@@ -16,7 +16,8 @@ import {
   sourceIsStep,
   stepParameterRuntime
 } from "./source.js";
-import { animationClipDuration, resolveAnimationFrame } from "./animationClock.js";
+import { resolveAnimationFrame } from "./animationClock.js";
+import { framePlanElapsedSec, resolveFramePlan } from "./framePlan.js";
 import { loadRenderModule } from "./renderModule.js";
 import {
   createHttpTessellationCacheProvider,
@@ -145,81 +146,11 @@ export async function runHeadlessRenderJob(job) {
 // rather than collecting an array: a 30 s 60 fps render is 1800 PNGs, and the
 // driver pipe cannot carry that in one protocol message.
 
-export const VIDEO_FPS_MIN = 1;
-export const VIDEO_FPS_MAX = 120;
-// The schedule's ceiling, mirroring cadgen's MAX_VIDEO_FRAMES: an fps bound
-// alone bounds nothing, because the frame count is fps TIMES seconds and every
-// frame is a full-size PNG written to disk before ffmpeg sees one of them.
-// 7200 frames is four minutes of review at 30 fps and tens of gigabytes of
-// frames at the default size; past that the request is a typo, not a video.
-export const VIDEO_MAX_FRAMES = 7200;
-
-function formatSeconds(value) {
-  return `${Number(value.toFixed(3))}s`;
-}
-
-/** The frame schedule a `video` request implies over one clip.
- *
- * `seconds` defaults to the span the clip still HAS from `start`, and the frame
- * count is `seconds * fps` rounded, so the last frame sits one interval BEFORE
- * `start + seconds`. That is what makes a looping clip loop cleanly: the frame
- * at `start + seconds` is the frame at `start` again, and rendering both
- * stutters on every repeat.
- *
- * Every time is measured against the clip, because `evaluateAnimationClip`
- * ANSWERS a time past the end rather than refusing it: a non-looping clip
- * clamps, so the tail of the video is one still image repeated, and a looping
- * one wraps, so it renders a different span than the one asked for. Both are
- * exit-0 wrong answers that nothing downstream can tell from a right one. */
-export function resolveVideoPlan(request, clip) {
-  const raw = request && typeof request === "object" ? request : {};
-  const fps = Number(raw.fps ?? 30);
-  if (!Number.isInteger(fps) || fps < VIDEO_FPS_MIN || fps > VIDEO_FPS_MAX) {
-    throw new Error(`video fps must be a whole number ${VIDEO_FPS_MIN}..${VIDEO_FPS_MAX}, got ${JSON.stringify(raw.fps)}`);
-  }
-  const start = raw.start === undefined || raw.start === null ? 0 : Number(raw.start);
-  if (!Number.isFinite(start) || start < 0) {
-    throw new Error(`video start must be seconds >= 0, got ${JSON.stringify(raw.start)}`);
-  }
-  const duration = animationClipDuration(clip);
-  if (start >= duration) {
-    throw new Error(
-      `video start ${formatSeconds(start)} is at or past the end of a ${formatSeconds(duration)} clip: `
-      + "every frame would be the same one"
-    );
-  }
-  const looping = clip?.loop !== false;
-  const seconds = raw.seconds === undefined || raw.seconds === null
-    // A looping clip's default is one whole cycle from wherever it starts; a
-    // clip that stops at its end has only the part of it that is left.
-    ? (looping ? duration : duration - start)
-    : Number(raw.seconds);
-  if (!Number.isFinite(seconds) || seconds <= 0) {
-    throw new Error(`video seconds must be a positive number, got ${JSON.stringify(raw.seconds)}`);
-  }
-  const frameCount = Math.max(1, Math.round(seconds * fps));
-  if (frameCount > VIDEO_MAX_FRAMES) {
-    throw new Error(
-      `video ${formatSeconds(seconds)} at ${fps} fps schedules ${frameCount} frames, `
-      + `past the ${VIDEO_MAX_FRAMES}-frame ceiling`
-    );
-  }
-  const warnings = [];
-  // An explicit span that overruns a clip which does not loop is the caller's
-  // to make, but the frames it buys past the end are all the final pose, and
-  // nothing in the finished file says so.
-  if (!looping && (start + seconds) - duration > 1e-9) {
-    warnings.push(
-      `video covers ${formatSeconds(start)}..${formatSeconds(start + seconds)} of a `
-      + `${formatSeconds(duration)} clip that does not loop: every frame past its end is the same final pose`
-    );
-  }
-  return { fps, seconds, start, frameCount, warnings };
-}
-
-export function videoFrameElapsedSec(plan, index) {
-  return plan.start + (index / plan.fps);
-}
+// The schedule itself lives in ./framePlan.js: a GLB export samples the same
+// span of the same clip into baked keyframes, and two derivations of "which
+// moments" is the pair that drifts by a frame and loops with a stutter. Video
+// is the LABEL passed through it, so the errors name the flag the caller used.
+const VIDEO_PLAN_LABEL = "video";
 
 /** The `update` patch that poses a prepared model at one moment of its clip.
  *
@@ -263,7 +194,7 @@ export function sequenceFrameBounds(model, stepAnimation, plan) {
   const last = plan.frameCount - 1;
   for (let sample = 0; sample < samples; sample += 1) {
     const index = samples === 1 ? 0 : Math.round((sample * last) / (samples - 1));
-    const bounds = poseSequenceFrame(model, stepAnimation, videoFrameElapsedSec(plan, index)).bounds;
+    const bounds = poseSequenceFrame(model, stepAnimation, framePlanElapsedSec(plan, index)).bounds;
     for (let axis = 0; axis < 3; axis += 1) {
       min[axis] = Math.min(min[axis], Number(bounds?.min?.[axis] ?? 0));
       max[axis] = Math.max(max[axis], Number(bounds?.max?.[axis] ?? 0));
@@ -291,7 +222,7 @@ export async function prepareHeadlessRenderSequence(job) {
   const model = buildModel(THREE, source, modelOptionsForRenderJob(context, renderJob));
   let viewport = null;
   try {
-    const plan = resolveVideoPlan(renderJob.video, stepAnimation.clip);
+    const plan = resolveFramePlan(renderJob.video, stepAnimation.clip, { label: VIDEO_PLAN_LABEL });
     // The union is measured BEFORE the scene is built, because the stage floor
     // and grid are sized to the bounds `renderModel` is handed while the camera
     // is locked to this union: built from the t = 0 pose they end up inside the
@@ -330,7 +261,7 @@ export async function captureHeadlessRenderSequenceFrame(index) {
     // just before it: captureModel updates the model itself, so posing
     // separately ran the clip evaluator and the whole effects pass twice on
     // every frame — the largest per-frame cost a video pays, doubled.
-    modelState: sequencePoseState(session.stepAnimation, videoFrameElapsedSec(session.plan, index))
+    modelState: sequencePoseState(session.stepAnimation, framePlanElapsedSec(session.plan, index))
   });
   const output = captured?.outputs?.[0];
   if (!output?.dataUrl) {

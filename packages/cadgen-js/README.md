@@ -97,8 +97,12 @@ component (`cadEdgeInstances.js`): the instances are every (segment,
 occurrence) pair, decoded in the vertex shader from a per-component segment
 texture (32 B per drawn segment, cached on the component) and a per-set
 instance texture (128 B per occurrence: matrix, colour, opacity, visibility,
-highlight). `display.edges.classes` styles colour, opacity AND pixel thickness
-per class. Per-occurrence highlight, dim, hide, focus, exploded placement and
+highlight). `display.edges.classes` styles colour, opacity AND thickness per
+class, and a thickness is a FULL width in DEVICE pixels — every line shader
+normalises its extrusion by the drawing buffer, never the CSS size, and the
+fragment stage then ramps coverage across ±0.75 px either side of the ink
+boundary, so an edge is feathered rather than a hard-edged quad left to MSAA.
+Per-occurrence highlight, dim, hide, focus, exploded placement and
 selection are slots in that texture, written by the same record passes
 (`applyDisplayRecordTransform`, `applyPartVisualState`,
 `syncRecordEdgeMaterials`) that drive a plain line object; highlighted

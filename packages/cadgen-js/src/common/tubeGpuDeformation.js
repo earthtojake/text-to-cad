@@ -268,9 +268,9 @@ function installRaycastGuard(THREE, record, restState, state, deformation, inver
     if (!near) {
       return false;
     }
-    if (state.cpuKey !== deformation.key) {
+    if (state.cpuSpec !== deformation.pathSpec) {
       materialize();
-      state.cpuKey = deformation.key;
+      state.cpuSpec = deformation.pathSpec;
     }
     return true;
   };
@@ -303,7 +303,7 @@ export function applyGpuTube(THREE, record, restState, deformation, inverse, sam
   state.frameTexture.needsUpdate = true;
   state.frames = frames;
   state.active = true;
-  state.cpuKey = null;
+  state.cpuSpec = null;
   const u = state.uniforms;
   u.cadTubeFrameTexture.value = state.frameTexture;
   u.cadTubeFrameCount.value = frames.count;

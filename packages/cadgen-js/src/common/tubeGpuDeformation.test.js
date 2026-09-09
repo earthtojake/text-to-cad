@@ -38,9 +38,9 @@ test('GPU display preserves source buffers, materializes exact picking, and upda
   assert.equal(record.geometry.attributes.cadTubeMappingIndex.array,record.tubeDeformationState.mapping.indices);
   assert.equal(record.geometry.attributes.cadTubeMaterial,undefined);
   const away=new THREE.Raycaster(new THREE.Vector3(100,100,100),new THREE.Vector3(0,0,-1));
-  assert.equal(mesh.userData.cadBeforeRaycast(away),false);assert.equal(record.tubeGpuState.cpuKey,null);
+  assert.equal(mesh.userData.cadBeforeRaycast(away),false);assert.equal(record.tubeGpuState.cpuSpec,null);
   const near=new THREE.Raycaster(new THREE.Vector3(3.535,1.465,10),new THREE.Vector3(0,0,-1));
-  assert.equal(mesh.userData.cadBeforeRaycast(near),true);assert.equal(record.tubeGpuState.cpuKey,spec.key);
+  assert.equal(mesh.userData.cadBeforeRaycast(near),true);assert.equal(record.tubeGpuState.cpuSpec,spec.pathSpec);
   const cpu={mesh:new THREE.Mesh(source),geometry:source};applyRecordTubeDeformation(THREE,cpu,spec);
   assert.deepEqual(record.geometry.attributes.position.array,cpu.geometry.attributes.position.array);
   assert.deepEqual(source.attributes.position.array,saved);

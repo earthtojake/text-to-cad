@@ -28,6 +28,7 @@ import {
   shouldUseRecordTopologyEdgeTransforms
 } from "./topologyDisplayEdgeRuntime.js";
 import {
+  screenSpaceLineDeviceResolution,
   syncScreenSpaceLineMaterialResolution
 } from "./renderEdges.js";
 import {
@@ -1086,7 +1087,15 @@ export async function captureModel(viewport, captureOptions = {}) {
     const baseOutputBounds = captureOptions.frameBounds || posedBounds;
     const outputBounds = applyViewportExplodedView(viewport, baseOutputBounds);
     syncViewportTopologyDisplayEdges(viewport);
-    syncScreenSpaceLineMaterialResolution(viewport.model.runtime.screenSpaceLineMaterials, width, height);
+    // Device pixels: renderScale is the renderer's pixel ratio, so a PNG at
+    // renderScale 2 has a 2x drawing buffer and `thickness` stays a
+    // drawing-buffer width there exactly as it does on a Retina viewport.
+    const lineResolution = screenSpaceLineDeviceResolution(viewport.renderer, width, height);
+    syncScreenSpaceLineMaterialResolution(
+      viewport.model.runtime.screenSpaceLineMaterials,
+      lineResolution.width,
+      lineResolution.height
+    );
     const cameraSpec = output.camera || job.camera || "iso";
     const outputProjection = resolveOutputCameraProjection(context, cameraSpec);
     const usePerspectiveCamera = outputProjection === CAMERA_PROJECTION.PERSPECTIVE;

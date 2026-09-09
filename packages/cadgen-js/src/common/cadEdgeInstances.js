@@ -9,7 +9,8 @@
 // end.xyz) and an occurrence (fetched from a per-set instance texture: four
 // texels of matrix, one of colour, one of opacity/visibility/highlight), then
 // extrudes the quad to the class's pixel width exactly as three's LineMaterial
-// does for screen-space lines. Per-occurrence highlight, dim, hide, focus,
+// does for screen-space lines, plus a feather of room on each side that the
+// fragment stage ramps coverage across. Per-occurrence highlight, dim, hide, focus,
 // exploded-view placement and selection therefore stay per occurrence: they
 // are slots in the instance texture, written by the same record passes that
 // used to write a material and a matrix per line object.
@@ -28,6 +29,15 @@
 // renderEdges imports syncEdgeInstanceStyle from here; both modules touch the
 // other's exports only inside functions, never while evaluating.
 import { applyLineDepthBias, CAD_EDGE_CLASS_ORDER } from "./renderEdges.js";
+
+// The analytic edge feather, in DEVICE pixels. An edge's coverage falls from 1
+// to 0 across +-0.75 px either side of the ink boundary: the ramp the deleted
+// surface-shader pass painted (`1.0 - smoothstep(halfWidth - 0.75, halfWidth +
+// 0.75, pixelDistance)` in cadSurfaceEdgeCoverage), moved into the line pass so
+// a 1.15 px feature edge is soft again instead of a hard-edged quad left to 4x
+// MSAA. renderEdges.js applies the same ramp to three's LineMaterial.
+export const CAD_EDGE_FEATHER_PIXELS = 0.75;
+const FEATHER_GLSL = CAD_EDGE_FEATHER_PIXELS.toFixed(4);
 
 // Texels per occurrence row in the instance texture: 4 matrix columns, colour, state, 2 spare.
 export const CAD_EDGE_INSTANCE_TEXELS = 8;
@@ -94,9 +104,17 @@ uniform int cadSegmentCount;
 uniform sampler2D cadInstanceTexture;
 uniform mat4 cadClassColor;
 uniform vec4 cadClassWidth;
+// The DRAWING BUFFER size, in device pixels -- not the CSS size. The extrusion
+// below normalises by resolution.y and lands in NDC, so whatever unit this is
+// in is the unit display.edges.classes[*].thickness is in. See
+// screenSpaceLineDeviceResolution in renderEdges.js.
 uniform vec2 resolution;
 uniform float cadHighlightPass;
 varying vec4 vColor;
+// x: the quad's cross coordinate, -1..1 at the PADDED edges; y: the ink's half
+// width in device pixels. Together they give the fragment its distance from the
+// segment without a derivative.
+varying vec2 vCadEdge;
 #include <common>
 #include <clipping_planes_pars_vertex>
 
@@ -125,6 +143,7 @@ void main() {
     // Not drawn in this pass: collapse the quad outside the clip volume.
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     vColor = vec4(0.0);
+    vCadEdge = vec2(0.0, 1.0);
     return;
   }
   vec4 classColor = cadClassColor[classIndex];
@@ -160,7 +179,14 @@ void main() {
   if (position.x < 0.0) {
     offset *= -1.0;
   }
-  offset *= lineWidth;
+  // lineWidth is the FULL width of the ink in device pixels: the quad spans
+  // +-halfWidth, and the extra feather on each side is the room the fragment
+  // ramp falls off in. offset is a unit perpendicular, so scaling it by the
+  // full padded width puts each side at the padded half width.
+  float halfWidth = lineWidth * 0.5;
+  float paddedHalfWidth = halfWidth + ${FEATHER_GLSL};
+  vCadEdge = vec2(position.x, halfWidth);
+  offset *= paddedHalfWidth * 2.0;
   offset /= resolution.y;
   vec4 clip = (position.y < 0.5) ? clipStart : clipEnd;
   offset *= clip.w;
@@ -177,11 +203,24 @@ void main() {
 const FRAGMENT_SHADER = /* glsl */`
 uniform float opacity;
 varying vec4 vColor;
+varying vec2 vCadEdge;
 layout(location = 0) out vec4 cadFragColor;
 #include <clipping_planes_pars_fragment>
 void main() {
   #include <clipping_planes_fragment>
-  cadFragColor = linearToOutputTexel(vec4(vColor.rgb, vColor.a * opacity));
+  // The analytic feather. No derivative and no alpha-to-coverage: the distance
+  // is exact in device pixels because the vertex stage already extruded in
+  // them, so the ramp is the same at every zoom, every dpr and every sample
+  // count. Coverage multiplies the per-class alpha rather than replacing it —
+  // a tangent edge at opacity 0.5 stays half-strength across its whole width.
+  float halfWidth = vCadEdge.y;
+  float distancePixels = abs(vCadEdge.x) * (halfWidth + ${FEATHER_GLSL});
+  float coverage = 1.0 - smoothstep(
+    max(halfWidth - ${FEATHER_GLSL}, 0.0),
+    halfWidth + ${FEATHER_GLSL},
+    distancePixels
+  );
+  cadFragColor = linearToOutputTexel(vec4(vColor.rgb, vColor.a * opacity * coverage));
 }
 `;
 
@@ -426,6 +465,7 @@ export class CadEdgeInstances {
     };
   }
 
+  // The DRAWING BUFFER size in device pixels; see screenSpaceLineDeviceResolution.
   setResolution(width, height) {
     this.uniforms.resolution.value.set(Math.max(1, width), Math.max(1, height));
   }

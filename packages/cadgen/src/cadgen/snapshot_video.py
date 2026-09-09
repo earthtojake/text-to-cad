@@ -49,8 +49,8 @@ MAX_VIDEO_FPS = 120
 # base64 across the driver pipe, and written full-size into a temp directory
 # before ffmpeg sees one of them. 7200 frames is four minutes of review at 30
 # fps and tens of gigabytes of frames at the default size. The page enforces
-# the same ceiling (headlessRenderEntry VIDEO_MAX_FRAMES), because it is where
-# the clip-duration default for `seconds` is resolved.
+# the same ceiling (framePlan FRAME_PLAN_MAX_FRAMES), because it is where the
+# clip-duration default for `seconds` is resolved.
 MAX_VIDEO_FRAMES = 7200
 
 # The OUT extension picks the container -- there is no `format` key, because the

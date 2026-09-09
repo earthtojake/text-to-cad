@@ -1,15 +1,13 @@
-// The video sequence entry, tested at its two load-bearing claims.
+// The video sequence entry, tested at its load-bearing claim: why a video is
+// affordable at all. A still pays for loadSource and buildModel and throws both
+// away; a sequence pays once and then moves only the clock. That is a claim
+// about cadScene's `update` — that a merged `callbacks.animation` re-runs the
+// effects pass over the records already built instead of rebuilding them — so
+// it is tested against a REAL model, by record identity, rather than against a
+// mock that would agree with anything.
 //
-// The first is arithmetic: a `video` request plus a clip is a frame schedule,
-// and getting the last frame's time wrong is a stutter on every loop that
-// nothing else would catch.
-//
-// The second is why a video is affordable at all. A still pays for loadSource
-// and buildModel and throws both away; a sequence pays once and then moves only
-// the clock. That is a claim about cadScene's `update` — that a merged
-// `callbacks.animation` re-runs the effects pass over the records already built
-// instead of rebuilding them — so it is tested against a REAL model, by record
-// identity, rather than against a mock that would agree with anything.
+// The schedule those frames follow is arithmetic that now lives beside its own
+// module: framePlan.test.js.
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -20,12 +18,10 @@ import { buildModel } from "./cadScene.js";
 import { modelOptionsForRenderJob, renderJobContext } from "./renderMeshScene.js";
 import { normalizeAnimationClips } from "./animationRuntime.js";
 import { resolveAnimationFrame } from "./animationClock.js";
+import { resolveFramePlan } from "./framePlan.js";
 import {
-  VIDEO_MAX_FRAMES,
   poseSequenceFrame,
-  resolveVideoPlan,
-  sequenceFrameBounds,
-  videoFrameElapsedSec
+  sequenceFrameBounds
 } from "./headlessRenderEntry.js";
 
 const SLIDE_CLIPS = normalizeAnimationClips({
@@ -96,75 +92,6 @@ function buildSequenceModel(stepAnimation) {
   return buildModel(THREE, { kind: "step", meshData }, modelOptionsForRenderJob(context, job));
 }
 
-test("a video's span defaults to the clip's declared duration", () => {
-  const plan = resolveVideoPlan({ fps: 30 }, SLIDE_CLIPS.slide);
-  assert.deepEqual(plan, { fps: 30, seconds: 4, start: 0, frameCount: 120, warnings: [] });
-  // The last frame sits one interval BEFORE start + seconds: at 4s the clip is
-  // back where it started, and rendering both ends stutters on every repeat.
-  assert.equal(videoFrameElapsedSec(plan, 0), 0);
-  assert.equal(videoFrameElapsedSec(plan, plan.frameCount - 1), 119 / 30);
-});
-
-test("a default span from a non-zero start is what is LEFT of the clip", () => {
-  // A looping clip wraps, so a whole cycle from anywhere is a clean cycle.
-  assert.equal(resolveVideoPlan({ fps: 30, start: 1.5 }, SLIDE_CLIPS.slide).seconds, 4);
-  // A clip that stops has only its remainder: the full duration here would put
-  // 45 of 120 frames past the end, where the evaluator clamps and every one of
-  // them is the same final pose.
-  const plan = resolveVideoPlan({ fps: 30, start: 1.5 }, SLIDE_CLIPS.once);
-  assert.equal(plan.seconds, 2.5);
-  assert.equal(plan.frameCount, 75);
-  assert.ok(videoFrameElapsedSec(plan, plan.frameCount - 1) < 4);
-});
-
-test("a video's span and start are its own, and fps is the frame count's other half", () => {
-  const plan = resolveVideoPlan({ fps: 12, seconds: 1.5, start: 2 }, SLIDE_CLIPS.slide);
-  assert.equal(plan.frameCount, 18);
-  assert.equal(videoFrameElapsedSec(plan, 0), 2);
-  assert.equal(videoFrameElapsedSec(plan, 17), 2 + (17 / 12));
-});
-
-test("an unusable video request is refused rather than scheduled", () => {
-  assert.throws(() => resolveVideoPlan({ fps: 0 }, SLIDE_CLIPS.slide), /fps must be/);
-  assert.throws(() => resolveVideoPlan({ fps: 240 }, SLIDE_CLIPS.slide), /fps must be/);
-  assert.throws(() => resolveVideoPlan({ fps: 30, seconds: 0 }, SLIDE_CLIPS.slide), /seconds must be/);
-  assert.throws(() => resolveVideoPlan({ fps: 30, start: -1 }, SLIDE_CLIPS.slide), /start must be/);
-});
-
-test("a span the clip cannot answer is refused or warned about, never silently wrong", () => {
-  // Past the end there is nothing to render: every frame would be the last one
-  // (clamped) or a wrapped span nobody asked for (looping).
-  assert.throws(
-    () => resolveVideoPlan({ fps: 30, start: 30 }, SLIDE_CLIPS.slide),
-    /past the end of a 4s clip/
-  );
-  assert.throws(
-    () => resolveVideoPlan({ fps: 30, start: 4 }, SLIDE_CLIPS.once),
-    /past the end of a 4s clip/
-  );
-  // An explicit overrun of a clip that stops is the caller's to make, and the
-  // frozen tail it buys is said out loud.
-  const { warnings } = resolveVideoPlan({ fps: 30, seconds: 6 }, SLIDE_CLIPS.once);
-  assert.equal(warnings.length, 1);
-  assert.match(warnings[0], /same final pose/);
-  // Overrunning a LOOPING clip is a second lap, which is the honest answer.
-  assert.deepEqual(resolveVideoPlan({ fps: 30, seconds: 8 }, SLIDE_CLIPS.slide).warnings, []);
-});
-
-test("the frame count is bounded, not just the fps", () => {
-  // The fps ceiling bounds one multiplicand; a caller writing milliseconds for
-  // seconds reaches a six-figure schedule through the other one, and every
-  // frame is a full-size PNG on disk before ffmpeg runs.
-  assert.throws(
-    () => resolveVideoPlan({ fps: 30, seconds: 3000 }, SLIDE_CLIPS.slide),
-    /90000 frames, past the 7200-frame ceiling/
-  );
-  assert.equal(
-    resolveVideoPlan({ fps: 30, seconds: VIDEO_MAX_FRAMES / 30 }, SLIDE_CLIPS.slide).frameCount,
-    VIDEO_MAX_FRAMES
-  );
-});
-
 test("a sequence frame re-poses the records the preparation built; nothing rebuilds", () => {
   const stepAnimation = resolveAnimationFrame(SLIDE_CLIPS, { clip: "slide", time: 0 });
   const model = buildSequenceModel(stepAnimation);
@@ -206,7 +133,7 @@ test("the camera frames the whole clip, not one pose of it", () => {
   const stepAnimation = resolveAnimationFrame(SLIDE_CLIPS, { clip: "slide", time: 0 });
   const model = buildSequenceModel(stepAnimation);
   try {
-    const plan = resolveVideoPlan({ fps: 4, seconds: 4 }, SLIDE_CLIPS.slide);
+    const plan = resolveFramePlan({ fps: 4, seconds: 4 }, SLIDE_CLIPS.slide);
     const bounds = sequenceFrameBounds(model, stepAnimation, plan);
     // Left starts at x 0..1 and the last frame (t = 3.75) slides it to 3.75..4.75,
     // so the union reaches past the resting model's own 0..3. It is padded by a
@@ -230,7 +157,7 @@ test("the camera frames the whole clip, not one pose of it", () => {
     // clip whose extent moved smoothly the whole time.
     let posed = 0;
     const counting = { ...model, update: (settings) => { posed += 1; return model.update(settings); } };
-    sequenceFrameBounds(counting, stepAnimation, resolveVideoPlan({ fps: 60, seconds: 30 }, SLIDE_CLIPS.slide));
+    sequenceFrameBounds(counting, stepAnimation, resolveFramePlan({ fps: 60, seconds: 30 }, SLIDE_CLIPS.slide));
     assert.ok(posed <= 192, `sampled ${posed} poses for an 1800-frame plan`);
   } finally {
     model.dispose();

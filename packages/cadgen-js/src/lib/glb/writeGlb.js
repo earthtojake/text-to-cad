@@ -26,13 +26,43 @@
  * { primitives: [ { positions: Float32Array,   // non-indexed, 9 floats per triangle
  *                   normals?: Float32Array,    // same length; derived per-face when absent
  *                   color?: "#rrggbb",         // becomes a per-primitive material
+ *                   opacity?: number,          // < 1 makes that material BLEND
+ *                   material?: {               // the authored PBR FINISH, if any
+ *                     roughness?, metalness?,  //   -> pbrMetallicRoughness factors
+ *                     clearcoat?,              //   -> KHR_materials_clearcoat
+ *                     clearcoatRoughness?,
+ *                     opacity? },              //   alpha when no `opacity` is given
  *                   occurrenceId?: string,     // extras.cadOccurrenceId, STEP convention
+ *                   node?: string,             // group key: same key -> same node
+ *                   indices?: Uint32Array,     // already-indexed input, passed through
+ *                   targets?: [ {              // MORPH targets, indexed input only
+ *                     positionDeltas,          //   Float32Array, RELATIVE to POSITION
+ *                     normalDeltas? } ],        //   same length, RELATIVE to NORMAL
  *                   name?: string } ],
  *   name?: string, units?: string }
  * ```
  *
- * One node per primitive, so a caller can drive visibility per group (G-code layer
- * scrubbing) without re-meshing.
+ * One node per primitive by default, so a caller can drive visibility per group (G-code
+ * layer scrubbing) without re-meshing. A caller that needs a node to mean something
+ * else -- one glTF node per CAD OCCURRENCE, so an animation channel has something to
+ * target -- gives its primitives a shared `node` key and they become the primitives of
+ * one mesh instead.
+ *
+ * ## Animation
+ *
+ * `options.animations` is `[{ name, times, channels: [{ node, times?, translation?,
+ * rotation?, scale? }] }]`, where `node` is a group key from the primitives above and
+ * each track is a flat Float32Array of samples (VEC3 / quaternion VEC4). One time
+ * accessor is written per distinct `times` array, so a clip's channels share it.
+ * `options.nodeTransforms` (a Map keyed by the same group keys) sets each node's own TRS
+ * -- what the file shows when nothing is playing it. Both are export-preset only: the
+ * render preset spends a node's TRS on dequantizing its one primitive.
+ *
+ * A channel may instead carry `{ weights: Float32Array, targetCount }`, which drives
+ * the node's mesh's MORPH TARGETS: `targetCount` scalars per time, so the output
+ * accessor holds `times.length * targetCount` of them. That is a different shape from
+ * every TRS track (whose count is `values.length / stride`), which is why it gets its
+ * own arm below rather than a fourth row in ANIMATION_PATHS.
  */
 
 import {
@@ -200,20 +230,171 @@ function quantizeNormals(normals) {
   return out;
 }
 
-function materialFor(color, name) {
+// The finish a source that authored none gets. A caller supplying no `material` (and a
+// channel a material omits) keeps exactly these numbers, so its bytes are unchanged.
+const DEFAULT_ROUGHNESS = 0.72;
+const DEFAULT_METALNESS = 0.02;
+
+/** One PBR channel off a caller's material, clamped to [0, 1]; null when unauthored. */
+function finishChannel(finish, key) {
+  const value = Number(finish?.[key]);
+  return Number.isFinite(value) ? clamp01(value) : null;
+}
+
+function materialFor(color, name, opacity = null, finish = null) {
   // sRGB in, LINEAR out: baseColorFactor is a linear quantity per the glTF spec, and the
   // authored hex is sRGB. Without the conversion every generated GLB renders too bright.
   const rgb = hexToRgb01(color).map(clamp01).map(srgbToLinear);
-  return {
+  // Alpha is NOT an sRGB quantity, so it rides through unconverted. A material below
+  // fully opaque also needs alphaMode: importers ignore baseColorFactor[3] in the
+  // default OPAQUE mode, which would render a half-faded part solid.
+  //
+  // An explicit `opacity` (a caller's own override -- an animation clip's faded
+  // occurrence) wins over the material's authored one; with neither, opaque.
+  const authoredAlpha = finishChannel(finish, "opacity");
+  const alpha = opacity === null || opacity === undefined
+    ? (authoredAlpha === null ? 1 : authoredAlpha)
+    : clamp01(opacity);
+  // The authored FINISH, when the caller has one. Metalness especially is not a
+  // decoration: a metal has no diffuse lobe, so exporting a brushed-aluminium part at
+  // the plastic default (0.02) inverts its shading and is why an exported file used to
+  // look nothing like the same document in the viewer.
+  const roughness = finishChannel(finish, "roughness");
+  const metalness = finishChannel(finish, "metalness");
+  const clearcoat = finishChannel(finish, "clearcoat");
+  const clearcoatRoughness = finishChannel(finish, "clearcoatRoughness");
+  const material = {
     name: sanitizeName(name || "material", "material"),
     doubleSided: true,
     extras: { cadSourceColor: true },
     pbrMetallicRoughness: {
-      baseColorFactor: [...rgb, 1],
-      roughnessFactor: 0.72,
-      metallicFactor: 0.02,
+      baseColorFactor: [...rgb, alpha],
+      roughnessFactor: roughness === null ? DEFAULT_ROUGHNESS : roughness,
+      metallicFactor: metalness === null ? DEFAULT_METALNESS : metalness,
     },
   };
+  if (alpha < 1) {
+    material.alphaMode = "BLEND";
+  }
+  // A clearcoat of 0 IS the glTF default, so an authored zero is written by leaving the
+  // extension off -- the file then says the same thing in fewer bytes and never lands in
+  // extensionsUsed for a coat nobody asked for.
+  if (clearcoat !== null && clearcoat > 0) {
+    material.extensions = {
+      KHR_materials_clearcoat: {
+        clearcoatFactor: clearcoat,
+        ...(clearcoatRoughness === null ? {} : { clearcoatRoughnessFactor: clearcoatRoughness }),
+      },
+    };
+  }
+  return material;
+}
+
+// The three node properties a glTF sampler may drive, and the accessor each track needs.
+const ANIMATION_PATHS = [
+  ["translation", 3, "VEC3"],
+  ["rotation", 4, "VEC4"],
+  ["scale", 3, "VEC3"],
+];
+
+/**
+ * `options.animations` -> the glTF `animations` array, appending its accessors and
+ * bufferViews through the callers' own writers so the BIN chunk stays one stream.
+ *
+ * One INPUT accessor per distinct `times` array (compared by identity, which is what a
+ * caller sampling every channel on one schedule hands in): a clip's channels then share
+ * a single time line instead of repeating it per occurrence, and the file says out loud
+ * that they are the same schedule.
+ */
+function buildAnimations(animations, { nodeIndexByKey, targetCountByKey, accessors, pushView }) {
+  const out = [];
+  for (const animation of Array.isArray(animations) ? animations : []) {
+    const samplers = [];
+    const channels = [];
+    const timeAccessors = new Map();
+    const timeAccessorFor = (times) => {
+      let index = timeAccessors.get(times);
+      if (index !== undefined) {
+        return index;
+      }
+      if (!times || !times.length) {
+        throw new Error("writeGlb: an animation channel needs a non-empty times array");
+      }
+      accessors.push({
+        bufferView: pushView(typedArrayBytes(times)),
+        byteOffset: 0,
+        componentType: COMPONENT_FLOAT,
+        count: times.length,
+        type: "SCALAR",
+        // REQUIRED on a sampler input by the glTF spec: a loader reads the clip's
+        // duration off them rather than scanning the accessor.
+        min: [times[0]],
+        max: [times[times.length - 1]],
+      });
+      index = accessors.length - 1;
+      timeAccessors.set(times, index);
+      return index;
+    };
+    for (const channel of animation?.channels || []) {
+      const node = nodeIndexByKey.get(String(channel?.node));
+      if (node === undefined) {
+        throw new Error(
+          `writeGlb: animation channel targets node ${JSON.stringify(channel?.node)}, `
+          + "which no primitive declared"
+        );
+      }
+      const input = timeAccessorFor(channel?.times || animation?.times);
+      if (channel?.weights) {
+        const times = channel?.times || animation?.times;
+        const declared = Number(channel.targetCount);
+        const actual = targetCountByKey.get(String(channel.node)) || 0;
+        // The channel says how many targets it drives and the MESH says how many it
+        // has; a mismatch is a file whose weights land on the wrong shapes, and the
+        // two numbers come from different halves of the export (the fit, and the
+        // primitives it produced), so they are worth comparing rather than assuming.
+        if (!Number.isInteger(declared) || declared < 1 || declared !== actual) {
+          throw new Error(
+            `writeGlb: weights channel on node ${JSON.stringify(channel.node)} declares `
+            + `${channel.targetCount} morph targets, but its mesh has ${actual}`
+          );
+        }
+        if (channel.weights.length !== times.length * declared) {
+          throw new Error(
+            `writeGlb: weights channel on node ${JSON.stringify(channel.node)} has `
+            + `${channel.weights.length} scalars for ${times.length} times x ${declared} targets`
+          );
+        }
+        accessors.push({
+          bufferView: pushView(typedArrayBytes(channel.weights)),
+          byteOffset: 0,
+          componentType: COMPONENT_FLOAT,
+          count: channel.weights.length,
+          type: "SCALAR",
+        });
+        samplers.push({ input, output: accessors.length - 1, interpolation: "LINEAR" });
+        channels.push({ sampler: samplers.length - 1, target: { node, path: "weights" } });
+      }
+      for (const [path, stride, type] of ANIMATION_PATHS) {
+        const values = channel?.[path];
+        if (!values) {
+          continue;
+        }
+        accessors.push({
+          bufferView: pushView(typedArrayBytes(values)),
+          byteOffset: 0,
+          componentType: COMPONENT_FLOAT,
+          count: values.length / stride,
+          type,
+        });
+        samplers.push({ input, output: accessors.length - 1, interpolation: "LINEAR" });
+        channels.push({ sampler: samplers.length - 1, target: { node, path } });
+      }
+    }
+    if (channels.length) {
+      out.push({ name: sanitizeName(animation?.name || "clip", "clip"), samplers, channels });
+    }
+  }
+  return out;
 }
 
 /**
@@ -233,6 +414,8 @@ export function writeGlb(mesh, options = {}) {
     encoder = null,
     occurrenceIdPrefix = null,
     upAxis = "y",
+    animations = null,
+    nodeTransforms = null,
   } = options;
 
   // WHICH SPACE the caller's positions are in, declared rather than guessed. glTF's
@@ -262,6 +445,15 @@ export function writeGlb(mesh, options = {}) {
       "writeGlb: preset 'render' requires meshoptimizer's MeshoptEncoder (await MeshoptEncoder.ready)"
     );
   }
+  // The render preset writes each node's scale/translation to dequantize its ONE
+  // primitive, so a node it did not create is a node whose geometry would land in the
+  // wrong place. Refuse rather than emit an artifact that renders scrambled.
+  if (render && (animations || nodeTransforms)) {
+    throw new Error(
+      "writeGlb: preset 'render' spends every node transform on dequantization, so it "
+      + "carries no animation or node TRS — use preset 'export' for an animated file"
+    );
+  }
 
   const inputs = Array.isArray(mesh?.primitives) && mesh.primitives.length
     ? mesh.primitives
@@ -273,6 +465,11 @@ export function writeGlb(mesh, options = {}) {
   const meshes = [];
   const nodes = [];
   const materials = [];
+  // Node key -> the primitives that share it, in first-appearance order. An input
+  // without a `node` key gets one of its own, which is the default one-node-per-
+  // primitive layout expressed as the degenerate case of grouping rather than as a
+  // second code path.
+  const groups = new Map();
   let byteOffset = 0;
 
   /** Append `bytes` to the BIN chunk at a 4-byte aligned offset; return that offset. */
@@ -337,6 +534,28 @@ export function writeGlb(mesh, options = {}) {
       : new Float32Array(input?.positions || []);
     if (!rawPositions.length) {
       continue;
+    }
+    const morphTargets = Array.isArray(input?.targets) && input.targets.length
+      ? input.targets
+      : null;
+    if (morphTargets) {
+      // A weld keys on QUANTIZED position+normal and can merge two corners a morph
+      // target moves apart; the target arrays are 1:1 with the vertices they came
+      // from, and after a weld they would not be. Rather than police the tolerance,
+      // require the correspondence the caller already has: indexed input, passed
+      // through untouched.
+      if (!input?.indices) {
+        throw new Error(
+          "writeGlb: morph targets need already-indexed input — a weld can merge two "
+          + "vertices a target moves apart, and the deltas would then be 1:1 with nothing"
+        );
+      }
+      if (render) {
+        throw new Error(
+          "writeGlb: preset 'render' quantizes every attribute and carries no morph targets "
+          + "— use preset 'export' for a deforming file"
+        );
+      }
     }
     // ALREADY-INDEXED input passes straight through. The G-code mesher emits indexed
     // ribbon geometry with its own groups; de-indexing it just to re-weld would cost a
@@ -498,29 +717,133 @@ export function writeGlb(mesh, options = {}) {
     });
     const indexAccessorIndex = accessors.length - 1;
 
-    materials.push(materialFor(colorArray ? "#ffffff" : input?.color, input?.name));
+    // Morph targets: POSITION (and NORMAL) deltas RELATIVE to the base attributes
+    // above, one accessor pair per target. min/max are the DELTAS' bounds, which is
+    // what the spec asks of a target POSITION accessor and what a viewer uses to size
+    // the morphed bounding box.
+    const targetAccessors = morphTargets?.map((target, ordinal) => {
+      const positionDeltas = target?.positionDeltas;
+      if (!(positionDeltas instanceof Float32Array) || positionDeltas.length !== welded.positions.length) {
+        throw new Error(
+          `writeGlb: morph target ${ordinal} has ${positionDeltas?.length ?? "no"} position `
+          + `deltas for ${welded.positions.length / 3} vertices`
+        );
+      }
+      const deltaBounds = boundsForPositions(positionDeltas);
+      accessors.push({
+        bufferView: pushView(typedArrayBytes(positionDeltas), TARGET_ARRAY_BUFFER),
+        byteOffset: 0,
+        componentType: COMPONENT_FLOAT,
+        count: vertexCount,
+        type: "VEC3",
+        min: deltaBounds.min,
+        max: deltaBounds.max,
+      });
+      const entry = { POSITION: accessors.length - 1 };
+      const normalDeltas = target?.normalDeltas;
+      if (normalDeltas) {
+        if (!(normalDeltas instanceof Float32Array) || normalDeltas.length !== welded.positions.length) {
+          throw new Error(
+            `writeGlb: morph target ${ordinal} has ${normalDeltas.length} normal deltas for `
+            + `${welded.positions.length / 3} vertices`
+          );
+        }
+        accessors.push({
+          bufferView: pushView(typedArrayBytes(normalDeltas), TARGET_ARRAY_BUFFER),
+          byteOffset: 0,
+          componentType: COMPONENT_FLOAT,
+          count: vertexCount,
+          type: "VEC3",
+        });
+        entry.NORMAL = accessors.length - 1;
+      }
+      return entry;
+    }) || null;
+
+    materials.push(
+      materialFor(
+        colorArray ? "#ffffff" : input?.color,
+        input?.name,
+        input?.opacity ?? null,
+        // The finish is independent of where the colour came from: a per-vertex-coloured
+        // primitive whitens its baseColorFactor and keeps its authored metal.
+        input?.material ?? null
+      )
+    );
+    const primitive = {
+      attributes: {
+        POSITION: positionAccessorIndex,
+        NORMAL: normalAccessorIndex,
+        ...(colorAccessorIndex === null ? {} : { COLOR_0: colorAccessorIndex }),
+      },
+      indices: indexAccessorIndex,
+      material: materials.length - 1,
+      mode: MODE_TRIANGLES,
+      ...(targetAccessors ? { targets: targetAccessors } : {}),
+    };
+    // An input with no `node` key gets a group of its own. The prefix is the
+    // ESCAPE `\0`, never the byte: a raw control character makes this file binary
+    // to grep and ripgrep, and every later search of the writer that emits every
+    // GLB the product ships would silently find nothing. No occurrence id can
+    // contain it, so the key can never collide with a caller's.
+    const groupKey = input?.node === undefined || input?.node === null
+      ? `\0primitive:${groups.size}`
+      : String(input.node);
+    let group = groups.get(groupKey);
+    if (!group) {
+      group = {
+        key: groupKey,
+        input,
+        primitives: [],
+        quantization: null,
+        targetCount: targetAccessors ? targetAccessors.length : 0,
+      };
+      groups.set(groupKey, group);
+    } else if (group.targetCount !== (targetAccessors ? targetAccessors.length : 0)) {
+      // `weights` is a MESH property, not a primitive one, so every primitive on one
+      // node has to agree about how many targets it has. Two colours of one tendon
+      // that disagree would put the file's weights on shapes half of it does not have.
+      throw new Error(
+        `writeGlb: node ${JSON.stringify(groupKey)} mixes primitives with `
+        + `${group.targetCount} and ${targetAccessors ? targetAccessors.length : 0} morph `
+        + "targets, and glTF weights are per MESH"
+      );
+    } else if (render) {
+      // Quantization puts the primitive's dequantizing scale/translation on the NODE, so
+      // two primitives on one node would need two different node transforms. Refuse
+      // rather than write the first one's and misplace the rest.
+      throw new Error(
+        `writeGlb: preset 'render' cannot put two primitives on node ${JSON.stringify(groupKey)}: `
+        + "each quantized primitive owns its node's transform"
+      );
+    }
+    group.primitives.push(primitive);
+    if (nodeScale) {
+      group.quantization = { scale: nodeScale, translation: nodeTranslation };
+    }
+  }
+
+  const nodeIndexByKey = new Map();
+  const targetCountByKey = new Map();
+  for (const group of groups.values()) {
+    targetCountByKey.set(group.key, group.targetCount);
     meshes.push({
-      primitives: [{
-        attributes: {
-          POSITION: positionAccessorIndex,
-          NORMAL: normalAccessorIndex,
-          ...(colorAccessorIndex === null ? {} : { COLOR_0: colorAccessorIndex }),
-        },
-        indices: indexAccessorIndex,
-        material: materials.length - 1,
-        mode: MODE_TRIANGLES,
-      }],
+      primitives: group.primitives,
+      // The mesh's DEFAULT morph weights, all zero: the base attributes are the
+      // clip's opening pose, so a file nothing is playing shows the tube where the
+      // clip starts it, exactly as `rest` does for the rigid channels.
+      ...(group.targetCount ? { weights: new Array(group.targetCount).fill(0) } : {}),
     });
     const node = {
       mesh: meshes.length - 1,
-      name: sanitizeName(input?.name || name, name),
+      name: sanitizeName(group.input?.name || name, name),
       extras: {
         // The occurrence id is an identity NAMESPACE, so it is keyed on the source kind
         // rather than the model's display name -- "mesh:0" is stable across a rename,
         // "export sphere:0" is not. A per-primitive `occurrenceId` still wins, and an
         // explicit `occurrenceIdPrefix` overrides the namespace.
         cadOccurrenceId: String(
-          input?.occurrenceId
+          group.input?.occurrenceId
           || `${occurrenceIdPrefix_}:${nodes.length}`
         ),
         cadSourceKind: options.sourceKind || "mesh",
@@ -532,16 +855,47 @@ export function writeGlb(mesh, options = {}) {
         cadUpAxis: upAxis_,
       },
     };
-    if (nodeScale) {
-      node.scale = nodeScale;
-      node.translation = nodeTranslation;
+    if (group.quantization) {
+      node.scale = group.quantization.scale;
+      node.translation = group.quantization.translation;
     }
+    const rest = nodeTransforms instanceof Map ? nodeTransforms.get(group.key) : null;
+    if (rest) {
+      // The pose the file shows when nothing is playing it: an animated clip's first
+      // sample. A channel overrides it during playback; a node with a constant offset
+      // and no channel carries it here alone.
+      if (rest.translation) {
+        node.translation = [...rest.translation];
+      }
+      if (rest.rotation) {
+        node.rotation = [...rest.rotation];
+      }
+      if (rest.scale) {
+        node.scale = [...rest.scale];
+      }
+    }
+    nodeIndexByKey.set(group.key, nodes.length);
     nodes.push(node);
   }
 
-  const extensionsUsed = [];
-  if (render) {
-    extensionsUsed.push("KHR_mesh_quantization", "EXT_meshopt_compression");
+  const gltfAnimations = buildAnimations(animations, {
+    nodeIndexByKey,
+    targetCountByKey,
+    accessors,
+    pushView,
+  });
+
+  // Both quantization extensions are REQUIRED for a render artifact: a loader without
+  // them would misread the integers as world units, which is worse than refusing the
+  // file. KHR_materials_clearcoat is only USED -- a loader that ignores it still draws
+  // the right geometry in the right colour, just without the coat, so requiring it would
+  // make ordinary importers refuse a file they can very nearly read.
+  const extensionsRequired = render
+    ? ["KHR_mesh_quantization", "EXT_meshopt_compression"]
+    : [];
+  const extensionsUsed = [...extensionsRequired];
+  if (materials.some((material) => material.extensions?.KHR_materials_clearcoat)) {
+    extensionsUsed.push("KHR_materials_clearcoat");
   }
 
   const gltf = {
@@ -553,12 +907,13 @@ export function writeGlb(mesh, options = {}) {
     materials,
     bufferViews,
     accessors,
+    ...(gltfAnimations.length ? { animations: gltfAnimations } : {}),
   };
   if (extensionsUsed.length) {
     gltf.extensionsUsed = extensionsUsed;
-    // Both are REQUIRED for a render artifact: a loader without them would misread the
-    // integers as world units, which is worse than refusing the file.
-    gltf.extensionsRequired = [...extensionsUsed];
+  }
+  if (extensionsRequired.length) {
+    gltf.extensionsRequired = extensionsRequired;
   }
   return buildGlb(gltf, binaryParts);
 }

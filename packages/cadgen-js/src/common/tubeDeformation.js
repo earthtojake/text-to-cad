@@ -11,6 +11,24 @@ import { TUBE_MATERIAL_ATTRIBUTE } from "./tubeMaterialShader.js";
 // assembly/world millimetres before occurrence animation transforms. No CAD
 // kernel or source model is read: the original STEP tessellation is the rest mesh.
 const EPS = 1e-7;
+
+/** How much of the local curvature radius a posed tube's surface may reach.
+ *
+ * The REST surface is authored and must be legal, so it still throws. A POSED
+ * one is interpolated, and an isolated blend artefact is not worth losing a
+ * clip over -- see the pull-back at the pose site. 0.05 keeps 5% of the radius
+ * between the surface and the centre of curvature. */
+const TUBE_PINCH_FLOOR = 0.05;
+
+/** Vertices pulled back by that clamp, since the last reset. Module-level
+ * because `updateAttribute` is called once per pose and the interesting number
+ * is the total over a bake, not one frame's. */
+export const tubePinchStats = { vertices: 0, worstReach: 0 };
+
+export function resetTubePinchStats() {
+  tubePinchStats.vertices = 0;
+  tubePinchStats.worstReach = 0;
+}
 const MAX_REFINED_TRIANGLES = 700000;
 const COMPILED_PATH_CACHE_SIZE = 128;
 
@@ -154,9 +172,6 @@ function buildBezierTable(segment) {
   };
   append(0, 1);
   segment.table = table;
-  for (const entry of table) {
-    entry.point = bezierAt(segment.points, entry.t);
-  }
   segment.length = table.at(-1).s;
 }
 
@@ -273,8 +288,6 @@ function sampledBezierRadius(segment) {
     const d = bezierDerivative(segment.points, entry.t);
     const dd = bezierSecond(segment.points, entry.t);
     const speed = length(d);
-    const tangent = mul(d, 1 / speed);
-    entry.curvature = mul(sub(dd, mul(tangent, dot(dd, tangent))), 1 / (speed * speed));
     return Math.pow(speed, 3) / length(cross(d, dd));
   }));
 }
@@ -329,7 +342,6 @@ export function compileTubePath(raw) {
     }
     if (segment.kind === "bezier") {
       buildBezierTable(segment);
-      segment.radius = sampledBezierRadius(segment);
     }
     segment.offset = total;
     segment.bounds = segmentBounds(segment);
@@ -337,7 +349,21 @@ export function compileTubePath(raw) {
     previous = segment;
     return segment;
   });
-  return { segments, length: total, minRadius: Math.min(...segments.map((s) => s.radius)) };
+  const path = { segments, length: total };
+  // Diagnostic only, and the sampled pass over every Bezier table entry that
+  // answers it is a third of a compile. Lines and arcs already know their radius;
+  // a Bezier's is filled in the first time anything asks this path for one.
+  Object.defineProperty(path, "minRadius", {
+    get() {
+      for (const segment of segments) {
+        if (segment.kind === "bezier" && segment.radius === Infinity) {
+          segment.radius = sampledBezierRadius(segment);
+        }
+      }
+      return Math.min(...segments.map((segment) => segment.radius));
+    },
+  });
+  return path;
 }
 
 /** Exact frame at arc length; endpoint tangent extrapolation is deliberate. */
@@ -357,11 +383,31 @@ export function sampleTubePath(path, distance) {
   return frame;
 }
 
+// The table's points, in the same order as its entries. Read ONLY by the
+// projection below, which runs over rest paths; a posed path is sampled, never
+// projected, so it never pays for these.
+function tablePoints(segment) {
+  if (!segment.tablePoints) {
+    const points = new Float64Array(segment.table.length * 3);
+    segment.table.forEach((entry, index) => {
+      const p = bezierAt(segment.points, entry.t);
+      points[index * 3] = p[0];
+      points[index * 3 + 1] = p[1];
+      points[index * 3 + 2] = p[2];
+    });
+    segment.tablePoints = points;
+  }
+  return segment.tablePoints;
+}
+
 function closestBezierDistance(segment, point) {
+  const points = tablePoints(segment);
   let bestIndex = 0;
   let bestD = Infinity;
   for (let i = 0; i < segment.table.length; i++) {
-    const d = distanceSq(point, segment.table[i].point);
+    const d = (point[0] - points[i * 3]) ** 2
+      + (point[1] - points[i * 3 + 1]) ** 2
+      + (point[2] - points[i * 3 + 2]) ** 2;
     if (d < bestD) {
       bestD = d;
       bestIndex = i;
@@ -432,8 +478,10 @@ export function projectTubePath(path, point) {
   return best;
 }
 
-// Values, not object identity: animation authors may mutate/reuse control arrays.
-// A bounded LRU retains the rest paths and the current posed packet.
+// Values, not object identity: a deformation is a SPEC, and two specs with the
+// same numbers compile to the same path. A bounded LRU retains the rest paths and
+// whichever posed paths are in flight; the string key is what makes the surface
+// and its edge object share one compile of the frame they are both drawing.
 const compiledPaths = new Map();
 
 function cachedCompile(raw) {
@@ -443,13 +491,113 @@ function cachedCompile(raw) {
     compiledPaths.delete(key);
   } else {
     path = compileTubePath(raw);
-    Object.defineProperty(path, "sourceKey", { value: key });
   }
   compiledPaths.set(key, path);
   if (compiledPaths.size > COMPILED_PATH_CACHE_SIZE) {
     compiledPaths.delete(compiledPaths.keys().next().value);
   }
   return path;
+}
+
+/** A validated, OWNED copy of a path spec: plain numbers, no compiled table.
+ *
+ * The shape checks stay here, so an authoring typo still fails at the moment the
+ * clip hands the deformation over. The COPY is what makes retaining a spec safe:
+ * authors may reuse and mutate their control arrays between frames, which the old
+ * code survived only because it stringified them on the spot. A bake that holds
+ * tens of thousands of samples cannot alias one array that is about to change. */
+function canonicalPathSpec(raw) {
+  keys(raw, ["segments", "normal"], "path");
+  if (!Array.isArray(raw.segments) || !raw.segments.length) {
+    fail("path needs at least one segment");
+  }
+  // No default seed: a guessed transverse normal would flip as the first tangent
+  // turns during an animation, twisting the tube by 90 degrees in one frame.
+  if (raw.normal === undefined) {
+    fail("path normal is required: give both the rest and the posed path an explicit transverse normal seed");
+  }
+  const normal = vector(raw.normal, "normal");
+  const segments = raw.segments.map((spec, index) => {
+    keys(spec, SEGMENT_KEYS[spec.kind] || SEGMENT_KEYS.arc, `segment ${index}`);
+    if (spec.kind === "line") {
+      return { kind: "line", start: vector(spec.start, "start"), end: vector(spec.end, "end") };
+    }
+    if (spec.kind === "arc") {
+      return {
+        kind: "arc",
+        center: vector(spec.center, "center"),
+        axis: vector(spec.axis, "axis"),
+        start: vector(spec.start, "start"),
+        sweepDeg: spec.sweepDeg,
+      };
+    }
+    if (spec.kind === "bezier") {
+      if (!Array.isArray(spec.points) || spec.points.length !== 4) {
+        fail("Bezier points must contain four vec3 control points");
+      }
+      return { kind: "bezier", points: spec.points.map((point) => vector(point, "Bezier point")) };
+    }
+    return fail(`unknown segment kind ${JSON.stringify(spec.kind)}; expected line, arc, bezier`);
+  });
+  return { normal, segments };
+}
+
+function sameNumbers(a, b) {
+  if (a === b) {
+    return true;
+  }
+  if (Array.isArray(a)) {
+    if (!Array.isArray(b) || a.length !== b.length) {
+      return false;
+    }
+    return a.every((value, index) => sameNumbers(value, b[index]));
+  }
+  if (a && typeof a === "object") {
+    if (!b || typeof b !== "object" || Array.isArray(b)) {
+      return false;
+    }
+    const names = Object.keys(a);
+    return names.length === Object.keys(b).length && names.every((name) => sameNumbers(a[name], b[name]));
+  }
+  return false;
+}
+
+/** Do two deformations pose a tube identically? Values, never object identity. */
+export function sameTubeDeformation(a, b) {
+  if (a === b) {
+    return true;
+  }
+  if (!a || !b) {
+    return false;
+  }
+  return a.twistDeg === b.twistDeg
+    && a.maxSegmentLength === b.maxSegmentLength
+    && sameNumbers(a.braid, b.braid)
+    && sameNumbers(a.restSpec, b.restSpec)
+    && sameNumbers(a.pathSpec, b.pathSpec);
+}
+
+/** Do two deformations share a REST shape — what the refined base mesh is OF?
+ *
+ * The value form of `restMappingKey`, for callers comparing samples rather than
+ * looking something up in a map. Exactly the same two fields, so the two agree. */
+export function sameTubeRestShape(a, b) {
+  return a.maxSegmentLength === b.maxSegmentLength && sameNumbers(a.restSpec, b.restSpec);
+}
+
+/** Resolve a deformation's two paths, through the bounded LRU above.
+ *
+ * An explicit call, never a getter and never memoised onto the deformation: the
+ * compiled arc-length tables are ~500 KB per path, and a value that quietly
+ * acquired them on first read would put one on every sample that was ever posed.
+ * The caller holds the result for as long as it is posing, and no longer, which is
+ * what keeps a 27,504-sample bake from retaining 27,504 tables. */
+export function compileDeformation(deformation) {
+  return {
+    ...deformation,
+    rest: cachedCompile(deformation.restSpec),
+    path: cachedCompile(deformation.pathSpec),
+  };
 }
 
 export function normalizeTubeDeformation(spec) {
@@ -474,20 +622,29 @@ export function normalizeTubeDeformation(spec) {
     }
     braid = { pitch, depth, strands };
   }
-  const rest = cachedCompile(spec.rest);
-  const path = cachedCompile(spec.path);
+  // Compiles NOTHING. A deformation is the numbers that describe it; the paths
+  // those numbers make are resolved by compileDeformation, at the moment something
+  // poses with them. See its comment for why this is not a lazy property.
   return {
-    rest,
-    path,
+    restSpec: canonicalPathSpec(spec.rest),
+    pathSpec: canonicalPathSpec(spec.path),
     twistDeg,
     maxSegmentLength,
-    braid,
-    key: JSON.stringify([rest.sourceKey, path.sourceKey, twistDeg, maxSegmentLength, braid])
+    braid
   };
 }
 
-const restMappingKey = (deformation) =>
-  JSON.stringify([deformation.rest.sourceKey ?? deformation.rest, deformation.maxSegmentLength]);
+/** The identity of a deformation's REST side: what the refined base mesh is OF.
+ *
+ * A string over the rest path's own numbers, deliberately never a compiled path:
+ * `compiledPaths` above is a 128-entry LRU that a clip driving dozens of tubes
+ * churns every frame, so two frames of one tendon hand back two different compiled
+ * objects for the same authored path. Anything that has to decide "is this still
+ * the same rest shape" across frames — the display state below, and the caches it
+ * keys — compares THIS, not identity. `sameTubeRestShape` is the same predicate
+ * for callers that only need the answer and not a map key. */
+export const restMappingKey = (deformation) =>
+  JSON.stringify([deformation.restSpec, deformation.maxSegmentLength]);
 
 // Clip a triangle (as [distance, w0, w1, w2] barycentric rows) against one
 // rest-arc-length band boundary, dropping repeated corners.
@@ -676,13 +833,33 @@ function updateAttribute(THREE, attribute, normals, mapping, deformation, invers
     }
     const u = c * values[j + 1] - s * values[j + 2];
     const v = s * values[j + 1] + c * values[j + 2];
-    const ox = frame.normal[0] * u + frame.binormal[0] * v;
-    const oy = frame.normal[1] * u + frame.binormal[1] * v;
-    const oz = frame.normal[2] * u + frame.binormal[2] * v;
-    const metric = 1 - (frame.curvature[0] * ox + frame.curvature[1] * oy + frame.curvature[2] * oz);
-    if (metric <= EPS) {
-      fail("posed mesh crosses the centerline curvature radius");
+    let ox = frame.normal[0] * u + frame.binormal[0] * v;
+    let oy = frame.normal[1] * u + frame.binormal[1] * v;
+    let oz = frame.normal[2] * u + frame.binormal[2] * v;
+    // How far this vertex's transverse offset reaches toward the centre of
+    // curvature, as a fraction of the local radius. At 1 the surface touches the
+    // centre; past it the tube turns inside out.
+    let reach = frame.curvature[0] * ox + frame.curvature[1] * oy + frame.curvature[2] * oz;
+    if (1 - reach <= TUBE_PINCH_FLOOR) {
+      // A POSED path may pinch where an authored one may not. These centerlines
+      // are blended between solved keyframes, and blending two Bezier control
+      // nets can put a momentary near-cusp at a joint even when both endpoints
+      // are smooth -- a spike the 4 Hz solve never sees but a 96 Hz sampler
+      // does. Refusing there loses a whole 6 s clip over a handful of vertices
+      // at a handful of instants, so the surface is pulled back to just inside
+      // the centre instead: locally pinched, never inverted, and counted so the
+      // caller can say how much it happened rather than discovering it later.
+      const scale = (1 - TUBE_PINCH_FLOOR) / reach;
+      ox *= scale;
+      oy *= scale;
+      oz *= scale;
+      tubePinchStats.vertices += 1;
+      tubePinchStats.worstReach = Math.max(tubePinchStats.worstReach, reach);
+      reach = 1 - TUBE_PINCH_FLOOR;
     }
+    // The normal's tangential term divides by this, so it must describe the
+    // offset actually used above, not the one that was asked for.
+    const metric = 1 - reach;
     point.set(
       frame.point[0] + ox + values[j + 3] * frame.tangent[0],
       frame.point[1] + oy + values[j + 3] * frame.tangent[1],
@@ -780,13 +957,16 @@ export function applyTubeDeformationToLineObject(THREE, object, deformation, bas
   if (!deformation && !state?.active) {
     return;
   }
-  if (deformation?.key && state?.active && state.lastKey === deformation.key) {
+  if (deformation && state?.active && sameTubeDeformation(state.lastSpec, deformation)) {
     return;
   }
+  // Resolved once, for this call. The state remembers the SPEC it last drew, never
+  // the compiled paths: two frames of one tendon must not pin two compiles.
+  const compiled = deformation ? compileDeformation(deformation) : null;
   const restKey = deformation ? restMappingKey(deformation) : state?.restKey;
   if (!state || (deformation && restKey !== state.restKey)) {
     const original = state?.original || object.geometry;
-    const source = refineLineGeometry(THREE, object, original, deformation.rest, base, deformation.maxSegmentLength);
+    const source = refineLineGeometry(THREE, object, original, compiled.rest, base, compiled.maxSegmentLength);
     const geometry = source.clone();
     state?.geometry.dispose();
     geometry.userData = { ...geometry.userData, cadSceneCachedGeometry: false };
@@ -811,13 +991,13 @@ export function applyTubeDeformationToLineObject(THREE, object, deformation, bas
   const inverse = base.clone().invert();
   for (const name of state.names) {
     if (restKey !== state.restKey) {
-      state.mappings[name] = mappingFor(THREE, state.source.attributes[name], null, deformation.rest, base);
+      state.mappings[name] = mappingFor(THREE, state.source.attributes[name], null, compiled.rest, base);
     }
-    updateAttribute(THREE, state.geometry.attributes[name], null, state.mappings[name], deformation, inverse);
+    updateAttribute(THREE, state.geometry.attributes[name], null, state.mappings[name], compiled, inverse);
   }
   state.restKey = restKey;
   state.active = true;
-  state.lastKey = deformation.key;
+  state.lastSpec = deformation;
   state.geometry.computeBoundingBox();
   state.geometry.computeBoundingSphere();
 }
@@ -858,6 +1038,44 @@ function preparedMapping(THREE, prepared, deformation, base, gpu) {
     prepared.mappings.set(key, mapping);
   }
   return mapping;
+}
+
+// The HEADLESS half of the deformation, for callers with geometry but no scene.
+//
+// `applyRecordTubeDeformation` below is the display driver: it owns a record, its
+// materials, its edge object and its GPU fallback. The GLB morph bake
+// (lib/export/packageTubeMorph.js) needs exactly the two steps in the middle of
+// that and none of the rest — refine the rest mesh, project it onto the rest
+// centerline, then write one posed shape into buffers it owns. Re-deriving those
+// analytically in the exporter would be a SECOND answer to "where does this vertex
+// go", and the two would agree until the curvature got tight; these call the same
+// prepareRestSurface / mappingFor / updateAttribute the viewer does, share the same
+// restPreparationCache, and so cannot drift from it.
+
+/** Refine one tube's rest mesh at its band step and map it onto the rest centerline.
+ *
+ * `geometry` is the rest tessellation in the space `base` maps to world; the result's
+ * `geometry` is the refined rest surface (the base mesh a bake must ship), and
+ * `sourceTriangles[i]` is the source triangle refined triangle `i` came from, or
+ * `null` when no refinement happened and the two are one-to-one. */
+export function prepareTubeBake(THREE, geometry, deformation, base) {
+  const prepared = prepareRestSurface(THREE, geometry, deformation, base);
+  return {
+    geometry: prepared.restSource,
+    sourceTriangles: prepared.sourceTriangles,
+    mapping: preparedMapping(THREE, prepared, deformation, base, false),
+    vertexCount: prepared.restSource.attributes.position.count,
+  };
+}
+
+/** Write ONE posed shape of a prepared tube into attributes the caller owns.
+ *
+ * `positions` (and `normals`, when given) must be `prepared.vertexCount` long; they
+ * are overwritten, never appended to, so a bake can pose the same pair of scratch
+ * buffers once per keyframe. `inverse` is the inverse of the `base` the preparation
+ * used, exactly as the display path passes it. */
+export function poseTubeBake(THREE, prepared, deformation, inverse, positions, normals = null) {
+  updateAttribute(THREE, positions, normals, prepared.mapping, deformation, inverse);
 }
 
 // Build the per-record display geometry over the (possibly refined) rest
@@ -935,27 +1153,28 @@ export function applyRecordTubeDeformation(THREE, record, deformation) {
     applyTubeDeformationToLineObject(THREE, record.edges, deformation, base);
   }
   let state = record.tubeDeformationState;
-  if (deformation?.key && state?.active && state.lastKey === deformation.key) {
+  if (deformation && state?.active && sameTubeDeformation(state.lastSpec, deformation)) {
     syncGpuTubeMaterials(record);
     return;
   }
   if (!deformation && !state?.active) {
     return;
   }
+  const compiled = deformation ? compileDeformation(deformation) : null;
   if (!deformation) {
     disableGpuTube(record);
   }
   if (!state || (deformation && restMappingKey(deformation) !== state.restKey)) {
-    state = record.tubeDeformationState = createDeformationState(THREE, record, state, deformation, base);
+    state = record.tubeDeformationState = createDeformationState(THREE, record, state, compiled, base);
   }
   if (!deformation) {
     restoreRestSurface(record, state);
     return;
   }
   const inverse = base.clone().invert();
-  const gpu = record.gpuTubeDeformationAllowed && deformation.path.length <= GPU_TUBE_MAX_PATH_LENGTH;
+  const gpu = record.gpuTubeDeformationAllowed && compiled.path.length <= GPU_TUBE_MAX_PATH_LENGTH;
   if (!state.mapping) {
-    state.mapping = preparedMapping(THREE, state.prepared, deformation, base, gpu);
+    state.mapping = preparedMapping(THREE, state.prepared, compiled, base, gpu);
     if (!state.mapping.gpu) {
       // The CPU path stores braid material coordinates per vertex; the GPU
       // path derives them from its mapping texture instead.
@@ -963,7 +1182,7 @@ export function applyRecordTubeDeformation(THREE, record, deformation) {
       for (let i = 0; i < coords.length / 3; i++) {
         const j = state.mapping.indices[i] * 8;
         const v = state.mapping.values;
-        coords.set([v[j] * deformation.rest.length, v[j + 1], v[j + 2]], i * 3);
+        coords.set([v[j] * compiled.rest.length, v[j + 1], v[j + 2]], i * 3);
       }
       state.geometry.setAttribute(TUBE_MATERIAL_ATTRIBUTE, new THREE.BufferAttribute(coords, 3));
     }
@@ -977,15 +1196,15 @@ export function applyRecordTubeDeformation(THREE, record, deformation) {
     // The exact mapping depends only on the rest path, which this state is
     // keyed by; a hover during animation must not re-project every vertex per pose.
     state.exactMapping ??= state.mapping.gpu
-      ? preparedMapping(THREE, state.prepared, deformation, base, false)
+      ? preparedMapping(THREE, state.prepared, compiled, base, false)
       : state.mapping;
-    updateAttribute(THREE, state.geometry.attributes.position, state.geometry.attributes.normal, state.exactMapping, deformation, inverse);
+    updateAttribute(THREE, state.geometry.attributes.position, state.geometry.attributes.normal, state.exactMapping, compiled, inverse);
     state.geometry.computeBoundingBox();
     state.geometry.computeBoundingSphere();
   };
-  if (applyGpuTube(THREE, record, state, deformation, inverse, sampleTubePath, materialize)) {
+  if (applyGpuTube(THREE, record, state, compiled, inverse, sampleTubePath, materialize)) {
     state.active = true;
-    state.lastKey = deformation.key;
+    state.lastSpec = deformation;
     return;
   }
   disableGpuTube(record);
@@ -993,5 +1212,5 @@ export function applyRecordTubeDeformation(THREE, record, deformation) {
   const bounds = state.geometry.boundingBox.clone().applyMatrix4(base);
   record.partBounds = { min: bounds.min.toArray(), max: bounds.max.toArray() };
   state.active = true;
-  state.lastKey = deformation.key;
+  state.lastSpec = deformation;
 }

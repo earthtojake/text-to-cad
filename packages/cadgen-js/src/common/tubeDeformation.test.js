@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from 'three';
-import { compileTubePath, sampleTubePath, projectTubePath, normalizeTubeDeformation, applyRecordTubeDeformation } from './tubeDeformation.js';
+import { compileTubePath, compileDeformation, sampleTubePath, projectTubePath, normalizeTubeDeformation, applyRecordTubeDeformation } from './tubeDeformation.js';
 import { evaluateAnimationClip, applyAnimationFrameToEffects } from './animationRuntime.js';
 import { applyStepModuleEffectsToRecords, resetStepModuleRecordEffects } from './stepModuleEffects.js';
 const line=(a,b)=>({kind:'line',start:a,end:b});
@@ -77,7 +77,7 @@ test('cached paths honor reused mutable inputs and unchanged poses leave buffers
   assert.equal(r.geometry.attributes.position.version,version);
   raw.segments[0].end[0]=20;
   const changed=normalizeTubeDeformation({rest:straight,path:raw});
-  assert.equal(first.path.length,10);assert.equal(changed.path.length,20);
+  assert.equal(compileDeformation(first).path.length,10);assert.equal(compileDeformation(changed).path.length,20);
   applyRecordTubeDeformation(THREE,r,changed);
   near(Array.from(r.geometry.attributes.position.array.slice(6,9)),[20,0,1]);
 });

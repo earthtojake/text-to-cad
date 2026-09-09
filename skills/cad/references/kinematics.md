@@ -300,6 +300,118 @@ The result names the file and what it covers — `saved video: tmp/demo.mp4
 opening it. Still snapshots remain the evidence for a POSE; a video is for
 motion a still cannot show.
 
+### Exporting the clip INSIDE a GLB
+
+A video is pixels. `cadgen glb build --animation` writes the motion itself: the
+clip is sampled into glTF node animation, so whatever opens the `.glb` — Blender,
+a three.js viewer, a browser's model preview — plays it. There is no camera, no
+quality and no encoder here, and `fps` means something different: the SAMPLING
+rate of the baked keyframes, not a playback rate.
+
+```bash
+cadgen glb build STEP/arm.step meshes/arm.glb --animation demo
+cadgen glb build STEP/arm.step meshes/arm.glb \
+  --animation '{"clip": "demo", "fps": 30, "seconds": 24, "start": 0}'
+```
+
+The request is a clip name, or an object whose keys are all optional but `clip`:
+
+| key | default | meaning |
+| --- | --- | --- |
+| `clip` | — | the clip to bake; required |
+| `fps` | `30` | keyframe samples per second, a whole number 1..120 |
+| `seconds` | what is left of the clip from `start` | how much of the clip to bake |
+| `start` | `0` | seconds into the clip where the span begins; must be inside it |
+| `drop` | `[]` | effects to bake STATIC instead of refusing: `opacity`, `visible` |
+| `deform` | `refuse` | what to do with `.deformTube()`: `refuse`, `morph`, `rest` |
+| `deformTolerance` | `1.0` | `morph` only — millimetres the baked tubes may sit from the clip's own deformation, `0.01`..`10` |
+
+The span is resolved exactly as `--video`'s is — a looping clip defaults to one
+whole cycle, a clip that stops gets what is left of it, and `fps * seconds` is
+capped at 7200 samples. The exported animation is re-based to zero, so `start`
+picks where in the CLIP the span begins and the file still opens at t = 0.
+
+**What glTF carries, and what it will not:**
+
+| clip effect | in the GLB |
+| --- | --- |
+| `.rotate()` | exact — a rotation channel on that occurrence's node |
+| `.translate()` | exact — a translation channel on the same node |
+| `.rotate()` about a pivot | exact — the pivot rides in the translation channel |
+| `.opacity()` | **refused.** glTF has no animated opacity. `"drop": ["opacity"]` bakes the value at `start` as a material alpha, and warns |
+| `.visible()` | **refused.** Same reason. `"drop": ["visible"]` omits whatever is hidden at `start`, and warns — an occurrence dropped this way loses its motion too, because a node that is not in the file cannot be animated |
+| `.deformTube()` | **refused by default.** Per-vertex motion, not a node transform. `"deform": "morph"` bakes it as glTF morph targets (below); `"deform": "rest"` ships those tubes at rest shape and warns |
+
+Nothing is dropped quietly: an effect the file cannot carry stops the export and
+names the occurrences, so a hand whose tendons froze on the way out is a refusal
+rather than a finished-looking file. Render the clip with
+`cadgen step snapshot --animation <clip> --video` when the motion is one of
+those — `--video` needs the clip named too, so both flags go together.
+
+#### Deforming tubes: `"deform": "morph"`
+
+```bash
+cadgen glb build STEP/hand.step meshes/hand.glb \
+  --animation '{"clip": "fist", "fps": 24, "seconds": 6,
+                "deform": "morph", "deformTolerance": 1.0}'
+```
+
+A deforming tube's node gets glTF **morph targets** — per-vertex position (and
+normal) deltas against one base mesh — and a `weights` channel that blends
+between them on the clip's own time line. What plays the file plays the bending
+cord.
+
+`deformTolerance` is the point. Morph weights blend the RESULT of two poses,
+while the clip blends its own control numbers and rebuilds the centerline from
+them, and the path→vertex map is not linear: the two agree only AT baked
+instants. A target per solved keyframe therefore looks perfect in any still
+taken at a keyframe and is wrong in between — measured at 23 mm mid-interval on
+1.5 mm tendons. So the targets are **fitted**, per occurrence, until the blend
+stays inside `deformTolerance` everywhere, measured on a grid four times finer
+than `fps` (at least 96 Hz). The summary reports `targets`, `bytes`,
+`runtimeBytes`, `deviationMm` and `fitGridHz`, so the file states what it is
+worth. Halving the tolerance roughly doubles the targets.
+
+The ceiling is **playback memory, not file size**: three.js uploads morph data
+as a float texture at 32 bytes per vertex per target (16 without normals), and a
+bake past 512 MiB of it is refused with the arithmetic and the four levers —
+raise `deformTolerance`, shorten `seconds`, coarsen `--mesh-tolerance` so the
+tubes carry fewer vertices, or coarsen the clip's own `maxSegmentLength`. A big
+hand at a fine tolerance does not fit in a browser, and the refusal says so
+rather than writing a file that will not open.
+
+What morph does not carry, said in the summary every time:
+
+- **a braid.** `braid:{...}` is a fragment shader over a material coordinate;
+  glTF has nowhere to put it, so the exported cord has the right shape and
+  motion and a smooth surface.
+- **a clip that re-routes a tube's `rest` path mid-span.** Morph targets are
+  deltas against ONE base mesh, and a rest path that moves has no such mesh.
+  Refused by name; move the tube with `.rotate()`/`.translate()` instead.
+- **playback in cadgen's own CAD Viewer**, which reads a GLB's geometry and
+  ignores its glTF animation — as it already does for the rigid channels. Play
+  the file in Blender, a three.js viewer, or a browser model preview.
+
+A tube the clip holds in a fixed non-rest shape still ships **posed**, with no
+targets: the rest shape would be the silent freeze this mode exists to prevent.
+
+An animated export writes ONE node per occurrence instead of the flat,
+colour-grouped mesh a static one writes, so the file is bigger and its parts are
+individually addressable. Only occurrences the clip actually MOVES get channels;
+an occurrence held at a constant offset carries it on its node and nothing else.
+Freshness folds the clip request and the `.step.js` into the export's key, so
+editing the choreography re-exports even though the STEP has not changed.
+
+`--animation` is GLB's alone, and the CLI is generated from each door's
+signature, so `cadgen stl build` and `cadgen 3mf build` have no such flag at all
+— they exit 2 with `unrecognized arguments: --animation`. Neither format has
+anywhere to put a clip; export it as `.glb`, or render it with
+`cadgen step snapshot --animation <clip> --video`.
+
+OUT is required. With no OUT a mesh door writes the model's DECLARED artifact,
+which is its static one, so `--animation` is refused there rather than replacing
+a committed `.glb` with a per-occurrence animated file.
+
 Identify fixed pivots, link lengths, gear ratios, and joint limits BEFORE
 declaring mates; pivot every rotation about its hinge bore or mate face —
 never a bounding-box center. Convert visual concerns into `cadgen step

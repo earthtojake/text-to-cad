@@ -66,10 +66,15 @@ local inverse-transpose; silhouettes and technical edges follow the surface.
 Every evaluation starts from rest. Omitting `deformTube` on a later frame or
 clearing animation restores the rest shape. Shared component meshes are never
 mutated. A changed centerline can be independently inspected without a renderer:
-`evaluateAnimationClip` returns `deformations`, keyed by occurrence ID, with
-compiled rest/posed paths and their lengths. `compileTubePath`,
-`sampleTubePath`, and `projectTubePath` are exported from
-`common/tubeDeformation.js`. Line and circle lengths/curvature are analytic;
+`evaluateAnimationClip` returns `deformations`, keyed by occurrence ID. A
+deformation is the NUMBERS — `restSpec`, `pathSpec`, `twistDeg`,
+`maxSegmentLength`, `braid` — validated and owned, never the author's arrays and
+never a compiled path: a morph bake fits on a 96 Hz grid, and a sample that held
+its two arc-length tables would hold hundreds of KB per tube per grid sample.
+`compileDeformation` resolves the two paths through a bounded LRU, for as long
+as the caller is posing with them; `sameTubeDeformation` and `sameTubeRestShape`
+compare two deformations by value. `compileTubePath`, `sampleTubePath`, and
+`projectTubePath` are exported from `common/tubeDeformation.js`. Line and circle lengths/curvature are analytic;
 `minRadius` for a Bézier is a sampled diagnostic and must not substitute for an
 independent curvature gate. As with any CAD tessellation, a finite surface mesh
 approximates the analytic posed centerline between its vertices.

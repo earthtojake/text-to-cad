@@ -86,6 +86,18 @@ cadgen stl build path/to/imported.step meshes/imported.stl
 
 A mesh door never writes a `.step` file. A generated model's STEP is the OUTPUT of `python <model>.py`; an imported model's STEP is already the file on disk.
 
+### Carrying a clip into the GLB
+
+GLB is the one mesh format with somewhere to put motion. `--animation` bakes a clip the document's render module (`STEP/model.step.js`) declares into the file as glTF node animation, so an external viewer plays it:
+
+```bash
+cadgen glb build STEP/model.step meshes/model.glb --animation demo
+cadgen glb build STEP/model.step meshes/model.glb \
+  --animation '{"clip": "demo", "fps": 30, "seconds": 24, "start": 0}'
+```
+
+`fps` is the SAMPLING rate of the baked keyframes, not a playback rate — this writes geometry, not pixels. Rotation and translation come out exact; opacity and visibility are refused by name, because glTF has no animated channel for them and a silently frozen part is the failure this export exists to avoid. A `.deformTube()` tube is refused by default too, and `"deform": "morph"` bakes it as glTF morph targets fitted to a stated millimetre tolerance (`deformTolerance`) — the file is much bigger and the ceiling is playback memory, not bytes. The flag exists on `glb build` alone — `cadgen stl build` and `cadgen 3mf build` have no `--animation` and reject it as an unrecognized argument. OUT is required: with no OUT a mesh door writes the model's declared artifact, which is its static one. Clips, the full request, and the drop/deform escape hatches are in `kinematics.md`.
+
 ## Rendering a mesh file
 
 Each mesh format also has a `snapshot` verb, with the same `TARGET [OUT]` grammar `cadgen step snapshot` uses:
