@@ -7,9 +7,26 @@ from pathlib import Path
 import json,hashlib,shutil
 from cadgen import read_step,srgb
 from lib.assembly import Body
-from lib.finish import FINISHES
+# Nearest-colour material inference for imported bodies runs over the
+# HARDWARE languages only; the cord hues are assigned by name in
+# lib.palette, never guessed from an imported colour.
+from lib.palette import HARDWARE_FINISHES as FINISHES
 
 ROOT=Path(__file__).resolve().parents[3]
+MARKER='/models/assemblies/'
+
+def rooted(path):
+    """Re-anchor a path a manifest recorded onto *this* checkout's ROOT.
+
+    A manifest records where a file stood when its evidence was written, but
+    that absolute prefix is provenance, not identity -- the sha256 recorded
+    beside it is the identity, and every caller asserts it. Read in a second
+    checkout the recorded prefix does not exist at all, so anchor the same
+    ``models/assemblies/...`` tail under ROOT and let the digest prove the
+    bytes are the same file. A path that names no such tail is left alone.
+    """
+    text=str(path).replace('\\','/')
+    return ROOT/text.split(MARKER,1)[1] if MARKER in text else Path(path)
 
 def appearance(shape,record):
     if 'color' in record:shape.color=tuple(record['color'])
@@ -88,7 +105,7 @@ def integrated_native_bodies():
         '73e22e401693dc33cd772cb8874923bbd4efd65bcc15c63da192e5fc46cee803',True)
     for family in ('cup_guide','thumb_base'):
         manifest=json.loads((ROOT/f'validation/anthropomorphic_hand/{family}_frames.json').read_text())
-        bodies=overlay(bodies,Path(manifest['step']),manifest['bodies'],manifest['sha256'])
+        bodies=overlay(bodies,rooted(manifest['step']),manifest['bodies'],manifest['sha256'])
     cmc=json.loads((ROOT/'validation/anthropomorphic_hand/thumb_cmc_frames.json').read_text())
     bodies=overlay(bodies,folder/'thumb_cmc_mounts_review.step',cmc['bodies'],cmc['sha256'],True)
     banks=json.loads((ROOT/'validation/anthropomorphic_hand/palm_bank_frames.json').read_text())
@@ -105,8 +122,8 @@ def integrated_native_bodies():
         '5b0c28e93e903292cc15b72c51576871f6b47a43962cbff3e68140c6477fdeb7')
     hardware=json.loads((ROOT/'validation/anthropomorphic_hand/positive_yaw_hardware_build_handoff.json').read_text())
     for item in hardware.values():
-        records=json.loads(Path(item['frames']).read_text())
-        bodies=overlay(bodies,Path(item['step']),records,item['sha256'],True)
+        records=json.loads(rooted(item['frames']).read_text())
+        bodies=overlay(bodies,rooted(item['step']),records,item['sha256'],True)
     ring_manifest=ROOT/'validation/anthropomorphic_hand/cmc_dorsal_ring_frames.json'
     ring_step=folder/'cmc_dorsal_ring_review.step'
     bodies=overlay(bodies,ring_step,json.loads(ring_manifest.read_text()),

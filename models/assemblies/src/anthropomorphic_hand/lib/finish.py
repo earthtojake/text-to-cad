@@ -1,13 +1,13 @@
-"""Four hardware surface languages, plus dyed braided tendon fibers."""
+"""Naming a surface language at authoring time.
 
-FINISHES = {
-    "aluminum": ("#a9b7c1", {"roughness": .34, "metalness": .86, "clearcoat": .12}),
-    "dark": ("#17242d", {"roughness": .32, "metalness": .68, "clearcoat": .16}),
-    "steel": ("#d3dbe1", {"roughness": .12, "metalness": .98, "clearcoat": .25}),
-    "pad": ("#ede8da", {"roughness": .67, "metalness": .01, "clearcoat": .04}),
-    "tendon_flex": ("#d67436", {"roughness": .57, "metalness": .03}),
-    "tendon_extend": ("#f1d3a1", {"roughness": .60, "metalness": .02}),
-}
+The table itself lives in :mod:`lib.palette`, which owns every colour the hand
+ships. This module is the verb: ``finish(shape, language, label)``. The hardware
+languages are ``aluminum``, ``dark``, ``steel`` and ``pad``; a cord names its
+motion and its side, e.g. ``cord_flexion_positive`` or ``cord_tip_negative``.
+The old generic ``tendon_flex`` / ``tendon_extend`` pair is retired -- a cord's
+colour now says which joint it drives.
+"""
+from lib.palette import FINISHES
 
 
 def finish(shape, language, label):

@@ -6,6 +6,7 @@ from lib.forearm_routing import forearm_route
 from lib.transport_guide import make_tendon
 from lib.bowden_guide import make_bowden_body
 from lib.finish import finish
+from lib.palette import cord_language
 from lib.neutral_routes import NEUTRAL_ROUTES
 
 
@@ -15,7 +16,7 @@ def hand_progress_review():
     for route,tendon in zip(NEUTRAL_ROUTES,TENDONS):
         assert route['name']==tendon['name']
         rope=finish(make_tendon(route['path'],route['name']),
-                    'tendon_flex' if tendon['sign']>0 else 'tendon_extend',route['name'])
+                    cord_language(route['name']),route['name'])
         bodies.append(Body(rope,'variable',tendon['joint'].split('_')[0],'tendon'))
         for group in route['groups']:
             if group.get('guide') not in ('snug_reaction_liner','fixed_curved_guide','compliant_wrist_guide','open_saddle'):continue

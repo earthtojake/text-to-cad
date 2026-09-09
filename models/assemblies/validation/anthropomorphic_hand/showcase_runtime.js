@@ -339,7 +339,20 @@ const ROPE_OFFSETS = ROPE_VARYING.reduce((offsets, positions) => {
 // Longitudinal refinement, in mm. A tendon bends only where it crosses a joint,
 // but refinement is one-time and covers the whole tube, so this trades vertices
 // on the straight runs for a smooth bend at the knuckles.
-const TUBE_REFINEMENT = 3;
+//
+// It is also the lever that decides whether a morph bake fits on a GPU. Every
+// refined vertex costs one RGBA32F texel per morph target per attribute, so at
+// 3 mm the 48 cords came to 697,924 refined vertices and 694.6 MiB of morph
+// texture for one 6 s clip — past cadgen's 512 MiB playback ceiling, and the
+// export refuses. 9 mm cuts the vertex count by a third, and it is the RIGHT
+// lever: chord and angular tolerance shrink a cord's circumference, which is
+// what the morph texture is priced on, so tightening them makes cord FIDELITY
+// worse, not better. Longitudinal facets barely show on a 0.6 mm tube; a path
+// error of a few mm shows as the cord sinking through a drum. Trade the first
+// for the second and keep the path
+// tolerance at 1 mm, which is the right way round: a cord's SHAPE error is far
+// more visible than its facet count, since the tube is only 0.6 mm across.
+const TUBE_REFINEMENT = 9;
 const BRAID = { pitch: 0.8, depth: 0.022, strands: 8 };
 
 function applyTendons(m, low, high, alpha) {
@@ -388,7 +401,18 @@ function applyGuides(m, low, high, alpha) {
   }
 }
 
+// Sealed inside their gearbox housings and therefore never visible, while
+// costing 59% of the model's triangles. Marked hidden every frame so an export
+// asked for `drop: ["visible"]` leaves them out of the file, and so a renderer
+// is not paying to draw geometry behind an opaque wall.
+function hideInternals(m) {
+  for (const name of HIDDEN_BODIES) {
+    m.get(name).visible(false);
+  }
+}
+
 function applyAt(m, t) {
+  hideInternals(m);
   const { low, high, alpha } = bracket(t);
   applyPose(m, blendedPose(low, high, alpha));
   applyActuators(m, low.q.map((value, index) => value * (1 - alpha) + high.q[index] * alpha));

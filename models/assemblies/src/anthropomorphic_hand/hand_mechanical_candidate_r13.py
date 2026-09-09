@@ -6,8 +6,9 @@ this assembled export aligned with the components used by the physical audits.
 import hashlib,json
 from pathlib import Path
 from cadgen import step,read_step
-from lib.native_integration import integrated_native_bodies,overlay,ROOT
+from lib.native_integration import integrated_native_bodies,overlay,rooted,ROOT
 from lib.assembly import compound
+from lib.palette import apply_palette
 
 def native_parts(path):
     from cadgen.step_scene import load_step_scene,scene_occurrence_shape
@@ -33,6 +34,17 @@ def hand_mechanical_candidate_r13():
     by_name={b.name:b for b in bodies}
     rows=[dict(name=n,frame=fr,system=by_name[n].system,kind=by_name[n].kind) for n,fr in repair['body_frames'].items()]
     bodies=overlay(bodies,folder/'static_clearance_relief_review.step',rows,replace=True)
+    # Index-marked capstans. The drum turns at most +-70 degrees -- 8.5 mm of
+    # rope off a R7 spool, 0.19 of a turn -- and as a plain surface of
+    # revolution wound with a helix it shows none of it, while every faster
+    # part of the actuator is sealed inside a static case. capstan_index_overlay
+    # replaces the 48 drums with the marked ones from lib.capstan; same names,
+    # same placement, same count, so nothing downstream shifts.
+    known={b.name:b for b in bodies}
+    parts=native_parts(folder/'capstan_index_overlay.step')
+    rows=[dict(name=name,frame=known[name].frame,system=known[name].system,kind=known[name].kind) for name in parts]
+    assert len(rows)==48,len(rows)
+    bodies=overlay(bodies,folder/'capstan_index_overlay.step',rows,replace=True)
     # Isolated R13 integration for final-export checking; whole-hand acceptance
     # remains separate until the complete static and aesthetic gates pass.
     for filename, gatefile in [
@@ -52,11 +64,16 @@ def hand_mechanical_candidate_r13():
     removed=set(gate['removed_names'])
     assert len(removed)==33 and removed<={b.name for b in bodies}
     bodies=[b for b in bodies if b.name not in removed]
+    # The gate keyed its inputs by where they stood when it was written; rooted()
+    # anchors those same tails here, so the digest asserted below is still the
+    # gate's own, read out of this checkout's copy of the very same file.
+    recorded={str(rooted(key)):digest for key,digest in gate['input_sha256'].items()}
+    assert len(recorded)==len(gate['input_sha256'])
     for filename,frame,kind in [
         ('phalanx_continuous_representative_r5.step','middle_mcp_flexion','guide_mount'),
         ('pulley_hub_review.step','middle_pip','hub_spacer')]:
         path=folder/filename;parts=native_parts(path)
-        assert gate['input_sha256'][str(path)]==hashlib.sha256(path.read_bytes()).hexdigest()
+        assert recorded[str(path)]==hashlib.sha256(path.read_bytes()).hexdigest()
         rows=[dict(name=name,frame=frame,system='middle',kind='phalanx' if name=='middle_proximal_frame' else kind) for name in parts]
         bodies=overlay(bodies,path,rows,replace=False)
     inputs={b.source_path:b.source_sha256 for b in bodies}
@@ -69,9 +86,14 @@ def hand_mechanical_candidate_r13():
             shape.color=body.shape.color;shape.cad_material=dict(getattr(body.shape,'cad_material',{}));shape.label=name
             body.shape=shape
     assert len(bodies)==3259 and sum(b.frame!='variable' for b in bodies)==3041
+    # Colour is decided last, on the shapes the exporter actually reads: the
+    # frozen chain's own colours are provenance, not presentation. lib/palette
+    # states the whole rule, and raises rather than defaulting, so a body the
+    # palette does not know fails here instead of shipping the frame grey.
+    palette=apply_palette(bodies)
     metadata=[dict(name=b.name,frame=b.frame,system=b.system,kind=b.kind) for b in bodies]
     (reports/'mechanical_candidate_r13_frames.json').write_text(json.dumps(metadata,indent=2)+'\n')
-    evidence=dict(scope=__doc__,input_sha256=inputs,body_revisions={b.name:dict(step_sha256=b.source_sha256,frame=b.frame) for b in bodies})
+    evidence=dict(scope=__doc__,input_sha256=inputs,palette=palette,body_revisions={b.name:dict(step_sha256=b.source_sha256,frame=b.frame) for b in bodies})
     (reports/'mechanical_candidate_r13_build_inputs.json').write_text(json.dumps(evidence,indent=2)+'\n')
     return compound(bodies,'mechanical_hand_candidate_r13')
 

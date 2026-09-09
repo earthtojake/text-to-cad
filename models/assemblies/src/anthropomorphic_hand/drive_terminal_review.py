@@ -18,7 +18,7 @@ def drive_terminal_review():
             children.extend(placement*body for body in (wheel,cover,screw,bond,
                 make_driven_ferrule(r,phase,direction,name+'_curved_blind_ferrule'),
                 make_pulley_grub_screw(bore,name+'_inclined_socket_grub_screw',side=sign),
-                finish(arc_tube(r,.30,-r*2.61799387799,0,phase,direction),'tendon_flex' if sign==1 else 'tendon_extend',name+'_unchanged_tendon_wrap')))
+                finish(arc_tube(r,.30,-r*2.61799387799,0,phase,direction),'cord_flexion_positive' if sign==1 else 'cord_flexion_negative',name+'_unchanged_tendon_wrap')))
     return bd.Compound(label='ten_captured_driven_tendon_terminal_prototypes',children=children)
 
 if __name__=='__main__':drive_terminal_review()

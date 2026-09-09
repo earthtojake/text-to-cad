@@ -36,6 +36,7 @@ import gzip
 import hashlib
 import json
 import math
+import re
 import sys
 import time as time_module
 from concurrent.futures import ProcessPoolExecutor
@@ -157,12 +158,117 @@ def pinch_pose(u):
     return pose
 
 
-def spread_pose(u):
+# --- hand signs -------------------------------------------------------------
+#
+# Three gestures in one clip, each held long enough to read. They are written as
+# whole target poses in degrees rather than as calls to curl()/spread(), because
+# what makes a sign legible is which fingers DISAGREE with each other -- peace
+# needs index and middle splayed apart while ring and little are fully shut, and
+# spread() moves all four on fixed ratios. A pose scales linearly to its
+# envelope, so `target * amount` interpolates cleanly out of rest.
+
+def _shut(pose, *fingers):
+    for finger in fingers:
+        pose[f'{finger}_mcp_flexion'] = 88.0
+        pose[f'{finger}_pip'] = 105.0
+        pose[f'{finger}_dip'] = 72.0
+
+
+def _thumb(pose, abduction, flexion, mcp, ip):
+    pose['thumb_cmc_abduction'] = abduction
+    pose['thumb_cmc_flexion'] = flexion
+    pose['thumb_mcp_flexion'] = mcp
+    pose['thumb_ip'] = ip
+
+
+def _peace():
+    """Index and middle up and apart; ring and little shut under the thumb.
+
+    Sign convention, measured rather than assumed: POSITIVE mcp_abduction moves a
+    fingertip toward -X. The index sits at -X of the middle, so the index takes
+    the positive value and the middle the negative one to separate them. Getting
+    this backwards closed the V instead of opening it -- the fingertip gap went
+    from 44 mm at rest to 4 mm at the hold.
+    """
     pose = {}
-    spread(pose, pulse(u, 0.35, 0.35))
-    for finger in FINGER_NAMES:
-        curl(pose, finger, 0.06 * pulse(u))
-    thumb_oppose(pose, 0.1 * pulse(u))
+    _shut(pose, 'ring', 'little')
+    pose['index_mcp_abduction'] = 17.0
+    pose['middle_mcp_abduction'] = -11.0
+    _thumb(pose, 34.0, 44.0, 34.0, 26.0)
+    return pose
+
+
+def _metal():
+    """Index and little up, middle and ring shut, thumb clamped over them."""
+    pose = {}
+    _shut(pose, 'middle', 'ring')
+    pose['index_mcp_abduction'] = 8.0
+    pose['little_mcp_abduction'] = -20.0
+    _thumb(pose, 36.0, 46.0, 38.0, 28.0)
+    return pose
+
+
+def _shaka():
+    """Thumb and little out, the other three shut. The thumb ABDUCTS without
+    flexing -- it points away from the palm rather than across it, which is the
+    whole difference between this and a fist."""
+    pose = {}
+    _shut(pose, 'index', 'middle', 'ring')
+    pose['little_mcp_abduction'] = -23.0
+    _thumb(pose, 40.0, 6.0, 0.0, 0.0)
+    return pose
+
+
+SIGNS = (_peace(), _metal(), _shaka())
+# Non-overlapping windows: each sign rises, HOLDS -- that hold is the pause that
+# lets you read it -- and returns to rest before the next begins.
+SIGN_WINDOW = 1.0 / len(SIGNS)
+
+
+def signs_pose(u):
+    pose = {}
+    for index, target in enumerate(SIGNS):
+        amount = pulse((clamp01(u) - index * SIGN_WINDOW) / SIGN_WINDOW, 0.28, 0.28)
+        if amount <= 0.0:
+            continue
+        for key, value in target.items():
+            pose[key] = pose.get(key, 0.0) + value * amount
+    return pose
+
+
+# --- every actuator at once -------------------------------------------------
+#
+# A capstan turns by (joint angle x drive_radius / 7 mm capstan radius), so the
+# way to make the whole pack visibly move is not to swing a few joints a long
+# way -- it is to sweep EVERY joint across its own declared range. Read straight
+# off lib.layout's JOINTS so a joint added later is swept too.
+#
+# The wrist is excluded: its transport packet is only measured at neutral, which
+# is the same reason the rest of this file does not move it.
+#
+# 0.9 of each limit, not 1.0: a posed cord that bends tighter than its own
+# radius fails the export outright, and the margin is cheap next to that.
+SWEEP_FRACTION = 0.9
+# One cycle, not two. A morph target is spent wherever the cord's shape moves,
+# so sweeping everything twice doubles the target count and forces the path
+# tolerance out to 2.7 mm -- worse than the 2.0 that made the cords visibly sink
+# into the drums. One slower sweep still takes every joint to both of its limits
+# and reads better for it.
+SWEEP_CYCLES = 1
+DRIVEN_JOINTS = tuple(j for j in JOINTS if not j.name.startswith('wrist_'))
+
+
+def drive_pose(u):
+    """Every driven joint through its full range, twice, in phase."""
+    # sin() so the sweep runs rest -> positive limit -> rest -> negative limit
+    # -> rest, covering BOTH ends of each joint and starting and finishing at
+    # the neutral pose rather than snapping into it.
+    swing = math.sin(2 * math.pi * SWEEP_CYCLES * clamp01(u))
+    pose = {}
+    for joint in DRIVEN_JOINTS:
+        low, high = joint.limits
+        reach = high if swing >= 0 else -low
+        pose[joint.name] = reach * swing * SWEEP_FRACTION
     return pose
 
 
@@ -170,7 +276,8 @@ MOTIONS = (
     {'id': 'fist', 'label': 'Make a fist', 'seconds': 6.0, 'pose': fist_pose},
     {'id': 'wave', 'label': 'Finger roll', 'seconds': 7.0, 'pose': wave_pose},
     {'id': 'pinch', 'label': 'Thumb-to-index pinch', 'seconds': 6.0, 'pose': pinch_pose},
-    {'id': 'spread', 'label': 'Splay and gather', 'seconds': 5.0, 'pose': spread_pose},
+    {'id': 'signs', 'label': 'Peace, metal, shaka', 'seconds': 11.0, 'pose': signs_pose},
+    {'id': 'drive', 'label': 'Every actuator at once', 'seconds': 6.0, 'pose': drive_pose},
 )
 TOUR_SECONDS = sum(motion['seconds'] for motion in MOTIONS)
 
@@ -489,6 +596,23 @@ def actuator_samples():
     return samples
 
 
+# The planetary internals: sun, three planets, carrier, spindle, bearings and
+# ring, per actuator. They turn -- the planets at twice the carrier -- and not
+# one of them is ever visible, because each set is sealed inside a closed
+# gearbox housing. They are 528 of the 3,259 bodies and, at export tessellation,
+# 59% of the model's triangles. A renderer that draws them is spending most of
+# its budget on geometry behind an opaque wall, so the clips mark them hidden
+# and `cadgen glb build --animation '{"drop":["visible"]}'` leaves them out of
+# the file entirely.
+HIDDEN_PATTERN = re.compile(r"gearbox_(sun|planet|carrier|spindle|bearing|ring)", re.I)
+
+
+def hidden_bodies(rows):
+    names = sorted(row["name"] for row in rows if HIDDEN_PATTERN.search(row["name"]))
+    assert names, "the gearbox internals pattern matched nothing"
+    return names
+
+
 def frame_bodies(rows):
     """(frame -> body names, bodies the routing places rather than a frame).
 
@@ -619,6 +743,7 @@ def build(rows):
         'fan': fan_table(),
         'tendons': tendon_table(),
         'actuatorBodies': actuator_bodies(rows),
+        'hiddenBodies': hidden_bodies(rows),
         'actuatorSamples': actuator_samples(),
         'frames': frames,
         'routed': routed,
@@ -645,6 +770,7 @@ def write_module(path, data, runtime):
         f'const FRAME_BODIES = {dumps(data["frames"])};\n'
         f'const TENDONS = {dumps(data["tendons"])};\n'
         f'const ACTUATOR_BODIES = {dumps(data["actuatorBodies"])};\n'
+        f'const HIDDEN_BODIES = {dumps(data["hiddenBodies"])};\n'
         f'const ACTUATOR_SAMPLES = {dumps(data["actuatorSamples"])};\n'
         f'const ROPE_NAMES = {dumps(data["ropeNames"])};\n'
         f'const ROPE_NORMALS = {dumps(data["ropeNormals"])};\n'
