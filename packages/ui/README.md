@@ -94,6 +94,7 @@ From the repository root:
 
 ```sh
 npm ci
+npx --no-install playwright install chromium
 npm run build:packages
 npm run typecheck --workspace @hardcore/ui
 npm test --workspace @hardcore/ui
@@ -101,6 +102,9 @@ npm run check:boundaries
 ```
 
 Rebuild shared packages after editing them; hosts resolve `dist`, never `src`.
+Install the npm Playwright browser even if Python's snapshot browser is already
+installed; they may require different Chromium revisions. On Linux, add
+`--with-deps` to the browser install command if its system libraries are absent.
 The UI suite includes Node helper tests, React/editor tests and real Chromium
 integration tests for renderer preparation, saves/conflicts, root changes,
 multiple instances, cancellation and disposal. App integration and packaged

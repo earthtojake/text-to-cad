@@ -43,3 +43,10 @@ runs:
       run: |
         npm ci --workspace @hardcore/core --workspace @hardcore/ui --workspace @hardcore/web --workspace cad-skills-docs
         npm run build:packages
+
+    # The UI browser tests use the npm Playwright version. Its Chromium revision
+    # can differ from Python Playwright's snapshot browser installed above.
+    # Linux system libraries are already installed by that --with-deps step.
+    - name: Install shared UI test browser
+      shell: bash
+      run: npx --no-install playwright install chromium
