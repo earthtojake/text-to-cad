@@ -24,7 +24,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
         with:
-          # The VERSION guard below diffs against the PR base.
+          # The VERSION guard needs the current target branch's history.
           fetch-depth: 0
 
       - name: Set up Node.js
@@ -44,22 +44,9 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           HEAD_REF: ${{ github.head_ref }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_REF: ${{ github.base_ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          if git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- VERSION; then
-            echo "VERSION unchanged."
-            exit 0
-          fi
-          case "$HEAD_REF" in
-            release/*) echo "VERSION changed on $HEAD_REF (a release PR)." ;;
-            *)
-              echo "This PR changes VERSION but its branch is '$HEAD_REF', not release/*." >&2
-              echo "Version bumps come from the Prepare Release workflow:" >&2
-              echo "  gh workflow run release-prepare.yml --ref main -f bump=patch" >&2
-              exit 1
-              ;;
-          esac
+        run: bash scripts/release/check-pr-version.sh "$BASE_REF" "$HEAD_REF" "$HEAD_SHA"
 
   test:
     name: Test (Linux)
