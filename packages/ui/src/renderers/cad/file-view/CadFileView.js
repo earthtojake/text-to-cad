@@ -522,6 +522,7 @@ function CadFileViewSurface({
     setReferenceState,
     referenceStatus,
     setReferenceStatus,
+    referenceError,
     setReferenceError,
     referenceLoadStage,
     displayEdgeState,
@@ -2979,6 +2980,13 @@ function CadFileViewSurface({
     stepTreeRoot,
     stepTreeTopologyReferences
   ]);
+  const featureRecognitionTarget = useMemo(() => {
+    if (!isAssemblyView) return { id: STEP_MODEL_ROOT_ID, partId: "", label: selectedEntry?.name || selectedEntry?.label || "Model" };
+    const ids = uniqueStringList([...selectedPartIds, ...selectedReferences.map(referencePartId)]);
+    if (ids.length !== 1 || !loadableStepTreeTopologyNodeIdSet.has(ids[0])) return null;
+    const node = copyableStepTreeNodeForWorkspace({ assemblyPartMap, displayStepTreeRoot, stepTreeRoot, nodeId: ids[0] });
+    return { id: ids[0], partId: ids[0], label: node?.displayName || node?.name || ids[0] };
+  }, [isAssemblyView, selectedEntry, selectedPartIds, selectedReferences, referencePartId, loadableStepTreeTopologyNodeIdSet, assemblyPartMap, displayStepTreeRoot, stepTreeRoot]);
   const isolatedStepTreeSelectableNodeIds = useMemo(() => {
     if (!isAssemblyView || !focusedAssemblyNodeIds.length) {
       return null;
@@ -3976,6 +3984,33 @@ function CadFileViewSurface({
     if (stepUpdateInProgress) return;
     for (const reference of referencesForHost(text)) onReference?.(reference);
   }, [onReference, referencesForHost, stepUpdateInProgress]);
+  const requestFeatureTopology = useCallback((target) => {
+    if (isAssemblyView) setExpandedStepTreeNodeIds(current => uniqueStringList([...current, target.id]));
+    else setLargeFileState(current => ({ ...current, selectableTopologyEnabled: true }));
+  }, [isAssemblyView]);
+  const selectFeatureFaces = useCallback((faceIds) => {
+    if (stepUpdateInProgress || !faceIds.length || !faceIds.every(id => effectiveActiveReferenceMap.get(id)?.selectorType === "face")) return;
+    const next = uniqueStringList(faceIds);
+    selectedPartIdsRef.current = [];
+    setSelectedPartIds([]);
+    setSelectedRenderPartIdByAssemblyPartId({});
+    setSelectedWholeEntryCadRefToken("");
+    selectedReferenceIdsRef.current = next;
+    setSelectedReferenceIds(next);
+    setActiveTreeNodeScrollKey("");
+    setCopyStatus("");
+  }, [stepUpdateInProgress, effectiveActiveReferenceMap]);
+  const copyFeatureFaces = useCallback(async (group, { toPrompt = false } = {}) => {
+    if (stepUpdateInProgress) throw new Error("Wait for the model to finish loading.");
+    const references = group.faceIds.map(id => effectiveActiveReferenceMap.get(id));
+    if (!references.length || references.some(r => r?.selectorType !== "face")) throw new Error("These faces changed. Recognize the part again.");
+    const { lines } = buildSelectionCopyPayload({ references, entry: selectedEntry });
+    const text = lines.join("\n");
+    if (!text) throw new Error("No face reference is available.");
+    if (toPrompt) {
+      for (const reference of referencesForHost(text)) onReference?.({ ...reference, label: group.label });
+    } else await deliverReferenceText(text);
+  }, [stepUpdateInProgress, effectiveActiveReferenceMap, selectedEntry, referencesForHost, onReference, deliverReferenceText]);
   const hostReference = useMemo(
     () => (typeof onReference === "function" ? { deliverReference: deliverReferenceText, addReference: addReferenceText } : null),
     [onReference, deliverReferenceText, addReferenceText]
@@ -4228,6 +4263,20 @@ function CadFileViewSurface({
     if (!selector || appliedSelectReferenceKeyRef.current === selectReference.key || viewerLoading) {
       return;
     }
+    const selectors = selector.split(",").map(value => value.trim()).filter(Boolean);
+    if (selectors.length > 1) {
+      const resolvedFaces = selectors.map(value => resolveSelectorSelection(value, {
+        referenceMap: effectiveActiveReferenceMap,
+        treeRoot: displayStepTreeRoot || stepTreeRoot
+      }));
+      if (resolvedFaces.some(value => !value)) return;
+      if (resolvedFaces.every(value => value.kind === "reference" && effectiveActiveReferenceMap.get(value.id)?.selectorType === "face")) {
+        if (stepUpdateInProgress) return;
+        selectFeatureFaces(resolvedFaces.map(value => value.id));
+        appliedSelectReferenceKeyRef.current = selectReference.key;
+        return;
+      }
+    }
     const resolved = resolveSelectorSelection(selector, {
       referenceMap: effectiveActiveReferenceMap,
       treeRoot: displayStepTreeRoot || stepTreeRoot
@@ -4250,6 +4299,8 @@ function CadFileViewSurface({
   }, [
     selectReference,
     viewerLoading,
+    stepUpdateInProgress,
+    selectFeatureFaces,
     effectiveActiveReferenceMap,
     displayStepTreeRoot,
     stepTreeRoot,
@@ -5798,6 +5849,16 @@ function CadFileViewSurface({
             {selectedFileSheetKind === "step" ? (
               <StepFileSheet
                 key={`step:${selectedKey}`}
+                featureRecognition={{
+                  revisionKey: buildReferenceCacheKey(selectedEntry),
+                  target: featureRecognitionTarget,
+                  runtime: selectedSelectorRuntime,
+                  error: referenceError,
+                  loading: referenceStatus === REFERENCE_STATUS.LOADING,
+                  onRequestTopology: requestFeatureTopology,
+                  onSelect: selectFeatureFaces,
+                  onCopy: copyFeatureFaces
+                }}
                 open={fileSheetOpen}
                 isDesktop={isDesktop}
                 width={activeSheetWidth || tabToolsWidth}
