@@ -16,6 +16,7 @@ from .backend import normalized_file_ref, require_contained
 OPS = {"Box", "Cylinder", "Sphere", "Cone", "Torus", "Hole", "extrude", "revolve", "loft", "sweep", "fillet", "chamfer", "shell", "offset", "mirror", "split"}
 SKETCHES = {"Rectangle", "RectangleRounded", "Circle", "Ellipse", "Polygon", "RegularPolygon", "SlotOverall", "SlotCenterToCenter", "Polyline", "Line", "Spline"}
 ARG_NAMES = {"Box": ["length", "width", "height"], "Cylinder": ["radius", "height"], "Sphere": ["radius"], "Cone": ["bottom_radius", "top_radius", "height"], "Hole": ["radius", "depth"], "Rectangle": ["width", "height"], "RectangleRounded": ["width", "height", "radius"], "Circle": ["radius"], "SlotOverall": ["width", "height"], "fillet": ["edges", "radius"], "chamfer": ["edges", "length"]}
+DEPENDENCIES = object()  # scope metadata cannot collide with a Python variable
 BINARY = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv}
 
 
@@ -54,20 +55,46 @@ def parse_design_outline(source, model_name=None):
     if sum(1 for _ in ast.walk(tree)) > 20000:
         raise ValueError("Source is too large to outline")
     functions = {n.name: n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
-    env, constants = {}, []
+    env, constants = {DEPENDENCIES: {}}, []
 
     def text(node):
         return (ast.get_source_segment(source, node) or ast.unparse(node))[:240]
 
+    def dependencies(node, scope):
+        return sorted({name for item in ast.walk(node) if isinstance(item, ast.Name) and isinstance(item.ctx, ast.Load)
+                       for name in scope.get(DEPENDENCIES, {}).get(item.id, [])})
+
+    def invalidate(scope, name):
+        scope[name] = None
+        scope[DEPENDENCIES] = {**scope.get(DEPENDENCIES, {}), name: []}
+
+    def helper_dependencies(helper):
+        local = {arg.arg for arg in (*helper.args.posonlyargs, *helper.args.args, *helper.args.kwonlyargs)}
+        local.update(arg.arg for arg in (helper.args.vararg, helper.args.kwarg) if arg)
+        local.update(n.id for n in ast.walk(helper) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store))
+        scope = {DEPENDENCIES: {key: value for key, value in env[DEPENDENCIES].items() if key not in local}}
+        return dependencies(helper, scope)
+
     def assign(statement, scope, record=False):
         if not isinstance(statement, ast.Assign):
             return
+        original_scope = dict(scope)  # all RHS values precede tuple/chained assignment
         for target in statement.targets:
             pairs = zip(target.elts, statement.value.elts) if isinstance(target, (ast.Tuple, ast.List)) and isinstance(statement.value, (ast.Tuple, ast.List)) else [(target, statement.value)]
             for name, value_node in pairs:
                 if not isinstance(name, ast.Name):
                     continue
-                value = literal(value_node, scope)
+                refs = dependencies(value_node, original_scope)
+                value = literal(value_node, original_scope)
+                if record and name.id in scope:
+                    # Earlier aliases retain their values, not a dependency on
+                    # this later definition of the same source parameter.
+                    scope[DEPENDENCIES] = {key: [ref for ref in names if ref != name.id]
+                                           for key, names in scope[DEPENDENCIES].items()}
+                    constants[:] = [item for item in constants if item['name'] != name.id]
+                if record and type(value) in (int, float):
+                    refs = sorted(set(refs + [name.id]))
+                scope[DEPENDENCIES] = {**scope.get(DEPENDENCIES, {}), name.id: refs}
                 scope[name.id] = value  # invalidate a previous constant too
                 if record and type(value) in (int, float):
                     constants.append({"name": name.id, "value": value, "expression": text(value_node)})
@@ -80,7 +107,7 @@ def parse_design_outline(source, model_name=None):
         names = [a.arg for a in functions[name].args.args] if name in functions else ARG_NAMES.get(name, [])
         values = [(names[i] if i < len(names) else f"argument_{i+1}", arg) for i, arg in enumerate(call.args)]
         values += [(k.arg or "arguments", k.value) for k in call.keywords]
-        return [{"name": name, "value": literal(value, scope), "expression": text(value)} for name, value in values if name not in ("edges", "objects", "argument_1") or literal(value, scope) is not None]
+        return [{"name": name, "value": literal(value, scope), "expression": text(value), "sourceParameters": dependencies(value, scope)} for name, value in values if name not in ("edges", "objects", "argument_1") or literal(value, scope) is not None]
 
     def operation(call, scope, mode="", target=""):
         name = call_name(call)
@@ -92,7 +119,7 @@ def parse_design_outline(source, model_name=None):
             calls = [n for n in ast.walk(helper) if isinstance(n, ast.Call) and call_name(n) in OPS]
             if len(calls) != 1:
                 if any(isinstance(n, ast.Return) and call_name(n.value) == 'Compound' for n in ast.walk(helper)):
-                    return {"id": f"source:{call.lineno}:{call.col_offset}", "label": name.replace('_', ' ').capitalize(), "type": "assembly", "line": call.lineno, "parameters": parameters(call, scope), "children": []}
+                    return {"id": f"source:{call.lineno}:{call.col_offset}", "label": name.replace('_', ' ').capitalize(), "type": "assembly", "sourceParameters": helper_dependencies(helper), "line": call.lineno, "parameters": parameters(call, scope), "children": []}
                 return None
             template, op = calls[0], call_name(calls[0])
         if op not in OPS | SKETCHES:
@@ -107,19 +134,20 @@ def parse_design_outline(source, model_name=None):
         if helper:
             child_scope = dict(env)
             for arg in helper.args.args:
-                child_scope[arg.arg] = None
+                invalidate(child_scope, arg.arg)
             for arg, default in zip(helper.args.args[-len(helper.args.defaults):], helper.args.defaults):
                 child_scope[arg.arg] = literal(default, env)
             for param in parameters(call, scope):
                 child_scope[param['name']] = param['value']
+                child_scope[DEPENDENCIES] = {**child_scope[DEPENDENCIES], param['name']: param['sourceParameters']}
             for node in ast.walk(helper):
                 if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
-                    child_scope[node.id] = None
+                    invalidate(child_scope, node.id)
         for child in ast.walk(template):
             if child is template or not isinstance(child, ast.Call) or call_name(child) not in SKETCHES:
                 continue
             children.append({"id": f"sketch:{call.lineno}:{child.lineno}:{child.col_offset}", "label": call_name(child), "type": "sketch", "line": child.lineno, "parameters": parameters(child, child_scope), "children": []})
-        return {"id": f"source:{call.lineno}:{call.col_offset}", "label": label, "type": "sketch" if op in SKETCHES else op.lower(), "line": call.lineno, "parameters": parameters(call, scope), "children": children}
+        return {"id": f"source:{call.lineno}:{call.col_offset}", "label": label, "type": "sketch" if op in SKETCHES else op.lower(), "sourceParameters": helper_dependencies(helper) if helper else [], "line": call.lineno, "parameters": parameters(call, scope), "children": children}
 
     def collect(statements, scope):
         nodes, pending_sketch = [], None
@@ -138,17 +166,18 @@ def parse_design_outline(source, model_name=None):
                 # still apply after assignments we haven't evaluated.
                 for n in ast.walk(statement):
                     if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store):
-                        scope[n.id] = None
+                        invalidate(scope, n.id)
                 continue
             if isinstance(statement, (ast.For, ast.If, ast.While)):
+                control_dependencies = dependencies(statement.iter if isinstance(statement, ast.For) else statement.test, scope)
                 control_scope = dict(scope)
                 for n in ast.walk(statement):
                     if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store):
-                        control_scope[n.id] = None
-                        scope[n.id] = None
+                        invalidate(control_scope, n.id)
+                        invalidate(scope, n.id)
                 children = collect(statement.body, dict(control_scope)) + collect(statement.orelse, dict(control_scope))
                 if children:
-                    nodes.append({"id": f"control:{statement.lineno}", "label": "Repeat" if isinstance(statement, (ast.For, ast.While)) else "Conditional features", "type": "pattern", "line": statement.lineno, "parameters": [{"name": "source", "value": None, "expression": text(statement.iter if isinstance(statement, ast.For) else statement.test)}], "children": children})
+                    nodes.append({"id": f"control:{statement.lineno}", "label": "Repeat" if isinstance(statement, (ast.For, ast.While)) else "Conditional features", "type": "pattern", "sourceParameters": control_dependencies, "line": statement.lineno, "parameters": [{"name": "source", "value": None, "expression": text(statement.iter if isinstance(statement, ast.For) else statement.test)}], "children": children})
                 continue
             value = getattr(statement, "value", None)
             target = statement.targets[0].id if isinstance(statement, ast.Assign) and isinstance(statement.targets[0], ast.Name) else ""
@@ -173,10 +202,10 @@ def parse_design_outline(source, model_name=None):
                     pending_sketch = None
                 nodes.append(item)
             if not found and isinstance(statement, ast.AugAssign) and isinstance(statement.op, (ast.Add, ast.Sub, ast.BitAnd)):
-                nodes.append({"id": f"boolean:{statement.lineno}", "label": {ast.Add: "Union", ast.Sub: "Cut", ast.BitAnd: "Intersect"}[type(statement.op)], "type": "boolean", "line": statement.lineno, "parameters": [{"name": "operand", "value": None, "expression": text(value)}], "children": []})
+                nodes.append({"id": f"boolean:{statement.lineno}", "label": {ast.Add: "Union", ast.Sub: "Cut", ast.BitAnd: "Intersect"}[type(statement.op)], "type": "boolean", "sourceParameters": dependencies(value, scope), "line": statement.lineno, "parameters": [{"name": "operand", "value": None, "expression": text(value)}], "children": []})
             assign(statement, scope)
             if isinstance(statement, ast.AugAssign) and isinstance(statement.target, ast.Name):
-                scope[statement.target.id] = None
+                invalidate(scope, statement.target.id)
         return nodes
 
     roots = [fn for fn in functions.values() if any((d.id if isinstance(d, ast.Name) else call_name(d) if isinstance(d, ast.Call) else getattr(d, 'attr', '')) == "step" for d in fn.decorator_list)]
@@ -186,7 +215,21 @@ def parse_design_outline(source, model_name=None):
             roots = matching
         elif len(roots) > 1:
             return {"features": [], "parameters": [], "status": "ambiguous"}
-        features = [item for fn in roots for item in collect(fn.body, dict(env))]
+        features = []
+        for fn in roots:
+            scope = dict(env)
+            # Python treats names assigned anywhere in the function as local.
+            # Invalidate them up front; supported assignments below restore
+            # explicit dependencies without borrowing a shadowed global.
+            for node in ast.walk(fn):
+                if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+                    invalidate(scope, node.id)
+                elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                    for alias in node.names:
+                        invalidate(scope, alias.asname or alias.name.split('.')[0])
+            for arg in (*fn.args.posonlyargs, *fn.args.args, *fn.args.kwonlyargs):
+                invalidate(scope, arg.arg)
+            features.extend(collect(fn.body, scope))
     else:
         features = collect(tree.body, dict(env))
     return {"features": features, "parameters": constants}

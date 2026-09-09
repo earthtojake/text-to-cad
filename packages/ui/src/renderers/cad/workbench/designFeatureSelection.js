@@ -37,8 +37,11 @@ export function resolveDesignFeatureLinks(links, references = [], parts = []) {
 export function designFeatureSelection(node, resolved, inheritedLine = null) {
   if (!resolved || !node || node.type === 'parameters') return empty();
   if (node.type === 'model' || node.type === 'imported') return {faceIds: resolved.faces, partIds: resolved.parts};
-  const lines = new Set();
+  if (node.type === 'part') return { faceIds: [], partIds: node.partIds.filter(id => resolved.parts.includes(id)) };
+  const lines = new Set((node.sourceLines || []).map(String));
+  const partIds = new Set();
   const collect = (item, parentLine) => {
+    if (item.type === 'part') item.partIds.filter(id => resolved.parts.includes(id)).forEach(id => partIds.add(id));
     const line = item.type === 'sketch' ? parentLine : item.line;
     if (line) lines.add(String(line));
     for (const child of item.children || []) collect(child, line);
@@ -46,6 +49,6 @@ export function designFeatureSelection(node, resolved, inheritedLine = null) {
   collect(node, inheritedLine);
   return {
     faceIds: [...new Set([...lines].flatMap(line => (resolved.lines[line] || []).map(index => resolved.faces[index]).filter(Boolean)))],
-    partIds: [...new Set([...lines].flatMap(line => (resolved.partLines[line] || []).map(index => resolved.parts[index]).filter(Boolean)))],
+    partIds: [...new Set([...partIds, ...[...lines].flatMap(line => (resolved.partLines[line] || []).map(index => resolved.parts[index]).filter(Boolean))])],
   };
 }

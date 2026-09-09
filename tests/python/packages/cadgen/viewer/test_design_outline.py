@@ -25,6 +25,61 @@ def case():
         self.assertAlmostEqual(body['children'][0]['parameters'][0]['value'], 74.2)
         self.assertTrue(cut['label'].startswith('Cut Extrude'))
 
+    def test_parameter_dependencies_follow_aliases_helpers_and_repeat_inputs(self):
+        result = parse_design_outline("""
+W = 20
+THICKNESS = 2
+UNUSED = 99
+DOUBLE = W * 2
+def block(width):
+    return Box(width, 3, THICKNESS)
+@step
+def case():
+    local_width = DOUBLE + 1
+    body = block(local_width)
+    for i in range(W):
+        Box(i, 2, 3)
+    return body
+""")
+        body, repeat = result['features']
+        self.assertEqual(body['parameters'][0]['sourceParameters'], ['DOUBLE', 'W'])
+        self.assertEqual(body['sourceParameters'], ['THICKNESS'])
+        self.assertEqual(repeat['sourceParameters'], ['W'])
+        self.assertEqual(repeat['children'][0]['parameters'][0]['sourceParameters'], [])
+
+    def test_shadowed_reassigned_and_uncertain_parameters_do_not_link_to_globals(self):
+        result = parse_design_outline("""
+W = 20
+H = 10
+@step
+def case(H=2):
+    W = 5
+    Box(W, H, 3)
+    for W in range(3):
+        Box(W, 2, 3)
+    Box(W, 2, 3)
+""")
+        first, repeat, last = result['features']
+        for node in (first, repeat['children'][0], last):
+            self.assertTrue(all(p['sourceParameters'] == [] for p in node['parameters']))
+
+    def test_redefined_globals_and_tuple_aliases_do_not_claim_stale_links(self):
+        result = parse_design_outline("""
+W = 20
+OLD = W
+W = 30
+@step
+def case():
+    a, b = W, OLD
+    a, b = b, a
+    Box(a, b, 2)
+""")
+        self.assertEqual([p['value'] for p in result['parameters'] if p['name'] == 'W'], [30])
+        a, b, _ = result['features'][0]['parameters']
+        self.assertEqual((a['value'], b['value']), (20, 30))
+        self.assertEqual(a['sourceParameters'], ['OLD'])
+        self.assertEqual(b['sourceParameters'], ['W'])
+
     def test_builder_sketch_is_nested_under_extrusion(self):
         result = parse_design_outline('''
 with BuildPart() as part:

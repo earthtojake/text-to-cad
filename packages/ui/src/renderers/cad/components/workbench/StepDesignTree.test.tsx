@@ -56,3 +56,26 @@ it('previews associated faces on click and keyboard selection, then clears on Es
   unmount();
   expect(onHighlight.mock.lastCall?.[0]).toBeNull();
 });
+
+it('groups assembly operations by part and selects global and operation parameters without editing values', async () => {
+  const box={min:[0,0,0],max:[1,1,1]};
+  const onHighlight=vi.fn();
+  const client={requestDesignOutline:vi.fn().mockResolvedValue({...result,
+    geometryLinks:{schema:1,parts:[{name:'Body',bbox:box}],partLines:{'5':[0]}},
+    features:[{...result.features[0],parameters:[{name:'depth',value:10,expression:'WALL',sourceParameters:['WALL']}]}],
+  })};
+  render(<StepDesignTree client={client} file="case.step" parts={[{id:'body-7',name:'Body',bounds:box}]} onHighlight={onHighlight} />);
+  const part=await screen.findByRole('treeitem',{name:'Body',exact:true});
+  fireEvent.keyDown(part,{key:'ArrowRight'});
+  fireEvent.click(screen.getByText('Extrude · body'));
+  fireEvent.click(screen.getByRole('button',{name:'Highlight depth'}));
+  await waitFor(()=>expect(onHighlight.mock.lastCall?.[0]).toEqual({faceIds:[],partIds:['body-7']}));
+  expect(screen.getByRole('button',{name:'Highlight depth'}).getAttribute('aria-pressed')).toBe('true');
+  fireEvent.click(screen.getByText('Parameters'));
+  fireEvent.click(screen.getByRole('button',{name:'Highlight WALL'}));
+  await waitFor(()=>expect(onHighlight.mock.lastCall?.[0]).toEqual({faceIds:[],partIds:['body-7']}));
+  expect(screen.getByRole('treeitem',{name:'WALL: 1.8',exact:true}).getAttribute('aria-selected')).toBe('true');
+  fireEvent.keyDown(screen.getByRole('button',{name:'Highlight WALL'}),{key:'Escape'});
+  await waitFor(()=>expect(onHighlight.mock.lastCall?.[0]).toBeNull());
+  expect(document.querySelectorAll('input,textarea,select').length).toBe(0);
+});
