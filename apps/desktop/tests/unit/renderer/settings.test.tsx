@@ -11,7 +11,7 @@ import { describe, expect, it, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { TooltipProvider } from "@renderer/components/ui/tooltip";
+import { TooltipProvider } from "@hardcore/ui/primitives/tooltip";
 import { SettingCard, SettingRow } from "@renderer/features/settings/SettingCard";
 import { SettingsRoute } from "@renderer/features/settings/SettingsRoute";
 import { matchesQuery } from "@renderer/features/settings/search";

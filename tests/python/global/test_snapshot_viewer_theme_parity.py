@@ -35,9 +35,9 @@ from cadgen.snapshot_core import (  # noqa: E402
     validate_display_settings_values,
 )
 
-SCENE = repo_path("packages/cadgen-js/src/common/sceneSettings.js")
-CAMERA = repo_path("packages/cadgen-js/src/common/camera.js")
-DISPLAY = repo_path("packages/cadgen-js/src/common/displaySettings.js")
+SCENE = repo_path("packages/core/src/common/sceneSettings.js")
+CAMERA = repo_path("packages/core/src/common/camera.js")
+DISPLAY = repo_path("packages/core/src/common/displaySettings.js")
 
 
 def exported_strings(path, export: str) -> set[str]:
@@ -74,7 +74,7 @@ class SharedSceneContractParityTests(unittest.TestCase):
             {"render": {}, "mode": "list"},
             {"render": None},
         ]
-        validator = repo_path("packages/cadgen-js/src/common/snapshotJobValidation.js")
+        validator = repo_path("packages/core/src/common/snapshotJobValidation.js")
         script = f"""
 import fs from "node:fs";
 import {{ validateSnapshotRenderJob }} from {json.dumps(validator.as_uri())};

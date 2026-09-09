@@ -8,7 +8,7 @@ That is not hypothetical: the Orbit button was gated off per format independentl
 had to be fixed twice, and one format grew a parallel export route to an endpoint the
 server does not implement.
 
-The fix is the capability registry (``packages/cadgen-js/src/lib/renderCapabilities.js``):
+The fix is the capability registry (``packages/core/src/lib/renderCapabilities.js``):
 code asks *what a format can do*, not *what it is*. This test ratchets the old pattern
 downward so it cannot grow back — without it the count creeps up again one feature at a
 time and the unification silently rots.
@@ -24,7 +24,8 @@ import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-CLIENT_ROOT = REPO_ROOT / "apps" / "viewer" / "src" / "client"
+UI_ROOT = REPO_ROOT / "packages" / "ui" / "src"
+CLIENT_ROOT = UI_ROOT / "renderers" / "cad"
 
 # Every remaining identity check is a unification candidate. Lower these as phases land;
 # never raise them.
@@ -80,7 +81,7 @@ class ViewerFormatCapabilityPolicyTest(unittest.TestCase):
             MAX_RENDER_FORMAT_CHECKS,
             "viewer client gained RENDER_FORMAT identity checks "
             f"({total} > {MAX_RENDER_FORMAT_CHECKS}). Gate on a capability from "
-            "cadgen-js/lib/renderCapabilities instead of on the format's identity. "
+            "@hardcore/core/lib/renderCapabilities instead of on the format's identity. "
             f"Heaviest files: {worst}",
         )
 
@@ -117,28 +118,29 @@ class ViewerFormatCapabilityPolicyTest(unittest.TestCase):
         These are the shell: if they start branching on format identity again, every
         feature added to one format stops reaching the others.
         """
-        for relative in (
-            "components/workbench/FloatingToolBar.js",
-            "components/workbench/CadRenderPane.js",
+        for path in (
+            CLIENT_ROOT / "components/workbench/FloatingToolBar.js",
+            CLIENT_ROOT / "components/workbench/CadRenderPane.js",
             # The renderer itself: it draws every format, so a format check here is a
             # feature one format gets and the others silently do not.
-            "components/CadViewer.js",
+            CLIENT_ROOT / "components/CadViewer.js",
             # Status, alerts and the file list: every one of these was a per-format
             # cascade, and each cascade was a place a new format inherited the wrong
             # advice, the wrong icon or no spinner at all.
-            "workbench/viewerAlerts.js",
-            "workbench/entryIconKind.js",
-            "workbench/entryIconStatus.js",
+            CLIENT_ROOT / "workbench/viewerAlerts.js",
+            UI_ROOT / "file-viewer/navigation/entryIconKind.js",
+            CLIENT_ROOT / "workbench/entryIconStatus.js",
             # The file list, which is now the SHARED file tree and the adapter that
             # feeds it — drawn by the standalone viewer and by the desktop app alike,
             # so a format check in either is a format one app lists and the other
             # does not. (It replaced `components/workbench/CadWorkspaceHome.js` and
             # `components/workbench/FileViewerSidebar.js`, which were the standalone's
             # own home screen and left sidebar.)
-            "shell/FileTree.jsx",
-            "shell/catalogTreeSource.js",
+            UI_ROOT / "file-viewer/navigation/FileTree.jsx",
+            REPO_ROOT / "apps/web/src/adapters/catalogTreeSource.js",
         ):
-            source = (CLIENT_ROOT / relative).read_text(encoding="utf-8")
+            source = path.read_text(encoding="utf-8")
+            relative = path.relative_to(REPO_ROOT).as_posix()
             self.assertEqual(
                 RENDER_FORMAT_MEMBER.findall(source),
                 [],

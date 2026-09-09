@@ -1,0 +1,36 @@
+{
+  "name": "hardcore-workspace",
+  "version": "0.5.1",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/core",
+    "packages/ui",
+    "apps/web",
+    "apps/docs",
+    "apps/desktop"
+  ],
+  "scripts": {
+    "build:packages": "npm run build -w @hardcore/core && npm run build -w @hardcore/ui",
+    "build:web": "npm run build:packages && npm run build -w @hardcore/web",
+    "build:desktop": "npm run build:packages && npm run build -w hardcore",
+    "build:docs": "npm run build -w @hardcore/core && npm run build -w cad-skills-docs",
+    "dev:web": "npm run build:packages && npm run dev -w @hardcore/web",
+    "dev:desktop": "npm run build:packages && npm run native:rebuild -w hardcore && npm run dev -w hardcore",
+    "dev:docs": "npm run build -w @hardcore/core && npm run dev -w cad-skills-docs",
+    "test": "scripts/test/test-js.sh",
+    "check:boundaries": "node scripts/test/check-dependencies.mjs"
+  },
+  "overrides": {
+    "postcss": "^8.5.14"
+  },
+  "allowScripts": {
+    "better-sqlite3@13.0.3": true,
+    "node-pty@1.1.0": true,
+    "electron@40.10.6": true,
+    "electron-winstaller@5.4.0": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true,
+    "fsevents@2.3.3": true
+  }
+}

@@ -1,12 +1,12 @@
 /**
- * ESM resolve hook: make bare `cadgen-js/...` specifiers resolvable in a builder child that
+ * ESM resolve hook: make bare `@hardcore/core/...` specifiers resolvable in a builder child that
  * has no `node_modules`.
  *
- * A source checkout runs builders from `packages/cadgen-js` with no `node_modules` beside the
- * entry, so a builder's bare `import … from "cadgen-js/glb/…"` has
+ * A source checkout runs builders from `packages/core` with no `node_modules` beside the
+ * entry, so a builder's bare `import … from "@hardcore/core/glb/…"` has
  * nothing to resolve against. `NODE_PATH=<packages>` fixes that for CommonJS -- a NODE_PATH
- * entry is treated as a `node_modules` directory, so `packages/cadgen-js` resolves as the
- * package `cadgen-js` *through its exports map* -- but **Node's ESM resolver ignores
+ * entry is treated as a `node_modules` directory, so `packages/core` resolves as the
+ * package `@hardcore/core` *through its exports map* -- but **Node's ESM resolver ignores
  * NODE_PATH entirely** (verified on v22.22.0: the import throws ERR_MODULE_NOT_FOUND while
  * `require.resolve` on the same specifier, same env, returns the right file). esbuild honors
  * NODE_PATH itself, which is why the bundling path never hit this.

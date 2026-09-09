@@ -137,7 +137,7 @@ Authored in-repo (committed because no script here can rebuild them):
 
 `DIMENSION`-entity coverage lives in `alu_extrusion_profile.dxf`. DXF `TEXT` and
 `MTEXT` entities are covered by unit fixtures in
-`packages/cadgen-js/src/lib/dxf/parseDxf.test.js`, not by a file here — the
+`packages/core/src/lib/dxf/parseDxf.test.js`, not by a file here — the
 cabinet panel drawing that used to hold that coverage is now generated, as
 `src/cabinet_panel_drawing.py`.
 
