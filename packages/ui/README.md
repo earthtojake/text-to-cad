@@ -43,7 +43,7 @@ src/
   loading/          shared loading animation
   styles/           canonical tokens and component CSS
   assets/           lightweight UI assets
-  dist/             generated ESM, declarations, CSS, assets and worker modules
+dist/               generated ESM, declarations, CSS, assets and worker modules
 ```
 
 `FileViewer` has no concrete renderer imports. A registration describes matching,
