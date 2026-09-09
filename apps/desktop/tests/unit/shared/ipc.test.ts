@@ -87,7 +87,6 @@ describe("the contract", () => {
       "explorer.absolutePath",
       "explorer.openDefault",
       "explorer.openWith",
-      "explorer.addFiles",
       "explorer.reveal",
       "explorer.createFile",
       "explorer.createDirectory",

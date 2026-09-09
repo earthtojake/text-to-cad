@@ -182,7 +182,6 @@ export type FileTreeSource = {
 
 export const FileTree: ComponentType<{
   source: FileTreeSource;
-  headerActions?: ReactNode;
   /** The file the surface is showing, highlighted in the tree. */
   activePath: string | null;
   /** A path to expand to and select without opening it. */

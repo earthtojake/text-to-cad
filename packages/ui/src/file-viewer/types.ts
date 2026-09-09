@@ -127,5 +127,5 @@ export interface FileViewerProps {
   narrowCrumbs?: boolean;
   reveal?: { path: string; directory: boolean; nonce?: number } | null;
   onError?: (error: Error) => void;
-  presentation?: { empty?: ReactNode; treeActions?: ReactNode; loading?: ReactNode; error?: (message: string) => ReactNode; activity?: (activity: FileActivity | null) => ReactNode };
+  presentation?: { empty?: ReactNode; loading?: ReactNode; error?: (message: string) => ReactNode; activity?: (activity: FileActivity | null) => ReactNode };
 }

@@ -11,7 +11,6 @@ import type { Project } from "@shared/types";
 import { BrowserTab } from "./BrowserTab";
 import { EmptyState } from "@hardcore/ui/navigation";
 import { FileTab } from "./FileTab";
-import { AddFilesButton } from "./AddFilesButton";
 import { ReviewTab } from "./ReviewTab";
 import { TabStrip } from "./TabStrip";
 import { TerminalTab } from "./TerminalTab";
@@ -30,7 +29,6 @@ export function ExplorerPane() {
   const project = useActiveProject();
   const tabs = useExplorer((state) => state.tabs);
   const ready = useExplorer((state) => state.ready);
-  const root = useExplorer((state) => state.root);
   const open = useExplorer((state) => state.open);
   const active = useActiveTab();
 
@@ -53,17 +51,14 @@ export function ExplorerPane() {
         ) : (
           <EmptyState
             action={
-              <div className="flex flex-wrap justify-center gap-2">
-                <Button className="h-7 gap-1.5 text-xs" onClick={() => open("file")} size="sm" variant="secondary">
-                  <Plus className="size-3.5" />
-                  Open a file
-                </Button>
-                {ready ? <AddFilesButton projectId={project.id} root={root} /> : null}
-              </div>
+              <Button className="h-7 gap-1.5 text-xs" onClick={() => open("file")} size="sm" variant="secondary">
+                <Plus className="size-3.5" />
+                Open a file
+              </Button>
             }
             description={
               ready && tabs.length === 0
-                ? "Open a project file, or add files — STEP, images, PDFs, code and more."
+                ? "Files, reviews, browsers and terminals all open here, in one strip."
                 : "Restoring…"
             }
             icon={PanelsTopLeft}
