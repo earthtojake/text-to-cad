@@ -1130,7 +1130,14 @@ export default function StepFileSheet({
       id: FILE_SHEET_SECTION_IDS.STEP_FEATURES,
       title: "Features",
       scrollsContent: true,
-      content: <StepDesignTree key={selectedEntry.file} {...designOutline} label={selectedEntry.name || selectedEntry.file?.split('/').pop()} />
+      content: <StepDesignTree key={selectedEntry.file} {...designOutline} label={selectedEntry.name || selectedEntry.file?.split('/').pop()}
+        partActions={isAssemblyView ? {
+          hiddenIds, focusedIds: focusedNodeIds, selectableIds: selectableNodeIds,
+          disabled: treeSelectionDisabled || viewerLoading,
+          onIsolate: onFocusTreeNode ? id => onFocusTreeNode(id, { reveal: false }) : null,
+          onExitIsolate: onUnfocusTreeNode, onExitAllIsolate,
+          onToggleVisibility: onTogglePartVisibility,
+        } : null} />
     },
     // Pose then Animation, directly after Tree and ahead of the readouts: they are
     // the tabs in this strip that MOVE the geometry, so they take the positions nearest
