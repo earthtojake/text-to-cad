@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { groupDesignFeatures, sourceParameterNode } from './designFeatureTree.js';
+import { designFeatureLabel, groupDesignFeatures, sourceParameterNode } from './designFeatureTree.js';
 import { designFeatureSelection } from './designFeatureSelection.js';
 
 const parts = [{id:'body',name:'Body'}, {id:'wing',name:'Wing'}];
@@ -29,8 +29,13 @@ test('source parameters preview associated operations and whole repeats; unrelat
   assert.deepEqual(designFeatureSelection(sourceParameterNode({name:'UNKNOWN'},features),resolved).partIds,[]);
 });
 
-test('sketch parameter references use the consuming operation, not the helper source line', () => {
-  const node=sourceParameterNode({name:'RADIUS'},[{type:'extrude',line:20,children:[{type:'sketch',line:999,parameters:[{sourceParameters:['RADIUS']}]}]}]);
+test('profile parameter references use the consuming operation, not the helper source line', () => {
+  const node=sourceParameterNode({name:'RADIUS'},[{type:'extrude',line:20,children:[{type:'profile',line:999,parameters:[{sourceParameters:['RADIUS']}]}]}]);
   assert.deepEqual(node.sourceLines,[20]);
   assert.deepEqual(designFeatureSelection(node,resolved).partIds,['wing']);
+});
+
+test('labels authored profiles without inventing a sketch operation', () => {
+  assert.equal(designFeatureLabel({type:'profile',label:'RectangleRounded'}),'Profile · Rounded rectangle');
+  assert.equal(designFeatureLabel({type:'sketch',label:'Sketch'}),'Sketch');
 });

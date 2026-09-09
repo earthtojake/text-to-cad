@@ -142,6 +142,8 @@ export const explorerIpc = {
      * was picked. Cancelling the picker is an ordinary outcome, not an error.
      */
     openWith: invoke(AtPath, z.void()),
+    /** Native multi-file chooser; copy into this workspace and return relative paths and failures. */
+    addFiles: invoke(InRoot, z.object({ paths: z.array(z.string()), errors: z.array(z.string()) }).nullable()),
     /** Show the entry in Finder / Explorer / the file manager. */
     reveal: invoke(AtPath, z.void()),
 

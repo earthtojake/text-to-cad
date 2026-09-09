@@ -138,7 +138,9 @@ class FeatureTrace:
                 if statement:
                     node, target = statement
                     old = frame.f_locals.get(target)
-                    uses_previous = isinstance(node, ast.AugAssign) or any(isinstance(n, ast.Name) and n.id == target for n in ast.walk(node.value))
+                    uses_previous = target == self.result_name or isinstance(node, ast.AugAssign) or any(isinstance(n, ast.Name) and n.id == target for n in ast.walk(node.value))
+                    # Edge-list fillets can consume the old result indirectly.
+                    # Compare its previous faces even without its name in the call.
                     before = list(old.faces()) if uses_previous and callable(getattr(old, 'faces', None)) else []
                     if sum(len(value) for value in frame.f_locals.values() if isinstance(value, list)) > 1000:
                         self.failed = True
@@ -166,8 +168,7 @@ class FeatureTrace:
             start = time.monotonic()
             final = list(shape.faces())
             from build123d import GeomType
-            if (len(final) > 250 or any(f.geom_type not in (GeomType.PLANE, GeomType.CYLINDER) for f in final)
-                    or sum(len(f.edges()) for f in final) > 2000):
+            if len(final) > 250 or sum(len(f.edges()) for f in final) > 2000:
                 return None
             metric_cache = {}
             def metric(face):
@@ -186,8 +187,12 @@ class FeatureTrace:
                 aa, bb = metric(a)['bbox'], metric(b)['bbox']
                 if any(aa['max'][i] < bb['min'][i] - 1e-6 or bb['max'][i] < aa['min'][i] - 1e-6 for i in range(3)):
                     return 0
+                # Exact surviving faces are valid for every surface type.
+                # Restrict geometric overlap inference to supported analytic faces.
                 if a.geom_type != b.geom_type:
                     return 0
+                if a.geom_type not in (GeomType.PLANE, GeomType.CYLINDER):
+                    return None  # Overlapping curved patches have uncertain ownership.
                 common = BRepAlgoAPI_Common(a.wrapped, b.wrapped)
                 if not common.IsDone():
                     return 0
@@ -199,9 +204,9 @@ class FeatureTrace:
                 for index, face in enumerate(final):
                     area = metric(face)['area']
                     tolerance = max(1e-6, area * 1e-6)
-                    if any(overlap(face, old) > tolerance for old in before):
+                    if any((amount := overlap(face, old)) is None or amount > tolerance for old in before):
                         continue
-                    if any(abs(overlap(face, new) - area) <= tolerance for new in after):
+                    if any((amount := overlap(face, new)) is not None and abs(amount - area) <= tolerance for new in after):
                         for line in owners:
                             by_line.setdefault(str(line), set()).add(index)
             return {'schema': SCHEMA, 'sourceHash': self.source_hash, 'faces': [metric(f) for f in final], 'lines': {line: sorted(ids) for line, ids in by_line.items()}}

@@ -28,15 +28,13 @@ test('imported parts and grouped faces keep the full filename and native selecto
   assert.equal(designFeaturePromptText({faceIds:['o1.f3','o1.f2']},{entry,referenceMap}), '"Hex Drive Screw (2).STEP"#o1.f2,o1.f3');
 });
 
-test('unlinked source inputs and measured extents remain distinct usable prompt context', async () => {
+test('keeps feature context to one source pointer and the selected measurement', async () => {
   const {designFeatureContextText}=await import('./designFeaturePrompt.js');
-  const context={file:'models/case.step',source:'models/case.py',line:20,label:'Sketch · Rounded rectangle',parameters:[{name:'width',value:30,expression:'WIDTH'}],measurements:{size:[30,20,0],area:600,radii:[]},inspection:{kind:'axis',value:0}};
+  const context={file:'models/case.step',source:'models/case.py',line:20,label:'Profile · Rounded rectangle',parameters:[{name:'width',value:30,expression:'WIDTH'}],measurements:{size:[30,20,0],area:600,radii:[]},inspection:{kind:'axis',value:0}};
   const text=designFeatureContextText(context);
-  assert.match(text,/Model: models\/case.step/);
-  assert.match(text,/Source: models\/case.py \(line 20\)/);
-  assert.match(text,/Source inputs: width = 30/);
-  assert.match(text,/Measured result extents \(X × Y × Z\): 30 × 20 × 0 mm/);
-  assert.match(text,/Selected measurement: X extent/);
-  assert.doesNotMatch(text,/#source:/);
-  assert.doesNotMatch(designFeatureContextText(context,{includeModel:false}),/Model:/);
+  assert.equal(text,'Profile · Rounded rectangle · X extent = 30 mm · models/case.step · models/case.py:20');
+  assert.doesNotMatch(text,/\n|Source inputs|Measured face area|#source:/);
+  assert.doesNotMatch(designFeatureContextText(context,{includeModel:false}),/models\/case.step/);
+  assert.equal(designFeatureContextText({file:'part.step',label:'Imported geometry'},{includeModel:false}),'');
+  assert.match(designFeatureContextText({...context,inspection:null}),/width = 30/);
 });

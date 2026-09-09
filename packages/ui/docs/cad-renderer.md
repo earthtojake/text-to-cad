@@ -206,9 +206,9 @@ Without an unambiguous source, the view shows Imported geometry. No automatic fe
 Feature groups selection mode is offered. Existing saved multi-face references
 continue to work through Tree and the host's reference callbacks.
 
-Normal model generation now records optional geometry links. For bounded,
-single-solid algebraic models with planar/cylindrical faces, the recorder associates source statements with
-surviving faces and carries a placed cutting tool's association back to its source
+Normal model generation now records optional geometry links. For single-solid
+algebraic models within its size limits, the recorder associates source statements
+with surviving faces and carries a placed cutting tool's association back to its source
 row. Named assembly components are linked when their identity survives into the
 returned assembly. Repeat rows combine their child associations; sketch rows
 highlight their consuming operation's faces, not a reconstructed sketch overlay.
@@ -264,8 +264,8 @@ not establish measurement endpoints. Missing associations remain unhighlighted.
 
 ## Selection and inspection tools
 
-STEP's Select tool offers All, Parts, Faces, and Edges. Explicit
-filters never fall back to a different entity type. Faces and Edges load topology
+STEP's Select tool offers All, Parts, Faces, Tangent faces, and Edges. Explicit
+filters never fall back to a different entity type. Face and edge filters load topology
 for the selected leaf part; selecting another part in Tree changes that target.
 Shift-click adds/removes entities. Escape clears the
 selection after any open menu or first-use tip has been dismissed. Input fields
@@ -297,8 +297,8 @@ Features part rows reuse Tree's hide/show and isolate controls. These affect
 viewer visibility only; they never suppress an authored operation. Isolation
 keeps Features open and offers an exit in the panel. Source-free imports list
 actual parts under Imported geometry, without inventing construction history.
-Single-body imports expose hide/show in both views, mapped to the existing whole-model
-render target. Their context menu omits isolate/hide-other actions because there
+Single-body models expose hide/show on the Features model row even when source
+operations have no geometry links, mapped to the existing whole-model render target. Their context menu omits isolate/hide-other actions because there
 are no other components to isolate from. Tree visibility actions use the row's
 selection target, including visual rows that alias a part.
 
@@ -308,3 +308,43 @@ spherical surface radii. Source parameters are labelled separately. Bounds do
 not imply extrusion depth or volume; surface radii do not imply recognised holes.
 Missing geometry/data is not replaced with zero or a partial total. Part bounds
 come from the display geometry and may reflect tessellation precision.
+
+### Tangent face selection
+
+The selection filter offers **Tangent faces**. Clicking a face selects its connected
+chain across edges classified as tangent by the loaded STEP topology; sharp,
+unknown, boundary and nonmanifold edges stop the chain. Selection never crosses
+occurrences or solid shapes. Shift-click adds a chain, or removes it if the whole
+chain is already selected. The resulting faces use the existing highlight and
+Add to prompt controls. An assembly part loads its topology through Tree first,
+as with the Faces filter. This changes selection only, not CAD geometry.
+
+Authored sketch rows beneath top-level operations are expanded when Features
+opens. Repeats and assembly part groups keep their existing collapsed state;
+imports do not acquire invented sketches.
+
+Selection filters keep All, Parts, Faces and Edges together. **Connected
+selection** groups Edge chain and Tangent faces separately; the measurement filter menu keeps
+its existing options.
+
+Profile inputs (rectangles, circles, etc.) retain their authored shape names;
+only an explicit BuildSketch source block is labeled Sketch. This source outline
+is not a recovered parametric history, and importing STEP alone does not invent
+sketches or CAD operations.
+
+Edge chain uses tessellated edge endpoints within the same solid/occurrence and
+a shared face, with a 0.00001 model-unit endpoint tolerance. It follows corners
+where only one continuation exists and a unique smooth continuation at branches;
+ambiguous branches, missing endpoints, and closed single edges stop traversal.
+Shift toggles the resulting group and Add to prompt uses its canonical edge refs.
+
+Feature prompt context is a compact single line: source location and, when
+selected, a parameter or measurement. Full child lists, parameter dumps and
+unrelated measured facts stay in the inspector. Imported geometry with valid
+references adds only its chip unless a particular measurement was selected.
+
+Feature capture retains exact surviving faces of rounded surfaces; uncertain
+overlap of unsupported curved patches remains unlinked. Fillets consuming a
+previously collected edge list still compare against the prior result, so they
+cannot claim unchanged faces from earlier operations. Source and STEP hashes
+and the viewer's unique face matching remain required before highlighting.

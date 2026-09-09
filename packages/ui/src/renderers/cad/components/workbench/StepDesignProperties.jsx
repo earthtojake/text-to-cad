@@ -8,7 +8,7 @@ export default function StepDesignProperties({ selected, selectedParameter, sele
   if (selected.type === 'model') return null;
   return <section aria-label="Feature properties" className="max-h-[32%] min-w-0 shrink-0 overflow-x-hidden overflow-y-auto border-t border-sidebar-border/70 px-3 py-2.5">
       <h3 className="mb-2 text-xs [overflow-wrap:anywhere]">{featureLabel(selected)}</h3>
-      {selected.parameters?.length ? <div className="mb-3 space-y-1 text-xs"><h4 className="mb-1 text-micro text-muted-foreground">{selected.type === 'sketch' ? 'Sketch inputs' : ['parameter', 'parameters'].includes(selected.type) ? 'Parameters' : 'Operation inputs'}</h4>{selected.parameters.map((param, i) => <button key={`${param.name}:${i}`} type="button"
+      {selected.parameters?.length ? <div className="mb-3 space-y-1 text-xs"><h4 className="mb-1 text-micro text-muted-foreground">{selected.type === 'profile' ? 'Profile inputs' : selected.type === 'sketch' ? 'Sketch inputs' : ['parameter', 'parameters'].includes(selected.type) ? 'Parameters' : 'Operation inputs'}</h4>{selected.parameters.map((param, i) => <button key={`${param.name}:${i}`} type="button"
         aria-label={`Highlight ${title(param.name)}`} aria-pressed={selected.type === 'parameter' ? selectionRequest > 0 : selectedParameter === i}
         title={param.expression} className={cn('flex w-full min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1 rounded px-1.5 py-1.5 text-left hover:bg-sidebar-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring', selectedParameter === i && 'bg-sidebar-accent text-sidebar-accent-foreground')}
         onClick={() => {

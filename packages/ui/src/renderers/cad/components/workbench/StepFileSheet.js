@@ -1137,7 +1137,8 @@ export default function StepFileSheet({
       scrollsContent: true,
       content: <StepDesignTree key={selectedEntry.file} {...designOutline} label={selectedEntry.name || selectedEntry.file?.split('/').pop()}
         partActions={showTreeVisibilityControls ? {
-          hiddenIds: isAssemblyView ? hiddenIds : hiddenIds.includes(STEP_MODEL_RENDER_PART_ID) ? (designOutline?.parts || []).map(part => part.id) : [],
+          modelId: isAssemblyView ? null : STEP_MODEL_ROOT_ID,
+          hiddenIds: isAssemblyView ? hiddenIds : hiddenIds.includes(STEP_MODEL_RENDER_PART_ID) ? [STEP_MODEL_ROOT_ID, ...(designOutline?.parts || []).map(part => part.id)] : [],
           focusedIds: focusedNodeIds, selectableIds: selectableNodeIds,
           disabled: treeSelectionDisabled || viewerLoading,
           onIsolate: isAssemblyView && onFocusTreeNode ? id => onFocusTreeNode(id, { reveal: false }) : null,
