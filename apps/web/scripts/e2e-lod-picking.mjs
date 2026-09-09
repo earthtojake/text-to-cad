@@ -22,11 +22,13 @@
 // Reads the REAL framebuffer via page.screenshot() (see e2e-format-sweep.mjs
 // for why canvas sampling is wrong here).
 //
-// Usage:
-//   node viewer/scripts/e2e-lod-picking.mjs --dir <models-root> [--url http://127.0.0.1:3245]
+// Usage (from the repository root):
+//   node apps/web/scripts/e2e-lod-picking.mjs --dir <models-root> --url <viewer-url>
 //
-// Requires: a viewer serving <models-root>, playwright, and the mounting plate
-// built in the examples project (python models/examples/src/mounting_plate.py).
+// Requires a viewer already serving <models-root>: run
+// `cadgen viewer --host 127.0.0.1 --json` there and pass its printed URL.
+// Requires playwright and the mounting plate built in the examples project
+// (python models/examples/src/mounting_plate.py).
 
 import fs from "node:fs";
 import path from "node:path";

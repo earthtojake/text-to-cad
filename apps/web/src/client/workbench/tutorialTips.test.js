@@ -5,10 +5,8 @@ import {
   markTutorialTipSeen,
   readSeenTutorialTipIds,
   resetTutorialTips,
-  TUTORIAL_TIP_IDS,
   TUTORIAL_TIP_STORAGE_KEY,
-  TUTORIAL_TIP_STORAGE_VERSION,
-  tutorialTipSeen
+  TUTORIAL_TIP_STORAGE_VERSION
 } from "./persistence.js";
 
 function createMemoryStorage() {
@@ -26,42 +24,42 @@ function createMemoryStorage() {
 
 test("a tip is unseen until it is marked, then stays seen", () => {
   const storage = createMemoryStorage();
-  assert.equal(tutorialTipSeen(TUTORIAL_TIP_IDS.COPY_REFERENCE, { storage }), false);
+  assert.equal(readSeenTutorialTipIds({ storage }).includes("copyReference"), false);
 
-  markTutorialTipSeen(TUTORIAL_TIP_IDS.COPY_REFERENCE, { storage });
-  assert.equal(tutorialTipSeen(TUTORIAL_TIP_IDS.COPY_REFERENCE, { storage }), true);
-  assert.deepEqual(readSeenTutorialTipIds({ storage }), [TUTORIAL_TIP_IDS.COPY_REFERENCE]);
+  markTutorialTipSeen("copyReference", { storage });
+  assert.equal(readSeenTutorialTipIds({ storage }).includes("copyReference"), true);
+  assert.deepEqual(readSeenTutorialTipIds({ storage }), ["copyReference"]);
 });
 
 test("marking the same tip twice does not duplicate it", () => {
   const storage = createMemoryStorage();
-  markTutorialTipSeen(TUTORIAL_TIP_IDS.COPY_REFERENCE, { storage });
-  markTutorialTipSeen(TUTORIAL_TIP_IDS.COPY_REFERENCE, { storage });
-  assert.deepEqual(readSeenTutorialTipIds({ storage }), [TUTORIAL_TIP_IDS.COPY_REFERENCE]);
+  markTutorialTipSeen("copyReference", { storage });
+  markTutorialTipSeen("copyReference", { storage });
+  assert.deepEqual(readSeenTutorialTipIds({ storage }), ["copyReference"]);
 });
 
 test("tips are tracked independently", () => {
   const storage = createMemoryStorage();
   markTutorialTipSeen("otherTip", { storage });
-  assert.equal(tutorialTipSeen("otherTip", { storage }), true);
-  assert.equal(tutorialTipSeen(TUTORIAL_TIP_IDS.COPY_REFERENCE, { storage }), false);
+  assert.equal(readSeenTutorialTipIds({ storage }).includes("otherTip"), true);
+  assert.equal(readSeenTutorialTipIds({ storage }).includes("copyReference"), false);
 });
 
 test("reset clears every seen tip", () => {
   const storage = createMemoryStorage();
-  markTutorialTipSeen(TUTORIAL_TIP_IDS.COPY_REFERENCE, { storage });
+  markTutorialTipSeen("copyReference", { storage });
   markTutorialTipSeen("otherTip", { storage });
 
   resetTutorialTips({ storage });
   assert.deepEqual(readSeenTutorialTipIds({ storage }), []);
-  assert.equal(tutorialTipSeen(TUTORIAL_TIP_IDS.COPY_REFERENCE, { storage }), false);
+  assert.equal(readSeenTutorialTipIds({ storage }).includes("copyReference"), false);
 });
 
 test("a stored payload from another schema version re-arms the tips", () => {
   const storage = createMemoryStorage();
   storage.setItem(TUTORIAL_TIP_STORAGE_KEY, JSON.stringify({
     version: TUTORIAL_TIP_STORAGE_VERSION + 1,
-    seen: [TUTORIAL_TIP_IDS.COPY_REFERENCE]
+    seen: ["copyReference"]
   }));
   assert.deepEqual(readSeenTutorialTipIds({ storage }), []);
 });
@@ -73,12 +71,12 @@ test("unreadable storage reads as unseen rather than throwing", () => {
     removeItem: () => {}
   };
   assert.deepEqual(readSeenTutorialTipIds({ storage }), []);
-  assert.equal(tutorialTipSeen(TUTORIAL_TIP_IDS.COPY_REFERENCE, { storage }), false);
+  assert.equal(readSeenTutorialTipIds({ storage }).includes("copyReference"), false);
 });
 
 test("an empty tip id is never seen and is never recorded", () => {
   const storage = createMemoryStorage();
   assert.equal(markTutorialTipSeen("", { storage }), false);
-  assert.equal(tutorialTipSeen("", { storage }), false);
+  assert.equal(readSeenTutorialTipIds({ storage }).includes(""), false);
   assert.deepEqual(readSeenTutorialTipIds({ storage }), []);
 });
