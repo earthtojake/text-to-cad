@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:http';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
@@ -14,7 +15,7 @@ test('the shared CAD renderer preserves baseline camera persistence, panels, cap
   const temporary = await mkdtemp(join(tmpdir(), 'hardcore-cad-browser-'));
   let server, browser;
   t.after(async () => { await browser?.close(); if (server) await new Promise((resolve) => server.close(resolve)); await rm(temporary, { recursive: true, force: true }); });
-  await build({ entryPoints: [new URL('./harness/index.tsx', import.meta.url).pathname], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', jsx: 'automatic', loader: { '.webp': 'dataurl' } });
+  await build({ entryPoints: [fileURLToPath(new URL('./harness/index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', jsx: 'automatic', loader: { '.webp': 'dataurl' } });
   const bundle = await readFile(join(temporary, 'harness.js'));
   const compiledCss = await readFile(new URL('../../../dist/styles.css', import.meta.url));
   const requests = [];
@@ -33,7 +34,9 @@ test('the shared CAD renderer preserves baseline camera persistence, panels, cap
     else { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css"></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>'); }
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  browser = await chromium.launch({ headless: true, args: ['--use-angle=metal'] });
+  browser = await chromium.launch({ headless: true, args: process.platform === 'darwin'
+    ? ['--use-angle=metal']
+    : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   page.setDefaultTimeout(10000);
   const errors = [];

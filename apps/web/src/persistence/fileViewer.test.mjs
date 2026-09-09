@@ -4,12 +4,12 @@ import { build } from 'esbuild';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const temporary = await mkdtemp(join(tmpdir(), 'hardcore-web-host-'));
 const output = join(temporary, 'host.mjs');
 await build({
-  stdin: { contents: `export * from './persistence/fileViewer.ts'; export * from './adapters/fileSource.ts';`, resolveDir: new URL('../', import.meta.url).pathname },
+  stdin: { contents: `export * from './persistence/fileViewer.ts'; export * from './adapters/fileSource.ts';`, resolveDir: fileURLToPath(new URL('../', import.meta.url)) },
   bundle: true, platform: 'node', format: 'esm', outfile: output,
 });
 const { readViewState, writeViewState, createWebFileSource } = await import(pathToFileURL(output).href);

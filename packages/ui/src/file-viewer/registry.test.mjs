@@ -3,12 +3,12 @@ import { test, after } from "node:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 
 const temporary = await mkdtemp(join(tmpdir(), "hardcore-registry-test-"));
 const output = join(temporary, "registry.mjs");
-await build({ entryPoints: [new URL("./registry.ts", import.meta.url).pathname], bundle: true, platform: "node", format: "esm", outfile: output });
+await build({ entryPoints: [fileURLToPath(new URL("./registry.ts", import.meta.url))], bundle: true, platform: "node", format: "esm", outfile: output });
 const { defineFileRenderer, selectRenderer, validateRenderers } = await import(pathToFileURL(output).href);
 after(() => rm(temporary, { recursive: true, force: true }));
 const file = { path: "notes.md", name: "notes.md", kind: "file", extension: "md", size: 4, mediaType: "text" };
