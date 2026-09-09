@@ -53,6 +53,19 @@ it("adds a capture and named reference together without duplicating an existing 
   expect(state.focusRequest?.key).toBe(key);
 });
 
+it("deduplicates repeated feature context while allowing it to be added again after removal", () => {
+  const key = cadDraftKey("car", null);
+  const context = { text: "Feature context: Extrude\nSource inputs: height = 5", references: [{ file: "models/car.step", selector: "o1.f2" }], deduplicateText: true };
+  addToDraft("car", null, context);
+  const first = useComposer.getState().drafts[key];
+  addToDraft("car", null, context);
+  expect(useComposer.getState().drafts[key]).toBe(first);
+  useComposer.getState().setDraft(key, "Make it wider");
+  addToDraft("car", null, context);
+  expect(useComposer.getState().drafts[key]).toContain(context.text);
+  expect(useComposer.getState().drafts[key]).toMatch(/^Make it wider/);
+});
+
 it("starts a chat in the context's workspace, preserving the old draft and bundled context", async () => {
   useSessions.setState({ activeId: "old", sessions: [{ id: "old", projectId: "car", cwd: "/car" }] as Session[] });
   useComposer.getState().setDraft("old", "Keep my unfinished request");

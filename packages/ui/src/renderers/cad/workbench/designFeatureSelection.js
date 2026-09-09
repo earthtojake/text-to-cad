@@ -36,6 +36,7 @@ export function resolveDesignFeatureLinks(links, references = [], parts = []) {
 
 export function designFeatureSelection(node, resolved, inheritedLine = null) {
   if (!resolved || !node || node.type === 'parameters') return empty();
+  if (node.type === 'geometry-face' || node.type === 'geometry-faces') return { faceIds: node.faceIds, partIds: [] };
   if (node.type === 'model' || node.type === 'imported') return {faceIds: resolved.faces, partIds: resolved.parts};
   if (node.type === 'part') return { faceIds: [], partIds: node.partIds.filter(id => resolved.parts.includes(id)) };
   const lines = new Set((node.sourceLines || []).map(String));

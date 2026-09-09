@@ -4,6 +4,7 @@ import { Box, Boxes, ChevronRight, Eye, EyeOff, Focus, X } from "lucide-react";
 import { cn } from "@hardcore/ui/utils";
 import {
   STEP_MODEL_ROOT_ID,
+  STEP_MODEL_RENDER_PART_ID,
   flattenVisibleStepTreeRows,
   stepTreeNodeChildren
 } from "@hardcore/core/lib/step/stepTree.js";
@@ -521,7 +522,7 @@ export default function StepFileSheet({
     ? false
     : Boolean(topologyTreeRowType(activeTreeRow));
   const isolateActive = focusedNodeIdSet.size > 0;
-  const showTreeVisibilityControls = isAssemblyView === true;
+  const showTreeVisibilityControls = isAssemblyView === true || stepTreeRoot?.id === STEP_MODEL_ROOT_ID;
   const treeSectionOpen = Array.isArray(openSectionIds) && openSectionIds.includes(treeSectionId);
   const treeSelectionTitle = treeSelectionDisabled
     ? String(treeSelectionDisabledReason || "Tree selection is disabled in the current parameter state.").trim()
@@ -965,7 +966,7 @@ export default function StepFileSheet({
                                   </span>
                                 </div>
                               </div>
-                              {!topologyRow && showTreeVisibilityControls && !focused ? (
+                              {!topologyRow && isAssemblyView && !focused ? (
                                 <Button
                                   type="button"
                                   variant="ghost"
@@ -1011,7 +1012,7 @@ export default function StepFileSheet({
                                       onUnfocusTreeNode?.(row.id);
                                       return;
                                     }
-                                    onTogglePartVisibility?.(row.id);
+                                    onTogglePartVisibility?.(selectionRowId);
                                   }}
                                 >
                                   {focused ? (
@@ -1035,11 +1036,11 @@ export default function StepFileSheet({
                           actionCount={contextActionCount}
                           copyReferenceDisabled={!copyReferenceTargetId || typeof onCopyTreeNodeReference !== "function"}
                           selectDisabled={contextSelectDisabled}
-                          showIsolate={!topologyRow}
+                          showIsolate={!topologyRow && isAssemblyView}
                           isolateDisabled={contextFocusDisabled}
                           showExitAllIsolate={contextExitAllIsolateAvailable}
                           exitAllIsolateDisabled={treeSelectionDisabled || !contextExitAllIsolateAvailable}
-                          showHideOther={!topologyRow}
+                          showHideOther={!topologyRow && isAssemblyView}
                           hideOtherDisabled={contextHideOtherDisabled}
                           hideAllDisabled={contextHideAllDisabled}
                           hideAllLabel="Show all"
@@ -1135,12 +1136,13 @@ export default function StepFileSheet({
       title: "Features",
       scrollsContent: true,
       content: <StepDesignTree key={selectedEntry.file} {...designOutline} label={selectedEntry.name || selectedEntry.file?.split('/').pop()}
-        partActions={isAssemblyView ? {
-          hiddenIds, focusedIds: focusedNodeIds, selectableIds: selectableNodeIds,
+        partActions={showTreeVisibilityControls ? {
+          hiddenIds: isAssemblyView ? hiddenIds : hiddenIds.includes(STEP_MODEL_RENDER_PART_ID) ? (designOutline?.parts || []).map(part => part.id) : [],
+          focusedIds: focusedNodeIds, selectableIds: selectableNodeIds,
           disabled: treeSelectionDisabled || viewerLoading,
-          onIsolate: onFocusTreeNode ? id => onFocusTreeNode(id, { reveal: false }) : null,
+          onIsolate: isAssemblyView && onFocusTreeNode ? id => onFocusTreeNode(id, { reveal: false }) : null,
           onExitIsolate: onUnfocusTreeNode, onExitAllIsolate,
-          onToggleVisibility: onTogglePartVisibility,
+          onToggleVisibility: onTogglePartVisibility ? id => onTogglePartVisibility(isAssemblyView ? id : STEP_MODEL_ROOT_ID) : null,
         } : null} />
     },
     // Pose then Animation, directly after Tree and ahead of the readouts: they are

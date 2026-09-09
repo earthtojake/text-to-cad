@@ -12,10 +12,10 @@ it('supplies labelled feature context to the shared viewer action without a sepa
   const props={client,file:'case.step',onHighlight};
   const {rerender}=render(<StepDesignTree {...props} references={[{id:'f7',selectorType:'face',pickData:descriptor}]} />);
   fireEvent.click(await screen.findByText('Extrude · body'));
-  expect(onHighlight).toHaveBeenLastCalledWith({faceIds:['f7'],partIds:[]},'Extrude · body');
+  expect(onHighlight).toHaveBeenLastCalledWith({faceIds:['f7'],partIds:[]},'Extrude · body',expect.objectContaining({file:'case.step'}));
   expect(screen.queryByRole('button',{name:'Add to prompt',exact:true})).toBeNull();
   rerender(<StepDesignTree {...props} references={[]} />);
-  expect(onHighlight).toHaveBeenLastCalledWith({faceIds:[],partIds:[]},'Extrude · body');
+  expect(onHighlight).toHaveBeenLastCalledWith({faceIds:[],partIds:[]},'Extrude · body',expect.objectContaining({file:'case.step'}));
 });
 it('shows source parameters read-only and navigates nested operations with arrows', async () => {
   render(<StepDesignTree client={{requestDesignOutline:vi.fn().mockResolvedValue(result)}} file="case.step" label="case.step" />);
@@ -122,5 +122,58 @@ it('shows real imported parts and their dimensions without inventing source oper
   expect(screen.queryByText('Source parameters')).toBeNull();
   expect(screen.queryByText('Face area')).toBeNull();
   await waitFor(()=>expect(onHighlight.mock.lastCall?.[0]).toEqual({faceIds:[],partIds:['o1']}));
-  expect(onHighlight).toHaveBeenLastCalledWith({faceIds:[],partIds:['o1']},'Imported bracket');
+  expect(onHighlight).toHaveBeenLastCalledWith({faceIds:[],partIds:['o1']},'Imported bracket',expect.objectContaining({file:'imported.step'}));
+});
+
+it('offers hide/show without an ineffective isolate action for a single imported body', async () => {
+  const onToggleVisibility = vi.fn();
+  const props = { client: { requestDesignOutline: vi.fn().mockResolvedValue({ status: 'unavailable' }) },
+    file: 'imported.step', parts: [{ id: 'o1', name: 'Bracket' }] };
+  const actions = { onToggleVisibility, hiddenIds: [], onIsolate: null };
+  const { rerender } = render(<StepDesignTree {...props} partActions={actions} />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Expand Imported geometry' }));
+  expect(screen.queryByRole('button', { name: 'Isolate Bracket' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Hide Bracket' }));
+  expect(onToggleVisibility).toHaveBeenCalledWith('o1');
+  rerender(<StepDesignTree {...props} partActions={{ ...actions, hiddenIds: ['o1'] }} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Show Bracket' }));
+  expect(onToggleVisibility).toHaveBeenCalledTimes(2);
+});
+
+it('drills into a single associated face and previews temporary dimensions without changing source values', async () => {
+  const descriptors=[
+    {area:12,center:[3,1,0],bbox:{min:[0,0,0],max:[6,2,0]}},
+    {area:6,center:[3,1,1],bbox:{min:[0,0,0],max:[6,2,2]}},
+  ];
+  const references=descriptors.map((pickData,i)=>({id:`f${i}`,label:`Face f${i}`,selectorType:'face',pickData:{...pickData,surfaceType:i?'cylinder':'plane',params:i?{radius:2}:undefined}}));
+  const onHighlight=vi.fn();
+  const client={requestDesignOutline:vi.fn().mockResolvedValue({...result,geometryLinks:{schema:1,faces:descriptors,lines:{'5':[0,1]}}})};
+  const {unmount}=render(<StepDesignTree client={client} file="case.step" references={references} onHighlight={onHighlight} />);
+  fireEvent.click(await screen.findByRole('button',{name:'Expand Extrude · body'}));
+  fireEvent.click(screen.getByRole('button',{name:'Expand Associated faces (2)'}));
+  fireEvent.click(screen.getByRole('treeitem',{name:'Face f0 · plane',exact:true}));
+  expect(onHighlight.mock.lastCall?.[0]).toEqual({faceIds:['f0'],partIds:[]});
+  expect(screen.getByRole('button',{name:'Show Z extent'}).hasAttribute('disabled')).toBe(true);
+  fireEvent.click(screen.getByRole('button',{name:'Show X extent'}));
+  expect(onHighlight.mock.lastCall?.[0].measurement.measurement.euclidean).toBe(6);
+  expect(onHighlight.mock.lastCall?.[0].faceIds).toEqual(['f0']);
+  fireEvent.click(screen.getByRole('button',{name:'Show X extent'}));
+  expect(onHighlight.mock.lastCall?.[0].measurement).toBeUndefined();
+  fireEvent.click(screen.getByRole('treeitem',{name:/^Extrude · body/}));
+  fireEvent.click(screen.getByRole('button',{name:'Highlight faces with radius 2 mm'}));
+  expect(onHighlight.mock.lastCall?.[0]).toEqual({faceIds:['f1'],partIds:[]});
+  fireEvent.keyDown(screen.getByRole('button',{name:'Highlight faces with radius 2 mm'}),{key:'Escape'});
+  expect(onHighlight.mock.lastCall?.[0]).toBeNull();
+  unmount();
+  expect(onHighlight.mock.lastCall?.[0]).toBeNull();
+});
+
+it('provides source context for unlinked parameters without telling the person to rebuild', async () => {
+  const onHighlight=vi.fn();
+  render(<StepDesignTree client={{requestDesignOutline:vi.fn().mockResolvedValue(result)}} file="case.step" onHighlight={onHighlight} />);
+  fireEvent.click(await screen.findByText('Parameters'));
+  fireEvent.click(screen.getByRole('button',{name:'Highlight WALL'}));
+  expect(onHighlight.mock.lastCall?.[0]).toEqual({faceIds:[],partIds:[]});
+  expect(onHighlight.mock.lastCall?.[2]).toMatchObject({file:'case.step',source:'case.py',parameters:[{name:'WALL',value:1.8}]});
+  expect(screen.queryByText(/Rebuild this model|Geometry links unavailable/)).toBeNull();
 });
