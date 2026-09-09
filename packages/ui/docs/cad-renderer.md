@@ -185,11 +185,30 @@ source defines several `@step` functions, only an exact stem match is used.
 Unknown expressions remain expressions. No values can be edited from this view.
 
 This is a **source outline**, not evaluated build history or recovered STEP
-history. Filename matching cannot prove that source generated the current STEP;
-the panel states this and does not map operations to faces. Without an unambiguous
-source, the view shows Imported geometry. No automatic feature detection or
+history. Filename matching alone cannot prove source/geometry correspondence.
+Without an unambiguous source, the view shows Imported geometry. No automatic feature detection or
 Feature groups selection mode is offered. Existing saved multi-face references
 continue to work through Tree and the host's reference callbacks.
+
+Normal model generation now records optional geometry links. For bounded,
+single-solid algebraic models with planar/cylindrical faces, the recorder associates source statements with
+surviving faces and carries a placed cutting tool's association back to its source
+row. Named assembly components are linked when their identity survives into the
+returned assembly. Repeat rows combine their child associations; sketch rows
+highlight their consuming operation's faces, not a reconstructed sketch overlay.
+
+The disposable cache is keyed by the exact source bytes and STEP bytes. Reading
+Features never runs a generator. Before highlighting, the client requires a
+complete, unique descriptor match against the loaded faces or assembly parts;
+face ordinals and guessed name similarity are never used. Unsupported, ambiguous,
+merged-away or stale links produce no highlight. The existing build remains valid
+if inspection capture is unavailable or exceeds its budget. Newly rebuilt models
+can acquire links; imported STEP without a matching source cannot.
+
+Clicking or using arrow keys in Features previews the associated geometry using
+the viewer's existing selection colour. It does not change CAD or replace the
+user's actual reference selection. Escape, a viewport click, leaving Features,
+or changing files clears the preview. The footer shows only the source filename.
 
 ## Selection and inspection tools
 
