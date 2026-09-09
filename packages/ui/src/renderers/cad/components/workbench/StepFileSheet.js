@@ -25,6 +25,7 @@ import { buildPoseControlsTab } from "./PoseControlsSection.js";
 import { buildAnimationControlsTab } from "./AnimationControlsSection.js";
 import { buildStepReferenceTab } from "./StepReferenceSection.js";
 import StepMeasurementsSection from "./StepMeasurementsSection.js";
+import StepFeatureGroups from "./StepFeatureGroups.jsx";
 import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections.js";
 const treeChevronButtonClasses = "grid h-7 w-7 shrink-0 place-items-center rounded-sm px-0 text-current/60 hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent/45";
 const treeRowActionButtonClasses = "h-7 w-7 shrink-0 rounded-sm px-0 text-current/60 shadow-none hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent/45 focus-visible:text-sidebar-accent-foreground";
@@ -390,6 +391,7 @@ function StepTreeRowGlyph({ row }) {
 
 export default function StepFileSheet({
   open,
+  featureRecognition = null,
   measurements = EMPTY_MEASUREMENTS,
   activeMeasurementId = "",
   measureModeActive = false,
@@ -647,6 +649,12 @@ export default function StepFileSheet({
       titleAttr: treeSelectionTitle || undefined,
       content: (
             <div className="max-w-full overflow-hidden pb-2">
+              {featureRecognition && <StepFeatureGroups
+                key={featureRecognition.revisionKey}
+                {...featureRecognition}
+                selectedReferenceIds={selectedReferenceIds}
+                disabled={viewerLoading || treeSelectionDisabled}
+              />}
               <div
                 className="select-none space-y-px"
                 role="tree"
