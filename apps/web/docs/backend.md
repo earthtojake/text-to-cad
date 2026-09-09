@@ -37,7 +37,7 @@ cadgen viewer --host 127.0.0.1 --json
 
 `--dist <directory>` is the command-line equivalent of `CADGEN_VIEWER_DIST`.
 Repository setup and editable-install instructions live in
-[CONTRIBUTING.md](../../../CONTRIBUTING.md).
+`CONTRIBUTING.md`.
 
 The launcher reuses a live instance for the same resolved root and code identity.
 That identity includes the cadgen version and the newest server/client file
@@ -108,7 +108,7 @@ Store layout and I/O have one implementation. `cadgen.viewer.store_paths` is a
 thin adapter over `cadgen.catalog`, `cadgen.store` and the source-sidecar helpers;
 it returns the strings and dictionaries expected by HTTP routes. The viewer
 does not maintain a second store layout. See
-[cadgen's store contract](../../../packages/cadgen/STORE.md) for objects,
+`packages/cadgen/STORE.md` for objects,
 document indexes, output records and cache-root resolution.
 
 The tessellation routes likewise delegate reads, writes and TESB batch framing
