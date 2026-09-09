@@ -1,10 +1,8 @@
 import {
   CUSTOM_THEME_ID,
   DEFAULT_THEME_ID,
-  getThemePresetIdForSettings,
   normalizeThemeId,
-  normalizeThemeSettings,
-  resolveThemeSettingsForId
+  normalizeThemeSettings
 } from "@hardcore/core/lib/themeSettings.js";
 import { THEME_STORAGE_KEY } from "../ui/colorScheme.js";
 import { createThemeState, fileSheetWidthPxForSessionState } from "@hardcore/ui/renderers/cad/state";
@@ -15,8 +13,6 @@ export const THEME_STORAGE_VERSION = 13;
 
 export const CAD_DIRECTORY_SESSION_STORAGE_VERSION = 1;
 export const CAD_DIRECTORY_SESSION_STORAGE_KEY = `cad-viewer:directory-session:v${CAD_DIRECTORY_SESSION_STORAGE_VERSION}`;
-export const CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH = 365;
-export const CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH = 280;
 
 function normalizeUniqueStringList(value) {
   return Array.isArray(value) ? [...new Set(value.map(entry => String(entry ?? "").trim()).filter(Boolean))] : [];
@@ -136,10 +132,6 @@ export const TUTORIAL_TIP_STORAGE_VERSION = 1;
 export const TUTORIAL_TIP_STORAGE_KEY = `cad-viewer:tutorial-tips:v${TUTORIAL_TIP_STORAGE_VERSION}`;
 export const TUTORIAL_TIP_RESET_QUERY_PARAM = "resetTips";
 
-export const TUTORIAL_TIP_IDS = Object.freeze({
-  COPY_REFERENCE: "copyReference"
-});
-
 function browserLocalStorage() {
   return typeof window !== "undefined" ? window.localStorage : null;
 }
@@ -154,11 +146,6 @@ export function readSeenTutorialTipIds(options = {}) {
     return [];
   }
   return normalizeUniqueStringList(rawValue.seen);
-}
-
-export function tutorialTipSeen(tipId, options = {}) {
-  const normalizedTipId = String(tipId || "").trim();
-  return Boolean(normalizedTipId) && readSeenTutorialTipIds(options).includes(normalizedTipId);
 }
 
 export function markTutorialTipSeen(tipId, options = {}) {
@@ -210,17 +197,6 @@ export function applyTutorialTipResetQueryParam(options = {}) {
   return true;
 }
 
-function readSystemPrefersDark() {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-    return false;
-  }
-  try {
-    return window.matchMedia("(prefers-color-scheme: dark)").matches === true;
-  } catch {
-    return false;
-  }
-}
-
 // Theme state is one active id plus, at most, one customized settings blob.
 //
 // `themeId` is "system", a built-in preset id, or "custom". Presets are
@@ -246,71 +222,11 @@ function readThemeStoragePayload() {
   return rawValue?.version === THEME_STORAGE_VERSION ? rawValue : null;
 }
 
-export function parseThemeSettingsStateFromStorage(rawValue, options = {}) {
-  const payload = rawValue?.version === THEME_STORAGE_VERSION ? rawValue : null;
-  return createThemeState(payload?.themeId, payload?.custom, options);
-}
-
-export function parseThemeSettingsFromStorage(rawValue) {
-  return parseThemeSettingsStateFromStorage(rawValue).settings;
-}
-
 export function readThemeSettingsState(options = {}) {
   const payload = readThemeStoragePayload();
   return createThemeState(payload?.themeId, payload?.custom, {
     prefersDark: options.prefersDark ?? prefersDarkColorScheme()
   });
-}
-
-export function readThemeSettings() {
-  return readThemeSettingsState().settings;
-}
-
-// Select a theme. Presets and "system" clear nothing — the custom slot is kept so
-// the user can flip back to it — but they do become the active, rendered theme.
-export function writeThemeState(themeId, options = {}) {
-  if (typeof window === "undefined") {
-    return true;
-  }
-  const payload = readThemeStoragePayload();
-  const custom = payload?.custom ? normalizeThemeSettings(payload.custom) : null;
-  // "custom" with nothing in the slot is not a selectable theme; fall back first
-  // so the cleared-storage check below sees the id that will actually be stored.
-  const requestedThemeId = normalizeThemeId(themeId) || DEFAULT_THEME_ID;
-  const normalizedThemeId = requestedThemeId === CUSTOM_THEME_ID && !custom
-    ? DEFAULT_THEME_ID
-    : requestedThemeId;
-  if (normalizedThemeId === DEFAULT_THEME_ID && !custom) {
-    return removeStorageItem(window.localStorage, THEME_STORAGE_KEY, options);
-  }
-  return writeStorageJson(window.localStorage, THEME_STORAGE_KEY, {
-    version: THEME_STORAGE_VERSION,
-    themeId: normalizedThemeId,
-    custom
-  }, options);
-}
-
-// Any settings edit lands in the custom slot and activates it, overwriting
-// whatever was there: there is only ever one custom theme.
-export function writeThemeSettings(themeSettings, options = {}) {
-  if (typeof window === "undefined") {
-    return true;
-  }
-  const settings = normalizeThemeSettings(themeSettings);
-  const matchingPresetId = getThemePresetIdForSettings(settings);
-  if (matchingPresetId) {
-    // Edited back to a preset exactly — record the preset, not a custom copy.
-    return writeStorageJson(window.localStorage, THEME_STORAGE_KEY, {
-      version: THEME_STORAGE_VERSION,
-      themeId: matchingPresetId,
-      custom: readThemeStoragePayload()?.custom || null
-    }, options);
-  }
-  return writeStorageJson(window.localStorage, THEME_STORAGE_KEY, {
-    version: THEME_STORAGE_VERSION,
-    themeId: CUSTOM_THEME_ID,
-    custom: settings
-  }, options);
 }
 
 
@@ -352,10 +268,6 @@ export function createDirectorySessionThemeSlice(themeState = {}) {
     return null;
   }
   return slice;
-}
-
-export function isDirectorySessionThemeSlice(themeSlice) {
-  return normalizeDirectorySessionThemeSlice(themeSlice) !== null;
 }
 
 export function readDirectoryThemeSettingsState(options = {}) {
