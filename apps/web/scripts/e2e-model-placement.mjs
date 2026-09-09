@@ -12,27 +12,26 @@
 //      origin-centered Box(60,40,4): authored z=[-2,2], top face at z=2);
 //   3. workbench light/dark (floor off): gridFloorZ === 0 and
 //      floorFollowsModel === false;
-//   4. cinematic (floor on): followModel may act — the grounded plate still
-//      yields gridFloorZ === 0 (follow is downward-only).
+//   4. cinematic (floor on): followModel grounds the stage at the plate's
+//      bottom, gridFloorZ === -2 (follow is downward-only).
 //
-// Usage:
-//   node viewer/scripts/e2e-model-placement.mjs --dir <models-root>
-//        [--url http://127.0.0.1:3245] [--file projects/demo-plate/STEP/plate.step]
+// Usage (from the repository root):
+//   node apps/web/scripts/e2e-model-placement.mjs --dir <models-root> --url <viewer-url>
+//        [--file projects/demo-plate/STEP/plate.step]
 //        [--out <dir>]
 //
-// Requires a viewer already serving <models-root> and playwright available.
-// Exits non-zero on any violation.
+// Requires a viewer already serving <models-root>: run
+// `cadgen viewer --host 127.0.0.1 --json` there and pass its printed URL.
+// --dir names the served fixture root; it is never part of the page URL.
+// Requires playwright. Exits non-zero on any violation.
 
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
+// Use the host's schema version so seeded themes are accepted at bootstrap.
+import { THEME_STORAGE_KEY, THEME_STORAGE_VERSION } from "../src/client/workbench/persistence.js";
 
 const require = createRequire(import.meta.url);
-
-// Must match viewer/src/client (persistence): same key/version the theme
-// conformance e2e uses.
-const THEME_STORAGE_KEY = "cad-viewer:theme";
-const THEME_STORAGE_VERSION = 12;
 
 const EXPECTATIONS = [
   { themeId: "workbench-light", floorEnabled: false },
@@ -70,8 +69,9 @@ for (const expectation of EXPECTATIONS) {
     window.localStorage.setItem(key, JSON.stringify({ version, themeId: id, custom: null }));
   }, [THEME_STORAGE_KEY, THEME_STORAGE_VERSION, expectation.themeId]);
   const page = await context.newPage();
-  const url = `${args.url}${args.dir}?file=${encodeURIComponent(args.file)}`;
-  await page.goto(url, { waitUntil: "domcontentloaded" });
+  const url = new URL("/", args.url);
+  url.searchParams.set("file", args.file);
+  await page.goto(url.href, { waitUntil: "domcontentloaded" });
   let placement = null;
   try {
     await page.waitForFunction(
