@@ -3,6 +3,7 @@ import { after, before, test } from "node:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createServer } from "node:http";
 import { build } from "esbuild";
 import { chromium } from "playwright";
@@ -10,7 +11,7 @@ import { chromium } from "playwright";
 let server, browser, temporary, page;
 before(async () => {
   temporary = await mkdtemp(join(tmpdir(), "hardcore-file-viewer-browser-"));
-  await build({ entryPoints: [new URL("./harness/index.tsx", import.meta.url).pathname], outfile: join(temporary, "harness.js"), bundle: true, format: "esm", platform: "browser", jsx: "automatic" });
+  await build({ entryPoints: [fileURLToPath(new URL("./harness/index.tsx", import.meta.url))], outfile: join(temporary, "harness.js"), bundle: true, format: "esm", platform: "browser", jsx: "automatic" });
   const bundle = await readFile(join(temporary, "harness.js"));
   server = createServer((request, response) => {
     if (request.url === "/harness.js") { response.setHeader("Content-Type", "text/javascript"); response.end(bundle); }

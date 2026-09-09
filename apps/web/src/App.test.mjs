@@ -6,21 +6,24 @@ import { createRequire } from 'node:module';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const temporary = await mkdtemp(join(tmpdir(), 'hardcore-web-app-'));
 const output = join(temporary, 'app.mjs');
 await build({
-  stdin: { contents: `export {default as App} from './App.tsx'; export {act,createElement} from 'react'; export {createRoot} from 'react-dom/client'; export {snapshot} from '@hardcore/ui/file-viewer';`, resolveDir: new URL('.', import.meta.url).pathname },
+  stdin: { contents: `export {default as App} from './App.tsx'; export {act,createElement} from 'react'; export {createRoot} from 'react-dom/client'; export {snapshot} from '@hardcore/ui/file-viewer';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
   bundle: true, platform: 'node', format: 'esm', jsx: 'automatic', outfile: output,
   banner: { js: `import {createRequire} from 'node:module'; const require=createRequire(import.meta.url);` },
   plugins: [{ name: 'host-boundaries', setup(plugin) {
-    plugin.onResolve({ filter: /^react(?:\/|$)|^react-dom(?:\/|$)/ }, args => ({ path: require.resolve(args.path), external: true }));
+    plugin.onResolve({ filter: /^react(?:\/|$)|^react-dom(?:\/|$)/ }, args => ({
+      path: args.kind.startsWith('require') ? require.resolve(args.path) : pathToFileURL(require.resolve(args.path)).href,
+      external: true,
+    }));
     plugin.onResolve({ filter: /^@hardcore\/ui\/file-viewer$|^@hardcore\/ui\/renderers\/cad$|^@hardcore\/ui\/renderers\/cad\/(presentation|empty)$|ViewerTopBar\.jsx$/ }, args => ({ path: args.path, namespace: 'host-test' }));
     plugin.onLoad({ filter: /.*/, namespace: 'host-test' }, args => {
       if (args.path.endsWith('/file-viewer')) return { contents: `let current; export function FileViewer(props){current=props; return null;} export const snapshot=()=>current;`, loader: 'js' };
-      if (args.path.endsWith('/cad')) return { contents: `export {createCadPreferences} from '${new URL('../../../packages/ui/src/renderers/cad/preferences.ts', import.meta.url).pathname}'; export const createCadRenderer=()=>({id:'cad'});`, loader: 'js', resolveDir: new URL('.', import.meta.url).pathname };
+      if (args.path.endsWith('/cad')) return { contents: `export {createCadPreferences} from ${JSON.stringify(fileURLToPath(new URL('../../../packages/ui/src/renderers/cad/preferences.ts', import.meta.url)))}; export const createCadRenderer=()=>({id:'cad'});`, loader: 'js', resolveDir: fileURLToPath(new URL('.', import.meta.url)) };
       if (args.path.endsWith('/presentation')) return { contents: 'export const MissingFileAlert=()=>null;export const ViewerLoadingOverlay=()=>null;export const StatusToast=()=>null;', loader: 'js' };
       if (args.path.endsWith('/empty')) return { contents: 'export const EmptyCadBackdrop=({children})=>children;', loader: 'js' };
       return { contents: 'export default function ViewerTopBar(){return null}', loader: 'js' };
