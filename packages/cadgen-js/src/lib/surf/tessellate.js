@@ -26,22 +26,15 @@
 import { ShapeUtils, Vector2 } from "three";
 
 import { evaluateCurve3, evaluatePCurve, evaluateSurface, evaluateSurfaceNormal } from "./evaluate.js";
-// Deterministic sin/cos: these decide refinement and therefore the emitted
-// triangles, so they may not vary with the engine (see trig.js).
-import { cos, sin } from "./trig.js";
 
 // Bump on ANY change that alters output triangles/normals/edge polylines for
 // the same input at the same tolerances — algorithm tweaks included, not just
 // entry-format changes (the codec version in tessellationCache.js only covers
 // those). This salts every shared tessellation-cache key (-t<version>-), so
 // meshes produced by the previous algorithm become unreachable instead of
-// being served stale; `cadgen cache gc` collects the orphans. TWO Python
-// mirrors move with it (both sync-tested): MESH_TESSELLATION_VERSION in
-// cadgen/_internal/cache_paths.py, and TESSELLATOR_VERSION in
-// cadgen/store/meshes.py, which is the one that builds and validates the key —
-// bumping only the first leaves the store rejecting every entry the new
-// algorithm writes.
-export const TESSELLATION_VERSION = 4;
+// being served stale; `cadgen cache gc` collects the orphans. Mirrored as
+// MESH_TESSELLATION_VERSION in cadgen/_internal/cache_paths.py (sync-tested).
+export const TESSELLATION_VERSION = 1;
 
 export const DEFAULT_OPTIONS = {
   // Max 3D distance between the surface and a triangle edge midpoint,
@@ -61,22 +54,8 @@ function sub(a, b) {
   return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 }
 
-// Math.sqrt is correctly rounded by IEEE 754 and required to be by ECMA-262;
-// Math.hypot is specified to no accuracy at all. Same reason as trig.js: every
-// float that reaches a stored tessellation comes from exactly defined
-// arithmetic. Squares of CAD-scale coordinates cannot overflow a double, which
-// is the only thing hypot's scaling would buy here.
 function length3(a) {
-  return Math.sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]);
-}
-
-function singularU(surface, v) {
-  if (surface.kind === "sphere") return Math.abs(cos(v)) < 1e-12;
-  if (surface.kind === "cone") {
-    return Math.abs(surface.radius + v * sin(surface.semiAngle)) <
-      (Math.abs(surface.radius) + Math.abs(v)) * 1e-12;
-  }
-  return false;
+  return Math.hypot(a[0], a[1], a[2]);
 }
 
 // --- Loop sampling -----------------------------------------------------------
@@ -89,11 +68,6 @@ function sampleLoopPolygon(face, loop, floats, tolerance, sharedEdges) {
   const points = [];
   const segmentOrds = [];
   const segmentMeta = [];
-  const boundSnaps = [];
-  for (let d = 0; face.surface.kind !== "plane" && d < 2; d += 1) {
-    const lo = face.uv[d * 2], hi = face.uv[d * 2 + 1];
-    boundSnaps.push({ d, lo, hi, epsilon: Math.max(Math.abs(lo), Math.abs(hi), hi - lo, 1e-12) * 2 ** -23 });
-  }
   for (const pcurve of loop) {
     const forward = !pcurve.reversed;
     const shared = pcurve.edgeOrd ? sharedEdges?.get(pcurve.edgeOrd) : null;
@@ -108,15 +82,6 @@ function sampleLoopPolygon(face, loop, floats, tolerance, sharedEdges) {
     }
     if (!segment) {
       segment = samplePCurveAdaptive(face, pcurve, floats, tolerance);
-    }
-    // Analytic face bounds are doubles, but pcurve coefficients are Float32.
-    // Snap their representation error at the bounds, especially at a sphere
-    // pole or cone apex where extrapolating by one ULP crosses the singularity.
-    for (const uv of segment) {
-      for (const { d, lo, hi, epsilon } of boundSnaps) {
-        if (Math.abs(uv[d] - lo) <= epsilon) uv[d] = lo;
-        else if (Math.abs(uv[d] - hi) <= epsilon) uv[d] = hi;
-      }
     }
     if (!forward) {
       segment.reverse();
@@ -334,16 +299,7 @@ function sampleSharedEdge(curve, floats, tolerance) {
   const [t0, t1] = curve.range;
   const start = evaluateCurve3(curve, floats, t0);
   const end = evaluateCurve3(curve, floats, t1);
-  let closed = false;
-  if (curve.kind !== "line") {
-    let extent = length3(sub(start, end));
-    for (const fraction of [0.25, 0.5, 0.75]) {
-      extent = Math.max(extent, length3(sub(start, evaluateCurve3(curve, floats, t0 + fraction * (t1 - t0)))));
-    }
-    // Closure is a geometric fact, independent of display chord tolerance.
-    // A short open edge must not become a closed seam at a coarse LOD.
-    closed = length3(sub(start, end)) <= extent * 2 ** -21;
-  }
+  const closed = length3(sub(start, end)) <= tolerance;
   const initial = curve.kind === "line" ? 1 : Math.max(closed ? 8 : 4, curve.n ?? 2);
   const params = [];
   for (let i = 0; i <= initial; i += 1) params.push(t0 + ((t1 - t0) * i) / initial);
@@ -513,7 +469,7 @@ function clipPolygonToCell(points, cu0, cu1, cv0, cv1) {
   return output;
 }
 
-function gridTriangulate(face, floats, loops, chordLimit, angleLimit = Infinity) {
+function gridTriangulate(face, floats, loops, chordLimit) {
   let minU = Infinity;
   let maxU = -Infinity;
   let minV = Infinity;
@@ -528,9 +484,8 @@ function gridTriangulate(face, floats, loops, chordLimit, angleLimit = Infinity)
   }
   if (!(maxU > minU) || !(maxV > minV)) return null;
   const uvBox = [minU, maxU, minV, maxV];
-  const stepsU = Math.min(256, Math.max(gridStepsForDirection(face, floats, uvBox, chordLimit, 0), Math.ceil((maxU - minU) / angleLimit)));
-  const stepsV = Math.min(256, Math.max(gridStepsForDirection(face, floats, uvBox, chordLimit, 1),
-    face.surface.kind === "sphere" ? Math.ceil((maxV - minV) / angleLimit) : 1));
+  const stepsU = gridStepsForDirection(face, floats, uvBox, chordLimit, 0);
+  const stepsV = gridStepsForDirection(face, floats, uvBox, chordLimit, 1);
   const du = (maxU - minU) / stepsU;
   const dv = (maxV - minV) / stepsV;
 
@@ -568,22 +523,7 @@ function gridTriangulate(face, floats, loops, chordLimit, angleLimit = Infinity)
 
   const uvVerts = [];
   const vertexIds = new Map();
-  // SURF pcurve coefficients are Float32. An exact grid line and a trim
-  // computed from those coefficients can differ by one source-precision ULP.
-  // Treating them as separate vertices creates sliver strips whose refined
-  // vertices later collapse in the Float32 mesh transport. Weld in parameter
-  // space before refinement, keeping opposite periodic seams distinct.
-  const epsilonU = Math.max(Math.abs(minU), Math.abs(maxU), maxU - minU, 1e-12) * 2 ** -23;
-  const epsilonV = Math.max(Math.abs(minV), Math.abs(maxV), maxV - minV, 1e-12) * 2 ** -23;
   const vertexId = (u, v) => {
-    const iu = Math.round((u - minU) / du);
-    const iv = Math.round((v - minV) / dv);
-    const gridU = iu === stepsU ? maxU : minU + iu * du;
-    const gridV = iv === stepsV ? maxV : minV + iv * dv;
-    if (face.surface.kind !== "plane") {
-      if (Math.abs(u - gridU) <= epsilonU) u = gridU;
-      if (Math.abs(v - gridV) <= epsilonV) v = gridV;
-    }
     const key = `${u}:${v}`;
     let id = vertexIds.get(key);
     if (id === undefined) {
@@ -651,8 +591,7 @@ function gridTriangulate(face, floats, loops, chordLimit, angleLimit = Infinity)
         const B = localPoints[b];
         const C = localPoints[c];
         const cross = (B.x - A.x) * (C.y - A.y) - (C.x - A.x) * (B.y - A.y);
-        if (Math.abs(cross) / 2 > degenerateLimit &&
-          localIds[a] !== localIds[b] && localIds[b] !== localIds[c] && localIds[c] !== localIds[a]) {
+        if (Math.abs(cross) / 2 > degenerateLimit) {
           triangles.push(localIds[a], localIds[b], localIds[c]);
         }
       }
@@ -805,16 +744,7 @@ function tessellateFaceRaw(face, floats, scale, options = {}, sharedEdges = null
   // triangulate their clipped polygon with earcut. This is boundary-exact
   // like a global earcut but never produces the long fans and caps that
   // made global earcut meshes fat on curved faces (Schwarz-lantern effect).
-  // A rectangular sphere/cone patch that ends at a pole has a singular UV
-  // edge: all its longitudes coincide in 3D. Adaptive UV edge splitting near
-  // that edge can invert facets because longitude there is arbitrary. Build
-  // its regular angular grid to the chord AND angular criteria up front,
-  // then collapse the pole row; meridian triangles need no UV refinement.
-  const singularGrid = loops.length === 1 &&
-    (singularU(face.surface, face.uv[2]) || singularU(face.surface, face.uv[3])) &&
-    loops[0].every(([u, v]) => u === face.uv[0] || u === face.uv[1] || v === face.uv[2] || v === face.uv[3]);
-  const built = gridTriangulate(face, floats, loops, singularGrid ? chordLimit / 3 : chordLimit,
-    singularGrid ? angleTolerance / Math.SQRT2 : Infinity);
+  const built = gridTriangulate(face, floats, loops, chordLimit);
   if (!built) return null;
   const { uvVerts, triangles: baseTriangles, vertexIds, segmentIndex } = built;
   let triangles = baseTriangles;
@@ -827,30 +757,12 @@ function tessellateFaceRaw(face, floats, scale, options = {}, sharedEdges = null
   // interior) marks its longest edge; (2) SUBDIVIDE every triangle by its
   // marked edges, materializing midpoints through a shared cache.
   const xyz = uvVerts.map(([u, v]) => evaluateSurface(face.surface, floats, u, v));
-  if (singularGrid) {
-    const poles = new Map(), remap = new Map();
-    for (let i = 0; i < uvVerts.length; i += 1) {
-      if (!singularU(face.surface, uvVerts[i][1])) continue;
-      const key = uvVerts[i][1];
-      if (poles.has(key)) remap.set(i, poles.get(key));
-      else poles.set(key, i);
-    }
-    const regular = [];
-    for (let t = 0; t < triangles.length; t += 3) {
-      const [a, b, c] = triangles.slice(t, t + 3).map((i) => remap.get(i) ?? i);
-      if (length3(sub(xyz[a], xyz[b])) <= scale * 1e-12 ||
-        length3(sub(xyz[b], xyz[c])) <= scale * 1e-12 ||
-        length3(sub(xyz[c], xyz[a])) <= scale * 1e-12) continue;
-      regular.push(a, b, c);
-    }
-    triangles = regular;
-  }
   const vertexNormal = ([u, v]) =>
     evaluateSurfaceNormal(face.surface, floats, u, v, face.uv, false);
   const nrm = uvVerts.map(vertexNormal);
-  const angleCos = cos(angleTolerance);
+  const angleCos = Math.cos(angleTolerance);
   const edgeKey = (a, b) => (a < b ? `${a}_${b}` : `${b}_${a}`);
-  for (let depth = 0; depth < (singularGrid ? 0 : maxRefineDepth); depth += 1) {
+  for (let depth = 0; depth < maxRefineDepth; depth += 1) {
     const marked = new Set();
     const chordChecked = new Map();
     const edgeChordBad = (a, b) => {
@@ -1047,7 +959,7 @@ function tessellateFaceRaw(face, floats, scale, options = {}, sharedEdges = null
     }
   }
 
-  return { uvVerts, xyz, nrm, triangles, segmentIndex, boundary, loops, singularGrid };
+  return { uvVerts, xyz, nrm, triangles, segmentIndex, boundary };
 }
 
 // One refinement round over a raw face mesh that never splits BOUNDARY edges
@@ -1056,7 +968,6 @@ function tessellateFaceRaw(face, floats, scale, options = {}, sharedEdges = null
 // their interiors stay flat across curved surfaces and the mesh loses the
 // bulge the tolerance promises.
 function refineInteriorPostConform(face, raw, floats, options = {}) {
-  if (raw.singularGrid) return;
   const { chordTolerance, angleTolerance, maxRefineDepth } = {
     ...DEFAULT_OPTIONS,
     ...options,
@@ -1072,7 +983,7 @@ function refineInteriorPostConform(face, raw, floats, options = {}) {
   const chordLimit = chordTolerance * Math.max(scale, 1e-9);
   const vertexNormal = ([u, v]) =>
     evaluateSurfaceNormal(face.surface, floats, u, v, face.uv, false);
-  const angleCos = cos(angleTolerance);
+  const angleCos = Math.cos(angleTolerance);
   const edgeKey = (a, b) => (a < b ? `${a}_${b}` : `${b}_${a}`);
   void angleCos;
   const REFINE_DEPTH = Math.min(3, maxRefineDepth);
@@ -1182,65 +1093,6 @@ export function finalizeFaceMesh(face, raw) {
   };
 }
 
-// Two vertices of ONE face can carry the same 3D point for exactly two
-// reasons. Either boundary snapping moved them onto the same model point — then
-// they ARE one vertex and must be welded — or the face is periodic and they are
-// the two images of its SEAM, which live at opposite ends of the wrapped
-// parameter direction and must both survive, because merging them would send
-// every later uv evaluation on that face to the wrong side of the surface.
-//
-// Which one it is follows from the face's uv BOX and nothing else. It is not a
-// question of how finely the face happens to be meshed, so it must not be
-// answered with a proximity epsilon: "are these two uv points near each other?"
-// is a proxy that holds only while mesh spacing stays under the epsilon, and
-// silently stops welding real duplicates once the spacing outgrows it — which
-// is what left zero-area triangles around small bores at coarse chord
-// tolerances. A seam pair spans the full box in the wrapped direction;
-// a duplicate lies strictly inside it.
-function seamImagePredicate(face, uvVerts) {
-  const [u0, u1, v0, v1] = face.uv;
-  const uSpan = u1 - u0;
-  const vSpan = v1 - v0;
-  // Relative slack only, so a pcurve that evaluated a hair outside the box
-  // still reads as "at the end" without admitting anything from its interior.
-  const FULL_SPAN = 1 - 1e-9;
-  return (i, j) =>
-    (uSpan > 0 && Math.abs(uvVerts[i][0] - uvVerts[j][0]) >= uSpan * FULL_SPAN) ||
-    (vSpan > 0 && Math.abs(uvVerts[i][1] - uvVerts[j][1]) >= vSpan * FULL_SPAN);
-}
-
-// Apply a weld's remap and drop every triangle that collapses under it.
-//
-// Two corners are the same point of the model when they are the same INDEX —
-// what a weld produces — or when they hold the same POSITION, which is the
-// seam case: a seam's two images stay separate vertices on purpose, so a
-// triangle that reaches across the seam to both of them has zero area and
-// carries no surface. Only exact coincidence counts. A merely thin triangle is
-// real surface, and an area threshold here would punch a hole in the mesh
-// rather than close one.
-//
-// Dropping a collapsed triangle cannot open the mesh either: it contributes
-// its one real edge TWICE (once through each coincident corner) plus a
-// self-loop that is not an edge at all, so removing it takes away a matched
-// pair and leaves every geometric edge's use count exactly as it was.
-function compactCollapsedTriangles(triangles, xyz, remap) {
-  const samePoint = (a, b) => {
-    if (a === b) return true;
-    const p = xyz[a];
-    const q = xyz[b];
-    return p[0] === q[0] && p[1] === q[1] && p[2] === q[2];
-  };
-  const kept = [];
-  for (let t = 0; t < triangles.length; t += 3) {
-    const a = remap.get(triangles[t]) ?? triangles[t];
-    const b = remap.get(triangles[t + 1]) ?? triangles[t + 1];
-    const c = remap.get(triangles[t + 2]) ?? triangles[t + 2];
-    if (samePoint(a, b) || samePoint(b, c) || samePoint(c, a)) continue;
-    kept.push(a, b, c);
-  }
-  return kept;
-}
-
 // Fan-split every face's boundary mesh edges to the UNION of boundary vertex
 // fractions across the component, so no T-junction survives: a vertex present
 // on one side of a model edge exists on the other side too, with bit-identical
@@ -1252,16 +1104,13 @@ function conformBoundaries(rawFaces, sharedEdges, floats, mergeTolerance = 0) {
   const fractionEps = (ord) => {
     const shared = sharedEdges.get(ord);
     const spatial = shared?.length ? (mergeTolerance * 0.5) / shared.length : 0;
-    // Even an edge shorter than the display tolerance keeps distinct ends.
-    return Math.min(0.25, Math.max(1e-9, spatial));
+    return Math.max(1e-9, spatial);
   };
   const FRACTION_EPS = 1e-9;
   // Closed edges wrap: any fraction within eps of 1 IS the seam point 0.
   const canonicalFraction = (ord, f) => {
     const shared = sharedEdges.get(ord);
-    const eps = fractionEps(ord);
-    if (f <= eps) return 0;
-    if (f >= 1 - eps) return shared?.closed ? 0 : 1;
+    if (shared?.closed && f >= 1 - Math.max(1e-6, fractionEps(ord))) return 0;
     return f;
   };
   const fractionsByOrd = new Map();
@@ -1304,70 +1153,7 @@ function conformBoundaries(rawFaces, sharedEdges, floats, mergeTolerance = 0) {
     const candidates = [union[lo], union[lo - 1] ?? union[lo]];
     return Math.abs(candidates[0] - f) <= Math.abs(candidates[1] - f) ? candidates[0] : candidates[1];
   };
-  for (const { face, raw } of rawFaces) {
-    if (face.surface.kind === "plane") {
-      // A new point on a curved trim can cross the old triangle's diagonal.
-      // Fanning it to that triangle's opposite vertex then makes inverted,
-      // overlapping triangles (especially around small circular holes).
-      // Re-triangulate the complete planar region from its final exact trim
-      // points instead. Planar UV is an exact inverse, unlike interpolating a
-      // rational pcurve's parameters or its old polygon chords.
-      const { origin, xdir, ydir } = face.surface;
-      const vertices = new Map();
-      const loops = raw.loops.map((loop) => {
-        const points = [];
-        points.segmentOrds = [];
-        points.segmentMeta = [];
-        for (let i = 0; i < loop.length; i += 1) {
-          const meta = loop.segmentMeta[i];
-          const shared = meta && sharedEdges.get(meta.ord);
-          if (!shared) {
-            points.push(loop[i]);
-            points.segmentOrds.push(loop.segmentOrds[i]);
-            points.segmentMeta.push(null);
-            continue;
-          }
-          const canonical = (f) => representativeOf(meta.ord, canonicalFraction(meta.ord, f));
-          const unwrap = (f, original) => shared.closed && f === 0 && original > 0.5 ? 1 : f;
-          const start = unwrap(canonical(meta.f0), meta.f0);
-          const end = unwrap(canonical(meta.f1), meta.f1);
-          const eps = fractionEps(meta.ord);
-          const between = fractionsByOrd.get(meta.ord).filter((f) =>
-            f > Math.min(start, end) + eps && f < Math.max(start, end) - eps);
-          if (end < start) between.reverse();
-          const fractions = [start, ...between, end];
-          for (let j = 0; j < fractions.length; j += 1) {
-            if (j + 1 < fractions.length && Math.abs(fractions[j + 1] - fractions[j]) <= eps) continue;
-            const f = canonicalFraction(meta.ord, fractions[j]);
-            const xyz = edgePointAt(shared, f, floats);
-            const delta = sub(xyz, origin);
-            const uv = [delta[0] * xdir[0] + delta[1] * xdir[1] + delta[2] * xdir[2],
-              delta[0] * ydir[0] + delta[1] * ydir[1] + delta[2] * ydir[2]];
-            if (j + 1 < fractions.length) {
-              points.push(uv);
-              points.segmentOrds.push(meta.ord);
-              points.segmentMeta.push({ ord: meta.ord, f0: fractions[j], f1: fractions[j + 1] });
-            }
-            const key = `${uv[0]}:${uv[1]}`;
-            const vertex = vertices.get(key);
-            if (vertex) vertex.labels.push({ ord: meta.ord, f });
-            else vertices.set(key, { xyz, labels: [{ ord: meta.ord, f }] });
-          }
-        }
-        return points;
-      });
-      const built = gridTriangulate(face, floats, loops, Infinity);
-      if (built?.triangles.length) {
-        Object.assign(raw, built, { boundary: new Map(), loops });
-        raw.xyz = built.uvVerts.map(([u, v], i) => {
-          const pinned = vertices.get(`${u}:${v}`);
-          if (pinned) raw.boundary.set(i, pinned.labels);
-          return pinned?.xyz ?? evaluateSurface(face.surface, floats, u, v);
-        });
-        raw.nrm = built.uvVerts.map(([u, v]) =>
-          evaluateSurfaceNormal(face.surface, floats, u, v, face.uv, false));
-      }
-    }
+  for (const { raw } of rawFaces) {
     for (const [vertIndex, labels] of raw.boundary) {
       for (const label of labels) {
         label.f = representativeOf(label.ord, canonicalFraction(label.ord, label.f));
@@ -1385,7 +1171,14 @@ function conformBoundaries(rawFaces, sharedEdges, floats, mergeTolerance = 0) {
     // Snapping can land two of a face's boundary vertices on the same
     // canonical point; weld them (by exact coordinates — they are
     // bit-identical by construction) and drop the triangles that collapse.
-    const isSeamImage = seamImagePredicate(face, raw.uvVerts);
+    let spanWeld = 0;
+    for (const [u, v] of raw.uvVerts) {
+      spanWeld = Math.max(spanWeld, Math.abs(u), Math.abs(v));
+    }
+    const uvWeldEps = Math.max(spanWeld, 1) * 1e-2;
+    const uvClose = (i, j) =>
+      Math.abs(raw.uvVerts[i][0] - raw.uvVerts[j][0]) <= uvWeldEps &&
+      Math.abs(raw.uvVerts[i][1] - raw.uvVerts[j][1]) <= uvWeldEps;
     const canonicalByPosition = new Map();
     const remap = new Map();
     for (const vertIndex of raw.boundary.keys()) {
@@ -1396,16 +1189,24 @@ function conformBoundaries(rawFaces, sharedEdges, floats, mergeTolerance = 0) {
         canonicalByPosition.set(key, [vertIndex]);
         continue;
       }
-      // Everything sharing this position is the same vertex EXCEPT a seam
-      // image (see seamImagePredicate).
-      const target = bucket.find((candidate) => !isSeamImage(candidate, vertIndex));
+      // A periodic face's SEAM pair shares 3D coordinates but lives at the
+      // two ends of the uv box; merging it corrupts every later uv-based
+      // evaluation on that face. Weld only uv-coincident duplicates.
+      const target = bucket.find((candidate) => uvClose(candidate, vertIndex));
       if (target !== undefined) remap.set(vertIndex, target);
       else bucket.push(vertIndex);
     }
-    // Unconditional: a seam-spanning triangle collapses on position alone, so
-    // it must be dropped even when nothing welded.
-    raw.triangles = compactCollapsedTriangles(raw.triangles, raw.xyz, remap);
-    for (const vertIndex of remap.keys()) raw.boundary.delete(vertIndex);
+    if (remap.size) {
+      const mapped = [];
+      for (let t = 0; t < raw.triangles.length; t += 3) {
+        const a = remap.get(raw.triangles[t]) ?? raw.triangles[t];
+        const b = remap.get(raw.triangles[t + 1]) ?? raw.triangles[t + 1];
+        const c = remap.get(raw.triangles[t + 2]) ?? raw.triangles[t + 2];
+        if (a !== b && b !== c && c !== a) mapped.push(a, b, c);
+      }
+      raw.triangles = mapped;
+      for (const vertIndex of remap.keys()) raw.boundary.delete(vertIndex);
+    }
   }
 
   for (const { face, raw } of rawFaces) {
@@ -1438,9 +1239,7 @@ function conformBoundaries(rawFaces, sharedEdges, floats, mergeTolerance = 0) {
       let id = minted.get(key);
       if (id !== undefined) return id;
       const uv = [
-        singularU(face.surface, uvVerts[a][1]) ? uvVerts[b][0] :
-          singularU(face.surface, uvVerts[b][1]) ? uvVerts[a][0] :
-            uvVerts[a][0] + w * (uvVerts[b][0] - uvVerts[a][0]),
+        uvVerts[a][0] + w * (uvVerts[b][0] - uvVerts[a][0]),
         uvVerts[a][1] + w * (uvVerts[b][1] - uvVerts[a][1]),
       ];
       id = uvVerts.length;
@@ -1537,7 +1336,14 @@ function conformBoundaries(rawFaces, sharedEdges, floats, mergeTolerance = 0) {
     // (same model point reached through another edge's labels). Positions are
     // bit-identical by construction, so a second exact-coordinate weld folds
     // them together and drops any triangle that collapsed.
-    const isSeamImageAfter = seamImagePredicate(face, uvVerts);
+    let spanAfter = 0;
+    for (const [u, v] of uvVerts) {
+      spanAfter = Math.max(spanAfter, Math.abs(u), Math.abs(v));
+    }
+    const uvAfterEps = Math.max(spanAfter, 1) * 1e-2;
+    const uvCloseAfter = (i, j) =>
+      Math.abs(uvVerts[i][0] - uvVerts[j][0]) <= uvAfterEps &&
+      Math.abs(uvVerts[i][1] - uvVerts[j][1]) <= uvAfterEps;
     const canonicalAfter = new Map();
     const remapAfter = new Map();
     for (const vertIndex of boundary.keys()) {
@@ -1548,22 +1354,31 @@ function conformBoundaries(rawFaces, sharedEdges, floats, mergeTolerance = 0) {
         canonicalAfter.set(key, [vertIndex]);
         continue;
       }
-      const target = bucket.find((candidate) => !isSeamImageAfter(candidate, vertIndex));
+      const target = bucket.find((candidate) => uvCloseAfter(candidate, vertIndex));
       if (target !== undefined) remapAfter.set(vertIndex, target);
       else bucket.push(vertIndex);
     }
-    raw.triangles = compactCollapsedTriangles(raw.triangles, xyz, remapAfter);
-    for (const [vertIndex, target] of remapAfter) {
-      const labels = boundary.get(vertIndex);
-      const targetLabels = boundary.get(target);
-      if (labels && targetLabels) {
-        for (const label of labels) {
-          if (!targetLabels.some((existing) => existing.ord === label.ord && existing.f === label.f)) {
-            targetLabels.push(label);
+    if (remapAfter.size) {
+      const mapped = [];
+      for (let t = 0; t < raw.triangles.length; t += 3) {
+        const a = remapAfter.get(raw.triangles[t]) ?? raw.triangles[t];
+        const b = remapAfter.get(raw.triangles[t + 1]) ?? raw.triangles[t + 1];
+        const c = remapAfter.get(raw.triangles[t + 2]) ?? raw.triangles[t + 2];
+        if (a !== b && b !== c && c !== a) mapped.push(a, b, c);
+      }
+      raw.triangles = mapped;
+      for (const [vertIndex, target] of remapAfter) {
+        const labels = boundary.get(vertIndex);
+        const targetLabels = boundary.get(target);
+        if (labels && targetLabels) {
+          for (const label of labels) {
+            if (!targetLabels.some((existing) => existing.ord === label.ord && existing.f === label.f)) {
+              targetLabels.push(label);
+            }
           }
         }
+        boundary.delete(vertIndex);
       }
-      boundary.delete(vertIndex);
     }
   }
 }
@@ -1665,9 +1480,7 @@ export function tessellateComponent(index, floats, options = {}) {
   // float rounding. Snap every cluster to ONE canonical point object so a
   // corner is bit-identical no matter which edge a face pinned it through.
   {
-    // Source-precision coincidence, independent of display detail. A coarse
-    // chord tolerance must not weld two distinct corners of a small feature.
-    const weldTolerance = scale * 2 ** -21;
+    const weldTolerance = chordTolerance * scale;
     const corners = [];
     const canonicalCorner = (point) => {
       for (const corner of corners) {

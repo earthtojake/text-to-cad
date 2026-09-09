@@ -9,20 +9,18 @@ const SCALE_SETTINGS = {
   cad: { minBoundsSpan: 1, minModelRadius: 1, minFloorSize: 100, minCameraDistance: 10, minCameraFar: 1000 }
 };
 
-function floorObjectsFor(bounds, floor = {}) {
+function floorZFor(bounds, floor = {}) {
   const scene = new THREE.Scene();
   addFloor(
     scene,
     bounds,
-    { floor: { mode: floor.enabled ? "stage" : "none", ...floor } },
+    { floor: { mode: "grid", grid: { enabled: true }, ...floor } },
     "cad",
-    SCALE_SETTINGS,
-    { grid: { enabled: true } }
+    SCALE_SETTINGS
   );
   const grid = scene.children.find((child) => child.isGridHelper || child.type === "GridHelper");
-  const plane = scene.children.find((child) => child.isMesh);
-  assert.ok(grid, "world-origin grid should have been added");
-  return { grid, plane };
+  assert.ok(grid, "grid floor should have been added");
+  return grid.position.z;
 }
 
 const grounded = { min: [-2400, -1000, -0.55], max: [2300, 1000, 1150] };
@@ -31,36 +29,31 @@ const belowFloor = { min: [-100, -100, -350], max: [100, 100, 400] };
 
 test("a grounded model rests on the floor", () => {
   // tyres at z ~= 0 -> floor within a hair of 0
-  const { plane } = floorObjectsFor(grounded, { enabled: true });
-  assert.ok(plane, "stage floor should have been added");
-  assert.ok(Math.abs(plane.position.z) < 1.0, "grounded model should sit on z=0");
+  assert.ok(Math.abs(floorZFor(grounded)) < 1.0, "grounded model should sit on z=0");
 });
 
 test("a model authored above z=0 genuinely floats", () => {
   // The regression: gluing the floor to bounds.min[2] would put it at 200 and
   // make this look grounded, hiding a real authoring mistake.
-  const { plane } = floorObjectsFor(liftedOffFloor, { enabled: true });
-  assert.ok(plane.position.z > -1.0, "floor must stay at world z=0, not follow up to 200");
-  assert.ok(Math.abs(plane.position.z) < 1.0);
+  assert.ok(floorZFor(liftedOffFloor) > -1.0, "floor must stay at world z=0, not follow up to 200");
+  assert.ok(Math.abs(floorZFor(liftedOffFloor)) < 1.0);
 });
 
 test("a grid-only canvas is pinned to world z=0 even for below-zero geometry", () => {
   // followModel is a floor-DEPENDENT trait: with no stage floor plane (grid
   // mode), it is inert, so the reference grid stays the true z=0 plane and
   // geometry authored below z=0 visibly extends below it.
-  const gridOnly = floorObjectsFor(belowFloor);
-  assert.equal(gridOnly.plane, undefined);
-  assert.equal(gridOnly.grid.position.z, 0, "grid canvas must not chase the model down");
-  assert.equal(floorObjectsFor(belowFloor, { followModel: true }).grid.position.z, 0, "followModel is inert without a floor");
+  assert.ok(Math.abs(floorZFor(belowFloor)) < 1.0, "grid canvas must not chase the model down");
+  assert.ok(Math.abs(floorZFor(belowFloor, { followModel: true })) < 1.0, "followModel is inert without a floor");
 });
 
 test("an enabled stage floor follows below-zero geometry down so nothing clips", () => {
   assert.ok(
-    floorObjectsFor(belowFloor, { enabled: true }).plane.position.z <= -350,
+    floorZFor(belowFloor, { enabled: true }) <= -350,
     "stage floor should follow the model downward"
   );
 });
 
 test("followModel:false pins an enabled floor to world z=0 regardless", () => {
-  assert.ok(Math.abs(floorObjectsFor(belowFloor, { enabled: true, followModel: false }).plane.position.z) < 1.0);
+  assert.ok(Math.abs(floorZFor(belowFloor, { enabled: true, followModel: false })) < 1.0);
 });

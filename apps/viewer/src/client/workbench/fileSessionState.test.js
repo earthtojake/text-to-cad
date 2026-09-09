@@ -49,19 +49,6 @@ function stepEntry(file = "parts/bracket.step", hash = "mesh-a", moduleHash = "m
   };
 }
 
-function materialStepEntry(file = "parts/finished.step", appearanceHash = "appearance-a") {
-  return {
-    ...stepEntry(file, "mesh", "module"),
-    appearanceHash,
-    sourceSidecar: {
-      appearance: {
-        materials: { steel: { name: "Steel" } },
-        assignments: { palm: "steel" }
-      }
-    }
-  };
-}
-
 function dxfEntry(file = "drawings/bracket.dxf", hash = "dxf-a") {
   return {
     file,
@@ -135,26 +122,6 @@ test("file session state ignores invalid json and version mismatches", () => {
   assert.equal(readFileSessionState("models", entry.file, entry, { storage }), null);
 });
 
-test("retired edge and grid controls cannot be restored from an older session", () => {
-  const storage = createMemoryStorage();
-  const entry = stepEntry();
-  const currentKey = fileSessionStorageKey("models", entry.file);
-  const retired = JSON.stringify({
-    version: 3,
-    fileKey: entry.file,
-    slices: {
-      display: {
-        edges: { thickness: 4, color: "#ff0000" },
-        guides: { grid: { enabled: true, density: 3, opacity: 1 } }
-      }
-    }
-  });
-  storage.setItem(currentKey.replace(":v4:", ":v3:"), retired);
-  assert.equal(readFileSessionState("models", entry.file, entry, { storage }), null);
-  storage.setItem(currentKey, retired);
-  assert.equal(readFileSessionState("models", entry.file, entry, { storage }), null);
-});
-
 test("file session state reports browser storage write failures", () => {
   const errors = [];
   const entry = stepEntry();
@@ -210,7 +177,7 @@ test("file session tab state stores file sheet open section ids", () => {
     slices: {
       tab: {
         inspectedAssemblyNodeId: "module-a",
-        fileSheetOpenSectionIds: ["tree", "display", "render"]
+        fileSheetOpenSectionIds: ["tree", "display", "theme"]
       }
     }
   }), { storage });
@@ -220,7 +187,7 @@ test("file session tab state stores file sheet open section ids", () => {
   assert.deepEqual(restoredTab.fileSheetOpenSectionIds, [
     "tree",
     "display",
-    "render"
+    "theme"
   ]);
 });
 
@@ -374,77 +341,6 @@ test("file session state skips stale content-sensitive slices", () => {
   assert.equal(restored.slices.animation, undefined);
 });
 
-test("display and Render setup survive ordinary geometry revisions", () => {
-  const storage = createMemoryStorage();
-  const oldEntry = stepEntry("parts/revised.step", "old-mesh", "old-module");
-  const nextEntry = stepEntry("parts/revised.step", "new-mesh", "new-module");
-
-  writeFileSessionState("models", oldEntry.file, createFileSessionSnapshot({
-    entry: oldEntry,
-    slices: {
-      tab: { selectedPartIds: ["old-solid"] },
-      display: { mode: "wireframe" },
-      render: {
-        enabled: true,
-        cadProjection: "orthographic",
-        payload: {
-          quality: "preview",
-          exposure: 0.75,
-          lighting: { size: 1.4 }
-        }
-      }
-    }
-  }), { storage });
-
-  const restored = readFileSessionState("models", nextEntry.file, nextEntry, { storage });
-  assert.equal(restored.slices.tab, undefined);
-  assert.equal(restored.slices.display.mode, "wireframe");
-  assert.equal(restored.slices.render.enabled, true);
-  assert.equal(restored.slices.render.payload.quality, "preview");
-  assert.equal(restored.slices.render.payload.exposure, 0.75);
-  assert.equal(restored.slices.render.payload.lighting.size, 1.4);
-});
-
-test("A to B to A restores distinct CAD and Render cameras", () => {
-  const storage = createMemoryStorage();
-  const entryA = stepEntry("parts/camera-a.step", "mesh-a", "module-a");
-  const entryB = stepEntry("parts/camera-b.step", "mesh-b", "module-b");
-  const cadA = { position: [10, 20, 30], target: [1, 2, 3], up: [0, 0, 1], projection: "orthographic", orthographicHalfHeight: 18 };
-  const renderA = { position: [40, 50, 60], target: [4, 5, 6], up: [0, 0, 1], projection: "perspective", orthographicHalfHeight: 21 };
-  const cadB = { position: [-10, -20, 15], target: [-1, -2, 0], up: [0, 0, 1], projection: "orthographic", orthographicHalfHeight: 35 };
-  const renderB = { position: [-40, -50, 25], target: [-4, -5, 0], up: [0, 0, 1], projection: "perspective", orthographicHalfHeight: 40 };
-
-  for (const [entry, cadCamera, renderCamera] of [
-    [entryA, cadA, renderA],
-    [entryB, cadB, renderB]
-  ]) {
-    writeFileSessionState("models", entry.file, createFileSessionSnapshot({
-      entry,
-      slices: {
-        render: {
-          enabled: true,
-          cadCamera,
-          cadProjection: cadCamera.projection,
-          payload: {
-            quality: "final",
-            camera: renderCamera
-          }
-        }
-      }
-    }), { storage });
-  }
-
-  const restoredA = readFileSessionState("models", entryA.file, entryA, { storage }).slices.render;
-  const restoredB = readFileSessionState("models", entryB.file, entryB, { storage }).slices.render;
-  const restoredAAgain = readFileSessionState("models", entryA.file, entryA, { storage }).slices.render;
-
-  assert.deepEqual(restoredA.cadCamera, cadA);
-  assert.deepEqual(restoredA.payload.camera, renderA);
-  assert.deepEqual(restoredB.cadCamera, cadB);
-  assert.deepEqual(restoredB.payload.camera, renderB);
-  assert.deepEqual(restoredAAgain, restoredA);
-});
-
 test("pose and animation are stored as independent slices", () => {
   const storage = createMemoryStorage();
   const entry = stepEntry("parts/bracket.step", "mesh", "module");
@@ -478,44 +374,6 @@ test("pose and animation are stored as independent slices", () => {
     speed: 1.5,
     loopEnabled: false
   });
-});
-
-test("material overlays round-trip and reset when authored appearance changes", () => {
-  const storage = createMemoryStorage();
-  const entry = materialStepEntry();
-  const overlay = {
-    materials: {
-      steel: { roughness: 0.2 },
-      "steel-copy-1": { name: "Steel copy", metalness: 0.8 }
-    },
-    assignments: { finger: "steel-copy-1" }
-  };
-
-  writeFileSessionState("models", entry.file, createFileSessionSnapshot({
-    entry,
-    slices: { materials: overlay }
-  }), { storage });
-
-  assert.deepEqual(readFileSessionState("models", entry.file, entry, { storage }).slices.materials, overlay);
-  assert.equal(
-    readFileSessionState("models", entry.file, { ...entry, appearanceHash: "appearance-b" }, { storage }).slices.materials,
-    undefined
-  );
-
-  writeFileSessionState("models", entry.file, createFileSessionSnapshot({
-    entry,
-    slices: { materials: { materials: {}, assignments: {} } }
-  }), { storage });
-  assert.equal(readFileSessionState("models", entry.file, entry, { storage })?.slices?.materials, undefined);
-});
-
-test("materials added to a bare STEP survive reload but expire on geometry replacement", () => {
-  const storage = createMemoryStorage();
-  const entry = { file: "bare.step", kind: "step", hash: "geometry-a" };
-  const materials = { materials: { plastic: { name: "Plastic", metalness: 0 } }, assignments: { body: "plastic" } };
-  writeFileSessionState("models", entry.file, createFileSessionSnapshot({ entry, slices: { materials } }), { storage });
-  assert.deepEqual(readFileSessionState("models", entry.file, entry, { storage }).slices.materials, materials);
-  assert.equal(readFileSessionState("models", entry.file, { ...entry, hash: "geometry-b" }, { storage }).slices.materials, undefined);
 });
 
 test("an animation slice stored before the gate existed reopens gated on", () => {

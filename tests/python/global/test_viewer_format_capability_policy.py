@@ -129,7 +129,14 @@ class ViewerFormatCapabilityPolicyTest(unittest.TestCase):
             "workbench/viewerAlerts.js",
             "workbench/entryIconKind.js",
             "workbench/entryIconStatus.js",
-            "components/workbench/CadWorkspaceHome.js",
+            # The file list, which is now the SHARED file tree and the adapter that
+            # feeds it — drawn by the standalone viewer and by the desktop app alike,
+            # so a format check in either is a format one app lists and the other
+            # does not. (It replaced `components/workbench/CadWorkspaceHome.js` and
+            # `components/workbench/FileViewerSidebar.js`, which were the standalone's
+            # own home screen and left sidebar.)
+            "shell/FileTree.jsx",
+            "shell/catalogTreeSource.js",
         ):
             source = (CLIENT_ROOT / relative).read_text(encoding="utf-8")
             self.assertEqual(

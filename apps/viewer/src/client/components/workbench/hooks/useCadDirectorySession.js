@@ -36,6 +36,7 @@ export function useCadDirectorySession({
   upsertTabRecord,
   selectedEntry,
   defaultDocumentTitle,
+  manageDocumentTitle = true,
   selectedKey,
   entryMap,
   buildActiveTabSnapshot,
@@ -86,10 +87,16 @@ export function useCadDirectorySession({
     cadDirectorySessionBootstrappedRef
   ]);
 
+  // The browser tab's name belongs to whoever owns the tab. The standalone app
+  // does; a host that embeds the surface in one pane of its own window does not,
+  // and says so with manageDocumentTitle={false}.
   useEffect(() => {
+    if (!manageDocumentTitle) {
+      return;
+    }
     const filename = filenameLabelForEntry(selectedEntry);
     document.title = filename ? `${defaultDocumentTitle} | ${filename}` : defaultDocumentTitle;
-  }, [defaultDocumentTitle, selectedEntry]);
+  }, [defaultDocumentTitle, manageDocumentTitle, selectedEntry]);
 
   useLayoutEffect(() => {
     const urlSelectionRequested = Boolean(readCadParam());
@@ -139,26 +146,11 @@ export function useCadDirectorySession({
     upsertTabRecord
   ]);
 
-  useEffect(() => {
-    const syncSelectionFromHistory = () => {
-      const nextSelectedKey = selectedEntryKeyFromUrl(catalogEntries);
-      if (nextSelectedKey) {
-        activateEntryTab(nextSelectedKey);
-        return;
-      }
-      resetActiveDirectory();
-    };
-
-    window.addEventListener("popstate", syncSelectionFromHistory);
-    return () => {
-      window.removeEventListener("popstate", syncSelectionFromHistory);
-    };
-  }, [
-    activateEntryTab,
-    catalogEntries,
-    resetActiveDirectory,
-    selectedEntryKeyFromUrl
-  ]);
+  // Back/forward used to be handled here, with a popstate listener of its own.
+  // It is the HOST's now: the file surface is told which file to show, so the
+  // shell that owns the URL turns a popstate into a new `file`, which changes
+  // `readCadParam`/`selectedEntryKeyFromUrl` and re-runs the reconciliation
+  // above. One path in, instead of two racing on the same event.
 
   useEffect(() => {
     if (selectedEntry) {

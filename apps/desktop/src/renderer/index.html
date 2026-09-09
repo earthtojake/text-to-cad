@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*"
+    />
+    <title>Hardcore</title>
+    <!--
+      The light/dark class, applied while this file is still being parsed.
+
+      Everything else about the theme is React's (src/renderer/hooks/use-theme.ts),
+      but React's earliest write is its first passive effect — and the window is
+      shown on `ready-to-show`, which is a paint before that. The result was a
+      white flash on every launch, reload and dev hot reload for anyone not on
+      Light. A classic script, first in the head, is the only thing that runs
+      before a frame can exist; `public/theme.js` says the rest.
+    -->
+    <script src="./theme.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

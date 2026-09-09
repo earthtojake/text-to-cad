@@ -1,6 +1,3 @@
-// Lazy: see tubeDeformationChunk.js. An effect only ever carries a deformation
-// an animation frame put there, and that animation loaded the runtime.
-import { tubeDeformation } from "./tubeDeformationChunk.js";
 import { stepModuleTargetPartIds } from "./stepModule.js";
 
 function toNumber(value, fallback = 0) {
@@ -14,7 +11,8 @@ function uniqueStrings(values) {
     .filter(Boolean))];
 }
 
-export function buildPartTransformMatrix(THREE, transform, matrix = new THREE.Matrix4()) {
+export function buildPartTransformMatrix(THREE, transform) {
+  const matrix = new THREE.Matrix4();
   if (!Array.isArray(transform) || transform.length !== 16) {
     matrix.identity();
     return matrix;
@@ -147,9 +145,8 @@ function matrixHasTransform(matrix, epsilon = 1e-6) {
   return matrix.elements.some((value, index) => Math.abs(Number(value) - identity[index]) > epsilon);
 }
 
-export function resetStepModuleRecordEffects(records, THREE = null) {
+export function resetStepModuleRecordEffects(records) {
   for (const record of Array.isArray(records) ? records : []) {
-    if (THREE) tubeDeformation()?.applyRecordTubeDeformation(THREE, record, null);
     record.effectMatrix = null;
     record.effectStyle = null;
     record.effectVisible = null;
@@ -225,14 +222,6 @@ export function createStepModuleEffectsApi(THREE, {
   };
 
   return {
-    // The part ids a target names, by the SAME resolution every effect below
-    // uses. A caller that must reason about which parts overlap before it
-    // writes anything (the mates runtime: accumulated world deltas must land
-    // on each part exactly once) asks here rather than re-implementing the
-    // feature/name/occurrence-id matching and drifting from it.
-    resolve(target) {
-      return resolveStepModuleEffectTargetPartIds(target, features, meshData, runtime?.displayRecords);
-    },
     transform(target, spec) {
       const matrix = buildStepModuleEffectMatrix(THREE, spec);
       const partIds = forEachTarget(target, (effect) => {
@@ -311,7 +300,6 @@ export function applyStepModuleEffectsToRecords(THREE, records, effectsByPartId)
   resetStepModuleRecordEffects(records);
   for (const record of Array.isArray(records) ? records : []) {
     const effect = effectsByPartId.get(String(record?.partId || "").trim());
-    tubeDeformation()?.applyRecordTubeDeformation(THREE, record, effect?.deformation || null);
     if (!effect) {
       continue;
     }

@@ -13,15 +13,11 @@ import {
   canonicalCadRefCopyText,
   computeNextSelectionIds,
   copySelectedReferenceText,
-  modelReferenceActivationDecision,
   normalizeReferenceList,
   orderedStringListEqual,
   parseAssemblyPartReferenceSelectionId,
-  pendingReferenceActivationMatches,
-  resolveAssemblyPartActivation,
   resolveTopologyRelativeFile,
   selectRequestedAssemblyComponents,
-  topologyCompositionKeyMatches,
   uniqueStringList,
   withFileRefPrefix
 } from "./referenceSelection.js";
@@ -210,69 +206,6 @@ test("selectRequestedAssemblyComponents loads only the expanded occurrences' com
   const part = selectRequestedAssemblyComponents(descriptor, [], { singleComponentPart: true });
   assert.deepEqual(part.neededCids, ["cidA", "cidB"]);
   assert.equal(part.loadedTopologyKey, "*");
-});
-
-test("empty lazy topology composition remains a valid exact assembly key", () => {
-  assert.equal(topologyCompositionKeyMatches("", ""), true);
-  assert.equal(topologyCompositionKeyMatches(undefined, "*"), true);
-  assert.equal(topologyCompositionKeyMatches("o1.3", "o1.3"), true);
-  assert.equal(topologyCompositionKeyMatches("", "*"), false);
-});
-
-test("collapsed assembly canvas picks activate parts without requiring topology", () => {
-  const resolvePartId = (id) => id === "mesh-sun" ? "o1.3" : "";
-  assert.deepEqual(
-    resolveAssemblyPartActivation("mesh-sun", { resolvePartId }),
-    { partId: "o1.3", renderPartId: "mesh-sun" }
-  );
-  assert.equal(
-    resolveAssemblyPartActivation("topology|o1.3|face|5", {
-      topologyReference: { selectorType: "face" },
-      resolvePartId: () => "o1.3"
-    }),
-    null
-  );
-  assert.equal(resolveAssemblyPartActivation("unknown", { resolvePartId }), null);
-  assert.deepEqual(
-    modelReferenceActivationDecision("mesh-sun", {
-      assemblyMode: true,
-      resolvePartId,
-      deferForTopology: true
-    }),
-    { kind: "part", partId: "o1.3", renderPartId: "mesh-sun" }
-  );
-});
-
-test("expanded topology activates exact references and stale topology demand stays fenced", () => {
-  for (const selectorType of ["face", "edge"]) {
-    assert.deepEqual(
-      modelReferenceActivationDecision(`topology|o1.3|${selectorType}|5`, {
-        topologyReference: { selectorType },
-        assemblyMode: true,
-        resolvePartId: () => "o1.3",
-        deferForTopology: false,
-        referenceKnown: true
-      }),
-      { kind: "reference", referenceId: `topology|o1.3|${selectorType}|5` }
-    );
-  }
-  assert.deepEqual(
-    modelReferenceActivationDecision("topology|o1.3|face|5", {
-      assemblyMode: false,
-      deferForTopology: true,
-      referenceKnown: false
-    }),
-    { kind: "defer", referenceId: "topology|o1.3|face|5" }
-  );
-  const pending = { fileRef: "planetary.step", tree: "tree-a", referenceId: "f5" };
-  assert.equal(pendingReferenceActivationMatches(pending, {
-    fileRef: "planetary.step",
-    tree: "tree-a"
-  }), true);
-  assert.equal(pendingReferenceActivationMatches(pending, {
-    fileRef: "planetary.step",
-    tree: "tree-b"
-  }), false);
 });
 
 test("copy text carries the entry's shortest unique path suffix", () => {

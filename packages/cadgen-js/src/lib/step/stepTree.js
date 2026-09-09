@@ -34,7 +34,12 @@ export function stepTreeNodeId(node) {
 
 export function stepTreeNodeLabel(node) {
   return normalizeString(
-    node?.displayName || node?.name || node?.label || node?.id,
+    node?.displayName ||
+    node?.name ||
+    node?.label ||
+    node?.sourcePath && basename(node.sourcePath) ||
+    node?.partSourcePath && basename(node.partSourcePath) ||
+    node?.id,
     "STEP"
   );
 }
@@ -139,7 +144,9 @@ function nodeMatchesQuery(node, query) {
     stepTreeNodeId(node),
     node?.occurrenceId,
     node?.topologyReferenceId,
-    node?.displaySelector
+    node?.displaySelector,
+    node?.sourcePath,
+    node?.partSourcePath
   ].map((value) => normalizeString(value).toLowerCase()).join(" ");
   return haystack.includes(normalizedQuery);
 }

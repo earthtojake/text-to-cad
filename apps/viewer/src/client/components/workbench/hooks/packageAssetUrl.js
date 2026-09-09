@@ -11,6 +11,13 @@
 // component-GLB package"). So we resolve the relative ref against the package dir explicitly and
 // rewrite the `file` param.
 
+// A package asset URL is either root-relative (the standalone viewer, same
+// origin as its backend) or absolute (an embedded surface pointed at another
+// `cadgen viewer`). Sub-assets must come back in the SAME shape: dropping the
+// origin would send the fetch — and the surf worker's fetch — at whatever host
+// happens to be serving the page.
+import { isAbsoluteViewerUrl } from "../../../file-view/viewerOrigin.js";
+
 const URL_RESOLUTION_BASE = "http://cad-viewer.local";
 
 // Join `relPath` under the absolute directory `baseDir`. Package refs are plain
@@ -41,5 +48,6 @@ export function resolvePackageAssetUrl(packageAssetUrl, relPath) {
     return "";
   }
   parsed.searchParams.set("file", resolvePackageDirRef(packageDir, ref));
-  return `${parsed.pathname}${parsed.search}`;
+  const originPrefix = isAbsoluteViewerUrl(base) ? parsed.origin : "";
+  return `${originPrefix}${parsed.pathname}${parsed.search}`;
 }

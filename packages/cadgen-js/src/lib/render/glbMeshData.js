@@ -2,9 +2,17 @@
 // Rollup's tree-shaking and drags the whole renderer (~730 kB) into every
 // bundle that reaches this module -- which includes the GLB and surf WORKERS,
 // where nothing else needs three at all. Three classes are all this file uses.
-import { AnimationMixer, Box3, Group, LoopOnce, Matrix3, Matrix4, Vector3 } from "three";
+import { Matrix3, Matrix4, Vector3 } from "three";
 
 const GLB_CAD_UNIT_SCALE = 1000;
+const CAD_EDGE_BARYCENTRIC_ATTRIBUTE_NAMES = Object.freeze([
+  "_cad_edge_barycentric",
+  "_CAD_EDGE_BARYCENTRIC"
+]);
+const CAD_EDGE_CLASS_ATTRIBUTE_NAMES = Object.freeze([
+  "_cad_edge_class",
+  "_CAD_EDGE_CLASS"
+]);
 const GENERATED_STEP_DEFAULT_BASE_COLOR = Object.freeze([0.72, 0.72, 0.72, 1]);
 const BASE_COLOR_EPSILON = 1e-6;
 
@@ -200,6 +208,16 @@ function sourceIndexForSlot(indexAttribute, slot) {
   return indexAttribute ? indexAttribute.getX(slot) : slot;
 }
 
+function geometryAttributeByName(geometry, names) {
+  for (const name of names) {
+    const attribute = geometry?.getAttribute?.(name);
+    if (attribute) {
+      return attribute;
+    }
+  }
+  return null;
+}
+
 function isValidTriangleSource(positions, indexAttribute, sourceStart) {
   for (let offset = 0; offset < 3; offset += 1) {
     const sourceIndex = sourceIndexForSlot(indexAttribute, sourceStart + offset);
@@ -246,6 +264,8 @@ function inspectGlbPrimitive(
     : null;
   const normalMatrix = matrixWorld ? new Matrix3().getNormalMatrix(matrixWorld) : null;
   const normals = geometry.getAttribute("normal");
+  const surfaceEdgeBarycentric = geometryAttributeByName(geometry, CAD_EDGE_BARYCENTRIC_ATTRIBUTE_NAMES);
+  const surfaceEdgeClass = geometryAttributeByName(geometry, CAD_EDGE_CLASS_ATTRIBUTE_NAMES);
   const indexAttribute = geometry.getIndex?.();
   const sourceStart = Math.max(0, Math.floor(Number(group?.start || 0)));
   const availableCount = indexAttribute?.count || positions.count;
@@ -272,6 +292,8 @@ function inspectGlbPrimitive(
     mesh,
     positions,
     normals,
+    surfaceEdgeBarycentric,
+    surfaceEdgeClass,
     indexAttribute,
     sourceStart,
     triangleVertexCount,
@@ -354,6 +376,16 @@ function writeGlbPrimitive(descriptor, output, offsets) {
         output.normals[outputComponentIndex + 1] = cadNormal.y;
         output.normals[outputComponentIndex + 2] = cadNormal.z;
       }
+      if (output.surfaceEdgeBarycentric && descriptor.surfaceEdgeBarycentric?.itemSize === 3 && sourceIndex < descriptor.surfaceEdgeBarycentric.count) {
+        output.surfaceEdgeBarycentric[outputComponentIndex] = descriptor.surfaceEdgeBarycentric.getX(sourceIndex);
+        output.surfaceEdgeBarycentric[outputComponentIndex + 1] = descriptor.surfaceEdgeBarycentric.getY(sourceIndex);
+        output.surfaceEdgeBarycentric[outputComponentIndex + 2] = descriptor.surfaceEdgeBarycentric.getZ(sourceIndex);
+      }
+      if (output.surfaceEdgeClass && descriptor.surfaceEdgeClass?.itemSize === 3 && sourceIndex < descriptor.surfaceEdgeClass.count) {
+        output.surfaceEdgeClass[outputComponentIndex] = descriptor.surfaceEdgeClass.getX(sourceIndex);
+        output.surfaceEdgeClass[outputComponentIndex + 1] = descriptor.surfaceEdgeClass.getY(sourceIndex);
+        output.surfaceEdgeClass[outputComponentIndex + 2] = descriptor.surfaceEdgeClass.getZ(sourceIndex);
+      }
       output.indices[offsets.indexOffset + localVertexCount] = outputVertexIndex;
       localVertexCount += 1;
     }
@@ -405,6 +437,7 @@ function buildMeshDataFromGltf(gltf) {
   const colorSet = new Set();
   let totalVertexCount = 0;
   let totalIndexCount = 0;
+  let hasSurfaceEdgeAttributes = false;
   const nextPrimitiveIndexByOccurrence = new Map();
   gltf?.scene?.traverse?.((object) => {
     if (!object?.isMesh || !object.geometry) {
@@ -441,6 +474,7 @@ function buildMeshDataFromGltf(gltf) {
       descriptors.push(descriptor);
       totalVertexCount += descriptor.vertexCount;
       totalIndexCount += descriptor.triangleCount * 3;
+      hasSurfaceEdgeAttributes ||= Boolean(descriptor.surfaceEdgeBarycentric && descriptor.surfaceEdgeClass);
       if (descriptor.color) {
         colorSet.add(descriptor.color.toLowerCase());
       }
@@ -450,11 +484,19 @@ function buildMeshDataFromGltf(gltf) {
   const vertices = new Float32Array(totalVertexCount * 3);
   const indices = new Uint32Array(totalIndexCount);
   const normals = new Float32Array(totalVertexCount * 3);
+  const surfaceEdgeBarycentric = hasSurfaceEdgeAttributes
+    ? new Float32Array(totalVertexCount * 3)
+    : null;
+  const surfaceEdgeClass = hasSurfaceEdgeAttributes
+    ? new Uint8Array(totalVertexCount * 3)
+    : null;
   const parts = [];
   const output = {
     vertices,
     indices,
     normals,
+    surfaceEdgeBarycentric,
+    surfaceEdgeClass,
     bounds: createBoundsAccumulator(),
   };
   // Vertex colours ride the same de-index walk as positions/normals; absent everywhere,
@@ -475,6 +517,8 @@ function buildMeshDataFromGltf(gltf) {
     vertices,
     indices,
     normals,
+    surfaceEdgeBarycentric: surfaceEdgeBarycentric || new Float32Array(0),
+    surfaceEdgeClass: surfaceEdgeClass || new Uint8Array(0),
     colors,
     edge_indices: new Uint32Array(0),
     bounds: boundsFromAccumulator(output.bounds),
@@ -526,163 +570,4 @@ export async function buildMeshDataFromGlbBuffer(buffer) {
   ]);
   const gltf = await parseGlb(GLTFLoader, decoder, buffer);
   return buildMeshDataFromGltf(gltf);
-}
-
-const GLTF_ANIMATION_PROPERTIES = new Set(["position", "quaternion", "scale", "morphTargetInfluences"]);
-
-export function isPlayableGlbAnimationClip(clip) {
-  return Number(clip?.duration) > 0 &&
-    Array.isArray(clip?.tracks) &&
-    clip.tracks.length > 0 &&
-    clip.tracks.every((track) => {
-      const property = String(track?.name || "").split(".").pop()?.split("[")[0] || "";
-      return GLTF_ANIMATION_PROPERTIES.has(property);
-    });
-}
-
-function playableGlbAnimationClips(gltf) {
-  return (Array.isArray(gltf?.animations) ? gltf.animations : []).filter((clip) => (
-    isPlayableGlbAnimationClip(clip)
-  ));
-}
-
-function nativeCadRootMatrix(gltf) {
-  const rootCorrection = buildGlbCadRootCorrection(gltf?.scene);
-  const hasStepTopology = !!gltf?.parser?.json?.extensions?.STEP_topology;
-  const declared = declaredCadUpAxis(gltf?.scene);
-  const convertYUpToCad = !rootCorrection && (declared ? declared === "y" : !hasStepTopology);
-  const orientation = rootCorrection || (convertYUpToCad
-    ? new Matrix4().makeRotationX(Math.PI / 2)
-    : new Matrix4());
-  return new Matrix4().makeScale(GLB_CAD_UNIT_SCALE, GLB_CAD_UNIT_SCALE, GLB_CAD_UNIT_SCALE)
-    .multiply(orientation);
-}
-
-function sampledAnimatedBounds(scene, clips, cadRootMatrix) {
-  const root = new Group();
-  root.matrix.copy(cadRootMatrix);
-  root.matrixAutoUpdate = false;
-  root.add(scene);
-  const union = new Box3();
-  const sampleBox = new Box3();
-  const mixer = new AnimationMixer(scene);
-  let vertexCount = 0;
-  scene.traverse((object) => { vertexCount += Number(object?.geometry?.attributes?.position?.count) || 0; });
-  // Bound precise vertex transforms as well as sample count. A million-vertex
-  // baked animation gets endpoints, not dozens of full CPU skinning passes.
-  let remainingSamples = Math.min(256, Math.max(2, Math.floor(2_000_000 / Math.max(vertexCount, 1))));
-  const includePose = () => {
-    root.updateMatrixWorld(true);
-    sampleBox.setFromObject(root, true);
-    if (!sampleBox.isEmpty()) union.union(sampleBox);
-  };
-  includePose();
-  for (const [clipIndex, clip] of clips.entries()) {
-    const action = mixer.clipAction(clip);
-    action.setLoop(LoopOnce, 1);
-    action.clampWhenFinished = true;
-    action.play();
-    const duration = Math.max(Number(clip.duration) || 0, 0.001);
-    // This is a bounded framing estimate, not an extrema proof: cubic tracks,
-    // rotations, and skinning can peak between samples. A global cap prevents
-    // imported baked animation with thousands of keys/clips from blocking load.
-    const remainingClips = clips.length - clipIndex;
-    const uniformCount = Math.min(65, Math.max(Math.floor(remainingSamples / remainingClips), 1));
-    const uniformTimes = Array.from(
-      { length: uniformCount },
-      (_, index) => uniformCount === 1 ? duration : duration * index / (uniformCount - 1)
-    );
-    const times = uniformTimes.slice(0, remainingSamples);
-    for (const time of times) {
-      mixer.setTime(Math.min(Math.max(Number(time) || 0, 0), duration));
-      includePose();
-    }
-    remainingSamples -= times.length;
-    action.stop();
-    if (remainingSamples <= 0) break;
-  }
-  mixer.stopAllAction();
-  mixer.uncacheRoot(scene);
-  scene.updateMatrixWorld(true);
-  scene.removeFromParent();
-  if (union.isEmpty()) return { min: [0, 0, 0], max: [0, 0, 0] };
-  return { min: union.min.toArray(), max: union.max.toArray() };
-}
-
-/**
- * Parse an interactive direct GLB once. The flattened mesh remains the Inspect
- * path for picking and matte CAD presentation; the native hierarchy remains
- * document-owned so Render can retain its textures and PBR materials.
- */
-export async function buildGlbDocumentFromBuffer(buffer) {
-  const [{ GLTFLoader }, decoder] = await Promise.all([
-    import("three/examples/jsm/loaders/GLTFLoader.js"),
-    loadMeshoptDecoder(),
-  ]);
-  const gltf = await parseGlb(GLTFLoader, decoder, buffer);
-  try {
-    const clips = playableGlbAnimationClips(gltf);
-    const cadRootMatrix = nativeCadRootMatrix(gltf);
-    const animatedBounds = clips.length ? sampledAnimatedBounds(gltf.scene, clips, cadRootMatrix) : null;
-    const restMeshData = buildMeshDataFromGltf(gltf);
-    // The workspace's Inspect/Render cameras consume meshData.bounds before
-    // CadViewer mounts the native hierarchy. Give both modes the same stable
-    // animation-aware frame; triangle inspection is disabled on this path.
-    const meshData = animatedBounds ? { ...restMeshData, bounds: animatedBounds } : restMeshData;
-    return {
-      meshData,
-      scene: gltf.scene,
-      clips,
-      cadRootMatrix: cadRootMatrix.toArray(),
-      animatedBounds,
-      restBounds: restMeshData.bounds,
-    };
-  } catch (error) {
-    disposeGlbDocument({ scene: gltf.scene });
-    throw error;
-  }
-}
-
-// Animated GLBs need their native hierarchy in both modes. A static GLB uses
-// it only in photographic Render; Inspect keeps the normalized mesh and its
-// CAD interaction behavior.
-export function shouldUseNativeGlbScene(document, { renderMode = false, clip = null } = {}) {
-  return Boolean(document?.scene && (renderMode || clip));
-}
-
-// Scene hosts detach native GLBs when changing presentation. Detachment is not
-// disposal: the document retains geometry, material and texture ownership for
-// the next mode toggle.
-export function detachGlbDocumentScene(document) {
-  document?.scene?.removeFromParent?.();
-}
-
-/** Release resources owned by one uncached interactive GLB document. */
-export function disposeGlbDocument(document) {
-  const geometries = new Set();
-  const materials = new Set();
-  const textures = new Set();
-  const images = new Set();
-  const skeletons = new Set();
-  document?.scene?.traverse?.((object) => {
-    if (object?.geometry) geometries.add(object.geometry);
-    if (object?.skeleton) skeletons.add(object.skeleton);
-    const values = Array.isArray(object?.material) ? object.material : [object?.material];
-    for (const material of values) {
-      if (!material) continue;
-      materials.add(material);
-      for (const value of Object.values(material)) {
-        if (value?.isTexture) {
-          textures.add(value);
-          if (value.source?.data) images.add(value.source.data);
-        }
-      }
-    }
-  });
-  for (const geometry of geometries) geometry.dispose?.();
-  for (const skeleton of skeletons) skeleton.dispose?.();
-  for (const material of materials) material.dispose?.();
-  for (const texture of textures) texture.dispose?.();
-  for (const image of images) image.close?.();
-  detachGlbDocumentScene(document);
 }

@@ -1,5 +1,3 @@
-import ViewerAlertBody from "./ViewerAlertBody";
-
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -10,6 +8,8 @@ import {
   AlertDialogTitle
 } from "../ui/alert-dialog";
 
+// A title and a description. The severity colours the title; nothing else is
+// rendered — no badge, no resolution paragraph, no command block.
 export default function ViewerAlertDialog({
   viewerAlertOpen,
   viewerAlert,
@@ -32,8 +32,8 @@ export default function ViewerAlertDialog({
           <AlertDialogTitle className={isWarning ? "text-warning-foreground" : "text-destructive"}>
             {viewerAlert.title}
           </AlertDialogTitle>
-          <AlertDialogDescription asChild>
-            <div><ViewerAlertBody alert={viewerAlert} /></div>
+          <AlertDialogDescription className="leading-6 whitespace-pre-line break-words">
+            {viewerAlert.message}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

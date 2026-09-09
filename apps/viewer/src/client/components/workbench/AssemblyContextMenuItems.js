@@ -31,6 +31,7 @@ export default function AssemblyContextMenuItems({
   collapseSelectedDisabled = true,
   expandAllDisabled = true,
   collapseAllDisabled = true,
+  onAddToPrompt,
   onCopyReference,
   onSelect,
   onIsolate,
@@ -55,6 +56,11 @@ export default function AssemblyContextMenuItems({
 
   return (
     <>
+      {onAddToPrompt ? (
+        <Item className={itemClassName} disabled={copyReferenceDisabled} onSelect={onAddToPrompt}>
+          <AssemblyContextMenuItemLabel>Add to prompt</AssemblyContextMenuItemLabel>
+        </Item>
+      ) : null}
       <Item
         className={itemClassName}
         disabled={copyReferenceDisabled}

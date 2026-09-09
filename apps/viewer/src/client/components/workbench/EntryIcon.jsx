@@ -42,8 +42,17 @@ export default function EntryIcon({
   sourceFormat = "",
   status = {},
   className,
-  spinning = false
+  spinning = false,
+  // Only the shared chrome sets this, so a CAD glyph in a file list is drawn
+  // at the same weight as the lucide icons beside it (`shell/icons.jsx`).
+  strokeWidth
 }) {
   const Icon = entryIconComponent(entry, sourceFormat, status);
-  return <Icon className={cn(className, spinning && "animate-spin")} aria-hidden="true" />;
+  return (
+    <Icon
+      className={cn(className, spinning && "animate-spin")}
+      strokeWidth={strokeWidth}
+      aria-hidden="true"
+    />
+  );
 }

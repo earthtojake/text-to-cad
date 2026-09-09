@@ -493,43 +493,78 @@ export function getStageFloorGlowSize(lightingScopeRadius, size, sceneScaleMode 
 }
 
 export function createStageFloorPlane(THREE, viewerTheme, themeSettings, size, floorZ, lift = 0) {
+  const glassFactor = resolveStageFloorGlassFactor(themeSettings);
   const horizonBlend = getStageFloorSetting(themeSettings, "horizonBlend", 0, 0, 1);
   const reflectivity = getStageFloorSetting(themeSettings, "reflectivity", 0.12, 0, 1);
   const floorColor = resolveStageFloorColor(THREE, viewerTheme, themeSettings);
   const roughness = getStageFloorSetting(
     themeSettings,
     "roughness",
-    getViewerThemeNumber(viewerTheme, "stageFloorRoughness", 0.92),
+    clamp(getViewerThemeNumber(viewerTheme, "stageFloorRoughness", 0.92) - (glassFactor * 0.48), 0.16, 1),
     0,
     1
   );
   const opacity = horizonBlend <= 0.001
     ? 1
     : clamp(
-      getViewerThemeNumber(viewerTheme, "stageFloorOpacity", 0.78) * (1 - (horizonBlend * 0.3)),
+      (getViewerThemeNumber(viewerTheme, "stageFloorOpacity", 0.78) - (glassFactor * 0.02)) * (1 - (horizonBlend * 0.3)),
       0.62,
       1
+    );
+  const floorHsl = {};
+  floorColor.getHSL(floorHsl);
+  const isDarkFloor = floorHsl.l < 0.18;
+  const specularColor = isDarkFloor
+    ? floorColor.clone().lerp(new THREE.Color("#1c5f8f"), 0.5)
+    : new THREE.Color("#ffffff");
+  const specularIntensity = isDarkFloor
+    ? clamp(reflectivity * 0.38, 0, 0.06)
+    : clamp(reflectivity * 1.4, 0.04, 0.36);
+  const clearcoat = isDarkFloor
+    ? clamp(reflectivity * 0.22, 0, 0.05)
+    : clamp((reflectivity * 0.58) + (glassFactor * 0.12), 0, 0.9);
+  const clearcoatRoughness = isDarkFloor
+    ? clamp(Math.max(roughness * 0.95, 0.35), 0.35, 0.85)
+    : clamp(
+      roughness * 0.62,
+      0.04,
+      0.8
     );
   const envMapIntensity = clamp(
     (
       Number(themeSettings?.materials?.envMapIntensity || 0) *
-        (themeSettings?.environment?.enabled ? 1 : 0) *
-        (0.08 + (reflectivity * 0.18))
+        (themeSettings?.environment?.enabled ? Number(themeSettings?.environment?.intensity || 0) : 0) *
+        (0.08 + (glassFactor * 0.1))
     ) + (reflectivity * 0.48),
     0,
-    0.8
+    1.15
   );
   const material = new THREE.MeshPhysicalMaterial({
     color: floorColor,
     roughness,
-    // A studio cove is a neutral dielectric. Its color must not change the
-    // physical response, and the model material must not make the floor glassy.
-    metalness: 0,
-    clearcoat: 0,
+    metalness: clamp(getViewerThemeNumber(viewerTheme, "stageFloorMetalness", 0) + (reflectivity * 0.06), 0, 0.18),
+    clearcoat,
+    clearcoatRoughness,
     reflectivity,
-    specularColor: new THREE.Color("#ffffff"),
-    specularIntensity: 1,
-    transmission: 0,
+    specularColor,
+    specularIntensity,
+    transmission: clamp(
+      getViewerThemeNumber(viewerTheme, "stageFloorTransmission", BASE_VIEWER_THEME.stageFloorTransmission) +
+        (glassFactor * 0.005),
+      0,
+      0.02
+    ),
+    ior: getViewerThemeNumber(viewerTheme, "stageFloorIor", BASE_VIEWER_THEME.stageFloorIor),
+    thickness: getViewerThemeNumber(
+      viewerTheme,
+      "stageFloorThickness",
+      BASE_VIEWER_THEME.stageFloorThickness
+    ),
+    attenuationDistance: getViewerThemeNumber(
+      viewerTheme,
+      "stageFloorAttenuationDistance",
+      BASE_VIEWER_THEME.stageFloorAttenuationDistance
+    ),
     transparent: opacity < 0.999,
     opacity,
     side: THREE.FrontSide,

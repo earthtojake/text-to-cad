@@ -4,7 +4,7 @@
 // This exists because nothing else in the toolchain asks that question. A bundler treats an
 // unbound identifier as a global reference and emits it without complaint, and a unit suite
 // only covers modules it imports — so `normalizeThemeSettings`, called twice in
-// A settings component with no import once shipped through a clean `vite build` and a green
+// ThemeSettingsPopover.js with no import, shipped through a clean `vite build` and a green
 // test run and threw a ReferenceError that crashed <CadWorkspace> the moment anyone changed
 // a theme colour. The same commit that removed the import removed the callers of the one
 // helper that used it, which is exactly how the survivor went unnoticed.

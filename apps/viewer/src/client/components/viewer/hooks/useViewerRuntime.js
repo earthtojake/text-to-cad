@@ -1,5 +1,4 @@
-import { disposeViewerCadScene } from "../../../render/lodSceneCleanup.js";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect } from "react";
 import { isEditableTarget } from "../../../ui/dom";
 import {
   isWebGlContextCreationError,
@@ -9,30 +8,22 @@ import {
 import {
   createCadWebGlRenderer
 } from "cadgen-js/common/webglRenderer";
-import { fitCameraDepthToBounds } from "cadgen-js/common/renderOptions.js";
-import {
-  screenSpaceLineDeviceResolution
-} from "cadgen-js/common/renderEdges";
-// The studio lives in Render's lazy chunk. A runtime can only be holding studio
-// resources if that chunk loaded, so teardown asks the boundary rather than
-// importing it — an Inspect-only session tears down with nothing to dispose.
-import { studioScene } from "@/render/renderStudioChunk";
 import {
   resolveInteractionPixelRatioCap
 } from "cadgen-js/lib/viewer/renderQuality";
 import { updateOrbitControls } from "../orbitControls.js";
-import { viewerLogarithmicDepthBuffer } from "../renderDepthPolicy.js";
-import { createZoomPivotReanchor } from "../zoomPivotReanchor.js";
-import { createFramePresentation } from "../framePresentation.js";
+import { PERF_MEASURE_NAMES, perfMeasure, perfStart } from "cadgen-js/lib/viewer/perfMarks.js";
 
-function createWebGlRenderer(THREE, renderMode) {
+// Perf experiment: render with a model-fitted depth range instead of a
+// logarithmic depth buffer so early-Z rejection stays enabled. Flip to false
+// to restore the log-depth renderer if depth artifacts appear.
+const FITTED_DEPTH_RANGE_ENABLED = true;
+
+function createWebGlRenderer(THREE) {
   return createCadWebGlRenderer(THREE, {
     allowFallback: true,
     isRecoverableError: isWebGlContextCreationError,
-    // Three's logarithmic-depth shaders suppress the photographic ground's
-    // shadow material. CAD inspection retains logarithmic depth for very wide
-    // model ranges; Render fits an ordinary depth range to the subject.
-    logarithmicDepthBuffer: viewerLogarithmicDepthBuffer(renderMode)
+    logarithmicDepthBuffer: !FITTED_DEPTH_RANGE_ENABLED
   });
 }
 
@@ -62,12 +53,9 @@ export function useViewerRuntime({
   getViewerThemeValue,
   getPixelRatioCap,
   applySceneBackground,
-  applyCameraFrameInsets,
-  frameInsetsRef,
   applyInitialPerspective,
   updateGridHelper,
   clearSceneGroup,
-  onSceneDisposed,
   disposeSceneObject,
   disposeTexture,
   syncViewPlaneOrientation,
@@ -86,36 +74,19 @@ export function useViewerRuntime({
   defaultGridRadius,
   sceneScaleMode,
   floorMode,
-  renderMode = false,
   onManualCameraInteraction,
   onViewportResize,
   onContextLost,
   onContextRestored,
   onInitializationError,
-  onFramePresented,
-  presentationRequestRef,
   preserveInteractionPixelRatio = false,
   runtimeResetToken = 0
 }) {
-  // A dependency change replaces this WebGL runtime while CadViewer remains
-  // mounted. Layout cleanup runs before passive runtime cleanup on a final
-  // unmount, so the latter can distinguish a renderer handoff from the last
-  // owner going away.
-  const viewerMountedRef = useRef(false);
-  useLayoutEffect(() => {
-    viewerMountedRef.current = true;
-    return () => { viewerMountedRef.current = false; };
-  }, []);
-
   useEffect(() => {
     if (runtimeRef.current) {
       runtimeRef.current.preserveInteractionPixelRatio = preserveInteractionPixelRatio === true;
     }
   }, [preserveInteractionPixelRatio, runtimeRef, runtimeResetToken]);
-
-  useEffect(() => {
-    runtimeRef.current?.setIdlePixelRatioCap?.(IDLE_PIXEL_RATIO_CAP);
-  }, [IDLE_PIXEL_RATIO_CAP, runtimeRef, runtimeResetToken]);
 
   // Runtime setup/teardown should run once per WebGL runtime epoch.
   useEffect(() => {
@@ -163,10 +134,6 @@ export function useViewerRuntime({
         const aspect = Math.max(nextWidth, 1) / Math.max(nextHeight, 1);
         if (targetCamera.isPerspectiveCamera) {
           targetCamera.aspect = aspect;
-          const focalLength = Number(targetCamera.userData?.cadFocalLength);
-          if (Number.isFinite(focalLength) && focalLength > 0) {
-            targetCamera.setFocalLength(focalLength);
-          }
         } else if (targetCamera.isOrthographicCamera) {
           const halfHeight = Math.max(Number(targetCamera.userData?.cadHalfHeight) || 120, 1e-3);
           targetCamera.left = -halfHeight * aspect;
@@ -188,19 +155,16 @@ export function useViewerRuntime({
       syncCameraViewport(perspectiveCamera, width, height);
       syncCameraViewport(orthographicCamera, width, height);
 
-      const renderer = createWebGlRenderer(THREE, renderMode);
-      const presentation = createFramePresentation({ canvas: renderer.domElement, renderMode, onPresent: onFramePresented });
+      const renderer = createWebGlRenderer(THREE);
       const softwareRendering = isSoftwareWebGlRenderer(renderer);
-      let idlePixelRatioCap = softwareRendering
-        ? 1
-        : Math.max(Number(IDLE_PIXEL_RATIO_CAP) || 1, 0.25);
+      const idlePixelRatioCap = softwareRendering ? 1 : IDLE_PIXEL_RATIO_CAP;
       const interactionPixelRatioCap = softwareRendering ? 1 : INTERACTION_PIXEL_RATIO_CAP;
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = getViewerThemeValue(viewerTheme, "toneMappingExposure", DEFAULT_LIGHTING.toneMappingExposure);
       renderer.localClippingEnabled = true;
       renderer.shadowMap.enabled = !softwareRendering;
-      renderer.shadowMap.type = THREE.PCFShadowMap;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       // Shadow maps are re-rendered only when the scene changes (see
       // interactionState.shadowsDirty); camera-only frames reuse the last map.
       renderer.shadowMap.autoUpdate = false;
@@ -313,19 +277,9 @@ export function useViewerRuntime({
         Number(runtimeRef.current?.cadScene?.runtime?.screenSpaceLineMaterials?.size || 0)
       );
 
-      // A screen-space line's `resolution` is the DRAWING BUFFER, in device
-      // pixels — not the CSS size the container reports and `setSize` takes.
-      // The shaders normalise their extrusion by resolution.y, so syncing CSS
-      // pixels would make every configured edge thickness devicePixelRatio
-      // times wider on screen. See screenSpaceLineDeviceResolution.
-      const lineMaterialResolution = () => screenSpaceLineDeviceResolution(
-        renderer,
-        container.clientWidth || width || 1,
-        container.clientHeight || height || 1
-      );
-
       const syncScreenSpaceLineMaterials = () => {
-        const { width: nextWidth, height: nextHeight } = lineMaterialResolution();
+        const nextWidth = container.clientWidth || width || 1;
+        const nextHeight = container.clientHeight || height || 1;
         for (const material of screenSpaceLineMaterials) {
           material?.resolution?.set?.(nextWidth, nextHeight);
         }
@@ -337,8 +291,7 @@ export function useViewerRuntime({
           return;
         }
         screenSpaceLineMaterials.add(material);
-        const { width: nextWidth, height: nextHeight } = lineMaterialResolution();
-        material.resolution.set(nextWidth, nextHeight);
+        material.resolution.set(container.clientWidth || width || 1, container.clientHeight || height || 1);
       };
 
       const unregisterScreenSpaceLineMaterial = (material) => {
@@ -391,29 +344,29 @@ export function useViewerRuntime({
         renderDrawingOverlay();
       };
 
-      const setIdlePixelRatioCap = (nextCap) => {
-        idlePixelRatioCap = softwareRendering
-          ? 1
-          : Math.max(Number(nextCap) || 1, 0.25);
-        if (!interactionState.active) {
-          applyRenderQuality(idlePixelRatioCap, { interaction: false });
-          requestRender();
-        }
-      };
-
       const fitCameraDepthRange = (runtime) => {
         const activeCamera = runtime?.camera;
         if (
-          !renderMode ||
-          !activeCamera?.isCamera ||
+          !FITTED_DEPTH_RANGE_ENABLED ||
+          !activeCamera?.isPerspectiveCamera ||
           renderer.capabilities?.logarithmicDepthBuffer
         ) {
           return;
         }
-        fitCameraDepthToBounds(activeCamera, runtime?.modelBounds, {
-          displayRecords: runtime?.displayRecords,
-          modelGroup: runtime?.modelGroup
-        });
+        const radius = Math.max(Number(runtime?.modelRadius) || 1, 1e-6);
+        const sceneExtent = Math.max(radius, Number(runtime?.gridConfig?.radius) || 0);
+        const target = runtime?.controls?.target || controls.target;
+        const distance = Math.max(activeCamera.position.distanceTo(target), radius * 1e-3);
+        const near = Math.max(distance - radius * 4, distance / 250);
+        const far = Math.max(distance + sceneExtent * 50, near * 16);
+        if (
+          Math.abs(near - activeCamera.near) > activeCamera.near * 0.1 ||
+          Math.abs(far - activeCamera.far) > activeCamera.far * 0.1
+        ) {
+          activeCamera.near = near;
+          activeCamera.far = far;
+          activeCamera.updateProjectionMatrix();
+        }
       };
 
       let rafId = 0;
@@ -454,6 +407,7 @@ export function useViewerRuntime({
       };
 
       function renderFrame(timestamp) {
+        const frameStartedAt = perfStart();
         interactionState.renderQueued = false;
         interactionState.renderQueuedAt = 0;
         if (interactionState.renderFallbackTimerId) {
@@ -469,11 +423,8 @@ export function useViewerRuntime({
         fitCameraDepthRange(runtimeRef.current);
         renderer.shadowMap.needsUpdate = interactionState.shadowsDirty === true;
         interactionState.shadowsDirty = false;
-        presentation.draw(
-          runtimeRef.current,
-          () => renderer.render(scene, runtimeRef.current?.camera || camera),
-          presentationRequestRef?.current,
-        );
+        renderer.render(scene, runtimeRef.current?.camera || camera);
+        perfMeasure(PERF_MEASURE_NAMES.frame, frameStartedAt, { interacting: interactionState.active === true });
         const previewOrbitActive = !!runtimeRef.current?.previewOrbitEnabled;
         if (!previewOrbitActive) {
           const nextActiveFace = getActiveViewPlaneFaceId(runtimeRef.current);
@@ -559,7 +510,6 @@ export function useViewerRuntime({
         renderer.setSize(w, h);
         syncCameraViewport(perspectiveCamera, w, h);
         syncCameraViewport(orthographicCamera, w, h);
-        applyCameraFrameInsets?.(runtimeRef.current, frameInsetsRef?.current, { updateProjection: false });
         syncScreenSpaceLineMaterials();
         syncDrawingCanvasSize(runtimeRef.current);
         renderDrawingOverlay();
@@ -578,11 +528,71 @@ export function useViewerRuntime({
       // at the new camera distance. Perspective pan and dolly both scale by the
       // camera->pivot distance, so a drifted pivot makes panning and zooming feel slow when
       // zoomed in and fast when zoomed out. After each wheel zoom, re-anchor the pivot depth
-      // onto the cursor hit in Inspect or stable model depth in Render, keeping
-      // it on the forward axis so the camera never re-orients or jumps the view.
-      const zoomReanchor = createZoomPivotReanchor(THREE, { renderMode });
-      const zoomReanchorPointer = zoomReanchor.pointer;
+      // onto the geometry under the cursor (falling back to the model centre), keeping it on
+      // the forward axis so the camera never re-orients or jumps the view.
+      const zoomReanchorPointer = new THREE.Vector2();
+      const zoomReanchorForward = new THREE.Vector3();
+      const zoomReanchorScratch = new THREE.Vector3();
+      const zoomReanchorCenter = new THREE.Vector3();
       let zoomPivotReanchorPending = false;
+
+      const readModelWorldCenter = (out) => {
+        const runtime = runtimeRef.current;
+        const bounds = runtime?.modelBounds;
+        if (bounds && Array.isArray(bounds.min) && Array.isArray(bounds.max)) {
+          out.set(
+            (Number(bounds.min[0]) + Number(bounds.max[0])) / 2,
+            (Number(bounds.min[1]) + Number(bounds.max[1])) / 2,
+            (Number(bounds.min[2]) + Number(bounds.max[2])) / 2
+          );
+          if (runtime.modelGroup?.position) {
+            out.add(runtime.modelGroup.position);
+          }
+          return out;
+        }
+        return out.copy(runtime?.controls?.target || out.set(0, 0, 0));
+      };
+
+      const reanchorZoomPivot = () => {
+        const runtime = runtimeRef.current;
+        const activeCamera = runtime?.camera;
+        const activeControls = runtime?.controls;
+        // Orthographic pan/dolly do not depend on the pivot distance, so leave them alone.
+        if (!activeCamera?.isPerspectiveCamera || !activeControls?.target) {
+          return;
+        }
+        activeCamera.getWorldDirection(zoomReanchorForward);
+        // Depth of a world point along the view axis (never negative / behind the camera).
+        const depthOf = (point) => Math.max(
+          zoomReanchorScratch.copy(point).sub(activeCamera.position).dot(zoomReanchorForward),
+          0
+        );
+        let depth = 0;
+        if (runtime.raycaster && runtime.modelGroup) {
+          runtime.raycaster.setFromCamera(zoomReanchorPointer, activeCamera);
+          // Only the nearest hit matters here; lets BVH-backed meshes early-out.
+          runtime.raycaster.firstHitOnly = true;
+          const hits = runtime.raycaster.intersectObject(runtime.modelGroup, true);
+          runtime.raycaster.firstHitOnly = false;
+          const hit = hits.find((entry) => entry?.point);
+          if (hit) {
+            depth = depthOf(hit.point);
+          }
+        }
+        if (!(depth > 0)) {
+          depth = depthOf(readModelWorldCenter(zoomReanchorCenter));
+        }
+        const minDepth = Math.max(
+          Number.isFinite(activeControls.minDistance) ? activeControls.minDistance : 0,
+          1e-4
+        );
+        const maxDepth = Number.isFinite(activeControls.maxDistance) && activeControls.maxDistance > 0
+          ? activeControls.maxDistance
+          : Number.POSITIVE_INFINITY;
+        depth = Math.min(Math.max(depth, minDepth), maxDepth);
+        // Only the pivot depth changes; the camera keeps looking down the same forward ray.
+        activeControls.target.copy(activeCamera.position).addScaledVector(zoomReanchorForward, depth);
+      };
 
       let controlsStartDistance = null;
       const readControlsDistance = () => {
@@ -594,19 +604,13 @@ export function useViewerRuntime({
       };
       const handleControlsStart = () => {
         controlsStartDistance = readControlsDistance();
-        // Any drag on the controls — orbit, pan or zoom — means the view is the
-        // user's now. A progressive load re-frames the camera when the model
-        // finishes arriving, and must not do that over someone's shoulder.
-        if (runtimeRef.current) {
-          runtimeRef.current.userMovedCamera = true;
-        }
         cancelCameraTransition(runtimeRef.current);
         beginInteraction();
       };
       const handleControlsChange = () => {
         if (zoomPivotReanchorPending) {
           zoomPivotReanchorPending = false;
-          zoomReanchor.apply(runtimeRef.current);
+          reanchorZoomPivot();
         }
         emitPerspectiveChange(runtimeRef.current);
         requestRender();
@@ -623,9 +627,6 @@ export function useViewerRuntime({
         scheduleIdleQuality();
       };
       const handleWheel = (event) => {
-        if (runtimeRef.current) {
-          runtimeRef.current.userMovedCamera = true;
-        }
         runtimeRef.current?.onManualCameraInteraction?.("wheel");
         cancelCameraTransition(runtimeRef.current);
         controls.enableDamping = false;
@@ -771,16 +772,12 @@ export function useViewerRuntime({
         pointLight,
         axesHelper,
         sceneBackgroundTexture: null,
-        environmentResource: null,
-        environmentResourceIdentity: "",
-        environmentReady: !renderMode,
-        photographicStudio: null,
-        shadowMapSize: 2048,
+        environmentTexture: null,
+        environmentTextureUrl: "",
         gridConfig: null,
         gridHelper: null,
         floorMode,
         hasVisibleModel: false,
-        hasDrawingDocument: false,
         edgePickThreshold: 1.5,
         vertexPickThreshold: 0.9,
         cameraTransition: null,
@@ -805,7 +802,6 @@ export function useViewerRuntime({
         },
         beginInteraction,
         scheduleIdleQuality,
-        setIdlePixelRatioCap,
         // Hooks a render type installs to tune the shared loop for its own frame
         // cost. All are inert on the mesh path, which leaves them at these
         // defaults.
@@ -821,21 +817,14 @@ export function useViewerRuntime({
         refreshRenderQuality: () => {
           applyRenderQuality(interactionState.pixelRatioCap, { force: true });
         },
-        applyCameraFrameInsets,
-        frameInsetsRef,
         onManualCameraInteraction,
         onViewportResize,
         registerScreenSpaceLineMaterial,
-        unregisterScreenSpaceLineMaterial,
-        // The scene sync calls this after building or updating a model so line
-        // materials created for it (the cadScene's own registry) start at the
-        // viewport's resolution rather than waiting for a resize.
-        syncScreenSpaceLineMaterials
+        unregisterScreenSpaceLineMaterial
       };
       syncDrawingCanvasSize(runtimeRef.current);
       renderDrawingOverlay();
       applySceneBackground(runtimeRef.current, viewerTheme);
-      applyCameraFrameInsets?.(runtimeRef.current, frameInsetsRef?.current);
       applyInitialPerspective?.(runtimeRef.current);
       window.addEventListener("keydown", handleKeyDown);
       window.addEventListener("keyup", handleKeyUp);
@@ -871,17 +860,16 @@ export function useViewerRuntime({
         window.removeEventListener("blur", clearKeyboardOrbit);
         document.removeEventListener("visibilitychange", handleVisibilityChange);
         runtime.controls.dispose();
-        const disposedSource = disposeViewerCadScene(runtime, { clearSceneGroup });
-        onSceneDisposed?.(disposedSource, { handoff: viewerMountedRef.current });
+        clearSceneGroup(runtime.stageGroup);
+        clearSceneGroup(runtime.modelGroup);
+        clearSceneGroup(runtime.edgesGroup);
+        clearSceneGroup(runtime.facePickGroup);
+        clearSceneGroup(runtime.edgePickGroup);
+        clearSceneGroup(runtime.vertexPickGroup);
         disposeSceneObject(runtime.gridHelper);
         disposeSceneObject(runtime.axesHelper);
         disposeTexture(runtime.sceneBackgroundTexture);
-        studioScene()?.disposeEnvironmentResource(runtime.environmentResource);
-        studioScene()?.disposePhotographicStudio(runtime);
-        runtime.keyLight?.shadow?.map?.dispose?.();
-        if (runtime.keyLight?.shadow) {
-          runtime.keyLight.shadow.map = null;
-        }
+        disposeTexture(runtime.environmentTexture);
         runtime.renderer.dispose();
         if (container.contains(runtime.renderer.domElement)) {
           container.removeChild(runtime.renderer.domElement);
@@ -902,5 +890,5 @@ export function useViewerRuntime({
       cleanup();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [renderMode, runtimeResetToken]);
+  }, [runtimeResetToken]);
 }
