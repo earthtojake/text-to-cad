@@ -57,31 +57,42 @@ and assets, so the app does not scan another package's source.
 
 ## Launching
 
-All commands run from this app's directory. Dev (Vite serves the client
-from source with HMR; rebuild shared packages after editing them):
+Dev serves the client from source with HMR. Build the shared packages from the
+repository root first, then invoke npm from the directory you want to serve
+(outside `apps/web`):
 
 ```bash
-npm run dev -- --host 127.0.0.1
+cd <the directory to serve>
+VIEWER_PYTHON=<checkout>/.venv/bin/python \
+  npm --prefix <checkout>/apps/web run dev -- --host 127.0.0.1
 # open http://127.0.0.1:5173/?file=<path relative to the served root>
 ```
+
+For the spawned backend, `scripts/directoryRoot.mjs` uses an explicit
+`directoryRoot` supplied by its caller first, then `INIT_CWD`, then the process
+working directory, accepting the latter two only outside `apps/web`. If neither
+qualifies, Vite defaults to the app's parent, `<checkout>/apps`. npm sets
+`INIT_CWD` to the directory where you invoked it, so `--prefix` selects the app
+without changing the served root. The page URL stays at the bare origin;
+`?file=` selects an artifact within that root.
 
 Dev spawns the real backend — `python -m cadgen.viewer --api-only` on an
 ephemeral port — and proxies `/__cad` and `/__tess_cache` to it, so there is one
 implementation, not two, and Vite owns the client. `VIEWER_PYTHON` names the
-interpreter that has cadgen installed (it defaults to `python3`, which on macOS
-is still 3.9 — below the server's floor of 3.11 — and rarely the one with
-cadgen); `VIEWER_BACKEND_URL` attaches to a backend you started yourself.
+interpreter that has cadgen installed (it defaults to `python3` and must be
+Python 3.11 or newer); `VIEWER_BACKEND_URL` attaches to a backend you started
+yourself, which retains its own served root.
 The shared packages must be built first; the web app itself needs no production
 build for Vite development.
 
 Prod is `cadgen viewer`, run FROM the directory to serve (there is no directory
 flag, the cwd IS the served directory). It serves the client bundled by
 `scripts/bundle/bundle.sh` or installed in the wheel. To explicitly select this
-checkout's web build:
+checkout's web build, start from the repository root:
 
 ```bash
-npm run build
-export CADGEN_VIEWER_DIST="$PWD/dist"
+npm run build:web
+export CADGEN_VIEWER_DIST="$PWD/apps/web/dist"
 cd <the directory to serve> && cadgen viewer --host 127.0.0.1 --json
 ```
 

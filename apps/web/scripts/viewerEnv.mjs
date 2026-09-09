@@ -8,7 +8,8 @@ export function assertNoDeprecatedLocalRootEnv(env = process.env) {
   if (configured.length) {
     throw new Error(
       `${configured.join(", ")} ${configured.length === 1 ? "is" : "are"} no longer supported. ` +
-      "A Viewer URL's path is the directory it opens; open the directory in the URL instead."
+      "Start dev from the directory to serve with npm --prefix <checkout>/apps/web run dev. " +
+      "Open the bare origin with ?file=<relative-path> to select an artifact within that root."
     );
   }
 }

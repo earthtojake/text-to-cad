@@ -1,8 +1,7 @@
-// The client is a package with a boundary: it imports @hardcore/core by NAME (resolved
-// by the vite alias / the `file:` dependency) and nothing else from outside its
-// own directory. A relative specifier that climbs out of the app root is a
-// reach into a sibling package's internals, which this fence refuses -- the
-// same law tests/python/global/test_package_boundaries.py holds for markdown.
+// Runtime imports stay inside the app or use shared packages' public exports.
+// Development documentation may link to the packages and repository guidance it
+// describes. The separate cadgen Markdown isolation check protects the wheel's
+// ships-alone documentation; this private workspace app is not that distribution.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -10,6 +9,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = path.resolve(appRoot, "../..");
 const SKIPPED_DIRS = new Set([
   "node_modules",
   "dist",
@@ -41,9 +41,9 @@ function collectFiles(dir, matches, files = []) {
   return files;
 }
 
-function escapesAppRoot(resolvedPath) {
-  const relative = path.relative(appRoot, resolvedPath);
-  return relative.startsWith("..") || path.isAbsolute(relative);
+function escapesRoot(root, resolvedPath) {
+  const relative = path.relative(root, resolvedPath);
+  return relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
 }
 
 test("relative module specifiers never resolve above the app root", () => {
@@ -55,7 +55,7 @@ test("relative module specifiers never resolve above the app root", () => {
     const source = fs.readFileSync(filePath, "utf8");
     for (const match of source.matchAll(specifierPattern)) {
       const resolved = path.resolve(path.dirname(filePath), match[1]);
-      if (escapesAppRoot(resolved)) {
+      if (escapesRoot(appRoot, resolved)) {
         offenders.push(`${path.relative(appRoot, filePath)} -> ${match[1]}`);
       }
     }
@@ -67,7 +67,7 @@ test("relative module specifiers never resolve above the app root", () => {
   );
 });
 
-test("markdown relative links resolve to files inside the app root", () => {
+test("markdown relative links resolve inside the repository", () => {
   // Inline links only: `[text](target)`. Skips URLs, anchors, and mailto.
   const linkPattern = /\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/gu;
   const offenders = [];
@@ -80,8 +80,8 @@ test("markdown relative links resolve to files inside the app root", () => {
       }
       const resolved = path.resolve(path.dirname(filePath), target.split("#")[0]);
       const label = `${path.relative(appRoot, filePath)} -> ${target}`;
-      if (escapesAppRoot(resolved)) {
-        offenders.push(`${label} (escapes app root)`);
+      if (escapesRoot(repoRoot, resolved)) {
+        offenders.push(`${label} (escapes repository)`);
       } else if (!fs.existsSync(resolved)) {
         offenders.push(`${label} (missing)`);
       }
@@ -90,7 +90,7 @@ test("markdown relative links resolve to files inside the app root", () => {
   assert.deepEqual(
     offenders,
     [],
-    `markdown links must resolve inside the viewer app root:\n  ${offenders.join("\n  ")}`
+    `markdown links must resolve inside the repository:\n  ${offenders.join("\n  ")}`
   );
 });
 

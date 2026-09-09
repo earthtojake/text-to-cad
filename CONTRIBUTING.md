@@ -579,20 +579,29 @@ Repo-owned Python tests live under `tests/python/`, grouped by tested surface:
 `skills/<skill>`, `packages/<package>`, and `global`. The CAD Viewer backend's
 suite is `tests/python/packages/cadgen/viewer/`, part of the cadgen package suite.
 
-For fast CAD Viewer source iteration, run the root viewer app in dev mode. Do
-not run the packaged viewer from an installed cadgen while modifying Viewer
-behavior:
+For fast CAD Viewer source iteration, build the shared packages, then invoke
+the web app in dev mode from the directory you want to serve (outside
+`apps/web`). The app consumes source with HMR while shared packages resolve to
+their compiled exports:
 
 ```bash
-npm --prefix apps/web run dev -- --host 127.0.0.1
+cd <the directory to serve>
+VIEWER_PYTHON=<checkout>/.venv/bin/python \
+  npm --prefix <checkout>/apps/web run dev -- --host 127.0.0.1
 ```
 
-The dev server serves ONE root, fixed at startup (the directory Vite runs
-from); the page is the bare origin and `?file=` names the artifact relative to
-that root:
-`http://127.0.0.1:<port>/?file=models/thang010146/STEP/gear_rack_gripper.step`.
-Do not assume a fixed dev port unless you pass
-Vite's standard `--port` flag. Packaged Viewer runtime checks are
+The spawned backend serves one root, fixed at startup. Its resolver accepts an
+explicit `directoryRoot` from its caller first, then `INIT_CWD`, then the
+process working directory, skipping the latter two when they are inside
+`apps/web`. Vite's fallback is `<checkout>/apps`. npm sets `INIT_CWD` to the
+invocation directory, so `--prefix` selects the app while retaining your chosen
+root. The page is the bare origin and `?file=` names an artifact relative to
+that root, for example `http://127.0.0.1:5173/?file=STEP/part.step` when the
+served directory contains `STEP/part.step`.
+
+Vite defaults to port 5173 and fails if it is taken; select another with
+`--port`. See [the app's launcher contract](apps/web/README.md#launching) for
+development and external-backend options. Packaged Viewer runtime checks are
 production-output checks; use `scripts/README.md` when you specifically need
 that path.
 
