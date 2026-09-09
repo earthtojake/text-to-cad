@@ -19,7 +19,7 @@ it('shows source parameters read-only and navigates nested operations with arrow
   fireEvent.keyDown(document.activeElement!, {key:'ArrowLeft'});
   expect(document.activeElement).toBe(row);
   expect(tree.querySelectorAll('input,textarea,select').length).toBe(0);
-  expect(screen.getByText(/Source order, not evaluated build history/)).toBeTruthy();
+  expect(screen.queryByText(/Source order, not evaluated build history/)).toBeNull();
 });
 it('aborts the old file and ignores its late source response', async () => {
   let resolveOld: (value: unknown) => void = () => {};
@@ -35,4 +35,24 @@ it('aborts the old file and ignores its late source response', async () => {
   resolveOld(result);
   await waitFor(() => expect(screen.queryByText('Extrude · body')).toBeNull());
   expect(screen.getByText('new.step')).toBeTruthy();
+});
+
+it('previews associated faces on click and keyboard selection, then clears on Escape and unmount', async () => {
+  const descriptor={area:1,center:[0,0,0],bbox:{min:[0,0,0],max:[1,1,0]}};
+  const onHighlight=vi.fn();
+  const client={requestDesignOutline:vi.fn().mockResolvedValue({...result,geometryLinks:{schema:1,faces:[descriptor],lines:{'5':[0]}}})};
+  const {unmount}=render(<StepDesignTree client={client} file="case.step" label="case.step" references={[{id:'f7',selectorType:'face',pickData:descriptor}]} onHighlight={onHighlight} />);
+  const text=await screen.findByText('Extrude · body');
+  expect(onHighlight.mock.lastCall?.[0]).toBeNull();
+  fireEvent.click(text);
+  await waitFor(()=>expect(onHighlight.mock.lastCall?.[0]).toEqual({faceIds:['f7'],partIds:[]}));
+  onHighlight.mockClear();
+  fireEvent.click(text);
+  await waitFor(()=>expect(onHighlight.mock.lastCall?.[0]).toEqual({faceIds:['f7'],partIds:[]}));
+  fireEvent.keyDown(text.closest('[role="treeitem"]')!,{key:'Escape'});
+  await waitFor(()=>expect(onHighlight.mock.lastCall?.[0]).toBeNull());
+  fireEvent.keyDown(screen.getByRole('treeitem',{name:'Parameters',exact:true}),{key:'ArrowDown'});
+  await waitFor(()=>expect(onHighlight.mock.lastCall?.[0]).toEqual({faceIds:['f7'],partIds:[]}));
+  unmount();
+  expect(onHighlight.mock.lastCall?.[0]).toBeNull();
 });

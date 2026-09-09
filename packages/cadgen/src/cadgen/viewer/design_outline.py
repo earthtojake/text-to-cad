@@ -91,6 +91,8 @@ def parse_design_outline(source, model_name=None):
             # Describe the helper only when it has one unambiguous CAD operation.
             calls = [n for n in ast.walk(helper) if isinstance(n, ast.Call) and call_name(n) in OPS]
             if len(calls) != 1:
+                if any(isinstance(n, ast.Return) and call_name(n.value) == 'Compound' for n in ast.walk(helper)):
+                    return {"id": f"source:{call.lineno}:{call.col_offset}", "label": name.replace('_', ' ').capitalize(), "type": "assembly", "line": call.lineno, "parameters": parameters(call, scope), "children": []}
                 return None
             template, op = calls[0], call_name(calls[0])
         if op not in OPS | SKETCHES:
@@ -218,4 +220,7 @@ def read_design_outline(root, file_ref):
     parsed = parse_design_outline(data.decode('utf-8'), path.stem)
     if parsed.get('status') == 'ambiguous':
         return parsed
-    return {"status": "ready", "source": str(source_path.relative_to(root)).replace(os.sep, '/'), "sourceHash": sha256(data).hexdigest(), **parsed}
+    from cadgen.feature_links import read_links
+    source_hash = sha256(data).hexdigest()
+    links = read_links(source_hash, path)
+    return {"status": "ready", "source": str(source_path.relative_to(root)).replace(os.sep, '/'), "sourceHash": source_hash, "geometryLinks": links, **parsed}

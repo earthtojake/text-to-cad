@@ -50,7 +50,7 @@ export interface CadClient {
   refresh(options?: CadRequestOptions & {file?: string;markRefreshing?: boolean}): Promise<CadCatalog>;
   resolveEntry(path: string, options?: CadRequestOptions): Promise<CadEntry>;
   serverInfo(options?: CadRequestOptions): Promise<CadServerInfo>;
-  requestDesignOutline(file: string, options?: CadRequestOptions): Promise<{ status: string; source?: string; sourceHash?: string; features: CadJson[]; parameters: CadJson[] }>;
+  requestDesignOutline(file: string, options?: CadRequestOptions): Promise<{ status: string; source?: string; sourceHash?: string; geometryLinks?: CadJson; features: CadJson[]; parameters: CadJson[] }>;
   requestArtifactStatus(file: string, options?: CadRequestOptions): Promise<CadArtifactResult>;
   requestArtifact(file: string, options?: CadRequestOptions & {force?: boolean}): Promise<CadArtifactResult>;
   createRenderSession(): CadRenderSession;
