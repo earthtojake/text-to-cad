@@ -1,6 +1,6 @@
 import SelectionFilterMenu from "./SelectionFilterMenu.jsx";
 import { SELECTION_FILTERS } from "../../workbench/selectionFilter.js";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Camera,
   Check,
@@ -22,12 +22,13 @@ import {
 import { TooltipProvider } from "@hardcore/ui/primitives/tooltip";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuSeparator, DropdownMenuTrigger
+  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger
 } from "@hardcore/ui/primitives/dropdown-menu";
 import DrawingToolbar from "./DrawingToolbar.js";
 import { ToolbarButton } from "./ToolbarButton.js";
 import { ZoomControl } from "../viewer/ZoomControl.js";
-import { CAD_WORKSPACE_TOOLBAR_DESKTOP_WIDTH_CLASS } from "./ToolbarShell.js";
+import ToolbarShell from "./ToolbarShell.js";
+import { FileSheetPortalContext } from "./FileSheet.js";
 
 const FLOATING_TOOL_BAR_SURFACE_CLASS =
   "bg-background border border-border text-foreground shadow-sm";
@@ -172,6 +173,7 @@ function DesktopFloatingToolBar({
   const animationLabel = animationPlaying ? "Pause" : "Play";
 
   const toolbarRef = useRef(null);
+  const boundary = useContext(FileSheetPortalContext);
   const [compact, setCompact] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const hasCapture = typeof handleCapture === "function";
@@ -209,11 +211,12 @@ function DesktopFloatingToolBar({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        sideOffset={6}
+        sideOffset={8}
+        collisionBoundary={boundary}
         collisionPadding={8}
         // Escape dismisses this menu, not the Inspector or tool underneath it.
         onEscapeKeyDown={(event) => event.stopPropagation()}
-        className="pointer-events-auto w-52 max-w-[calc(100vw-16px)]"
+        className="pointer-events-auto w-60 max-w-[min(240px,var(--radix-dropdown-menu-content-available-width))]"
         onCloseAutoFocus={(event) => {
           if (!compact) {
             event.preventDefault();
@@ -221,6 +224,7 @@ function DesktopFloatingToolBar({
           }
         }}
       >
+        <DropdownMenuLabel>More tools</DropdownMenuLabel>
         {!previewMode && showToolCluster ? (
           <DropdownMenuItem
             disabled={viewerLoading || !viewportContent}
@@ -453,16 +457,15 @@ function DesktopFloatingToolBar({
       {!previewMode && selectionToolActive && selectionFilterNotice && <p role="status" className="max-w-56 rounded-md border bg-background px-2 py-1 text-micro text-muted-foreground shadow-sm">{selectionFilterNotice}</p>}
 
 
-      {!previewMode && measureModeActive && measurementPanel && <section aria-label="Measurements" className="pointer-events-auto w-60 max-w-full max-h-64 overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
-        <div className="flex items-center justify-between gap-2 px-2 py-1.5 text-sm font-medium"><span>Measure</span><button type="button" className="rounded-sm p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Finish measuring" onClick={() => handleSelectTabToolMode("references")}><X className="size-3" aria-hidden="true" /></button></div>
-        <div className="-mx-1 my-1 h-px bg-border" />
+      {!previewMode && measureModeActive && measurementPanel && <ToolbarShell
+        title="Measure" label="Measurements" className="max-h-64"
+        onClose={() => handleSelectTabToolMode("references")} closeLabel="Finish measuring"
+        footer="Clears when you leave Measure.">
         {measurementPanel}
-        <div className="-mx-1 my-1 h-px bg-border" />
-        <p className="px-2 py-1.5 text-micro text-muted-foreground">Clears when you leave Measure.</p>
-      </section>}
+      </ToolbarShell>}
       {!previewMode && supportsTool(renderFormat, "draw") && drawToolActive ? (
         <DrawingToolbar
-          className={`${CAD_WORKSPACE_TOOLBAR_DESKTOP_WIDTH_CLASS} max-w-full`}
+          onClose={() => handleSelectTabToolMode("references")}
           drawingToolOptions={drawingToolOptions}
           drawingTool={drawingTool}
           handleSelectDrawingTool={handleSelectDrawingTool}
