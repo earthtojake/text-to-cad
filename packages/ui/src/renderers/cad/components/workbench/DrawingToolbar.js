@@ -1,13 +1,9 @@
 import { Redo2, Trash2, Undo2 } from "lucide-react";
-import { cn } from "@hardcore/ui/utils";
-import { ScrollArea } from "@hardcore/ui/primitives/scroll-area";
-import { TooltipProvider } from "@hardcore/ui/primitives/tooltip";
-import ToolbarShell from "./ToolbarShell.js";
-import { ToolbarButton } from "./ToolbarButton.js";
+import ToolbarShell, { TOOLBAR_MENU_ROW_CLASS } from "./ToolbarShell.js";
+import SelectionFilterMenu from "./SelectionFilterMenu.jsx";
 
 export default function DrawingToolbar({
   className,
-  layout = "wrap",
   drawingToolOptions,
   drawingTool,
   handleSelectDrawingTool,
@@ -16,76 +12,27 @@ export default function DrawingToolbar({
   handleClearDrawings,
   canUndoDrawing,
   canRedoDrawing,
-  drawingStrokes
+  drawingStrokes,
+  onClose
 }) {
-  const historyUndo = handleUndoDrawing;
-  const historyRedo = handleRedoDrawing;
-  const clearAction = handleClearDrawings;
-  const canUndo = canUndoDrawing;
-  const canRedo = canRedoDrawing;
-  const actionCount = drawingStrokes.length;
-  const scrollLayout = layout === "scroll";
-  const toolbarButtons = (
-    <div
-      className={cn(
-        "flex gap-1",
-        scrollLayout ? "w-max min-w-full flex-nowrap" : "flex-wrap"
-      )}
-    >
-      {drawingToolOptions.map(({ id, label, Icon }) => {
-        const active = drawingTool === id;
-        return (
-          <ToolbarButton
-            key={id}
-            label={label}
-            active={active}
-            aria-pressed={active}
-            onClick={() => handleSelectDrawingTool(id)}
-          >
-            <Icon className="size-3.5" strokeWidth={2} aria-hidden="true" />
-          </ToolbarButton>
-        );
-      })}
-
-      <ToolbarButton
-        label="Undo"
-        onClick={historyUndo}
-        disabled={!canUndo}
-      >
-        <Undo2 className="size-3.5" strokeWidth={2} aria-hidden="true" />
-      </ToolbarButton>
-
-      <ToolbarButton
-        label="Redo"
-        onClick={historyRedo}
-        disabled={!canRedo}
-      >
-        <Redo2 className="size-3.5" strokeWidth={2} aria-hidden="true" />
-      </ToolbarButton>
-
-      <ToolbarButton
-        label="Clear all"
-        onClick={clearAction}
-        disabled={!actionCount}
-      >
-        <Trash2 className="size-3.5" strokeWidth={2} aria-hidden="true" />
-      </ToolbarButton>
-    </div>
-  );
-
+  const currentTool = drawingToolOptions.find(option => option.id === drawingTool);
   return (
-    <ToolbarShell className={cn("p-1.5", className)}>
-      <TooltipProvider delayDuration={250}>
-        {scrollLayout ? (
-          <ScrollArea
-            className="min-w-0 max-w-full"
-            type="auto"
-            scrollbars="horizontal"
-          >
-            {toolbarButtons}
-          </ScrollArea>
-        ) : toolbarButtons}
-      </TooltipProvider>
+    <ToolbarShell className={className} title="Draw" onClose={onClose} closeLabel="Finish drawing">
+      <div className="py-1">
+        <p className="px-2 py-1 text-micro text-muted-foreground">Tool</p>
+        <SelectionFilterMenu fullWidth options={drawingToolOptions} value={drawingTool}
+          onChange={handleSelectDrawingTool} menuLabel="Drawing tool" hint="" triggerIcon={currentTool?.Icon} />
+      </div>
+      <div className="-mx-1 my-1 h-px shrink-0 bg-border" />
+      <button type="button" className={TOOLBAR_MENU_ROW_CLASS} onClick={handleUndoDrawing} disabled={!canUndoDrawing}>
+        <Undo2 className="size-3.5 text-muted-foreground" aria-hidden="true" />Undo
+      </button>
+      <button type="button" className={TOOLBAR_MENU_ROW_CLASS} onClick={handleRedoDrawing} disabled={!canRedoDrawing}>
+        <Redo2 className="size-3.5 text-muted-foreground" aria-hidden="true" />Redo
+      </button>
+      <button type="button" className={TOOLBAR_MENU_ROW_CLASS} onClick={handleClearDrawings} disabled={!drawingStrokes.length}>
+        <Trash2 className="size-3.5 text-muted-foreground" aria-hidden="true" />Clear all
+      </button>
     </ToolbarShell>
   );
 }
