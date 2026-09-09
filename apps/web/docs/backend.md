@@ -53,19 +53,29 @@ Do not stop an instance you did not start.
 
 ## Development
 
-After the root workspace dependencies and shared packages are built, run Vite
-from `apps/web`:
+After the root workspace dependencies and shared packages are built, invoke
+Vite from the directory to serve, outside `apps/web`:
 
 ```bash
-VIEWER_PYTHON=<checkout>/.venv/bin/python npm run dev -- --host 127.0.0.1
+cd <the directory to serve>
+VIEWER_PYTHON=<checkout>/.venv/bin/python \
+  npm --prefix <checkout>/apps/web run dev -- --host 127.0.0.1
 ```
+
+Dev root resolution first honors an explicit `directoryRoot` from its caller,
+then the first of `INIT_CWD` and the process working directory that is outside
+`apps/web`. Otherwise Vite defaults to `<checkout>/apps`. npm preserves its
+invocation directory in `INIT_CWD`, so the command above chooses the served
+root while `--prefix` locates the app. Open the bare origin with
+`?file=<path relative to the served root>`; the URL path does not choose a root.
 
 Vite serves the client from source with HMR. It spawns
 `python -m cadgen.viewer --ephemeral --no-registry --api-only` and proxies
 `/__cad` and `/__tess_cache` to that process. `VIEWER_PYTHON` selects its
 interpreter; the default is `python3`. `VIEWER_BACKEND_URL` attaches to a backend
-you started separately. The app needs no production build in this mode, but
-shared package imports still resolve to their compiled `dist/` exports.
+you started separately, using that backend's existing root. The app needs no
+production build in this mode, but shared package imports still resolve to
+their compiled `dist/` exports.
 
 Vite defaults to port 5173 and refuses to roll to another port; pass `--port`
 when needed. The development backend never enters the production instance
