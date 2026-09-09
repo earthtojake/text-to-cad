@@ -156,7 +156,7 @@ test("the viewer's Add to prompt lands a chip, and the camera an image", async (
   await filter.fill(STEP);
   await page.getByRole("option", { name: STEP, exact: false }).first().click();
   await expect(page.locator("canvas").first()).toBeVisible({ timeout: 60_000 });
-  const tree = page.getByRole("tab", { name: "Tree" });
+  const tree = page.getByRole("tab", { name: "Geometry" });
   await expect(tree).toBeVisible({ timeout: 90_000 });
   await tree.click();
 
@@ -171,6 +171,7 @@ test("the viewer's Add to prompt lands a chip, and the camera an image", async (
   const selector = (await chip.getAttribute("data-selector")) ?? "";
 
   // The camera button: the viewport as a PNG attachment.
+  await page.getByRole("button", { name: "Capture", exact: true }).click();
   await page.getByTestId("capture-to-chat").click();
   const captures = page.locator("[data-composer]").getByText(/import-smoke-.*\.png/);
   await expect(captures).toHaveCount(1, { timeout: 15_000 });
