@@ -10,7 +10,6 @@
 // derived from server-side — just fresher.
 
 import { tessellateComponent } from "./tessellate.js";
-import { hasInwardCylinderWinding } from "../step/recognizeFeatures.js";
 
 export const STEP_TOPOLOGY_SCHEMA_VERSION = 2;
 
@@ -473,20 +472,9 @@ export function buildSelectorBundleFromSurf(index, floats, options = {}) {
     );
   });
 
-  // Ephemeral derived metadata, not a change to the serialized STEP topology
-  // schema. Reuse the already-tessellated mesh; do not retain another mesh copy.
-  const inwardCylinders = Uint8Array.from(faces, face => {
-    const range = rangeByOrd.get(face.ord);
-    return face.surfaceType === "cylinder" && range && hasInwardCylinderWinding({
-      params: face.params, triangleStart: range.indexStart / 3,
-      triangleCount: range.indexCount / 3,
-    }, component.positions, component.indices) ? 1 : 0;
-  });
-
   return {
     manifest,
     buffers: {
-      inwardCylinders,
       faceRuns,
       edgePositions: Float32Array.from(edgePositions),
       edgeIndices: Uint32Array.from(edgeIndices),

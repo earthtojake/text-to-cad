@@ -134,6 +134,7 @@ cache reads and writes.
 | `GET /__cad/catalog` | Current catalog and root identity. |
 | `GET /__cad/asset?file=...` | Allowed artifact bytes inside the served root. |
 | `GET /__cad/store?file=...` | Virtual render assets from the shared store. |
+| `GET /__cad/design-outline?file=...` | Read-only Python source outline for a STEP; never executes source or recovers STEP history. |
 | `GET /__cad/artifact?file=...` | Artifact status and advisory progress. |
 | `POST /__cad/artifact?file=...` | Import a foreign STEP; `&force=1` requests a rebuild. |
 | `GET /__tess_cache/<key>.tess` | Read a tessellation-cache entry. |
