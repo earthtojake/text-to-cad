@@ -9,12 +9,22 @@
  * switches to it first, the way clicking the project in the sidebar would,
  * because a tab opened into the wrong project's strip is a tab nobody sees.
  */
-import { rendererForPath } from "@renderer/features/explorer/renderers/registry";
+import { isCadFile } from "@hardcore/core/lib/fileFormats.js";
+import { markdownRenderer } from "@hardcore/ui/renderers/markdown";
 import type { CadCommand } from "@shared/ipc/cad";
 
 import { hostOf, tabTitle, useExplorer } from "./explorer";
 import { useProjects } from "./projects";
 import { useUi } from "./ui";
+
+function rendererIdForPath(path: string): "cad" | "markdown" | "code" {
+  if (isCadFile(path)) return "cad";
+  const name = path.split("/").at(-1) ?? path;
+  const extension = name.includes(".") ? (name.split(".").at(-1) ?? "").toLowerCase() : "";
+  return markdownRenderer.matches({ path, name, extension, kind: "file", size: 0, mediaType: "text" })
+    ? "markdown"
+    : "code";
+}
 
 /** Bring the explorer for `projectId` on screen and wait until its strip is bound. */
 async function focusProject(projectId: string): Promise<void> {
@@ -40,7 +50,7 @@ function describeTabs() {
       id: tab.id,
       kind: tab.kind,
       title: tabTitle(tab),
-      ...(tab.kind === "file" ? { path: tab.path, root: tab.root, renderer: tab.path ? rendererForPath(tab.path).id : null } : {}),
+      ...(tab.kind === "file" ? { path: tab.path, root: tab.root, renderer: tab.path ? rendererIdForPath(tab.path) : null } : {}),
       ...(tab.kind === "browser" ? { url: tab.url } : {}),
       ...(tab.kind === "terminal" ? { cwd: tab.cwd } : {}),
       ...(tab.kind === "review" ? { scope: tab.scope } : {}),
@@ -65,9 +75,9 @@ export async function performCadCommand(command: CadCommand): Promise<unknown> {
         opened: command.path,
         root: command.root ?? null,
         tabId: tab.id,
-        renderer: rendererForPath(command.path).id,
+        renderer: rendererIdForPath(command.path),
         note:
-          rendererForPath(command.path).id === "cad"
+          rendererIdForPath(command.path) === "cad"
             ? "Rendered by the CAD Viewer; the person can orbit, section and measure it there."
             : undefined,
       };
@@ -99,7 +109,7 @@ export async function performCadCommand(command: CadCommand): Promise<unknown> {
       const { tabs, activeId } = useExplorer.getState();
       const active = tabs.find((tab) => tab.id === activeId) ?? null;
       const file = active?.kind === "file" ? active.path : null;
-      const renderer = file ? rendererForPath(file).id : null;
+      const renderer = file ? rendererIdForPath(file) : null;
       return {
         file,
         root: active?.kind === "file" ? active.root : null,

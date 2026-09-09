@@ -38,7 +38,7 @@
  *                  scripted sweep and a scripted drag
  *
  * plus every /__cad and /__tess_cache response the page made. The measures
- * come from `cadgen-js/lib/viewer/perfMarks.js`, recorded only because this
+ * come from `@hardcore/core/lib/viewer/perfMarks.js`, recorded only because this
  * script sets `globalThis.__cadgenPerf` in the page.
  *
  * THE PROCESS COSTS time, with the same interpreter and environment the app

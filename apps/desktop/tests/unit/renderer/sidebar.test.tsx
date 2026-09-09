@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { TooltipProvider } from "@renderer/components/ui/tooltip";
+import { TooltipProvider } from "@hardcore/ui/primitives/tooltip";
 import { Sidebar } from "@renderer/features/sidebar/Sidebar";
 import { SESSION_GLYPH_LABELS, sessionGlyphFor, sidebarSections } from "@renderer/lib/sidebar";
 import { useProjects } from "@renderer/state/projects";

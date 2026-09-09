@@ -2,7 +2,7 @@
 
 There is exactly ONE tessellator in this repo and it is JavaScript: every render
 mesh and every exported mesh comes out of ``tessellateComponent`` in
-``packages/cadgen-js/src/lib/surf/tessellate.js``. Its ``DEFAULT_OPTIONS`` are
+``packages/core/src/lib/surf/tessellate.js``. Its ``DEFAULT_OPTIONS`` are
 the real defaults; the values below are a Python-side MIRROR, and what they
 document is what an OMITTED tolerance means: a mesh export with no
 ``--mesh-tolerance`` (``MeshExportJob.mesh_tolerance is None``) is meshed at

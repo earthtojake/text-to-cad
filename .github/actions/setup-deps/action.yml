@@ -19,10 +19,10 @@ inputs:
   npm:
     description: >-
       Space-separated npm project prefixes to `npm ci`, or "none". Building
-      cadgen's packaged runtime needs `packages/cadgen-js`; the Viewer's client
-      build and its own suite need `apps/viewer`; only the docs check needs
+      cadgen's packaged runtime needs `packages/core`; the Viewer's client
+      build and its own suite need `apps/web`; only the docs check needs
       `apps/docs`.
-    default: "packages/cadgen-js apps/viewer apps/docs"
+    default: "packages/core apps/web apps/docs"
 
 runs:
   using: composite
@@ -40,10 +40,7 @@ runs:
       with:
         node-version: "22"
         cache: npm
-        cache-dependency-path: |
-          packages/cadgen-js/package-lock.json
-          apps/viewer/package-lock.json
-          apps/docs/package-lock.json
+        cache-dependency-path: package-lock.json
 
     - name: Install Python dependencies
       if: inputs.python == 'true'

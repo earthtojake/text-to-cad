@@ -8,9 +8,9 @@
 #                       Everything downstream runs it: the skills (thin entrypoints over
 #                       its CLIs), the viewer (served by cadgen.viewer), the docs site
 #                       (documents its commands), the wheel.
-#   packages/cadgen-js  bundled into the runtime cadgen executes (mesh exports,
+#   packages/core  bundled into the runtime cadgen executes (mesh exports,
 #                       snapshots), imported by the viewer client, and by the docs hero.
-#   apps/viewer         the client. Platform-agnostic JS; served by the backend.
+#   apps/web         the client. Platform-agnostic JS; served by the backend.
 #   skills/             SKILL.md + scripts. Their suites run the cadgen CLIs; the docs
 #                       site mirrors their frontmatter.
 #   apps/docs           the docs site.
@@ -83,9 +83,9 @@ jobs:
               - 'tests/python/support/**'
               - 'requirements*.txt'
             cadgenjs:
-              - 'packages/cadgen-js/**'
+              - 'packages/core/**'
             viewer:
-              - 'apps/viewer/**'
+              - 'apps/web/**'
               - 'tests/browser/**'
             skills:
               - 'skills/**'
@@ -167,7 +167,7 @@ jobs:
       - name: Set up dependencies
         uses: ./.github/actions/setup-deps
         with:
-          npm: packages/cadgen-js
+          npm: packages/core
 
       - name: Run the cadgen package suite
         run: scripts/test/test-python.sh --select cadgen --print-weights
@@ -193,7 +193,7 @@ jobs:
       - name: Set up dependencies
         uses: ./.github/actions/setup-deps
         with:
-          npm: packages/cadgen-js
+          npm: packages/core
 
       # --keep-going: report every failing suite in one round trip rather than one per
       # run; the Linux job keeps the fail-fast default.
@@ -216,10 +216,10 @@ jobs:
         with:
           python: "false"
           playwright: "false"
-          npm: packages/cadgen-js
+          npm: packages/core
 
       - name: Run cadgen-js tests
-        run: npm --prefix packages/cadgen-js test
+        run: npm --prefix packages/core test
 
       - name: Run the viewer-memory bench helper tests
         run: node --test scripts/bench/viewer-memory/*.test.mjs
@@ -240,10 +240,10 @@ jobs:
       - name: Set up dependencies
         uses: ./.github/actions/setup-deps
         with:
-          npm: packages/cadgen-js apps/viewer
+          npm: packages/core apps/web
 
       - name: Run the CAD Viewer client tests
-        run: npm --prefix apps/viewer run test
+        run: npm --prefix apps/web run test
 
       - name: Bundle production outputs
         run: scripts/bundle/bundle.sh
@@ -268,7 +268,7 @@ jobs:
       - name: Set up dependencies
         uses: ./.github/actions/setup-deps
         with:
-          npm: packages/cadgen-js
+          npm: packages/core
 
       - name: Run the policy gates
         run: scripts/test/test-global.sh
@@ -314,7 +314,7 @@ jobs:
       - name: Set up dependencies
         uses: ./.github/actions/setup-deps
         with:
-          npm: packages/cadgen-js apps/viewer
+          npm: packages/core apps/web
 
       - name: Bundle production outputs from clean
         run: scripts/bundle/bundle.sh --clean

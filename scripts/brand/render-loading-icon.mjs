@@ -13,7 +13,7 @@ const { build } = require("esbuild");
 const { chromium } = require("playwright");
 const sourceCommit = "ed6a16b25936031adfa0a6d4705d80e1c712eb37";
 const sourcePath = "apps/docs/src/lib/icon/model.mjs";
-const out = path.join(root, "apps/viewer/src/client/assets/brand");
+const out = path.join(root, "apps/web/src/client/assets/brand");
 await fs.mkdir(path.join(root, "tmp"), { recursive: true });
 const scratch = await fs.mkdtemp(path.join(root, "tmp/loading-icon-"));
 const size = 192;

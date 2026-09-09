@@ -117,7 +117,7 @@ SUPPORTED_QUALITY_KEYS = frozenset({"tessellation"})
 # renderer dies, and the caller sees a lost Playwright driver connection rather
 # than a rejected request — so the request is rejected here, before a browser
 # is launched. Mirrored as RENDER_TESSELLATION_FLOORS in
-# packages/cadgen-js/src/common/source.js (that file validates the same job in
+# packages/core/src/common/source.js (that file validates the same job in
 # the page; the parity is tested).
 MIN_RENDER_TESSELLATION = {"chordTolerance": 1e-5, "angleTolerance": 5e-3}
 SUPPORTED_OUTPUT_KEYS = frozenset(
@@ -1221,7 +1221,7 @@ def route_file(pathname: str, prefix: str, root: Path) -> Path:
 #
 # The snapshot page resolves component tessellations through the SAME disk
 # cache the mesh-export CLI uses (immutable objects plus index/mesh; codec and
-# key scheme in packages/cadgen-js/src/lib/surf/tessellationCache.js). The page
+# key scheme in packages/core/src/lib/surf/tessellationCache.js). The page
 # cannot touch the filesystem, so the host serves the cache: GET
 # /__tess_cache/<key>.tess is a read, POST is a best-effort write-back after
 # an in-page tessellation miss. CADGEN_MESH_CACHE=0 turns both directions

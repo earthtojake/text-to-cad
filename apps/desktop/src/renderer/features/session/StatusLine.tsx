@@ -1,4 +1,4 @@
-import LoadingIcon from "cad-viewer/loading-icon";
+import LoadingIcon from "@hardcore/ui/loading-icon";
 
 /** The live status keeps its existing words; only actual work animates. */
 export function StatusLine({ text, active }: { text: string; active: boolean }) {

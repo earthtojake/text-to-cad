@@ -27,6 +27,7 @@ import os
 import stat
 import threading
 import time
+from hashlib import sha256
 from pathlib import Path
 
 from . import reload as dev_reload
@@ -229,6 +230,12 @@ class CadApp:
         root_path = self.backend.root_path
         self.root_path = root_path
         self.root_name = self.backend.root_name
+        # A connection port is ephemeral; persisted view state follows the
+        # canonical directory this server exposes.  Hash the realpath so
+        # symlink spellings share an identity without adding another machine
+        # path to every catalog response.
+        canonical_root = os.path.normcase(os.path.realpath(root_path))
+        self.root_id = f"local-fs:{sha256(os.fsencode(canonical_root)).hexdigest()}"
         self.host = host
         self.port = port
         # dist_dir is compared as a string prefix, so resolve it ONCE here and
@@ -277,6 +284,7 @@ class CadApp:
             "serverMode": "serve",
             "serverFeatures": LOCAL_SERVER_FEATURES,
             "backend": "local-fs",
+            "rootId": self.root_id,
             # path.resolve(), NOT realpath: the launcher's registry and the
             # client both compare the spelling the operator gave.
             "rootPath": self.root_path,
@@ -290,6 +298,11 @@ class CadApp:
             "startedAt": self.started_at,
             "url": f"http://{self.host}:{self.port}",
         }
+
+    def read_catalog(self) -> dict:
+        """The backend catalog plus this connection's stable root identity."""
+        catalog = self.backend.read_catalog()
+        return {**catalog, "rootId": self.root_id}
 
     # --- gates ------------------------------------------------------------
 
@@ -500,7 +513,7 @@ class CadApp:
         every model in the root per tick.
         """
         if catalog is None:
-            catalog = self.backend.read_catalog()
+            catalog = self.read_catalog()
         entry = self.backend.catalog_entry_for_file_ref(catalog, file_ref)
         return str((entry or {}).get("url") or "")
 
@@ -539,7 +552,7 @@ class CadApp:
         # Scanned AFTER the build, success or failure, and republished by the
         # client — the import is precisely the event that changes what the
         # catalog says about this entry.
-        catalog = self.backend.read_catalog()
+        catalog = self.read_catalog()
         payload = {
             **result,
             "ref": self._entry_ref_for_status(file_ref, catalog),

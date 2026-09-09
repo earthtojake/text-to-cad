@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { TooltipProvider } from "@renderer/components/ui/tooltip";
+import { TooltipProvider } from "@hardcore/ui/primitives/tooltip";
 import { ActivityGroup } from "@renderer/features/session/parts/ActivityRow";
 import { PermissionCard } from "@renderer/features/session/parts/PermissionCard";
 import { PlanCard } from "@renderer/features/session/PlanCard";

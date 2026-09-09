@@ -25,8 +25,8 @@ set -euo pipefail
 # that proves the wheel got them.
 #
 # `--check` skips the viewer stage because it is the expensive one (a vite build of
-# apps/viewer, which needs that app's node_modules) and because a checkout serves
-# apps/viewer/dist directly -- cadgen.assets prefers it, so nothing in a checkout reads
+# apps/web, which needs that app's node_modules) and because a checkout serves
+# apps/web/dist directly -- cadgen.assets prefers it, so nothing in a checkout reads
 # _runtime/viewer. `--print-outputs` lists the two directories a bundle always produces.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -41,7 +41,7 @@ RUNTIME_DIR="$REPO_ROOT/packages/cadgen/src/cadgen/_runtime"
 NODE_DIR="$RUNTIME_DIR/node"
 BROWSER_DIR="$RUNTIME_DIR/browser"
 VIEWER_DIR="$RUNTIME_DIR/viewer"
-VIEWER_APP_DIR="$REPO_ROOT/apps/viewer"
+VIEWER_APP_DIR="$REPO_ROOT/apps/web"
 VIEWER_PACKAGE_MANAGER="${CAD_VIEWER_PACKAGE_MANAGER:-}"
 
 SNAPSHOT_BUILD_DEPS_DIR="${CADGEN_SNAPSHOT_BUILD_DEPS_DIR:-$REPO_ROOT/tmp/cadgen-snapshot-build}"
@@ -53,8 +53,8 @@ NODE_OUTPUTS=(dxf-mesh.mjs mesh-export.mjs package.json THIRD_PARTY_LICENSES.txt
 BROWSER_OUTPUTS=(snapshot-render.js render.html THIRD_PARTY_LICENSES.txt)
 
 BUILDER_ENTRIES=(
-  "$REPO_ROOT/packages/cadgen-js/bin/dxf-mesh.mjs"
-  "$REPO_ROOT/packages/cadgen-js/bin/mesh-export.mjs"
+  "$REPO_ROOT/packages/core/bin/dxf-mesh.mjs"
+  "$REPO_ROOT/packages/core/bin/mesh-export.mjs"
 )
 
 MODE="write"
@@ -140,7 +140,7 @@ resolve_viewer_package_manager() {
     echo "$VIEWER_PACKAGE_MANAGER"
     return
   fi
-  if [ -f "$VIEWER_APP_DIR/package-lock.json" ]; then
+  if [ -f "$REPO_ROOT/package-lock.json" ]; then
     echo "npm"
     return
   fi
@@ -199,7 +199,7 @@ The JavaScript in this directory is bundled output. It inlines third-party code:
 
 Each bundle carries the originating licence banners at end of file
 (esbuild --legal-comments=eof). Exact versions are pinned by
-packages/cadgen-js/package-lock.json at the commit that produced these files.
+package-lock.json at the commit that produced these files.
 
 MIT License
 

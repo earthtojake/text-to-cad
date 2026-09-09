@@ -3,8 +3,8 @@ name: Deploy Docs
 # Deploys the docs site from a ref of this repository -- main by default.
 #
 # The docs app is a website, not something anyone installs. It builds against
-# repo-root packages/ (apps/docs/tsconfig.json maps cadgen-js/* to
-# ../../packages/cadgen-js/src/*), so it needs the source tree, which every ref
+# compiled @hardcore/core exports, built through the root npm workspace. It
+# needs the shared source tree and root lockfile, which every ref
 # of main is. Releases pass the release commit itself, which carries the bumped
 # VERSION and the stamped apps/docs/package.json the site header reads. To
 # redeploy a past release, pass its tag (`v0.5.0`; bare `0.4.28` before 0.5.0).
@@ -50,7 +50,7 @@ jobs:
         run: |
           missing=""
           [ -d apps/docs ] || missing="$missing apps/docs/"
-          [ -d packages/cadgen-js/src ] || missing="$missing packages/cadgen-js/src"
+          [ -d packages/core/src ] || missing="$missing packages/core/src"
           if [ -n "$missing" ]; then
             echo "This ref cannot build the docs site; missing:$missing" >&2
             echo "This looks like a publish commit from before main carried apps/ and packages/." >&2

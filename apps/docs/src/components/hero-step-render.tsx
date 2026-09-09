@@ -11,18 +11,18 @@ import {
   animationClipDuration,
   findAnimationClip,
   firstAnimationClipId,
-} from "cadgen-js/common/animationClock.js";
-import { CAD_SCENE_SCALE, buildModel } from "cadgen-js/common/cadScene.js";
-import { loadSourceAnimation } from "cadgen-js/common/renderModule.js";
-import { renderModel } from "cadgen-js/common/renderModel.js";
+} from "@hardcore/core/common/animationClock.js";
+import { CAD_SCENE_SCALE, buildModel } from "@hardcore/core/common/cadScene.js";
+import { loadSourceAnimation } from "@hardcore/core/common/renderModule.js";
+import { renderModel } from "@hardcore/core/common/renderModel.js";
 import {
   loadSource,
   packageSourceFromBaseUrl,
   stepParameterRuntime,
-} from "cadgen-js/common/source.js";
-import { cloneThemePresetSettings } from "cadgen-js/common/themeSettings.js";
+} from "@hardcore/core/common/source.js";
+import { cloneThemePresetSettings } from "@hardcore/core/common/themeSettings.js";
 
-// The hero renders the planetary gear STEP the way every cadgen-js client
+// The hero renders the planetary gear STEP the way every @hardcore/core client
 // renders a STEP: the model's render package (exact surfaces, tessellated in
 // the browser) plus its sidecar (kinematics for the mate graph, copied
 // animation clips for choreography). No GLB export, no site-local gear math —

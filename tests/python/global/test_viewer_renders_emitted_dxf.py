@@ -1,7 +1,7 @@
 """The Viewer must render every entity kind the DXF engine can write.
 
 Two halves of one product, in two languages: `cadgen._internal.dxf_emit` writes
-drawings through build123d's `ExportDXF`, and `packages/cadgen-js/src/lib/dxf/
+drawings through build123d's `ExportDXF`, and `packages/core/src/lib/dxf/
 parseDxf.js` is what the Viewer and the snapshot renderer read them back with.
 An entity the engine emits and the parser does not know simply vanishes from the
 render — a hole that is cut but not shown, which is the worst kind of silence in
@@ -23,7 +23,7 @@ from tests.python.support.paths import add_repo_path, repo_path
 
 add_repo_path("packages/cadgen/src")
 
-PARSER = repo_path("packages/cadgen-js/src/lib/dxf/parseDxf.js")
+PARSER = repo_path("packages/core/src/lib/dxf/parseDxf.js")
 # `if (entityType === "SPLINE") {` — the parser's dispatch, plus the explicit
 # list of types it knowingly ignores.
 _DISPATCH = re.compile(r'entityType === "([A-Z0-9_]+)"')
@@ -71,7 +71,7 @@ class ViewerRendersEmittedDxfTest(unittest.TestCase):
             [],
             missing,
             f"{PARSER.name} does not handle {missing}, which the DXF engine emits. "
-            "Add support in packages/cadgen-js and regenerate the bundles, or the "
+            "Add support in packages/core and regenerate the bundles, or the "
             "Viewer will silently drop that geometry.",
         )
 

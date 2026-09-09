@@ -7,8 +7,8 @@
  *
  * 1. The wheel. Built the way `release-publish.yml` builds the one it
  *    publishes — `python -m build packages/cadgen` — and copied in. The
- *    wheel is what `pip install --find-links resources/cadgen cadgen==<v>`
- *    resolves the exact-version requirement to (src/main/cad/runtime.ts).
+ *    runtime bundling passes this exact wheel path to pip, so an index or pip
+ *    cache can supply dependencies but cannot substitute another cadgen build.
  *    In CI this step does not run: the `desktop` job downloads the wheel the
  *    `publish` job just built and uploaded into the same directory, so the
  *    app bundles the very file that went to PyPI.
@@ -19,9 +19,8 @@
  *    was tested against, and nothing the venv happens to hold beyond them
  *    (pytest, playwright, the editable cadgen itself) pins anything.
  *
- * Both are build outputs: gitignored, recreated on demand, and absent from a
- * checkout that never ran this — which the app handles (it installs from
- * PyPI with no constraints, and Settings says so).
+ * Both are build outputs: gitignored, recreated on demand, and required before
+ * a packaged CAD runtime can be built.
  */
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";

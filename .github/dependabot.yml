@@ -3,7 +3,7 @@
 # `dependencies` label, which .github/release.yml files under Maintenance.
 #
 # packages/cadgen's pins are the Python floor a released wheel is built against, so
-# they are reviewed like any other change; cadgen-js/viewer/docs are the three npm
+# they are reviewed like any other change; @hardcore/core/viewer/docs are the three npm
 # trees CI installs (.github/actions/setup-deps).
 version: 2
 updates:
@@ -22,46 +22,15 @@ updates:
           - patch
 
   - package-ecosystem: npm
-    directory: /apps/viewer
+    directory: /
     schedule:
       interval: weekly
     labels:
       - dependencies
     groups:
-      viewer-minor-patch:
-        patterns:
-          - "*"
-        update-types:
-          - minor
-          - patch
-
-  - package-ecosystem: npm
-    directory: /packages/cadgen-js
-    schedule:
-      interval: weekly
-    labels:
-      - dependencies
-    groups:
-      cadgen-js-minor-patch:
-        patterns:
-          - "*"
-        update-types:
-          - minor
-          - patch
-
-  - package-ecosystem: npm
-    directory: /apps/docs
-    schedule:
-      interval: weekly
-    labels:
-      - dependencies
-    groups:
-      docs-minor-patch:
-        patterns:
-          - "*"
-        update-types:
-          - minor
-          - patch
+      npm-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
 
   - package-ecosystem: pip
     directory: /packages/cadgen
