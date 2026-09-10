@@ -131,7 +131,7 @@ test("a Codex session opens a STEP in the explorer through open_file", async () 
   await expect(page.getByRole("tab", { name: /part\.step/ })).toBeVisible({ timeout: 30_000 });
   if (CAD_PYTHON) {
     await expect(page.locator("canvas").first()).toBeVisible({ timeout: 90_000 });
-    await expect(page.getByRole("tab", { name: "Geometry" })).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByRole("tab", { name: "Model" })).toBeVisible({ timeout: 90_000 });
   }
 
   // And the session recorded the tool call, with the server's answer in it.

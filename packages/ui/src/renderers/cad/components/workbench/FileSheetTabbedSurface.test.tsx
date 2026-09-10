@@ -13,9 +13,9 @@ function Tree({ active }: { active: boolean }) {
 
 function Inspector() {
   const [open, setOpen] = useState(['tree']);
-  return <FileSheetTabbedSurface kind="step" openSectionIds={open} onOpenSectionIdsChange={setOpen} sections={[
-    { id: 'tree', title: 'Geometry', keepMounted: true, scrollsContent: true, content: (active: boolean) => <Tree active={active} /> },
-    { id: 'features', title: 'Source features', keepMounted: true, scrollsContent: true, content: <p>Source operations</p> },
+  return <FileSheetTabbedSurface kind="mesh" openSectionIds={open} onOpenSectionIdsChange={setOpen} sections={[
+    { id: 'tree', title: 'Model', keepMounted: true, scrollsContent: true, content: (active: boolean) => <Tree active={active} /> },
+    { id: 'details', title: 'Details', keepMounted: true, scrollsContent: true, content: <p>Model details</p> },
   ]} />;
 }
 
@@ -24,10 +24,10 @@ it('keeps tree state and scroll when switching tabs, with inactive content hidde
   fireEvent.click(screen.getByRole('button', { name: 'Expand model' }));
   const panel = document.querySelector('[data-file-sheet-tab-panel="tree"]')!;
   panel.scrollTop = 120;
-  fireEvent.click(screen.getByRole('tab', { name: 'Source features' }));
+  fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
   expect(screen.queryByRole('button', { name: /model/ })).toBeNull();
   expect(panel.getAttribute('hidden')).toBe('');
-  fireEvent.click(screen.getByRole('tab', { name: 'Geometry' }));
+  fireEvent.click(screen.getByRole('tab', { name: 'Model' }));
   expect(screen.getByRole('button', { name: 'Expand model' }).getAttribute('aria-expanded')).toBe('true');
   expect(document.querySelector('[data-file-sheet-tab-panel="tree"]')).toBe(panel);
   expect(panel.scrollTop).toBe(120);

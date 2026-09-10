@@ -3,7 +3,7 @@ import { buildEdgeChainGraph } from "../workbench/edgeChainSelection.js";
 
 import StepMeasurementsSection from "../components/workbench/StepMeasurementsSection.js";
 import SelectionFilterMenu from "../components/workbench/SelectionFilterMenu.jsx";
-import { designFeatureContextText, designFeaturePromptText } from "../workbench/designFeaturePrompt.js";
+import { stepGeometryContextText, stepGeometryPromptText } from "../workbench/stepGeometryPrompt.js";
 import { filterSelectionReferences, toggleReferenceGroupSelection, connectedReferenceIds, MEASURE_SELECTION_FILTERS } from "../workbench/selectionFilter.js";
 import { buildTangentFaceGraph } from "../workbench/tangentFaceSelection.js";
 
@@ -351,9 +351,9 @@ function CadFileViewSurface({
   const [hoveredListReferenceId, setHoveredListReferenceId] = useState("");
   const [hoveredModelReferenceId, setHoveredModelReferenceId] = useState("");
   const [selectionFilter, setSelectionFilter] = useState("all");
-  const [designHighlight, setDesignHighlight] = useState(null);
-  const handleDesignHighlight = useCallback((selection, label, context) => {
-    setDesignHighlight(selection ? { ...selection, label, context } : null);
+  const [inspectionHighlight, setInspectionHighlight] = useState(null);
+  const handleInspectionHighlight = useCallback((selection, label, context) => {
+    setInspectionHighlight(selection ? { ...selection, label, context } : null);
   }, []);
   const [selectionFilterNotice, setSelectionFilterNotice] = useState("");
   const [selectedPartIds, setSelectedPartIds] = useState([]);
@@ -2686,7 +2686,7 @@ function CadFileViewSurface({
   useEffect(() => {
     setSelectionFilter("all");
     setSelectionFilterNotice("");
-    setDesignHighlight(null);
+    setInspectionHighlight(null);
   }, [selectedKey, artifactRevision]);
   const selectedDisplayEdgesMatch =
     !!displayEdgeState &&
@@ -3188,7 +3188,7 @@ function CadFileViewSurface({
   }, [selectedKey]);
   useEffect(() => {
     setMeasureRulerState((current) => measureRulerStateForChange(current, { toolActive: measureModeActive }));
-    if (measureModeActive) setDesignHighlight(null);
+    if (measureModeActive) setInspectionHighlight(null);
   }, [measureModeActive]);
   // A new measurement reveals the tab that holds it. Re-appending (rather than
   // just ensuring membership) moves it to the end, and last-in-pane wins tab
@@ -3921,7 +3921,7 @@ function CadFileViewSurface({
     if (!normalizedNodeId || selectedFileSheetKind !== "step") {
       return;
     }
-    setActiveTreeNodeScrollKey(source === "viewer" || source === "reference" ? `${Date.now()}:${normalizedNodeId}` : "");
+    setActiveTreeNodeScrollKey(source === "viewer" || source === "reference" ? `${source}:${Date.now()}:${normalizedNodeId}` : "");
     openFileSheetSection(FILE_SHEET_SECTION_IDS.STEP_TREE, {
       openSheet: shouldOpenFileSheetForSelectionReveal({ isDesktop, source }),
       activate: source === "reference"
@@ -4032,9 +4032,9 @@ function CadFileViewSurface({
     if (topologyTarget) {
       loadFilterTopology(topologyTarget);
       setSelectionFilterNotice("");
-    } else setSelectionFilterNotice("Select a part in Geometry to load its faces and edges.");
+    } else setSelectionFilterNotice("Select a part in Model to load its faces and edges.");
   }, [selectionFilter, topologyTarget, loadFilterTopology]);
-  const loadDesignTopology = useCallback((partIds = []) => {
+  const loadInspectionTopology = useCallback((partIds = []) => {
     if (!isAssemblyView) setLargeFileState(current => current.selectableTopologyEnabled ? current : ({ ...current, selectableTopologyEnabled: true }));
     else if (partIds.length === 1 && loadableStepTreeTopologyNodeIdSet.has(partIds[0])) {
       setExpandedStepTreeNodeIds(current => current.includes(partIds[0]) ? current : [...current, partIds[0]]);
@@ -4059,27 +4059,28 @@ function CadFileViewSurface({
   const handleAddSelection = useCallback(() => {
     addReferenceText(canonicalCopySelectionLines.join("\n"));
   }, [addReferenceText, canonicalCopySelectionLines]);
-  const handleAddDesignFeature = useCallback((selection, label) => {
+  const handleAddInspectedGeometry = useCallback((selection, label) => {
     if (viewerLoading || stepUpdateInProgress) return;
-    const text = designFeaturePromptText(selection, {
+    const text = stepGeometryPromptText(selection, {
       referenceMap: effectiveActiveReferenceMap,
       parts: selectedMeshData?.parts || EMPTY_LIST,
       entry: selectedEntry,
     });
     const references = referencesForHost(text).map(reference => ({ ...reference, label }));
+    if (!references.length) return;
     if (typeof onPromptContext === "function" && selection.context?.file === selectedEntry?.file) {
       const context = { ...selection.context, file: cadFileParamForEntry(selectedEntry) };
-      onPromptContext({ text: designFeatureContextText(context, { includeModel: !references.length }), references });
+      onPromptContext({ text: stepGeometryContextText(context, { includeModel: !references.length }), references });
     } else for (const reference of references) onReference?.(reference);
   }, [viewerLoading, stepUpdateInProgress, onReference, onPromptContext, effectiveActiveReferenceMap, selectedMeshData, selectedEntry, referencesForHost]);
 
   const handleAddCurrentSelection = useCallback(() => {
-    if (designHighlight) {
-      if (designHighlight.label) handleAddDesignFeature(designHighlight, designHighlight.label);
+    if (inspectionHighlight) {
+      if (inspectionHighlight.label) handleAddInspectedGeometry(inspectionHighlight, inspectionHighlight.label);
       return;
     }
     handleAddSelection();
-  }, [designHighlight, handleAddDesignFeature, handleAddSelection]);
+  }, [inspectionHighlight, handleAddInspectedGeometry, handleAddSelection]);
 
   const handleCopySelection = useCallback(async () => {
     setScreenshotStatus("");
@@ -4808,12 +4809,12 @@ function CadFileViewSurface({
     }
     const topologyReference = effectiveActiveReferenceMap.get(nextReferenceId) || null;
     if (selectionFilter === "edge-chain" && topologyReference?.selectorType === "edge") {
-      setDesignHighlight(null);
+      setInspectionHighlight(null);
       selectReferenceGroup(connectedReferenceIds(edgeChains, topologyReference.id), { multiSelect });
       return;
     }
     if (selectionFilter === "tangent-faces" && topologyReference?.selectorType === "face") {
-      setDesignHighlight(null);
+      setInspectionHighlight(null);
       selectReferenceGroup(connectedReferenceIds(tangentFaces, topologyReference.id), { multiSelect });
       return;
     }
@@ -5667,14 +5668,14 @@ function CadFileViewSurface({
   const selectionToolActive = hasCapability(effectiveRenderFormat, "topology") &&
     tabToolMode === TAB_TOOL_MODE.REFERENCES;
   const drawToolActive = drawModeActive;
-  const canAddFeatureContext = typeof onPromptContext === "function" &&
-    designHighlight?.context?.file === selectedEntry?.file;
+  const canAddInspectionContext = typeof onPromptContext === "function" &&
+    inspectionHighlight?.context?.file === selectedEntry?.file;
   let selectionCount = selectionCountBase;
-  if (designHighlight) {
+  if (inspectionHighlight) {
     selectionCount = 0;
-    if (designHighlight.label && !viewerLoading && !stepUpdateInProgress) {
-      if (canAddFeatureContext) selectionCount = 1;
-      else if (typeof onReference === "function") selectionCount = designHighlight.faceIds.length + designHighlight.partIds.length;
+    if (inspectionHighlight.label && !viewerLoading && !stepUpdateInProgress) {
+      if (canAddInspectionContext) selectionCount = inspectionHighlight.faceIds.length + inspectionHighlight.partIds.length;
+      else if (typeof onReference === "function") selectionCount = inspectionHighlight.faceIds.length + inspectionHighlight.partIds.length;
     }
   }
   const activeReferenceId = String(selectedReferenceIds[selectedReferenceIds.length - 1] || "").trim();
@@ -5764,7 +5765,7 @@ function CadFileViewSurface({
       data-cad-surface
       tabIndex={-1}
       onPointerDownCapture={event => {
-        if (event.target instanceof Element && event.target.closest("canvas")) { setDesignHighlight(null); event.currentTarget.focus({ preventScroll: true }); }
+        if (event.target instanceof Element && event.target.closest("canvas")) { setInspectionHighlight(null); event.currentTarget.focus({ preventScroll: true }); }
       }}
       ref={hostRef}
     >
@@ -5834,10 +5835,10 @@ function CadFileViewSurface({
                   assemblyPickingActive={viewerInAssemblyMode}
                   assemblyParts={viewerAssemblyRenderParts}
                   hiddenPartIds={viewerHiddenPartIds}
-                  selectedPartIds={designHighlight ? designHighlight.partIds : viewerSelectedPartIds}
+                  selectedPartIds={inspectionHighlight ? inspectionHighlight.partIds : viewerSelectedPartIds}
                   hoveredPartId={viewerHoveredPartIds}
                   hoveredReferenceId={effectiveHoveredReferenceId}
-                  selectedReferenceIds={designHighlight ? designHighlight.faceIds : selectedReferenceIds}
+                  selectedReferenceIds={inspectionHighlight ? inspectionHighlight.faceIds : selectedReferenceIds}
                   selectorRuntime={effectiveSelectorRuntime}
                   displayEdgeRuntime={selectedDisplayEdgeRuntime}
                   selectionFilter={selectionFilter}
@@ -5858,8 +5859,8 @@ function CadFileViewSurface({
                   handleModelReferenceContext={handleModelReferenceContext}
                   onMeasurePick={handleMeasurePick}
                   onMeasureHoverPoint={handleMeasureHoverPoint}
-                  activeMeasurementId={designHighlight?.measurement?.id || activeMeasureId}
-                  measureState={designHighlight?.measurement ? { measurements: [designHighlight.measurement] } : measureRulerState}
+                  activeMeasurementId={inspectionHighlight?.measurement?.id || activeMeasureId}
+                  measureState={inspectionHighlight?.measurement ? { measurements: [inspectionHighlight.measurement] } : measureRulerState}
                   viewerContextMenu={viewerContextMenu}
                   onViewerContextMenuClose={closeViewerContextMenu}
                   onViewerContextMenuCopyReference={copyViewerContextMenuReference}
@@ -5975,7 +5976,7 @@ function CadFileViewSurface({
             {selectedFileSheetKind === "step" ? (
               <StepFileSheet
                 key={`step:${selectedKey}`}
-                designOutline={{ client, file: selectedEntry?.file, revision: artifactRevision, onOpenFile, references: !viewerLoading && !stepUpdateInProgress ? isAssemblyView ? assemblyStepTreeTopologyReferences : selectedSelectorRuntime?.references || EMPTY_LIST : EMPTY_LIST, parts: !viewerLoading && !stepUpdateInProgress ? selectedMeshData?.parts || EMPTY_LIST : EMPTY_LIST, onHighlight: handleDesignHighlight, onLoadTopology: loadDesignTopology }}
+                geometryInspection={{ file: selectedEntry?.file, revision: artifactRevision, references: !viewerLoading && !stepUpdateInProgress ? isAssemblyView ? assemblyStepTreeTopologyReferences : selectedSelectorRuntime?.references || EMPTY_LIST : EMPTY_LIST, parts: !viewerLoading && !stepUpdateInProgress ? selectedMeshData?.parts || EMPTY_LIST : EMPTY_LIST, onHighlight: handleInspectionHighlight, onLoadTopology: loadInspectionTopology }}
                 open={fileSheetOpen}
                 isDesktop={isDesktop}
                 width={activeSheetWidth || tabToolsWidth}
@@ -5999,6 +6000,8 @@ function CadFileViewSurface({
                 focusedNodeIds={focusedAssemblyNodeIds}
                 onSelectTreeNode={selectStepTreeNode}
                 onSelectReferenceNode={selectStepTreeReferenceNode}
+                onSelectReferenceGroup={selectReferenceGroup}
+                onRevealGeometrySelection={() => revealStepTreeNode(activeStepTreeNodeId, { source: "reference", expandAncestors: true })}
                 onCopyTreeNodeReference={copyStepTreeContextMenuReference}
                 onFocusTreeNode={focusStepTreeNode}
                 onUnfocusTreeNode={handleExitSingleIsolate}
