@@ -1,0 +1,11 @@
+trimesh
+numpy
+rtree
+# trimesh treats these as optional extras, but this tool needs them on every
+# run: scipy backs the connected-components call behind mesh.body_count and
+# mesh.split, and networkx + lxml are required to load the .3mf that SKILL.md
+# advertises. Without them the first measure of any mesh dies with a raw
+# ModuleNotFoundError.
+scipy
+networkx
+lxml

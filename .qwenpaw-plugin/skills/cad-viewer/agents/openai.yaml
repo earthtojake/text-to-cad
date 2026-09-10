@@ -1,0 +1,4 @@
+interface:
+  display_name: "CAD Viewer"
+  short_description: "Open CAD, G-code, and robot files in Viewer."
+  default_prompt: "Use $cad-viewer to start CAD Viewer and return review links for explicit CAD, G-code, or robot-description files."

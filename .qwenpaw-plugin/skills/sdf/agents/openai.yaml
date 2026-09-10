@@ -1,0 +1,4 @@
+interface:
+  display_name: "SDF"
+  short_description: "Author and validate SDFormat robot models."
+  default_prompt: "Use $sdf to author, update, and validate SDFormat/SDF robot or simulator models as direct XML, handing new or changed SDFs to $cad-viewer when available."

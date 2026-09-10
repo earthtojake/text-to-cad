@@ -1,0 +1,4 @@
+interface:
+  display_name: "DXF"
+  short_description: "Generate and validate 2D DXF drawings."
+  default_prompt: "Use $dxf to create, regenerate, and validate explicit DXF drawing files from gen_dxf() Python sources, handing outputs to $cad-viewer when available."
