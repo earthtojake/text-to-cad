@@ -156,7 +156,7 @@ test("the viewer's Add to prompt lands a chip, and the camera an image", async (
   await filter.fill(STEP);
   await page.getByRole("option", { name: STEP, exact: false }).first().click();
   await expect(page.locator("canvas").first()).toBeVisible({ timeout: 60_000 });
-  const tree = page.getByRole("tab", { name: "Geometry" });
+  const tree = page.getByRole("tab", { name: "Model", exact: true });
   await expect(tree).toBeVisible({ timeout: 90_000 });
   await tree.click();
 
