@@ -31,7 +31,7 @@ test('Model tree groups collapsed faces and adds measured STEP references to the
     const page = await app.firstWindow();
     test.skip((await page.evaluate(() => window.hardcore.runtime.status())).state !== 'ready', 'CAD runtime required');
     const sourceRequests = [];
-    page.on('request', request => { if (request.url().includes('/__cad/design-outline')) sourceRequests.push(request.url()); });
+    page.on('request', request => { if (/\/__cad\/(design-outline|reconstruction)/.test(request.url())) sourceRequests.push(request.url()); });
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
     let loading = false;
@@ -104,6 +104,11 @@ test('Model tree groups collapsed faces and adds measured STEP references to the
     await expect(chip).toHaveAttribute('data-selector',/f[0-9]/);
     await expect(page.locator('[data-composer]')).not.toContainText('.py');
     await expect(page.getByRole('tab',{name:'Source features'})).toHaveCount(0);
+    await page.getByRole('tab',{name:'features',exact:true}).click();
+    await expect(page.getByRole('list',{name:'Inferred modeling operations'}).getByRole('button',{name:/^Select /}).first()).toBeVisible({timeout:30000});
+    await expect(page.getByRole('button',{name:/Play (build|assembly)/})).toHaveCount(0);
+    await page.getByRole('tab',{name:'geometry',exact:true}).click();
+    await expect(tree).toBeVisible();
     assert.deepEqual(sourceRequests,[]);
     assert.deepEqual(errors,[]);
     await page.screenshot({path:`${output}/surfaces.png`});
