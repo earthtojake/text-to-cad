@@ -33,7 +33,6 @@ export default function ModelingTree({ modeling, active, disabled, references=EM
   const componentIds=useMemo(()=>[...new Set(descriptor?.occurrences.map(o=>o.component)||[])],[descriptor]);
   const selectionOccurrences=[...new Set(references.filter(r=>selectedReferenceIds.includes(r.id)).map(r=>r.occurrenceId).filter(Boolean))];
   const partId=selectionOccurrences.length===1 ? selectionOccurrences[0] : selectedPartIds.length===1 ? selectedPartIds[0] : selected?.occurrenceId;
-  const currentPart=descriptor?.occurrences.find(o=>o.id===partId) || (descriptor?.occurrences.length===1 ? descriptor.occurrences[0] : null);
   useEffect(()=>{
     if(!partId)return;
     const find=nodes=>{for(const node of nodes){if(node.occurrenceId===partId)return [node.id];const path=find(node.children||[]);if(path)return [node.id,...path];}return null;};
@@ -74,12 +73,10 @@ export default function ModelingTree({ modeling, active, disabled, references=EM
   const selection=new Set(selectedReferenceIds),showDetails=selected && (pending || ids.some(id=>selection.has(id)));
   const empty=descriptor && done===componentIds.length && !failed && componentIds.every(id=>!results[id]?.tree?.length);
   return <div className="flex h-full min-h-0 flex-col text-xs" aria-label="Modeling tree">
-    <div className="space-y-2 border-b border-sidebar-border/60 p-2">
-      <div className="flex justify-between gap-2 text-micro text-muted-foreground"><span className="truncate" title={currentPart?.name}>{currentPart?.name || 'Features'}</span><span title="Inferred from STEP geometry, not original history.">Inferred · read-only</span></div>
+    {(loading || error || failed>0) && <div className="space-y-2 border-b border-sidebar-border/60 p-2">
       {loading && <p role="status" className="text-micro text-muted-foreground">{descriptor ? `Recognizing geometry · ${done} of ${componentIds.length} components` : 'Loading model geometry…'}</p>}
       {(error || failed>0) && <p role="alert" className="text-micro text-muted-foreground">{error || `${failed} ${failed===1?'component is':'components are'} unavailable.`} <button type="button" className="underline" onClick={retryFailed}>Retry</button></p>}
-      {!loading && !error && !empty && <p className="text-micro text-muted-foreground">Inferred features · original build order unknown.</p>}
-    </div>
+    </div>}
     <InspectorSplit title={selected?.label} label="Modeling details" details={showDetails && <div className="space-y-3 p-3" aria-label="Modeling details">
       {!!selected.measurements?.length && <dl className="space-y-2">{selected.measurements.map(([label,value,unit])=><div key={label} className="flex flex-wrap justify-between gap-x-3 gap-y-1"><dt className="text-muted-foreground">{label}</dt><dd className="tabular-nums">{number(value)} {unit}</dd></div>)}</dl>}
       {selected.note && <p className="text-micro leading-relaxed text-muted-foreground">{selected.note}</p>}
