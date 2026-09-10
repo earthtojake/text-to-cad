@@ -269,7 +269,9 @@ class CadApp:
     # --- server info ------------------------------------------------------
 
     def server_info(self) -> dict:
+        from .reconstruction import enabled as reconstruction_enabled
         return {
+            "reconstructionExperiment": reconstruction_enabled(),
             "app": "cad-viewer",
             "viewerVersion": self.viewer_version,
             # The start-time token, NOT identity_token() re-evaluated: a
@@ -479,6 +481,12 @@ class CadApp:
                     response.send_empty(204)
                 elif pathname == TESS_CACHE_PROBE_PATH:
                     self._handle_tess_probe(request, response)
+                elif pathname == "/__cad/reconstruction":
+                    from .reconstruction import reconstruct, MAX_INPUT
+                    if int(request.header("content-length") or "0") > MAX_INPUT:
+                        response.send_json(413, {"error": "Reconstruction recipe exceeds the size limit."})
+                        return
+                    response.send_json(200, reconstruct(self.root_path, query.get("file") or "", request.body()))
                 elif pathname == TESS_CACHE_BATCH_PATH:
                     # Matched BEFORE the prefix branch: /__tess_cache/batch
                     # matches both.
