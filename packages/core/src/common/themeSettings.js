@@ -1115,24 +1115,24 @@ const WORKBENCH_BASE_THEME_SETTINGS = Object.freeze({
   }
 });
 
-// Workbench dark mode treatment: a deep, slightly muted blue-slate. Mode
+// Workbench dark mode treatment: a neutral charcoal canvas. Mode
 // overrides can only swap colors, not light intensities, so dark-part
 // visibility is tuned entirely through these colors: lifted ambient and
 // hemisphere-ground fill so shaded faces of dark parts keep their form and
 // a canvas/floor luminance step for silhouette separation. Edges stay deep
 // navy so they read as subtle technical linework on light fills; wireframe
 // display relies on the automatic light-edge contrast fallback.
-const WORKBENCH_DARK_FLOOR_COLOR = "#202832";
+const WORKBENCH_DARK_FLOOR_COLOR = "#383838";
 
 const WORKBENCH_DARK_THEME_SETTINGS = Object.freeze({
   ...DARKOAL_THEME_SETTINGS,
   background: {
     ...DARKOAL_THEME_SETTINGS.background,
-    solidColor: "#181f28",
-    linearStart: "#242e3a",
-    linearEnd: "#0c1016",
-    radialInner: "#293443",
-    radialOuter: "#0c1016"
+    solidColor: "#333333",
+    linearStart: "#3b3b3b",
+    linearEnd: "#2b2b2b",
+    radialInner: "#404040",
+    radialOuter: "#2b2b2b"
   },
   floor: {
     ...DARKOAL_THEME_SETTINGS.floor,
@@ -1439,7 +1439,7 @@ export const THEME_PRESETS = Object.freeze([
     id: "workbench-dark",
     label: "Dark",
     preview: {
-      background: "#181f28",
+      background: "#333333",
       modelColor: "#b6c4ce"
     },
     settings: WORKBENCH_DARK_THEME_PRESET_SETTINGS

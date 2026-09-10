@@ -258,12 +258,12 @@ else that needs a real database belongs in the e2e.
 
 ## Brand
 
-The sidebar uses the original faceted star converted directly to grayscale,
+The sidebar uses the original faceted star in its original blue,
 beside “Hardcore” in the regular system typeface (`features/sidebar/Wordmark.tsx`).
 The mark in `src/renderer/assets/brand` embeds the original star pixels with
-an SVG saturation filter and exterior clip. It is not a path-only vector.
+an exterior SVG clip. It is not a path-only vector.
 
-The Dock and packaged app icon use this same grayscale star on a dark tile.
+The Dock and packaged app icon use this same blue star on a dark tile.
 The legacy H export assets below remain available separately.
 
 HARDCORE, set in JetBrains Mono ExtraBold Italic and drawn twice: a light-blue
@@ -273,7 +273,7 @@ scaled, printed, and at 16px.
 
 ```sh
 npm run brand   # resources/brand/*.png
-npm run icons   # build/icon.png, from src/renderer/assets/brand/hardcore-monochrome.svg
+npm run icons   # build/icon.png, from src/renderer/assets/brand/hardcore-star.svg
 ```
 
 | File | What it is |
@@ -282,7 +282,7 @@ npm run icons   # build/icon.png, from src/renderer/assets/brand/hardcore-monoch
 | `resources/brand/hardcore-wordmark-light.png`, `…-light@2x.png` | the same for light surfaces, ink `#0a0a0a` |
 | `resources/brand/hardcore-h.png` | the H alone, 1024×1024, transparent, dark-surface colours. Legacy export asset |
 | `resources/brand/hardcore-h-dark.png`, `hardcore-h-light.png` | the H on a solid `#0a0a0a` / `#ffffff` square, 1024×1024 |
-| `build/icon.png` | the app icon: the grayscale star on a dark squircle tile, on macOS's icon grid |
+| `build/icon.png` | the app icon: the blue star on a dark squircle tile, on macOS's icon grid |
 
 Three numbers decide how it looks, and each is a named constant in
 `scripts/make-brand.mjs`:
@@ -351,7 +351,7 @@ stays at `0.0.0` because `VERSION` is the one canonical release version
 (AGENTS.md) — and passes anything else through to electron-builder, so
 `npm run package:mac -- --arm64 --x64` works.
 
-`npm run icons` composites the sidebar's grayscale star onto its tile and writes
+`npm run icons` composites the sidebar's blue star onto its tile and writes
 `build/icon.png`; the mark lives in one place and electron-builder derives the
 platform containers — the macOS `.icns`, the Windows `.ico` — from that one PNG
 at package time. An unpackaged app (`npm run dev`, `npx electron .`) runs inside

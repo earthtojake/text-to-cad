@@ -57,7 +57,7 @@ function windowBackgroundColor(): string {
     // No database yet is not a reason to refuse to open a window.
   }
   const dark = preference === "system" ? nativeTheme.shouldUseDarkColors : preference === "dark";
-  return dark ? "#0a0a0a" : "#ffffff";
+  return dark ? "#292929" : "#ffffff";
 }
 
 /**

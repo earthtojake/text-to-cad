@@ -13,7 +13,7 @@ const { build } = require("esbuild");
 const { chromium } = require("playwright");
 const sourceCommit = "ed6a16b25936031adfa0a6d4705d80e1c712eb37";
 const sourcePath = "apps/docs/src/lib/icon/model.mjs";
-const out = path.join(root, "apps/web/src/client/assets/brand");
+const out = path.join(root, "packages/ui/src/assets");
 await fs.mkdir(path.join(root, "tmp"), { recursive: true });
 const scratch = await fs.mkdtemp(path.join(root, "tmp/loading-icon-"));
 const size = 192;
@@ -56,7 +56,7 @@ const bundle = await build({
       const { group, prongs } = createIcon();
       group.traverse(object => {
         if (!object.isMesh) return;
-        object.material.color.set('#b8bbc0');
+        object.material.color.set('#62b7ec');
         object.material.metalness = 0.35;
         object.material.roughness = 0.35;
       });
