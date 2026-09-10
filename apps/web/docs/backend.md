@@ -163,3 +163,48 @@ actions remain outside this HTTP interface.
 Backend tests live in `tests/python/packages/cadgen/viewer` and are run by
 `scripts/test/test-python.sh`. The web app's `npm run test` covers its JavaScript
 host only.
+
+#### Experimental reconstruction
+
+`CADGEN_RECONSTRUCTION_EXPERIMENT=1` exposes `reconstructionExperiment: true` in
+server info. A guarded `POST /__cad/reconstruction?file=<STEP>` accepts
+`{tree, component, recipe, preview?}` and returns a verified preview or an explicit
+failure. `preview: false` returns only proof/status/frame-count for automatic
+background verification; full meshes are requested when playback opens.
+The current document's artifact-side tree must equal `tree`, and the component
+must belong to it. Numerical recipes are replayed in a disposable Python process;
+the long-lived HTTP server imports no kernel. The target BREP is read only after
+replay, to compare the resulting geometry. Source records are never consulted.
+
+The prototype permits one verification job at a time, 256 KiB request bodies,
+32 MiB reference BREPs, 128 recipe nodes, 24 MiB responses, and a 60-second worker
+timeout. Its temporary request/result directory is removed on completion. It
+writes no STEP files and does not change normal document compilation. Successful
+playback meshes and proof are saved through the existing opaque mesh cache. This isolated experimental job is separate from the compile pool;
+production integration should settle scheduling/cancellation before enabling it
+by default. Closing the preview cancels the client request; an already-started
+worker may finish within its bounded lifetime.
+
+Verified previews use the existing atomic `index/mesh` → object cache, plus the
+64 MiB / 128-entry in-memory LRU. Disk results survive viewer/app restarts and
+are disposable through the existing store reset/GC workflow. No project files,
+sidecars or source records are written. Keys cover exact BREP bytes, the full
+numerical recipe, interpreter implementation and installed kernel version;
+geometry, recipe or engine changes recheck. Repeated instances share results.
+Stored payload checksums and proof shape are checked on read; missing, corrupt
+or unreadable entries miss, and an unwritable cache cannot fail successful
+verification. Only successful verified playback is persisted. `CADGEN_MESH_CACHE=0`
+disables disk reads/writes. Cache access still validates the current STEP and
+component membership. One kernel job runs at a time; callers wait at most 65
+seconds for its slot. Ordinary viewing and catalog requests remain independent.
+Recognition still runs client-side on reopen; the expensive replay, Boolean
+verification and preview meshing can come from disk.
+
+The experimental recipe interpreter supports polygon/line/circle/axial sketches,
+extrude, cut, full revolve, ruled loft (2–32 section sketches), solid-tool add/cut operations, and constant-radius fillets over all edges or a
+bounded coplanar edge set with an exact expected count. Every operation consumes earlier validated dependencies
+and must produce one valid positive-volume solid. Comparison uses adaptive exact-
+surface integration, volume difference, directional Boolean differences, bounds
+and area; mesh similarity alone never verifies a candidate. Preview meshes carry optional
+triangle `indices` to share vertices within each face and stay within the existing
+response limit; this does not alter the verified BREP geometry.

@@ -1459,3 +1459,16 @@ complete Python runtime and native Node dependency closure.
   has an exports map whose `"./*"` already points at `./esm/vs/*.js`, so the
   older deep path resolves to `esm/vs/esm/vs/…` and the build fails with a
   message that names the file rather than the map.
+
+### Opt-in STEP reconstruction preview
+
+For the shared reconstruction experiment, launch with
+`CADGEN_RECONSTRUCTION_EXPERIMENT=1` in the desktop process environment. The
+managed viewer inherits it. Recognition and verification start automatically for the active STEP, including
+with the inspector closed. In Model → Features, a verified part offers Play build
+sequence to open real intermediate-solid playback. Unsupported parts retain
+partial recognition and the existing Geometry view. Normal launches hide Features and start no recognition or verification workers.
+No generator scripts or STEP files are changed; the worker publishes no store
+records. Assembly parts are verified individually in their local coordinates.
+
+See [coverage and rollback](../../packages/ui/docs/step-reconstruction-validation.md) for the test corpus, known limits, and removal instructions.
