@@ -1,4 +1,5 @@
 import type { JsonValue } from '../../file-viewer/types.js';
+import { FILE_SHEET_TAB_LAYOUT_STORAGE_KEY } from './workbench/fileSheetTabLayout.js';
 
 export interface CadPreferences {
   theme?: { themeId: string; custom: JsonValue | null };
@@ -35,6 +36,6 @@ export const CAD_LEGACY_PREFERENCE_KEYS = Object.freeze({
   themeVersion: 13,
   directory: 'cad-viewer:directory-session:v1',
   tips: 'cad-viewer:tutorial-tips:v1',
-  fileSheetTabs: 'cad-viewer:file-sheet-tab-layout:v5',
+  fileSheetTabs: FILE_SHEET_TAB_LAYOUT_STORAGE_KEY,
   resetTipsQuery: 'resetTips'
 });

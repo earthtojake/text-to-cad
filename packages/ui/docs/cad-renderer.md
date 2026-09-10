@@ -91,7 +91,7 @@ Hosts preserve these existing preference keys and precedence when migrating:
 | Global theme | `cad-viewer:theme`, schema version 13 |
 | Directory theme and layout | `cad-viewer:directory-session:v1` |
 | Seen tutorial tips | `cad-viewer:tutorial-tips:v1` |
-| Sheet tab order and split arrangement | `cad-viewer:file-sheet-tab-layout:v5` |
+| Sheet tab order and split arrangement | `cad-viewer:file-sheet-tab-layout:v6` |
 | Tip reset URL | `?resetTips` remains a web-host action |
 | Per-file CAD session | `cad-viewer:file-session:v1:<namespace>:<file>` |
 
@@ -381,3 +381,9 @@ numerical recipes: only a successful exact replay enables playback. Entries with
 no faces are reported separately from the reconstruction denominator.
 
 The entire Features experiment is gated by the host flag, including background recognition. With the flag off the Model inspector contains only geometry inspection. See [validation and rollback](step-reconstruction-validation.md).
+
+STEP models place Model, Kinematics and Animation in one top tab strip by
+default. Motion tabs appear only when their corresponding controls exist.
+Switching tabs gives the selected controls the full panel height; playback
+remains accessible from the viewer toolbar. The v6 layout resets saved STEP
+arrangements to this default and preserves other file kinds’ arrangements.
