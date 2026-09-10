@@ -14,6 +14,7 @@ import {
   setFileSheetTabSplit,
   writeFileSheetTabLayoutStore,
   FILE_SHEET_TAB_PANES,
+  FILE_SHEET_TAB_LAYOUT_STORAGE_KEY,
   MAX_FILE_SHEET_SPLIT_RATIO,
   MIN_FILE_SHEET_SPLIT_RATIO
 } from "./fileSheetTabLayout.js";
@@ -26,50 +27,42 @@ test("only step supports the split", () => {
   assert.equal(kindSupportsSplit("urdf"), false);
 });
 
-test("default step arrangement puts the tree on top and everything else on the bottom", () => {
+test("default step arrangement groups model and motion above legacy readouts", () => {
   const arrangement = defaultFileSheetTabArrangement("step", STEP_SECTIONS);
   assert.equal(arrangement.split, true);
-  assert.deepEqual(arrangement.top, ["tree"]);
-  assert.deepEqual(arrangement.bottom, ["pose", "display", "theme", "metadata"]);
+  assert.deepEqual(arrangement.top, ["tree", "pose"]);
+  assert.deepEqual(arrangement.bottom, ["display", "theme", "metadata"]);
   assert.equal(arrangement.ratio, 0.5);
 });
 
-test("pose sits between reference and display in the bottom pane", () => {
+test("pose shares the top pane with the model", () => {
   const arrangement = defaultFileSheetTabArrangement(
     "step",
     ["tree", "reference", "pose", "display"]
   );
-  assert.deepEqual(arrangement.top, ["tree"]);
-  assert.deepEqual(arrangement.bottom, ["reference", "pose", "display"]);
+  assert.deepEqual(arrangement.top, ["tree", "pose"]);
+  assert.deepEqual(arrangement.bottom, ["reference", "display"]);
 });
 
-test("pose and animation are two bottom-pane tabs, in render order", () => {
-  // The split's two systems land side by side under the tree; neither is
-  // promoted to the top pane, and Animation follows Pose.
-  const arrangement = defaultFileSheetTabArrangement(
-    "step",
-    ["tree", "reference", "pose", "animation", "measurements", "display"]
-  );
-  assert.deepEqual(arrangement.top, ["tree"]);
-  assert.deepEqual(arrangement.bottom, ["reference", "pose", "animation", "measurements", "display"]);
-  // A model with clips but no mates renders Animation alone — it must not
-  // inherit Pose's slot rules by being appended somewhere else.
-  const clipsOnly = defaultFileSheetTabArrangement(
-    "step",
-    ["tree", "reference", "animation", "measurements", "display"]
-  );
-  assert.deepEqual(clipsOnly.bottom, ["reference", "animation", "measurements", "display"]);
+test("model and supported motion controls share one full-height strip", () => {
+  for (const tabs of [["tree"], ["tree", "pose"], ["tree", "animation"], ["tree", "pose", "animation"]]) {
+    const arrangement = defaultFileSheetTabArrangement("step", tabs);
+    assert.equal(arrangement.split, false);
+    assert.deepEqual(arrangement.top, tabs);
+    assert.deepEqual(arrangement.bottom, []);
+    const active = activateFileSheetTab(["tree"], arrangement, "step", "top", tabs.at(-1));
+    const resolved = resolveFileSheetTabPanes(arrangement, "step", active);
+    assert.equal(resolved.panes.length, 1);
+    assert.equal(resolved.panes[0].activeId, tabs.at(-1));
+  }
 });
 
-test("a stored strip picks up animation at its render-order slot", () => {
-  // Stored from a model with mates only; the next one also ships clips.
-  const stored = { split: true, top: ["tree"], bottom: ["reference", "pose", "display"] };
-  const normalized = normalizeFileSheetTabArrangement(
-    stored,
-    "step",
-    ["tree", "reference", "pose", "animation", "display"]
-  );
-  assert.deepEqual(normalized.bottom, ["reference", "pose", "animation", "display"]);
+test("a stored model strip picks up motion controls in render order", () => {
+  const stored = { split: false, top: ["tree", "animation"], bottom: [] };
+  const normalized = normalizeFileSheetTabArrangement(stored, "step", ["tree", "pose", "animation"]);
+  assert.deepEqual(normalized.top, ["tree", "pose", "animation"]);
+  assert.deepEqual(normalized.bottom, []);
+  assert.equal(normalized.split, false);
 });
 
 test("default non-split-kind arrangement is a single strip", () => {
@@ -101,10 +94,9 @@ test("step with only a tree collapses to a single strip", () => {
 test("normalize drops missing tabs and slots new ones into their default pane", () => {
   const stored = { split: true, top: ["tree"], bottom: ["display", "theme"], ratio: 0.6 };
   const normalized = normalizeFileSheetTabArrangement(stored, "step", STEP_SECTIONS);
-  // pose + metadata are newly rendered; both default to the bottom pane and
-  // land at their render-order position (pose before display, metadata last).
-  assert.deepEqual(normalized.top, ["tree"]);
-  assert.deepEqual(normalized.bottom, ["pose", "display", "theme", "metadata"]);
+  // Newly rendered pose joins the model; metadata stays with the readouts.
+  assert.deepEqual(normalized.top, ["tree", "pose"]);
+  assert.deepEqual(normalized.bottom, ["display", "theme", "metadata"]);
   assert.equal(normalized.ratio, 0.6);
 });
 
@@ -116,8 +108,9 @@ test("issues and pose slot into render order when they first appear", () => {
     "step",
     ["status", "tree", "reference", "pose", "display"]
   );
-  // Issues leads, pose sits between reference and display — not appended.
-  assert.deepEqual(normalized.bottom, ["status", "reference", "pose", "display"]);
+  // Issues leads the readouts; pose joins the model.
+  assert.deepEqual(normalized.top, ["tree", "pose"]);
+  assert.deepEqual(normalized.bottom, ["status", "reference", "display"]);
   // Leftmost is the pane fallback, so Issues is what you land on.
   assert.equal(resolveFileSheetTabPanes(normalized, "step", []).panes[1].activeId, "status");
 });
@@ -143,8 +136,8 @@ test("normalize re-derives the default split when a requested split has an empty
   const stored = { split: true, top: ["tree", "pose", "display", "theme", "metadata"], bottom: [] };
   const normalized = normalizeFileSheetTabArrangement(stored, "step", STEP_SECTIONS);
   assert.equal(normalized.split, true);
-  assert.deepEqual(normalized.top, ["tree"]);
-  assert.deepEqual(normalized.bottom, ["pose", "display", "theme", "metadata"]);
+  assert.deepEqual(normalized.top, ["tree", "pose"]);
+  assert.deepEqual(normalized.bottom, ["display", "theme", "metadata"]);
 });
 
 test("normalize forces a single strip for non-split kinds", () => {
@@ -158,8 +151,8 @@ test("normalize forces a single strip for non-split kinds", () => {
 test("moving a tab across panes updates assignment", () => {
   const arrangement = defaultFileSheetTabArrangement("step", STEP_SECTIONS);
   const next = moveFileSheetTab(arrangement, "step", "display", FILE_SHEET_TAB_PANES.TOP, 1);
-  assert.deepEqual(next.top, ["tree", "display"]);
-  assert.deepEqual(next.bottom, ["pose", "theme", "metadata"]);
+  assert.deepEqual(next.top, ["tree", "display", "pose"]);
+  assert.deepEqual(next.bottom, ["theme", "metadata"]);
   assert.equal(next.split, true);
 });
 
@@ -179,8 +172,8 @@ test("toggling the split off merges panes, on restores the default split", () =>
 
   const reSplit = setFileSheetTabSplit(merged, "step", true, STEP_SECTIONS);
   assert.equal(reSplit.split, true);
-  assert.deepEqual(reSplit.top, ["tree"]);
-  assert.deepEqual(reSplit.bottom, ["pose", "display", "theme", "metadata"]);
+  assert.deepEqual(reSplit.top, ["tree", "pose"]);
+  assert.deepEqual(reSplit.bottom, ["display", "theme", "metadata"]);
 });
 
 test("split ratio is clamped", () => {
@@ -310,4 +303,17 @@ test("stored source-feature tabs fall back to document geometry", () => {
   );
   assert.deepEqual(normalized.top, ["tree"]);
   assert.deepEqual(normalized.bottom, []);
+});
+
+test("v5 storage resets STEP placement while preserving other file layouts", () => {
+  const dxf = { split: false, top: ["dxfLayers", "material"], bottom: [], ratio: 0.6 };
+  const data = { "cad-viewer:file-sheet-tab-layout:v5": JSON.stringify({
+    step: { split: true, top: ["tree"], bottom: ["pose", "animation"] }, dxf
+  }) };
+  const storage = { getItem: (key) => data[key] ?? null, setItem: (key, value) => { data[key] = value; } };
+  assert.deepEqual(readFileSheetTabLayoutStore(storage), { dxf });
+  const step = defaultFileSheetTabArrangement("step", ["tree", "pose", "animation"]);
+  writeFileSheetTabLayoutStore(storage, { dxf, step });
+  assert.ok(data[FILE_SHEET_TAB_LAYOUT_STORAGE_KEY]);
+  assert.deepEqual(readFileSheetTabLayoutStore(storage), { dxf, step });
 });

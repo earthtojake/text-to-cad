@@ -14,10 +14,10 @@ import { FILE_SHEET_SECTION_IDS } from "./fileSheetSections.js";
 // existing reveal-on-select behavior keeps working.
 
 // Bumped to reset saved arrangements when the default pane assignment changes.
-// v5: the single Parameters tab became two — Pose and Animation — so a stored
-// v4 arrangement names a tab that no longer exists and knows nothing of the two
-// that replaced it.
-export const FILE_SHEET_TAB_LAYOUT_STORAGE_KEY = "cad-viewer:file-sheet-tab-layout:v5";
+// v6: STEP motion controls share the top strip with Model. Other file kinds
+// retain their v5 arrangements when the store is first read.
+export const FILE_SHEET_TAB_LAYOUT_STORAGE_KEY = "cad-viewer:file-sheet-tab-layout:v6";
+const PREVIOUS_LAYOUT_STORAGE_KEY = "cad-viewer:file-sheet-tab-layout:v5";
 
 export const DEFAULT_FILE_SHEET_SPLIT_RATIO = 0.5;
 export const MIN_FILE_SHEET_SPLIT_RATIO = 0.2;
@@ -51,24 +51,21 @@ export function clampSplitRatio(ratio) {
 }
 
 // Tabs that live in the top pane of a split layout; everything else defaults to
-// the bottom pane, in render order. STEP: the Tree on top, Reference/Pose/
-// Animation/Measure/Display below. DXF: Material on top (it always renders), the
-// conditional Bends/Layers tabs below.
+// the bottom pane, in render order. STEP: Model, Kinematics and Animation
+// share the full-height top pane. DXF: Material on top, Bends/Layers below.
 const TOP_PANE_SECTION_IDS = Object.freeze(new Set([
   FILE_SHEET_SECTION_IDS.STEP_TREE,
   FILE_SHEET_SECTION_IDS.STEP_MODELING,
+  FILE_SHEET_SECTION_IDS.STEP_POSE,
+  FILE_SHEET_SECTION_IDS.STEP_ANIMATION,
   FILE_SHEET_SECTION_IDS.DXF_MATERIAL
 ]));
 
 // Where to slot a tab that the stored arrangement has never seen: at its
 // render-order position among the tabs already in the pane, not at the end.
 //
-// Issues, Pose and Animation render only for some files, so appending would park
-// them at the end of a strip carried over from a file that had none — Issues would
-// stop being leftmost (and so stop being the default-active tab), and Pose would
-// land after Display instead of between Reference and Display. Tabs the
-// user has explicitly dragged are already in the arrangement and keep the
-// position they were dropped at; this only places tabs that are not in it yet.
+// Conditional tabs keep their render order when switching models. Tabs the user
+// explicitly dragged retain their saved position; this only places new tabs.
 function renderOrderInsertIndex(pane, id, renderIndex) {
   const target = renderIndex.get(id);
   for (let index = 0; index < pane.length; index += 1) {
@@ -311,7 +308,10 @@ export function readFileSheetTabLayoutStore(storage) {
   try {
     const raw = storage.getItem(FILE_SHEET_TAB_LAYOUT_STORAGE_KEY);
     if (!raw) {
-      return {};
+      const previous = JSON.parse(storage.getItem(PREVIOUS_LAYOUT_STORAGE_KEY) || "null");
+      if (!isPlainObject(previous)) return {};
+      const { step: _step, ...otherKinds } = previous;
+      return otherKinds;
     }
     const parsed = JSON.parse(raw);
     return isPlainObject(parsed) ? parsed : {};
