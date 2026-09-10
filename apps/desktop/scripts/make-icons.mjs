@@ -1,5 +1,5 @@
 /**
- * Render the existing grayscale sidebar star onto a dark macOS-grid tile.
+ * Render the existing blue sidebar star onto a dark macOS-grid tile.
  * `build/icon.png` is shared by the development Dock icon and electron-builder,
  * which derives the packaged .icns and .ico from it. No redraw of the mark.
  *
@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const source = path.join(appRoot, "src", "renderer", "assets", "brand", "hardcore-monochrome.svg");
+const source = path.join(appRoot, "src", "renderer", "assets", "brand", "hardcore-star.svg");
 const target = path.join(appRoot, "build", "icon.png");
 
 const CANVAS_PX = 1024;
@@ -20,7 +20,7 @@ const CANVAS_PX = 1024;
 const TILE_FRACTION = 824 / 1024;
 
 /** The tile's fill: the app's own background (`resources/brand`'s `INK`). */
-const TILE_FILL = "#0a0a0a";
+const TILE_FILL = "#292929";
 
 /**
  * A superellipse — |x/a|^n + |y/a|^n = 1 — sampled as an SVG path. macOS's icon

@@ -253,7 +253,7 @@ test("stays dark through a STEP file, its theme panel, a slider and a preset", a
   await page.getByLabel("Filter files").fill(STEP);
   await page.getByRole("option", { name: STEP, exact: false }).first().click();
   await expect(page.locator("[data-cad-surface] canvas").first()).toBeVisible({ timeout: 120_000 });
-  await expect(page.getByRole("tab", { name: "Model" })).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByRole("tree", { name: "Model", exact: true })).toBeVisible({ timeout: 120_000 });
   await expectNeverMoved(page, "dark", "the CAD surface mounting");
   /*
     Mounting the surface wrote NEITHER of the two attributes it writes when it
@@ -414,7 +414,7 @@ test("paints the stored theme on the first frame of a restart", async () => {
   // through `nativeTheme`, which is the same answer the page's
   // `prefers-color-scheme` gives before Playwright emulates anything.
   expect(await windowBackground(app)).toBe(
-    (await app.evaluate(({ nativeTheme }) => nativeTheme.shouldUseDarkColors)) ? "#0a0a0a" : "#ffffff",
+    (await app.evaluate(({ nativeTheme }) => nativeTheme.shouldUseDarkColors)) ? "#292929" : "#ffffff",
   );
   await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
   await expectNeverMoved(page, null, "a restart on System");
