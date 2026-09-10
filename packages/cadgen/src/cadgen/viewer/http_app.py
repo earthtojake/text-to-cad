@@ -347,9 +347,6 @@ class CadApp:
                     self._handle_artifact_status(request, response, query)
                 elif pathname == "/__cad/store":
                     self._handle_store_asset(request, response, query)
-                elif pathname == "/__cad/design-outline":
-                    from .design_outline import read_design_outline
-                    response.send_json(200, read_design_outline(self.root_path, query.get("file") or ""))
                 elif pathname == "/__cad/asset":
                     self._handle_asset(request, response, query)
                 else:

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { designFeatureMeasurements as measure } from './designFeatureMeasurements.js';
+import { stepGeometryMeasurements as measure } from './stepGeometryMeasurements.js';
 const face = (id, min, max, area, params) => ({id,selectorType:'face',pickData:{bbox:{min,max},area,params:params ? {radius:params.radius} : undefined,surfaceType:params?.kind}});
 test('unions translated bounds and sums unique faces without treating source values as geometry', () => {
  const refs=[face('f1',[1,2,3],[4,6,3],12,{kind:'cylinder',radius:2}),face('f2',[-1,2,3],[1,6,8],20,{kind:'cylinder',radius:2})];
@@ -18,7 +18,7 @@ test('missing data does not become zero or a misleading partial total; torus/con
 });
 
 test('dimension previews measure placed world-axis extents and reject incomplete or flat spans', async () => {
- const {designFeatureDimension: dimension}=await import('./designFeatureMeasurements.js');
+ const {stepGeometryDimension: dimension}=await import('./stepGeometryMeasurements.js');
  const refs=[face('f1',[10,-4,2],[16,3,2],42)];
  const x=dimension({faceIds:['f1']},refs,[],0);
  assert.deepEqual(x.pickA.point,[10,-4,2]);

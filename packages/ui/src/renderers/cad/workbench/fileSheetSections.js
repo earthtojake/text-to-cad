@@ -1,7 +1,7 @@
 export const FILE_SHEET_SECTION_IDS = Object.freeze({
   FILE_STATUS: "status",
   STEP_TREE: "tree",
-  STEP_FEATURES: "features",
+  STEP_MODELING: "modeling",
   STEP_MEASUREMENTS: "measurements",
   STEP_REFERENCE: "reference",
   // Two tabs, two independent systems: Pose drives the sidecar's mate graph
@@ -52,11 +52,10 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
         ...(options.hasDxfLayersPanel ? [FILE_SHEET_SECTION_IDS.DXF_LAYERS] : [])
       ];
     case "step":
-      // Geometry and source inspection live here; Display is a toolbar popover.
+      // STEP geometry inspection lives here; Display is a toolbar popover.
       return [
         ...status,
         FILE_SHEET_SECTION_IDS.STEP_TREE,
-        FILE_SHEET_SECTION_IDS.STEP_FEATURES,
         // Pose sits directly after Reference when the model declares mates: it is the
         // one tab here that MOVES the geometry, so it earns the position nearest the
         // default rather than trailing the readouts. Animation follows it — same model,

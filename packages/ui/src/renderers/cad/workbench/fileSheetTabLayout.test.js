@@ -302,3 +302,12 @@ test("dropping any tab past the last slot puts it last", () => {
     assert.equal(top.length, tabs.length, "no tab lost or duplicated");
   }
 });
+
+test("stored source-feature tabs fall back to document geometry", () => {
+  const normalized = normalizeFileSheetTabArrangement(
+    { split: true, top: ["features", "surfaces", "tree"], bottom: ["display"], activeTop: "features" },
+    "step", ["tree"]
+  );
+  assert.deepEqual(normalized.top, ["tree"]);
+  assert.deepEqual(normalized.bottom, []);
+});

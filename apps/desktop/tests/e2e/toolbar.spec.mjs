@@ -30,6 +30,8 @@ test('CAD toolbar compacts to its scene and restores every tool on widening', as
   try {
     const page = await app.firstWindow();
     test.skip((await page.evaluate(() => window.hardcore.runtime.status())).state !== 'ready', 'CAD runtime required');
+    const sourceRequests = [];
+    page.on('request', request => { if (request.url().includes('/__cad/design-outline')) sourceRequests.push(request.url()); });
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
     let loading = false;
@@ -173,6 +175,8 @@ test('CAD toolbar compacts to its scene and restores every tool on widening', as
     await markup.getByRole('button', { name: 'Capture', exact: true }).click();
     for (const name of ['Copy screenshot', 'Ask about this view']) await expect(page.getByRole('menuitem', { name, exact: true })).toBeDisabled();
     assert.deepEqual(errors, []);
+    assert.deepEqual(sourceRequests, []);
+    await expect(page.getByRole('tab', { name: 'Source features' })).toHaveCount(0);
     console.info('PASS: semantic groups at both widths; View and Capture menus; Draw; Pan/Orbit; focus; scene bounds; loading; no renderer errors');
   } finally {
     await app.close();

@@ -5,7 +5,6 @@ import contextlib
 from dataclasses import dataclass
 from dataclasses import replace
 import importlib.util
-import hashlib
 from pathlib import Path
 import sys
 from typing import Iterator
@@ -79,9 +78,8 @@ def _load_generator_module(script_path: Path) -> object:
     # executes STALE code. Model scripts are small; recompiling each load
     # costs ~ms and makes what runs always be what is on disk.
     try:
-        source_bytes = resolved_script_path.read_bytes()
         source_code = compile(
-            source_bytes,
+            resolved_script_path.read_bytes(),
             str(resolved_script_path),
             "exec",
             dont_inherit=True,
@@ -118,7 +116,6 @@ def _load_generator_module(script_path: Path) -> object:
         module.__package__ = package
     sys.modules[module_name] = module
     exec(source_code, module.__dict__)
-    module.__cadgen_loaded_source_hash__ = hashlib.sha256(source_bytes).hexdigest()
 
     return module
 
@@ -524,7 +521,6 @@ def _run_script_generator_body(
         # generators are unaffected -- nothing reads the binding unless they ask for it.
         from cadgen.authoring import building
         from cadgen.store.closure import ExecutionHashes
-        from cadgen.feature_links import FeatureTrace
 
         # Hash at execution: every first-party file is hashed the moment it runs
         # (the exec audit hook) — never after the body — so an edit landing
@@ -536,7 +532,6 @@ def _run_script_generator_body(
             reporting_as(progress),
             ExecutionHashes() as executed_hashes,
             building(spec.script_path, entry_name) as frame,
-            FeatureTrace(spec.script_path, entry_name, enabled=model_format == "step", source_hash=module.__cadgen_loaded_source_hash__) as feature_trace,
         ):
             executed_hashes.note(spec.script_path)
             raw_payload = generator()
@@ -583,7 +578,6 @@ def _run_script_generator_body(
             script_path=spec.script_path,
             logger=logger,
         )
-        generated_scene.design_feature_links = feature_trace.finish(raw_payload)
         if declared.block:
             generated_scene.kinematics = declared.block
         # Children pinned by the body's calls — recorded from the CALLS, never

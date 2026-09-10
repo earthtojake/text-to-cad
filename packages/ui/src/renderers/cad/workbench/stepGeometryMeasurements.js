@@ -3,7 +3,7 @@ import { measurementFromPicks } from '@hardcore/core/lib/viewer/measurement.js';
 const validBox = box => box && ['min', 'max'].every(key => Array.isArray(box[key]) && box[key].length === 3 && box[key].every(Number.isFinite)) && box.min.every((value, axis) => value <= box.max[axis]);
 
 // These are world-axis bounding extents, not inferred construction dimensions.
-export function designFeatureDimension(selection, references, parts, axis) {
+export function stepGeometryDimension(selection, references, parts, axis) {
   if (![0, 1, 2].includes(axis)) return null;
   const faces = new Map(references.filter(ref => ref.selectorType === 'face').map(ref => [ref.id, ref.pickData]));
   const bodies = new Map(parts.map(part => [part.id, part]));
@@ -20,7 +20,7 @@ export function designFeatureDimension(selection, references, parts, axis) {
 }
 
 // Read the linked final geometry, never infer construction dimensions or volume.
-export function designFeatureMeasurements(selection, references, parts) {
+export function stepGeometryMeasurements(selection, references, parts) {
   const faceIds = [...new Set(selection?.faceIds || [])];
   const partIds = [...new Set(selection?.partIds || [])];
   const faceMap = new Map(references.filter(ref => ref.selectorType === 'face').map(ref => [ref.id, ref.pickData]));

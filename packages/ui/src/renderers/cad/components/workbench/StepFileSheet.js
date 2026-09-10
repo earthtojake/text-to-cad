@@ -1,5 +1,5 @@
 import { useHostReference } from "../../file-view/hostReference.js";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Box, Boxes, ChevronRight, Eye, EyeOff, Focus, X } from "lucide-react";
 import { cn } from "@hardcore/ui/utils";
 import {
@@ -27,7 +27,12 @@ import { buildPoseControlsTab } from "./PoseControlsSection.js";
 import { buildAnimationControlsTab } from "./AnimationControlsSection.js";
 import { buildStepReferenceTab } from "./StepReferenceSection.js";
 import InspectorSplit from "./InspectorSplit.jsx";
-import StepDesignTree from "./StepDesignTree.jsx";
+import StepGeometryProperties from "./StepGeometryProperties.jsx";
+import SelectionFilterMenu from "./SelectionFilterMenu.jsx";
+import { modelTreePresentation, modelTreeReferenceAncestors, modelTreeGroupCopyText, MODEL_GROUP_PREFIX } from "../../workbench/modelTreePresentation.js";
+import { stepGeometryMeasurements, stepGeometryDimension } from "../../workbench/stepGeometryMeasurements.js";
+const EMPTY = [];
+const FACE_LIST_OPTIONS = [{id: 'all', label: 'Individual faces'}, {id: 'surface', label: 'By surface type'}];
 import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections.js";
 const treeChevronButtonClasses = "grid h-7 w-7 shrink-0 place-items-center rounded-sm px-0 text-current/60 hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent/45";
 const treeRowActionButtonClasses = "h-7 w-7 shrink-0 rounded-sm px-0 text-current/60 shadow-none hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent/45 focus-visible:text-sidebar-accent-foreground";
@@ -391,7 +396,7 @@ function StepTreeRowGlyph({ row }) {
 
 export default function StepFileSheet({
   open,
-  designOutline = null,
+  geometryInspection = null,
   isDesktop,
   width,
   onOpenChange,
@@ -414,6 +419,8 @@ export default function StepFileSheet({
   focusedNodeIds = [],
   onSelectTreeNode,
   onSelectReferenceNode,
+  onSelectReferenceGroup,
+  onRevealGeometrySelection,
   onCopyTreeNodeReference,
   onFocusTreeNode,
   onUnfocusTreeNode,
@@ -438,6 +445,39 @@ export default function StepFileSheet({
   onOpenSectionIdsChange
 }) {
   const hostReference = useHostReference();
+  const [faceList, setFaceList] = useState('all');
+  const [presentationExpanded, setPresentationExpanded] = useState(new Set([STEP_MODEL_ROOT_ID]));
+  const [inspection, setInspection] = useState(null);
+  const modelReferences = geometryInspection?.references || EMPTY;
+  const modelParts = geometryInspection?.parts || EMPTY;
+  const modelReferenceMap = useMemo(() => new Map(modelReferences.map(ref => [ref.id, ref])), [modelReferences]);
+  const highlight = geometryInspection?.onHighlight;
+  const togglePresentedNode = id => {
+    if (id.startsWith(MODEL_GROUP_PREFIX) || (!isAssemblyView && id === STEP_MODEL_ROOT_ID)) {
+      setPresentationExpanded(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+    } else onToggleTreeNode?.(id);
+  };
+  const presentedExpandedIds = useMemo(() => [...(expandedTreeNodeIds || []), ...presentationExpanded], [expandedTreeNodeIds, presentationExpanded]);
+  const measuredSelection = useMemo(() => ({
+    faceIds: selectedReferences.filter(ref => ref.selectorType === 'face').map(ref => ref.id),
+    partIds: [...new Set([
+      ...(selectedPartIds || []).flatMap(id => id === STEP_MODEL_ROOT_ID ? modelParts.map(part => part.id) : modelParts.some(part => part.id === id) ? [id] : []),
+      ...selectedReferences.filter(ref => ref.selectorType === 'occurrence' && modelParts.some(part => part.id === ref.id)).map(ref => ref.id),
+    ])],
+  }), [selectedReferences, selectedPartIds, modelParts]);
+  const measurements = useMemo(() => stepGeometryMeasurements(measuredSelection, modelReferences, modelParts), [measuredSelection, modelReferences, modelParts]);
+  const selectionKey = [...measuredSelection.faceIds, ...measuredSelection.partIds].join('|');
+  useEffect(() => setInspection(null), [selectionKey]);
+  useEffect(() => {
+    if (!inspection) return;
+    const selection = inspection.kind === 'axis'
+      ? { ...measuredSelection, measurement: stepGeometryDimension(measuredSelection, modelReferences, modelParts, inspection.value) }
+      : { partIds: [], faceIds: modelReferences.filter(ref => measuredSelection.faceIds.includes(ref.id) && ['cylinder', 'sphere'].includes(ref.pickData?.surfaceType || ref.pickData?.params?.kind) && Number.isFinite(ref.pickData?.params?.radius) && Number(ref.pickData.params.radius.toPrecision(10)) === inspection.value).map(ref => ref.id) };
+    highlight?.(selection, 'Selected geometry', {file: selectedEntry?.file, label: 'Selected geometry', measurements, inspection});
+    return () => highlight?.(null);
+  }, [inspection, measuredSelection, modelReferences, modelParts, highlight, selectedEntry?.file, measurements]);
+  const inspect = (kind, value) => setInspection(current => current?.kind === kind && current.value === value ? null : {kind, value});
+
   const rowRefs = useRef(new Map());
   const lastActiveTreeNodeScrollKeyRef = useRef("");
   const selectedIds = [...(Array.isArray(selectedPartIds) ? selectedPartIds : [])];
@@ -464,18 +504,17 @@ export default function StepFileSheet({
     }
     return new Set(selectableNodeIds.map((id) => String(id || "").trim()).filter(Boolean));
   }, [selectableNodeIds]);
-  const treeRoot = stepTreeRoot;
+  const treeRoot = useMemo(() => modelTreePresentation(stepTreeRoot, modelReferences, faceList === 'surface'), [stepTreeRoot, modelReferences, faceList]);
   const treeRootChildren = stepTreeNodeChildren(treeRoot);
   const elideRootTreeRow = treeRootChildren.length > 0 && (
-    isAssemblyView ||
-    stepTreeNodeId(treeRoot) === STEP_MODEL_ROOT_ID
+    isAssemblyView
   );
   const visibleRows = useMemo(
-    () => flattenVisibleStepTreeRows(treeRoot, expandedTreeNodeIds, {
+    () => flattenVisibleStepTreeRows(treeRoot, presentedExpandedIds, {
       omitRoot: elideRootTreeRow,
       showAllRootChildren: true
     }),
-    [elideRootTreeRow, expandedTreeNodeIds, treeRoot]
+    [elideRootTreeRow, presentedExpandedIds, treeRoot]
   );
   const visibleRowIdsSignature = useMemo(
     () => visibleRows.map((row) => String(row?.id || "")).join("\n"),
@@ -529,8 +568,8 @@ export default function StepFileSheet({
     ? String(treeSelectionDisabledReason || "Tree selection is disabled in the current parameter state.").trim()
     : "";
   const expandedTreeNodeIdSet = useMemo(
-    () => new Set((Array.isArray(expandedTreeNodeIds) ? expandedTreeNodeIds : []).map((id) => String(id || "").trim()).filter(Boolean)),
-    [expandedTreeNodeIds]
+    () => new Set((Array.isArray(presentedExpandedIds) ? presentedExpandedIds : []).map((id) => String(id || "").trim()).filter(Boolean)),
+    [presentedExpandedIds]
   );
   const loadableTreeNodeIdSet = useMemo(
     () => new Set((Array.isArray(loadableTreeNodeIds) ? loadableTreeNodeIds : []).map((id) => String(id || "").trim()).filter(Boolean)),
@@ -621,6 +660,13 @@ export default function StepFileSheet({
     };
   }, [open, activeTreeNodeId, activeTreeNodeIsTopology, activeTreeNodeScrollKey, treeSectionOpen, visibleRowIdsSignature]);
 
+  useEffect(() => {
+    if (!activeTreeNodeScrollKey || !activeSelectedReferenceId) return;
+    const ancestors = modelTreeReferenceAncestors(treeRoot, activeSelectedReferenceId).filter(id => id.startsWith(MODEL_GROUP_PREFIX) || id === STEP_MODEL_ROOT_ID);
+    setPresentationExpanded(current => ancestors.every(id => current.has(id)) ? current : new Set([...current, ...ancestors]));
+  }, [activeTreeNodeScrollKey, activeSelectedReferenceId, treeRoot]);
+
+
   if (!selectedEntry) {
     return null;
   }
@@ -628,18 +674,27 @@ export default function StepFileSheet({
   const sections = [
     {
       id: treeSectionId,
-      title: "Geometry",
+      title: "Model",
       keepMounted: true,
       scrollsContent: true,
       titleAttr: treeSelectionTitle || undefined,
-      content: (
+      content: active => (
             <div className="flex h-full min-h-0 max-w-full flex-col overflow-hidden">
-              <InspectorSplit title={selectedReferences.length === 1 ? 'Selected geometry' : `${selectedReferences.length} selected items`}
-                details={selectedReferences.length > 0 ? buildStepReferenceTab({ references: selectedReferences }).content : null}>
+              <div className="flex min-h-0 flex-1 flex-col">
+              <InspectorSplit title={selectedReferences.length > 1 ? `${selectedReferences.length} selected items` : activeTreeRow?.label || 'Selected geometry'}
+                details={selectedReferences.length > 0 || measuredSelection.partIds.length > 0 ? <>
+                  <StepGeometryProperties measurements={measurements} geometrySelection={measuredSelection} inspection={inspection} inspect={inspect} />
+                  {selectedReferences.length > 0 && <details className="mt-2"><summary className="cursor-pointer py-1 text-micro text-muted-foreground">Reference details</summary>{buildStepReferenceTab({ references: selectedReferences }).content}</details>}
+                </> : null}>
+              <div className="flex shrink-0 items-center justify-between gap-2 border-b border-sidebar-border/60 px-2 py-1.5">
+                <span className="text-micro text-muted-foreground">{isAssemblyView ? 'Assembly' : 'Part'}</span>
+                <SelectionFilterMenu compact value={faceList} onChange={setFaceList} options={FACE_LIST_OPTIONS} menuLabel="Face list" hint="" />
+              </div>
               <ScrollArea className="min-h-0 flex-1 pb-2">
               <div
                 className="select-none space-y-px"
                 role="tree"
+                aria-label="Model"
                 aria-multiselectable="true"
                 aria-disabled={treeSelectionDisabled}
                 title={treeSelectionTitle || undefined}
@@ -652,10 +707,10 @@ export default function StepFileSheet({
                   }
                 }}
               >
-              {hasAssemblyTree ? (
+              {hasHiddenTreeRows ? (
                 <div className="flex items-center justify-between gap-2 pr-1">
                   <div className={treeGroupLabelClasses} role="presentation">
-                    Assembly
+                    Hidden parts
                     <span className="ml-1.5 tabular-nums text-sidebar-foreground/35">
                       {topLevelPartCount}
                     </span>
@@ -685,18 +740,19 @@ export default function StepFileSheet({
                   const topologyRow = Boolean(topologyType);
                   const rowId = String(row.id || "").trim();
                   const selectionRowId = String(row.node?.selectionPartId || row.id || "").trim();
+                  const groupReferenceIds = row.node?.groupReferenceIds || EMPTY;
+                  const groupRow = groupReferenceIds.length > 0;
                   const topologyReferenceId = String(row.topologyReferenceId || "").trim();
                   const topologyPartId = topologyRow ? String(row.node?.partId || "").trim() : "";
                   const selectableTopologyRow = Boolean(topologyType) &&
-                    topologyReferenceId &&
-                    typeof onSelectReferenceNode === "function";
+                    ((topologyReferenceId && typeof onSelectReferenceNode === "function") || (groupRow && typeof onSelectReferenceGroup === "function"));
                   const rowDetail = String(row.detail || "").trim();
                   const inlineRowDetail = topologyType ? "" : rowDetail;
                   const rowAriaLabel = stepTreeRowAriaLabel(row, topologyType, rowDetail);
                   const rowHasChildren = rowCanExpandOrLoad(row);
                   const rowExpanded = Boolean(row.expanded);
                   const selected = topologyRow
-                    ? selectedReferenceIdSet.has(topologyReferenceId)
+                    ? groupRow ? groupReferenceIds.every(id => selectedReferenceIdSet.has(id)) : selectedReferenceIdSet.has(topologyReferenceId)
                     : selectedIds.includes(selectionRowId);
                   const topologyInsideSelectablePart = topologyRow && topologyPartId && (
                     isolatedTreeRowIds?.has(topologyPartId) ||
@@ -747,9 +803,14 @@ export default function StepFileSheet({
                   const rowDepthPx = Math.min(Math.max(row.depth, 0) * treeDepthIndentPx, treeDepthMaxPx);
                   const selectRow = (event) => {
                     const multiSelect = event.shiftKey;
-                    if (topologyRow) {
+                    setInspection(null);
+                    highlight?.(null);
+                    if (groupRow) {
+                      onSelectReferenceGroup?.(groupReferenceIds, { multiSelect });
+                    } else if (topologyRow) {
                       onSelectReferenceNode?.(topologyReferenceId, { multiSelect });
                     } else {
+                      geometryInspection?.onLoadTopology?.(selectionRowId === STEP_MODEL_ROOT_ID ? [] : [selectionRowId]);
                       onSelectTreeNode?.(selectionRowId, { multiSelect });
                     }
                   };
@@ -814,12 +875,12 @@ export default function StepFileSheet({
                     }
                     if (rowHasChildren && event.key === "ArrowRight" && !rowExpanded) {
                       event.preventDefault();
-                      onToggleTreeNode?.(row.id);
+                      togglePresentedNode(row.id);
                       return;
                     }
                     if (rowHasChildren && event.key === "ArrowLeft" && rowExpanded) {
                       event.preventDefault();
-                      onToggleTreeNode?.(row.id);
+                      togglePresentedNode(row.id);
                     }
                   };
                   const contextFocusActionAvailable = focused
@@ -878,6 +939,7 @@ export default function StepFileSheet({
                     typeof onToggleTreeNode !== "function";
                   const collapseAllDisabled = expandedExpandableTreeNodeIds.length < 1 ||
                     typeof onToggleTreeNode !== "function";
+                  const groupCopyText = groupRow ? modelTreeGroupCopyText(groupReferenceIds, modelReferenceMap, selectedEntry) : '';
                   const copyReferenceTargetId = topologyRow ? topologyReferenceId : selectionRowId;
                   return (
                     <div key={row.id} className="relative min-w-0 max-w-full">
@@ -936,7 +998,7 @@ export default function StepFileSheet({
                                     className={treeChevronButtonClasses}
                                     onClick={(event) => {
                                       event.stopPropagation();
-                                      onToggleTreeNode?.(row.id);
+                                      togglePresentedNode(row.id);
                                     }}
                                     aria-label={rowExpanded ? `Collapse ${row.label}` : `Expand ${row.label}`}
                                     title={rowExpanded ? "Collapse" : "Expand"}
@@ -998,6 +1060,7 @@ export default function StepFileSheet({
                                   className={cn(
                                     treeRowActionButtonClasses,
                                     "shrink-0",
+                                    !showSelectedRowState && !hovered && !hidden && !focused && "opacity-0 group-hover/tree-row:opacity-100 group-focus-within/tree-row:opacity-100",
                                     hidden && "text-current/75",
                                     treeSelectionDisabled && "cursor-default text-current/35 hover:!bg-transparent hover:!text-current/35"
                                   )}
@@ -1038,7 +1101,7 @@ export default function StepFileSheet({
                           isolated={focused}
                           hidden={hidden}
                           actionCount={contextActionCount}
-                          copyReferenceDisabled={!copyReferenceTargetId || typeof onCopyTreeNodeReference !== "function"}
+                          copyReferenceDisabled={groupRow ? !groupCopyText || !hostReference : !copyReferenceTargetId || typeof onCopyTreeNodeReference !== "function"}
                           selectDisabled={contextSelectDisabled}
                           showIsolate={!topologyRow && isAssemblyView}
                           isolateDisabled={contextFocusDisabled}
@@ -1056,9 +1119,10 @@ export default function StepFileSheet({
                           collapseSelectedDisabled={collapseSelectedDisabled}
                           expandAllDisabled={expandAllDisabled}
                           collapseAllDisabled={collapseAllDisabled}
-                          onAddToPrompt={hostReference ? () => onCopyTreeNodeReference?.(copyReferenceTargetId, { topology: topologyRow, toPrompt: true }) : undefined}
+                          onAddToPrompt={hostReference ? () => groupRow ? hostReference.addReference(groupCopyText) : onCopyTreeNodeReference?.(copyReferenceTargetId, { topology: topologyRow, toPrompt: true }) : undefined}
                           onCopyReference={() => {
-                            onCopyTreeNodeReference?.(copyReferenceTargetId, { topology: topologyRow });
+                            if (groupRow) hostReference?.deliverReference(groupCopyText);
+                            else onCopyTreeNodeReference?.(copyReferenceTargetId, { topology: topologyRow });
                           }}
                           onSelect={(event) => {
                             if (!topologyRow && selected && selectedContextNodeIds.length > 1) {
@@ -1094,22 +1158,22 @@ export default function StepFileSheet({
                           }}
                           onExpandSelected={() => {
                             for (const nodeId of collapsedActionNodeIds) {
-                              onToggleTreeNode?.(nodeId);
+                              togglePresentedNode(nodeId);
                             }
                           }}
                           onCollapseSelected={() => {
                             for (const nodeId of expandedActionNodeIds) {
-                              onToggleTreeNode?.(nodeId);
+                              togglePresentedNode(nodeId);
                             }
                           }}
                           onExpandAll={() => {
                             for (const nodeId of collapsedExpandableTreeNodeIds) {
-                              onToggleTreeNode?.(nodeId);
+                              togglePresentedNode(nodeId);
                             }
                           }}
                           onCollapseAll={() => {
                             for (const nodeId of expandedExpandableTreeNodeIds) {
-                              onToggleTreeNode?.(nodeId);
+                              togglePresentedNode(nodeId);
                             }
                           }}
                         />
@@ -1129,24 +1193,9 @@ export default function StepFileSheet({
               </div>
               </ScrollArea>
               </InspectorSplit>
+              </div>
             </div>
       )
-    },
-    {
-      id: FILE_SHEET_SECTION_IDS.STEP_FEATURES,
-      title: "Source features",
-      keepMounted: true,
-      scrollsContent: true,
-      content: active => <StepDesignTree active={active} key={selectedEntry.file} {...designOutline} label={selectedEntry.name || selectedEntry.file?.split('/').pop()}
-        partActions={showTreeVisibilityControls ? {
-          modelId: isAssemblyView ? null : STEP_MODEL_ROOT_ID,
-          hiddenIds: isAssemblyView ? hiddenIds : hiddenIds.includes(STEP_MODEL_RENDER_PART_ID) ? [STEP_MODEL_ROOT_ID, ...(designOutline?.parts || []).map(part => part.id)] : [],
-          focusedIds: focusedNodeIds, selectableIds: selectableNodeIds,
-          disabled: treeSelectionDisabled || viewerLoading,
-          onIsolate: isAssemblyView && onFocusTreeNode ? id => onFocusTreeNode(id, { reveal: false }) : null,
-          onExitIsolate: onUnfocusTreeNode, onExitAllIsolate,
-          onToggleVisibility: onTogglePartVisibility ? id => onTogglePartVisibility(isAssemblyView ? id : STEP_MODEL_ROOT_ID) : null,
-        } : null} />
     },
     // Pose then Animation, directly after Tree and ahead of the readouts: they are
     // the tabs in this strip that MOVE the geometry, so they take the positions nearest

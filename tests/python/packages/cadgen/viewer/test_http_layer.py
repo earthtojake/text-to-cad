@@ -607,16 +607,3 @@ class EveryRouteAnswersForReal(HttpLayerTestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
-class DesignOutlineRoute(HttpLayerTestCase):
-    def test_read_only_route_and_host_guard(self):
-        import json
-        root = Path(self.fixture.root)
-        (root / 'outline.step').write_text('fixture', encoding="utf-8")
-        (root / 'outline.py').write_text('@step\ndef outline():\n    Box(1, 2, 3)\n', encoding="utf-8")
-        status, _, body = self.fixture.request('GET', '/__cad/design-outline?file=outline.step')
-        self.assertEqual(status, 200)
-        self.assertEqual(json.loads(body)['features'][0]['type'], 'box')
-        status, _, _ = self.fixture.request('GET', '/__cad/design-outline?file=outline.step', headers={'Host': 'evil.example'})
-        self.assertEqual(status, 403)
