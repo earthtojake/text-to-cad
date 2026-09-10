@@ -5,10 +5,9 @@ import ModelingTreeView from '../../../../../dist/renderers/cad/components/workb
 
 import { useStepModeling } from '../../../../../dist/renderers/cad/workbench/useStepModeling.js';
 function ModelingTree(props:any) {
- const modeling=useStepModeling(props.entry,!props.disabled,props.reconstructionEnabled,props.selectedPartIds?.[0]);
+ const modeling=useStepModeling(props.entry,!props.disabled);
  return <ModelingTreeView {...props} modeling={modeling}/>;
 }
-vi.mock('../../../../../dist/renderers/cad/components/workbench/ReconstructionPreview.js',()=>({default:()=> <div role="dialog">Verified preview</div>}));
 Object.assign(globalThis,{React});
 afterEach(()=>{cleanup();vi.unstubAllGlobals();WorkerStub.instances=[];});
 const feature={id:'cut:1-2',kind:'cut',label:'Cut extrude 1',faces:[1,2],edges:[],measurements:[['Depth',2,'mm']],children:[]};
@@ -103,18 +102,11 @@ it('opens the part selected in Geometry without resetting its canonical selectio
  expect(onSelect).toHaveBeenCalledWith(['o2.f1','o2.f2']);
 });
 
-it('keeps an open reconstruction through background viewer loading, but closes it on leaving Features',async()=>{
- setup();
- const props={active:true,entry:{...entry,url:'http://localhost/__cad/store?file='+ 'a'.repeat(64)},reconstructionEnabled:true};
- vi.stubGlobal('fetch',vi.fn().mockImplementation(async (_url:any,init:any)=>({ok:true,json:async()=>init?.method==='POST' ? {status:'verified',tree:'a'.repeat(64),component:'c',proof:{passed:true},frameCount:2} : descriptor})));
- const {rerender}=render(<ModelingTree {...props}/>);
- await respond({tree,recipe:{schema:1}});
- fireEvent.click(await screen.findByRole('button',{name:'Play build sequence'}));
- expect(await screen.findByRole('dialog')).toBeTruthy();
- rerender(<ModelingTree {...props} disabled/>);
- expect(screen.getByRole('dialog')).toBeTruthy();
- rerender(<ModelingTree {...props} active={false}/>);
- await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());
+it('inspects STEP features without requesting kernel replay',async()=>{
+ const fetch=setup();render(<ModelingTree entry={entry} active/>);await respond({tree});
+ expect(screen.getByRole('button',{name:'Select Cut extrude 1'})).toBeTruthy();
+ expect(fetch.mock.calls.every(([,init])=>!init?.method || init.method==='GET')).toBe(true);
+ expect(screen.queryByRole('button',{name:/Play/})).toBeNull();
 });
 
 it('does not fetch geometry or start a worker when modeling is disabled',async()=>{

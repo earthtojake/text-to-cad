@@ -258,9 +258,9 @@ groups wrap independently at narrow widths; actions keep the same group at every
 width. Compact zoom keeps the editable percentage and Reset view; plus/minus
 return when the viewport widens. Capture actions do not contain navigation tools.
 
-### Opt-in STEP modeling-tree prototype
+### Read-only STEP features
 
-The **Modeling** tab reads existing assembly/SURF assets automatically as the
+The **Model → Features** view reads existing assembly/SURF assets automatically as the
 current file’s geometry becomes available. It recognizes one unique component at
 a time in a bounded, disposable worker and shares results across repeated
 instances. It never discovers Python files, writes models, or
@@ -271,8 +271,8 @@ side area and solid volume support a possible base-extrude / cut-extrude sequenc
 The recovered sketch profiles reference actual STEP boundary edges. Full coaxial
 cylinder/cone solids can instead yield a closed axial profile and 360-degree
 revolution, checked against the solid volume. These are inferred modeling choices,
-not original history or editable source constraints. Line/circle contours support these paths. The local reconstruction experiment also
-proposes ruled lofts and rounded-box fillets as described below; shell and pattern
+not original history or editable source constraints. Line/circle contours support these paths. Analytic recognition also
+proposes ruled lofts and rounded-box fillets; shell and pattern
 operations are not invented.
 
 Other solids remain **Imported body**. Local planar caps, translated rims and
@@ -291,7 +291,7 @@ and expandable operations; a difficult first component cannot hide the rest of
 the assembly. The first recognized part expands automatically. Long lists group
 same-kind operations into inspection folders, never inferred patterns.
 Annotation-only components show a no-faces state. Recognition continues while
-the current file’s Model/Modeling tabs switch, and stops on disposal or when the
+the current file’s Geometry/Features views switch, and stops on disposal or when the
 viewer invalidates its geometry. Completed results stay in memory for that file
 revision. Retry processes only failed components. Every displayed operation and
 selection remains scoped to its assembly occurrence.
@@ -306,81 +306,16 @@ local tool occupancy from a successful remove/restore Boolean round trip. A
 partial feature match does not establish a rebuildable history for the whole
 part, particularly when the independent Boolean reconstruction fails.
 
-### STEP reconstruction experiment
+### Replay experiment scope
 
-Model contains Geometry and Features views sharing the document's canonical
-part/face selection. Features automatically infers operations from each unique
-component's SURF topology. Complete supported single-solid candidates also carry
-numeric recipes (line/circle/polygon sketches, extrusion, cuts, axial-profile
-revolve, ruled lofts and constant-radius fillets).
-Partial matches remain inspection only; feature folders never imply chronology.
+Shared Features inspection runs entirely client-side from STEP geometry. The
+worker returns inferred operations, not executable playback. The existing
+canonical face/edge reference flow supplies highlighting and Add to prompt.
 
-When the local viewer advertises `reconstructionExperiment`, the STEP document
-automatically queues verification as recipes become available, even with the
-inspector closed or Geometry active. It verifies one unique component at a time
-and prioritizes the selected component next. The document holds only small proof
-summaries. The server persists verified playback in the existing mesh cache, so
-reopening unchanged STEP geometry after an app restart skips kernel replay and
-verification. Recognition still runs client-side; changed recipes, geometry or
-engine implementations invalidate saved results. Verified parts offer **Play build sequence**; the lazy preview requests
-the cached geometry, starts at the final solid, and provides dependency navigation, previous/next,
-scrubbing, Play/Pause/Replay, and original/reconstructed comparison. Playback uses
-meshes of independently rebuilt intermediate solids. Sketch frames overlay the
-recovered profile over the preceding solid. The preview owns and disposes its own
-Three.js scene; it cannot modify the document viewer's visibility or selections.
-
-This is a newly chosen valid sequence, not recovered original history. Only a
-successful final bidirectional Boolean-volume, surface-area, bounds and validity
-comparison enables playback. Source programs and source-side store records are
-never read. A changed document or mismatched component invalidates the response.
-Unsupported partial models have no complete replay. The local experiment remains opt-in and bounded; when enabled, verification
-runs after geometry is available without blocking the viewport. `useStepModeling`
-is owned outside the inspector portal so opening the panel is not a prerequisite.
-Changing STEP documents cancels client requests and ignores stale responses.
-
-Ruled-loft candidates recover convex section polygons from degree-1 bilinear
-SURF patches. All patches must share a compatible section axis; higher-degree,
-rational and branched candidates remain partial. Capped cylindrical walls can
-become outward cut tools after the loft, preserving the material between opposite
-blind cuts. Rounded boxes use six orthogonal support planes and matching edge/
-corner blend radii to propose rectangle → extrude → fillet. No part names or
-generator files participate. Float32 control-point snapping only proposes numeric
-coordinates; acceptance still requires comparison with the original BREP.
-
-Verification uses adaptive surface/volume integration and checks absolute volume
-difference in addition to both Boolean differences, bounds and area. These paths
-expand supported shapes; they do not promise reconstruction of arbitrary STEP
-solids, variable fillets, shells or original authoring history.
-
-Rounded-prism candidates discover four-corner profiles through connected planar
-walls, keeping nearby slots separate even when radii match. Analytic torus blends
-recover end fillets; axis-aligned profile bounds select exact intermediate
-fillet edges with an expected count. Boss tools are fused and cavity/slot tools
-subtracted through explicit solid dependencies. Tool-construction frames are
-labeled as tools. This supports the rounded phone-case fixture without part-name
-rules or hand-entered dimensions. Playback meshes share indexed vertices and use
-a separate display tessellation; exact-solid verification is unchanged.
-
-Playback offers Export → Animated GIF or Video. Both use the same scene builder
-as the live preview, in an isolated renderer, with the current camera angle and
-a step-number/label footer. GIF encoding runs in a disposable worker using
-[gifenc](https://github.com/mattdesl/gifenc); it loops with one second per step and
-a longer final hold. Video records the canvas at 12 fps, preferring supported
-MP4/H.264 and otherwise WebM; the extension follows the real encoder format.
-Recording takes approximately the playback duration. Progress and cancellation
-are local to the export, closing the dialog aborts, and GPU resources, workers,
-tracks and download URLs are released. Neither export reruns the kernel, edits
-the STEP, includes chat contents, or implies original authoring history.
-
-Imported full cylinders may comprise several angular faces. Coaxial groups with
-matching radii and axial intervals can reconstruct a stepped shaft; matching
-prismatic end contours with transverse cylindrical cuts can reconstruct brackets.
-Planar stock plus outward recess tools, local additive bosses and planar-supported
-quarter-cylinder fillets extend multi-operation candidates. These are proposed
-numerical recipes: only a successful exact replay enables playback. Entries with
-no faces are reported separately from the reconstruction denominator.
-
-The entire Features experiment is gated by the host flag, including background recognition. With the flag off the Model inspector contains only geometry inspection. See [validation and rollback](step-reconstruction-validation.md).
+Kernel verification, its cache and endpoint, intermediate-solid playback, and
+GIF/video export are isolated on `amy/step-reconstruction-playback`. They are
+not shipped in the shared app. Pure numerical recipe helpers remain as
+recognition regression checks, without a runtime interpreter or export path.
 
 STEP models place Model, Kinematics and Animation in one top tab strip by
 default. Motion tabs appear only when their corresponding controls exist.

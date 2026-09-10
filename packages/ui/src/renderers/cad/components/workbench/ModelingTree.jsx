@@ -1,11 +1,10 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Boxes, Circle, ChevronRight, CornerUpRight, Layers, RotateCw, Shapes, Spline, SquareDashed } from 'lucide-react';
 import { cn } from '@hardcore/ui/utils';
 import InspectorSplit from './InspectorSplit.jsx';
 import { modelingReferenceIds } from '../../workbench/modelingTree.js';
 import { presentModelingAssembly } from '../../workbench/modelingPresentation.js';
 
-const ReconstructionPreview = lazy(() => import('./ReconstructionPreview.jsx'));
 const EMPTY = [];
 const icons = {part:Box,assembly:Boxes,group:Boxes,boss:Layers,pocket:Shapes,hole:Circle,body:Box,extrude:Layers,loft:Layers,cut:Shapes,revolve:RotateCw,round:CornerUpRight,profile:SquareDashed,curve:Spline,remainder:Box};
 const number = n => n.toLocaleString(undefined,{maximumFractionDigits:3});
@@ -26,9 +25,8 @@ function ModelingRow({ node, depth=0, selected, expanded, toggle, choose, disabl
 }
 
 /** Read-only geometry inference; assembly instances share recognition, never selection IDs. */
-export default function ModelingTree({ modeling, active, entry, disabled, references=EMPTY, selectedReferenceIds=EMPTY, selectedPartIds=EMPTY, reconstructionEnabled=false, onLoadTopology, onSelect }) {
-  const {descriptor,results,error,retryFailed,target,statuses,retryVerification}=modeling;
-  const [preview,setPreview]=useState(null);
+export default function ModelingTree({ modeling, active, disabled, references=EMPTY, selectedReferenceIds=EMPTY, selectedPartIds=EMPTY, onLoadTopology, onSelect }) {
+  const {descriptor,results,error,retryFailed}=modeling;
   const [selected,setSelected]=useState(null),[pending,setPending]=useState(null),[expanded,setExpanded]=useState(new Set());
   const initialExpansion=useRef(false),firstFeatureExpanded=useRef(false);
   const tree=useMemo(()=>presentModelingAssembly(descriptor,results),[descriptor,results]);
@@ -36,12 +34,6 @@ export default function ModelingTree({ modeling, active, entry, disabled, refere
   const selectionOccurrences=[...new Set(references.filter(r=>selectedReferenceIds.includes(r.id)).map(r=>r.occurrenceId).filter(Boolean))];
   const partId=selectionOccurrences.length===1 ? selectionOccurrences[0] : selectedPartIds.length===1 ? selectedPartIds[0] : selected?.occurrenceId;
   const currentPart=descriptor?.occurrences.find(o=>o.id===partId) || (descriptor?.occurrences.length===1 ? descriptor.occurrences[0] : null);
-  const recipe=currentPart && results[currentPart.component]?.recipe;
-  const verification=currentPart && statuses[currentPart.component];
-  const ready=Object.values(statuses).filter(s=>s.state==='ready').length;
-  const emptyComponents=componentIds.filter(id=>results[id]?.hasFaces===false).length;
-  const geometryComponents=componentIds.length-emptyComponents;
-  useEffect(()=>{if(!active)setPreview(null);},[active]);
   useEffect(()=>{
     if(!partId)return;
     const find=nodes=>{for(const node of nodes){if(node.occurrenceId===partId)return [node.id];const path=find(node.children||[]);if(path)return [node.id,...path];}return null;};
@@ -87,12 +79,7 @@ export default function ModelingTree({ modeling, active, entry, disabled, refere
       {loading && <p role="status" className="text-micro text-muted-foreground">{descriptor ? `Recognizing geometry · ${done} of ${componentIds.length} components` : 'Loading model geometry…'}</p>}
       {(error || failed>0) && <p role="alert" className="text-micro text-muted-foreground">{error || `${failed} ${failed===1?'component is':'components are'} unavailable.`} <button type="button" className="underline" onClick={retryFailed}>Retry</button></p>}
       {!loading && !error && !empty && <p className="text-micro text-muted-foreground">Inferred features · original build order unknown.</p>}
-      {reconstructionEnabled && componentIds.length>0 && <p role="status" className="text-micro text-muted-foreground">{ready} of {geometryComponents} components reconstructed{Object.values(statuses).some(s=>s.state==='checking') ? ' · Verifying…' : ''}{emptyComponents>0 && <span title="These STEP entries contain no faces."> · {emptyComponents} empty {emptyComponents===1 ? 'entry' : 'entries'}</span>}</p>}
     </div>
-    {currentPart && <div className="shrink-0 border-b border-sidebar-border/60 p-2">
-      {recipe && reconstructionEnabled ? verification?.state==='ready' ? <button type="button" onClick={()=>setPreview({component:currentPart.component,recipe,label:currentPart.name || 'Part'})} className="flex w-full items-center justify-center gap-2 rounded border px-2 py-1.5 text-xs hover:bg-sidebar-accent"><RotateCw className="size-3.5"/>Play build sequence</button> : verification?.state==='failed' ? <div className="space-y-1 text-micro text-muted-foreground"><p>{verification.error}</p><button type="button" className="underline" onClick={()=>retryVerification(currentPart.component)}>Retry verification</button></div> : <p role="status" className="text-micro text-muted-foreground">{verification?.state==='checking' ? 'Verifying build sequence…' : 'Build sequence queued…'}</p> : <p className="text-micro text-muted-foreground">{recipe ? 'Complete recipe inferred.' : 'Partial recognition · no complete build sequence yet.'}</p>}
-    </div>}
-    {preview && <Suspense fallback={<p role="status" className="p-2 text-xs">Opening reconstruction…</p>}><ReconstructionPreview {...preview} target={target} file={entry.file} onClose={()=>setPreview(null)}/></Suspense>}
     <InspectorSplit title={selected?.label} label="Modeling details" details={showDetails && <div className="space-y-3 p-3" aria-label="Modeling details">
       {!!selected.measurements?.length && <dl className="space-y-2">{selected.measurements.map(([label,value,unit])=><div key={label} className="flex flex-wrap justify-between gap-x-3 gap-y-1"><dt className="text-muted-foreground">{label}</dt><dd className="tabular-nums">{number(value)} {unit}</dd></div>)}</dl>}
       {selected.note && <p className="text-micro leading-relaxed text-muted-foreground">{selected.note}</p>}

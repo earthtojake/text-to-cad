@@ -81,7 +81,6 @@
     "@tiptap/react": "3.31.3",
     "@tiptap/starter-kit": "3.31.3",
     "class-variance-authority": "0.7.1",
-    "gifenc": "1.0.3",
     "monaco-editor": "0.56.0",
     "radix-ui": "1.6.7",
     "remark-gfm": "4.0.1",
