@@ -139,6 +139,15 @@ grok plugin install earthtojake/text-to-cad --trust
 grok plugin enable cad
 ```
 
+```bash
+# QwenPaw (clone the repo, then install the plugin directory)
+git clone https://github.com/earthtojake/text-to-cad.git
+qwenpaw plugin install text-to-cad/.qwenpaw-plugin
+```
+
+The QwenPaw plugin registers the skills as a skill provider: every skill is
+copied into each QwenPaw workspace and enabled by default.
+
 Restart your agent if newly installed skills do not appear. For local
 development, branch from `main`, open PRs against `main`, and follow
 [CONTRIBUTING.md](CONTRIBUTING.md).

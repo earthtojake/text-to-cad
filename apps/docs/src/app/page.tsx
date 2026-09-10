@@ -24,6 +24,13 @@ const pluginInstallCommands = [
     agent: "Grok Build",
     command: "grok plugin install earthtojake/text-to-cad --trust",
   },
+  // QwenPaw has no marketplace resolution over GitHub; its CLI installs a plugin
+  // from a local directory or a ZIP, so the repo is cloned first.
+  {
+    agent: "QwenPaw",
+    command:
+      "git clone https://github.com/earthtojake/text-to-cad.git\nqwenpaw plugin install text-to-cad/.qwenpaw-plugin",
+  },
 ];
 
 const skillGroups = [

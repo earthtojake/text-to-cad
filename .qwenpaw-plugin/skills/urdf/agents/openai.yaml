@@ -1,0 +1,4 @@
+interface:
+  display_name: "URDF"
+  short_description: "Author and validate URDF robot descriptions."
+  default_prompt: "Use $urdf to author, update, and validate URDF robot descriptions as direct XML, handing new or changed URDFs to $cad-viewer when available."

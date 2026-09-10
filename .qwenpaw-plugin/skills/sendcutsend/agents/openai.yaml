@@ -1,0 +1,4 @@
+interface:
+  display_name: "SendCutSend"
+  short_description: "Review DXF/STEP against SendCutSend specs."
+  default_prompt: "Use $sendcutsend to review this DXF or STEP file for SendCutSend upload readiness."

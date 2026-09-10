@@ -25,6 +25,7 @@ export const jsonTargets = [
   },
   { path: ".claude-plugin/plugin.json", fields: [["version"]] },
   { path: ".codex-plugin/plugin.json", fields: [["version"]] },
+  { path: ".qwenpaw-plugin/plugin.json", fields: [["version"]] },
   { path: ".claude-plugin/marketplace.json", fields: [["version"]], pluginEntries: ["cad"] },
 ];
 
