@@ -1,6 +1,6 @@
-import hardcoreMark from "@renderer/assets/brand/hardcore-monochrome.svg";
+import hardcoreMark from "@renderer/assets/brand/hardcore-star.svg";
 
-/** The original star in grayscale, alongside the app's regular type. */
+/** The original star in blue, alongside the app's regular type. */
 export function Wordmark() {
   return (
     <span aria-label="Hardcore" className="app-no-drag flex min-w-0 items-center gap-2" role="img">

@@ -12,6 +12,7 @@ import {
   setFileSheetTabRatio
 } from "../../workbench/fileSheetTabLayout.js";
 import { ScrollArea } from "@hardcore/ui/primitives/scroll-area";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@hardcore/ui/primitives/tabs";
 import { useFileSheetTabPreferences } from "../../workbench/fileSheetTabPreferences.js";
 
 // Per-kind tab arrangement (pane assignment, order, split, ratio), persisted
@@ -60,21 +61,16 @@ function useFileSheetTabArrangement(kind, sectionIds) {
 function FileSheetTab({
   section,
   pane,
-  active,
   dragging,
-  onActivate,
   onDragStart,
   onDragEnd
 }) {
   return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
+    <TabsTrigger
+      value={section.id}
       title={section.titleAttr || undefined}
       data-file-sheet-tab={section.id}
       draggable
-      onClick={() => onActivate(pane, section.id)}
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = "move";
         try {
@@ -86,28 +82,25 @@ function FileSheetTab({
       }}
       onDragEnd={onDragEnd}
       className={cn(
-        "group/file-sheet-tab relative -mb-px flex h-8 max-w-[12rem] shrink-0 cursor-pointer select-none items-center gap-1.5 whitespace-nowrap border-r border-sidebar-border/50 border-b-2 px-2 text-tiny leading-none transition-colors",
-        active
-          ? "border-b-primary bg-accent/40 text-foreground"
-          : "border-b-transparent text-muted-foreground hover:bg-accent/25 hover:text-foreground",
+        "max-w-[12rem] flex-none select-none",
         dragging && "opacity-40"
       )}
     >
       <span className="min-w-0 truncate">{section.title}</span>
-    </button>
+    </TabsTrigger>
   );
 }
 
 // Keep visited inspection trees mounted so tab switches retain disclosure and scroll state.
 // Other sections retain their existing mount/unmount lifecycle.
-function FileSheetTabContent({ section, active }) {
+function FileSheetTabContent({ section, active, hasTabs }) {
   const [visited, setVisited] = useState(active);
   useEffect(() => { if (active) setVisited(true); }, [active]);
   if (!active && (!section.keepMounted || !visited)) return null;
   const content = typeof section.content === "function" ? section.content(active) : section.content;
-  return <div hidden={!active} className={cn("min-h-0 flex-1 overflow-hidden", active && "flex flex-col")} data-file-sheet-tab-panel={section.id}>
+  return <TabsContent value={section.id} forceMount hidden={!active} {...(!hasTabs && { role: "region", "aria-label": section.title, "aria-labelledby": undefined })} className={cn("min-h-0 flex-1 overflow-hidden", active && "flex flex-col")} data-file-sheet-tab-panel={section.id}>
     {section.scrollsContent ? content : <ScrollArea className="min-h-0 flex-1" viewportClassName="h-full">{content}</ScrollArea>}
-  </div>;
+  </TabsContent>;
 }
 
 function FileSheetTabPane({
@@ -128,19 +121,20 @@ function FileSheetTabPane({
   const stripRef = useRef(null);
 
   return (
-    <section
-      className="flex min-h-0 min-w-0 flex-1 flex-col"
+    <Tabs
+      value={activeId}
+      onValueChange={id => onActivate(pane, id)}
+      className="min-h-0 min-w-0 flex-1 gap-0"
       data-file-sheet-tab-pane={pane}
       onDragOver={(event) => onPaneDragOver(event, pane, stripRef.current)}
       onDrop={(event) => onPaneDrop(event, pane)}
       onDragLeave={onPaneDragLeave}
     >
-      <div
-        role="tablist"
-        aria-orientation="horizontal"
+      {sectionsById.size > 1 && <TabsList
+        aria-label="Model panels"
         ref={stripRef}
         className={cn(
-          "flex h-8 shrink-0 items-stretch overflow-x-auto border-b border-sidebar-border/70 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+          "mx-2 my-2 max-w-[calc(100%-1rem)] shrink-0 justify-start overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
           isDropPane && "bg-accent/20"
         )}
       >
@@ -150,16 +144,14 @@ function FileSheetTabPane({
             return null;
           }
           return (
-            <span key={id} className="relative flex items-stretch">
+            <span key={id} className="relative flex h-full items-stretch">
               {isDropPane && dropIndex === index ? (
                 <span className="absolute inset-y-0 -left-px z-10 w-0.5 bg-primary" aria-hidden="true" />
               ) : null}
               <FileSheetTab
                 section={section}
                 pane={pane}
-                active={id === activeId}
                 dragging={id === dragId}
-                onActivate={onActivate}
                 onDragStart={onDragStartTab}
                 onDragEnd={onDragEndTab}
               />
@@ -167,16 +159,16 @@ function FileSheetTabPane({
           );
         })}
         {isDropPane && dropIndex >= tabs.length ? (
-          <span className="relative flex items-stretch">
+          <span className="relative flex h-full items-stretch">
             <span className="absolute inset-y-0 left-0 z-10 w-0.5 bg-primary" aria-hidden="true" />
           </span>
         ) : null}
-      </div>
+      </TabsList>}
       {tabs.map(id => {
         const section = sectionsById.get(id);
-        return section ? <FileSheetTabContent key={id} section={section} active={id === activeId} /> : null;
+        return section ? <FileSheetTabContent key={id} section={section} active={id === activeId} hasTabs={sectionsById.size > 1} /> : null;
       })}
-    </section>
+    </Tabs>
   );
 }
 
