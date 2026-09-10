@@ -100,6 +100,6 @@ function applyVibrancy(enabled: boolean) {
   }
   for (const window of BrowserWindow.getAllWindows()) {
     window.setVibrancy(enabled ? "sidebar" : null);
-    window.setBackgroundColor(enabled ? "#00000000" : "#0a0a0a");
+    window.setBackgroundColor(enabled ? "#00000000" : "#292929");
   }
 }
