@@ -387,3 +387,16 @@ default. Motion tabs appear only when their corresponding controls exist.
 Switching tabs gives the selected controls the full panel height; playback
 remains accessible from the viewer toolbar. The v6 layout resets saved STEP
 arrangements to this default and preserves other file kinds’ arrangements.
+
+
+### Inspector tabs and dark surfaces
+
+The inspector uses the shared shadcn Tabs primitives for Model, Kinematics and
+Animation, including native keyboard navigation. A single section shows its
+content directly without a redundant tab strip. Split panes retain tab labels
+so users can move them back together. Visited trees keep disclosure and scroll
+state across tab changes.
+
+The shared dark UI uses neutral charcoal tokens. Workbench Dark uses a slightly
+lighter `#333333` canvas; existing custom scene themes and light mode are preserved.
+The shared loading star and desktop wordmark/icon use blue branding.
