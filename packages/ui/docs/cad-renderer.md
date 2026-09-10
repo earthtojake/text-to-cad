@@ -178,89 +178,13 @@ and [renderer contracts](renderers.md) for changes inside the shared package.
 
 The optional `@hardcore/ui/renderers/cad/empty` entry exports `EmptyCadBackdrop` for the web host’s missing-file presentation. It lazily mounts the same empty CAD viewport with the host’s `preferences` and `colorScheme`, and overlays its `children`. It owns no file access, catalog subscription, or persisted state. This preserves the original grid and camera behind `MissingFileAlert` without loading CAD into the master viewer.
 
-## Read-only Features view
+## STEP and source separation
 
-STEP keeps its geometry **Tree** and adds a separate **Features** tab. The upper
-list uses an operation/sketch hierarchy; selecting a row shows read-only
-properties below it. With verified assembly links, operations belonging to one
-part are nested under that part in **Parts**. Operations spanning several parts,
-including repeated features, appear once under **Assembly operations**; unmapped
-source operations stay there too. Single-body models retain their direct operation
-list. This grouping does not invent missing helper internals or part history.
-Part rows expose the existing hide/show and isolate controls, synchronized with
-Tree. Isolating from Features leaves that tab open; row and panel exit controls
-restore the normal view. Face-only source operations remain highlightable rather
-than acquiring a misleading feature-suppression action.
-Tree remains the default, with selected geometry details.
-
-Features reads a same-stem Python source through `GET /__cad/design-outline`.
-The backend parses its AST without importing or executing it. It supports direct
-CAD operations, sketches, simple one-operation helpers, and static scalar values.
-Loops and conditionals are source containers, not evaluated instances. When a
-source defines several `@step` functions, only an exact stem match is used.
-Unknown expressions remain expressions. No values can be edited from this view.
-
-This is a **source outline**, not evaluated build history or recovered STEP
-history. Filename matching alone cannot prove source/geometry correspondence.
-Without an unambiguous source, the view shows Imported geometry. No automatic feature detection or
-Feature groups selection mode is offered. Existing saved multi-face references
-continue to work through Tree and the host's reference callbacks.
-
-Normal model generation now records optional geometry links. For bounded,
-single-solid algebraic models with planar/cylindrical faces, the recorder associates source statements with
-surviving faces and carries a placed cutting tool's association back to its source
-row. Named assembly components are linked when their identity survives into the
-returned assembly. Repeat rows combine their child associations; sketch rows
-highlight their consuming operation's faces, not a reconstructed sketch overlay.
-
-The disposable cache is keyed by the exact source bytes and STEP bytes. Reading
-Features never runs a generator. Before highlighting, the client requires a
-complete, unique descriptor match against the loaded faces or assembly parts;
-face ordinals and guessed name similarity are never used. Unsupported, ambiguous,
-merged-away or stale links produce no highlight. The existing build remains valid
-if inspection capture is unavailable or exceeds its budget. Newly rebuilt models
-can acquire links; imported STEP without a matching source cannot.
-
-Clicking or using arrow keys in Features previews the associated geometry using
-the viewer's existing selection colour. It does not change CAD or replace the
-user's actual reference selection. Escape, a viewport click, leaving Features,
-or changing files clears the preview. The footer shows only the source filename.
-
-Linked operations and loaded parts expand into an **Associated faces** group.
-Each child selects one actual face and shows that face's measured properties;
-these rows are topology, not reconstructed source features. Part inspection loads
-one part's topology on demand, never an entire assembly's faces at once.
-The X/Y/Z extent buttons preview a temporary dimension between world-axis bounding
-limits using the existing ruler overlay. These are measured extents, not inferred
-sketch dimensions, wall thicknesses or source parameter values. Clicking a radius
-filters the preview to associated cylindrical/spherical faces with that radius.
-Clicking the active measurement again, selecting another row, Escape, leaving
-Features or changing files clears the temporary dimension. Inspection dimensions
-are not added to the Measure tool's list or saved with the model.
-
-When the host supports prompt context, every Features row and parameter exposes
-**Add to prompt**, including source operations without geometry links. Sketch and
-operation inputs appear before measured result geometry in the property panel.
-The draft receives the selected source inputs, location and measured values as
-plain text; valid geometry links also become the existing reference chips.
-Hosts supporting only geometry references retain the linked-selection action. It sends the linked geometry through
-the existing host reference callback, with a display label for the source feature.
-Canonical STEP selectors and the actual file path remain the reference payload;
-source row IDs are never geometry selectors. A multi-face or multi-part feature
-becomes a grouped reference. Missing geometry contributes no face/part tokens; source context remains usable.
-The current document is checked again before delivery. Selection alone does not modify the
-draft; the action adds context without submitting a prompt. Features uses the
-same floating viewer action as Tree, with the feature label and linked geometry
-as its context. There is no separate Features sidebar action.
-
-Parameters expand into individual read-only rows. Selecting a source constant
-previews the linked operations that explicitly reference it, including tracked
-scalar aliases, helper arguments, helper globals and repeat inputs. Reassigned,
-shadowed and uncertain bindings do not imply a global-parameter link. This is a
-bounded source association, not complete dependency analysis. An operation's
-property values are also clickable and preview that operation's geometry.
-Neither interaction creates a dimension annotation: parameter values alone do
-not establish measurement endpoints. Missing associations remain unhighlighted.
+STEP inspection reads the document's geometry, assembly structure, and topology.
+It does not search for a matching Python file or reconstruct authored operations,
+parameters, or sketches. Source files remain independently accessible through the
+file explorer. Geometry references added to prompts identify the STEP and its
+selected entities, without attaching a source filename or source line.
 
 ## Selection and inspection tools
 
@@ -275,9 +199,7 @@ Measure has a temporary panel below its toolbar button, with Any geometry,
 Points, Edges and Faces snap filters. Measure reuses the selection-filter dropdown
 component, including radio rows and keyboard behaviour; its panel uses the same
 popover surface, spacing and type styles. Draw uses the same tool chooser and
-panel shell, with labelled Undo/Redo/Clear actions. The compact toolbar's More
-tools menu shares the dropdown width, offset and collision boundary. Direct
-actions such as Pan, Orbit and screenshot capture remain direct actions.
+panel shell, with labelled Undo/Redo/Clear actions. The View and Capture menus share the dropdown width, offset and collision boundary.
 Leaving Measure or changing models clears
 completed rulers and the current draft. Escape first cancels a draft, then exits
 the tool. The existing measurement engine supplies planar-face spacing and
@@ -293,25 +215,7 @@ whose bounds intersect the active plane receive the two extra stencil passes;
 disabling clipping releases the fill and materials without disposing the model's
 geometry. Open/non-manifold meshes cannot guarantee a solid section fill.
 
-Features part rows reuse Tree's hide/show and isolate controls. These affect
-viewer visibility only; they never suppress an authored operation. Isolation
-keeps Features open and offers an exit in the panel. Source-free imports list
-actual parts under Imported geometry, without inventing construction history.
-Single-body models expose hide/show on the Features model row even when source
-operations have no geometry links, mapped to the existing whole-model render target. Their context menu omits isolate/hide-other actions because there
-are no other components to isolate from. Tree visibility actions use the row's
-selection target, including visual rows that alias a part.
-
-Selected rows show associated geometry's world-axis bounding size, summed face
-area when the entire face selection has area data, and available cylindrical or
-spherical surface radii. Source parameters are labelled separately. Bounds do
-not imply extrusion depth or volume; surface radii do not imply recognised holes.
-Missing geometry/data is not replaced with zero or a partial total. Part bounds
-come from the display geometry and may reflect tessellation precision.
-
-### Tangent face selection
-
-The selection filter offers **Tangent faces**. Clicking a face selects its connected
+Tangent faces**. Clicking a face selects its connected
 chain across edges classified as tangent by the loaded STEP topology; sharp,
 unknown, boundary and nonmanifold edges stop the chain. Selection never crosses
 occurrences or solid shapes. Shift-click adds a chain, or removes it if the whole
@@ -319,18 +223,9 @@ chain is already selected. The resulting faces use the existing highlight and
 Add to prompt controls. An assembly part loads its topology through Tree first,
 as with the Faces filter. This changes selection only, not CAD geometry.
 
-Authored sketch rows beneath top-level operations are expanded when Features
-opens. Repeats and assembly part groups keep their existing collapsed state;
-imports do not acquire invented sketches.
-
 Selection filters keep All, Parts, Faces and Edges together. **Connected
 selection** groups Edge chain and Tangent faces separately; the measurement filter menu keeps
 its existing options.
-
-Profile inputs (rectangles, circles, etc.) retain their authored shape names;
-only an explicit BuildSketch source block is labeled Sketch. This source outline
-is not a recovered parametric history, and importing STEP alone does not invent
-sketches or CAD operations.
 
 Edge chain uses tessellated edge endpoints within the same solid/occurrence and
 a shared face, with a 0.00001 model-unit endpoint tolerance. It follows corners
@@ -338,32 +233,22 @@ where only one continuation exists and a unique smooth continuation at branches;
 ambiguous branches, missing endpoints, and closed single edges stop traversal.
 Shift toggles the resulting group and Add to prompt uses its canonical edge refs.
 
-Feature prompt context is a compact single line: source location and, when
-selected, a parameter or measurement. Full child lists, parameter dumps and
-unrelated measured facts stay in the inspector. Imported geometry with valid
-references adds only its chip unless a particular measurement was selected.
-
-Feature capture retains exact surviving faces of rounded surfaces; uncertain
-overlap of unsupported curved patches remains unlinked. Fillets consuming a
-previously collected edge list still compare against the prior result, so they
-cannot claim unchanged faces from earlier operations. Source and STEP hashes
-and the viewer's unique face matching remain required before highlighting.
-
-
 ### STEP inspector layout
 
-The STEP inspector uses Geometry and Source features tabs. Display mode, explode,
-and clipping reuse their existing per-file controls in the toolbar's Display
-popover; they no longer occupy a lower inspector pane. Stored tab layouts drop
-the absent Display tab through the existing normalization.
+The STEP inspector uses one Model tab. Parts retain their assembly hierarchy and
+existing visibility/context actions. Faces, Edges, and Bodies are presentation
+folders, initially collapsed. The Face list menu switches between individual
+faces and grouping by surface type inside each part; no entity IDs change.
+Selecting a face/edge group uses the existing multi-reference selection. External
+reference reveals expand the presentation ancestors so the selected row remains
+reachable. The standalone model keeps one root instead of a duplicate wrapper.
 
-Visited geometry/source trees remain mounted across tab switches to retain their
-scroll position and disclosures. Inactive source inspection does not request
-selection topology or publish a highlight. Both trees use the same collapsible
-selection-details area with a draggable, keyboard-accessible divider. Feature
-measurements appear before expandable operation inputs, with each bounding extent
-shown once as its existing dimension-preview button. File state, reference
-callbacks, model geometry, and display-setting persistence are unchanged.
+Selection details are collapsible and resizable. Measured extents, area, and radii
+appear first, with the existing reference details behind a disclosure. Extent and
+radius buttons preview the selected STEP geometry using the existing temporary
+measurement overlay. Add to prompt uses canonical STEP references, optionally
+with the selected measured value. There is no separate Surfaces tab or source
+feature view. Display controls and per-file state retain their toolbar popover.
 
 The toolbar has stable View, Inspect, and Markup/capture groups. View groups zoom,
 a View controls menu (Pan, Orbit, and authored animation playback), and Display.

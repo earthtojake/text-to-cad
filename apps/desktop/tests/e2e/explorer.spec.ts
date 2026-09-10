@@ -522,9 +522,10 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   // first open compiles the document in cadgen's build pool, so this is the
   // slow assertion of the suite.
   await expect(page.locator("canvas").first()).toBeVisible({ timeout: 60_000 });
-  const tree = page.getByRole("tab", { name: "Geometry" });
+  const tree = page.getByRole("tab", { name: "Model" });
   await expect(tree).toBeVisible({ timeout: 90_000 });
-  await expect(page.getByRole("tab", { name: "Source features" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Source features" })).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "Surfaces" })).toHaveCount(0);
 
   /*
     A CAD tab opens with the viewer's Inspector as its ONE panel — a STEP
@@ -557,7 +558,7 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await shoot("file-cad-tree.png", true);
   // ...and the Inspector's own toggle brings it back, closing the tree.
   await page.locator("header [data-file-panel='cad-file-sheet']").click();
-  await expect(page.getByRole("tab", { name: "Source features" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Source features" })).toHaveCount(0);
   await expect(page.getByLabel("Filter files")).toHaveCount(0);
   await expect(panels(page)).toHaveCount(1);
   await resizeWindow(1440, 900);
@@ -659,7 +660,7 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await themePanel.click();
   await expect(themePanel).toHaveAttribute("aria-pressed", "true");
   await expect(sheetPanel).toHaveAttribute("aria-pressed", "false");
-  await expect(page.getByRole("tab", { name: "Geometry" })).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "Model" })).toHaveCount(0);
   // The theme panel takes the Inspector's place in the SAME column: the viewer
   // portals it into this app's panel container, so there is one of those and
   // it names the panel that is in it.
@@ -693,8 +694,8 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await sheetPanel.click();
   await expect(sheetPanel).toHaveAttribute("aria-pressed", "true");
   await expect(themePanel).toHaveAttribute("aria-pressed", "false");
-  await expect(page.getByRole("tab", { name: "Geometry" })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Source features" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Model" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Source features" })).toHaveCount(0);
   await expect(panels(page)).toHaveCount(1);
   await expect(panels(page)).toHaveAttribute("data-file-panel-container", "cad-file-sheet");
   await expectInspectorBesideModel();
@@ -853,7 +854,7 @@ test("renders the explorer in light as well as dark", async () => {
   await shoot("browser-light.png");
   if (cadReady) {
     await page.getByRole("tab", { name: /import-smoke\.step/ }).click();
-    await expect(page.getByRole("tab", { name: "Geometry" })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole("tab", { name: "Model" })).toBeVisible({ timeout: 60_000 });
     // The app stays light: the surface follows the app's theme rather than
     // flipping the document to the CAD theme's own.
     await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
@@ -1182,7 +1183,7 @@ async function expectInspectorBesideModel() {
   const surface = page.locator("[data-cad-surface]");
   const sheet = panels(page);
   await expect(sheet).toHaveAttribute("data-file-panel-container", "cad-file-sheet");
-  await expect(page.getByRole("tab", { name: "Geometry" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Model" })).toBeVisible();
   const surfaceBox = (await surface.boundingBox())!;
   const sheetBox = (await sheet.boundingBox())!;
   const where = `surface ${JSON.stringify(surfaceBox)} sheet ${JSON.stringify(sheetBox)}`;
