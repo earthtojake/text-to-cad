@@ -104,10 +104,15 @@ test('Model tree groups collapsed faces and adds measured STEP references to the
     await expect(chip).toHaveAttribute('data-selector',/f[0-9]/);
     await expect(page.locator('[data-composer]')).not.toContainText('.py');
     await expect(page.getByRole('tab',{name:'Source features'})).toHaveCount(0);
-    await page.getByRole('tab',{name:'features',exact:true}).click();
+    const views=page.getByRole('tablist',{name:'Model view',exact:true});
+    const geometryTab=views.getByRole('tab',{name:'Geometry',exact:true});
+    await expect(geometryTab).toHaveAttribute('data-slot','tabs-trigger');
+    await geometryTab.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(views.getByRole('tab',{name:'Features',exact:true})).toHaveAttribute('aria-selected','true');
     await expect(page.getByRole('list',{name:'Inferred modeling operations'}).getByRole('button',{name:/^Select /}).first()).toBeVisible({timeout:30000});
     await expect(page.getByRole('button',{name:/Play (build|assembly)/})).toHaveCount(0);
-    await page.getByRole('tab',{name:'geometry',exact:true}).click();
+    await page.getByRole('tab',{name:'Geometry',exact:true}).click();
     await expect(tree).toBeVisible();
     assert.deepEqual(sourceRequests,[]);
     assert.deepEqual(errors,[]);
