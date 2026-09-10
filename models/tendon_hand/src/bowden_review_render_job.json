@@ -1,0 +1,32 @@
+{
+  "input": "models/tendon_hand/STEP/bowden_review.step",
+  "mode": "view",
+  "theme": "models/tendon_hand/src/presentation-theme.json",
+  "display": {
+    "mode": "solid",
+    "edges": {
+      "enabled": false
+    }
+  },
+  "render": {
+    "sizeProfile": "presentation-large",
+    "padding": 0.12
+  },
+  "outputs": [
+    {
+      "path": "models/tendon_hand/tmp/bowden_review.png",
+      "camera": {
+        "direction": [
+          0.7,
+          -0.4,
+          1
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ]
+      }
+    }
+  ]
+}

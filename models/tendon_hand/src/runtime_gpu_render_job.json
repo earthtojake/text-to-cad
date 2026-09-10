@@ -1,0 +1,10 @@
+{
+  "input":"models/tendon_hand/STEP/runtime_fixture.step",
+  "theme":"models/tendon_hand/src/presentation-theme.json",
+  "display":{"mode":"solid","edges":{"enabled":false}},
+  "animation":{"clip":"bend","time":0.75},
+  "render":{"sizeProfile":"presentation-large","padding":0.14,"tessellation":{"chordTolerance":0.001,"angleTolerance":0.18}},
+  "camera":{"direction":[0.2,-0.4,1.0],"up":[0,1,0]},
+  "outputs":[{"path":"models/tendon_hand/tmp/runtime_gpu_bend.png"}],
+  "timeoutSeconds":300
+}

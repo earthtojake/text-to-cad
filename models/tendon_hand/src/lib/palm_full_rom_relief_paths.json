@@ -1,0 +1,6534 @@
+[
+  {
+    "sample": "full_fist_candidate",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "body": "main",
+    "tendon": "thumb_mcp_flexion_positive",
+    "group": "thumb_mcp_flexion_positive_cmc_reaction",
+    "radius": 0.45,
+    "gap": -0.18683626018779237,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -23.368093449481293,
+            30.307790411448295,
+            0.0
+          ],
+          [
+            -24.53690171043072,
+            36.93643145238975,
+            0.0
+          ],
+          [
+            -25.648104753137854,
+            36.5921887161915,
+            5.069008962790951
+          ],
+          [
+            -25.421326724092896,
+            33.67634235508753,
+            11.2623597928587
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -25.421326724092896,
+            33.67634235508753,
+            11.2623597928587
+          ],
+          [
+            -25.194548695047935,
+            30.76049599398356,
+            17.455710622926446
+          ],
+          [
+            -31.391899533094573,
+            33.09150789803846,
+            19.50336292943104
+          ],
+          [
+            -32.92044426318412,
+            34.8973478139922,
+            15.650704865611658
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -32.92044426318412,
+            34.8973478139922,
+            15.650704865611658
+          ],
+          [
+            -34.44898899327367,
+            36.70318772994594,
+            11.798046801792273
+          ],
+          [
+            -35.6314040320217,
+            39.48363174114541,
+            11.202260041689225
+          ],
+          [
+            -37.32210349833328,
+            43.10934844715241,
+            15.20279579551077
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "full_fist_candidate",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "body": "main",
+    "tendon": "index_pip_positive",
+    "group": "index_pip_positive_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.44999999999999823,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -28.991175381902828,
+            90.51482582534962,
+            0.0
+          ],
+          [
+            -30.667936313478318,
+            95.12168862267698,
+            0.0
+          ],
+          [
+            -33.329535505875384,
+            98.96374795212688,
+            -5.971085007265048
+          ],
+          [
+            -33.77282470101465,
+            102.9239257922533,
+            -2.4624666728317246
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -33.77282470101465,
+            102.9239257922533,
+            -2.4624666728317246
+          ],
+          [
+            -34.216113896153914,
+            106.88410363237972,
+            1.0461516616015984
+          ],
+          [
+            -33.0,
+            101.0,
+            7.278278040540239
+          ],
+          [
+            -33.0,
+            101.0,
+            12.250000000000002
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "full_fist_candidate",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "body": "main",
+    "tendon": "index_pip_positive",
+    "group": "index_pip_positive_proximal_guide",
+    "radius": 0.45,
+    "gap": -0.4499999999999929,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -32.999999999999986,
+            101.00000000000001,
+            12.25
+          ],
+          [
+            -32.999999999999986,
+            101.00000000000001,
+            21.166666666666657
+          ],
+          [
+            -35.1,
+            96.50000000000001,
+            30.083333333333343
+          ],
+          [
+            -35.1,
+            96.50000000000001,
+            39.0
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "full_fist_candidate",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "body": "main",
+    "tendon": "index_pip_negative",
+    "group": "index_pip_negative_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.44999999999999823,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -34.62933110661828,
+            88.46270496539562,
+            0.0
+          ],
+          [
+            -36.28539611903262,
+            93.01270619215286,
+            0.0
+          ],
+          [
+            -39.579167890158864,
+            96.60786600868144,
+            -5.866773605905172
+          ],
+          [
+            -39.489648111773924,
+            100.79869871152465,
+            -2.68580065054051
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -39.489648111773924,
+            100.79869871152465,
+            -2.68580065054051
+          ],
+          [
+            -39.40012833338898,
+            104.98953141436789,
+            0.4951723048241523
+          ],
+          [
+            -38.99999999999999,
+            101.0,
+            7.241602263326186
+          ],
+          [
+            -38.99999999999999,
+            101.0,
+            12.25
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "full_fist_candidate",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "body": "main",
+    "tendon": "index_pip_negative",
+    "group": "index_pip_negative_proximal_guide",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -38.99999999999999,
+            101.0,
+            12.25
+          ],
+          [
+            -38.99999999999999,
+            101.0,
+            21.166666666666657
+          ],
+          [
+            -36.89999999999999,
+            105.50000000000001,
+            30.083333333333343
+          ],
+          [
+            -36.89999999999999,
+            105.50000000000001,
+            39.0
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "full_fist_candidate",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "body": "main",
+    "tendon": "index_dip_positive",
+    "group": "index_dip_positive_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.008206693131664666,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -27.863544236959736,
+            90.92524999734043,
+            0.0
+          ],
+          [
+            -29.564709515636167,
+            95.59916318726415,
+            0.0
+          ],
+          [
+            -32.36742537860729,
+            101.9337063418563,
+            -5.0587747299249175
+          ],
+          [
+            -33.05981104290762,
+            104.82522951443596,
+            -0.6160603679423201
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -33.05981104290762,
+            104.82522951443596,
+            -0.6160603679423201
+          ],
+          [
+            -33.75219670720794,
+            107.71675268701563,
+            3.826653994040277
+          ],
+          [
+            -31.799999999999994,
+            101.0,
+            7.346900831872253
+          ],
+          [
+            -31.799999999999994,
+            101.0,
+            12.249999999999998
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "full_fist_candidate",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "body": "main",
+    "tendon": "index_dip_negative",
+    "group": "index_dip_negative_mcp_reaction",
+    "radius": 0.45,
+    "gap": -1.1379786002407855e-14,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -35.756962251561376,
+            88.0522807934048,
+            0.0
+          ],
+          [
+            -37.46697901817543,
+            92.75051324656573,
+            0.0
+          ],
+          [
+            -40.493747946067366,
+            99.94266221910826,
+            -4.557373733938175
+          ],
+          [
+            -41.01528316754077,
+            102.86955062318361,
+            -0.5479690066433485
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -41.01528316754077,
+            102.86955062318361,
+            -0.5479690066433485
+          ],
+          [
+            -41.536818389014165,
+            105.79643902725897,
+            3.4614357206514788
+          ],
+          [
+            -40.199999999999996,
+            101.0,
+            7.25022823172334
+          ],
+          [
+            -40.19999999999999,
+            101.0,
+            12.250000000000002
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "full_fist_candidate",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "body": "main",
+    "tendon": "middle_pip_positive",
+    "group": "middle_pip_positive_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.44999999999999823,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -7.943758057065949,
+            93.0580821766191,
+            0.0
+          ],
+          [
+            -8.379544183127011,
+            98.03914039031478,
+            0.0
+          ],
+          [
+            -9.149295491612104,
+            105.42667037701406,
+            -4.666427744713186
+          ],
+          [
+            -9.28604089690072,
+            108.3310489020553,
+            -0.5249322893630013
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -9.28604089690072,
+            108.3310489020553,
+            -0.5249322893630013
+          ],
+          [
+            -9.42278630218934,
+            111.23542742709655,
+            3.616563165987183
+          ],
+          [
+            -9.0,
+            105.0,
+            7.265980453783072
+          ],
+          [
+            -9.0,
+            105.00000000000001,
+            12.249999999999998
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "full_fist_candidate",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "body": "main",
+    "tendon": "middle_pip_positive",
+    "group": "middle_pip_positive_proximal_guide",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -8.999999999999998,
+            105.00000000000001,
+            12.25
+          ],
+          [
+            -8.999999999999998,
+            105.00000000000001,
+            22.166666666666657
+          ],
+          [
+            -11.099999999999998,
+            100.5,
+            32.08333333333334
+          ],
+          [
+            -11.099999999999998,
+            100.5,
+            42.0
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "full_fist_candidate",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "body": "main",
+    "tendon": "middle_pip_negative",
+    "group": "middle_pip_negative_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -13.920926245616423,
+            92.53514772013314,
+            0.0
+          ],
+          [
+            -14.356677477210233,
+            97.51580708824306,
+            0.0
+          ],
+          [
+            -15.140421219816497,
+            105.08936407797152,
+            -4.486607669414168
+          ],
+          [
+            -15.270090429768075,
+            108.02117754736828,
+            -0.4524114814712504
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -15.270090429768075,
+            108.02117754736828,
+            -0.4524114814712504
+          ],
+          [
+            -15.399759639719653,
+            110.95299101676504,
+            3.5817847064716672
+          ],
+          [
+            -14.999999999999998,
+            105.0,
+            7.250462484837223
+          ],
+          [
+            -14.999999999999998,
+            105.0,
+            12.25
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "full_fist_candidate",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "body": "main",
+    "tendon": "middle_pip_negative",
+    "group": "middle_pip_negative_proximal_guide",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -14.999999999999998,
+            105.00000000000001,
+            12.25
+          ],
+          [
+            -14.999999999999998,
+            105.00000000000001,
+            22.166666666666657
+          ],
+          [
+            -12.9,
+            109.50000000000003,
+            32.08333333333334
+          ],
+          [
+            -12.9,
+            109.50000000000003,
+            42.0
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "full_fist_candidate",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "body": "main",
+    "tendon": "middle_dip_positive",
+    "group": "middle_dip_positive_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.0016533731893871306,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -6.748324419355854,
+            93.16266906791628,
+            0.0
+          ],
+          [
+            -7.18413088701761,
+            98.14395978717182,
+            0.0
+          ],
+          [
+            -7.949519905780503,
+            105.47731869524785,
+            -4.707713799696947
+          ],
+          [
+            -8.08861313294009,
+            108.38612474257478,
+            -0.5452270502077664
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -8.08861313294009,
+            108.38612474257478,
+            -0.5452270502077664
+          ],
+          [
+            -8.227706360099678,
+            111.2949307899017,
+            3.617259699281414
+          ],
+          [
+            -7.799999999999997,
+            105.0,
+            7.270221182144902
+          ],
+          [
+            -7.799999999999997,
+            105.0,
+            12.25
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "full_fist_candidate",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "body": "main",
+    "tendon": "middle_dip_negative",
+    "group": "middle_dip_negative_mcp_reaction",
+    "radius": 0.45,
+    "gap": -4.274358644806853e-15,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -15.116359883326515,
+            92.43056082883595,
+            0.0
+          ],
+          [
+            -15.552112306638408,
+            97.41123381834588,
+            0.0
+          ],
+          [
+            -16.333592233151407,
+            104.96745818743108,
+            -4.470198640379298
+          ],
+          [
+            -16.464841006982937,
+            107.93505324747552,
+            -0.4619765005733792
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -16.464841006982937,
+            107.93505324747552,
+            -0.4619765005733792
+          ],
+          [
+            -16.59608978081447,
+            110.90264830751995,
+            3.5462456392325397
+          ],
+          [
+            -16.199999999999996,
+            105.0,
+            7.250426765659022
+          ],
+          [
+            -16.199999999999996,
+            105.0,
+            12.249999999999998
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "full_fist_candidate",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "body": "main",
+    "tendon": "ring_pip_positive",
+    "group": "ring_pip_positive_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.44999999999999823,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            13.920926245616423,
+            87.53514772013314,
+            0.0
+          ],
+          [
+            14.356677476846192,
+            92.51580708408206,
+            0.0
+          ],
+          [
+            15.140421165657951,
+            100.08936385307904,
+            -4.486607769775308
+          ],
+          [
+            15.270090407845105,
+            103.02117741854795,
+            -0.4524116482619539
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            15.270090407845105,
+            103.02117741854795,
+            -0.4524116482619539
+          ],
+          [
+            15.399759650032259,
+            105.95299098401685,
+            3.5817844732513997
+          ],
+          [
+            14.999999999999998,
+            99.99999999999999,
+            7.250462495305338
+          ],
+          [
+            14.999999999999998,
+            99.99999999999999,
+            12.25
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "full_fist_candidate",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "body": "main",
+    "tendon": "ring_pip_positive",
+    "group": "ring_pip_positive_proximal_guide",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            14.999999999999998,
+            99.99999999999999,
+            12.25
+          ],
+          [
+            14.999999999999998,
+            100.0,
+            20.833333333333343
+          ],
+          [
+            12.899999999999997,
+            95.50000000000001,
+            29.416666666666657
+          ],
+          [
+            12.899999999999997,
+            95.50000000000001,
+            38.0
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "full_fist_candidate",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "body": "main",
+    "tendon": "ring_pip_negative",
+    "group": "ring_pip_negative_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.4499999999999858,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            7.943758057065949,
+            88.0580821766191,
+            0.0
+          ],
+          [
+            8.379544183640029,
+            93.03914039617858,
+            0.0
+          ],
+          [
+            9.149295452085862,
+            100.42667053151911,
+            -4.666427672475524
+          ],
+          [
+            9.28604090521079,
+            103.33104899891286,
+            -0.5249321536122397
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            9.28604090521079,
+            103.33104899891286,
+            -0.5249321536122397
+          ],
+          [
+            9.422786358335715,
+            106.23542746630666,
+            3.6165633652510443
+          ],
+          [
+            9.0,
+            100.0,
+            7.26598044957074
+          ],
+          [
+            9.0,
+            100.00000000000001,
+            12.249999999999998
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "full_fist_candidate",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "body": "main",
+    "tendon": "ring_pip_negative",
+    "group": "ring_pip_negative_proximal_guide",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            8.999999999999998,
+            100.0,
+            12.25
+          ],
+          [
+            8.999999999999998,
+            100.00000000000001,
+            20.833333333333343
+          ],
+          [
+            11.1,
+            104.5,
+            29.416666666666657
+          ],
+          [
+            11.1,
+            104.5,
+            38.0
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "full_fist_candidate",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "body": "main",
+    "tendon": "ring_dip_positive",
+    "group": "ring_dip_positive_mcp_reaction",
+    "radius": 0.45,
+    "gap": -4.274358644806853e-15,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            15.116359883326515,
+            87.43056082883595,
+            0.0
+          ],
+          [
+            15.552112385323461,
+            92.41123471772016,
+            0.0
+          ],
+          [
+            16.33359332757962,
+            99.96745821938916,
+            -4.470198879859107
+          ],
+          [
+            16.46484147395688,
+            102.93505265663939,
+            -0.46197763098909267
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            16.46484147395688,
+            102.93505265663939,
+            -0.46197763098909267
+          ],
+          [
+            16.596089620334144,
+            105.9026470938896,
+            3.5462436178809216
+          ],
+          [
+            16.199999999999996,
+            99.99999999999999,
+            7.250426405838972
+          ],
+          [
+            16.199999999999996,
+            99.99999999999999,
+            12.249999999999998
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "full_fist_candidate",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "body": "main",
+    "tendon": "ring_dip_negative",
+    "group": "ring_dip_negative_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.0016533742596014367,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            6.748324419355854,
+            88.16266906791628,
+            0.0
+          ],
+          [
+            7.184130854300922,
+            93.14395941321835,
+            0.0
+          ],
+          [
+            7.949523244745268,
+            100.47731647826149,
+            -4.707714776064961
+          ],
+          [
+            8.08861495091409,
+            103.38612333753747,
+            -0.5452287331689316
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            8.08861495091409,
+            103.38612333753747,
+            -0.5452287331689316
+          ],
+          [
+            8.227706657082914,
+            106.29493019681345,
+            3.6172573097270977
+          ],
+          [
+            7.799999999999997,
+            100.0,
+            7.270220876879334
+          ],
+          [
+            7.799999999999997,
+            100.0,
+            12.25
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "full_fist_candidate",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "body": "little",
+    "tendon": "little_pip_positive",
+    "group": "little_pip_positive_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            33.54184965478638,
+            76.62987482357893,
+            0.0
+          ],
+          [
+            35.118536661739164,
+            80.01109102146668,
+            0.0
+          ],
+          [
+            38.57027910479597,
+            82.02065103714249,
+            -5.246311797910506
+          ],
+          [
+            39.17256934890275,
+            87.9309892017086,
+            -2.6855062206964067
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            39.17256934890275,
+            87.9309892017086,
+            -2.6855062206964067
+          ],
+          [
+            39.77485959300953,
+            93.8413273662747,
+            -0.1247006434823077
+          ],
+          [
+            39.0,
+            89.0,
+            6.661275467252114
+          ],
+          [
+            39.0,
+            89.0,
+            12.250000000000002
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "full_fist_candidate",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "body": "little",
+    "tendon": "little_pip_positive",
+    "group": "little_pip_positive_proximal_guide",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            39.0,
+            89.0,
+            12.25
+          ],
+          [
+            39.0,
+            89.0,
+            18.16666666666667
+          ],
+          [
+            36.89999999999999,
+            84.5,
+            24.08333333333333
+          ],
+          [
+            36.89999999999999,
+            84.5,
+            30.0
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "full_fist_candidate",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "body": "little",
+    "tendon": "little_pip_negative",
+    "group": "little_pip_negative_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            28.10400293256648,
+            79.16558439402313,
+            0.0
+          ],
+          [
+            30.105801072450134,
+            83.4584543584668,
+            0.0
+          ],
+          [
+            32.658867509551285,
+            86.83451763200942,
+            -6.210795288420724
+          ],
+          [
+            32.68715956862553,
+            91.16039133084477,
+            -2.611985057249372
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            32.68715956862553,
+            91.16039133084477,
+            -2.611985057249372
+          ],
+          [
+            32.71545162769978,
+            95.48626502968011,
+            0.9868251739219795
+          ],
+          [
+            32.99999999999999,
+            89.0,
+            7.356627337196753
+          ],
+          [
+            32.99999999999999,
+            89.0,
+            12.25
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "full_fist_candidate",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "body": "little",
+    "tendon": "little_pip_negative",
+    "group": "little_pip_negative_proximal_guide",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            32.99999999999999,
+            89.0,
+            12.25
+          ],
+          [
+            32.99999999999999,
+            89.0,
+            18.16666666666667
+          ],
+          [
+            35.099999999999994,
+            93.5,
+            24.08333333333333
+          ],
+          [
+            35.099999999999994,
+            93.5,
+            30.0
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "full_fist_candidate",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "body": "little",
+    "tendon": "little_dip_positive",
+    "group": "little_dip_positive_mcp_reaction",
+    "radius": 0.45,
+    "gap": -1.1379786002407855e-14,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            34.62941899923036,
+            76.1227329094901,
+            0.0
+          ],
+          [
+            36.743313951469084,
+            80.65599526379627,
+            0.0
+          ],
+          [
+            40.65139781346279,
+            87.37154983926831,
+            -4.566165099395589
+          ],
+          [
+            41.137528768905575,
+            90.40367411357374,
+            -0.6378913369230403
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            41.137528768905575,
+            90.40367411357374,
+            -0.6378913369230403
+          ],
+          [
+            41.623659724348364,
+            93.43579838787916,
+            3.2903824255495087
+          ],
+          [
+            40.19999999999999,
+            89.0,
+            7.25061142058003
+          ],
+          [
+            40.19999999999999,
+            89.0,
+            12.25
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "full_fist_candidate",
+    "pose": {
+      "index_mcp_abduction": -20.0,
+      "index_mcp_flexion": 90.0,
+      "index_pip": 110.0,
+      "index_dip": 80.0,
+      "middle_mcp_abduction": -5.0,
+      "middle_mcp_flexion": 90.0,
+      "middle_pip": 110.0,
+      "middle_dip": 80.0,
+      "ring_mcp_abduction": 5.0,
+      "ring_mcp_flexion": 90.0,
+      "ring_pip": 110.0,
+      "ring_dip": 80.0,
+      "little_mcp_abduction": 25.0,
+      "little_mcp_flexion": 90.0,
+      "little_pip": 110.0,
+      "little_dip": 80.0,
+      "thumb_cmc_abduction": -20.0,
+      "thumb_cmc_flexion": 45.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_mcp_flexion": 55.0,
+      "thumb_ip": 60.0
+    },
+    "body": "little",
+    "tendon": "little_dip_negative",
+    "group": "little_dip_negative_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.006016275620649492,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            27.016433588122503,
+            79.67272630811198,
+            0.0
+          ],
+          [
+            29.280550427901005,
+            84.52814053985922,
+            0.0
+          ],
+          [
+            34.601645516226625,
+            88.80194579214036,
+            -4.83156853441062
+          ],
+          [
+            33.78596315047335,
+            92.62834783195046,
+            -0.2429363727900033
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            33.78596315047335,
+            92.62834783195046,
+            -0.2429363727900033
+          ],
+          [
+            32.97028078472006,
+            96.45474987176057,
+            4.3456957888306125
+          ],
+          [
+            31.8,
+            89.0,
+            7.834763826730968
+          ],
+          [
+            31.8,
+            89.0,
+            12.25
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "precision_pinch_candidate",
+    "pose": {
+      "index_mcp_abduction": -17.40900758070954,
+      "index_mcp_flexion": 74.68469201675903,
+      "index_pip": 57.94830222639836,
+      "index_dip": 21.90864380435607,
+      "thumb_mcp_abduction": -11.484462068625563,
+      "thumb_mcp_flexion": 7.697863149475799,
+      "thumb_ip": 31.564732218590134,
+      "thumb_cmc_abduction": -21.046825109125002,
+      "thumb_cmc_flexion": 37.474289981694746
+    },
+    "body": "main",
+    "tendon": "thumb_mcp_flexion_positive",
+    "group": "thumb_mcp_flexion_positive_cmc_reaction",
+    "radius": 0.45,
+    "gap": -0.08697063926650017,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -23.368093449481293,
+            30.307790411448295,
+            0.0
+          ],
+          [
+            -24.52853079051934,
+            36.888957606482876,
+            0.0
+          ],
+          [
+            -25.738012014462416,
+            36.24790602930768,
+            5.08269828962743
+          ],
+          [
+            -25.91366490733869,
+            34.08832574923734,
+            11.287036295604496
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -25.91366490733869,
+            34.08832574923734,
+            11.287036295604496
+          ],
+          [
+            -26.08931780021496,
+            31.928745469167,
+            17.491374301581562
+          ],
+          [
+            -32.00411581530911,
+            34.755946880615134,
+            19.420327428026976
+          ],
+          [
+            -33.4379182892565,
+            36.43792128584562,
+            15.489630796911879
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -33.4379182892565,
+            36.43792128584562,
+            15.489630796911879
+          ],
+          [
+            -34.871720763203896,
+            38.11989569107611,
+            11.558934165796781
+          ],
+          [
+            -36.092311403481695,
+            40.67558141591096,
+            10.545854340519622
+          ],
+          [
+            -37.97424391318797,
+            44.911784939807895,
+            14.09943127688055
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "wrist_flexion_55",
+    "pose": {
+      "wrist_flexion": 55.0
+    },
+    "body": "main",
+    "tendon": "index_mcp_flexion_negative",
+    "group": "index_mcp_flexion_negative_wrist_guide",
+    "radius": 0.45,
+    "gap": 0.09999348512099354,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -16.5,
+            -42.1064551406392,
+            -14.833962231627078
+          ],
+          [
+            -16.5,
+            -32.97453666164105,
+            -27.87569340513978
+          ],
+          [
+            -21.855920130092176,
+            0.3347402048452901,
+            -13.237604497717527
+          ],
+          [
+            -21.63008852535945,
+            12.554286225223557,
+            -11.496833964246024
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -21.63008852535945,
+            12.554286225223557,
+            -11.496833964246024
+          ],
+          [
+            -21.404256920626725,
+            24.773832245601824,
+            -9.756063430774521
+          ],
+          [
+            -19.820828093559378,
+            53.91666656143302,
+            -5.4999999999999964
+          ],
+          [
+            -24.875018342308913,
+            67.80294014350012,
+            -5.4999999999999964
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "wrist_flexion_60",
+    "pose": {
+      "wrist_flexion": 60.0
+    },
+    "body": "main",
+    "tendon": "ring_pip_positive",
+    "group": "ring_pip_positive_wrist_guide",
+    "radius": 0.45,
+    "gap": 0.11143229399313143,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            10.5,
+            28.12140090910688,
+            30.092304845413267
+          ],
+          [
+            10.5,
+            35.32078806914702,
+            17.622600500864745
+          ],
+          [
+            11.010744010726466,
+            37.007826260119614,
+            22.99358414401506
+          ],
+          [
+            11.940718020200451,
+            47.27200898761352,
+            15.135580166826259
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            11.940718020200451,
+            47.27200898761352,
+            15.135580166826259
+          ],
+          [
+            12.870692029674437,
+            57.53619171510741,
+            7.277576189637454
+          ],
+          [
+            10.785737352734852,
+            51.699774695460334,
+            0.0
+          ],
+          [
+            11.938133098107201,
+            64.87171833854592,
+            7.105427357601002e-15
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "palm_cup_10",
+    "pose": {
+      "palm_cup": 10.0
+    },
+    "body": "main",
+    "tendon": "little_mcp_abduction_positive",
+    "group": "little_mcp_abduction_positive_cup_reaction",
+    "radius": 0.45,
+    "gap": -0.44999999999999823,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            16.22366801037394,
+            35.0,
+            -9.5
+          ],
+          [
+            16.22366801037394,
+            39.100585790348774,
+            -9.5
+          ],
+          [
+            13.311436120373832,
+            43.208498982748296,
+            -4.251793496862776
+          ],
+          [
+            13.548475382056894,
+            47.302231835295956,
+            -4.248602567580769
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            13.548475382056894,
+            47.302231835295956,
+            -4.248602567580769
+          ],
+          [
+            13.785514643739956,
+            51.395964687843616,
+            -4.245411638298762
+          ],
+          [
+            16.254403048087653,
+            55.887183732578364,
+            -10.659656575813042
+          ],
+          [
+            17.961081160479665,
+            59.603627893291105,
+            -10.358723177213736
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "palm_cup_20",
+    "pose": {
+      "palm_cup": 20.0
+    },
+    "body": "main",
+    "tendon": "little_mcp_abduction_positive",
+    "group": "little_mcp_abduction_positive_cup_reaction",
+    "radius": 0.45,
+    "gap": -0.2740473346707842,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            16.22366801037394,
+            35.0,
+            -9.5
+          ],
+          [
+            16.22366801037394,
+            39.10059217756244,
+            -9.5
+          ],
+          [
+            12.123548398529705,
+            43.52116203334868,
+            -5.352135614661503
+          ],
+          [
+            13.711460840341065,
+            47.30187283721561,
+            -5.356877971314059
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            13.711460840341065,
+            47.30187283721561,
+            -5.356877971314059
+          ],
+          [
+            15.299373282152425,
+            51.08258364108254,
+            -5.361620327966616
+          ],
+          [
+            18.192634537211767,
+            55.886985237342074,
+            -11.495456537949247
+          ],
+          [
+            19.82121481573266,
+            59.603627893291105,
+            -10.90270179245468
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "palm_cup_20",
+    "pose": {
+      "palm_cup": 20.0
+    },
+    "body": "main",
+    "tendon": "little_mcp_flexion_negative",
+    "group": "little_mcp_flexion_negative_cup_reaction",
+    "radius": 0.45,
+    "gap": -0.4499999999999921,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            12.0,
+            31.0,
+            -5.5
+          ],
+          [
+            12.0,
+            35.531351365306065,
+            -5.5
+          ],
+          [
+            19.36135125752204,
+            40.35031467876263,
+            -9.624931224396807
+          ],
+          [
+            21.586100494929806,
+            44.29885036536922,
+            -10.347453436836034
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            21.586100494929806,
+            44.29885036536922,
+            -10.347453436836034
+          ],
+          [
+            23.810849732337573,
+            48.24738605197581,
+            -11.06997564927526
+          ],
+          [
+            20.654504025851715,
+            53.742927158666774,
+            -6.3426982335325
+          ],
+          [
+            22.370727644770064,
+            57.65958388928388,
+            -5.718043920901599
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "palm_cup_25",
+    "pose": {
+      "palm_cup": 25.0
+    },
+    "body": "main",
+    "tendon": "little_mcp_flexion_negative",
+    "group": "little_mcp_flexion_negative_cup_reaction",
+    "radius": 0.45,
+    "gap": -0.44999999999999646,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            12.0,
+            31.0,
+            -5.5
+          ],
+          [
+            12.0,
+            35.44326400359586,
+            -5.5
+          ],
+          [
+            18.680574884765875,
+            41.02441882773456,
+            -10.10403095702109
+          ],
+          [
+            21.64993580186353,
+            44.32979181371704,
+            -10.104030505923303
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            21.64993580186353,
+            44.32979181371704,
+            -10.104030505923303
+          ],
+          [
+            24.619296718961188,
+            47.63516479969952,
+            -10.104030054825516
+          ],
+          [
+            21.165808452791154,
+            53.63261917804543,
+            -6.457568461125356
+          ],
+          [
+            22.867677279145887,
+            57.65958388928388,
+            -5.663973994220885
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "index_mcp_flexion_85",
+    "pose": {
+      "index_mcp_flexion": 85.0
+    },
+    "body": "main",
+    "tendon": "index_pip_positive",
+    "group": "index_pip_positive_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.4499999999999927,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -28.991175381902828,
+            90.51482582534962,
+            0.0
+          ],
+          [
+            -30.7011965628682,
+            95.21307040684111,
+            0.0
+          ],
+          [
+            -33.309533464048954,
+            102.37942622710509,
+            -4.483141322709155
+          ],
+          [
+            -34.357687685315824,
+            105.25920080537061,
+            -0.5435647802932606
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -34.357687685315824,
+            105.25920080537061,
+            -0.5435647802932606
+          ],
+          [
+            -35.40584190658269,
+            108.13897538363612,
+            3.396011762122634
+          ],
+          [
+            -33.39705166277375,
+            102.61987141995318,
+            7.22288386994662
+          ],
+          [
+            -33.54608262806333,
+            103.02933063188584,
+            12.203385051623885
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "index_mcp_flexion_85",
+    "pose": {
+      "index_mcp_flexion": 85.0
+    },
+    "body": "main",
+    "tendon": "index_pip_positive",
+    "group": "index_pip_positive_proximal_guide",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -33.54608262806333,
+            103.02933063188584,
+            12.203385051623883
+          ],
+          [
+            -33.81187971973037,
+            103.75960213939773,
+            21.086121109608598
+          ],
+          [
+            -34.517797374650556,
+            99.55910571594282,
+            30.3610580099578
+          ],
+          [
+            -34.78359446631759,
+            100.28937722345471,
+            39.243794067942545
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "index_mcp_flexion_85",
+    "pose": {
+      "index_mcp_flexion": 85.0
+    },
+    "body": "main",
+    "tendon": "index_pip_negative",
+    "group": "index_pip_negative_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.4499999999999858,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -34.62933110661828,
+            88.46270496539562,
+            0.0
+          ],
+          [
+            -36.339352288794764,
+            93.16094955021461,
+            0.0
+          ],
+          [
+            -38.94769511098862,
+            100.32730325685132,
+            -4.483141303304632
+          ],
+          [
+            -39.99584575161442,
+            103.20707912191567,
+            -0.543564746486709
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -39.99584575161442,
+            103.20707912191567,
+            -0.543564746486709
+          ],
+          [
+            -41.04399639224021,
+            106.08685498698001,
+            3.3960118103312142
+          ],
+          [
+            -39.03520738760576,
+            100.56775056031944,
+            7.222883873842038
+          ],
+          [
+            -39.18423835277878,
+            100.97720977193184,
+            12.203385051623885
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "index_mcp_flexion_85",
+    "pose": {
+      "index_mcp_flexion": 85.0
+    },
+    "body": "main",
+    "tendon": "index_pip_negative",
+    "group": "index_pip_negative_proximal_guide",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -39.18423835277878,
+            100.97720977193184,
+            12.203385051623883
+          ],
+          [
+            -39.45003544444582,
+            101.70748127944373,
+            21.086121109608598
+          ],
+          [
+            -39.27571197285968,
+            107.36852071792237,
+            29.576656325228882
+          ],
+          [
+            -39.541509064526714,
+            108.09879222543425,
+            38.459392383213626
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "index_mcp_flexion_85",
+    "pose": {
+      "index_mcp_flexion": 85.0
+    },
+    "body": "main",
+    "tendon": "index_dip_positive",
+    "group": "index_dip_positive_mcp_reaction",
+    "radius": 0.45,
+    "gap": 0.12792899856368473,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -27.863544236959736,
+            90.92524999734043,
+            0.0
+          ],
+          [
+            -29.57356537663013,
+            95.6234944653749,
+            0.0
+          ],
+          [
+            -32.18191050592347,
+            102.7898509293712,
+            -4.483140921926154
+          ],
+          [
+            -33.23005766603813,
+            105.6696255045572,
+            -0.5435641522817044
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -33.23005766603813,
+            105.6696255045572,
+            -0.5435641522817044
+          ],
+          [
+            -34.27820482615279,
+            108.54940007974321,
+            3.396012617362745
+          ],
+          [
+            -32.26942044001896,
+            103.03029537815813,
+            7.222881269539002
+          ],
+          [
+            -32.418451483120236,
+            103.43975480387665,
+            12.203385051623885
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "index_mcp_flexion_85",
+    "pose": {
+      "index_mcp_flexion": 85.0
+    },
+    "body": "main",
+    "tendon": "index_dip_negative",
+    "group": "index_dip_negative_mcp_reaction",
+    "radius": 0.45,
+    "gap": 0.12792896526515013,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -35.756962251561376,
+            88.0522807934048,
+            0.0
+          ],
+          [
+            -37.466983391231764,
+            92.75052526143928,
+            0.0
+          ],
+          [
+            -40.075328520525105,
+            99.91688172543557,
+            -4.483140921926154
+          ],
+          [
+            -41.12347568063976,
+            102.79665630062159,
+            -0.5435641522817044
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -41.12347568063976,
+            102.79665630062159,
+            -0.5435641522817044
+          ],
+          [
+            -42.17162284075442,
+            105.6764308758076,
+            3.396012617362745
+          ],
+          [
+            -40.1628384546206,
+            100.1573261742225,
+            7.222881269539002
+          ],
+          [
+            -40.31186949772187,
+            100.56678559994103,
+            12.203385051623885
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "index_mcp_flexion_90",
+    "pose": {
+      "index_mcp_flexion": 90.0
+    },
+    "body": "main",
+    "tendon": "index_pip_positive",
+    "group": "index_pip_positive_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.44999999999999823,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -28.991175381902828,
+            90.51482582534962,
+            0.0
+          ],
+          [
+            -30.701181438533585,
+            95.21302885307327,
+            0.0
+          ],
+          [
+            -33.290857291707795,
+            102.32810364147896,
+            -4.557920162673515
+          ],
+          [
+            -34.279340930207866,
+            105.04394073356741,
+            -0.4661973893020424
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -34.279340930207866,
+            105.04394073356741,
+            -0.4661973893020424
+          ],
+          [
+            -35.26782456870794,
+            107.75977782565585,
+            3.62552538406943
+          ],
+          [
+            -33.18092213764227,
+            102.026060429977,
+            7.255090183481221
+          ],
+          [
+            -33.18092213764227,
+            102.026060429977,
+            12.25
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "index_mcp_flexion_90",
+    "pose": {
+      "index_mcp_flexion": 90.0
+    },
+    "body": "main",
+    "tendon": "index_pip_positive",
+    "group": "index_pip_positive_proximal_guide",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -33.18092213764227,
+            102.026060429977,
+            12.25
+          ],
+          [
+            -33.18092213764227,
+            102.02606042997701,
+            21.166666666666657
+          ],
+          [
+            -33.61518599632717,
+            97.07920133545652,
+            30.083333333333343
+          ],
+          [
+            -33.61518599632717,
+            97.07920133545652,
+            39.0
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "index_mcp_flexion_90",
+    "pose": {
+      "index_mcp_flexion": 90.0
+    },
+    "body": "main",
+    "tendon": "index_pip_negative",
+    "group": "index_pip_negative_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -34.62933110661828,
+            88.46270496539562,
+            0.0
+          ],
+          [
+            -36.33933716807232,
+            93.16090800637113,
+            0.0
+          ],
+          [
+            -38.92901242066254,
+            100.27598320096584,
+            -4.557920068328834
+          ],
+          [
+            -39.91749638877596,
+            102.99182010256177,
+            -0.466197216140146
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -39.91749638877596,
+            102.99182010256177,
+            -0.466197216140146
+          ],
+          [
+            -40.90598035688938,
+            105.70765700415774,
+            3.6255256360485424
+          ],
+          [
+            -38.819077862357716,
+            99.97393957002299,
+            7.255090188717159
+          ],
+          [
+            -38.819077862357716,
+            99.97393957002299,
+            12.25
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "index_mcp_flexion_90",
+    "pose": {
+      "index_mcp_flexion": 90.0
+    },
+    "body": "main",
+    "tendon": "index_pip_negative",
+    "group": "index_pip_negative_proximal_guide",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -38.819077862357716,
+            99.97393957002299,
+            12.25
+          ],
+          [
+            -38.81907786235772,
+            99.973939570023,
+            21.166666666666657
+          ],
+          [
+            -38.38481400367283,
+            104.9207986645435,
+            30.083333333333343
+          ],
+          [
+            -38.38481400367283,
+            104.9207986645435,
+            39.0
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "index_mcp_flexion_90",
+    "pose": {
+      "index_mcp_flexion": 90.0
+    },
+    "body": "main",
+    "tendon": "index_dip_positive",
+    "group": "index_dip_positive_mcp_reaction",
+    "radius": 0.45,
+    "gap": -1.5015766408055242e-13,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -27.863544236959736,
+            90.92524999734043,
+            0.0
+          ],
+          [
+            -29.573550218782877,
+            95.62345281953185,
+            0.0
+          ],
+          [
+            -32.16322449517517,
+            102.73852913404265,
+            -4.557919878050191
+          ],
+          [
+            -33.1517115271994,
+            105.45436473244564,
+            -0.46619676517414127
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -33.1517115271994,
+            105.45436473244564,
+            -0.46619676517414127
+          ],
+          [
+            -34.140198559223634,
+            108.17020033084864,
+            3.6255263477019084
+          ],
+          [
+            -32.053290992699175,
+            102.4364846019678,
+            7.255089997291129
+          ],
+          [
+            -32.053290992699175,
+            102.4364846019678,
+            12.25
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "index_mcp_flexion_90",
+    "pose": {
+      "index_mcp_flexion": 90.0
+    },
+    "body": "main",
+    "tendon": "index_dip_negative",
+    "group": "index_dip_negative_mcp_reaction",
+    "radius": 0.45,
+    "gap": -1.5615286841352827e-13,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -35.756962251561376,
+            88.0522807934048,
+            0.0
+          ],
+          [
+            -37.466968232251546,
+            92.75048361248342,
+            0.0
+          ],
+          [
+            -40.05664555195473,
+            99.86555871137348,
+            -4.557919931325872
+          ],
+          [
+            -41.04512600841724,
+            102.58139674160992,
+            -0.46619686009762573
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -41.04512600841724,
+            102.58139674160992,
+            -0.46619686009762573
+          ],
+          [
+            -42.03360646487975,
+            105.29723477184635,
+            3.62552621113062
+          ],
+          [
+            -39.94670900730081,
+            99.56351539803218,
+            7.255089988463639
+          ],
+          [
+            -39.94670900730081,
+            99.56351539803218,
+            12.25
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "middle_mcp_flexion_85",
+    "pose": {
+      "middle_mcp_flexion": 85.0
+    },
+    "body": "main",
+    "tendon": "middle_pip_positive",
+    "group": "middle_pip_positive_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.4499999999999856,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -7.943758057065949,
+            93.0580821766191,
+            0.0
+          ],
+          [
+            -8.379516503022016,
+            98.03882400526695,
+            0.0
+          ],
+          [
+            -9.04418710926968,
+            105.63607943850617,
+            -4.483141322709155
+          ],
+          [
+            -9.311285835068066,
+            108.68901035221201,
+            -0.5435647802932606
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -9.311285835068066,
+            108.68901035221201,
+            -0.5435647802932606
+          ],
+          [
+            -9.57838456086645,
+            111.74194126591783,
+            3.396011762122634
+          ],
+          [
+            -9.06649140247583,
+            105.89098303670825,
+            7.22288386994662
+          ],
+          [
+            -9.104468418524988,
+            106.32506231645293,
+            12.203385051623885
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "middle_mcp_flexion_85",
+    "pose": {
+      "middle_mcp_flexion": 85.0
+    },
+    "body": "main",
+    "tendon": "middle_pip_positive",
+    "group": "middle_pip_positive_proximal_guide",
+    "radius": 0.45,
+    "gap": -0.4499999999999857,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -9.104468418524988,
+            106.32506231645293,
+            12.203385051623883
+          ],
+          [
+            -9.17979664317279,
+            107.18606786405145,
+            22.082315807700354
+          ],
+          [
+            -10.956425334062663,
+            103.39822890760243,
+            32.3534474061413
+          ],
+          [
+            -11.031753558710465,
+            104.25923445520097,
+            42.23237816221777
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "middle_mcp_flexion_85",
+    "pose": {
+      "middle_mcp_flexion": 85.0
+    },
+    "body": "main",
+    "tendon": "middle_pip_negative",
+    "group": "middle_pip_negative_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.44999999999999823,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -13.920926245616423,
+            92.53514772013314,
+            0.0
+          ],
+          [
+            -14.356684691881114,
+            97.51588955230856,
+            0.0
+          ],
+          [
+            -15.021361564435244,
+            105.1131444764116,
+            -4.483141303304632
+          ],
+          [
+            -15.288456498551891,
+            108.16607570633157,
+            -0.543564746486709
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -15.288456498551891,
+            108.16607570633157,
+            -0.543564746486709
+          ],
+          [
+            -15.555551432668542,
+            111.21900693625152,
+            3.3960118103312142
+          ],
+          [
+            -15.043659591056008,
+            105.3680485805618,
+            7.222883873842038
+          ],
+          [
+            -15.081636607075461,
+            105.80212785996697,
+            12.203385051623885
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "middle_mcp_flexion_85",
+    "pose": {
+      "middle_mcp_flexion": 85.0
+    },
+    "body": "main",
+    "tendon": "middle_pip_negative",
+    "group": "middle_pip_negative_proximal_guide",
+    "radius": 0.45,
+    "gap": -0.44999999999999823,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -15.081636607075461,
+            105.80212785996697,
+            12.203385051623883
+          ],
+          [
+            -15.156964831723263,
+            106.6631334075655,
+            22.082315807700354
+          ],
+          [
+            -13.530992590128992,
+            112.1729834592116,
+            31.56904572141238
+          ],
+          [
+            -13.606320814776794,
+            113.03398900681012,
+            41.44797647748885
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "middle_mcp_flexion_85",
+    "pose": {
+      "middle_mcp_flexion": 85.0
+    },
+    "body": "main",
+    "tendon": "middle_dip_positive",
+    "group": "middle_dip_positive_mcp_reaction",
+    "radius": 0.45,
+    "gap": 0.12792899856367684,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -6.748324419355854,
+            93.16266906791628,
+            0.0
+          ],
+          [
+            -7.1840828547888735,
+            98.14341077628514,
+            0.0
+          ],
+          [
+            -7.848761242172807,
+            105.74066896091428,
+            -4.483140921926154
+          ],
+          [
+            -8.115853148218942,
+            108.79359804408487,
+            -0.5435641522817044
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -8.115853148218942,
+            108.79359804408487,
+            -0.5435641522817044
+          ],
+          [
+            -8.382945054265079,
+            111.84652712725546,
+            3.396012617362745
+          ],
+          [
+            -7.871057744937265,
+            105.99556970136499,
+            7.222881269539002
+          ],
+          [
+            -7.909034780814893,
+            106.42964920775012,
+            12.203385051623885
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "middle_mcp_flexion_85",
+    "pose": {
+      "middle_mcp_flexion": 85.0
+    },
+    "body": "main",
+    "tendon": "middle_dip_negative",
+    "group": "middle_dip_negative_mcp_reaction",
+    "radius": 0.45,
+    "gap": 0.12792896526515557,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -15.116359883326515,
+            92.43056082883595,
+            0.0
+          ],
+          [
+            -15.552118318759534,
+            97.4113025372048,
+            0.0
+          ],
+          [
+            -16.21679670614347,
+            105.00856072183394,
+            -4.483140921926154
+          ],
+          [
+            -16.483888612189606,
+            108.06148980500454,
+            -0.5435641522817044
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -16.483888612189606,
+            108.06148980500454,
+            -0.5435641522817044
+          ],
+          [
+            -16.750980518235743,
+            111.11441888817514,
+            3.396012617362745
+          ],
+          [
+            -16.239093208907924,
+            105.26346146228465,
+            7.222881269539002
+          ],
+          [
+            -16.277070244785556,
+            105.69754096866978,
+            12.203385051623885
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "middle_mcp_flexion_90",
+    "pose": {
+      "middle_mcp_flexion": 90.0
+    },
+    "body": "main",
+    "tendon": "middle_pip_positive",
+    "group": "middle_pip_positive_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.4499999999999975,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -7.943758057065949,
+            93.0580821766191,
+            0.0
+          ],
+          [
+            -8.379512648943118,
+            98.03877995294356,
+            0.0
+          ],
+          [
+            -9.039430574673084,
+            105.58167187848645,
+            -4.557920162673515
+          ],
+          [
+            -9.291322087136157,
+            108.46080745714454,
+            -0.4661973893020424
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -9.291322087136157,
+            108.46080745714454,
+            -0.4661973893020424
+          ],
+          [
+            -9.543213599599227,
+            111.33994303580259,
+            3.62552538406943
+          ],
+          [
+            -9.011415905724762,
+            105.26146722824298,
+            7.255090183481221
+          ],
+          [
+            -9.011415905724762,
+            105.26146722824298,
+            12.25
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "middle_mcp_flexion_90",
+    "pose": {
+      "middle_mcp_flexion": 90.0
+    },
+    "body": "main",
+    "tendon": "middle_pip_positive",
+    "group": "middle_pip_positive_proximal_guide",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -9.011415905724762,
+            105.26146722824299,
+            12.25
+          ],
+          [
+            -9.011415905724762,
+            105.26146722824299,
+            22.166666666666657
+          ],
+          [
+            -10.711223929352967,
+            100.59556402706005,
+            32.08333333333334
+          ],
+          [
+            -10.711223929352967,
+            100.59556402706005,
+            42.0
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "middle_mcp_flexion_90",
+    "pose": {
+      "middle_mcp_flexion": 90.0
+    },
+    "body": "main",
+    "tendon": "middle_pip_negative",
+    "group": "middle_pip_negative_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -13.920926245616423,
+            92.53514772013314,
+            0.0
+          ],
+          [
+            -14.356680838722692,
+            97.51584551050628,
+            0.0
+          ],
+          [
+            -15.01659807920361,
+            105.05873767295508,
+            -4.557920068328834
+          ],
+          [
+            -15.268489959351815,
+            107.93787315292174,
+            -0.466197216140146
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -15.268489959351815,
+            107.93787315292174,
+            -0.466197216140146
+          ],
+          [
+            -15.520381839500022,
+            110.8170086328884,
+            3.6255256360485424
+          ],
+          [
+            -14.988584094275236,
+            104.73853277175702,
+            7.255090188717159
+          ],
+          [
+            -14.988584094275236,
+            104.73853277175702,
+            12.25
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "middle_mcp_flexion_90",
+    "pose": {
+      "middle_mcp_flexion": 90.0
+    },
+    "body": "main",
+    "tendon": "middle_pip_negative",
+    "group": "middle_pip_negative_proximal_guide",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -14.988584094275236,
+            104.73853277175704,
+            12.25
+          ],
+          [
+            -14.988584094275236,
+            104.73853277175704,
+            22.166666666666657
+          ],
+          [
+            -13.288776070647032,
+            109.40443597293998,
+            32.08333333333334
+          ],
+          [
+            -13.288776070647032,
+            109.40443597293998,
+            42.0
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "middle_mcp_flexion_90",
+    "pose": {
+      "middle_mcp_flexion": 90.0
+    },
+    "body": "main",
+    "tendon": "middle_dip_positive",
+    "group": "middle_dip_positive_mcp_reaction",
+    "radius": 0.45,
+    "gap": -1.5515366769136563e-13,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -6.748324419355854,
+            93.16266906791628,
+            0.0
+          ],
+          [
+            -7.184078992170073,
+            98.14336662635023,
+            0.0
+          ],
+          [
+            -7.843994999860598,
+            105.68625961789625,
+            -4.557919878050191
+          ],
+          [
+            -8.095890176810531,
+            108.56539463207368,
+            -0.46619676517414127
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -8.095890176810531,
+            108.56539463207368,
+            -0.46619676517414127
+          ],
+          [
+            -8.347785353760466,
+            111.4445296462511,
+            3.6255263477019084
+          ],
+          [
+            -7.815982268014667,
+            105.36605411954017,
+            7.255089997291129
+          ],
+          [
+            -7.815982268014667,
+            105.36605411954017,
+            12.25
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "middle_mcp_flexion_90",
+    "pose": {
+      "middle_mcp_flexion": 90.0
+    },
+    "body": "main",
+    "tendon": "middle_dip_negative",
+    "group": "middle_dip_negative_mcp_reaction",
+    "radius": 0.45,
+    "gap": -1.6003864899971632e-13,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -15.116359883326515,
+            92.43056082883595,
+            0.0
+          ],
+          [
+            -15.552114455852024,
+            97.41125838396992,
+            0.0
+          ],
+          [
+            -16.212033717780947,
+            104.9541509889833,
+            -4.557919931325872
+          ],
+          [
+            -16.46392191382118,
+            107.83328665025086,
+            -0.46619686009762573
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -16.46392191382118,
+            107.83328665025086,
+            -0.46619686009762573
+          ],
+          [
+            -16.71581010986142,
+            110.71242231151838,
+            3.62552621113062
+          ],
+          [
+            -16.18401773198533,
+            104.63394588045983,
+            7.255089988463639
+          ],
+          [
+            -16.18401773198533,
+            104.63394588045983,
+            12.25
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "ring_mcp_flexion_85",
+    "pose": {
+      "ring_mcp_flexion": 85.0
+    },
+    "body": "main",
+    "tendon": "ring_pip_positive",
+    "group": "ring_pip_positive_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.4499999999999856,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            13.920926245616423,
+            87.53514772013314,
+            0.0
+          ],
+          [
+            14.356684691836458,
+            92.51588955179814,
+            0.0
+          ],
+          [
+            15.021361485257088,
+            100.11314445977659,
+            -4.483141313770147
+          ],
+          [
+            15.288456470154248,
+            103.16607569172756,
+            -0.543564769777738
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            15.288456470154248,
+            103.16607569172756,
+            -0.543564769777738
+          ],
+          [
+            15.555551455051408,
+            106.2190069236785,
+            3.3960117742146703
+          ],
+          [
+            15.043659591072203,
+            100.36804858074692,
+            7.222883875965983
+          ],
+          [
+            15.081636607075461,
+            100.80212785996696,
+            12.203385051623885
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "ring_mcp_flexion_85",
+    "pose": {
+      "ring_mcp_flexion": 85.0
+    },
+    "body": "main",
+    "tendon": "ring_pip_positive",
+    "group": "ring_pip_positive_proximal_guide",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            15.081636607075461,
+            100.80212785996696,
+            12.203385051623883
+          ],
+          [
+            15.146836667064735,
+            101.54736795578754,
+            20.7540562102447
+          ],
+          [
+            12.72931946131075,
+            98.00981766710073,
+            29.69692821122996
+          ],
+          [
+            12.794519521300023,
+            98.75505776292131,
+            38.247599369850775
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "ring_mcp_flexion_85",
+    "pose": {
+      "ring_mcp_flexion": 85.0
+    },
+    "body": "main",
+    "tendon": "ring_pip_negative",
+    "group": "ring_pip_negative_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            7.943758057065949,
+            88.0580821766191,
+            0.0
+          ],
+          [
+            8.379516503003543,
+            93.0388240050558,
+            0.0
+          ],
+          [
+            9.044187045582198,
+            100.63607951044446,
+            -4.483141295087339
+          ],
+          [
+            9.311285825304578,
+            103.68901039216784,
+            -0.5435647329996602
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            9.311285825304578,
+            103.68901039216784,
+            -0.5435647329996602
+          ],
+          [
+            9.578384605026956,
+            106.74194127389121,
+            3.3960118290880184
+          ],
+          [
+            9.066491402475014,
+            100.89098303669893,
+            7.222883869839648
+          ],
+          [
+            9.104468418524988,
+            101.32506231645291,
+            12.203385051623885
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "ring_mcp_flexion_85",
+    "pose": {
+      "ring_mcp_flexion": 85.0
+    },
+    "body": "main",
+    "tendon": "ring_pip_negative",
+    "group": "ring_pip_negative_proximal_guide",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            9.104468418524988,
+            101.32506231645291,
+            12.203385051623883
+          ],
+          [
+            9.16966847851426,
+            102.07030241227349,
+            20.7540562102447
+          ],
+          [
+            11.717585804246795,
+            107.09833289260146,
+            28.91252652650104
+          ],
+          [
+            11.782785864236068,
+            107.84357298842204,
+            37.463197685121855
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "ring_mcp_flexion_85",
+    "pose": {
+      "ring_mcp_flexion": 85.0
+    },
+    "body": "main",
+    "tendon": "ring_dip_positive",
+    "group": "ring_dip_positive_mcp_reaction",
+    "radius": 0.45,
+    "gap": 0.1279289853803552,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            15.116359883326515,
+            87.43056082883595,
+            0.0
+          ],
+          [
+            15.552118285404617,
+            92.41130215595636,
+            0.0
+          ],
+          [
+            16.216791916622316,
+            100.00855444590361,
+            -4.483143067454259
+          ],
+          [
+            16.48388880253846,
+            103.06148662602929,
+            -0.543567618661014
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            16.48388880253846,
+            103.06148662602929,
+            -0.543567618661014
+          ],
+          [
+            16.750985688454602,
+            106.11441880615496,
+            3.3960078301322314
+          ],
+          [
+            16.239093221137605,
+            100.26346160207052,
+            7.222882873401973
+          ],
+          [
+            16.277070244785556,
+            100.69754096866977,
+            12.203385051623885
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "ring_mcp_flexion_85",
+    "pose": {
+      "ring_mcp_flexion": 85.0
+    },
+    "body": "main",
+    "tendon": "ring_dip_negative",
+    "group": "ring_dip_negative_mcp_reaction",
+    "radius": 0.45,
+    "gap": 0.12792898533726488,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            6.748324419355854,
+            88.16266906791628,
+            0.0
+          ],
+          [
+            7.184082820893466,
+            93.14341038885887,
+            0.0
+          ],
+          [
+            7.8487559848439785,
+            100.74066262396973,
+            -4.483143111145091
+          ],
+          [
+            8.115853066572367,
+            103.79359482487534,
+            -0.5435676991896755
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            8.115853066572367,
+            103.79359482487534,
+            -0.5435676991896755
+          ],
+          [
+            8.382950148300756,
+            106.84652702578097,
+            3.3960077127657393
+          ],
+          [
+            7.871057757174582,
+            100.99556984123817,
+            7.222882874403822
+          ],
+          [
+            7.909034780814893,
+            101.4296492077501,
+            12.203385051623885
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "ring_mcp_flexion_90",
+    "pose": {
+      "ring_mcp_flexion": 90.0
+    },
+    "body": "main",
+    "tendon": "ring_pip_positive",
+    "group": "ring_pip_positive_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.44999999999999823,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            13.920926245616423,
+            87.53514772013314,
+            0.0
+          ],
+          [
+            14.356680837536585,
+            92.51584549694901,
+            0.0
+          ],
+          [
+            15.016597990188629,
+            100.05873749372188,
+            -4.557920160152925
+          ],
+          [
+            15.268489918547479,
+            102.9378730346577,
+            -0.4661973857097819
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            15.268489918547479,
+            102.9378730346577,
+            -0.4661973857097819
+          ],
+          [
+            15.520381846906329,
+            105.8170085755935,
+            3.625525388733361
+          ],
+          [
+            14.988584094275236,
+            99.73853277175702,
+            7.2550901857151535
+          ],
+          [
+            14.988584094275236,
+            99.73853277175702,
+            12.25
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "ring_mcp_flexion_90",
+    "pose": {
+      "ring_mcp_flexion": 90.0
+    },
+    "body": "main",
+    "tendon": "ring_pip_positive",
+    "group": "ring_pip_positive_proximal_guide",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            14.988584094275236,
+            99.73853277175702,
+            12.25
+          ],
+          [
+            14.988584094275236,
+            99.73853277175704,
+            20.833333333333343
+          ],
+          [
+            12.504374385918108,
+            95.43868369011426,
+            29.416666666666657
+          ],
+          [
+            12.504374385918108,
+            95.43868369011426,
+            38.0
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "ring_mcp_flexion_90",
+    "pose": {
+      "ring_mcp_flexion": 90.0
+    },
+    "body": "main",
+    "tendon": "ring_pip_negative",
+    "group": "ring_pip_negative_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            7.943758057065949,
+            88.0580821766191,
+            0.0
+          ],
+          [
+            8.379512649043363,
+            93.03877995408935,
+            0.0
+          ],
+          [
+            9.039430490891359,
+            100.58167201760111,
+            -4.5579200974313965
+          ],
+          [
+            9.291322063741646,
+            103.46080754517551,
+            -0.46619727000847655
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            9.291322063741646,
+            103.46080754517551,
+            -0.46619727000847655
+          ],
+          [
+            9.543213636591933,
+            106.33994307274992,
+            3.6255255574144436
+          ],
+          [
+            9.011415905724762,
+            100.26146722824298,
+            7.255090188159406
+          ],
+          [
+            9.011415905724762,
+            100.26146722824298,
+            12.25
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "ring_mcp_flexion_90",
+    "pose": {
+      "ring_mcp_flexion": 90.0
+    },
+    "body": "main",
+    "tendon": "ring_pip_negative",
+    "group": "ring_pip_negative_proximal_guide",
+    "radius": 0.45,
+    "gap": -0.44999999999999823,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            9.011415905724762,
+            100.26146722824298,
+            12.25
+          ],
+          [
+            9.011415905724762,
+            100.26146722824299,
+            20.833333333333343
+          ],
+          [
+            11.49562561408189,
+            104.56131630988575,
+            29.416666666666657
+          ],
+          [
+            11.49562561408189,
+            104.56131630988575,
+            38.0
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "ring_mcp_flexion_90",
+    "pose": {
+      "ring_mcp_flexion": 90.0
+    },
+    "body": "main",
+    "tendon": "ring_dip_positive",
+    "group": "ring_dip_positive_mcp_reaction",
+    "radius": 0.45,
+    "gap": -2.9976021664879227e-15,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            15.116359883326515,
+            87.43056082883595,
+            0.0
+          ],
+          [
+            15.552114482012428,
+            92.41125868298471,
+            0.0
+          ],
+          [
+            16.212032030678817,
+            99.95415283669772,
+            -4.557919103410869
+          ],
+          [
+            16.463923379696887,
+            102.83328762753203,
+            -0.46619531555748406
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            16.463923379696887,
+            102.83328762753203,
+            -0.46619531555748406
+          ],
+          [
+            16.715814728714964,
+            105.71242241836633,
+            3.625528472295901
+          ],
+          [
+            16.18401773198533,
+            99.63394588045983,
+            7.255089980905748
+          ],
+          [
+            16.18401773198533,
+            99.63394588045983,
+            12.25
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "ring_mcp_flexion_90",
+    "pose": {
+      "ring_mcp_flexion": 90.0
+    },
+    "body": "main",
+    "tendon": "ring_dip_negative",
+    "group": "ring_dip_negative_mcp_reaction",
+    "radius": 0.45,
+    "gap": -1.9984014443252818e-14,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            6.748324419355854,
+            88.16266906791628,
+            0.0
+          ],
+          [
+            7.184079018626293,
+            93.1433669287462,
+            0.0
+          ],
+          [
+            7.843996910283356,
+            100.68626116369391,
+            -4.5579190437314825
+          ],
+          [
+            8.095888902860596,
+            103.56539585742328,
+            -0.46619520900396055
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            8.095888902860596,
+            103.56539585742328,
+            -0.46619520900396055
+          ],
+          [
+            8.347780895437836,
+            106.44453055115267,
+            3.625528625723561
+          ],
+          [
+            7.815982268014667,
+            100.36605411954017,
+            7.2550899903131745
+          ],
+          [
+            7.815982268014667,
+            100.36605411954017,
+            12.25
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "little_mcp_flexion_75",
+    "pose": {
+      "little_mcp_flexion": 75.0
+    },
+    "body": "little",
+    "tendon": "little_pip_positive",
+    "group": "little_pip_positive_mcp_reaction",
+    "radius": 0.45,
+    "gap": 0.12951100269753607,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            33.54184965478638,
+            76.62987482357893,
+            0.0
+          ],
+          [
+            35.65491766629727,
+            81.1613637977714,
+            0.0
+          ],
+          [
+            38.885011309014985,
+            88.08832180826727,
+            -4.467868476607944
+          ],
+          [
+            40.339469643328314,
+            91.2074179969972,
+            -0.8443304328858864
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            40.339469643328314,
+            91.2074179969972,
+            -0.8443304328858864
+          ],
+          [
+            41.79392797764165,
+            94.32651418572712,
+            2.779207610836172
+          ],
+          [
+            39.51196054014029,
+            89.43281893342983,
+            7.003140451721018
+          ],
+          [
+            40.05884863420598,
+            90.60562423589799,
+            11.832591372041087
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "little_mcp_flexion_75",
+    "pose": {
+      "little_mcp_flexion": 75.0
+    },
+    "body": "little",
+    "tendon": "little_pip_negative",
+    "group": "little_pip_negative_mcp_reaction",
+    "radius": 0.45,
+    "gap": 0.12951100274758115,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            28.10400293256648,
+            79.16558439402313,
+            0.0
+          ],
+          [
+            30.217070943291347,
+            83.69707336652998,
+            0.0
+          ],
+          [
+            33.44716436442063,
+            90.62403138145577,
+            -4.467868390968743
+          ],
+          [
+            34.901622957472185,
+            93.74312754969408,
+            -0.8443304337765273
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            34.901622957472185,
+            93.74312754969408,
+            -0.8443304337765273
+          ],
+          [
+            36.35608155052375,
+            96.8622237179324,
+            2.779207523415688
+          ],
+          [
+            34.07411381810807,
+            91.96852850427652,
+            7.003140453378426
+          ],
+          [
+            34.62100191198608,
+            93.14133380634219,
+            11.832591372041087
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "little_mcp_flexion_85",
+    "pose": {
+      "little_mcp_flexion": 85.0
+    },
+    "body": "little",
+    "tendon": "little_pip_positive",
+    "group": "little_pip_positive_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            33.54184965478638,
+            76.62987482357893,
+            0.0
+          ],
+          [
+            35.65484268678055,
+            81.1612030036789,
+            0.0
+          ],
+          [
+            38.87784885258016,
+            88.07295464431382,
+            -4.483141257509496
+          ],
+          [
+            40.172999994008435,
+            90.85041968134365,
+            -0.5435646602190399
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            40.172999994008435,
+            90.85041968134365,
+            -0.5435646602190399
+          ],
+          [
+            41.46815113543672,
+            93.62788471837348,
+            3.3960119370714166
+          ],
+          [
+            38.985984485688284,
+            88.3048596446352,
+            7.2228838607015415
+          ],
+          [
+            39.17013506524395,
+            88.69977183690817,
+            12.203385051623885
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "little_mcp_flexion_85",
+    "pose": {
+      "little_mcp_flexion": 85.0
+    },
+    "body": "little",
+    "tendon": "little_pip_positive",
+    "group": "little_pip_positive_proximal_guide",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            39.17013506524395,
+            88.69977183690817,
+            12.203385051623883
+          ],
+          [
+            39.3880672488733,
+            89.16712891290307,
+            18.097537015333373
+          ],
+          [
+            35.808207757242926,
+            86.45911878327016,
+            24.383889821407323
+          ],
+          [
+            36.02613994087228,
+            86.92647585926505,
+            30.278041785116827
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "little_mcp_flexion_85",
+    "pose": {
+      "little_mcp_flexion": 85.0
+    },
+    "body": "little",
+    "tendon": "little_pip_negative",
+    "group": "little_pip_negative_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            28.10400293256648,
+            79.16558439402313,
+            0.0
+          ],
+          [
+            30.21699596381648,
+            83.69691257252722,
+            0.0
+          ],
+          [
+            33.43999641053165,
+            90.60866682468104,
+            -4.483141278146432
+          ],
+          [
+            34.73515101212961,
+            93.38613027157436,
+            -0.5435646982980029
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            34.73515101212961,
+            93.38613027157436,
+            -0.5435646982980029
+          ],
+          [
+            36.03030561372758,
+            96.16359371846767,
+            3.3960118815504265
+          ],
+          [
+            33.54813776365098,
+            90.84056921547096,
+            7.222883865639867
+          ],
+          [
+            33.732288343024045,
+            91.23548140735237,
+            12.203385051623885
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "little_mcp_flexion_85",
+    "pose": {
+      "little_mcp_flexion": 85.0
+    },
+    "body": "little",
+    "tendon": "little_pip_negative",
+    "group": "little_pip_negative_proximal_guide",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            33.732288343024045,
+            91.23548140735237,
+            12.203385051623883
+          ],
+          [
+            33.950220526653396,
+            91.70283848334726,
+            18.097537015333373
+          ],
+          [
+            37.96594438554247,
+            95.34556276497,
+            23.599488136678403
+          ],
+          [
+            38.18387656917182,
+            95.8129198409649,
+            29.493640100387907
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "little_mcp_flexion_85",
+    "pose": {
+      "little_mcp_flexion": 85.0
+    },
+    "body": "little",
+    "tendon": "little_dip_positive",
+    "group": "little_dip_positive_mcp_reaction",
+    "radius": 0.45,
+    "gap": 0.12792898557945992,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            34.62941899923036,
+            76.1227329094901,
+            0.0
+          ],
+          [
+            36.74241193137304,
+            80.65406087545786,
+            0.0
+          ],
+          [
+            39.96541476757893,
+            87.56581323933014,
+            -4.483142066020498
+          ],
+          [
+            41.260567670713165,
+            90.34327730618902,
+            -0.5435663079581802
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            41.260567670713165,
+            90.34327730618902,
+            -0.5435663079581802
+          ],
+          [
+            42.55572057384742,
+            93.1207413730479,
+            3.396009450104138
+          ],
+          [
+            40.07355379787358,
+            87.7977176613674,
+            7.222882988239529
+          ],
+          [
+            40.257704409687925,
+            88.19262992281934,
+            12.203385051623885
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "little_mcp_flexion_85",
+    "pose": {
+      "little_mcp_flexion": 85.0
+    },
+    "body": "little",
+    "tendon": "little_dip_negative",
+    "group": "little_dip_negative_mcp_reaction",
+    "radius": 0.45,
+    "gap": 0.12792884311586045,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            27.016433588122503,
+            79.67272630811198,
+            0.0
+          ],
+          [
+            29.129426522020346,
+            84.2040542778437,
+            0.0
+          ],
+          [
+            32.35242964270343,
+            91.11580648838888,
+            -4.483142072279216
+          ],
+          [
+            33.64758237113914,
+            93.8932706457684,
+            -0.5435663134647521
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            33.64758237113914,
+            93.8932706457684,
+            -0.5435663134647521
+          ],
+          [
+            34.94273509957485,
+            96.67073480314792,
+            3.396009445349712
+          ],
+          [
+            32.46056838660872,
+            91.3477110596526,
+            7.222882983993298
+          ],
+          [
+            32.64471899858007,
+            91.74262332144122,
+            12.203385051623885
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "little_mcp_flexion_90",
+    "pose": {
+      "little_mcp_flexion": 90.0
+    },
+    "body": "little",
+    "tendon": "little_pip_positive",
+    "group": "little_pip_positive_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            33.54184965478638,
+            76.62987482357893,
+            0.0
+          ],
+          [
+            35.65482399966559,
+            81.16116292903155,
+            0.0
+          ],
+          [
+            38.85476439766839,
+            88.0234580822593,
+            -4.5579200593438935
+          ],
+          [
+            40.07618768045327,
+            90.64280833727554,
+            -0.46619719937542153
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            40.07618768045327,
+            90.64280833727554,
+            -0.46619719937542153
+          ],
+          [
+            41.29761096323814,
+            93.26215859229175,
+            3.6255256605930506
+          ],
+          [
+            38.71892336110995,
+            87.7321452147779,
+            7.2550901887936545
+          ],
+          [
+            38.71892336110995,
+            87.7321452147779,
+            12.25
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "little_mcp_flexion_90",
+    "pose": {
+      "little_mcp_flexion": 90.0
+    },
+    "body": "little",
+    "tendon": "little_pip_positive",
+    "group": "little_pip_positive_proximal_guide",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            38.71892336110995,
+            87.7321452147779,
+            12.25
+          ],
+          [
+            38.71892336110995,
+            87.7321452147779,
+            18.16666666666667
+          ],
+          [
+            34.913894830499835,
+            84.54125852276844,
+            24.08333333333333
+          ],
+          [
+            34.91389483049984,
+            84.54125852276846,
+            30.0
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "little_mcp_flexion_90",
+    "pose": {
+      "little_mcp_flexion": 90.0
+    },
+    "body": "little",
+    "tendon": "little_pip_negative",
+    "group": "little_pip_negative_mcp_reaction",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            28.10400293256648,
+            79.16558439402313,
+            0.0
+          ],
+          [
+            30.216977274780596,
+            83.69687249376044,
+            0.0
+          ],
+          [
+            33.416918224594724,
+            90.55916727712204,
+            -4.55792011317763
+          ],
+          [
+            34.638341216361226,
+            93.17851770940285,
+            -0.4661972978401612
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            34.638341216361226,
+            93.17851770940285,
+            -0.4661972978401612
+          ],
+          [
+            35.85976420812773,
+            95.7978681416837,
+            3.6255255174973073
+          ],
+          [
+            33.28107663889005,
+            90.2678547852221,
+            7.25509018508206
+          ],
+          [
+            33.28107663889005,
+            90.2678547852221,
+            12.25
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "little_mcp_flexion_90",
+    "pose": {
+      "little_mcp_flexion": 90.0
+    },
+    "body": "little",
+    "tendon": "little_pip_negative",
+    "group": "little_pip_negative_proximal_guide",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            33.28107663889005,
+            90.2678547852221,
+            12.25
+          ],
+          [
+            33.28107663889005,
+            90.2678547852221,
+            18.16666666666667
+          ],
+          [
+            37.086105169500165,
+            93.45874147723156,
+            24.08333333333333
+          ],
+          [
+            37.086105169500165,
+            93.45874147723157,
+            30.0
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "little_mcp_flexion_90",
+    "pose": {
+      "little_mcp_flexion": 90.0
+    },
+    "body": "little",
+    "tendon": "little_dip_positive",
+    "group": "little_dip_positive_mcp_reaction",
+    "radius": 0.45,
+    "gap": -1.7208456881689926e-15,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            34.62941899923036,
+            76.1227329094901,
+            0.0
+          ],
+          [
+            36.74239339622902,
+            80.65402112671325,
+            0.0
+          ],
+          [
+            39.942334041317515,
+            87.5163158158021,
+            -4.5579201083405225
+          ],
+          [
+            41.16375714255218,
+            90.13566623788904,
+            -0.4661973843316742
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            41.16375714255218,
+            90.13566623788904,
+            -0.4661973843316742
+          ],
+          [
+            42.38518024378684,
+            92.755016659976,
+            3.625525339677174
+          ],
+          [
+            39.80649270555393,
+            87.22500330068907,
+            7.255090376567482
+          ],
+          [
+            39.80649270555393,
+            87.22500330068907,
+            12.25
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "little_mcp_flexion_90",
+    "pose": {
+      "little_mcp_flexion": 90.0
+    },
+    "body": "little",
+    "tendon": "little_dip_negative",
+    "group": "little_dip_negative_mcp_reaction",
+    "radius": 0.45,
+    "gap": -1.887379141862766e-15,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            27.016433588122503,
+            79.67272630811198,
+            0.0
+          ],
+          [
+            29.129407980093518,
+            84.20401451455331,
+            0.0
+          ],
+          [
+            32.32934838570128,
+            91.06630911938566,
+            -4.557920200806245
+          ],
+          [
+            33.55077163716362,
+            93.68565954445354,
+            -0.46619755697078913
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            33.55077163716362,
+            93.68565954445354,
+            -0.46619755697078913
+          ],
+          [
+            34.772194888625954,
+            96.30500996952138,
+            3.6255250868646667
+          ],
+          [
+            32.19350729444607,
+            90.77499669931095,
+            7.255090377329638
+          ],
+          [
+            32.19350729444607,
+            90.77499669931095,
+            12.25
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "thumb_cmc_abduction_-25",
+    "pose": {
+      "thumb_cmc_abduction": -25.0
+    },
+    "body": "main",
+    "tendon": "thumb_mcp_flexion_positive",
+    "group": "thumb_mcp_flexion_positive_cmc_reaction",
+    "radius": 0.45,
+    "gap": -0.44999999999999823,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -23.368093449481293,
+            30.307790411448295,
+            0.0
+          ],
+          [
+            -24.40709640506163,
+            36.2002689839601,
+            0.0
+          ],
+          [
+            -26.291239728012275,
+            34.36558491765253,
+            6.799133180838902
+          ],
+          [
+            -28.714097468837277,
+            34.96488448409867,
+            11.141147803446682
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -28.714097468837277,
+            34.96488448409867,
+            11.141147803446682
+          ],
+          [
+            -31.13695520966227,
+            35.5641840505448,
+            15.483162426054461
+          ],
+          [
+            -34.7566298552172,
+            40.47259521904196,
+            15.3638302284012
+          ],
+          [
+            -36.261244879398106,
+            41.85649110995254,
+            12.533724221490814
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -36.261244879398106,
+            41.85649110995254,
+            12.533724221490814
+          ],
+          [
+            -37.765859903579006,
+            43.24038700086313,
+            9.703618214580429
+          ],
+          [
+            -37.57493440347576,
+            45.705998090273276,
+            5.5
+          ],
+          [
+            -39.626598934503384,
+            51.34290006156764,
+            5.5
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "thumb_cmc_abduction_-15",
+    "pose": {
+      "thumb_cmc_abduction": -15.0
+    },
+    "body": "main",
+    "tendon": "thumb_mcp_flexion_positive",
+    "group": "thumb_mcp_flexion_positive_cmc_reaction",
+    "radius": 0.45,
+    "gap": -0.3970739768051835,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -23.368093449481293,
+            30.307790411448295,
+            0.0
+          ],
+          [
+            -24.392065686398286,
+            36.1150255424689,
+            0.0
+          ],
+          [
+            -26.017360224383452,
+            34.407123842663765,
+            6.685717343201286
+          ],
+          [
+            -28.579637087446784,
+            35.1561214032848,
+            11.02737068212559
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -28.579637087446784,
+            35.1561214032848,
+            11.02737068212559
+          ],
+          [
+            -31.141913950510112,
+            35.90511896390582,
+            15.369024021049892
+          ],
+          [
+            -35.100543455236526,
+            40.46726160612281,
+            15.21875112607661
+          ],
+          [
+            -36.72457267304421,
+            41.734748137458766,
+            12.456121243343507
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -36.72457267304421,
+            41.734748137458766,
+            12.456121243343507
+          ],
+          [
+            -38.34860189085188,
+            43.00223466879473,
+            9.693491360610404
+          ],
+          [
+            -39.229781387216775,
+            45.12619626756863,
+            5.5
+          ],
+          [
+            -42.220577136594,
+            50.30640646055102,
+            5.5
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "thumb_cmc_abduction_-5",
+    "pose": {
+      "thumb_cmc_abduction": -5.0
+    },
+    "body": "main",
+    "tendon": "thumb_mcp_flexion_positive",
+    "group": "thumb_mcp_flexion_positive_cmc_reaction",
+    "radius": 0.45,
+    "gap": -0.024114577018390537,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -23.368093449481293,
+            30.307790411448295,
+            0.0
+          ],
+          [
+            -24.380625522406792,
+            36.0501451484105,
+            0.0
+          ],
+          [
+            -25.909310137069784,
+            34.99090642932563,
+            6.62079644102685
+          ],
+          [
+            -28.555923991407663,
+            35.651630073448054,
+            10.903643122888976
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -28.555923991407663,
+            35.651630073448054,
+            10.903643122888976
+          ],
+          [
+            -31.202537845745535,
+            36.312353717570474,
+            15.186489804751101
+          ],
+          [
+            -35.438411540666756,
+            40.4242358879002,
+            15.024119945560775
+          ],
+          [
+            -37.17891260905128,
+            41.56933868224269,
+            12.351450934266916
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -37.17891260905128,
+            41.56933868224269,
+            12.351450934266916
+          ],
+          [
+            -38.9194136774358,
+            42.71444147658518,
+            9.678781922973057
+          ],
+          [
+            -40.76459931660525,
+            44.2701333896048,
+            5.5
+          ],
+          [
+            -44.595161756177546,
+            48.835219938621535,
+            5.5
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "thumb_cmc_abduction_5",
+    "pose": {
+      "thumb_cmc_abduction": 5.0
+    },
+    "body": "main",
+    "tendon": "thumb_mcp_flexion_positive",
+    "group": "thumb_mcp_flexion_positive_cmc_reaction",
+    "radius": 0.45,
+    "gap": -0.05218983391232496,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -23.368093449481293,
+            30.307790411448295,
+            0.0
+          ],
+          [
+            -24.36901701153042,
+            35.9843100117245,
+            0.0
+          ],
+          [
+            -25.93912581041282,
+            35.804679293189366,
+            6.5675704580835506
+          ],
+          [
+            -28.632737079251363,
+            36.31553765012955,
+            10.74714398845653
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -28.632737079251363,
+            36.31553765012955,
+            10.74714398845653
+          ],
+          [
+            -31.326348348089912,
+            36.82639600706975,
+            14.92671751882951
+          ],
+          [
+            -35.766901293934836,
+            40.33972855698454,
+            14.763623419316673
+          ],
+          [
+            -37.625672113931635,
+            41.350716223249115,
+            12.211815486014808
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -37.625672113931635,
+            41.350716223249115,
+            12.211815486014808
+          ],
+          [
+            -39.48444293392845,
+            42.36170388951369,
+            9.660007552712944
+          ],
+          [
+            -42.13524126670118,
+            43.162044875648924,
+            5.5
+          ],
+          [
+            -46.67820224118576,
+            46.97404175379171,
+            5.5
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "thumb_cmc_abduction_15",
+    "pose": {
+      "thumb_cmc_abduction": 15.0
+    },
+    "body": "main",
+    "tendon": "thumb_mcp_flexion_positive",
+    "group": "thumb_mcp_flexion_positive_cmc_reaction",
+    "radius": 0.45,
+    "gap": -0.44999999999999823,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -23.368093449481293,
+            30.307790411448295,
+            0.0
+          ],
+          [
+            -24.357633613259694,
+            35.91975155206626,
+            0.0
+          ],
+          [
+            -26.085270762707673,
+            36.85526400063208,
+            6.441364127731056
+          ],
+          [
+            -28.81897640893497,
+            37.28330793604509,
+            10.488542834761029
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -28.81897640893497,
+            37.28330793604509,
+            10.488542834761029
+          ],
+          [
+            -31.55268205516227,
+            37.711351871458106,
+            14.535721541791002
+          ],
+          [
+            -36.09159685775699,
+            40.23133812486572,
+            14.479813244566868
+          ],
+          [
+            -38.0623312311338,
+            41.081736626047515,
+            12.059852432664755
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -38.0623312311338,
+            41.081736626047515,
+            12.059852432664755
+          ],
+          [
+            -40.03306560451059,
+            41.93213512722931,
+            9.639891620762642
+          ],
+          [
+            -43.29597775590484,
+            41.82891547510414,
+            5.5
+          ],
+          [
+            -48.40640646055102,
+            44.77942286340599,
+            5.5
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "thumb_cmc_abduction_25",
+    "pose": {
+      "thumb_cmc_abduction": 25.0
+    },
+    "body": "main",
+    "tendon": "thumb_mcp_flexion_positive",
+    "group": "thumb_mcp_flexion_positive_cmc_reaction",
+    "radius": 0.45,
+    "gap": -0.4499999999999929,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -23.368093449481293,
+            30.307790411448295,
+            0.0
+          ],
+          [
+            -24.344098261175354,
+            35.84298875586822,
+            0.0
+          ],
+          [
+            -26.400447754583297,
+            37.74710427702617,
+            6.302237380248771
+          ],
+          [
+            -29.182242758326492,
+            38.110686841045805,
+            10.172805804356212
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -29.182242758326492,
+            38.110686841045805,
+            10.172805804356212
+          ],
+          [
+            -31.964037762069687,
+            38.47426940506545,
+            14.043374228463653
+          ],
+          [
+            -36.39884817825694,
+            40.083629907008856,
+            14.11241786384944
+          ],
+          [
+            -38.47413877750896,
+            40.75106033508643,
+            11.862850295554063
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -38.47413877750896,
+            40.75106033508643,
+            11.862850295554063
+          ],
+          [
+            -40.54942937676097,
+            41.418490763164,
+            9.613282727258685
+          ],
+          [
+            -44.21576698224748,
+            40.312024862699666,
+            5.5
+          ],
+          [
+            -49.72726380358143,
+            42.31804565191802,
+            5.5
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "thumb_cmc_abduction_35",
+    "pose": {
+      "thumb_cmc_abduction": 35.0
+    },
+    "body": "main",
+    "tendon": "thumb_mcp_flexion_positive",
+    "group": "thumb_mcp_flexion_positive_cmc_reaction",
+    "radius": 0.45,
+    "gap": -0.3911116724744293,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -23.368093449481293,
+            30.307790411448295,
+            0.0
+          ],
+          [
+            -24.329419430808947,
+            35.759740972077964,
+            0.0
+          ],
+          [
+            -26.83116772587984,
+            38.459376747610634,
+            6.177802139047874
+          ],
+          [
+            -29.668240770346532,
+            38.76320613062299,
+            9.838743995168526
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -29.668240770346532,
+            38.76320613062299,
+            9.838743995168526
+          ],
+          [
+            -32.50531381481322,
+            39.067035513635346,
+            13.499685851289179
+          ],
+          [
+            -36.69125239591462,
+            39.897367059019615,
+            13.681185752099333
+          ],
+          [
+            -38.85205191420402,
+            40.35567329585421,
+            11.629962466369266
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -38.85205191420402,
+            40.35567329585421,
+            11.629962466369266
+          ],
+          [
+            -41.01285143249342,
+            40.813979532688805,
+            9.578739180639198
+          ],
+          [
+            -44.86273674242433,
+            38.6529505420113,
+            5.5
+          ],
+          [
+            -50.60064068829509,
+            39.664697820381875,
+            5.5
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "thumb_cmc_abduction_45",
+    "pose": {
+      "thumb_cmc_abduction": 45.0
+    },
+    "body": "main",
+    "tendon": "thumb_mcp_flexion_positive",
+    "group": "thumb_mcp_flexion_positive_cmc_reaction",
+    "radius": 0.45,
+    "gap": 0.04042233369742759,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -23.368093449481293,
+            30.307790411448295,
+            0.0
+          ],
+          [
+            -24.314444337829798,
+            35.67481299951824,
+            0.0
+          ],
+          [
+            -27.32865114457801,
+            39.002080981063976,
+            6.066829726621592
+          ],
+          [
+            -30.218912482585626,
+            39.22506709154462,
+            9.5000293722614
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -30.218912482585626,
+            39.22506709154462,
+            9.5000293722614
+          ],
+          [
+            -33.10917382059324,
+            39.44805320202525,
+            12.933229017901208
+          ],
+          [
+            -36.9432423194271,
+            39.683275095247,
+            13.240241478916843
+          ],
+          [
+            -39.18209517797849,
+            39.88212600399668,
+            11.374254708249177
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -39.18209517797849,
+            39.88212600399668,
+            11.374254708249177
+          ],
+          [
+            -41.42094803652988,
+            40.08097691274638,
+            9.508267937581511
+          ],
+          [
+            -45.21273767727299,
+            36.9,
+            5.5
+          ],
+          [
+            -51.0,
+            36.900000000000006,
+            5.5
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "thumb_cmc_flexion_-5",
+    "pose": {
+      "thumb_cmc_flexion": -5.0
+    },
+    "body": "main",
+    "tendon": "thumb_mcp_flexion_positive",
+    "group": "thumb_mcp_flexion_positive_cmc_reaction",
+    "radius": 0.45,
+    "gap": -0.44999999999999646,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -23.368093449481293,
+            30.307790411448295,
+            0.0
+          ],
+          [
+            -24.35118261824002,
+            35.88316614129275,
+            0.0
+          ],
+          [
+            -26.311752012162454,
+            35.510968424936685,
+            6.765129071403557
+          ],
+          [
+            -29.09992724208927,
+            36.3551319385699,
+            10.677997068401105
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -29.09992724208927,
+            36.3551319385699,
+            10.677997068401105
+          ],
+          [
+            -31.88810247201608,
+            37.19929545220311,
+            14.590865065398653
+          ],
+          [
+            -35.93362629712574,
+            40.76057534969863,
+            14.178459790123766
+          ],
+          [
+            -37.699110799600156,
+            41.811867724985355,
+            11.719154794091537
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -37.699110799600156,
+            41.811867724985355,
+            11.719154794091537
+          ],
+          [
+            -39.46459530207457,
+            42.86316010027208,
+            9.259849798059308
+          ],
+          [
+            -41.82395239262126,
+            44.09674459875705,
+            4.59795768527274
+          ],
+          [
+            -45.97321661131545,
+            48.24600881745124,
+            4.08457895554207
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "thumb_cmc_flexion_5",
+    "pose": {
+      "thumb_cmc_flexion": 5.0
+    },
+    "body": "main",
+    "tendon": "thumb_mcp_flexion_positive",
+    "group": "thumb_mcp_flexion_positive_cmc_reaction",
+    "radius": 0.45,
+    "gap": -0.4305338814651191,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -23.368093449481293,
+            30.307790411448295,
+            0.0
+          ],
+          [
+            -24.40064361970994,
+            36.16367341970916,
+            0.0
+          ],
+          [
+            -25.494560117658377,
+            35.456637188370614,
+            6.3764363794920556
+          ],
+          [
+            -28.026477784061168,
+            35.759751599365245,
+            10.931237361342903
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -28.026477784061168,
+            35.759751599365245,
+            10.931237361342903
+          ],
+          [
+            -30.558395450463962,
+            36.06286601035988,
+            15.486038343193751
+          ],
+          [
+            -35.255047989924584,
+            39.9782183982878,
+            15.61214218516219
+          ],
+          [
+            -37.07624667166165,
+            41.08705843400473,
+            12.80663067892907
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -37.07624667166165,
+            41.08705843400473,
+            12.80663067892907
+          ],
+          [
+            -38.897445353398716,
+            42.19589846972166,
+            10.00111917269595
+          ],
+          [
+            -41.057410233549504,
+            43.330202439685294,
+            6.349218064277372
+          ],
+          [
+            -45.29530402743704,
+            47.56809623357283,
+            6.873562723467131
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "thumb_cmc_flexion_15",
+    "pose": {
+      "thumb_cmc_flexion": 15.0
+    },
+    "body": "main",
+    "tendon": "thumb_mcp_flexion_positive",
+    "group": "thumb_mcp_flexion_positive_cmc_reaction",
+    "radius": 0.45,
+    "gap": -0.4499999999999921,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -23.368093449481293,
+            30.307790411448295,
+            0.0
+          ],
+          [
+            -24.449806011506283,
+            36.442487198512694,
+            0.0
+          ],
+          [
+            -24.68004413453393,
+            36.00151103503737,
+            5.877123836262741
+          ],
+          [
+            -26.874922881587317,
+            35.71840291259753,
+            11.016391941419782
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -26.874922881587317,
+            35.71840291259753,
+            11.016391941419782
+          ],
+          [
+            -29.069801628640704,
+            35.43529479015771,
+            16.155660046576823
+          ],
+          [
+            -34.47994220869942,
+            39.00583823169455,
+            16.906279588600718
+          ],
+          [
+            -36.362384483678554,
+            40.21081250945352,
+            13.705638028762893
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -36.362384483678554,
+            40.21081250945352,
+            13.705638028762893
+          ],
+          [
+            -38.244826758657695,
+            41.41578678721248,
+            10.50499646892507
+          ],
+          [
+            -40.07019667647291,
+            42.3429888826087,
+            7.856460320063677
+          ],
+          [
+            -44.28523726680041,
+            46.5580294729362,
+            9.453696766230207
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "thumb_cmc_flexion_25",
+    "pose": {
+      "thumb_cmc_flexion": 25.0
+    },
+    "body": "main",
+    "tendon": "thumb_mcp_flexion_positive",
+    "group": "thumb_mcp_flexion_positive_cmc_reaction",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -23.368093449481293,
+            30.307790411448295,
+            0.0
+          ],
+          [
+            -24.49261213126174,
+            36.68525276725022,
+            0.0
+          ],
+          [
+            -23.982663969670458,
+            36.6765876462795,
+            5.339950715790705
+          ],
+          [
+            -25.785942977033777,
+            35.71434703095296,
+            10.94012598931547
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -25.785942977033777,
+            35.71434703095296,
+            10.94012598931547
+          ],
+          [
+            -27.58922198439709,
+            34.752106415626415,
+            16.540301262840238
+          ],
+          [
+            -33.59568625692012,
+            37.85750022239368,
+            17.93037078577284
+          ],
+          [
+            -35.57826921105626,
+            39.22222782599382,
+            14.372331338036647
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -35.57826921105626,
+            39.22222782599382,
+            14.372331338036647
+          ],
+          [
+            -37.56085216519241,
+            40.586955429593964,
+            10.814291890300453
+          ],
+          [
+            -38.91668020676806,
+            41.189472412903854,
+            9.07114394884122
+          ],
+          [
+            -42.97370669680906,
+            45.24649890294485,
+            11.746585016552764
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "thumb_cmc_flexion_35",
+    "pose": {
+      "thumb_cmc_flexion": 35.0
+    },
+    "body": "main",
+    "tendon": "thumb_mcp_flexion_positive",
+    "group": "thumb_mcp_flexion_positive_cmc_reaction",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -23.368093449481293,
+            30.307790411448295,
+            0.0
+          ],
+          [
+            -24.53972161917349,
+            36.952423949575625,
+            0.0
+          ],
+          [
+            -23.5795012503343,
+            37.492418297328996,
+            4.800544567128848
+          ],
+          [
+            -24.82843625488878,
+            35.708639353131595,
+            10.795354418422079
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -24.82843625488878,
+            35.708639353131595,
+            10.795354418422079
+          ],
+          [
+            -26.07737125944325,
+            33.924860408934194,
+            16.79016426971531
+          ],
+          [
+            -32.28882598431099,
+            36.20998806480419,
+            18.630711715303704
+          ],
+          [
+            -34.15669652562602,
+            37.646433978598495,
+            15.04203255563496
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -34.15669652562602,
+            37.646433978598495,
+            15.04203255563496
+          ],
+          [
+            -36.024567066941046,
+            39.08287989239281,
+            11.453353395966214
+          ],
+          [
+            -37.916332248622616,
+            40.18912445475841,
+            10.232324608735695
+          ],
+          [
+            -41.4005625101657,
+            43.67335471630149,
+            13.682559225206193
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "thumb_cmc_flexion_45",
+    "pose": {
+      "thumb_cmc_flexion": 45.0
+    },
+    "body": "main",
+    "tendon": "thumb_mcp_flexion_positive",
+    "group": "thumb_mcp_flexion_positive_cmc_reaction",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -23.368093449481293,
+            30.307790411448295,
+            0.0
+          ],
+          [
+            -24.58872101913217,
+            37.23031335573345,
+            0.0
+          ],
+          [
+            -25.34381620025377,
+            39.02576483360802,
+            4.924409147055145
+          ],
+          [
+            -24.76680186791128,
+            36.25277781568981,
+            11.20661820159334
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -24.76680186791128,
+            36.25277781568981,
+            11.20661820159334
+          ],
+          [
+            -24.189787535568797,
+            33.47979079777161,
+            17.488827256131536
+          ],
+          [
+            -29.881397163702324,
+            33.564788155115444,
+            18.174845995031173
+          ],
+          [
+            -31.79848811052602,
+            34.74698400189041,
+            15.53702089776579
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -31.79848811052602,
+            34.74698400189041,
+            15.53702089776579
+          ],
+          [
+            -33.715579057349714,
+            35.929179848665385,
+            12.89919580050041
+          ],
+          [
+            -37.26672282750603,
+            39.53951503364182,
+            11.88380475785174
+          ],
+          [
+            -39.613603896932105,
+            41.886396103067895,
+            15.202795795510772
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "thumb_cmc_flexion_55",
+    "pose": {
+      "thumb_cmc_flexion": 55.0
+    },
+    "body": "main",
+    "tendon": "thumb_mcp_flexion_positive",
+    "group": "thumb_mcp_flexion_positive_cmc_reaction",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -23.368093449481293,
+            30.307790411448295,
+            0.0
+          ],
+          [
+            -24.624882027534603,
+            37.43539262526523,
+            0.0
+          ],
+          [
+            -25.097881332872845,
+            39.36686032737332,
+            4.457572191082997
+          ],
+          [
+            -23.8751929531423,
+            35.81807597802585,
+            10.844416889576312
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -23.8751929531423,
+            35.81807597802585,
+            10.844416889576312
+          ],
+          [
+            -22.65250457341175,
+            32.26929162867839,
+            17.23126158806963
+          ],
+          [
+            -28.790746696790073,
+            32.02821586987739,
+            18.144930437437864
+          ],
+          [
+            -30.735543063052067,
+            33.41685280768689,
+            15.313240199283097
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -30.735543063052067,
+            33.41685280768689,
+            15.313240199283097
+          ],
+          [
+            -32.680339429314074,
+            34.805489745496374,
+            12.48154996112833
+          ],
+          [
+            -35.70842748119213,
+            37.98121968732792,
+            12.305106014821607
+          ],
+          [
+            -37.6671266903267,
+            39.93991889646249,
+            16.26110310855462
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sample": "thumb_cmc_flexion_65",
+    "pose": {
+      "thumb_cmc_flexion": 65.0
+    },
+    "body": "main",
+    "tendon": "thumb_mcp_flexion_positive",
+    "group": "thumb_mcp_flexion_positive_cmc_reaction",
+    "radius": 0.45,
+    "gap": -0.45,
+    "path": [
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -23.368093449481293,
+            30.307790411448295,
+            0.0
+          ],
+          [
+            -24.657750425760018,
+            37.621798574560955,
+            0.0
+          ],
+          [
+            -24.857234258107436,
+            39.70123750551401,
+            4.010195217660542
+          ],
+          [
+            -23.039784703458956,
+            35.410605606018954,
+            10.32598620175649
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -23.039784703458956,
+            35.410605606018954,
+            10.32598620175649
+          ],
+          [
+            -21.222335148810487,
+            31.119973706523908,
+            16.641777185852437
+          ],
+          [
+            -27.644293439186512,
+            30.45590297582345,
+            17.938974532010725
+          ],
+          [
+            -29.699528345522666,
+            32.125115489805516,
+            14.89868066379941
+          ]
+        ]
+      },
+      {
+        "kind": "bezier",
+        "points": [
+          [
+            -29.699528345522666,
+            32.125115489805516,
+            14.89868066379941
+          ],
+          [
+            -31.754763251858815,
+            33.794328003787584,
+            11.858386795588096
+          ],
+          [
+            -34.13604464673036,
+            36.40883685286615,
+            12.323969113337512
+          ],
+          [
+            -35.620273615307184,
+            37.893065821442974,
+            16.825325032160247
+          ]
+        ]
+      }
+    ]
+  }
+]

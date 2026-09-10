@@ -1,0 +1,16 @@
+# Generated geometry and document metadata.
+/STEP/**/*.step
+/STEP/**/*.stp
+/STEP/**/*.stl
+/STEP/**/*.3mf
+/STEP/**/*.glb
+/STEP/**/*.json
+/STEP/hand_mechanical_candidate_r13.step.js
+
+# Generated presentation assets. The HTML and its behavior test are source.
+/website/*.glb
+/website/*.mp4
+/website/*.gif
+
+# Snapshots, logs, checkpoints, and local review packets.
+/tmp/
