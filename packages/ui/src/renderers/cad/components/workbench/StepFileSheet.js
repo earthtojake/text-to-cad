@@ -10,6 +10,7 @@ import {
 } from "@hardcore/core/lib/step/stepTree.js";
 import { Button } from "@hardcore/ui/primitives/button";
 import { ScrollArea } from "@hardcore/ui/primitives/scroll-area";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@hardcore/ui/primitives/tabs";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -687,24 +688,19 @@ export default function StepFileSheet({
       scrollsContent: true,
       titleAttr: treeSelectionTitle || undefined,
       content: active => (
-            <div className="flex h-full min-h-0 max-w-full flex-col overflow-hidden">
-              <div className="flex shrink-0 gap-1 border-b border-sidebar-border/60 p-1" role="tablist" aria-label="Model view">
-                {['geometry','features'].map(view => <button key={view} type="button" role="tab" aria-selected={modelView === view} tabIndex={modelView === view ? 0 : -1} onClick={() => changeModelView(view)} onKeyDown={event => {
-                  if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
-                  event.preventDefault();
-                  const next = event.key === 'Home' ? 'geometry' : event.key === 'End' ? 'features' : view === 'geometry' ? 'features' : 'geometry';
-                  changeModelView(next);
-                  event.currentTarget.parentElement.querySelectorAll('[role="tab"]')[next === 'geometry' ? 0 : 1].focus();
-                }} className={cn('flex-1 rounded px-2 py-1.5 text-xs capitalize hover:bg-sidebar-accent/50', modelView === view && 'bg-sidebar-accent')}>{view}</button>)}
-              </div>
-              <div hidden={modelView !== 'features'} className="min-h-0 flex-1">
+            <Tabs value={modelView} onValueChange={changeModelView} className="h-full min-h-0 max-w-full gap-0 overflow-hidden">
+              <TabsList aria-label="Model view" className="mx-2 my-2 shrink-0">
+                <TabsTrigger value="geometry">Geometry</TabsTrigger>
+                <TabsTrigger value="features">Features</TabsTrigger>
+              </TabsList>
+              <TabsContent value="features" forceMount hidden={modelView !== 'features'} className="min-h-0 overflow-hidden">
                 <ModelingTree key={`${selectedEntry?.file}:${geometryInspection?.revision}`}
                   modeling={modeling}
                   active={active && open && modelView === 'features'} disabled={treeSelectionDisabled || viewerLoading}
                   references={modelReferences} selectedReferenceIds={selectedReferenceIds} selectedPartIds={selectedPartIds}
                   onLoadTopology={geometryInspection?.onLoadTopology} onSelect={onSelectReferenceGroup} />
-              </div>
-              <div hidden={modelView !== 'geometry'} className="min-h-0 flex-1 flex-col" style={modelView === 'geometry' ? {display:'flex'} : undefined}>
+              </TabsContent>
+              <TabsContent value="geometry" forceMount hidden={modelView !== 'geometry'} className={cn("min-h-0 overflow-hidden", modelView === 'geometry' && "flex flex-col")}>
 
               <InspectorSplit title={selectedReferences.length > 1 ? `${selectedReferences.length} selected items` : activeTreeRow?.label || 'Selected geometry'}
                 details={selectedReferences.length > 0 || measuredSelection.partIds.length > 0 ? <>
@@ -1218,8 +1214,8 @@ export default function StepFileSheet({
               </div>
               </ScrollArea>
               </InspectorSplit>
-              </div>
-            </div>
+              </TabsContent>
+            </Tabs>
       )
     },
     // Pose then Animation, directly after Tree and ahead of the readouts: they are

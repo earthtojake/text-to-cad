@@ -327,8 +327,9 @@ arrangements to this default and preserves other file kinds’ arrangements.
 ### Inspector tabs and dark surfaces
 
 The inspector uses the shared shadcn Tabs primitives for Model, Kinematics and
-Animation, including native keyboard navigation. A single section shows its
-content directly without a redundant tab strip. Split panes retain tab labels
+Animation, and for Geometry/Features within Model. Both levels use the default
+styling and native keyboard navigation; switching views preserves mounted trees.
+A single section shows its content directly without a redundant tab strip. Split panes retain tab labels
 so users can move them back together. Visited trees keep disclosure and scroll
 state across tab changes.
 
