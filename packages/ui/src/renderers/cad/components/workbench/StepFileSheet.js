@@ -26,6 +26,8 @@ import { buildFileStatusTab } from "./FileStatusSection.js";
 import { buildPoseControlsTab } from "./PoseControlsSection.js";
 import { buildAnimationControlsTab } from "./AnimationControlsSection.js";
 import { buildStepReferenceTab } from "./StepReferenceSection.js";
+import ModelingTree from "./ModelingTree.jsx";
+import { useStepModeling } from "../../workbench/useStepModeling.js";
 import InspectorSplit from "./InspectorSplit.jsx";
 import StepGeometryProperties from "./StepGeometryProperties.jsx";
 import SelectionFilterMenu from "./SelectionFilterMenu.jsx";
@@ -444,8 +446,17 @@ export default function StepFileSheet({
   openSectionIds = [],
   onOpenSectionIdsChange
 }) {
+  const reconstructionEnabled = viewerServerInfo?.reconstructionExperiment === true;
+  const modeling = useStepModeling(selectedEntry, reconstructionEnabled && !treeSelectionDisabled && !viewerLoading,
+    reconstructionEnabled,
+    selectedReferences[0]?.occurrenceId || selectedPartIds?.[0]);
   const hostReference = useHostReference();
   const [faceList, setFaceList] = useState('all');
+  const [modelView, setModelView] = useState("geometry");
+  const changeModelView = view => {
+    setModelView(view);
+    if (view === "geometry") onRevealGeometrySelection?.();
+  };
   const [presentationExpanded, setPresentationExpanded] = useState(new Set([STEP_MODEL_ROOT_ID]));
   const [inspection, setInspection] = useState(null);
   const modelReferences = geometryInspection?.references || EMPTY;
@@ -666,6 +677,7 @@ export default function StepFileSheet({
     setPresentationExpanded(current => ancestors.every(id => current.has(id)) ? current : new Set([...current, ...ancestors]));
   }, [activeTreeNodeScrollKey, activeSelectedReferenceId, treeRoot]);
 
+  useEffect(() => { if (activeTreeNodeScrollKey.startsWith("reference:")) setModelView("geometry"); }, [activeTreeNodeScrollKey]);
 
   if (!selectedEntry) {
     return null;
@@ -680,7 +692,25 @@ export default function StepFileSheet({
       titleAttr: treeSelectionTitle || undefined,
       content: active => (
             <div className="flex h-full min-h-0 max-w-full flex-col overflow-hidden">
-              <div className="flex min-h-0 flex-1 flex-col">
+              {reconstructionEnabled && <div className="flex shrink-0 gap-1 border-b border-sidebar-border/60 p-1" role="tablist" aria-label="Model view">
+                {['geometry','features'].map(view => <button key={view} type="button" role="tab" aria-selected={modelView === view} tabIndex={modelView === view ? 0 : -1} onClick={() => changeModelView(view)} onKeyDown={event => {
+                  if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+                  event.preventDefault();
+                  const next = event.key === 'Home' ? 'geometry' : event.key === 'End' ? 'features' : view === 'geometry' ? 'features' : 'geometry';
+                  changeModelView(next);
+                  event.currentTarget.parentElement.querySelectorAll('[role="tab"]')[next === 'geometry' ? 0 : 1].focus();
+                }} className={cn('flex-1 rounded px-2 py-1.5 text-xs capitalize hover:bg-sidebar-accent/50', modelView === view && 'bg-sidebar-accent')}>{view}</button>)}
+              </div>}
+              {reconstructionEnabled && <div hidden={modelView !== 'features'} className="min-h-0 flex-1">
+                <ModelingTree key={`${selectedEntry?.file}:${geometryInspection?.revision}`}
+                  modeling={modeling}
+                  reconstructionEnabled={reconstructionEnabled}
+                  active={active && open && modelView === 'features'} entry={selectedEntry} disabled={treeSelectionDisabled || viewerLoading}
+                  references={modelReferences} selectedReferenceIds={selectedReferenceIds} selectedPartIds={selectedPartIds}
+                  onLoadTopology={geometryInspection?.onLoadTopology} onSelect={onSelectReferenceGroup} />
+              </div>}
+              <div hidden={reconstructionEnabled && modelView !== 'geometry'} className="min-h-0 flex-1 flex-col" style={!reconstructionEnabled || modelView === 'geometry' ? {display:'flex'} : undefined}>
+
               <InspectorSplit title={selectedReferences.length > 1 ? `${selectedReferences.length} selected items` : activeTreeRow?.label || 'Selected geometry'}
                 details={selectedReferences.length > 0 || measuredSelection.partIds.length > 0 ? <>
                   <StepGeometryProperties measurements={measurements} geometrySelection={measuredSelection} inspection={inspection} inspect={inspect} />

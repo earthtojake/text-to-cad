@@ -40,7 +40,7 @@ memo (bare), scope, blob. They do not appear in code or documentation.
   index/output/<sha256(output path)>  {model}: which script wrote the file at this path
   index/component/<cid>               component entries → {surf, brep} object hashes
   index/op/<sha256(op key)>           op-memo entries → object hash
-  index/mesh/<key>                    tessellation entries → object hash
+  index/mesh/<key>                    tessellation/playback entries → object hash
 ```
 
 Nothing else lives under the root. A build's progress is process state, not
