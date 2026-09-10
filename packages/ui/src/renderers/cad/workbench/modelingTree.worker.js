@@ -1,6 +1,5 @@
 import { parseSurf } from '@hardcore/core/lib/surf/container.js';
 import { buildModelingTree } from './modelingTree.js';
-import { reconstructionRecipe } from './reconstructionRecipe.js';
 
 // One requested component, bounded input, and a disposable worker. Never generate CAD.
 const MAX_BYTES = 16 * 1024 * 1024;
@@ -23,7 +22,7 @@ self.onmessage = async ({ data: { url } }) => {
     for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
     const { index, floats } = parseSurf(bytes.buffer);
     const tree = buildModelingTree(index, floats);
-    self.postMessage({ tree, hasFaces: index.faces.length > 0, recipe: reconstructionRecipe(index, tree) });
+    self.postMessage({ tree, hasFaces: index.faces.length > 0 });
   } catch (error) {
     self.postMessage({ error: error instanceof Error ? error.message : 'Could not infer a modeling tree.' });
   }
