@@ -4,6 +4,7 @@ import { cn } from '@hardcore/ui/utils';
 import InspectorSplit from './InspectorSplit.jsx';
 import { modelingReferenceIds } from '../../workbench/modelingTree.js';
 import { presentModelingAssembly } from '../../workbench/modelingPresentation.js';
+import { entryAssetUrl } from '@hardcore/core/lib/entryAssets.js';
 
 const ReconstructionPreview = lazy(() => import('./ReconstructionPreview.jsx'));
 const EMPTY = [];
@@ -88,6 +89,7 @@ export default function ModelingTree({ modeling, active, entry, disabled, refere
       {(error || failed>0) && <p role="alert" className="text-micro text-muted-foreground">{error || `${failed} ${failed===1?'component is':'components are'} unavailable.`} <button type="button" className="underline" onClick={retryFailed}>Retry</button></p>}
       {!loading && !error && !empty && <p className="text-micro text-muted-foreground">Inferred features · original build order unknown.</p>}
       {reconstructionEnabled && componentIds.length>0 && <p role="status" className="text-micro text-muted-foreground">{ready} of {geometryComponents} components reconstructed{Object.values(statuses).some(s=>s.state==='checking') ? ' · Verifying…' : ''}{emptyComponents>0 && <span title="These STEP entries contain no faces."> · {emptyComponents} empty {emptyComponents===1 ? 'entry' : 'entries'}</span>}</p>}
+      {reconstructionEnabled && ready>0 && descriptor?.occurrences.length>1 && <button type="button" onClick={()=>setPreview({assembly:{descriptor,results,statuses,meshUrl:entryAssetUrl(entry,'glb')},label:entry.name || entry.file.split('/').pop()})} className="flex w-full items-center justify-center gap-2 rounded border px-2 py-1.5 text-xs hover:bg-sidebar-accent"><RotateCw className="size-3.5"/>Play assembly sequences</button>}
     </div>
     {currentPart && <div className="shrink-0 border-b border-sidebar-border/60 p-2">
       {recipe && reconstructionEnabled ? verification?.state==='ready' ? <button type="button" onClick={()=>setPreview({component:currentPart.component,recipe,label:currentPart.name || 'Part'})} className="flex w-full items-center justify-center gap-2 rounded border px-2 py-1.5 text-xs hover:bg-sidebar-accent"><RotateCw className="size-3.5"/>Play build sequence</button> : verification?.state==='failed' ? <div className="space-y-1 text-micro text-muted-foreground"><p>{verification.error}</p><button type="button" className="underline" onClick={()=>retryVerification(currentPart.component)}>Retry verification</button></div> : <p role="status" className="text-micro text-muted-foreground">{verification?.state==='checking' ? 'Verifying build sequence…' : 'Build sequence queued…'}</p> : <p className="text-micro text-muted-foreground">{recipe ? 'Complete recipe inferred.' : 'Partial recognition · no complete build sequence yet.'}</p>}

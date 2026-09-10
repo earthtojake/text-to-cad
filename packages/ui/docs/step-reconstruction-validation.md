@@ -56,3 +56,25 @@ Use the repository's Python runtime (`CAD_DESKTOP_PYTHON` if needed). The tracke
 The commit **Keep STEP inspection independent of model source** is the baseline: source-link removal and geometry-only inspection. The following **Add opt-in STEP reconstruction and playback exports** commit contains the experiment, backend worker/cache, dependency, tests, and documentation. Revert that second commit to remove the experiment without restoring source-code coupling. Reinstall dependencies and rebuild/relaunch afterward; disposable mesh-cache entries need no migration.
 
 The experiment writes neither STEP files nor model scripts. Proof/playback cache entries use the existing disposable store. Recognition limits and unsupported surfaces still apply: drafted/blended parts, freeform surfaces, and flattened multi-solid components commonly get only partial inspection.
+
+## Assembly playback experiment
+
+`Play assembly sequences` combines the components already verified when the
+preview opens. Verification remains per component. Partial or failed parts stay
+visible as finished STEP geometry; they do not block supported sequences.
+Repeated occurrences share their component sequence and retain the STEP's
+placements. Surrounding parts are faint during a sequence, and the final view
+shows the complete assembly. Ordering parts for playback does not establish
+original build history or dependencies between components.
+
+Individual part playback remains available. The assembly preview uses the same
+GIF/video exporter, including a caption distinguishing verified components from
+parts kept as original geometry. This is client-side presentation; the kernel
+verifier and STEP files are unchanged.
+
+Local validation: the imported Duo includes all 14 verified components plus one
+original component across 32 steps; the Ferrari includes all 35 verified
+components across 100 steps. Both previews retain their complete assemblies and
+reported no page errors. The Duo GIF decoded as 32 distinct scene frames at
+800 × 514, with 32.8 seconds total duration. Existing single-part playback,
+experiment-off behavior and GIF-download integration tests still pass.

@@ -6,6 +6,7 @@ import { cn } from '@hardcore/ui/utils';
 import ReconstructionViewport from './ReconstructionViewport.jsx';
 import ReconstructionExport from './ReconstructionExport.jsx';
 import { requestReconstruction } from '../../workbench/reconstructionClient.js';
+import { loadAssemblyPlayback } from '../../workbench/reconstructionAssembly.js';
 
 function Playback({ data, label }) {
   const viewRef = useRef(null);
@@ -34,7 +35,7 @@ function Playback({ data, label }) {
         <span className="absolute bottom-3 left-3 text-xs text-muted-foreground">{original ? 'Original STEP' : `${frame + 1} / ${data.steps.length} · ${step.label}`}</span>
       </div>
       <div className="flex min-h-0 flex-col border-t sm:w-64 sm:shrink-0 sm:border-l sm:border-t-0">
-        <div className="flex items-center gap-1.5 border-b px-3 py-2 text-xs"><Check className="size-3.5" />Final geometry matches</div>
+        <div className="space-y-1 border-b px-3 py-2 text-xs"><div className="flex items-center gap-1.5"><Check className="size-3.5 shrink-0" />{data.tracks ? `${data.verified} components with verified playback` : 'Final geometry matches'}</div>{data.tracks && <p className="text-micro text-muted-foreground">{data.staticParts > 0 ? `${data.staticParts} ${data.staticParts === 1 ? "component stays" : "components stay"} as finished geometry. ` : ''}Other parts appear faintly while each sequence plays.</p>}</div>
         <ol className="min-h-0 flex-1 overflow-auto p-1" aria-label="Verified build sequence">
           {data.steps.map((item, i) => {
             const Icon = item.kind === 'sketch' ? SquareDashed : item.kind === 'revolve' ? RotateCw : Layers;
@@ -58,19 +59,23 @@ function Playback({ data, label }) {
   </>;
 }
 
-export default function ReconstructionPreview({ target, file, component, recipe, label, onClose }) {
+export default function ReconstructionPreview({ target, file, component, recipe, assembly, label, onClose }) {
   const [data, setData] = useState(null), [error, setError] = useState('');
+  const [progress, setProgress] = useState('Rebuilding and verifying this part…');
   useEffect(() => {
     const controller = new AbortController();
-    requestReconstruction({ target, file, component, recipe, signal: controller.signal })
+    const request = assembly
+      ? loadAssemblyPlayback({ ...assembly, target, file, signal: controller.signal, onProgress: setProgress })
+      : requestReconstruction({ target, file, component, recipe, signal: controller.signal });
+    request
       .then(result => { if (!controller.signal.aborted) setData(result); })
       .catch(e => { if (!controller.signal.aborted) setError(e.message); });
     return () => controller.abort();
-  }, [target, file, component, recipe]);
+  }, [target, file, component, recipe, assembly]);
   return <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
     <DialogContent className="flex h-[min(760px,90vh)] w-[min(1100px,94vw)] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none">
-      <div className="shrink-0 space-y-1 border-b px-4 py-3 pr-10"><DialogTitle className="text-sm">Build sequence · {label}</DialogTitle><DialogDescription className="text-xs">A new sequence reconstructed from STEP geometry—not the original build history.</DialogDescription></div>
-      {data ? <Playback data={data} label={label} /> : <div className="grid flex-1 place-items-center p-6 text-center text-sm text-muted-foreground"><p role={error ? 'alert' : 'status'}>{error || 'Rebuilding and verifying this part…'}</p></div>}
+      <div className="shrink-0 space-y-1 border-b px-4 py-3 pr-10"><DialogTitle className="text-sm">Build sequence · {label}</DialogTitle><DialogDescription className="text-xs">{assembly ? 'Verified part sequences in assembly order. Original build history and dependencies between parts are unknown.' : 'A new sequence reconstructed from STEP geometry—not the original build history.'}</DialogDescription></div>
+      {data ? <Playback data={data} label={label} /> : <div className="grid flex-1 place-items-center p-6 text-center text-sm text-muted-foreground"><p role={error ? 'alert' : 'status'}>{error || progress}</p></div>}
     </DialogContent>
   </Dialog>;
 }

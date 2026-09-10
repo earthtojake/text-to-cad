@@ -88,7 +88,8 @@ export async function exportReconstruction({ data, label, format, camera, signal
       ctx.fillStyle = '#fafafa'; ctx.font = '16px sans-serif';
       ctx.fillText(`${i + 1} / ${data.steps.length} · ${data.steps[i].label}`, 20, height + 24, width - 40);
       ctx.fillStyle = '#a3a3a3'; ctx.font = '12px sans-serif';
-      ctx.fillText(`${label} · Reconstructed from STEP geometry`, 20, height + 46, width - 40);
+      const summary = data.tracks ? `${data.verified} verified components · ${data.staticParts} kept as original` : 'Reconstructed from STEP geometry';
+      ctx.fillText(`${label} · ${summary}`, 20, height + 46, width - 40);
     };
     const blob = format === 'gif' ? await gifFrames(canvas, draw, data.steps.length, signal, onProgress) : await videoFrames(canvas, draw, data.steps.length, signal, onProgress, mimeType);
     signal.throwIfAborted();
