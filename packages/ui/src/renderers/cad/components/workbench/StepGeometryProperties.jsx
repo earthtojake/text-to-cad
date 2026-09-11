@@ -3,7 +3,7 @@ import { cn } from '@hardcore/ui/utils';
 const measurement = value => value.toLocaleString(undefined, { maximumFractionDigits: 2 });
 
 /** Measured properties of the selected STEP geometry. */
-export default function StepGeometryProperties({ measurements, inspection, geometrySelection, inspect }) {
+export default function StepGeometryProperties({ measurements, inspection, inspect }) {
   return <div className="min-w-0 px-1 text-xs">
       {(measurements.size || measurements.area !== null || measurements.radii.length > 0) && <div className="mb-3" aria-label="Associated geometry measurements">
         <h4 className="mb-1.5 text-micro text-muted-foreground">Measurements</h4>
@@ -20,6 +20,5 @@ export default function StepGeometryProperties({ measurements, inspection, geome
         </dl>
       </div>}
 
-      {(geometrySelection.partIds.length > 0 || geometrySelection.faceIds.length > 0) && <p className="mt-3 text-micro text-muted-foreground">{geometrySelection.partIds.length ? `${geometrySelection.partIds.length} associated ${geometrySelection.partIds.length === 1 ? 'part' : 'parts'}` : `${geometrySelection.faceIds.length} associated ${geometrySelection.faceIds.length === 1 ? 'face' : 'faces'}`}</p>}
     </div>;
 }

@@ -20,7 +20,7 @@ function ModelingRow({ node, depth=0, selected, expanded, toggle, choose, disabl
     <ModelPartMenu node={node} controls={partControls} disabled={disabled} selectDisabled={disabled || unavailable} selected={selected.has(node.id)} onSelect={event=>choose(node,event)}>
     <div className={cn('flex min-w-0 items-center rounded hover:bg-sidebar-accent/50', selected.has(node.id) && 'bg-sidebar-accent', hidden && 'opacity-50')} onMouseEnter={() => partControls.onHoverTreeNode?.(node.selectionId || node.occurrenceId || '')} onMouseLeave={() => partControls.onHoverTreeNode?.('')} style={{paddingLeft:depth*14}}>
       {branch ? <button type="button" aria-label={`${open ? 'Collapse' : 'Expand'} ${node.label}`} aria-expanded={open} className="grid size-7 shrink-0 place-items-center rounded text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring" onClick={()=>toggle(node.id)}><ChevronRight className={cn('size-3.5 transition-transform',open && 'rotate-90')}/></button> : <span className="w-7 shrink-0"/>}
-      <button type="button" aria-label={`Select ${node.label}`} aria-pressed={selected.has(node.id)} disabled={disabled || unavailable || !(node.selectionId || node.faces?.length || node.edges?.length)} onClick={event=>choose(node,event)} title={node.note || node.label} className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40">
+      <button type="button" aria-label={`Select ${node.label}`} aria-pressed={selected.has(node.id)} disabled={disabled || unavailable || !(node.selectionId || node.faces?.length || node.edges?.length)} onClick={event=>choose(node,event)} title={node.label} className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40">
         <Icon className="size-3.5 shrink-0 text-muted-foreground"/><span className="min-w-0 flex-1 truncate">{node.label}</span>
         {node.summary && <span className="shrink-0 text-micro text-muted-foreground">{node.summary}</span>}
         {node.measurements?.[0] && ['extrude','loft','cut','round','boss','pocket','hole'].includes(node.kind) && <span className="shrink-0 text-micro tabular-nums text-muted-foreground">{node.kind === 'round' ? 'R ' : node.kind === 'hole' ? 'Ø ' : ''}{number(node.measurements[0][1])}</span>}
@@ -100,12 +100,10 @@ export default function ModelingTree({ modeling, active, disabled, references=EM
       {partControls.hiddenPartIds?.length > 0 && <button disabled={disabled} type="button" className="text-muted-foreground hover:text-foreground" onClick={partControls.showAllHiddenParts}>Show all</button>}
       {partControls.focusedNodeIds?.length > 0 && <button disabled={disabled} type="button" className="text-muted-foreground hover:text-foreground" onClick={partControls.onExitAllIsolate}>Exit isolate</button>}
     </div>}
-    <InspectorSplit title={showDetails ? selected?.label : 'Selection'} label="Modeling details" details={showDetails ? <div className="space-y-3 p-3" aria-label="Modeling details">
+    <InspectorSplit title={showDetails ? selected?.label : 'Selection'} label="Modeling details" details={showDetails ? (selected.measurements?.length || pending ? <div className="space-y-3 p-3" aria-label="Modeling details">
       {!!selected.measurements?.length && <dl className="space-y-2">{selected.measurements.map(([label,value,unit])=><div key={label} className="flex flex-wrap justify-between gap-x-3 gap-y-1"><dt className="text-muted-foreground">{label}</dt><dd className="tabular-nums">{number(value)} {unit}</dd></div>)}</dl>}
-      {selected.note && <p className="text-micro leading-relaxed text-muted-foreground">{selected.note}</p>}
-      <div className="text-micro text-muted-foreground">{selected.edges?.length ? `${selected.edges.length} boundary ${selected.edges.length===1?'edge':'edges'}` : `${selected.faces.length} associated faces`}</div>
       {pending && <p role="status" className="text-micro text-muted-foreground">Loading selectable geometry…</p>}
-    </div> : selectionDetails}>
+    </div> : null) : selectionDetails}>
       <div className="min-h-0 flex-1 overflow-auto p-1">
         {empty && !stepRoot ? <p role="status" className="p-2 leading-relaxed text-muted-foreground">This component has no faces to inspect.</p> : <ul aria-label="Model">{tree.map(node=><ModelingRow key={node.id} {...{node,selected:highlighted,expanded,choose,disabled,partControls,rowRefs}} toggle={id=>setExpanded(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next;})}/>)}</ul>}
       </div>

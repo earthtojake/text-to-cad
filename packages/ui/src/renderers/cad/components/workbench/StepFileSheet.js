@@ -52,7 +52,7 @@ export default function StepFileSheet({
 
   if (!selectedEntry) return null;
   const selectionDetails = selectedReferences.length || measuredSelection.partIds.length ? <>
-    <StepGeometryProperties measurements={measurements} geometrySelection={measuredSelection} inspection={inspection} inspect={inspect} />
+    <StepGeometryProperties measurements={measurements} inspection={inspection} inspect={inspect} />
     {selectedReferences.length > 0 && buildStepReferenceTab({ references: selectedReferences }).content}
   </> : null;
   const sections = [{
