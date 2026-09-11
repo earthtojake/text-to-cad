@@ -100,7 +100,7 @@ export default function ModelingTree({ modeling, active, disabled, references=EM
       {partControls.hiddenPartIds?.length > 0 && <button disabled={disabled} type="button" className="text-muted-foreground hover:text-foreground" onClick={partControls.showAllHiddenParts}>Show all</button>}
       {partControls.focusedNodeIds?.length > 0 && <button disabled={disabled} type="button" className="text-muted-foreground hover:text-foreground" onClick={partControls.onExitAllIsolate}>Exit isolate</button>}
     </div>}
-    <InspectorSplit title={showDetails ? selected?.label : 'Selection'} label="Modeling details" details={showDetails ? (selected.measurements?.length || pending ? <div className="space-y-3 p-3" aria-label="Modeling details">
+    <InspectorSplit title={showDetails ? selected?.label : 'Selection'} label="Modeling details" details={showDetails && selected.edges?.length === 1 && !pending && selectionDetails ? selectionDetails : showDetails ? (selected.measurements?.length || pending ? <div className="space-y-3 p-3" aria-label="Modeling details">
       {!!selected.measurements?.length && <dl className="space-y-2">{selected.measurements.map(([label,value,unit])=><div key={label} className="flex flex-wrap justify-between gap-x-3 gap-y-1"><dt className="text-muted-foreground">{label}</dt><dd className="tabular-nums">{number(value)} {unit}</dd></div>)}</dl>}
       {pending && <p role="status" className="text-micro text-muted-foreground">Loading selectable geometry…</p>}
     </div> : null) : selectionDetails}>
