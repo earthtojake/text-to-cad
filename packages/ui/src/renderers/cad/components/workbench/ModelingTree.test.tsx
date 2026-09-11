@@ -115,3 +115,38 @@ it('does not fetch geometry or start a worker when modeling is disabled',async()
  await act(async()=>{});
  expect(fetch).not.toHaveBeenCalled();expect(WorkerStub.instances).toHaveLength(0);
 });
+
+it('highlights a picked face’s feature while preserving its precise reference and details',async()=>{
+ setup();const onSelect=vi.fn();
+ render(<ModelingTree active entry={entry} references={refs()} selectedReferenceIds={['o1.f1']} onSelect={onSelect} selectionDetails={<p>Picked face details</p>}/>);
+ await respond({tree});
+ expect(screen.getByRole('button',{name:'Select Cut extrude 1'}).getAttribute('aria-pressed')).toBe('true');
+ expect(screen.getByText('Picked face details')).toBeTruthy();
+ expect(onSelect).not.toHaveBeenCalled();
+});
+
+it('keeps imported parts selectable and revealable before recognition finishes',async()=>{
+ setup();const onSelectTreeNode=vi.fn(),onTogglePartVisibility=vi.fn();
+ const stepRoot={id:'__step_model__',nodeType:'part',displayName:'Imported case',leafPartIds:['__model__'],children:[]};
+ const props={entry,active:true,stepRoot,partControls:{onSelectTreeNode,onTogglePartVisibility,hiddenPartIds:[]}};
+ const {rerender}=render(<ModelingTree {...props}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Select Imported case'}));
+ expect(onSelectTreeNode).toHaveBeenCalledWith('__step_model__',expect.any(Object));
+ fireEvent.click(screen.getByRole('button',{name:'Hide Imported case'}));
+ expect(onTogglePartVisibility).toHaveBeenCalledWith('__step_model__');
+ rerender(<ModelingTree {...props} partControls={{...props.partControls,hiddenPartIds:['__model__']}}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Reveal Imported case'}));
+ expect(onTogglePartVisibility).toHaveBeenCalledTimes(2);
+ expect(screen.getByRole('button',{name:'Select Imported case'}).hasAttribute('disabled')).toBe(true);
+ expect(screen.queryByRole('button',{name:'Isolate Imported case'})).toBeNull();
+});
+
+it('does not overwrite a newer viewport selection when a feature’s topology finishes loading',async()=>{
+ setup();const onSelect=vi.fn();
+ const props={active:true,entry,references:[],selectedReferenceIds:[],onSelect};
+ const {rerender}=render(<ModelingTree {...props}/>);await respond({tree});
+ fireEvent.click(screen.getByRole('button',{name:'Select Cut extrude 1'}));
+ rerender(<ModelingTree {...props} selectedReferenceIds={['o1.e3']}/>);
+ rerender(<ModelingTree {...props} selectedReferenceIds={['o1.e3']} references={refs()}/>);
+ expect(onSelect).not.toHaveBeenCalled();
+});

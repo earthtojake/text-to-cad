@@ -537,7 +537,7 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   */
   await expect(page.getByRole("button", { name: "Show files" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Hide files" })).toHaveCount(0);
-  await expect(page.getByRole("tree").first()).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible({ timeout: 120_000 });
   await page.waitForTimeout(1000);
   await shoot("file-cad-default.png", true);
   await expectInspectorBesideModel();
