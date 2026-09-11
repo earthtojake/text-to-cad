@@ -18,7 +18,7 @@ export default function StepFileSheet({
   geometryInspection = null, stepTreeRoot, isAssemblyView = false,
   selectedPartIds = EMPTY, selectedReferenceIds = EMPTY, selectedReferences = EMPTY,
   hiddenPartIds = EMPTY, focusedNodeIds = EMPTY, selectableNodeIds = null,
-  activeTreeNodeScrollKey = '', onSelectTreeNode, onSelectReferenceGroup,
+  activeTreeNodeScrollKey = '', onSelectTreeNode, onSelectReferenceGroup, onClearSelection,
   onFocusTreeNode, onUnfocusTreeNode, onExitAllIsolate, onTogglePartVisibility,
   onCopyTreeNodeReference, onHoverTreeNode, showAllHiddenParts,
   treeSelectionDisabled = false, treeSelectionDisabledReason = '',
@@ -67,7 +67,7 @@ export default function StepFileSheet({
       references={modelReferences} selectedReferences={selectedReferences}
       selectedReferenceIds={selectedReferenceIds} selectedPartIds={selectedPartIds}
       selectionDetails={selectionDetails} activeTreeNodeScrollKey={activeTreeNodeScrollKey}
-      onLoadTopology={geometryInspection?.onLoadTopology} onSelect={onSelectReferenceGroup}
+      onLoadTopology={geometryInspection?.onLoadTopology} onSelect={onSelectReferenceGroup} onClearSelection={onClearSelection}
       partControls={{isAssemblyView, hiddenPartIds, focusedNodeIds, selectableNodeIds,
         onSelectTreeNode, onFocusTreeNode, onUnfocusTreeNode, onExitAllIsolate,
         onTogglePartVisibility, showAllHiddenParts, onCopyTreeNodeReference, onHoverTreeNode}}
