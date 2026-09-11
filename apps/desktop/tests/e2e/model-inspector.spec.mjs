@@ -10,7 +10,7 @@ const root = path.resolve(appRoot, '../..');
 // test drives Electron rather than a page, so it takes no fixture from it. The
 // empty pattern is the framework's contract, not an oversight.
 // eslint-disable-next-line no-empty-pattern
-test('Model tree groups collapsed faces and adds measured STEP references to the prompt', async ({}, testInfo) => {
+test('Model tree preserves part controls and adds precise viewport references to the prompt', async ({}, testInfo) => {
   test.setTimeout(120000);
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'hardcore-surfaces-'));
   const output = testInfo.outputPath('screenshots');
@@ -84,36 +84,32 @@ test('Model tree groups collapsed faces and adds measured STEP references to the
     await expect(page.getByRole('tab',{name:'Model',exact:true})).toHaveCount(0);
     await expect(page.locator('[data-file-sheet-tab-panel=tree]')).toBeVisible();
     await expect(page.getByRole('tab',{name:'Surfaces',exact:true})).toHaveCount(0);
-    const tree=page.getByRole('tree',{name:'Model',exact:true});
-    await tree.getByRole('treeitem').first().click();
-    await expect(tree.getByRole('button',{name:/^Expand Faces/})).toBeVisible({timeout:60000});
-    await expect(tree.locator('[data-step-tree-node-type="topology-face"]')).toHaveCount(0);
-    await page.getByRole('button',{name:'Face list: Individual faces',exact:true}).click();
-    await page.getByRole('menuitemradio',{name:'By surface type',exact:true}).click();
-    await tree.getByRole('button',{name:/^Expand Faces/}).click();
-    const planar=tree.getByText(/^Planar \(\d+\)$/);
-    await expect(planar).toBeVisible();
-    await planar.click();
-    await expect(page.getByText('Face area',{exact:true})).toBeVisible();
-    await page.getByRole('button',{name:'Show X extent',exact:true}).click();
-    await expect(page.getByRole('button',{name:'Show X extent',exact:true})).toHaveAttribute('aria-pressed','true');
+    await expect(page.getByRole('tab',{name:'Geometry',exact:true})).toHaveCount(0);
+    await expect(page.getByRole('tab',{name:'Features',exact:true})).toHaveCount(0);
+    const tree=page.getByRole('list',{name:'Model',exact:true});
+    const part=tree.getByRole('button',{name:/^Select /}).first();
+    await expect(part).toBeVisible({timeout:30000});
+    await part.click();
+    await expect(page.getByRole('button',{name:'Show X extent',exact:true})).toBeVisible();
+    await tree.getByRole('button',{name:/^Hide /}).first().click();
+    await expect(tree.getByRole('button',{name:/^Reveal /}).first()).toBeVisible();
+    await page.getByRole('button',{name:'Show all',exact:true}).click();
+    await expect(tree.getByRole('button',{name:/^Hide /}).first()).toBeVisible();
+    // Pick the model itself; no exhaustive topology list is needed to inspect faces or edges.
+    const canvas=page.locator('[data-cad-surface] canvas').first();
+    const box=await canvas.boundingBox();
+    await canvas.click({position:{x:box.width*0.5,y:box.height*0.5}});
+    await expect(page.getByRole('button',{name:'Add to prompt',exact:true})).toBeVisible();
+    const reference=page.locator('[data-file-sheet-tab-panel=tree]').getByText(/^o[0-9.]+\.[fe][0-9]+$/);
+    await expect(reference).toBeVisible();
+    const selector=await reference.innerText();
     await page.getByRole('button',{name:'Add to prompt',exact:true}).click();
     const chip=page.locator('[data-composer] [data-reference-chip]');
     await expect(chip).toHaveCount(1);
     await expect(chip).toHaveAttribute('data-file','models/examples/imported/import-smoke.step');
-    await expect(chip).toHaveAttribute('data-selector',/f[0-9]/);
+    await expect(chip).toHaveAttribute('data-selector',selector);
     await expect(page.locator('[data-composer]')).not.toContainText('.py');
-    await expect(page.getByRole('tab',{name:'Source features'})).toHaveCount(0);
-    const views=page.getByRole('tablist',{name:'Model view',exact:true});
-    const geometryTab=views.getByRole('tab',{name:'Geometry',exact:true});
-    await expect(geometryTab).toHaveAttribute('data-slot','tabs-trigger');
-    await geometryTab.focus();
-    await page.keyboard.press('ArrowRight');
-    await expect(views.getByRole('tab',{name:'Features',exact:true})).toHaveAttribute('aria-selected','true');
-    await expect(page.getByRole('list',{name:'Inferred modeling operations'}).getByRole('button',{name:/^Select /}).first()).toBeVisible({timeout:30000});
     await expect(page.getByRole('button',{name:/Play (build|assembly)/})).toHaveCount(0);
-    await page.getByRole('tab',{name:'Geometry',exact:true}).click();
-    await expect(tree).toBeVisible();
     assert.deepEqual(sourceRequests,[]);
     assert.deepEqual(errors,[]);
     await page.screenshot({path:`${output}/surfaces.png`});

@@ -914,13 +914,16 @@ export function useViewerPicking({
           pickPartReferenceFromIntersections(modelIntersections);
       }
       if (pickMode === VIEWER_PICK_MODE.MEASURE || pickMode === VIEWER_PICK_MODE.TOPOLOGY) {
-        return pickTopologyReference(modelIntersections, clientX, clientY, { hover });
+        return pickTopologyReference(modelIntersections, clientX, clientY, { hover }) ||
+          (hover && pickMode === VIEWER_PICK_MODE.TOPOLOGY ? pickPartReferenceFromIntersections(modelIntersections) : null);
       }
       return null;
     }
 
     function pickActivationReference(clientX, clientY, pointerType = "") {
       if (canHoverWithPointer(pointerType)) {
+        // Topology may have arrived since the last pointer move.
+        if (pickModeRef.current === VIEWER_PICK_MODE.TOPOLOGY) return pickReferenceAtPosition(clientX, clientY);
         return String(hoverState.hoveredReferenceId || "").trim() || pickReferenceAtPosition(clientX, clientY, { hover: true });
       }
       return pickReferenceAtPosition(clientX, clientY);
