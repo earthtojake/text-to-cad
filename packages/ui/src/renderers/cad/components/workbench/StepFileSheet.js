@@ -52,8 +52,11 @@ export default function StepFileSheet({
 
   if (!selectedEntry) return null;
   const selectionDetails = selectedReferences.length || measuredSelection.partIds.length ? <>
-    <StepGeometryProperties measurements={measurements} inspection={inspection} inspect={inspect} />
     {selectedReferences.length > 0 && buildStepReferenceTab({ references: selectedReferences }).content}
+    {(measurements.size || measurements.radii.length > 0) && <details className="mt-1">
+      <summary className="cursor-pointer px-2 py-1 text-tiny text-muted-foreground">Dimension previews</summary>
+      <StepGeometryProperties measurements={{...measurements,area:null}} inspection={inspection} inspect={inspect} />
+    </details>}
   </> : null;
   const sections = [{
     id: 'tree', title: 'Model', keepMounted: true, scrollsContent: true,
