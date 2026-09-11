@@ -22,7 +22,7 @@ self.onmessage = async ({ data: { url } }) => {
     for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
     const { index, floats } = parseSurf(bytes.buffer);
     const tree = buildModelingTree(index, floats);
-    self.postMessage({ tree, hasFaces: index.faces.length > 0 });
+    self.postMessage({ tree, hasFaces: index.faces.length > 0, edgeFaces: Object.fromEntries(index.edges.map(edge => [edge.ord, edge.faceOrds || []])) });
   } catch (error) {
     self.postMessage({ error: error instanceof Error ? error.message : 'Could not infer a modeling tree.' });
   }

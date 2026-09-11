@@ -1,3 +1,4 @@
+import { STEP_MODEL_ROOT_ID, stepTreeNodeIsTopology, stepTreeNodeLeafPartIds, stepTreeNodeLabel } from '@hardcore/core/lib/step/stepTree.js';
 import { unique } from './modelingGeometry.js';
 
 const folders = {boss:'Bosses',pocket:'Pockets',hole:'Bores',cut:'Cuts',round:'Edge blends'};
@@ -26,9 +27,9 @@ export function presentModelingTree(tree) {
 
 // Keep the STEP's assembly hierarchy. Scope every repeated part's operation IDs
 // and canonical face/edge references without copying or guessing its source history.
-export function presentModelingAssembly(descriptor,results) {
-  if(!descriptor)return [];
-  const occurrences=new Map(descriptor.occurrences.map(o=>[o.id,o]));
+export function presentModelingAssembly(descriptor,results,stepRoot=null) {
+  if(!descriptor && !stepRoot)return [];
+  const occurrences=new Map((descriptor?.occurrences||[]).map(o=>[o.id,o]));
   const scope=(node,occurrenceId)=>({...node,id:`${occurrenceId}/${node.id}`,occurrenceId,children:node.children?.map(n=>scope(n,occurrenceId))});
   const part=o=>{
     const result=results[o.component],tree=result?.tree;
@@ -47,6 +48,21 @@ export function presentModelingAssembly(descriptor,results) {
     const children=(n.children||[]).map(visit).filter(Boolean);
     return children.length?{id:`assembly:${n.id}`,kind:'assembly',label:n.name||'Assembly',faces:[],edges:[],children}:null;
   };
+  if(stepRoot){
+    const fromStep=n=>{
+      if(stepTreeNodeIsTopology(n))return null;
+      const children=(n.children||[]).map(fromStep).filter(Boolean);
+      const occurrence=occurrences.get(n.id) || (n.id===STEP_MODEL_ROOT_ID && descriptor?.occurrences.length===1 ? descriptor.occurrences[0] : null);
+      const recognized=occurrence ? part(occurrence) : null;
+      return {
+        ...(recognized || {faces:[],edges:[]}),
+        id:`model:${n.id}`,selectionId:n.id,leafPartIds:stepTreeNodeLeafPartIds(n),
+        kind:children.length && !occurrence ? 'assembly':'part',label:stepTreeNodeLabel(n),
+        children:recognized?.children || children,
+      };
+    };
+    return [fromStep(stepRoot)].filter(Boolean);
+  }
   if(descriptor.occurrences.length===1){
     const o=descriptor.occurrences[0],result=results[o.component];
     return result?.tree ? presentModelingTree(result.tree).map(n=>scope(n,o.id)) : [part(o)];
