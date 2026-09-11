@@ -389,7 +389,9 @@ export function buildSelectorBundleFromSurf(index, floats, options = {}) {
       relation.count,
       Math.max(0, Math.min(100, Math.round(relevance))),
       edge.flags || 0,
-      edge.params ?? null,
+      edge.curve?.kind === "circle" && edge.curve.range?.length === 2 && edge.curve.range.every(Number.isFinite)
+        ? { ...edge.params, sweepRadians: Math.abs(edge.curve.range[1] - edge.curve.range[0]) }
+        : edge.params ?? null,
       segments.start,
       segments.count,
       edge.adjacentFaceCount ?? (edge.faceOrds || []).length,

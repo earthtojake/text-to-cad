@@ -4,12 +4,12 @@ import { cn } from "@hardcore/ui/utils";
 import { copyTextToClipboard } from "@hardcore/ui/clipboard";
 import { useHostReference } from "../../file-view/hostReference.js";
 import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections.js";
+import { referenceMeasurements, selectionMeasurements } from "../../workbench/referenceMeasurements.js";
 import { Button } from "@hardcore/ui/primitives/button";
 
 // A selected "element" is either a topology reference (face / edge / solid,
 // carrying reference.pickData) or an assembly node (component / subassembly).
-// All values below come straight off the selection objects — no extra geometry
-// work — mirroring the per-selection readouts in Onshape / Fusion / SolidWorks.
+// Measurements use the current STEP selection, including its occurrence transforms.
 
 const SELECTOR_TYPE_LABELS = Object.freeze({
   face: "Face",
@@ -45,8 +45,6 @@ const AXES = Object.freeze([
   { key: "Z", className: "text-sky-500 dark:text-sky-400" }
 ]);
 
-const SUMMARY_PATTERN = /^(.*?)\s+(area|length|volume)\s*=\s*([-\d.eE+]+)\s*$/;
-
 function titleCase(value) {
   const text = String(value || "").trim();
   return text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
@@ -60,15 +58,6 @@ function formatNumber(value, digits = 2) {
   return numeric.toLocaleString(undefined, { maximumFractionDigits: digits });
 }
 
-function parseSummary(summary) {
-  const text = String(summary || "").trim();
-  const match = text.match(SUMMARY_PATTERN);
-  if (match) {
-    return { subtype: match[1].trim(), measureKey: match[2], measureValue: Number(match[3]) };
-  }
-  return { subtype: text, measureKey: null, measureValue: null };
-}
-
 function readBbox(source) {
   const bbox = source?.bbox || source?.boundingBox || null;
   const min = Array.isArray(bbox?.min) ? bbox.min : null;
@@ -79,15 +68,6 @@ function readBbox(source) {
   const dims = [0, 1, 2].map((axis) => Math.abs((Number(max[axis]) || 0) - (Number(min[axis]) || 0)));
   const center = [0, 1, 2].map((axis) => ((Number(min[axis]) || 0) + (Number(max[axis]) || 0)) / 2);
   return dims.some((value) => value > 1e-9) ? { dims, center } : null;
-}
-
-function radiusFromParams(params) {
-  if (!params || typeof params !== "object") {
-    return null;
-  }
-  const candidate = params.radius ?? params.radius1 ?? params.majorRadius ?? params.minorRadius;
-  const numeric = Number(candidate);
-  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
 }
 
 function isPartNode(item) {
@@ -163,10 +143,10 @@ function DetailHeader({ typeLabel, subtitle, selector, copyText }) {
 
 // Label-column rows keep the value next to its label instead of pushing it to
 // the far edge, so the readout scans top-to-bottom.
-function InfoRow({ label, children }) {
+function InfoRow({ label, children, title }) {
   return (
-    <div className="flex items-baseline gap-3 px-2 py-1">
-      <span className="w-[4.5rem] shrink-0 text-tiny text-muted-foreground">{label}</span>
+    <div className="flex items-baseline gap-3 px-2 py-1" title={title}>
+      <span className="w-[6.25rem] shrink-0 text-tiny text-muted-foreground">{label}</span>
       <div className="min-w-0 flex-1 text-tiny text-sidebar-foreground">{children}</div>
     </div>
   );
@@ -190,29 +170,33 @@ function CoordValue({ vector, digits = 2 }) {
   );
 }
 
+const MEASUREMENT_HINTS = {
+  'Plane spacing': 'Perpendicular distance between the planes; not the minimum gap between their trimmed faces.',
+  'Line spacing': 'Perpendicular distance between the supporting lines; not the gap between their endpoints.',
+  'Axis spacing': 'Perpendicular distance between the cylinder axes.',
+  'Center distance': 'Straight-line distance between circle centers.',
+  'Angle': 'Smaller angle between the directions or planes (0–90°).',
+  'Axis angle': 'Smaller angle between the cylinder axes (0–90°).',
+};
+
+function MeasurementRows({rows}) {
+  return rows.map(([label,value,unit])=><InfoRow key={label} label={label} title={MEASUREMENT_HINTS[label]}><MonoValue>{`${formatNumber(value)} ${unit}`}</MonoValue></InfoRow>);
+}
+
 function TopologyDetail({ reference }) {
   const pick = reference.pickData || {};
   const type = reference.selectorType;
-  const parsed = parseSummary(reference.summary);
+  const quantities = referenceMeasurements(reference);
   let subtype = "";
   if (type === "face") {
-    subtype = SURFACE_LABELS[pick.surfaceType] || titleCase(pick.surfaceType || parsed.subtype);
+    subtype = SURFACE_LABELS[pick.surfaceType] || titleCase(quantities.kind);
   } else if (type === "edge") {
-    subtype = CURVE_LABELS[parsed.subtype] || titleCase(parsed.subtype);
+    subtype = CURVE_LABELS[quantities.kind] || titleCase(quantities.kind);
   } else {
-    subtype = titleCase(pick.kind || parsed.subtype);
+    subtype = titleCase(pick.kind || quantities.kind);
   }
   const box = readBbox(pick);
-  const radius = radiusFromParams(pick.params);
-  const measureLabel = parsed.measureKey === "area"
-    ? "Area"
-    : parsed.measureKey === "length"
-      ? "Length"
-      : parsed.measureKey === "volume"
-        ? "Volume"
-        : null;
-  const measureUnit = parsed.measureKey === "area" ? "mm²" : parsed.measureKey === "volume" ? "mm³" : "mm";
-  const center = Array.isArray(pick.center) ? pick.center : box?.center;
+  const center = quantities.circular && Array.isArray(pick.params?.center) ? pick.params.center : Array.isArray(pick.center) ? pick.center : box?.center;
   const component = String(pick.sourceName || pick.name || reference.occurrenceId || "").trim();
 
   return (
@@ -224,26 +208,18 @@ function TopologyDetail({ reference }) {
         copyText={reference.copyText}
       />
       <div className="flex flex-col py-0.5">
-        {measureLabel && Number.isFinite(parsed.measureValue) ? (
-          <InfoRow label={measureLabel}>
-            <MonoValue>{`${formatNumber(parsed.measureValue)} ${measureUnit}`}</MonoValue>
-          </InfoRow>
-        ) : null}
-        {radius != null ? (
-          <InfoRow label="Radius"><MonoValue>{`${formatNumber(radius)} mm`}</MonoValue></InfoRow>
-        ) : null}
+        <MeasurementRows rows={quantities.rows} />
         {box ? (
           <InfoRow label="Size">
             <MonoValue>{`${formatNumber(box.dims[0])} × ${formatNumber(box.dims[1])} × ${formatNumber(box.dims[2])} mm`}</MonoValue>
           </InfoRow>
         ) : null}
-        {Array.isArray(center) ? (
-          <InfoRow label="Center"><CoordValue vector={center} /></InfoRow>
-        ) : null}
-        {Array.isArray(pick.normal) ? (
-          <InfoRow label="Normal"><CoordValue vector={pick.normal} digits={3} /></InfoRow>
-        ) : null}
-        {component ? <InfoRow label="Component">{component}</InfoRow> : null}
+        <details className="mt-1" key={reference.id}>
+          <summary className="cursor-pointer px-2 py-1 text-tiny text-muted-foreground">Details</summary>
+          {Array.isArray(center) && <InfoRow label="Center"><CoordValue vector={center}/></InfoRow>}
+          {Array.isArray(pick.normal) && <InfoRow label="Normal"><CoordValue vector={pick.normal} digits={3}/></InfoRow>}
+          {component && <InfoRow label="Component">{component}</InfoRow>}
+        </details>
       </div>
     </div>
   );
@@ -279,8 +255,11 @@ function PartDetail({ node }) {
             <MonoValue>{`${formatNumber(box.dims[0])} × ${formatNumber(box.dims[1])} × ${formatNumber(box.dims[2])} mm`}</MonoValue>
           </InfoRow>
         ) : null}
-        {box ? <InfoRow label="Center"><CoordValue vector={box.center} /></InfoRow> : null}
-        {selector ? <InfoRow label="Path">{selector}</InfoRow> : null}
+        <details className="mt-1" key={node.id}>
+          <summary className="cursor-pointer px-2 py-1 text-tiny text-muted-foreground">Details</summary>
+          {box && <InfoRow label="Center"><CoordValue vector={box.center}/></InfoRow>}
+          {selector && <InfoRow label="Path">{selector}</InfoRow>}
+        </details>
       </div>
     </div>
   );
@@ -318,6 +297,7 @@ export function StepReferenceSection({ references = [] }) {
   }
 
   const safeIndex = Math.min(Math.max(index, 0), count - 1);
+  const totals = count > 1 ? selectionMeasurements(items) : [];
 
   return (
     <div className="flex min-w-0 flex-col pb-2">
@@ -353,6 +333,7 @@ export function StepReferenceSection({ references = [] }) {
           </div>
         </div>
       ) : null}
+      {totals.length > 0 && <div className="border-b border-sidebar-border/60 py-1" aria-label="Selection measurements"><MeasurementRows rows={totals}/></div>}
       <ElementDetail item={items[safeIndex]} />
     </div>
   );

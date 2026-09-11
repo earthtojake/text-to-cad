@@ -90,6 +90,7 @@ test('Model tree preserves part controls and adds precise viewport references to
     const part=tree.getByRole('button',{name:/^Select /}).first();
     await expect(part).toBeVisible({timeout:30000});
     await part.click();
+    await page.getByText('Dimension previews',{exact:true}).click();
     await expect(page.getByRole('button',{name:'Show X extent',exact:true})).toBeVisible();
     await tree.getByRole('button',{name:/^Hide /}).first().click();
     await expect(tree.getByRole('button',{name:/^Reveal /}).first()).toBeVisible();

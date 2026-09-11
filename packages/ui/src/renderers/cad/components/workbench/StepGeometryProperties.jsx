@@ -6,7 +6,6 @@ const measurement = value => value.toLocaleString(undefined, { maximumFractionDi
 export default function StepGeometryProperties({ measurements, inspection, inspect }) {
   return <div className="min-w-0 px-1 text-xs">
       {(measurements.size || measurements.area !== null || measurements.radii.length > 0) && <div className="mb-3" aria-label="Associated geometry measurements">
-        <h4 className="mb-1.5 text-micro text-muted-foreground">Measurements</h4>
         <dl className="space-y-1.5 text-xs">
           {measurements.size && <div className="flex flex-wrap gap-1" aria-label="Preview bounding dimensions" title="Bounding size along the model’s X, Y and Z axes">{['X', 'Y', 'Z'].map((axis, i) => <button key={axis} type="button"
             aria-label={`Show ${axis} extent`} aria-pressed={inspection?.kind === 'axis' && inspection.value === i}
