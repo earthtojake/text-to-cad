@@ -105,3 +105,11 @@ test("relation and proxy buffers are consistent", () => {
   assert.equal(bundle.buffers.surfaceHalfEdges.length % 7, 0);
   assert.equal(bundle.buffers.edgeIds.length * 2, bundle.buffers.edgeIndices.length);
 });
+
+test("circular references carry the analytic sweep even when display polylines approximate their lengths", () => {
+  const rows = rowsAsObjects(bundle.manifest, "edges", "edgeColumns");
+  for (const edge of index.edges.filter(edge => edge.curve?.kind === "circle")) {
+    const row = rows.find(row => row.ordinal === edge.ord);
+    assert.equal(row.params.sweepRadians, Math.abs(edge.curve.range[1] - edge.curve.range[0]));
+  }
+});
