@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Boxes, Circle, ChevronRight, CornerUpRight, Layers, RotateCw, Shapes, Spline, SquareDashed } from 'lucide-react';
+import { Box, Boxes, Circle, ChevronRight, CornerUpRight, Layers, RotateCw, Shapes, Spline, SquareDashed, X } from 'lucide-react';
+import { Button } from '@hardcore/ui/primitives/button';
+import { selectionSummary } from '../../workbench/selectionSummary.js';
 import { cn } from '@hardcore/ui/utils';
 import ModelPartMenu from './ModelPartMenu.jsx';
 import ModelPartActions from './ModelPartActions.jsx';
@@ -33,7 +35,7 @@ function ModelingRow({ node, depth=0, selected, expanded, toggle, choose, disabl
 }
 
 /** Read-only geometry inference; assembly instances share recognition, never selection IDs. */
-export default function ModelingTree({ modeling, active, disabled, references=EMPTY, selectedReferenceIds=EMPTY, selectedPartIds=EMPTY, onLoadTopology, onSelect, stepRoot, selectedReferences, selectionDetails, activeTreeNodeScrollKey, partControls={} }) {
+export default function ModelingTree({ modeling, active, disabled, references=EMPTY, selectedReferenceIds=EMPTY, selectedPartIds=EMPTY, onLoadTopology, onSelect, onClearSelection, stepRoot, selectedReferences, selectionDetails, activeTreeNodeScrollKey, partControls={} }) {
   const {descriptor,results,error,retryFailed}=modeling;
   const [selected,setSelected]=useState(null),[pending,setPending]=useState(null),[expanded,setExpanded]=useState(new Set());
   const initialExpansion=useRef(false),firstFeatureExpanded=useRef(false);
@@ -41,6 +43,7 @@ export default function ModelingTree({ modeling, active, disabled, references=EM
   const componentIds=useMemo(()=>[...new Set(descriptor?.occurrences.map(o=>o.component)||[])],[descriptor]);
   const rowRefs=useRef(new Map());
   const picked=useMemo(()=>selectedReferences || references.filter(ref=>selectedReferenceIds.includes(ref.id)),[selectedReferences,references,selectedReferenceIds]);
+  const summary=selectionSummary(picked,descriptor?.occurrences);
   const paths=useMemo(()=>modelingSelectionPaths(tree,picked,selectedPartIds,descriptor,results),[tree,picked,selectedPartIds,descriptor,results]);
   useEffect(()=>{
     const ancestors=paths.flatMap(path=>(path.at(-1)?.kind === 'part' ? path : path.slice(0,-1)).map(node=>node.id));
@@ -100,10 +103,16 @@ export default function ModelingTree({ modeling, active, disabled, references=EM
       {partControls.hiddenPartIds?.length > 0 && <button disabled={disabled} type="button" className="text-muted-foreground hover:text-foreground" onClick={partControls.showAllHiddenParts}>Show all</button>}
       {partControls.focusedNodeIds?.length > 0 && <button disabled={disabled} type="button" className="text-muted-foreground hover:text-foreground" onClick={partControls.onExitAllIsolate}>Exit isolate</button>}
     </div>}
-    <InspectorSplit title={showDetails ? selected?.label : 'Selection'} label="Modeling details" details={showDetails && selected.edges?.length === 1 && !pending && selectionDetails ? selectionDetails : showDetails ? (selected.measurements?.length || pending ? <div className="space-y-3 p-3" aria-label="Modeling details">
+    <InspectorSplit title={summary.label ? <span className="flex min-w-0 items-center gap-1">
+      <span className="max-w-full shrink-0 truncate">{summary.label}</span>
+      {summary.context && <span className="truncate text-muted-foreground">· {summary.context}</span>}
+    </span> : showDetails ? selected?.label : 'Selection'}
+    titleTooltip={summary.label ? [summary.label,summary.context].filter(Boolean).join(' · ') : undefined}
+    actions={summary.label && onClearSelection ? <Button type="button" variant="ghost" size="icon-xs" aria-label="Clear selection" title="Clear selection" disabled={disabled} onClick={()=>{setSelected(null);setPending(null);onClearSelection();}}><X className="size-3.5" aria-hidden="true"/></Button> : null}
+    label="Modeling details" details={showDetails && selected.edges?.length === 1 && !pending && selectionDetails ? selectionDetails : showDetails ? (selected.measurements?.length || pending ? <div className="space-y-3 p-3" aria-label="Modeling details">
       {!!selected.measurements?.length && <dl className="space-y-2">{selected.measurements.map(([label,value,unit])=><div key={label} className="flex flex-wrap justify-between gap-x-3 gap-y-1"><dt className="text-muted-foreground">{label}</dt><dd className="tabular-nums">{number(value)} {unit}</dd></div>)}</dl>}
       {pending && <p role="status" className="text-micro text-muted-foreground">Loading selectable geometry…</p>}
-    </div> : null) : selectionDetails}>
+    </div> : selectionDetails) : selectionDetails}>
       <div className="min-h-0 flex-1 overflow-auto p-1">
         {empty && !stepRoot ? <p role="status" className="p-2 leading-relaxed text-muted-foreground">This component has no faces to inspect.</p> : <ul aria-label="Model">{tree.map(node=><ModelingRow key={node.id} {...{node,selected:highlighted,expanded,choose,disabled,partControls,rowRefs}} toggle={id=>setExpanded(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next;})}/>)}</ul>}
       </div>

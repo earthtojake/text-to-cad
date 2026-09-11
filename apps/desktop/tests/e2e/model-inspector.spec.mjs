@@ -111,6 +111,12 @@ test('Model tree preserves part controls and adds precise viewport references to
     await expect(chip).toHaveAttribute('data-selector',selector);
     await expect(page.locator('[data-composer]')).not.toContainText('.py');
     await expect(page.getByRole('button',{name:/Play (build|assembly)/})).toHaveCount(0);
+    await page.screenshot({path:`${output}/selection-summary.png`});
+    // Clearing inspection must also clear the viewport selection, while preserving the draft reference.
+    await page.getByRole('button',{name:'Clear selection',exact:true}).click();
+    await expect(page.getByRole('region',{name:'Modeling details',exact:true})).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'Add to prompt',exact:true})).toHaveCount(0);
+    await expect(chip).toHaveCount(1);
     assert.deepEqual(sourceRequests,[]);
     assert.deepEqual(errors,[]);
     await page.screenshot({path:`${output}/surfaces.png`});

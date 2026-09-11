@@ -302,8 +302,7 @@ export function StepReferenceSection({ references = [] }) {
   return (
     <div className="flex min-w-0 flex-col pb-2">
       {count > 1 ? (
-        <div className="flex items-center justify-between gap-2 border-b border-sidebar-border/60 px-2 py-1">
-          <span className="text-tiny text-muted-foreground">{count} selected</span>
+        <div className="flex items-center justify-end gap-2 border-b border-sidebar-border/60 px-2 py-1">
           <div className="inline-flex items-center gap-0.5">
             <Button
               type="button"

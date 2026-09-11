@@ -150,3 +150,13 @@ it('does not overwrite a newer viewport selection when a feature’s topology fi
  rerender(<ModelingTree {...props} selectedReferenceIds={['o1.e3']} references={refs()}/>);
  expect(onSelect).not.toHaveBeenCalled();
 });
+it('summarizes canonical selection in the details header and clears through the host',async()=>{
+ setup();const onClearSelection=vi.fn();
+ const props={active:true,entry,references:refs(),selectedReferences:refs(),selectedReferenceIds:refs().map(r=>r.id),selectionDetails:<p>Face measurements</p>,onClearSelection};
+ const {rerender}=render(<ModelingTree {...props}/>);await respond({tree});
+ expect(screen.getByText('2 faces')).toBeTruthy();expect(screen.getByTitle('2 faces · Case')).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'Hide selection details'}));
+ fireEvent.click(screen.getByRole('button',{name:'Clear selection'}));expect(onClearSelection).toHaveBeenCalledTimes(1);
+ rerender(<ModelingTree {...props} selectedReferences={[]} selectedReferenceIds={[]} selectionDetails={null}/>);
+ expect(screen.queryByRole('button',{name:'Clear selection'})).toBeNull();
+});
