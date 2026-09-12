@@ -20,9 +20,17 @@ function geometryTriangleCount(geometry) {
   return position ? Math.floor(position.count / 3) : 0;
 }
 
+// Builds wait for REAL idle time: a 2 s timeout forced one build every two
+// seconds through a progressive load whose main thread never idles, and a
+// large assembly's builds (~0.35 s per million triangles) then competed with
+// the decode/compose work the load was waiting on. A page that never idles
+// still gets its trees, one every half minute; until then picking uses stock
+// raycasting.
+const BVH_IDLE_TIMEOUT_MS = 30000;
+
 function scheduleIdle(task) {
   if (typeof globalThis.requestIdleCallback === "function") {
-    globalThis.requestIdleCallback(() => task(), { timeout: 2000 });
+    globalThis.requestIdleCallback(() => task(), { timeout: BVH_IDLE_TIMEOUT_MS });
     return;
   }
   setTimeout(task, 0);
@@ -30,7 +38,15 @@ function scheduleIdle(task) {
 
 export function attachAcceleratedRaycast(mesh) {
   if (mesh?.isMesh) {
-    mesh.raycast = acceleratedRaycast;
+    // A mesh whose displayed vertices are produced on the GPU (tube deformation)
+    // installs userData.cadBeforeRaycast to reject far rays cheaply and to
+    // materialize exact CPU positions before the intersection test.
+    mesh.raycast = function (raycaster, intersections) {
+      if (this.userData?.cadBeforeRaycast?.(raycaster) === false) {
+        return;
+      }
+      return acceleratedRaycast.call(this, raycaster, intersections);
+    };
   }
 }
 
@@ -72,8 +88,17 @@ export function scheduleRuntimeRaycastBvh(runtime, { maxTriangles = DEFAULT_MAX_
     if (!geometry) {
       return;
     }
-    delete geometry.userData.__bvhQueued;
-    buildGeometryBvh(geometry, maxTriangles);
+    // The flag is the queue entry's liveness token, not a bookkeeping detail.
+    // A publish that drops every occurrence of a component releases its
+    // geometry and clears the flag (cadScene's releaseUnusedRecordGeometry),
+    // but cannot reach into this closure's queue; building now would allocate
+    // a tree — and hold the arrays — for something nothing draws. Clearing it
+    // on build also makes a geometry queued twice (released, then re-adopted
+    // by a later publish while the older queue still holds it) build once.
+    if (geometry.userData.__bvhQueued) {
+      delete geometry.userData.__bvhQueued;
+      buildGeometryBvh(geometry, maxTriangles);
+    }
     if (pending.length) {
       scheduleIdle(step);
     }

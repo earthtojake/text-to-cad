@@ -272,6 +272,7 @@ def emit(
     prog: str,
     as_json: bool,
     verbose: bool = False,
+    verbose_hint: bool = True,
     stdout: Any | None = None,
     stderr: Any | None = None,
 ) -> int:
@@ -291,7 +292,9 @@ def emit(
             return 1
         from cadgen._internal.cli_errors import report_cli_error
 
-        return report_cli_error(exc, tool=prog, verbose=verbose, stream=stderr)
+        return report_cli_error(
+            exc, tool=prog, verbose=verbose, verbose_hint=verbose_hint, stream=stderr
+        )
     if as_json:
         print(json.dumps(result_payload(result), separators=(",", ":")), file=out)
     else:
@@ -307,6 +310,7 @@ def call_verb(
     prog: str,
     as_json: bool,
     verbose: bool = False,
+    verbose_hint: bool = True,
     stdout: Any | None = None,
 ) -> int:
     """:func:`emit` for an adapter: it passes its own arguments to the verb."""
@@ -315,6 +319,7 @@ def call_verb(
         prog=prog,
         as_json=as_json,
         verbose=verbose,
+        verbose_hint=verbose_hint,
         stdout=stdout,
     )
 
@@ -336,6 +341,10 @@ def run_cli(
         prog=prog,
         as_json=bool(getattr(args, JSON_FLAG_DEST)),
         verbose=bool(getattr(args, "verbose", False)),
+        # The verb's signature decides whether `--verbose` exists at all (only a
+        # `verbose` parameter generates it), so the failure hint follows the same
+        # source of truth instead of promising a flag this door does not have.
+        verbose_hint=hasattr(args, "verbose"),
         stdout=stdout,
     )
 

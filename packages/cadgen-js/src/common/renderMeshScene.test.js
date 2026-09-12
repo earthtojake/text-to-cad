@@ -19,6 +19,7 @@ import { stepModuleFromKinematics } from "./kinematicsModule.js";
 import { normalizeStepModuleDefinition } from "./stepModule.js";
 import { normalizeStepParameterRenderValues } from "./stepParameters.js";
 import { stepParameterRuntime } from "./source.js";
+import { buildComposedPackageMeshData } from "../lib/assembly/meshData.js";
 
 function twoPartMeshData() {
   return {
@@ -65,6 +66,30 @@ function twoPartMeshData() {
     ]
   };
 }
+
+test("component-only packages render and section every placed occurrence", async () => {
+  const makeComponent = () => ({
+    vertices: new Float32Array([-1, 0, -1, 1, 0, 1, 0, 1, -1]),
+    indices: new Uint32Array([0, 1, 2]),
+    normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
+    parts: [{ id: "triangle", vertexCount: 3, triangleCount: 1 }],
+    bounds: { min: [-1, 0, -1], max: [1, 1, 1] }
+  });
+  const mesh = buildComposedPackageMeshData({ occurrences: [
+    { id: "a", component: "a" },
+    { id: "b", component: "b", transform: [1, 0, 0, 10, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] }
+  ], assembly: { root: { id: "root", nodeType: "assembly", children: [
+    { id: "a", nodeType: "part", children: [] }, { id: "b", nodeType: "part", children: [] }
+  ] } } }, { a: makeComponent(), b: makeComponent() });
+  assert.equal(mesh.indices.length, 0);
+  const list = await renderMeshJob(mesh, { mode: "list", selection: { focus: ["b"] } });
+  assert.deepEqual(list.parts.map((part) => part.ref), ["#b"]);
+  const result = await renderMeshJob(mesh, { mode: "section", section: { plane: "XY", offset: 0 },
+    outputs: [{ path: "section.svg", format: "svg" }] });
+  assert.equal(result.section.segmentCount, 2);
+  assert.match(result.outputs[0].text, /10\.0000 0\.0000/);
+  assert.match(result.outputs[0].text, /10\.5000 0\.5000/);
+});
 
 test("renderMeshJob list capture uses buildModel selection", async () => {
   const result = await renderMeshJob(twoPartMeshData(), {

@@ -1,0 +1,5 @@
+# Validation output stays local; commit runners and concise Markdown summaries.
+*.json
+*.gz
+*.log
+*.npz

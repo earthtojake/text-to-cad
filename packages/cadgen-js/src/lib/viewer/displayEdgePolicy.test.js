@@ -38,4 +38,14 @@ test("display edge policy avoids duplicate record edges when CAD topology edges 
     topologyDisplayEdgesVisible: false,
     wireframeMode: true
   }), true);
+  // A surf STEP carries its CAD edges on the records themselves.
+  assert.equal(shouldShowRecordDisplayEdges({
+    edgesVisible: true,
+    topologyDisplayEdgesVisible: false,
+    cadEdgesVisible: true
+  }), true);
+  assert.equal(shouldShowRecordDisplayEdges({
+    edgesVisible: false,
+    cadEdgesVisible: true
+  }), false);
 });

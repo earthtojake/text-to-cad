@@ -3,19 +3,13 @@
   "configurations": [
     {
       "name": "cad-viewer-dev",
-      "runtimeExecutable": "npm",
+      "runtimeExecutable": "sh",
       "runtimeArgs": [
-        "--prefix",
-        "apps/viewer",
-        "run",
-        "dev",
-        "--",
-        "--host",
-        "127.0.0.1",
-        "--port",
-        "3251"
+        "-c",
+        "VIEWER_PYTHON=\"${VIEWER_PYTHON:-$PWD/.venv/bin/python}\" PYTHONPATH=\"$PWD/packages/cadgen/src${PYTHONPATH:+:$PYTHONPATH}\" exec npm --prefix apps/viewer run dev -- --host 127.0.0.1"
       ],
-      "port": 3251
+      "port": 5173,
+      "autoPort": true
     },
     {
       "name": "docs",

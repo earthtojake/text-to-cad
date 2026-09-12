@@ -42,6 +42,7 @@ __all__ = [
     "compound_from_instances",
     "read_step",
     "load_step_scene",
+    "declare_input",
     "located_shape",
     "occurrence_selector_id",
     "scene_occurrence_shape",
@@ -94,6 +95,13 @@ def __getattr__(name: str):
         from cadgen import step_scene
 
         return getattr(step_scene, name)
+    if name == "declare_input":
+        # The declaration for a file cadgen has no reader for (a JSON atlas, a
+        # CSV table): the model reads it, this records it. `read_step`'s
+        # freshness contract, one format over.
+        from cadgen.inputs import declare_input
+
+        return declare_input
     if name in {"srgb", "srgb_to_linear", "linear_to_srgb"}:
         from cadgen import color
 
@@ -119,6 +127,7 @@ if TYPE_CHECKING:
     from cadgen import build123d, dxf, glb, step, stl, threemf
     from cadgen.assembly import AssemblyHelper, MateTarget, label_shape, label_text, target
     from cadgen.color import linear_to_srgb, srgb, srgb_to_linear
+    from cadgen.inputs import declare_input
     from cadgen.kinematics import couple, cylindrical, fastened, revolute, slider
     from cadgen.instances import compound_from_instances
     from cadgen.progress import report, track

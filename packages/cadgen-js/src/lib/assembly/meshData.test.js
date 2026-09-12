@@ -417,6 +417,29 @@ test("composed package flags a mirrored occurrence (rendered DoubleSide, geometr
   assert.deepEqual([...composed.indices], [0, 1, 2]);
 });
 
+test("multiple components keep their own buffers without an aggregate allocation", () => {
+  const a = unitTriangleComponentMeshData();
+  const b = unitTriangleComponentMeshData();
+  const descriptor = { components: { a: {}, b: {} }, occurrences: [
+    { id: "first", component: "a", transform: IDENTITY_4X4 },
+    { id: "second", component: "b", transform: IDENTITY_4X4 },
+    { id: "repeat", component: "a", transform: IDENTITY_4X4 }
+  ] };
+  descriptor.assembly = { root: { id: "root", nodeType: "assembly",
+    children: descriptor.occurrences.map(({ id }) => ({ id, nodeType: "part", children: [] })) } };
+  const composed = buildComposedPackageMeshData(descriptor, { a, b });
+  assert.equal(composed.vertices.length, 0);
+  assert.equal(composed.normals.length, 0);
+  assert.equal(composed.indices.length, 0);
+  assert.equal(composed.parts[0].sourceMesh, a);
+  assert.equal(composed.parts[1].sourceMesh, b);
+  assert.equal(composed.parts[2].sourceMesh, a);
+  const single = buildComposedPackageMeshData({ entryKind: "part", occurrences: [descriptor.occurrences[0]] }, { a });
+  assert.equal(single.vertices, a.vertices);
+  assert.equal(single.normals, a.normals);
+  assert.equal(single.indices, a.indices);
+});
+
 test("composed package drives a per-occurrence override colour through the material (hex, not vertex baking)", () => {
   // The baked composer wrote override floats straight into per-occurrence vertex colours; the
   // shared-geometry composer can't (geometry is shared), so it routes the override to part.color

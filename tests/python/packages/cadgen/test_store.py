@@ -14,6 +14,7 @@ import textwrap
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 REPO = Path(__file__).resolve().parents[4]
 PYTHON = sys.executable
@@ -450,6 +451,109 @@ class TreeFlattening(StoreCase):
         self.assertEqual(by_id["o1.1.2"]["transform"][3::4][:3], [15, 10, 7])
         self.assertEqual(list(flat["components"]), ["c0"], "one shared component, stored once")
         self.assertEqual(flat["assembly"]["root"]["children"][0]["nodeType"], "subassembly")
+
+
+class TreeBounds(StoreCase):
+    """The tree's bbox is the merge of per-occurrence TIGHT boxes, memoized on
+    (component content, world placement). A control-polygon bound reported a
+    NURBS radius 8% too large (PR #370 bug record 004), and measuring the whole compound
+    tightly on every finalize would have charged a 150k-face assembly seconds
+    it never spends twice.
+    """
+
+    RADIUS = 7.5
+    HEIGHT = 4.0
+
+    @classmethod
+    def nurbs_cylinder(cls):
+        """A cylinder as a NURBS solid: its control polygon reaches 2R, so a
+        loose bound is unmistakable."""
+        from build123d import Cylinder, Solid
+        from OCP.BRepBuilderAPI import BRepBuilderAPI_NurbsConvert
+
+        solid = Cylinder(radius=cls.RADIUS, height=cls.HEIGHT)
+        return Solid(BRepBuilderAPI_NurbsConvert(solid.wrapped, True).Shape())
+
+    def assert_bounds(self, bbox, expected):
+        for key in ("min", "max"):
+            for got, want in zip(bbox[key], expected[key]):
+                self.assertAlmostEqual(got, want, delta=1e-6)
+
+    def test_a_rotated_nurbs_occurrence_reports_its_exact_bounds(self) -> None:
+        from build123d import Location
+
+        from cadgen.store.build import build_tree_from_compound
+
+        # Rolled onto its side: the axis is +Y, so the exact box is R in X and Z
+        # and half the height in Y, about the placement's origin.
+        placed = Location((3, -4, 5), (90, 0, 0)) * self.nurbs_cylinder()
+        _hash, tree, _stats = build_tree_from_compound(placed, root_name="pulley")
+        self.assert_bounds(
+            tree["bbox"],
+            {
+                "min": [3 - self.RADIUS, -4 - self.HEIGHT / 2, 5 - self.RADIUS],
+                "max": [3 + self.RADIUS, -4 + self.HEIGHT / 2, 5 + self.RADIUS],
+            },
+        )
+
+    def test_two_placements_merge_into_the_exact_box(self) -> None:
+        from build123d import Compound, Location
+
+        from cadgen.store.build import build_tree_from_compound
+
+        left = Location((-20, 0, 0)) * self.nurbs_cylinder()
+        left.label = "left"
+        right = Location((20, 0, 0)) * self.nurbs_cylinder()
+        right.label = "right"
+        _hash, tree, _stats = build_tree_from_compound(
+            Compound(children=[left, right], label="bank"), root_name="bank"
+        )
+        self.assertEqual(len(tree["occurrences"]), 2)
+        self.assert_bounds(
+            tree["bbox"],
+            {
+                "min": [-20 - self.RADIUS, -self.RADIUS, -self.HEIGHT / 2],
+                "max": [20 + self.RADIUS, self.RADIUS, self.HEIGHT / 2],
+            },
+        )
+
+    def test_only_occurrences_that_moved_are_measured_again(self) -> None:
+        from build123d import Compound, Location
+
+        from cadgen._internal import component_package, op_memo
+        from cadgen.store.build import build_tree_from_compound
+
+        def bank(offset: float) -> Compound:
+            left = Location((-20, 0, 0)) * self.nurbs_cylinder()
+            left.label = "left"
+            right = Location((20 + offset, 0, 0)) * self.nurbs_cylinder()
+            right.label = "right"
+            return Compound(children=[left, right], label="bank")
+
+        real = component_package.optimal_box
+        calls: list[int] = []
+
+        def counted(wrapped):
+            calls.append(1)
+            return real(wrapped)
+
+        with mock.patch.object(component_package, "optimal_box", counted):
+            _h, cold, _s = build_tree_from_compound(bank(0), root_name="bank")
+            self.assertEqual(len(calls), 2, "one measurement per occurrence, cold")
+
+            # Cleared memory: the second build reads the disk tier, so an
+            # unchanged assembly measures nothing at all.
+            op_memo.clear()
+            calls.clear()
+            _h, warm, _s = build_tree_from_compound(bank(0), root_name="bank")
+            self.assertEqual(len(calls), 0, "an unchanged occurrence is not measured again")
+            self.assertEqual(warm["bbox"], cold["bbox"])
+
+            op_memo.clear()
+            calls.clear()
+            _h, moved, _s = build_tree_from_compound(bank(5), root_name="bank")
+            self.assertEqual(len(calls), 1, "only the occurrence that moved")
+            self.assertEqual(moved["bbox"]["max"][0], cold["bbox"]["max"][0] + 5)
 
 
 class TreeKind(StoreCase):

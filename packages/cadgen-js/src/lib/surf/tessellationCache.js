@@ -353,14 +353,27 @@ export async function tessellateComponentCached(index, floats, { cid = "", optio
   return component;
 }
 
-// The fetch-backed provider both browser hosts use. `entryUrl(key)` resolves a
-// single entry, `batchUrl` the POST endpoint speaking the batch container
-// above; `headers` ride every request (the viewer adds its cross-site POST
-// guard header). A host without the batch route (404/405) demotes getMany to
-// per-key gets permanently for this provider instance.
+// One request = one `arrayBuffer()`, so the batch has to be bounded: a
+// 690-component assembly at macro tolerance is gigabytes, and asking for all
+// of it in one response makes the page allocate all of it at once (that is a
+// renderer death, reported as a lost driver connection). Split by key count,
+// then adapt the next chunk from the bytes this host actually returned per
+// entry so a single response stays near the target.
+const BATCH_MAX_KEYS = 128;
+const BATCH_TARGET_BYTES = 64 * 1024 * 1024;
+
+// The fetch-backed provider both browser hosts use. `origin` addresses a host
+// whose cache does NOT live on the page's own origin (the snapshot renderer's
+// loopback asset server; the viewer serves the cache itself and leaves it
+// empty). `entryUrl(key)` resolves a single entry, `batchUrl` the POST
+// endpoint speaking the batch container above; `headers` ride every request
+// (the viewer adds its cross-site POST guard header). A host without the batch
+// route (404/405) demotes getMany to per-key gets permanently for this
+// provider instance.
 export function createHttpTessellationCacheProvider({
-  entryUrl = (key) => `/__tess_cache/${encodeURIComponent(key)}.tess`,
-  batchUrl = "/__tess_cache/batch",
+  origin = "",
+  entryUrl = (key) => `${origin}/__tess_cache/${encodeURIComponent(key)}.tess`,
+  batchUrl = `${origin}/__tess_cache/batch`,
   headers = {},
 } = {}) {
   let batchSupported = Boolean(batchUrl);
@@ -383,20 +396,34 @@ export function createHttpTessellationCacheProvider({
     },
     async getMany(keys) {
       if (!batchSupported) return null; // caller falls back to per-key gets
-      try {
-        const response = await fetch(batchUrl, {
-          method: "POST",
-          headers: { ...headers, "content-type": "application/json" },
-          body: JSON.stringify({ names: keys.map((key) => `${key}.tess`) }),
-        });
-        if (!response.ok) {
-          batchSupported = false;
+      const entries = [];
+      let limit = BATCH_MAX_KEYS;
+      while (entries.length < keys.length) {
+        const chunk = keys.slice(entries.length, entries.length + limit);
+        let bytes;
+        try {
+          const response = await fetch(batchUrl, {
+            method: "POST",
+            headers: { ...headers, "content-type": "application/json" },
+            body: JSON.stringify({ names: chunk.map((key) => `${key}.tess`) }),
+          });
+          if (!response.ok) {
+            batchSupported = false;
+            return null;
+          }
+          bytes = new Uint8Array(await response.arrayBuffer());
+        } catch {
           return null;
         }
-        return decodeTessellationCacheBatch(new Uint8Array(await response.arrayBuffer()));
-      } catch {
-        return null;
+        const decoded = decodeTessellationCacheBatch(bytes);
+        // A short or malformed container is not a partial answer: the caller's
+        // per-key fallback is the only correct continuation.
+        if (!decoded || decoded.length !== chunk.length) return null;
+        for (const entry of decoded) entries.push(entry);
+        const perEntry = Math.max(1, Math.ceil(bytes.byteLength / chunk.length));
+        limit = Math.max(1, Math.min(BATCH_MAX_KEYS, Math.floor(BATCH_TARGET_BYTES / perEntry)));
       }
+      return entries;
     },
   };
 }

@@ -24,6 +24,7 @@ def build(
     *,
     mesh_tolerance: float | None = None,
     mesh_angular_tolerance: float | None = None,
+    animation: str | dict | None = None,
     force: bool = False,
     verbose: bool = False,
 ) -> MeshExportResult:
@@ -36,6 +37,14 @@ def build(
         diagonal, overriding what the document declares.
     mesh_angular_tolerance: max normal spread across a triangle edge in
         radians, overriding what the document declares.
+    animation: carry a clip of the document's render module (<name>.step.js)
+        into the file as glTF animation, instead of exporting it static. A clip
+        name, or a {clip, fps, seconds, start, drop, deform} object; `fps` is
+        the SAMPLING rate of the baked keyframes (default 30). Rotation and
+        translation are exact; opacity, visibility and tube deformation are
+        refused by name unless `drop`/`deform` says what to do with them. GLB
+        only — no other mesh format carries animation — and OUT only: the
+        declared @glb is the model's static output, not a place for a clip.
     force: re-export even where the ledger says the output is current. Never
         rebuilds the model itself — run `python <script>` for that.
     verbose: show detailed progress and timing on stderr.
@@ -48,6 +57,7 @@ def build(
         out,
         mesh_tolerance=mesh_tolerance,
         mesh_angular_tolerance=mesh_angular_tolerance,
+        animation=animation,
         force=force,
         verbose=verbose,
     )

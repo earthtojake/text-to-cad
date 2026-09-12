@@ -100,6 +100,7 @@ from cadgen.snapshot_core import (
     asset_url_for_path,
     clear_render_output_targets,
     content_type_for_path,
+    declared_output_path,
     default_render_size,
     encode_path_param,
     explicit_size_profile,
@@ -128,6 +129,12 @@ from cadgen.snapshot_core import (
     with_snapshot_timeout,
     write_output_payload,
     write_render_outputs,
+)
+from cadgen.snapshot_video import (
+    ffmpeg_binary,
+    normalize_video_request,
+    parse_video_option,
+    video_container_for_path,
 )
 
 
@@ -170,6 +177,8 @@ class SnapshotOptions:
     animation: object = None
     animation_time: object = None
     animation_specified: bool = False
+    video: object = None
+    video_specified: bool = False
     joint_values: object = None
     joint_values_specified: bool = False
     focus: list[str] | None = None
@@ -220,7 +229,8 @@ def parse_animation_option(raw_animation: object, raw_time: object = None) -> di
     Already an object when it came from a ``<format>.snapshot(animation={...})``
     call; from argv it is one string, told apart by shape the way ``--kinematics``
     is: text that opens with ``{`` is the inline JSON request, anything else is
-    the NAME of a clip the model's ``.anim.js`` declares. ``--time`` is the
+    the NAME of a clip the document's render module (``<name>.step.js``)
+    declares. ``--time`` is the
     second half of the same request — the moment, in seconds, defaulting to 0 —
     and is folded in here, so the job carries ONE field either way. Resolving
     the name needs the sidecar, which only the resolver has loaded, so it travels
@@ -319,6 +329,7 @@ def apply_option_overrides_to_job(job: object, options: SnapshotOptions, *, cwd:
             options.size_profile,
             options.kinematics_specified,
             options.animation_specified,
+            options.video_specified,
             options.joint_values_specified,
             options.display_specified,
             options.theme_specified,
@@ -337,6 +348,8 @@ def apply_option_overrides_to_job(job: object, options: SnapshotOptions, *, cwd:
         next_job["kinematics"] = parse_kinematics_option(options.kinematics)
     if options.animation_specified:
         next_job["animation"] = parse_animation_option(options.animation, options.animation_time)
+    if options.video_specified:
+        next_job["video"] = parse_video_option(options.video, cwd=cwd)
     if options.joint_values_specified:
         next_job["jointValues"] = parse_joint_values_option(options.joint_values)
     if options.display_specified:
@@ -413,6 +426,8 @@ def load_job_from_options(
         job["kinematics"] = parse_kinematics_option(options.kinematics)
     if options.animation_specified:
         job["animation"] = parse_animation_option(options.animation, options.animation_time)
+    if options.video_specified:
+        job["video"] = parse_video_option(options.video, cwd=resolved_cwd)
     if options.joint_values_specified:
         job["jointValues"] = parse_joint_values_option(options.joint_values)
     if options.debug:
@@ -693,6 +708,10 @@ def resolve_robot_render_job(
         raise SnapshotError(
             f"an animation frame requires a STEP model with a sidecar; {label} robots have no clips"
         )
+    if job.get("video") is not None:
+        raise SnapshotError(
+            f"a video renders an animation clip; {label} robots have no clips to render"
+        )
 
     mode = str(job.get("mode") or "view").strip().lower()
     if mode not in SUPPORTED_RENDER_MODES:
@@ -859,9 +878,40 @@ def resolve_step_render_job(
     # directly, so it did not necessarily pass through the flag parser); which
     # clip it names is checked against the sidecar further down.
     animation_request: dict[str, object] | None = None
-    if job.get("animation") is not None:
-        animation_request = normalize_animation_request(job["animation"], where="render job animation")
+    raw_animation = job.get("animation")
+    if raw_animation is not None:
+        animation_request = normalize_animation_request(raw_animation, where="render job animation")
         job["animation"] = animation_request
+    # A video is the SPAN of a clip, so it needs the clip, and it cannot also be
+    # a moment of one. The flag pair is refused at the door (snapshot_door);
+    # this holds the same two rules for a packet that carries the fields
+    # directly, and resolves ffmpeg before anything expensive runs.
+    if job.get("video") is not None:
+        video_request = normalize_video_request(job["video"], where="render job video")
+        if animation_request is None:
+            raise SnapshotError(
+                "video requires animation: name the clip the sequence renders"
+            )
+        # `animation.time` and `video.start` are the same number, and a video
+        # reads only the second. A time of 0 is indistinguishable from an unset
+        # one (the normalizer fills it, and so does the --animation flag), so
+        # only a time that would actually be ignored is refused.
+        if animation_request["time"]:
+            raise SnapshotError(
+                "a video renders a span, not a moment: the animation names time "
+                f"{animation_request['time']}, which a sequence ignores — say where it "
+                "begins with video start instead"
+            )
+        job["video"] = video_request
+        # Both of these are decided before the tree is built, let alone rendered.
+        # `normalize_common_job` checks the container too, for a packet that never
+        # comes past here -- but it runs AFTER the STEP package is compiled, which
+        # is the slowest part of a snapshot, and a typo in a file extension is not
+        # worth minutes. An encoder discovered missing at the end of those same
+        # minutes is the other failure this ordering exists to prevent.
+        for output in job.get("outputs") or []:
+            video_container_for_path(declared_output_path(output))
+        ffmpeg_binary()
     # A render is a READ of the tree behind the document's bytes (compiled from
     # them on demand below when the store has none). Whether the document's
     # source has moved on is its model's business, never a render's.
@@ -1054,6 +1104,10 @@ def resolve_drawing_render_job(
         raise SnapshotError(
             "an animation frame requires a STEP document with a render module beside it; "
             "drawings have no clips"
+        )
+    if job.get("video") is not None:
+        raise SnapshotError(
+            "a video renders an animation clip; drawings have no clips to render"
         )
 
     mode = str(job.get("mode") or "view").strip().lower()
@@ -1284,6 +1338,27 @@ def resolve_render_job_packet(
 
 
 
+def snapshot_narrator(logger: CliLogger) -> Callable[[str], None] | None:
+    """Words for a run the progress line cannot paint, or None when it can.
+
+    `cli_progress_line` disables itself on a non-tty, and `cadgen step snapshot`
+    is served by the warm daemon: the worker's stderr is a frame relay whose
+    `isatty()` is False, so everything the bar would have shown reaches nobody
+    on the door that serves `--video`. These lines fill exactly that gap. Under
+    --verbose the bar stands down for the logger, and lines are what the caller
+    asked for anyway.
+
+    None when the bar IS painting -- the two together smear, because the live
+    line repaints with \\r and a printed line lands on top of it.
+    """
+    if logger.verbose:
+        return logger.info
+    stream = logger.stream if logger.stream is not None else sys.stderr
+    if getattr(stream, "isatty", lambda: False)():
+        return None
+    return logger.info
+
+
 def snapshot_progress_label(packet: object) -> str:
     """The header the progress line commits: what this run is rendering."""
     jobs = packet.get("jobs") if isinstance(packet, dict) else None
@@ -1343,7 +1418,10 @@ async def run_snapshot_async(
         )
         progress.phase(PHASE_BROWSER)
         result = await render_snapshot(
-            packet, runtime_dir=browser_runtime_dir(runtime_dir), progress=progress
+            packet,
+            runtime_dir=browser_runtime_dir(runtime_dir),
+            progress=progress,
+            narrate=snapshot_narrator(logger),
         )
         progress.finish()
     return result

@@ -98,6 +98,56 @@ class BuildResult:
         return lines
 
 
+def _format_bytes(value: float) -> str:
+    """GiB past a gigabyte, MiB below it. Matches the exporter's own refusal."""
+    if value >= 1024 ** 3:
+        return f"{value / 1024 ** 3:.2f} GiB"
+    return f"{value / 1024 ** 2:.1f} MiB"
+
+
+def _animation_summary(animation: dict | None) -> str:
+    """`` (showcase, 120 samples @ 30 fps, 4s, 3 moving)`` — what a GLB carries.
+
+    Empty for a static export. The moving count is what catches the clip that
+    resolved but animated nothing: a typo'd label throws, but a clip whose
+    targets all sit still exports a file that plays and does not move.
+
+    A morph bake adds its own clause, because without it the line is misleading
+    twice over: a deforming tube's weights channel counts toward ``moving`` the
+    same as a part that travels, so 48 baked tendons read as 48 occurrences on
+    the move — and the numbers that decide whether the file is any GOOD (how many
+    targets it cost, how close they track, and the playback texture that has to
+    fit on a GPU) would appear nowhere a human looks.
+
+    A file the LEDGER served was not re-sampled, so only the request is known and
+    the counts it cannot answer are simply absent: `` (showcase, 30 fps)``.
+    Printing nothing there would report a clip-carrying file as static.
+    """
+    if not animation:
+        return ""
+    parts = [str(animation.get("clip"))]
+    samples = animation.get("samples")
+    parts.append(
+        f"{animation.get('fps')} fps" if samples is None
+        else f"{samples} samples @ {animation.get('fps')} fps"
+    )
+    seconds = animation.get("seconds")
+    if seconds is not None:
+        parts.append(f"{float(seconds):g}s")
+    channels = animation.get("channels")
+    if channels is not None:
+        parts.append(f"{channels} moving")
+    deform = animation.get("deform")
+    if isinstance(deform, dict):
+        parts.append(
+            f"{deform.get('mode')} on {deform.get('nodes')} of them: "
+            f"{deform.get('targets')} targets, "
+            f"{float(deform.get('deviationMm', 0)):g}mm of {float(deform.get('toleranceMm', 0)):g}mm, "
+            f"{_format_bytes(float(deform.get('runtimeBytes', 0)))} at playback"
+        )
+    return f" ({', '.join(parts)})"
+
+
 @dataclass(frozen=True)
 class MeshExportFile:
     """One mesh output of a format door, and the tolerances it was written at."""
@@ -111,6 +161,14 @@ class MeshExportFile:
     #: tessellator default, which is ``None``).
     mesh_tolerance: float | None = None
     mesh_angular_tolerance: float | None = None
+    #: The clip baked into this file, for an animated GLB: ``{clip, fps,
+    #: samples, seconds, start, channels}``. ``None`` for a static export, which
+    #: is every other file this door writes. Reported because the schedule is
+    #: DERIVED — a clip states its own duration — so a wrong clip or a wrong
+    #: span shows up without opening the file. A ``skipped`` file was not
+    #: re-sampled, so ``samples`` and ``channels`` are ``None`` there: the clip
+    #: and the request's own schedule are all this side knows.
+    animation: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -119,22 +177,31 @@ class MeshExportResult:
 
     ok: bool
     files: tuple[MeshExportFile, ...] = ()
+    #: What an animated export could not carry: an effect ``drop`` froze, tubes
+    #: shipped at rest, a span past the end of a clip that does not loop. ``ok``
+    #: stays true — these are choices the caller made — but a file that made them
+    #: silently is the failure the animated door exists to avoid, so they are IN
+    #: the result rather than only on the log, where ``--json`` never sees them.
+    warnings: tuple[str, ...] = ()
 
     def human_lines(self) -> list[str]:
-        return [
-            f"{'current' if entry.skipped else 'wrote'} {entry.fmt.upper()}: {_display(entry.path)}"
+        lines = [
+            f"{'current' if entry.skipped else 'wrote'} {entry.fmt.upper()}: "
+            f"{_display(entry.path)}{_animation_summary(entry.animation)}"
             for entry in self.files
         ]
+        lines += [f"warning: {warning}" for warning in self.warnings]
+        return lines
 
 
 @dataclass(frozen=True)
 class SnapshotFile:
-    """One image a snapshot run wrote."""
+    """One file a snapshot run wrote: a still, or a video of an animation clip."""
 
     path: Path
-    #: The encoding the render produced: ``png``, or whatever suffix a text
-    #: output carried. It follows the RENDER, not the request — an SVG served
-    #: under a ``.png`` name still reports ``svg``.
+    #: The encoding the render produced: ``png``, ``mp4``, ``gif``, or whatever
+    #: suffix a text output carried. It follows the RENDER, not the request — an
+    #: SVG served under a ``.png`` name still reports ``svg``.
     kind: str
     #: What this output framed: the camera preset, ``azimuth:elevation`` pair, or
     #: view label the output declared. Empty when the job named none.
@@ -148,6 +215,11 @@ class SnapshotFile:
     #: between them. Empty for inputs that render without a tree (meshes,
     #: drawings, robot descriptions).
     tree: str = ""
+    #: ``--video`` only: what the sequence covers. A still leaves all three at
+    #: zero. The frames themselves are never here — they are the file.
+    frames: int = 0
+    fps: int = 0
+    seconds: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -194,7 +266,16 @@ class SnapshotResult:
         # agent, so it stays one compact JSON line.
         if not self.files:
             return [json.dumps(list(self.parts), separators=(",", ":"))]
-        lines = [f"saved snapshot: {entry.path}" for entry in self.files]
+        lines = [
+            # A video says what it covers: the path alone cannot be checked
+            # against the clip the caller asked for, and the frame count is the
+            # first thing that is wrong when the request was.
+            f"saved video: {entry.path} ({entry.frames} frames, {entry.fps} fps, "
+            f"{entry.seconds:g}s)"
+            if entry.frames
+            else f"saved snapshot: {entry.path}"
+            for entry in self.files
+        ]
         lines += [f"warning: {warning}" for warning in self.warnings]
         return lines
 

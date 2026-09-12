@@ -52,11 +52,19 @@ export function useViewportLod({ viewerRef, lodPackage, applyComponentLodPayload
     };
   }, []);
 
+  // The package summary is republished per progressive-load batch (useCadAssets),
+  // so the same file arriving again means the model GREW: keep the levels
+  // already applied. A different file (or null between loads) is a reset.
+  const lodPackageFileRef = useRef("");
   useEffect(() => {
     const components = lodEnabled() ? lodPackage?.components || [] : [];
+    const file = String(lodPackage?.file || "");
+    const preserveLevels = !!file && file === lodPackageFileRef.current;
+    lodPackageFileRef.current = file;
     componentsRef.current = new Map(components.map((component) => [component.cid, component]));
     schedulerRef.current?.setComponents(
-      components.map(({ cid, diagonal }) => ({ cid, diagonal }))
+      components.map(({ cid, diagonal }) => ({ cid, diagonal })),
+      { preserveLevels }
     );
   }, [lodPackage]);
 

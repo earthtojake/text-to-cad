@@ -1,6 +1,7 @@
 import {
   fitCameraToModel
 } from "./cadScene.js";
+import { screenSpaceLineDeviceResolution } from "./renderEdges.js";
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
@@ -118,7 +119,9 @@ export function renderModel(THREE, model, options = {}) {
     const { width, height } = resolveViewportSize(hostElement, renderer.domElement, options.width, options.height);
     renderer.setPixelRatio(clamp(toFiniteNumber(options.pixelRatio, globalThis.devicePixelRatio || 1), 1, options.maxPixelRatio || 2));
     renderer.setSize(width, height, false);
-    model.runtime?.syncScreenSpaceLineMaterials?.(width, height);
+    // Device pixels, after setPixelRatio: `thickness` is a drawing-buffer width.
+    const lineResolution = screenSpaceLineDeviceResolution(renderer, width, height);
+    model.runtime?.syncScreenSpaceLineMaterials?.(lineResolution.width, lineResolution.height);
     const fit = fitCameraToModel(THREE, camera, model.bounds, {
       direction: frame.direction,
       up: frame.up,

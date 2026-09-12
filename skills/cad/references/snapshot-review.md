@@ -4,7 +4,7 @@ Read this file when choosing saved CAD `cadgen step snapshot` outputs for primar
 
 ## Policy
 
-Snapshot validation is mandatory. Every created or visibly updated primary STEP/STP part or assembly gets at least one reviewed PNG snapshot; deterministic checks passing is not a reason to skip. Use CAD `cadgen step snapshot` rather than opening the viewer manually or using Playwright; snapshots are faster, lighter, more precise, and more agent-friendly. Snapshots are PNG stills; review motion interactively in the viewer. For still evidence of a pose or of one moment in a clip, pass `--kinematics` and/or `--animation CLIP --time SECONDS` (see `kinematics.md`, "Reviewing motion") — one frame, never a sequence.
+Snapshot validation is mandatory. Every created or visibly updated primary STEP/STP part or assembly gets at least one reviewed PNG snapshot; deterministic checks passing is not a reason to skip. Use CAD `cadgen step snapshot` rather than opening the viewer manually or using Playwright; snapshots are faster, lighter, more precise, and more agent-friendly. Review evidence is a PNG still. For still evidence of a pose or of one moment in a clip, pass `--kinematics` and/or `--animation CLIP --time SECONDS` (see `kinematics.md`, "Reviewing motion"). A clip that a still cannot show renders as a video with `--animation CLIP --video '{...}'` into an `.mp4`/`.gif` OUT — that is for motion, not a substitute for the reviewed still.
 
 Skip saved snapshots only when no visible geometry was created or updated, or no valid artifact exists:
 
@@ -49,9 +49,54 @@ Prefer a single `view` JSON job with these outputs:
 
 The two opposed isometric views guarantee every face appears in at least one image — rear, left, and bottom features are covered by default, not by suspicion. The top ortho is the primary pattern/symmetry check and the front ortho the profile check.
 
-Set `input` to the primary STEP/STP artifact using a relative or absolute path (documents only — a `.py` model script is refused: run it first, then snapshot the STEP it wrote). The snapshot CLI derives its internal render root from that input path. It defaults to `theme: "snapshot"` and `display.mode: "solid"`. `snapshot` is a render-only theme — Workbench Light with the ground grid, origin axis and shadows removed, because in a still image those read as geometry rather than as orientation. It is not offered in the CAD Viewer's theme picker; pass `theme: "workbench-light"` to match the viewport exactly; labeled/section views default to 1600x1200 when dimensions are omitted. Use `render.sizeProfile: "assembly"` or `"assembly-large"` for complex assemblies that need 1800x1200 or 1920x1440. For CAD review packets, use still-image render modes `view` and `section`; set `display.mode` to `solid`, `transparent`, `hidden_edges`, `hidden_lines_removed`, or `wireframe` when the visual check benefits from explicit CAD linework.
+Set `input` to the primary STEP/STP artifact using a relative or absolute path (documents only — a `.py` model script is refused: run it first, then snapshot the STEP it wrote). The snapshot CLI derives its internal render root from that input path. It defaults to `theme: "snapshot"` and `display.mode: "solid"`. `snapshot` is a render-only theme — Workbench Light with the ground grid, origin axis and shadows removed, because in a still image those read as geometry rather than as orientation. It is not offered in the CAD Viewer's theme picker; pass `theme: "workbench-light"` to match the viewport exactly; labeled/section views default to 1600x1200 when dimensions are omitted. Use `render.sizeProfile: "assembly"` or `"assembly-large"` for complex assemblies that need 1800x1200 or 1920x1440. For CAD review packets, use still-image render modes `view` and `section`; set `display.mode` to `solid`, `transparent`, `hidden_edges`, `hidden_lines_removed`, or `wireframe` when the visual check benefits from explicit CAD linework. The MODE is the edge switch: `solid` means shaded-with-edges, and those four modes plus `wireframe` always draw linework. For shaded surfaces with no CAD linework set `display.mode: "rendered"` (or `"unshaded"`). `display.edges` styles the linework the mode draws — colour, thickness, opacity, per-class — and has NO `enabled` key: a job that sets `display.edges.enabled` is refused, because it could never change the image.
 
 Use `--focus '#o1.2' ...` to emphasize specific part or subassembly occurrence refs — in `view` renders the focused refs keep full opacity while the rest of the assembly is ghosted in place (framing and context are preserved); in `section` mode focus isolates the refs entirely. Use `--hide '#o1.2' ...` to omit parts from the render in every mode. Do not combine focus and hide in the same snapshot command or job. These filters accept occurrence refs only, not face, edge, vertex, or shape selectors.
+
+For close macro views, a JSON job can set `render.tessellation` to
+`{"chordTolerance": 0.0005, "angleTolerance": 0.10}`. Chord tolerance is
+relative to each component's bounding diagonal; angle tolerance is radians.
+These positive numeric overrides retessellate the exact STEP surfaces and use
+separate shared-cache entries. They do not change the STEP geometry or a model's
+declared mesh-export tolerances. Use them only when visible faceting needs finer
+sampling; lower tolerances cost more memory and render time. `chordTolerance`
+must be at least `0.00001` and `angleTolerance` at least `0.005` — finer than
+that exhausts the renderer instead of improving the image, and the job is
+refused. The largest named still profile is `presentation-large` (2800×1800).
+Existing mesh documents cannot be retessellated this way.
+
+`render` is a closed schema like the job itself: `sizeProfile`, `padding`,
+`paddingPercent`, `viewLabels`, `tightFrame`, `transparent`, `renderScale`,
+`scale`/`sceneScale`/`sceneScaleMode`, and `tessellation`. Any other key is
+refused rather than ignored, so a misspelling cannot render the wrong thing
+quietly.
+
+### Flags and job keys
+
+A JSON job's keys are the flags without their dashes, and the job is the only
+place some shapes exist. `--animation CLIP --time SECONDS` is ONE request, so a
+job carries it as one `animation` object — `time` is not a top-level job key:
+
+```json
+{
+  "input": "models/arm.step",
+  "kinematics": "open",
+  "animation": { "clip": "demo", "time": 2.0 },
+  "outputs": [{ "path": "/tmp/render/demo_t2.png", "camera": "iso" }]
+}
+```
+
+`clip` names a clip the document's render module declares and is required;
+`time` is seconds, finite and >= 0, defaulting to 0. A bare clip name is the
+FLAG's spelling, not the job's: `"animation": "demo"` is refused, as is any key
+the job does not support — the error lists the supported set.
+
+A `"video"` object beside it renders the clip's SPAN into the `.mp4` or `.gif`
+the single output names, instead of one frame: `{"fps": 30, "seconds": <what is
+left of the clip>, "start": 0, "quality": "review", "loop": true}`, every key
+optional and every other key refused. It needs `animation`, refuses an
+`animation.time`, refuses a `start` past the end of the clip, and needs ffmpeg
+installed. See `kinematics.md`, "Rendering the whole clip".
 
 ## Output paths
 

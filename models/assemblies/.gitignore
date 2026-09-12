@@ -12,5 +12,10 @@
 !/GLB/imported/
 /3MF/*
 !/3MF/imported/
+/BREP/
 /tmp/
 __pycache__/
+
+# Rendered review pages keep their HTML; the GLBs beside them are regenerated
+# from the STEP by `cadgen glb build --animation` and run to gigabytes each.
+/render/*/*.glb

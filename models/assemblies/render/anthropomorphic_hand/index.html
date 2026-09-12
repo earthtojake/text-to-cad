@@ -1,0 +1,855 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tendon hand — how the cords move the fingers</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #cfd4d7;
+    --panel: rgba(14, 17, 21, 0.86);
+    --edge: rgba(255, 255, 255, 0.08);
+    --ink: #e9ecf0;
+    --dim: #939ca7;
+    --accent: #ff8b4a;
+    --red: #d2372c; --green: #3f9e58; --blue: #2f6fd0; --yellow: #e0b325;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink); overflow: hidden;
+    font: 14px/1.55 ui-sans-serif, -apple-system, "SF Pro Text", Segoe UI, Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  canvas { display: block; width: 100vw; height: 100vh; }
+
+  #boot {
+    position: fixed; inset: 0; z-index: 40; display: grid; place-content: center;
+    gap: 16px; text-align: center; transition: opacity .7s ease;
+    background: radial-gradient(120% 85% at 50% 38%, #14181e 0%, #07080a 72%);
+  }
+  #boot.gone { opacity: 0; pointer-events: none; }
+  #boot h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: .015em; }
+  #bar { width: 300px; height: 3px; border-radius: 2px; background: #21262d; overflow: hidden; margin: 0 auto; }
+  #bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s linear; }
+  #bootnote { color: var(--dim); font-size: 12px; max-width: 460px; font-variant-numeric: tabular-nums; }
+  #bootwarn { color: #6d757f; font-size: 11.5px; max-width: 460px; }
+
+  .panel {
+    position: fixed; z-index: 20; background: var(--panel); border: 1px solid var(--edge);
+    border-radius: 14px; backdrop-filter: blur(20px) saturate(1.35);
+    box-shadow: 0 22px 60px rgba(0,0,0,.42);
+  }
+  #hud { left: 18px; top: 18px; width: 314px; padding: 16px; }
+  #hud h1 { margin: 0 0 3px; font-size: 15px; font-weight: 650; }
+  #hud .sub { color: var(--dim); font-size: 12.5px; margin-bottom: 15px; }
+
+  .label { margin: 0 0 7px; font-size: 10.5px; letter-spacing: .08em;
+           text-transform: uppercase; color: var(--dim); }
+
+  .motions { display: grid; gap: 6px; }
+  .motion {
+    display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+    padding: 9px 11px; border-radius: 9px; border: 1px solid var(--edge);
+    background: #12161b; color: var(--ink); font: inherit; cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .motion:hover { border-color: rgba(255,255,255,.2); }
+  .motion[aria-current="true"] { border-color: var(--accent); background: rgba(255,139,74,.12); }
+  .motion .dot { width: 7px; height: 7px; border-radius: 50%; background: #39414b; flex: 0 0 auto; }
+  .motion[aria-current="true"] .dot { background: var(--accent); }
+  .motion small { display: block; color: var(--dim); font-size: 11.5px; }
+
+  .row { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+  button { font: inherit; color: var(--ink); background: #12161b;
+           border: 1px solid var(--edge); border-radius: 9px; padding: 8px 12px; cursor: pointer; }
+  button:hover { border-color: rgba(255,255,255,.22); }
+  button.primary { background: var(--accent); color: #17110c; border-color: transparent; font-weight: 650; }
+  .time { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--dim); font-size: 12px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+
+  .toggles { margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--edge); display: grid; gap: 8px; }
+  .toggle { display: flex; align-items: center; gap: 9px; color: var(--dim); font-size: 12.5px; cursor: pointer; }
+  .toggle input { accent-color: var(--accent); }
+
+  /* the cord key doubles as the legend for the four hues in the model */
+  #key { margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--edge); display: grid; gap: 5px; }
+  #key div { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--dim); }
+  #key i { width: 22px; height: 4px; border-radius: 2px; flex: 0 0 auto; }
+  #key b { color: var(--ink); font-weight: 600; }
+
+  #teach { right: 18px; top: 18px; width: 344px; padding: 16px; }
+  #beat { min-height: 152px; }
+  #beat h2 { margin: 0 0 8px; font-size: 14px; font-weight: 650; color: var(--accent); }
+  #beat p { margin: 0 0 9px; font-size: 13px; color: #c6cdd5; }
+  #beat p:last-child { margin-bottom: 0; }
+  .fig { color: var(--ink); font-variant-numeric: tabular-nums; font-weight: 600; }
+  .fade { animation: fade .5s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  #facts { margin-top: 15px; padding-top: 13px; border-top: 1px solid var(--edge);
+           display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+  #facts div { font-size: 11.5px; color: var(--dim); line-height: 1.35; }
+  #facts b { display: block; color: var(--ink); font-size: 16px; font-weight: 620;
+             font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+  #caveat { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--edge);
+            font-size: 11.5px; color: #7c848e; }
+
+  #hint { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 20;
+          color: #5a626b; font-size: 11.5px; pointer-events: none; }
+  #stats { position: fixed; right: 18px; bottom: 16px; z-index: 20; color: #5a626b;
+           font-size: 11px; font-variant-numeric: tabular-nums; }
+  .err { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%); z-index: 60;
+         max-width: 520px; padding: 18px 20px; border-radius: 14px;
+         border: 1px solid rgba(255,120,90,.35); background: rgba(34,16,12,.95); }
+  .err code { color: var(--accent); }
+  @media (max-width: 940px) {
+    body { overflow: auto; }
+    canvas { height: 58vh; }
+    #hud, #teach { position: static; width: auto; margin: 12px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="boot">
+  <h1>Loading the tendon hand</h1>
+  <div id="bar"><i></i></div>
+  <div id="bootnote">3,259 bodies &middot; 48 cords &middot; 24 driven joints</div>
+  <div id="bootwarn">Full CAD detail, nothing decimated. Give it a moment.</div>
+</div>
+
+<section class="panel" id="hud" hidden>
+  <h1>Anthropomorphic tendon hand</h1>
+  <div class="sub">Every finger joint is pulled by a cord wound onto a motor in the forearm.</div>
+
+  <p class="label">Motion</p>
+  <div class="motions" id="motions"></div>
+
+  <div class="row">
+    <button id="play" class="primary">Play</button>
+    <button id="restart">Restart</button>
+    <span class="time" id="clock">0.00 s</span>
+  </div>
+  <div class="row"><input type="range" id="scrub" min="0" max="1000" value="0" step="1"></div>
+
+  <div class="toggles">
+    <label class="toggle"><input type="checkbox" id="tSpin" checked> Slow turntable</label>
+    <label class="toggle"><input type="checkbox" id="tShadow"> Contact shadows <span style="color:#6b737d">(doubles GPU load)</span></label>
+    <label class="toggle"><input type="checkbox" id="tFocus"> Push in on the hand</label>
+    <label class="toggle"><input type="checkbox" id="tMotors"> Push in on the motors</label>
+    <label class="toggle"><input type="checkbox" id="tCords" checked> Cords</label>
+    <label class="toggle"><input type="checkbox" id="tSheaths" checked> Bowden sheaths <span style="color:#6b737d">(the tubes the cords run in)</span></label>
+    <label class="toggle"><input type="checkbox" id="tInternals"> Gearbox internals <span style="color:#6b737d">(sealed inside; 59% of the model)</span></label>
+  </div>
+
+  <div id="key">
+    <div><i style="background:var(--red)"></i><span><b>Red</b> — flexion, the curl</span></div>
+    <div><i style="background:var(--green)"></i><span><b>Green</b> — abduction, the sideways swing</span></div>
+    <div><i style="background:var(--blue)"></i><span><b>Blue</b> — the middle joint</span></div>
+    <div><i style="background:var(--yellow)"></i><span><b>Yellow</b> — the fingertip joint</span></div>
+    <div style="color:#6b737d;margin-top:2px">Dark of each hue = the antagonist paying out.</div>
+  </div>
+</section>
+
+<section class="panel" id="teach" hidden>
+  <p class="label">What is happening</p>
+  <div id="beat"></div>
+  <div id="facts">
+    <div><b>48</b>cords, in antagonist pairs</div>
+    <div><b>24</b>independently driven joints</div>
+    <div><b>7 mm</b>capstan radius in the forearm</div>
+    <div><b>4:1</b>planetary reduction per motor</div>
+  </div>
+  <div id="caveat"></div>
+</section>
+
+<div id="hint">drag to orbit &middot; scroll to zoom &middot; right-drag to pan</div>
+<div id="stats"></div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+
+// ---------------------------------------------------------------------------
+// One file per motion.
+//
+// Not a choice — a constraint. The deforming cords are baked as glTF MORPH
+// TARGETS, and a morph target costs one RGBA32F texel per vertex per target per
+// attribute at playback. One six-second clip over 48 cords already runs to
+// hundreds of MiB of morph texture, so cadgen refuses past a 512 MiB ceiling and
+// four motions in one file was never going to fit. Each file therefore carries
+// its own geometry, and switching motions is a real load.
+// ---------------------------------------------------------------------------
+const MOTIONS = [
+  { id: "fist",  file: "hand_fist.glb",  name: "Make a fist", note: "four fingers close, thumb opposes" },
+  { id: "wave",  file: "hand_wave.glb",  name: "Ripple",      note: "all four curling at once, a beat apart" },
+  { id: "pinch", file: "hand_pinch.glb", name: "Pinch",       note: "thumb and index meet in space" },
+  { id: "signs", file: "hand_signs.glb", name: "Hand signs",    note: "peace, metal, shaka" },
+  { id: "drive", file: "hand_drive.glb", name: "Every actuator", note: "44 cords, 22 joints, full range" },
+];
+
+// Narration, keyed to seconds WITHIN each motion.
+const BEATS = {
+  fist: [
+    { at: 0, title: "At rest", body: [
+      "Find one cord where it leaves a spool in the forearm. Follow it up the arm, across the wrist, and into a finger. That single path is the entire drive train for one joint.",
+      "There is no motor anywhere in the hand. There is no room for one — which is exactly the problem tendons solve."] },
+    { at: 1.3, title: "The spools take up rope", body: [
+      "Watch the drums in the forearm turn — the notch cut across each drive boss is there so you can see the angle change. Each is a <span class='fig'>7 mm</span> capstan behind a <span class='fig'>4:1</span> planetary gearbox.",
+      "The governing rule is conservation of length: rope arriving on the spool has to leave from somewhere, and the only somewhere is the finger."] },
+    { at: 2.6, title: "The little finger leads", body: [
+      "A real hand does not close as a block. The little finger starts first and the index trails, so the closing edge reads as a wave rather than a clamp.",
+      "Each finger is three joints, and the pulley radii at each are sized so they flex in a fixed ratio off one pull."] },
+    { at: 4.1, title: "The thumb opposes", body: [
+      "The thumb does not curl in the plane of the palm; it rotates across it. That takes two extra joints at its base, each with its own pair of cords.",
+      "Opposition is the whole difference between a hand and a gripper."] },
+    { at: 5.2, title: "And it releases", body: [
+      "Nothing springs back. Cords come in antagonist pairs — the saturated one pulls while its pale partner pays out at the matching rate — so the joint is driven in <em>both</em> directions and stops where the motors stop."] },
+  ],
+  wave: [
+    { at: 0, title: "One pattern, four channels", body: [
+      "Identical hardware to the fist; the only change is timing. Each finger is handed the same curl a beat after the one before it.",
+      "The roll is software. Nothing in the mechanism couples the fingers together."] },
+    { at: 2.2, title: "Why they can be independent", body: [
+      "<span class='fig'>48</span> cords over <span class='fig'>24</span> joints: two per joint, each pair reaching its own motor. Nothing is shared, so nothing is dragged along.",
+      "A cheap gripper couples its fingers to one actuator. This spends 48 cords instead, and buys a hand that can hold a pen."] },
+    { at: 4.6, title: "Routing under motion", body: [
+      "Notice the cords stay inside the finger as it curls. A guide at each joint holds the rope at a fixed radius from the pivot, so the moment arm — and the fingertip force — does not fall away as the joint closes."] },
+  ],
+  pinch: [
+    { at: 0, title: "A two-finger task", body: [
+      "Only the thumb and index do real work. Everything else holds position, which a tendon hand gets for free: an unloaded cord stays exactly where it was left."] },
+    { at: 1.7, title: "Meeting in mid-air", body: [
+      "The thumb swings across the palm while the index curls to meet it. Two independent kinematic chains have to arrive at the same point in space at the same instant.",
+      "This is where per-joint control earns back its 48 cords."] },
+    { at: 3.5, title: "Holding", body: [
+      "At contact the antagonists load against each other. Grip force is the <em>difference</em> between the two cord tensions — no brake, no ratchet, just two motors pulling against one another through the finger."] },
+  ],
+  signs: [
+    { at: 0, title: "Peace", body: [
+      "Index and middle up and splayed apart, ring and little shut, the thumb folded across to hold them down. Four fingers doing four different things at once.",
+      "Watch which cords are taut — red on the two that are shut, green on the two that are spread."] },
+    { at: 3.7, title: "Metal", body: [
+      "Index and little up, middle and ring shut under the thumb. The two raised fingers are not neighbours, so no linkage could produce this shape.",
+      "A gripper couples its fingers to one actuator and cannot make it at all. Two cords per joint is what buys it."] },
+    { at: 7.3, title: "Shaka", body: [
+      "Thumb and little out, the middle three shut. And the thumb does something different here: it <em>abducts</em> without flexing, pointing away from the palm rather than folding across it.",
+      "That is a separate joint with its own antagonist pair, and it is the whole difference between this and a fist."] },
+  ],
+  drive: [
+    { at: 0, title: "Everything at once", body: [
+      "Not a gesture — a demonstration. Every one of the <span class='fig'>22</span> driven joints sweeps its full range together, putting <span class='fig'>44</span> of the 48 cords to work simultaneously.",
+      "The wrist sits it out: its routing is only solved at neutral, so the model does not pretend about it."] },
+    { at: 1.5, title: "Reading the drums", body: [
+      "A capstan turns by the joint angle times its drive radius over the 7 mm drum, so the knuckles — widest range, biggest radius — turn theirs furthest: about <span class='fig'>297°</span> across this clip against a 194° average.",
+      "The black mark on each drum face is there to make that legible."] },
+    { at: 3.0, title: "Both directions", body: [
+      "The sweep runs out to each joint's positive limit, back through rest, out to its negative limit and back — twice. Every drum reverses, and each antagonist takes up what its partner pays out.",
+      "None of this is springs. Both directions are driven."] },
+  ],
+};
+
+// The cords: coloured by which joint they drive, and the one part of the model
+// that changes its own shape rather than just its placement.
+const CORD = /_(positive|negative)$/;
+
+// The planetary internals -- sun, three planets, carrier, spindle, bearings,
+// ring -- are 528 bodies and 55.4 M triangles: 59% of the whole model, sealed
+// inside a closed gearbox housing where not one of them is ever visible. They
+// turn (the planets at twice the carrier), and you cannot see them turn. Hidden
+// by default, because paying 59% of the frame for occluded geometry is what
+// made this page crash a browser on orbit.
+const GEARBOX_INTERNALS = /gearbox_(sun|planet|carrier|spindle|bearing|ring)/i;
+
+// Everything that turns with the capstan: the drum, its retainer screw and the
+// bond line, all at rotation q. Against a frame that is now one uniform
+// aluminium they were invisible, which is the whole reason the motors read as
+// stationary. Bronze is the convention for a wear surface and it separates them
+// from the structure at a glance.
+const SPINNING = /_(capstan|capstan_retainer_screw|capstan_terminal_bond_line|terminal_ferrule)$/;
+const DRUM = /_capstan$/;
+const SPIN_COLOR = 0xc2762e;
+
+// The structural frame, forced to the servo pack's anodised black.
+//
+// This belongs in lib/palette.py, and it IS there -- `apply_palette` sets
+// #17242d on all 3,029 frame bodies and an instrumented build confirms it runs.
+// The colour is then lost before the STEP is written, because cadgen keys a
+// cached component on its GEOMETRY: a colour-only edit does not move that hash,
+// so the stale component ships with its original grey. A cold cache would dodge
+// it but the model cannot assemble cold (native_integration.overlay's label
+// assert fails), so the artefact is corrected here until the cache bug is fixed.
+const FRAME_GREY = 0xa9b7c1;
+// Gunmetal: 65% of the way from the servo pack's anodised black back toward the
+// original aluminium. Dark enough to sit with the motor frame rather than
+// against it, light enough that the frame still reads as machined metal and the
+// cords still have something to contrast with.
+const FRAME_GUNMETAL = 0x76848d;
+
+// Cord colour, decided HERE rather than taken from the file.
+//
+// The model's own palette makes each antagonist a 45%-toward-white tint of its
+// partner's hue, which is a fine idea on paper and renders as plain white the
+// moment a specular highlight lands on it — which on a 0.6 mm tube is most of
+// its surface. So the paying-out cord gets a DARKER shade of the same hue
+// instead of a paler one: same "these two are a pair" reading, no colour left
+// for the highlight to wash out.
+// The bowden sheaths -- translucent liners the cords run THROUGH. They arrive
+// at the model's own alpha 0.28 now that `cad_material` carries the opacity;
+// it used to ride only on the shape's colour, which the exporter turns into a
+// hex string on the way into the GLB, so it was dropped and 170 sheaths shipped
+// opaque. Those were the white "wires", and the reason they read as colliding
+// with the motor cases: an opaque sheath through a drum looks like a mistake, a
+// translucent one looks like the sleeve it is.
+const SHEATH = /_(exit_guide|wrist_guide|metacarpal_guide|drive_guide)$|_reaction$/;
+
+const CORD_HUES = [
+  [/_(mcp_flexion|cmc_flexion)_|^wrist_flexion_|^palm_cup_/, 0xd2372c, 0x7d1d16],
+  [/_(mcp_abduction|cmc_abduction)_|^wrist_abduction_/,      0x3f9e58, 0x1f5c31],
+  [/_pip_/,                                                  0x2f6fd0, 0x17417f],
+  [/_(dip|ip)_/,                                             0xe0b325, 0x8a6a0e],
+];
+
+function cordColor(name) {
+  for (const [test, positive, negative] of CORD_HUES) {
+    if (test.test(name)) return name.endsWith("_positive") ? positive : negative;
+  }
+  return null;
+}
+
+// ------------------------------------------------------------------ renderer
+const canvas = document.getElementById("view");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
+// A 2x pixel ratio on a 2560-wide panel is a 5120x2880 buffer; at 94 M
+// triangles the fill cost is not worth the sharpness.
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+// Filmic tone mapping over physically-lit materials is most of what separates a
+// render from a viewport: highlights roll off instead of clipping to white.
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.72;
+renderer.shadowMap.enabled = false;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+canvas.addEventListener("webglcontextlost", (event) => {
+  event.preventDefault();
+  fail("The GPU dropped this scene.",
+    "94 M triangles plus the morph textures went past what this browser would hold. " +
+    "The page is fine; the graphics context is gone. Reload, and close other GPU-heavy tabs — " +
+    "or use a coarser export.");
+}, false);
+canvas.addEventListener("webglcontextrestored", () => location.reload(), false);
+
+const scene = new THREE.Scene();
+// The model ships a presentation theme (`presentation-theme.json`): a light
+// studio, #f0efed to #b8bfc3 at 145 degrees. That is not decoration — polished
+// steel and anodised aluminium are mostly a picture of their surroundings, and
+// against a black void they collapse to charcoal with no colour in them.
+scene.background = (() => {
+  const c = document.createElement("canvas");
+  c.width = c.height = 512;
+  const ctx = c.getContext("2d");
+  const a = (145 * Math.PI) / 180;
+  const g = ctx.createLinearGradient(256 - Math.cos(a) * 256, 256 - Math.sin(a) * 256,
+                                     256 + Math.cos(a) * 256, 256 + Math.sin(a) * 256);
+  g.addColorStop(0, "#f0efed");
+  g.addColorStop(1, "#b8bfc3");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 512, 512);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+
+const camera = new THREE.PerspectiveCamera(35, 1, 1, 1e5);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.055;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.45;
+// The default of 1 crawls on a model this size. Zoom is also made proportional
+// to distance by OrbitControls, so a big number here only feels fast far out.
+controls.zoomSpeed = 3.0;
+controls.zoomToCursor = true;
+let userMovedCamera = false;
+controls.addEventListener("start", () => { userMovedCamera = true; });
+
+// Image-based lighting from a procedural room: no HDR to fetch, and it gives
+// the machined metal something to reflect. The rig below is the theme's own.
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.03).texture;
+
+// Only the key casts. 3,259 shadow-casting bodies against five lights is five
+// depth passes for a gain nobody can see.
+const key = new THREE.DirectionalLight(0xfff9f0, 1.15);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.bias = -0.0004;
+key.shadow.normalBias = 0.8;
+const spot = new THREE.DirectionalLight(0xe3efff, 0.55);
+const point = new THREE.PointLight(0xffffff, 0.22);
+scene.add(key, key.target, spot, point,
+  new THREE.AmbientLight(0xffffff, 0.10),
+  new THREE.HemisphereLight(0xedf4ff, 0x575453, 0.30));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShadowMaterial({ opacity: 0.22 }));
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+ground.visible = false;
+scene.add(ground);
+
+function resize() {
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (!w || !h) return;
+  const dpr = renderer.getPixelRatio();
+  if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    if (root && !userMovedCamera) {
+      view(document.getElementById("tMotors")?.checked ? "motors"
+        : document.getElementById("tFocus")?.checked ? "hand" : "wide");
+    }
+  }
+}
+addEventListener("resize", resize);
+
+// ------------------------------------------------------------------- loading
+const boot = document.getElementById("boot");
+const bar = document.querySelector("#bar i");
+const bootnote = document.getElementById("bootnote");
+
+function fail(title, detail) {
+  boot.classList.add("gone");
+  const el = document.createElement("div");
+  el.className = "panel err";
+  el.innerHTML = `<b>${title}</b><p style="color:var(--dim);margin:.6em 0 0">${detail}</p>`;
+  document.body.append(el);
+}
+
+let root = null, mixer = null, action = null, motion = MOTIONS[0], playing = false;
+let center = new THREE.Vector3(), radius = 1;
+const box = new THREE.Box3();
+let cords = [];
+let internals = [];
+let spinning = [];
+let sheaths = [];
+const loader = new GLTFLoader();
+let loadToken = 0;
+
+function disposeRoot() {
+  if (!root) return;
+  scene.remove(root);
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    o.geometry.dispose();
+    const m = o.material;
+    (Array.isArray(m) ? m : [m]).forEach((x) => x?.dispose());
+  });
+  root = null;
+  mixer = null;
+  action = null;
+  cords = [];
+}
+
+async function load(next) {
+  const token = ++loadToken;
+  motion = next;
+  for (const b of menu.children) b.setAttribute("aria-current", String(b.dataset.id === next.id));
+  boot.classList.remove("gone");
+  bootnote.textContent = "";
+  bar.style.width = "0%";
+
+  let gltf;
+  try {
+    gltf = await new Promise((res, rej) => loader.load(next.file, res, (e) => {
+      const mb = (n) => (n / 1048576).toFixed(0);
+      if (e.total) {
+        bar.style.width = ((e.loaded / e.total) * 100).toFixed(1) + "%";
+        bootnote.textContent = `${mb(e.loaded)} / ${mb(e.total)} MB`;
+      } else bootnote.textContent = `${mb(e.loaded)} MB`;
+    }, rej));
+  } catch (err) {
+    fail("Could not load that motion.",
+      `Expected <code>${next.file}</code> beside this page, served over HTTP — a ` +
+      `<code>file://</code> open will not do. ${err?.message || err}`);
+    return;
+  }
+  // A second click while the first was still downloading: the newer one wins.
+  if (token !== loadToken) return;
+  bootnote.textContent = "Building the scene…";
+  // Yield once so the browser can paint that line before the scene build blocks
+  // the thread. requestAnimationFrame ALONE is not enough: a hidden pane or a
+  // background tab never fires it, and awaiting it there hangs the load
+  // outright, which is exactly how this page first appeared to freeze.
+  await Promise.race([
+    new Promise((r) => requestAnimationFrame(r)),
+    new Promise((r) => setTimeout(r, 60)),
+  ]);
+  if (token !== loadToken) return;
+  disposeRoot();
+  internals = [];
+  spinning = [];
+  sheaths = [];
+  root = gltf.scene;
+  // Authored lying down: long axis Z, hand at -Z, motor pack at +Z. A quarter
+  // turn about X stands it up, hand above the motors.
+  root.rotation.x = Math.PI / 2;
+  root.updateMatrixWorld(true);
+
+  let meshes = 0, triangles = 0, morphed = 0, targets = 0, hiddenTriangles = 0, reframed = 0;
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    meshes += 1;
+    // Set lazily by the shadow toggle: flagging 3,259 objects as casters costs
+    // a whole extra depth pass over 94 M triangles on every frame.
+    o.castShadow = false;
+    o.receiveShadow = false;
+    const index = o.geometry.index;
+    triangles += (index ? index.count : o.geometry.attributes.position.count) / 3;
+    if (o.morphTargetInfluences?.length) {
+      morphed += 1;
+      targets = Math.max(targets, o.morphTargetInfluences.length);
+    }
+    if (CORD.test(o.name || "")) cords.push(o);
+    if (GEARBOX_INTERNALS.test(o.name || "")) {
+      internals.push(o);
+      o.visible = internalsToggle.checked;
+      hiddenTriangles += (index ? index.count : o.geometry.attributes.position.count) / 3;
+    }
+    // The GLB carries the model's own finish — metalness, roughness and
+    // KHR_materials_clearcoat — so there is nothing to reconstruct here.
+    if (o.material?.isMeshStandardMaterial) {
+      o.material.envMapIntensity = 0.5;
+      if (o.material.color.getHex() === FRAME_GREY) {
+        o.material.color.setHex(FRAME_GUNMETAL);
+        reframed += 1;
+      }
+      if (SPINNING.test(o.name || "")) {
+        o.material.color.setHex(SPIN_COLOR);
+        o.material.metalness = 0.9;
+        o.material.roughness = 0.28;
+        spinning.push(o);
+        if (DRUM.test(o.name)) addDrumMark(o);
+      }
+      // Gate on CORD: an actuator is named after the joint its cord drives, so
+      // `..._mcp_flexion_positive_capstan` matches the joint patterns too and
+      // would take the cord's colour instead of its own.
+      if (SHEATH.test(o.name || "")) {
+        const m = o.material;
+        // The file now carries alphaMode BLEND at the model's own 0.28, so the
+        // opacity is NOT set here -- the loader already read it. What the file
+        // cannot express is draw order: a translucent tube must not occlude the
+        // cord running inside it, which is a renderer concern, not a material one.
+        m.depthWrite = false;
+        // Tint it with the cord it carries, so a sheath reads as belonging to its
+        // own drive train rather than as generic pipework.
+        const carried = cordColor(o.name);
+        if (carried !== null) m.color.setHex(carried).lerp(new THREE.Color(0xffffff), 0.55);
+        o.renderOrder = 3;
+        sheaths.push(o);
+      }
+      const hue = CORD.test(o.name || "") ? cordColor(o.name) : null;
+      if (hue !== null) {
+        o.material.color.setHex(hue);
+        // Dyed braided fibre: no metal, and rough enough that the highlight
+        // never takes the whole tube.
+        o.material.metalness = 0.0;
+        o.material.roughness = 0.72;
+        o.material.envMapIntensity = 0.35;
+      }
+    }
+  });
+  scene.add(root);
+  // A handle for the console: this page is the only place the assembled scene
+  // exists at runtime, and being unable to inspect it made a blank canvas take
+  // far longer to diagnose than it should have.
+  window.hand = { THREE, scene, camera, renderer, controls, root, get action() { return action; } };
+  frame();
+  mixer = new THREE.AnimationMixer(root);
+  const clip = (gltf.animations || [])[0];
+  if (!clip) {
+    fail("That file carries no animation.", `<code>${next.file}</code> loaded, but has no clip.`);
+    return;
+  }
+  action = mixer.clipAction(clip);
+  action.loop = THREE.LoopRepeat;
+  action.play();
+  action.paused = !playing;
+  duration = clip.duration || 1;
+  cordsToggle.checked = true;
+
+  const size = box.getSize(new THREE.Vector3());
+  const diag = document.getElementById("stats");
+  diag.textContent =
+    `${meshes.toLocaleString()} meshes · ${sheaths.length} sheaths · ${reframed} reframed · ${Math.round(triangles - (internalsToggle.checked ? 0 : hiddenTriangles)).toLocaleString()} of ${Math.round(triangles / 1e6)}M triangles drawn · ` +
+    (morphed ? `${morphed} deforming cords, ${targets} morph targets` : `${cords.length} cords, rigid`) +
+    ` · canvas ${canvas.clientWidth}x${canvas.clientHeight}@${renderer.getPixelRatio()}` +
+    ` · model ${size.x.toFixed(2)}x${size.y.toFixed(2)}x${size.z.toFixed(2)}` +
+    ` · cam ${camera.position.distanceTo(controls.target).toFixed(2)}`;
+  // An empty or non-finite bounding box means the scene is there but has no
+  // extent, which draws exactly nothing and looks identical to a GPU failure.
+  if (!(size.x > 0 && size.y > 0 && size.z > 0)) {
+    fail("The model loaded but has no extent.",
+      `${meshes} meshes, bounding box ${size.x}x${size.y}x${size.z}. Nothing to draw.`);
+    return;
+  }
+  // Report the first frame's real draw count, once, after a render has happened.
+  setTimeout(() => {
+    const info = renderer.info.render;
+    diag.textContent += ` · drew ${info.calls} calls / ${(info.triangles / 1e6).toFixed(1)} M tri`;
+    if (!info.calls) {
+      fail("The scene never drew.",
+        "The render loop is not producing draw calls — the WebGL context is probably gone. " +
+        "Check the browser console for a context-lost warning.");
+    }
+  }, 2000);
+  document.getElementById("caveat").textContent = morphed
+    ? "The cords deform for real: their centrelines are baked as glTF morph targets, so the rope on "
+      + "each drum winds and pays out with the motor instead of being carried along rigidly."
+    : "The cords in this file ship at rest shape — this export carried no morph targets.";
+  lastBeat = -1;
+  narrate(0);
+  boot.classList.add("gone");
+  document.getElementById("hud").hidden = false;
+  document.getElementById("teach").hidden = false;
+}
+
+async function start() {
+  buildMenu();
+  await load(MOTIONS[0]);
+}
+
+const MARK_MATERIAL = new THREE.MeshStandardMaterial({
+  color: 0x101418, roughness: 0.55, metalness: 0.0,
+});
+
+function addDrumMark(mesh) {
+  const g = mesh.geometry;
+  if (!g.boundingBox) g.computeBoundingBox();
+  const bb = g.boundingBox;
+  const size = bb.getSize(new THREE.Vector3());
+  const centre = bb.getCenter(new THREE.Vector3());
+  const dims = [size.x, size.y, size.z];
+  // The drum is a disc: its axis is simply its shortest extent.
+  const axis = dims.indexOf(Math.min(...dims));
+  const [a, b] = [0, 1, 2].filter((i) => i !== axis);
+  const radius = Math.max(dims[a], dims[b]) / 2;
+
+  const box = [0, 0, 0];
+  box[axis] = radius * 0.02;
+  box[a] = radius * 0.94;
+  box[b] = radius * 0.13;
+
+  for (const end of ["min", "max"]) {
+    const mark = new THREE.Mesh(new THREE.BoxGeometry(box[0], box[1], box[2]), MARK_MATERIAL);
+    mark.position.copy(centre);
+    // Proud of the face by a hair so it cannot z-fight with the flange.
+    mark.position.setComponent(axis, bb[end].getComponent(axis) + (end === "max" ? 1 : -1) * radius * 0.008);
+    mark.position.setComponent(a, centre.getComponent(a) + radius * 0.47);
+    mark.renderOrder = 2;
+    mesh.add(mark);
+  }
+}
+
+// --------------------------------------------------------------- framing
+function frame() {
+  box.setFromObject(root);
+  box.getCenter(center);
+  const size = box.getSize(new THREE.Vector3());
+  radius = Math.max(size.x, size.y, size.z) * 0.5 || 1;
+
+  ground.scale.setScalar(radius * 16);
+  ground.position.set(center.x, box.min.y - radius * 0.008, center.z);
+
+  const d = radius * 3;
+  key.position.set(center.x + d * 0.8, center.y + d * 1.2, center.z + d * 0.55);
+  key.target.position.copy(center);
+  const cam = key.shadow.camera;
+  cam.left = -radius * 1.35; cam.right = radius * 1.35;
+  cam.top = radius * 1.35; cam.bottom = -radius * 1.35;
+  cam.near = radius * 0.5; cam.far = d * 5;
+  cam.updateProjectionMatrix();
+  spot.position.set(center.x + d * 0.6, center.y - d * 0.2, center.z + d * 0.55);
+  point.position.set(center.x - d * 0.5, center.y - d * 0.3, center.z - d * 0.45);
+  point.distance = d * 6;
+
+  camera.near = radius / 200;
+  camera.far = radius * 80;
+  view("wide");
+}
+
+// Fitted rather than guessed at a multiple of the radius: the arm is roughly
+// four times as tall as it is wide, so a distance that frames it on a wide
+// monitor crops it on a narrow one. Both half-angles get a say.
+function fitDistance(halfHeight, halfWidth) {
+  const v = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+  return Math.max(halfHeight / v, halfWidth / (v * camera.aspect));
+}
+
+function view(mode = "wide") {
+  const focusHand = mode === "hand" || mode === true;
+  const size = box.getSize(new THREE.Vector3());
+  const target = center.clone();
+  let distance;
+  if (mode === "motors") {
+    // The pack is the bottom half; frame it tightly enough that a 15 mm drum is
+    // a readable object rather than two per cent of the frame height.
+    const span = size.y * 0.34;
+    target.y = box.min.y + span * 0.62;
+    distance = fitDistance(span * 0.62, Math.max(size.x, size.z) * 0.72);
+  } else if (focusHand) {
+    const span = size.y * 0.30;
+    target.y = box.max.y - span * 0.52;
+    distance = fitDistance(span * 0.60, Math.max(size.x, size.z) * 0.85);
+  } else {
+    distance = fitDistance(size.y * 0.58, Math.max(size.x, size.z) * 0.7);
+  }
+  controls.target.copy(target);
+  camera.position.copy(target).add(new THREE.Vector3(0.74, 0.20, 0.64).normalize().multiplyScalar(distance));
+  camera.updateProjectionMatrix();
+  controls.update();
+}
+
+// -------------------------------------------------------------- interaction
+const menu = document.getElementById("motions");
+const playBtn = document.getElementById("play");
+const scrub = document.getElementById("scrub");
+const clock = document.getElementById("clock");
+const beatEl = document.getElementById("beat");
+const spinToggle = document.getElementById("tSpin");
+const cordsToggle = document.getElementById("tCords");
+const internalsToggle = document.getElementById("tInternals");
+internalsToggle.addEventListener("change", (e) => {
+  for (const o of internals) o.visible = e.target.checked;
+});
+let duration = 1;
+
+function buildMenu() {
+  menu.innerHTML = "";
+  for (const m of MOTIONS) {
+    const b = document.createElement("button");
+    b.className = "motion";
+    b.dataset.id = m.id;
+    b.innerHTML = `<span class="dot"></span><span>${m.name}<small>${m.note}</small></span>`;
+    b.addEventListener("click", () => select(m.id));
+    menu.append(b);
+  }
+}
+
+function select(id) {
+  const next = MOTIONS.find((m) => m.id === id);
+  if (next && next.id !== motion.id) load(next);
+}
+
+function seek(time) {
+  if (!action) return;
+  const previous = action.time;
+  action.time = time;
+  // The mixer advances by a delta, so hand it the jump we just made.
+  mixer.update(time - previous || 1e-6);
+}
+
+function applySpin() { controls.autoRotate = spinToggle.checked && !playing; }
+
+// The turntable is for looking at a still model; while a motion runs it fights
+// the motion for attention. Dragging still works throughout.
+function setPlaying(next) {
+  playing = next;
+  if (action) action.paused = !playing;
+  playBtn.textContent = playing ? "Pause" : "Play";
+  applySpin();
+}
+
+playBtn.addEventListener("click", () => setPlaying(!playing));
+document.getElementById("restart").addEventListener("click", () => seek(0));
+scrub.addEventListener("input", () => {
+  setPlaying(false);
+  seek((scrub.value / 1000) * duration);
+});
+spinToggle.addEventListener("change", applySpin);
+document.getElementById("tShadow").addEventListener("change", (e) => {
+  const on = e.target.checked;
+  ground.visible = on;
+  renderer.shadowMap.enabled = on;
+  if (root) root.traverse((o) => { if (o.isMesh) { o.castShadow = on; o.receiveShadow = on; } });
+  scene.traverse((o) => { if (o.isMesh && o.material) o.material.needsUpdate = true; });
+});
+document.getElementById("tFocus").addEventListener("change", (e) => {
+  userMovedCamera = false;
+  if (e.target.checked) document.getElementById("tMotors").checked = false;
+  view(e.target.checked ? "hand" : "wide");
+});
+document.getElementById("tMotors").addEventListener("change", (e) => {
+  userMovedCamera = false;
+  if (e.target.checked) document.getElementById("tFocus").checked = false;
+  view(e.target.checked ? "motors" : "wide");
+});
+document.getElementById("tSheaths").addEventListener("change", (e) => {
+  for (const o of sheaths) o.visible = e.target.checked;
+});
+cordsToggle.addEventListener("change", (e) => {
+  for (const cord of cords) cord.visible = e.target.checked;
+});
+
+// ---------------------------------------------------------------- narration
+let lastBeat = -1;
+function narrate(t) {
+  const beats = BEATS[motion.id] || [];
+  let index = 0;
+  for (let i = 0; i < beats.length; i += 1) if (t >= beats[i].at) index = i;
+  if (index === lastBeat) return;
+  lastBeat = index;
+  const beat = beats[index];
+  if (!beat) return;
+  beatEl.innerHTML = `<h2>${beat.title}</h2>` + beat.body.map((p) => `<p>${p}</p>`).join("");
+  beatEl.classList.remove("fade");
+  void beatEl.offsetWidth;
+  beatEl.classList.add("fade");
+}
+
+// --------------------------------------------------------------------- loop
+const wall = new THREE.Clock();
+// The loop is driven by requestAnimationFrame, UNCONDITIONALLY. A hidden pane
+// or background tab never fires rAF, so a timer takes over -- but only once it
+// is clear rAF is genuinely dead, and never in a way that can stop the normal
+// path from rescheduling itself. The obvious-looking version of this
+// (`if (rafAlive) requestAnimationFrame(tick)`) renders exactly one frame in a
+// visible tab, because nothing has set the flag yet when the first frame runs.
+let rafAlive = false;
+function loop() {
+  rafAlive = true;
+  requestAnimationFrame(loop);
+  tick();
+}
+requestAnimationFrame(loop);
+setTimeout(() => { if (!rafAlive) setInterval(tick, 1000 / 30); }, 800);
+
+function tick() {
+  resize();
+  const dt = wall.getDelta();
+  if (mixer && playing) mixer.update(dt);
+  if (action) {
+    const t = duration ? action.time % duration : 0;
+    clock.textContent = t.toFixed(2) + " s";
+    if (playing) scrub.value = String(Math.round((t / duration) * 1000));
+    narrate(t);
+  }
+  controls.update();
+  renderer.render(scene, camera);
+}
+start();
+</script>
+</body>
+</html>

@@ -1,0 +1,125 @@
+{
+  "input": "models/assemblies/STEP/anthropomorphic_hand/hand_progress_review.step",
+  "mode": "view",
+  "theme": "models/assemblies/src/anthropomorphic_hand/presentation-theme.json",
+  "display": {
+    "mode": "solid",
+    "edges": {
+      "enabled": true,
+      "classes": {
+        "feature": {
+          "opacity": 0,
+          "thickness": 0
+        },
+        "tangent": {
+          "opacity": 0,
+          "thickness": 0
+        },
+        "seam": {
+          "opacity": 0,
+          "thickness": 0
+        },
+        "degenerate": {
+          "opacity": 0,
+          "thickness": 0
+        }
+      },
+      "silhouette": false
+    }
+  },
+  "render": {
+    "sizeProfile": "presentation-large",
+    "padding": 0.1,
+    "tessellation": {
+      "chordTolerance": 0.001,
+      "angleTolerance": 0.18
+    }
+  },
+  "outputs": [
+    {
+      "path": "tmp/anthropomorphic_hand/integrated_palm.png",
+      "width": 1800,
+      "height": 2800,
+      "camera": {
+        "position": [
+          -12,
+          99,
+          360
+        ],
+        "target": [
+          -12,
+          99,
+          0
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ]
+      }
+    },
+    {
+      "path": "tmp/anthropomorphic_hand/integrated_dorsal.png",
+      "width": 1800,
+      "height": 2800,
+      "camera": {
+        "position": [
+          -12,
+          99,
+          -360
+        ],
+        "target": [
+          -12,
+          99,
+          0
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ]
+      }
+    },
+    {
+      "path": "tmp/anthropomorphic_hand/integrated_whole.png",
+      "camera": {
+        "direction": [
+          0.7,
+          -0.5,
+          1
+        ],
+        "up": [
+          0.85,
+          0.5,
+          0
+        ],
+        "zoom": 1.35
+      }
+    },
+    {
+      "path": "tmp/anthropomorphic_hand/integrated_joint_macro.png",
+      "camera": {
+        "position": [
+          7,
+          125,
+          31
+        ],
+        "target": [
+          -15.9,
+          149.8,
+          0
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ]
+      }
+    }
+  ],
+  "timeoutSeconds": 900,
+  "animation": {
+    "clip": "presentation",
+    "time": 0
+  }
+}

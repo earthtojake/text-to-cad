@@ -17,6 +17,18 @@ extracted in a process pool from their BREP payloads, exactly as before, into a
 scratch directory that is then ingested into ``objects/``. Reuse is by cid
 through ``index/component/<cid>`` (cid → the pair of object hashes): a cid seen
 before costs nothing.
+
+A model that writes a STEP builds its tree THROUGH that STEP
+(``build_tree_through_step``): the walk above assembles the document, the
+document is re-read with the scene loader, and the components the tree
+publishes are the re-read prototypes — the geometry the artifact actually
+contains. OCCT's STEP translation is not lossless for every surface (a trimmed
+rational ellipsoid reloads as its complementary cap: PR #370 bug records 028-030), and a
+tree serialized from the returned shapes described a solid the file did not
+hold, so the Viewer, ``inspect`` and a warm ``read_step`` disagreed with any
+cold parse of the same bytes. Now the store, the document and every reader of
+either agree by construction. Colours, materials and occurrence metadata still
+come from the build — the STEP carries geometry and colour, nothing else.
 """
 
 from __future__ import annotations
@@ -25,6 +37,7 @@ import hashlib
 import json
 import os
 import tempfile
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -97,6 +110,32 @@ def compound_has_children(shape: Any) -> bool:
     return False
 
 
+@dataclass
+class _Walk:
+    """A compound walked into tree parts, before anything is published: own
+    occurrences (placing ``components`` by cid), links to children's trees, the
+    grouping root, and per cid the shape that owns the geometry plus the
+    location-stripped BREP bytes its cid digests."""
+
+    occurrences: list[dict[str, Any]] = field(default_factory=list)
+    links: list[dict[str, Any]] = field(default_factory=list)
+    components: dict[str, dict[str, Any]] = field(default_factory=dict)
+    shapes: dict[str, Any] = field(default_factory=dict)
+    brep_bytes_by_cid: dict[str, bytes] = field(default_factory=dict)
+    root: dict[str, Any] = field(default_factory=dict)
+
+    def draft_tree(self, *, root_name: str) -> dict[str, Any]:
+        """The tree these parts describe, minus the object hashes publishing adds."""
+        return {
+            "label": root_name,
+            "units": "mm",
+            "components": self.components,
+            "occurrences": self.occurrences,
+            "links": self.links,
+            "assembly": {"root": self.root},
+        }
+
+
 def build_tree_from_compound(
     compound: Any,
     *,
@@ -110,32 +149,39 @@ def build_tree_from_compound(
 
     Packaging follows the RETURN VALUE: a Compound with children is walked into
     occurrences; a single shape is one component (``compound_has_children``).
-    The tree's ``entryKind`` is then read off the tree (``tree_kind``)."""
+    The tree's ``entryKind`` is then read off the tree (``tree_kind``).
+
+    The components are the shapes as returned. This is the tree of a model that
+    writes no STEP (mesh-only outputs) and of an imported document, whose
+    compound IS the document's geometry; a model that writes a STEP builds
+    through it (:func:`build_tree_through_step`)."""
+    progress = resolve_progress(progress)
+    walk = _walk_compound(compound, root_name=root_name, progress=progress)
+    return _publish_tree(
+        walk, bbox_shape=compound, root_name=root_name, force=force, progress=progress, extra=extra
+    )
+
+
+def _walk_compound(compound: Any, *, root_name: str, progress: Any) -> _Walk:
     from build123d import Location
 
     single_component = not compound_has_children(compound)
 
     from cadgen._internal.component_package import (
-        PAYLOAD_UNREADABLE,
-        _build_component_surf_worker,
-        _component_build_worker_count,
         _component_id,
         _content_hash_and_bytes,
-        _bbox_from_shape,
         _occurrence_color,
         _occurrence_material,
-        _shape_brep_bytes,
         _transform_from_location,
-        _write_component_artifacts_atomic,
     )
 
-    progress = resolve_progress(progress)
-    occurrences: list[dict[str, Any]] = []
-    links: list[dict[str, Any]] = []
-    components: dict[str, dict[str, Any]] = {}
-    shapes: dict[str, Any] = {}
+    walk = _Walk()
+    occurrences = walk.occurrences
+    links = walk.links
+    components = walk.components
+    shapes = walk.shapes
     hash_memo: dict[Any, str] = {}
-    brep_bytes_by_cid: dict[str, bytes] = {}
+    brep_bytes_by_cid = walk.brep_bytes_by_cid
 
     def _add_leaf(node: Any, world_loc: Any, occ_id: str, name: str | None = None) -> dict[str, Any]:
         try:
@@ -250,6 +296,35 @@ def build_tree_from_compound(
         root["nodeType"] = "assembly"
     if not occurrences and not links:
         raise RuntimeError(f"model {root_name!r} has no geometry")
+    walk.root = root
+    return walk
+
+
+def _publish_tree(
+    walk: _Walk,
+    *,
+    bbox_shape: Any,
+    root_name: str,
+    force: bool,
+    progress: Any,
+    extra: dict[str, Any] | None,
+) -> tuple[str, dict[str, Any], dict[str, Any]]:
+    """Build the walk's missing components, ingest them, write the tree object."""
+    from cadgen._internal.component_package import (
+        PAYLOAD_UNREADABLE,
+        _build_component_surf_worker,
+        _component_build_worker_count,
+        _bbox_from_shape,
+        _shape_brep_bytes,
+        _write_component_artifacts_atomic,
+    )
+
+    occurrences = walk.occurrences
+    links = walk.links
+    components = walk.components
+    shapes = walk.shapes
+    brep_bytes_by_cid = walk.brep_bytes_by_cid
+    root = walk.root
 
     # --- components: reuse by cid, extract the rest, ingest as objects -------------
     built: list[str] = []
@@ -325,7 +400,7 @@ def build_tree_from_compound(
     from cadgen.store.trees import tree_kind
 
     tree["entryKind"] = tree_kind(tree)
-    bbox = _bbox_from_shape(compound)
+    bbox = _bbox_from_shape(bbox_shape)
     if bbox is not None:
         tree["bbox"] = bbox
     tree["stats"] = {"occurrenceCount": len(occurrences), "linkCount": len(links)}
@@ -338,3 +413,252 @@ def build_tree_from_compound(
         "components_reused": len(reused),
     }
     return tree_hash, tree, stats
+
+
+def _transforms_agree(written: list[float], read: tuple[float, ...]) -> bool:
+    if len(written) != 16 or len(read) != 16:
+        return False
+    return all(abs(a - b) <= 1e-6 * max(1.0, abs(a), abs(b)) for a, b in zip(written, read))
+
+
+def _reread_component(
+    scene: Any, node: Any, occurrence: dict[str, Any], step_name: str, *, written: Any
+) -> tuple[Any, dict[int, tuple] | None]:
+    """The component an own occurrence reads back as: ``(unlocated TopoDS_Shape,
+    face colours by MapShapes ordinal or None)``.
+
+    A leaf node IS the prototype. A node with children is what XCAF makes of a
+    written ``TopoDS_Compound`` (and of the located root of a single-shape
+    document, whose placement the reader hangs on the child): its leaves,
+    re-placed relative to the occurrence's own placement, are the component —
+    so the occurrence's transform still places exactly what the document
+    shows. The component keeps the WRITTEN shape's kind: a compound that was
+    written (a ``Part``, build123d's boolean result, is a compound of one
+    solid) comes back a compound, so ``materialize`` hands a parent the type
+    the model returned; a located solid root comes back the bare solid, which
+    keeps XCAF's own de-duplication (one product, one cid) across
+    occurrences."""
+    from OCP.TopAbs import TopAbs_ShapeEnum
+    from OCP.BRep import BRep_Builder
+    from OCP.TopLoc import TopLoc_Location
+    from OCP.TopoDS import TopoDS_Compound
+
+    from cadgen._internal.step_scene_loader import _location_from_transform_matrix, _selector_id
+    from cadgen._internal.step_scene_mesh import _face_colors_by_ordinal, _iter_leaf_occurrences
+
+    occ_id = str(occurrence["id"])
+    label = f"{step_name}: occurrence {occ_id} ({occurrence.get('name')})"
+    if not node.children:
+        if node.prototype_key is None or node.prototype_key not in scene.prototype_shapes:
+            raise RuntimeError(f"{label} reads back with no shape")
+        if not _transforms_agree(occurrence["transform"], tuple(node.transform)):
+            raise RuntimeError(
+                f"{label} reads back at a different placement: wrote {occurrence['transform']}, "
+                f"read {list(node.transform)}"
+            )
+        prototype = scene.prototype_shapes[node.prototype_key]
+        face_colors = scene.prototype_face_colors.get(node.prototype_key)
+        return prototype, (_face_colors_by_ordinal(prototype, face_colors) if face_colors else None)
+
+    leaves = _iter_leaf_occurrences([node])
+    if not leaves:
+        raise RuntimeError(f"{label} reads back with no shape")
+    inverse = _location_from_transform_matrix(tuple(occurrence["transform"])).Inverted()
+    placed: list[tuple[Any, Any]] = []
+    for leaf in leaves:
+        if leaf.prototype_key is None or leaf.prototype_key not in scene.prototype_shapes:
+            raise RuntimeError(f"{label}: member {_selector_id(leaf.path)} reads back with no shape")
+        relative = inverse.Multiplied(leaf.location) if leaf.location is not None else inverse
+        if relative.IsIdentity() or _transforms_agree(list(_identity16()), tuple(_matrix16(relative))):
+            relative = TopLoc_Location()
+        placed.append((leaf, relative))
+    written_compound = written is not None and written.ShapeType() == TopAbs_ShapeEnum.TopAbs_COMPOUND
+    if len(placed) == 1 and placed[0][1].IsIdentity() and not written_compound:
+        leaf = placed[0][0]
+        prototype = scene.prototype_shapes[leaf.prototype_key]
+        face_colors = scene.prototype_face_colors.get(leaf.prototype_key)
+        return prototype, (_face_colors_by_ordinal(prototype, face_colors) if face_colors else None)
+
+    compound = TopoDS_Compound()
+    builder = BRep_Builder()
+    builder.MakeCompound(compound)
+    merged_face_colors: dict[int, tuple] = {}
+    for leaf, relative in placed:
+        prototype = scene.prototype_shapes[leaf.prototype_key]
+        builder.Add(compound, prototype.Located(relative))
+        merged_face_colors.update(scene.prototype_face_colors.get(leaf.prototype_key) or {})
+    if not merged_face_colors:
+        return compound, None
+    from OCP.TopAbs import TopAbs_ShapeEnum
+    from OCP.TopExp import TopExp
+    from OCP.TopTools import TopTools_IndexedMapOfShape
+
+    from cadgen._internal.step_scene_loader import _shape_hash
+
+    face_map = TopTools_IndexedMapOfShape()
+    TopExp.MapShapes_s(compound, TopAbs_ShapeEnum.TopAbs_FACE, face_map)
+    by_ordinal: dict[int, tuple] = {}
+    for ordinal in range(1, face_map.Extent() + 1):
+        # Face colours are keyed by the PROTOTYPE's faces; a member's faces are
+        # those faces under the member's location, so strip it to look them up.
+        color = merged_face_colors.get(_shape_hash(face_map.FindKey(ordinal).Located(TopLoc_Location())))
+        if color is not None:
+            by_ordinal[ordinal] = tuple(float(c) for c in color)
+    return compound, (by_ordinal or None)
+
+
+def _identity16() -> list[float]:
+    return [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+
+
+def _matrix16(location: Any) -> list[float]:
+    trsf = location.Transformation()
+    rows = [trsf.Value(r, c) for r in range(1, 4) for c in range(1, 5)]
+    return [*rows, 0.0, 0.0, 0.0, 1.0]
+
+
+def build_tree_through_step(
+    compound: Any,
+    step_path: Path,
+    *,
+    root_name: str,
+    force: bool = False,
+    progress: Any | None = None,
+    extra: dict[str, Any] | None = None,
+    logger: Any | None = None,
+) -> tuple[str, dict[str, Any], dict[str, Any], str]:
+    """Write ``step_path`` from ``compound`` and publish the tree of what was
+    WRITTEN. Returns ``(tree_hash, tree, stats, step_hash)``.
+
+    1. Walk the compound (:func:`_walk_compound`): own occurrences, links,
+       grouping — and, for each own component, the returned shape.
+    2. Assemble the document exactly as :func:`cadgen.store.materialize.materialize`
+       would from the published tree (the in-memory draft flattened, links
+       resolved from the store, own components read back from their BREP
+       bytes) and write the STEP.
+    3. Re-read the STEP with the scene loader — the same reader a cold
+       ``read_step`` and ``inspect`` use — and map every own occurrence to its
+       node by id (``o1.2.3`` is the XCAF path, because the document's product
+       tree mirrors the flattened grouping). What the node reads back as
+       (:func:`_reread_component`) is the component the tree publishes: new
+       BREP bytes, new cid. The occurrence's name, colour and material stay the
+       build's; a vendor part's face colours ride the STEP as coloured
+       sub-shapes and come back with the prototype.
+    4. Publish (:func:`_publish_tree`): missing components are extracted from
+       the re-read shapes — once; nothing was meshed before the round trip.
+
+    Any own occurrence the re-read does not account for — no node at its id, a
+    member without a shape, a placement that moved — is a hard error (law 10):
+    a tree that silently kept the build's shape for it would be exactly the
+    disagreement this exists to end.
+
+    Cost: one text-STEP parse of the document per build, plus one BinTools
+    serialization per re-read component. The parse is the same one a cold
+    ``read_step`` of the output pays, moved into the build so no reader pays it
+    later. Measured on a synthetic 500-occurrence / 50-component assembly
+    (2.2 MB STEP): re-read 0.50 s and component re-serialization 5 ms, in a
+    4.2 s build whose STEP write already cost 0.25 s — about 12% of the build,
+    scaling with the document's size, not the model's op count.
+    """
+    from contextlib import nullcontext
+
+    from build123d import Compound
+
+    from cadgen._internal.component_package import (
+        _build123d_shape_from_brep_bytes,
+        _build123d_shape_from_topods,
+        _component_id,
+        _content_hash_and_bytes,
+    )
+    from cadgen._internal.step_scene_loader import _selector_id, load_step_scene
+    from cadgen._internal.step_scene_mesh import scene_leaf_occurrences, scene_occurrence_shape
+    from cadgen.step_export import export_build123d_step_file
+    from cadgen.store.materialize import materialize_descriptor
+    from cadgen.store.trees import flatten_tree
+
+    def timed(label: str):
+        return logger.timed(label) if logger is not None else nullcontext()
+
+    progress = resolve_progress(progress)
+    walk = _walk_compound(compound, root_name=root_name, progress=progress)
+
+    # The document, assembled the way materialize() assembles a published tree
+    # so the bytes do not depend on whether the tree existed yet.
+    own_shapes: dict[str, Any] = {}
+    for cid, brep in walk.brep_bytes_by_cid.items():
+        shape = _build123d_shape_from_brep_bytes(brep)
+        face_colors = getattr(walk.shapes.get(cid), "cad_face_ordinal_colors", None)
+        if face_colors:
+            shape.cad_face_ordinal_colors = face_colors
+        own_shapes[cid] = shape
+    descriptor = flatten_tree(walk.draft_tree(root_name=root_name))
+    with timed(f"tree: assemble STEP {step_path.name}"):
+        document = materialize_descriptor(descriptor, shapes=own_shapes, label=root_name)
+        step_path.parent.mkdir(parents=True, exist_ok=True)
+        step_hash = export_build123d_step_file(document, step_path, logger=logger)
+
+    with timed(f"tree: re-read STEP {step_path.name}"):
+        scene = load_step_scene(step_path, record_read=False)
+    nodes: dict[str, Any] = {}
+    stack = list(scene.roots)
+    while stack:
+        node = stack.pop()
+        nodes[_selector_id(node.path)] = node
+        stack.extend(node.children)
+
+    components: dict[str, dict[str, Any]] = {}
+    shapes: dict[str, Any] = {}
+    brep_bytes_by_cid: dict[str, bytes] = {}
+    cid_by_prototype: dict[int, str] = {}
+    with timed("tree: re-read components"):
+        for occurrence in walk.occurrences:
+            occ_id = str(occurrence["id"])
+            node = nodes.get(occ_id)
+            if node is None:
+                raise RuntimeError(
+                    f"{step_path.name}: occurrence {occ_id} ({occurrence.get('name')}) has no "
+                    "product at that path in the STEP just written"
+                )
+            old_cid = str(occurrence["component"])
+            cid = cid_by_prototype.get(node.prototype_key) if not node.children else None
+            if cid is None:
+                written = getattr(walk.shapes.get(old_cid), "wrapped", None)
+                prototype, face_colors = _reread_component(
+                    scene, node, occurrence, step_path.name, written=written
+                )
+                content_hash, brep = _content_hash_and_bytes(prototype)
+                cid = _component_id(content_hash)
+                if not node.children and node.prototype_key is not None:
+                    cid_by_prototype[node.prototype_key] = cid
+                if cid not in shapes:
+                    shape = _build123d_shape_from_topods(prototype)
+                    if face_colors:
+                        shape.cad_face_ordinal_colors = face_colors
+                    elif getattr(walk.shapes.get(old_cid), "cad_face_ordinal_colors", None):
+                        raise RuntimeError(
+                            f"{step_path.name}: occurrence {occ_id} ({occurrence.get('name')}) was "
+                            "written with per-face colours the STEP does not carry back"
+                        )
+                    shapes[cid] = shape
+                    brep_bytes_by_cid[cid] = brep
+                    meta: dict[str, Any] = {"contentHash": content_hash}
+                    old_meta = walk.components.get(old_cid) or {}
+                    if "color" in old_meta:
+                        meta["color"] = old_meta["color"]
+                    components[cid] = meta
+            occurrence["component"] = cid
+
+    walk.components = components
+    walk.shapes = shapes
+    walk.brep_bytes_by_cid = brep_bytes_by_cid
+    # The tree's bbox bounds the document, links included, as the document reads.
+    artifact = Compound(
+        children=[
+            _build123d_shape_from_topods(scene_occurrence_shape(scene, node))
+            for node in scene_leaf_occurrences(scene)
+        ]
+    )
+    tree_hash, tree, stats = _publish_tree(
+        walk, bbox_shape=artifact, root_name=root_name, force=force, progress=progress, extra=extra
+    )
+    return tree_hash, tree, stats, step_hash

@@ -159,8 +159,8 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "examples:\n"
-            "  cadgen step inspect interfere models/car/car.step.py\n"
-            "  cadgen step inspect interfere models/car/car.step.py --refs o1.1,o1.7\n"
+            "  cadgen step inspect interfere models/car/car.step\n"
+            "  cadgen step inspect interfere models/car/car.step --refs o1.1,o1.7\n"
             "  cadgen step inspect interfere models/car/car.step --tolerance 25\n"
         ),
     )
@@ -201,8 +201,9 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
             "self-intersection test is numeric and can differ by placement, so by "
             "default it runs once per shape at its first placement -- the report says so "
             "in selfIntersectionCheck -- and --every-placement runs it on every copy.\n\n"
-            "A stale generated document is rebuilt from its script first; that decision is "
-            "announced on stderr.\n\n"
+            "This door reads the document it is given and never rebuilds it: a document "
+            "behind its script stays behind until you run that script (python model.py). "
+            "A model script is refused by name.\n\n"
             "examples:\n"
             "  cadgen step inspect validate models/car/car.step\n"
             "  cadgen step inspect validate models/car/car.step --refs o1.1,o1.7\n"

@@ -24,6 +24,11 @@ import {
 } from "cadgen-js/lib/assembly/meshData";
 import { mapWithConcurrency } from "cadgen-js/lib/async/concurrency";
 import { resolvePackageAssetUrl } from "./packageAssetUrl.js";
+import {
+  createProgressivePackageLoader,
+  progressiveLoadStage,
+  publishMeshCostAccounting
+} from "./packageProgressiveLoad.js";
 import { ASSET_STATUS, REFERENCE_STATUS } from "../../../workbench/constants";
 import {
   entryAssetHash,
@@ -41,6 +46,7 @@ import {
   loadRenderMeshByUrl,
   peekRenderMeshByUrl
 } from "cadgen-js/lib/render/meshLoaders";
+import { releaseSurfWorkers } from "cadgen-js/lib/renderAssetClient";
 import { shouldUseGlbMeshWorkerForEntry } from "cadgen-js/lib/render/meshCost";
 import { RENDER_FORMAT, entrySourceFormat } from "cadgen-js/lib/fileFormats";
 import { buildDisplayEdgeRuntime, buildSelectorRuntime } from "cadgen-js/lib/selectors/runtime";
@@ -97,6 +103,25 @@ function packageComponentLoadConcurrency() {
     return PACKAGE_COMPONENT_LOAD_CONCURRENCY;
   }
   return Math.max(4, Math.min(PACKAGE_COMPONENT_LOAD_CONCURRENCY, Math.floor(hardwareConcurrency)));
+}
+
+async function surfContentLength(url, signal) {
+  if (typeof fetch !== "function") {
+    return null;
+  }
+  try {
+    const response = await fetch(url, { method: "HEAD", signal, cache: "no-store" });
+    if (!response.ok) {
+      return null;
+    }
+    const length = Number(response.headers.get("content-length"));
+    return Number.isFinite(length) && length > 0 ? length : null;
+  } catch (error) {
+    if (isAbortError(error) || signal?.aborted) {
+      throw error;
+    }
+    return null;
+  }
 }
 
 function urdfMeshUrls(urdfData) {
@@ -471,6 +496,18 @@ export function useCadAssets({
   const cancelMeshLoad = useCallback(() => {
     requestIdRef.current += 1;
     abortLoad(meshAbortControllerRef);
+    publishMeshCostAccounting(null);
+    // A load cancelled mid-way leaves a PARTIAL composition published; drop it
+    // and its LOD working set so the component arrays it references can go. A
+    // complete model stays (it is still the right thing to show).
+    const ctx = lodPackageRef.current;
+    if (ctx && ctx.complete === false) {
+      lodPackageRef.current = null;
+      setLodPackage(null);
+      setMeshState((current) => (
+        current && current.file === ctx.file && !current.assemblyInteractionReady ? null : current
+      ));
+    }
     setMeshLoadInProgress(false);
     setMeshLoadTargetFile("");
     setMeshLoadStage("");
@@ -546,32 +583,96 @@ export function useCadAssets({
         // world space. A non-package descriptor is a stale/unbuilt artifact (throws below).
         const packageDescriptor = await loadPackageDescriptor(meshUrl, { signal: controller.signal });
         if (packageDescriptor && packageDescriptor.kind === "assembly-package") {
-          setMeshLoadStage("loading components");
-          const componentEntries = Object.entries(packageDescriptor.components || {});
-          const componentMeshDataByCid = {};
-          await mapWithConcurrency(componentEntries, packageComponentLoadConcurrency(), async ([cid, component]) => {
+          // Progressive publish (design/viewer-memory.md §6): components are
+          // fetched with bounded concurrency and the ones loaded so far are
+          // re-composed and published per batch (packageProgressiveLoad.js owns
+          // the batch policy), so the model paints while it loads and a cancel
+          // frees what was never published. Composition is the reference-based
+          // path applyComponentLodPayload uses for a level swap. The final
+          // publish carries every component and is the state the single
+          // post-load publish used to produce.
+          let publishedOnce = false;
+          const loader = createProgressivePackageLoader({
+            descriptor: packageDescriptor,
+            concurrency: packageComponentLoadConcurrency(),
             // Exact-surface artifact: tessellated client-side from the .surf
             // (design/surface-rendering.md). Same meshData contract as the
             // component GLB this replaced.
-            componentMeshDataByCid[cid] = await loadRenderSurf(resolvePackageAssetUrl(meshUrl, component.surf), {
+            loadComponent: (cid, component) => loadRenderSurf(resolvePackageAssetUrl(meshUrl, component.surf), {
               signal: controller.signal
-            });
+            }),
+            // Byte-aware admission: the .surf's content-length (a HEAD, no body)
+            // sizes the component before its decode is admitted; null when the
+            // server does not answer, and the loader falls back to its running
+            // mean.
+            sizeHint: (cid, component) => surfContentLength(resolvePackageAssetUrl(meshUrl, component.surf), controller.signal),
+            // The same staleness guard every publish below re-checks: the
+            // request is current and not aborted.
+            isCurrent: () => requestId === requestIdRef.current && !controller.signal.aborted,
+            // The LOD working set is live from the first publish, so a level
+            // swap that lands mid-load is composed from and kept by later
+            // batches instead of being reverted to level 0.
+            swappedComponents: () => (
+              lodPackageRef.current?.requestId === requestId ? lodPackageRef.current.componentMeshDataByCid : null
+            ),
+            onPublish: ({ meshData, componentMeshDataByCid, loaded, total, final, publishCount }) => {
+              // window.__cadMeshCost for the headless memory harness; not React state.
+              publishMeshCostAccounting({ meshData, componentMeshDataByCid, loaded, total, publishCount, final });
+              const nextState = buildComposedPackageMeshState(entry, packageDescriptor, meshData);
+              // A partial model is structure-ready (the tree can show) but not
+              // interaction-ready: the workspace keeps the "loading" overlay
+              // with the per-batch count until the final publish flips it.
+              nextState.assemblyInteractionReady = final;
+              const ctx = lodPackageRef.current;
+              if (ctx && ctx.requestId === requestId) {
+                ctx.componentMeshDataByCid = componentMeshDataByCid;
+                ctx.complete = final;
+              } else {
+                lodPackageRef.current = {
+                  entry,
+                  file: entry.file,
+                  descriptor: packageDescriptor,
+                  componentMeshDataByCid,
+                  requestId,
+                  complete: final
+                };
+              }
+              if (!publishedOnce) {
+                // First publish replaces whatever was showing (requestId is the
+                // guard, as the single publish had). The camera frames once per
+                // model key on this state; the loader put the extreme-placed
+                // components in the first batch so that frame spans the model.
+                publishedOnce = true;
+                setMeshState(nextState);
+                setStatus(ASSET_STATUS.READY);
+                setError("");
+                // A partial model is on screen: a later failure attaches to it
+                // as a background error rather than blanking the viewport.
+                assemblyPreviewVisible = entry?.kind === "assembly";
+              } else {
+                // Later publishes swap the state in place under the same guard
+                // the LOD swap uses: a state for another file is never replaced.
+                setMeshState((current) => (
+                  !current || current.file !== entry.file ? current : nextState
+                ));
+              }
+              // The LOD scheduler and memory accounting see the model as it
+              // loads; the summary only lists components with bounds (loaded).
+              setLodPackage(buildLodPackageSummary(entry, meshUrl, packageDescriptor, componentMeshDataByCid));
+              setMeshLoadStage(final ? "building assembly" : progressiveLoadStage(loaded, total));
+            }
           });
-          if (requestId !== requestIdRef.current) {
-            return;
+          setMeshLoadStage(progressiveLoadStage(0, loader.total));
+          try {
+            await loader.run();
+          } finally {
+            // Nothing tessellates once the load ends — a later LOD refinement
+            // builds a fresh pool — so the workers' isolates go back to the
+            // process instead of holding the heap each grew for the largest
+            // component it decoded. Also on the failure path: an aborted load
+            // is exactly when the memory is most worth returning.
+            releaseSurfWorkers().catch(() => {});
           }
-          setMeshLoadStage("building assembly");
-          const composed = buildComposedPackageMeshData(packageDescriptor, componentMeshDataByCid);
-          setMeshState(buildComposedPackageMeshState(entry, packageDescriptor, composed));
-          lodPackageRef.current = {
-            entry,
-            file: entry.file,
-            descriptor: packageDescriptor,
-            componentMeshDataByCid: { ...componentMeshDataByCid }
-          };
-          setLodPackage(buildLodPackageSummary(entry, meshUrl, packageDescriptor, componentMeshDataByCid));
-          setStatus(ASSET_STATUS.READY);
-          setError("");
           return;
         }
         // Every STEP model is a component-GLB package (handled above). A missing/non-package

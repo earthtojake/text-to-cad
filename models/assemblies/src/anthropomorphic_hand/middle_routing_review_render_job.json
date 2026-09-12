@@ -1,0 +1,32 @@
+{
+  "input": "models/assemblies/STEP/anthropomorphic_hand/middle_routing_review.step",
+  "mode": "view",
+  "theme": "models/assemblies/src/anthropomorphic_hand/presentation-theme.json",
+  "display": {
+    "mode": "solid",
+    "edges": {
+      "enabled": false
+    }
+  },
+  "render": {
+    "sizeProfile": "presentation-large",
+    "padding": 0.12
+  },
+  "outputs": [
+    {
+      "path": "models/assemblies/tmp/anthropomorphic_hand/middle_routing_review.png",
+      "camera": {
+        "direction": [
+          0.7,
+          -0.4,
+          1
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ]
+      }
+    }
+  ]
+}

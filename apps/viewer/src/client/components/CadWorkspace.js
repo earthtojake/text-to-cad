@@ -93,7 +93,6 @@ import {
 import {
   FILE_SHEET_SECTION_IDS,
   defaultOpenFileSheetSectionIds,
-  fileSheetSectionIdsWithOpenSection,
   normalizeFileSheetOpenSectionIds,
   renderedFileSheetSectionIds,
   shouldOpenFileSheetForSelectionReveal
@@ -262,12 +261,6 @@ import {
   URDF_JOINT_ANIMATION_FOLLOW_MS
 } from "cadgen-js/lib/urdf/jointAnimation";
 import { requestArtifactStatus } from "../workbench/cadManifestStore.js";
-import {
-  FILE_STATUS_LEVELS,
-  buildFileStatusItems,
-  fileStatusHasWarningsOrErrors,
-  mostIntenseFileStatusLevel
-} from "@/workbench/fileStatusItems";
 import { useArtifact } from "./workbench/hooks/useArtifact.js";
 import {
   rootAssemblyInspectionNodeId,
@@ -299,6 +292,7 @@ import {
 import {
   normalizeStepModuleParameterValues
 } from "cadgen-js/common/stepModule";
+import { meshStateIsComplete, tolerantAnimationClip } from "./workbench/hooks/packageProgressiveLoad.js";
 import { loadKinematicsModuleDefinition } from "cadgen-js/common/kinematicsModule";
 import { loadRenderModule, validateRenderModuleClips } from "cadgen-js/common/renderModule";
 import {
@@ -1682,10 +1676,11 @@ export default function CadWorkspace({
     };
   }, [fileSessionNamespace, selectedEntry, selectedStepModuleCadPath, selectedStepModuleUrl]);
 
-  // The animation half of the same sidecar, loaded on its own: the copied
-  // .anim.js text compiles to clips through a Blob import. A model with no
-  // animation section resolves to no clips and no Animation tab, and a broken
-  // one reports its own error without disturbing the Pose tab.
+  // The animation half, loaded on its own from the render module beside the
+  // document (<name>.step.js): its text compiles to clips through a Blob
+  // import. A document with no render module resolves to no clips and no
+  // Animation tab, and a broken one reports its own error without disturbing
+  // the Pose tab.
   useEffect(() => {
     let cancelled = false;
     const resetAnimation = () => {
@@ -1817,6 +1812,14 @@ export default function CadWorkspace({
     () => findAnimationClip(selectedAnimationClips, animationState.activeClipId),
     [selectedAnimationClips, animationState.activeClipId]
   );
+  // Progressive publish (design/viewer-memory.md §6): a STEP package paints
+  // while it loads, and the partial states carry assemblyInteractionReady=false.
+  // The render module attaches on the FIRST publish and stays live: the viewer
+  // re-runs its setup on every meshData change (the same path a LOD swap
+  // takes), so occurrences bind as they arrive. Pose and animation controls
+  // act on whatever is present; only clip validation waits for the complete
+  // model, and a partial model's clip tolerates labels not yet loaded.
+  const selectedMeshPartial = selectedMeshMatches && !meshStateIsComplete(meshState);
   const selectedStepParameterRuntime = useMemo(() => {
     if (!selectedStepModuleDefinition || !stepModuleEnabled) {
       return null;
@@ -1842,16 +1845,20 @@ export default function CadWorkspace({
   // the pose gate above: switched off this memo is null, and null is already how
   // the viewport draws the rest scene — pose only, evaluator never run. So there
   // is no "disabled" render path, only the absence of a frame.
+  const selectedPlayableAnimationClip = useMemo(
+    () => (selectedMeshPartial ? tolerantAnimationClip(selectedActiveAnimationClip) : selectedActiveAnimationClip),
+    [selectedActiveAnimationClip, selectedMeshPartial]
+  );
   const selectedAnimationRuntime = useMemo(() => animationRenderFrame({
     enabled: animationState.enabled !== false,
-    clip: selectedActiveAnimationClip,
+    clip: selectedPlayableAnimationClip,
     elapsedSec: animationState.elapsedSec,
     playing: animationState.playing
   }), [
     animationState.elapsedSec,
     animationState.enabled,
     animationState.playing,
-    selectedActiveAnimationClip
+    selectedPlayableAnimationClip
   ]);
   const handleStepModuleTransformDetectedChange = useCallback(() => {}, []);
   const stepModuleTreeSelectionDisabled = false;
@@ -2138,10 +2145,16 @@ export default function CadWorkspace({
     if (!selectedAnimationClips || !Array.isArray(selectedMeshData?.parts) || !selectedMeshData.parts.length) {
       return "";
     }
+    // A partial progressive state lacks occurrences by design; validating
+    // against it would report every not-yet-loaded label as a clip error, so
+    // validation runs on the complete model only.
+    if (selectedMeshPartial) {
+      return "";
+    }
     return validateRenderModuleClips(THREE, selectedMeshData, selectedAnimationClips)
       .map((problem) => `${problem.clip}: ${problem.error}`)
       .join("\n");
-  }, [selectedAnimationClips, selectedMeshData]);
+  }, [selectedAnimationClips, selectedMeshData, selectedMeshPartial]);
   const selectedAnimationError = selectedAnimationLoadError || selectedAnimationValidationError;
   const selectedViewportContent = selectedMeshData;
 
@@ -3095,38 +3108,6 @@ export default function CadWorkspace({
     return next;
   }, []);
 
-  const selectedFileStatusItems = useMemo(() => (
-    selectedArtifactGenerating
-      ? []
-      : buildFileStatusItems({
-        entry: selectedEntry,
-        fileSheetKind: selectedFileSheetKind,
-        stepSourceStatus: selectedStepSourceStatus,
-        urdfData: selectedUrdfData,
-        viewerAlert,
-        stepArtifactGenerationAvailable,
-        activeGenerationFiles: activeStepArtifactGenerationFiles,
-        viewerServerInfo,
-        artifactAdvisory: selectedArtifact.advisory
-      })
-  ), [
-    activeStepArtifactGenerationFiles,
-    selectedEntry,
-    selectedFileSheetKind,
-    selectedArtifact.advisory,
-    selectedArtifactGenerating,
-    stepArtifactGenerationAvailable,
-    selectedStepSourceStatus,
-    selectedUrdfData,
-    viewerAlert,
-    viewerServerInfo
-  ]);
-  const selectedFileStatusLevel = useMemo(
-    () => mostIntenseFileStatusLevel(selectedFileStatusItems),
-    [selectedFileStatusItems]
-  );
-  const selectedFileHasWarningOrErrorStatus = fileStatusHasWarningsOrErrors(selectedFileStatusItems);
-
   const fileSheetSectionOptions = useMemo(() => ({
     // Gated separately, because the two systems are separate: mates give a Pose
     // tab, clips give an Animation tab, and a model may have either or both.
@@ -3140,7 +3121,6 @@ export default function CadWorkspace({
       (selectedRenderModuleUrl && selectedAnimationStatus === "loading") ||
       selectedAnimationError
     ),
-    hasFileStatus: selectedFileHasWarningOrErrorStatus,
     hasDxfBendsPanel: selectedFileSheetKind === "dxf" && drawingBends.length > 0,
     hasDxfLayersPanel: selectedFileSheetKind === "dxf" && drawingLayers.length > 1,
     isSdf: selectedFileSheetKind === "sdf",
@@ -3150,7 +3130,6 @@ export default function CadWorkspace({
     selectedAnimationError,
     selectedAnimationStatus,
     selectedFileSheetKind,
-    selectedFileHasWarningOrErrorStatus,
     selectedStepModuleDefinition,
     selectedStepModuleError,
     selectedStepModuleStatus,
@@ -3228,29 +3207,6 @@ export default function CadWorkspace({
     }
     setFileSheetOpenSectionIds(normalizedSectionIds);
   }, [fileSheetOpenSectionIds, renderedSelectedFileSheetSectionIds]);
-
-  useEffect(() => {
-    if (selectedFileStatusLevel !== FILE_STATUS_LEVELS.ERROR) {
-      return;
-    }
-    setFileSheetOpenSectionIds((current) => {
-      const baseSectionIds = normalizeFileSheetOpenSectionIds(
-        Array.isArray(current) ? current : defaultSelectedFileSheetOpenSectionIds,
-        renderedSelectedFileSheetSectionIds
-      );
-      const nextSectionIds = fileSheetSectionIdsWithOpenSection(
-        baseSectionIds,
-        renderedSelectedFileSheetSectionIds,
-        FILE_SHEET_SECTION_IDS.FILE_STATUS
-      );
-      return orderedStringListEqual(nextSectionIds, baseSectionIds) ? current : nextSectionIds;
-    });
-  }, [
-    defaultSelectedFileSheetOpenSectionIds,
-    renderedSelectedFileSheetSectionIds,
-    selectedFileStatusLevel,
-    selectedKey
-  ]);
 
   const buildActiveTabSnapshot = useCallback(() => {
     return cloneTabSnapshot({
@@ -7312,7 +7268,6 @@ export default function CadWorkspace({
                 }}
                 viewerServerInfo={viewerServerInfo}
                 suppressDynamicMetadataStatus={selectedArtifactGenerating}
-                statusItems={selectedFileStatusItems}
                 themeTabs={themeTabs}
                 openSectionIds={effectiveFileSheetOpenSectionIds}
                 onOpenSectionIdsChange={handleFileSheetOpenSectionIdsChange}
@@ -7345,7 +7300,6 @@ export default function CadWorkspace({
                 } : null}
                 viewerServerInfo={viewerServerInfo}
                 suppressDynamicMetadataStatus={selectedArtifactGenerating}
-                statusItems={selectedFileStatusItems}
                 themeTabs={themeTabs}
                 openSectionIds={effectiveFileSheetOpenSectionIds}
                 onOpenSectionIdsChange={handleFileSheetOpenSectionIdsChange}
@@ -7365,7 +7319,6 @@ export default function CadWorkspace({
                 onStartResize={handleStartFileSheetResize}
                 viewerServerInfo={viewerServerInfo}
                 suppressDynamicMetadataStatus={selectedArtifactGenerating}
-                statusItems={selectedFileStatusItems}
                 themeTabs={[
                   buildDxfMaterialTab({
                     thicknessMm: drawingThicknessMm,
@@ -7414,7 +7367,6 @@ export default function CadWorkspace({
                 onStartResize={handleStartFileSheetResize}
                 viewerServerInfo={viewerServerInfo}
                 suppressDynamicMetadataStatus={selectedArtifactGenerating}
-                statusItems={selectedFileStatusItems}
                 themeTabs={themeTabs}
                 openSectionIds={effectiveFileSheetOpenSectionIds}
                 onOpenSectionIdsChange={handleFileSheetOpenSectionIdsChange}

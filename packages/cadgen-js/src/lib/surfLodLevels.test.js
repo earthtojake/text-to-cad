@@ -1,7 +1,7 @@
 // Level-keyed surf tessellation (design/unified-tessellation.md Phase 5): the
 // same component URL at different chord tolerances yields distinct cached
 // payloads (finer level -> more triangles), repeat requests at a level are
-// cache hits (one fetch per level), and non-default levels are LRU-bounded.
+// cache hits (one fetch per level), and every surf entry is LRU-bounded.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -68,7 +68,7 @@ test("levels tessellate once each, differ in density, and stay consistent", asyn
   assert.equal(l2Again, l2);
 });
 
-test("non-default levels are LRU-bounded; the default level is never evicted", async (t) => {
+test("every surf entry — any level — rides one bounded leash; consumers own what they keep", async (t) => {
   const originalFetch = globalThis.fetch;
   let fetches = 0;
   globalThis.fetch = async () => {
@@ -83,8 +83,11 @@ test("non-default levels are LRU-bounded; the default level is never evicted", a
   const level = { chordTolerance: LOD_CHORD_LEVELS[1] };
   const first = await loadRenderSurfPayloadAtLevel(urlFor(0), { tessellation: level });
   const firstDefault = await loadRenderSurfPayloadAtLevel(urlFor(0), {});
-  // Push more level entries than the LRU holds.
-  for (let n = 1; n <= 9; n += 1) {
+  // Within the leash both stay put.
+  assert.equal(await loadRenderSurfPayloadAtLevel(urlFor(0), { tessellation: level }), first);
+  assert.equal(await loadRenderSurfPayloadAtLevel(urlFor(0), {}), firstDefault);
+  // Push more entries than the leash holds (levels and defaults alike).
+  for (let n = 1; n <= 30; n += 1) {
     await loadRenderSurfPayloadAtLevel(urlFor(n), { tessellation: level });
   }
   // The upstream array-buffer cache may absorb the fetch; eviction is proven
@@ -92,5 +95,5 @@ test("non-default levels are LRU-bounded; the default level is never evicted", a
   const firstAgain = await loadRenderSurfPayloadAtLevel(urlFor(0), { tessellation: level });
   assert.notEqual(firstAgain, first, "evicted level entry re-tessellates");
   const defaultAgain = await loadRenderSurfPayloadAtLevel(urlFor(0), {});
-  assert.equal(defaultAgain, firstDefault, "default-level entry survived the LRU churn");
+  assert.notEqual(defaultAgain, firstDefault, "the default level is evicted like any other: the package owns its meshData");
 });

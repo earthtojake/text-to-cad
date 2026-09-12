@@ -214,8 +214,19 @@ primary checkout (they are gitignored) or `npm install` in each package:
 
 ```bash
 ln -s <main>/packages/cadgen-js/node_modules <worktree>/packages/cadgen-js/node_modules
-ln -s <main>/apps/viewer/node_modules <worktree>/apps/viewer/node_modules
+mkdir <worktree>/apps/viewer/node_modules
+for e in <main>/apps/viewer/node_modules/* <main>/apps/viewer/node_modules/.bin; do
+  [ "$(basename "$e")" = cadgen-js ] || ln -s "$e" <worktree>/apps/viewer/node_modules/
+done
+ln -s <worktree>/packages/cadgen-js <worktree>/apps/viewer/node_modules/cadgen-js
 ```
+
+Do NOT symlink the Viewer's `node_modules` directory whole. Its `cadgen-js`
+entry is a RELATIVE link (`../../../packages/cadgen-js`) that resolves against
+the primary checkout, so the worktree's Viewer tests and dev server would run
+the primary checkout's cadgen-js and silently ignore every cadgen-js edit in
+the worktree. Link the entries individually and point `cadgen-js` at the
+worktree's package, as above.
 
 For `npm run dev`, set `VIEWER_PYTHON` the same way — it defaults to `python3`,
 which is usually wrong here: on macOS `python3` is still 3.9, BELOW the
@@ -253,7 +264,8 @@ dependencies linked — `three-mesh-bvh` included, which an earlier version of
 this recipe omitted:
 
 ```bash
-ln -s <main>/apps/viewer/node_modules apps/viewer/node_modules
+# apps/viewer/node_modules: per-entry links with cadgen-js pointing at THIS
+# worktree -- see "Viewer Development In This Repo" above for why not one link.
 mkdir -p packages/cadgen-js/node_modules
 for dep in three three-mesh-bvh meshoptimizer; do
   ln -s <main>/packages/cadgen-js/node_modules/$dep packages/cadgen-js/node_modules/$dep

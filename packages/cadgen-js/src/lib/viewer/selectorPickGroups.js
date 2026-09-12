@@ -153,15 +153,36 @@ export function syncDisplayMeshFaceIds(runtime, meshData, selectorRuntime) {
     if (!mesh?.userData) {
       continue;
     }
-    let faceIds = null;
     const partId = String(record?.partId || "").trim();
+    const part = partId && partId !== "__model__"
+      ? partsById.get(partId) || sourcePartForRecord(record, partId)
+      : null;
+    // Records survive progressive publishes; face ids depend only on the
+    // selector runtime and the part's triangle range, so a record synced to
+    // this runtime with the same range keeps them (the face-run walk is
+    // O(runs) per occurrence).
+    const faceIdsKey = `${partId}:${Number(part?.triangleCount) || 0}`;
+    if (mesh.userData.faceIdsSource === selectorRuntime && mesh.userData.faceIdsKey === faceIdsKey) {
+      continue;
+    }
+    let faceIds = null;
     if (partId && partId !== "__model__") {
-      const part = partsById.get(partId) || sourcePartForRecord(record, partId);
       faceIds = part ? buildGlbFaceIdsForPart(part, selectorRuntime) : null;
     } else {
       faceIds = buildGlbFaceIdsForMesh(meshData, selectorRuntime);
     }
-    if (faceIds) {
+    mesh.userData.faceIdsSource = selectorRuntime;
+    mesh.userData.faceIdsKey = faceIdsKey;
+    // A deformed tube shows a refined copy of its rest surface: its triangles
+    // map back to the rest triangles the face ids are indexed by.
+    const deformation = record.tubeDeformationState;
+    if (deformation) {
+      deformation.originalFaceIds = faceIds || undefined;
+    }
+    const sourceTriangles = deformation?.prepared?.sourceTriangles;
+    if (faceIds && sourceTriangles) {
+      mesh.userData.faceIds = new Uint32Array(sourceTriangles.map((index) => faceIds[index]));
+    } else if (faceIds) {
       mesh.userData.faceIds = faceIds;
     } else {
       delete mesh.userData.faceIds;

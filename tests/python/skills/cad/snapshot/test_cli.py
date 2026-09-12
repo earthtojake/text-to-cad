@@ -313,6 +313,24 @@ class SnapshotCliTests(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, "exploded supports only enabled and amount"):
             self._display_job('{"exploded":{"enabled":true,"steps":[]}}')
 
+    def test_display_json_rejects_the_edges_enabled_no_op(self) -> None:
+        # The display MODE is the edge switch, so `edges.enabled` could never change a
+        # snapshot: solid always draws linework and rendered never does. A still image
+        # gets one shot, so an ineffective setting is refused instead of ignored.
+        for payload in (
+            '{"mode":"solid","edges":{"enabled":false}}',
+            '{"edges":{"enabled":true}}',
+        ):
+            with self.assertRaisesRegex(SnapshotError, "display edges has no enabled key"):
+                self._display_job(payload)
+
+    def test_display_json_still_accepts_edge_styling(self) -> None:
+        # `edges` styles the linework the mode has decided to draw; only `enabled` goes.
+        self.assertEqual(
+            self._display_job('{"mode":"solid","edges":{"opacity":0,"thickness":0}}')["display"],
+            {"mode": "solid", "edges": {"opacity": 0, "thickness": 0}},
+        )
+
     def test_display_json_accepts_valid_closed_set_values(self) -> None:
         self.assertEqual(self._display_job('{"projection":"orthographic"}')["display"], {"projection": "orthographic"})
         self.assertEqual(self._display_job('{"mode":"shaded"}')["display"], {"mode": "shaded"})
@@ -333,10 +351,10 @@ class SnapshotCliTests(unittest.TestCase):
                 "parts/STEP/cylindrical_cap.step",
                 "tmp/cap.png",
                 "--display",
-                '{"edges":{"enabled":false,"color":"#123456"}}',
+                '{"edges":{"color":"#123456","opacity":0.5}}',
             ]
         )
-        self.assertEqual(job["display"], {"edges": {"enabled": False, "color": "#123456"}})
+        self.assertEqual(job["display"], {"edges": {"color": "#123456", "opacity": 0.5}})
 
         with self.assertRaisesRegex(SnapshotError, "unsupported keys: edges"):
             job_from_argv(
@@ -344,7 +362,7 @@ class SnapshotCliTests(unittest.TestCase):
                     "parts/STEP/cylindrical_cap.step",
                     "tmp/cap.png",
                     "--theme",
-                    '{"edges":{"enabled":false}}',
+                    '{"edges":{"color":"#123456"}}',
                 ]
             )
 
@@ -1666,6 +1684,7 @@ class SnapshotCliTests(unittest.TestCase):
 
     def test_snapshot_renderer_does_not_force_chromium_single_process(self) -> None:
         captured_launch_options = {}
+        init_scripts = []
 
         class FakePage:
             async def route(self, *args, **kwargs):
@@ -1680,6 +1699,9 @@ class SnapshotCliTests(unittest.TestCase):
         class FakeContext:
             async def new_page(self):
                 return FakePage()
+
+            async def add_init_script(self, script):
+                init_scripts.append(script)
 
             async def close(self):
                 pass
@@ -1739,6 +1761,14 @@ class SnapshotCliTests(unittest.TestCase):
                 sys.modules["playwright.async_api"] = original_async_api
 
         self.assertNotIn("--single-process", captured_launch_options.get("args") or [])
+        # The page must be handed the loopback cache server's ABSOLUTE origin
+        # before any page script runs: a relative cache URL is intercepted by
+        # the route above, and interception alone pushes the whole request body
+        # through the driver, which large uploads do not survive.
+        self.assertTrue(
+            any("__cadgenSnapshotAssetOrigin" in script and "http://127.0.0.1:" in script for script in init_scripts),
+            init_scripts,
+        )
 
     def test_snapshot_tool_has_no_sideways_runtime_dependencies(self) -> None:
         """The shipped runtime must not reach outside itself.
@@ -1913,11 +1943,11 @@ class JobDisplayResolutionTests(unittest.TestCase):
         self.assertEqual(packet["jobs"][0]["display"]["mode"], "wireframe")
 
     def test_job_display_file_path_is_loaded_into_settings(self):
-        body = {"mode": "wireframe", "edges": {"enabled": False}}
+        body = {"mode": "wireframe", "edges": {"color": "#123456"}}
         packet = self._packet_for("models/stage.display.json", display_body=body)
         display = packet["jobs"][0]["display"]
         self.assertEqual(display["mode"], "wireframe")
-        self.assertEqual(display["edges"]["enabled"], False)
+        self.assertEqual(display["edges"]["color"], "#123456")
 
     def test_job_display_invalid_mode_raises(self):
         with self.assertRaises(SnapshotError):

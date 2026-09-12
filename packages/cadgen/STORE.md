@@ -39,7 +39,7 @@ memo (bare), scope, blob. They do not appear in code or documentation.
   index/model/<sha256(script::function)>  records (input-addressed, mutable, atomic)
   index/output/<sha256(output path)>  {model}: which script wrote the file at this path
   index/component/<cid>               component entries → {surf, brep} object hashes
-  index/op/<sha256(op key)>           op-memo entries → object hash
+  index/op/<sha256(op key)>           op-memo entries → object hash, or an inline value
   index/mesh/<key>                    tessellation entries → object hash
 ```
 
@@ -130,7 +130,16 @@ identity. A real one (`link_arm`: a bar plus two placements of a pin model):
 
 - `components` are geometry this model created itself, keyed by component id
   (`cid`, a content hash of the exact shape); each names the `.surf` and
-  `.brep` objects. `occurrences` place components; `links` place children's
+  `.brep` objects. For a model that writes a `.step`, that exact shape is the
+  one READ BACK from the document the build wrote, not the shape the script
+  returned: the build assembles and writes the STEP first, re-reads it with
+  the scene loader, and publishes its prototypes
+  (`cadgen.store.build.build_tree_through_step`). OCCT's STEP translation is
+  lossy for some geometry, and a tree serialized from the returned shapes
+  described solids the file did not hold — so the store, the Viewer and a warm
+  `read_step` disagreed with any cold parse of the same bytes. Colours,
+  materials and occurrence names still come from the build. `occurrences`
+  place components; `links` place children's
   trees. Two placements of one child are two links to one tree. Transforms
   are 16 numbers, row-major, translation in the fourth column, in the
   parent's frame.

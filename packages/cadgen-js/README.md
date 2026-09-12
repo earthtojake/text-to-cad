@@ -23,17 +23,22 @@ snapshot renderer and the node builders in `bin/`).
 ## The laws that live here
 
 - **Viewer three-input law**: a client renders from the file, its sidecar
-  (`<name>.step.json`), and the cache — never source, never a build. The
+  (`<name>.step.json`), its optional adjacent render module
+  (`<name>.step.js`), and the cache — never source, never a build. The
   code in this package must be writable against exactly those inputs.
 - **Kinematics is data, choreography is JS, independently**: the FK
   evaluator (`kinematicsRuntime.js`) folds sidecar mate data into
   transforms and is the operation-for-operation twin of the Python
   evaluator (`cadgen/_internal/kinematics_fk.py`) — a viewer slider and an
   exported bake agree to the bit. The animation runtime
-  (`animationRuntime.js`) evaluates the sidecar's copied `.anim.js` text
-  with the `m.get(target)` handle contract (premultiplying calls, reset to
-  rest every frame, pure in t). Neither half references the other; they
-  meet only in the effect records.
+  (`animationRuntime.js`) evaluates the `clips` the render module beside the
+  document (`<name>.step.js`, loaded by `renderModule.js`) exports, with the
+  `m.get(target)` handle contract (premultiplying calls, reset to rest every
+  frame, pure in t). That module is authored, never generated: editing it is
+  a reload, never a rebuild. Neither half references the other; they
+  meet only in the effect records. Flexible swept bodies use
+  [tube deformation](docs/tube-deformation.md), deforming the original STEP
+  tessellation through analytic centerlines in that same shared effects pass.
 - **Byte determinism**: the tessellator and mesh serializers here produce
   the shipped export bytes — same geometry in, same bytes out.
 - **Loud failure**: unresolved refs, unknown labels, and unknown presets
@@ -69,6 +74,57 @@ Contract mirrors that must stay in lockstep (each has a sync test):
 tessellation cache keys ↔ `cadgen/_internal/cache_paths.py`;
 `apps/viewer/server/store_paths.py` ↔ `cadgen/_internal/`
 schema constants.
+
+Browser mesh-cache traffic is best effort and unrestricted in size, but it
+must reach its host without passing through a debugging transport: an
+intercepted request's body is handed to the driver as escaped text in one
+message, which a large tessellation overruns. `createHttpTessellationCacheProvider`
+therefore takes an `origin` for hosts whose cache is not on the page's own
+origin (the snapshot renderer's loopback asset server passes one; the viewer
+serves the cache itself and leaves it empty). Batched reads are split by key
+count and by the bytes the host returns per entry, so no single response has
+to be allocated whole.
+
+Scene geometry is the tessellator's INDEXED output: a surf component's
+meshData shares the tessellation's vertex, normal and index buffers by
+reference (a decoded `.tess` cache entry is copied out of its one entry
+buffer) and is never expanded per triangle corner. CAD edges are not a
+surface shader: `surfMeshData.js` emits indexed line segments
+(`cadEdgePositions` + `cadEdgeIndices` + `cadEdgeClassRanges`, from the same
+tessellation's boundary polylines, ~1.5 bytes per surface triangle) and
+`cadScene.js` draws them as ONE instanced screen-space line draw per
+component (`cadEdgeInstances.js`): the instances are every (segment,
+occurrence) pair, decoded in the vertex shader from a per-component segment
+texture (32 B per drawn segment, cached on the component) and a per-set
+instance texture (128 B per occurrence: matrix, colour, opacity, visibility,
+highlight). `display.edges.classes` styles colour, opacity AND thickness per
+class, and a thickness is a FULL width in DEVICE pixels — every line shader
+normalises its extrusion by the drawing buffer, never the CSS size, and the
+fragment stage then ramps coverage across ±0.75 px either side of the ink
+boundary, so an edge is feathered rather than a hard-edged quad left to MSAA.
+Per-occurrence highlight, dim, hide, focus, exploded placement and
+selection are slots in that texture, written by the same record passes
+(`applyDisplayRecordTransform`, `applyPartVisualState`,
+`syncRecordEdgeMaterials`) that drive a plain line object; highlighted
+occurrences draw in a second pass at the highlight render order. A deformed
+tube leaves its slot for a private `GL_LINES` object (the component's
+polylines with per-point class colours) that bends with the surface. GPU cost
+per component: two textures, one 4-vertex quad, two materials, one draw call
+(+1 while any occurrence is highlighted). Geometry built from a shared
+component is cached on the component object (`part.sourceMesh`), never on the
+composed package meshData: a package is re-composed on every progressive
+publish and LOD swap, and every occurrence, publish and swap reuses the one
+upload. A publish of the same model reaches the live scene through
+`api.update({ source })`, which reconciles records by occurrence id — records
+already on screen keep their mesh, materials, visual and deformation state
+and BVH; only new occurrences are built and only departed ones disposed.
+Effects that change vertex positions or normals acquire
+writable attributes before deforming them; material refreshes leave component
+data unchanged. This keeps large assemblies from duplicating these buffers for
+display. Assemblies keep geometry in their component buffers; they allocate no
+combined copy of all positions, normals and indices. Rendering and section
+views visit the placed components directly, and the Viewer accepts that
+component geometry.
 
 ## Working on cadgen-js
 

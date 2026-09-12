@@ -1,0 +1,119 @@
+{
+  "input": "models/assemblies/STEP/anthropomorphic_hand/motor_review.step",
+  "mode": "view",
+  "outputs": [
+    {
+      "path": "tmp/anthropomorphic_hand/motor_macro.png",
+      "camera": {
+        "direction": [
+          0.7,
+          -1,
+          0.9
+        ]
+      }
+    }
+  ],
+  "render": {
+    "sizeProfile": "presentation-large",
+    "padding": 0.15,
+    "tessellation": {
+      "chordTolerance": 0.0005,
+      "angleTolerance": 0.1
+    }
+  },
+  "display": {
+    "mode": "solid",
+    "edges": {
+      "enabled": false
+    }
+  },
+  "theme": {
+    "projection": "perspective",
+    "materials": {
+      "defaultColor": "#a7b3bc",
+      "cycleColors": false,
+      "overrideSourceColors": false,
+      "tintStrength": 0,
+      "saturation": 1.02,
+      "contrast": 1.04,
+      "brightness": 1.0,
+      "roughness": 0.34,
+      "metalness": 0.75,
+      "clearcoat": 0.18,
+      "clearcoatRoughness": 0.24,
+      "opacity": 1,
+      "envMapIntensity": 1.3,
+      "emissiveIntensity": 0
+    },
+    "background": {
+      "type": "linear",
+      "solidColor": "#e4e5e5",
+      "linearStart": "#f0efed",
+      "linearEnd": "#b8bfc3",
+      "linearAngle": 145
+    },
+    "floor": {
+      "enabled": false,
+      "grid": {
+        "enabled": false
+      },
+      "axis": {
+        "enabled": false
+      }
+    },
+    "environment": {
+      "enabled": true,
+      "presetId": "studio-hdri-43",
+      "intensity": 0.75,
+      "rotationY": 0.4,
+      "useAsBackground": false
+    },
+    "lighting": {
+      "toneMappingExposure": 1.1,
+      "directional": {
+        "enabled": true,
+        "color": "#fff9f0",
+        "intensity": 2.4,
+        "position": {
+          "x": -220,
+          "y": 260,
+          "z": 340
+        }
+      },
+      "spot": {
+        "enabled": true,
+        "color": "#e3efff",
+        "intensity": 1.4,
+        "angle": 0.85,
+        "distance": 0,
+        "position": {
+          "x": 230,
+          "y": -80,
+          "z": 200
+        }
+      },
+      "point": {
+        "enabled": true,
+        "color": "#ffffff",
+        "intensity": 0.5,
+        "distance": 0,
+        "position": {
+          "x": -180,
+          "y": -100,
+          "z": -160
+        }
+      },
+      "ambient": {
+        "enabled": true,
+        "color": "#ffffff",
+        "intensity": 0.22
+      },
+      "hemisphere": {
+        "enabled": true,
+        "skyColor": "#edf4ff",
+        "groundColor": "#575453",
+        "intensity": 0.65
+      }
+    }
+  }
+}

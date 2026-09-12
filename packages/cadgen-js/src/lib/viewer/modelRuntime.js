@@ -4,6 +4,7 @@ import {
   readBoundsCenter,
   syncMaterialClipPlanes
 } from "../../common/cadScene.js";
+import { cadEdgeInstanceSets } from "../../common/cadEdgeInstances.js";
 import {
   clampSceneModelRadius,
   getShadowCameraSettings
@@ -125,7 +126,10 @@ export function syncRuntimeStepClipPlane(runtime, clipSettings) {
   }
   for (const record of Array.isArray(runtime.displayRecords) ? runtime.displayRecords : []) {
     syncMaterialClipPlanes(record.material, clipPlanes);
-    syncMaterialClipPlanes(record.edgeMaterial, clipPlanes);
+    syncMaterialClipPlanes(record.edgeMaterials, clipPlanes);
+  }
+  for (const set of cadEdgeInstanceSets(runtime)) {
+    syncMaterialClipPlanes(set.materials, clipPlanes);
   }
   syncObjectClipPlanes(runtime.facePickGroup, clipPlanes);
   syncObjectClipPlanes(runtime.edgePickGroup, clipPlanes);
