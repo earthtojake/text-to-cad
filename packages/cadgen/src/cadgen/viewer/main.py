@@ -280,7 +280,7 @@ def resolve_dist_dir(explicit: str) -> str:
     """The built client to serve: ``--dist``, else ``cadgen.assets.viewer_dist_dir()``.
 
     That resolver is env ``CADGEN_VIEWER_DIST``, then a checkout's
-    ``apps/viewer/dist``, then the packaged ``_runtime/viewer``. A candidate
+    ``apps/web/dist``, then the packaged ``_runtime/viewer``. A candidate
     counts only with an ``index.html`` in it; ``""`` means nothing usable.
     """
     candidates = [c for c in (str(explicit or "").strip(), str(assets.viewer_dist_dir())) if c]
@@ -563,7 +563,7 @@ def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
     if not dist_dir and not args["api_only"]:
         _err(
             "No built CAD Viewer client found. This cadgen was installed without one; "
-            "in a checkout, build it with `npm run build` in apps/viewer, or point "
+            "in a checkout, build it with `npm run build` in apps/web, or point "
             "--dist (or CADGEN_VIEWER_DIST) at a dist directory. "
             "(--api-only serves the API alone, for a dev server that supplies its own client.)\n"
         )

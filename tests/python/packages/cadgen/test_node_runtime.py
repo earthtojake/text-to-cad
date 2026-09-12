@@ -1,7 +1,7 @@
 """The Python<->Node builder bridge.
 
 Every test here spawns a REAL node child running a REAL script that imports the REAL
-``cadgen-js/glb/progressStream.js`` helper through ``NODE_PATH``. That is deliberate: the
+``@hardcore/core/glb/progressStream.js`` helper through ``NODE_PATH``. That is deliberate: the
 three things this module actually promises -- that bare specifiers resolve through the
 exports map, that NDJSON reaches the run, and that no child outlives it -- are
 all properties of a separate process, and a mocked ``Popen`` proves none of them.
@@ -37,11 +37,11 @@ from cadgen.coordination import DRAWING_PACKAGE, artifact_build  # noqa: E402
 _NODE = shutil.which("node")
 
 # The helper is imported by BARE SPECIFIER, so every script below is also a live test of the
-# NODE_PATH mechanism: cadgen-js/package.json maps "./glb/*" -> "./src/lib/glb/*", and only
+# NODE_PATH mechanism: @hardcore/core/package.json maps "./glb/*" -> "./src/lib/glb/*", and only
 # a NODE_PATH entry (not a directory alias) resolves through an exports map.
 _IMPORT = (
     'import { reportPhase, reportTotal, reportAdvance, reportResult } '
-    'from "cadgen-js/glb/progressStream.js";\n'
+    'from "@hardcore/core/glb/progressStream.js";\n'
 )
 
 
@@ -76,6 +76,12 @@ class NodeRuntimeTestCase(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory(prefix="cadnode-")
         self.addCleanup(self._tmp.cleanup)
         self.root = Path(self._tmp.name)
+        # Test scripts live outside the checkout; explicitly provide the workspace
+        # dependency tree rather than asking installed cadgen to discover this repo.
+        from tests.python.support.paths import repo_path
+        env = mock.patch.dict(os.environ, {"NODE_PATH": str(repo_path("node_modules"))}, clear=False)
+        env.start()
+        self.addCleanup(env.stop)
 
     def script(self, body: str, name: str = "builder.mjs") -> Path:
         path = self.root / name
@@ -272,9 +278,9 @@ class DiscoveryTest(NodeRuntimeTestCase):
         self.assertIn("node was not found", message)
         self.assertIn("CADGEN_NODE", message)
 
-    def test_node_path_points_at_the_packages_dir_holding__cadgen_js(self):
+    def test_node_path_is_derived_from_the_configured_builder_location(self):
         root = node_package_root()
-        self.assertTrue((root / "cadgen-js" / "package.json").is_file(), root)
+        self.assertEqual(root, node_runtime.node_builders_dir().parent.parent)
         env = node_child_env()
         self.assertEqual(str(root), env["NODE_PATH"].split(os.pathsep)[0])
 
@@ -289,22 +295,29 @@ class DiscoveryTest(NodeRuntimeTestCase):
         # dir with no node_modules above it, so they all depend on this. Pinned explicitly
         # because the mechanism is subtle: Node's ESM resolver ignores NODE_PATH, so the
         # bridge's --import hook forwards the miss to the CJS resolver, which reads NODE_PATH
-        # AND applies the exports map. `cadgen-js/glb/*` is mapped to `./src/lib/glb/*`, so gluing
+        # AND applies the exports map. `@hardcore/core/glb/*` is mapped to `./src/lib/glb/*`, so gluing
         # the specifier onto the package directory would look for src/glb/ -- which does not
         # exist. Resolving it proves the map was consulted rather than a path joined.
         script = self.script(
-            'reportResult({ ok: true, url: import.meta.resolve("cadgen-js/glb/writeGlb.js") });\n'
+            'reportResult({ ok: true, url: import.meta.resolve("@hardcore/core/glb/writeGlb.js") });\n'
         )
         payload = run_node_builder(script, run=Recorder())
         self.assertTrue(
-            payload["url"].endswith("/cadgen-js/src/lib/glb/writeGlb.js"), payload["url"]
+            payload["url"].endswith("/packages/core/dist/lib/glb/writeGlb.js"), payload["url"]
         )
 
-    def test_node_path_is_what_makes_it_resolve(self):
-        # The other half of the claim: with NODE_PATH removed the same import fails. Without
-        # this, a stray node_modules somewhere above the temp dir could make the test above
-        # pass while the packaged, node_modules-free runtime still broke.
-        script = self.script('reportResult({ ok: true });\n')
+    def test_explicit_node_path_resolves_an_external_dependency(self):
+        modules = self.root / "dependencies"
+        package = modules / "fixture-node-path"
+        package.mkdir(parents=True)
+        (package / "package.json").write_text(
+            json.dumps({"type": "module", "exports": {"./runtime": "./runtime.js"}}),
+            encoding="utf-8",
+        )
+        (package / "runtime.js").write_text("export default 42;", encoding="utf-8")
+        script = self.script('import answer from "fixture-node-path/runtime"; reportResult({answer});')
+        result = run_node_builder(script, run=Recorder(), env={"NODE_PATH": str(modules)})
+        self.assertEqual(result["answer"], 42)
         with self.assertRaises(NodeBuilderError):
             run_node_builder(script, run=Recorder(), env={"NODE_PATH": ""})
 
@@ -424,47 +437,29 @@ class BuilderErrorMessageTests(unittest.TestCase):
         self.assertEqual("", node_runtime.first_builder_error([]))
 
 
-class SourceCheckoutWithoutNodeModules(unittest.TestCase):
-    """A checkout's live builders import `three` from packages/cadgen-js/node_modules; a
-    fresh worktree has none, and the failure must be cadgen's own sentence, not the
-    child's ERR_MODULE_NOT_FOUND."""
-
-    def _fake_checkout(self, *, with_node_modules: bool) -> Path:
-        root = Path(tempfile.mkdtemp(prefix="cadgen-checkout-"))
-        self.addCleanup(shutil.rmtree, root, True)
-        builders = root / "packages" / "cadgen-js" / "bin"
-        builders.mkdir(parents=True)
-        (builders / "mesh-export.mjs").write_text("// builder\n", encoding="utf-8")
-        if with_node_modules:
-            (root / "packages" / "cadgen-js" / "node_modules" / "three").mkdir(parents=True)
-        return builders
-
-    def test_a_dev_checkout_without_node_modules_is_refused_with_the_fix(self) -> None:
+class ExplicitRuntimeAssets(unittest.TestCase):
+    def test_defaults_are_packaged_even_when_app_sources_exist_nearby(self):
         from cadgen import assets
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            packaged = root / "packages" / "cadgen" / "src" / "cadgen" / "_runtime"
+            (root / "apps" / "web" / "dist").mkdir(parents=True)
+            (root / "apps" / "web" / "dist" / "index.html").write_text("host", encoding="utf-8")
+            with mock.patch.object(assets, "_RUNTIME", packaged), mock.patch.dict(os.environ, {"CADGEN_VIEWER_DIST": "", "CADGEN_NODE_BUILDERS_DIR": ""}):
+                self.assertEqual(assets.viewer_dist_dir(), packaged / "viewer")
+                self.assertEqual(assets.node_builders_dir(), packaged / "node")
 
-        builders = self._fake_checkout(with_node_modules=False)
-        with mock.patch.object(assets, "_dev_builders_dir", return_value=builders), \
-             mock.patch.object(node_runtime, "node_builders_dir", return_value=builders):
-            with self.assertRaises(node_runtime.NodeBuilderError) as caught:
-                node_runtime.node_builder_script("mesh-export.mjs")
-        message = str(caught.exception)
-        self.assertIn("node_modules", message)
-        self.assertIn("CONTRIBUTING.md", message)
-        self.assertIn(str(builders.parent / "node_modules"), message)
-
-    def test_a_dev_checkout_with_node_modules_resolves_the_builder(self) -> None:
+    def test_development_overrides_are_explicit(self):
         from cadgen import assets
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            with mock.patch.dict(os.environ, {"CADGEN_VIEWER_DIST": str(root / "web"), "CADGEN_NODE_BUILDERS_DIR": str(root / "builders")}):
+                self.assertEqual(assets.viewer_dist_dir(), root / "web")
+                self.assertEqual(assets.node_builders_dir(), root / "builders")
 
-        builders = self._fake_checkout(with_node_modules=True)
-        with mock.patch.object(assets, "_dev_builders_dir", return_value=builders), \
-             mock.patch.object(node_runtime, "node_builders_dir", return_value=builders):
-            self.assertEqual(node_runtime.node_builder_script("mesh-export.mjs"), builders / "mesh-export.mjs")
-
-    def test_the_packaged_builders_need_no_node_modules(self) -> None:
-        from cadgen import assets
-
-        builders = self._fake_checkout(with_node_modules=False)
-        # The packaged copy is not the dev dir: no check, no refusal.
-        with mock.patch.object(assets, "_dev_builders_dir", return_value=None), \
-             mock.patch.object(node_runtime, "node_builders_dir", return_value=builders):
-            self.assertEqual(node_runtime.node_builder_script("mesh-export.mjs"), builders / "mesh-export.mjs")
+    def test_packaged_builders_do_not_require_a_node_modules_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            builders = Path(tmp)
+            (builders / "mesh-export.mjs").write_text("// bundled", encoding="utf-8")
+            with mock.patch.object(node_runtime, "node_builders_dir", return_value=builders):
+                self.assertEqual(node_runtime.node_builder_script("mesh-export.mjs"), builders / "mesh-export.mjs")

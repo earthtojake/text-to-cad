@@ -5,7 +5,7 @@
 3. ``~/.cache/cadgen`` otherwise.
 
 The JS mirror is ``cadgenCacheRootDir`` in
-``packages/cadgen-js/src/lib/surf/tessellationCacheFs.mjs``;
+``packages/core/src/lib/surf/tessellationCacheFs.mjs``;
 ``tests/python/global/test_cache_root_sync.py`` pins the two together.
 """
 
@@ -14,7 +14,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-# Mirror of TESSELLATION_VERSION in packages/cadgen-js/src/lib/surf/tessellate.js
+# Mirror of TESSELLATION_VERSION in packages/core/src/lib/surf/tessellate.js
 # (sync-tested). It is part of the MESH index key, not a store salt.
 MESH_TESSELLATION_VERSION = 1
 

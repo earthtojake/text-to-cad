@@ -57,6 +57,9 @@ else
   echo "Building the packaged runtime..."
 fi
 
+# Shared ESM packages are the inputs consumed by hosts and runtime builders.
+npm --prefix "$REPO_ROOT" run build:packages
+
 "$SCRIPT_DIR/cadgen-runtime.sh" "${RUNTIME_ARGS[@]+"${RUNTIME_ARGS[@]}"}"
 
 if [ "$MODE" = "check" ]; then

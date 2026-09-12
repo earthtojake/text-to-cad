@@ -16,10 +16,10 @@ set -euo pipefail
 #   --browser   snapshot browser bundle   -> _runtime/browser    (committed)
 #   --viewer    CAD Viewer client (vite)  -> _runtime/viewer     (gitignored; wheel-only)
 #
-# The viewer stage is the odd one out: its output is NOT committed. A checkout serves
-# apps/viewer/dist directly (cadgen.assets prefers it), so the only consumer of
-# _runtime/viewer is `python -m build`, and a 2.7 MB tree that changes on every client
-# edit is noise in git. `--check` therefore skips it (nothing committed to diff against)
+# The viewer stage is the odd one out: its output is NOT committed. Editable
+# installs and wheels serve _runtime/viewer by default; a development override
+# can explicitly select apps/web/dist. This generated client changes on every
+# edit and is assembled for the wheel rather than stored in git. `--check` therefore skips it (nothing committed to diff against)
 # and `--print-outputs` does not list it (the release's staged-outputs assertion is about
 # what the publish COMMIT must carry). scripts/release/check-wheel-contents.sh is the gate
 # that proves the wheel got it.
@@ -36,15 +36,15 @@ RUNTIME_DIR="$REPO_ROOT/packages/cadgen/src/cadgen/_runtime"
 NODE_DIR="$RUNTIME_DIR/node"
 BROWSER_DIR="$RUNTIME_DIR/browser"
 VIEWER_DIR="$RUNTIME_DIR/viewer"
-VIEWER_APP_DIR="$REPO_ROOT/apps/viewer"
+VIEWER_APP_DIR="$REPO_ROOT/apps/web"
 VIEWER_PACKAGE_MANAGER="${CAD_VIEWER_PACKAGE_MANAGER:-}"
 
 CHECK_DIR="${CADGEN_RUNTIME_CHECK_DIR:-$REPO_ROOT/tmp/cadgen-runtime-check}"
 SNAPSHOT_BUILD_DEPS_DIR="${CADGEN_SNAPSHOT_BUILD_DEPS_DIR:-$REPO_ROOT/tmp/cadgen-snapshot-build}"
 
 BUILDER_ENTRIES=(
-  "$REPO_ROOT/packages/cadgen-js/bin/dxf-mesh.mjs"
-  "$REPO_ROOT/packages/cadgen-js/bin/mesh-export.mjs"
+  "$REPO_ROOT/packages/core/bin/dxf-mesh.mjs"
+  "$REPO_ROOT/packages/core/bin/mesh-export.mjs"
 )
 
 MODE="write"
@@ -126,7 +126,7 @@ resolve_viewer_package_manager() {
     echo "$VIEWER_PACKAGE_MANAGER"
     return
   fi
-  if [ -f "$VIEWER_APP_DIR/package-lock.json" ]; then
+  if [ -f "$REPO_ROOT/package-lock.json" ]; then
     echo "npm"
     return
   fi
@@ -185,7 +185,7 @@ The JavaScript in this directory is bundled output. It inlines third-party code:
 
 Each bundle carries the originating licence banners at end of file
 (esbuild --legal-comments=eof). Exact versions are pinned by
-packages/cadgen-js/package-lock.json at the commit that produced these files.
+package-lock.json at the commit that produced these files.
 
 MIT License
 

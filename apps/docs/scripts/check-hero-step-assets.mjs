@@ -1,6 +1,6 @@
 // The CI gate for the hero showcase assets: the committed render package and
 // sidecar under public/hero/ must still satisfy the contracts the hero page
-// consumes through cadgen-js — the .surf container format the client
+// consumes through @hardcore/core — the .surf container format the client
 // tessellates, a kinematics section that compiles into a step-module
 // definition, and copied animation clip text. A cadgen schema bump that
 // regenerates these formats fails here instead of silently breaking the
@@ -11,8 +11,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { SURF_MAGIC, SURF_VERSION } from "../../../packages/cadgen-js/src/lib/surf/container.js";
-import { stepModuleFromKinematics } from "../../../packages/cadgen-js/src/common/kinematicsModule.js";
+import { SURF_MAGIC, SURF_VERSION } from "../../../packages/core/src/lib/surf/container.js";
+import { stepModuleFromKinematics } from "../../../packages/core/src/common/kinematicsModule.js";
 
 const docsRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const heroPackageDir = path.join(docsRoot, "public/hero/planetary");
@@ -32,7 +32,7 @@ for (const [cid, entry] of components) {
   assert.equal(
     header.readUInt32LE(4),
     SURF_VERSION,
-    `${surfPath} is SURF v${header.readUInt32LE(4)}; cadgen-js expects v${SURF_VERSION}`,
+    `${surfPath} is SURF v${header.readUInt32LE(4)}; @hardcore/core expects v${SURF_VERSION}`,
   );
 }
 

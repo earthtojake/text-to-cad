@@ -26,19 +26,20 @@ step; nothing else belongs here (one-off helpers go in `tmp/`).
   `release-publish.yml`, `check-builds.sh`, the pre-commit hook.
 - `cadgen-runtime.sh` — builds the three runtime stages: `--node` (esbuilt Node
   builders, committed), `--browser` (snapshot browser bundle, committed),
-  `--viewer` (vite build of `apps/viewer`, gitignored, wheel-only). `--print-outputs`
+  `--viewer` (vite build of `apps/web`, gitignored, wheel-only). `--print-outputs`
   lists the committed paths. Called by `bundle.sh`, `check-builds.sh`,
   `test/test-installed.sh`; pinned by `tests/python/global/test_node_builder_bundles.py`
   and `test_js_runtime_reproducibility.py`. Call it directly only to debug one stage.
 - `lib/node_builders.sh`, `lib/snapshot_runtime.sh` — sourced by
   `cadgen-runtime.sh`; esbuild the Node builders and the browser bundle with
-  `three`/`meshoptimizer` pinned from `packages/cadgen-js/package-lock.json`.
+  `three`/`meshoptimizer` pinned from `package-lock.json`.
 
 `test/` — test runners.
 
 - `test.sh` — `test-js.sh`, then `test-python.sh`, then `test-global.sh`. Called
   by `test.yml` and `release-publish.yml`.
-- `test-js.sh` — `packages/cadgen-js` and `apps/viewer` client suites.
+- `test-js.sh` — dependency boundaries, core/UI/web suites and optional desktop checks.
+- `check-dependencies.mjs` — resolved import graph policy for apps and packages.
 - `test-python.sh [--keep-going]` — the cadgen package suite, then every skill's
   suite. Each test FILE runs in its own interpreter against its own temporary
   store, `CADGEN_TEST_JOBS` at a time (default: the core count; CI sets 4).
@@ -60,6 +61,10 @@ step; nothing else belongs here (one-off helpers go in `tmp/`).
 
 `release/` — the version and the release identity.
 
+- `check-pr-version.sh BASE_REF HEAD_REF HEAD_SHA` — rejects VERSION edits
+  outside `release/*`, comparing with the current target branch's merge base
+  so inherited releases are not mistaken for PR edits. Requires fetched remote
+  history; called by `test.yml`.
 - `check-version.sh [--incremented-from REF]` — `VERSION` is valid semver, every
   skill pins `cadgen==VERSION`, and (with the flag) `VERSION` is greater than the
   one at `REF`. Called by `test.yml`, `release-prepare.yml`, `release-publish.yml`,

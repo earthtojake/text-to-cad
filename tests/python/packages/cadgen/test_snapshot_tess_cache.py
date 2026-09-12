@@ -1,7 +1,7 @@
 """The snapshot host's side of the shared component-tessellation cache.
 
 The page and the export CLI share ONE on-disk store (~/.cache/cadgen/meshes;
-codec in packages/cadgen-js/src/lib/surf/tessellationCache.js). Python never
+codec in packages/core/src/lib/surf/tessellationCache.js). Python never
 decodes entries — it stores and serves opaque bytes — so what these tests pin
 is the transport contract: name validation (the cache lives OUTSIDE any model
 root, so a bad name must be refused, never resolved), the CADGEN_MESH_CACHE=0
@@ -19,6 +19,7 @@ from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cadgen/src")
 
+import cadgen.snapshot_core as snapshot_core  # noqa: E402
 from cadgen.snapshot_core import (  # noqa: E402
     TESS_CACHE_BATCH_MAGIC,
     TESS_CACHE_BATCH_PATH,
@@ -140,6 +141,64 @@ class SnapshotAssetServerTests(unittest.TestCase):
         self.assertEqual(decode_batch(response), [b"ENTRY", None])
         status, _, _ = self.request("POST", TESS_CACHE_BATCH_PATH, b"not json")
         self.assertEqual(status, 400)
+
+
+
+class SnapshotCacheBoundaryTests(unittest.TestCase):
+    def setUp(self) -> None:
+        import tempfile
+
+        self._tmp = tempfile.TemporaryDirectory(prefix="snapshot-cache-boundary-")
+        self.addCleanup(self._tmp.cleanup)
+        self._environment = mock.patch.dict(
+            os.environ,
+            {
+                "CADGEN_CACHE_DIR": str(Path(self._tmp.name) / "cache"),
+                "CADGEN_MESH_CACHE": "1",
+            },
+        )
+        self._environment.start()
+        self.addCleanup(self._environment.stop)
+
+    def test_snapshot_cache_boundary_does_not_reach_into_viewer(self) -> None:
+        source = Path(snapshot_core.__file__).read_text(encoding="utf-8")
+        self.assertNotIn(
+            "cadgen.viewer",
+            source,
+            "snapshot cache I/O belongs to cadgen.store, independent of the HTTP host",
+        )
+
+    def test_snapshot_and_http_hosts_share_exact_store_bytes(self) -> None:
+        import json
+
+        from cadgen.viewer.tess_cache import (
+            read_tess_cache_batch,
+            read_tess_cache_entry,
+            write_tess_cache_entry,
+        )
+
+        name = "feed01-t1-l1.500000e-3-a3.500000e-1.tess"
+        route = f"{TESS_CACHE_ROUTE_PREFIX}{name}"
+        payload = b"\x00shared\xff"
+        self.assertTrue(write_tessellation_cache_entry(route, payload))
+        self.assertEqual(read_tess_cache_entry(route), (200, payload))
+        self.assertEqual(write_tess_cache_entry(route, b"second"), 204)
+        self.assertEqual(read_tessellation_cache_entry(route), b"second")
+        request = json.dumps({"names": [name, "missing.tess"]}).encode()
+        self.assertEqual(read_tessellation_cache_batch(request), read_tess_cache_batch(request))
+
+    def test_snapshot_transport_refuses_malformed_cache_names(self) -> None:
+        for name in (
+            "../escape.tess",
+            "%2e%2e%2fescape.tess",
+            "%zz.tess",
+            "%C0%AF.tess",
+            "a.tess%0A",
+        ):
+            route = f"{TESS_CACHE_ROUTE_PREFIX}{name}"
+            with self.subTest(name=name):
+                self.assertIsNone(read_tessellation_cache_entry(route))
+                self.assertFalse(write_tessellation_cache_entry(route, b"payload"))
 
 
 if __name__ == "__main__":

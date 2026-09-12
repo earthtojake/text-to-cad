@@ -24,7 +24,7 @@ which every generated build writes and every gate reads — the ONE home of
 source-derived identity. Eviction costs one rebuild, never correctness (an
 evicted record simply reads as an import until the next build re-records it).
 Imports write neither. The JS authority
-(``apps/viewer/server/artifact_status.py``) mirrors this: a sidecar at THIS schema
+(``apps/web/server/artifact_status.py``) mirrors this: a sidecar at THIS schema
 is a fast yes, and the record decides everything else.
 
 Write ordering matters: the sidecar is written BEFORE the tree lands at

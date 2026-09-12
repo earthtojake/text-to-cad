@@ -1,16 +1,29 @@
 # Docs site
 
-The documentation website (Next.js) — texttocad.dev. A cadgen-js CLIENT: the
+The documentation website (Next.js) — texttocad.dev. A @hardcore/core CLIENT: the
 hero and example scenes render real CAD models in the browser through the
 same shared runtime the viewer uses.
 
 **PURPOSE** — the public documentation and marketing site.
 
-**MAY DEPEND ON** — `cadgen-js` (source, mapped by `tsconfig.json` and
-aliased in `next.config.ts` to `../../packages/cadgen-js/src`) and its own
-npm dependencies. Never the viewer, never cadgen Python.
+**MAY DEPEND ON** — compiled `@hardcore/core` exports and this app's own
+npm dependencies. Never another app or the running cadgen Python service.
+The root npm workspace and lockfile resolve dependencies; no source aliases
+or consumer-owned declarations are required.
 
 **DEPENDED ON BY** — nothing in the repo. It is a website, not an install.
+
+The package migration is a pure refactor: the site's UI, UX, functionality, content and static
+CAD showcases remain unchanged. Normal development, checks and deployment use
+existing static assets and do not start Python. Asset regeneration is still an
+explicit operation.
+
+Install from the repository root with `npm ci` (or the docs-only workspace
+filter), then `npm run build:docs`. `apps/docs/vercel.json` runs the root
+workspace install and build from Vercel's `apps/docs` root directory. Shared
+package outputs are built first; production uses the same package exports as
+local development.
+
 
 ## Build and deploy
 
@@ -25,8 +38,9 @@ Vercel, not this repo) must point at `apps/docs`.
 
 Hero STEP assets under `public/hero/` are a view of the tree behind the
 planetary gear STEP (`assembly.json` + each component's `.surf`) plus its
-sidecar, committed as PLAIN files (never LFS — Vercel serves them statically
-with no backend). Refresh them after rebuilding the model:
+kinematics sidecar and authored `.step.js` render module, committed as PLAIN
+files (never LFS — Vercel serves them statically with no backend). Refresh them
+after rebuilding the model:
 
 ```
 python models/assemblies/src/planetary_gear_assembly/planetary_gear_assembly.py
@@ -36,7 +50,7 @@ node apps/docs/scripts/sync-hero-step-assets.mjs   # same CADGEN_CACHE_DIR as th
 The sync script asks cadgen for the tree by the STEP's bytes and exports a
 view of it, so it never restates a store path. The check script
 (`scripts/check-hero-step-assets.mjs`, part of `npm run check`) pins the surf
-container and sidecar contracts against cadgen-js so a schema bump cannot
+container and sidecar contracts against @hardcore/core so a schema bump cannot
 silently break the hero render.
 
 ## The shape of the app

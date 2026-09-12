@@ -1,0 +1,50 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import * as THREE from 'three';
+import { syncSectionCaps, disposeSectionCaps } from './sectionCaps.js';
+
+test('section caps borrow mesh geometry and track transforms without becoming pickable', () => {
+  const scene = new THREE.Scene(), modelGroup = new THREE.Group();
+  scene.add(modelGroup);
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(10,8,6),new THREE.MeshBasicMaterial());
+  modelGroup.add(mesh);
+  mesh.position.set(20,0,0);
+  const runtime = { THREE, scene, modelGroup, displayRecords:[{mesh}],modelRadius:15,modelBounds:{min:[15,-4,-3],max:[25,4,3]} };
+  const plane = new THREE.Plane(new THREE.Vector3(0,0,1),0);
+  syncSectionCaps(runtime,plane);
+  const caps = runtime.sectionCaps;
+  assert.equal(caps.stencils.length,2);
+  assert.equal(caps.stencils[0].geometry,mesh.geometry);
+  assert.equal(caps.stencils[0].parent,mesh);
+  assert.equal(caps.plane.position.x,20);
+  assert.equal(caps.plane.position.z,0);
+  const hits=[]; caps.plane.raycast(null,hits); assert.deepEqual(hits,[]);
+  syncSectionCaps(runtime,new THREE.Plane(new THREE.Vector3(0,0,1),-2));
+  assert.equal(runtime.sectionCaps,caps);
+  assert.equal(caps.plane.position.z,2);
+  let disposed=0; mesh.geometry.addEventListener('dispose',()=>disposed++);
+  syncSectionCaps(runtime,null);
+  assert.equal(runtime.sectionCaps,null);
+  assert.equal(mesh.children.length,0);
+  assert.equal(disposed,0,'removing clip must not dispose the model geometry');
+  disposeSectionCaps(runtime);
+});
+
+test('only intersected parts receive stencil passes and moving the plane releases them', () => {
+  const scene = new THREE.Scene(), modelGroup = new THREE.Group();
+  scene.add(modelGroup);
+  const near = new THREE.Mesh(new THREE.BoxGeometry(2,2,2),new THREE.MeshBasicMaterial());
+  const far = new THREE.Mesh(near.geometry,near.material);
+  far.position.z = 20;
+  modelGroup.add(near,far);
+  const runtime = { THREE, scene, modelGroup, displayRecords:[{mesh:near},{mesh:far}], modelRadius:22 };
+  syncSectionCaps(runtime,new THREE.Plane(new THREE.Vector3(0,0,1),0));
+  assert.deepEqual(runtime.sectionCaps.records,[near]);
+  assert.equal(far.children.length,0);
+  syncSectionCaps(runtime,new THREE.Plane(new THREE.Vector3(0,0,1),-20));
+  assert.deepEqual(runtime.sectionCaps.records,[far]);
+  assert.equal(near.children.length,0);
+  syncSectionCaps(runtime,new THREE.Plane(new THREE.Vector3(0,0,1),-50));
+  assert.equal(runtime.sectionCaps,null);
+  assert.equal(far.children.length,0);
+});

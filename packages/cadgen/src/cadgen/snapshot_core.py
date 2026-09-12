@@ -36,6 +36,15 @@ from urllib.parse import quote, unquote, urlparse
 from cadgen.coordination import PHASE_RENDER, resolve as resolve_progress
 from cadgen.results import SnapshotFile, SnapshotResult, SnapshotTimings
 from cadgen._internal.atomic_replace import replace_atomic, write_bytes_atomic
+from cadgen.store.tess_cache import (
+    TESS_CACHE_BATCH_MAGIC,
+    TESS_CACHE_BATCH_MAX_NAMES,
+    TESS_CACHE_BATCH_VERSION,
+    encode_tessellation_cache_batch,
+    is_tessellation_cache_key,
+    read_tessellation_cache,
+    write_tessellation_cache,
+)
 
 
 SNAPSHOT_ORIGIN = "http://snapshot.local"
@@ -902,7 +911,7 @@ def route_file(pathname: str, prefix: str, root: Path) -> Path:
 #
 # The snapshot page resolves component tessellations through the SAME disk
 # cache the mesh-export CLI uses (~/.cache/cadgen/meshes/<key>.tess; codec and
-# key scheme in packages/cadgen-js/src/lib/surf/tessellationCache.js). The page
+# key scheme in packages/core/src/lib/surf/tessellationCache.js). The page
 # cannot touch the filesystem, so the host serves the cache: GET
 # /__tess_cache/<key>.tess is a read, POST is a best-effort write-back after
 # an in-page tessellation miss. CADGEN_MESH_CACHE=0 turns both directions
@@ -923,44 +932,49 @@ TESS_CACHE_ROUTE_PREFIX = "/__tess_cache/"
 # <cid>-t<tessellator-version>-l<chord>-a<angle>.tess with exponential-notation
 # tolerances (the key scheme's home is tessellationCache.js); anything else
 # (path separators, dots-runs, empty) is refused before touching disk.
-TESS_CACHE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.+_-]*\.tess$")
+TESS_CACHE_NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9.+_-]*\.tess")
 
 
-def tessellation_cache_enabled() -> bool:
-    return os.environ.get("CADGEN_MESH_CACHE") != "0"
+def _tessellation_cache_key_from_route_path(pathname: str) -> str | None:
+    try:
+        name = unquote(
+            str(pathname or "")[len(TESS_CACHE_ROUTE_PREFIX) :],
+            encoding="utf-8",
+            errors="strict",
+        )
+    except UnicodeDecodeError:
+        return None
+    if TESS_CACHE_NAME_PATTERN.fullmatch(name) is None or ".." in name:
+        return None
+    key = name[: -len(".tess")]
+    return key if is_tessellation_cache_key(key) else None
 
 
 def read_tessellation_cache_entry(pathname: str) -> bytes | None:
     """One entry's bytes, from the mesh index (``index/mesh`` -> object); None
     for a refused name, a miss, or a disabled cache."""
-    from cadgen.viewer.tess_cache import read_tess_cache_entry
-
-    if not tessellation_cache_enabled():
-        return None
-    status, data = read_tess_cache_entry(pathname)
-    return data if status == 200 else None
+    key = _tessellation_cache_key_from_route_path(pathname)
+    return None if key is None else read_tessellation_cache(key)
 
 
 def write_tessellation_cache_entry(pathname: str, body: bytes | None) -> bool:
     """Best-effort write-back; False only for an invalid name (a 403)."""
-    from cadgen.viewer.tess_cache import write_tess_cache_entry
-
-    return write_tess_cache_entry(pathname, body) != 403
+    key = _tessellation_cache_key_from_route_path(pathname)
+    if key is None:
+        return False
+    if body:
+        write_tessellation_cache(key, body)
+    return True
 
 
 # POST /__tess_cache/batch: one round trip for N entries — a many-component
 # assembly otherwise pays ~2 requests per component. Request body is JSON
 # {"names": ["<key>.tess", ...]}; the response is the TESB container defined
-# in packages/cadgen-js/src/lib/surf/tessellationCache.js (that file is the
+# in packages/core/src/lib/surf/tessellationCache.js (that file is the
 # format's single home; Python only frames the opaque entry bytes): "TESB"
 # u32, version u32, count u32, then per entry u32 byteLength (0 = miss) +
 # bytes padded to a 4-byte boundary.
 TESS_CACHE_BATCH_PATH = "/__tess_cache/batch"
-TESS_CACHE_BATCH_MAGIC = 0x42534554  # "TESB" little-endian
-TESS_CACHE_BATCH_VERSION = 1
-TESS_CACHE_BATCH_MAX_NAMES = 4096
-
-
 def read_tessellation_cache_batch(body: bytes | None) -> bytes | None:
     """The TESB response for a batch request body, or None for a malformed
     request (the route answers 400). Invalid names and read failures are
@@ -971,22 +985,15 @@ def read_tessellation_cache_batch(body: bytes | None) -> bytes | None:
         return None
     if not isinstance(names, list) or len(names) > TESS_CACHE_BATCH_MAX_NAMES:
         return None
-    entries: list[bytes] = []
+    entries: list[bytes | None] = []
     for name in names:
-        entry = b""
+        entry = None
         if isinstance(name, str):
             data = read_tessellation_cache_entry(f"{TESS_CACHE_ROUTE_PREFIX}{name}")
             if data is not None:
                 entry = data
         entries.append(entry)
-    parts = [struct.pack("<III", TESS_CACHE_BATCH_MAGIC, TESS_CACHE_BATCH_VERSION, len(entries))]
-    for entry in entries:
-        parts.append(struct.pack("<I", len(entry)))
-        parts.append(entry)
-        padding = (-len(entry)) % 4
-        if padding:
-            parts.append(b"\x00" * padding)
-    return b"".join(parts)
+    return encode_tessellation_cache_batch(entries)
 
 
 RENDER_ASSET_ROUTE_PREFIX = "/__render_asset/"

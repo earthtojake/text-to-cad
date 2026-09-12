@@ -1,19 +1,25 @@
 # Packages
 
-Libraries and distributions. Applications live in `apps/`.
+Three shared packages support the applications in `apps/docs`, `apps/web` and
+`apps/desktop`:
 
-- `cadgen/` — the published distribution: the Python engine plus the built
-  JS runtimes it executes. The design laws live in its README.
-- `cadgen-js/` — the shared JS source between cadgen's rendering and its
-  clients (the viewer, the docs app). Framework-free by law.
+| Directory | Identity | Responsibility |
+| --- | --- | --- |
+| [cadgen](cadgen/README.md) | Python distribution `cadgen` | CAD engine, store, CLI, build daemon, HTTP service and bundled runtime outputs |
+| [core](core/README.md) | `@hardcore/core` | Framework-independent JS/TS geometry, rendering and explicit CAD service client |
+| [ui](ui/README.md) | `@hardcore/ui` | Complete shared FileViewer, injectable renderers, navigation, controls and styles |
 
-Each package's README carries its PURPOSE / MAY DEPEND ON / DEPENDED ON BY
-boundary and the laws that live there. New shared code goes in the package
-whose boundary admits it — never in an app, never duplicated.
+This migration is a pure refactor. All apps retain their existing UI, UX and
+functionality. Web and desktop both consume the same FileViewer; their adapters
+own browser/native services and application state. Docs consumes core for its
+static CAD showcases.
 
-Ships-alone law: `cadgen/` builds and publishes as a package that works in
-isolation outside this repo (cadgen-js is bundled in at build time), so its
-markdown must not refer to anything outside the package. The same law binds
-`apps/viewer/`, which mirrors unchanged to the standalone
-`earthtojake/cad-viewer` repo. Enforced by the markdown-isolation check in
-`tests/python/global/test_package_boundaries.py`.
+Apps import compiled public package exports. UI may depend on core; core never
+depends on React or UI. Shared packages never import application source, and
+applications never import one another. The root npm workspace and lockfile own
+JavaScript installation; `npm run build:packages` builds core before UI.
+
+The Python wheel assembles built Node/browser runtimes and the built web client.
+That build dependency does not let Python engine code reach into app source.
+The wheel works outside this repository, so its own Markdown must also stand
+alone; repository development instructions belong in `CONTRIBUTING.md`.

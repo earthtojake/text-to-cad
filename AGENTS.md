@@ -56,12 +56,15 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
 - `.claude-plugin/`, `.codex-plugin/`: agent plugin manifests. The repository
   root is the plugin package; its skills are `skills/` directly.
 - `models/`: sample and durable CAD/robot-description fixtures.
-- `apps/viewer/`: the CAD Viewer's React client (its backend is `cadgen.viewer`).
-- `packages/cadgen-js`: shared JS CAD/render/runtime code, UI-framework agnostic.
+- `apps/web/`: the CAD Viewer's React client (its backend is `cadgen.viewer`).
+- `packages/core`: `@hardcore/core`, shared CAD/runtime/client code without React.
+- `packages/ui`: `@hardcore/ui`, the shared FileViewer, renderers, controls and styles.
 - `packages/cadgen`: the published distribution — STEP/GLB/topology generation,
   the skill CLI parsers, the CAD Viewer backend + client, and the Node/browser
   runtimes it executes.
 - `apps/docs/`: documentation site.
+- `apps/desktop/`: Hardcore, the Electron agent workbench and FileViewer host.
+  A root npm workspace; its build packages the complete cadgen Python runtime.
 - `tests/`: root-owned test suites for skills, packages, viewer services, and
   repo-wide policy.
 - `scripts/`: durable repo commands grouped by purpose.
@@ -69,8 +72,8 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
 ## Repo Rules
 
 - Boundaries and design laws live in each package's README: read
-  `packages/cadgen/README.md` (the laws), `packages/cadgen-js/README.md`,
-  `apps/viewer/README.md`, and `apps/docs/README.md` before changing
+  `packages/cadgen/README.md` (the laws), `packages/core/README.md`, `packages/ui/README.md`,
+  `apps/web/README.md`, `apps/desktop/README.md`, and `apps/docs/README.md` before changing
   generation, rendering, storage, layout, or public interfaces.
 - Ships-alone law: `packages/cadgen` (the built PyPI wheel) works in isolation
   outside this repo, so its markdown must not refer to anything outside the
@@ -114,16 +117,18 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
   a skill with missing files. `scripts/github-workflows/check-builds.sh` enforces
   this; do not relax it.
 - The CAD Viewer is `cadgen viewer`: the server is `cadgen.viewer` (Python, in
-  `packages/cadgen`), the React client's source is `apps/viewer/` and its build
-  ships in the wheel at `cadgen/_runtime/viewer` (gitignored; a checkout serves
-  `apps/viewer/dist`). The cad-viewer skill is instructions over that verb.
+  `packages/cadgen`), the React client's source is `apps/web/` and its build
+  ships in the wheel at `cadgen/_runtime/viewer` (gitignored; development uses an explicit
+  `CADGEN_VIEWER_DIST` override for `apps/web/dist`). The cad-viewer skill is instructions over that verb.
   Nothing in `cadgen.viewer` imports the CAD kernel at module scope — the one
   kernel action, importing a foreign STEP, is a compile job in cadgen's build
   pool, never work the server process does.
-  Keep repo-level tooling in `scripts/`, not under `apps/viewer/`.
-- `packages/cadgen-js` must stay reusable/non-React; app UI and workflow state
-  belong in `apps/viewer/`. It holds the shared CAD render/runtime code: one package,
-  one copy of each shared primitive.
+  Keep repo-level tooling in `scripts/`, not under `apps/web/`.
+- `packages/core` stays non-React. Shared FileViewer/renderers belong in
+  `packages/ui`; host workflow state belongs in apps. Apps never import another
+  app and shared packages never import apps. Root npm workspaces consume compiled
+  package exports; do not add source aliases or nested lockfiles. Preserve app
+  UI/UX and functionality during restructuring; changes are pure refactors.
 - `packages/cadgen` is the whole distribution, not just the Python: artifact
   generation, the CLI parsers behind every skill command (`cadgen/cli`), the warm
   build daemon (`cadgen/daemon`), and
@@ -176,9 +181,9 @@ when touching shared surfaces or before handoff:
   `scripts/test/test-global.sh`
 - Canonical release version: `scripts/release/check-version.sh`
 - Generated runtime freshness: `scripts/bundle/bundle.sh --check`
-- CAD Viewer or `packages/cadgen-js`:
-  `npm --prefix packages/cadgen-js test`,
-  `npm --prefix apps/viewer run test`, `npm --prefix apps/viewer run build`.
+- CAD Viewer or shared JS/UI: build compiled exports with `npm run build:packages`, then
+  `npm --prefix packages/core test`, `npm --prefix packages/ui test`,
+  `npm --prefix apps/web run test`, `npm --prefix apps/web run build`.
   The Viewer is two languages and `npm run test` covers only the client — the
   backend's suite is `tests/python/packages/cadgen/viewer`, run by
   `scripts/test/test-python.sh`. Touching `cadgen/viewer/` means running that.
@@ -191,10 +196,10 @@ rerun `scripts/bundle/bundle.sh --check`, and commit the regenerated
 
 ## CAD Viewer
 
-The app-facing playbook lives in `apps/viewer/README.md`: launcher contract
+The app-facing playbook lives in `apps/web/README.md`: launcher contract
 (reuse, ports, `--new`), dev vs prod, and the catalog/link-verification
 gotchas. The repo-side half — the lightweight-worktree recipe and
-node_modules linking — lives in `CONTRIBUTING.md` under "Viewer Development
+root workspace dependencies — lives in `CONTRIBUTING.md` under "Viewer Development
 In This Repo". Read them before starting, stopping, or debugging a Viewer.
 Never stop an instance you did not start; packaged-runtime checks go
 through `scripts/bundle/bundle.sh`.

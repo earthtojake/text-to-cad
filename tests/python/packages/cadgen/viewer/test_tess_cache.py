@@ -1,8 +1,8 @@
-"""The shared tessellation cache: name validation, store I/O, and TESB framing.
+"""The viewer's tessellation-cache transport and shared TESB framing.
 
 Ports ``tessCache.test.mjs``. The container test does not read the format by
 eye — it hands the Python encoder's bytes to the AUTHORITATIVE decoder in
-``packages/cadgen-js``, which is where the format lives. A hand-written
+``packages/core``, which is where the format lives. A hand-written
 assertion about offsets would pass just as happily against a subtly wrong
 encoder, and the client would then silently fall back to one round trip per
 component for the life of the page.
@@ -23,16 +23,16 @@ from cadgen.viewer.tess_cache import (
     read_tess_cache_batch,
     read_tess_cache_entry,
     tess_cache_key_from_route_path,
-    tessellation_cache_dir,
     write_tess_cache_entry,
 )
+from cadgen.store.tess_cache import tessellation_cache_dir
 
 GOOD_KEY = "c0ffee-t1-l1.500000e-3-a3.500000e-1"
 
-# The authoritative codec: cadgen-js in this repository. The suite is root-owned
+# The authoritative codec: @hardcore/core in this repository. The suite is root-owned
 # and runs from a checkout, so the source path is always present -- no skip.
 REPO_ROOT = Path(__file__).resolve().parents[5]
-CADGEN_JS_CODEC = REPO_ROOT / "packages" / "cadgen-js" / "src" / "lib" / "surf" / "tessellationCache.js"
+CADGEN_JS_CODEC = REPO_ROOT / "packages" / "core" / "src" / "lib" / "surf" / "tessellationCache.js"
 
 
 class TessCacheTestCase(unittest.TestCase):
@@ -174,7 +174,7 @@ class BatchFramingMatchesTheAuthoritativeCodec(TessCacheTestCase):
     """The Python encoder's bytes must decode with the JS decoder that owns the format.
 
     Neither precondition is allowed to make this disappear quietly. A missing
-    codec is a FAILURE — cadgen-js ships with the app, so its absence means the
+    codec is a FAILURE — @hardcore/core ships with the app, so its absence means the
     tree is broken, not that this machine is unusual. A missing `node` is a
     failure too: the client is a JavaScript app, so anywhere this suite runs
     can run its decoder. Skipping on either is how the check went dead the
@@ -186,7 +186,7 @@ class BatchFramingMatchesTheAuthoritativeCodec(TessCacheTestCase):
         if not CADGEN_JS_CODEC.is_file():
             raise AssertionError(
                 f"the authoritative tessellation-cache codec is missing: {CADGEN_JS_CODEC}. "
-                "cadgen-js is vendored at packages/cadgen-js and ships with this app; "
+                "@hardcore/core is vendored at packages/core and ships with this app; "
                 "without it the Python encoder's framing is verified by nothing."
             )
         if not shutil.which("node"):

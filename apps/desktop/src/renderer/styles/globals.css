@@ -1,0 +1,308 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* App-specific layout and session styles; FileViewer tokens and styles are package outputs. */
+
+@source "../app";
+@source "../components";
+@source "../features";
+@source "../hooks";
+@source "../lib";
+@source "../state";
+@source "../main.tsx";
+@source "../index.html";
+/* Streamdown renders markdown with Tailwind classes of its own — the
+ * heading sizes, list indents, table rules — and they live in its dist, which
+ * is outside every path above. Without these lines a README's H1 is body
+ * text in bold. */
+@source "../../../../../node_modules/streamdown/dist/*.js";
+@source "../../../../../node_modules/@streamdown/code/dist/*.js";
+
+@import "@hardcore/ui/tokens.css";
+@import "@hardcore/ui/styles.css";
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family:
+      ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+      sans-serif;
+    /* A desktop chrome, not a document: the window itself never scrolls or
+     * rubber-bands, and text is not accidentally selectable. */
+    overflow: hidden;
+    overscroll-behavior: none;
+    user-select: none;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  input,
+  textarea,
+  [contenteditable="true"],
+  [data-selectable] {
+    user-select: text;
+  }
+
+  /* The transcript is the one part of this window that is a document, so all
+   * of it selects: an agent's prose, a person's own prompt, the code in a
+   * fenced block, an activity row's summary and the path in it. It was
+   * unselectable for no reason but the `user-select: none` above — a rule
+   * about chrome that a thread of writing is not — and a reply nobody can
+   * copy out of is a reply they retype.
+   *
+   * The transcript's own controls opt back out below. */
+  [data-transcript] {
+    user-select: text;
+  }
+
+  /* Chrome inside the document: the jump pill, an error row's Retry and
+   * Reconnect, a permission card's answers. A drag that starts on one of
+   * those is somebody missing the button, not somebody copying its label.
+   * An activity row's button is deliberately not here — its one line is the
+   * tool call's summary and the path in it, which is exactly what gets
+   * copied. */
+  [data-transcript]
+    :is([data-jump-to-latest], [data-part="error"] button, [data-permission] button) {
+    user-select: none;
+  }
+}
+
+/* The strip Electron reserves for the window controls (titleBarStyle
+ * "hiddenInset" on macOS, the native frame elsewhere). Panes that reach the
+ * top of the window use these rather than each guessing a number.
+ *
+ * `--titlebar-inset` is the room the macOS traffic lights need on the left of
+ * the leftmost pane; `platform-mac` is set by main.tsx before the first paint.
+ * Nothing interactive may start inside it.
+ */
+:root {
+  --titlebar-height: 36px;
+  --titlebar-inset: 0px;
+}
+
+/* 84px is the room the pinned cluster needs, measured on macOS 15 as the x of
+ * Chromium's titlebar-area rect (src/shared/titlebar.ts, and the pin itself is
+ * `trafficLightPosition` in src/main/index.ts). It is the value the first
+ * frame paints with, and the fallback for a window with no overlay to read:
+ * `lib/titlebar.ts` overwrites this custom property with the measurement as
+ * soon as there is one, and again whenever the geometry changes — the buttons'
+ * width is AppKit's, not ours, and a number typed in here on its own would be
+ * a guess about every macOS release after this one. */
+.platform-mac {
+  --titlebar-inset: 84px;
+}
+
+/* Whichever pane is leftmost makes room for the traffic lights: the sidebar
+ * does it in its own top strip, and when it is hidden the session's title bar
+ * takes over. Those are the only two — the session pane is never collapsed,
+ * so the explorer's strip is never at the window's left edge. Set by `Shell`
+ * from the same collapsed flag that decides who is leftmost. Settings replaces
+ * the shell entirely and reserves the same room itself (SettingsRoute). */
+[data-shell][data-leftmost="session"] [data-session-header] {
+  padding-left: calc(var(--titlebar-inset) + 0.75rem);
+}
+
+/* The sidebar's own strip holds nothing at its left end — its collapse sits at
+ * the right — but the room is reserved all the same, so that a control added
+ * to that row later cannot land under the lights. */
+[data-shell][data-leftmost="sidebar"] [data-sidebar-titlebar] {
+  padding-left: var(--titlebar-inset);
+}
+
+/* The wordmark: JetBrains Mono ExtraBold Italic (resources/brand/fonts, OFL),
+ * the ink alone. The offset blue copy and the PNGs live on in
+ * `scripts/make-brand.mjs` and the app icon; the title in the sidebar is
+ * just the word. */
+@font-face {
+  font-family: "JetBrains Mono Brand";
+  font-style: italic;
+  font-weight: 800;
+  font-display: block;
+  src: url("../../../resources/brand/fonts/JetBrainsMono-ExtraBoldItalic.woff2") format("woff2");
+}
+
+.brand-wordmark {
+  display: inline-block;
+  font: italic 800 28px/1 "JetBrains Mono Brand", ui-monospace, monospace;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+  user-select: none;
+  cursor: default;
+  white-space: nowrap;
+}
+
+/* Scrollbars, thin and quiet. The transcript, the file tree and the settings
+ * pages all scroll; a 15px grey gutter on each is the one thing that makes
+ * an Electron app look like a web page. Monaco and xterm draw their own. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklab, var(--foreground) 16%, transparent);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklab, var(--foreground) 30%, transparent);
+}
+
+/* A strip that scrolls sideways under its tabs shows no bar at all: the tabs
+ * themselves are the indication, and a bar under them reads as a defect. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.app-drag {
+  -webkit-app-region: drag;
+}
+
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Small, one-shot feedback at interaction boundaries. Only opacity and
+ * transforms animate: streaming text and CAD layout never animate per update.
+ * No forwards fill, so a finished reveal leaves no containing block behind. */
+@keyframes ui-reveal {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ui-dismiss {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes ui-reference-enter {
+  from { opacity: 0; scale: 0.97; }
+  to { opacity: 1; scale: 1; }
+}
+
+@keyframes ui-preview-enter {
+  from { opacity: 0; scale: 0.985; }
+  to { opacity: 1; scale: 1; }
+}
+
+@keyframes ui-preview-exit {
+  from { opacity: 1; scale: 1; }
+  to { opacity: 0; scale: 0.985; }
+}
+
+.ui-reveal,
+.ui-disclosure[data-state="open"] {
+  animation: ui-reveal 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.ui-disclosure[data-state="closed"] {
+  animation: ui-dismiss 100ms ease-out;
+}
+
+.ui-reference-enter {
+  transform-origin: left center;
+  animation: ui-reference-enter 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.ui-preview-trigger {
+  transition: transform 120ms ease-out;
+}
+
+.ui-preview-trigger:hover {
+  transform: translateY(-1px);
+}
+
+.ui-image-preview[data-state="open"] {
+  animation: ui-preview-enter 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.ui-image-preview[data-state="closed"] {
+  animation: ui-preview-exit 100ms ease-out;
+}
+
+/* Settings › Appearance. Both classes are set on <html> by
+ * src/renderer/hooks/use-appearance.ts. */
+
+/* Reduce motion. The OS setting is honoured by the media query; this class is
+ * the app's own switch for someone whose OS is not set that way. `!important`
+ * because the utilities it is overriding are single-class rules of the same
+ * specificity that would otherwise win on order. */
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+.reduce-motion .ui-preview-trigger:hover {
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-preview-trigger:hover {
+    transform: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Translucent sidebar. main sets the window's macOS vibrancy
+ * (src/main/settings-effects.ts); this is the half that lets it through. */
+.translucent-sidebar {
+  --sidebar: oklch(0.985 0 0 / 65%);
+}
+
+.translucent-sidebar.dark {
+  --sidebar: oklch(0.205 0 0 / 55%);
+}
+
+.translucent-sidebar [data-slot="sidebar"],
+.translucent-sidebar [data-translucent] {
+  backdrop-filter: saturate(140%) blur(20px);
+}
+
+/*
+ * The composer's editor (features/session/composer): the placeholder the
+ * Placeholder extension writes as a data attribute on the empty paragraph,
+ * and a chip under ProseMirror's node selection.
+ */
+.composer-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--muted-foreground);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+.composer-editor p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

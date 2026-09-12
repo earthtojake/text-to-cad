@@ -4,7 +4,7 @@ The render pipeline supports per-occurrence PBR overrides: any leaf shape
 carrying a plain ``cad_material`` dict ({roughness, metalness, clearcoat,
 clearcoatRoughness, opacity} in [0,1]) has those channels override the
 presentation theme's global material (see cadgen
-``_occurrence_material`` and cadgen-js ``applyMaterialSettingsToRecord``).
+``_occurrence_material`` and @hardcore/core ``applyMaterialSettingsToRecord``).
 Albedo still comes from ``shape.color``.
 
 ``apply(compound)`` walks a built Compound's leaves and assigns materials

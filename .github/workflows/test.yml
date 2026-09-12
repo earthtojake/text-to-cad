@@ -24,7 +24,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
         with:
-          # The VERSION guard below diffs against the PR base.
+          # The VERSION guard needs the current target branch's history.
           fetch-depth: 0
 
       - name: Set up Node.js
@@ -44,22 +44,9 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           HEAD_REF: ${{ github.head_ref }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_REF: ${{ github.base_ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          if git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- VERSION; then
-            echo "VERSION unchanged."
-            exit 0
-          fi
-          case "$HEAD_REF" in
-            release/*) echo "VERSION changed on $HEAD_REF (a release PR)." ;;
-            *)
-              echo "This PR changes VERSION but its branch is '$HEAD_REF', not release/*." >&2
-              echo "Version bumps come from the Prepare Release workflow:" >&2
-              echo "  gh workflow run release-prepare.yml --ref main -f bump=patch" >&2
-              exit 1
-              ;;
-          esac
+        run: bash scripts/release/check-pr-version.sh "$BASE_REF" "$HEAD_REF" "$HEAD_SHA"
 
   test:
     name: Test (Linux)
@@ -155,3 +142,75 @@ jobs:
       # is shipped to a Windows user, and none of its answers can differ by operating system;
       # running it here only asks whether `bash` on a Windows runner behaves like bash, which
       # it does not (it resolves to the WSL stub and answers in UTF-16).
+
+  # A THIRD separate job, for the same reason `test-windows` is one: `Test` is a
+  # required status check on main, and turning either of the jobs above into a matrix
+  # would rename its check and leave every pull request waiting for a check that no
+  # longer exists.
+  #
+  # macOS because the desktop app's two native modules (better-sqlite3, node-pty) are
+  # rebuilt explicitly against Electron's ABI, and macOS is both the
+  # platform this app is developed on and the one whose packaging (hardened runtime,
+  # notarisation, arm64 + x64) has the most that can go wrong. Its own `npm ci`: the
+  # desktop app participates in the root npm workspace, and the Linux job's
+  # setup-deps knows nothing about it.
+  #
+  # The Playwright step drives the BUILT app through `_electron`, so no browser
+  # download is needed -- `playwright install` would fetch three browsers this suite
+  # never opens -- and no xvfb, because macOS has a display server.
+  desktop:
+    name: Desktop (macOS)
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # The explicit native:rebuild step runs electron-builder install-app-deps for
+      # better-sqlite3 and node-pty for Electron. A plain `npm ci --ignore-scripts`
+      # would install them for Node's ABI and every database test would fail to load.
+      - name: Install desktop dependencies
+        run: |
+          npm ci
+          npm run native:rebuild -w hardcore
+          npm run build:packages
+
+      - name: Typecheck
+        run: npm --prefix apps/desktop run typecheck
+
+      - name: Lint
+        run: npm --prefix apps/desktop run lint
+
+      - name: Run unit tests
+        run: npm --prefix apps/desktop test
+
+      - name: Build
+        run: npm --prefix apps/desktop run build
+
+      - name: Run the Electron smoke test
+        run: npm --prefix apps/desktop run e2e
+
+      # The screenshots the e2e writes are the cheapest review of whether the app
+      # still looks like an app; a failed run's are the more interesting ones.
+      - name: Upload Playwright screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-screenshots
+          path: apps/desktop/tests/e2e/__screenshots__/*.png
+          if-no-files-found: ignore
+
+      - name: Upload failed Electron traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-test-results
+          path: apps/desktop/test-results/
+          if-no-files-found: ignore

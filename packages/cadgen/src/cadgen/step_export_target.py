@@ -200,7 +200,7 @@ from cadgen._internal.mesh_export import (  # noqa: E402
 def _linear_channel_to_srgb_byte(channel: float) -> int:
     """One LINEAR channel (0..1) to the 0..255 byte an sRGB hex carries.
 
-    The mirror of ``linearChannelToSrgbByte`` in ``packages/cadgen-js/src/lib/color.js``
+    The mirror of ``linearChannelToSrgbByte`` in ``packages/core/src/lib/color.js``
     -- see that module for why the boundary exists.
     """
     clamped = max(0.0, min(1.0, channel))

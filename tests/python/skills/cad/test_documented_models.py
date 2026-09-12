@@ -304,7 +304,7 @@ class DocumentedRenderModule(unittest.TestCase):
 
     `STEP/<name>.step.js` is authored from what the skill shows, so the sample
     must be exactly what the loader accepts: the CLI's pre-flight reads its
-    clip ids, and the shared loader (cadgen-js renderModule.js) compiles it in
+    clip ids, and the shared loader (@hardcore/core renderModule.js) compiles it in
     Node the same way the viewer and the snapshot page do in the browser.
     """
 
@@ -327,7 +327,7 @@ class DocumentedRenderModule(unittest.TestCase):
         node = shutil.which("node")
         if node is None:
             self.skipTest("node is not installed")
-        loader = repo_path("packages/cadgen-js/src/common/renderModule.js")
+        loader = repo_path("packages/core/src/common/renderModule.js")
         script = textwrap.dedent(
             f"""
             import {{ compileRenderModule, importRenderModule }} from {str(loader.as_uri())!r};

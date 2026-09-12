@@ -48,6 +48,24 @@ if __name__ == "__main__":
     {name}()
 """
 
+SLOW_PART = """\
+import os
+from pathlib import Path
+
+from cadgen import step
+from cadgen import build123d as bd
+
+
+@step(out=(Path(os.environ["CADGEN_CACHE_DIR"]) / "slow.step").as_posix())
+def slow():
+    import time; time.sleep(4.0)
+    return bd.Box(5.0, 4.0, 2.0)
+
+
+if __name__ == "__main__":
+    slow()
+"""
+
 PARENT = """\
 from cadgen import step
 from cadgen import build123d as bd
@@ -96,7 +114,7 @@ class DaemonRouting(unittest.TestCase):
         for name, size in (("left", 6.0), ("right", 7.0)):
             (cls.src / f"{name}.py").write_text(PART.format(name=name, sleep=0.0, size=size), encoding="utf-8")
         (cls.src / "pair.py").write_text(PARENT, encoding="utf-8")
-        (cls.src / "slow.py").write_text(PART.format(name="slow", sleep=4.0, size=5.0), encoding="utf-8")
+        (cls.src / "slow.py").write_text(SLOW_PART, encoding="utf-8")
         # The daemon's key and progress records live in ITS state dir; this process must
         # read the same one to authenticate. Kept for the whole class.
         cls._state_patch = mock.patch.dict(os.environ, {"CADGEN_DAEMON_STATE_DIR": str(cls.work / "state")})
@@ -221,7 +239,11 @@ class DaemonRouting(unittest.TestCase):
                 time.sleep(0.05)
             else:
                 self.fail("the first build never went busy on slow.py")
-            second = executor.submit(self._build, "slow.py", "--force")
+            # Both jobs still have the same routing key, but their derived writes
+            # are independent. Otherwise this routing test also races two forced
+            # publishers on the same component index and STEP output, which can
+            # fail with ERROR_ACCESS_DENIED on Windows before routing is asserted.
+            second = executor.submit(self._build, "slow.py", "--force", store="b")
             second_code, second_out, _ = second.result(timeout=300)
             first_code, first_out, _ = first.result(timeout=300)
         self.assertEqual(first_code, 0, first_out)
