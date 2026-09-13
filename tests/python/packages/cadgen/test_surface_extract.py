@@ -509,5 +509,112 @@ class PeriodicSeamWindowTest(unittest.TestCase):
                 self.assertLess(expected.Distance(actual), 1e-6, (u, v))
 
 
+class PeriodicUnclampedDomainTest(unittest.TestCase):
+    """Unperiodizing preserves outer knots beyond the active spline domain.
+
+    These are support knots, not the parameter interval addressed by a face.
+    Using them to choose a whole-period translation shifts a correct surface
+    away from its pcurves and produces metre-long spikes on small CAD parts.
+    """
+
+    def _surface(self, degree, periodic_axis):
+        from OCP.Geom import Geom_BSplineSurface
+        from OCP.TColStd import TColStd_Array1OfInteger, TColStd_Array1OfReal
+        from OCP.TColgp import TColgp_Array2OfPnt
+        from OCP.gp import gp_Pnt
+
+        nu, nv = (degree, 2) if periodic_axis == "u" else (2, degree)
+        poles = TColgp_Array2OfPnt(1, nu, 1, nv)
+        for i in range(nu):
+            for j in range(nv):
+                angle = 2 * math.pi * (i if periodic_axis == "u" else j) / degree
+                height = 10 * (j if periodic_axis == "u" else i)
+                poles.SetValue(i + 1, j + 1, gp_Pnt(7 * math.cos(angle),
+                                                     5 * math.sin(angle), height))
+        knots = TColStd_Array1OfReal(1, 2)
+        knots.SetValue(1, 0.0)
+        knots.SetValue(2, 1.0)
+        periodic_mult = TColStd_Array1OfInteger(1, 2)
+        regular_mult = TColStd_Array1OfInteger(1, 2)
+        for i in (1, 2):
+            periodic_mult.SetValue(i, degree)
+            regular_mult.SetValue(i, 2)
+        return Geom_BSplineSurface(
+            poles, knots, knots,
+            periodic_mult if periodic_axis == "u" else regular_mult,
+            regular_mult if periodic_axis == "u" else periodic_mult,
+            degree if periodic_axis == "u" else 1,
+            1 if periodic_axis == "u" else degree,
+            periodic_axis == "u", periodic_axis == "v")
+
+    def test_unperiodized_surface_keeps_face_parameter_frame(self):
+        from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace
+        from cadgen._internal import surface_extract
+
+        for degree in (3, 14):
+            for axis in ("u", "v"):
+                with self.subTest(degree=degree, axis=axis):
+                    native = self._surface(degree, axis)
+                    face = BRepBuilderAPI_MakeFace(native, 0, 1, 0, 1, 1e-7).Face()
+                    bin_out = surface_extract._Bin()
+                    payload = surface_extract._surface_payload(face, bin_out)
+                    surface_extract._assert_surface_covers_face(payload, 0, 1, 0, 1,
+                                                                 bin_out)
+                    rebuilt = _rebuild_bspline_surface(payload, bin_out.payload())
+                    self.assertEqual(rebuilt.Bounds(), (0.0, 1.0, 0.0, 1.0))
+                    for u in (0, .1, .5, .9, 1):
+                        for v in (0, .2, .5, .8, 1):
+                            self.assertLess(native.Value(u, v).Distance(rebuilt.Value(u, v)),
+                                             2e-6)
+                    self.assertEqual(native.IsUPeriodic(), axis == "u")
+                    self.assertEqual(native.IsVPeriodic(), axis == "v")
+
+    def test_whole_period_offsets_keep_native_points(self):
+        from unittest import mock
+        from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace
+        from cadgen._internal import surface_extract
+
+        for axis in ("u", "v"):
+            for offset in (-2, 2):
+                with self.subTest(axis=axis, offset=offset):
+                    native = self._surface(14, axis)
+                    face = BRepBuilderAPI_MakeFace(native, 0, 1, 0, 1, 1e-7).Face()
+                    window = ((offset, offset + 1, 0, 1) if axis == "u"
+                              else (0, 1, offset, offset + 1))
+                    fake_tools = mock.Mock()
+                    fake_tools.UVBounds_s.return_value = window
+                    bin_out = surface_extract._Bin()
+                    with mock.patch.object(surface_extract, "BRepTools", fake_tools):
+                        payload = surface_extract._surface_payload(face, bin_out)
+                    surface_extract._assert_surface_covers_face(payload, *window, bin_out)
+                    rebuilt = _rebuild_bspline_surface(payload, bin_out.payload())
+                    for a in (.01, .4, .99):
+                        u, v = ((offset + a, .5) if axis == "u"
+                                else (.5, offset + a))
+                        self.assertLess(native.Value(u, v).Distance(rebuilt.Value(u, v)),
+                                         2e-6)
+
+    def test_coverage_guard_rejects_outer_support_span(self):
+        from cadgen._internal import surface_extract
+
+        for axis in ("u", "v"):
+            with self.subTest(axis=axis):
+                native = self._surface(14, axis)
+                spline = native.Copy()
+                if axis == "u":
+                    spline.SetUNotPeriodic()
+                    surface_extract._shift_knots(1, spline.NbUKnots, spline.UKnot,
+                                                  spline.SetUKnot)
+                else:
+                    spline.SetVNotPeriodic()
+                    surface_extract._shift_knots(1, spline.NbVKnots, spline.VKnot,
+                                                  spline.SetVKnot)
+                bin_out = surface_extract._Bin()
+                payload = surface_extract._nurbs_surface_payload(spline, bin_out)
+                with self.assertRaises(surface_extract.Unextractable):
+                    surface_extract._assert_surface_covers_face(payload, 0, 1, 0, 1,
+                                                                bin_out)
+
+
 if __name__ == "__main__":
     unittest.main()
