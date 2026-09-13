@@ -1,0 +1,86 @@
+{
+  "name": "@emdash/chat-ui",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Solid-based chat transcript renderer with pretext layout engine",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Hardcore Contributors",
+    "url": "https://github.com/amywork777/hardcore"
+  },
+  "type": "module",
+  "sideEffects": [
+    "./dist/style.css"
+  ],
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/src/index.d.ts"
+    },
+    "./style.css": "./dist/style.css"
+  },
+  "scripts": {
+    "build": "vite build --config vite.lib.config.ts",
+    "dev": "vite build --config vite.lib.config.ts --watch",
+    "storybook": "node ../../tooling/scripts/ensure-packages-built.mjs && storybook dev -p 6007",
+    "build-storybook": "storybook build",
+    "lint": "oxlint src",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --project \"!perf\"",
+    "test:perf": "vitest run --project perf",
+    "test:bench": "vitest bench --project browser"
+  },
+  "dependencies": {
+    "@chenglou/pretext": "^0.0.8",
+    "@emdash/core": "workspace:*",
+    "@emdash/shared": "workspace:*",
+    "@fontsource-variable/inter": "^5.2.8",
+    "@fontsource-variable/jetbrains-mono": "5.2.8",
+    "@shikijs/langs": "^4.2.0",
+    "@vanilla-extract/css": "^1.20.1",
+    "@vanilla-extract/dynamic": "^2.1.5",
+    "@vanilla-extract/recipes": "^0.5.7",
+    "@vanilla-extract/sprinkles": "^1.6.5",
+    "@vanilla-extract/vite-plugin": "^5.2.2",
+    "beautiful-mermaid": "^1.1.3",
+    "clsx": "^2.1.1",
+    "mdast-util-to-string": "^4.0.0",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
+    "remark-parse": "^11.0.0",
+    "shiki": "^4.2.0",
+    "solid-js": "^1.9.13",
+    "unified": "^11.0.5",
+    "unist-util-visit": "^5.1.0",
+    "vfile": "^6.0.3"
+  },
+  "devDependencies": {
+    "@storybook/addon-docs": "^10.4.5",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@types/mdast": "^4.0.4",
+    "@types/node": "^20.10.0",
+    "@types/react": "^19.0.0",
+    "@types/unist": "^3.0.3",
+    "@vitest/browser": "^4.1.8",
+    "@vitest/browser-playwright": "^4.1.8",
+    "devicon": "^2.17.0",
+    "oxfmt": "^0.51.0",
+    "oxlint": "^1.69.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "storybook": "^10.4.5",
+    "storybook-solidjs-vite": "10.4.0",
+    "typescript": "^6.0.2",
+    "vite": "7.1.11",
+    "vite-plugin-dts": "5.0.2",
+    "vite-plugin-solid": "2.11.12",
+    "vitest": "^4.1.8"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "packageManager": "pnpm@10.28.2"
+}

@@ -1,0 +1,52 @@
+{
+  "name": "@emdash/workspace-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hardcore Workspace Server — runs as a daemon on remote machines and exposes workspace runtimes via wire",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Hardcore Contributors",
+    "url": "https://github.com/amywork777/hardcore"
+  },
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "scripts": {
+    "build": "tsdown --config-loader tsx",
+    "dev": "tsx --watch src/index.ts",
+    "dev:remote": "tsx scripts/dev-remote.ts",
+    "dev:remote-app": "EMDASH_WORKSPACE_SERVER_ARTIFACTS_URL=http://minio:9000/emdash-releases/workspace-server EMDASH_WORKSPACE_SERVER_DEV_AUTO_UPDATE=1 pnpm --dir ../emdash-desktop run dev",
+    "package": "tsx scripts/package.ts",
+    "package:dev": "EMDASH_WS_DEV_BUILD=1 tsx scripts/package.ts --target linux-arm64",
+    "upload:dev": "EMDASH_WS_DEV_UPLOAD=1 EMDASH_WS_UPLOAD_ENDPOINT=http://localhost:9000/emdash-releases EMDASH_WS_UPLOAD_ACCESS_KEY=minioadmin EMDASH_WS_UPLOAD_SECRET_KEY=minioadmin tsx scripts/upload-r2.ts",
+    "upload:r2": "tsx scripts/upload-r2.ts",
+    "run:docker-remote": "docker compose up --build -d minio minio-setup workspace-remote",
+    "start": "node dist/index.mjs",
+    "test": "vitest run",
+    "lint": "oxlint .",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "typecheck": "tsgo --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@emdash/core": "workspace:*",
+    "@emdash/plugins": "workspace:*",
+    "@emdash/shared": "workspace:*",
+    "@emdash/wire": "workspace:*",
+    "@parcel/watcher": "2.5.6",
+    "better-sqlite3": "12.10.0",
+    "node-pty": "1.1.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.1",
+    "@typescript/native-preview": "7.0.0-dev.20260609.1",
+    "s3mini": "^0.9.5",
+    "tsdown": "^0.22.2",
+    "tsx": "^4.22.4",
+    "vitest": "^4.1.0"
+  },
+  "engines": {
+    "node": ">=24.0.0",
+    "pnpm": ">=10.28.0"
+  }
+}

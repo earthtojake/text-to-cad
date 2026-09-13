@@ -1,0 +1,48 @@
+export { fileSearchContract, type FileSearchContract } from './contract';
+export {
+  contentSearchErrorSchema,
+  fileSearchRegisterRootErrorSchema,
+  fileSearchRootUnavailableReasonSchema,
+  fileSearchUnregisterRootErrorSchema,
+  pathSearchErrorSchema,
+  type ContentSearchError,
+  type FileSearchRegisterRootError,
+  type FileSearchRootUnavailableReason,
+  type FileSearchUnregisterRootError,
+  type PathSearchError,
+} from './errors';
+export { pathEntryKinds } from './path-entry-kind';
+export {
+  CONTENT_SEARCH_DEFAULT_LIMIT,
+  CONTENT_SEARCH_MAX_LIMIT,
+  CONTENT_SEARCH_MAX_PREVIEW_LENGTH,
+  FILE_SEARCH_MAX_QUERY_LENGTH,
+  PATH_SEARCH_DEFAULT_LIMIT,
+  PATH_SEARCH_MAX_LIMIT,
+  contentSearchFileResultSchema,
+  contentSearchInputSchema,
+  contentSearchLineMatchSchema,
+  contentSearchLocationSchema,
+  contentSearchProgressSchema,
+  contentSearchRangeSchema,
+  contentSearchResultSchema,
+  fileSearchRootInputSchema,
+  pathEntryKindSchema,
+  pathSearchHitSchema,
+  pathSearchInputSchema,
+  pathSearchResultSchema,
+  type ContentSearchFileResult,
+  type ContentSearchInput,
+  type ContentSearchLineMatch,
+  type ContentSearchLocation,
+  type ContentSearchProgress,
+  type ContentSearchRange,
+  type ContentSearchResult,
+  type FileSearchRootInput,
+  type PathEntryKind,
+  type PathSearchHit,
+  type PathSearchInput,
+  type PathSearchResult,
+} from './schemas';
+
+export { fileSearchWorker } from './worker';

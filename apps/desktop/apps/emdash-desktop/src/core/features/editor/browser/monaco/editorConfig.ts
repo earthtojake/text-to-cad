@@ -1,0 +1,42 @@
+import type { editor } from 'monaco-editor';
+
+/** Shared options for all DiffEditor instances in the diff viewer. */
+export const DIFF_EDITOR_BASE_OPTIONS: editor.IDiffEditorConstructionOptions = {
+  originalEditable: false,
+  fontSize: 13,
+  lineHeight: 20,
+  minimap: { enabled: false },
+  scrollBeyondLastLine: false,
+  wordWrap: 'on',
+  lineNumbers: 'on',
+  lineNumbersMinChars: 2,
+  readOnly: true,
+  renderIndicators: true,
+  overviewRulerLanes: 3,
+  renderOverviewRuler: true,
+  overviewRulerBorder: false,
+  automaticLayout: true,
+  scrollbar: {
+    vertical: 'auto',
+    horizontal: 'auto',
+    useShadows: false,
+    verticalScrollbarSize: 4,
+    horizontalScrollbarSize: 4,
+    arrowSize: 0,
+    verticalHasArrows: false,
+    horizontalHasArrows: false,
+    alwaysConsumeMouseWheel: false,
+    verticalSliderSize: 4,
+    horizontalSliderSize: 4,
+  },
+  // Collapsed unchanged regions break drag-selection across large diffs (ENG-1248).
+  hideUnchangedRegions: { enabled: false },
+  diffWordWrap: 'on',
+  enableSplitViewResizing: false,
+  smoothScrolling: true,
+  cursorSmoothCaretAnimation: 'on',
+  padding: { top: 8, bottom: 8 },
+  folding: false,
+  useInlineViewWhenSpaceIsLimited: false,
+  glyphMargin: true,
+};

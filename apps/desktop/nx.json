@@ -1,0 +1,78 @@
+{
+  "$schema": "./node_modules/nx/schemas/nx-schema.json",
+  "namedInputs": {
+    "default": [
+      "{projectRoot}/**/*",
+      "sharedGlobals"
+    ],
+    "sharedGlobals": [
+      "{workspaceRoot}/.oxlintrc.json",
+      "{workspaceRoot}/.oxfmtrc.json",
+      "{workspaceRoot}/tooling/oxlint/**/*",
+      "{workspaceRoot}/tooling/scripts/**/*",
+      "{workspaceRoot}/pnpm-lock.yaml"
+    ]
+  },
+  "targetDefaults": {
+    "build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "default"
+      ],
+      "cache": true,
+      "outputs": [
+        "{projectRoot}/dist",
+        "{projectRoot}/out"
+      ]
+    },
+    "typecheck": {
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "default"
+      ],
+      "cache": true
+    },
+    "test": {
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "default",
+        {
+          "env": "CI"
+        },
+        {
+          "env": "EMDASH_TEST_SKIP_BROWSER"
+        }
+      ],
+      "cache": true
+    },
+    "lint": {
+      "inputs": [
+        "default"
+      ],
+      "cache": true
+    },
+    "format:check": {
+      "inputs": [
+        "default"
+      ],
+      "cache": true
+    },
+    "dev": {
+      "dependsOn": [
+        "^build"
+      ]
+    },
+    "storybook": {
+      "dependsOn": [
+        "^build"
+      ]
+    }
+  },
+  "analytics": false
+}

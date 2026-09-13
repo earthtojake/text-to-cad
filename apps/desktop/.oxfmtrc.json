@@ -1,0 +1,38 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 100,
+  "tabWidth": 2,
+  "useTabs": false,
+  "singleQuote": true,
+  "jsxSingleQuote": false,
+  "semi": true,
+  "trailingComma": "es5",
+  "bracketSpacing": true,
+  "bracketSameLine": false,
+  "arrowParens": "always",
+  "endOfLine": "lf",
+  "ignorePatterns": [
+    "**/.git",
+    "**/node_modules",
+    "**/dist",
+    "**/.next",
+    "**/build",
+    "**/.turbo",
+    "**/out",
+    "**/storybook-static",
+    "**/.env*",
+    "**/pnpm-lock.yaml",
+    "**/yarn.lock",
+    "**/*.md",
+    "**/*.yaml",
+    "**/*.yml"
+  ],
+  "sortImports": {
+    "newlinesBetween": false,
+    "internalPattern": ["@/", "@root/", "@shared/", "@main/", "@renderer/"]
+  },
+  "sortTailwindcss": {
+    "stylesheet": "./apps/emdash-desktop/src/renderer/index.css"
+  },
+  "sortPackageJson": true
+}

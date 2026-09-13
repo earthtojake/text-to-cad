@@ -1,0 +1,1 @@
+ALTER TABLE `terminals` ADD `shell_id` text DEFAULT 'system' NOT NULL;

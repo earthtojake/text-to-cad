@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hardcore design-system exploration</title>
+    <link rel="stylesheet" href="./mockup.css" />
+  </head>
+  <body data-theme="hardcore">
+    <svg class="symbol-library" aria-hidden="true">
+      <defs>
+        <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7.5V6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5Z"/><path d="M3 9h18"/></symbol>
+        <symbol id="i-chat" viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 4v-4H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/></symbol>
+        <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+        <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+        <symbol id="i-cube" viewBox="0 0 24 24"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9Z"/><path d="m4.5 7.8 7.5 4.3 7.5-4.3M12 12.1V21"/></symbol>
+        <symbol id="i-files" viewBox="0 0 24 24"><path d="M8 3h7l4 4v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M15 3v5h5M3 7v12a2 2 0 0 0 2 2"/></symbol>
+        <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16.5 8"/></symbol>
+        <symbol id="i-loader" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v6h-6"/></symbol>
+        <symbol id="i-send" viewBox="0 0 24 24"><path d="m21 3-7.5 18-3.2-7.3L3 10.5Z"/><path d="M10.3 13.7 21 3"/></symbol>
+        <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m8 10 4 4 4-4"/></symbol>
+        <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+        <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></symbol>
+        <symbol id="i-archive" viewBox="0 0 24 24"><path d="M4 8h16v12H4Z"/><path d="M3 4h18v4H3ZM9 12h6"/></symbol>
+        <symbol id="i-branch" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 7v8a4 4 0 0 0 4 4M8 5h3a7 7 0 0 1 7 7"/></symbol>
+        <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1"/><path d="M9 4v16"/></symbol>
+        <symbol id="i-sketch" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16"/><circle cx="8" cy="16" r="1.5"/><circle cx="16" cy="8" r="1.5"/><path d="m9.2 14.8 5.6-5.6"/></symbol>
+        <symbol id="i-extrude" viewBox="0 0 24 24"><path d="m4 9 8 4 8-4-8-4Z"/><path d="M4 9v7l8 4 8-4V9M12 13v7"/></symbol>
+        <symbol id="i-fillet" viewBox="0 0 24 24"><path d="M5 19V9a4 4 0 0 1 4-4h10"/><path d="M9 19H5v-4"/></symbol>
+        <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></symbol>
+        <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11"/><path d="M16 8V5H5v11h3"/></symbol>
+      </defs>
+    </svg>
+
+    <div class="concept-switcher" aria-label="Mockup theme selector">
+      <span class="switcher-label">Design direction</span>
+      <button type="button" data-set-theme="smui">01 · SMUI refined</button>
+      <button type="button" data-set-theme="studio">02 · Precision studio</button>
+      <button type="button" data-set-theme="hardcore">03 · Hardcore drafting</button>
+    </div>
+
+    <div class="presentation">
+      <div class="concept-heading">
+        <div>
+          <span class="eyebrow" id="concept-number">OPTION 03</span>
+          <h1 id="concept-name">Hardcore Drafting</h1>
+        </div>
+        <p id="concept-description">An ownable CAD-native system built from drawing paper, blueprint ink, title-block typography, and orange markup for geometry references.</p>
+      </div>
+
+      <section class="app-window" aria-label="Hardcore desktop mockup">
+        <header class="window-bar">
+          <div class="traffic-lights" aria-hidden="true"><i></i><i></i><i></i></div>
+          <button class="icon-button sidebar-toggle" aria-label="Toggle projects"><svg><use href="#i-panel"/></svg></button>
+          <div class="window-title"><svg class="icon"><use href="#i-cube"/></svg><strong>Hardcore</strong><span>/</span><span>Rover chassis</span></div>
+          <div class="window-actions"><span class="sync-state"><svg class="icon"><use href="#i-check"/></svg> Saved locally</span><button class="quiet-button"><svg class="icon"><use href="#i-panel"/></svg> Panels <svg class="icon caret"><use href="#i-chevron"/></svg></button></div>
+        </header>
+
+        <div class="workspace">
+          <aside class="projects-panel">
+            <div class="panel-topline"><span>Projects</span><button class="text-button"><svg class="icon"><use href="#i-plus"/></svg> New</button></div>
+
+            <div class="project-block open">
+              <div class="project-row"><svg class="icon"><use href="#i-folder"/></svg><strong>Rover chassis</strong><div class="row-actions"><button aria-label="Project actions"><svg><use href="#i-more"/></svg></button><button aria-label="New chat"><svg><use href="#i-plus"/></svg></button></div></div>
+              <div class="thread-list">
+                <div class="thread-row running"><span class="status-mark"><svg><use href="#i-loader"/></svg></span><div><strong>Suspension clearance</strong><small>Building wheel envelope</small></div><time>18s</time></div>
+                <div class="thread-row active"><svg class="icon"><use href="#i-chat"/></svg><div><strong>Reduce steering bracket weight</strong><small>steering-bracket.step</small></div><time>4m</time><button class="thread-menu" aria-label="Thread actions"><svg><use href="#i-more"/></svg></button></div>
+                <div class="thread-row"><svg class="icon"><use href="#i-chat"/></svg><div><strong>Compare hub materials</strong><small>Discussion</small></div><time>2h</time></div>
+                <div class="thread-row done"><svg class="icon"><use href="#i-check"/></svg><div><strong>Import motor mount</strong><small>Completed</small></div><time>1d</time></div>
+              </div>
+              <button class="archive-row"><svg class="icon"><use href="#i-archive"/></svg><span>Archived</span><span>3</span><svg class="icon caret"><use href="#i-chevron"/></svg></button>
+            </div>
+
+            <div class="project-block">
+              <div class="project-row"><svg class="icon"><use href="#i-folder"/></svg><strong>Camera enclosure</strong><div class="row-actions"><button aria-label="Project actions"><svg><use href="#i-more"/></svg></button><button aria-label="New chat"><svg><use href="#i-plus"/></svg></button></div></div>
+              <div class="thread-list compact">
+                <div class="thread-row"><svg class="icon"><use href="#i-chat"/></svg><div><strong>Seal redesign</strong><small>enclosure.step</small></div><time>3d</time></div>
+              </div>
+            </div>
+
+            <div class="sidebar-footer">
+              <button><svg class="icon"><use href="#i-search"/></svg> Search <kbd>⌘K</kbd></button>
+              <button><svg class="icon"><use href="#i-settings"/></svg> Settings</button>
+            </div>
+          </aside>
+
+          <main class="chat-panel">
+            <header class="chat-header">
+              <div class="chat-heading"><svg class="icon"><use href="#i-chat"/></svg><div><strong>Reduce steering bracket weight</strong><small>Rover chassis</small></div></div>
+              <div class="chat-actions"><span class="run-pill"><svg class="icon"><use href="#i-loader"/></svg> Working</span><button class="icon-button" aria-label="Chat actions"><svg><use href="#i-more"/></svg></button></div>
+            </header>
+
+            <div class="conversation">
+              <div class="user-message">Make the steering bracket 20% lighter without changing its mounting points. Keep it machinable from 6061 aluminum.</div>
+
+              <article class="assistant-turn">
+                <div class="agent-line"><span class="agent-mark">H</span><strong>Hardcore</strong><span>·</span><span>Codex 5.6 Sol</span></div>
+                <p>I’ll preserve the four mounting interfaces, remove material from the neutral zones, and validate the revised STEP.</p>
+                <div class="work-card">
+                  <div class="work-card-header"><svg class="icon"><use href="#i-loader"/></svg><strong>Optimizing bracket</strong><span>3 steps</span><svg class="icon caret"><use href="#i-chevron"/></svg></div>
+                  <div class="work-step complete"><svg class="icon"><use href="#i-check"/></svg><span>Measured the current model</span><small>842 g</small></div>
+                  <div class="work-step complete"><svg class="icon"><use href="#i-check"/></svg><span>Added two lightening pockets</span><small>−176 g</small></div>
+                  <div class="work-step active"><svg class="icon"><use href="#i-loader"/></svg><span>Validating geometry and wall thickness</span><small>Running</small></div>
+                </div>
+                <div class="artifact-card">
+                  <svg class="artifact-icon"><use href="#i-cube"/></svg>
+                  <div><span class="card-label">UPDATED ARTIFACT</span><strong>steering-bracket.step</strong><small>Revision 12 · 666 g · Geometry valid</small></div>
+                  <button>Open <span>→</span></button>
+                </div>
+              </article>
+            </div>
+
+            <div class="composer-wrap">
+              <div class="composer">
+                <textarea aria-label="Message" placeholder="Ask about the project or describe a change…"></textarea>
+                <div class="composer-bar">
+                  <button class="add-context" aria-label="Add context"><svg><use href="#i-plus"/></svg></button>
+                  <button class="model-picker"><span class="provider-mark">◆</span> Codex · GPT-5.6 Sol <svg class="icon caret"><use href="#i-chevron"/></svg></button>
+                  <span class="context-file"><svg class="icon"><use href="#i-cube"/></svg> steering-bracket.step</span>
+                  <button class="send-button" aria-label="Send"><svg><use href="#i-send"/></svg></button>
+                </div>
+              </div>
+              <div class="composer-meta"><span><svg class="icon"><use href="#i-branch"/></svg> Local</span><span>CAD skills ready</span></div>
+            </div>
+          </main>
+
+          <section class="artifact-panel">
+            <header class="artifact-header">
+              <div class="artifact-title"><svg class="icon"><use href="#i-cube"/></svg><div><strong>steering-bracket.step</strong><small>Canonical artifact · Revision 12</small></div></div>
+              <nav class="artifact-switcher" aria-label="Outputs"><button class="selected"><svg class="icon"><use href="#i-cube"/></svg> 3D model</button><button><svg class="icon"><use href="#i-files"/></svg> Files</button></nav>
+              <div class="artifact-actions"><button aria-label="Copy reference"><svg><use href="#i-copy"/></svg></button><button aria-label="View options"><svg><use href="#i-eye"/></svg></button><button aria-label="More artifact actions"><svg><use href="#i-more"/></svg></button></div>
+            </header>
+
+            <div class="artifact-body">
+              <div class="cad-canvas">
+                <div class="viewer-toolbar"><button>−</button><strong>100%</strong><button>+</button><span></span><button aria-label="Select">↖</button><button aria-label="Pan">✋</button><button aria-label="Measure">⌁</button><button aria-label="Fit">⌗</button></div>
+                <svg class="cad-model" viewBox="0 0 800 620" role="img" aria-label="Isometric steering bracket">
+                  <g class="grid-lines">
+                    <path d="M0 100 800 560M0 210 710 620M120 0 800 395M300 0 800 288M500 0 800 172"/>
+                    <path d="m800 100-800 460m800-350L90 620M680 0 0 395M500 0 0 288M300 0 0 172"/>
+                  </g>
+                  <ellipse class="model-shadow" cx="399" cy="470" rx="270" ry="74"/>
+                  <g class="bracket">
+                    <path class="side-a" d="M166 335 425 466 425 520 166 388Z"/>
+                    <path class="side-b" d="m425 466 223-128v54L425 520Z"/>
+                    <path class="top" d="m166 335 221-127 261 130-223 128Z"/>
+                    <ellipse class="cut" cx="249" cy="335" rx="27" ry="15" transform="rotate(26 249 335)"/>
+                    <ellipse class="cut" cx="535" cy="352" rx="27" ry="15" transform="rotate(26 535 352)"/>
+                    <path class="pocket" d="m294 351 104-60 121 60-105 60Z"/>
+                    <path class="pocket-depth" d="m294 351 120 60v23l-120-61Z"/>
+                    <path class="pocket-depth-b" d="m414 411 105-60v23l-105 60Z"/>
+                    <ellipse class="boss-side" cx="406" cy="280" rx="81" ry="48"/>
+                    <path class="boss-wall" d="M325 269v-48h162v59c-6 29-41 48-81 48s-75-19-81-48Z"/>
+                    <ellipse class="boss-top" cx="406" cy="221" rx="81" ry="48"/>
+                    <ellipse class="boss-hole" cx="406" cy="221" rx="34" ry="20"/>
+                    <path class="selection" d="m166 335 221-127 261 130-223 128Z"/>
+                  </g>
+                  <g class="dimension">
+                    <path d="M180 410v70m235 50v48M180 470l235 118"/>
+                    <path d="m180 470 13-2-7 12m229 108-13 2 7-12"/>
+                    <rect x="264" y="513" width="94" height="26" rx="4"/>
+                    <text x="311" y="531" text-anchor="middle">180.00 mm</text>
+                  </g>
+                </svg>
+                <div class="axis-widget"><i class="axis-x">X</i><i class="axis-y">Y</i><i class="axis-z">Z</i></div>
+                <div class="selection-toast"><kbd>⌘C</kbd> Copy selected face reference</div>
+              </div>
+
+              <aside class="design-panel">
+                <div class="design-tabs"><button class="active">Design</button><button>Geometry</button><button aria-label="Hide panel">«</button></div>
+                <div class="tree-heading"><span>FEATURE TREE</span><button><svg><use href="#i-more"/></svg></button></div>
+                <div class="feature-tree">
+                  <div class="feature active"><span class="tree-line"></span><svg class="icon"><use href="#i-sketch"/></svg><div><strong>Sketch 1</strong><small>Top plane · Fully defined</small></div><svg class="icon eye"><use href="#i-eye"/></svg></div>
+                  <div class="feature"><span class="tree-line"></span><svg class="icon"><use href="#i-extrude"/></svg><div><strong>Boss-Extrude 1</strong><small>Base plate</small></div></div>
+                  <div class="feature"><span class="tree-line"></span><svg class="icon"><use href="#i-sketch"/></svg><div><strong>Sketch 2</strong><small>Lightening pockets</small></div></div>
+                  <div class="feature"><span class="tree-line"></span><svg class="icon"><use href="#i-extrude"/></svg><div><strong>Cut-Extrude 1</strong><small>Through all</small></div></div>
+                  <div class="feature"><span class="tree-line"></span><svg class="icon"><use href="#i-fillet"/></svg><div><strong>Fillet 1</strong><small>4 edges</small></div></div>
+                </div>
+                <div class="parameter-heading"><span>SKETCH 1 PARAMETERS</span><span class="linked-state"><svg class="icon"><use href="#i-check"/></svg> Linked</span></div>
+                <div class="parameter-list">
+                  <label><span>Overall width</span><div class="number-field"><input value="180.00"/><em>mm</em></div></label>
+                  <label><span>Overall depth</span><div class="number-field"><input value="96.00"/><em>mm</em></div></label>
+                  <label><span>Plate thickness</span><div class="number-field"><input value="16.00"/><em>mm</em></div></label>
+                  <label><span>Mount hole Ø</span><div class="number-field"><input value="12.00"/><em>mm</em></div></label>
+                </div>
+                <div class="parameter-note"><span></span><p>Editing a value rebuilds the canonical STEP through cadgen.</p></div>
+              </aside>
+            </div>
+          </section>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const themes = {
+        smui: {
+          number: 'OPTION 01',
+          name: 'SMUI Refined',
+          description: 'Jake’s Nord-derived visual language, tightened for a dense CAD desktop: sharp edges, monospace metadata, quiet blue surfaces.'
+        },
+        studio: {
+          number: 'OPTION 02',
+          name: 'Precision Studio',
+          description: 'A calmer professional-tool direction inspired by creative and engineering software: warm neutrals, legible hierarchy, restrained blue focus.'
+        },
+        hardcore: {
+          number: 'OPTION 03',
+          name: 'Hardcore Drafting',
+          description: 'An ownable CAD-native system built from drawing paper, blueprint ink, title-block typography, and orange markup for geometry references.'
+        }
+      };
+
+      function setTheme(theme) {
+        const next = themes[theme] ? theme : 'hardcore';
+        document.body.dataset.theme = next;
+        document.querySelector('#concept-number').textContent = themes[next].number;
+        document.querySelector('#concept-name').textContent = themes[next].name;
+        document.querySelector('#concept-description').textContent = themes[next].description;
+        document.querySelectorAll('[data-set-theme]').forEach((button) => {
+          button.classList.toggle('active', button.dataset.setTheme === next);
+        });
+        const url = new URL(window.location.href);
+        url.searchParams.set('theme', next);
+        history.replaceState({}, '', url);
+      }
+
+      document.querySelectorAll('[data-set-theme]').forEach((button) => {
+        button.addEventListener('click', () => setTheme(button.dataset.setTheme));
+      });
+
+      setTheme(new URLSearchParams(window.location.search).get('theme') || 'hardcore');
+    </script>
+  </body>
+</html>

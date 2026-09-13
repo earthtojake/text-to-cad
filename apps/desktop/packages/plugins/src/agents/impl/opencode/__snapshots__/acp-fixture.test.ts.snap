@@ -1,0 +1,397 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`OpenCode ACP fixture parsing > agents 1`] = `[]`;
+
+exports[`OpenCode ACP fixture parsing > config 1`] = `
+{
+  "availableCommands": [
+    {
+      "description": "guided AGENTS.md setup",
+      "name": "init",
+      "source": "provider-command",
+    },
+    {
+      "description": "review changes [commit|branch|pr], defaults to uncommitted",
+      "name": "review",
+      "source": "provider-command",
+    },
+    {
+      "description": "Use ONLY when the user is editing or creating opencode's own configuration: opencode.json, opencode.jsonc, files under .opencode/, or files under ~/.config/opencode/. Also use when creating or fixing opencode agents, subagents, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring opencode itself.",
+      "name": "customize-opencode",
+      "source": "provider-command",
+    },
+    {
+      "description": "Build, review, refactor, or architect ASP.NET Core web applications using current official guidance for .NET web development. Use when working on Blazor Web Apps, Razor Pages, MVC, Minimal APIs, controller-based Web APIs, SignalR, gRPC, middleware, dependency injection, configuration, authentication, authorization, testing, performance, deployment, or ASP.NET Core upgrades.",
+      "name": "aspnet-core",
+      "source": "provider-command",
+    },
+    {
+      "description": "compact the session",
+      "name": "compact",
+      "source": "provider-command",
+    },
+  ],
+  "efforts": {
+    "available": [
+      {
+        "id": "low",
+        "name": "Low",
+      },
+      {
+        "id": "medium",
+        "name": "Medium",
+      },
+      {
+        "id": "high",
+        "name": "High",
+      },
+      {
+        "id": "max",
+        "name": "Max",
+      },
+    ],
+    "configId": "effort",
+    "selected": "low",
+  },
+  "modeOptions": {
+    "available": [
+      {
+        "description": "The default agent. Executes tools based on configured permissions.",
+        "id": "build",
+        "name": "build",
+      },
+      {
+        "description": "Plan mode. Disallows all edit tools.",
+        "id": "plan",
+        "name": "plan",
+      },
+    ],
+    "configId": "mode",
+    "selected": "plan",
+  },
+  "modelOptions": {
+    "available": [
+      {
+        "id": "anthropic/claude-sonnet-4-6",
+        "name": "Anthropic/Claude Sonnet 4.6",
+      },
+      {
+        "id": "anthropic/claude-sonnet-4-5-20250929",
+        "name": "Anthropic/Claude Sonnet 4.5",
+      },
+      {
+        "id": "anthropic/claude-sonnet-4-5",
+        "name": "Anthropic/Claude Sonnet 4.5 (latest)",
+      },
+      {
+        "id": "anthropic/claude-sonnet-5",
+        "name": "Anthropic/Claude Sonnet 5",
+      },
+      {
+        "id": "anthropic/claude-opus-4-8-fast",
+        "name": "Anthropic/Claude Opus 4.8 Fast",
+      },
+      {
+        "id": "anthropic/claude-opus-4-8",
+        "name": "Anthropic/Claude Opus 4.8",
+      },
+      {
+        "id": "anthropic/claude-opus-4-7-fast",
+        "name": "Anthropic/Claude Opus 4.7 Fast",
+      },
+      {
+        "id": "anthropic/claude-opus-4-7",
+        "name": "Anthropic/Claude Opus 4.7",
+      },
+      {
+        "id": "anthropic/claude-opus-4-6-fast",
+        "name": "Anthropic/Claude Opus 4.6 Fast",
+      },
+      {
+        "id": "anthropic/claude-opus-4-6",
+        "name": "Anthropic/Claude Opus 4.6",
+      },
+      {
+        "id": "anthropic/claude-opus-4-5-20251101",
+        "name": "Anthropic/Claude Opus 4.5",
+      },
+      {
+        "id": "anthropic/claude-opus-4-5",
+        "name": "Anthropic/Claude Opus 4.5 (latest)",
+      },
+      {
+        "id": "anthropic/claude-haiku-4-5-20251001",
+        "name": "Anthropic/Claude Haiku 4.5",
+      },
+      {
+        "id": "anthropic/claude-haiku-4-5",
+        "name": "Anthropic/Claude Haiku 4.5 (latest)",
+      },
+      {
+        "id": "anthropic/claude-fable-5",
+        "name": "Anthropic/Claude Fable 5",
+      },
+      {
+        "id": "opencode/big-pickle",
+        "name": "OpenCode Zen/Big Pickle",
+      },
+      {
+        "id": "opencode/north-mini-code-free",
+        "name": "OpenCode Zen/North Mini Code Free",
+      },
+      {
+        "id": "opencode/nemotron-3-ultra-free",
+        "name": "OpenCode Zen/Nemotron 3 Ultra Free",
+      },
+      {
+        "id": "opencode/mimo-v2.5-free",
+        "name": "OpenCode Zen/MiMo V2.5 Free",
+      },
+      {
+        "id": "opencode/deepseek-v4-flash-free",
+        "name": "OpenCode Zen/DeepSeek V4 Flash Free",
+      },
+    ],
+    "configId": "model",
+    "selected": "anthropic/claude-sonnet-4-6",
+  },
+}
+`;
+
+exports[`OpenCode ACP fixture parsing > plan 1`] = `null`;
+
+exports[`OpenCode ACP fixture parsing > title 1`] = `null`;
+
+exports[`OpenCode ACP fixture parsing > transcript 1`] = `
+{
+  "active": null,
+  "committed": [
+    {
+      "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:0",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:0:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "In one sentence, without reading any files, what is emdash?",
+        },
+      ],
+      "seq": 0,
+    },
+    {
+      "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:1",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:1:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Think about how to explore this repo, then read \`AGENTS.md\` and give me the Repository Structure section as exactly 3 bullet points.",
+        },
+      ],
+      "seq": 1,
+    },
+    {
+      "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:2",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:2:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Search the codebase for the definition of \`toAgentUpdate\` — give the file path and line number.",
+        },
+      ],
+      "seq": 2,
+    },
+    {
+      "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:3",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:3:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Read \`packages/core/src/acp/agent-update.ts\` and \`packages/core/src/acp/session-machine.ts\`, then explain in two sentences how they relate.",
+        },
+      ],
+      "seq": 3,
+    },
+    {
+      "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:4",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:4:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Use your todo/task-tracking tool (TodoWrite or update_plan — do not just write a markdown list) to create exactly 4 items for auditing the ACP reducer module. Then actually complete items 1 and 2 using read-only work only: read \`packages/core/src/acp/reducer/reducer.ts\` for item 1 and search for \`NormalizedEvent\` in \`packages/core/src/acp/reducer\` for item 2. Before starting each item, mark it in_progress; after finishing each item, mark it completed. Leave items 3 and 4 pending and summarize what you did.",
+        },
+      ],
+      "seq": 4,
+    },
+    {
+      "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:5",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:5:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Update the existing todo/plan using the todo/task-tracking tool again: add a fifth item named "summarize parser fixture gaps", remove item 4 entirely, then mark every remaining item completed. Do not edit files.",
+        },
+      ],
+      "seq": 5,
+    },
+    {
+      "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:6",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:6:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Run \`git rev-parse --abbrev-ref HEAD\` and tell me the current branch name.",
+        },
+      ],
+      "seq": 6,
+    },
+    {
+      "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:7",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:7:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Run \`ls packages\` and list the workspace package names.",
+        },
+      ],
+      "seq": 7,
+    },
+    {
+      "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:8",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:8:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Create the file \`.acp-fixture-scratch/NOTES.md\` containing exactly this line: \`# ACP fixture notes\`",
+        },
+      ],
+      "seq": 8,
+    },
+    {
+      "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:9",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:9:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Append the line \`generated by fixture script\` to \`.acp-fixture-scratch/NOTES.md\`.",
+        },
+      ],
+      "seq": 9,
+    },
+    {
+      "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:10",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:10:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Rename \`.acp-fixture-scratch/NOTES.md\` to \`.acp-fixture-scratch/NOTES2.md\`, then delete \`.acp-fixture-scratch/NOTES2.md\`.",
+        },
+      ],
+      "seq": 10,
+    },
+    {
+      "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:11",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:11:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Launch a foreground subagent (Task tool) to read \`packages/core/src/acp/reducer/decode.ts\` and search \`packages/core/src/acp/reducer\` for \`NormalizedEvent\`, then summarize the files it looked at. The subagent should perform the read and search itself.",
+        },
+      ],
+      "seq": 11,
+    },
+    {
+      "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:12",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:12:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Launch two subagents in parallel. The first should summarize \`packages/core/src/acp/reducer/parser.ts\`; the second should summarize \`packages/core/src/acp/reducer/item-fold.ts\`. Wait for both and then combine their answers in two short bullets.",
+        },
+      ],
+      "seq": 12,
+    },
+    {
+      "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:13",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:13:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Launch a background subagent to search the repo for every usage of \`stopReason\` and write a short summary. Do not wait for it; answer immediately with the session id from \`pwd\` and say that the background task is running.",
+        },
+      ],
+      "seq": 13,
+    },
+    {
+      "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:14",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:14:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Check whether the background subagent from the previous step has finished. If it has, summarize its result; otherwise report that it is still running.",
+        },
+      ],
+      "seq": 14,
+    },
+    {
+      "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:15",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "ses_0c63394e0ffexIrDU5oCz8OiNR:turn:15:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Explain the ACP session lifecycle in detail, using markdown headings for each phase and including a fenced code block showing an example sequence of events.",
+        },
+      ],
+      "seq": 15,
+    },
+  ],
+}
+`;
+
+exports[`OpenCode ACP fixture parsing > usage 1`] = `null`;

@@ -115,7 +115,8 @@ def _why_one(model: str, as_json: bool) -> int:
         if number == 1:
             print(f"  [{mark}] 1 record {'missing' if clause.get('stale') else 'present'}")
         elif number == 2:
-            print(f"  [{mark}] 2 closure {clause.get('why') or f'{clause.get('files', 0)} files unchanged'}")
+            detail = clause.get("why") or f"{clause.get('files', 0)} files unchanged"
+            print(f"  [{mark}] 2 closure {detail}")
         elif number == 3:
             children = clause.get("children") or []
             print(f"  [{mark}] 3 children ({len(children)})")

@@ -1,0 +1,19 @@
+/* tokens.css — single entry point for all runtime CSS design tokens.
+ *
+ * Import this once as a side-effect to load the full token stack:
+ *   - theme.css      — palette ramps (--neutral-*, --accent-*, etc.) + per-.em<id> semantic vars
+ *   - semantic.css   — semantic aliases per polarity (.emlight / .emdark)
+ *   - typography.css — semantic typography role classes (.text-role-*)
+ *
+ * Surface cascade classes (.surface-*) and non-color design tokens (--text-*,
+ * --radius-*, --font-*, --animate-*) are emitted by the Vanilla Extract build
+ * pipeline into dist/style.css. Consumers must also import '@emdash/ui/style.css'.
+ *
+ * Usage in an app entry (e.g. main.tsx):
+ *   import '@emdash/ui/styles/tokens.css';
+ *   import '@emdash/ui/style.css';
+ */
+
+@import '@emdash/theme/theme.css';
+@import '@emdash/theme/semantic.css';
+@import './typography.css';

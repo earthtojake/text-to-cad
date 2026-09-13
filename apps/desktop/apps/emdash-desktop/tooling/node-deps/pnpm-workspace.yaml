@@ -1,0 +1,8 @@
+allowBuilds:
+  better-sqlite3: set this to true or false
+# Anchors tooling/node-deps as its own pnpm workspace root, isolated from the
+# repo workspace. This side project holds the better-sqlite3 copy built for the
+# system-Node ABI (the root node_modules copy stays Electron-compiled), so its
+# lockfile and virtual store must never merge into the repo install.
+onlyBuiltDependencies:
+  - better-sqlite3

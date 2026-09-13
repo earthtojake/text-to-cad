@@ -1,0 +1,4 @@
+provider: github
+owner: generalaction
+repo: emdash
+updaterCacheDirName: emdash-updater

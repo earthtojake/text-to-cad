@@ -1,0 +1,1019 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import '@xterm/xterm/css/xterm.css';
+
+@source '../core';
+
+@custom-variant emlight (&:is(.emlight *));
+@custom-variant emdark (&:is(.emdark *));
+
+@theme inline {
+  /* Keep Tailwind utilities on the same type contract as @emdash/ui. Without
+   * this bridge, text-sm/text-base silently fall back to Tailwind's 14/16px
+   * scale while shared controls render at 13/14px. */
+  --font-sans: var(--em-font-sans);
+  --font-mono: var(--em-font-mono);
+
+  --text-micro: var(--em-text-micro);
+  --text-micro--line-height: var(--em-text-micro--line-height);
+  --text-tiny: var(--em-text-tiny);
+  --text-tiny--line-height: var(--em-text-tiny--line-height);
+  --text-xs: var(--em-text-xs);
+  --text-xs--line-height: var(--em-text-xs--line-height);
+  --text-sm: var(--em-text-sm);
+  --text-sm--line-height: var(--em-text-sm--line-height);
+  --text-base: var(--em-text-base);
+  --text-base--line-height: var(--em-text-base--line-height);
+  --text-lg: var(--em-text-lg);
+  --text-lg--line-height: var(--em-text-lg--line-height);
+  --text-xl: var(--em-text-xl);
+  --text-xl--line-height: var(--em-text-xl--line-height);
+  --text-2xl: var(--em-text-2xl);
+  --text-2xl--line-height: var(--em-text-2xl--line-height);
+
+  --color-background: var(--background);
+  --color-background-1: var(--background-1);
+  --color-background-2: var(--background-2);
+  --color-background-3: var(--background-3);
+
+  --color-foreground: var(--foreground);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-foreground-passive: var(--foreground-passive);
+
+  --color-background-secondary: var(--background-secondary);
+  --color-background-secondary-1: var(--background-secondary-1);
+  --color-background-secondary-2: var(--background-secondary-2);
+  --color-background-secondary-3: var(--background-secondary-3);
+
+  --color-foreground-secondary: var(--foreground-secondary);
+
+  --color-background-tertiary: var(--background-tertiary);
+  --color-background-tertiary-1: var(--background-tertiary-1);
+  --color-background-tertiary-2: var(--background-tertiary-2);
+  --color-background-tertiary-3: var(--background-tertiary-3);
+
+  --color-foreground-tertiary: var(--foreground-tertiary);
+  --color-foreground-tertiary-muted: var(--foreground-tertiary-muted);
+  --color-foreground-tertiary-passive: var(--foreground-tertiary-passive);
+
+  --color-background-destructive: var(--background-destructive);
+  --color-foreground-destructive: var(--foreground-destructive);
+
+  --color-background-quaternary: var(--background-quaternary);
+  --color-background-quaternary-1: var(--background-quaternary-1);
+  --color-background-quaternary-2: var(--background-quaternary-2);
+
+  --color-primary-button-foreground: var(--primary-button-foreground);
+
+  --color-foreground-diff-added: var(--foreground-diff-added);
+  --color-foreground-diff-modified: var(--foreground-diff-modified);
+  --color-foreground-diff-deleted: var(--foreground-diff-deleted);
+
+  --color-border: var(--border);
+  --color-border-1: var(--border-1);
+  --color-border-2: var(--border-2);
+  --color-border-destructive: var(--border-destructive);
+  --color-border-primary: var(--border-primary);
+  --color-ring: var(--ring);
+
+  --color-status-in-progress: var(--status-in-progress);
+  --color-status-in-review: var(--status-in-review);
+  --color-status-done: var(--status-done);
+  --color-status-todo: var(--status-todo);
+  --color-status-cancelled: var(--status-cancelled);
+
+  --color-foreground-success: var(--foreground-success);
+  --color-background-success: var(--background-success);
+  --color-border-success: var(--border-success);
+
+  --color-foreground-error: var(--foreground-error);
+
+  --color-foreground-warning: var(--foreground-warning);
+  --color-background-warning: var(--background-warning);
+  --color-background-warning-hover: var(--background-warning-hover);
+  --color-border-warning: var(--border-warning);
+
+  --color-foreground-info: var(--foreground-info);
+  --color-background-info: var(--background-info);
+  --color-background-info-hover: var(--background-info-hover);
+  --color-border-info: var(--border-info);
+
+  --color-foreground-conflict: var(--foreground-conflict);
+  --color-foreground-merged: var(--foreground-merged);
+
+  /* Tailwind shadow utilities follow the shared elevation ladder. */
+  --shadow-sm: var(--em-shadow-sm);
+  --shadow-md: var(--em-shadow-md);
+  --shadow-lg: var(--em-shadow-lg);
+
+  /* Tailwind radius utilities must resolve to the same geometry as the shared
+   * UI package. The previous zero values made controls that used rounded-* in
+   * source compile to square hover and selected states at runtime. */
+  --radius-xs: var(--hc-radius-xs, 4px);
+  --radius-sm: var(--hc-radius-sm, 6px);
+  --radius-md: var(--hc-radius-md, 8px);
+  --radius-lg: var(--hc-radius-lg, 10px);
+  --radius-xl: var(--hc-radius-xl, 14px);
+  --radius-2xl: var(--hc-radius-2xl, 20px);
+  --radius-full: var(--hc-radius-full, 9999px);
+}
+
+::selection {
+  background: var(--selection);
+  color: var(--selection-foreground);
+}
+
+/* Hide xterm viewport scrollbars in embedded terminals */
+.xterm .xterm-viewport {
+  background-color: transparent !important;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+.xterm .xterm-viewport::-webkit-scrollbar {
+  width: 0 !important; /* Chrome/Safari */
+  height: 0 !important;
+}
+
+@layer base {
+  .emlight {
+    /* ── Color palette (Radix P3) ──────────────────────────────── */
+
+    /* Neutral */
+    --neutral-1: color(display-p3 0.988 0.988 0.988);
+    --neutral-2: color(display-p3 0.975 0.975 0.975);
+    --neutral-3: color(display-p3 0.939 0.939 0.939);
+    --neutral-4: color(display-p3 0.908 0.908 0.908);
+    --neutral-5: color(display-p3 0.88 0.88 0.88);
+    --neutral-6: color(display-p3 0.849 0.849 0.849);
+    --neutral-7: color(display-p3 0.807 0.807 0.807);
+    --neutral-8: color(display-p3 0.732 0.732 0.732);
+    --neutral-9: color(display-p3 0.553 0.553 0.553);
+    --neutral-10: color(display-p3 0.512 0.512 0.512);
+    --neutral-11: color(display-p3 0.392 0.392 0.392);
+    --neutral-12: color(display-p3 0.125 0.125 0.125);
+
+    /* Red */
+    --red-1: color(display-p3 0.998 0.989 0.988);
+    --red-2: color(display-p3 0.995 0.971 0.971);
+    --red-3: color(display-p3 0.985 0.925 0.925);
+    --red-4: color(display-p3 0.999 0.866 0.866);
+    --red-5: color(display-p3 0.984 0.812 0.811);
+    --red-6: color(display-p3 0.955 0.751 0.749);
+    --red-7: color(display-p3 0.915 0.675 0.672);
+    --red-8: color(display-p3 0.872 0.575 0.572);
+    --red-9: color(display-p3 0.83 0.329 0.324);
+    --red-10: color(display-p3 0.798 0.294 0.285);
+    --red-11: color(display-p3 0.744 0.234 0.222);
+    --red-12: color(display-p3 0.36 0.115 0.143);
+
+    /* Green (Radix grass) */
+    --green-1: color(display-p3 0.986 0.996 0.985);
+    --green-2: color(display-p3 0.966 0.983 0.964);
+    --green-3: color(display-p3 0.923 0.965 0.917);
+    --green-4: color(display-p3 0.872 0.94 0.865);
+    --green-5: color(display-p3 0.811 0.908 0.802);
+    --green-6: color(display-p3 0.733 0.864 0.724);
+    --green-7: color(display-p3 0.628 0.803 0.622);
+    --green-8: color(display-p3 0.477 0.72 0.482);
+    --green-9: color(display-p3 0.38 0.647 0.378);
+    --green-10: color(display-p3 0.344 0.598 0.342);
+    --green-11: color(display-p3 0.263 0.488 0.261);
+    --green-12: color(display-p3 0.151 0.233 0.153);
+
+    /* Blue */
+    --blue-1: color(display-p3 0.986 0.992 0.999);
+    --blue-2: color(display-p3 0.96 0.979 0.998);
+    --blue-3: color(display-p3 0.912 0.956 0.991);
+    --blue-4: color(display-p3 0.853 0.932 1);
+    --blue-5: color(display-p3 0.788 0.894 0.998);
+    --blue-6: color(display-p3 0.709 0.843 0.976);
+    --blue-7: color(display-p3 0.606 0.777 0.947);
+    --blue-8: color(display-p3 0.451 0.688 0.917);
+    --blue-9: color(display-p3 0.247 0.556 0.969);
+    --blue-10: color(display-p3 0.234 0.523 0.912);
+    --blue-11: color(display-p3 0.15 0.44 0.84);
+    --blue-12: color(display-p3 0.102 0.193 0.379);
+
+    /* Yellow */
+    --yellow-1: color(display-p3 0.992 0.992 0.978);
+    --yellow-2: color(display-p3 0.995 0.99 0.922);
+    --yellow-3: color(display-p3 0.997 0.982 0.749);
+    --yellow-4: color(display-p3 0.992 0.953 0.627);
+    --yellow-5: color(display-p3 0.984 0.91 0.51);
+    --yellow-6: color(display-p3 0.934 0.847 0.474);
+    --yellow-7: color(display-p3 0.876 0.785 0.46);
+    --yellow-8: color(display-p3 0.811 0.689 0.313);
+    --yellow-9: color(display-p3 1 0.92 0.22);
+    --yellow-10: color(display-p3 0.977 0.868 0.291);
+    --yellow-11: color(display-p3 0.6 0.44 0);
+    --yellow-12: color(display-p3 0.271 0.233 0.137);
+
+    /* Purple */
+    --purple-1: color(display-p3 0.995 0.988 0.996);
+    --purple-2: color(display-p3 0.983 0.971 0.993);
+    --purple-3: color(display-p3 0.963 0.931 0.989);
+    --purple-4: color(display-p3 0.937 0.888 0.981);
+    --purple-5: color(display-p3 0.904 0.837 0.966);
+    --purple-6: color(display-p3 0.86 0.774 0.942);
+    --purple-7: color(display-p3 0.799 0.69 0.91);
+    --purple-8: color(display-p3 0.719 0.583 0.874);
+    --purple-9: color(display-p3 0.523 0.318 0.751);
+    --purple-10: color(display-p3 0.483 0.289 0.7);
+    --purple-11: color(display-p3 0.473 0.281 0.687);
+    --purple-12: color(display-p3 0.234 0.132 0.363);
+
+    /* Orange */
+    --orange-1: color(display-p3 0.995 0.988 0.985);
+    --orange-2: color(display-p3 0.994 0.968 0.934);
+    --orange-3: color(display-p3 0.989 0.938 0.85);
+    --orange-4: color(display-p3 1 0.874 0.687);
+    --orange-5: color(display-p3 1 0.821 0.583);
+    --orange-6: color(display-p3 0.975 0.767 0.545);
+    --orange-7: color(display-p3 0.919 0.693 0.486);
+    --orange-8: color(display-p3 0.877 0.597 0.379);
+    --orange-9: color(display-p3 0.9 0.45 0.2);
+    --orange-10: color(display-p3 0.87 0.409 0.164);
+    --orange-11: color(display-p3 0.76 0.34 0);
+    --orange-12: color(display-p3 0.323 0.185 0.127);
+
+    /* Cyan */
+    --cyan-1: color(display-p3 0.982 0.992 0.996);
+    --cyan-2: color(display-p3 0.955 0.981 0.984);
+    --cyan-3: color(display-p3 0.888 0.965 0.975);
+    --cyan-4: color(display-p3 0.821 0.941 0.959);
+    --cyan-5: color(display-p3 0.751 0.907 0.935);
+    --cyan-6: color(display-p3 0.671 0.862 0.9);
+    --cyan-7: color(display-p3 0.564 0.8 0.854);
+    --cyan-8: color(display-p3 0.388 0.715 0.798);
+    --cyan-9: color(display-p3 0.282 0.627 0.765);
+    --cyan-10: color(display-p3 0.264 0.583 0.71);
+    --cyan-11: color(display-p3 0.08 0.48 0.63);
+    --cyan-12: color(display-p3 0.108 0.232 0.277);
+
+    /* Amber */
+    --amber-1: color(display-p3 0.995 0.992 0.985);
+    --amber-2: color(display-p3 0.994 0.986 0.921);
+    --amber-3: color(display-p3 0.994 0.969 0.782);
+    --amber-4: color(display-p3 0.989 0.937 0.65);
+    --amber-5: color(display-p3 0.97 0.902 0.527);
+    --amber-6: color(display-p3 0.936 0.844 0.506);
+    --amber-7: color(display-p3 0.89 0.762 0.443);
+    --amber-8: color(display-p3 0.85 0.65 0.3);
+    --amber-9: color(display-p3 1 0.77 0.26);
+    --amber-10: color(display-p3 0.959 0.741 0.274);
+    --amber-11: color(display-p3 0.64 0.4 0);
+    --amber-12: color(display-p3 0.294 0.208 0.145);
+
+    /* Violet */
+    --violet-1: color(display-p3 0.991 0.988 0.995);
+    --violet-2: color(display-p3 0.978 0.974 0.998);
+    --violet-3: color(display-p3 0.953 0.943 0.993);
+    --violet-4: color(display-p3 0.916 0.897 1);
+    --violet-5: color(display-p3 0.876 0.851 1);
+    --violet-6: color(display-p3 0.825 0.793 0.981);
+    --violet-7: color(display-p3 0.752 0.712 0.943);
+    --violet-8: color(display-p3 0.654 0.602 0.902);
+    --violet-9: color(display-p3 0.417 0.341 0.784);
+    --violet-10: color(display-p3 0.381 0.306 0.741);
+    --violet-11: color(display-p3 0.383 0.317 0.702);
+    --violet-12: color(display-p3 0.179 0.15 0.359);
+
+    /* Jade */
+    --jade-1: color(display-p3 0.986 0.996 0.992);
+    --jade-2: color(display-p3 0.962 0.983 0.969);
+    --jade-3: color(display-p3 0.912 0.965 0.932);
+    --jade-4: color(display-p3 0.858 0.941 0.893);
+    --jade-5: color(display-p3 0.795 0.909 0.847);
+    --jade-6: color(display-p3 0.715 0.864 0.791);
+    --jade-7: color(display-p3 0.603 0.802 0.718);
+    --jade-8: color(display-p3 0.44 0.72 0.629);
+    --jade-9: color(display-p3 0.319 0.63 0.521);
+    --jade-10: color(display-p3 0.299 0.592 0.488);
+    --jade-11: color(display-p3 0.15 0.5 0.37);
+    --jade-12: color(display-p3 0.142 0.229 0.194);
+
+    /* ── Semantic tokens ─────────────────────────────────────── */
+    /* Background/selection/status/success values mirror the generated
+       @emdash/theme palette (packages/theme/src/__generated__/semantic.css)
+       so app chrome and @emdash/ui components render identically. */
+    --background: color(display-p3 0.9884 0.988 0.9881);
+    --background-1: color(display-p3 0.9437 0.9432 0.9433);
+    --background-2: color(display-p3 0.8995 0.8987 0.8989);
+    --background-3: color(display-p3 0.8559 0.8545 0.8549);
+
+    --foreground: var(--neutral-12);
+    --foreground-inverse: white;
+    --foreground-muted: var(--neutral-11);
+    --foreground-passive: var(--neutral-8);
+
+    --background-secondary: var(--background-1);
+    --background-secondary-1: var(--background);
+    --background-secondary-2: var(--background-3);
+    --background-secondary-3: color(display-p3 0.7703 0.7673 0.7681);
+
+    --foreground-secondary: var(--neutral-12);
+    --foreground-secondary-muted: var(--neutral-11);
+    --foreground-secondary-passive: var(--neutral-8);
+
+    --background-tertiary: var(--background-2);
+    --background-tertiary-1: var(--background-3);
+    --background-tertiary-2: color(display-p3 0.8128 0.8107 0.8113);
+    --background-tertiary-3: color(display-p3 0.7703 0.7673 0.7681);
+
+    --foreground-tertiary: var(--neutral-12);
+    --foreground-tertiary-muted: var(--neutral-11);
+    --foreground-tertiary-passive: var(--neutral-8);
+
+    --background-quaternary: var(--background);
+    --background-quaternary-1: var(--background-1);
+    --background-quaternary-2: var(--background-2);
+
+    --background-destructive: var(--red-2);
+    --background-destructive-1: color(display-p3 0.9756 0.931 0.926);
+    --foreground-destructive: var(--red-11);
+    --foreground-destructive-muted: color(display-p3 0.8746 0.3651 0.3565);
+
+    --primary-button-background: var(--jade-12);
+    --primary-button-background-hover: var(--jade-11);
+    --primary-button-foreground: var(--jade-2);
+    --primary-button-border: transparent;
+
+    --border: var(--neutral-5);
+    --border-1: var(--neutral-8);
+    --border-2: var(--neutral-9);
+    --border-destructive: var(--red-8);
+    --border-primary: var(--neutral-9);
+
+    --radius: 0.5rem;
+
+    --selection: color(display-p3 0.6279 0.7807 0.9926);
+    --selection-foreground: color(display-p3 0 0.0948 0.2443);
+
+    --status-in-progress: color(display-p3 0.4753 0.3235 0);
+    --status-in-review: color(display-p3 0.2304 0.5845 0.236);
+    --status-done: color(display-p3 0.5582 0.5525 0.554);
+    --status-todo: color(display-p3 0.5582 0.5525 0.554);
+    --status-cancelled: color(display-p3 0.5582 0.5525 0.554);
+
+    /* Monaco editor */
+    --monaco-bg: var(--em-surface-paper);
+    --monaco-fg: var(--foreground);
+    --monaco-error-fg: var(--foreground-destructive);
+
+    --monaco-line-highlight: var(--background-2);
+    --monaco-line-number: var(--foreground-passive);
+    --monaco-gutter: var(--monaco-bg);
+    --monaco-inserted-text-bg: color(display-p3 0.063 0.725 0.506 / 0.251);
+    --monaco-inserted-line-bg: color(display-p3 0.925 0.992 0.961 / 0.502);
+    --monaco-removed-text-bg: color(display-p3 0.957 0.247 0.369 / 0.251);
+    --monaco-removed-line-bg: color(display-p3 1 0.945 0.949 / 0.502);
+    --monaco-unchanged-region-bg: color(display-p3 0.886 0.91 0.941);
+    --monaco-diff-diagonal-fill: var(--background-2);
+    --monaco-selection-bg: var(--selection);
+    --monaco-selection-fg: var(--selection-foreground);
+    --monaco-inactive-selection-bg: color-mix(in srgb, var(--selection) 15.3%, transparent);
+
+    /* xterm terminals */
+    --xterm-bg: var(--em-surface-paper);
+    --xterm-fg: var(--foreground);
+    --xterm-cursor: var(--foreground);
+    --xterm-cursor-accent: var(--foreground-inverse);
+    --xterm-selection-bg: color(display-p3 0.004 0.502 0.984 / 0.212);
+    --xterm-selection-fg: var(--blue-12);
+
+    --foreground-diff-added: var(--green-9);
+    --foreground-diff-modified: var(--amber-9);
+    --foreground-diff-deleted: var(--red-9);
+
+    /* State / indicator tokens */
+    --foreground-success: color(display-p3 0.2542 0.6265 0.2594);
+    --background-success: color(display-p3 0.8675 0.9185 0.8638);
+    --background-success-hover: color(display-p3 0.8054 0.885 0.7999);
+    --border-success: color(display-p3 0.6251 0.8728 0.6141);
+
+    --foreground-error: var(--red-9);
+    --background-error: var(--red-3);
+    --background-error-hover: var(--red-4);
+
+    --foreground-warning: var(--amber-11);
+    --background-warning: var(--amber-3);
+    --background-warning-hover: var(--amber-4);
+    --border-warning: var(--amber-7);
+
+    --foreground-info: var(--blue-9);
+    --background-info: var(--blue-3);
+    --background-info-hover: var(--blue-4);
+    --border-info: var(--blue-7);
+
+    --foreground-conflict: var(--orange-9);
+    --foreground-merged: var(--purple-9);
+
+    /* ── ChatComposer theme contract ──────────────────────────── */
+    /* Map --composer-* to desktop tokens for the @emdash/ui ChatComposer. */
+    /* See packages/ui/src/react/components/chat-composer/composer-contract.css.ts */
+    --composer-fg: var(--foreground);
+    --composer-fg-muted: var(--foreground-muted);
+    --composer-fg-passive: var(--foreground-passive);
+    --composer-fg-destructive: var(--foreground-destructive);
+    --composer-fg-warning: var(--foreground-warning);
+    --composer-fg-info: var(--foreground-info);
+    --composer-border: var(--border);
+    --composer-border-strong: var(--border-1);
+    --composer-border-focus: var(--border-primary);
+    --composer-border-destructive: var(--border-destructive);
+    --composer-surface: var(--background-1);
+    --composer-surface-hover: var(--background-2);
+    --composer-surface-selected: var(--background-3);
+    --composer-surface-elevated: var(--background);
+    --composer-surface-elevated-hover: var(--background-1);
+    --composer-accent: var(--primary-button-background);
+    --composer-accent-hover: var(--primary-button-background-hover);
+    --composer-accent-fg: var(--primary-button-foreground);
+    --composer-accent-border: var(--primary-button-border);
+    --composer-destructive-bg: var(--background-error);
+    --composer-destructive-hover: var(--background-error-hover);
+    --composer-destructive-selected: var(--background-error-hover);
+    --composer-error-surface: var(--background-error);
+    --composer-error-border: var(--border-destructive);
+    --composer-error-fg: var(--foreground-error);
+    --composer-warning-surface: var(--background-warning);
+    --composer-warning-border: var(--border-warning);
+    --composer-warning-surface-fg: var(--foreground-warning);
+    --composer-info-surface: var(--background-info);
+    --composer-info-border: var(--border-info);
+    --composer-info-surface-fg: var(--foreground-info);
+  }
+
+  .emdark {
+    /* ── Color palette (Radix dark P3) ───────────────────────── */
+
+    /* Neutral */
+    --neutral-1: color(display-p3 0.067 0.067 0.067);
+    --neutral-2: color(display-p3 0.098 0.098 0.098);
+    --neutral-3: color(display-p3 0.135 0.135 0.135);
+    --neutral-4: color(display-p3 0.163 0.163 0.163);
+    --neutral-5: color(display-p3 0.192 0.192 0.192);
+    --neutral-6: color(display-p3 0.228 0.228 0.228);
+    --neutral-7: color(display-p3 0.283 0.283 0.283);
+    --neutral-8: color(display-p3 0.375 0.375 0.375);
+    --neutral-9: color(display-p3 0.431 0.431 0.431);
+    --neutral-10: color(display-p3 0.484 0.484 0.484);
+    --neutral-11: color(display-p3 0.706 0.706 0.706);
+    --neutral-12: color(display-p3 0.933 0.933 0.933);
+
+    /* Red */
+    --red-1: color(display-p3 0.093 0.068 0.067);
+    --red-2: color(display-p3 0.118 0.077 0.079);
+    --red-3: color(display-p3 0.211 0.081 0.099);
+    --red-4: color(display-p3 0.287 0.079 0.113);
+    --red-5: color(display-p3 0.348 0.11 0.142);
+    --red-6: color(display-p3 0.414 0.16 0.183);
+    --red-7: color(display-p3 0.508 0.224 0.236);
+    --red-8: color(display-p3 0.659 0.298 0.297);
+    --red-9: color(display-p3 0.83 0.329 0.324);
+    --red-10: color(display-p3 0.861 0.403 0.387);
+    --red-11: color(display-p3 1 0.57 0.55);
+    --red-12: color(display-p3 0.971 0.826 0.852);
+
+    /* Green (Radix grass dark) */
+    --green-1: color(display-p3 0.062 0.083 0.067);
+    --green-2: color(display-p3 0.083 0.103 0.085);
+    --green-3: color(display-p3 0.118 0.163 0.122);
+    --green-4: color(display-p3 0.142 0.225 0.15);
+    --green-5: color(display-p3 0.178 0.279 0.186);
+    --green-6: color(display-p3 0.217 0.337 0.224);
+    --green-7: color(display-p3 0.258 0.4 0.264);
+    --green-8: color(display-p3 0.302 0.47 0.305);
+    --green-9: color(display-p3 0.38 0.647 0.378);
+    --green-10: color(display-p3 0.426 0.694 0.426);
+    --green-11: color(display-p3 0.535 0.807 0.542);
+    --green-12: color(display-p3 0.797 0.936 0.776);
+
+    /* Blue */
+    --blue-1: color(display-p3 0.057 0.081 0.122);
+    --blue-2: color(display-p3 0.072 0.098 0.147);
+    --blue-3: color(display-p3 0.078 0.154 0.27);
+    --blue-4: color(display-p3 0.033 0.197 0.37);
+    --blue-5: color(display-p3 0.08 0.245 0.441);
+    --blue-6: color(display-p3 0.14 0.298 0.511);
+    --blue-7: color(display-p3 0.195 0.361 0.6);
+    --blue-8: color(display-p3 0.239 0.434 0.72);
+    --blue-9: color(display-p3 0.247 0.556 0.969);
+    --blue-10: color(display-p3 0.344 0.612 0.973);
+    --blue-11: color(display-p3 0.49 0.72 1);
+    --blue-12: color(display-p3 0.788 0.898 0.99);
+
+    /* Yellow */
+    --yellow-1: color(display-p3 0.078 0.069 0.047);
+    --yellow-2: color(display-p3 0.103 0.094 0.063);
+    --yellow-3: color(display-p3 0.168 0.137 0.039);
+    --yellow-4: color(display-p3 0.209 0.169 0);
+    --yellow-5: color(display-p3 0.255 0.209 0);
+    --yellow-6: color(display-p3 0.31 0.261 0.07);
+    --yellow-7: color(display-p3 0.389 0.331 0.135);
+    --yellow-8: color(display-p3 0.497 0.42 0.182);
+    --yellow-9: color(display-p3 1 0.92 0.22);
+    --yellow-10: color(display-p3 1 1 0.456);
+    --yellow-11: color(display-p3 0.948 0.885 0.392);
+    --yellow-12: color(display-p3 0.959 0.934 0.731);
+
+    /* Purple */
+    --purple-1: color(display-p3 0.09 0.068 0.103);
+    --purple-2: color(display-p3 0.113 0.082 0.134);
+    --purple-3: color(display-p3 0.175 0.112 0.224);
+    --purple-4: color(display-p3 0.224 0.137 0.297);
+    --purple-5: color(display-p3 0.264 0.167 0.349);
+    --purple-6: color(display-p3 0.311 0.208 0.406);
+    --purple-7: color(display-p3 0.381 0.266 0.496);
+    --purple-8: color(display-p3 0.49 0.349 0.649);
+    --purple-9: color(display-p3 0.523 0.318 0.751);
+    --purple-10: color(display-p3 0.57 0.373 0.791);
+    --purple-11: color(display-p3 0.8 0.62 1);
+    --purple-12: color(display-p3 0.913 0.854 0.971);
+
+    /* Orange */
+    --orange-1: color(display-p3 0.088 0.07 0.057);
+    --orange-2: color(display-p3 0.113 0.089 0.061);
+    --orange-3: color(display-p3 0.189 0.12 0.056);
+    --orange-4: color(display-p3 0.262 0.132 0);
+    --orange-5: color(display-p3 0.315 0.168 0.016);
+    --orange-6: color(display-p3 0.376 0.219 0.088);
+    --orange-7: color(display-p3 0.465 0.283 0.147);
+    --orange-8: color(display-p3 0.601 0.359 0.201);
+    --orange-9: color(display-p3 0.9 0.45 0.2);
+    --orange-10: color(display-p3 0.98 0.51 0.23);
+    --orange-11: color(display-p3 1 0.63 0.38);
+    --orange-12: color(display-p3 0.98 0.883 0.775);
+
+    /* Cyan */
+    --cyan-1: color(display-p3 0.053 0.085 0.098);
+    --cyan-2: color(display-p3 0.072 0.105 0.122);
+    --cyan-3: color(display-p3 0.073 0.168 0.209);
+    --cyan-4: color(display-p3 0.063 0.216 0.277);
+    --cyan-5: color(display-p3 0.091 0.267 0.336);
+    --cyan-6: color(display-p3 0.137 0.324 0.4);
+    --cyan-7: color(display-p3 0.186 0.398 0.484);
+    --cyan-8: color(display-p3 0.23 0.496 0.6);
+    --cyan-9: color(display-p3 0.282 0.627 0.765);
+    --cyan-10: color(display-p3 0.331 0.675 0.801);
+    --cyan-11: color(display-p3 0.446 0.79 0.887);
+    --cyan-12: color(display-p3 0.757 0.919 0.962);
+
+    /* Amber */
+    --amber-1: color(display-p3 0.082 0.07 0.05);
+    --amber-2: color(display-p3 0.111 0.094 0.064);
+    --amber-3: color(display-p3 0.178 0.128 0.049);
+    --amber-4: color(display-p3 0.239 0.156 0);
+    --amber-5: color(display-p3 0.29 0.193 0);
+    --amber-6: color(display-p3 0.344 0.245 0.076);
+    --amber-7: color(display-p3 0.422 0.314 0.141);
+    --amber-8: color(display-p3 0.535 0.399 0.189);
+    --amber-9: color(display-p3 1 0.77 0.26);
+    --amber-10: color(display-p3 1 0.87 0.15);
+    --amber-11: color(display-p3 1 0.8 0.29);
+    --amber-12: color(display-p3 0.984 0.909 0.726);
+
+    /* Violet */
+    --violet-1: color(display-p3 0.077 0.071 0.118);
+    --violet-2: color(display-p3 0.101 0.084 0.141);
+    --violet-3: color(display-p3 0.154 0.123 0.256);
+    --violet-4: color(display-p3 0.191 0.148 0.345);
+    --violet-5: color(display-p3 0.226 0.182 0.396);
+    --violet-6: color(display-p3 0.269 0.223 0.449);
+    --violet-7: color(display-p3 0.326 0.277 0.53);
+    --violet-8: color(display-p3 0.399 0.346 0.656);
+    --violet-9: color(display-p3 0.417 0.341 0.784);
+    --violet-10: color(display-p3 0.477 0.402 0.823);
+    --violet-11: color(display-p3 0.72 0.65 1);
+    --violet-12: color(display-p3 0.883 0.867 0.986);
+
+    /* Jade */
+    --jade-1: color(display-p3 0.059 0.083 0.071);
+    --jade-2: color(display-p3 0.078 0.11 0.094);
+    --jade-3: color(display-p3 0.091 0.176 0.138);
+    --jade-4: color(display-p3 0.102 0.228 0.177);
+    --jade-5: color(display-p3 0.133 0.279 0.221);
+    --jade-6: color(display-p3 0.174 0.334 0.273);
+    --jade-7: color(display-p3 0.219 0.402 0.335);
+    --jade-8: color(display-p3 0.263 0.488 0.411);
+    --jade-9: color(display-p3 0.319 0.63 0.521);
+    --jade-10: color(display-p3 0.338 0.68 0.555);
+    --jade-11: color(display-p3 0.4 0.835 0.656);
+    --jade-12: color(display-p3 0.734 0.934 0.838);
+
+    /* ── Semantic tokens ─────────────────────────────────────── */
+    /* Background/selection/status/success values mirror the generated
+       @emdash/theme palette (packages/theme/src/__generated__/semantic.css)
+       so app chrome and @emdash/ui components render identically. */
+    --background: color(display-p3 0.0671 0.0669 0.067);
+    --background-1: color(display-p3 0.0956 0.0952 0.0953);
+    --background-2: color(display-p3 0.1252 0.1246 0.1248);
+    --background-3: color(display-p3 0.156 0.155 0.1552);
+
+    --foreground: var(--neutral-12);
+    --foreground-inverse: var(--neutral-1);
+    --foreground-muted: var(--neutral-11);
+    --foreground-passive: var(--neutral-9);
+
+    --background-secondary: var(--background-1);
+    --background-secondary-1: var(--background);
+    --background-secondary-2: var(--background-3);
+    --background-secondary-3: color(display-p3 0.2206 0.2181 0.2188);
+
+    --foreground-secondary: var(--foreground);
+    --foreground-secondary-muted: var(--foreground-muted);
+    --foreground-secondary-passive: var(--foreground-passive);
+
+    --background-tertiary: var(--background-2);
+    --background-tertiary-1: var(--background-3);
+    --background-tertiary-2: color(display-p3 0.1878 0.1862 0.1866);
+    --background-tertiary-3: color(display-p3 0.2206 0.2181 0.2188);
+
+    --foreground-tertiary: var(--foreground);
+    --foreground-tertiary-muted: var(--foreground-muted);
+    --foreground-tertiary-passive: var(--foreground-passive);
+
+    --background-quaternary: var(--background);
+    --background-quaternary-1: var(--background-1);
+    --background-quaternary-2: var(--background-2);
+
+    --background-destructive: var(--red-3);
+    --background-destructive-1: color(display-p3 0.25 0.102 0.122);
+    --foreground-destructive: var(--red-9);
+    --foreground-destructive-muted: color(display-p3 0.661 0.263 0.26);
+
+    --primary-button-background: var(--jade-4);
+    --primary-button-background-hover: var(--jade-5);
+    --primary-button-foreground: var(--jade-12);
+    --primary-button-border: var(--jade-7);
+
+    --border: var(--neutral-6);
+    --border-1: var(--neutral-7);
+    --border-2: var(--neutral-8);
+    --border-destructive: var(--red-8);
+    --border-primary: var(--neutral-10);
+
+    --radius: 0.5rem;
+
+    --selection: color(display-p3 0.087 0.2177 0.3954);
+    --selection-foreground: color(display-p3 0.8222 0.9187 1);
+
+    --status-in-progress: color(display-p3 0.8581 0.6803 0.314);
+    --status-in-review: color(display-p3 0.3486 0.7012 0.3465);
+    --status-done: color(display-p3 0.5721 0.5663 0.5679);
+    --status-todo: color(display-p3 0.5721 0.5663 0.5679);
+    --status-cancelled: color(display-p3 0.5721 0.5663 0.5679);
+
+    /* Monaco editor */
+    --monaco-bg: var(--em-surface-paper);
+    --monaco-fg: var(--foreground-muted);
+    --monaco-error-fg: color(display-p3 1 0.592 0.49);
+
+    --monaco-line-highlight: var(--neutral-5);
+    --monaco-line-number: color(display-p3 0.227 0.227 0.227);
+    --monaco-gutter: var(--monaco-bg);
+    /* Semi-transparent so the selection layer beneath stays visible (ENG-1248). */
+    --monaco-inserted-text-bg: color(display-p3 0.145 0.282 0.176 / 0.45);
+    --monaco-inserted-line-bg: color(display-p3 0.106 0.165 0.118 / 0.55);
+    --monaco-inserted-text-border: color(display-p3 0.145 0.282 0.176 / 0.65);
+    --monaco-removed-text-bg: color(display-p3 0.38 0.086 0.137 / 0.45);
+    --monaco-removed-line-bg: color(display-p3 0.231 0.071 0.098 / 0.55);
+    --monaco-removed-text-border: color(display-p3 0.38 0.086 0.137 / 0.65);
+    --monaco-unchanged-region-bg: color(display-p3 0.165 0.165 0.165);
+    --monaco-diff-border: color(display-p3 0.227 0.227 0.227);
+    --monaco-diff-diagonal-fill: color(display-p3 0.165 0.165 0.165);
+    --monaco-selection-bg: color(display-p3 0.3 0.52 0.82 / 0.7);
+    --monaco-selection-fg: color(display-p3 0.95 0.96 0.98);
+    --monaco-inactive-selection-bg: color(display-p3 0.3 0.52 0.82 / 0.35);
+
+    /* xterm terminals */
+    --xterm-bg: var(--em-surface-paper);
+    --xterm-fg: var(--foreground);
+    --xterm-cursor: var(--foreground);
+    --xterm-cursor-accent: var(--foreground-inverse);
+    --xterm-selection-bg: color(display-p3 0.224 0.557 1 / 0.475);
+    --xterm-selection-fg: var(--blue-11);
+
+    --foreground-diff-added: var(--green-10);
+    --foreground-diff-modified: var(--amber-9);
+    --foreground-diff-deleted: var(--red-9);
+
+    /* State / indicator tokens */
+    --foreground-success: color(display-p3 0.2745 0.6459 0.278);
+    --background-success: color(display-p3 0.101 0.138 0.099);
+    --background-success-hover: color(display-p3 0.1154 0.176 0.1127);
+    --border-success: color(display-p3 0.1928 0.4218 0.1922);
+
+    --foreground-error: var(--red-9);
+    --background-error: var(--red-3);
+    --background-error-hover: var(--red-4);
+
+    --foreground-warning: var(--amber-11);
+    --background-warning: var(--amber-3);
+    --background-warning-hover: var(--amber-4);
+    --border-warning: var(--amber-7);
+
+    --foreground-info: var(--blue-9);
+    --background-info: var(--blue-3);
+    --background-info-hover: var(--blue-4);
+    --border-info: var(--blue-7);
+
+    --foreground-conflict: var(--orange-9);
+    --foreground-merged: var(--purple-9);
+
+    /* ── ChatComposer theme contract ──────────────────────────── */
+    --composer-fg: var(--foreground);
+    --composer-fg-muted: var(--foreground-muted);
+    --composer-fg-passive: var(--foreground-passive);
+    --composer-fg-destructive: var(--foreground-destructive);
+    --composer-fg-warning: var(--foreground-warning);
+    --composer-fg-info: var(--foreground-info);
+    --composer-border: var(--border);
+    --composer-border-strong: var(--border-1);
+    --composer-border-focus: var(--border-primary);
+    --composer-border-destructive: var(--border-destructive);
+    --composer-surface: var(--background-1);
+    --composer-surface-hover: var(--background-2);
+    --composer-surface-selected: var(--background-3);
+    --composer-surface-elevated: var(--background);
+    --composer-surface-elevated-hover: var(--background-1);
+    --composer-accent: var(--primary-button-background);
+    --composer-accent-hover: var(--primary-button-background-hover);
+    --composer-accent-fg: var(--primary-button-foreground);
+    --composer-accent-border: var(--primary-button-border);
+    --composer-destructive-bg: var(--background-error);
+    --composer-destructive-hover: var(--background-error-hover);
+    --composer-destructive-selected: var(--background-error-hover);
+    --composer-error-surface: var(--background-error);
+    --composer-error-border: var(--border-destructive);
+    --composer-error-fg: var(--foreground-error);
+    --composer-warning-surface: var(--background-warning);
+    --composer-warning-border: var(--border-warning);
+    --composer-warning-surface-fg: var(--foreground-warning);
+    --composer-info-surface: var(--background-info);
+    --composer-info-border: var(--border-info);
+    --composer-info-surface-fg: var(--foreground-info);
+  }
+}
+
+/*
+ * ChatTranscript (@emdash/chat-ui) theme contract overrides.
+ *
+ * These MUST stay UNLAYERED. chat-ui ships its built-in defaults via
+ * vanilla-extract `createGlobalTheme(':where(:root), :where(.emlight)')` and
+ * `createGlobalTheme(':where(.emdark)')`, which are unlayered. In the CSS
+ * cascade an unlayered declaration always beats a layered one regardless of
+ * specificity, so if these overrides lived inside `@layer base` the chat-ui
+ * defaults would win and these tokens would never apply. Keep them out of any
+ * `@layer` and rely on `.emlight`/`.emdark` (0,1,0) beating chat-ui's
+ * `:where(...)` (0,0,0) selectors.
+ */
+.emlight {
+  --chat-fg: var(--foreground);
+  --chat-fg-muted: var(--foreground-muted);
+  --chat-fg-passive: var(--foreground-passive);
+  --chat-bg: var(--em-surface-paper);
+  --chat-bg-1: var(--background-1);
+  --chat-bg-2: var(--background-2);
+  --chat-bg-3: var(--background-3);
+  --chat-border: var(--border);
+  --chat-user-card-bg: var(--background-1);
+  --chat-user-card-border: var(--border);
+  --chat-user-card-border-hover: var(--border-1);
+  --chat-mention-chip-bg: var(--background-2);
+  --chat-mention-chip-fg: var(--foreground);
+  --chat-mention-file-bg: var(--background-2);
+  --chat-mention-file-fg: var(--foreground);
+  --chat-mention-issue-bg: var(--background-info);
+  --chat-mention-issue-fg: var(--foreground-info);
+  --chat-mention-symbol-bg: var(--background-info);
+  --chat-mention-symbol-fg: var(--foreground-info);
+  --chat-mention-custom-bg: var(--background-2);
+  --chat-mention-custom-fg: var(--foreground);
+  --chat-diff-added: var(--foreground-diff-added);
+  --chat-diff-deleted: var(--foreground-diff-deleted);
+  --chat-diff-modified: var(--foreground-diff-modified);
+  --chat-link: var(--foreground-info);
+  --chat-bubble-user: var(--background-3);
+  --chat-bubble-user-fg: var(--foreground);
+  --chat-mention-bg: var(--background-info);
+  --chat-mention-fg: var(--foreground-info);
+  --chat-code-bg: var(--background-1);
+  --chat-code-inline-bg: rgba(0, 0, 0, 0.06);
+  --chat-table-header-bg: var(--background-1);
+  --chat-font-sans:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Fira Sans',
+    'Droid Sans', 'Helvetica Neue', sans-serif;
+  --chat-font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
+  --chat-radius-sm: 0.375rem;
+  --chat-radius-md: 0.5rem;
+  --chat-radius-lg: 0.625rem;
+  --chat-radius-xl: 0.875rem;
+  --chat-radius-full: 9999px;
+}
+
+.emdark {
+  --chat-fg: var(--foreground);
+  --chat-fg-muted: var(--foreground-muted);
+  --chat-fg-passive: var(--foreground-passive);
+  --chat-bg: var(--em-surface-paper);
+  --chat-bg-1: var(--background-1);
+  --chat-bg-2: var(--background-2);
+  --chat-bg-3: var(--background-3);
+  --chat-border: var(--border);
+  --chat-user-card-bg: var(--background-3);
+  --chat-user-card-border: var(--border);
+  --chat-user-card-border-hover: var(--border-1);
+  --chat-mention-chip-bg: var(--neutral-5);
+  --chat-mention-chip-fg: var(--foreground);
+  --chat-mention-file-bg: var(--neutral-5);
+  --chat-mention-file-fg: var(--foreground);
+  --chat-mention-issue-bg: var(--background-info);
+  --chat-mention-issue-fg: var(--foreground-info);
+  --chat-mention-symbol-bg: var(--background-info);
+  --chat-mention-symbol-fg: var(--foreground-info);
+  --chat-mention-custom-bg: var(--neutral-5);
+  --chat-mention-custom-fg: var(--foreground);
+  --chat-diff-added: var(--foreground-diff-added);
+  --chat-diff-deleted: var(--foreground-diff-deleted);
+  --chat-diff-modified: var(--foreground-diff-modified);
+  --chat-link: var(--foreground-info);
+  --chat-bubble-user: var(--background-3);
+  --chat-bubble-user-fg: var(--foreground);
+  --chat-mention-bg: var(--background-info);
+  --chat-mention-fg: var(--foreground-info);
+  --chat-code-bg: var(--background-2);
+  --chat-code-inline-bg: rgba(255, 255, 255, 0.08);
+  --chat-table-header-bg: var(--background-2);
+  --chat-font-sans:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Fira Sans',
+    'Droid Sans', 'Helvetica Neue', sans-serif;
+  --chat-font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
+  --chat-radius-sm: 0.375rem;
+  --chat-radius-md: 0.5rem;
+  --chat-radius-lg: 0.625rem;
+  --chat-radius-xl: 0.875rem;
+  --chat-radius-full: 9999px;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+  }
+  #root {
+    height: 100%;
+    overflow: hidden;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  ::selection {
+    background-color: color-mix(in srgb, var(--selection) 35%, transparent);
+    color: var(--selection-foreground);
+  }
+
+  ::-moz-selection {
+    background-color: color-mix(in srgb, var(--selection) 35%, transparent);
+    color: var(--selection-foreground);
+  }
+
+  /* Scrollbar styles for light and dark mode */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: var(--hc-radius-full, 9999px);
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+}
+
+@layer components {
+  .text-shimmer {
+    background: linear-gradient(
+      90deg,
+      var(--foreground-passive) 0%,
+      var(--foreground-passive) 30%,
+      var(--foreground) 50%,
+      var(--foreground-passive) 70%,
+      var(--foreground-passive) 100%
+    );
+    background-size: 200% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    animation: text-shimmer-move 2s linear infinite;
+  }
+
+  @keyframes text-shimmer-move {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .text-shimmer {
+      animation: none;
+    }
+  }
+
+  .diff-line-added {
+    background-color: var(--diff-added-bg);
+  }
+
+  .diff-line-modified {
+    background-color: var(--diff-modified-bg);
+  }
+
+  .diff-line-deleted {
+    background-color: var(--diff-deleted-bg);
+  }
+
+  /* Monaco diff comment UI */
+  .file-diff-view .monaco-editor .margin-view-overlays .glyph-margin {
+    width: 20px !important;
+  }
+
+  .file-diff-view .monaco-editor .margin {
+    background-color: transparent !important;
+  }
+
+  .file-diff-view .comment-hover-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    margin: 1px auto;
+    border-radius: var(--hc-radius-sm, 6px);
+    border: 1px solid transparent;
+    background: transparent;
+    cursor: pointer;
+    pointer-events: auto;
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease;
+  }
+
+  .file-diff-view .comment-hover-icon::before {
+    content: '';
+    display: block;
+    width: 12px;
+    height: 12px;
+    background-color: currentColor;
+    color: var(--foreground-muted);
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='12' y1='5' x2='12' y2='19'%3E%3C/line%3E%3Cline x1='5' y1='12' x2='19' y2='12'%3E%3C/line%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='12' y1='5' x2='12' y2='19'%3E%3C/line%3E%3Cline x1='5' y1='12' x2='19' y2='12'%3E%3C/line%3E%3C/svg%3E");
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+  }
+
+  .file-diff-view .comment-hover-icon:hover,
+  .file-diff-view .comment-hover-icon.comment-hover-icon-pinned {
+    background-color: var(--background-2);
+    border-color: var(--border);
+  }
+
+  .file-diff-view .comment-hover-icon:hover::before,
+  .file-diff-view .comment-hover-icon.comment-hover-icon-pinned::before {
+    color: var(--foreground);
+  }
+
+  .file-diff-view .monaco-editor .glyph-margin > div {
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+  }
+
+  .file-diff-view .monaco-editor .view-zones,
+  .file-diff-view .monaco-editor .view-zone,
+  .file-diff-view .comment-view-zone {
+    pointer-events: auto !important;
+  }
+}

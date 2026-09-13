@@ -1,0 +1,38 @@
+{
+  "name": "hardcore",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "cad:check": "node tooling/scripts/setup-cad.mjs --check",
+    "cad:setup": "node tooling/scripts/setup-cad.mjs",
+    "cad:test": "node tooling/scripts/test-cad.mjs",
+    "dev": "nx run-many -t dev --all --parallel=10",
+    "build": "nx run-many -t build --all",
+    "test": "node tooling/scripts/test.mjs",
+    "lint": "nx run-many -t lint --all && node tooling/oxlint/scripts/check-allowlists.mjs",
+    "format": "nx run-many -t format --all",
+    "format:check": "nx run-many -t format:check --all",
+    "typecheck": "nx run-many -t typecheck --all",
+    "affected": "nx affected -t lint typecheck test",
+    "check": "node tooling/scripts/check.mjs",
+    "doctor": "pnpm --dir apps/emdash-desktop run doctor",
+    "prune:boundary-allowlists": "node tooling/oxlint/scripts/prune-boundary-allowlists.mjs",
+    "graph": "nx graph"
+  },
+  "devDependencies": {
+    "nx": "^23.0.0",
+    "tsx": "^4.22.4"
+  },
+  "engines": {
+    "node": ">=24.0.0",
+    "pnpm": ">=10.28.0"
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "24.14.0",
+      "onFail": "download"
+    }
+  },
+  "packageManager": "pnpm@10.28.2"
+}

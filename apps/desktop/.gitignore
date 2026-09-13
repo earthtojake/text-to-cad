@@ -1,0 +1,120 @@
+# Dependencies
+node_modules/
+dist/
+out/
+/release/
+
+# App-specific outputs
+apps/*/out/
+apps/*/release/
+apps/*/dist/
+apps/workspace-server/dist-artifacts/
+apps/workspace-server/runtime-deps/node_modules/
+
+# Temporary electron-builder deploy directories (created by scripts/release/build.ts)
+.emdash-deploy-*/
+
+# Logs
+*.log
+.emdash-logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+/.cad-runtime/
+
+# Coverage directory used by tools like istanbul
+coverage/
+__pycache__/
+__cadgen__/
+*.pyc
+
+# nyc test coverage
+.nyc_output
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# dotenv environment variables file
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# AI assistant instructions
+.notes/
+.notes
+.claude/
+.scratch/
+
+# Hardcore CAD recovery snapshots
+.hardcore/
+
+# Local desktop development logs
+**/.hardcore-logs/
+
+# Checkouts directory
+.checkouts/
+
+/container.md
+
+.env
+.cursor
+.codex/config.toml
+
+apps/*/src/main/appConfig.json
+
+# Stray per-developer dev databases from older setups (dev DBs now live in the
+# platform user-data dir or at EMDASH_DB_FILE; reset with pnpm run db:reset)
+apps/*/tooling/db/dev.db
+apps/*/tooling/db/dev.db-wal
+apps/*/tooling/db/dev.db-shm
+
+# Stray local databases at the repo root
+/tooling/db/
+
+# Isolated better-sqlite3 for system Node (installed by postinstall)
+apps/*/tooling/node-deps/node_modules/
+.pi/extensions/emdash-hook.ts
+.opencode/plugins/emdash-notifications.js
+
+# Vitest / Browser testing
+.vitest-attachments/
+**/__screenshots__/
+
+# ACP fixture transcripts (generated locally via pnpm generate:acp-fixture)
+packages/plugins/src/agents/impl/*/fixtures/acp-transcript.json
+
+# Nx local cache and workspace data
+.nx/cache
+.nx/workspace-data

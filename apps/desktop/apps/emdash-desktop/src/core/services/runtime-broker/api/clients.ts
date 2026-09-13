@@ -1,0 +1,24 @@
+import type { AcpApiContract } from '@emdash/core/runtimes/acp/api';
+import type { AgentConfigContract } from '@emdash/core/runtimes/agent-config/api';
+import type { FileSearchContract } from '@emdash/core/runtimes/file-search/api';
+import type { FilesContract } from '@emdash/core/runtimes/files/api';
+import type { GitContract } from '@emdash/core/runtimes/git/api';
+import type { HostSettingsContract } from '@emdash/core/runtimes/host-settings/api';
+import type { ResourceUsageContract } from '@emdash/core/runtimes/resource-usage/api';
+import type { TerminalsContract } from '@emdash/core/runtimes/terminals/api';
+import type { TuiAgentsContract } from '@emdash/core/runtimes/tui-agents/api';
+import type { WorkspaceRegistryContract } from '@emdash/core/runtimes/workspace-registry/api';
+import type { ContractClient } from '@emdash/wire/rpc';
+import type { MementosWireContract } from '@core/primitives/mementos/api';
+
+export type AcpRuntimeClient = ContractClient<AcpApiContract>;
+export type AgentConfigRuntimeClient = ContractClient<AgentConfigContract>;
+export type FileSearchRuntimeClient = ContractClient<FileSearchContract>;
+export type FilesRuntimeClient = ContractClient<FilesContract>;
+export type GitRuntimeClient = ContractClient<GitContract>;
+export type HostSettingsRuntimeClient = ContractClient<HostSettingsContract>;
+export type ResourceUsageRuntimeClient = ContractClient<ResourceUsageContract>;
+export type MementosRuntimeClient = ContractClient<MementosWireContract>;
+export type TerminalsRuntimeClient = ContractClient<TerminalsContract>;
+export type TuiAgentsRuntimeClient = ContractClient<TuiAgentsContract>;
+export type WorkspaceRegistryRuntimeClient = ContractClient<WorkspaceRegistryContract>;

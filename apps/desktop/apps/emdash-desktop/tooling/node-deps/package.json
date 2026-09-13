@@ -1,0 +1,8 @@
+{
+  "name": "emdash-tooling-node-deps",
+  "private": true,
+  "description": "Isolated better-sqlite3 for the system-Node ABI (not Electron). Used by Vitest fixture and migration tests so the root node_modules/better-sqlite3 can stay Electron-compiled at all times. Keep the pinned version in sync with the version locked for apps/emdash-desktop in the repo pnpm-lock.yaml.",
+  "dependencies": {
+    "better-sqlite3": "12.10.0"
+  }
+}

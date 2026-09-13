@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" fill="none">
+  <rect width="180" height="180" rx="22" fill="url(#athas-bg)" />
+  <path
+    d="M0 148C31 137 60 131 90 131C120 131 149 137 180 148V180H0V148Z"
+    fill="url(#athas-ground)"
+  />
+  <path d="M58 50L101 18L124 41V132H58V50Z" fill="url(#athas-front)" />
+  <path d="M101 18L124 41V132H100L101 18Z" fill="url(#athas-side)" />
+  <path d="M58 50L101 18L100 132H58V50Z" fill="url(#athas-highlight)" opacity=".42" />
+  <path d="M100 132H124L180 148V180H0V148L58 132H100Z" fill="url(#athas-shadow)" />
+  <defs>
+    <linearGradient id="athas-bg" x1="90" x2="90" y1="0" y2="180" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff" />
+      <stop offset=".62" stop-color="#f6fbff" />
+      <stop offset="1" stop-color="#d8efff" />
+    </linearGradient>
+    <linearGradient
+      id="athas-ground"
+      x1="90"
+      x2="90"
+      y1="131"
+      y2="180"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop stop-color="#51b8ff" />
+      <stop offset="1" stop-color="#f5fbff" />
+    </linearGradient>
+    <linearGradient
+      id="athas-front"
+      x1="64"
+      x2="120"
+      y1="41"
+      y2="116"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop stop-color="#1fb8ff" />
+      <stop offset=".52" stop-color="#0989f1" />
+      <stop offset="1" stop-color="#0159d8" />
+    </linearGradient>
+    <linearGradient
+      id="athas-side"
+      x1="101"
+      x2="128"
+      y1="21"
+      y2="126"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop stop-color="#006ff0" />
+      <stop offset="1" stop-color="#003ec1" />
+    </linearGradient>
+    <linearGradient
+      id="athas-highlight"
+      x1="67"
+      x2="101"
+      y1="41"
+      y2="113"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop stop-color="#8ae8ff" />
+      <stop offset="1" stop-color="#fff" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient
+      id="athas-shadow"
+      x1="90"
+      x2="90"
+      y1="132"
+      y2="180"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop stop-color="#0c79df" stop-opacity=".38" />
+      <stop offset=".65" stop-color="#39aaf6" stop-opacity=".12" />
+      <stop offset="1" stop-color="#fff" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+</svg>

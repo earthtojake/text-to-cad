@@ -1,0 +1,23 @@
+import type { PluginIconAsset } from '@emdash/shared/plugins';
+
+export const icon: PluginIconAsset = {
+  kind: 'svg',
+  alt: 'Command Code CLI',
+  variants: [
+    {
+      minSize: 0,
+      light: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="Command Code">
+  <rect width="192" height="192" rx="42" fill="#000" />
+  <path
+    d="M77 96H58a27 27 0 1 1 27-27v54a27 27 0 1 1-27-27h76a27 27 0 1 1-27 27V69a27 27 0 1 1 27 27H77Z"
+    fill="none"
+    stroke="#fff"
+    stroke-width="16"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>
+`,
+    },
+  ],
+};

@@ -1,0 +1,7 @@
+# Optional convenience for humans who use mise (https://mise.jdx.dev) for
+# auto-switching toolchains. Nothing in the repo requires this file: the
+# authoritative pins live in package.json (`devEngines.runtime` for Node,
+# `packageManager` for pnpm) and any pnpm on PATH enforces them itself.
+[tools]
+node = "24.14.0"
+pnpm = "10.28.2"

@@ -1,0 +1,156 @@
+{
+  "id": "ec5ec68f-1a84-410f-8b18-4e960089ead9",
+  "prevId": "97c4cc46-9ea4-4c44-9c79-6e0379a327e4",
+  "version": "6",
+  "dialect": "sqlite",
+  "tables": {
+    "automation_deployments": {
+      "name": "automation_deployments",
+      "columns": {
+        "automation_id": {
+          "name": "automation_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "payload": {
+          "name": "payload",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "deployed_at": {
+          "name": "deployed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "automation_journal": {
+      "name": "automation_journal",
+      "columns": {
+        "singleton": {
+          "name": "singleton",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "next_seq": {
+          "name": "next_seq",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "automation_journal_singleton_check": {
+          "name": "automation_journal_singleton_check",
+          "value": "\"automation_journal\".\"singleton\" = 1"
+        }
+      }
+    },
+    "automation_runs": {
+      "name": "automation_runs",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "seq": {
+          "name": "seq",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "automation_id": {
+          "name": "automation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scheduled_at": {
+          "name": "scheduled_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deadline_at": {
+          "name": "deadline_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "payload": {
+          "name": "payload",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "automation_runs_seq_idx": {
+          "name": "automation_runs_seq_idx",
+          "columns": ["seq"],
+          "isUnique": true
+        },
+        "automation_runs_one_scheduled_idx": {
+          "name": "automation_runs_one_scheduled_idx",
+          "columns": ["automation_id"],
+          "where": "\"automation_runs\".\"status\" = 'scheduled'",
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

@@ -1,0 +1,86 @@
+diff --git a/dist/index.js b/dist/index.js
+index f15585a172e7443da1235ad8beb2509cc4925ae7..759fd4b8289a84489e72dafd100cd83440a8a7da 100755
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -21983,6 +21983,22 @@ function createWebSearchCompleteUpdate(item) {
+     rawInput: item
+   };
+ }
++// Keep Codex's typed child lifecycle in both live updates and history replay.
++function createSubAgentActivityUpdate(item) {
++  return {
++    sessionUpdate: "tool_call",
++    toolCallId: item.id,
++    kind: "other",
++    title: "subAgentActivity",
++    status: "completed",
++    rawInput: {
++      type: item.type,
++      kind: item.kind,
++      agentThreadId: item.agentThreadId,
++      agentPath: item.agentPath
++    }
++  };
++}
+ function createCollabAgentToolCallUpdate(item) {
+   return {
+     sessionUpdate: "tool_call",
+@@ -22703,8 +22719,9 @@ ${text}
+         return this.createExitedReviewModeEvent(event.item);
+       case "contextCompaction":
+         return this.createContextCompactedEvent();
+-      //ignored types
+       case "subAgentActivity":
++        return createSubAgentActivityUpdate(event.item);
++      //ignored types
+       case "sleep":
+       case "userMessage":
+       case "hookPrompt":
+@@ -27297,8 +27314,9 @@ You have been logged out. Please try again.`);
+     switch (item.type) {
+       case "userMessage":
+         return this.createUserMessageUpdates(item);
+-      case "hookPrompt":
+       case "subAgentActivity":
++        return [createSubAgentActivityUpdate(item)];
++      case "hookPrompt":
+       case "sleep":
+         return [];
+       case "agentMessage":
+@@ -27900,6 +27918,10 @@ ${stderr}` : "";
+   }
+ };
+ function mergeHistoryUpdates(responseItemFallbackUpdates, threadUpdates) {
++  const activityIds = new Set(threadUpdates.filter((update) => update.rawInput?.type === "subAgentActivity").map((update) => update.toolCallId));
++  // Activity records carry the child lifecycle themselves. A raw completion
++  // without its generic start would create an orphan "unknown" tool row.
++  responseItemFallbackUpdates = responseItemFallbackUpdates.filter((update) => update.sessionUpdate !== "tool_call_update" || !activityIds.has(update.toolCallId));
+   const merged = [];
+   const seen = /* @__PURE__ */ new Set();
+   let fallbackIndex = 0;
+@@ -27913,20 +27935,22 @@ function mergeHistoryUpdates(responseItemFallbackUpdates, threadUpdates) {
+     }
+     merged.push(update);
+   };
+-  const flushFallbackThrough = (targetKey) => {
++  const flushFallbackThrough = (targetKey, typedUpdate) => {
+     const matchIndex = responseItemFallbackUpdates.findIndex((update, index) => index >= fallbackIndex && historyUpdateKey(update) === targetKey);
+     if (matchIndex === -1) {
+       return false;
+     }
+     while (fallbackIndex <= matchIndex) {
+-      pushUpdate(responseItemFallbackUpdates[fallbackIndex]);
++      const fallback = responseItemFallbackUpdates[fallbackIndex];
++      // Raw calls lose the child's typed lifecycle; keep the authoritative item.
++      pushUpdate(typedUpdate.rawInput?.type === "subAgentActivity" && historyUpdateKey(fallback) === targetKey ? typedUpdate : fallback);
+       fallbackIndex += 1;
+     }
+     return true;
+   };
+   for (const update of threadUpdates) {
+     const key = historyUpdateKey(update);
+-    if (key && flushFallbackThrough(key)) {
++    if (key && flushFallbackThrough(key, update)) {
+       continue;
+     }
+     pushUpdate(update);
