@@ -146,8 +146,12 @@ def _assert_surface_covers_face(payload, u0, u1, v0, v1, bin_out) -> None:
     knots_u = bin_out.values
     ku_off, ku_len = payload["knotsU"]
     kv_off, kv_len = payload["knotsV"]
-    first_u, last_u = knots_u[ku_off], knots_u[ku_off + ku_len - 1]
-    first_v, last_v = knots_u[kv_off], knots_u[kv_off + kv_len - 1]
+    # SetNotPeriodic may retain exterior support knots. The evaluator's
+    # active span is [knots[degree], knots[pole_count]], not the outer span.
+    first_u = knots_u[ku_off + payload["degU"]]
+    last_u = knots_u[ku_off + payload["nu"]]
+    first_v = knots_u[kv_off + payload["degV"]]
+    last_v = knots_u[kv_off + payload["nv"]]
     eps_u = max(abs(u1 - u0), 1.0) * 1e-6
     eps_v = max(abs(v1 - v0), 1.0) * 1e-6
     if (u0 < first_u - eps_u or u1 > last_u + eps_u
@@ -203,9 +207,9 @@ def _reframe_knots_to_window(nurbs, surface, u0: float, u1: float, v0: float, v1
     changes nothing but the frame; the nearest whole period is the one."""
     for periodic, period_of, w0, w1, first_knot, nb_knots, knot, set_knot in (
         (surface.IsUPeriodic(), surface.UPeriod, u0, u1,
-         nurbs.UKnot(1), nurbs.NbUKnots, nurbs.UKnot, nurbs.SetUKnot),
+         nurbs.Bounds()[0], nurbs.NbUKnots, nurbs.UKnot, nurbs.SetUKnot),
         (surface.IsVPeriodic(), surface.VPeriod, v0, v1,
-         nurbs.VKnot(1), nurbs.NbVKnots, nurbs.VKnot, nurbs.SetVKnot),
+         nurbs.Bounds()[2], nurbs.NbVKnots, nurbs.VKnot, nurbs.SetVKnot),
     ):
         if not periodic:
             continue
@@ -393,15 +397,16 @@ def _surface_payload(face, bin_out: _Bin) -> dict[str, Any]:
             eps_v = max(abs(v1 - v0), 1.0) * 1e-6
             _translate_knots_to_window(
                 nurbs, period_u, u0, eps_u,
-                nurbs.UKnot(1), nurbs.NbUKnots, nurbs.UKnot, nurbs.SetUKnot)
+                nurbs.Bounds()[0], nurbs.NbUKnots, nurbs.UKnot, nurbs.SetUKnot)
             _translate_knots_to_window(
                 nurbs, period_v, v0, eps_v,
-                nurbs.VKnot(1), nurbs.NbVKnots, nurbs.VKnot, nurbs.SetVKnot)
+                nurbs.Bounds()[2], nurbs.NbVKnots, nurbs.VKnot, nurbs.SetVKnot)
+            active_u0, active_u1, active_v0, active_v1 = nurbs.Bounds()
             if (
-                u0 >= nurbs.UKnot(1) - eps_u
-                and u1 <= nurbs.UKnot(nurbs.NbUKnots()) + eps_u
-                and v0 >= nurbs.VKnot(1) - eps_v
-                and v1 <= nurbs.VKnot(nurbs.NbVKnots()) + eps_v
+                u0 >= active_u0 - eps_u
+                and u1 <= active_u1 + eps_u
+                and v0 >= active_v0 - eps_v
+                and v1 <= active_v1 + eps_v
             ):
                 return _nurbs_surface_payload(nurbs, bin_out)
         try:
