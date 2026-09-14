@@ -23,6 +23,6 @@
     "three-mesh-bvh": "0.9.14"
   },
   "devDependencies": {
-    "playwright": "^1.52.0"
+    "playwright": "^1.63.0"
   }
 }
