@@ -416,7 +416,7 @@ const FRAME_GUNMETAL = 0x76848d;
 // instead of a paler one: same "these two are a pair" reading, no colour left
 // for the highlight to wash out.
 // The bowden sheaths -- translucent liners the cords run THROUGH. They arrive
-// at the model's own alpha 0.28 now that `cad_material` carries the opacity;
+// at the model's own alpha 0.28 now that named material metadata carries opacity;
 // it used to ride only on the shape's colour, which the exporter turns into a
 // hex string on the way into the GLB, so it was dropped and 170 sheaths shipped
 // opaque. Those were the white "wires", and the reason they read as colliding

@@ -28,7 +28,7 @@ if __name__ == "__main__":
     bracket()
 ```
 
-`python models/bracket.py` then writes the STEP **and** the declared meshes, and rewrites any of them that were deleted or edited — no separate export step (a declared output is part of the model's freshness gate). The declarations are recorded in the document's sidecar, which is where the mesh doors read them from.
+`python models/bracket.py` then writes the STEP **and** the declared meshes, and rewrites any of them that were deleted or edited — no separate export step (a declared output is part of the model's freshness gate). The declarations are recorded in the model's store record. Mesh doors read the document, its intrinsic appearance annotations when present, and derived artifact data; they never read a model's output declarations.
 
 ## A model with no STEP
 
@@ -86,6 +86,18 @@ cadgen stl build path/to/imported.step meshes/imported.stl
 
 A mesh door never writes a `.step` file. A generated model's STEP is the OUTPUT of `python <model>.py`; an imported model's STEP is already the file on disk.
 
+### Carrying a clip into the GLB
+
+GLB is the one mesh format with somewhere to put motion. `--animation` bakes a clip from the document sidecar's embedded animation into the file as glTF node animation, so an external viewer plays it:
+
+```bash
+cadgen glb build STEP/model.step meshes/model.glb --animation demo
+cadgen glb build STEP/model.step meshes/model.glb \
+  --animation '{"clip": "demo", "fps": 30, "seconds": 24, "start": 0}'
+```
+
+`fps` is the SAMPLING rate of the baked keyframes, not a playback rate — this writes geometry, not pixels. Rotation and translation come out exact; opacity and visibility are refused by name, because glTF has no animated channel for them and a silently frozen part is the failure this export exists to avoid. A `.deformTube()` tube is refused by default too, and `"deform": "morph"` bakes it as glTF morph targets fitted to a stated millimetre tolerance (`deformTolerance`) — the file is much bigger and the ceiling is playback memory, not bytes. The flag exists on `glb build` alone — `cadgen stl build` and `cadgen 3mf build` have no `--animation` and reject it as an unrecognized argument. OUT is required: with no OUT a mesh door writes the model's declared artifact, which is its static one. Clips, the full request, and the drop/deform escape hatches are in `kinematics.md`.
+
 ## Rendering a mesh file
 
 Each mesh format also has a `snapshot` verb, with the same `TARGET [OUT]` grammar `cadgen step snapshot` uses:
@@ -96,7 +108,14 @@ cadgen 3mf snapshot 3MF/bracket.3mf tmp/bracket_3mf.png
 cadgen glb snapshot meshes/bracket.glb tmp/bracket_glb.png
 ```
 
-A mesh carries no CAD topology, so these render shaded solid and do not HAVE `--focus`/`--hide`, `--display`, `--kinematics`, `--animation`/`--time`, or `--mode section` — a mesh has no occurrences, CAD edges, kinematics, or clips for those to act on, so they are absent from the command rather than refused by it. `cadgen step snapshot` refuses a mesh input and names the door that takes it.
+A mesh carries no CAD topology. Its snapshot door accepts `--display` for the
+format-neutral `shaded`, `wireframe`, `transparent`, and `unshaded` modes, and
+accepts `--render` for the photographic view. The two settings are separate:
+`--display` cannot be combined with `--render`. Mesh doors do not have
+`--focus`/`--hide`, `--kinematics`, or `--animation`/`--time`, and reject
+`--mode section`; meshes have no canonical CAD occurrences, edges, kinematics,
+or render-module clips for those controls to act on. `cadgen step snapshot`
+refuses a mesh input and names the door that takes it.
 
 This is a review of the EXPORT, not of the model. Snapshot validation of the primary STEP is still what the required workflow means; render the mesh when the question is about the mesh (tessellation density, a tolerance change, what an external tool will receive).
 

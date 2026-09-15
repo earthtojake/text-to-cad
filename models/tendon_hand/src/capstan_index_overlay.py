@@ -19,11 +19,14 @@ import json
 from pathlib import Path
 
 from cadgen import build123d as bd, step
+from lib.assembly import Body,compound
 from lib.capstan import make_capstan
+from lib.palette import assembly_materials
 from lib.layout import TENDONS
 
 HERE = Path(__file__).resolve().parent
 FRAMES = HERE.parents[0] / 'validation/mechanical_candidate_r13_frames.json'
+CAPSTAN_MATERIALS = assembly_materials('aluminum_frame')
 
 
 def capstan_records():
@@ -39,7 +42,7 @@ def capstan_records():
     return records
 
 
-@step(out='../STEP/capstan_index_overlay.step')
+@step(out='../STEP/capstan_index_overlay.step', materials=CAPSTAN_MATERIALS)
 def capstan_index_overlay():
     # One expensive prototype, 48 placed occurrences -- and the placement is
     # lib.assembly's, character for character, or the drums land somewhere the
@@ -54,14 +57,10 @@ def capstan_index_overlay():
         part = placement * bd.Pos(0, 0, 29) * prototype
         part.label = f'{tendon["actuator"]}_capstan'
         part.color = prototype.color
-        if getattr(prototype, 'cad_material', None):
-            part.cad_material = dict(prototype.cad_material)
-        parts.append(part)
-    names = [p.label for p in parts]
+        parts.append(Body(part, 'forearm', 'forearm', 'capstan'))
+    names = [body.name for body in parts]
     assert len(names) == len(set(names)) == 48
-    result = bd.Compound(children=parts)
-    result.label = 'capstan_index_overlay'
-    return result
+    return compound(parts, 'capstan_index_overlay')
 
 
 if __name__ == '__main__':

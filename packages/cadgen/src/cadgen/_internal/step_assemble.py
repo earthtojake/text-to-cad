@@ -12,6 +12,7 @@ runs here; this is the FreeCAD save path, not a recompute.
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -36,13 +37,21 @@ def _load_component_shapes(package_dir: Path, descriptor: Mapping[str, Any]) -> 
     """Each unique component's exact shape, BinTools-read ONCE per cid.
     Occurrences share the TShape through ``moved()``, matching how the
     original build deduped repeats."""
-    from cadgen._internal.component_package import _build123d_shape_from_brep_bytes
+    from cadgen._internal.component_package import decode_geometry_component
 
     shapes: dict[str, Any] = {}
     for cid, entry in (descriptor.get("components") or {}).items():
         ref = str(entry.get("brep") or f"{COMPONENT_DIRNAME}/{cid}.brep")
         blob_path = package_dir / ref
-        shapes[cid] = _build123d_shape_from_brep_bytes(blob_path.read_bytes())
+        payload = blob_path.read_bytes()
+        digest = entry.get("brepObject")
+        if not digest or hashlib.sha256(payload).hexdigest() != digest:
+            raise ValueError("package native geometry does not match its content address")
+        canonical = {key: entry[key] for key in ("kind", "codec", "contentHash", "faceColors")}
+        canonical["brep"] = digest
+        if entry.get("kind") == "eager-only":
+            canonical["eagerSurface"] = entry["eagerSurface"]
+        shapes[cid] = decode_geometry_component(canonical, payload)
     return shapes
 
 

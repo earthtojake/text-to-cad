@@ -65,7 +65,7 @@ class CadgenOps:
         if not owns_artifact_path(file_ref):
             # Not ours to have an opinion about: no candidate resolution, no
             # disk read, no kernel.
-            return {"state": ARTIFACT_STATE.RENDERED}
+            return {"state": ARTIFACT_STATE.COMPILED}
 
         candidate = self._candidate(file_ref)
         build_key = build_scope(candidate)
@@ -118,7 +118,7 @@ class CadgenOps:
 
     def build_artifact(self, file_ref, *, force: bool = False) -> dict:
         if not owns_artifact_path(file_ref):
-            return {"ok": True, "state": ARTIFACT_STATE.RENDERED}
+            return {"ok": True, "state": ARTIFACT_STATE.COMPILED}
 
         candidate = self._candidate(file_ref)
         if self._is_raw_step_file(candidate):
@@ -131,7 +131,7 @@ class CadgenOps:
                 # land on the wire and its ok wins.
                 return {
                     "ok": True,
-                    "state": ARTIFACT_STATE.RENDERED,
+                    "state": ARTIFACT_STATE.COMPILED,
                     "compiled": True,
                     **compiled,
                 }

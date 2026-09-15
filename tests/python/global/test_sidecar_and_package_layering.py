@@ -6,7 +6,7 @@ Two stores of state sit beside a generated STEP and neither may leak into the ot
   is not derivable from artifact bytes, so a tree carrying it would make
   identical-bytes documents collide and would be swept by `cadgen store gc`.
 * The SIDECAR is what the author declared, and it TRAVELS WITH THE FILE. It holds
-  kinematics and nothing else (law 17): no mesh declarations, no choreography (the
+  kinematics and intrinsic appearance (law 17): no mesh declarations, no choreography (the
   render module beside the document is read by the viewer, never by a build), and
   no path into anybody's source tree.
 
@@ -16,6 +16,7 @@ store, so the assertions hold on a real build and read nothing under models/.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -112,7 +113,8 @@ class TreeCarriesNoAuthoredState(LayeringCase):
 
 class SidecarCarriesKinematicsOnly(LayeringCase):
     def test_the_sidecar_holds_kinematics_and_its_schema_and_nothing_else(self) -> None:
-        self.assertEqual(sorted(self.sidecar), ["kinematics", "schemaVersion"])
+        self.assertEqual(sorted(self.sidecar), ["documentHash", "kinematics", "schemaVersion"])
+        self.assertEqual(self.sidecar["documentHash"], hashlib.sha256(self.document.read_bytes()).hexdigest())
 
     def test_the_sidecar_reaches_into_no_source_tree(self) -> None:
         # A generated file has zero dependencies on the machine that made it.

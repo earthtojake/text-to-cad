@@ -1409,8 +1409,6 @@ def build(sectioned: bool = True):
                 if not cut.solids() or cut.volume < 1.0:
                     continue
                 cut.label, cut.color = part.label, part.color
-                if getattr(part, "cad_material", None) is not None:
-                    cut.cad_material = dict(part.cad_material)
                 part = cut
             parts.append(part)
         parts += build_fuel(bank, sectioned)

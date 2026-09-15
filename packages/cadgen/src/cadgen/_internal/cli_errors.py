@@ -68,12 +68,17 @@ def report_cli_error(
     *,
     tool: str,
     verbose: bool = False,
+    verbose_hint: bool = True,
     stream: TextIO | None = None,
 ) -> int:
     """Print ``exc`` as a CLI failure and return the exit code (always 1).
 
     Under ``verbose`` this is the raw traceback, unchanged -- a cadgen bug needs its own
     frames. Otherwise it is the exception plus the model frames that led to it.
+
+    ``verbose_hint`` is whether the caller ACCEPTS ``--verbose``: a command whose
+    parser has no such flag must not be told to re-run with it. Only the caller
+    knows, so it says so; the default is the flag-bearing case.
     """
     out = stream if stream is not None else sys.stderr
     if verbose:
@@ -103,5 +108,6 @@ def report_cli_error(
             innermost = raised[-1]
             line(f"  raised in {_display(innermost.filename)}:{innermost.lineno}")
 
-    line("re-run with --verbose for the full traceback")
+    if verbose_hint:
+        line("re-run with --verbose for the full traceback")
     return 1

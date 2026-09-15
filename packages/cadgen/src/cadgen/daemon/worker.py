@@ -69,6 +69,11 @@ def _apply_request_env(request: dict) -> None:
         os.environ["CADGEN_ROOT_ID"] = root_id
     else:
         os.environ.pop("CADGEN_ROOT_ID", None)
+    job_id = request.get("job_id")
+    if isinstance(job_id, str) and job_id:
+        os.environ["CADGEN_JOB_ID"] = job_id
+    else:
+        os.environ.pop("CADGEN_JOB_ID", None)
 
 
 def _emit(frame: dict) -> None:
@@ -144,6 +149,16 @@ def _warm_imports() -> None:
     the packagers) is another few hundred milliseconds a fresh worker paid on its first
     job. Spares fill in the background, so the cost lands where nobody is waiting.
     """
+    # The distribution's namespace and CLI parsers deliberately import no CAD
+    # kernel. Importing them alone leaves a supposedly warm spare paying the
+    # build123d/OCP import cost on its first real document job. Only a worker
+    # preloads the kernel; the daemon and viewer server remain lightweight.
+    with contextlib.suppress(Exception):
+        importlib.import_module("build123d")
+        # This fresh worker has not accepted or executed authored source yet.
+        # Only bootstrap may establish the memo cache's runtime witness;
+        # generic in-process runners cannot bless a caller's earlier patches.
+        importlib.import_module("cadgen.memoization").install(trusted_worker=True)
     with contextlib.suppress(Exception):
         importlib.import_module("cadgen.generation")
     for tool in _TOOL_IMPORTS:
@@ -153,6 +168,8 @@ def _warm_imports() -> None:
 
 def _run(request: dict) -> int:
     tool = request.get("tool")
+    if tool == "artifact":
+        return _run_artifact(request)
     argv = [str(a) for a in request.get("argv") or []]
     cwd = request.get("cwd")
     prog = str(request.get("prog") or "") or None
@@ -171,7 +188,9 @@ def _run(request: dict) -> int:
             return 1
         sys.argv = [prog or f"cadgen {tool}", *argv]
         main = _tool_main(tool)
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        from cadgen.daemon.artifacts import worker_context
+
+        with worker_context(request.get("store_root")), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             # Pass the caller's name where the parser takes one, so a command reports the
             # same usage warm as cold.
             if prog and "prog" in inspect.signature(main).parameters:
@@ -195,6 +214,30 @@ def _run(request: dict) -> int:
         # Deterministic closure capture: the next job must see a clean first-party module
         # space or it records a different sourceClosureHash than a cold build would.
         _evict_first_party_modules()
+
+
+def _run_artifact(request: dict) -> int:
+    """A typed operation has no parser, script path, declared outputs or hygiene scan."""
+    from cadgen.daemon import artifacts, broker
+
+    out, err = _FrameWriter("stdout"), _FrameWriter("stderr")
+    try:
+        if request.get("argv") != []:
+            raise ValueError("artifact requests have empty argv")
+        if not isinstance(request.get("store_root"), str) or not request["store_root"]:
+            raise ValueError("artifact requests require an explicit store_root")
+        operation = artifacts.normalize_request(request.get("artifact"))
+        root = artifacts.store_path(request.get("store_root"))
+        if artifacts.store_path() != root:
+            raise RuntimeError("artifact worker store does not match its request")
+        with broker.held(f"artifact:{operation['kind']}", required=True), artifacts.worker_context(root), \
+             contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            result = artifacts.result_frame(operation, artifacts.execute(operation))
+            _emit({"artifactResult": result})
+        return 0
+    except BaseException:  # the worker stays reusable, but no success is emitted
+        err.write(traceback.format_exc())
+        return 1
 
 
 def serve() -> int:

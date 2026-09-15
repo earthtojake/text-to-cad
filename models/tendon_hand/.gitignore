@@ -5,7 +5,6 @@
 /STEP/**/*.3mf
 /STEP/**/*.glb
 /STEP/**/*.json
-/STEP/hand_mechanical_candidate_r13.step.js
 
 # Generated presentation assets. The HTML and its behavior test are source.
 /website/*.glb

@@ -22,12 +22,14 @@ tested from the outside, on the bytes actually written:
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 
@@ -71,6 +73,30 @@ def wrapped():
 
 if __name__ == "__main__":
     wrapped()
+'''
+
+
+_JSON_MODEL = '''import json
+from pathlib import Path
+
+from cadgen import build123d as bd
+from cadgen import declare_input, step
+
+HERE = Path(__file__).resolve().parent
+
+
+def _atlas():
+    return json.loads(declare_input(HERE / "atlas.json").read_text(encoding="utf-8"))
+
+
+@step
+def plate():
+    atlas = _atlas()
+    return bd.Box(atlas["width"], 20, 4)
+
+
+if __name__ == "__main__":
+    plate()
 '''
 
 
@@ -120,44 +146,19 @@ class DiscoveredFileInputTests(unittest.TestCase):
         (self.project / name).write_text(source, encoding="utf-8")
         return name
 
-    def test_new_bytes_at_the_same_path_rebuild_the_drawing(self) -> None:
-        model = self._write_model("bracket_profile.py", _DXF_MODEL)
-        self._write_vendor_step(20.0)
-        self._run(model)
-        first = (self.project / "bracket_profile.dxf").read_bytes()
-
-        self._run(model)
-        self.assertEqual(first, (self.project / "bracket_profile.dxf").read_bytes())
-
-        # The vendor part changes. Nothing in the model's Python changed, so the
-        # old gate would have called this current and skipped.
-        self._write_vendor_step(30.0)
-        self._run(model)
-        self.assertNotEqual(
-            first,
-            (self.project / "bracket_profile.dxf").read_bytes(),
-            "a replaced vendor STEP must make the drawing stale",
-        )
-
-    def test_identical_bytes_replaced_in_place_stay_a_no_op(self) -> None:
-        """The input is the file's CONTENT, not its mtime.
-
-        Rewriting a file with the same bytes — a checkout, a sync, an rsync —
-        must not rebuild anything, or every `git checkout` would invalidate every
-        model that reads a committed STEP.
-
-        The bytes are replayed rather than re-exported on purpose: build123d's
-        STEP writer stamps its own header, so a re-export of identical geometry
-        is a genuinely different file and SHOULD rebuild.
-        """
+    def test_input_bytes_control_drawing_rebuild_and_missing_input_fails(self) -> None:
+        """The input is its content, while absence remains a loud error."""
         model = self._write_model("bracket_profile.py", _DXF_MODEL)
         self._write_vendor_step(20.0)
         vendor = self.project / "vendor.step"
         payload = vendor.read_bytes()
         self._run(model)
         drawing = self.project / "bracket_profile.dxf"
+        first = drawing.read_bytes()
         before = drawing.stat().st_mtime_ns
 
+        # A checkout or sync may replace an input without changing its bytes.
+        # The artifact remains current even though the input looks newer.
         vendor.unlink()
         vendor.write_bytes(payload)
         self.assertNotEqual(
@@ -167,13 +168,19 @@ class DiscoveredFileInputTests(unittest.TestCase):
         )
         self._run(model)
         self.assertEqual(before, drawing.stat().st_mtime_ns)
+        self.assertEqual(first, drawing.read_bytes())
 
-    def test_a_missing_input_fails_loudly(self) -> None:
-        model = self._write_model("bracket_profile.py", _DXF_MODEL)
-        self._write_vendor_step(20.0)
+        # The vendor part changes. Nothing in the model's Python changed, so the
+        # old gate would have called this current and skipped.
+        self._write_vendor_step(30.0)
         self._run(model)
+        self.assertNotEqual(
+            first,
+            drawing.read_bytes(),
+            "a replaced vendor STEP must make the drawing stale",
+        )
 
-        (self.project / "vendor.step").unlink()
+        vendor.unlink()
         completed = subprocess.run(
             [sys.executable, str(self.project / model)],
             cwd=str(self.project),
@@ -224,107 +231,6 @@ class DiscoveredFileInputTests(unittest.TestCase):
         before = artifact.stat().st_mtime_ns
         self._run(model)
         self.assertEqual(before, artifact.stat().st_mtime_ns)
-
-
-_ANIMATED_MODEL = '''import cadgen
-from cadgen import label_shape, step
-from cadgen import build123d as bd
-
-KINEMATICS = {
-    "mates": [
-        cadgen.revolute("swing", parent="#base", child="#arm",
-                        origin=(0, 0, 6), direction=(0, 0, 1), limits=(0, 90)),
-    ],
-}
-
-
-@step(kinematics=KINEMATICS)
-def hinge():
-    base = label_shape(bd.Box(20, 20, 4), "base")
-    arm = label_shape(bd.Pos(10, 0, 6) * bd.Box(16, 4, 4), "arm")
-    return bd.Compound(children=[base, arm])
-
-
-if __name__ == "__main__":
-    hinge()
-'''
-
-
-def _clip(label: str) -> str:
-    return f'export const clips = {{ demo: {{ label: "{label}", duration: 2, update(t, m) {{}} }} }};\n'
-
-
-class RenderModuleIsNotABuildInputTests(unittest.TestCase):
-    """The render module beside the document (`hinge.step.js`) is the viewer's.
-
-    Choreography never touches geometry or the tree, so it is not a build
-    input: no decorator names it, no build reads it, the sidecar carries no
-    copy of it, and editing it is a reload in the viewer — never a rebuild.
-    The model stays `current` through any edit of the module.
-    """
-
-    def setUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory(prefix="render-module-")
-        self.addCleanup(self._tmp.cleanup)
-        self.project = Path(self._tmp.name).resolve()
-        self.environment = dict(os.environ)
-        self.environment.update(
-            {
-                "CADGEN_DAEMON": "0",
-                "CADGEN_COMPONENT_WORKERS": "1",
-                "CADGEN_CACHE_DIR": str(self.project / "store"),
-                "PYTHONPATH": str(CADGEN_SRC),
-            }
-        )
-        (self.project / "hinge.py").write_text(_ANIMATED_MODEL, encoding="utf-8")
-        # Beside the DOCUMENT (the output), not the script: hinge.step.js.
-        self.render_module = self.project / "hinge.step.js"
-        self.render_module.write_text(_clip("Showcase"), encoding="utf-8")
-
-    def _run(self, *args: str) -> str:
-        import json
-
-        completed = subprocess.run(
-            [sys.executable, str(self.project / "hinge.py"), "--json", *args],
-            cwd=str(self.project),
-            env=self.environment,
-            capture_output=True,
-            text=True,
-            timeout=600,
-        )
-        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
-        return json.loads(completed.stdout.strip().splitlines()[-1])["outcome"]
-
-    def _sidecar(self) -> dict:
-        import json
-
-        return json.loads((self.project / "hinge.step.json").read_text(encoding="utf-8"))
-
-    def test_editing_the_render_module_never_makes_the_model_stale(self) -> None:
-        self.assertEqual(self._run(), "built")
-        self.assertEqual(self._run(), "current")
-        self.assertNotIn("animation", self._sidecar(), "the sidecar carries no copy of the module")
-
-        self.render_module.write_text(_clip("Showcase EDITED"), encoding="utf-8")
-        self.assertEqual(self._run(), "current", "choreography is a reload, never a rebuild")
-        self.render_module.unlink()
-        self.assertEqual(self._run(), "current", "nor is its absence a build concern")
-
-    def test_force_still_rebuilds_a_current_model(self) -> None:
-        self.assertEqual(self._run(), "built")
-        self.assertEqual(self._run("--force"), "built")
-
-    def test_the_render_module_is_not_in_the_closure(self) -> None:
-        self._run()
-        from unittest import mock
-
-        from cadgen.store.records import read_record
-
-        with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": self.environment["CADGEN_CACHE_DIR"]}):
-            recorded = read_record(self.project / "hinge.py")
-        self.assertIsNotNone(recorded, "the build must leave a record for the model")
-        files = sorted(os.path.basename(f) for f in recorded["closure"]["files"])
-        self.assertEqual(files, ["hinge.py"])
 
 
 class ReaderSurfaceTests(unittest.TestCase):
@@ -439,6 +345,187 @@ class DiscoveredInputRecordingTests(unittest.TestCase):
             # say about a STEP file, and a comment there is content.
             data.write_text("ISO-10303-21;\n/* a comment */\n", encoding="utf-8")
             self.assertFalse(closure_hash_matches(closure.closure_hash, closure.files, base=root))
+
+
+class DeclaredDataInputTests(unittest.TestCase):
+    """A model's own data file is a build input once it says so.
+
+    `read_step` covers the files cadgen reads for the model. A JSON routing
+    atlas, a CSV table, a solved-offsets dump -- cadgen has no reader for
+    those, so it cannot record them, and a model that computes its geometry
+    from one used to report itself current forever after the file changed
+    (PR #370 bug record 012, whose workaround was to re-export the data as a
+    Python literal module so the IMPORT closure would carry it).
+
+    `cadgen.declare_input` is the declaration: the model still parses the file
+    itself, and the path it declares joins the closure. The three properties
+    are the same three that matter for `read_step`, because the failure being
+    guarded is the same silent one -- a build that does nothing and says
+    everything is fine.
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory(prefix="declared-inputs-")
+        self.addCleanup(self._tmp.cleanup)
+        self.project = Path(self._tmp.name).resolve()
+        self.environment = dict(os.environ)
+        self.environment.update(
+            {
+                "CADGEN_DAEMON": "0",
+                "CADGEN_COMPONENT_WORKERS": "1",
+                "CADGEN_CACHE_DIR": str(self.project / "store"),
+                "PYTHONPATH": str(CADGEN_SRC),
+            }
+        )
+        (self.project / "plate.py").write_text(_JSON_MODEL, encoding="utf-8")
+        self.atlas = self.project / "atlas.json"
+
+    def _write_atlas(self, width: float) -> None:
+        self.atlas.write_text(json.dumps({"width": width}) + "\n", encoding="utf-8")
+
+    def _run_outcome(self) -> str:
+        completed = subprocess.run(
+            [sys.executable, str(self.project / "plate.py"), "--json"],
+            cwd=str(self.project),
+            env=self.environment,
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        return json.loads(completed.stdout.strip().splitlines()[-1])["outcome"]
+
+    def test_declared_input_is_content_addressed_recorded_and_required(self) -> None:
+        self._write_atlas(30.0)
+        self.assertEqual(self._run_outcome(), "built")
+        from cadgen.store.records import read_record
+
+        with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": self.environment["CADGEN_CACHE_DIR"]}):
+            recorded = read_record(self.project / "plate.py")
+        self.assertIsNotNone(recorded, "the build must leave a record for the model")
+        self.assertIn("atlas.json", sorted(recorded["closure"]["files"]))
+
+        payload = self.atlas.read_bytes()
+        before = self.atlas.stat().st_mtime_ns
+        self.atlas.unlink()
+        self.atlas.write_bytes(payload)
+        self.assertNotEqual(
+            before,
+            self.atlas.stat().st_mtime_ns,
+            "precondition: the input must look newer than the artifact",
+        )
+        self.assertEqual(self._run_outcome(), "current")
+
+        self._write_atlas(45.0)
+        self.assertEqual(
+            self._run_outcome(), "built", "a changed data file must make the model stale"
+        )
+        self.assertEqual(self._run_outcome(), "current")
+
+        self.atlas.unlink()
+        completed = subprocess.run(
+            [sys.executable, str(self.project / "plate.py")],
+            cwd=str(self.project),
+            env=self.environment,
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+        self.assertNotEqual(completed.returncode, 0, "a missing input must not pass silently")
+        self.assertIn("declare_input", completed.stdout + completed.stderr)
+
+    def test_declaring_outside_a_build_resolves_but_records_nothing(self) -> None:
+        """A REPL, a test or a tool reading a data file is not a build."""
+        from cadgen import declare_input
+        from cadgen._internal.source_hash import record_discovered_inputs
+
+        self._write_atlas(30.0)
+        self.assertEqual(declare_input(self.atlas), self.atlas.resolve())
+        with record_discovered_inputs() as recorded:
+            declare_input(self.atlas)
+        self.assertEqual(recorded, {self.atlas.resolve()})
+
+    def test_edit_after_declared_read_keeps_step_and_drawing_closures_stale(self) -> None:
+        from unittest import mock
+
+        from cadgen import declare_input
+        from cadgen._internal.source_hash import capture_runtime_closure, record_discovered_inputs
+        from cadgen.store.closure import ExecutionHashes, build_closure, current_closure_hash
+        from cadgen.store.gate import stale
+        from cadgen.store.publish import decide
+
+        script = self.project / "plain.py"
+        script.write_text("def model():\n    return None\n", encoding="utf-8")
+        self._write_atlas(30.0)
+        with record_discovered_inputs() as inputs, ExecutionHashes() as hashes:
+            consumed = json.loads(declare_input(self.atlas).read_text(encoding="utf-8"))
+            first_hash = hashes.hashes[str(self.atlas)]
+            self._write_atlas(45.0)
+            declare_input(self.atlas)  # A later declaration cannot erase the first read.
+        self.assertEqual(consumed["width"], 30.0)
+        for path in inputs:
+            hashes.note(path)  # The runner's post-body fallback must not overwrite it.
+
+        step_closure = build_closure(script, executed=hashes.hashes, discovered_inputs=inputs)
+        drawing_closure = capture_runtime_closure(
+            set(sys.modules), script, base=self.project, discovered_inputs=inputs,
+            executed_hashes=hashes.hashes,
+        )
+        for label, digest, files, shas in (
+            ("step", step_closure.hash, step_closure.files, step_closure.shas),
+            ("drawing", drawing_closure.closure_hash, drawing_closure.files, drawing_closure.file_hashes),
+        ):
+            with self.subTest(format=label):
+                self.assertEqual(shas["atlas.json"], first_hash)
+                self.assertNotEqual(digest, current_closure_hash(script, files))
+                record = {"tree": None, "closure": {"hash": digest, "files": files, "shas": shas}}
+                with mock.patch("cadgen.store.gate.read_record", return_value=record):
+                    verdict = stale(script)
+                self.assertTrue(verdict.stale)
+                self.assertIn("atlas.json", verdict.clauses[1]["why"])
+                # An older build cannot replace a current record that a newer
+                # build published while this body was still running.
+                with mock.patch("cadgen.store.publish.stale", return_value=mock.Mock(stale=False)):
+                    decision = decide(script, ran_closure_hash=digest, ran_files=files)
+                self.assertFalse(decision.publish_outputs)
+
+    def test_pre_declaration_hash_records_miss_without_invalidating_saved_artifacts(self) -> None:
+        import hashlib
+        from unittest import mock
+
+        from cadgen.catalog import result_snapshot_for
+        from cadgen.store.closure import build_closure
+        from cadgen.store.gate import stale
+        from cadgen.store.objects import put_object, read_verified_object
+        from cadgen.store.records import note_document_tree, read_record, write_record
+        from tests.python.support.tmp_root import generated_cad_directory
+
+        with generated_cad_directory(prefix="declared-input-admission-") as folder:
+            root = Path(folder)
+            script = root / "model.py"
+            script.write_text("def model():\n    return None\n", encoding="utf-8")
+            data = root / "dimensions.json"
+            data.write_text('{"width":30}', encoding="utf-8")
+            consumed_width = json.loads(data.read_text(encoding="utf-8"))["width"]
+            data.write_text('{"width":45}', encoding="utf-8")
+            # Reproduce the old late-hash record: its closure falsely agrees
+            # with the edited input, although the body consumed width 30.
+            closure = build_closure(script, executed={}, discovered_inputs=[data])
+            document = root / "saved.step"
+            document.write_bytes(f"saved geometry width {consumed_width}".encode())
+            document_hash = hashlib.sha256(document.read_bytes()).hexdigest()
+            with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(root / "store")}):
+                payload = b"immutable saved geometry"
+                tree = put_object(payload)
+                note_document_tree(document_hash, tree)
+                record = {"tree": None, "closure": closure.as_json(), "children": [], "outputs": {}}
+                with mock.patch("cadgen.store.records.RECORD_SCHEMA_VERSION", 5):
+                    write_record(script, record)
+                    self.assertFalse(stale(script).stale, "precondition: the old record falsely passes")
+                self.assertIsNone(read_record(script))
+                self.assertTrue(stale(script).stale)
+                self.assertEqual(result_snapshot_for(document), (document_hash, tree))
+                self.assertEqual(read_verified_object(tree), payload)
 
 
 if __name__ == "__main__":

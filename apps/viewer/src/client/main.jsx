@@ -34,8 +34,8 @@ function bootstrap() {
   if (!rootElement) {
     throw new Error(`Missing #${ROOT_ID} mount point.`);
   }
-  // The viewer is a consumer of the shared component-tessellation cache
-  // (~/.cache/cadgen/meshes, served by viewer/server on /__tess_cache/):
+  // The viewer consumes the shared immutable tessellation object/index store
+  // (served by cadgen.viewer on /__tess_cache/):
   // component loads and LOD level re-tessellations resolve through it and
   // write back on miss, so tessellations persist across sessions and are
   // shared with snapshots and exports. Best-effort by construction — any

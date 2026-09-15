@@ -64,6 +64,15 @@ _SEMANTIC_HASH_CACHE: dict[str, tuple[int, int, str]] = {}
 _SEMANTIC_HASH_SETTLE_NS = 2_000_000_000
 
 
+def _semantic_source_bytes(source: bytes) -> str:
+    """Hash the source buffer a loader actually compiled, without rereading it."""
+    try:
+        dumped = ast.dump(ast.parse(source))
+    except (SyntaxError, ValueError, MemoryError, RecursionError):
+        return hashlib.sha256(source).hexdigest()
+    return "ast1:" + hashlib.sha256(dumped.encode("utf-8")).hexdigest()
+
+
 def _semantic_source_hash(path: Path) -> str:
     """Content hash that ignores comments, blank lines, and formatting for
     Python sources — so a comment/whitespace-only edit to a generator or a
@@ -93,12 +102,7 @@ def _semantic_source_hash(path: Path) -> str:
         cached = _SEMANTIC_HASH_CACHE.get(key)
         if cached is not None and cached[0] == stat.st_mtime_ns and cached[1] == stat.st_size:
             return cached[2]
-    try:
-        dumped = ast.dump(ast.parse(path.read_bytes()))
-    except (OSError, SyntaxError, ValueError, MemoryError, RecursionError):
-        result = _sha256_file(path)
-    else:
-        result = "ast1:" + hashlib.sha256(dumped.encode("utf-8")).hexdigest()
+    result = _semantic_source_bytes(path.read_bytes())
     if stat is not None and time.time_ns() - stat.st_mtime_ns > _SEMANTIC_HASH_SETTLE_NS:
         _SEMANTIC_HASH_CACHE[key] = (stat.st_mtime_ns, stat.st_size, result)
     return result
@@ -387,7 +391,7 @@ def evict_foreign_first_party_modules(own_roots) -> tuple[str, ...]:
         if name.partition(".")[0] in protected or name in _NEVER_EVICTED:
             continue
         module = sys.modules.get(name)
-        entries = list(getattr(module, "__path__", None) or ())
+        entries = _namespace_package_entries(module)
         if entries and all(_owned(Path(str(entry)).resolve()) for entry in entries):
             continue
         foreign.append(name)
@@ -395,6 +399,33 @@ def evict_foreign_first_party_modules(own_roots) -> tuple[str, ...]:
     for name in evicted:
         sys.modules.pop(name, None)
     return evicted
+
+
+def _namespace_package_entries(module: object) -> tuple[str, ...]:
+    """Snapshot a namespace package's paths, including an orphaned child.
+
+    ``importlib``'s ``_NamespacePath`` recalculates from its parent package when
+    iterated. First-party eviction can intentionally remove a foreign namespace
+    parent while retaining a nested package that belongs to the next model. If
+    that retained path is invalidated before the next hygiene pass, iteration
+    raises ``KeyError(parent)``. Its last calculated ``_path`` is still the
+    child's exact import path and is sufficient to classify and evict that stale
+    module. Ordinary namespace packages continue through the public iterator;
+    the private snapshot is only the recovery path for an unusable iterator.
+    """
+    search_paths = getattr(module, "__path__", None)
+    if search_paths is None:
+        return ()
+    try:
+        return tuple(str(entry) for entry in search_paths)
+    except (KeyError, TypeError):
+        stale_paths = getattr(search_paths, "_path", None)
+        if stale_paths is None:
+            return ()
+        try:
+            return tuple(str(entry) for entry in stale_paths)
+        except (KeyError, TypeError):
+            return ()
 
 
 def _first_party_namespace_packages() -> set[str]:
@@ -407,13 +438,7 @@ def _first_party_namespace_packages() -> set[str]:
     for name, module in list(sys.modules.items()):
         if module is None or getattr(module, "__file__", None):
             continue
-        search_paths = getattr(module, "__path__", None)
-        if search_paths is None:
-            continue
-        try:
-            entries = [str(entry) for entry in search_paths]
-        except TypeError:  # _NamespacePath can raise while its finder is mid-update
-            continue
+        entries = _namespace_package_entries(module)
         if entries and all(_is_first_party_directory(entry) for entry in entries):
             names.add(name)
     return names
@@ -597,7 +622,10 @@ def _resolve_against_base(relative: str, base: Path) -> Path | None:
     return resolved if resolved.is_file() else None
 
 
-def closure_for_files(script_path: Path, files: object, *, base: Path) -> PythonSourceClosure:
+def closure_for_files(
+    script_path: Path, files: object, *, base: Path,
+    executed_hashes: dict[str, str] | None = None,
+) -> PythonSourceClosure:
     """Build a closure record from the script plus a set of dependency files, recording every path
     RELATIVE TO ``base`` (the model folder). The digest is computed over (relative path, content
     hash) pairs, so it — like the stored ``files`` — is independent of the absolute repository
@@ -609,7 +637,9 @@ def closure_for_files(script_path: Path, files: object, *, base: Path) -> Python
     pairs: list[tuple[str, str]] = []
     for path in paths:
         try:
-            file_hash = _semantic_source_hash(path)
+            file_hash = (executed_hashes or {}).get(str(path))
+            if file_hash is None:
+                file_hash = _semantic_source_hash(path)
         except OSError:
             continue
         pairs.append((_relative_to_base(path, base_dir), file_hash))
@@ -627,6 +657,7 @@ def capture_runtime_closure(
     base: Path,
     executed_files: object = (),
     discovered_inputs: object = (),
+    executed_hashes: dict[str, str] | None = None,
 ) -> PythonSourceClosure:
     """Capture a generator's dependency closure after running it.
 
@@ -639,7 +670,8 @@ def capture_runtime_closure(
     ``discovered_inputs``: the data files the run declared through
     :func:`note_discovered_input`, which is how ``cadgen.read_step`` puts a
     vendor STEP into the closure. Every recorded path is relative to ``base``
-    (the model folder), and a non-``.py`` input is hashed by its bytes.
+    (the model folder), and a non-``.py`` input is hashed by its bytes. Captured
+    execution/declaration hashes take precedence over the files' current bytes.
 
     A file read WITHOUT going through a declaring reader is still not a
     freshness input — nothing observes it — which is exactly why reading one is
@@ -656,7 +688,9 @@ def capture_runtime_closure(
         *executed_files,
         *discovered_inputs,
     ]
-    return closure_for_files(script_path, dependency_files, base=base)
+    return closure_for_files(
+        script_path, dependency_files, base=base, executed_hashes=executed_hashes,
+    )
 
 
 def _recompute_closure_hash(relative_files: object, *, base: Path, hasher) -> str | None:

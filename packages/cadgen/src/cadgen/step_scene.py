@@ -75,9 +75,16 @@ def load_step_scene(step_path: Path | str, **kwargs) -> Any:
     tree depends on that STEP's bytes exactly as much as one that takes its
     shape.
     """
-    from cadgen._internal.step_scene import load_step_scene as engine_load
+    from cadgen._internal.step_scene_package import load_step_scene_cached
 
-    return engine_load(_record_input(step_path, reader="load_step_scene"), **kwargs)
+    # ``record_read`` was the raw engine's internal scope-capture switch. Keep
+    # accepting it for source compatibility; this public reader always records
+    # its authored input through ``_record_input`` and the exact digest hook.
+    kwargs.pop("record_read", None)
+    if kwargs:
+        unexpected = ", ".join(sorted(str(key) for key in kwargs))
+        raise TypeError(f"load_step_scene() got unexpected keyword argument(s): {unexpected}")
+    return load_step_scene_cached(_record_input(step_path, reader="load_step_scene"))
 
 
 def read_step(step_path: Path | str, *, label: str | None = None) -> Any:
@@ -85,10 +92,13 @@ def read_step(step_path: Path | str, *, label: str | None = None) -> Any:
 
     Usable in a ``@step`` body (composing a vendor part into an assembly) and in
     a ``@dxf`` body (deriving a cut profile from one) alike. The returned shape
-    is topologically identical to ``build123d.import_step``'s — the root itself,
-    not a wrapper — with per-occurrence and prototype STEP colors applied, and it
-    comes from the store, so a warm read costs tens
-    of milliseconds instead of a full text-STEP re-parse.
+    is the file's geometry, as ``build123d.import_step`` would read it — the
+    root itself, not a wrapper — with per-occurrence and prototype STEP colors
+    applied. When the store holds a tree for the file's bytes the read is warm
+    (tens of milliseconds instead of a full text-STEP parse), and it is the
+    SAME geometry: a model's tree is built from the STEP it wrote, re-read, so a
+    warm read, a cold parse and ``import_step`` agree by construction
+    (``cadgen.store.build.build_tree_through_step``).
 
     **The recording is the point.** Freshness used to follow a model's Python
     import reach only, which is observable: modules announce themselves. A file

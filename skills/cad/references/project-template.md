@@ -323,7 +323,6 @@ model of its own so assemblies can link to it).
 ```gitignore
 /STEP/*
 !/STEP/imported/
-!/STEP/*.step.js
 /DXF/*
 !/DXF/imported/
 /STL/*
@@ -337,26 +336,20 @@ __pycache__/
 ```
 
 The `*` forms matter: ignoring the directory itself (`/STEP/`) would make the
-`imported/` negation dead — git never descends into an ignored directory. The
-`!/STEP/*.step.js` line keeps render modules (the authored choreography beside
-a document, `arm.step.js` beside `arm.step`) committed while everything
-generated around them stays ignored. A project whose folders mirror the
+`imported/` negation dead — git never descends into an ignored directory. A project whose folders mirror the
 product tree (groups, sub-assembly folders, `purchased/`) needs the negations
 at every depth, because git never descends into an ignored directory:
 
 ```gitignore
 /STEP/*
 !/STEP/imported/
-!/STEP/*.step.js
 !/STEP/*/
 /STEP/*/*
-!/STEP/*/*.step.js
 !/STEP/*/*/
 /STEP/*/*/*
-!/STEP/*/*/*.step.js
 ```
 
-One `!/STEP/*/`, `/STEP/*/*`, `!/STEP/*/*.step.js` triple per nesting level
+One `!/STEP/*/`, `/STEP/*/*` pair per nesting level
 (the same for `DXF/`, `STL/`, `GLB/`, `3MF/`). Pin any other file deliberately
 with its own negation line or `git add -f`.
 
@@ -370,15 +363,14 @@ STL/imported/**  filter=lfs diff=lfs merge=lfs -text
 GLB/imported/**  filter=lfs diff=lfs merge=lfs -text
 3MF/imported/**  filter=lfs diff=lfs merge=lfs -text
 
-# Authored text beside the documents stays plain git.
-*.step.js text
+# Generated sidecars stay diffable text when a project chooses to commit them.
 *.step.json text
 ```
 
 A per-project file at the project root, next to `.gitignore`. The `imported/`
 folders hold vendor STEPs, supplier DXFs and other files you did not author;
 tracking them with Git LFS keeps those binaries out of plain git history while
-the render modules and sidecars beside the documents stay diffable text. Run
+sidecars beside the documents stay diffable text. Run
 `git lfs install` once per machine. If a file under `imported/` is a few lines
 of text beginning `version https://git-lfs...`, it is an LFS pointer whose
 object was not fetched: `read_step` fails on it, and
@@ -422,7 +414,6 @@ demo/
     bracket_right.step
     frame.step
     assembly.step
-    assembly.step.js            # the render module beside assembly.step — authored, committed
     imported/
       servo.step                # brought in from outside — committed
   STL/
@@ -433,17 +424,12 @@ demo/
     assembly.png                # the snapshot: scratch — ignored
 ```
 
-No model here declares kinematics or a mesh export beside its STEP, so no
-`.step.json` sidecar is written; a model that does gets one beside its
-document, generated with it and ignored with it. `assembly.step.js` is the
-other file beside a document: the render module (choreography — see the cad
-skill's kinematics reference). Nothing generates it and no build reads it; the
-viewer loads it by name, so it is authored like `src/` and committed like
-`imported/`.
+No model here declares kinematics, materials, animation, or a mesh export
+beside its STEP, so no `.step.json` sidecar is written; a model that does gets
+one beside its document, generated with it and ignored with it.
 
 `git status` in this tree shows exactly `.gitignore`, `.gitattributes`, `src/`,
-`STEP/assembly.step.js` and `STEP/imported/servo.step`: authored code, the
-authored choreography, and the one input code cannot regenerate. Everything
+and `STEP/imported/servo.step`: authored code and the one input code cannot regenerate. Everything
 else is rebuilt by running the scripts, so a fresh clone that runs
 `python src/assembly.py && python src/plate_drawing.py` arrives at this same
 tree.

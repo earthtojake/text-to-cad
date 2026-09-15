@@ -68,7 +68,7 @@ def make_cable_grommet():
     seat=bd.Cylinder(4,1.8)-bd.Cylinder(2.2,2.0)
     s=s-seat
     s=_done(s,'dark','silicone_two_lip_cable_exit_grommet')
-    s.color=srgb('#242a2b');s.cad_material={'roughness':.72,'metalness':0.0}
+    s.color=srgb('#242a2b')
     return s
 
 

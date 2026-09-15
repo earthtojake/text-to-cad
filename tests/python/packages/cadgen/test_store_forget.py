@@ -18,7 +18,7 @@ import unittest
 from pathlib import Path
 
 from tests.python.support.paths import REPO_ROOT
-from tests.python.support.tmp_root import temporary_directory
+from tests.python.support.tmp_root import generated_cad_directory
 
 PIN = """
     from cadgen import step
@@ -50,7 +50,7 @@ def _run(*argv: str, cwd: Path, cache: Path) -> subprocess.CompletedProcess:
 
 class StoreForget(unittest.TestCase):
     def setUp(self) -> None:
-        self._tmp = temporary_directory(prefix="store-forget-")
+        self._tmp = generated_cad_directory(prefix="store-forget-")
         self.root = Path(self._tmp.name) / "proj"
         (self.root / "src").mkdir(parents=True)
         self.cache = Path(self._tmp.name) / "store"

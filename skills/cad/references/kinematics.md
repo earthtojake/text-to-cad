@@ -13,21 +13,21 @@ There are THREE systems with different lifecycles, deliberately independent:
   the export decorators. It drives the viewer's pose sliders — no rebuild, no
   Python at render time — and never moves the geometry a model writes. It
   lives in the model's sidecar (`<name>.step.json`, written beside the
-  artifact), the one thing a sidecar is written for.
-- **Animation** is choreography in the RENDER MODULE beside the document:
-  `STEP/<name>.step.js`, next to `<name>.step` and `<name>.step.json`. It is
-  authored and committed, discovered by name, loaded by the viewer and the
-  snapshot door, and read by NO build — no decorator names it, the sidecar
-  carries no copy, the gate has no clause for it. It targets occurrences
-  directly and knows nothing about mates. Editing it is a reload in the
-  viewer, never a rebuild; editing kinematics never changes the tree either,
-  but it does rewrite the sidecar, so a kinematics edit is a (cheap) run.
+  artifact), alongside any intrinsic material appearance.
+- **Animation** is choreography declared as a self-contained JavaScript ES
+  module string via `animation=` on `@step`. The build embeds it in
+  `<name>.step.json`; the viewer, snapshot door, and animated GLB export read
+  that document-bound copy. Animated GLB export hashes the source with the clip
+  request, so an animation edit invalidates that export. Animation targets
+  occurrences directly and knows nothing about mates. Like materials and
+  kinematics, it never changes STEP geometry or bytes.
 
 ## Kinematics: typed mates
 
-Kinematics is the ONE thing a model writes a sidecar for, and it never moves
-geometry: the declaration describes how the written tree articulates, the
-viewer poses it at render time. A model that declares none has no sidecar.
+Kinematics is one sidecar section, independent of intrinsic material appearance.
+It never moves saved geometry: the declaration describes how the written tree
+articulates, and the viewer poses it at render time. A STEP model with neither
+kinematics nor intrinsic material finishes has no sidecar.
 
 One `kinematics=` dict, closed keys `mates` / `couplings` / `poses`, on any of
 `@step`/`@stl`/`@glb`/`@threemf`. Each decorator's declaration stands alone
@@ -113,9 +113,11 @@ if __name__ == "__main__":
 A document with no model script gets its kinematics from
 `cadgen step build IN OUT`, whose `--kinematics` takes the whole SPACE — the
 same `{mates, couplings, poses, at}` vocabulary, as inline JSON or a `.json`
-path — and whose `--animation` copies a `.js` module's text into OUT's sidecar.
-The input is read with OCCT and re-emitted by the canonical writer, so OUT's
-bytes are deterministic whichever kernel wrote IN:
+path. `--materials` accepts the named material declaration as inline JSON or
+a `.json` path, and `--animation` accepts a self-contained JavaScript module
+file or source string. The input is read with OCCT and
+re-emitted by the canonical writer, so OUT's bytes are deterministic whichever
+kernel wrote IN:
 
 ```bash
 cadgen step build vendor/hinge.step STEP/hinge.step \
@@ -130,21 +132,18 @@ script — a thin `@step` function that imports the foreign STEP and re-exports
 it, so the kinematics live beside the geometry decisions and every edit is one
 `python model.py`. Reach for `step build` when the geometry is fixed and not
 yours: a one-shot annotation or canonicalization of a vendor file. Re-running it
-is a no-op, editing only the kinematics refreshes the sidecar without
+is a no-op, editing only these annotations refreshes the sidecar without
 re-emitting a byte, and vendor metadata (PMI, GD&T) does not survive the trip.
 
-## Animation: the render module (`<name>.step.js`)
+## Animation: the embedded module
 
-A STEP document may carry ONE JavaScript module beside it, named after the
-document: `STEP/arm.step` → `STEP/arm.step.js`. It is the place for
-render-only behaviour — today choreography, as the `clips` export below;
-other render-only exports will join it, and an export the renderer does not
-know is a load ERROR, never ignored. It is an ES module with no imports,
-authored by you and COMMITTED even though it lives in a format folder (the
-project's `.gitignore` whitelists `*.step.js`; see `project-layout.md`).
+A STEP document may carry one self-contained JavaScript animation module in
+its unified sidecar. Author the module as a Python string and pass it to
+`@step(animation=...)`. It exports `clips`; an export the renderer does not
+know is a load error, never ignored. The module has no imports.
 
-```js
-// STEP/arm.step.js — beside arm.step; the viewer loads it by name.
+```python
+ANIMATION = r"""
 export const clips = {
   demo: {
     label: "Demo",
@@ -157,6 +156,10 @@ export const clips = {
     },
   },
 };
+"""
+
+@step(out="../STEP/arm.step", kinematics=KINEMATICS, animation=ANIMATION)
+def arm(): ...
 ```
 
 - `m.get(target)` takes a LABEL (canonical) or occurrence-id refs
@@ -164,7 +167,25 @@ export const clips = {
   targets THROW — a typo never silently animates nothing. Labels here match
   RENDERED PARTS only: to animate a whole group, name its occurrence id.
 - Handles: `.rotate(axis, degrees, origin=[0,0,0])`, `.translate(vec)`,
-  `.opacity(0..1)`, `.visible(bool)`. Successive transform calls
+  `.opacity(0..1)`, `.visible(bool)`, and
+  `.deformTube({rest, path, twistDeg: 0, maxSegmentLength: 1})`. The latter
+  deforms an existing continuous swept STEP body using rest and posed
+  centerlines in assembly coordinates. Each path is `{normal, segments}`;
+  segments are tangent-connected `{kind:"line",start,end}`,
+  `{kind:"arc",center,axis,start,sweepDeg}`, or
+  `{kind:"bezier",points:[p0,p1,p2,p3]}`. `normal` is the transverse frame
+  seed and is REQUIRED on both paths (omitting it throws; there is no guessed
+  default, which would twist the tube when the first tangent turns);
+  coordinates are vec3 millimetres and circle angles are degrees. Normalized
+  arc length maps rest to pose; solve tendon length, bend radius and collision
+  constraints separately. `twistDeg` rotates authored braid cross-sections;
+  it does not calculate spool payout. Optional
+  `braid:{pitch:0.8,depth:0.02,strands:8}` adds procedural fiber color and
+  normal relief to the real swept core (millimetres, even carrier count);
+  this is surface finish, not additional CAD or collision geometry. `maxSegmentLength` controls one-time
+  longitudinal mesh refinement in mm (default 1, minimum 0.05). Rest mesh,
+  smooth normals and topology remain continuous; shared source buffers remain
+  immutable. Omitting deformation in a later frame restores rest. Successive transform calls
   PREMULTIPLY: spin about a part's own center first, then orbit the origin,
   and the spin rides the orbit.
 - Every frame starts from rest and `update(t)` rebuilds the state — a pure
@@ -173,15 +194,14 @@ export const clips = {
   mates: animating a jointed part re-describes the motion (a few lines of
   ratio math). That independence is what guarantees choreography edits can
   never invalidate builds.
-- No build reads the file. Nothing declares it: drop it beside the document
-  and the viewer's Animation tab appears on the next load; delete it and the
-  tab goes. A model without one is simply a model without animation.
+- The model build validates and embeds the declaration. A model without
+  `animation=` is simply a model without animation.
 - Targets are checked at LOAD, against the compiled tree: every clip's
   `update(0, m)` runs once when the module loads, and a label or occurrence
   id no part carries is reported in the viewer's Status tab and in
   `snapshot --animation`'s error — not at the first frame that reaches it.
-- Mesh-only models (no `.step`) have no document to sit beside, and so no
-  render module; animation is a STEP-document concern.
+- Mesh-only models (no `.step`) have no document sidecar; animation is a
+  STEP-document concern.
 
 ## Reviewing motion
 
@@ -202,8 +222,8 @@ cadgen step snapshot STEP/arm.step tmp/open.png --kinematics open
 ```
 
 For still evidence of a CLIP, freeze one frame: `--animation` names a clip
-the document's render module (`STEP/arm.step.js`) declares and `--time` the
-moment in seconds (default 0). One frame, one clip, one time — there is no sequence output. The frame
+the document sidecar's embedded animation declares and `--time` the
+moment in seconds (default 0). The frame
 is composed exactly as the viewer composes it: `--kinematics` sets the base
 pose, and the clip's `update(t, m)` is evaluated at that time on top of it.
 A clip name the model does not declare fails with the clips it has:
@@ -217,6 +237,181 @@ In a JSON job the request is one field, `"animation": {"clip": "demo",
 "time": 2.0}`, beside `"kinematics"`; the Python door takes the same object
 (`step.snapshot(..., animation={"clip": "demo", "time": 2.0})`) or the clip
 name with `time=`.
+
+### Rendering the whole clip
+
+`--video` renders the SPAN instead of a moment, into the `.mp4` or `.gif` the
+OUT names. Everything else is unchanged — same theme, display settings, camera
+and size profile as a still, and the same `--kinematics` base pose underneath:
+
+```bash
+cadgen step snapshot STEP/arm.step tmp/demo.mp4 --animation demo --video '{"fps": 30}'
+cadgen step snapshot STEP/arm.step tmp/demo.gif --animation demo \
+  --video '{"fps": 12, "seconds": 3, "start": 1.5, "quality": "draft"}'
+```
+
+The request's keys, all optional:
+
+| key | default | meaning |
+| --- | --- | --- |
+| `fps` | `30` | frames per second, a whole number 1..120 |
+| `seconds` | what is left of the clip from `start` | how much of the clip to render |
+| `start` | `0` | seconds into the clip where the video begins; must be inside it |
+| `quality` | `review` | `draft`, `review`, or `high` |
+| `loop` | `true` | GIF only — an `.mp4` that sets it is refused |
+
+The span is measured against the clip rather than trusted, because the clip
+evaluator ANSWERS a time past the end instead of refusing it: a clip that does
+not loop holds its final pose, so an overrunning span buys frames that are all
+one still image, and a looping clip wraps, so it renders a different span than
+the one asked for. A `start` at or past the end is refused; an explicit
+`seconds` that overruns a clip which does not loop renders and warns. Hence the
+default: a looping clip gets one whole cycle from wherever it starts, and a clip
+that stops gets the part of it that is left. `fps * seconds` is capped at 7200
+frames — every frame is a full-size PNG on disk before ffmpeg runs.
+
+Width and height come from `--width`/`--height`/`--size-profile` like any
+other render; there is no size key here. `--video` needs `--animation` (it
+renders a clip) and refuses `--time` (that freezes one frame instead), and it
+needs **ffmpeg** on `PATH` — or `CADGEN_FFMPEG` pointing at one. A missing
+encoder is reported before the first frame is drawn, never after minutes of
+rendering. A GIF stores its frame delay in hundredths of a second, so a player
+shows the nearest rate to the one asked for; `.mp4` is exact.
+
+The camera is fitted ONCE, to everything the clip covers, so the model moves
+and the frame does not. That is why a long clip is worth trimming with
+`start`/`seconds`: framing the whole of a clip that travels a long way leaves
+the interesting part small.
+
+In a JSON job the request is a `"video"` object beside `"animation"`, and a
+video job carries exactly one output:
+
+```json
+{
+  "input": "STEP/arm.step",
+  "animation": { "clip": "demo" },
+  "video": { "fps": 24, "quality": "high" },
+  "outputs": [{ "path": "tmp/demo.mp4", "camera": "iso" }]
+}
+```
+
+The result names the file and what it covers — `saved video: tmp/demo.mp4
+(120 frames, 30 fps, 4s)` — so a wrong clip or a wrong span shows up without
+opening it. Still snapshots remain the evidence for a POSE; a video is for
+motion a still cannot show.
+
+### Exporting the clip INSIDE a GLB
+
+A video is pixels. `cadgen glb build --animation` writes the motion itself: the
+clip is sampled into glTF node animation, so whatever opens the `.glb` — Blender,
+a three.js viewer, a browser's model preview — plays it. There is no camera, no
+quality and no encoder here, and `fps` means something different: the SAMPLING
+rate of the baked keyframes, not a playback rate.
+
+```bash
+cadgen glb build STEP/arm.step meshes/arm.glb --animation demo
+cadgen glb build STEP/arm.step meshes/arm.glb \
+  --animation '{"clip": "demo", "fps": 30, "seconds": 24, "start": 0}'
+```
+
+The request is a clip name, or an object whose keys are all optional but `clip`:
+
+| key | default | meaning |
+| --- | --- | --- |
+| `clip` | — | the clip to bake; required |
+| `fps` | `30` | keyframe samples per second, a whole number 1..120 |
+| `seconds` | what is left of the clip from `start` | how much of the clip to bake |
+| `start` | `0` | seconds into the clip where the span begins; must be inside it |
+| `drop` | `[]` | effects to bake STATIC instead of refusing: `opacity`, `visible` |
+| `deform` | `refuse` | what to do with `.deformTube()`: `refuse`, `morph`, `rest` |
+| `deformTolerance` | `1.0` | `morph` only — millimetres the baked tubes may sit from the clip's own deformation, `0.01`..`10` |
+
+The span is resolved exactly as `--video`'s is — a looping clip defaults to one
+whole cycle, a clip that stops gets what is left of it, and `fps * seconds` is
+capped at 7200 samples. The exported animation is re-based to zero, so `start`
+picks where in the CLIP the span begins and the file still opens at t = 0.
+
+**What glTF carries, and what it will not:**
+
+| clip effect | in the GLB |
+| --- | --- |
+| `.rotate()` | exact — a rotation channel on that occurrence's node |
+| `.translate()` | exact — a translation channel on the same node |
+| `.rotate()` about a pivot | exact — the pivot rides in the translation channel |
+| `.opacity()` | **refused.** glTF has no animated opacity. `"drop": ["opacity"]` bakes the value at `start` as a material alpha, and warns |
+| `.visible()` | **refused.** Same reason. `"drop": ["visible"]` omits whatever is hidden at `start`, and warns — an occurrence dropped this way loses its motion too, because a node that is not in the file cannot be animated |
+| `.deformTube()` | **refused by default.** Per-vertex motion, not a node transform. `"deform": "morph"` bakes it as glTF morph targets (below); `"deform": "rest"` ships those tubes at rest shape and warns |
+
+Nothing is dropped quietly: an effect the file cannot carry stops the export and
+names the occurrences, so a hand whose tendons froze on the way out is a refusal
+rather than a finished-looking file. Render the clip with
+`cadgen step snapshot --animation <clip> --video` when the motion is one of
+those — `--video` needs the clip named too, so both flags go together.
+
+#### Deforming tubes: `"deform": "morph"`
+
+```bash
+cadgen glb build STEP/hand.step meshes/hand.glb \
+  --animation '{"clip": "fist", "fps": 24, "seconds": 6,
+                "deform": "morph", "deformTolerance": 1.0}'
+```
+
+A deforming tube's node gets glTF **morph targets** — per-vertex position (and
+normal) deltas against one base mesh — and a `weights` channel that blends
+between them on the clip's own time line. What plays the file plays the bending
+cord.
+
+`deformTolerance` is the point. Morph weights blend the RESULT of two poses,
+while the clip blends its own control numbers and rebuilds the centerline from
+them, and the path→vertex map is not linear: the two agree only AT baked
+instants. A target per solved keyframe therefore looks perfect in any still
+taken at a keyframe and is wrong in between — measured at 23 mm mid-interval on
+1.5 mm tendons. So the targets are **fitted**, per occurrence, until the blend
+stays inside `deformTolerance` everywhere, measured on a grid four times finer
+than `fps` (at least 96 Hz). The summary reports `targets`, `bytes`,
+`runtimeBytes`, `deviationMm` and `fitGridHz`, so the file states what it is
+worth. Halving the tolerance roughly doubles the targets.
+
+The ceiling is **playback memory, not file size**: three.js uploads morph data
+as a float texture at 32 bytes per vertex per target (16 without normals), and a
+bake past 512 MiB of it is refused with the arithmetic and the four levers —
+raise `deformTolerance`, shorten `seconds`, coarsen `--mesh-tolerance` so the
+tubes carry fewer vertices, or coarsen the clip's own `maxSegmentLength`. A big
+hand at a fine tolerance does not fit in a browser, and the refusal says so
+rather than writing a file that will not open.
+
+What morph does not carry, said in the summary every time:
+
+- **a braid.** `braid:{...}` is a fragment shader over a material coordinate;
+  glTF has nowhere to put it, so the exported cord has the right shape and
+  motion and a smooth surface.
+- **a clip that re-routes a tube's `rest` path mid-span.** Morph targets are
+  deltas against ONE base mesh, and a rest path that moves has no such mesh.
+  Refused by name; move the tube with `.rotate()`/`.translate()` instead.
+
+The CAD Viewer plays a GLB's embedded rigid, skinned and morph animation through
+its Animation tab in both Inspect and Render. These are baked clips: the STEP
+sidecar module's procedural controls are not available in the exported GLB.
+
+A tube the clip holds in a fixed non-rest shape still ships **posed**, with no
+targets: the rest shape would be the silent freeze this mode exists to prevent.
+
+An animated export writes ONE node per occurrence instead of the flat,
+colour-grouped mesh a static one writes, so the file is bigger and its parts are
+individually addressable. Only occurrences the clip actually MOVES get channels;
+an occurrence held at a constant offset carries it on its node and nothing else.
+Freshness folds the clip request and the sidecar animation source into the export's key, so
+editing the choreography re-exports even though the STEP has not changed.
+
+`--animation` is GLB's alone, and the CLI is generated from each door's
+signature, so `cadgen stl build` and `cadgen 3mf build` have no such flag at all
+— they exit 2 with `unrecognized arguments: --animation`. Neither format has
+anywhere to put a clip; export it as `.glb`, or render it with
+`cadgen step snapshot --animation <clip> --video`.
+
+OUT is required. With no OUT a mesh door writes the model's DECLARED artifact,
+which is its static one, so `--animation` is refused there rather than replacing
+a committed `.glb` with a per-occurrence animated file.
 
 Identify fixed pivots, link lengths, gear ratios, and joint limits BEFORE
 declaring mates; pivot every rotation about its hinge bore or mate face —

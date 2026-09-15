@@ -27,10 +27,11 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from unittest import mock
+from tests.python.support.tmp_root import generated_cad_directory
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _CADGEN_SRC = str(_REPO_ROOT / "packages" / "cadgen" / "src")
@@ -65,12 +66,12 @@ print(json.dumps({{"ok": exit_code == 0, "exit_code": exit_code}}))
 
 class StepBuildsWithoutNodeTests(unittest.TestCase):
     def test_a_step_package_builds_with_node_unresolvable(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with generated_cad_directory(prefix="step-no-node-") as tmp:
             root = Path(tmp)
             model = root / "block.py"
             model.write_text(_MODEL, encoding="utf-8")
 
-            env = dict(os.environ)
+            env = {**os.environ, "CADGEN_DAEMON": "0", "CADGEN_CACHE_DIR": str(root / "store")}
             # Not an executable, so cad_node_executable() raises NodeUnavailable rather than
             # falling back to PATH. Any attempt to reach Node fails loudly.
             env["CADGEN_NODE"] = str(root / "definitely-not-node")
@@ -93,11 +94,12 @@ class StepBuildsWithoutNodeTests(unittest.TestCase):
             payload = json.loads(proc.stdout.strip().splitlines()[-1])
             self.assertTrue(payload.get("ok"))
 
-            from cadgen.catalog import result_view_dir
-
-            candidate = result_view_dir(root / "block.step")
-            packages = [candidate] if candidate.is_dir() else []
-            self.assertTrue(packages, f"No tree was written under {root}")
+            from cadgen.catalog import result_tree_for
+            from cadgen.store.trees import tree_complete
+            with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": env["CADGEN_CACHE_DIR"]}):
+                tree = result_tree_for(root / "block.step")
+                self.assertTrue(tree and tree_complete(tree), f"No complete geometry tree under {root}")
+            self.assertFalse((root / "store/index/surface").exists())
 
 
 if __name__ == "__main__":  # pragma: no cover

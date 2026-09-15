@@ -34,6 +34,8 @@ class GeneratorMetadata:
     # False for a MESH-ONLY model (mesh decorators, no @step): a model like any
     # other whose .step is not among its outputs and is never written.
     step_output: bool = True
+    materials: object | None = None
+    animation: object | None = None
 
 
 @dataclass(frozen=True)
@@ -291,6 +293,8 @@ def parse_generator_metadata(script_path: Path, function: str | None = None) -> 
         is_decorated=True,
         mesh_exports=tuple(defn.mesh_exports),
         step_output=bool(defn.step_output),
+        materials=defn.materials,
+        animation=defn.animation,
     )
 
 
@@ -396,6 +400,5 @@ def _is_multi_item_sequence_expression(
     if isinstance(expression, (ast.List, ast.Tuple, ast.Set)):
         return len(expression.elts) > 1
     return False
-
 
 

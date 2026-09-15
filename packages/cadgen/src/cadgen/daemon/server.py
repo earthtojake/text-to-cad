@@ -49,6 +49,9 @@ from cadgen.daemon.client import (
 DEFAULT_IDLE_TIMEOUT_SECONDS = 3600.0
 REQUEST_READ_TIMEOUT_SECONDS = 30.0
 CLIENT_LIVENESS_INTERVAL_SECONDS = 0.5
+# Read-only waiters are independent of build admission and cannot block accept().
+# Saturation returns an immediate ledger snapshot, never starts more threads.
+_JOB_WATCH_SLOTS = threading.BoundedSemaphore(32)
 # A worker that produces NO frame for this long mid-job is treated as wedged. Generous:
 # a large model can legitimately be silent for many minutes inside one OCCT boolean.
 WORKER_SILENCE_TIMEOUT_SECONDS = 3600.0
@@ -71,16 +74,16 @@ _TOOL_IMPORTS = {
     "3mf-build": "cadgen.cli.threemf_build",
     "glb-build": "cadgen.cli.glb_build",
     "inspect": "cadgen.cli.step_inspect.cli",
-    "snapshot": "cadgen.cli.step_snapshot",
 }
 
 from cadgen.daemon import broker as broker_mod  # noqa: E402
 from cadgen.daemon import pool as pool_mod  # noqa: E402 - after _TOOL_IMPORTS, which worker.py reads
 
-_POOL = pool_mod.Pool()
 # Daemon-wide job slots and the in-flight registry (STORE.md §9). Workers reach it
 # over the daemon's own socket.
 _BROKER = broker_mod.Broker()
+# Admission waits on the jobs holding those slots rather than refusing a spawn.
+_POOL = pool_mod.Pool(in_flight=lambda: _BROKER.snapshot()["running"])
 
 
 class _DaemonShutdown(BaseException):
@@ -142,6 +145,7 @@ def _watch_client(
     done: threading.Event,
     tool: str,
     worker,
+    preserve_work=None,
 ) -> None:
     """Kill the WORKER when the requesting client vanishes mid-job.
 
@@ -160,12 +164,47 @@ def _watch_client(
         except OSError:
             if done.is_set():
                 return
+            if preserve_work is not None and preserve_work():
+                _log(f"{tool}: producer disconnected; continuing for coalesced consumers")
+                while not done.wait(CLIENT_LIVENESS_INTERVAL_SECONDS):
+                    if not preserve_work():
+                        _log(f"{tool}: last coalesced consumer disconnected; killing worker {worker.pid}")
+                        worker.kill()
+                        return
+                return
             _log(f"{tool}: client disconnected mid-request; killing worker {worker.pid}")
             worker.kill()
             return
 
 
-def _status_payload() -> dict:
+def _wait_for_inflight_consumer(conn: transport.Channel, entry: dict) -> int | None:
+    """Wait for canonical work, or return None when only this consumer left.
+
+    A request client sends no more messages, so a nonblocking receive is purely
+    an EOF probe. It emits no heartbeat frames and cannot disturb other users of
+    the same in-flight entry.
+    """
+    result_seen = False
+    while True:
+        event, done, code = _BROKER.wait_update(entry, result_seen=result_seen)
+        try:
+            if event is not None:
+                _send(conn, event if entry.get("artifact") else {"event": event})
+                result_seen = True
+        except OSError:
+            return None
+        if done:
+            return code
+        try:
+            if conn.recv(0.0) == b"":
+                return None
+        except (AttributeError, OSError):
+            # Simple in-process test channels have no receive side. A real
+            # transport.Channel normalizes peer loss to b"".
+            pass
+
+
+def _status_payload(startup_token: str) -> dict:
     """What the supervisor knows that nothing else can: which workers exist, which
     model each is bound to, and what it is doing. A socket file on disk proves none
     of it."""
@@ -181,12 +220,46 @@ def _status_payload() -> dict:
         "socket": str(daemon_address()),
         "identity": daemon_identity(),
         "version": __version__,
-        "token": compute_version_token(),
+        "token": startup_token,
         "startedAt": _STARTED_AT,
         "requests": _REQUESTS_SERVED[0],
         "inflight": sum(1 for thread in list(_INFLIGHT) if thread.is_alive()),
     })
     return snapshot
+
+
+def _serve_job_watch(conn: transport.Channel, after: str | None, scope: dict) -> None:
+    try:
+        with contextlib.suppress(OSError):
+            _send(conn, {"status": _JOBS.watch(after, **scope)})
+    finally:
+        with contextlib.suppress(OSError):
+            conn.close()
+        _JOB_WATCH_SLOTS.release()
+
+
+def _start_job_watch(conn: transport.Channel, request: dict) -> bool:
+    """Transfer channel ownership to a bounded waiter, or answer immediately."""
+    after = request.get("after")
+    after = after if isinstance(after, str) and len(after) <= 128 else None
+    output, root = request.get("output"), request.get("storeRoot")
+    scope = {"output": output, "store_root": root} if (
+        isinstance(output, str) and isinstance(root, str) and len(output) <= 8192 and len(root) <= 8192
+    ) else {}
+    limited = bool(after) and not _JOB_WATCH_SLOTS.acquire(blocking=False)
+    if not after or limited:
+        snapshot = _JOBS.watch(timeout=0, **scope)
+        if limited:
+            snapshot["jobsWatchLimited"] = True
+        with contextlib.suppress(OSError):
+            _send(conn, {"status": snapshot})
+        return False
+    try:
+        threading.Thread(target=_serve_job_watch, args=(conn, after, scope), daemon=True).start()
+    except BaseException:
+        _JOB_WATCH_SLOTS.release()
+        raise
+    return True
 
 
 def _script_path(candidates, base: object) -> str:
@@ -245,42 +318,78 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
 
     tool = request.get("tool")
     argv = request.get("argv")
+    is_artifact = tool == "artifact"
 
-    if tool not in _TOOL_IMPORTS or not isinstance(argv, list):
+    if (tool not in _TOOL_IMPORTS and not is_artifact) or not isinstance(argv, list):
         with send_lock:
             _send(conn, {"stream": "stderr", "data": f"cadgen-daemon: invalid request for tool {tool!r}\n"})
             _send(conn, {"exit": 1})
         return
 
+    if is_artifact:
+        from cadgen.daemon.artifacts import normalize_request, store_path
+
+        try:
+            if argv:
+                raise ValueError("artifact requests have no argv or source subject")
+            if not isinstance(request.get("store_root"), str) or not request["store_root"]:
+                raise ValueError("artifact requests require an explicit store_root")
+            artifact = normalize_request(request.get("artifact"))
+            root = store_path(request.get("store_root"))
+        except (ValueError, TypeError, OSError) as exc:
+            _send(conn, {"stream": "stderr", "data": f"invalid artifact request: {exc}\n"})
+            _send(conn, {"exit": 1})
+            return
+        request = {**request, "artifact": artifact, "store_root": root}
+
     cwd = str(request.get("cwd") or "")
-    model = _script_path(argv, cwd)
+    model = "" if is_artifact else _script_path(argv, cwd)
     # What in-flight coalescing keys on: the model, or for a compile job the imported
     # document (which binds no worker -- it borrows a spare -- but two compiles of one
     # file are still one job).
-    subject = model or _document_path(argv, cwd)
+    subject = "" if is_artifact else model or _document_path(argv, cwd)
     closure = str(request.get("closure") or "")
-    job = _JOBS.adopt(_JOBS.start(tool=tool, subject=subject, argv=argv), subject=subject, tool=tool, argv=argv)
+    if is_artifact:
+        job = _JOBS.start_artifact(artifact, store_root=root, root_id=request.get("root_id"), dependency=request.get("dependency"))
+    else:
+        job = _JOBS.start(
+            tool=tool, subject=subject, argv=argv, store_root=str(request.get("store_root") or ""),
+            editing_producer=not bool(subject and closure and request.get("coalesce")),
+            adopt_announced=True,
+        )
     inflight = None
-    if subject and closure and request.get("coalesce"):
-        inflight = _BROKER.claim(subject, closure)
-        if inflight is not None:
+    if is_artifact or (subject and closure and request.get("coalesce")):
+        if is_artifact:
+            owns_work, inflight = _BROKER.claim_artifact_entry(artifact, store_root=root)
+        else:
+            owns_work, inflight = _BROKER.claim_entry(subject, closure, store_root=str(request.get("store_root") or ""))
+        if not owns_work:
             # Identical source is already building: attach, relay its exit, run nothing.
             _log(f"{tool} {model}: coalesced onto the job in flight")
-            inflight["done"].wait()
-            code = inflight["exit"] if inflight["exit"] is not None else 1
+            try:
+                code = _wait_for_inflight_consumer(conn, inflight)
+            finally:
+                _BROKER.detach(inflight)
+            if code is None:
+                _JOBS.finish(job, 1, error="client disconnected")
+                return
+            if is_artifact and inflight.get("result") is not None:
+                _JOBS.record_artifact_result(job, inflight["result"]["artifactResult"])
             _JOBS.finish(job, code)
             with contextlib.suppress(OSError), send_lock:
                 _send(conn, {"exit": code})
             return
+        if not is_artifact:
+            _JOBS.accept_editing_producer(job)
     try:
-        worker = _POOL.acquire(model)
-    except pool_mod.WorkerGone as exc:
-        # A spawn that never announced itself. There is no worker to blame and nothing
-        # to retry warm; the client sees the failure and can run cold.
+        worker = _POOL.acquire(model, dependency=bool(request.get("dependency")))
+    except (pool_mod.WorkerGone, pool_mod.MemoryAdmissionError) as exc:
+        # Failed spawn or memory admission. Return an explicit failure; a cold
+        # retry here would bypass the daemon's aggregate admission policy.
         _log(f"{tool}: could not start a worker: {exc}")
-        _JOBS.finish(job, 1)
-        if subject and closure and request.get("coalesce"):
-            _BROKER.finish(subject, closure, 1)
+        _JOBS.finish(job, 1, error=str(exc))
+        if inflight is not None:
+            _BROKER.finish_entry(inflight, 1)
         with contextlib.suppress(OSError), send_lock:
             _send(conn, {"stream": "stderr", "data": f"cadgen-daemon: could not start a worker: {exc}\n"})
             _send(conn, {"exit": 1})
@@ -291,13 +400,19 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
     # reason the ledger records, so a reader (the CAD Viewer) can say why.
     stderr_tail: collections.deque[str] = collections.deque(maxlen=80)
     watchdog_done = threading.Event()
+    def preserve_coalesced_work() -> bool:
+        return bool(inflight is not None and _BROKER.abandon(inflight))
+
     watchdog = threading.Thread(
-        target=_watch_client, args=(conn, send_lock, watchdog_done, tool, worker), daemon=True
+        target=_watch_client,
+        args=(conn, send_lock, watchdog_done, tool, worker, preserve_coalesced_work),
+        daemon=True,
     )
     watchdog.start()
+    relay_connected = True
     try:
         worker.send({
-            "kind": "run",
+            "kind": "artifact" if is_artifact else "run",
             "tool": tool,
             "prog": request.get("prog"),
             "argv": [str(a) for a in argv],
@@ -305,6 +420,8 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
             "env": request.get("env"),
             "store_root": request.get("store_root"),
             "root_id": request.get("root_id"),
+            "job_id": job["id"],
+            **({"artifact": artifact} if is_artifact else {}),
         })
         for frame in worker.frames(silence_timeout=WORKER_SILENCE_TIMEOUT_SECONDS):
             if "exit" in frame:
@@ -312,9 +429,34 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
                 break
             if frame.get("stream") == "stderr":
                 stderr_tail.append(str(frame.get("data") or ""))
-            _JOBS.observe(frame)
-            with send_lock:
-                _send(conn, frame)
+            if not is_artifact:
+                _JOBS.observe(frame)
+            if is_artifact:
+                if "event" in frame:
+                    raise OSError("artifact worker emitted a source event")
+                if "artifactResult" in frame:
+                    from cadgen.daemon.artifacts import validate_result
+
+                    try:
+                        validate_result(artifact, frame["artifactResult"])
+                        if inflight.get("result") is not None:
+                            raise ValueError("duplicate artifact result")
+                    except (ValueError, RuntimeError, TypeError) as exc:
+                        raise OSError(f"invalid artifact worker result: {exc}") from exc
+                    _JOBS.record_artifact_result(job, frame["artifactResult"])
+                    _BROKER.publish_artifact_result(inflight, frame["artifactResult"])
+            event = frame.get("event")
+            if inflight is not None and isinstance(event, dict) and event.get("job") == job["id"]:
+                _BROKER.publish_result(inflight, event)
+            if relay_connected:
+                try:
+                    with send_lock:
+                        _send(conn, frame)
+                except OSError:
+                    if preserve_coalesced_work():
+                        relay_connected = False
+                    else:
+                        raise
     except pool_mod.WorkerGone as exc:
         # Its own frame, not a stderr chunk: the client owns the wording (it knows
         # how the user invoked it) and pins it by test; the supervisor supplies the
@@ -339,10 +481,13 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         watchdog.join(timeout=CLIENT_LIVENESS_INTERVAL_SECONDS + 1.0)
         # A killed worker is not reusable; release() drops it and the pool respawns.
         _POOL.release(worker, healthy=healthy and worker.alive())
+        if is_artifact and exit_code == 0 and inflight.get("result") is None:
+            exit_code = 1
+            stderr_tail.append("artifact worker completed without an artifact result")
         reason = failure_message("".join(stderr_tail))[0] if exit_code != 0 else None
         _JOBS.finish(job, exit_code, error=reason or None)
-        if subject and closure and request.get("coalesce"):
-            _BROKER.finish(subject, closure, exit_code)
+        if inflight is not None:
+            _BROKER.finish_entry(inflight, exit_code)
 
     _REQUESTS_SERVED[0] += 1
     _log(f"{tool} {argv!r} -> exit {exit_code} in {time.perf_counter() - started:.2f}s "
@@ -368,25 +513,15 @@ def _serve_connection(conn, request) -> None:
             conn.close()
 
 
-def _drain_inflight(reason: str) -> None:
-    """Let the jobs already running finish before this process exits.
-
-    A token mismatch means a NEW daemon is wanted, not that the builds in flight are
-    wrong: they run the code they started with and their clients are waiting on them.
-    """
-    threads = [thread for thread in list(_INFLIGHT) if thread.is_alive()]
-    if not threads:
-        return
-    _log(f"{reason}; finishing {len(threads)} job(s) in flight before exiting")
-    for thread in threads:
-        thread.join()
+def _active_requests() -> list[threading.Thread]:
+    return [thread for thread in list(_INFLIGHT) if thread.is_alive()]
 
 
 _DAEMON_LOCK: transport.SingletonLock | None = None
 
 
-def _bind(address: str, authkey: bytes) -> transport.Server | None:
-    """One daemon per identity, decided by a lock -- never by probing or sweeping.
+def _bind(address: str) -> transport.Server | None:
+    """One daemon per address, decided by a lock -- never by probing or sweeping.
 
     Probing a leftover socket was a race: twenty clients starting at once spawn twenty
     daemons, the losers' probes against a backlog-8 listener are REFUSED, each reads
@@ -406,7 +541,13 @@ def _bind(address: str, authkey: bytes) -> transport.Server | None:
     if transport.address_is_stale(address):
         transport.clear_address(address)
     try:
-        return transport.Server(address, authkey, backlog=128)
+        authkey = transport.ensure_authkey(address)
+        return transport.Server(
+            address,
+            authkey,
+            backlog=128,
+            on_authentication_error=lambda: transport.publish_authkey(address, authkey),
+        )
     except OSError as exc:
         _log(f"cannot bind {address}: {exc}")
         lock.release()
@@ -418,8 +559,7 @@ def serve() -> int:
     os.environ["CADGEN_DAEMON_CHILD"] = "1"
     address = daemon_address()
     token = compute_version_token()
-    authkey = transport.ensure_authkey(daemon_identity())
-    server = _bind(address, authkey)
+    server = _bind(address)
     if server is None:
         return 0
     bound = {"address": True}
@@ -443,7 +583,7 @@ def serve() -> int:
     # accept() cannot take a timeout the way a socket could, so idleness is watched from
     # the side: the watchdog closes the listener, which makes the pending accept return.
     # Closing is portable across both families and does not reach into Listener internals.
-    state = {"last_activity": time.monotonic(), "idle_exit": False}
+    state = {"last_activity": time.monotonic(), "idle_exit": False, "draining": False}
 
     def _watch_for_idle() -> None:
         slice_seconds = max(0.5, min(idle_timeout / 4, 5.0))
@@ -452,9 +592,13 @@ def serve() -> int:
             if server.closed:
                 return
             _POOL.unbind_idle()
-            if any(thread.is_alive() for thread in list(_INFLIGHT)):
+            active = _active_requests()
+            if active:
                 state["last_activity"] = time.monotonic()  # a long build is not idleness
                 continue
+            if state["draining"]:
+                server.close()
+                return
             if time.monotonic() - state["last_activity"] >= idle_timeout:
                 state["idle_exit"] = True
                 server.close()
@@ -468,6 +612,8 @@ def serve() -> int:
             if conn is None:
                 if state["idle_exit"]:
                     _log("idle timeout; exiting")
+                elif state["draining"]:
+                    _log("version token changed; exiting")
                 return 0
             state["last_activity"] = time.monotonic()
             try:
@@ -477,22 +623,46 @@ def serve() -> int:
                 if request.get("kind") == "status":
                     # Answered BEFORE the token check: asking what is warm must never
                     # make the daemon exit, whichever cadgen the asker is running.
-                    with contextlib.suppress(OSError):
-                        _send(conn, {"status": _status_payload()})
+                    if request.get("jobsOnly") is True:
+                        if _start_job_watch(conn, request):
+                            conn = None  # the bounded watcher owns it
+                    else:
+                        with contextlib.suppress(OSError):
+                            _send(conn, {"status": _status_payload(token)})
                     continue
-                if request.get("token") != token:
-                    # Close and release the address BEFORE replying so the client's
-                    # respawn cannot race this daemon's cleanup and lose the fresh
-                    # daemon's address; then finish what is running.
+                token_changed = request.get("token") != token
+                dependency_finishing_old_work = bool(
+                    request.get("dependency") and (state["draining"] or _active_requests())
+                )
+                if state["draining"] and not request.get("dependency"):
+                    with contextlib.suppress(OSError):
+                        _send(conn, {"restart": True})
+                    continue
+                if token_changed and not dependency_finishing_old_work:
+                    active = _active_requests()
+                    if active:
+                        # Keep the old address and singleton lock together while its
+                        # jobs finish. Their workers can still submit child/artifact
+                        # dependencies; fresh top-level calls are sent cold until the
+                        # drain completes. Closing the listener here deadlocked a long
+                        # job against its own final artifact request.
+                        state["draining"] = True
+                        _log(f"version token changed; finishing {len(active)} job(s) in flight before exiting")
+                        with contextlib.suppress(OSError):
+                            _send(conn, {"restart": True})
+                        continue
+                    # With no work to preserve, release the address before replying so
+                    # the client's respawn cannot race this daemon's cleanup.
                     server.close()
                     _release_address()
                     with contextlib.suppress(OSError):
                         _send(conn, {"restart": True})
                     conn.close()
                     conn = None
-                    _drain_inflight("version token changed")
                     _log("version token changed; exiting")
                     return 0
+                if token_changed:
+                    state["draining"] = True
                 # One thread per job so a second client is served rather than queued.
                 worker_thread = threading.Thread(
                     target=_serve_connection, args=(conn, request), daemon=True

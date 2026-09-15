@@ -100,9 +100,10 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
   are cadgen-free); do not add the dependency to a skill that never invokes it.
 - Regenerate derived outputs (`scripts/bundle/bundle.sh`) when a change reaches
   what the bundlers consume; `bundle.sh --check` is the freshness gate.
-- Write all test, sample, permanent, and generated CAD/robot-description
-  artifacts under `models/`, including STEP/STP, STL, GLB, DXF, URDF, SRDF,
-  and SDF outputs. Do not create ad hoc artifact directories elsewhere.
+- Keep samples and manual CAD/robot-description validation artifacts under
+  `models/`. Automated tests must not read or depend on that sample corpus:
+  generate small fixtures in fresh temporary directories or use tiny test-owned
+  fixtures, with their own cache stores and cleanup. Repo `tmp/` is fine.
 - Reserve `scripts/` for durable repo commands. Do not write temporary,
   one-off, or local-only helper scripts there; use `tmp/` or `/tmp` instead.
 - When source changes affect generated runtimes, refresh or check them with the

@@ -12,15 +12,16 @@ from cadgen import step
 
 from lib import exhaust as exhaust_lib
 from lib import spec as S
+from lib.palette import material_compound, materials_for_system
 
 
-@step(out="../STEP/exhaust.step",
+@step(out="../STEP/exhaust.step", materials=materials_for_system("exhaust"),
       mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
 def exhaust():
     parts = exhaust_lib.build(S.SECTIONED)
     if not parts:
         raise RuntimeError("exhaust.build() produced no parts")
-    return bd.Compound(children=parts, label="exhaust")
+    return material_compound(parts, "exhaust")
 
 
 if __name__ == "__main__":

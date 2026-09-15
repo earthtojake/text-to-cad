@@ -5,8 +5,20 @@ import { buildMeshDataFromGlbBuffer } from "../lib/render/glbMeshData.js";
 import { buildMeshDataFromSurf } from "../lib/surf/surfMeshData.js";
 import { parseSurf } from "../lib/surf/container.js";
 import { tessellateComponent } from "../lib/surf/tessellate.js";
+import { lodTessellationForLevel } from "../lib/surf/lodPolicy.js";
+import { validateSnapshotRenderJob } from "./snapshotJobValidation.js";
 import {
-  getCachedComponentEntries,
+  SCENE_QUALITY,
+  resolveSceneQuality,
+  resolveRenderQuality
+} from "./sceneSettings.js";
+import {
+  TESS_BATCH_MAX_BYTES,
+  TESS_PROBE_MAX_KEYS,
+  decodeComponentTessellation,
+  getCachedEntryBytes,
+  getCachedEntryBytesMany,
+  probeCachedTessellationEntries,
   surfIndexFromCacheEntry,
   writeBackComponentEntry,
 } from "../lib/surf/tessellationCache.js";
@@ -27,7 +39,15 @@ import {
   renderAssetSourceScopeForJob,
   setRenderAssetSourceScope
 } from "../lib/renderAssetSourceScope.js";
-import { loadKinematicsModuleDefinition } from "./kinematicsModule.js";
+import {
+  kinematicsModuleDefinitionFromSidecar,
+  loadKinematicsModuleDefinition
+} from "./kinematicsModule.js";
+import {
+  applySourceAppearance,
+  loadSourceSidecar,
+  validateSourceSidecar
+} from "./sourceSidecar.js";
 import {
   isRobotSourceKind,
   loadRobotMeshData,
@@ -180,32 +200,148 @@ async function fetchComponentGlbBuffer(url, cid) {
   throw new Error(`Failed to load component GLB ${cid}: HTTP ${lastStatus}${hint}`);
 }
 
-async function loadPackageMeshData(packageInfo) {
-  const descriptor = isObject(packageInfo.descriptor) ? packageInfo.descriptor : null;
-  if (!descriptor) {
+// Floors for an explicit macro tessellation request. Chord tolerance is
+// RELATIVE to the component's bounding diagonal and angle tolerance is
+// radians, so these sit ~100x finer than the tessellator's own defaults
+// (1.5e-3 / 0.35 rad) — beyond any display need at any output size. Below
+// them a job is not a render, it is a memory bomb: the page tessellates until
+// the renderer dies, which reaches the caller as an opaque lost driver
+// connection instead of a rejected request. Mirrored as
+// MIN_RENDER_TESSELLATION in cadgen/snapshot_core.py, which refuses the same
+// job before a browser is even launched (parity-tested from the Python side).
+export const RENDER_TESSELLATION_FLOORS = Object.freeze({
+  chordTolerance: 1e-5,
+  angleTolerance: 5e-3
+});
+
+export function normalizeRenderTessellation(value) {
+  if (value === undefined || value === null) return {};
+  if (!isObject(value) || Array.isArray(value)) {
+    throw new Error("quality.tessellation must be an object");
+  }
+  const result = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (!Object.hasOwn(RENDER_TESSELLATION_FLOORS, key)) {
+      throw new Error(`Unknown quality.tessellation field: ${key}`);
+    }
+    if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) {
+      throw new Error(`quality.tessellation.${key} must be a positive finite number`);
+    }
+    if (raw < RENDER_TESSELLATION_FLOORS[key]) {
+      throw new Error(
+        `quality.tessellation.${key} must be at least ${RENDER_TESSELLATION_FLOORS[key]}; ` +
+        "finer sampling exhausts the renderer instead of improving the image"
+      );
+    }
+    result[key] = raw;
+  }
+  return result;
+}
+
+export function tessellationForSnapshotQuality(input = {}) {
+  validateSnapshotRenderJob(input);
+  const explicit = input.render != null ? null : input.quality?.tessellation;
+  if (explicit != null) {
+    return normalizeRenderTessellation(explicit);
+  }
+  const quality = input.render != null
+    ? resolveRenderQuality(input.render.quality)
+    : resolveSceneQuality(SCENE_QUALITY.INTERACTIVE);
+  // Final uses the existing finest bounded rung. Preview and CAD inspection
+  // retain the canonical L1 cache request.
+  return quality.snapshotLodLevel > 1
+    ? lodTessellationForLevel(quality.snapshotLodLevel)
+    : {};
+}
+
+async function loadPackageMeshData(packageInfo, tessellation = {}, appearance = null, diagnostics = null) {
+  const measure = (name, started) => {
+    if (diagnostics) diagnostics[name] = (diagnostics[name] || 0) + performance.now() - started;
+  };
+  const storedDescriptor = isObject(packageInfo.descriptor) ? packageInfo.descriptor : null;
+  if (!storedDescriptor) {
     throw new Error("Assembly render job is missing its tree (assembly.json)");
   }
+  const descriptor = applySourceAppearance(storedDescriptor, appearance);
   const componentUrls = isObject(packageInfo.componentUrls) ? packageInfo.componentUrls : {};
   const components = isObject(descriptor.components) ? descriptor.components : {};
   const componentMeshDataByCid = {};
   const cids = Object.keys(components);
-  // ONE batched round trip resolves the whole hit set against the shared
-  // component cache (provider getMany -> POST /__tess_cache/batch). A v3
-  // entry carries the surf index fields render meshData needs, so a hit
-  // skips the .surf fetch entirely — on a 563-component warm model this
-  // replaces ~2 requests per component with one request total. No provider,
-  // batch-less host, or older entries degrade to the miss path below.
-  const cachedEntries = await getCachedComponentEntries(cids);
+  const inputs = cids.map((cid) => String(components[cid]?.surfaceInput || ""));
+  if (diagnostics) diagnostics.componentCount = cids.length;
+  const probeStarted = performance.now();
+  const probes = await probeCachedTessellationEntries(inputs, tessellation);
+  measure("probeMs", probeStarted);
   const misses = [];
+
+  // Probe metadata is tiny. Full bodies are fetched only in admitted TESB
+  // groups whose observed framing stays under the host's 32 MiB bound. Each
+  // group is decoded, copied into render-owned arrays and dropped before the
+  // next group, so a warm assembly never retains all raw cache bodies beside
+  // the final mesh.
+  const groups = [];
+  let group = [];
+  let framedBytes = 12;
+  const flush = () => {
+    if (group.length) groups.push(group);
+    group = [];
+    framedBytes = 12;
+  };
   for (const cid of cids) {
-    const decoded = cachedEntries.get(cid);
-    const surrogateIndex = decoded ? surfIndexFromCacheEntry(decoded) : null;
-    if (decoded && surrogateIndex) {
-      componentMeshDataByCid[cid] = buildMeshDataFromSurf(surrogateIndex, null, {
+    const component = components[cid];
+    const surfaceInput = String(component?.surfaceInput || "");
+    const surfaceObject = String(component?.surfaceObject || "");
+    const probe = probes.get(surfaceInput);
+    if (!probe || (surfaceObject && probe.surfaceObject !== surfaceObject)) {
+      misses.push(cid);
+      continue;
+    }
+    const entryBytes = 4 + ((probe.byteLength + 3) & ~3);
+    if (group.length >= TESS_PROBE_MAX_KEYS
+      || (group.length && framedBytes + entryBytes > TESS_BATCH_MAX_BYTES)) flush();
+    group.push({ cid, surfaceInput, surfaceObject, probe });
+    framedBytes += entryBytes;
+    if (framedBytes >= TESS_BATCH_MAX_BYTES || entryBytes + 12 > TESS_BATCH_MAX_BYTES) flush();
+  }
+  flush();
+
+  if (diagnostics) diagnostics.cacheBatchCount = groups.length;
+  let cacheHits = 0;
+  for (const entries of groups) {
+    const readStarted = performance.now();
+    let bodies;
+    if (entries.length === 1 && entries[0].probe.byteLength + 16 > TESS_BATCH_MAX_BYTES) {
+      const entry = entries[0];
+      bodies = [await getCachedEntryBytes(entry.surfaceInput, tessellation, { probe: entry.probe })];
+    } else {
+      const maxBytes = 12 + entries.reduce(
+        (sum, entry) => sum + 4 + ((entry.probe.byteLength + 3) & ~3),
+        0,
+      );
+      bodies = await getCachedEntryBytesMany(entries.map((entry) => entry.probe), { maxBytes });
+    }
+    measure("cacheReadMs", readStarted);
+    for (let index = 0; index < entries.length; index += 1) {
+      const decodeStarted = performance.now();
+      const entry = entries[index];
+      const decoded = decodeComponentTessellation(bodies?.[index], {
+        surfaceInput: entry.surfaceInput,
+        surfaceObject: entry.probe.surfaceObject,
+        tessellationInput: entry.probe.tessellationInput,
+        tessellation,
+      });
+      const surrogateIndex = decoded ? surfIndexFromCacheEntry(decoded) : null;
+      measure("cacheDecodeMs", decodeStarted);
+      if (!decoded || !surrogateIndex) {
+        misses.push(entry.cid);
+        continue;
+      }
+      cacheHits += 1;
+      const meshStarted = performance.now();
+      componentMeshDataByCid[entry.cid] = buildMeshDataFromSurf(surrogateIndex, null, {
         component: decoded.component,
       });
-    } else {
-      misses.push(cid);
+      measure("meshBuildMs", meshStarted);
     }
   }
   // Misses load through a small pool: tessellation is CPU-bound and
@@ -214,7 +350,14 @@ async function loadPackageMeshData(packageInfo) {
   // the dominant cost on a 563-component model. The pool overlaps the network
   // waits with the CPU work; 6 matches the browser's per-host connection
   // budget.
+  if (diagnostics) {
+    diagnostics.cacheHitCount = cacheHits;
+    diagnostics.cacheMissCount = misses.length;
+  }
   const loadComponent = async (cid) => {
+    const descriptorComponent = components[cid];
+    const surfaceInput = String(descriptorComponent?.surfaceInput || "");
+    const surfaceObject = String(descriptorComponent?.surfaceObject || "");
     const url = String(componentUrls[cid] || "").trim();
     if (!url) {
       throw new Error(`Assembly package component ${cid} has no resolved URL`);
@@ -222,21 +365,18 @@ async function loadPackageMeshData(packageInfo) {
     // Exact-surface artifact (design/surface-rendering.md): the resolved URL
     // points at the component GLB; its .surf sibling shares the stem.
     const surfUrl = url.replace(/\.glb(?=$|[?#])/, ".surf");
+    const readStarted = performance.now();
     const { index, floats } = parseSurf(await fetchComponentGlbBuffer(surfUrl, cid));
-    // A decoded entry without the surf-index header (a writer that had no
-    // index in hand) still spares the tessellation; a true miss tessellates
-    // and writes back — the batch above already answered for every cid, so
-    // re-asking the provider per key would only repeat the lookup that
-    // just missed.
-    const decoded = cachedEntries.get(cid) || null;
-    let component;
-    if (decoded) {
-      component = decoded.component;
-    } else {
-      component = tessellateComponent(index, floats, {});
-      await writeBackComponentEntry(cid, {}, component, index);
-    }
+    measure("surfaceReadMs", readStarted);
+    const tessellateStarted = performance.now();
+    const component = tessellateComponent(index, floats, tessellation);
+    measure("tessellateMs", tessellateStarted);
+    const writeStarted = performance.now();
+    await writeBackComponentEntry(surfaceInput, surfaceObject, tessellation, component, index);
+    measure("cacheWriteMs", writeStarted);
+    const meshStarted = performance.now();
     componentMeshDataByCid[cid] = buildMeshDataFromSurf(index, floats, { component });
+    measure("meshBuildMs", meshStarted);
   };
   const POOL = 6;
   let next = 0;
@@ -249,7 +389,10 @@ async function loadPackageMeshData(packageInfo) {
       }
     }),
   );
-  return buildComposedPackageMeshData(descriptor, componentMeshDataByCid);
+  const composeStarted = performance.now();
+  const meshData = buildComposedPackageMeshData(descriptor, componentMeshDataByCid);
+  measure("composeMs", composeStarted);
+  return meshData;
 }
 
 async function loadMeshDataFromUrl(url, kind) {
@@ -305,13 +448,16 @@ async function loadStepParameters({
   kind,
   kinematics,
   stepParameterUrl,
+  documentHash,
   cadPath,
-  selectorRuntime
+  selectorRuntime,
+  sourceSidecar = null
 }) {
   assertStepOnlyOption(kind, kinematics, "kinematics");
   assertStepOnlyOption(kind, stepParameterUrl, "stepParameterUrl");
+  assertStepOnlyOption(kind, documentHash, "documentHash");
   const explicit = hasStepParameterRenderValues(kinematics);
-  if (!stepParameterUrl) {
+  if (!stepParameterUrl && !sourceSidecar) {
     if (!explicit) {
       return null;
     }
@@ -319,7 +465,9 @@ async function loadStepParameters({
   }
   // stepParameterUrl is the model SIDECAR url (the .step.json); its
   // kinematics section is the one articulation mechanism.
-  const definition = await loadKinematicsModuleDefinition(stepParameterUrl, { cadPath });
+  const definition = sourceSidecar
+    ? kinematicsModuleDefinitionFromSidecar(sourceSidecar, { cadPath, url: stepParameterUrl })
+    : await loadKinematicsModuleDefinition(stepParameterUrl, { cadPath, documentHash });
   if (!definition) {
     if (explicit) {
       throw new Error("model declares no kinematics, so the kinematics values have nothing to drive");
@@ -382,6 +530,8 @@ export function packageSourceFromBaseUrl(baseUrl, descriptor) {
 
 export async function loadSource(input, options = {}) {
   const inputObject = isObject(input) ? input : {};
+  validateSnapshotRenderJob(inputObject);
+  const photographicRender = inputObject.render != null;
   const resolved = isObject(inputObject.resolved) ? inputObject.resolved : {};
   const explicitMeshData = inputObject.meshData || options.meshData || (
     inputObject.vertices && inputObject.indices ? inputObject : null
@@ -390,14 +540,27 @@ export async function loadSource(input, options = {}) {
     typeof input === "string" ? sourceKindFromUrl(input) : ""
   );
   const kind = normalizeKind(rawKind);
+  const rawTessellation = photographicRender ? null : inputObject.quality?.tessellation;
+  const tessellation = tessellationForSnapshotQuality(inputObject);
+  assertStepOnlyOption(kind, rawTessellation, "quality.tessellation");
   const kinematics = inputObject.kinematics ?? options.kinematics;
   const stepParameterUrl = String(
     inputObject.stepParameterUrl || resolved.stepParameterUrl || options.stepParameterUrl || ""
   ).trim();
+  const documentHash = String(
+    inputObject.documentHash || resolved.documentHash || options.documentHash || ""
+  ).trim();
+  const inlineSourceSidecar = inputObject.sourceSidecar || resolved.sourceSidecar || options.sourceSidecar || null;
 
   const cadPath = String(inputObject.cadPath || resolved.inputPath || options.cadPath || "").trim();
   assertStepOnlyOption(kind, kinematics, "kinematics");
   assertStepOnlyOption(kind, stepParameterUrl, "stepParameterUrl");
+  assertStepOnlyOption(kind, documentHash, "documentHash");
+  assertStepOnlyOption(kind, inlineSourceSidecar, "sourceSidecar");
+
+  const sourceSidecar = inlineSourceSidecar
+    ? validateSourceSidecar(inlineSourceSidecar, { url: stepParameterUrl || cadPath, documentHash })
+    : (stepParameterUrl ? await loadSourceSidecar(stepParameterUrl, { documentHash }) : null);
 
   let meshData = explicitMeshData;
   // Component-GLB package: the canonical assembly artifact is a directory, so there is
@@ -408,13 +571,15 @@ export async function loadSource(input, options = {}) {
     isObject(resolved.package) ? resolved.package : null
   );
   if (!meshData && packageInfo) {
-    meshData = await loadPackageMeshData(packageInfo);
-    const packageSelectorRuntime = inputObject.selectorRuntime || options.selectorRuntime || null;
+    const diagnostics = options.stageTimings ? {} : null;
+    meshData = await loadPackageMeshData(packageInfo, tessellation, sourceSidecar?.appearance, diagnostics);
+    if (diagnostics) options.stageTimings.sourceLoad = diagnostics;
+    const packageSelectorRuntime = photographicRender ? null : inputObject.selectorRuntime || options.selectorRuntime || null;
     return {
       kind: "step",
       meshData,
       selectorRuntime: packageSelectorRuntime,
-      displayEdgeRuntime: inputObject.displayEdgeRuntime || options.displayEdgeRuntime || null,
+      displayEdgeRuntime: photographicRender ? null : inputObject.displayEdgeRuntime || options.displayEdgeRuntime || null,
       // Parameter sidecars resolve features against composed occurrence ids, so
       // they stay fully functional for package sources even without a selector
       // runtime (feature refs prefix-match meshData part occurrence ids).
@@ -422,14 +587,20 @@ export async function loadSource(input, options = {}) {
         kind: "step",
         kinematics,
         stepParameterUrl,
+        documentHash,
         cadPath,
-        selectorRuntime: packageSelectorRuntime
+        selectorRuntime: packageSelectorRuntime,
+        sourceSidecar
       }),
+      sourceSidecar,
       resolved,
       url: "",
       glbUrl: "",
       cadPath
     };
+  }
+  if (rawTessellation !== undefined && rawTessellation !== null) {
+    throw new Error("quality.tessellation requires an exact-surface STEP package; existing mesh data cannot be retessellated");
   }
   const glbUrl = String(inputObject.glbUrl || resolved.glbUrl || options.glbUrl || "").trim();
   const url = String(typeof input === "string" ? input : inputObject.url || resolved.url || glbUrl || "").trim();
@@ -449,6 +620,7 @@ export async function loadSource(input, options = {}) {
       selectorRuntime: null,
       displayEdgeRuntime: null,
       stepParameterSource: null,
+      sourceSidecar,
       resolved,
       url,
       glbUrl: "",
@@ -477,19 +649,21 @@ export async function loadSource(input, options = {}) {
     // kinds have none, and loading them anyway re-downloads the mesh binary just to
     // fail the GLB container parse — gate by kind so "no selectors for meshes" is
     // intent, not a swallowed error (matches the CLI's mesh-input validation).
-    const stepSidecarsEnabled = sourceIsStep(kind);
-    const selectorRuntime = inputObject.selectorRuntime || options.selectorRuntime || (
+    const stepSidecarsEnabled = sourceIsStep(kind) && !photographicRender;
+    const selectorRuntime = photographicRender ? null : inputObject.selectorRuntime || options.selectorRuntime || (
       stepSidecarsEnabled ? await loadSelectorRuntime(glbUrl || url, { cadPath }) : null
     );
-    const displayEdgeRuntime = inputObject.displayEdgeRuntime || options.displayEdgeRuntime || (
+    const displayEdgeRuntime = photographicRender ? null : inputObject.displayEdgeRuntime || options.displayEdgeRuntime || (
       stepSidecarsEnabled ? await loadDisplayEdgeRuntime(glbUrl || url) : null
     );
     const stepParameterSource = await loadStepParameters({
       kind,
       kinematics,
       stepParameterUrl,
+      documentHash,
       cadPath,
-      selectorRuntime
+      selectorRuntime,
+      sourceSidecar
     });
 
     return {
@@ -498,6 +672,7 @@ export async function loadSource(input, options = {}) {
       selectorRuntime,
       displayEdgeRuntime,
       stepParameterSource,
+      sourceSidecar,
       resolved,
       url,
       glbUrl,

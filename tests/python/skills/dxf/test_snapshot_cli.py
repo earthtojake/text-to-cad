@@ -86,15 +86,18 @@ class DxfSnapshotCliTests(unittest.TestCase):
             snapshot.drawing_mesh_path(Path("/models/part.step"), force=False)
 
     def test_reports_a_missing_input(self) -> None:
-        with self.assertRaises(snapshot.SnapshotError):
-            snapshot.drawing_mesh_path(Path("/models/definitely-absent.dxf"), force=False)
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(snapshot.SnapshotError):
+                snapshot.drawing_mesh_path(Path(tmp) / "definitely-absent.dxf", force=False)
 
     def test_section_mode_is_rejected_for_a_drawing(self) -> None:
         # Drawings have no CAD topology, so section has nothing to work with.
         # `--mode` is one string across every door, so section is refused per KIND
         # at resolve time -- which is what keeps the message specific instead of
-        # "invalid choice". (`--display` and `--kinematics` are a different case:
-        # those are absent from this door's SIGNATURE, so they never parse at all.)
+        # "invalid choice". (`--kinematics` is a different case: it is absent
+        # from this door's SIGNATURE, so it never parses at all.)
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -122,7 +125,9 @@ class DxfSnapshotCliTests(unittest.TestCase):
         self.assertIn("usage: cadgen dxf snapshot", result.stdout)
         self.assertIn("[TARGET] [OUT]", result.stdout)
         self.assertIn(".dxf", result.stdout)
-        for absent in ("--display", "--kinematics", "--focus", "--input", "--output"):
+        for present in ("--display", "--render"):
+            self.assertIn(present, result.stdout)
+        for absent in ("--kinematics", "--focus", "--input", "--output"):
             self.assertNotIn(absent, result.stdout, f"{absent} is not a drawing's business")
 
     def test_runtime_is_bundled_beside_the_cli(self) -> None:

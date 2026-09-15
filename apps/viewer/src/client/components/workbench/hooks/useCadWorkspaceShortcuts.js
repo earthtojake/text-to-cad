@@ -8,8 +8,8 @@ export function useCadWorkspaceShortcuts({
   setCopyStatus,
   setScreenshotStatus,
   previewMode,
+  inspectionEnabled = true,
   viewerAlertOpen,
-  themeSheetOpen,
   tabToolsOpen,
   isDesktop,
   sidebarOpen,
@@ -23,7 +23,6 @@ export function useCadWorkspaceShortcuts({
   handleRedoDrawing,
   setPreviewMode,
   setViewerAlertOpen,
-  setThemeEditing,
   setTabToolsOpen,
   setSidebarOpen,
   setTabToolMode
@@ -40,7 +39,7 @@ export function useCadWorkspaceShortcuts({
   }, [copyStatus, screenshotStatus, setCopyStatus, setScreenshotStatus]);
 
   useEffect(() => {
-    if (!(previewMode || viewerAlertOpen || themeSheetOpen || tabToolsOpen || (!isDesktop && sidebarOpen) || tabToolMode === TAB_TOOL_MODE.MEASURE)) {
+    if (!(previewMode || viewerAlertOpen || tabToolsOpen || (!isDesktop && sidebarOpen) || tabToolMode === TAB_TOOL_MODE.MEASURE)) {
       return undefined;
     }
 
@@ -56,34 +55,33 @@ export function useCadWorkspaceShortcuts({
           lowerKey === "y" ||
           (lowerKey === "z" && event.shiftKey);
         const undoShortcut = lowerKey === "z" && !event.shiftKey;
-        if (undoShortcut && drawingUndoStackRef.current.length) {
+        if (inspectionEnabled && undoShortcut && drawingUndoStackRef.current.length) {
           event.preventDefault();
           handleUndoDrawing();
           return;
         }
 
-        if (redoShortcut && drawingRedoStackRef.current.length) {
+        if (inspectionEnabled && redoShortcut && drawingRedoStackRef.current.length) {
           event.preventDefault();
           handleRedoDrawing();
           return;
         }
       }
 
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !event.defaultPrevented) {
         if (previewMode) {
           const previousUiState = previewUiStateRef.current;
           previewUiStateRef.current = null;
           setPreviewMode(false);
           if (previousUiState) {
             setViewerAlertOpen(previousUiState.viewerAlertOpen);
-            setThemeEditing(previousUiState.themeEditing);
             setSidebarOpen(previousUiState.sidebarOpen);
             setTabToolsOpen(previousUiState.tabToolsOpen);
             setTabToolMode(previousUiState.tabToolMode);
           }
           return;
         }
-        if (tabToolMode === TAB_TOOL_MODE.MEASURE) {
+        if (inspectionEnabled && tabToolMode === TAB_TOOL_MODE.MEASURE) {
           // Escape cancels the measurement in progress and leaves the tool
           // armed, the way it does in a CAD measure tool. Only once there is
           // nothing to cancel does it back out of the tool itself.
@@ -95,7 +93,6 @@ export function useCadWorkspaceShortcuts({
           return;
         }
         setViewerAlertOpen(false);
-        setThemeEditing(false);
         setTabToolsOpen(false);
         if (!isDesktop) {
           setSidebarOpen(false);
@@ -113,10 +110,9 @@ export function useCadWorkspaceShortcuts({
     handleRedoDrawing,
     handleUndoDrawing,
     isDesktop,
-    themeSheetOpen,
+    inspectionEnabled,
     previewMode,
     previewUiStateRef,
-    setThemeEditing,
     setPreviewMode,
     setSidebarOpen,
     setTabToolMode,

@@ -1,7 +1,7 @@
-"""Write the hand's showcase render module: the tendons and actuators drive it.
+"""Refresh the hand's embedded showcase animation source.
 
-The module this writes is `STEP/<name>.step.js`, loaded by
-the viewer and by `cadgen step snapshot --animation`/`--video`.
+The generated JavaScript is stored in the model's ``ANIMATION_JS`` decorator
+argument and travels in the STEP metadata consumed by the viewer and exporters.
 
 The point of this model is that finger motion comes from a cord being spooled in
 a forearm, so an animation that moves the phalanges and leaves the cords behind
@@ -782,7 +782,11 @@ def write_module(path, data, runtime):
         f'const KEYFRAMES = {dumps(data["keyframes"])};\n'
         + runtime
     )
-    path.write_text(text)
+    source = path.read_text()
+    marker = "ANIMATION_JS = r'''"
+    start = source.index(marker) + len(marker)
+    end = source.index("\n'''", start)
+    path.write_text(source[:start] + text.rstrip() + source[end:])
     return len(text)
 
 
@@ -790,10 +794,9 @@ def main():
     rows = json.loads((HERE / 'mechanical_candidate_r13_frames.json').read_text())
     runtime = (HERE / 'showcase_runtime.js').read_text()
     data = build(rows)
-    folder = ROOT / 'STEP'
     for name in TARGETS:
-        size = write_module(folder / f'{name}.step.js', data, runtime)
-    print(f'wrote {len(TARGETS)} render module(s), {size / 1024:.0f} KB: '
+        size = write_module(ROOT / 'src' / f'{name}.py', data, runtime)
+    print(f'refreshed {len(TARGETS)} embedded animation source(s), {size / 1024:.0f} KB: '
           f'{sum(len(v) for v in data["frames"].values())} bodies on {len(data["frames"])} frames, '
           f'{len(data["actuatorBodies"])} actuator parts, {len(data["guides"])} fitted guides, '
           f'{len(data["keyframes"])} keyframes')

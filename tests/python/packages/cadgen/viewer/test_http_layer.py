@@ -10,12 +10,14 @@ status-code assertion.
 from __future__ import annotations
 
 import http.client
+import json
 import os
 import socket
 import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from cadgen.viewer import handler as handler_module
 from cadgen.viewer.http_app import create_cad_app, host_is_allowed, hostname_only
@@ -155,6 +157,68 @@ class NonLoopbackBindDisablesTheGate(unittest.TestCase):
         self.assertTrue(host_is_allowed("anything", "192.168.1.5"))
 
 
+class SelectedFirstCatalog(unittest.TestCase):
+    def setUp(self):
+        self.fixture = ServerFixture()
+        self.addCleanup(self.fixture.close)
+
+    def test_selected_row_is_complete_and_other_rows_are_navigation_only(self):
+        Path(self.fixture.root, "selected.stl").write_bytes(b"selected")
+        Path(self.fixture.root, "other.stl").write_bytes(b"other")
+        with mock.patch.object(self.fixture.app.backend, "_start_catalog_hydration"):
+            status, _, body = self.fixture.request(
+                "GET", "/__cad/catalog?file=selected.stl"
+            )
+        self.assertEqual(status, 200)
+        entries = json.loads(body)["entries"]
+        selected = next(entry for entry in entries if entry["rootRelativeFile"] == "selected.stl")
+        pending = next(entry for entry in entries if entry["rootRelativeFile"] == "other.stl")
+        self.assertEqual(selected["bytes"], len(b"selected"))
+        self.assertTrue(selected["hash"])
+        self.assertEqual(set(pending), {"file", "rootRelativeFile", "catalogPending"})
+        self.assertTrue(pending["catalogPending"])
+
+    def test_homepage_fully_reads_only_the_first_discovered_row(self):
+        Path(self.fixture.root, "a.stl").write_bytes(b"first")
+        Path(self.fixture.root, "b.stl").write_bytes(b"second")
+        with mock.patch.object(self.fixture.app.backend, "_start_catalog_hydration"):
+            status, _, body = self.fixture.request("GET", "/__cad/catalog")
+        self.assertEqual(status, 200)
+        entries = json.loads(body)["entries"]
+        first = next(entry for entry in entries if entry["rootRelativeFile"] == "a.stl")
+        second = next(entry for entry in entries if entry["rootRelativeFile"] == "b.stl")
+        self.assertEqual(first["bytes"], len(b"first"))
+        self.assertEqual(set(second), {"file", "rootRelativeFile", "catalogPending"})
+
+    def test_a_current_complete_snapshot_is_reused_without_another_hydration(self):
+        Path(self.fixture.root, "a.stl").write_bytes(b"first")
+        Path(self.fixture.root, "b.stl").write_bytes(b"second")
+        snapshot = self.fixture.app.backend._full_catalog_snapshot()
+        self.assertIsNotNone(snapshot)
+        self.fixture.app.backend._catalog_snapshot = snapshot
+        with mock.patch.object(self.fixture.app.backend, "_start_catalog_hydration") as hydrate:
+            status, _, body = self.fixture.request("GET", "/__cad/catalog?file=a.stl")
+        self.assertEqual(status, 200)
+        self.assertTrue(all(not entry.get("catalogPending") for entry in json.loads(body)["entries"]))
+        hydrate.assert_not_called()
+
+    def test_a_changed_asset_is_pending_instead_of_serving_a_stale_snapshot(self):
+        Path(self.fixture.root, "a.stl").write_bytes(b"first")
+        Path(self.fixture.root, "b.stl").write_bytes(b"second")
+        snapshot = self.fixture.app.backend._full_catalog_snapshot()
+        self.assertIsNotNone(snapshot)
+        self.fixture.app.backend._catalog_snapshot = snapshot
+        Path(self.fixture.root, "b.stl").write_bytes(b"changed bytes")
+        with mock.patch.object(self.fixture.app.backend, "_start_catalog_hydration"):
+            status, _, body = self.fixture.request("GET", "/__cad/catalog?file=a.stl")
+        self.assertEqual(status, 200)
+        changed = next(
+            entry for entry in json.loads(body)["entries"]
+            if entry["rootRelativeFile"] == "b.stl"
+        )
+        self.assertEqual(set(changed), {"file", "rootRelativeFile", "catalogPending"})
+
+
 class PostGuard(HttpLayerTestCase):
     def test_missing_header_is_refused_with_the_exact_message(self):
         status, _, body = self.fixture.request("POST", "/__cad/artifact")
@@ -195,6 +259,8 @@ class ServerInfo(HttpLayerTestCase):
         self.assertEqual(info["app"], "cad-viewer")
         self.assertEqual(info["backend"], "local-fs")
         self.assertEqual(info["serverMode"], "serve")
+        self.assertEqual(info["currentIdentityToken"], info["identityToken"])
+        self.assertIs(info["restartRequired"], False)
         self.assertEqual(info["serverFeatures"], ["path-directory"])
         self.assertEqual(info["stepArtifactGenerationAvailable"], False)
         self.assertEqual(info["pid"], os.getpid())
@@ -208,7 +274,8 @@ class ServerInfo(HttpLayerTestCase):
         _, _, body = self.fixture.request("GET", "/__cad/server")
         text = body.decode("utf-8")
         order = [
-            '"app"', '"viewerVersion"', '"identityToken"', '"serverMode"', '"serverFeatures"', '"backend"',
+            '"app"', '"viewerVersion"', '"identityToken"', '"currentIdentityToken"',
+            '"restartRequired"', '"serverMode"', '"serverFeatures"', '"backend"',
             '"rootPath"', '"rootName"', '"port"', '"pid"',
             '"stepArtifactGenerationAvailable"',
             '"packageDir"', '"startedAt"', '"url"',
@@ -236,7 +303,7 @@ class ArtifactBuildPayload(HttpLayerTestCase):
     event that changes this entry's URL, and one payload cannot honestly
     describe two moments.
 
-    An ``.stl`` is the subject on purpose — ``build_artifact`` answers "rendered"
+    An ``.stl`` is the subject on purpose — ``build_artifact`` answers "compiled"
     for an unowned entry without touching the kernel, so this pins the payload
     shape rather than exercising a compile.
     """
@@ -253,7 +320,7 @@ class ArtifactBuildPayload(HttpLayerTestCase):
         )
         self.assertEqual(status, 200, body[:400])
         payload = json_module.loads(body)
-        self.assertEqual(payload["state"], "rendered")
+        self.assertEqual(payload["state"], "compiled")
         entry = next(
             e for e in payload["catalog"]["entries"] if e["rootRelativeFile"] == "part.stl"
         )
@@ -531,6 +598,20 @@ class KeepAlive(HttpLayerTestCase):
 
 
 class RequestBodies(HttpLayerTestCase):
+    def test_tess_metadata_cap_precedes_body_read_and_closes_the_connection(self):
+        from cadgen.viewer.tess_cache import TESS_CACHE_METADATA_MAX_BYTES
+
+        for path, limit in (("/__tess_cache/probe", TESS_CACHE_METADATA_MAX_BYTES),
+                            ("/__tess_cache/batch", TESS_CACHE_METADATA_MAX_BYTES),
+                            ("/__cad/surfaces", 128 * 1024), ("/__cad/surfaces/cancel", 128 * 1024)):
+            with self.subTest(path=path):
+                raw = self.fixture.raw(
+                    f"POST {path} HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                    f"x-cadgen-viewer: 1\r\nContent-Length: {limit + 1}\r\n\r\n".encode()
+                )
+                self.assertIn(b"413", raw.split(b"\r\n")[0])
+                self.assertIn(b"connection: close", raw.lower())
+
     def test_a_chunked_body_is_refused_deliberately(self):
         # The stdlib decodes no chunked framing at all. Silently mangling a
         # /__tess_cache/batch body would demote the client's provider to
@@ -556,6 +637,38 @@ class RequestBodies(HttpLayerTestCase):
 
 
 class EveryRouteAnswersForReal(HttpLayerTestCase):
+    def test_tess_get_requires_exact_object_and_admitted_size_before_read(self):
+        from urllib.parse import urlencode
+
+        digest = "ab" * 32
+        for object_hash, limit in ((None, None), (digest, None), (None, "1"), (digest.upper(), "1"),
+                                   (" " + digest, "1"), (digest, "0"), (digest, "-1"),
+                                   (digest, "1.5"), (digest, "9007199254740992")):
+            query = urlencode({key: value for key, value in (("object", object_hash), ("maxBytes", limit)) if value is not None})
+            with self.subTest(object_hash=object_hash, limit=limit), mock.patch(
+                "cadgen.viewer.http_app.read_tess_cache_entry", side_effect=AssertionError("unadmitted cache read"),
+            ):
+                status, _, _ = self.fixture.request("GET", f"/__tess_cache/a.tess?{query}")
+            self.assertEqual(status, 400)
+
+    def test_tess_get_uses_the_probed_object_and_byte_limit(self):
+        import base64
+        import json
+        from cadgen.store import meshes
+        from tests.python.support.tessellation import tessellation_fixture
+
+        fixture = tessellation_fixture()
+        payload = base64.b64decode(fixture["bytes"])
+        with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(Path(self.fixture.root) / "store"), "CADGEN_MESH_CACHE": "1"}):
+            row = meshes.write(fixture["key"], payload)
+            status, _, body = self.fixture.request("POST", "/__tess_cache/probe", headers={"x-cadgen-viewer": "1"},
+                                                 body=json.dumps({"tessellationInputs": [fixture["key"]]}).encode())
+            self.assertEqual(status, 200)
+            self.assertEqual(json.loads(body)["entries"][fixture["key"]], row)
+            route = f"/__tess_cache/{fixture['key']}.tess?object={row['object']}&maxBytes={row['byteLength']}"
+            status, _, body = self.fixture.request("GET", route)
+            self.assertEqual((status, body), (200, payload))
+
     def test_no_route_reports_itself_as_unported(self):
         # This class used to list the routes still awaiting their step, each
         # answering 501 with a distinctive body so a missing route could never

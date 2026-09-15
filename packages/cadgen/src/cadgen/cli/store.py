@@ -64,6 +64,7 @@ def _cmd_info(as_json: bool) -> int:
         "document": "document entries (bytes -> tree)",
         "output": "output entries (path -> model)",
         "component": "component entries",
+        "surface": "surface entries",
         "op": "op-memo entries",
         "mesh": "mesh entries",
     }

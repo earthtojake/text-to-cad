@@ -6,7 +6,7 @@ outputs are generated (gitignored, absent in CI), its inputs may be LFS pointers
 and a test that reaches into it either fails on a fresh clone or passes only
 because a developer built something earlier. Each test writes the small model it
 needs (a `bd.Box` is enough for every contract that is not about geometry), or
-reads a tiny fixture committed under tests/.
+reads a tiny fixture committed with the tests.
 
 The runner gives every test file its own fresh store; a test that spawns a build
 should still set CADGEN_CACHE_DIR itself so a direct `python -m unittest` never
@@ -23,42 +23,49 @@ from pathlib import Path
 from tests.python.support.paths import REPO_ROOT
 
 TESTS = REPO_ROOT / "tests"
-MODELS = REPO_ROOT / "models"
 
-# Every top-level project under models/ -- the corpus a test must never name as a
-# path. A fictional `models/part.step` inside a temp root is fine; `models/juno/…`
-# is not.
-CORPUS_DIRS = sorted(p.name for p in MODELS.iterdir() if p.is_dir())
-CORPUS_PATH = re.compile(r"models/(?:" + "|".join(map(re.escape, CORPUS_DIRS)) + r")/")
-# Joining the repo root with "models" is reaching into the corpus by another spelling.
-REPO_MODELS = re.compile(r"""(?:REPO_ROOT|REPO|ROOT|repo_root\(\)|repo_path\()\s*(?:/|,)\s*["']models(?:["']|/)""")
+# These spellings construct this checkout's models/ path. Plain models/... paths
+# remain legal because many tests create a fictional project beneath a temp root.
+REPO_MODEL_PATTERNS = (
+    re.compile(
+        r"""\b(?:REPO_ROOT|_REPO_ROOT|REPO|repoRoot|repo_root\(\))\s*(?:/|,|\.joinpath\()\s*["']models(?:["']|/)"""
+    ),
+    re.compile(r"""Path\(__file__\)\.resolve\(\)\.parents\[\d+\]\s*/\s*["']models["']"""),
+    re.compile(r"""Path\.cwd\(\)\s*(?:/|,|\.joinpath\()\s*["']models(?:["']|/)"""),
+    re.compile(r"""\brepo_path\(\s*["']models(?:["']|/)"""),
+    re.compile(r"""\$\{?REPO_ROOT\}?/models/"""),
+    re.compile(r"""["'`]\.\.(?:/\.\.)*/models/"""),
+)
 
-# This file names the corpus on purpose (in the regexes above), as does the
-# package-boundary guard, whose regex forbids package markdown from naming it.
-EXEMPT = {
-    Path(__file__).resolve(),
-    (TESTS / "python" / "global" / "test_package_boundaries.py").resolve(),
-}
+# This file names the corpus on purpose in the patterns above.
+EXEMPT = {Path(__file__).resolve()}
 
 
 def _test_files():
-    for path in sorted(TESTS.rglob("*.py")):
+    paths = set()
+    for extension in ("py", "js", "mjs", "ts"):
+        paths.update(TESTS.rglob(f"*.{extension}"))
+    for extension in ("py", "sh"):
+        paths.update((REPO_ROOT / "scripts" / "test").rglob(f"*.{extension}"))
+    for package in (REPO_ROOT / "packages" / "cadgen-js", REPO_ROOT / "apps" / "viewer"):
+        for folder in ("src", "scripts"):
+            for extension in ("js", "mjs", "cjs", "jsx", "ts", "tsx"):
+                paths.update((package / folder).rglob(f"*.test.{extension}"))
+    for path in sorted(paths):
         if "__pycache__" in path.parts or path.resolve() in EXEMPT:
             continue
         yield path
 
 
 class TestsNeverTouchTheCorpus(unittest.TestCase):
-    def test_no_test_names_a_corpus_path(self) -> None:
+    def test_no_test_names_the_repo_models_path(self) -> None:
         offenders = []
         for path in _test_files():
             text = path.read_text(encoding="utf-8")
-            for match in CORPUS_PATH.finditer(text):
-                line = text.count("\n", 0, match.start()) + 1
-                offenders.append(f"{path.relative_to(REPO_ROOT)}:{line}: {match.group(0)}")
-            for match in REPO_MODELS.finditer(text):
-                line = text.count("\n", 0, match.start()) + 1
-                offenders.append(f"{path.relative_to(REPO_ROOT)}:{line}: {match.group(0)}")
+            for pattern in REPO_MODEL_PATTERNS:
+                for match in pattern.finditer(text):
+                    line = text.count("\n", 0, match.start()) + 1
+                    offenders.append(f"{path.relative_to(REPO_ROOT)}:{line}: {match.group(0)}")
         self.assertEqual(
             offenders,
             [],

@@ -1,3 +1,4 @@
+import { applyTubeDeformationToLineObject } from "../../common/tubeDeformation.js";
 import {
   applyTopologyDisplayEdgeSurfaceOffset,
   disposeTopologyDisplayEdgeObject
@@ -92,6 +93,7 @@ function applyRecordEffectMatrix(runtime, object, record) {
   if (!THREE || !object) {
     return false;
   }
+  applyTubeDeformationToLineObject(THREE, object, record?.effectDeformation || null);
   const nextMatrix = composeDisplayRecordEffectMatrix(THREE, record) || new THREE.Matrix4();
   object.matrixAutoUpdate = false;
   const targetMatrix = object.matrix instanceof THREE.Matrix4 ? object.matrix : new THREE.Matrix4();

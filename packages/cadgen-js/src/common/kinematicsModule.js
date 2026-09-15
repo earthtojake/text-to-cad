@@ -3,9 +3,8 @@
 // step-module definition — one number slider per DOF, an update pass that
 // folds slider values through the shared FK evaluator into per-occurrence
 // matrix effects. Pure data in, arithmetic out: no authored JS is involved on
-// this path. Choreography is the render module BESIDE the document
-// (`<name>.step.js`, renderModule.js) and never touches the sidecar or this
-// module; the two meet only in the effect records.
+// this path. Choreography is the sidecar's embedded animation module; the two
+// sections meet only in the effect records.
 
 import {
   kinematicsAtRest,
@@ -15,12 +14,12 @@ import {
   kinematicsPoses
 } from "./kinematicsRuntime.js";
 import { normalizeStepModuleDefinition } from "./stepModule.js";
+import {
+  loadSourceSidecar,
+  SOURCE_SIDECAR_SCHEMA_VERSION
+} from "./sourceSidecar.js";
 
-// The sidecar schema this runtime reads. Mirrors cadgen's
-// source_sidecar.SOURCE_SIDECAR_SCHEMA_VERSION and the viewer's
-// packageContract.mjs; pinned across the three by
-// tests/python/global/test_render_contract_sync.py.
-export const SOURCE_SIDECAR_SCHEMA_VERSION = 6;
+export { SOURCE_SIDECAR_SCHEMA_VERSION } from "./sourceSidecar.js";
 
 function isObject(value) {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -99,55 +98,40 @@ export function stepModuleFromKinematics(block) {
   };
 }
 
-// Reading sections out of a sidecar written to a different shape is how a
-// model silently loses its kinematics, so the schema is checked before any
-// section is touched. The viewer surfaces this as the step-module load error.
-// The sidecar's own filename, whether the url is a plain path or the viewer's
-// `/__cad/asset?file=<path>` form (whose LAST path segment is "asset").
-function sidecarName(url) {
-  const text = String(url || "").split("#")[0];
-  const query = /[?&]file=([^&]+)/.exec(text);
-  const target = query ? decodeURIComponent(query[1]) : text.split("?")[0];
-  return target.replace(/\\/g, "/").split("/").filter(Boolean).pop() || "sidecar";
+function moduleDefinitionFromKinematics(block, { cadPath = "", url = "" } = {}) {
+  const raw = stepModuleFromKinematics(block);
+  return raw ? normalizeStepModuleDefinition(raw, { url, cadPath }) : null;
 }
 
-function sidecarSections(sidecar, url) {
-  const schemaVersion = sidecar?.schemaVersion;
-  if (schemaVersion !== SOURCE_SIDECAR_SCHEMA_VERSION) {
-    const name = sidecarName(url);
-    const model = name.replace(/\.(step|stp)\.json$/i, "");
-    throw new Error(
-      `${name}: unsupported sidecar schema ${schemaVersion ?? "none"} `
-      + `(expected ${SOURCE_SIDECAR_SCHEMA_VERSION}) — rebuild the model `
-      + `(python ${model}.py) or re-annotate the document (cadgen step build)`
-    );
-  }
-  return sidecar;
-}
-
-async function fetchSidecar(sidecarUrl) {
-  const url = String(sidecarUrl || "").trim();
-  if (!url) {
+export function kinematicsModuleDefinitionFromSidecar(
+  sidecar,
+  { cadPath = "", url = "" } = {}
+) {
+  if (!sidecar) {
     return null;
   }
-  const response = await fetch(url, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Failed to load model sidecar: HTTP ${response.status}`);
-  }
-  return sidecarSections(await response.json(), url);
+  return moduleDefinitionFromKinematics(sidecar.kinematics, { cadPath, url });
+}
+
+/** Compile already-resolved preview kinematics without fetching a saved
+ * sidecar. Preview data is bound to its in-memory STEP by the build response. */
+export function previewKinematicsModuleDefinition(block, { cadPath = "" } = {}) {
+  return moduleDefinitionFromKinematics(block, { cadPath });
 }
 
 /** Fetch the model's sidecar (<name>.step.json) and compile its
  * kinematics section into a normalized step-module definition. Models with no
  * kinematics resolve to null (nothing to pose). */
-export async function loadKinematicsModuleDefinition(sidecarUrl, { cadPath = "" } = {}) {
-  const sidecar = await fetchSidecar(sidecarUrl);
+export async function loadKinematicsModuleDefinition(
+  sidecarUrl,
+  { cadPath = "", documentHash = "" } = {}
+) {
+  const sidecar = await loadSourceSidecar(sidecarUrl, { documentHash });
   if (!sidecar) {
     return null;
   }
-  const raw = stepModuleFromKinematics(sidecar.kinematics);
-  if (!raw) {
-    return null;
-  }
-  return normalizeStepModuleDefinition(raw, { url: String(sidecarUrl).trim(), cadPath });
+  return kinematicsModuleDefinitionFromSidecar(sidecar, {
+    url: String(sidecarUrl).trim(),
+    cadPath
+  });
 }

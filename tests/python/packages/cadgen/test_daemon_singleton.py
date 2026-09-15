@@ -52,13 +52,36 @@ class AuthkeyTest(unittest.TestCase):
     def test_twenty_concurrent_creators_agree_on_one_key(self):
         with tempfile.TemporaryDirectory(prefix="cadgen-key-") as tmp:
             with mock.patch.object(transport, "state_dir", lambda: Path(tmp)):
-                identity = "test-identity"
+                address = str(Path(tmp) / "daemon.sock")
                 with ThreadPoolExecutor(max_workers=20) as pool:
-                    keys = list(pool.map(lambda _: transport.ensure_authkey(identity), range(20)))
+                    keys = list(pool.map(lambda _: transport.ensure_authkey(address), range(20)))
                 self.assertEqual(len(set(keys)), 1, "clients hold different secrets")
-                self.assertEqual(keys[0], transport.read_authkey(identity))
+                self.assertEqual(keys[0], transport.read_authkey(address))
                 leftovers = [p for p in Path(tmp).iterdir() if p.name.endswith(".tmp")]
                 self.assertEqual(leftovers, [], "temp key files were left behind")
+
+    def test_private_addresses_have_private_keys(self):
+        with tempfile.TemporaryDirectory(prefix="cadgen-key-") as tmp:
+            with mock.patch.object(transport, "state_dir", lambda: Path(tmp)):
+                left = str(Path(tmp) / "same.sock")
+                right = str(Path(tmp) / "same.other")
+                left_key = transport.ensure_authkey(left)
+                right_key = transport.ensure_authkey(right)
+                self.assertNotEqual(left_key, right_key)
+                self.assertEqual(transport.read_authkey(left), left_key)
+                self.assertEqual(transport.read_authkey(right), right_key)
+                self.assertNotEqual(transport._authkey_path(left), transport._authkey_path(right))
+                self.assertTrue(transport._authkey_path(left).is_file())
+                self.assertTrue(transport._authkey_path(right).is_file())
+
+    def test_an_existing_empty_key_never_returns_an_unpublished_secret(self):
+        with tempfile.TemporaryDirectory(prefix="cadgen-key-") as tmp:
+            with mock.patch.object(transport, "state_dir", lambda: Path(tmp)):
+                address = str(Path(tmp) / "daemon.sock")
+                transport._authkey_path(address).touch()
+                with mock.patch.object(transport.time, "sleep"):
+                    with self.assertRaisesRegex(OSError, "empty or unreadable"):
+                        transport.ensure_authkey(address)
 
 
 class BindTest(unittest.TestCase):
@@ -68,9 +91,11 @@ class BindTest(unittest.TestCase):
         self.addCleanup(held.release)
         with mock.patch.object(transport, "daemon_lock", lambda key: transport.SingletonLock(held.path)), \
                 mock.patch.object(transport, "clear_address") as clear, \
+                mock.patch.object(transport, "ensure_authkey") as ensure, \
                 mock.patch.object(server, "_log"):
-            self.assertIsNone(server._bind("/tmp/does-not-matter.sock", b"key"))
+            self.assertIsNone(server._bind("/tmp/does-not-matter.sock"))
         clear.assert_not_called()
+        ensure.assert_not_called()
 
     def test_the_lock_holder_sweeps_a_leftover_address_and_binds(self):
         tmp = Path(tempfile.mkdtemp(prefix="cadgen-bind-"))
@@ -78,18 +103,24 @@ class BindTest(unittest.TestCase):
         created = {}
 
         class _Server:
-            def __init__(self, address, authkey, backlog):
+            def __init__(self, address, authkey, backlog, on_authentication_error):
                 created["args"] = (address, backlog)
+                created["repair"] = on_authentication_error
 
         with mock.patch.object(transport, "daemon_lock", lambda key: lock), \
                 mock.patch.object(transport, "address_is_stale", lambda a: True), \
                 mock.patch.object(transport, "clear_address") as clear, \
+                mock.patch.object(transport, "ensure_authkey", return_value=b"key") as ensure, \
+                mock.patch.object(transport, "publish_authkey") as publish, \
                 mock.patch.object(transport, "Server", _Server), \
                 mock.patch.object(server, "_log"):
-            self.assertIsNotNone(server._bind("/tmp/leftover.sock", b"key"))
+            self.assertIsNotNone(server._bind("/tmp/leftover.sock"))
+            created["repair"]()
         clear.assert_called_once_with("/tmp/leftover.sock")
+        ensure.assert_called_once_with("/tmp/leftover.sock")
         self.assertEqual(created["args"][1], 128)
         self.assertTrue(lock.held, "the daemon keeps the lock for its life")
+        publish.assert_called_once_with("/tmp/leftover.sock", b"key")
         lock.release()
 
 
@@ -116,12 +147,14 @@ class SpawnElectionTest(unittest.TestCase):
 
         with mock.patch.object(transport, "spawn_lock", lambda key: transport.SingletonLock(lock_path)), \
                 mock.patch.object(client, "_spawn_daemon", fake_spawn), \
+                mock.patch.object(client, "_reap_detached") as reap, \
                 mock.patch.object(client, "_connect", fake_connect), \
                 mock.patch.object(client, "daemon_identity", lambda: "id"):
             with ThreadPoolExecutor(max_workers=8) as pool:
                 results = list(pool.map(lambda _: client._connect_or_spawn("/tmp/x.sock"), range(8)))
         self.assertEqual(results, ["channel"] * 8)
         self.assertEqual(len(spawns), 1, f"expected one spawn, got {len(spawns)}")
+        reap.assert_called_once_with(mock.ANY)
 
 
 if __name__ == "__main__":

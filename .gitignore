@@ -1,6 +1,7 @@
 # macOS
 .DS_Store
 .vscode
+/.claude/launch.json
 
 # Python
 __pycache__/
@@ -34,6 +35,15 @@ tmp/
 repo-scan*.md
 *-scan-*.md
 *-fix-plan*.md
+
+# Benchmark output is local evidence, not source. Use tmp/ for reports.
+/scripts/bench/**/results/
+/scripts/bench/**/*.json
+/scripts/bench/**/*.log
+/scripts/bench/**/*.gz
+/scripts/bench/**/*.cpuprofile
+/scripts/bench/**/*.heapsnapshot
+/scripts/bench/**/*.png
 
 # Review media rendered next to a fixture. models/ holds CAD/robot sources,
 # generated 3D and fabrication outputs, and docs only; see models/README.md.

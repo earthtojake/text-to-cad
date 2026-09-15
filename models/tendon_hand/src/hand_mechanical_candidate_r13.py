@@ -8,7 +8,11 @@ from pathlib import Path
 from cadgen import step,read_step
 from lib.native_integration import integrated_native_bodies,overlay,rooted,ROOT
 from lib.assembly import compound
-from lib.palette import apply_palette
+from lib.palette import apply_palette,ASSEMBLY_MATERIALS
+
+ANIMATION_JS = r'''// Regenerate with validation/write_showcase_presentation.py after the body-frame manifest exists.
+export const clips = {};
+'''
 
 def native_parts(path):
     from cadgen.step_scene import load_step_scene,scene_occurrence_shape
@@ -24,7 +28,7 @@ def native_parts(path):
         shape.label=name;parts[name]=shape
     return parts
 
-@step(out='../STEP/hand_mechanical_candidate_r13.step')
+@step(out='../STEP/hand_mechanical_candidate_r13.step', materials=ASSEMBLY_MATERIALS, animation=ANIMATION_JS)
 def hand_mechanical_candidate_r13():
     bodies=integrated_native_bodies();folder=ROOT/'STEP';reports=ROOT/'validation'
     for family,filename in [('fingertip_pad','fingertip_pad_export_repair.step'),('fingernail','fingernail_export_repair_review.step')]:
@@ -83,7 +87,7 @@ def hand_mechanical_candidate_r13():
         if len(native)==len(selected)==1:native={selected[0].name:next(iter(native.values()))}
         for body in selected:
             name=body.name;shape=native[name]
-            shape.color=body.shape.color;shape.cad_material=dict(getattr(body.shape,'cad_material',{}));shape.label=name
+            shape.color=body.shape.color;shape.label=name
             body.shape=shape
     assert len(bodies)==3259 and sum(b.frame!='variable' for b in bodies)==3041
     # Colour is decided last, on the shapes the exporter actually reads: the

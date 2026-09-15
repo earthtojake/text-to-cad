@@ -54,20 +54,19 @@ class RenderContractSyncTest(unittest.TestCase):
             "them; a .surf the client cannot parse renders nothing).",
         )
 
-    def test_sidecar_schema_matches_the_js_kinematics_loader(self) -> None:
-        # What is genuinely cross-language is the CLIENT: the kinematics loader
-        # runs in the browser and REFUSES any other schema, so a one-sided bump
-        # makes every model's kinematics fail to load.
+    def test_sidecar_schema_matches_the_js_source_sidecar_loader(self) -> None:
+        # What is genuinely cross-language is the CLIENT: the shared sidecar
+        # loader runs in the browser and REFUSES any other schema.
         sidecar_module = ROOT / "packages/cadgen/src/cadgen/_internal/source_sidecar.py"
         self.assertEqual(
             _extract(r"^SOURCE_SIDECAR_SCHEMA_VERSION = (\d+)$", sidecar_module),
             _extract(
                 r"^export const SOURCE_SIDECAR_SCHEMA_VERSION = (\d+);",
-                ROOT / "packages/cadgen-js/src/common/kinematicsModule.js",
+                ROOT / "packages/cadgen-js/src/common/sourceSidecar.js",
             ),
             "SOURCE_SIDECAR_SCHEMA_VERSION diverged between cadgen and the JS "
-            "kinematics loader — the loader REFUSES any other schema, so a "
-            "one-sided bump makes every model's kinematics fail to load",
+            "source-sidecar loader — the loader REFUSES any other schema, so a "
+            "one-sided bump makes document annotations fail to load",
         )
 
     def test_component_blob_format_is_pinned_not_current(self) -> None:

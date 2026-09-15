@@ -1,4 +1,4 @@
-"""Generate STEP/w16.step.js (the render module beside the engine's STEP) from lib/spec + lib/kin.
+"""Refresh the ``ANIMATION_JS`` literal embedded in ``src/w16.py``.
 
 The render module must re-describe the motion on its own (it knows nothing about
 mates or Python), so this bakes every constant it needs: the cylinder table,
@@ -15,7 +15,7 @@ from pathlib import Path
 from lib import kin, spec as S
 from lib.valvetrain import valve_tag
 
-OUT = Path(__file__).resolve().parent.parent.parent / "STEP" / "w16.step.js"
+OUT = Path(__file__).resolve().parent.parent / "w16.py"
 
 CRANK_SECONDS = 6.0        # one 720 deg cycle
 
@@ -572,7 +572,11 @@ def main():
         "cam_axes": json.dumps(cam_axes()),
         "chains": json.dumps(chains()),
     }
-    OUT.write_text(js)
+    source = OUT.read_text()
+    marker = "ANIMATION_JS = r'''"
+    start = source.index(marker) + len(marker)
+    end = source.index("\n'''", start)
+    OUT.write_text(source[:start] + js.rstrip() + source[end:])
     print(f"wrote {OUT} ({len(js)} bytes)")
 
 

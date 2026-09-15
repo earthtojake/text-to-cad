@@ -94,6 +94,7 @@ declare module "cadgen-js/common/source.js" {
     kind: string;
     meshData: unknown;
     stepParameterSource: unknown;
+    sourceSidecar: unknown;
   };
 
   export function loadSource(

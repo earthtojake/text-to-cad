@@ -1,0 +1,12 @@
+*.step
+*.stp
+*.step.json
+*.stp.json
+*.stl
+*.3mf
+*.glb
+*.png
+*.jpg
+*.mp4
+*.log
+__pycache__/

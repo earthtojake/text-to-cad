@@ -1,8 +1,11 @@
 "use client";
 
+import LoadingIndicator from "./workbench/LoadingIndicator";
+import { disposeViewerCadScene } from "../render/lodSceneCleanup.js";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { Minus, Plus, RotateCcw } from "lucide-react";
+import { LoaderCircle, Minus, Plus, RotateCcw } from "lucide-react";
+import { viewerTransitionBackdrop } from "./viewer/framePresentation.js";
 import { parseCadRefToken } from "cadgen-js/lib/cadRefs";
 import {
   dxfBendGuideSegments,
@@ -27,6 +30,17 @@ import {
 } from "cadgen-js/lib/perspective";
 import { VIEWER_PICK_MODE } from "cadgen-js/lib/viewer/constants";
 import { resolveScenePartRendering } from "cadgen-js/lib/viewer/partRendering";
+import { hasMeshGeometry } from "cadgen-js/lib/render/meshCost";
+import {
+  detachGlbDocumentScene,
+  disposeGlbDocument,
+  shouldUseNativeGlbScene
+} from "cadgen-js/lib/render/glbMeshData";
+import {
+  createGlbAnimationRuntime,
+  disposeGlbAnimationRuntime,
+  setGlbAnimationTime
+} from "cadgen-js/lib/render/glbAnimationRuntime";
 import { normalizeStepClipSettings } from "cadgen-js/lib/viewer/clipPlane";
 import {
   buildDrawingPoint,
@@ -52,9 +66,19 @@ import {
   displayModeForcesEdges,
   displayModeIsWireframe,
   displayModeShowsEdges,
-  displayModeShowsThroughEdges,
-  resolveDisplayEdgeSettings
+  displayModeShowsThroughEdges
 } from "cadgen-js/lib/displaySettings";
+import { resolveCadEdgeSettings, resolveCadGridSettings } from "cadgen-js/common/cadInk.js";
+import { resolveDisplayMaterialSettings } from "cadgen-js/common/sceneSettings.js";
+import {
+  createEnvironmentResource,
+  disposeEnvironmentResource,
+  environmentResourceIdentity
+} from "cadgen-js/common/environmentMap.js";
+import {
+  applyPhotographicStudio,
+  disposePhotographicStudio
+} from "cadgen-js/common/photographicStudio.js";
 import {
   clampSceneModelRadius,
   defaultSceneGridRadius,
@@ -75,7 +99,6 @@ import {
   getViewerThemeValue,
   getStageFloorSize,
   normalizeFloorMode,
-  resolveWireframeEdgeColor,
   updateSpotLightTarget
 } from "cadgen-js/lib/viewer/stageTheme";
 import {
@@ -122,6 +145,16 @@ import {
   syncSelectorPickGroups
 } from "cadgen-js/lib/viewer/selectorPickGroups";
 import { scheduleRuntimeRaycastBvh } from "cadgen-js/lib/viewer/raycastBvh";
+import { renderMemoryAccounting } from "../render/renderMemoryAccounting";
+import { viewerMemoryPolicy } from "../render/viewerMemoryPolicy.js";
+import { inactiveExplodedViewNeedsReset } from "../render/explodedViewLifecycle.js";
+import {
+  createStaticSceneReset,
+  sceneSourceAlreadyPlaced,
+  staticSceneResetEligible
+} from "../render/staticSceneReset.js";
+import { sampleLodCamera, resampleLodAfterViewportResize } from "../render/lodCameraSample.js";
+import { sceneBuildStructuralKey } from "../render/sceneBuildSettings.js";
 import {
   buildSurfaceLinePositions,
   projectPointToSurfaceUv,
@@ -146,7 +179,6 @@ import { buildRuntimeInitializationAlert } from "cadgen-js/lib/viewer/webglSuppo
 import { DRAWING_TOOL } from "@/workbench/constants";
 import { hasCapability } from "cadgen-js/lib/renderCapabilities";
 import {
-  getEnvironmentPresetById,
   THEME_FLOOR_MODES
 } from "cadgen-js/lib/themeSettings";
 import ViewPlaneControl from "./viewer/ViewPlaneControl";
@@ -155,6 +187,11 @@ import { useViewerMeasureOverlay } from "./viewer/hooks/useViewerMeasureOverlay"
 import { useViewerPicking } from "./viewer/hooks/useViewerPicking";
 import { useViewerRuntime } from "./viewer/hooks/useViewerRuntime";
 import { PREVIEW_AUTO_ROTATE_SPEED } from "./viewer/orbitControls";
+import {
+  CAD_DEFAULT_VERTICAL_FOV_DEGREES,
+  explicitViewerFocalLength,
+  perspectiveDistanceScale
+} from "./viewer/cameraLens.js";
 import {
   applyOrbitDelta,
   cameraMatchesViewPreset,
@@ -238,7 +275,7 @@ const CAMERA_TRANSITION_EASING = Object.freeze({
 const AUTO_ZOOM_PADDING = DEFAULT_AUTO_ZOOM_PADDING;
 const CAD_COORDINATE_SYSTEM = "cad-z-up-v1";
 const ROBOT_COORDINATE_SYSTEM = "cad-z-up-robot-framing-v2";
-const DISPLAY_TOOLBAR_CLASSES = "cad-glass-surface pointer-events-auto absolute z-30 inline-flex h-8 w-fit items-center gap-0.5 rounded-md border border-sidebar-border p-1 text-sidebar-foreground shadow-sm";
+const DISPLAY_TOOLBAR_CLASSES = "bg-sidebar pointer-events-auto absolute z-30 inline-flex h-8 w-fit items-center gap-0.5 rounded-md border border-sidebar-border p-1 text-sidebar-foreground shadow-sm";
 const DISPLAY_TOOLBAR_BUTTON_CLASSES = "grid size-6 shrink-0 place-items-center rounded-sm text-sidebar-foreground/70 transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 disabled:pointer-events-none disabled:opacity-50";
 const VIEW_PLANE_CONTROL_SIZE = "7.5rem";
 const VIEW_PLANE_CONTROL_GAP = "0.5rem";
@@ -623,10 +660,18 @@ function syncRuntimeScaledLighting(runtime, lightingSettings = {}, radius, scene
   }
 }
 
-function syncRuntimeScaledLightingAndShadow(THREE, runtime, lightingSettings = {}, radius, bounds, sceneScaleMode = VIEWER_SCENE_SCALE.CAD) {
+function syncRuntimeScaledLightingAndShadow(
+  THREE,
+  runtime,
+  lightingSettings = {},
+  radius,
+  bounds,
+  sceneScaleMode = VIEWER_SCENE_SCALE.CAD,
+  shadowMapSize = 2048
+) {
   syncRuntimeScaledLighting(runtime, lightingSettings, radius, sceneScaleMode);
   if (THREE && bounds && runtime?.keyLight?.shadow?.camera) {
-    applyRuntimeModelBounds(THREE, runtime, bounds, sceneScaleMode);
+    applyRuntimeModelBounds(THREE, runtime, bounds, sceneScaleMode, { shadowMapSize });
   }
 }
 
@@ -1015,13 +1060,29 @@ function readPerspectiveSnapshot(runtime) {
   if (!runtime?.camera || !runtime?.controls) {
     return null;
   }
+  const orthographicHalfHeight = readOrthographicHalfHeight(runtime);
   return {
     position: [runtime.camera.position.x, runtime.camera.position.y, runtime.camera.position.z],
     target: [runtime.controls.target.x, runtime.controls.target.y, runtime.controls.target.z],
     up: [runtime.camera.up.x, runtime.camera.up.y, runtime.camera.up.z],
     zoom: runtime.camera.zoom,
-    projection: runtimeCameraProjection(runtime)
+    projection: runtimeCameraProjection(runtime),
+    ...(Number.isFinite(runtime.perspectiveCamera?.getFocalLength?.())
+      ? { focalLength: runtime.perspectiveCamera.getFocalLength() }
+      : {}),
+    ...(orthographicHalfHeight ? { orthographicHalfHeight } : {})
   };
+}
+
+function setRuntimePerspectiveFocalLength(runtime, focalLength) {
+  const camera = runtime?.perspectiveCamera;
+  const next = Number(focalLength);
+  if (!camera?.setFocalLength || !Number.isFinite(next) || next <= 0) {
+    return false;
+  }
+  camera.setFocalLength(next);
+  camera.userData.cadFocalLength = next;
+  return true;
 }
 
 function readScopedPerspectiveSnapshot(runtime, { modelKey = "", sceneScaleMode = "" } = {}) {
@@ -1062,9 +1123,18 @@ function applyPerspectiveSnapshot(runtime, perspective, { scheduleIdle = true } 
   if (Object.prototype.hasOwnProperty.call(nextPerspective, "projection")) {
     syncRuntimeCameraProjection(runtime, nextPerspective.projection, { scheduleIdle: false });
   }
+  if (Number.isFinite(nextPerspective.focalLength) && nextPerspective.focalLength > 0) {
+    setRuntimePerspectiveFocalLength(runtime, nextPerspective.focalLength);
+  }
   runtime.camera.position.set(...nextPerspective.position);
   runtime.controls.target.set(...nextPerspective.target);
   runtime.camera.up.set(...nextPerspective.up);
+  if (
+    Number.isFinite(nextPerspective.orthographicHalfHeight) &&
+    nextPerspective.orthographicHalfHeight > 0
+  ) {
+    setOrthographicCameraHalfHeight(runtime, nextPerspective.orthographicHalfHeight);
+  }
   if (Number.isFinite(nextPerspective.zoom) && nextPerspective.zoom > 0) {
     runtime.camera.zoom = nextPerspective.zoom;
     runtime.camera.updateProjectionMatrix?.();
@@ -1082,7 +1152,7 @@ function applyPerspectiveSnapshot(runtime, perspective, { scheduleIdle = true } 
 function transitionCameraToPerspectiveSnapshot(runtime, perspective, {
   durationMs = VIEW_PLANE_TRANSITION_MS,
   easing = CAMERA_TRANSITION_EASING.EASE_IN_OUT_CUBIC,
-  orthographicHalfHeight = null,
+  orthographicHalfHeight = undefined,
   resetZoomBaselineOnComplete = false
 } = {}) {
   const nextPerspective = clonePerspectiveSnapshot(perspective);
@@ -1094,6 +1164,9 @@ function transitionCameraToPerspectiveSnapshot(runtime, perspective, {
   if (Object.prototype.hasOwnProperty.call(nextPerspective, "projection")) {
     syncRuntimeCameraProjection(runtime, nextPerspective.projection, { scheduleIdle: false });
   }
+  if (Number.isFinite(nextPerspective.focalLength) && nextPerspective.focalLength > 0) {
+    setRuntimePerspectiveFocalLength(runtime, nextPerspective.focalLength);
+  }
   const endPosition = new runtime.THREE.Vector3(...nextPerspective.position);
   const endTarget = new runtime.THREE.Vector3(...nextPerspective.target);
   const endUp = new runtime.THREE.Vector3(...nextPerspective.up);
@@ -1104,7 +1177,7 @@ function transitionCameraToPerspectiveSnapshot(runtime, perspective, {
     ? Number(runtime.camera.userData?.cadHalfHeight)
     : null;
   const endOrthographicHalfHeight = runtime.camera?.isOrthographicCamera
-    ? Number(orthographicHalfHeight)
+    ? Number(orthographicHalfHeight ?? nextPerspective.orthographicHalfHeight)
     : null;
   if (
     ![endPosition.x, endPosition.y, endPosition.z, endTarget.x, endTarget.y, endTarget.z, endUp.x, endUp.y, endUp.z, endZoom]
@@ -1438,7 +1511,6 @@ function disposeSceneObject(object) {
     object.userData.beforeDispose(object);
     delete object.userData.beforeDispose;
   }
-  object.parent?.remove(object);
   if (object.geometry?.userData?.cadSceneCachedGeometry !== true) {
     object.geometry?.dispose?.();
   }
@@ -1448,6 +1520,51 @@ function disposeSceneObject(object) {
     material?.alphaMap?.dispose?.();
     material?.dispose?.();
   }
+  object.parent?.remove(object);
+}
+
+// Read-only debug/test seam (like __cadModelPlacement): how long each scene
+// sync — the effect that turns a published mesh state into display records —
+// held the main thread, and whether it rebuilt the scene or reused its records.
+// Read by the headless timing harness; never React state.
+function recordSceneSyncTiming(startedAt, { mode, records, reason = "" }) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const ms = performance.now() - startedAt;
+  const stats = window.__cadSceneSync || (window.__cadSceneSync = { count: 0, totalMs: 0, entries: [] });
+  stats.count += 1;
+  stats.totalMs += ms;
+  stats.entries.push({ atMs: Math.round(performance.now()), ms: Math.round(ms * 10) / 10, mode, records, reason });
+}
+
+// Why a live scene was rebuilt rather than reused: the build-key fields that
+// changed (for the timing seam above).
+function sceneBuildKeyDifference(previous, next, runtime, modelKey) {
+  const reasons = [];
+  if (!runtime.hasVisibleModel) {
+    reasons.push("no visible model");
+  }
+  if (runtime.activeModelKey !== (modelKey || "")) {
+    reasons.push("model key");
+  }
+  if (previous.viewerTheme !== next.viewerTheme) {
+    reasons.push("viewer theme");
+  }
+  if (previous.key !== next.key) {
+    try {
+      const before = JSON.parse(previous.key || "{}");
+      const after = JSON.parse(next.key || "{}");
+      for (const field of new Set([...Object.keys(before), ...Object.keys(after)])) {
+        if (JSON.stringify(before[field]) !== JSON.stringify(after[field])) {
+          reasons.push(field);
+        }
+      }
+    } catch {
+      reasons.push("build key");
+    }
+  }
+  return reasons.join(",");
 }
 
 function clearSceneGroup(group) {
@@ -1460,6 +1577,54 @@ function clearSceneGroup(group) {
     }
     disposeSceneObject(child);
   }
+}
+
+function nativeGlbBounds(THREE, root) {
+  root.updateWorldMatrix(true, true);
+  const box = new THREE.Box3().setFromObject(root, true);
+  if (box.isEmpty()) return { min: [0, 0, 0], max: [0, 0, 0] };
+  return { min: box.min.toArray(), max: box.max.toArray() };
+}
+
+function buildNativeGlbCadScene(THREE, document, source, receiveShadows) {
+  const modelGroup = new THREE.Group();
+  modelGroup.matrix.fromArray(document.cadRootMatrix);
+  modelGroup.matrixAutoUpdate = false;
+  modelGroup.matrixWorldNeedsUpdate = true;
+  modelGroup.add(document.scene);
+  document.scene.traverse((object) => {
+    // The viewer owns one lighting rig in both Inspect and Render. Retain the
+    // authored node hierarchy, but do not let embedded punctual lights create
+    // a second, file-specific Studio.
+    if (object?.isLight) {
+      object.visible = false;
+      return;
+    }
+    if (!object?.isMesh) return;
+    object.castShadow = true;
+    object.receiveShadow = receiveShadows;
+    // Three caches local culling bounds. Bone deformation (and, on imported
+    // files, morph displacement) can leave those rest-pose bounds even though
+    // the hierarchy and framing estimate are correct.
+    if (object.isSkinnedMesh || object.morphTargetInfluences?.length) {
+      object.frustumCulled = false;
+    }
+  });
+  return {
+    source,
+    nativeDocument: document,
+    modelGroup,
+    edgesGroup: new THREE.Group(),
+    displayRecords: [],
+    bounds: document.animatedBounds || nativeGlbBounds(THREE, modelGroup),
+    update() {},
+    syncSurfaceInstances() {},
+    dispose() {
+      // The document owns its native resources across renderer/theme rebuilds.
+      // Detach it before the generic scene cleanup recursively disposes children.
+      detachGlbDocumentScene(document);
+    }
+  };
 }
 
 function getEdgeThickness(edgeSettings = null, viewerTheme = null) {
@@ -1551,14 +1716,19 @@ function updateGridHelper(
   floorMode = THEME_FLOOR_MODES.STAGE,
   floorSettings = {}
 ) {
-  updateStageOriginAxis(runtime, viewerTheme, radius, floorZ, {
+  // Inspection guides live on the authored world plane. The physical Render
+  // floor may follow the model, but that placement belongs to stage effects.
+  updateStageOriginAxis(runtime, viewerTheme, radius, 0, {
     disposeSceneObject,
     floorSettings
   });
-  return updateStageGridHelper(runtime, viewerTheme, radius, floorZ, sceneScaleMode, floorMode, {
+  const result = updateStageGridHelper(runtime, viewerTheme, radius, 0, sceneScaleMode, floorMode, {
     disposeSceneObject,
     floorSettings
   });
+  runtime.gridFloorZ = floorZ;
+  runtime.floorMode = floorMode;
+  return result;
 }
 
 const CadViewer = forwardRef(function CadViewer({
@@ -1584,10 +1754,18 @@ const CadViewer = forwardRef(function CadViewer({
   perspective = null,
   perspectiveRef = null,
   projection = CAMERA_PROJECTION.PERSPECTIVE,
+  focalLength = null,
   showEdges,
   recomputeNormals,
   theme = BASE_VIEWER_THEME,
   themeSettings = null,
+  materialOverrides = null,
+  receiveShadows = false,
+  renderMode = false,
+  materialPickingEnabled = false,
+  appearance = "light",
+  renderConfiguration = null,
+  quality = null,
   floorModeOverride = "",
   previewMode = false,
   showViewPlane = true,
@@ -1597,6 +1775,9 @@ const CadViewer = forwardRef(function CadViewer({
   compactViewPlane = false,
   viewportFrameInsets = null,
   isLoading = false,
+  presentationKey = "",
+  onPresentationChange = null,
+  loadingPresentation = null,
   pickMode = VIEWER_PICK_MODE.AUTO,
   panToolActive = false,
   renderPartsIndividually = false,
@@ -1612,6 +1793,8 @@ const CadViewer = forwardRef(function CadViewer({
   displayEdgeRuntime = null,
   stepParameters = null,
   stepAnimation = null,
+  glbDocument = null,
+  embeddedGlbAnimation = null,
   pickableFaces = [],
   pickableEdges = [],
   pickableVertices = [],
@@ -1623,6 +1806,8 @@ const CadViewer = forwardRef(function CadViewer({
   drawingStrokes = [],
   onDrawingStrokesChange,
   onPerspectiveChange,
+  onLodCameraChange,
+  onMeshSourceAdoption,
   onHoverReferenceChange,
   onActivateReference,
   onDoubleActivateReference,
@@ -1641,6 +1826,12 @@ const CadViewer = forwardRef(function CadViewer({
   // model has no clip selected, and the evaluator never runs.
   const stepAnimationRuntime = stepAnimation;
   const stepAnimationPlaying = Boolean(stepAnimationRuntime?.playing);
+  // Fresh even when every prop is unchanged: a receipt can skip only the
+  // duplicate reset in this render, never work triggered by a later render.
+  const staticResetRenderToken = {};
+  const staticSceneResetRef = useRef(null);
+  if (!staticSceneResetRef.current) staticSceneResetRef.current = createStaticSceneReset();
+  useEffect(() => () => staticSceneResetRef.current.reset(), []);
   // What counts as "something is on screen" for overlays and the view cube.
   const viewportContent = meshData;
   const hasViewportContent = !!viewportContent;
@@ -1671,7 +1862,19 @@ const CadViewer = forwardRef(function CadViewer({
   const drawingStrokesRef = useRef(Array.isArray(drawingStrokes) ? drawingStrokes : []);
   const drawingChangeRef = useRef(onDrawingStrokesChange);
   const perspectiveChangeRef = useRef(onPerspectiveChange);
+  const lodCameraChangeRef = useRef(onLodCameraChange);
+  lodCameraChangeRef.current = onLodCameraChange;
+  const lodSelectedPartIdsRef = useRef(selectedPartIds);
+  lodSelectedPartIdsRef.current = selectedPartIds;
+  const lodSelectionKey = normalizePartIdList(selectedPartIds).join("\u0000");
+  const meshSourceAdoptionRef = useRef(onMeshSourceAdoption);
+  meshSourceAdoptionRef.current = onMeshSourceAdoption;
+
   const viewerAlertChangeRef = useRef(onViewerAlertChange);
+  const sceneUpdateAlertRef = useRef(null);
+  // The last { title, message } the scene-effects pass raised, so it can be
+  // deduplicated across frames and cleared when a pass runs clean.
+  const sceneEffectsAlertRef = useRef(null);
   const stepModuleTransformDetectedChangeRef = useRef(onStepModuleTransformDetectedChange);
   const lastEmittedPerspectiveRef = useRef(null);
   const lastProjectionRef = useRef(normalizedProjection);
@@ -1687,6 +1890,10 @@ const CadViewer = forwardRef(function CadViewer({
   });
   const viewportFrameInsetsRef = useRef(normalizedViewportFrameInsets);
   const framedModelKeyRef = useRef("");
+  // The model key this view was framed against once every component had
+  // arrived. A progressive load frames on the first publish so something is on
+  // screen immediately, and that first batch is a fraction of the model.
+  const framedCompleteModelKeyRef = useRef("");
   const modelTransformRef = useRef({
     modelKey: "",
     sceneScaleMode: "",
@@ -1703,6 +1910,29 @@ const CadViewer = forwardRef(function CadViewer({
   const [error, setError] = useState("");
   const [viewerReadyTick, setViewerReadyTick] = useState(0);
   const [runtimeResetToken, setRuntimeResetToken] = useState(0);
+  const presentationEpoch = useMemo(() => ({}), [renderMode, runtimeResetToken]);
+  const [presentedEpoch, setPresentedEpoch] = useState(null);
+  const [presentedKey, setPresentedKey] = useState("");
+  const resolvedPresentationKey = String(presentationKey || modelKey || "");
+  const presentationRequestRef = useRef({ key: "", ready: false });
+  const handleFramePresented = useCallback((key) => {
+    setPresentedEpoch(presentationEpoch);
+    setPresentedKey(String(key || ""));
+  }, [presentationEpoch]);
+  useLayoutEffect(() => {
+    // Hide the old canvas in the same commit as the mode control changes,
+    // before asynchronous runtime teardown/setup can expose an empty frame.
+    const canvas = runtimeRef.current?.renderer?.domElement;
+    if (canvas) canvas.style.visibility = "hidden";
+  }, [presentationEpoch]);
+  useLayoutEffect(() => {
+    presentationRequestRef.current = { key: resolvedPresentationKey, ready: false };
+  }, [presentationEpoch, resolvedPresentationKey]);
+  const markPresentationReady = useCallback((runtime) => {
+    if (!runtime || !resolvedPresentationKey) return;
+    presentationRequestRef.current = { key: resolvedPresentationKey, ready: true };
+    runtime.requestRender?.();
+  }, [resolvedPresentationKey]);
   const [activeViewPlaneFace, setActiveViewPlaneFace] = useState("");
   const [viewPlaneOrientation, setViewPlaneOrientation] = useState(DEFAULT_VIEW_PLANE_ORIENTATION);
   const [cameraZoomPercent, setCameraZoomPercent] = useState(100);
@@ -1719,6 +1949,8 @@ const CadViewer = forwardRef(function CadViewer({
   // so this is a signal rather than a longer dependency list: the last attempt at a dependency
   // list is why isolating a part while exploded collapsed the model.
   const [displayRecordsToken, setDisplayRecordsToken] = useState(0);
+  // The build settings the live cadScene was built with (see the scene sync effect).
+  const sceneBuildRef = useRef({ key: "", viewerTheme: null });
   const activeViewPlaneFaceRef = useRef("");
   const defaultPerspectiveResettingRef = useRef(false);
   const previewModeRef = useRef(previewMode);
@@ -1739,30 +1971,49 @@ const CadViewer = forwardRef(function CadViewer({
   const normalizedThemeSettings = normalizedViewerRenderState.themeSettings;
   const normalizedDisplaySettings = normalizedViewerRenderState.displaySettings;
   const normalizedDisplayMode = normalizedViewerRenderState.displayMode;
+  const normalizedMaterialSettings = useMemo(
+    () => resolveDisplayMaterialSettings(
+      normalizedThemeSettings.materials,
+      normalizedDisplaySettings.partColor
+    ),
+    [normalizedDisplaySettings.partColor, normalizedThemeSettings.materials]
+  );
+  const materialPartPolicyKey = `${
+    normalizedMaterialSettings.cycleColors === true &&
+    Array.isArray(normalizedMaterialSettings.fillColors) &&
+    normalizedMaterialSettings.fillColors.length > 1
+  }:${normalizedMaterialSettings.overrideSourceColors === true}`;
   const normalizedExplodedSettings = normalizedDisplaySettings.exploded;
   const explodeAmount = clamp(toNumber(normalizedExplodedSettings.amount, 1), 0, 1);
   const explodablePartCount = useMemo(() => renderableMeshParts(meshData).length, [meshData]);
   const explodedViewActive = normalizedExplodedSettings.enabled && explodablePartCount > 1;
   const effectiveRenderPartsIndividually = renderPartsIndividually ||
     explodedViewActive;
+  useLayoutEffect(() => {
+    const explosion = explodedViewAnimationRef.current;
+    staticSceneResetRef.current.beginRender(staticResetRenderToken, staticSceneResetEligible({
+      source: meshData,
+      renderFormat,
+      parameters: stepParameterRuntime,
+      animation: stepAnimationRuntime,
+      drawing: drawingIsDocument || drawingGeometry || planMode,
+      exploded: explodedViewActive || explosion.enabled || explosion.rafId || Number(explosion.progress) !== 0,
+      loading: isLoading,
+      records: runtimeRef.current?.displayRecords || [],
+    }));
+  });
   // CAD edges come from the topology package, so this is the `topology` capability, not
   // "is this STEP". A second format that ships topology inherits the edge rendering.
   const shouldUseCadEdgeSource = hasCapability(renderFormat, "topology");
+  const displayEdgeSettingsKey = JSON.stringify(normalizedDisplaySettings.edges);
   const displayEdgeSettings = useMemo(
-    () => resolveDisplayEdgeSettings(normalizedDisplaySettings),
-    [normalizedDisplaySettings]
+    () => resolveCadEdgeSettings(normalizedDisplaySettings.edges),
+    [displayEdgeSettingsKey]
   );
   const wireframeMode = displayModeIsWireframe(normalizedDisplayMode);
   const displayModeForceEdges = displayModeForcesEdges(normalizedDisplayMode);
   const displayModeThroughEdges = displayModeShowsThroughEdges(normalizedDisplayMode);
-  const wireframeEdgeColor = useMemo(
-    () => resolveWireframeEdgeColor({
-      edgeColor: displayEdgeSettings?.color,
-      themeSettings: normalizedThemeSettings,
-      viewerTheme
-    }),
-    [displayEdgeSettings, normalizedThemeSettings, viewerTheme]
-  );
+  const wireframeEdgeColor = displayEdgeSettings.color;
   const wireframeEdgeOpacity = useMemo(() => {
     const baseOpacity = Number.isFinite(Number(displayEdgeSettings?.opacity))
       ? clamp(Number(displayEdgeSettings.opacity), 0, 1)
@@ -1811,6 +2062,11 @@ const CadViewer = forwardRef(function CadViewer({
   }, [hiddenPartIds, visualEdgeSettings]);
   const normalizedClipSettings = normalizedViewerRenderState.clipSettings;
   const floorSettings = normalizedThemeSettings.floor || {};
+  const guideFloorSettings = useMemo(() => ({
+    ...floorSettings,
+    grid: resolveCadGridSettings(normalizedDisplaySettings.guides.grid, { colorMode: appearance }),
+    axis: normalizedDisplaySettings.guides.axis
+  }), [floorSettings, normalizedDisplaySettings.guides, appearance]);
   const defaultFloorMode = floorSettings.enabled === true
     ? THEME_FLOOR_MODES.STAGE
     : THEME_FLOOR_MODES.NONE;
@@ -1823,6 +2079,38 @@ const CadViewer = forwardRef(function CadViewer({
   // authored coordinates. Normalization enforces the same rule; this guard
   // keeps the invariant local for raw settings.
   const floorFollowsModel = floorSettings.enabled === true && floorSettings.followModel !== false;
+  const renderEnvironmentMapSize = Number(quality?.environmentMapSize) > 0
+    ? Number(quality.environmentMapSize)
+    : 256;
+  const renderShadowMapSize = receiveShadows && Number(quality?.shadowMapSize) > 0
+    ? Number(quality.shadowMapSize)
+    : 2048;
+  const renderShadowMapSizeRef = useRef(renderShadowMapSize);
+  renderShadowMapSizeRef.current = renderShadowMapSize;
+  const renderConfigurationRef = useRef(renderConfiguration);
+  renderConfigurationRef.current = renderConfiguration;
+  const applyActivePhotographicStudio = useCallback((runtime, bounds = runtime?.modelBounds) => {
+    const configuration = renderConfigurationRef.current;
+    if (!renderMode || !configuration || !runtime?.THREE) {
+      return;
+    }
+    applyPhotographicStudio(runtime.THREE, runtime, configuration, {
+      bounds,
+      sceneScale: normalizedSceneScaleMode,
+      shadowMapSize: renderShadowMapSizeRef.current
+    });
+    if (typeof window !== "undefined" && window.__cadModelPlacement) {
+      window.__cadModelPlacement = {
+        ...window.__cadModelPlacement,
+        floorFollowsModel: configuration.backdrop?.ground === true
+          && configuration.backdrop.groundPlacement === "lowest"
+      };
+    }
+  }, [normalizedSceneScaleMode, renderMode]);
+
+  useEffect(() => {
+    applyActivePhotographicStudio(runtimeRef.current);
+  }, [applyActivePhotographicStudio, renderConfiguration, viewerReadyTick]);
   const updateActiveGridHelper = useCallback((
     runtime,
     activeViewerTheme,
@@ -1838,11 +2126,11 @@ const CadViewer = forwardRef(function CadViewer({
       floorZ,
       sceneScaleMode,
       floorMode,
-      normalizedThemeSettings.floor
+      guideFloorSettings
     );
-  }, [normalizedThemeSettings.floor]);
+  }, [guideFloorSettings]);
   const applyActiveSceneBackground = applySceneBackground;
-  const edgesVisible = showEdges && shouldUseCadEdgeSource && displayModeShowsEdges(normalizedDisplayMode, visualEdgeSettings);
+  const edgesVisible = showEdges && shouldUseCadEdgeSource && displayModeShowsEdges(normalizedDisplayMode);
   const topologyDisplayEdgesVisible = shouldRenderTopologyDisplayEdges({
     edgesVisible,
     wireframeMode,
@@ -1864,6 +2152,7 @@ const CadViewer = forwardRef(function CadViewer({
     edgesVisible,
     topologyDisplayEdgesVisible,
     displayEdgesVisible,
+    cadEdgesVisible: surfaceStepEdgesVisible,
     wireframeMode
   });
   const preserveInteractionPixelRatio = Boolean(
@@ -1875,6 +2164,7 @@ const CadViewer = forwardRef(function CadViewer({
     recordEdgesVisible
   );
   const partVisualStateEnabled =
+    (Array.isArray(selectedPartIds) && selectedPartIds.length > 0) ||
     pickMode === VIEWER_PICK_MODE.PARTS ||
     pickMode === VIEWER_PICK_MODE.ASSEMBLY ||
     (
@@ -2148,11 +2438,10 @@ const CadViewer = forwardRef(function CadViewer({
   }, [perspectiveRef]);
   const handleViewportResize = useCallback(() => {
     const runtime = runtimeRef.current;
-    if (!syncRuntimeViewportFraming(runtime)) {
-      return;
-    }
-    syncCameraZoomPercent(runtime);
-    emitPerspectiveChange(runtime);
+    resampleLodAfterViewportResize(runtime, {
+      syncFraming: syncRuntimeViewportFraming, syncZoom: syncCameraZoomPercent,
+      emitPerspective: emitPerspectiveChange, resample: () => lodCameraChangeRef.current?.()
+    });
   }, [syncCameraZoomPercent]);
   const applyZoomPercent = useCallback((nextZoomPercent) => {
     const runtime = runtimeRef.current;
@@ -2397,16 +2686,16 @@ const CadViewer = forwardRef(function CadViewer({
     const group = runtime?.modelGroup;
     const previous = runtime?.dxfDrawingLines || null;
     const dispose = () => {
-      if (!previous) {
-        return;
-      }
-      previous.parent?.remove(previous);
-      for (const child of previous.children || []) {
-        child.geometry?.dispose?.();
-        child.material?.dispose?.();
+      if (previous) {
+        previous.parent?.remove(previous);
+        for (const child of previous.children || []) {
+          child.geometry?.dispose?.();
+          child.material?.dispose?.();
+        }
       }
       if (runtime) {
         runtime.dxfDrawingLines = null;
+        runtime.hasDrawingDocument = false;
       }
     };
     if (!group || !drawingIsDocument || !drawingGeometry?.geometry) {
@@ -2427,6 +2716,8 @@ const CadViewer = forwardRef(function CadViewer({
     );
     const { layers } = buildDxfDrawingLineGroups(drawingGeometry);
     if (!layers.length) {
+      runtime.hasDrawingDocument = true;
+      markPresentationReady(runtime);
       return undefined;
     }
     const container = new THREE.Group();
@@ -2461,6 +2752,7 @@ const CadViewer = forwardRef(function CadViewer({
     group.add(container);
     if (runtime) {
       runtime.dxfDrawingLines = container;
+      runtime.hasDrawingDocument = true;
     }
     // A document has no mesh for the shared fit to measure, so its own extent stands in.
     // Publishing runtime.modelBounds is how it gets the shared zoom baseline, reset and fit
@@ -2473,13 +2765,17 @@ const CadViewer = forwardRef(function CadViewer({
       }
       : null;
     if (bounds && runtime?.THREE) {
-      applyRuntimeModelBounds(runtime.THREE, runtime, bounds, sceneScaleModeRef.current);
+      applyRuntimeModelBounds(runtime.THREE, runtime, bounds, sceneScaleModeRef.current, {
+        shadowMapSize: renderShadowMapSizeRef.current
+      });
+      applyActivePhotographicStudio(runtime, bounds);
       runtime.hasVisibleModel = true;
       resetZoomAndPan({ animate: false });
     }
+    markPresentationReady(runtime);
     runtime?.requestRender?.();
     return undefined;
-  }, [drawingIsDocument, drawingGeometry, drawingHiddenLayers, viewerReadyTick]);
+  }, [applyActivePhotographicStudio, drawingIsDocument, drawingGeometry, drawingHiddenLayers, markPresentationReady, viewerReadyTick]);
 
   // Applied SYNCHRONOUSLY when the meshes already exist. The previous version restored flat
   // positions in its cleanup and re-folded on the next animation frame — so every slider
@@ -3020,33 +3316,15 @@ const CadViewer = forwardRef(function CadViewer({
       return await copyImageBlobToClipboard(blobPromise);
     },
     // Viewport LOD sampler (design/unified-tessellation.md Phase 5): projection
-    // parameters + live distances from the camera to model-space points. CAD
-    // scenes render in model units, so distances and component diagonals share
-    // a unit; the model group transform (floor placement) is applied.
-    sampleLodCamera() {
+    // parameters + nearest eligible occurrence distances. Whole live bounds
+    // include floor/group placement; numeric samples retain no scene objects.
+    sampleLodCamera(options) {
       const runtime = runtimeRef.current;
-      const canvas = runtime?.renderer?.domElement;
-      const camera = runtime?.camera;
-      if (!runtime || !camera || !canvas) {
-        return null;
-      }
-      const cameraSpec = camera.isOrthographicCamera
-        ? {
-          kind: "orthographic",
-          visibleWorldHeight: (camera.top - camera.bottom) / (camera.zoom || 1)
-        }
-        : { kind: "perspective", fovYDeg: camera.fov };
-      runtime.modelGroup?.updateMatrixWorld?.(true);
-      const point = new THREE.Vector3();
-      return {
-        camera: cameraSpec,
-        viewportHeightPx: canvas.clientHeight || canvas.height || 0,
-        distanceToModelPoint: (x, y, z) => {
-          point.set(x, y, z);
-          runtime.modelGroup?.localToWorld?.(point);
-          return camera.position.distanceTo(point);
-        }
-      };
+      if (!runtimeModelKeyMatches(runtime, modelKeyRef.current)) return null;
+      return sampleLodCamera(THREE, runtime, {
+        ...options,
+        selectedPartIds: lodSelectedPartIdsRef.current,
+      });
     },
     // Exposed so a toolbar can drive the camera the same way the view-plane widget does.
     // The DXF 2D/3D toggle is exactly "look straight down" vs "the default three-quarter
@@ -3077,7 +3355,12 @@ const CadViewer = forwardRef(function CadViewer({
       if (options?.animate) {
         return transitionCameraToPerspectiveSnapshot(runtimeRef.current, perspective, options);
       }
-      return applyPerspectiveSnapshot(runtimeRef.current, perspective);
+      const applied = applyPerspectiveSnapshot(runtimeRef.current, perspective);
+      if (applied && options?.resetZoomBaseline) {
+        resetRuntimeZoomBaseline(runtimeRef.current);
+        syncCameraZoomPercent(runtimeRef.current);
+      }
+      return applied;
     },
     resetZoom() {
       return resetZoomAndPan({ animate: true });
@@ -3216,6 +3499,7 @@ const CadViewer = forwardRef(function CadViewer({
 
   const handleRuntimeContextRestored = useCallback(() => {
     framedModelKeyRef.current = "";
+    framedCompleteModelKeyRef.current = "";
     lastEmittedPerspectiveRef.current = null;
     defaultPerspectiveResettingRef.current = false;
     viewerAlertChangeRef.current?.(null);
@@ -3224,8 +3508,12 @@ const CadViewer = forwardRef(function CadViewer({
   }, []);
 
   const handleRuntimeInitializationError = useCallback((runtimeError) => {
+    // A replacement runtime that cannot initialize has no future scene that
+    // can finish an in-flight LOD handoff.
+    meshSourceAdoptionRef.current?.(null, false, { disposed: true, terminal: true });
     viewerAlertChangeRef.current?.(buildRuntimeInitializationAlert(runtimeError));
   }, []);
+  const handleRuntimeContextLost = useCallback(() => { meshSourceAdoptionRef.current?.(null, false); }, []);
 
   useViewerRuntime({
     mountRef,
@@ -3259,6 +3547,8 @@ const CadViewer = forwardRef(function CadViewer({
     applyInitialPerspective,
     updateGridHelper: updateActiveGridHelper,
     clearSceneGroup,
+    onSceneDisposed: (source, { handoff = false } = {}) => meshSourceAdoptionRef.current?.(source, false,
+      { disposed: true, terminal: !handoff, handoff }),
     disposeSceneObject,
     disposeTexture,
     syncViewPlaneOrientation,
@@ -3268,7 +3558,9 @@ const CadViewer = forwardRef(function CadViewer({
     DEFAULT_ZOOM_SPEED,
     COARSE_POINTER_ZOOM_SPEED,
     INTERACTION_PIXEL_RATIO_CAP,
-    IDLE_PIXEL_RATIO_CAP,
+    IDLE_PIXEL_RATIO_CAP: Number(quality?.idlePixelRatioCap) > 0
+      ? Number(quality.idlePixelRatioCap)
+      : IDLE_PIXEL_RATIO_CAP,
     INTERACTION_IDLE_DELAY_MS,
     TRACKPAD_PINCH_ZOOM_SPEED,
     COARSE_POINTER_PINCH_ZOOM_SPEED,
@@ -3277,11 +3569,71 @@ const CadViewer = forwardRef(function CadViewer({
     defaultGridRadius,
     sceneScaleMode: normalizedSceneScaleMode,
     floorMode: resolvedFloorMode,
+    renderMode,
     onInitializationError: handleRuntimeInitializationError,
+    onFramePresented: handleFramePresented,
+    presentationRequestRef,
+    onContextLost: handleRuntimeContextLost,
     onContextRestored: handleRuntimeContextRestored,
     preserveInteractionPixelRatio,
     runtimeResetToken
   });
+
+  useEffect(() => {
+    const runtime = runtimeRef.current;
+    const camera = runtime?.perspectiveCamera;
+    const nextFocalLength = explicitViewerFocalLength(focalLength);
+    if (
+      !renderMode &&
+      runtime?.controls &&
+      camera &&
+      nextFocalLength == null
+    ) {
+      delete camera.userData.cadFocalLength;
+      if (Math.abs(camera.fov - CAD_DEFAULT_VERTICAL_FOV_DEGREES) >= 1e-4) {
+        camera.fov = CAD_DEFAULT_VERTICAL_FOV_DEGREES;
+        camera.updateProjectionMatrix();
+        camera.lookAt(runtime.controls.target);
+        runtime.controls.update?.();
+        emitPerspectiveChange(runtime);
+        runtime.requestRender?.();
+      }
+      return;
+    }
+    if (
+      !runtime?.controls ||
+      !camera?.getFocalLength ||
+      nextFocalLength == null
+    ) {
+      return;
+    }
+    const previousFocalLength = camera.getFocalLength();
+    if (Math.abs(previousFocalLength - nextFocalLength) < 1e-4) {
+      camera.userData.cadFocalLength = nextFocalLength;
+      return;
+    }
+    const previousFov = camera.fov * Math.PI / 180;
+    const offset = camera.position.clone().sub(runtime.controls.target);
+    setRuntimePerspectiveFocalLength(runtime, nextFocalLength);
+    const nextFov = camera.fov * Math.PI / 180;
+    if (runtime.camera === camera && offset.lengthSq() > 1e-8) {
+      const distanceScale = perspectiveDistanceScale(
+        previousFov * 180 / Math.PI,
+        nextFov * 180 / Math.PI
+      );
+      if (Number.isFinite(distanceScale) && distanceScale > 0) {
+        camera.position.copy(runtime.controls.target).add(offset.multiplyScalar(distanceScale));
+        if (Number.isFinite(runtime.zoomBaseDistance) && runtime.zoomBaseDistance > 0) {
+          runtime.zoomBaseDistance *= distanceScale;
+        }
+      }
+    }
+    camera.lookAt(runtime.controls.target);
+    runtime.controls.update?.();
+    emitPerspectiveChange(runtime);
+    runtime.scheduleIdleQuality?.();
+    runtime.requestRender?.();
+  }, [focalLength, renderMode, viewerReadyTick]);
 
   useEffect(() => {
     const runtime = runtimeRef.current;
@@ -3290,6 +3642,38 @@ const CadViewer = forwardRef(function CadViewer({
     }
     runtime.sceneScaleMode = normalizedSceneScaleMode;
   }, [normalizedSceneScaleMode]);
+
+  useEffect(() => {
+    const runtime = runtimeRef.current;
+    if (renderMode) {
+      applyActivePhotographicStudio(runtime);
+      return;
+    }
+    const shadow = runtime?.keyLight?.shadow;
+    if (!runtime?.THREE || !shadow?.mapSize) {
+      return;
+    }
+    const previousSize = Number(runtime.shadowMapSize);
+    if (Math.abs(previousSize - renderShadowMapSize) < 1) {
+      return;
+    }
+    const previousMap = shadow.map;
+    shadow.map = null;
+    previousMap?.dispose?.();
+    shadow.mapSize.set(renderShadowMapSize, renderShadowMapSize);
+    runtime.shadowMapSize = renderShadowMapSize;
+    if (runtime.modelBounds) {
+      applyRuntimeModelBounds(
+        runtime.THREE,
+        runtime,
+        runtime.modelBounds,
+        normalizedSceneScaleMode,
+        { shadowMapSize: renderShadowMapSize }
+      );
+    }
+    runtime.invalidateShadows?.();
+    runtime.requestRender?.();
+  }, [applyActivePhotographicStudio, normalizedSceneScaleMode, renderMode, renderShadowMapSize, viewerReadyTick]);
 
   useEffect(() => {
     const runtime = runtimeRef.current;
@@ -3322,6 +3706,50 @@ const CadViewer = forwardRef(function CadViewer({
       return;
     }
 
+    const materialSettings = { ...normalizedMaterialSettings };
+    if (runtime.cadScene) {
+      runtime.cadScene.update({
+        theme: normalizedThemeSettings,
+        appearance,
+        materialSettings,
+        materialOverrides,
+        receiveShadows
+      });
+      runtime.displayRecords = runtime.cadScene.displayRecords;
+    } else {
+      for (const record of runtime.displayRecords || []) {
+        applyMaterialSettingsToRecord(runtime.THREE, record, materialSettings, {
+          displayMode: normalizedDisplayMode,
+          materialOverrides
+        });
+      }
+    }
+    runtime.cadScene?.syncSurfaceInstances();
+
+    if (renderMode) {
+      runtime.hemisphereLight.visible = false;
+      runtime.ambientLight.visible = false;
+      runtime.keyLight.visible = false;
+      runtime.fillLight.visible = false;
+      runtime.rimLight.visible = false;
+      runtime.spotLight.visible = false;
+      runtime.pointLight.visible = false;
+      runtime.gridConfig = null;
+      updateActiveGridHelper(
+        runtime,
+        viewerTheme,
+        runtime.gridRadius ?? defaultGridRadius,
+        0,
+        normalizedSceneScaleMode,
+        THEME_FLOOR_MODES.NONE
+      );
+      clearSceneGroup(runtime.stageGroup);
+      applyActivePhotographicStudio(runtime);
+      runtime.requestRender();
+      return;
+    }
+
+    disposePhotographicStudio(runtime);
     applyActiveSceneBackground(runtime, viewerTheme, normalizedThemeSettings.background);
     runtime.renderer.toneMappingExposure = Math.max(normalizedThemeSettings.lighting.toneMappingExposure, 0.05);
 
@@ -3362,25 +3790,14 @@ const CadViewer = forwardRef(function CadViewer({
       normalizedThemeSettings.lighting,
       runtime.modelRadius ?? runtime.gridRadius ?? defaultGridRadius,
       runtime.modelBounds,
-      normalizedSceneScaleMode
+      normalizedSceneScaleMode,
+      renderShadowMapSizeRef.current
     );
     updateSpotLightTarget(runtime);
 
     // Keep a single primary shadow; the spot light drives the floor glow/fill.
     runtime.keyLight.castShadow = runtime.keyLight.visible && runtime.softwareRendering !== true;
     runtime.spotLight.castShadow = false;
-
-    const materialSettings = {
-      ...normalizedThemeSettings.materials,
-      envMapIntensity: normalizedThemeSettings.materials.envMapIntensity * (
-        normalizedThemeSettings.environment.enabled ? normalizedThemeSettings.environment.intensity : 0
-      )
-    };
-    for (const record of runtime.displayRecords || []) {
-      applyMaterialSettingsToRecord(runtime.THREE, record, materialSettings, {
-        displayMode: normalizedDisplayMode
-      });
-    }
 
     runtime.gridConfig = null;
     const themeFloorZCandidate = floorFollowsModel
@@ -3415,13 +3832,19 @@ const CadViewer = forwardRef(function CadViewer({
   }, [
     defaultGridRadius,
     normalizedDisplayMode,
+    appearance,
+    materialOverrides,
+    normalizedMaterialSettings,
     normalizedThemeSettings,
     normalizedSceneScaleMode,
     resolvedFloorMode,
+    receiveShadows,
+    renderMode,
     floorFollowsModel,
     viewerReadyTick,
     viewerTheme,
-    updateActiveGridHelper
+    updateActiveGridHelper,
+    applyActivePhotographicStudio
   ]);
 
   useEffect(() => {
@@ -3430,67 +3853,61 @@ const CadViewer = forwardRef(function CadViewer({
       return;
     }
 
-    let cancelled = false;
-    const environmentSettings = normalizedThemeSettings.environment;
-    const clearEnvironmentTexture = () => {
+    const clearEnvironmentResource = () => {
       runtime.scene.environment = null;
-      disposeTexture(runtime.environmentTexture);
-      runtime.environmentTexture = null;
-      runtime.environmentTextureUrl = "";
+      disposeEnvironmentResource(runtime.environmentResource);
+      runtime.environmentResource = null;
+      runtime.environmentResourceIdentity = "";
     };
-    const applyBackgroundFallback = () => {
-      clearEnvironmentTexture();
+    if (!renderMode || !renderConfiguration) {
+      runtime.environmentReady = true;
+      clearEnvironmentResource();
+      runtime.scene.environmentIntensity = 0;
       applyActiveSceneBackground(runtime, viewerTheme, normalizedThemeSettings.background);
+      viewerAlertChangeRef.current?.(null);
+      runtime.requestRender();
+      return;
+    }
+
+    let cancelled = false;
+    runtime.scene.environmentIntensity = 1;
+    const applyBackgroundFallback = () => {
+      clearEnvironmentResource();
+      applyActivePhotographicStudio(runtime);
+      runtime.environmentReady = true;
       runtime.requestRender();
     };
 
     const loadAndApplyEnvironment = async () => {
-      if (!environmentSettings.enabled) {
+      const resourceIdentity = environmentResourceIdentity(renderConfiguration, {
+        size: renderEnvironmentMapSize
+      });
+      if (!resourceIdentity) {
         viewerAlertChangeRef.current?.(null);
         applyBackgroundFallback();
         return;
       }
 
-      const preset = getEnvironmentPresetById(environmentSettings.presetId);
-      const textureUrl = String(preset?.url || "").trim();
-      if (!textureUrl) {
-        viewerAlertChangeRef.current?.(null);
-        applyBackgroundFallback();
-        return;
-      }
-
-      if (!runtime.environmentTexture || runtime.environmentTextureUrl !== textureUrl) {
-        const textureLoader = new runtime.THREE.TextureLoader();
-        if (typeof textureLoader.setCrossOrigin === "function") {
-          textureLoader.setCrossOrigin("anonymous");
-        }
-        const nextTexture = await textureLoader.loadAsync(textureUrl);
+      if (!runtime.environmentResource || runtime.environmentResourceIdentity !== resourceIdentity) {
+        const nextResource = await createEnvironmentResource(runtime.renderer, renderConfiguration, {
+          size: renderEnvironmentMapSize
+        });
         if (cancelled) {
-          nextTexture.dispose?.();
+          disposeEnvironmentResource(nextResource);
           return;
         }
-        nextTexture.mapping = runtime.THREE.EquirectangularReflectionMapping;
-        nextTexture.colorSpace = runtime.THREE.SRGBColorSpace;
-        nextTexture.needsUpdate = true;
-        disposeTexture(runtime.environmentTexture);
-        runtime.environmentTexture = nextTexture;
-        runtime.environmentTextureUrl = textureUrl;
+        const previousResource = runtime.environmentResource;
+        runtime.scene.environment = null;
+        runtime.environmentResource = nextResource;
+        runtime.environmentResourceIdentity = resourceIdentity;
+        disposeEnvironmentResource(previousResource);
       }
 
-      runtime.scene.environment = runtime.environmentTexture;
+      runtime.scene.environment = runtime.environmentResource.texture;
+      runtime.environmentReady = true;
       viewerAlertChangeRef.current?.(null);
 
-      if (runtime.scene.environmentRotation?.set) {
-        runtime.scene.environmentRotation.set(0, environmentSettings.rotationY, 0);
-      }
-      if (environmentSettings.useAsBackground) {
-        runtime.scene.background = runtime.environmentTexture;
-        if (runtime.scene.backgroundRotation?.set) {
-          runtime.scene.backgroundRotation.set(0, environmentSettings.rotationY, 0);
-        }
-      } else {
-        applyActiveSceneBackground(runtime, viewerTheme, normalizedThemeSettings.background);
-      }
+      applyActivePhotographicStudio(runtime);
       runtime.requestRender();
     };
 
@@ -3500,18 +3917,27 @@ const CadViewer = forwardRef(function CadViewer({
         viewerAlertChangeRef.current?.({
           severity: "warning",
           summary: "Environment unavailable",
-          title: "Environment preset could not be loaded",
-          message: `Failed to load ${String(getEnvironmentPresetById(environmentSettings.presetId)?.label || "the selected environment preset")}.`,
-          resolution: "The viewer fell back to the current background settings. Check the network connection or choose another preset."
+          title: "Couldn’t prepare studio lighting",
+          message: "The reflection environment could not be created. The model is shown with the studio’s direct lighting, so reflective materials may look different.",
+          recovery: "Reload the viewer to retry the studio environment.",
+          details: String(error?.message || error)
         });
-        console.error("Failed to apply environment texture", error);
+        console.error("Failed to apply environment resource", error);
       }
     });
 
     return () => {
       cancelled = true;
     };
-  }, [viewerReadyTick, viewerTheme, normalizedThemeSettings.background, normalizedThemeSettings.environment]);
+  }, [
+    applyActivePhotographicStudio,
+    renderConfiguration,
+    renderEnvironmentMapSize,
+    renderMode,
+    viewerReadyTick,
+    viewerTheme,
+    normalizedThemeSettings.background
+  ]);
 
   useEffect(() => {
     const runtime = runtimeRef.current;
@@ -3558,53 +3984,42 @@ const CadViewer = forwardRef(function CadViewer({
       vertexPickGroup
     } = runtime;
 
-    const clearDisplayedModel = ({ preserveModelIdentity = false } = {}) => {
+    // releaseGpu: a model going away frees its components' GPU buffers and
+    // BVHs; a rebuild of the SAME model (theme, display mode) keeps them so the
+    // new records draw without re-uploading every component.
+    const clearDisplayedModel = ({ preserveModelIdentity = false, releaseGpu = true } = {}) => {
+      staticSceneResetRef.current.invalidate();
       cancelCameraTransition(runtime);
-      runtime.cadScene?.dispose?.();
-      runtime.cadScene = null;
-      clearSceneGroup(runtime.stageGroup);
-      clearSceneGroup(modelGroup);
-      clearSceneGroup(edgesGroup);
-      clearSceneGroup(facePickGroup);
-      clearSceneGroup(edgePickGroup);
-      clearSceneGroup(vertexPickGroup);
-      runtime.facePickMesh = null;
-      runtime.edgePickLines = null;
-      runtime.vertexPickPoints = null;
-      runtime.edgePickObjects = [];
-      runtime.topologyDisplayEdgeLine = null;
-      runtime.topologyDisplayEdgeTransformByRecord = false;
-      runtime.displayRecords = [];
-      if (!preserveModelIdentity) {
-        runtime.hasVisibleModel = false;
-        runtime.activeModelKey = "";
-      }
+      const disposedSource = disposeViewerCadScene(runtime, { clearSceneGroup, preserveModelIdentity, releaseGpu });
       runtime.requestRender();
+      return disposedSource;
     };
 
     if (isLoading) {
-      clearDisplayedModel();
+      const disposedSource = clearDisplayedModel();
+      meshSourceAdoptionRef.current?.(disposedSource, false, { disposed: true });
       setError("");
       return;
     }
 
-    if (!meshData || !isNumericArray(meshData.vertices, 3) || !isNumericArray(meshData.indices, 3)) {
-      clearDisplayedModel();
+    if (!hasMeshGeometry(meshData)) {
+      const disposedSource = clearDisplayedModel();
+      meshSourceAdoptionRef.current?.(disposedSource, false, { disposed: true });
       return;
     }
 
-    clearDisplayedModel();
-
+    try {
+    const sceneSyncStartedAt = performance.now();
     const { controls } = runtime;
-    const hasFillRotation = normalizedThemeSettings.materials.cycleColors === true &&
-      Array.isArray(normalizedThemeSettings.materials.fillColors) &&
-      normalizedThemeSettings.materials.fillColors.length > 1;
+    const hasFillRotation = normalizedMaterialSettings.cycleColors === true &&
+      Array.isArray(normalizedMaterialSettings.fillColors) &&
+      normalizedMaterialSettings.fillColors.length > 1;
     const shouldRenderFillParts = hasFillRotation &&
       Array.isArray(meshData?.parts) &&
       meshData.parts.length > 0;
     const shouldRenderSourceColorParts =
       !wireframeMode &&
-      normalizedThemeSettings.materials?.overrideSourceColors !== true &&
+      normalizedMaterialSettings.overrideSourceColors !== true &&
       meshNeedsPartRenderingForSourceColors(meshData);
     const { renderParts: shouldRenderParts, parts: renderedParts } = resolveScenePartRendering({
       meshData,
@@ -3614,12 +4029,7 @@ const CadViewer = forwardRef(function CadViewer({
       pickableParts,
       pickMode
     });
-    const materialSettings = {
-      ...normalizedThemeSettings.materials,
-      envMapIntensity: normalizedThemeSettings.materials.envMapIntensity * (
-        normalizedThemeSettings.environment.enabled ? normalizedThemeSettings.environment.intensity : 0
-      )
-    };
+    const materialSettings = { ...normalizedMaterialSettings };
     const modelStepParameters = stepParameterRuntime?.definition
       ? {
           ...stepParameterRuntime,
@@ -3648,28 +4058,24 @@ const CadViewer = forwardRef(function CadViewer({
             enabled: false
           }
         };
-    const cadScene = buildModel(THREE, meshData, {
-      theme: sceneTheme,
+    // Everything that decides how the scene's records are BUILT. While it holds
+    // for the same model, a new mesh state (a progressive publish, a LOD swap)
+    // is handed to the existing scene, which reconciles its records instead of
+    // rebuilding them: occurrences already on screen keep their meshes,
+    // materials, visual and deformation state and BVHs.
+    const sceneBuildKey = sceneBuildStructuralKey({
       displayMode: normalizedDisplayMode,
       applyDisplayModeEdgePolicy: !topologyDisplayEdgesVisible,
-      scale: normalizedSceneScaleMode,
-      baseTheme: viewerTheme,
-      materialSettings,
+      sceneScaleMode: normalizedSceneScaleMode,
+      edgeSettings: sceneTheme.edges,
       recomputeNormals,
-      silhouette: topologyDisplayEdgesVisible && displayEdgeSettings.silhouette === true,
+      silhouette: topologyDisplayEdgesVisible && displayEdgeSettings.silhouette === true
+    });
+    const sceneModelSettings = {
+      appearance,
       parts: shouldRenderParts ? renderedParts : [],
       renderPartsIndividually: effectiveRenderPartsIndividually,
       stepParameters: modelStepParameters,
-      parameterSetup: false,
-      edgeRendering: {
-        mode: "screen-space",
-        Line2: runtime.Line2,
-        LineGeometry: runtime.LineGeometry,
-        LineSegments2: runtime.LineSegments2,
-        LineSegmentsGeometry: runtime.LineSegmentsGeometry,
-        LineMaterial: runtime.LineMaterial,
-        wireframeEdgeColor
-      },
       selection: shouldRenderParts
         ? partVisualStateRef.current
         : {
@@ -3691,12 +4097,68 @@ const CadViewer = forwardRef(function CadViewer({
             message: warning?.message || "The CAD scene renderer reported a warning."
           });
         }
-      }
+      },
+      receiveShadows
+    };
+    const nativeGlbActive = shouldUseNativeGlbScene(glbDocument, {
+      renderMode,
+      clip: embeddedGlbAnimation?.clip
     });
-    modelGroup.add(cadScene.modelGroup);
-    edgesGroup.add(cadScene.edgesGroup);
+    const reuseScene = !!runtime.cadScene &&
+      runtime.hasVisibleModel &&
+      runtime.activeModelKey === (modelKey || "") &&
+      (nativeGlbActive
+        ? runtime.cadScene.nativeDocument === glbDocument
+        : !runtime.cadScene.nativeDocument) &&
+      sceneBuildRef.current.key === sceneBuildKey &&
+      sceneBuildRef.current.viewerTheme === viewerTheme;
+    const rebuildReason = !reuseScene && runtime.cadScene
+      ? sceneBuildKeyDifference(sceneBuildRef.current, { key: sceneBuildKey, viewerTheme }, runtime, modelKey)
+      : "";
+    let cadScene;
+    if (reuseScene) {
+      cadScene = runtime.cadScene;
+      if (!nativeGlbActive) cadScene.update({
+        source: meshData,
+        theme: sceneTheme,
+        materialSettings,
+        materialOverrides,
+        ...sceneModelSettings
+      });
+    } else {
+      clearDisplayedModel({ releaseGpu: !runtime.hasVisibleModel || runtime.activeModelKey !== (modelKey || "") });
+      cadScene = nativeGlbActive
+        ? buildNativeGlbCadScene(THREE, glbDocument, meshData, receiveShadows)
+        : buildModel(THREE, meshData, {
+        theme: sceneTheme,
+        displayMode: normalizedDisplayMode,
+        applyDisplayModeEdgePolicy: !topologyDisplayEdgesVisible,
+        scale: normalizedSceneScaleMode,
+        baseTheme: viewerTheme,
+        materialSettings,
+        materialOverrides,
+        edgeSettings: visualEdgeSettings,
+        recomputeNormals,
+        silhouette: topologyDisplayEdgesVisible && displayEdgeSettings.silhouette === true,
+        parameterSetup: false,
+        edgeRendering: {
+          mode: "screen-space",
+          Line2: runtime.Line2,
+          LineGeometry: runtime.LineGeometry,
+          LineSegments2: runtime.LineSegments2,
+          LineSegmentsGeometry: runtime.LineSegmentsGeometry,
+          LineMaterial: runtime.LineMaterial,
+          wireframeEdgeColor
+        },
+        ...sceneModelSettings
+        });
+      modelGroup.add(cadScene.modelGroup);
+      edgesGroup.add(cadScene.edgesGroup);
+      sceneBuildRef.current = { key: sceneBuildKey, viewerTheme };
+    }
     runtime.cadScene = cadScene;
     runtime.displayRecords = cadScene.displayRecords;
+    runtime.syncScreenSpaceLineMaterials?.();
     setDisplayRecordsToken((token) => token + 1);
     runtime.hasVisibleModel = true;
     runtime.activeModelKey = modelKey || "";
@@ -3795,15 +4257,22 @@ const CadViewer = forwardRef(function CadViewer({
       });
     runtime.modelFloorZBase = Number(previousTransform.floorZ);
     runtime.modelFloorZBelowModel = Number(previousTransform.floorZBelowModel);
-    const { radius } = applyRuntimeModelBounds(THREE, runtime, displayBounds, normalizedSceneScaleMode);
-    syncRuntimeScaledLightingAndShadow(
-      THREE,
-      runtime,
-      normalizedThemeSettings.lighting,
-      radius,
-      displayBounds,
-      normalizedSceneScaleMode
-    );
+    const { radius } = applyRuntimeModelBounds(THREE, runtime, displayBounds, normalizedSceneScaleMode, {
+      shadowMapSize: renderShadowMapSizeRef.current
+    });
+    if (renderMode) {
+      applyActivePhotographicStudio(runtime, displayBounds);
+    } else {
+      syncRuntimeScaledLightingAndShadow(
+        THREE,
+        runtime,
+        normalizedThemeSettings.lighting,
+        radius,
+        displayBounds,
+        normalizedSceneScaleMode,
+        renderShadowMapSizeRef.current
+      );
+    }
     updateActiveGridHelper(
       runtime,
       viewerTheme,
@@ -3812,9 +4281,12 @@ const CadViewer = forwardRef(function CadViewer({
       normalizedSceneScaleMode,
       resolvedFloorMode
     );
-    updateSpotLightTarget(runtime);
-    updateStageEffects(runtime, viewerTheme, normalizedThemeSettings, radius, runtime.gridFloorZ ?? 0, resolvedFloorMode, normalizedSceneScaleMode);
+    if (!renderMode) {
+      updateSpotLightTarget(runtime);
+      updateStageEffects(runtime, viewerTheme, normalizedThemeSettings, radius, runtime.gridFloorZ ?? 0, resolvedFloorMode, normalizedSceneScaleMode);
+    }
 
+    const modelGroupPlacementChanged = !modelGroup.position.equals(modelOffset);
     modelGroup.position.copy(modelOffset);
     edgesGroup.position.copy(modelOffset);
     facePickGroup.position.copy(modelOffset);
@@ -3823,22 +4295,66 @@ const CadViewer = forwardRef(function CadViewer({
     if (typeof window !== "undefined") {
       // Read-only debug/test seam (like __CAD_VIEWER_LOD__): the true-pose
       // contract — model at authored coordinates, grid pinned per the floor
-      // coupling — is asserted by scripts/e2e-model-placement.mjs through this.
+      // coupling — is asserted by tests/browser/viewer-e2e.mjs through this.
       window.__cadModelPlacement = {
         modelKey: modelKey || "",
         position: modelGroup.position.toArray(),
         boundsMin: [...boundsMin],
         boundsMax: [...boundsMax],
         gridFloorZ: Number.isFinite(Number(runtime.gridFloorZ)) ? Number(runtime.gridFloorZ) : null,
-        floorFollowsModel
+        floorFollowsModel: renderMode
+          ? renderConfigurationRef.current?.backdrop?.ground === true
+            && renderConfigurationRef.current.backdrop.groundPlacement === "lowest"
+          : floorFollowsModel
       };
     }
     facePickGroup.updateMatrixWorld(true);
     edgePickGroup.updateMatrixWorld(true);
     vertexPickGroup.updateMatrixWorld(true);
+    // Refresh retained scene/GPU estimates before admitting idle BVH work.
+    // A denied accelerator keeps stock raycasting and therefore cannot make
+    // selection incorrect or blank the current model.
+    const initialRenderMemory = renderMemoryAccounting(runtime);
+    if (import.meta.env?.DEV && typeof document !== "undefined") {
+      // Main-world diagnostic that browser automation can read even when its
+      // JavaScript executes in an isolated extension world.
+      document.documentElement.dataset.cadRenderMemory = JSON.stringify({
+        displayCpuBytes: initialRenderMemory.displayCpuBytes,
+        gpuEstimatedBytes: initialRenderMemory.gpuEstimatedBytes,
+        bvhBytes: initialRenderMemory.bvhBytes,
+        policy: initialRenderMemory.memoryPolicy
+      });
+    }
+    const raycastBvhOptions = {
+      deferUntilRaycast: true,
+      reserveBuild: ({ estimatedBytes }) => viewerMemoryPolicy.reserve({
+        category: "bvhBuild",
+        bytes: estimatedBytes,
+        label: "display raycast BVH",
+        kind: "accelerator"
+      }),
+      finishBuild: (token, { builtBytes }) => {
+        viewerMemoryPolicy.release(token);
+        const current = viewerMemoryPolicy.snapshot().retainedByCategory.bvh || 0;
+        viewerMemoryPolicy.setRetained("bvh", current + builtBytes);
+      },
+      onBuildDenied: (detail) => {
+        if (typeof window !== "undefined") {
+          window.__cadViewerMemoryLimitation = detail;
+          window.dispatchEvent(new CustomEvent("cad:memory-limitation", { detail }));
+        }
+      }
+    };
+    runtime.raycastBvhOptions = raycastBvhOptions;
     syncSelectorPickGroups(runtime, displaySelectorRuntime, modelOffset, { clearSceneGroup });
-    scheduleRuntimeRaycastBvh(runtime);
+    if (!renderMode) {
+      scheduleRuntimeRaycastBvh(runtime, raycastBvhOptions);
+    }
     syncRuntimeStepClipPlane(runtime, clipSettingsRef.current);
+    if (typeof window !== "undefined") {
+      // Byte attribution for the headless memory harness (read, never polled here).
+      window.__cadRenderMemoryProbe = () => renderMemoryAccounting(runtimeRef.current);
+    }
 
     const currentPartVisualState = partVisualStateRef.current;
     applyPartVisualState(THREE, runtime.displayRecords, shouldRenderParts
@@ -3850,6 +4366,7 @@ const CadViewer = forwardRef(function CadViewer({
         focusedPartId: [],
         selectedPartIds: []
       });
+    runtime.cadScene?.syncSurfaceInstances();
     modelGroup.updateMatrixWorld(true);
     edgesGroup.updateMatrixWorld(true);
 
@@ -3860,7 +4377,23 @@ const CadViewer = forwardRef(function CadViewer({
     controls.zoomSpeed = DEFAULT_ZOOM_SPEED;
     runtime.edgePickThreshold = Math.max(radius / 320, 0.65);
 
-    if (framedModelKeyRef.current !== (modelKey || "")) {
+    // A progressive load frames on the first publish, against the handful of
+    // components that have arrived, and the model then grows well outside that
+    // frame. So it frames again once every component is composed — unless the
+    // user has taken the view, in which case their camera stands.
+    const missingComponentIds = meshData?.missingComponentIds;
+    const modelIsComplete = !(Array.isArray(missingComponentIds) && missingComponentIds.length > 0);
+    const reframeForCompleteModel = modelIsComplete
+      && framedModelKeyRef.current === (modelKey || "")
+      && framedCompleteModelKeyRef.current !== (modelKey || "")
+      && !runtime.userMovedCamera;
+    if (modelIsComplete) {
+      framedCompleteModelKeyRef.current = modelKey || "";
+    }
+    if (framedModelKeyRef.current !== (modelKey || "") || reframeForCompleteModel) {
+      if (framedModelKeyRef.current !== (modelKey || "")) {
+        runtime.userMovedCamera = false;
+      }
       const nextPerspective = resolvePerspectiveSnapshot(
         perspectiveRef ? perspectiveRef.current : undefined,
         perspective
@@ -3874,10 +4407,14 @@ const CadViewer = forwardRef(function CadViewer({
         requireCoordinateSystem: true
       });
       runWithoutPerspectiveEvents(() => {
-        if (
-          !nextPerspectiveMatchesScene ||
-          !applyPerspectiveSnapshot(runtime, nextPerspective, { scheduleIdle: false })
-        ) {
+        // The re-frame always FITS. The perspective it would otherwise restore
+        // is the one this same effect emitted when it framed the first batch,
+        // so honouring it here would just re-apply the too-close view the
+        // re-frame exists to replace.
+        const restored = !reframeForCompleteModel
+          && nextPerspectiveMatchesScene
+          && applyPerspectiveSnapshot(runtime, nextPerspective, { scheduleIdle: false });
+        if (!restored) {
           cancelCameraTransition(runtime);
           const frameMetrics = getViewportFrameMetrics(runtime, viewportFrameInsetsRef.current);
           const camera = runtime.camera;
@@ -3909,10 +4446,64 @@ const CadViewer = forwardRef(function CadViewer({
       });
     }
 
+    recordSceneSyncTiming(sceneSyncStartedAt, { mode: reuseScene ? "reuse" : "rebuild", records: runtime.displayRecords.length, reason: rebuildReason });
+    // A mode switch replaces the renderer. The parent's quality-change sample
+    // can arrive before this scene is ready, so resample its framed camera on
+    // construction too; otherwise the old quality remains until the next orbit.
+    if (!reuseScene || modelGroupPlacementChanged) lodCameraChangeRef.current?.();
     setError("");
     runtime.requestRender();
+    if (shouldRenderParts) {
+      staticSceneResetRef.current.complete(staticResetRenderToken, {
+        source: meshData, runtime, visualState: currentPartVisualState, clipState: clipSettingsRef.current,
+      });
+    }
+    const adopted = runtime.cadScene === cadScene && runtime.activeModelKey === (modelKey || "") && cadScene.source === meshData;
+    if (meshSourceAdoptionRef.current?.(meshData, adopted) === false) {
+      throw new Error("The displayed detail does not match its requested component occurrences.");
+    }
+    if (adopted && sceneUpdateAlertRef.current) {
+      const recoveredAlert = sceneUpdateAlertRef.current;
+      sceneUpdateAlertRef.current = null;
+      // Clear this failure only after real adoption, preserving any newer
+      // environment or animation alert that replaced it during recovery.
+      viewerAlertChangeRef.current?.(current => current === recoveredAlert ? null : current);
+    }
+    if (adopted) markPresentationReady(runtime);
+    } catch (error) {
+      staticSceneResetRef.current.invalidate();
+      if (error?.failedCadScene) {
+        // Initial construction can fail before buildModel returns. Its typed
+        // cleanup failure transfers the still-owned scene to this host.
+        runtime.cadScene = error.failedCadScene;
+        runtime.displayRecords = error.failedCadScene.displayRecords;
+        modelGroup.add(error.failedCadScene.modelGroup);
+        edgesGroup.add(error.failedCadScene.edgesGroup);
+      }
+      // Reconciliation is in-place: a failure may have disposed old records
+      // and attached new orphans. Full teardown precedes any recovery/release.
+      let recovery;
+      try {
+        clearDisplayedModel();
+        recovery = meshSourceAdoptionRef.current?.(meshData, false, { disposed: true, recover: true });
+      } catch (cleanupError) {
+        meshSourceAdoptionRef.current?.(meshData, false, { cleanupFailed: true });
+        sceneUpdateAlertRef.current = { severity: "error", title: "Scene cleanup failed",
+          message: "Detail work has stopped because scene ownership could not be released. Reload the viewer." };
+        viewerAlertChangeRef.current?.(sceneUpdateAlertRef.current);
+        setError(cleanupError instanceof Error ? cleanupError.message : String(cleanupError));
+        return;
+      }
+      sceneUpdateAlertRef.current = { severity: "error", title: "Detail update failed",
+        message: recovery?.recovering
+          ? "The partial scene was cleared. The previous view is being restored; reload if restoration fails."
+          : "The scene was cleared after the display failed. Reload the model to continue." };
+      viewerAlertChangeRef.current?.(sceneUpdateAlertRef.current);
+      setError(error instanceof Error ? error.message : String(error));
+    }
   }, [
     meshGeometrySource,
+    markPresentationReady,
     modelKey,
     perspective,
     perspectiveRef,
@@ -3929,19 +4520,57 @@ const CadViewer = forwardRef(function CadViewer({
     selectorRuntime,
     displayEdgeRuntime,
     normalizedDisplayMode,
+    materialPartPolicyKey,
     normalizedSceneScaleMode,
     resolvedFloorMode,
+    receiveShadows,
+    renderMode,
     floorFollowsModel,
     viewerTheme,
-    normalizedThemeSettings.lighting,
-    normalizedThemeSettings.materials,
-    normalizedThemeSettings.environment,
     displayEdgeSettings,
     hiddenAwareVisualEdgeSettings,
     visualEdgeSettings,
     syncCameraZoomPercent,
     wireframeEdgeColor,
-    updateActiveGridHelper
+    applyActivePhotographicStudio,
+    glbDocument,
+    embeddedGlbAnimation?.clip
+  ]);
+
+  const embeddedGlbMixerRef = useRef(null);
+  useEffect(() => () => {
+    // This component is the sole owner of an interactive document. Detach the
+    // scene before releasing GPU resources so generic group cleanup cannot
+    // recursively dispose the same hierarchy.
+    detachGlbDocumentScene(glbDocument);
+    disposeGlbDocument(glbDocument);
+  }, [glbDocument]);
+  useEffect(() => {
+    const runtime = runtimeRef.current;
+    const scene = glbDocument?.scene;
+    if (!runtime?.THREE || !scene || !embeddedGlbAnimation?.clip) {
+      embeddedGlbMixerRef.current = null;
+      return undefined;
+    }
+    const mixerState = createGlbAnimationRuntime(runtime.THREE, scene, embeddedGlbAnimation.clip);
+    embeddedGlbMixerRef.current = { ...mixerState, document: glbDocument };
+    return () => {
+      disposeGlbAnimationRuntime(mixerState);
+      if (embeddedGlbMixerRef.current?.mixer === mixerState.mixer) embeddedGlbMixerRef.current = null;
+    };
+  }, [glbDocument, embeddedGlbAnimation?.clip, viewerReadyTick]);
+
+  useEffect(() => {
+    const runtime = runtimeRef.current;
+    const mixerState = embeddedGlbMixerRef.current;
+    if (!runtime?.THREE || !mixerState || runtime.cadScene?.nativeDocument !== glbDocument) return;
+    setGlbAnimationTime(mixerState, embeddedGlbAnimation?.elapsedSec);
+    runtime.requestRender();
+  }, [
+    embeddedGlbAnimation?.clip,
+    embeddedGlbAnimation?.elapsedSec,
+    glbDocument,
+    viewerReadyTick
   ]);
 
   useEffect(() => {
@@ -3954,6 +4583,16 @@ const CadViewer = forwardRef(function CadViewer({
       !Array.isArray(runtime.displayRecords) ||
       !runtime.displayRecords.length
     ) {
+      return;
+    }
+    // Component-package revisions already adopted this exact wrapper through
+    // cadScene.update in the scene-sync effect above. That adoption applied
+    // the changed record transforms and the same effect refreshed bounds,
+    // lighting, floor and stage. Repeating this loop touched every occurrence
+    // after an otherwise selective update. Posed wrappers (URDF/SDF) retain a
+    // stable geometrySource, so their scene-sync effect does not run and their
+    // distinct meshData wrapper still reaches the placement path below.
+    if (sceneSourceAlreadyPlaced(runtime, meshData)) {
       return;
     }
 
@@ -3977,15 +4616,22 @@ const CadViewer = forwardRef(function CadViewer({
       return;
     }
 
-    const { radius } = applyRuntimeModelBounds(runtime.THREE, runtime, meshData.bounds, normalizedSceneScaleMode);
-    syncRuntimeScaledLightingAndShadow(
-      runtime.THREE,
-      runtime,
-      normalizedThemeSettings.lighting,
-      radius,
-      meshData.bounds,
-      normalizedSceneScaleMode
-    );
+    const { radius } = applyRuntimeModelBounds(runtime.THREE, runtime, meshData.bounds, normalizedSceneScaleMode, {
+      shadowMapSize: renderShadowMapSizeRef.current
+    });
+    if (renderMode) {
+      applyActivePhotographicStudio(runtime, meshData.bounds);
+    } else {
+      syncRuntimeScaledLightingAndShadow(
+        runtime.THREE,
+        runtime,
+        normalizedThemeSettings.lighting,
+        radius,
+        meshData.bounds,
+        normalizedSceneScaleMode,
+        renderShadowMapSizeRef.current
+      );
+    }
     const cachedFloorZ = floorFollowsModel
       ? modelTransformRef.current.floorZBelowModel
       : modelTransformRef.current.floorZ;
@@ -4005,8 +4651,10 @@ const CadViewer = forwardRef(function CadViewer({
       normalizedSceneScaleMode,
       resolvedFloorMode
     );
-    updateSpotLightTarget(runtime);
-    updateStageEffects(runtime, viewerTheme, normalizedThemeSettings, radius, runtime.gridFloorZ ?? 0, resolvedFloorMode, normalizedSceneScaleMode);
+    if (!renderMode) {
+      updateSpotLightTarget(runtime);
+      updateStageEffects(runtime, viewerTheme, normalizedThemeSettings, radius, runtime.gridFloorZ ?? 0, resolvedFloorMode, normalizedSceneScaleMode);
+    }
     runtime.requestRender();
   }, [
     meshData?.parts,
@@ -4015,11 +4663,13 @@ const CadViewer = forwardRef(function CadViewer({
     effectiveRenderPartsIndividually,
     normalizedSceneScaleMode,
     normalizedThemeSettings,
+    renderMode,
     resolvedFloorMode,
     floorFollowsModel,
     viewerTheme,
     viewerReadyTick,
-    updateActiveGridHelper
+    updateActiveGridHelper,
+    applyActivePhotographicStudio
   ]);
 
   useEffect(() => {
@@ -4029,8 +4679,13 @@ const CadViewer = forwardRef(function CadViewer({
     }
 
     applyPartVisualState(runtime.THREE, runtime.displayRecords, partVisualStateRef.current);
+    runtime.cadScene?.syncSurfaceInstances();
     runtime.requestRender();
   }, [viewerReadyTick, partVisualStateEnabled, recordEdgesVisible, focusedPartIds, hiddenPartIds, hoveredPartId, pickMode, pickableParts, selectedPartIds, viewerTheme, visualEdgeSettings, normalizedDisplayMode]);
+
+  useEffect(() => {
+    lodCameraChangeRef.current?.();
+  }, [lodSelectionKey]);
 
   useEffect(() => {
     const runtime = runtimeRef.current;
@@ -4116,16 +4771,34 @@ const CadViewer = forwardRef(function CadViewer({
     // Either system can be the only one present: a model may declare mates
     // without shipping clips, or ship clips without declaring a single mate.
     // Only when NEITHER has anything to say does the pass fall back to rest.
+    // An alert this pass raised earlier (e.g. a clip label the composition did
+    // not carry) is cleared the moment a pass runs clean, or the module goes
+    // away; a pass that fails the same way again does not re-raise it every
+    // frame — one clean error per failing state.
+    const clearSceneEffectsAlert = () => {
+      if (sceneEffectsAlertRef.current) {
+        sceneEffectsAlertRef.current = null;
+        viewerAlertChangeRef.current?.(null);
+      }
+    };
     if ((!definition && !animationClip) || isLoading || !meshData) {
+      clearSceneEffectsAlert();
       stepModuleTransformDetectedChangeRef.current?.(false);
       updateTransformedRuntimeState(setTransformedSelectorRuntime, null);
       updateTransformedRuntimeState(setTransformedDisplayEdgeRuntime, null);
       runtime.topologyDisplayEdgeTransformByRecord = explodedViewActive;
-      resetStepModuleRecordEffects(runtime.displayRecords);
+      if (staticSceneResetRef.current.consume(staticResetRenderToken, {
+        source: meshData, runtime, visualState: partVisualStateRef.current, clipState: clipSettingsRef.current,
+      })) {
+        runtime.requestRender?.();
+        return;
+      }
+      resetStepModuleRecordEffects(runtime.displayRecords, THREE);
       for (const record of runtime.displayRecords) {
         applyDisplayRecordTransform(runtime.THREE, record, runtime.modelRadius || 1);
       }
       applyPartVisualState(runtime.THREE, runtime.displayRecords, partVisualStateRef.current);
+      runtime.cadScene?.syncSurfaceInstances();
       const baseTopologyDisplayEdgesVisible = shouldRenderTopologyDisplayEdges({
         edgesVisible,
         wireframeMode,
@@ -4144,6 +4817,8 @@ const CadViewer = forwardRef(function CadViewer({
         displayRecords: runtime.displayRecords,
         syncClip: (activeRuntime) => syncRuntimeStepClipPlane(activeRuntime, clipSettingsRef.current)
       });
+      runtime.invalidateShadows?.();
+      lodCameraChangeRef.current?.();
       runtime.requestRender?.();
       return;
     }
@@ -4152,6 +4827,7 @@ const CadViewer = forwardRef(function CadViewer({
     // kinematics update, then the clip merged OVER it — the two systems meet
     // in the effect records and nowhere else.
     let transformDetected = false;
+    let passError = null;
     const sceneState = applySceneState(runtime.THREE, {
       runtime,
       meshData,
@@ -4165,11 +4841,18 @@ const CadViewer = forwardRef(function CadViewer({
       },
       onError: ({ phase, error }) => {
         const title = phase === "animation" ? "Animation update failed" : "Pose update failed";
+        const message = error instanceof Error ? error.message : String(error);
+        passError = { title, message };
+        const previous = sceneEffectsAlertRef.current;
+        if (previous && previous.title === title && previous.message === message) {
+          return;
+        }
+        sceneEffectsAlertRef.current = passError;
         viewerAlertChangeRef.current?.({
           severity: "warning",
           compact: true,
           title,
-          message: error instanceof Error ? error.message : String(error)
+          message
         });
         console.error(title, error);
       },
@@ -4180,6 +4863,9 @@ const CadViewer = forwardRef(function CadViewer({
       }
     });
     void sceneState;
+    if (!passError) {
+      clearSceneEffectsAlert();
+    }
     const useRecordTopologyEdgeTransforms = explodedViewActive || shouldUseRecordTopologyEdgeTransforms({
       transformDetected,
       topologyDisplayEdgesVisible,
@@ -4217,6 +4903,7 @@ const CadViewer = forwardRef(function CadViewer({
       applyDisplayRecordTransform(runtime.THREE, record, runtime.modelRadius || 1);
     }
     applyPartVisualState(runtime.THREE, runtime.displayRecords, partVisualStateRef.current);
+    runtime.cadScene?.syncSurfaceInstances();
     runtime.topologyDisplayEdgeTransformByRecord = useRecordTopologyEdgeTransforms;
     syncTopologyDisplayEdgeLine(
       runtime,
@@ -4240,6 +4927,11 @@ const CadViewer = forwardRef(function CadViewer({
     if (!stepAnimationPlaying) {
       syncDisplayMeshFaceIds(runtime, meshData, effectiveRuntime);
       syncSelectorPickGroups(runtime, effectiveRuntime, modelTransformRef.current.offset, { clearSceneGroup });
+      // A kinematic edit (or a stopped scrub) is a one-shot model-bounds
+      // change for LOD and shadows. Playback stays on its existing bounded
+      // frame loop; an idle posed model schedules no recurring work.
+      runtime.invalidateShadows?.();
+      lodCameraChangeRef.current?.();
     }
     runtime.requestRender?.();
   }, [
@@ -4298,6 +4990,10 @@ const CadViewer = forwardRef(function CadViewer({
     // Steady disabled state: nothing to evaluate. (When disabling from an
     // exploded state we still evaluate below so the collapse animates.)
     if (!explodedViewActive && !wasEnabled) {
+      if (!inactiveExplodedViewNeedsReset(animation, runtime.displayRecords)) {
+        animation.layout = null;
+        return undefined;
+      }
       clearExplodedViewRecords(runtime.displayRecords);
       for (const record of runtime.displayRecords) {
         applyDisplayRecordTransform(THREE, record);
@@ -4885,16 +5581,44 @@ const CadViewer = forwardRef(function CadViewer({
     onMeasurePick: handleMeasurePick,
     onMeasureHoverPoint: handleMeasureHoverPoint,
     viewerReadyTick,
-    suppressTopologyPicking: stepAnimationPlaying,
+    suppressTopologyPicking: (renderMode && !materialPickingEnabled) || stepAnimationPlaying,
     allowMeshVertexSnap
+  });
+
+  const hasPresentableContent = hasViewportContent || Boolean(drawingIsDocument && drawingGeometry?.geometry);
+  const preparingFrame = Boolean(resolvedPresentationKey) &&
+    (presentedEpoch !== presentationEpoch || presentedKey !== resolvedPresentationKey) && !error;
+  const coveringModeTransition = presentedEpoch !== presentationEpoch && !error && hasPresentableContent;
+  useEffect(() => {
+    onPresentationChange?.({
+      file: modelKey,
+      renderMode,
+      key: resolvedPresentationKey,
+      preparing: Boolean(preparingFrame),
+      covering: Boolean(coveringModeTransition),
+    });
+  }, [modelKey, renderMode, resolvedPresentationKey, preparingFrame, coveringModeTransition, onPresentationChange]);
+  const transitionBackdrop = viewerTransitionBackdrop({
+    renderMode, renderConfiguration, background: normalizedThemeSettings.background, viewerTheme
   });
 
   return (
     <div
       ref={interactionHostRef}
       className="relative h-full w-full"
+      style={coveringModeTransition ? { backgroundColor: transitionBackdrop.backgroundColor } : undefined}
+      aria-busy={preparingFrame}
     >
       <div className="h-full w-full" ref={mountRef} />
+      {coveringModeTransition ? (
+        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center" style={transitionBackdrop} role="status" data-viewer-transition={renderMode ? "render" : "inspect"}>
+          <LoadingIndicator
+            headline={renderMode ? "Preparing render…" : "Opening model…"}
+            progress={loadingPresentation?.busy ? loadingPresentation.progress : { label: "Preparing view" }}
+            operationKey={`${resolvedPresentationKey}:${renderMode}`}
+          />
+        </div>
+      ) : null}
       <canvas
         ref={measureCanvasRef}
         className="absolute inset-0 z-10 h-full w-full touch-none"
@@ -4930,7 +5654,7 @@ const CadViewer = forwardRef(function CadViewer({
         activateDefaultViewPlane={activateDefaultViewPlane}
       />
       {error ? (
-        <p className="cad-glass-popover pointer-events-none absolute left-4 top-24 z-20 rounded-[10px] border border-[var(--ui-error-bg)] px-4 py-3 text-sm text-[var(--ui-error-text)] shadow-[var(--ui-shadow-soft)] sm:top-20">
+        <p className="bg-popover pointer-events-none absolute left-4 top-24 z-20 rounded-[10px] border border-[var(--ui-error-bg)] px-4 py-3 text-sm text-[var(--ui-error-text)] shadow-[var(--ui-shadow-soft)] sm:top-20">
           {error}
         </p>
       ) : null}

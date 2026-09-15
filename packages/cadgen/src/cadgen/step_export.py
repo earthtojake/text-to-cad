@@ -127,6 +127,13 @@ def _create_bin_xcaf_doc(to_export: Any) -> Any:
     color_tool = XCAFDoc_DocumentTool.ColorTool_s(doc.Main())
     is_assembly = isinstance(to_export, Compound) and len(to_export.children) > 0
     shape_definitions: dict[int, object] = {}
+    # STEPCAF collapses definitions backed by the same TShape during transfer.
+    # That is normally the desired instance reuse, but it also collapses the
+    # definition style: differently coloured occurrences then all receive the
+    # last colour. Keep one topology representative per intrinsic appearance.
+    # Copying with copyGeom=False detaches only the topological identity; the
+    # canonical package still content-deduplicates the identical BREP.
+    leaf_variants: dict[int, list[tuple[object, dict[object, object]]]] = {}
 
     def set_label_name(label: object, name: str | None) -> None:
         if name and not label.IsNull():
@@ -143,6 +150,72 @@ def _create_bin_xcaf_doc(to_export: Any) -> Any:
             wrapped,
             XCAFDoc_ColorType.XCAFDoc_ColorSurf,
         )
+
+    def color_signature(color: object | None) -> tuple[float, float, float, float] | None:
+        wrapped = quantity_color_rgba_from_color(color)
+        if wrapped is None:
+            return None
+        rgb = wrapped.GetRGB()
+        return (
+            float(rgb.Red()),
+            float(rgb.Green()),
+            float(rgb.Blue()),
+            float(wrapped.Alpha()),
+        )
+
+    def leaf_appearance_signature(shape: object) -> object:
+        face_colors = getattr(shape, "cad_face_ordinal_colors", None)
+        face_signature = ()
+        if face_colors:
+            face_signature = tuple(
+                (int(ordinal), color_signature(color))
+                for ordinal, color in sorted(face_colors.items(), key=lambda item: int(item[0]))
+            )
+        return color_signature(getattr(shape, "color", None)), face_signature
+
+    def leaf_shape_for_appearance(unlocated: object, shape: object) -> object:
+        signature = leaf_appearance_signature(shape)
+        bucket = leaf_variants.setdefault(hash(unlocated), [])
+        for native_shape, variants in bucket:
+            # IsEqual includes orientation (location is already stripped).
+            # IsSame would let a reversed occurrence reuse the forward
+            # representative and silently flip its intended topology.
+            if unlocated.IsEqual(native_shape):
+                representative = variants.get(signature)
+                if representative is not None:
+                    return representative
+                from OCP.BRepBuilderAPI import BRepBuilderAPI_Copy
+
+                representative = BRepBuilderAPI_Copy(
+                    unlocated,
+                    False,  # share geometric surfaces and curves
+                    False,  # never copy triangulation into the STEP document
+                ).Shape()
+                variants[signature] = representative
+                return representative
+        bucket.append((unlocated, {signature: unlocated}))
+        return unlocated
+
+    def set_face_colors(label: object, unlocated: object, shape: object) -> None:
+        """Per-face colours (``cad_face_ordinal_colors``, keyed by MapShapes ordinal
+        on the unlocated shape) as coloured sub-shape labels — the XCAF form
+        the scene loader reads back (``_face_color_map_from_label``). A vendor
+        part composed through ``read_step`` keeps its face colours this way, and
+        the build's tree, re-read from the written STEP, still renders them."""
+        face_colors = getattr(shape, "cad_face_ordinal_colors", None)
+        if not face_colors or label.IsNull():
+            return
+        from OCP.TopExp import TopExp
+        from OCP.TopTools import TopTools_IndexedMapOfShape
+
+        face_map = TopTools_IndexedMapOfShape()
+        TopExp.MapShapes_s(unlocated, ta.TopAbs_FACE, face_map)
+        for ordinal, color in sorted(face_colors.items()):
+            ordinal = int(ordinal)
+            if not 1 <= ordinal <= face_map.Extent():
+                continue
+            sub_label = shape_tool.AddSubShape(label, face_map.FindKey(ordinal))
+            set_label_color(sub_label, color)
 
     def shape_location(shape: object) -> object:
         wrapped = getattr(shape, "wrapped", None)
@@ -191,10 +264,13 @@ def _create_bin_xcaf_doc(to_export: Any) -> Any:
                 set_label_color(child_component, getattr(child, "color", None))
             return definition_label
 
-        definition_label = shape_tool.AddShape(shape_without_location(shape), False)
+        unlocated = shape_without_location(shape)
+        unlocated = leaf_shape_for_appearance(unlocated, shape)
+        definition_label = shape_tool.AddShape(unlocated, False)
         shape_definitions[key] = definition_label
         set_label_name(definition_label, getattr(shape, "label", None))
         set_label_color(definition_label, getattr(shape, "color", None))
+        set_face_colors(definition_label, unlocated, shape)
         return definition_label
 
     if is_assembly:
@@ -202,7 +278,13 @@ def _create_bin_xcaf_doc(to_export: Any) -> Any:
         shape_tool.UpdateAssemblies()
         return doc
 
-    shape_tool.AddShape(to_export.wrapped, is_assembly)
+    root_label = shape_tool.AddShape(to_export.wrapped, is_assembly)
+    set_face_colors(
+        shape_tool.FindShape(shape_without_location(to_export), findInstance=False)
+        if not root_label.IsNull() else root_label,
+        shape_without_location(to_export),
+        to_export,
+    )
 
     for node in PreOrderIter(to_export):
         if not node.label and node.color is None:

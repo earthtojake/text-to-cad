@@ -120,10 +120,12 @@ joints you do not name staying at the rest pose (the `"jointValues"` job field i
 thing in a packet). Robots are authored in metres and are framed on the robot scene scale
 automatically.
 
-Theme settings live under one `--theme`, mirroring the viewer's Theme tab. The default
-theme is `snapshot` — Workbench Light with the ground grid, origin axis and shadows
-removed, because in a still image those read as geometry. There is no `--display`: display
-settings (mode, clip, exploded, edges) are CAD topology settings, and a robot carries none.
+A normal snapshot uses deterministic light CAD lighting and hides grid and axis guides.
+Pass `--render light` or `--render dark` (or photographic Render JSON or a file path)
+for the shared Render scene. An envelope with no `studio` resolves Light in the CLI.
+Set its camera inside Render JSON; top-level `--camera`, `--display`, and `--joint-values`
+control normal snapshots and cannot be combined with Render. Robot link meshes have no CAD-edge or exploded assembly
+topology, so those display combinations are rejected clearly.
 
 Link meshes are resolved relative to the description, so they must be present: an
 unhydrated Git LFS pointer fails as "No link mesh loaded for robot". Run

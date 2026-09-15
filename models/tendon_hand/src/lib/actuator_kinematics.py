@@ -57,7 +57,6 @@ validator, whose static body cache otherwise keys on name and path alone.
         shape=bd.Compound.cast(body.shape.wrapped.Moved(matrix_location(transform).wrapped)).solids()[0]
         name=body.name+(f'__payout_{float(q).hex()}' if cache_aliases else '')
         shape.label=name;shape.color=body.shape.color
-        if getattr(body.shape,'cad_material',None):shape.cad_material=body.shape.cad_material
         moved.append(Body(shape,body.frame,body.system,body.kind));aliases[name]=body.name
         if q!=0.:active.add(name)
     return moved,aliases,active

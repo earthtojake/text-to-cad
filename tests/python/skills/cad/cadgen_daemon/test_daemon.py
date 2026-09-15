@@ -43,8 +43,8 @@ if __name__ == "__main__":
 """
 
 
-def _authkey() -> bytes:
-    key = transport.read_authkey(daemon_client.daemon_identity())
+def _authkey(address: str) -> bytes:
+    key = transport.read_authkey(str(address))
     if not key:
         raise RuntimeError("the daemon has not written its auth key")
     return key
@@ -52,7 +52,7 @@ def _authkey() -> bytes:
 
 def _raw_request(address: str, payload: dict) -> list[dict]:
     """One request, straight over the transport, bypassing the client's retry logic."""
-    channel = transport.connect(str(address), _authkey())
+    channel = transport.connect(str(address), _authkey(address))
     frames: list[dict] = []
     try:
         channel.send(json.dumps(payload).encode("utf-8"))
@@ -125,7 +125,7 @@ class CadgenDaemonTests(unittest.TestCase):
             if cls.server.poll() is not None:
                 raise RuntimeError(f"daemon exited during startup:\n{cls.log_path.read_text(encoding='utf-8')}")
             try:
-                probe = transport.connect(str(cls.address), _authkey())
+                probe = transport.connect(str(cls.address), _authkey(cls.address))
             except (OSError, RuntimeError):
                 time.sleep(0.1)
                 continue
@@ -303,7 +303,7 @@ class CadgenDaemonTests(unittest.TestCase):
         # no smaller thing to stop, and every queued request died with it. Now the job
         # runs in a pooled worker, so the watchdog kills that one worker and the
         # supervisor keeps serving — which is what the assertions below check.
-        channel = transport.connect(str(self.address), _authkey())
+        channel = transport.connect(str(self.address), _authkey(self.address))
         try:
             channel.send(json.dumps({
                 "tool": "run",

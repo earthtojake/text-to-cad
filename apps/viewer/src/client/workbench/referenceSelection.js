@@ -109,6 +109,70 @@ export function selectRequestedAssemblyComponents(
   return { occurrencesToLoad, neededCids, loadedTopologyKey };
 }
 
+// The empty string is the exact composition key for an assembly with no expanded
+// occurrences. Only an absent key belongs to the single-part fallback contract.
+export function topologyCompositionKeyMatches(loadedTopologyKey, requestedTopologyKey) {
+  return (loadedTopologyKey ?? "*") === requestedTopologyKey;
+}
+
+export function resolveAssemblyPartActivation(referenceId, {
+  topologyReference = null,
+  resolvePartId = null
+} = {}) {
+  const normalizedReferenceId = String(referenceId || "").trim();
+  const selectorType = String(topologyReference?.selectorType || "").trim();
+  if (
+    !normalizedReferenceId ||
+    selectorType === "face" ||
+    selectorType === "edge" ||
+    selectorType === "vertex" ||
+    typeof resolvePartId !== "function"
+  ) {
+    return null;
+  }
+  const partId = String(resolvePartId(normalizedReferenceId) || "").trim();
+  return partId ? { partId, renderPartId: normalizedReferenceId } : null;
+}
+
+export function modelReferenceActivationDecision(referenceId, {
+  topologyReference = null,
+  assemblyMode = false,
+  resolvePartId = null,
+  deferForTopology = false,
+  referenceKnown = false
+} = {}) {
+  const normalizedReferenceId = String(referenceId || "").trim();
+  if (!normalizedReferenceId) {
+    return { kind: "clear" };
+  }
+  const selectorType = String(topologyReference?.selectorType || "").trim();
+  if (selectorType === "face" || selectorType === "edge" || selectorType === "vertex") {
+    return { kind: "reference", referenceId: normalizedReferenceId };
+  }
+  if (assemblyMode) {
+    const part = resolveAssemblyPartActivation(normalizedReferenceId, {
+      topologyReference,
+      resolvePartId
+    });
+    if (part) {
+      return { kind: "part", ...part };
+    }
+  }
+  if (deferForTopology) {
+    return { kind: "defer", referenceId: normalizedReferenceId };
+  }
+  if (assemblyMode) {
+    return { kind: "clear" };
+  }
+  return referenceKnown
+    ? { kind: "reference", referenceId: normalizedReferenceId }
+    : { kind: "ignore" };
+}
+
+export function pendingReferenceActivationMatches(pending, { fileRef = "", tree = "" } = {}) {
+  return !!pending && pending.fileRef === fileRef && pending.tree === tree;
+}
+
 export function parseAssemblyPartReferenceSelectionId(referenceId) {
   const normalizedReferenceId = String(referenceId || "").trim();
   const prefix = "assembly-part:";

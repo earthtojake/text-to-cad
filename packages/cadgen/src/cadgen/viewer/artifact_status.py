@@ -4,26 +4,14 @@ What this module deliberately does NOT decide is "is a build in flight". The
 caller supplies a snapshot (``build_progress.py``: the daemon's job ledger,
 matched to the document by declared output path) and this module reads it.
 
-Nothing here imports cadgen. Status is answered for a directory of models by an
-interpreter that may have no kernel installed at all, and every read degrades to
-"no" rather than raising: a badge is not a render. The ONE exception is
-containment — an out-of-root ``?file=`` ref raises before anything is read,
-because that is a refusal rather than a missing file.
+The server answers status without loading the CAD kernel. Missing or damaged
+required geometry means not compiled. Complete native geometry means compiled;
+SURF derivation and browser pixels have separate lifecycles. Containment errors
+still raise before any store read.
 
-Freshness semantics:
-
-* a tree must exist, parse, declare the exact kind, and have every component
-  payload on disk;
-* nothing else is gated. The tree KEY is ``<sha256(document)>-v<schema>``, so
-  a tree that resolved at all has the right schema and belongs to exactly
-  these bytes — the old schema, bake, and per-poll digest gates all collapsed
-  into content keying, and that digest re-hash was the one full-file read every
-  status poll used to pay;
-* generated outputs are DETACHED from their source code: no source checks, ever;
-* the viewer never learns whether a document was generated. Nothing here opens a
-  record, a script or a closure (STORE.md §2, the law): status is artifact-side —
-  not compiled / compiling / rendered / failed — and "is this document behind its
-  source" is ``cadgen store why``'s question.
+The document's byte digest resolves through index/document to one immutable
+geometry tree. Its complete required closure must verify. Saved documents never
+consult source scripts, model records or source currency.
 """
 
 from __future__ import annotations
@@ -33,7 +21,7 @@ import os
 import re
 
 from .backend import require_contained
-from .store_paths import component_object_present, result_descriptor, result_tree
+from .store_paths import result_descriptor, result_tree
 
 __all__ = [
     "ARTIFACT_STATE",
@@ -62,7 +50,7 @@ _STEP_ENTRY_RE = re.compile(r"\.(step|stp)\Z", re.IGNORECASE)
 
 
 class ARTIFACT_STATE:  # noqa: N801 - a namespace of wire constants, not a class
-    RENDERED = "rendered"
+    COMPILED = "compiled"
     COMPILING = "compiling"
     NOT_COMPILED = "not-compiled"
     FAILED = "failed"
@@ -200,15 +188,9 @@ def _validate_step(step_path: str) -> dict:
             "tree": tree,
             "descriptor": descriptor,
         }
-    for component in components:
-        surf = str((component or {}).get("surfObject") or "") if isinstance(component, dict) else ""
-        if not surf or not component_object_present(surf):
-            return {
-                "ok": False,
-                "code": "missing_glb",
-                "tree": tree,
-                "descriptor": descriptor,
-            }
+    # result_descriptor captured the full required geometry closure. Optional
+    # SURF/TESS availability is a separate runtime capability and cannot make
+    # this document need another compile.
     return {"ok": True, "tree": tree, "descriptor": descriptor}
 
 
@@ -253,7 +235,7 @@ def artifact_status(file_ref, root_dir, *, snapshot=None, verdict=None) -> dict:
 
     failed = snapshot.get("failed")
     if verdict.get("ok"):
-        status = {"state": ARTIFACT_STATE.RENDERED}
+        status = {"state": ARTIFACT_STATE.COMPILED}
         if isinstance(failed, dict):
             # The tree renders; the latest build of this document failed. Both
             # facts, the render first.

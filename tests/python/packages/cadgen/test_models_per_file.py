@@ -17,7 +17,7 @@ import unittest
 from pathlib import Path
 
 from tests.python.support.paths import REPO_ROOT, add_repo_path
-from tests.python.support.tmp_root import temporary_directory
+from tests.python.support.tmp_root import generated_cad_directory
 
 add_repo_path("packages/cadgen/src")
 
@@ -71,7 +71,7 @@ print(type(shape).__name__, round(size.X, 3), round(size.Y, 3), round(size.Z, 3)
 
 class ModelsPerFile(unittest.TestCase):
     def setUp(self) -> None:
-        self._tmp = temporary_directory(prefix="cadgen-models-per-file-")
+        self._tmp = generated_cad_directory(prefix="cadgen-models-per-file-")
         self.root = Path(self._tmp.name)
         self.src = self.root / "src"
         self.src.mkdir()

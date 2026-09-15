@@ -14,6 +14,9 @@ import textwrap
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
+
+from tests.python.support.tmp_root import generated_cad_directory
 
 REPO = Path(__file__).resolve().parents[4]
 PYTHON = sys.executable
@@ -41,7 +44,7 @@ MODEL_TEXT = textwrap.dedent(
 
 class StoreCase(unittest.TestCase):
     def setUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = generated_cad_directory(prefix="store-case-")
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
         self.previous = os.environ.get("CADGEN_CACHE_DIR")
@@ -71,14 +74,19 @@ class StoreCase(unittest.TestCase):
         from cadgen.store.objects import put_object
         from cadgen.store.trees import put_tree
 
-        digest = put_object(payload)
+        from build123d import Solid
+        from cadgen._internal.component_package import prepare_geometry_component
+        prepared = prepare_geometry_component(Solid.make_box(1, 2, 3 + sum(payload) / 1000))
+        entry = prepared["entry"]
+        digest = put_object(prepared["payload"])
+        cid = entry["contentHash"][:16]
         return put_tree(
             {
                 "label": label,
                 "entryKind": "part",
                 "units": "mm",
-                "components": {"c0": {"surf": digest, "brep": digest, "contentHash": "c0"}},
-                "occurrences": [{"id": "o1", "name": f"{label}_body", "component": "c0", "transform": IDENTITY}],
+                "components": {cid: entry},
+                "occurrences": [{"id": "o1", "name": f"{label}_body", "component": cid, "transform": IDENTITY}],
                 "links": [],
                 "assembly": {"root": {"id": "o1", "name": label, "nodeType": "part", "leafPartIds": ["o1"], "children": []}},
                 "stats": {"occurrenceCount": 1, "linkCount": 0},
@@ -170,7 +178,8 @@ class GateTruthTable(StoreCase):
         tree = self.tree_for("plate", payload=b"SURF\x02")
         self.record(script, tree=tree)
         self.assertIsNone(self.stale_clause(script))
-        object_path(hashlib.sha256(b"SURF\x02").hexdigest()).unlink()
+        from cadgen.store.trees import get_tree
+        object_path(next(iter(get_tree(tree)["components"].values()))["brep"]).unlink()
         self.assertEqual(self.stale_clause(script), 4)
 
     def test_clause_5_an_output_that_changed_on_disk(self) -> None:
@@ -448,8 +457,151 @@ class TreeFlattening(StoreCase):
         self.assertEqual(by_id["o1.1.2"]["name"], "pin_right")
         self.assertEqual(by_id["o1.1.1"]["transform"][3::4][:3], [-15, 10, 7])
         self.assertEqual(by_id["o1.1.2"]["transform"][3::4][:3], [15, 10, 7])
-        self.assertEqual(list(flat["components"]), ["c0"], "one shared component, stored once")
+        self.assertEqual(len(flat["components"]), 1, "one shared component, stored once")
         self.assertEqual(flat["assembly"]["root"]["children"][0]["nodeType"], "subassembly")
+
+
+class TreeBounds(StoreCase):
+    """The tree's bbox is the merge of per-occurrence TIGHT boxes, memoized on
+    (component content, rotation), followed by translation. A control-polygon bound reported a
+    NURBS radius 8% too large (PR #370 bug record 004), and measuring the whole compound
+    tightly on every finalize would have charged a 150k-face assembly seconds
+    it never spends twice.
+    """
+
+    RADIUS = 7.5
+    HEIGHT = 4.0
+
+    @classmethod
+    def nurbs_cylinder(cls):
+        """A cylinder as a NURBS solid: its control polygon reaches 2R, so a
+        loose bound is unmistakable."""
+        from build123d import Cylinder, Solid
+        from OCP.BRepBuilderAPI import BRepBuilderAPI_NurbsConvert
+
+        solid = Cylinder(radius=cls.RADIUS, height=cls.HEIGHT)
+        return Solid(BRepBuilderAPI_NurbsConvert(solid.wrapped, True).Shape())
+
+    def assert_bounds(self, bbox, expected):
+        for key in ("min", "max"):
+            for got, want in zip(bbox[key], expected[key]):
+                self.assertAlmostEqual(got, want, delta=1e-6)
+
+    def test_a_rotated_nurbs_occurrence_reports_its_exact_bounds(self) -> None:
+        from build123d import Location
+
+        from cadgen.store.build import build_tree_from_compound
+
+        # Rolled onto its side: the axis is +Y, so the exact box is R in X and Z
+        # and half the height in Y, about the placement's origin.
+        placed = Location((3, -4, 5), (90, 0, 0)) * self.nurbs_cylinder()
+        _hash, tree, _stats = build_tree_from_compound(placed, root_name="pulley")
+        self.assert_bounds(
+            tree["bbox"],
+            {
+                "min": [3 - self.RADIUS, -4 - self.HEIGHT / 2, 5 - self.RADIUS],
+                "max": [3 + self.RADIUS, -4 + self.HEIGHT / 2, 5 + self.RADIUS],
+            },
+        )
+
+    def test_two_placements_merge_into_the_exact_box(self) -> None:
+        from build123d import Compound, Location
+
+        from cadgen.store.build import build_tree_from_compound
+
+        left = Location((-20, 0, 0)) * self.nurbs_cylinder()
+        left.label = "left"
+        right = Location((20, 0, 0)) * self.nurbs_cylinder()
+        right.label = "right"
+        _hash, tree, _stats = build_tree_from_compound(
+            Compound(children=[left, right], label="bank"), root_name="bank"
+        )
+        self.assertEqual(len(tree["occurrences"]), 2)
+        self.assert_bounds(
+            tree["bbox"],
+            {
+                "min": [-20 - self.RADIUS, -self.RADIUS, -self.HEIGHT / 2],
+                "max": [20 + self.RADIUS, self.RADIUS, self.HEIGHT / 2],
+            },
+        )
+
+    def test_translations_reuse_the_same_tight_box_in_memory_and_on_disk(self) -> None:
+        from build123d import Compound, Location
+
+        from cadgen._internal import component_package, op_memo
+        from cadgen.store.build import build_tree_from_compound
+
+        op_memo.clear()
+
+        def bank(offset: float) -> Compound:
+            left = Location((-20, 0, 0)) * self.nurbs_cylinder()
+            left.label = "left"
+            right = Location((20 + offset, 0, 0)) * self.nurbs_cylinder()
+            right.label = "right"
+            return Compound(children=[left, right], label="bank")
+
+        real = component_package.optimal_box
+        calls: list[int] = []
+
+        def counted(wrapped):
+            calls.append(1)
+            return real(wrapped)
+
+        with mock.patch.object(component_package, "optimal_box", counted):
+            _h, cold, _s = build_tree_from_compound(bank(0), root_name="bank")
+            self.assertEqual(len(calls), 1, "translated copies share one tight measurement")
+
+            # Cleared memory: the second build reads the disk tier, so an
+            # unchanged assembly measures nothing at all.
+            op_memo.clear()
+            calls.clear()
+            _h, warm, _s = build_tree_from_compound(bank(0), root_name="bank")
+            self.assertEqual(len(calls), 0, "an unchanged occurrence is not measured again")
+            self.assertEqual(warm["bbox"], cold["bbox"])
+
+            op_memo.clear()
+            calls.clear()
+            _h, moved, _s = build_tree_from_compound(bank(5), root_name="bank")
+            self.assertEqual(len(calls), 0, "translation does not repeat surface extrema")
+            self.assertEqual(moved["bbox"]["max"][0], cold["bbox"]["max"][0] + 5)
+
+    def test_rotation_changes_the_measured_box_without_changing_caller_placement(self) -> None:
+        from build123d import Location
+        from cadgen._internal import component_package, op_memo
+
+        op_memo.clear()
+        part = self.nurbs_cylinder()
+        real = component_package.optimal_box
+        with mock.patch.object(component_package, "optimal_box", wraps=real) as measure:
+            for rotation, translation in [((0, 0, 0), (10, 20, 30)), ((90, 0, 0), (-8, 4, 2)),
+                                          ((90, 0, 0), (200, -300, 400))]:
+                placed = Location(translation, rotation) * part
+                location = placed.wrapped.Location().Transformation()
+                before = tuple(location.Value(row, column) for row in (1, 2, 3) for column in (1, 2, 3, 4))
+                expected = real(placed.wrapped)
+                actual = component_package._bbox_from_shape(placed)
+                after = placed.wrapped.Location().Transformation()
+                self.assertEqual(before, tuple(after.Value(row, column) for row in (1, 2, 3) for column in (1, 2, 3, 4)))
+                self.assert_bounds(actual, {"min": expected[:3], "max": expected[3:]})
+            self.assertEqual(measure.call_count, 2)
+            op_memo.clear()
+            again = Location((-123, 321, -20), (90, 0, 0)) * part
+            component_package._bbox_from_shape(again)
+            self.assertEqual(measure.call_count, 2, "rotation-specific bounds survive RAM eviction")
+
+    def test_translated_nested_and_mirrored_shapes_keep_native_tight_bounds(self) -> None:
+        from build123d import Box, Compound, Location, Plane
+        from cadgen._internal import component_package
+
+        source = Box(3, 5, 7).moved(Location((2, 4, 6)))
+        mirrored = source.mirror(Plane.YZ)
+        child = Compound(children=[source, mirrored]).moved(Location((12, -3, 8), (23, 41, 17)))
+        root = Compound(children=[child]).moved(Location((-8, 14, 32), (9, 7, 11)))
+        leaves = component_package._world_leaves(root.wrapped)
+        direct = [component_package.optimal_box(leaf) for leaf in leaves]
+        expected = {"min": [min(box[axis] for box in direct) for axis in range(3)],
+                    "max": [max(box[axis + 3] for box in direct) for axis in range(3)]}
+        self.assert_bounds(component_package._bbox_from_shape(root), expected)
 
 
 class TreeKind(StoreCase):
@@ -467,14 +619,15 @@ class TreeKind(StoreCase):
         from cadgen.store.trees import flatten, get_tree, put_tree, tree_kind, tree_kind_for
 
         child = self.tree_for("pin")
-        digest = put_object(b"SURF\x01")
+        child_entry = next(iter(get_tree(self.tree_for("arm", b"different"))["components"].values()))
+        cid = child_entry["contentHash"][:16]
         parent = put_tree(
             {
                 "label": "arm",
                 "entryKind": "part",  # the static inference's answer; the tree overrules it
                 "units": "mm",
-                "components": {"c1": {"surf": digest, "brep": digest, "contentHash": "c1"}},
-                "occurrences": [{"id": "o1.1", "name": "arm_body", "component": "c1", "transform": IDENTITY}],
+                "components": {cid: child_entry},
+                "occurrences": [{"id": "o1.1", "name": "arm_body", "component": cid, "transform": IDENTITY}],
                 "links": [{"id": "o1.2", "name": "pin", "tree": child, "transform": IDENTITY}],
                 "assembly": {"root": {"id": "o1", "name": "arm", "nodeType": "assembly", "children": [
                     {"id": "o1.1", "name": "arm_body", "nodeType": "part", "leafPartIds": ["o1.1"], "children": []},
@@ -511,6 +664,8 @@ class GcReachability(StoreCase):
             {
                 "label": "arm", "entryKind": "assembly", "units": "mm", "components": {}, "occurrences": [],
                 "links": [{"id": "o1.1", "name": "pin", "tree": pin, "transform": IDENTITY}],
+                "assembly": {"root": {"id": "o1", "name": "arm", "nodeType": "assembly", "children": [
+                    {"id": "o1.1", "nodeType": "link", "children": []}]}},
                 "stats": {"occurrenceCount": 0, "linkCount": 1},
             }
         )
@@ -525,7 +680,8 @@ class GcReachability(StoreCase):
         self.assertFalse(has_object(old_orphan))
         self.assertTrue(has_object(fresh_orphan), "within the grace window a build may still pin it")
         self.assertTrue(has_object(pin) and has_object(arm))
-        self.assertTrue(has_object(hashlib.sha256(b"SURF\x00").hexdigest()), "reachable through the link")
+        from cadgen.store.trees import get_tree
+        self.assertTrue(has_object(next(iter(get_tree(pin)["components"].values()))["brep"]), "reachable through the link")
 
 
 class LinkOrComponent(StoreCase):
@@ -572,6 +728,105 @@ class LinkOrComponent(StoreCase):
             sorted(c.label for c in again.children),
             sorted(["bar", "pin_left", "pin_right", "pin_mirrored", "pin_cut", "pin_relocated"]),
         )
+
+
+class MaterializeCacheOwnership(unittest.TestCase):
+    """Independent materialize consumers never share mutable OCCT TShapes."""
+
+    def setUp(self) -> None:
+        self.tmp = generated_cad_directory(prefix="materialize-cache-")
+        self.addCleanup(self.tmp.cleanup)
+        self.previous = os.environ.get("CADGEN_CACHE_DIR")
+        os.environ["CADGEN_CACHE_DIR"] = str(Path(self.tmp.name) / "store")
+        from cadgen.store.materialize import reset_memo
+
+        reset_memo()
+        self.addCleanup(reset_memo)
+
+        def restore() -> None:
+            if self.previous is None:
+                os.environ.pop("CADGEN_CACHE_DIR", None)
+            else:
+                os.environ["CADGEN_CACHE_DIR"] = self.previous
+
+        self.addCleanup(restore)
+
+    @staticmethod
+    def _triangulated_faces(shape) -> int:
+        from OCP.BRep import BRep_Tool
+        from OCP.TopAbs import TopAbs_ShapeEnum
+        from OCP.TopExp import TopExp_Explorer
+        from OCP.TopLoc import TopLoc_Location
+        from OCP.TopoDS import TopoDS
+
+        count = 0
+        explorer = TopExp_Explorer(shape.wrapped, TopAbs_ShapeEnum.TopAbs_FACE)
+        while explorer.More():
+            face = TopoDS.Face_s(explorer.Current())
+            if BRep_Tool.Triangulation_s(face, TopLoc_Location()) is not None:
+                count += 1
+            explorer.Next()
+        return count
+
+    def _box_tree(self) -> str:
+        from build123d import Box
+        from cadgen.store.build import build_tree_from_compound
+
+        tree, _descriptor, _stats = build_tree_from_compound(Box(8, 6, 4), root_name="box")
+        return tree
+
+    def test_independent_consumers_are_mutation_and_mesh_isolated(self) -> None:
+        from OCP.BRepMesh import BRepMesh_IncrementalMesh
+        from cadgen.store.materialize import materialize, reset_memo
+
+        tree = self._box_tree()
+        first = materialize(tree, label="first")
+        original_checked = bool(first.wrapped.Checked())
+        first.wrapped.Checked(not original_checked)
+        BRepMesh_IncrementalMesh(first.wrapped, 0.1, False, 0.5, True)
+        self.assertGreater(self._triangulated_faces(first), 0)
+
+        # This call hits the process byte cache after the first consumer was
+        # mutated and meshed. It must reconstruct the canonical disk result.
+        second = materialize(tree, label="second")
+        self.assertFalse(first.wrapped.IsPartner(second.wrapped))
+        self.assertEqual(bool(second.wrapped.Checked()), original_checked)
+        self.assertEqual(self._triangulated_faces(second), 0)
+
+        reset_memo()
+        from_disk = materialize(tree, label="from-disk")
+        self.assertFalse(second.wrapped.IsPartner(from_disk.wrapped))
+        self.assertAlmostEqual(from_disk.volume, second.volume, places=12)
+        self.assertEqual(self._triangulated_faces(from_disk), 0)
+
+    def test_cache_release_does_not_invalidate_active_but_never_masks_deletion(self) -> None:
+        from cadgen.store.materialize import materialize, reset_memo
+        from cadgen.store.objects import object_path
+        from cadgen.store.trees import flatten
+
+        tree = self._box_tree()
+        active = materialize(tree)
+        volume = active.volume
+        brep = next(iter(flatten(tree)["components"].values()))["brep"]
+        object_path(brep).unlink()
+
+        with self.assertRaises(FileNotFoundError):
+            materialize(tree)
+        reset_memo()
+        self.assertAlmostEqual(active.volume, volume, places=12)
+
+    def test_canonical_byte_cache_is_byte_bounded_lru(self) -> None:
+        from cadgen.store import materialize as materialize_mod
+        from cadgen.store.objects import put_object
+
+        first = put_object(b"a" * 10)
+        second = put_object(b"b" * 10)
+        with mock.patch.object(materialize_mod, "_BREP_BYTES_MEMO_CAPACITY", 15):
+            materialize_mod._bytes_for_object(first)
+            materialize_mod._bytes_for_object(second)
+
+        self.assertEqual(list(materialize_mod._BREP_BYTES_MEMO), [second])
+        self.assertEqual(materialize_mod._BREP_BYTES_MEMO_SIZE, 10)
 
 
 class LinkedRootPlacement(StoreCase):

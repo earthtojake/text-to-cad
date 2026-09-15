@@ -28,7 +28,7 @@ import FileSheet, {
   parseFileSheetNumberInput
 } from "./FileSheet";
 import FileSheetTabbedSurface from "./FileSheetTabbedSurface";
-import { buildFileStatusTab } from "./FileStatusSection";
+import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections";
 
 const compactNumericInputClasses = FILE_SHEET_COMPACT_NUMERIC_INPUT_CLASSES;
 const compactButtonClasses = FILE_SHEET_COMPACT_BUTTON_CLASSES;
@@ -269,8 +269,8 @@ export default function UrdfFileSheet({
   sdf = null,
   viewerServerInfo = null,
   suppressDynamicMetadataStatus = false,
-  statusItems = [],
-  themeTabs = [],
+  renderMode = false,
+  settingsTabs = [],
   openSectionIds = [],
   onOpenSectionIdsChange
 }) {
@@ -302,8 +302,7 @@ export default function UrdfFileSheet({
   const activeGroupState = groupStatePresets.find((state) => String(state?.id || "").trim() === activeGroupStateValue);
   const activeGroupStateLabel = activeGroupStateValue === "__custom__" ? "custom" : String(activeGroupState?.label || activeGroupState?.name || activeGroupStateValue);
 
-  const sections = [
-    buildFileStatusTab(statusItems),
+  const allSections = [
     isSdf ? {
       id: "sdf",
       title: "SDF",
@@ -424,8 +423,11 @@ export default function UrdfFileSheet({
             )
       )
     } : null,
-    ...themeTabs
+    ...settingsTabs
   ];
+  const sections = renderMode
+    ? allSections.filter((section) => section?.id === FILE_SHEET_SECTION_IDS.THEME_RENDER)
+    : allSections;
 
   return (
     <FileSheet
@@ -439,6 +441,8 @@ export default function UrdfFileSheet({
     >
       <FileSheetTabbedSurface
         kind={isSdf ? "sdf" : (sourceFormat || "urdf")}
+        layoutMode={renderMode ? "render" : "cad"}
+        layoutScope={selectedEntry?.rootRelativeFile || selectedEntry?.file || ""}
         sections={sections}
         openSectionIds={openSectionIds}
         onOpenSectionIdsChange={onOpenSectionIdsChange}

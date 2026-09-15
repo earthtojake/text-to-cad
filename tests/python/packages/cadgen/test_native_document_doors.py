@@ -1,0 +1,114 @@
+"""Native document operations do not demand disposable display surfaces."""
+from __future__ import annotations
+
+import builtins
+import contextlib
+import io
+import os
+from pathlib import Path
+import shutil
+import unittest
+from unittest import mock
+
+from tests.python.support.tmp_root import generated_cad_directory
+
+
+class NativeDocumentDoors(unittest.TestCase):
+    def setUp(self):
+        temporary = generated_cad_directory(prefix="native-doors-")
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.store = self.root / "store"
+        self.enterContext(mock.patch.dict(os.environ, {
+            "CADGEN_CACHE_DIR": str(self.store), "CADGEN_DAEMON": "0",
+            "CADGEN_COMPONENT_WORKERS": "1",
+        }))
+        from build123d import Solid
+        from cadgen import step
+        from cadgen.step_export import export_build123d_step_file
+
+        self.document = self.root / "box.step"
+        box = Solid.make_box(2, 3, 4)
+        box.label = "colored box"
+        box.cad_face_ordinal_colors = {1: (0.2, 0.4, 0.8, 1.0)}
+        export_build123d_step_file(box, self.document)
+        self.original = self.document.read_bytes()
+        self.tree = step.compile(self.document).tree
+        self.source = self.root / "unrelated.py"
+        self.source.write_text("from cadgen import step\n@step\ndef unrelated():\n    raise AssertionError('never run')\n", encoding="utf-8")
+
+    @contextlib.contextmanager
+    def native_only(self):
+        attempts = []
+        original_open, original_io_open = builtins.open, io.open
+
+        def guard(opener):
+            def read(path, *args, **kwargs):
+                if isinstance(path, (str, bytes, os.PathLike)) and os.fsdecode(path) == str(self.source):
+                    attempts.append(str(path))
+                    raise AssertionError("unrelated source read")
+                return opener(path, *args, **kwargs)
+            return read
+
+        with contextlib.ExitStack() as stack:
+            for name in ("cadgen.daemon.artifacts.submit_artifact", "cadgen.daemon.artifacts.resolve_artifact",
+                         "cadgen.store.surfaces.derive", "cadgen._internal.surface_extract.extract_surface_component",
+                         "cadgen.catalog.result_view_dir", "cadgen.store.view.export_view",
+                         "cadgen.step_artifact_cli._entries_by_step_path_for_repo"):
+                stack.enter_context(mock.patch(name, side_effect=AssertionError(f"native-only operation invoked {name}")))
+            stack.enter_context(mock.patch("builtins.open", side_effect=guard(original_open)))
+            stack.enter_context(mock.patch("io.open", side_effect=guard(original_io_open)))
+            yield
+        self.assertEqual(attempts, [], "a source scan swallowed the forbidden read")
+        self.assertFalse((self.store / "index/surface").exists())
+        self.assertEqual(self.document.read_bytes(), self.original)
+
+    def test_summary_matches_static_metadata_without_surface_or_selector_work(self):
+        from cadgen import step
+        from cadgen.reporting import entry_summary_payload
+        from cadgen.step_targets import resolve_step_target
+        from cadgen.step_topology_artifact import ensure_step_topology_artifact
+        from cadgen.store.objects import object_path
+        from cadgen.store.surfaces import derive
+
+        # The previous summary path obtained this metadata through a complete
+        # static view. Preserve that exact report while removing its surface dependency.
+        artifact = ensure_step_topology_artifact(resolve_step_target(str(self.document)), require_selector=False)
+        expected = entry_summary_payload(artifact.manifest, kind="part")
+        for record in derive(self.tree).values():
+            object_path(record["object"]).unlink()
+        shutil.rmtree(self.store / "index/surface")
+        with self.native_only(), mock.patch(
+            "cadgen.step_topology_artifact.ensure_step_topology_artifact",
+            side_effect=AssertionError("summary constructed a selector artifact"),
+        ):
+            result = step.inspect(self.document)
+        self.assertTrue(result.ok, result.report)
+        self.assertEqual(result.report["tokens"][0]["summary"], expected)
+
+    def test_compile_native_inspections_and_reemit_skip_display_and_unrelated_source(self):
+        from cadgen import read_step, step
+        from cadgen.store.trees import capture_tree
+
+        closure = capture_tree(self.tree)[1]
+        destination = self.root / "reemit.step"
+        with self.native_only():
+            self.assertEqual(step.compile(self.document, force=True).tree, self.tree)
+            self.assertEqual(capture_tree(self.tree)[1], closure)
+            self.assertAlmostEqual(read_step(self.document).volume, 24.0)
+            self.assertTrue(step.inspect(self.document, inspection="validate", skip_self_intersection=True).ok)
+            interference = step.inspect(self.document, inspection="interfere").report
+            self.assertEqual(interference["errors"], [])
+            self.assertFalse(interference["conclusive"])
+            self.assertIn("at least two", interference["inconclusiveReason"])
+            first = step.build(self.document, destination)
+            self.assertTrue(first.ok)
+            output = destination.read_bytes()
+            self.assertTrue(step.build(self.document, destination).skipped)
+            self.assertTrue(step.build(self.document, destination, force=True).ok)
+            self.assertEqual(destination.read_bytes(), output)
+            self.assertEqual(capture_tree(self.tree)[1], closure)
+
+
+if __name__ == "__main__":
+    unittest.main()

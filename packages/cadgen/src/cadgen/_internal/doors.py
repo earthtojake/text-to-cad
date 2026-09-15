@@ -32,6 +32,7 @@ __all__ = [
     "announce_rebuild",
     "document_target",
     "document_tree",
+    "document_snapshot",
     "script_target_message",
 ]
 
@@ -48,7 +49,7 @@ class CompileFailed(RuntimeError):
     """
 
 
-def document_tree(document: Path) -> str:
+def document_snapshot(document: Path) -> tuple[str, str]:
     """The tree for THIS document's bytes — a door's one question (STORE.md §9).
 
     Yes, the store has one — ``index/document/<sha256(bytes)>`` → tree (STORE.md
@@ -58,22 +59,27 @@ def document_tree(document: Path) -> str:
     builds a tree from the file's bytes, exactly as for an imported STEP,
     whether or not the file has a script, and the lookup is repeated.
     """
-    from cadgen.catalog import result_tree_for
+    from cadgen.catalog import result_snapshot_for
 
     document = Path(document).expanduser().resolve()
-    tree = result_tree_for(document)
-    if tree:
-        return tree
+    snapshot = result_snapshot_for(document)
+    if snapshot:
+        return snapshot
     from cadgen.daemon.executors import submit_compile
 
     job = submit_compile(document)
     if job.wait() != 0:
         said = job.output().rstrip()
         raise CompileFailed(f"compiling {_display(document)} failed" + (f":\n{said}" if said else ""))
-    tree = result_tree_for(document)
-    if not tree:
+    snapshot = result_snapshot_for(document)
+    if not snapshot:
         raise CompileFailed(f"no tree for {_display(document)} after its compile")
-    return tree
+    return snapshot
+
+
+def document_tree(document: Path) -> str:
+    """The canonical tree from the same coherent lookup used by mesh exports."""
+    return document_snapshot(document)[1]
 
 
 def _display(path: Path) -> str:

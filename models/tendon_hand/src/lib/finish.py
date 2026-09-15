@@ -12,8 +12,7 @@ from lib.palette import FINISHES
 
 def finish(shape, language, label):
     from cadgen import srgb
-    color, material = FINISHES[language]
+    color, _material = FINISHES[language]
     shape.label = label
     shape.color = srgb(color)
-    shape.cad_material = dict(material)
     return shape

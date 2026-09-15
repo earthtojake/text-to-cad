@@ -39,8 +39,11 @@ classifiers = [
 # OCC operations now, with shapely only the fallback for the degenerate unions
 # OCC refuses -- but a fallback that is not installed is not a fallback.
 dependencies = [
-  "build123d",
-  "cadquery-ocp",
+  "build123d>=0.11.1",
+  # cadgen imports OCP directly for STEP/XCAF, topology and BREP work.  Match
+  # build123d's non-VTK provider: cadgen does not import VTK or cadquery, and
+  # this keeps the optional visualization stack out of every CAD install.
+  "cadquery-ocp-novtk>=7.9,<8",
   "ezdxf",
   "shapely",
 ]

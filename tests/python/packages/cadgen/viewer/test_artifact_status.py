@@ -71,7 +71,9 @@ class _Tree:
         if not write_payloads:
             from cadgen.store.objects import object_path
 
-            object_path(hashlib.sha256(b"SURF\x00").hexdigest()).unlink()
+            from cadgen.store.trees import get_tree
+            component = next(iter(get_tree(tree)["components"].values()))
+            object_path(component["brep"]).unlink()
         return tree
 
 class ArtifactStatusTestCase(unittest.TestCase):
@@ -159,7 +161,7 @@ class Verdicts(ArtifactStatusTestCase):
     def test_a_fresh_package_is_ready(self):
         step = self.tree.step()
         self.tree.package(step)
-        self.assertEqual(artifact_status(step, str(self.tree.root)), {"state": "rendered"})
+        self.assertEqual(artifact_status(step, str(self.tree.root)), {"state": "compiled"})
 
     def test_editing_the_file_unresolves_the_package(self):
         step = self.tree.step()
@@ -177,7 +179,7 @@ class Verdicts(ArtifactStatusTestCase):
         self.tree.package(step)
         Path(step).write_bytes(STEP_BYTES + b"\n")
         Path(step).write_bytes(STEP_BYTES)
-        self.assertEqual(artifact_status(step, str(self.tree.root)), {"state": "rendered"})
+        self.assertEqual(artifact_status(step, str(self.tree.root)), {"state": "compiled"})
 
     def test_a_missing_candidate_is_an_error_naming_the_raw_ref(self):
         self.assertEqual(
@@ -198,15 +200,15 @@ class Verdicts(ArtifactStatusTestCase):
         self.assertEqual(artifact_status(step, str(self.tree.root))["reason"], "missing_glb")
 
         self.tree.package(step, components=())
-        self.assertEqual(artifact_status(step, str(self.tree.root))["reason"], "missing_glb")
+        self.assertEqual(artifact_status(step, str(self.tree.root))["reason"], "missing_step_topology")
 
         self.tree.package(step)
-        self.assertEqual(artifact_status(step, str(self.tree.root)), {"state": "rendered"})
+        self.assertEqual(artifact_status(step, str(self.tree.root)), {"state": "compiled"})
 
-    def test_a_component_whose_surf_payload_is_absent_is_missing_glb(self):
+    def test_a_component_whose_native_payload_is_absent_is_missing_glb(self):
         step = self.tree.step()
         self.tree.package(step, write_payloads=False)
-        self.assertEqual(artifact_status(step, str(self.tree.root))["reason"], "missing_glb")
+        self.assertEqual(artifact_status(step, str(self.tree.root))["reason"], "missing_step_topology")
 
 
 class SnapshotShapes(ArtifactStatusTestCase):
@@ -239,7 +241,7 @@ class SnapshotShapes(ArtifactStatusTestCase):
             str(self.tree.root),
             snapshot={"writing": False, "busy": True, "runId": "r2", "progress": None},
         )
-        self.assertEqual(status, {"state": "rendered", "busy": True, "runId": "r2"})
+        self.assertEqual(status, {"state": "compiled", "busy": True, "runId": "r2"})
 
     def test_busy_over_an_unbuilt_package_is_needs_build_plus_blocked(self):
         step = self.tree.step()

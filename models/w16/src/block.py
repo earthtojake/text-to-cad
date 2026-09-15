@@ -12,15 +12,16 @@ from cadgen import step
 
 from lib import block as block_lib
 from lib import spec as S
+from lib.palette import material_compound, materials_for_system
 
 
-@step(out="../STEP/block.step",
+@step(out="../STEP/block.step", materials=materials_for_system("block"),
       mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
 def block():
     parts = block_lib.build(S.SECTIONED)
     if not parts:
         raise RuntimeError("block.build() produced no parts")
-    return bd.Compound(children=parts, label="block")
+    return material_compound(parts, "block")
 
 
 if __name__ == "__main__":

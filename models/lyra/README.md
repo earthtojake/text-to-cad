@@ -43,9 +43,8 @@ interpenetrates.
     self-check (run `python -m lib.clearance` from `src/` after editing
     poses or animation key orders — it sweeps every named pose and every
     blend path).
-  - `STEP/lyra.step.js` — the render module beside the document: the
-    animation clips, loaded by the viewer by name (authored, committed; no
-    build reads it). Clips: `poseTour` (a finger-ripple wave,
+  - `ANIMATION_JS` in `src/lyra.py` — animation clips embedded in model
+    metadata at build time. Clips: `poseTour` (a finger-ripple wave,
     then relaxed -> precision pinch -> OK sign -> point -> tripod pinch ->
     fist; key order chosen so every blend is collision-free), `graspLoop`
     (power grasp), `pinchLoop` (pinch with pad double-tap), `rippleLoop`

@@ -61,18 +61,18 @@ The command surface (the `cadgen` console script, installed with the package):
 
 ```bash
 python <model>.py            # its __main__ calls the model, which builds it
-cadgen step build IN OUT     # re-emit an existing STEP as a new one, with kinematics
+cadgen step build IN OUT     # re-emit an existing STEP with durable annotations
 cadgen stl build ...         # one door per mesh format; `3mf` and `glb` are the others
 cadgen step inspect ...      # refs, measure, align, frame, diff
-cadgen step snapshot ...     # PNG visual review packets, for STEP
+cadgen step snapshot ...     # PNG visual review packets (and clip videos), for STEP
 cadgen stl snapshot ...      # the same, for a mesh file; `3mf` and `glb` again
 cadgen store why <model>.py  # why the model is stale or current, clause by clause
 cadgen daemon status         # the warm workers and the jobs they are running
 ```
 
 **Scripts are RUN; commands take DOCUMENTS.** `python model.py` is the one
-source door — it writes every output the model declares and (only when the
-model declares kinematics, animation, or mesh exports) its sidecar. Every
+source door — it writes every output the model declares and, for STEP files
+with kinematics, intrinsic material finishes, or animation, their sidecar. Every
 command above takes a `.step`/`.stl`/`.dxf` FILE, and one handed a `.py` says
 so. A door asks one question of a document: does the store have a tree for
 this file's bytes? If so it reads it; if not it compiles one from the bytes as
@@ -129,17 +129,19 @@ The rules, each enforced by the decorator or the build:
   print-only parts and render assets. `references/supported-exports.md`.
 - **Decorator arguments never change the geometry.** They decide where the
   files land (`out=`), how they are written (`mesh_tolerance=`,
-  `mesh_angular_tolerance=`) and what the sidecar declares (`kinematics=`).
+  `mesh_angular_tolerance=`) and what the sidecar declares (`kinematics=`,
+  `materials=`, `animation=`).
   The geometry is the return value and nothing else: a `Compound` placing
   children is packaged as occurrences, a single solid as one component, and
   `part`/`assembly` is read off the tree. There is no `kind=` and no bake
   point — a posed or differently configured export is authored geometry, or
   another model.
 - **A sidecar only when strictly necessary.** `<name>.step.json` is written
-  only when the model declares `kinematics=`; a model that declares none has
-  no sidecar, and a rebuild that dropped the declaration deletes the stale
-  file. What a model declares about its outputs lives in its record, not in
-  a file beside the geometry.
+  only when `kinematics=`, `materials=`, or `animation=` declares useful
+  annotations. It contains resolved declarations bound to the saved STEP's
+  byte hash; a model with none has no sidecar. Rebuilding removes dropped
+  sections and deletes an empty sidecar. Mesh-output declarations live in the
+  store record.
 - **One model per file, as a rule of thumb.** A model's identity is its file
   plus its function (`plate.py::plate`); a file holding one model is named by
   its path alone. A file MAY hold several (a small family of variants): each is
@@ -150,6 +152,12 @@ The rules, each enforced by the decorator or the build:
 - **Composition is a call.** Import a sibling model and call it inside your
   body (`from arm import arm` … `arm()`); it returns the child's geometry.
   `references/step-generation.md` has the whole composition contract.
+- **Expensive pure factories may use `@memo`.** This optional decorator
+  reuses parameterized geometry inside a model without declaring files. Use
+  immutable value arguments and deterministic helpers, with no I/O, reporting,
+  child builds, process state or dependency mutation. Keep ordinary factories
+  for cheap work. Read the memoization section in `references/step-generation.md`
+  before using it; no cache/session utilities are needed.
 - **`from cadgen import build123d as bd`** is the canonical import — a lazy,
   transparent re-export of build123d (same names, same behaviour) — so the
   freshness gate and the warm-worker handoff run before any kernel import is
@@ -280,7 +288,7 @@ A failed child raises at the site in the parent that first read its geometry, na
 
 ## Snapshots
 
-**Snapshot inputs.** One format, one door, and the same `TARGET [OUT]` grammar `build` uses. `cadgen step snapshot` renders `.step`/`.stp` documents — nothing else (a model script is refused by name: run `python <model>.py`, then snapshot the STEP it wrote). A mesh file goes to its own door: `cadgen stl snapshot`, `cadgen 3mf snapshot`, `cadgen glb snapshot`. A mesh has no CAD topology, so the STEP-only options (`--focus`/`--hide`, `--display`, `--kinematics`, `--animation`/`--time`, `--mode section`) are not on those commands at all — check `--help` and the door tells you what it can do. Robot descriptions belong to the `urdf`/`srdf`/`sdf` skills. Each door refuses what is not its own format, and names the door that takes it.
+**Snapshot inputs.** One format, one door, and the same `TARGET [OUT]` grammar `build` uses. `cadgen step snapshot` renders `.step`/`.stp` documents — nothing else (a model script is refused by name: run `python <model>.py`, then snapshot the STEP it wrote). A mesh file goes to its own door: `cadgen stl snapshot`, `cadgen 3mf snapshot`, `cadgen glb snapshot`. A mesh has no CAD topology, so focus/hide, kinematics, animation/video, section mode, exploded views and CAD-edge display modes remain STEP-only. Normal-CAD camera and format-neutral Display settings work across the snapshot doors; Render carries its own camera and presentation. Robot descriptions belong to the `urdf`/`srdf`/`sdf` skills. Each door refuses what is not its own format, and names the door that takes it.
 
 ```bash
 cadgen step snapshot STEP/bracket.step tmp/review.png
@@ -294,9 +302,13 @@ cadgen step snapshot STEP/bracket.step tmp/review.png
 # then Read tmp/review.png
 ```
 
-OUT is written exactly as given (a relative path against the current working directory), cleared before the render and written atomically after it — so reuse one name while iterating, name the iterations (`tmp/before.png`, `tmp/after.png`) when you need to compare, and treat a missing file as the failure signal: there is never an older image at the path to mistake for output. A directory (`tmp/`) is the don't-care case and gets a generated timestamped name inside it, printed on the `saved snapshot:` line. The same rule applies per output in a JSON packet.
+OUT is written exactly as given (a relative path against the current working directory). Conflicting Render/CAD controls are rejected before OUT is touched. After that check, OUT is cleared before input resolution and written atomically after rendering, so a later failure leaves no stale image from an earlier successful run. Reuse one name while iterating, and name the iterations (`tmp/before.png`, `tmp/after.png`) when you need to compare. A directory (`tmp/`) is the don't-care case and gets a generated timestamped name inside it, printed on the `saved snapshot:` line. The same rule applies per output in a JSON packet.
 
-**Theme and display.** Theme settings live under one `--theme`, display settings under one `--display` — the viewer's two tabs, one option each. The default theme is `snapshot`: Workbench Light with the ground grid and origin axis removed, because in a still image those read as geometry rather than as orientation. Pass `--theme workbench-light` for the viewer's own look. Projection is a theme trait honoured by every format, so a snapshot frames the same way the viewport does.
+**Normal and Render snapshots.** With no `--render`, snapshots use deterministic light CAD lighting, an orthographic isometric camera, normal shaded-with-edges display, and no grid or axis guides. `--render light|dark` opts into the photographic scene: perspective, shaded authored materials, softbox lighting, ground shadows, and no edges or guides. `--render '{}'` chooses the Light studio. It also accepts compact Render JSON or a path to it: `studio` is `light` or `dark`, `quality` is `preview` or `final`, `exposure` is -5..5, `lighting` controls `rotation`, `size`, and `fill`, `backdrop` controls `color`, `transparent`, `ground`, and `groundPlacement` (`origin` for the default Z=0 plane, or `lowest` to align the translucent floor to the model minimum), and `camera` controls the photographic view. Final quality is the default and captures at L3 with 2x render scale; preview uses L1 and 1x. A perspective camera may set `focalLength` to 20..200 mm; projection and the positive `orthographicHalfHeight` view scale also belong in camera JSON. Top-level `--camera` and `--display` configure normal CAD snapshots and cannot be combined with Render. A packet output's `camera` remains an explicit per-image override.
+
+Selection, kinematics and top-level `quality.tessellation` are also normal-CAD state and
+cannot be combined with Render. Animation frames and sequences remain composable with Render.
+Photographic Render supports `view` mode only.
 
 ## Required workflow
 
@@ -337,8 +349,8 @@ Load these files only when their trigger applies:
 - `references/inspection-and-validation.md` — validation sequence, selector refs, facts, planes, measurements, alignment, diff, frame, and validation reporting.
 - `references/snapshot-review.md` — mandatory snapshot policy, packet sizing, targeted views, and converting visual findings into geometry checks.
 - `references/positioning.md` — part-local datums and origins, assembly transforms, build123d joints, CLI alignment validation, and positioning reports.
-- `references/kinematics.md` — articulating, posing, or animating a STEP model: typed mates (`kinematics=` on the decorators — mates, couplings, pose presets, export-at-pose), and the render module beside the document (`<name>.step.js`: the choreography contract, loaded by the viewer, read by no build).
-- `references/supported-exports.md` — STL/3MF/native GLB outputs: declared exports, mesh-only models, and the `cadgen stl|3mf|glb build` doors.
+- `references/kinematics.md` — articulating, posing, or animating a STEP model: typed mates (`kinematics=` on the decorators — mates, couplings, pose presets, export-at-pose), and the embedded `animation=` JavaScript module. Also how a clip leaves the repo: `snapshot --video` for pixels, `glb build --animation` for a GLB that carries the motion itself.
+- `references/supported-exports.md` — STL/3MF/native GLB outputs: declared exports, mesh-only models, the `cadgen stl|3mf|glb build` doors, and `glb build --animation` (a clip baked into the file as glTF animation).
 - `references/repair-loop.md` — diagnosis and repair procedures.
 - `references/project-layout.md` — project structure for anything bigger than a couple of loose models: `src/` for model scripts and shared code, format folders (`STEP/`, `DXF/`, `STL/`) for raw outputs, naming, and commit policy; `references/project-template.md` is the copyable exemplar. Read them when a project has more than a couple of models or when asked how to organise CAD code and artifacts.
 - `references/migrations.md` — the tooling disagreeing with a model you believe is correct: recognizing a project authored against an older cadgen, and where the migration guides live.

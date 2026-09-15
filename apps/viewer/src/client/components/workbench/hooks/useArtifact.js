@@ -1,10 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 
+import { serverErrorMessage } from "../../../workbench/viewerRequest.js";
+
 import { requestArtifact, requestArtifactStatus } from "../../../workbench/cadManifestStore.js";
 import {
   ARTIFACT_PROGRESS_FIRST_POLL_MS,
   ARTIFACT_PROGRESS_POLL_MS,
-  normalizeArtifactProgress
+  ARTIFACT_STATUS_FAILURE_LIMIT,
+  ARTIFACT_STATUS_TIMEOUT_MS,
+  artifactProgressConnectionLost,
+  artifactStatusFailure,
+  normalizeArtifactProgress,
+  refreshArtifactProgress
 } from "../../../workbench/artifactProgress.js";
 import {
   ARTIFACT_ACTION_ATTACH,
@@ -40,16 +47,16 @@ import {
 // reported ratio is monotonic only within a single run and carrying it across a handoff is what
 // made the bar jump backwards.
 
-const READY = { status: "rendered", error: "", progress: null, advisory: null };
+const READY = { status: "compiled", error: "", progress: null, advisory: null };
 
 function isAbortError(error) {
-  return error?.name === "AbortError" || /abort/i.test(String(error?.message || ""));
+  return error?.name === "AbortError";
 }
 
 export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {}) {
   const activeRef = String(enabled ? fileRef || "" : "").trim();
   const key = activeRef ? `${activeRef}:${freshnessKey}` : "";
-  const [state, setState] = useState({ key: "", status: "rendered", error: "", progress: null });
+  const [state, setState] = useState({ key: "", status: "compiled", error: "", progress: null });
   const requestSeqRef = useRef(0);
 
   useEffect(() => {
@@ -66,10 +73,15 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {})
     };
 
     // Polls the status route alongside the in-flight build and merges whatever position it
-    // reports into the existing `generating` state. Any failure (a poll racing the build's
-    // own request, a sidecar not written yet) simply leaves the last known progress in place —
-    // this is decoration, and it must never turn into an error the user sees.
+    // reports into the existing `generating` state. A single missed response retains the
+    // last useful frame and marks the connection as lost; repeated misses become an
+    // actionable status failure. The compile POST itself has no elapsed-time timeout.
     let pollTimer = 0;
+    let statusFailures = 0;
+    // A status GET already in flight may reject after the compile POST has completed.
+    // Once a final result wins, that stale read must not put the same key back into a
+    // waiting or failed state. A peer handoff reopens polling in showGenerating().
+    let finished = false;
     // True when we are watching a build we did NOT start. Nothing else will tell us it
     // finished, so the poll has to notice the state leaving `generating` and re-resolve.
     let attached = false;
@@ -86,17 +98,52 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {})
     // bar resets instead.
     let shownRunId = null;
 
+    const noteStatusFailure = (error) => {
+      if (finished || !isCurrent() || controller.signal.aborted || isAbortError(error)) {
+        return false;
+      }
+      statusFailures += 1;
+      const source = error?.failure || { detail: error instanceof Error ? error.message : String(error) };
+      const terminal = statusFailures >= ARTIFACT_STATUS_FAILURE_LIMIT;
+      const failure = terminal ? artifactStatusFailure(error, statusFailures) : null;
+      if (terminal) {
+        finished = true;
+        stopPolling();
+      }
+      setState((current) => {
+        const progress = artifactProgressConnectionLost(
+          current.key === key ? current.progress : null,
+          source,
+          statusFailures
+        );
+        const base = current.key === key
+          ? current
+          : { key, status: "compiling", error: "", progress, advisory: null };
+        return terminal
+          ? { ...base, status: "failed", error: failure.detail, failure, progress }
+          : { ...base, progress };
+      });
+      return !terminal;
+    };
+
+    const statusReadSucceeded = () => {
+      statusFailures = 0;
+    };
+
     const mergeProgress = (status) => {
-      if (!isCurrent()) {
+      if (finished || !isCurrent()) {
         return;
       }
       const reconciled = reconcileArtifactRun(
         shownRunId,
         status,
-        normalizeArtifactProgress(status?.progress)
+        refreshArtifactProgress(normalizeArtifactProgress(status?.progress))
       );
       shownRunId = reconciled.runId;
       if (!reconciled.progress && !reconciled.handedOff) {
+        setState((current) => current.key === key && current.progress?.connectionLost
+          ? { ...current, progress: null }
+          : current);
         return;
       }
       setState((current) =>
@@ -105,53 +152,69 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {})
     };
 
     const pollProgress = async () => {
-      if (!isCurrent() || controller.signal.aborted) {
+      if (finished || !isCurrent() || controller.signal.aborted) {
         return;
       }
       let reported = "";
       try {
-        const status = await requestArtifactStatus(activeRef, { signal: controller.signal });
+        const status = await requestArtifactStatus(activeRef, {
+          signal: controller.signal,
+          timeoutMs: ARTIFACT_STATUS_TIMEOUT_MS
+        });
+        statusReadSucceeded();
         reported = String(status?.state || "");
         mergeProgress(status);
-      } catch {
-        // ignored on purpose — see above
+      } catch (error) {
+        if (!noteStatusFailure(error)) return;
       }
       // ATTACHED to a peer's build (we did not POST, so nothing else will tell us it
       // finished): keep polling until the run leaves `generating`, then re-resolve.
-      if (attached && isCurrent() && !controller.signal.aborted && reported && reported !== "compiling") {
+      if (!finished && attached && isCurrent() && !controller.signal.aborted && reported && reported !== "compiling") {
         stopPolling();
         resolve();
         return;
       }
-      if (isCurrent() && !controller.signal.aborted) {
+      if (!finished && isCurrent() && !controller.signal.aborted) {
         pollTimer = window.setTimeout(pollProgress, ARTIFACT_PROGRESS_POLL_MS);
       }
     };
 
     const showGenerating = (status) => {
+      finished = false;
+      statusReadSucceeded();
       shownRunId = status?.runId ? String(status.runId) : null;
       settle({
         status: "compiling",
         error: "",
-        progress: normalizeArtifactProgress(status?.progress)
+        progress: refreshArtifactProgress(normalizeArtifactProgress(status?.progress))
       });
     };
 
     async function resolve() {
+      let readingStatus = true;
       try {
-        const status = await requestArtifactStatus(activeRef, { signal: controller.signal });
+        const status = await requestArtifactStatus(activeRef, {
+          signal: controller.signal,
+          timeoutMs: ARTIFACT_STATUS_TIMEOUT_MS
+        });
+        readingStatus = false;
+        statusReadSucceeded();
         if (!isCurrent()) {
           return;
         }
         const action = artifactActionFor(status);
         if (action === ARTIFACT_ACTION_READY) {
-          // Ready may carry advisory flags (stale package rendered as-is, generator
+          // Ready may carry advisory flags (stale package compiled as-is, generator
           // busy elsewhere); keep them for the file sheet's status section.
+          finished = true;
+          stopPolling();
           settle({ ...READY, advisory: artifactAdvisoryFor(status) });
           return;
         }
         if (action === ARTIFACT_ACTION_ERROR) {
-          settle({ status: "failed", error: String(status?.error || status?.reason || "The document could not be compiled.") });
+          finished = true;
+          stopPolling();
+          settle({ status: "failed", error: serverErrorMessage(status) });
           return;
         }
         if (action === ARTIFACT_ACTION_ATTACH) {
@@ -169,6 +232,7 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {})
         showGenerating(status);
         pollTimer = window.setTimeout(pollProgress, ARTIFACT_PROGRESS_FIRST_POLL_MS);
         const result = await requestArtifact(activeRef, { signal: controller.signal });
+        finished = true;
         stopPolling();
         if (!isCurrent()) {
           return;
@@ -181,13 +245,22 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {})
           pollTimer = window.setTimeout(pollProgress, ARTIFACT_PROGRESS_FIRST_POLL_MS);
           return;
         }
-        settle(result?.ok && result.state === "rendered"
+        settle(result?.ok && result.state === "compiled"
           ? { ...READY, advisory: artifactAdvisoryFor(result) }
-          : { status: "failed", error: String(result?.error || "Compiling the document failed.") });
+          : { status: "failed", error: serverErrorMessage(result) });
       } catch (error) {
+        if (readingStatus && noteStatusFailure(error)) {
+          pollTimer = window.setTimeout(resolve, ARTIFACT_PROGRESS_POLL_MS);
+          return;
+        }
+        if (readingStatus) return;
+        finished = true;
         stopPolling();
         if (isCurrent() && !isAbortError(error) && !controller.signal.aborted) {
-          settle({ status: "failed", error: error instanceof Error ? error.message : String(error) });
+          settle({
+            status: "failed", error: error instanceof Error ? error.message : String(error),
+            failure: error?.failure || { kind: "response", operation: "checking display assets" }
+          });
         }
       }
     }
@@ -195,6 +268,7 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {})
     resolve();
 
     return () => {
+      finished = true;
       stopPolling();
       controller.abort();
     };
@@ -205,6 +279,7 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {})
     ? {
       status: state.status,
       error: state.error,
+      failure: state.failure || null,
       progress: state.progress,
       advisory: state.advisory || null
     }

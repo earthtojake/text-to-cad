@@ -115,7 +115,6 @@ def make_pulley(pitch_radius=3.5, rope_radius=0.30, width=1.50,
         wheel = wheel + cap
     wheel.label = label
     wheel.color = srgb("#B7C3CB")
-    wheel.cad_material = {"metalness": .88, "roughness": .28}
     if len(wheel.solids()) != 1 or not wheel.is_valid or wheel.volume <= 0:
         raise ValueError(f"{label}: turned profile failed solid validation")
     return wheel

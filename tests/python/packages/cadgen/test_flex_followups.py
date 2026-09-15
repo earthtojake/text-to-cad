@@ -237,7 +237,8 @@ class FollowUps(unittest.TestCase):
         (src / "washer.py").write_text(WASHER, encoding="utf-8")
         self.assertEqual(self.run_in(src, "washer.py").returncode, 0)
         info = self.run_in(src, "-m", "cadgen.cli", "store", "info")
-        for kind in ("model", "document", "output", "component", "op", "mesh"):
+        self.assertEqual(info.returncode, 0, info.stderr)
+        for kind in ("model", "document", "output", "component", "surface", "op", "mesh"):
             self.assertIn(f"index/{kind}", info.stdout, info.stdout)
         self.assertRegex(info.stdout, r"index/document\s+1 ")
         self.assertRegex(info.stdout, r"index/output\s+1 ")

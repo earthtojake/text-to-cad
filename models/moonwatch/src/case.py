@@ -11,10 +11,9 @@ from lib import case as C
 from lib import materials as M
 
 
-@step(out="../STEP/case.step")
+@step(out="../STEP/case.step", materials=M.materials_for_model("case"))
 def case():
     compound = bd.Compound(children=C.build_case_parts(), label="case")
-    M.apply(compound)
     return compound
 
 

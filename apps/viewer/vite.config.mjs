@@ -20,6 +20,16 @@ import {
 // with --port; nothing rolls or reuses here.
 const DEFAULT_DEV_PORT = 5173;
 
+// A supervisor that assigns ports (the agent harness) says so through PORT.
+// Honouring it is what lets dev be launched without pinning a number in a
+// config file — pinning one is how this collided with a resident Viewer on
+// 3251 in the first place. `strictPort` still stands: an assigned port that is
+// taken is a mistake to report, not to roll away from.
+function devPort() {
+  const assigned = Number(process.env.PORT);
+  return Number.isInteger(assigned) && assigned > 0 ? assigned : DEFAULT_DEV_PORT;
+}
+
 const viewerAppRoot = path.dirname(fileURLToPath(import.meta.url));
 const viewerClientRoot = path.join(viewerAppRoot, "src", "client");
 const cadJsPackageRoot = resolveCadJsPackageRoot();
@@ -262,7 +272,7 @@ export default defineConfig(async ({ command }) => ({
   },
   server: {
     host: "127.0.0.1",
-    port: DEFAULT_DEV_PORT,
+    port: devPort(),
     // Fail on a taken port instead of silently rolling: dev is hand-managed,
     // so the agent picks another port explicitly. (The bundled launcher is the
     // one that rolls/reuses; dev stays out of that machinery entirely.)

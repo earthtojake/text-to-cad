@@ -7,17 +7,16 @@ import { FILE_SHEET_SECTION_IDS } from "./fileSheetSections.js";
 // can be dragged between panes and a resizable divider between them. Other file
 // kinds render a single tab strip.
 //
-// The arrangement (which pane each tab lives in, tab order, split ratio, and
-// whether the split is active) is a global per-kind preference persisted to
-// localStorage. Which tab is *active* in each pane is resolved from the
-// per-file `openSectionIds` list (see resolveFileSheetTabPanes) so that the
-// existing reveal-on-select behavior keeps working.
+// The CAD arrangement (which pane each tab lives in, tab order, split ratio,
+// and whether the split is active) is a global per-kind preference persisted
+// to localStorage. Render begins as one Studio-first row and keeps drag/split
+// changes only for that visit. Which tab is *active* in each pane is resolved
+// from the mode's per-file `openSectionIds` list (see resolveFileSheetTabPanes).
 
 // Bumped to reset saved arrangements when the default pane assignment changes.
-// v5: the single Parameters tab became two — Pose and Animation — so a stored
-// v4 arrangement names a tab that no longer exists and knows nothing of the two
-// that replaced it.
-export const FILE_SHEET_TAB_LAYOUT_STORAGE_KEY = "cad-viewer:file-sheet-tab-layout:v5";
+// v6: Display took ownership of inspection presentation. Older stored Render
+// ids are harmlessly dropped when CAD arrangements normalize.
+export const FILE_SHEET_TAB_LAYOUT_STORAGE_KEY = "cad-viewer:file-sheet-tab-layout:v6";
 
 export const DEFAULT_FILE_SHEET_SPLIT_RATIO = 0.5;
 export const MIN_FILE_SHEET_SPLIT_RATIO = 0.2;
@@ -52,8 +51,8 @@ export function clampSplitRatio(ratio) {
 
 // Tabs that live in the top pane of a split layout; everything else defaults to
 // the bottom pane, in render order. STEP: the Tree on top, Reference/Pose/
-// Animation/Measure/Display below. DXF: Material on top (it always renders), the
-// conditional Bends/Layers tabs below.
+// Animation/Measure/Display below. DXF: Material on top (it always
+// renders), the conditional Bends/Layers tabs below.
 const TOP_PANE_SECTION_IDS = Object.freeze(new Set([
   FILE_SHEET_SECTION_IDS.STEP_TREE,
   FILE_SHEET_SECTION_IDS.DXF_MATERIAL
@@ -62,10 +61,9 @@ const TOP_PANE_SECTION_IDS = Object.freeze(new Set([
 // Where to slot a tab that the stored arrangement has never seen: at its
 // render-order position among the tabs already in the pane, not at the end.
 //
-// Issues, Pose and Animation render only for some files, so appending would park
-// them at the end of a strip carried over from a file that had none — Issues would
-// stop being leftmost (and so stop being the default-active tab), and Pose would
-// land after Display instead of between Reference and Display. Tabs the
+// Pose and Animation render only for some files, so appending would park them at
+// the end of a strip carried over from a file that had none: Pose would land after
+// Display instead of between Reference and Display. Tabs the
 // user has explicitly dragged are already in the arrangement and keep the
 // position they were dropped at; this only places tabs that are not in it yet.
 function renderOrderInsertIndex(pane, id, renderIndex) {
@@ -109,6 +107,35 @@ export function defaultFileSheetTabArrangement(kind, sectionIds) {
     bottom: split ? bottom : [],
     ratio: DEFAULT_FILE_SHEET_SPLIT_RATIO
   };
+}
+
+// Render starts as one Studio-first strip on every entry. The surface keeps any
+// drag/split edits in component state for that Render visit; this arrangement is
+// never part of the durable per-kind CAD layout store.
+export function defaultRenderFileSheetTabArrangement(sectionIds) {
+  return {
+    split: false,
+    top: uniqueStrings(sectionIds),
+    bottom: [],
+    ratio: DEFAULT_FILE_SHEET_SPLIT_RATIO
+  };
+}
+
+export function renderFileSheetTabArrangementForScope(
+  arrangementState,
+  scope,
+  kind,
+  sectionIds
+) {
+  const normalizedScope = normalizeString(scope);
+  const scopedArrangement = arrangementState?.scope === normalizedScope
+    ? arrangementState.arrangement
+    : null;
+  return normalizeFileSheetTabArrangement(
+    scopedArrangement || defaultRenderFileSheetTabArrangement(sectionIds),
+    kind,
+    sectionIds
+  );
 }
 
 // Reconcile a stored arrangement against the sections currently rendered:
@@ -230,9 +257,8 @@ export function setFileSheetTabRatio(arrangement, ratio) {
 }
 
 // Resolve the active tab for a pane from the per-file open list: the last open
-// id that lives in the pane wins, falling back to the pane's leftmost tab. That
-// fallback is why Issues is pinned leftmost — it makes a file's problems the tab
-// you land on without needing a separate "preferred active tab" table.
+// id that lives in the pane wins, falling back to the pane's leftmost tab — so a
+// pane needs no separate "preferred active tab" table.
 function resolveActiveTab(paneTabs, openSectionIds) {
   const open = uniqueStrings(openSectionIds);
   let active = "";

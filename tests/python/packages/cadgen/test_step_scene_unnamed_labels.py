@@ -11,6 +11,7 @@ add_repo_path("packages/cadgen/src")
 from build123d import Box, Compound, Location  # noqa: E402
 
 from cadgen.step_export import build_build123d_step_scene  # noqa: E402
+from cadgen._internal.step_scene_loader import _normalize_label_name  # noqa: E402
 
 
 class UnnamedLabelSceneTests(unittest.TestCase):
@@ -48,6 +49,15 @@ class UnnamedLabelSceneTests(unittest.TestCase):
     def test_single_unnamed_solid_builds(self) -> None:
         scene = self._build(Box(20, 20, 10))
         self.assertIsNotNone(scene)
+
+    def test_vendor_unicode_label_spellings_normalize_to_authored_text(self) -> None:
+        escaped = r"\X2\51F853F0\X0\-\X2\62C94F38\X0\4_1_2_3_4"
+        mojibake = "å\x9c\x86è§\x922_1_2"
+        self.assertEqual(_normalize_label_name(escaped), "凸台-拉伸4_1_2_3_4")
+        self.assertEqual(_normalize_label_name(mojibake), "圆角2_1_2")
+        self.assertEqual(_normalize_label_name(r"\X4\0001F680\X0\ mount"), "🚀 mount")
+        self.assertEqual(_normalize_label_name("café Ã©"), "café Ã©")
+        self.assertEqual(_normalize_label_name("bracket"), "bracket")
 
 
 if __name__ == "__main__":

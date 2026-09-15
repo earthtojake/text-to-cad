@@ -171,12 +171,13 @@ const SURFACE_EVALUATORS = {
     return frameMix(payload, r * Math.cos(u), r * Math.sin(u), v);
   },
   cone(payload, u, v) {
-    const r = payload.radius + v * Math.sin(payload.semiAngle);
+    let r = payload.radius + v * Math.sin(payload.semiAngle);
+    if (Math.abs(r) < (Math.abs(payload.radius) + Math.abs(v)) * Number.EPSILON * 4) r = 0;
     return frameMix(payload, r * Math.cos(u), r * Math.sin(u), v * Math.cos(payload.semiAngle));
   },
   sphere(payload, u, v) {
     const r = payload.radius;
-    const cv = Math.cos(v);
+    const cv = Math.abs(Math.cos(v)) < Number.EPSILON * 4 ? 0 : Math.cos(v);
     return frameMix(payload, r * cv * Math.cos(u), r * cv * Math.sin(u), r * Math.sin(v));
   },
   torus(payload, u, v) {
@@ -226,9 +227,24 @@ function rotateAroundAxis(point, origin, axis, angle) {
   ];
 }
 
-// Central-difference normal; the WGSL kernel mirrors this (exact partials
-// come later per surface kind if goldens demand them).
+// Analytic normals preserve limiting directions at sphere poles and cone
+// apices, and avoid translation-sensitive finite differences. Freeform and
+// swept surfaces use central differences of the same reference evaluator.
 export function evaluateSurfaceNormal(payload, floats, u, v, uvBox, flip) {
+  if (["plane", "cylinder", "cone", "sphere", "torus"].includes(payload.kind)) {
+    const { xdir: x, ydir: y, zdir: z } = payload;
+    const cross = [x[1] * y[2] - x[2] * y[1], x[2] * y[0] - x[0] * y[2], x[0] * y[1] - x[1] * y[0]];
+    const handedness = cross[0] * z[0] + cross[1] * z[1] + cross[2] * z[2] < 0 ? -1 : 1;
+    let nx = 0, ny = 0, nz = 1;
+    if (payload.kind !== "plane") {
+      const latitude = payload.kind === "cone" ? -payload.semiAngle : payload.kind === "cylinder" ? 0 : v;
+      nx = Math.cos(u) * Math.cos(latitude);
+      ny = Math.sin(u) * Math.cos(latitude);
+      nz = Math.sin(latitude);
+    }
+    const sign = (flip ? -1 : 1) * handedness;
+    return [0, 1, 2].map((d) => sign * (nx * x[d] + ny * y[d] + nz * z[d]));
+  }
   const [u0, u1, v0, v1] = uvBox;
   const hu = Math.max((u1 - u0) * 1e-4, 1e-7);
   const hv = Math.max((v1 - v0) * 1e-4, 1e-7);

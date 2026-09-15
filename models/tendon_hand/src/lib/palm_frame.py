@@ -96,7 +96,6 @@ def _finish(pieces,label,bores,blend_nodes):
         raise ValueError(f'{label}: {len(s.solids())} disconnected solids; bounds {[str(b.bounding_box()) for b in s.solids()]}')
     if not s.is_valid or s.volume<=0:raise ValueError(f'{label}: invalid frame')
     s.label=label;s.color=srgb('#a9b7c1')
-    s.cad_material={'roughness':.34,'metalness':.86,'clearcoat':.12}
     return s
 
 
@@ -120,7 +119,6 @@ def make_little_metacarpal(mcp_support_plane=None,label='fifth_metacarpal_cuppin
     nodes += [(36,89,z,5.) for z in mp]
     result=_finish(p,label,bores,nodes)
     result.label=label;result.color=srgb('#a9b7c1')
-    result.cad_material={'roughness':.34,'metalness':.86,'clearcoat':.12}
     return result
 
 
@@ -143,7 +141,6 @@ def make_palm_frame_bodies(mcp_support_plane=None,thumb_support_plane=None):
     for body in bodies:
         aluminum=body.label=='palm_metacarpal_truss' or 'bearing_node' in body.label or 'clamp' in body.label
         body.color=srgb('#a9b7c1' if aluminum else '#d0d8df')
-        body.cad_material={'roughness':.34 if aluminum else .16,'metalness':.86 if aluminum else .98}
     return bodies
 
 

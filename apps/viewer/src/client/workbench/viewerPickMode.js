@@ -1,5 +1,16 @@
 import { VIEWER_PICK_MODE } from "cadgen-js/lib/viewer/constants.js";
 
+export function viewerSelectorRuntimeForRenderPane({
+  renderMode = false,
+  hasTopology = false,
+  retainingPreviousStepMesh = false,
+  selectorRuntime = null
+} = {}) {
+  // Animation evaluates occurrence labels and mesh data. Inspection selectors
+  // would only allocate invisible picking geometry in the photographic scene.
+  return !renderMode && hasTopology && !retainingPreviousStepMesh ? selectorRuntime : null;
+}
+
 // Callers decide whether picking is enabled (parts, topology, or Measure).
 // This helper stays format-agnostic.
 export function viewerPickModeForRenderPane({

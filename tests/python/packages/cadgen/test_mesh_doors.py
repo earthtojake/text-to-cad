@@ -221,8 +221,14 @@ class DoorResults(unittest.TestCase):
                         "skipped": False,
                         "mesh_tolerance": 0.005,
                         "mesh_angular_tolerance": 0.35,
+                        # A clip is GLB's alone, and a static export of any
+                        # format says so rather than omitting the field.
+                        "animation": None,
                     }
                 ],
+                # An animated export's dropped effects land here; a static one
+                # has none, and says so rather than omitting the field.
+                "warnings": [],
             },
             json.loads(out.getvalue()),
         )

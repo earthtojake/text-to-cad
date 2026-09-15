@@ -59,7 +59,7 @@ def guide_end_registry(routes=None):
 def _finish(s,label,color='#9DADB5'):
     if not s.is_valid or len(s.solids())!=1 or s.volume<=0:
         raise ValueError(f'{label}: invalid mount, solids={len(s.solids())}')
-    s.label=label;s.color=srgb(color);s.cad_material={'metalness':.85,'roughness':.28}
+    s.label=label;s.color=srgb(color)
     return s
 
 

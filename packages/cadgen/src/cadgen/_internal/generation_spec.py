@@ -124,6 +124,7 @@ class GeneratedStepResult:
     spec: EntrySpec
     scene: LoadedStepScene | None
     selector_bundle: SelectorBundle | None = None
+    tree: str | None = None
 
 
 def _cli_progress_line(
@@ -305,5 +306,4 @@ def _hint_float(value: object) -> float:
 
 def _hint_int(value: object) -> int:
     return int(_hint_float(value))
-
 

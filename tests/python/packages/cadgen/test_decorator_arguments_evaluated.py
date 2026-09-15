@@ -71,7 +71,7 @@ class DecoratorArgumentsAreEvaluated(unittest.TestCase):
         )
         return completed
 
-    def test_computed_arguments_decide_where_the_files_land(self) -> None:
+    def test_computed_arguments_land_and_tracked_constants_invalidate_them(self) -> None:
         completed = self.run_py("plate.py")
         self.assertEqual(completed.returncode, 0, completed.stderr[-3000:])
         self.assertTrue((self.src / "out" / "plate_rev_b.step").is_file(), completed.stderr[-2000:])
@@ -80,18 +80,6 @@ class DecoratorArgumentsAreEvaluated(unittest.TestCase):
         self.assertEqual(rerun.returncode, 0, rerun.stderr[-3000:])
         self.assertIn("current", rerun.stdout)
 
-    def test_the_metadata_reader_reports_the_evaluated_values(self) -> None:
-        from cadgen.metadata import parse_generator_metadata
-
-        metadata = parse_generator_metadata(self.src / "plate.py")
-        self.assertEqual(metadata.out_target, "out/plate_rev_b.step")
-        self.assertAlmostEqual(metadata.mesh_tolerance, 0.04)
-        (stl_decl,) = metadata.mesh_exports
-        self.assertEqual(stl_decl.out, "out/plate_rev_b.stl")
-        self.assertAlmostEqual(stl_decl.mesh_tolerance, 0.02)
-
-    def test_a_constant_feeding_out_is_a_tracked_input(self) -> None:
-        self.assertEqual(self.run_py("plate.py").returncode, 0)
         dims = self.src / "lib" / "dims.py"
         dims.write_text(DIMS.replace("plate_rev_b", "plate_rev_c"), encoding="utf-8")
         why = subprocess.run(
@@ -103,6 +91,16 @@ class DecoratorArgumentsAreEvaluated(unittest.TestCase):
         rebuilt = self.run_py("plate.py")
         self.assertEqual(rebuilt.returncode, 0, rebuilt.stderr[-3000:])
         self.assertTrue((self.src / "out" / "plate_rev_c.step").is_file())
+
+    def test_the_metadata_reader_reports_the_evaluated_values(self) -> None:
+        from cadgen.metadata import parse_generator_metadata
+
+        metadata = parse_generator_metadata(self.src / "plate.py")
+        self.assertEqual(metadata.out_target, "out/plate_rev_b.step")
+        self.assertAlmostEqual(metadata.mesh_tolerance, 0.04)
+        (stl_decl,) = metadata.mesh_exports
+        self.assertEqual(stl_decl.out, "out/plate_rev_b.stl")
+        self.assertAlmostEqual(stl_decl.mesh_tolerance, 0.02)
 
     def test_a_bad_argument_is_refused_at_import(self) -> None:
         bad = self.src / "bad.py"

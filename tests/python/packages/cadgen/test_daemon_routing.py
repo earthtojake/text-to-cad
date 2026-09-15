@@ -18,11 +18,12 @@ import tempfile
 import threading
 import time
 import unittest
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import nullcontext, redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
 from tests.python.support.paths import REPO_ROOT, add_repo_path
+from tests.python.support.daemon_cleanup import retire_owned_daemon
 from tests.python.support.tmp_root import temporary_directory
 
 add_repo_path("packages/cadgen/src")
@@ -40,12 +41,36 @@ from cadgen import build123d as bd
 
 @step
 def {name}():
-    import time; time.sleep({sleep})
     return bd.Box({size}, 4.0, 2.0)
 
 
 if __name__ == "__main__":
     {name}()
+"""
+
+BLOCKED_PART = """\
+from cadgen import step
+from cadgen import build123d as bd
+
+
+@step
+def blocked():
+    import time
+    from pathlib import Path
+
+    ready = Path(__file__).with_suffix(".ready")
+    release = Path(__file__).with_suffix(".release")
+    ready.touch()
+    deadline = time.monotonic() + 120
+    while not release.exists() and time.monotonic() < deadline:
+        time.sleep(0.02)
+    if not release.exists():
+        raise TimeoutError("test did not release blocked model")
+    return bd.Box(5.0, 4.0, 2.0)
+
+
+if __name__ == "__main__":
+    blocked()
 """
 
 PARENT = """\
@@ -68,8 +93,8 @@ if __name__ == "__main__":
 """
 
 
-def _authkey() -> bytes:
-    key = transport.read_authkey(daemon_client.daemon_identity())
+def _authkey(address: str) -> bytes:
+    key = transport.read_authkey(str(address))
     if not key:
         raise RuntimeError("the daemon has not written its auth key")
     return key
@@ -80,9 +105,7 @@ class DaemonRouting(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.socket_dir = tempfile.TemporaryDirectory(
-            prefix="cadgen-routing-", dir=None if os.name == "nt" else "/tmp", ignore_cleanup_errors=True
-        )
+        cls.socket_dir = tempfile.TemporaryDirectory(prefix="cadgen-routing-", dir=None if os.name == "nt" else "/tmp")
         if os.name == "nt":
             cls.address = rf"\\.\pipe\cadgen-routing-{os.getpid()}"
         else:
@@ -94,14 +117,36 @@ class DaemonRouting(unittest.TestCase):
         cls.src.mkdir()
         cls.stores = {"a": cls.work / "store-a", "b": cls.work / "store-b"}
         for name, size in (("left", 6.0), ("right", 7.0)):
-            (cls.src / f"{name}.py").write_text(PART.format(name=name, sleep=0.0, size=size), encoding="utf-8")
+            (cls.src / f"{name}.py").write_text(PART.format(name=name, size=size), encoding="utf-8")
         (cls.src / "pair.py").write_text(PARENT, encoding="utf-8")
-        (cls.src / "slow.py").write_text(PART.format(name="slow", sleep=4.0, size=5.0), encoding="utf-8")
-        # The daemon's key and progress records live in ITS state dir; this process must
-        # read the same one to authenticate. Kept for the whole class.
-        cls._state_patch = mock.patch.dict(os.environ, {"CADGEN_DAEMON_STATE_DIR": str(cls.work / "state")})
-        cls._state_patch.start()
+        (cls.src / "blocked.py").write_text(BLOCKED_PART, encoding="utf-8")
+        # Concurrent clients must not patch process-global daemon routing independently:
+        # one thread restoring the runner's endpoint can otherwise spawn an unowned
+        # daemon. Keep this class's socket, state and default store invariant throughout.
+        env = {
+            key: value for key, value in os.environ.items()
+            if key not in {"CADGEN_DAEMON_CHILD", "CADGEN_ROOT_ID", "CADGEN_BROKER", "CADGEN_BROKER_KEY", "CADGEN_BROKER_STATS"}
+        }
+        env.update({
+            "CADGEN_DAEMON": "1",
+            "CADGEN_DAEMON_SOCKET": cls.address,
+            "CADGEN_CACHE_DIR": str(cls.stores["a"]),
+            "CADGEN_DAEMON_STATE_DIR": str(cls.work / "state"),
+            "CADGEN_JOBS": "2",
+            # Routing concurrency is the subject here; memory admission has its own
+            # suite. Give these tiny solids stable, bounded test reservations.
+            "CADGEN_MEMORY_MB": "8192",
+            "CADGEN_WORKER_MEMORY_MB": "512",
+            "CADGEN_DEPENDENCY_MEMORY_MB": "512",
+        })
+        cls._env_patch = mock.patch.dict(os.environ, env, clear=True)
+        cls._env_patch.start()
         cls._start_server()
+        cls._spawn_patch = mock.patch.object(
+            daemon_client, "_spawn_daemon",
+            side_effect=AssertionError("routing fixture attempted to spawn a daemon outside its owned server"),
+        )
+        cls._spawn_patch.start()
 
     @classmethod
     def _start_server(cls) -> None:
@@ -122,7 +167,7 @@ class DaemonRouting(unittest.TestCase):
             if cls.server.poll() is not None:
                 raise RuntimeError(f"daemon exited during startup:\n{cls.log_path.read_text(encoding='utf-8')}")
             try:
-                probe = transport.connect(cls.address, _authkey())
+                probe = transport.connect(cls.address, _authkey(cls.address))
             except (OSError, RuntimeError):
                 time.sleep(0.1)
                 continue
@@ -133,59 +178,79 @@ class DaemonRouting(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
         pids = {int(w["pid"]) for w in (cls._status() or {}).get("workers", []) if w.get("pid")}
-        if cls.server is not None and cls.server.poll() is None:
-            cls.server.terminate()
+        retirement_error = None
+        forced = False
+        try:
             try:
-                cls.server.wait(timeout=15)
-            except subprocess.TimeoutExpired:
-                cls.server.kill()
-        for pid in pids:
+                retire_owned_daemon(cls.address)
+            except Exception as error:  # still close every owned process before reporting it
+                retirement_error = error
+                if cls.server is not None and cls.server.poll() is None:
+                    cls.server.terminate()
+                forced = True
+            if cls.server is not None:
+                try:
+                    cls.server.wait(timeout=60 if retirement_error is None else 15)
+                except subprocess.TimeoutExpired:
+                    cls.server.kill()
+                    cls.server.wait(timeout=15)
+                    forced = True
+            if forced:
+                for pid in pids:
+                    try:
+                        os.kill(pid, 9)
+                    except OSError:
+                        pass
+        finally:
             try:
-                os.kill(pid, 9)
-            except OSError:
-                pass
-        cls._state_patch.stop()
-        cls.work_tmp.cleanup()
-        cls.socket_dir.cleanup()
+                try:
+                    cls.work_tmp.cleanup()
+                finally:
+                    cls.socket_dir.cleanup()
+            finally:
+                cls._spawn_patch.stop()
+                cls._env_patch.stop()
+        if retirement_error is not None:
+            raise retirement_error
 
     # --- helpers ------------------------------------------------------------------
 
     @classmethod
-    def _env(cls, store: str = "a") -> dict[str, str]:
-        return {
-            "CADGEN_DAEMON": "1",
-            "CADGEN_DAEMON_SOCKET": cls.address,
-            "CADGEN_CACHE_DIR": str(cls.stores[store]),
-            "CADGEN_DAEMON_STATE_DIR": str(cls.work / "state"),
-        }
-
-    @classmethod
     def _status(cls) -> dict | None:
-        with mock.patch.dict(os.environ, cls._env()):
-            os.environ.pop("CADGEN_DAEMON_CHILD", None)
-            return daemon_client.status()
+        return daemon_client.status()
+
+    def _run(self, script: str, *extra: str, store: str = "a") -> int | None:
+        cache = nullcontext() if store == "a" else mock.patch.dict(
+            os.environ, {"CADGEN_CACHE_DIR": str(self.stores[store])}
+        )
+        with cache:
+            return daemon_client.run_via_daemon(
+                "run", [str(self.src / script), *extra], cwd=str(self.src), prog=f"python {script}"
+            )
 
     def _build(self, script: str, *extra: str, store: str = "a") -> tuple[int | None, str, list[dict]]:
         out, err = io.StringIO(), io.StringIO()
         events: list[dict] = []
         from cadgen.daemon import executors
 
-        with mock.patch.dict(os.environ, self._env(store)):
-            os.environ.pop("CADGEN_DAEMON_CHILD", None)
-            os.environ.pop("CADGEN_ROOT_ID", None)
-            executors.set_event_sink(events.append)
-            try:
-                with redirect_stdout(out), redirect_stderr(err):
-                    code = daemon_client.run_via_daemon(
-                        "run", [str(self.src / script), *extra], cwd=str(self.src), prog=f"python {script}"
-                    )
-            finally:
-                executors.set_event_sink(None)
+        executors.set_event_sink(events.append)
+        try:
+            with redirect_stdout(out), redirect_stderr(err):
+                code = self._run(script, *extra, store=store)
+        finally:
+            executors.set_event_sink(None)
         return code, out.getvalue() + err.getvalue(), events
 
     def _workers_for(self, model: str) -> list[dict]:
         status = self._status() or {}
         return [w for w in status.get("workers", []) if w["model"].endswith(model)]
+
+    def _reset_blocked_model(self) -> tuple[Path, Path]:
+        ready = self.src / "blocked.ready"
+        release = self.src / "blocked.release"
+        ready.unlink(missing_ok=True)
+        release.unlink(missing_ok=True)
+        return ready, release
 
     # --- tests -----------------------------------------------------------------------
 
@@ -206,28 +271,31 @@ class DaemonRouting(unittest.TestCase):
         self.assertNotEqual(left[0]["pid"], right[0]["pid"])
 
     def test_a_busy_model_runs_a_second_request_on_an_extra_without_waiting(self):
-        # Synchronized on OBSERVED state, not the clock: the second request is issued
-        # only once the daemon reports the first one's worker busy on slow.py, so the
-        # only place it can run without waiting is an extra. The status counter
-        # `concurrent` is bumped when an extra is bound to an already-bound model.
+        ready, release = self._reset_blocked_model()
         before = (self._status() or {}).get("concurrent", 0)
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            first = executor.submit(self._build, "slow.py", "--force")
-            deadline = time.monotonic() + 120
-            while time.monotonic() < deadline:
-                if any(w["busy"] for w in self._workers_for("slow.py")):
-                    break
-                self.assertFalse(first.done(), "the first build finished before it was seen busy")
-                time.sleep(0.05)
-            else:
-                self.fail("the first build never went busy on slow.py")
-            second = executor.submit(self._build, "slow.py", "--force")
-            second_code, second_out, _ = second.result(timeout=300)
-            first_code, first_out, _ = first.result(timeout=300)
-        self.assertEqual(first_code, 0, first_out)
-        self.assertEqual(second_code, 0, second_out)
-        status = self._status() or {}
-        self.assertGreater(status.get("concurrent", 0), before, "no extra was bound for the busy model")
+            first = executor.submit(self._run, "blocked.py", "--force")
+            try:
+                deadline = time.monotonic() + 120
+                while not ready.exists() and time.monotonic() < deadline:
+                    self.assertFalse(first.done(), "the first build finished before reaching its barrier")
+                    time.sleep(0.02)
+                self.assertTrue(ready.exists(), "the first build never reached its barrier")
+                second = executor.submit(self._run, "blocked.py", "--force")
+                deadline = time.monotonic() + 120
+                while time.monotonic() < deadline:
+                    status = self._status() or {}
+                    if status.get("concurrent", 0) > before:
+                        break
+                    self.assertFalse(first.done(), "the held build finished before an extra was bound")
+                    time.sleep(0.02)
+                else:
+                    self.fail("no extra was bound for the held model")
+                self.assertFalse(first.done(), "the held build finished before its release")
+            finally:
+                release.touch()
+            self.assertEqual(first.result(timeout=300), 0)
+            self.assertEqual(second.result(timeout=300), 0)
 
     def test_a_parent_submits_children_which_land_on_their_own_workers(self):
         code, output, events = self._build("pair.py", "--force")
@@ -250,7 +318,7 @@ class DaemonRouting(unittest.TestCase):
         self.assertTrue((self.stores["b"] / "index" / "model").is_dir())
 
     def test_status_does_not_trip_the_token_exit(self):
-        channel = transport.connect(self.address, _authkey())
+        channel = transport.connect(self.address, _authkey(self.address))
         try:
             channel.send(json.dumps({"kind": "status", "token": "not-this-daemon"}).encode("utf-8"))
             raw = channel.recv(30.0)
@@ -281,32 +349,60 @@ class DaemonRouting(unittest.TestCase):
     def test_z_token_mismatch_drains_the_job_in_flight_before_exiting(self):
         # Last on purpose: it stops the daemon.
         results: dict = {}
+        ready, release = self._reset_blocked_model()
 
-        def slow() -> None:
-            results["slow"] = self._build("slow.py", "--force")
+        def blocked() -> None:
+            results["blocked"] = self._build("blocked.py", "--force")
 
-        thread = threading.Thread(target=slow)
+        thread = threading.Thread(target=blocked)
         thread.start()
-        deadline = time.monotonic() + 60
-        while time.monotonic() < deadline:
-            if any(w["busy"] for w in self._workers_for("slow.py")):
-                break
-            time.sleep(0.1)
-        else:
-            self.fail("the slow build never went busy")
-        channel = transport.connect(self.address, _authkey())
         try:
-            channel.send(json.dumps({"tool": "run", "argv": ["left.py"], "cwd": str(self.src), "token": "stale"}).encode("utf-8"))
-            raw = channel.recv(30.0)
+            deadline = time.monotonic() + 120
+            while not ready.exists() and time.monotonic() < deadline:
+                self.assertTrue(thread.is_alive(), "the build finished before reaching its barrier")
+                time.sleep(0.02)
+            self.assertTrue(ready.exists(), "the build never reached its barrier")
+            channel = transport.connect(self.address, _authkey(self.address))
+            try:
+                channel.send(json.dumps({"tool": "run", "argv": ["left.py"], "cwd": str(self.src), "token": "stale"}).encode("utf-8"))
+                raw = channel.recv(30.0)
+            finally:
+                channel.close()
+            self.assertEqual(json.loads(raw.decode("utf-8")), {"restart": True})
+
+            # The held job may still need a child or artifact after the runtime edit.
+            # Its dependency request carries the new token because the client computes
+            # that token from the live source tree. The draining daemon must finish it
+            # on the old pool instead of closing the listener under its own root job.
+            dependency = transport.connect(self.address, _authkey(self.address))
+            try:
+                dependency.send(json.dumps({
+                    "tool": "run",
+                    "argv": [str(self.src / "left.py")],
+                    "cwd": str(self.src),
+                    "token": "stale",
+                    "dependency": True,
+                }).encode("utf-8"))
+                frames = []
+                while True:
+                    frame = dependency.recv(30.0)
+                    self.assertTrue(frame, frames)
+                    message = json.loads(frame.decode("utf-8"))
+                    frames.append(message)
+                    if "exit" in message:
+                        break
+            finally:
+                dependency.close()
+            self.assertEqual(frames[-1], {"exit": 0}, frames)
         finally:
-            channel.close()
-        self.assertEqual(json.loads(raw.decode("utf-8")), {"restart": True})
+            release.touch()
         thread.join(timeout=120)
-        code, output, _ = results["slow"]
+        self.assertFalse(thread.is_alive(), "the held build did not drain")
+        code, output, _ = results["blocked"]
         self.assertEqual(code, 0, f"the job in flight was not drained:\n{output}")
         self.server.wait(timeout=60)
         log = self.log_path.read_text(encoding="utf-8")
-        # The slow job plus its worker's slot lease are both request threads in flight.
+        # The blocked job plus its worker's slot lease are both request threads in flight.
         self.assertRegex(log, r"finishing \d+ job\(s\) in flight")
 
 

@@ -36,6 +36,36 @@ const FINE_POINTER_TAP_SLOP_PX = 4;
 const COARSE_POINTER_TAP_SLOP_PX = 12;
 export const VIEWER_DOUBLE_CLICK_ACTIVATION_DELAY_MS = 220;
 
+export function resolveViewerReferencePick({
+  pickMode,
+  suppressTopologyPicking = false,
+  preferTopology = false,
+  intersectModel,
+  pickTopology,
+  pickPart
+}) {
+  // Raycasts can materialize deformation buffers and enqueue a BVH build.
+  // A disabled picker must stop before even preparing those intersections.
+  if (suppressTopologyPicking || pickMode === VIEWER_PICK_MODE.NONE) {
+    return null;
+  }
+  const intersections = intersectModel();
+  if (preferTopology) {
+    const reference = pickTopology(intersections);
+    if (reference) return reference;
+  }
+  if (pickMode === VIEWER_PICK_MODE.PARTS || pickMode === VIEWER_PICK_MODE.ASSEMBLY) {
+    return pickPart(intersections);
+  }
+  if (pickMode === VIEWER_PICK_MODE.AUTO) {
+    return pickTopology(intersections) || pickPart(intersections);
+  }
+  if (pickMode === VIEWER_PICK_MODE.MEASURE) {
+    return pickTopology(intersections);
+  }
+  return null;
+}
+
 function applyColumnMajorMatrix4(point, elements) {
   if (!isFinitePoint(point) || !elements || elements.length < 16) {
     return null;
@@ -890,39 +920,27 @@ export function useViewerPicking({
     }
 
     function pickReferenceAtPosition(clientX, clientY, { hover = false, preferTopology = false } = {}) {
-      if (suppressTopologyPicking) {
-        return null;
-      }
-      setPointerFromPosition(clientX, clientY);
-      const modelIntersections = intersectVisibleModelMeshes();
-      const pickMode = pickModeRef.current;
-      if (preferTopology) {
-        const topologyReference = pickTopologyReference(modelIntersections, clientX, clientY, { hover });
-        if (topologyReference) {
-          return topologyReference;
-        }
-      }
-      if (pickMode === VIEWER_PICK_MODE.PARTS) {
-        return pickPartReferenceFromIntersections(modelIntersections);
-      }
-      if (pickMode === VIEWER_PICK_MODE.ASSEMBLY) {
-        return pickPartReferenceFromIntersections(modelIntersections);
-      }
-      if (pickMode === VIEWER_PICK_MODE.AUTO) {
-        return pickTopologyReference(modelIntersections, clientX, clientY, { hover }) ||
-          pickPartReferenceFromIntersections(modelIntersections);
-      }
-      if (pickMode === VIEWER_PICK_MODE.MEASURE) {
-        return pickTopologyReference(modelIntersections, clientX, clientY, { hover });
-      }
-      return null;
+      return resolveViewerReferencePick({
+        pickMode: pickModeRef.current,
+        suppressTopologyPicking,
+        preferTopology,
+        intersectModel: () => {
+          setPointerFromPosition(clientX, clientY);
+          return intersectVisibleModelMeshes();
+        },
+        pickTopology: (intersections) => pickTopologyReference(intersections, clientX, clientY, { hover }),
+        pickPart: pickPartReferenceFromIntersections
+      });
     }
 
     function pickActivationReference(clientX, clientY, pointerType = "") {
-      if (canHoverWithPointer(pointerType)) {
-        return String(hoverState.hoveredReferenceId || "").trim() || pickReferenceAtPosition(clientX, clientY, { hover: true });
-      }
-      return pickReferenceAtPosition(clientX, clientY);
+      // Activation is infrequent and must resolve the coordinates of this
+      // gesture. The cached hover can belong to a previous point or even the
+      // selector runtime retired by a live scene replacement when pointer-down
+      // arrives before the next hover frame.
+      return String(pickReferenceAtPosition(clientX, clientY, {
+        hover: canHoverWithPointer(pointerType)
+      }) || "").trim();
     }
 
     function isCoarsePointer(pointerType = "") {
@@ -1038,6 +1056,10 @@ export function useViewerPicking({
     }
 
     function scheduleHoverPick(clientX, clientY) {
+      if (suppressTopologyPicking || pickModeRef.current === VIEWER_PICK_MODE.NONE) {
+        clearHoverState();
+        return;
+      }
       hoverState.x = clientX;
       hoverState.y = clientY;
       if (
@@ -1266,11 +1288,11 @@ export function useViewerPicking({
       pointerDown.x = event.clientX;
       pointerDown.y = event.clientY;
       pointerDown.pointerType = event.pointerType || "";
-      pointerDown.referenceId = String(
-        canHoverWithPointer(pointerDown.pointerType)
-          ? (hoverState.hoveredReferenceId || pickReferenceAtPosition(event.clientX, event.clientY, { hover: true }) || "")
-          : (pickReferenceAtPosition(event.clientX, event.clientY) || "")
-      ).trim();
+      // OrbitControls may clear hover before pointer-up; retain the fresh
+      // pointer-down raycast rather than the earlier hover frame.
+      pointerDown.referenceId = pickActivationReference(
+        event.clientX, event.clientY, pointerDown.pointerType,
+      );
     }
 
     function handlePointerUp(event) {
@@ -1376,6 +1398,7 @@ export function useViewerPicking({
     previewMode,
     runtimeRef,
     sceneMountRef,
+    selectorRuntime,
     suppressTopologyPicking,
     viewerReadyTick
   ]);

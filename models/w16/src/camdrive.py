@@ -12,15 +12,16 @@ from cadgen import step
 
 from lib import camdrive as camdrive_lib
 from lib import spec as S
+from lib.palette import material_compound, materials_for_system
 
 
-@step(out="../STEP/camdrive.step",
+@step(out="../STEP/camdrive.step", materials=materials_for_system("camdrive"),
       mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
 def camdrive():
     parts = camdrive_lib.build(S.SECTIONED)
     if not parts:
         raise RuntimeError("camdrive.build() produced no parts")
-    return bd.Compound(children=parts, label="camdrive")
+    return material_compound(parts, "camdrive")
 
 
 if __name__ == "__main__":

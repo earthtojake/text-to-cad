@@ -12,10 +12,9 @@ from lib import materials
 from lib.bracelet import build_bracelet
 
 
-@step(out="../STEP/bracelet.step")
+@step(out="../STEP/bracelet.step", materials=materials.materials_for_model("bracelet"))
 def bracelet():
     compound = build_bracelet()
-    materials.apply(compound)
     return compound
 
 

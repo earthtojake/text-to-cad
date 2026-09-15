@@ -14,8 +14,7 @@ thang010146/
     README.md             #   the model catalog
     gear_rack_gripper.py
   STEP/
-    gear_rack_gripper.step        # generated (gitignored) + its .step.json sidecar
-    gear_rack_gripper.step.js     # the render module beside it: the clip (authored, committed)
+    gear_rack_gripper.step        # generated (gitignored) + its embedded-metadata .step.json sidecar
     imported/
       gear_rack_gripper.step      # the VENDOR document (committed; no code makes it)
   tmp/                    # snapshots and other review renders (gitignored)

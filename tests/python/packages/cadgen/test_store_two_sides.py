@@ -10,7 +10,9 @@ twice and the pin once) built through the real pipeline:
    path AND status), and the mesh ledger find a tree through ``index/document``
    alone; the viewer has no exception;
 3. records are deletable — ``rm -rf index/model index/output`` loses no
-   artifact, and the rebuild re-creates the records without a new object.
+   artifact, and the rebuild re-creates the records without a new object;
+4. copied document bytes reuse the same canonical tree without a producer
+   record, a text STEP parse, or a compile.
 """
 
 from __future__ import annotations
@@ -229,7 +231,7 @@ class TwoSidesLaw(unittest.TestCase):
             verdict = artifact_status.resolve_artifact_verdict(str(self.robot_step), str(self.root))
             self.assertTrue(verdict.get("ok"), verdict)
             self.assertNotIn("generated", verdict)
-            self.assertEqual("rendered", artifact_status.artifact_status(str(self.robot_step), str(self.root))["state"])
+            self.assertEqual("compiled", artifact_status.artifact_status(str(self.robot_step), str(self.root))["state"])
             payload = export_cad_target(self.robot_step, [("stl", out)], repo_root=self.root)
             self.assertTrue(out.is_file(), payload)
             # A second export at the same variant is satisfied by the ARTIFACT-side ledger.
@@ -277,6 +279,44 @@ class TwoSidesLaw(unittest.TestCase):
             self.assertIsNotNone(read_record(self.root / name), f"{name} has no record after the rebuild")
         self.assertEqual(expected, self._document_trees(), "the rebuild changed a tree hash")
         self.assertEqual(objects, self._objects(), "the rebuild wrote new objects")
+
+    def test_property_4_copied_document_reuses_the_byte_addressed_tree(self) -> None:
+        import hashlib
+
+        from cadgen import load_step_scene
+        from cadgen._internal import step_scene_package
+        from cadgen.step_artifact_cli import build_step_artifact
+        from cadgen.store.records import tree_for_document_hash
+
+        copied = self.root / "relocated" / "renamed-robot.step"
+        copied.parent.mkdir()
+        shutil.copyfile(self.robot_step, copied)
+        document_hash = hashlib.sha256(copied.read_bytes()).hexdigest()
+        expected_tree = tree_for_document_hash(document_hash)
+        self.assertEqual(self._document_trees()["robot"], expected_tree)
+
+        # A new path for identical bytes is an artifact-side hit. It neither
+        # needs a producer record nor reparses/compiles the STEP document.
+        with (
+            forbid_record_reads(),
+            mock.patch.object(
+                step_scene_package,
+                "_load_step_scene_text",
+                side_effect=AssertionError("a byte-addressed hit reparsed STEP text"),
+            ),
+            mock.patch(
+                "cadgen.daemon.executors.submit_compile",
+                side_effect=AssertionError("a byte-addressed hit submitted a compile"),
+            ),
+        ):
+            result = build_step_artifact(repo_root=self.root, step=copied)
+            scene = load_step_scene(copied)
+
+        self.assertTrue(result.get("skipped"), result)
+        self.assertEqual(document_hash, scene.step_hash)
+        self.assertTrue(scene.roots)
+        self.assertTrue(scene.prototype_shapes)
+        self.assertEqual(expected_tree, tree_for_document_hash(document_hash))
 
 
 if __name__ == "__main__":

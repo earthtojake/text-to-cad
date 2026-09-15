@@ -1,25 +1,8 @@
-"""The render module beside a document: ``<name>.step.js``.
+"""Inspect animation source embedded in a document-bound STEP sidecar.
 
-A STEP document may carry, beside it and its sidecar, ONE JavaScript module the
-renderer loads by name — ``part.step`` -> ``part.step.js``. It is authored (and
-committed), never generated, and no build reads it: choreography is a render-
-only concern, so an edit is a reload in the viewer, never a rebuild. Today the
-module's one export is ``clips`` (see the cad skill's kinematics reference);
-future render-only exports live in the same file.
-
-The Python side only needs two things from it: WHERE it is (this module's path
-helpers, shared by the snapshot door and the viewer's catalog) and, for a
-snapshot's ``--animation CLIP``, WHICH clip ids it declares — read WITHOUT
-running it, so a typo'd clip name fails as a clean CLI error naming the clips
-the model has, the way a typo'd pose name fails against the declared poses. The
-reader collects the top-level keys of ``export const clips = { id: {...} }``,
-skipping over nested braces, strings, template literals and comments.
-
-That reader is a PRE-FLIGHT, not a parser: a module that builds its clips some
-other way (``export const clips = build()``) yields ``None``, and the runtime's
-own check — which has the compiled clips in hand — is the authority that
-refuses the name with the declared set. The two never disagree on a literal,
-because the runtime's ids are exactly these keys.
+Python only reads the source and preflights literal clip names; the shared
+JavaScript runtime compiles and evaluates the module. No adjacent JS file is
+searched or loaded. Dynamic clip definitions are validated by that runtime.
 """
 
 from __future__ import annotations
@@ -27,29 +10,14 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-# APPENDED to the document's whole name, so the trio sorts and reads together:
-# `part.step`, `part.step.js`, `part.step.json`. Match the pair of suffixes,
-# never `.js` alone — a loose script beside a model is not a render module.
-RENDER_MODULE_SUFFIX = ".js"
-RENDER_MODULE_NAMES = (".step.js", ".stp.js")
 
+def read_animation_source(document: Path | str, *, document_hash: str | None = None) -> str | None:
+    """Read the animation from the validated sidecar of the selected STEP."""
+    from cadgen._internal.source_sidecar import read_source_sidecar
 
-def render_module_path(document: Path | str) -> Path:
-    """``part.step`` -> ``part.step.js``, beside the document."""
-    document = Path(document)
-    return document.with_name(document.name + RENDER_MODULE_SUFFIX)
-
-
-def is_render_module_name(name: str) -> bool:
-    return str(name or "").lower().endswith(RENDER_MODULE_NAMES)
-
-
-def read_render_module_text(document: Path | str) -> str | None:
-    """The module's text, or ``None`` when the document has no render module."""
-    path = render_module_path(document)
-    if not path.is_file():
-        return None
-    return path.read_text(encoding="utf-8")
+    sidecar = read_source_sidecar(document, document_hash=document_hash) or {}
+    animation = sidecar.get("animation")
+    return animation["source"] if animation is not None else None
 
 
 _CLIPS_DECLARATION = re.compile(r"\bexport\s+const\s+clips\s*=\s*\{")

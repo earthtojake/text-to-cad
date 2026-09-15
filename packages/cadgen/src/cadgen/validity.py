@@ -26,9 +26,10 @@ Two things this deliberately does *not* do:
 Scale is the other half of the design. An assembly places the same bolt a
 hundred times, and every placed occurrence is ``prototype.Moved(location)`` --
 one TShape, many locations. Topology, closure, solid presence and volume are
-properties of the TShape, so they are checked ONCE per prototype and the
-finding is reported against every occurrence that shares it. The
-self-intersection test is different: ``BRepAlgoAPI_Check`` is numeric, and the
+properties of the TShape, so they are checked ONCE per prototype, in the
+prototype's OWN frame (a scaled or mirrored location would otherwise libel a
+sound body -- see ``_in_own_frame``), and the finding is reported against every
+occurrence that shares it. The self-intersection test is different: ``BRepAlgoAPI_Check`` is numeric, and the
 same bolt has been seen to self-intersect at 15 and 30 degrees of tilt and
 pass at 45 and upright. By default it runs once per prototype, at the
 prototype's FIRST placement, and the report says so; ``every_placement`` runs
@@ -146,6 +147,27 @@ def _is_self_intersecting(wrapped: Any) -> bool | None:
         return None
 
 
+def _in_own_frame(wrapped: Any) -> Any:
+    """The shape with its top-level location dropped.
+
+    Topology, closure and volume are properties of the TShape, and the checks
+    below say so -- but a location can be non-rigid, and then reading them off
+    the PLACED copy libels a sound body. A location carrying a scale factor
+    leaves the geometry's tolerances behind, so ``BRepCheck_Analyzer`` calls the
+    placed shape invalidTopology; a mirror (negative determinant) flips the
+    signed volume, so a good solid reports nonPositiveVolume (PR #370 bug record 021). The
+    body is what is being checked, so it is checked in its own frame. Child
+    locations stay -- they are part of the prototype, same as in
+    ``_shape_brep_bytes``.
+    """
+    from OCP.TopLoc import TopLoc_Location
+
+    try:
+        return wrapped.Located(TopLoc_Location())
+    except Exception:  # noqa: BLE001 - not a TopoDS_Shape; check it as handed over
+        return wrapped
+
+
 def check_occurrence_shape(
     wrapped: Any,
     *,
@@ -161,11 +183,14 @@ def check_occurrence_shape(
     from OCP.BRepCheck import BRepCheck_Analyzer
 
     reasons: list[str] = []
+    # Self-intersection is the one numeric test and stays on the PLACED copy;
+    # everything else reads the body in its own frame (see _in_own_frame).
+    body = _in_own_frame(wrapped)
 
-    if not BRepCheck_Analyzer(wrapped, True).IsValid():
+    if not BRepCheck_Analyzer(body, True).IsValid():
         reasons.append(REASON_INVALID_TOPOLOGY)
 
-    solids = _solids(wrapped)
+    solids = _solids(body)
     volumes = [_signed_volume(solid) for solid in solids]
 
     if solids and any(volume <= min_volume for volume in volumes):
@@ -177,7 +202,7 @@ def check_occurrence_shape(
         # `allow_open` means "surface geometry is intended here", so it
         # suppresses both the open-shell and the no-solid findings. Reporting
         # noSolid while honouring allow_open would make the flag useless.
-        shells = _shells(wrapped)
+        shells = _shells(body)
         if shells and any(_has_free_edges(shell) for shell in shells):
             reasons.append(REASON_OPEN_SHELL)
         if not solids:

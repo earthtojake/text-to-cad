@@ -12,15 +12,16 @@ from cadgen import step
 
 from lib import oil_system as oil_system_lib
 from lib import spec as S
+from lib.palette import material_compound, materials_for_system
 
 
-@step(out="../STEP/oil_system.step",
+@step(out="../STEP/oil_system.step", materials=materials_for_system("oil_system"),
       mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
 def oil_system():
     parts = oil_system_lib.build(S.SECTIONED)
     if not parts:
         raise RuntimeError("oil_system.build() produced no parts")
-    return bd.Compound(children=parts, label="oil_system")
+    return material_compound(parts, "oil_system")
 
 
 if __name__ == "__main__":

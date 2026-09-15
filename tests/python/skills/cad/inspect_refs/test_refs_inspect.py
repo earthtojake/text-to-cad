@@ -353,6 +353,7 @@ class InspectRefsSyntaxTests(unittest.TestCase):
 
 class InspectRefsTests(unittest.TestCase):
     def setUp(self) -> None:
+        self.enterContext(mock.patch.dict("os.environ", {"CADGEN_DAEMON": "0"}))
         self._isolated_roots = IsolatedCadRoots(self, prefix="refs-inspect-")
         tempdir = self._isolated_roots.temporary_cad_directory(prefix="tmp-refs-inspect-")
         self._tempdir = tempdir
@@ -379,8 +380,8 @@ class InspectRefsTests(unittest.TestCase):
     ):
         """Serve `manifest` as the entry's topology artifact.
 
-        Mocks at the one live boundary — ``ensure_step_topology_artifact`` —
-        which in production returns the assembly.json with a
+        Mocks the geometry-summary and selector-artifact read boundaries.
+        The selector artifact in production returns assembly.json with an
         assembly.json-backed selector bundle (selector rows composed on demand
         from the per-component .surf files). Everything below that boundary
         (grammar, lookup, measure, align) runs for real.
@@ -425,6 +426,9 @@ class InspectRefsTests(unittest.TestCase):
             stack.enter_context(
                 mock.patch("cadgen.step_topology_artifact.ensure_step_topology_artifact", side_effect=fake_ensure)
             )
+            stack.enter_context(
+                mock.patch.object(refs_inspect, "_load_summary_manifest", return_value=topology_manifest)
+            )
             yield
 
     def _manifest_path(self, path: Path) -> str:
@@ -434,7 +438,7 @@ class InspectRefsTests(unittest.TestCase):
         except ValueError:
             return resolved.as_posix()
 
-    def test_whole_entry_summary_uses_glb_index(self) -> None:
+    def test_whole_entry_summary_uses_geometry_metadata(self) -> None:
         with self._mock_glb_topology(_summary_manifest(self.cad_ref), include_selector=False):
             result = refs_inspect.inspect_cad_refs(self.cad_ref)
 

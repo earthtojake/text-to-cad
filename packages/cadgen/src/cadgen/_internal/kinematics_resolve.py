@@ -138,6 +138,53 @@ def _occurrence_id_for_ref(
     )
 
 
+def remap_document_kinematics(
+    block: Mapping[str, Any],
+    occurrence_map: Mapping[str, list[str]],
+    document_node_map: Mapping[str, str],
+    document_tree: str,
+) -> dict[str, Any]:
+    """Bind resolved authored mates to their verified canonical product nodes.
+
+    Axes are already world-space numbers. Structural correspondence supplies
+    the exact written product; its canonical descendant set must still equal
+    the independently recorded authored leaf set. This preserves nested
+    single-child groups, which leaf sets alone cannot distinguish.
+    """
+    from cadgen.store.trees import flatten
+
+    descriptor = flatten(document_tree)
+    if descriptor is None:
+        raise FileNotFoundError(f"document tree missing: {document_tree}")
+    leaves = {str(item["id"]) for item in descriptor.get("occurrences") or []}
+    node_leaves: dict[str, frozenset[str]] = {}
+
+    def visit(node):
+        node_id = str(node.get("id") or "")
+        members = {node_id} if node_id in leaves else set()
+        for child in node.get("children") or []:
+            members.update(visit(child))
+        if node_id:
+            node_leaves[node_id] = frozenset(members)
+        return members
+
+    visit((descriptor.get("assembly") or {}).get("root") or {})
+    resolved = copy.deepcopy(dict(block))
+    for mate in resolved.get("mates") or []:
+        for key in ("parentId", "childId"):
+            authored_id = str(mate.get(key) or "")
+            members = frozenset(occurrence_map.get(authored_id) or [])
+            document_id = str(document_node_map.get(authored_id) or "")
+            if not members or document_id not in node_leaves:
+                raise ValueError(f"mate {mate.get('name')}: {key} {authored_id} has no exact document subtree")
+            if node_leaves[document_id] != members:
+                raise ValueError(
+                    f"mate {mate.get('name')}: {key} {authored_id} document subtree does not match its exact leaves"
+                )
+            mate[key] = document_id
+    return resolved
+
+
 def resolve_kinematics_block(
     block: Mapping[str, Any], *, package_dir: Path, step_path: Path, source_ref: str
 ) -> tuple[dict[str, Any], dict[str, str]]:

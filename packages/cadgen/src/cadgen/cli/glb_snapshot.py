@@ -9,9 +9,9 @@ is declared once, beside the verb, in
 
 The mesh half of ``cadgen step snapshot``, re-homed: GLB is a format with a
 door (``cadgen glb build``), so its snapshot belongs behind the same door. Its
-verb is the MESH shape — no display, kinematics, section mode or selection — so
-the options a mesh cannot act on are absent from ``--help`` rather than
-advertised and refused at runtime.
+verb is the MESH shape — normal-CAD display settings, but no kinematics,
+section mode or selection. ``--display`` accepts mesh-neutral modes; options
+that require CAD topology are absent from ``--help``.
 """
 
 from __future__ import annotations

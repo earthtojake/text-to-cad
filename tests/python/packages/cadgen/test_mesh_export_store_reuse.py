@@ -4,12 +4,10 @@ The export fast path, exercised through the `cadgen stl|3mf|glb build` doors.
 Doors take DOCUMENTS (design/pose-animation-split.md, CLI/doors follow-on), so
 there are exactly two shapes to cover:
 
-* A document whose package is current exports straight from it — no generator
-  run, no extraction, no source read at all. Its DECLARED variants come from
-  the sidecar the script run wrote.
-* A document whose sidecar closure no longer re-hashes is STALE, and the door
-  says so by naming `python <script>` instead of rebuilding. A render or an
-  export must never contain a build.
+* A generated document whose package is current exports straight from it — no
+  generator run, no extraction, no source read at all.
+* Editing its source does not change the saved document. The door continues to
+  export those exact bytes and never contains a model rebuild.
 
 A document with no package at all (an import) compiles one into the shared
 store on first use, and every later export reuses it.
@@ -38,11 +36,8 @@ def _write_model(root: Path, size: float) -> Path:
     entry.write_text(textwrap.dedent(f"""\
         SIZE = {size}
 
-        from cadgen import glb, step, stl, threemf
+        from cadgen import step
         @step
-        @stl
-        @glb
-        @threemf
         def model():
             from build123d.topology import Solid
             block = Solid.make_box(SIZE, SIZE, SIZE)
@@ -97,7 +92,7 @@ class MeshExportStoreReuseTest(unittest.TestCase):
             return set()
         return {p.name for p in records.iterdir() if p.is_file()}
 
-    def test_a_current_document_exports_from_its_store_package(self) -> None:
+    def test_a_generated_document_exports_current_and_after_source_edit(self) -> None:
         entry = _write_model(self.root, size=6.0)
         build = self._run([entry.name], self.root)
         self.assertEqual(build.returncode, 0, build.stdout + build.stderr)
@@ -116,13 +111,9 @@ class MeshExportStoreReuseTest(unittest.TestCase):
             self.assertNotIn("load STEP", current.stderr)
             self.assertTrue(step_file.with_suffix(f".{fmt}").is_file(), fmt)
 
-    def test_a_stale_document_is_read_as_written_by_the_door(self) -> None:
         # A door asks one question -- does the store have a tree for this file's
         # bytes? -- and never runs the script. The source moving on is the model's
         # business: the door reads the document as written and rebuilds nothing.
-        entry = _write_model(self.root, size=6.0)
-        self.assertEqual(0, self._run([entry.name], self.root).returncode)
-        step_file = self.root / "block.step"
         step_before = step_file.read_bytes()
         stl_before = step_file.with_suffix(".stl").read_bytes()
 
@@ -135,7 +126,7 @@ class MeshExportStoreReuseTest(unittest.TestCase):
         self.assertEqual(step_before, step_file.read_bytes())
         self.assertEqual(stl_before, step_file.with_suffix(".stl").read_bytes())
 
-    def test_a_bare_door_writes_the_sibling_mesh(self) -> None:
+    def test_an_imported_document_writes_defaults_then_reuses_one_compilation(self) -> None:
         # A door reads no declarations: a bare door tessellates the document's
         # tree and writes ONE mesh beside it — imported or generated alike.
         entry = _write_model(self.root, size=6.0)
@@ -144,21 +135,17 @@ class MeshExportStoreReuseTest(unittest.TestCase):
         imported.write_bytes((self.root / "block.step").read_bytes() + b"\n")
         self.assertFalse(imported.with_suffix(".step.json").exists(), "an import has no sidecar")
 
+        before = self._package_dirs()
         bare = self._export("stl", "imported_block.step")
         self.assertTrue(imported.with_suffix(".stl").is_file(), bare.stderr)
         self.assertIn("wrote STL", bare.stdout + bare.stderr)
-
-    def test_an_imported_document_compiles_once_then_reuses(self) -> None:
-        entry = _write_model(self.root, size=6.0)
-        self.assertEqual(0, self._run([entry.name], self.root).returncode)
-        imported = self.root / "imported_block.step"
-        imported.write_bytes((self.root / "block.step").read_bytes() + b"\n")
-
-        before = self._package_dirs()
-        self._export("glb", "imported_block.step", "out/imported.glb")
-        self.assertTrue((self.root / "out/imported.glb").is_file())
         after_first = self._package_dirs()
         self.assertEqual(len(after_first - before), 1, "one store package built by export")
+
+        glb = self._export("glb", "imported_block.step", "out/imported.glb")
+        self.assertTrue((self.root / "out/imported.glb").is_file())
+        self.assertEqual(self._package_dirs(), after_first, "cross-format export builds nothing")
+        self.assertNotIn("extract exact geometry", glb.stderr)
         again = self._export("stl", "imported_block.step", "out/imported.stl")
         self.assertEqual(self._package_dirs(), after_first, "second export builds nothing")
         self.assertNotIn("extract exact geometry", again.stderr)

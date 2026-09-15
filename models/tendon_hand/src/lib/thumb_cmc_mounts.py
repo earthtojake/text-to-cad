@@ -77,7 +77,6 @@ def _parts_finish(lower,upper,extras,host,cutters,label):
  parts=[_finish(lower,label+'_structural_jaw'),_finish(upper,label+'_scalloped_cap')]
  for p in extras:
   q=_finish(p,p.label or label+'_host_cap','#d0d8df' if 'screw' in p.label else '#9DADB5')
-  if 'screw' in p.label:q.cad_material={'metalness':.98,'roughness':.14}
   parts.append(q)
  return parts
 

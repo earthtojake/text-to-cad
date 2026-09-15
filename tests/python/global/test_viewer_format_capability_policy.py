@@ -28,7 +28,7 @@ CLIENT_ROOT = REPO_ROOT / "apps" / "viewer" / "src" / "client"
 
 # Every remaining identity check is a unification candidate. Lower these as phases land;
 # never raise them.
-MAX_RENDER_FORMAT_CHECKS = 34
+MAX_RENDER_FORMAT_CHECKS = 18
 MAX_FORMAT_PREDICATE_CALLS = 3
 
 # Files allowed to know about concrete formats, because deciding *which* format an entry

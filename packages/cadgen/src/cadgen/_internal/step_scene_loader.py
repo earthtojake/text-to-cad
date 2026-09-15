@@ -4,9 +4,11 @@ import contextlib
 from functools import lru_cache
 import os
 from pathlib import Path
+import re
 import sys
 import time
 from typing import Any, Iterator
+import unicodedata
 
 from OCP.BinXCAFDrivers import BinXCAFDrivers
 from OCP.IFSelect import IFSelect_RetDone
@@ -135,10 +137,51 @@ def _xcaf_children(shape_tool: Any, label: object) -> list[object]:
     return []
 
 
+_STEP_UNICODE_ESCAPE = re.compile(r"\\X([24])\\([0-9A-Fa-f]+)\\X0\\")
+
+
+def _decode_step_unicode_escapes(text: str) -> str:
+    """Decode Part 21 ``\\X2\\``/``\\X4\\`` product-name escapes.
+
+    Some vendor files leave these escape sequences in XCAF labels while a
+    cadgen write/read returns the decoded Unicode spelling.  They are the same
+    authored name and must compare as such during strict correspondence.
+    """
+    def replace(match: re.Match[str]) -> str:
+        digits = match.group(2)
+        unit = 4 if match.group(1) == "2" else 8
+        if len(digits) % unit:
+            return match.group(0)
+        try:
+            codec = "utf-16-be" if unit == 4 else "utf-32-be"
+            return bytes.fromhex(digits).decode(codec)
+        except (UnicodeDecodeError, ValueError):
+            return match.group(0)
+
+    return _STEP_UNICODE_ESCAPE.sub(replace, text)
+
+
+def _repair_utf8_mojibake(text: str) -> str:
+    """Undo OCCT's UTF-8-bytes-as-Latin-1 product-name decode when provable."""
+    # The failing OCCT spelling contains the UTF-8 continuation bytes as C1
+    # controls (U+0080..U+009F).  Require that impossible-in-a-normal-product-
+    # label evidence before attempting a repair, so an intentionally authored
+    # Latin-1-looking Unicode name is never silently changed.
+    if not any("\x80" <= char <= "\x9f" for char in text):
+        return text
+    try:
+        repaired = text.encode("latin-1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return text
+    return repaired
+
+
 def _normalize_label_name(raw_name: object) -> str | None:
     if raw_name is None:
         return None
-    text = " ".join(str(raw_name).split())
+    text = _decode_step_unicode_escapes(str(raw_name))
+    text = unicodedata.normalize("NFC", _repair_utf8_mojibake(text))
+    text = " ".join(text.split())
     if not text:
         return None
     lowered = text.lower()
@@ -220,8 +263,12 @@ def _color_from_shape(color_tool: Any, shape: object) -> ColorRGBA | None:
 def _face_color_map_from_label(shape_tool: Any, color_tool: Any, label: object) -> dict[int, ColorRGBA]:
     face_colors: dict[int, ColorRGBA] = {}
 
-    def collect(colored_label: object) -> None:
-        label_color = _color_from_label(color_tool, colored_label)
+    def collect(colored_label: object, *, include_label: bool = True) -> None:
+        # A whole-part definition color is already carried as the occurrence's
+        # color. Baking it into every face would make otherwise identical
+        # geometry use a different component content hash for each instance
+        # color. Only sub-shape labels are intrinsic face-color overrides.
+        label_color = _color_from_label(color_tool, colored_label) if include_label else None
         if label_color is not None:
             try:
                 shape = shape_tool.GetShape_s(colored_label)
@@ -237,7 +284,7 @@ def _face_color_map_from_label(shape_tool: Any, color_tool: Any, label: object) 
             collect(iterator.Value())
             iterator.Next()
 
-    collect(label)
+    collect(label, include_label=False)
     return face_colors
 
 
@@ -448,35 +495,43 @@ def _load_fallback_occurrence_tree(
     shape = reader.OneShape()
     if shape.IsNull():
         raise RuntimeError(f"STEP file produced no shape: {step_path}")
-    prototype_key = _shape_hash(shape)
+    # The fallback has no product names. Its representation must still depend
+    # only on the bytes, not on the current filename of a copied document.
+    location = _shape_location(shape)
+    transform = _location_transform_matrix(location)
+    prototype = _unlocated_shape(shape)
+    prototype_key = _shape_hash(prototype)
     return (
         [
             OccurrenceNode(
                 path=(1,),
-                name=step_path.stem,
-                source_name=step_path.stem,
-                transform=_identity_transform_matrix(),
+                name="model",
+                source_name="model",
+                transform=transform,
                 prototype_key=prototype_key,
-                local_transform=_identity_transform_matrix(),
-                location=None,
+                local_transform=transform,
+                location=location,
             )
         ],
-        {prototype_key: shape},
-        {prototype_key: step_path.stem},
+        {prototype_key: prototype},
+        {prototype_key: "model"},
         {},
         {},
     )
 
 
-def load_step_scene(step_path: Path) -> LoadedStepScene:
+def load_step_scene(step_path: Path, *, record_read: bool = True) -> LoadedStepScene:
     resolved_step_path = step_path.expanduser().resolve()
     if not resolved_step_path.exists():
         raise FileNotFoundError(f"STEP file does not exist: {resolved_step_path}")
-    # OCCT reads the file in C++, invisible to Python audit events; report it
-    # to any active closure recording so imported STEP data is a freshness input.
-    from cadgen._internal.scope_capture import note_scope_read
+    if record_read:
+        # OCCT reads the file in C++, invisible to Python audit events; report it
+        # to any active closure recording so imported STEP data is a freshness
+        # input. A build re-reading the STEP it just WROTE passes False: its own
+        # output is not its input.
+        from cadgen._internal.scope_capture import note_scope_read
 
-    note_scope_read(resolved_step_path)
+        note_scope_read(resolved_step_path)
     load_started = time.perf_counter()
     (
         roots,
@@ -517,5 +572,3 @@ def _relative_path_from_directory(path: Path, base_dir: Path) -> str:
 
 def _step_hash(step_path: Path) -> str:
     return step_file_hash(step_path)
-
-

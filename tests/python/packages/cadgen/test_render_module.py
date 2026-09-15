@@ -1,12 +1,4 @@
-"""cadgen._internal.render_module: the render module beside a document.
-
-`part.step` -> `part.step.js`, authored beside the document and loaded by name;
-no build reads it. The snapshot CLI refuses a typo'd `--animation` clip with the
-clips the module declares: this reader collects the top-level keys of the
-contract's declaration form (`export const clips = { id: {...} }`) without
-executing anything; a module that builds its clips some other way yields None,
-deferring to the runtime.
-"""
+"""Embedded animation source and literal clip-name preflight."""
 
 from __future__ import annotations
 
@@ -18,42 +10,33 @@ add_repo_path("packages/cadgen/src")
 
 from cadgen._internal.render_module import (  # noqa: E402
     declared_clip_ids,
-    is_render_module_name,
-    read_render_module_text,
-    render_module_path,
+    read_animation_source,
 )
 
 
-class RenderModulePathTests(unittest.TestCase):
-    def test_the_module_is_the_documents_whole_name_plus_js(self) -> None:
-        from pathlib import Path
-
-        self.assertEqual(Path("/m/STEP/arm.step.js"), render_module_path("/m/STEP/arm.step"))
-        self.assertEqual(Path("/m/arm.STP.js"), render_module_path(Path("/m/arm.STP")))
-
-    def test_only_the_full_pair_of_suffixes_is_a_render_module(self) -> None:
-        self.assertTrue(is_render_module_name("arm.step.js"))
-        self.assertTrue(is_render_module_name("ARM.STP.JS"))
-        self.assertFalse(is_render_module_name("arm.js"))
-        self.assertFalse(is_render_module_name("arm.anim.js"))
-        self.assertFalse(is_render_module_name("arm.step.json"))
-
-    def test_a_document_without_a_module_reads_none(self) -> None:
+class AnimationSidecarTests(unittest.TestCase):
+    def test_reads_bound_animation_and_ignores_adjacent_javascript(self):
         import tempfile
         from pathlib import Path
+        from cadgen._internal.source_sidecar import write_source_sidecar, SidecarBindingError
 
         with tempfile.TemporaryDirectory() as tmp:
             document = Path(tmp) / "arm.step"
             document.write_text("ISO-10303-21;", encoding="utf-8")
-            self.assertIsNone(read_render_module_text(document))
-            render_module_path(document).write_text("export const clips = {};", encoding="utf-8")
-            self.assertEqual("export const clips = {};", read_render_module_text(document))
+            document.with_suffix(".step.js").write_text("export const clips = {};", encoding="utf-8")
+            self.assertIsNone(read_animation_source(document))
+            source = "export const clips = { spin: {duration: 2, update(t,m) {}} };"
+            write_source_sidecar(document, {"animation": {"language": "javascript", "source": source}})
+            self.assertEqual(source, read_animation_source(document))
+            document.write_text("different document", encoding="utf-8")
+            with self.assertRaises(SidecarBindingError):
+                read_animation_source(document)
 
 
 class DeclaredClipIdsTests(unittest.TestCase):
     def test_reads_the_contract_form_in_declaration_order(self) -> None:
         text = """
-        // arm.anim.js
+        // embedded source
         export const clips = {
           demo: { label: "Demo", duration: 8, loop: true, update(t, m) { m.get("forearm").rotate([0, 0, 1], t); } },
           teardown: { duration: 5, update: (t, m) => { m.get("lid").opacity(1 - t / 5); } },

@@ -375,6 +375,16 @@ def _load_step_context(
     *,
     profile: SelectorProfile,
 ) -> EntryContext:
+    if profile == SelectorProfile.SUMMARY:
+        manifest = _load_summary_manifest(target)
+        return EntryContext(
+            cad_path=target.cad_path,
+            kind=_entry_kind_from_manifest(manifest, fallback="part"),
+            source_path=target.source_path,
+            step_path=target.step_path,
+            manifest=manifest,
+            selector_index=None,
+        )
     from cadgen.step_topology_artifact import ensure_step_topology_artifact
 
     artifact = ensure_step_topology_artifact(
@@ -406,6 +416,26 @@ def _load_step_context(
         manifest=manifest,
         selector_index=selector_index,
     )
+
+
+def _load_summary_manifest(target: ResolvedStepTarget) -> dict[str, object]:
+    """Whole-entry summaries consume geometry metadata, never display surfaces."""
+    from cadgen._internal.doors import CompileFailed, document_tree
+    from cadgen.step_targets import StepTopologyArtifactError
+    from cadgen.store.trees import capture_tree
+
+    try:
+        manifest, _ = capture_tree(document_tree(target.step_path), retain_payloads=False)
+        return manifest
+    except Exception as exc:
+        # Preserve the inspection door's existing structured failure and the
+        # compile's own explanation, without constructing a display view.
+        said = str(exc) if isinstance(exc, CompileFailed) else f"reading geometry for {target.cad_path} failed: {exc}"
+        raise StepTopologyArtifactError(
+            code="glb_regeneration_failed", cad_path=target.cad_path,
+            step_path=target.step_path, artifact_path=target.step_path,
+            message=said,
+        ) from exc
 
 
 def _entry_kind_from_manifest(manifest: dict[str, object], *, fallback: str) -> str:

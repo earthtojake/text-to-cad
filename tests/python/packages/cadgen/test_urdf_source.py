@@ -1,7 +1,8 @@
-import tempfile
 import unittest
 import warnings
 from pathlib import Path
+
+from tests.python.support.tmp_root import generated_cad_directory
 
 from cadgen.urdf_source import (
     MeshUriKind,
@@ -15,14 +16,14 @@ from cadgen.urdf_source import (
 
 class UrdfSourceTests(unittest.TestCase):
     def setUp(self) -> None:
-        self._tempdir = tempfile.TemporaryDirectory(prefix="tmp-urdf-source-")
+        self._tempdir = generated_cad_directory(prefix="tmp-urdf-source-")
         self.temp_root = Path(self._tempdir.name)
 
     def tearDown(self) -> None:
         self._tempdir.cleanup()
 
-    def _file_ref(self, name: str) -> str:
-        return (self.temp_root / f"{name}.urdf").resolve().as_posix()
+    def _file_ref(self, name: str) -> Path:
+        return (self.temp_root / f"{name}.urdf").resolve()
 
     def _write_mesh(self, name: str) -> Path:
         mesh_path = self.temp_root / name if Path(name).suffix else self.temp_root / f"{name}.stl"
@@ -54,7 +55,7 @@ class UrdfSourceTests(unittest.TestCase):
 
         source = read_urdf_source(source_path)
 
-        self.assertEqual(self._file_ref("robot"), source.file_ref)
+        self.assertEqual(self._file_ref("robot"), Path(source.file_ref).resolve())
         self.assertEqual("sample-robot", source.robot_name)
         self.assertEqual("base_link", source.root_link)
         self.assertEqual(("base_link",), source.links)
@@ -648,7 +649,7 @@ class UrdfSourceTests(unittest.TestCase):
 
         source = read_urdf_source(source_path)
 
-        self.assertEqual(source_path.resolve().as_posix(), source.file_ref)
+        self.assertEqual(source_path.resolve(), Path(source.file_ref).resolve())
 
 
 if __name__ == "__main__":

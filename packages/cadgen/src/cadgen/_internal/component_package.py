@@ -1,18 +1,19 @@
-"""Component extraction helpers and the view-directory assembly.json reader.
+"""Component serialization, intrinsic appearance and extraction helpers.
 
-A model's result is a TREE in the store (``cadgen.store.build`` emits it):
-one content-addressed component per unique part (exact ``.brep`` + ``.surf``
-render bytes) plus occurrences -> component + world transform. This module
-holds the per-component extraction (content hashing, surf/brep workers, the
-worker pool) that build uses, and the assembly.json reader consumers apply to a
-VIEW directory (``cadgen.store.view``) when they need the tree shape.
+Canonical geometry inputs contain exact encoded BREP and effective face-color
+recipes. Disposable surfaces are derived by ``cadgen.store.surfaces`` under a
+separately attested producer. Native imports remain local to operations.
 """
 
 from __future__ import annotations
 
 import contextlib
+import copy
+import io
+import struct
 import hashlib
 import json
+import math
 import os
 import time
 from pathlib import Path
@@ -27,11 +28,6 @@ from cadgen.coordination import (
     resolve as resolve_progress,
 )
 PACKAGE_KIND = "assembly-package"
-# Self-contained content-addressed packages: each model's components live INSIDE its own package
-# at <store>/packages/<stepHash>-v<N>/components/<geomHash>.glb, referenced by the
-# assembly.json via the flat relative ref components/<geomHash>.glb. Within-model dedup (repeated
-# parts share one cid) is preserved; components are not shared ACROSS packages, so each
-# view directory is a complete, relocatable unit.
 COMPONENT_DIRNAME = "components"
 DESCRIPTOR_NAME = "assembly.json"
 # Source-provenance keys stripped from a component GLB's embedded STEP_TOPOLOGY so the
@@ -75,48 +71,52 @@ def read_package_descriptor(path: Path) -> dict[str, Any] | None:
 
 
 def _component_id(source_hash: str) -> str:
-    # The cid is the first 64 bits of the content hash, not an accident of slicing:
-    # a tree build holds dozens of components, so the birthday bound at 2^32
-    # distinct shapes is unreachable by ~9 orders of magnitude, and the hash is
-    # salted by CACHE_SCHEMA_VERSION (see _content_hash_and_bytes) so an extractor
-    # change re-keys every cid at once. A collision would only merge two dedup
-    # entries within one build -- never a cross-package effect.
+    # Trees use a short map key alongside the complete geometry content hash.
+    # Publication and capture reject a short-ID collision instead of merging it.
     return source_hash[:16]
 
 
-def _content_hash_and_bytes(shape: Any) -> tuple[str, bytes]:
-    """The content hash AND the location-stripped BREP bytes it digests, from a
-    single serialization.
+def _normalized_face_colors(value: object) -> dict[int, tuple[float, float, float, float]]:
+    """Canonical extraction input: positive face ordinals and finite RGBA.
 
-    The digest is salted with :data:`CACHE_SCHEMA_VERSION` because the cid
-    addresses a BUILT component GLB, not the geometry alone. Each GLB embeds the
-    topology tables the extractor produced, so a change to what the extractor
-    emits makes every cached component wrong while its geometry — and therefore
-    an unsalted digest — is unchanged. The build reuses any ``<cid>.glb`` already
-    on disk, so without the salt an extractor fix would leave every existing
-    tree serving the old tables behind an assembly.json that claims to be current.
+    Channels are clamped just as the STEP color writer clamps them. Converting
+    keys must never silently merge two different finishes for one face.
+    """
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError("cad_face_ordinal_colors must map face ordinals to RGBA")
+    normalized: dict[int, tuple[float, float, float, float]] = {}
+    for raw_ordinal, raw_color in value.items():
+        try:
+            ordinal = int(raw_ordinal)
+        except (TypeError, ValueError, OverflowError) as error:
+            raise ValueError(f"invalid face color ordinal {raw_ordinal!r}") from error
+        if ordinal <= 0 or isinstance(raw_ordinal, bool) or (
+            not isinstance(raw_ordinal, str) and raw_ordinal != ordinal
+        ):
+            raise ValueError(f"invalid face color ordinal {raw_ordinal!r}")
+        try:
+            channels = tuple(float(channel) for channel in raw_color)
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"face {ordinal} color must be finite RGBA") from error
+        if len(channels) != 4 or not all(math.isfinite(channel) for channel in channels):
+            raise ValueError(f"face {ordinal} color must be finite RGBA")
+        color = tuple(min(1.0, max(0.0, channel)) for channel in channels)
+        if ordinal in normalized and normalized[ordinal] != color:
+            raise ValueError(f"conflicting colors for face ordinal {ordinal}")
+        normalized[ordinal] = color
+    return dict(sorted(normalized.items()))
 
-    Two occurrences of the same part share an underlying ``TShape`` (``.moved()``
-    only swaps the location), so stripping the location and serializing yields an
-    identical digest for every repeat — the content-addressing that dedups the
-    components. Stable across builds/processes (unlike Python ``hash``).
 
-    Triangulation and normals are excluded so the digest is geometry-only:
-    meshing a part attaches a triangulation to its shared ``TShape``, and a
-    triangulation-sensitive hash would change after the first component is built,
-    breaking the content-addressed cache on re-hash. The same bytes are the
-    worker-build payload, so returning both avoids serializing each missing
-    component's BREP twice (once to hash, once for the payload)."""
-    brep = _shape_brep_bytes(shape)
-    digest = hashlib.sha256()
-    digest.update(str(CACHE_SCHEMA_VERSION).encode("utf-8"))
-    digest.update(b"\x00")
-    digest.update(brep)
-    return digest.hexdigest(), brep
+def _content_hash_and_bytes(shape: Any, *, face_colors: object = None) -> tuple[str, bytes]:
+    """The complete geometry-input identity and its admitted encoded BREP bytes."""
+    prepared = prepare_geometry_component(shape, face_colors=face_colors)
+    return prepared["entry"]["contentHash"], prepared["payload"]
 
 
 def _content_hash_shape(shape: Any) -> str:
-    """sha256 of a shape's location-stripped BREP bytes (see
+    """Hash a shape's complete component extraction input (see
     :func:`_content_hash_and_bytes`)."""
     return _content_hash_and_bytes(shape)[0]
 
@@ -133,24 +133,95 @@ def _transform_from_location(location: Any) -> list[float]:
     ]
 
 
-def _bbox_from_shape(shape: Any) -> dict[str, list[float]] | None:
-    """The world-frame axis-aligned bounding box of a composed shape, as the
-    ``{"min": [...], "max": [...]}`` the assembly.json records so a cheap whole-entry
-    inspect summary does not have to re-mesh + extract full topology.
+def optimal_box(wrapped: Any) -> list[float] | None:
+    """The TIGHT world-frame bounds of one ``TopoDS_Shape`` as
+    ``[xmin, ymin, zmin, xmax, ymax, zmax]``, or None when it bounds nothing.
 
-    Computed from the geometric representation (``useTriangulation=False``) so it
-    never tessellates the shape — meshing would mutate the shared ``TShape`` and
-    break content-addressed component dedup on a later in-process rebuild."""
+    ``BRepBndLib::Add`` bounds a B-spline by its CONTROL POLYGON: a NURBS
+    circle of radius r reports r/cos(22.5 deg) = 1.082 r, so every rounded body
+    came back ~8% too big and a reported bound could invent a clash that is not
+    there (PR #370 bug record 004). ``AddOptimal`` subdivides instead.
+    ``useTriangulation=False``: meshing here would mutate the shared ``TShape``
+    and break content-addressed component dedup on a later in-process rebuild.
+    """
     try:
         from OCP.Bnd import Bnd_Box
         from OCP.BRepBndLib import BRepBndLib
 
         box = Bnd_Box()
-        BRepBndLib.Add_s(shape.wrapped, box, False)
+        BRepBndLib.AddOptimal_s(wrapped, box, False, False)
+        if box.IsVoid():
+            return None
         xmin, ymin, zmin, xmax, ymax, zmax = box.Get()
+        return [float(xmin), float(ymin), float(zmin), float(xmax), float(ymax), float(zmax)]
+    except Exception:  # noqa: BLE001 - OCP bounds reads can raise on odd shapes
+        return None
+
+
+def _world_leaves(wrapped: Any) -> list[Any]:
+    """The shape's leaves, each carrying its WORLD location.
+
+    ``TopoDS_Iterator`` composes the parent's location into every child it
+    yields, so recursing containers hands back exactly the placed bodies the
+    occurrences describe — one leaf per occurrence, links included.
+    """
+    from OCP.TopAbs import TopAbs_ShapeEnum
+    from OCP.TopoDS import TopoDS_Iterator
+
+    containers = (TopAbs_ShapeEnum.TopAbs_COMPOUND, TopAbs_ShapeEnum.TopAbs_COMPSOLID)
+    leaves: list[Any] = []
+    stack = [wrapped]
+    while stack:
+        node = stack.pop()
+        if node.ShapeType() not in containers:
+            leaves.append(node)
+            continue
+        iterator = TopoDS_Iterator(node)
+        while iterator.More():
+            stack.append(iterator.Value())
+            iterator.Next()
+    return leaves
+
+
+def _bbox_from_shape(shape: Any) -> dict[str, list[float]] | None:
+    """The world-frame axis-aligned bounding box of a composed shape, as the
+    ``{"min": [...], "max": [...]}`` the assembly.json records so a cheap whole-entry
+    inspect summary does not have to re-mesh + extract full topology.
+
+    Measured PER LEAF and merged, not once over the whole compound, because a
+    leaf's box is a pure function of its geometry and rotation. Translation
+    shifts the six bounds without repeating the surface-extrema calculation.
+    ``op_memo.memoized_value`` keeps the untranslated box in the warm worker
+    and on disk, so translated instances share that calculation. Tight bounds
+    cost ~0.08 ms per face, which a whole
+    150k-face assembly could not absorb on every finalize but an unchanged
+    occurrence never pays twice.
+    """
+    try:
+        from cadgen._internal import op_memo
+        from OCP.TopLoc import TopLoc_Location
+        from OCP.gp import gp_Vec
+
+        boxes = []
+        for leaf in _world_leaves(shape.wrapped):
+            transform = leaf.Location().Transformation()
+            translation = tuple(transform.TranslationPart().Coord())
+            transform.SetTranslationPart(gp_Vec(0.0, 0.0, 0.0))
+            untranslated = leaf.Located(TopLoc_Location(transform))
+            box = op_memo.memoized_value(
+                # The op_name names the FUNCTION: change what this computes and
+                # change the name (or _OP_MEMO_VERSION) with it.
+                "occurrence_bbox.optimal.untranslated.v1",
+                op_memo.placed_shape_key(untranslated),
+                lambda untranslated=untranslated: optimal_box(untranslated),
+            )
+            if box is not None:
+                boxes.append([value + translation[index % 3] for index, value in enumerate(box)])
+        if not boxes:
+            return None
         return {
-            "min": [float(xmin), float(ymin), float(zmin)],
-            "max": [float(xmax), float(ymax), float(zmax)],
+            "min": [min(box[axis] for box in boxes) for axis in (0, 1, 2)],
+            "max": [max(box[axis] for box in boxes) for axis in (3, 4, 5)],
         }
     except Exception:  # noqa: BLE001 - OCP bounds reads can raise on odd shapes; a component without bounds is None
         return None
@@ -172,16 +243,27 @@ def _occurrence_color(child: Any) -> list[float] | None:
 _MATERIAL_KEYS = ("roughness", "metalness", "clearcoat", "clearcoatRoughness", "opacity")
 
 
-def _occurrence_material(child: Any) -> dict[str, float] | None:
-    """Optional per-occurrence PBR overrides authored as a plain
-    ``cad_material`` dict attribute on the source shape (keys from
-    ``_MATERIAL_KEYS``, values clamped to [0, 1]). Colors alone cannot
-    express brushed-vs-polished finishing; these ride the assembly.json so the
-    viewer can override its theme material per part."""
-    material = getattr(child, "cad_material", None)
+def _occurrence_material(child: Any) -> dict[str, Any] | None:
+    """Private material metadata restored from a pinned model tree.
+
+    Public ``cad_material`` mutation was replaced by ``@step(materials=...)``;
+    finding that dynamic attribute is therefore a hard authoring error.
+    """
+    if "cad_material" in getattr(child, "__dict__", {}):
+        raise ValueError(
+            "cad_material authoring was removed; declare named materials with "
+            "@step(materials={'definitions': ..., 'assignments': ...})"
+        )
+    material = getattr(child, "_cadgen_material", None)
     if not isinstance(material, dict):
         return None
-    resolved: dict[str, float] = {}
+    resolved: dict[str, Any] = {}
+    name = material.get("name")
+    if isinstance(name, str) and name.strip():
+        resolved["name"] = name.strip()
+    base_color = material.get("baseColor")
+    if isinstance(base_color, str):
+        resolved["baseColor"] = base_color
     for key in _MATERIAL_KEYS:
         value = material.get(key)
         if value is None:
@@ -221,7 +303,7 @@ def _unlocated_shape(shape: Any) -> Any:
     color = getattr(shape, "color", None)
     if color is not None:
         local.color = color
-    face_colors = getattr(shape, "cad_face_ordinal_colors", None)
+    face_colors = _normalized_face_colors(getattr(shape, "cad_face_ordinal_colors", None))
     if face_colors:
         local.cad_face_ordinal_colors = face_colors
     return local
@@ -274,6 +356,15 @@ def _build123d_shape_from_brep_bytes(payload: bytes) -> Any:
     BinTools.Read_s(topo, io.BytesIO(payload))
     if topo.IsNull():
         raise RuntimeError("component BREP payload deserialized to a null shape")
+    return _build123d_shape_from_topods(topo)
+
+
+def _build123d_shape_from_topods(topo: Any) -> Any:
+    """Wrap a bare ``TopoDS_Shape`` in the build123d class matching its ShapeType
+    (a Solid stays a Solid; anything unknown is a Compound)."""
+    import build123d
+    from OCP.TopAbs import TopAbs_ShapeEnum
+
     by_type = {
         TopAbs_ShapeEnum.TopAbs_COMPOUND: build123d.Compound,
         TopAbs_ShapeEnum.TopAbs_COMPSOLID: build123d.Compound,
@@ -329,21 +420,35 @@ def parallel_worker_count(work_count: int, *, env_var: str) -> int:
     (~seconds each), and cap at eight so a large machine does not multiply a
     ~300 MB resident kernel by its core count. One sizing rule, every pool: the
     component build and ``inspect validate`` differ only in the variable that
-    overrides them."""
+    overrides them. The shared memory policy can lower either requested count
+    to fit extraction reservations inside the owning worker's allowance."""
+    from cadgen.daemon.memory import component_worker_limit
+
     env_value = os.environ.get(env_var, "").strip()
     if env_value:
         try:
             requested = int(env_value)
         except ValueError:
             requested = 0
-        return max(1, min(requested, work_count)) if requested > 1 else 1
+        return component_worker_limit(max(1, min(requested, work_count)) if requested > 1 else 1)
     if work_count < 6:
         return 1
-    return max(1, min((os.cpu_count() or 2) - 2, work_count, 8))
+    return component_worker_limit(max(1, min((os.cpu_count() or 2) - 2, work_count, 8)))
 
 
-def _component_build_worker_count(missing_count: int) -> int:
-    """Worker count for parallel component builds (``CADGEN_COMPONENT_WORKERS``)."""
+_SERIAL_COMPONENT_PAYLOAD_BYTES = 768 * 1024
+
+
+def _component_build_worker_count(missing_count: int, *, payload_bytes: int | None = None) -> int:
+    """Avoid spawn startup for small BREP batches unless workers are explicit.
+
+    Both schedules reconstruct private shapes from the same payloads. The
+    conservative byte cutoff limits only the default component scheduler;
+    larger/unknown work and explicit overrides retain CPU and memory sizing.
+    """
+    if (payload_bytes is not None and payload_bytes <= _SERIAL_COMPONENT_PAYLOAD_BYTES
+            and not os.environ.get("CADGEN_COMPONENT_WORKERS", "").strip()):
+        return 1
     return parallel_worker_count(missing_count, env_var="CADGEN_COMPONENT_WORKERS")
 
 
@@ -434,10 +539,9 @@ def _write_component_artifacts_atomic(
     component object is a plain write when the hashing payload is already in hand.
     The surf goes in place LAST so its existence signals a complete set.
 
-    No colour goes into the surf: the cid is geometry-only, so a colour there
-    would let two occurrences of one part with different colours share one
-    file and one of them render wrong. The assembly.json's occurrence carries
-    colour (``_occurrence_color``) and the viewer applies it per record."""
+    Per-face colors go into SURF and participate in the component input hash.
+    Uniform occurrence color and PBR finish stay on the tree's occurrences and
+    are applied per placement; they do not alter this reusable component."""
     from cadgen._internal.surface_extract import extract_surface_component
 
     out_surf.parent.mkdir(parents=True, exist_ok=True)
@@ -454,3 +558,270 @@ def _write_component_artifacts_atomic(
         ),
     )
     return out_surf
+
+
+# Geometry inputs are independent of disposable surface producer versions.
+GEOMETRY_SCHEME = "cadgen-geometry-input-v3"
+GEOMETRY_CODECS = frozenset({"bintools-v4", "bintools-v3", "breptools-ascii-v3"})
+COMPONENT_KINDS = frozenset({"native", "eager-only"})
+_BREP_HEADERS = {
+    "bintools-v4": b"\nOpen CASCADE Topology V4, (c) Open Cascade\n",
+    "bintools-v3": b"\nOpen CASCADE Topology V3 (c)\n",
+    "breptools-ascii-v3": b"\nCASCADE Topology V3, (c) Open Cascade\n",
+}
+class NativeUnavailable(RuntimeError):
+    """An eager-only component cannot certify faithful native reconstruction."""
+
+class CodecFidelityError(ValueError):
+    """No permitted codec proved the required point-bearing fidelity."""
+
+def canonical_json_bytes(value: Any) -> bytes:
+    # JSON object keys are strings. Convert ordinal keys before sorting so the
+    # same value has identical bytes before and after a JSON store round-trip.
+    # Sorting int keys first would emit 1,2,10 while parsed keys emit 1,10,2.
+    def json_value(item):
+        if type(item) is dict:
+            if any(type(key) not in (str, int) for key in item):
+                raise ValueError("unsupported canonical JSON key")
+            normalized = {str(key): json_value(part) for key, part in item.items()}
+            if len(normalized) != len(item):
+                raise ValueError("duplicate canonical JSON key")
+            return normalized
+        if isinstance(item, (list, tuple)):
+            return [json_value(part) for part in item]
+        return item
+    return json.dumps(json_value(value), sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+
+def geometry_component_hash(codec: str, payload: bytes, face_colors: dict, *,
+                   kind: str = "native", eager_surface: str | None = None) -> str:
+    from cadgen.store.objects import is_object_hash
+
+    if codec not in GEOMETRY_CODECS or kind not in COMPONENT_KINDS:
+        raise ValueError("unsupported geometry codec/kind")
+    if (kind == "eager-only") != is_object_hash(eager_surface):
+        raise ValueError("eager-only geometry must pin its required surface")
+    digest = hashlib.sha256()
+    digest.update(GEOMETRY_SCHEME.encode() + b"\0" + kind.encode() + b"\0" + codec.encode() + b"\0")
+    digest.update(len(payload).to_bytes(8, "big"))
+    digest.update(payload)
+    digest.update(canonical_json_bytes(face_colors))
+    if eager_surface is not None:
+        digest.update(b"\0" + eager_surface.encode())
+    return digest.hexdigest()
+
+def effective_face_colors(shape: Any, colors: Any) -> dict:
+    from OCP.TopAbs import TopAbs_FACE
+    from OCP.TopExp import TopExp
+    from OCP.TopTools import TopTools_IndexedMapOfShape
+
+    normalized = _normalized_face_colors(colors)
+    if not normalized:
+        return {}
+    faces = TopTools_IndexedMapOfShape()
+    TopExp.MapShapes_s(getattr(shape, "wrapped", shape), TopAbs_FACE, faces)
+    return {ordinal: color for ordinal, color in normalized.items() if ordinal <= faces.Extent()}
+
+def _point_signature(shape: Any) -> tuple:
+    """Exact native vertex records and referenced placements, scoped locally.
+
+    Geometry table values intentionally stay outside the signature; their
+    ordinary decoder normalization remains the existing v4 behavior. Native
+    table indices preserve the point-to-geometry association. No pointer or
+    native object escapes this call, and no approximate comparison is used.
+    """
+    from OCP.BinTools import BinTools_ShapeSet
+    from OCP.TopAbs import TopAbs_VERTEX
+    from OCP.TopExp import TopExp
+    from OCP.TopLoc import TopLoc_Location
+    from OCP.TopTools import TopTools_IndexedMapOfShape
+
+    local = getattr(shape, "wrapped", shape).Located(TopLoc_Location())
+    vertices = TopTools_IndexedMapOfShape()
+    TopExp.MapShapes_s(local, TopAbs_VERTEX, vertices)
+    point_vertices = [
+        (i, vertices.FindKey(i)) for i in range(1, vertices.Extent() + 1)
+        if not vertices.FindKey(i).TShape().Points().IsEmpty()
+    ]
+    if not point_vertices:
+        return ()
+    shape_set = BinTools_ShapeSet()
+    shape_set.SetFormatNb(3)
+    shape_set.SetWithTriangles(False)
+    shape_set.SetWithNormals(False)
+    shape_set.Add(local)
+
+    def placement(location):
+        transform = location.Transformation()
+        return struct.pack(">12d", *(transform.Value(i, j) for i in range(1, 4) for j in range(1, 5)))
+
+    result = []
+    for ordinal, vertex in point_vertices:
+        locations = []
+        for point in vertex.TShape().Points():
+            kinds = [point.IsPointOnCurve(), point.IsPointOnCurveOnSurface(), point.IsPointOnSurface()]
+            if sum(kinds) != 1:
+                raise CodecFidelityError("unsupported native point representation")
+            locations.append(placement(point.Location()))
+        stream = io.BytesIO()
+        # ShapeSet strips each TShape's location before writing its geometry.
+        # Keep the vertex occurrence placement separately and do the same here.
+        shape_set.WriteShape(vertex.Located(TopLoc_Location()), stream)
+        result.append((ordinal, placement(vertex.Location()), stream.getvalue(), tuple(locations)))
+    return tuple(result)
+
+def _binary_v3_bytes(shape: Any) -> bytes:
+    from OCP.BinTools import BinTools, BinTools_FormatVersion
+    from OCP.TopLoc import TopLoc_Location
+
+    stream = io.BytesIO()
+    BinTools.Write_s(
+        getattr(shape, "wrapped", shape).Located(TopLoc_Location()), stream,
+        False, False, BinTools_FormatVersion.BinTools_FormatVersion_VERSION_3,
+    )
+    return stream.getvalue()
+
+def _ascii_v3_bytes(shape: Any) -> bytes:
+    from OCP.BRepTools import BRepTools
+    from OCP.TopLoc import TopLoc_Location
+    from OCP.TopTools import TopTools_FormatVersion
+
+    stream = io.BytesIO()
+    BRepTools.Write_s(
+        getattr(shape, "wrapped", shape).Located(TopLoc_Location()), stream,
+        False, False, TopTools_FormatVersion.TopTools_FormatVersion_VERSION_3,
+    )
+    return stream.getvalue()
+
+def _decode_brep(codec: str, payload: bytes) -> Any:
+    if codec not in _BREP_HEADERS:
+        raise ValueError(f"unsupported BREP codec: {codec}")
+    if not isinstance(payload, bytes) or not payload.startswith(_BREP_HEADERS[codec]):
+        raise ValueError(f"BREP header does not match declared codec {codec}")
+    from OCP.BinTools import BinTools
+    from OCP.TopAbs import TopAbs_VERTEX
+    from OCP.TopoDS import TopoDS, TopoDS_Shape
+
+    shape = TopoDS_Shape()
+    if codec == "breptools-ascii-v3":
+        from OCP.BRep import BRep_Builder
+        from OCP.BRepTools import BRepTools
+
+        BRepTools.Read_s(shape, io.BytesIO(payload), BRep_Builder())
+    else:
+        BinTools.Read_s(shape, io.BytesIO(payload))
+    if shape.IsNull():
+        raise RuntimeError("BREP payload deserialized to a null shape")
+    if shape.ShapeType() == TopAbs_VERTEX:
+        shape = TopoDS.Vertex_s(shape)
+    return _build123d_shape_from_topods(shape)
+
+def _encode_brep(shape: Any) -> dict[str, Any]:
+
+    original = _shape_brep_bytes(shape)
+    original_points = _point_signature(shape)
+    try:
+        private = _decode_brep("bintools-v4", original)
+        if _point_signature(private) != original_points:
+            raise CodecFidelityError("binary v4 changed exact native point records")
+        return {"codec": "bintools-v4", "bytes": original,
+                "private_decoded_shape": private}
+    except Exception as binary_failure:
+        failures = [f"binary v4: {binary_failure}"]
+    for alternate_codec, writer in (("bintools-v3", _binary_v3_bytes),
+                                    ("breptools-ascii-v3", _ascii_v3_bytes)):
+        try:
+            alternate = writer(shape)
+            private = _decode_brep(alternate_codec, alternate)
+            if _shape_brep_bytes(private) != original:
+                raise CodecFidelityError("original native byte fidelity not proven")
+            if writer(private) != alternate:
+                raise CodecFidelityError("alternate read/write is not a byte fixed point")
+            return {"codec": alternate_codec, "bytes": alternate,
+                    "private_decoded_shape": private}
+        except Exception as alternate_failure:
+            failures.append(f"{alternate_codec}: {alternate_failure}")
+    raise CodecFidelityError("; ".join(failures))
+
+
+def prepare_geometry_component(shape: Any, *, face_colors: object = None) -> dict[str, Any]:
+    """Capture a component's owned bytes, effective recipe and private native input.
+
+    No store write occurs here. Ordinary v4 decoding preserves the existing
+    canonical worker semantics; exact native point records fence the known
+    parameter-loss cases. Alternate codecs require full original-native bytes
+    and their own byte fixed point. Failure retains an explicit eager surface,
+    never a falsely readable native entry.
+    """
+    from cadgen._internal.surface_extract import extract_surface_component
+    from cadgen.store.surfaces import validate_surface_bytes
+
+    try:
+        encoded = _encode_brep(shape)
+        kind = "native"
+    except CodecFidelityError:
+        encoded = {"codec": "bintools-v4", "bytes": _shape_brep_bytes(shape),
+                   "private_decoded_shape": None}
+        kind = "eager-only"
+    private = encoded["private_decoded_shape"]
+    colors = effective_face_colors(
+        private if private is not None else shape,
+        getattr(shape, "cad_face_ordinal_colors", None) if face_colors is None else face_colors,
+    )
+    payload = encoded["bytes"]
+    entry = {"kind": kind, "codec": encoded["codec"],
+             "brep": hashlib.sha256(payload).hexdigest(), "faceColors": colors}
+    surface = None
+    if kind == "eager-only":
+        from OCP.TopLoc import TopLoc_Location
+        surface = extract_surface_component(getattr(shape, "wrapped", shape).Located(TopLoc_Location()), face_colors=colors)
+        validate_surface_bytes(surface)
+        entry["eagerSurface"] = hashlib.sha256(surface).hexdigest()
+    entry["contentHash"] = geometry_component_hash(
+        entry["codec"], payload, colors, kind=kind, eager_surface=entry.get("eagerSurface"),
+    )
+    if private is not None:
+        private.cad_face_ordinal_colors = dict(colors)
+    return {"entry": entry, "payload": payload, "shape": private, "surface": surface}
+
+
+def decode_geometry_component(entry: dict[str, Any], payload: bytes) -> Any:
+    """Privately reconstruct one verified geometry input, without surface reads."""
+    validate_geometry_component(entry, payload)
+    if entry["kind"] == "eager-only":
+        raise NativeUnavailable("eager-only component has no admitted native representation")
+    try:
+        shape = _decode_brep(entry["codec"], payload)
+        colors = effective_face_colors(shape, entry["faceColors"])
+    except MemoryError:
+        raise
+    except Exception as exc:
+        # Hash/header integrity is independent of native readability. OCP
+        # failures use several exception types; readers treat them uniformly
+        # as an invalid encoded input and can repair from the selected STEP.
+        raise ValueError(f"unreadable {entry['codec']} geometry payload") from exc
+    if canonical_json_bytes(colors) != canonical_json_bytes(entry["faceColors"]):
+        raise ValueError("intrinsic recipe names an absent native face")
+    shape.cad_face_ordinal_colors = colors
+    return shape
+
+
+def validate_geometry_component(entry: Any, payload: bytes, *, cid: str | None = None) -> None:
+    """Kernel-free verification of a complete encoded geometry input."""
+    if type(entry) is not dict or entry.get("kind") not in COMPONENT_KINDS or entry.get("codec") not in GEOMETRY_CODECS:
+        raise ValueError("unsupported geometry component")
+    allowed = {"kind", "codec", "brep", "faceColors", "contentHash", "color"}
+    if entry["kind"] == "eager-only":
+        allowed.add("eagerSurface")
+    if set(entry) - allowed:
+        raise ValueError("unknown geometry component field")
+    if not isinstance(payload, bytes) or not payload.startswith(_BREP_HEADERS[entry["codec"]]):
+        raise ValueError("BREP header does not match declared codec")
+    if hashlib.sha256(payload).hexdigest() != entry.get("brep"):
+        raise ValueError("geometry BREP object identity mismatch")
+    colors = _normalized_face_colors(entry.get("faceColors"))
+    if canonical_json_bytes(colors) != canonical_json_bytes(entry.get("faceColors")):
+        raise ValueError("noncanonical intrinsic appearance recipe")
+    full = geometry_component_hash(entry["codec"], payload, colors, kind=entry["kind"],
+                                   eager_surface=entry.get("eagerSurface"))
+    if entry.get("contentHash") != full or (cid is not None and cid != full[:16]):
+        raise ValueError("geometry input identity mismatch")

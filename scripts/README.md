@@ -53,7 +53,11 @@ step; nothing else belongs here (one-off helpers go in `tmp/`).
   exercises cadgen from outside the repo. Called by `test.yml` and
   `release-publish.yml`.
 - `test-viewer-launch.sh` — launches `cadgen viewer` against the built client and
-  checks it answers. Called by `test.yml`.
+  verifies reuse, cold STEP import, display derivation and browser drawing using
+  a tiny test-owned STEP. Called by `test.yml`.
+- `test-viewer-browser.sh` — self-contained browser checks for supported formats,
+  Inspect/Render placement and appearance, and face/edge picking through detail
+  changes. Generates its inputs in a temporary project and owns its viewer and cache.
 - `common.sh`, `unittest_files.py` — shared runner pieces (interpreter
   resolution, fail-closed unittest loading, the per-file parallel run). Sourced
   by the runners.
@@ -106,6 +110,10 @@ when staged paths touch `packages`, `apps`, `skills` or `scripts/bundle`.
 
 `utils/list-skills.sh` — prints every `skills/*/SKILL.md` directory. Used by the
 install scripts and `test-python.sh`.
+
+`bench/` — manual warm-build and viewer performance commands. See
+[benchmark usage](bench/cadgen-performance/README.md). Reports and profiler
+captures are local output under `tmp/`, never committed here.
 
 ## CI
 

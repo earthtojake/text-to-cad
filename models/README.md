@@ -13,6 +13,7 @@ cad-projects; four are imported robot-description fixtures.
 
 ```text
 models/
+├── tests/            small manual validation models; NEVER used by CI
 ├── examples/         the demo corpus: parts, assemblies AND 2D drawings
 ├── thang010146/      imported, annotated mechanism assemblies
 ├── f1/ f14d/ hypercar/ moonwatch/ motorbike/ qdd_actuator/
@@ -22,7 +23,7 @@ models/
 
 **Each cad-project has the same shape**, the one the `$cad` skill's `project-layout.md` reference
 defines: authored code in `src/` (one `@step` or `@dxf` model per file, shared
-modules in `src/lib/`), `.step.js` render modules beside the documents they animate (authored, committed),
+modules in `src/lib/`, and animation source embedded in owning `@step` declarations),
 raw artifacts in format folders (`STEP/`, `DXF/`, `3MF/`, `GLB/`, `STL/`),
 committed inputs no script regenerates in `<FORMAT>/imported/`, scratch in
 `tmp/`, and a `.gitignore` that keeps the artifacts out of the repo. A fresh
@@ -47,6 +48,8 @@ Generated output (`.step`/`.dxf`/`.stl`/`.3mf`/`.glb` exports and their
 `.step.json` sidecars) is gitignored — never commit it; a fresh clone
 regenerates by running the scripts.
 
+For manual edge-case checks and debugging, use [tests/](tests/README.md). Automated tests must never depend on any model in this tree; they must create their own isolated fixtures.
+
 ## Directory Map
 
 ### The demo corpus
@@ -54,7 +57,7 @@ regenerates by running the scripts.
 - [examples/](examples/src/README.md): every part, assembly and 2D drawing that
   is a single self-contained model script, as one cad-project. `@step` and
   `@dxf` scripts sit directly under `examples/src/` (shared helpers in
-  `src/lib/`, `.step.js` render modules beside the documents they animate), and
+  `src/lib/`, animation source embedded in owning `@step` declarations), and
   every artifact lands in a root-level format folder. Two models
   (`planetary_gear_assembly`, `mars_rover_concept`) carry typed mates and
   animation clips; a handful declare STL/3MF/GLB exports so the mesh doors have
@@ -71,14 +74,14 @@ Models that need a **folder of their own** rather than a single loose script.
   [thang010146](https://www.youtube.com/@thang010146/videos) YouTube channel.
   Its content is `STEP/imported/` — annotated mechanism STEPs, each a
   `cadgen.read_step` of the vendor document re-exported with kinematics
-  (`.step.json` sidecar) and its authored `.step.js` render module beside it.
+  (`.step.json` sidecar) with animation embedded by its owning Python model.
 - [f1/](f1/src/README.md): open-wheel F1 car — a modular `lib/` build over one
   shared surface vocabulary, plus `f1_stage.appearance.json`, the authored
   presentation stage. Its DRS four-bar and rack-and-track-rod steering are
-  CLOSED loops, so both solves live in `f1.step.js` rather than in typed mates.
+  CLOSED loops, so both solves live in `f1.py`'s embedded `ANIMATION_JS` rather than in typed mates.
 - [f14d/](f14d/src/README.md): Grumman F-14D Super Tomcat — one lofted airframe
-  skin with ten systems grouped on top of it, a staged teardown in
-  `f14d.step.js`, and a `render/` suite of presentation configs and review
+  skin with ten systems grouped on top of it, a staged teardown embedded in
+  `f14d.py`, and a `render/` suite of presentation configs and review
   tooling.
 - [hypercar/](hypercar/src/README.md): mid-engine hypercar — modular `lib/`
   build with a `render/` presentation theme.
@@ -94,7 +97,7 @@ Models that need a **folder of their own** rather than a single loose script.
 - [qdd_actuator/](qdd_actuator/src/README.md): quasi-direct-drive actuator —
   one virtual `drive` DOF gears the rotor, carrier, both ball cages and the
   three planets through the 4.5:1 planetary reduction, with the exploded
-  teardown in `qdd_actuator.step.js`.
+  teardown embedded in `qdd_actuator.py`.
 
 ### SpaceX reconstruction package
 
@@ -143,7 +146,7 @@ not included in this committed fixture tree.
 A project's articulation is split three ways (see the `$cad` skill's
 `kinematics.md`): geometry parameters are the model function's signature,
 typed mates are pure data under the `@step` decorator's `kinematics=`, and
-choreography is a `.js` module named by `animation=`. The retired `.params.js`
+choreography is JavaScript source embedded in Python and passed to `animation=`. The retired `.params.js`
 sidecars are gone from every package here.
 
 Some packages keep a `render/` subfolder holding presentation-theme JSON,

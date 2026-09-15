@@ -37,9 +37,8 @@ Only OUTPUTS are organized by format. Code is not: a model script is not a
       __init__.py         #     one-line docstring; lib is a regular package
       holes.py            #     helpers
       bracket_shape.py    #     a factory two models build from
-  STEP/                   # raw outputs ONLY (+ their sidecars) — and the one authored exception:
+  STEP/                   # raw outputs ONLY (+ their generated sidecars)
     plate.step
-    assembly.step.js      #   the render module beside a document (choreography); authored, committed
     chassis/  purchased/  #   outputs mirror src/ folder for folder
     imported/             #   committed source files brought in from outside (see commit policy)
   DXF/  STL/  GLB/  3MF/  # other format folders: same shape, outputs + imported/
@@ -319,9 +318,7 @@ anything code cannot reproduce are committed:
    renders are scratch, not artifacts: they go to `tmp/`, always ignored.
 3. **Committed exceptions, made deliberately**: imported source files under
    any format folder's `imported/` (no code can regenerate them — a
-   code-only checkout must never be missing INPUTS, only derived outputs);
-   render modules (`STEP/<name>.step.js`, the choreography beside a
-   document — authored, read by no build, so nothing regenerates them); and
+   code-only checkout must never be missing INPUTS, only derived outputs); and
    pinned fixtures —
    anything asserted against byte-for-byte, since regeneration on a newer
    kernel can legally change bytes for identical geometry. Pin a loose file
@@ -330,7 +327,6 @@ anything code cannot reproduce are committed:
 ```gitignore
 /STEP/*
 !/STEP/imported/
-!/STEP/*.step.js
 /DXF/*
 !/DXF/imported/
 /STL/*

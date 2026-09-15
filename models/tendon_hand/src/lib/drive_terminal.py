@@ -57,7 +57,6 @@ def make_driven_bond_line(radius=3.5,angle=-60.,direction=-1):
     body=arc_tube(radius,.31,-FERRULE_LENGTH,0.,angle,direction)-arc_tube(radius,.30,-FERRULE_LENGTH,0.,angle,direction)
     if not body.is_valid or len(body.solids())!=1:raise ValueError('invalid driven resin bond line')
     body=finish(body,'dark','drive_terminal_bond_line')
-    body.cad_material={'metalness':0.,'roughness':.44,'clearcoat':.12}
     return body
 
 
@@ -224,7 +223,6 @@ def make_capstan_bond_line():
     body=sweep_round(path,.31)-sweep_round(path,.30)
     if not body.is_valid or len(body.solids())!=1:raise ValueError('invalid capstan resin bond line')
     body=finish(body,'dark','capstan_terminal_bond_line')
-    body.cad_material={'metalness':0.,'roughness':.44,'clearcoat':.12}
     return body
 
 

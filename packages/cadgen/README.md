@@ -14,9 +14,16 @@ snapshots, the warm daemon and its build pool, and the CAD Viewer
 (`cadgen viewer`: a local HTTP server over the built client, one directory per
 instance).
 
+Snapshot `--debug --json` reports artifact resolution and measured browser
+stages; see [snapshot diagnostics](SNAPSHOTS.md) for timing boundaries.
+
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily,
 never at namespace-import time) and the *built outputs* of `cadgen-js`.
 Never app code, never `cadgen-js` source at runtime.
+
+Expensive pure parameterized geometry helpers may opt into [`@memo`](MEMO.md).
+The decorator uses the existing object/index store and requires no author-owned
+cache utilities. It is separate from the parameterless models that declare files.
 
 **DEPENDED ON BY** — every skill (as a pinned installed distribution). The
 CAD Viewer is not a dependent but a part: `cadgen.viewer` serves the client and
@@ -39,9 +46,48 @@ in the store is compiled from those bytes (`cadgen step compile` semantics),
 never from source. Deleting every `.py` in a project must not change what
 renders.
 
+The viewer automatically follows an active build's immutable preview tree
+before STEP persistence ([`STORE.md`](STORE.md) §9b). This is a separate
+runtime input: it does not change saved-artifact read-back or allow artifact
+readers to inspect source or model records. Concurrent child requests adopt their
+announced jobs before execution, so completed builds leave no orphaned pending status.
+Following edits keeps the authored preview after a successful STEP save.
+The viewer reports incomplete or failed updates without announcing background file writes. Without an available editing preview,
+the viewer resolves the saved bytes and corresponding topology and annotations.
+Native geometry completeness is separate from display-surface readiness.
+Canonical trees pin encoded BREP and effective intrinsic face colors; surface
+extraction is an artifact-only build-pool job selected by an attested producer.
+`read_step`, STEP re-emits and parent materialization do not wait for SURF.
+A first display or selector request still pays missing surface derivation.
+The exact input, codec and recovery boundaries are in [`STORE.md`](STORE.md).
+
+The authored tree is also the final result returned by decorated calls when the
+caller consumes that result. A conventional real-file `__main__` bare call
+finishes the checked source result and every declared output, then avoids
+materializing geometry that Python immediately discards; assigned, nested,
+interactive and instrumented calls retain the geometry return. A parent can
+consume a child's complete source result before that child's STEP save, but
+waits for every called child's declared outputs before saving itself.
+The child's job carries the exact immutable pin; asynchronous consumers never
+look up a newer model record to resolve it.
+For a small result made entirely of pinned child links, the build runtime
+captures verified geometry and appearance and validates private native shapes
+before publication. It can then assemble the private STEP document after the
+source event. Ordinary model code, child-output waiting and saved-byte readback
+keep their existing semantics; unsupported or forced builds use the ordinary
+order. The bounds and ownership limits are specified in [`STORE.md`](STORE.md) §6.
+An exact `Compound(children=[...])` of eligible lazy children preserves their
+pins through composition instead of reconstructing them at attachment. Native
+access or hierarchy mutation restores ordinary private geometry. Until then
+the root is an internal Compound subclass, so exact-type introspection differs;
+`isinstance(root, Compound)` stays true. See [`STORE.md`](STORE.md) §9a for the
+eligibility and escape boundaries.
+
 - Nothing a renderer reads references the source tree: the sidecar's
-  kinematics are resolved numbers and labels, its animation is COPIED
-  module text; a tree and its components carry no path, script or record key
+  kinematics are resolved numbers and labels, its appearance uses canonical
+  leaf occurrence IDs, and its animation is an embedded self-contained ES
+  module; a tree and its
+  components carry no path, script or record key
   ([`STORE.md`](STORE.md) §2, the two-sides law).
 - A door never refuses a document and never auto-rebuilds: whether a
   document is behind its script is the model's record's question, answered
@@ -69,27 +115,30 @@ that information is in the wrong place.
 
 There is no automatic GC: `cadgen store gc` is the only sweeper, and every
 object is immutable and idempotently written, so deletion never needs
-coordination — a racing reader re-misses and rebuilds. There are no locks:
-atomic writes, pins and the publish rule (`STORE.md` §5, §7) decide every
-concurrent outcome, and no reader ever waits on a build.
+coordination — a racing reader re-misses and rebuilds. Store correctness needs
+no lock protocol: atomic writes, pins and the publish rule (`STORE.md` §5, §7)
+decide concurrent outcomes. Saved-file readers never wait for a source model
+to finish; missing derived artifacts are resolved through the build pool.
 
 ### 3. One sidecar per artifact, and it belongs to that artifact alone
 
 `part.step` gets `part.step.json` — schema-versioned sections (kinematics,
-animation). New capability = new section + schema bump, never a second sidecar
+appearance, animation). New capability = new section + schema bump, never a second sidecar
 file. Model-side, beside the artifact, so it travels with the file it
 describes — and it exists only when law 17 says it must.
 
 A sidecar describes the model that declared it — never its parent, never its
-children. A parent composing a child receives GEOMETRY (tree, labels, colors,
-placements, exact shape) and nothing else: the child's kinematics and
-animation are written by the child's own build into the child's own sidecar,
+children. A parent composing a child receives geometry and intrinsic appearance
+(tree, labels, colors, PBR values, placements, exact shape). The child's
+kinematics belong to the child's own sidecar,
 and an assembly that needs a relation declares it on the assembly. This is
 what lets a cached child stand in for its function: the cache carries
-geometry, and geometry is all a parent may read.
+geometry and intrinsic appearance; a parent never reads the child's sidecar.
 *Pressure-test*: build a child that declares `kinematics=`, then build a parent
-that composes it. The parent's sidecar must contain only the parent's own
-declarations, and the child's sidecar must be unchanged by the parent's build.
+that composes it. The parent's kinematics section contains only its own
+declarations, and the child's sidecar is unchanged by the parent's build.
+Intrinsic finishes travel with the pinned geometry and are rebound to the
+parent document's occurrences when it is saved.
 
 ### 4. Zero metadata in written artifacts
 
@@ -156,7 +205,9 @@ path.
 
 Kinematics is pure data and choreography is pure JS, fully independent
 (11). Clients render from file + sidecar + the store's artifact side and never
-read source, a record, or trigger builds (12). Correctness never depends on a
+read source, a record, or trigger source builds (12). An explicit editing
+session may consume runtime-announced preview trees as specified in STORE §9b.
+Correctness never depends on a
 store hit (13). Composition: importing binds, calling links — a parent
 depends on a child by its RESULT (the pinned tree), on a constant by its
 VALUE, on a helper by its FILE — and a model must never `read_step` its own
@@ -180,35 +231,57 @@ to its source, a repo script, or a repo workflow does not.
 A `@step`/`@dxf`/`@stl`/`@glb`/`@threemf` decorator's arguments never change
 the geometry a model produces. They decide where the files land (`out=`),
 how they are written (the mesh tolerances), and what the sidecar declares
-(`kinematics=`). The geometry is the function's return value and nothing
+(`kinematics=`, `materials=`, `animation=`). The geometry is the function's return value and nothing
 else: a `Compound` placing children is packaged as occurrences, a single
 solid as one component, and `part`/`assembly` is read off the resulting tree.
 A posed or differently configured export is authored geometry, or another
-model.
+model. Intrinsic appearance participates in the authored tree identity so it
+inherits through pinned children, while component identities and STEP bytes
+remain unchanged.
+
+A source fast path may refresh literal `kinematics=`, `materials=`, and
+`animation=` annotations from the model module without executing geometry.
+It requires an exact executed-byte closure attestation, unchanged dependencies
+and child pins, complete cached baseline/document trees, and same-module
+literals used only by those decorator arguments. A computed or imported
+annotation may coexist: its expression remains in the geometry fingerprint and
+its recorded value is reused only while that expression and its dependencies
+are unchanged. Reflection, another use of a stripped literal constant, or a
+change to computed annotation code falls back to the ordinary model build.
 
 Two features were deleted for violating this: the kinematics bake point
 (`kinematics={..., "at": pose}`), which transformed the tree through its mates
 before writing it, and `kind="part"|"assembly"`, whose only effect was to steer
 whether the build packaged the return as one component or as occurrences.
-*Pressure-test*: strip every argument off a model's decorators and rebuild;
-the tree hash must not change.
+*Pressure-test*: change only `materials=` or `animation=` and rebuild; component
+identities and STEP bytes must not change.
 
 ### 17. A sidecar only when strictly necessary
 
 Never write a JSON sidecar unless something beside the artifact has to read
-it. Today the only legitimate content is kinematics declared by the model;
-a model that declares none writes no sidecar, and a rebuild of a model that
-dropped its declaration deletes the stale file. Metadata with no reader
+it. Kinematics, named intrinsic materials, and animation need durable artifact annotations;
+a model with none writes no sidecar. A rebuild removes sections the model
+no longer declares and deletes an empty sidecar. Metadata with no reader
 beside the artifact — what a model declares about its own outputs, where a
 build came from, when it ran — belongs in the store record, never in a
 file next to the geometry.
 
-Two sections were deleted for violating this: `meshExports`, a copy of the
-mesh decorators' declarations that only a door read back (a door now
-tessellates the document's tree and writes the file it was asked for), and
-the animation text copied from the `.anim.js` module (animation is a render
-module beside the STEP, read live by the viewer).
-*Pressure-test*: build a part that declares meshes and no kinematics; no
+Schema 9 sidecars contain only `schemaVersion`, the saved STEP's `documentHash`,
+and optional `kinematics`, `appearance`, and `animation` sections. Appearance
+stores named material definitions plus canonical leaf occurrence assignments;
+animation stores a self-contained JavaScript ES module. Appearance is applied to an owned
+render/export descriptor, never to the byte-derived tree. Appearance-sensitive
+export variants include its digest, including the absence of overrides.
+The document digest binds those declarations to the artifact; it is
+not provenance. An old schema or a mismatched digest must be rebuilt or
+re-annotated, never silently applied. Compiling an imported STEP preserves
+its authored sidecar bytes.
+
+The retired `meshExports` section copied mesh decorator declarations that only
+a door read back; a door now tessellates the document's tree and writes the
+file it was asked for.
+*Pressure-test*: build a part that declares meshes but no kinematics,
+materials, or animation; no
 `.step.json` may appear beside it.
 
 ## The shape of the package
@@ -225,6 +298,9 @@ src/cadgen/
   kinematics.py          # typed mates vocabulary (revolute/slider/
                          #   cylindrical/fastened, couple, normalize)
   step_scene.py          # read_step and scene loading (recorded inputs)
+  inputs.py              # declare_input: a data file the model reads and
+                         #   cadgen has no reader for (a JSON atlas, a CSV
+                         #   table) is a freshness input once it says so
   assembly.py            # AssemblyHelper — positioning through native joints, labels
   results.py             # the typed Results every verb returns (stdlib-only)
   store/                 # the store (STORE.md): objects, index, records, trees,
@@ -242,7 +318,7 @@ src/cadgen/
   viewer/                # the CAD Viewer's server: launcher (main),
                          #   routes (http_app), catalog (scanner), status
                          #   (artifact_status: not compiled / compiling /
-                         #   rendered / failed), build_progress (the daemon's
+                         #   compiled / failed), build_progress (the daemon's
                          #   job ledger, read over its socket)
   _runtime/              # BUILT JS (browser snapshot renderer, node
                          #   builders, the viewer client) — generated, never

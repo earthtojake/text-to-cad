@@ -45,6 +45,8 @@ class LoadedStepScene:
     # refs resolved to numbers during the tree build, then written into the
     # model's sidecar).
     kinematics: dict[str, Any] | None = None
+    materials: dict[str, Any] | None = None
+    animation: dict[str, str] | None = None
     source_hash: str | None = None
     source_closure_hash: str | None = None
     source_closure_files: tuple[str, ...] = ()
@@ -147,5 +149,4 @@ def _identity_transform_matrix() -> tuple[float, ...]:
         0.0,
         1.0,
     )
-
 

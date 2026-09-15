@@ -245,8 +245,8 @@ def build_step_topology_index_manifest(
 
     tables = manifest.get("tables") if isinstance(manifest.get("tables"), Mapping) else {}
     occurrence_columns = tables.get("occurrenceColumns") if isinstance(tables, Mapping) else None
-    # No version field: the store KEY (CACHE_SCHEMA_VERSION salt) is the one
-    # regeneration signal, and nothing inside an artifact records a scheme.
+    # This view contains artifact fields. Compatibility is validated by the
+    # owning index/payload contracts, never by version-salting document keys.
     index: dict[str, Any] = {
         "profile": "index",
         "entryKind": resolved_entry_kind,

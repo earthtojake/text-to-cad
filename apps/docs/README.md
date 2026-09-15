@@ -25,7 +25,7 @@ Vercel, not this repo) must point at `apps/docs`.
 
 Hero STEP assets under `public/hero/` are a view of the tree behind the
 planetary gear STEP (`assembly.json` + each component's `.surf`) plus its
-sidecar, committed as PLAIN files (never LFS — Vercel serves them statically
+schema-v9 sidecar with embedded animation, committed as PLAIN files (never LFS — Vercel serves them statically
 with no backend). Refresh them after rebuilding the model:
 
 ```

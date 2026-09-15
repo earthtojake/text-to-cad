@@ -10,6 +10,7 @@ at parser-build time, pushing the command to adapter status instead.
 from __future__ import annotations
 
 import contextlib
+import functools
 import io
 import json
 import unittest
@@ -82,6 +83,11 @@ class Derivation(unittest.TestCase):
         parser = cli_from_function(verb, prog="t")
         self.assertEqual(0.25, parser.parse_args(["a.py", "--mesh-tolerance", "0.25"]).mesh_tolerance)
 
+    def test_abbreviated_flags_are_rejected_instead_of_silently_dropped(self):
+        parser = cli_from_function(verb, prog="t")
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            parser.parse_args(["a.py", "--mesh-tol", "0.25"])
+
     def test_docstring_supplies_description_and_per_argument_help(self):
         summary, helps = parse_docstring(verb.__doc__)
         self.assertEqual("Do the thing to TARGET.", summary)
@@ -134,6 +140,30 @@ class OutsideTheSubset(unittest.TestCase):
 
 
 class Serialization(unittest.TestCase):
+    def test_generated_invocation_preserves_explicit_default_valued_keywords(self):
+        calls = []
+
+        def declared(target: Path, *, mode: str = "view", force: bool = False) -> Result:
+            return Result(ok=True, path=target)
+
+        @functools.wraps(declared)
+        def recording(*args, **kwargs):
+            calls.append(dict(kwargs))
+            return declared(*args, **kwargs)
+
+        self.assertEqual(0, run_cli(recording, ["a.py"], prog="t", stdout=io.StringIO()))
+        self.assertEqual({}, calls.pop())
+        self.assertEqual(
+            0,
+            run_cli(
+                recording,
+                ["a.py", "--mode", "view", "--force"],
+                prog="t",
+                stdout=io.StringIO(),
+            ),
+        )
+        self.assertEqual({"mode": "view", "force": True}, calls.pop())
+
     def test_json_carries_the_dataclass_with_paths_as_strings(self):
         # A Path serializes as str(Path) -- the NATIVE spelling, backslashes and
         # all on Windows -- so the expectation is built the same way rather than

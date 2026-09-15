@@ -13,7 +13,7 @@ import {
   firstAnimationClipId,
 } from "cadgen-js/common/animationClock.js";
 import { CAD_SCENE_SCALE, buildModel } from "cadgen-js/common/cadScene.js";
-import { loadRenderModule } from "cadgen-js/common/renderModule.js";
+import { loadSourceAnimation } from "cadgen-js/common/renderModule.js";
 import { renderModel } from "cadgen-js/common/renderModel.js";
 import {
   loadSource,
@@ -29,9 +29,7 @@ import { cloneThemePresetSettings } from "cadgen-js/common/themeSettings.js";
 // the same clip the viewer's Animation tab plays drives this scene.
 const HERO_PACKAGE_BASE_URL = "/hero/planetary";
 const HERO_SIDECAR_URL = "/hero/planetary_gear_assembly.step.json";
-// The render module beside the document (<name>.step.js): choreography,
-// authored in the model project and synced here as a plain file.
-const HERO_RENDER_MODULE_URL = "/hero/planetary_gear_assembly.step.js";
+const HERO_DOCUMENT_HASH = "58dfc3609e12077876821915a7aff14e2333359142c0fd3770d357d55044c77d";
 const HERO_STEP_CAD_PATH = "models/assemblies/STEP/planetary_gear_assembly/planetary_gear_assembly.step";
 const HERO_STEP_DEMO_URL =
   "https://cad.fun/?file=fun%2Fplanetary_gear_assembly.step";
@@ -106,15 +104,6 @@ function buildWorkbenchTheme(scheme: PreviewScheme) {
       clearcoat: 0,
       envMapIntensity: 0,
     },
-    edges: {
-      ...(theme.edges || {}),
-      enabled: true,
-      color: scheme === "dark" ? "#202b38" : "#2f3a4b",
-      contrastMode: "manual",
-      opacity: 1,
-      silhouette: true,
-      thickness: 1,
-    },
     background: {
       type: "solid",
       solidColor: palette.background,
@@ -143,6 +132,15 @@ function buildWorkbenchTheme(scheme: PreviewScheme) {
         enabled: false,
       },
     },
+  };
+}
+
+function buildWorkbenchEdges(scheme: PreviewScheme) {
+  return {
+    enabled: true,
+    color: scheme === "dark" ? "#202b38" : "#2f3a4b",
+    silhouette: true,
+    thickness: 1,
   };
 }
 
@@ -251,26 +249,22 @@ export function HeroStepRender() {
     const load = async () => {
       try {
         setStatus("loading step");
-        // The tree's descriptor and the render module beside the document load
-        // in parallel; the clips come through the same loader the viewer uses
-        // (kinematics and animation stay independent end to end).
-        const [descriptor, renderModule] = await Promise.all([
-          fetch(`${HERO_PACKAGE_BASE_URL}/assembly.json`, {
-            cache: "no-store",
-          }).then((response) => {
-            if (!response.ok) {
-              throw new Error(`hero assembly.json: HTTP ${response.status}`);
-            }
-            return response.json();
-          }),
-          loadRenderModule(HERO_RENDER_MODULE_URL),
-        ]);
+        const descriptor = await fetch(`${HERO_PACKAGE_BASE_URL}/assembly.json`, {
+          cache: "no-store",
+        }).then((response) => {
+          if (!response.ok) {
+            throw new Error(`hero assembly.json: HTTP ${response.status}`);
+          }
+          return response.json();
+        });
         const source = await loadSource({
           ...packageSourceFromBaseUrl(HERO_PACKAGE_BASE_URL, descriptor),
           stepParameterUrl: HERO_SIDECAR_URL,
+          documentHash: HERO_DOCUMENT_HASH,
           cadPath: HERO_STEP_CAD_PATH,
         });
-        const clips = (renderModule?.clips ?? {}) as Parameters<typeof findAnimationClip>[0];
+        const animation = await loadSourceAnimation(source.sourceSidecar, { name: "hero animation" });
+        const clips = (animation?.clips ?? {}) as Parameters<typeof findAnimationClip>[0];
         if (disposed) {
           return;
         }
@@ -278,13 +272,14 @@ export function HeroStepRender() {
           findAnimationClip(clips, HERO_CLIP_ID) ??
           findAnimationClip(clips, firstAnimationClipId(clips));
         if (!clip) {
-          throw new Error("hero render module declares no animation clips");
+          throw new Error("hero sidecar declares no animation clips");
         }
         clipDuration = animationClipDuration(clip);
 
         cadModel = buildModel(THREE, source, {
           theme: buildWorkbenchTheme(scheme),
-          displayMode: "solid",
+          displayMode: "shaded_edges",
+          edgeSettings: buildWorkbenchEdges(scheme),
           stepParameters: stepParameterRuntime(source.stepParameterSource),
           scale: CAD_SCENE_SCALE.CAD,
           selection: {

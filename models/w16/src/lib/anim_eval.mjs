@@ -1,4 +1,4 @@
-// Evaluate a clip of w16.anim.js headlessly and dump per-part world matrices.
+// Evaluate the ANIMATION_JS literal in w16.py headlessly and dump per-part world matrices.
 //
 //   node src/lib/anim_eval.mjs <clip> <t0,t1,...|N> [labels.json] > out.json
 //
@@ -10,18 +10,26 @@
 // Python side exports from the built assembly; unknown labels THROW, exactly as
 // the viewer would, so a typo in the choreography fails here first.
 
-import { pathToFileURL } from "node:url";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
 const here = path.dirname(new URL(import.meta.url).pathname);
-const animPath = path.resolve(here, "..", "w16.anim.js");
+const modelPath = path.resolve(here, "..", "w16.py");
 const [clipName, samplesArg, labelsPath] = process.argv.slice(2);
 if (!clipName || !samplesArg) {
   console.error("usage: node anim_eval.mjs <clip> <t0,t1,...|N> [labels.json]");
   process.exit(2);
 }
-const { clips } = await import(pathToFileURL(animPath).href);
+const pythonSource = readFileSync(modelPath, "utf8");
+const marker = "ANIMATION_JS = r'''";
+const animationStart = pythonSource.indexOf(marker) + marker.length;
+const animationEnd = pythonSource.indexOf("\n'''", animationStart);
+if (animationStart < marker.length || animationEnd < animationStart) {
+  throw new Error(`cannot find ANIMATION_JS literal in ${modelPath}`);
+}
+const animationSource = pythonSource.slice(animationStart, animationEnd);
+const animationUrl = `data:text/javascript;base64,${Buffer.from(animationSource).toString("base64")}`;
+const { clips } = await import(animationUrl);
 const clip = clips[clipName];
 if (!clip) throw new Error(`no clip ${clipName}; have ${Object.keys(clips)}`);
 const groups = labelsPath ? JSON.parse(readFileSync(labelsPath, "utf8")) : {};

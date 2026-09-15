@@ -15,18 +15,20 @@ the sidecar for it.
 from __future__ import annotations
 
 import json
-import tempfile
 import unittest
 from pathlib import Path
 
 from cadgen._internal.source_sidecar import (
     SOURCE_SIDECAR_SCHEMA_VERSION,
+    SidecarBindingError,
     SidecarSchemaError,
     read_source_provenance,
     read_source_sidecar,
+    source_sidecar_matches_document,
     source_sidecar_path,
     write_source_sidecar,
 )
+from tests.python.support.tmp_root import generated_cad_directory
 
 CURRENT_SIDECAR = {
     "kinematics": {
@@ -46,7 +48,7 @@ CURRENT_SIDECAR = {
 
 class SidecarSchemaGate(unittest.TestCase):
     def setUp(self) -> None:
-        self._temp = tempfile.TemporaryDirectory(prefix="tmp-sidecar-gate-")
+        self._temp = generated_cad_directory(prefix="sidecar-gate-")
         self.addCleanup(self._temp.cleanup)
         self.root = Path(self._temp.name)
         self.document = self.root / "hinge.step"
@@ -60,12 +62,18 @@ class SidecarSchemaGate(unittest.TestCase):
         path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
         return path
 
+    def _document_hash(self) -> str:
+        import hashlib
+
+        return hashlib.sha256(self.document.read_bytes()).hexdigest()
+
     def test_a_current_schema_sidecar_reads(self) -> None:
         write_source_sidecar(self.document, CURRENT_SIDECAR)
 
         payload = read_source_sidecar(self.document)
         self.assertIsNotNone(payload)
         self.assertEqual(SOURCE_SIDECAR_SCHEMA_VERSION, payload["schemaVersion"])
+        self.assertEqual(self._document_hash(), payload["documentHash"])
 
     def test_a_missing_sidecar_is_not_an_error(self) -> None:
         self.assertIsNone(read_source_sidecar(self.document))
@@ -102,14 +110,31 @@ class SidecarSchemaGate(unittest.TestCase):
         self.assertFalse(model_is_generated(self.document))
         self._write_at_schema(SOURCE_SIDECAR_SCHEMA_VERSION - 1)
         self.assertFalse(model_is_generated(self.document))
-        self._write_at_schema(SOURCE_SIDECAR_SCHEMA_VERSION)
+        write_source_sidecar(self.document, CURRENT_SIDECAR)
         self.assertTrue(model_is_generated(self.document))
+
+    def test_a_sidecar_for_replaced_step_bytes_is_refused(self) -> None:
+        write_source_sidecar(self.document, CURRENT_SIDECAR)
+        self.document.write_text("replacement STEP bytes\n", encoding="utf-8")
+
+        with self.assertRaisesRegex(SidecarBindingError, "does not match hinge.step sha256"):
+            read_source_sidecar(self.document)
+        self.assertFalse(source_sidecar_matches_document(self.document))
+
+    def test_an_already_verified_digest_avoids_rereading_for_binding(self) -> None:
+        digest = self._document_hash()
+        write_source_sidecar(self.document, CURRENT_SIDECAR, document_hash=digest)
+
+        self.assertEqual(
+            digest,
+            read_source_sidecar(self.document, document_hash=digest)["documentHash"],
+        )
 
     def test_provenance_never_falls_back_to_the_sidecar(self) -> None:
         """Source identity lives in the records tier alone. A document with a
         sidecar but no record is an import (or an evicted record) — one rebuild
         re-records, which is the whole cost."""
-        self._write_at_schema(SOURCE_SIDECAR_SCHEMA_VERSION)
+        write_source_sidecar(self.document, CURRENT_SIDECAR)
         path = source_sidecar_path(self.document)
         payload = json.loads(path.read_text(encoding="utf-8"))
         payload["sourceKind"] = "python"

@@ -1,9 +1,9 @@
 """Stdlib-only client for the warm CAD CLI daemon.
 
 The tool launchers' ``CADGEN_DAEMON`` shim imports this module BEFORE any heavy
-import, so it must stay dependency-free and cheap to import. Everything here
-falls back to ``None`` (caller runs inline, cold) on any spawn or protocol
-problem — the daemon is a fast path, never a requirement.
+import, so it must stay dependency-free and cheap to import. Ordinary CLI paths
+retain their cold fallback. Artifact requests require a matched result and
+report transport failures without replaying the work.
 """
 
 from __future__ import annotations
@@ -13,6 +13,8 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
+import threading
 import time
 from pathlib import Path
 from typing import Callable
@@ -57,7 +59,36 @@ _TIMED_OUT = object()
 # script's own folder (``PYTHONPATH=src``), and a build must resolve imports exactly as
 # ``python script.py`` run by the client would. Entries are absolutized against the
 # client's cwd, because the worker runs elsewhere.
-FORWARDED_ENV_VARS = ("CADGEN_CACHE_DIR", "XDG_CACHE_HOME", "LOCALAPPDATA", "PYTHONPATH")
+# CADGEN_FFMPEG is the same kind of per-client choice: `snapshot --video` encodes
+# with the ffmpeg the CALLER has, and a warm worker's ambient PATH is whatever
+# shell happened to start the daemon.
+FORWARDED_ENV_VARS = (
+    "CADGEN_CACHE_DIR",
+    "XDG_CACHE_HOME",
+    "LOCALAPPDATA",
+    "PYTHONPATH",
+    "CADGEN_FFMPEG",
+    "CADGEN_MEMO_CACHE",
+)
+
+# The client's own ffmpeg, looked up once per process. Resolved HERE rather than
+# in the worker because a PATH lookup only answers for the process that does it:
+# a tool dispatched to a resident worker sees the PATH belonging to
+# whatever first spawned the daemon -- an editor, an agent session, a cron run --
+# so an ffmpeg the caller can run was reported as not installed, and installing
+# one after the daemon started never helped. Whenever the caller has one, the
+# ABSOLUTE path travels and the worker looks nothing up; the worker keeps its own
+# PATH fallback for the callers that never came through here.
+_ffmpeg_on_path: str | None = None
+
+
+def _client_ffmpeg() -> str:
+    global _ffmpeg_on_path
+    if _ffmpeg_on_path is None:
+        import shutil
+
+        _ffmpeg_on_path = shutil.which("ffmpeg") or ""
+    return _ffmpeg_on_path
 
 
 def forwarded_env() -> dict[str, str]:
@@ -66,6 +97,12 @@ def forwarded_env() -> dict[str, str]:
     if "PYTHONPATH" in env:
         entries = [os.path.abspath(e) for e in env["PYTHONPATH"].split(os.pathsep) if e]
         env["PYTHONPATH"] = os.pathsep.join(entries)
+    # An explicit CADGEN_FFMPEG is the caller's answer and stands; otherwise the
+    # caller's PATH is asked here, where it is the caller's.
+    if not env.get("CADGEN_FFMPEG"):
+        found = _client_ffmpeg()
+        if found:
+            env["CADGEN_FFMPEG"] = found
     return env
 
 
@@ -145,6 +182,7 @@ def _request_payload(
     root_id: str | None = None,
     closure: str | None = None,
     coalesce: bool = False,
+    dependency: bool = False,
 ) -> dict:
     from cadgen.store.paths import store_root as default_store_root
 
@@ -169,6 +207,9 @@ def _request_payload(
         # request never does -- the model the user asked for runs.
         "closure": str(closure) if closure else None,
         "coalesce": bool(coalesce and closure),
+        # A nested request may consume the reserved dependency-progress
+        # headroom. This is independent of whether it can coalesce.
+        "dependency": bool(dependency),
         "token": compute_version_token(),
     }
 
@@ -179,9 +220,9 @@ def run_via_daemon(
     """Run one CLI invocation on the warm daemon; ``None`` means run inline instead."""
     # Warm by DEFAULT. It was opt-in while the daemon could only hold one job, because
     # turning it on serialised parallel builds -- the moonwatch README told people to
-    # avoid it for exactly that. The pool removed the reason: a burst spawns workers up
-    # to the cap and overflows cold rather than queueing. An optimisation nobody enables
-    # is the same as not having one.
+    # avoid it for exactly that. The pool removed the reason: a burst borrows or spawns
+    # workers while their memory reservations fit. Admission refusal is an explicit
+    # failure, never a cold retry that bypasses the daemon's memory budget.
     if os.environ.get("CADGEN_DAEMON") == "0" or os.environ.get("CADGEN_DAEMON_CHILD"):
         return None
     if not daemon_supported():
@@ -219,42 +260,117 @@ def run_nested(
     if os.environ.get("CADGEN_DAEMON") == "0" or not daemon_supported():
         return None
     payload = _request_payload(
-        tool, argv, cwd, prog, store_root=store_root, root_id=root_id, closure=closure, coalesce=True
+        tool, argv, cwd, prog, store_root=store_root, root_id=root_id, closure=closure,
+        coalesce=True, dependency=True,
     )
     return _run_with_retry(payload, on_stream=on_stream, on_event=on_event)
 
 
-def _run_with_retry(payload: dict, *, on_stream=None, on_event=None) -> int | None:
+def artifact_payload(request: dict, *, store_root: str, dependency: bool = False) -> dict:
+    """Capture a structured source-free request on the calling thread."""
+    from cadgen.daemon.artifacts import normalize_request, store_path
+
+    payload = _request_payload("artifact", [], None, None, store_root=store_path(store_root),
+                               root_id=os.environ.get("CADGEN_ROOT_ID"), dependency=dependency)
+    payload["artifact"] = normalize_request(request)
+    return payload
+
+
+def run_artifact(payload: dict, *, subscriber=None):
+    """Run exactly this artifact request; protocol failure never replays cold."""
+    from cadgen.daemon.artifacts import ArtifactJobError, validate_result
+
+    results, chunks = [], []
+
+    def receive(value):
+        if results:
+            raise ArtifactJobError("artifact worker returned more than one result")
+        results.append(validate_result(payload["artifact"], value))
+
+    def connected(conn):
+        if subscriber is not None:
+            subscriber._bind_detach(conn.close if conn is not None else None)
+
+    try:
+        code = _run_with_retry(payload, on_stream=chunks.append, on_artifact_result=receive, strict=True,
+                               on_connection=connected, cancelled=(lambda: subscriber.detached) if subscriber is not None else None)
+    except transport.AuthenticationError as error:
+        raise ArtifactJobError(f"artifact request failed: {error}") from error
+    if code is None or code != 0 or not results:
+        detail = "".join(chunks).strip()
+        if not detail:
+            detail = ("The geometry service completed without returning the requested geometry."
+                      if code == 0 else f"The geometry service failed (exit {code})."
+                      if code is not None else "The geometry service could not accept the request.")
+        raise ArtifactJobError(f"artifact request failed: {detail}")
+    return results[0]
+
+
+def _run_with_retry(payload: dict, *, on_stream=None, on_event=None,
+                    on_artifact_result=None, strict: bool = False, on_connection=None, cancelled=None) -> int | None:
     address = daemon_address()
     for attempt in range(2):
-        conn = _connect_or_spawn(address)
+        if cancelled is not None and cancelled():
+            return None
+        try:
+            conn = _connect_or_spawn(address)
+        except transport.AuthenticationError:
+            if strict:
+                raise
+            # No request was submitted: preserve the ordinary source/CLI
+            # fallback, without spawning repeatedly over a live listener.
+            return None
         if conn is None:
             return None
         try:
-            outcome = _run_request(conn, payload, on_stream=on_stream, on_event=on_event)
+            if on_connection is not None:
+                on_connection(conn)
+            kwargs = {"on_stream": on_stream, "on_event": on_event}
+            if strict or on_artifact_result is not None:
+                kwargs.update(on_artifact_result=on_artifact_result, strict=strict, cancelled=cancelled)
+            outcome = _run_request(conn, payload, **kwargs)
         finally:
             try:
                 conn.close()
             except OSError:
                 pass
+            if on_connection is not None:
+                on_connection(None)
         if outcome is _RESTART and attempt == 0:
             continue  # stale daemon exited; respawn once and retry
+        if outcome is _RESTART and strict and on_stream is not None:
+            on_stream("The geometry service is updating while existing builds finish. Retry after those builds finish.")
         return outcome if isinstance(outcome, int) else None
     return None
 
 
 def _connect(address: str) -> transport.Channel:
-    key = transport.read_authkey(daemon_identity())
-    if not key:
-        # No key means no daemon has started under this identity, so there is nothing to
-        # connect to. Raising keeps this indistinguishable from a refused connection.
-        raise OSError("no daemon key")
-    return transport.connect(address, key)
+    key = transport.read_authkey(address) or b""
+    try:
+        return transport.connect(address, key)
+    except transport.AuthenticationError:
+        # A live lock owner repairs a replaced key after rejecting this handshake.
+        # Its accept thread and this client observe the rejection concurrently, so
+        # give the owner a bounded window to finish the atomic publication. An empty
+        # key is a recovery probe when external cleanup removed the file entirely.
+        # Windows replacement can spend two 750 ms sharing-violation ladders,
+        # including the unseen-copy retry. Leave a little scheduling headroom.
+        deadline = time.monotonic() + 2.0
+        while True:
+            repaired = transport.read_authkey(address)
+            if repaired and not transport.keys_match(key, repaired):
+                return transport.connect(address, repaired)
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(0.005)
+        raise
 
 
 def _connect_or_spawn(address: str) -> transport.Channel | None:
     try:
         return _connect(address)
+    except transport.AuthenticationError:
+        raise
     except OSError:
         pass
     # Never unlink the address here. Only the daemon that holds the singleton lock
@@ -271,21 +387,28 @@ def _connect_or_spawn(address: str) -> transport.Channel | None:
             # released it. If the daemon answers now, there is nothing to spawn.
             try:
                 return _connect(address)
+            except transport.AuthenticationError:
+                raise
             except OSError:
                 pass
             process = _spawn_daemon(address)
             if process is None:
                 return None
+            _reap_detached(process)
         deadline = time.monotonic() + SPAWN_WAIT_SECONDS
         while time.monotonic() < deadline:
             try:
                 return _connect(address)
+            except transport.AuthenticationError:
+                raise
             except OSError:
                 if process is not None and process.poll() is not None:
                     # Our daemon exited: it failed, or it stood down because one is
                     # already bound. One more connect tells the two apart.
                     try:
                         return _connect(address)
+                    except transport.AuthenticationError:
+                        raise
                     except OSError:
                         return None
                 time.sleep(0.05)
@@ -309,6 +432,25 @@ def _detach_kwargs() -> dict:
     return {"start_new_session": True}
 
 
+def _reap_detached(process: subprocess.Popen) -> None:
+    """Retain and eventually reap the daemon process the client started.
+
+    The daemon deliberately outlives this command, but dropping its ``Popen`` as soon as
+    the socket answers makes Python warn that the subprocess is still running.  A daemon
+    thread may wait for that detached process without keeping the client alive; it also
+    closes the Windows process handle promptly when the daemon eventually exits.
+    """
+    def wait() -> None:
+        with contextlib.suppress(OSError):
+            process.wait()
+
+    threading.Thread(
+        target=wait,
+        name=f"cadgen-daemon-{process.pid}",
+        daemon=True,
+    ).start()
+
+
 def _spawn_daemon(address: str) -> subprocess.Popen | None:
     from cadgen.daemon.executors import worker_env
 
@@ -318,9 +460,6 @@ def _spawn_daemon(address: str) -> subprocess.Popen | None:
     env["CADGEN_DAEMON_CHILD"] = "1"
     env.setdefault("CADGEN_DAEMON_SOCKET", str(address))
     try:
-        # Before the daemon exists, so a client that finds an address always finds the key
-        # that goes with it.
-        transport.ensure_authkey(daemon_identity())
         log_file_path = log_path(address)
         log_file_path.parent.mkdir(parents=True, exist_ok=True)
         with open(log_file_path, "ab") as log_file:
@@ -329,6 +468,10 @@ def _spawn_daemon(address: str) -> subprocess.Popen | None:
                 stdin=subprocess.DEVNULL,
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
+                # A resident daemon must not retain the project directory of the
+                # first model that happened to need it.  Windows refuses to remove a
+                # directory while any live process has it as cwd.
+                cwd=tempfile.gettempdir(),
                 env=env,
                 **_detach_kwargs(),
             )
@@ -432,7 +575,8 @@ def worker_died_message(payload: dict, death: dict) -> str:
 
 
 def _run_request(
-    channel: transport.Channel, payload: dict, *, on_stream=None, on_event=None
+    channel: transport.Channel, payload: dict, *, on_stream=None, on_event=None,
+    on_artifact_result=None, strict: bool = False, cancelled=None,
 ) -> int | object | None:
     """Send one request and stream the response; int exit code, ``_RESTART``, or
     ``None`` on any protocol fault.
@@ -440,15 +584,30 @@ def _run_request(
     Stream frames go to the process's own stdout/stderr unless ``on_stream`` is
     given (a nested child build captures them); ``event`` frames — the build
     tree's model transitions — go to ``on_event``."""
-    if not _send_json(channel, payload):
+    def protocol_failure(reason):
+        if strict and on_stream is not None:
+            on_stream(f"The geometry service {reason}.\n")
         return None
+
+    if cancelled is not None and cancelled():
+        return None
+    if not _send_json(channel, payload):
+        return protocol_failure("disconnected before the request was sent")
     # Applies per frame, not to the whole request: a daemon that is streaming output keeps
     # resetting it, so only genuine silence trips the deadline.
     timeout = request_timeout() or None
     streams = {"stdout": sys.stdout, "stderr": sys.stderr}
+    observed_work = False
+    deadline = time.monotonic() + timeout if timeout else None
     while True:
-        message = _recv_json(channel, timeout)
+        if cancelled is not None and cancelled():
+            return None
+        message = _recv_json(channel, .1 if strict else timeout)
         if message is _TIMED_OUT:
+            if strict:
+                if deadline is not None and time.monotonic() >= deadline:
+                    return protocol_failure(f"stopped responding for {timeout:.0f} seconds")
+                continue
             # Silent past the deadline: either the daemon is wedged, or it is still
             # grinding through a queued build we cannot see. Either way, fall back to
             # a cold in-process run so THIS invocation still completes. Say so on
@@ -461,12 +620,24 @@ def _run_request(
             )
             return None
         if message is None:
-            return None  # closed without an exit frame
+            return protocol_failure("closed the connection before the request finished")
+        deadline = time.monotonic() + timeout if timeout else None
         if message.get("restart"):
+            if strict and observed_work:
+                # An uncertain completed/partial operation cannot replay.
+                return protocol_failure("restarted before confirming the completed request")
             return _RESTART
         if "exit" in message:
             return int(message["exit"])
+        if "artifactResult" in message:
+            if on_artifact_result is None:
+                return None
+            on_artifact_result(message["artifactResult"])
+            observed_work = True
+            continue
         if "event" in message:
+            if strict:
+                return protocol_failure("sent a build update instead of a geometry response")
             if on_event is not None and isinstance(message["event"], dict):
                 on_event(message["event"])
             continue
@@ -474,7 +645,9 @@ def _run_request(
             # The worker running this job is gone. The supervisor follows with the exit
             # frame; this is the one place the loss is explained, and it is never a
             # silent cold retry -- the caller's job may have run for half an hour.
-            text = worker_died_message(payload, message["workerDied"] or {})
+            text = (f"artifact worker died: {message['workerDied']}; no retry\n" if strict
+                    else worker_died_message(payload, message["workerDied"] or {}))
+            observed_work = True
             if on_stream is not None:
                 on_stream(text)
             else:
@@ -484,7 +657,8 @@ def _run_request(
         data = message.get("data")
         stream = message.get("stream")
         if stream not in streams or not isinstance(data, str):
-            return None
+            return protocol_failure("sent an invalid response")
+        observed_work = observed_work or bool(data)
         if on_stream is not None:
             on_stream(data)
             continue
@@ -493,6 +667,37 @@ def _run_request(
         target.flush()
 
 
+
+
+def watch_jobs(after: str | None = None, *, output: str | None = None, store_root: str | None = None) -> dict | None:
+    """Read changes from the running ledger, with at most a one-second wait.
+
+    Like status(), this never starts or restarts a daemon. No model, source
+    path, build request or kernel worker is involved in this read-only request.
+    """
+    if not daemon_supported():
+        return None
+    try:
+        channel = _connect(daemon_address())
+    except OSError:
+        return None
+    try:
+        request = {"kind": "status", "jobsOnly": True, "after": after}
+        if output is not None and store_root is not None:
+            request.update(output=output, storeRoot=store_root)
+        if not _send_json(channel, request):
+            return None
+        message = _recv_json(channel, 2.0)
+        if not isinstance(message, dict):
+            return None
+        payload = message.get("status")
+        if (not isinstance(payload, dict) or not isinstance(payload.get("jobsCursor"), str)
+                or not isinstance(payload.get("jobs"), list)):
+            return None
+        return payload
+    finally:
+        with contextlib.suppress(OSError):
+            channel.close()
 
 
 def status() -> dict | None:

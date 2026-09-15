@@ -54,7 +54,6 @@ def _finish(pieces,bores,label):
     for args in bores:shape=shape-_bore(*args)
     if len(shape.solids())!=1 or not shape.is_valid:raise ValueError(f'{label}: invalid result, solids={len(shape.solids())}, valid={shape.is_valid}, volumes={[s.volume for s in shape.solids()]}')
     shape.label=label;shape.color=srgb('#a9b7c1')
-    shape.cad_material={'metalness':.86,'roughness':.34,'clearcoat':.12}
     return shape
 
 
@@ -111,7 +110,6 @@ def make_wrist_palm_cradle(label='wrist_palm_cradle'):
     for x in (-24.,24.):
         shape=shape-(bd.Pos(x,14,-10.2)*bd.Cylinder(3.5,4.0))
     shape.label=label;shape.color=srgb('#a9b7c1')
-    shape.cad_material={'metalness':.86,'roughness':.34,'clearcoat':.12}
     return shape
 
 

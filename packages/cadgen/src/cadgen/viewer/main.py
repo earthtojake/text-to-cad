@@ -3,7 +3,7 @@
 Launching is UNCONDITIONAL, Jupyter-style: running ``cadgen viewer`` from a
 directory always ends with the URL of a live, correct Viewer for that directory.
 If an identity-probed instance already serves ``realpath(cwd)`` at this identity
-token (version salted with the code's newest mtime — see ``identity_token``),
+token (version plus the runtime content digest — see ``identity_token``),
 its URL is printed with ``action:"reused"`` and nothing is spawned (``--new``
 skips the lookup); otherwise the server binds the first free port from 3245
 upward and prints ``action:"started"``. An EXPLICIT ``--port`` stays strict — it
@@ -354,11 +354,10 @@ def find_reusable(directory: str, token: str) -> dict | None:
     bug, and pid-liveness is the probe's job. Dev instances never register, so
     nothing here can hand back a Vite proxy target.
 
-    The token is the version SALTED with the app files' newest mtime (see
+    The token covers the cadgen Python runtime and exact built client (see
     ``identity_token`` in http_app.py). The entry's token was recorded when
-    that instance STARTED, so an instance running last week's code — the
-    version number is frozen between releases — fails the match after a
-    ``git pull`` or rebuild, and a fresh launch starts fresh instead of
+    that instance STARTED, so an instance running last week's code fails the
+    match after a ``git pull`` or rebuild, and a fresh launch starts instead of
     reusing stale resident code.
     """
     root_real = _realpath_or(directory)
@@ -537,22 +536,6 @@ def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
         _err(f"CAD Viewer cannot serve the current directory — it no longer exists ({error}).\n")
         return 1
 
-    # Reuse before spawn: a live, identity-probed instance already serving this
-    # realpath(root) at this identity token IS the requested viewer. Explicit
-    # --port opts out (you asked for a port, not a viewer), --new forces fresh.
-    # Ephemeral dev backends never reuse and never register.
-    if not args["fresh"] and not args["port_explicit"] and not args["ephemeral"]:
-        held = find_reusable(directory, identity_token())
-        if held:
-            url = f"http://{held.get('host') or DEFAULT_VIEWER_HOST}:{held['port']}/"
-            _out(f"Reusing CAD Viewer at {url} (serving {held.get('root')}, pid {held['pid']})\n")
-            _out(f"CAD Viewer URL: {url}\n")
-            if args["json"]:
-                _out(f"{_compact_json({'url': url, 'port': held['port'], 'action': 'reused'})}\n")
-            return 0
-
-    # Checked AFTER the reuse lookup, so a reuse succeeds with no client on disk.
-    #
     # --api-only exempts the check because in dev the CLIENT COMES FROM VITE:
     # this process serves only /__cad and /__tess_cache, and requiring a built
     # dist made `npm run dev` fail on any checkout that had not run
@@ -568,6 +551,20 @@ def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
             "(--api-only serves the API alone, for a dev server that supplies its own client.)\n"
         )
         return 1
+
+    # Reuse only the exact runtime requested now. Resolving dist before this
+    # lookup is load-bearing: --dist must never hand back a server that is
+    # serving a different client, and a removed default dist is not a usable
+    # resident merely because its registry entry is still alive.
+    if not args["fresh"] and not args["port_explicit"] and not args["ephemeral"]:
+        held = find_reusable(directory, identity_token(dist_dir))
+        if held:
+            url = f"http://{held.get('host') or DEFAULT_VIEWER_HOST}:{held['port']}/"
+            _out(f"Reusing CAD Viewer at {url} (serving {held.get('root')}, pid {held['pid']})\n")
+            _out(f"CAD Viewer URL: {url}\n")
+            if args["json"]:
+                _out(f"{_compact_json({'url': url, 'port': held['port'], 'action': 'reused'})}\n")
+            return 0
 
     host = args["host"]
     port = args["port"]

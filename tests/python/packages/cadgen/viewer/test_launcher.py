@@ -241,10 +241,9 @@ class RollAndReuse(LauncherFixture):
         first = self.launch(["--dist", dist, "--json"], cwd=root)
         a = self.json_line(self.wait_for_url_line(first))
 
-        # Reuse: same realpath(served dir) x identity token -> the existing URL,
-        # exit 0, no spawn. Note NO --dist: the dist check happens after the
-        # reuse lookup.
-        code, stdout, _ = self.run_to_exit(["--json"], cwd=root)
+        # Reuse: same realpath(served dir) x exact runtime identity -> the
+        # existing URL, exit 0, no spawn.
+        code, stdout, _ = self.run_to_exit(["--dist", dist, "--json"], cwd=root)
         self.assertEqual(code, 0)
         self.assertEqual(
             self.json_line(stdout), {"url": a["url"], "port": a["port"], "action": "reused"}
@@ -256,7 +255,7 @@ class RollAndReuse(LauncherFixture):
         alias_parent = tempfile.mkdtemp(dir=self._tmp.name, prefix="cad-alias-")
         alias = os.path.join(alias_parent, "link")
         os.symlink(root, alias)
-        code, stdout, _ = self.run_to_exit(["--json"], cwd=alias)
+        code, stdout, _ = self.run_to_exit(["--dist", dist, "--json"], cwd=alias)
         self.assertEqual(code, 0)
         self.assertEqual(self.json_line(stdout)["action"], "reused")
 
@@ -298,7 +297,7 @@ class RollAndReuse(LauncherFixture):
 
 
 class IdentityToken(LauncherFixture):
-    """Reuse identity is the version SALTED with the app files' newest mtime.
+    """Reuse identity covers the complete Python runtime and selected client.
 
     The version alone is frozen between releases, so in a checkout a `git pull`
     followed by a launch reused a resident server running last week's code.
@@ -357,11 +356,21 @@ class IdentityToken(LauncherFixture):
         self.assertEqual(self.json_line(reused_stdout)["action"], "reused")
 
         token_at_start = self.server_info(a["port"])["identityToken"]
-        self.assertRegex(token_at_start, r"^[^:]*:\d+$", "the token is version:mtime")
+        self.assertRegex(token_at_start, r"^[^:]*:[0-9a-f]{64}$", "the token is version:digest")
 
-        # A pull: a server source's mtime moves forward.
-        future = time.time() + 60
-        os.utime(os.path.join(staged, "src", "cadgen", "viewer", "scanner.py"), (future, future))
+        # A pull changes runtime code outside cadgen.viewer. The viewer imports
+        # daemon transport through its artifact path, so this must re-key too.
+        runtime_file = Path(staged, "src", "cadgen", "daemon", "transport.py")
+        runtime_file.write_text(runtime_file.read_text(encoding="utf-8") + "\n# changed runtime\n", encoding="utf-8")
+
+        stale_info = self.server_info(a["port"])
+        self.assertEqual(stale_info["identityToken"], token_at_start)
+        self.assertNotEqual(stale_info["currentIdentityToken"], token_at_start)
+        self.assertIs(stale_info["restartRequired"], True)
+        with self.assertRaises(urllib.error.HTTPError) as refused:
+            urllib.request.urlopen(f"http://127.0.0.1:{a['port']}/__cad/catalog", timeout=5)
+        self.assertEqual(refused.exception.code, 409)
+        self.assertEqual(json.loads(refused.exception.read())["code"], "viewer_restart_required")
 
         # The resident answers with the token computed AT ITS OWN START —
         # never a re-read, which would let a stale server claim freshness.
@@ -379,11 +388,39 @@ class IdentityToken(LauncherFixture):
         )
 
         # The dist is the other half of the app: a rebuilt client re-keys too.
-        os.utime(os.path.join(staged, "dist", "index.html"), (future + 60, future + 60))
+        Path(staged, "dist", "index.html").write_text("<html>rebuilt viewer</html>", encoding="utf-8")
         third = self.launch_staged(staged, root)
         c = self.json_line(self.wait_for_url_line(third))
         self.assertEqual(c["action"], "started", "a rebuilt dist must not reuse the old client")
         self.assertNotIn(c["port"], (a["port"], b["port"]))
+
+    def test_explicit_dist_never_reuses_a_different_client(self) -> None:
+        staged = self.stage_app()
+        root = self.make_root()
+        first = self.launch_staged(staged, root)
+        a = self.json_line(self.wait_for_url_line(first))
+
+        alternate = os.path.join(staged, "alternate-dist")
+        os.makedirs(alternate)
+        # The realpath is part of the identity even when the files happen to
+        # match now: this process must keep serving the directory requested.
+        Path(alternate, "index.html").write_text("<html>viewer</html>", encoding="utf-8")
+        second = subprocess.Popen(
+            [*LAUNCH, "--json", "--dist", alternate],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=root,
+            env=self.env(PYTHONPATH=os.path.join(staged, "src")),
+        )
+        self._children.append(second)
+        b = self.json_line(self.wait_for_url_line(second))
+        self.assertEqual(b["action"], "started")
+        self.assertNotEqual(b["port"], a["port"])
+        self.assertNotEqual(
+            self.server_info(b["port"])["identityToken"],
+            self.server_info(a["port"])["identityToken"],
+        )
 
 
 class DistFreshnessWarning(unittest.TestCase):

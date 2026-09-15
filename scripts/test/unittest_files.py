@@ -15,9 +15,9 @@ which `-m unittest` would run silently.
     python scripts/test/unittest_files.py --top <repo root> [--jobs N] <test file>...
 
 With ``--jobs N`` greater than one, each FILE runs in its own interpreter, N at a time,
-with its own fresh ``CADGEN_CACHE_DIR`` (a temporary store, removed afterwards), so
-modules cannot see one another's builds and a module that spawns workers or a daemon
-does not serialize the rest. The per-module output is printed as each finishes and
+with its own fresh store and private daemon endpoint/auth state. Its daemon is retired
+before the temporary directories are removed, so modules cannot see one another's
+builds or stop one another's artifact workers. The per-module output is printed as each finishes and
 the final ``Ran N tests`` / ``OK`` / ``FAILED`` summary aggregates every module, so a
 log reads the same as a single-process run. The loaded test set is identical to
 `python -m unittest <files>` run from --top either way.
@@ -37,6 +37,7 @@ import tempfile
 import time
 import traceback
 import unittest
+import uuid
 
 
 def dotted_name(path: str, top: str) -> str:
@@ -138,8 +139,16 @@ def _counts(output: str) -> dict[str, int]:
 
 def _run_one_file(path: str, top: str, verbose: bool) -> tuple[str, int, str]:
     store = tempfile.mkdtemp(prefix="cadgen-test-store.")
+    # Stores alone do not isolate lazy artifact jobs: a sibling test can stop
+    # the shared daemon while this module is reading its package. Keep auth,
+    # logs and the actual endpoint private too. The short filename avoids the
+    # Unix socket length ceiling; Windows pipe names need explicit uniqueness.
+    state = tempfile.mkdtemp(prefix="cgt-")
     env = dict(os.environ)
     env["CADGEN_CACHE_DIR"] = store
+    env["CADGEN_DAEMON_STATE_DIR"] = state
+    env["CADGEN_DAEMON_SOCKET"] = (rf"\\.\pipe\cadgen-test-{uuid.uuid4().hex}" if os.name == "nt"
+                                  else os.path.join(state, "d.sock"))
     argv = [sys.executable, os.path.abspath(__file__), "--top", top, "--jobs", "1"]
     if verbose:
         argv.append("--verbose")
@@ -147,7 +156,22 @@ def _run_one_file(path: str, top: str, verbose: bool) -> tuple[str, int, str]:
     try:
         completed = subprocess.run(argv, env=env, capture_output=True, text=True, cwd=os.getcwd())
     finally:
-        shutil.rmtree(store, ignore_errors=True)
+        try:
+            # No key means no daemon could have bound under this private state.
+            if any(name.endswith(".key") for name in os.listdir(state)):
+                cleanup_env = dict(env)
+                cleanup_env["PYTHONPATH"] = os.pathsep.join(filter(None, [
+                    os.path.join(top, "packages", "cadgen", "src"), env.get("PYTHONPATH", "")
+                ]))
+                cleanup = subprocess.run([
+                    sys.executable, os.path.join(top, "tests", "python", "support", "daemon_cleanup.py"),
+                    env["CADGEN_DAEMON_SOCKET"],
+                ], env=cleanup_env, capture_output=True, text=True, timeout=15)
+                if cleanup.returncode:
+                    raise RuntimeError(f"test daemon cleanup failed: {cleanup.stdout}{cleanup.stderr}")
+        finally:
+            shutil.rmtree(store, ignore_errors=True)
+            shutil.rmtree(state, ignore_errors=True)
     return path, completed.returncode, (completed.stdout or "") + (completed.stderr or "")
 
 

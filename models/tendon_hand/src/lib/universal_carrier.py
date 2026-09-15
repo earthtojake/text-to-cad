@@ -73,7 +73,6 @@ def make_universal_carrier(phalanx_width=18.,yaw_plane=8.,
     frame=bd.fillet(rims,.08)
     frame.label=label
     frame.color=srgb('#a9b7c1')
-    frame.cad_material={'roughness':.34,'metalness':.86,'clearcoat':.12}
     bounds=frame.bounding_box()
     if bounds.min.X > -x-.9 or bounds.max.X < x+.9:
         raise ValueError(f'{label}: Boolean result lost a bearing cheek')

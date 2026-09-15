@@ -1,10 +1,9 @@
 """kinematics= end to end: declaration -> resolved sidecar.
 
 The decoration-time vocabulary is pinned in test_kinematics_def; this covers
-the BUILD half (design/pose-animation-split.md): mate refs validate against
+the build half: mate refs validate against
 real occurrences, axis selector refs resolve to world numbers, the block lands
-in the ``.step.json`` sidecar (kinematics only — choreography is the render
-module beside the document, which no build reads). No declaration moves
+in the unified ``.step.json`` sidecar. No declaration moves
 geometry: the tree is the model's return value as stored.
 """
 
@@ -14,6 +13,7 @@ import json
 import math
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 from tests.python.support.cad_test_roots import IsolatedCadRoots
@@ -126,7 +126,7 @@ class KinematicsBuildTests(unittest.TestCase):
         self.assertEqual(0, self._build(script))
 
         sidecar = self._sidecar(script)
-        self.assertEqual(sidecar["schemaVersion"], 6)
+        self.assertEqual(sidecar["schemaVersion"], 9)
         # The sidecar file carries the branded suffix.
         self.assertTrue((self.root / "hinge.step.json").is_file())
 
@@ -146,6 +146,50 @@ class KinematicsBuildTests(unittest.TestCase):
 
         # The descriptor stays STEP-pure: kinematics is sidecar-only.
         self.assertNotIn("kinematics", self._descriptor(script))
+
+    def test_preview_and_sidecar_share_one_owned_kinematics_resolution(self) -> None:
+        from cadgen.daemon import executors
+
+        script = self._write("owned.py")
+        previews = []
+
+        def sink(event: dict) -> None:
+            preview = event.get("preview")
+            if not isinstance(preview, dict) or not isinstance(preview.get("kinematics"), dict):
+                return
+            previews.append(json.loads(json.dumps(preview["kinematics"])))
+            # Reporting owns its event payload. A sink may retain or mutate it;
+            # neither action may alter the final sidecar or the cached value.
+            preview["kinematics"]["mates"][0]["name"] = "sink mutation"
+
+        def resolve(block, **_kwargs):
+            resolved = json.loads(json.dumps(block))
+            resolved["mates"][0].update(parentId="o1.1", childId="o1.2")
+            return resolved, {"#base": "o1.1", "#arm": "o1.2"}
+
+        view = self.root / "kinematics-view"
+
+        def export_view(_tree):
+            view.mkdir(exist_ok=True)
+            return view
+
+        executors.set_event_sink(sink)
+        try:
+            with mock.patch(
+                "cadgen._internal.kinematics_resolve.resolve_kinematics_block",
+                side_effect=resolve,
+            ) as resolve_call, mock.patch(
+                "cadgen.store.view.export_view", side_effect=export_view,
+            ) as export_call:
+                self.assertEqual(0, self._build(script))
+        finally:
+            executors.set_event_sink(None)
+
+        self.assertEqual(resolve_call.call_count, 1)
+        self.assertEqual(export_call.call_count, 1)
+        self.assertEqual(len(previews), 1)
+        self.assertEqual(previews[0], self._sidecar(script)["kinematics"])
+        self.assertEqual(self._sidecar(script)["kinematics"]["mates"][0]["name"], "swing")
 
     def test_axis_selector_refs_resolve_to_world_numbers(self) -> None:
         script = self.root / "pivot.py"
@@ -194,13 +238,6 @@ class KinematicsBuildTests(unittest.TestCase):
             encoding="utf-8",
         )
         with self.assertRaisesRegex(ValueError, "'#wrist' does not name an occurrence"):
-            self._build(script)
-
-    def test_animation_is_not_a_decorator_argument(self) -> None:
-        # No decorator names JavaScript: the render module beside the document
-        # is discovered by name. `animation=` is an unknown argument like any other.
-        script = self._write("noanim.py", extra=', animation="nope.anim.js"')
-        with self.assertRaisesRegex(TypeError, "unexpected keyword argument: animation"):
             self._build(script)
 
     def test_the_root_exposes_no_pose_surface(self) -> None:

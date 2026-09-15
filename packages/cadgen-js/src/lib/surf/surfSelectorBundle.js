@@ -36,11 +36,7 @@ const EDGE_COLUMNS = [
   "dihedralDeg", "visibilityClass", "surfaceHalfEdgeStart", "surfaceHalfEdgeCount",
 ];
 
-// Mirror of cadgen's step_topology_capabilities / class codes.
-const CLASS_CODES = {
-  none: 0, feature: 1, tangent: 2, seam: 3, degenerate: 4, boundary: 5,
-  nonManifold: 6, unknown: 7,
-};
+// Mirror of cadgen's step_topology_capabilities render classes.
 const RENDER_VISIBILITY_CLASSES = ["feature", "tangent", "seam", "degenerate"];
 
 function capabilities() {
@@ -50,13 +46,11 @@ function capabilities() {
       angularToleranceDeg: 2,
       samples: 3,
     },
+    // The render records own the CAD edges (per-class line segments built from
+    // the same tessellation's boundary polylines, see surfMeshData.js), so the
+    // selector runtime's topology line pass stays off for surf components.
     surfaceEdgeRendering: {
-      algorithm: "surf-grid-clip-v1",
-      primitiveAttributes: {
-        barycentric: "_CAD_EDGE_BARYCENTRIC",
-        class: "_CAD_EDGE_CLASS",
-      },
-      classCodes: { ...CLASS_CODES },
+      algorithm: "surf-edge-lines-v1",
       visibilityClasses: [...RENDER_VISIBILITY_CLASSES],
     },
   };
@@ -267,36 +261,8 @@ export function buildSelectorBundleFromSurf(index, floats, options = {}) {
     segmentRanges.set(edge.ord, { start: segmentStart, count: edgeIds.length - segmentStart });
   }
 
-  // --- Surface half-edges (barycentric overlay index) -------------------------
-  // Grouped per edge so edge rows can carry contiguous [start, count) runs.
-  const halfEdgesByEdgeRow = new Map();
-  for (const range of component.faceRanges) {
-    const faceRow = faceRowByOrd.get(range.ord);
-    const triangleBase = range.indexStart / 3;
-    const triangleCount = range.indexCount / 3;
-    for (let t = 0; t < triangleCount; t += 1) {
-      for (let side = 0; side < 3; side += 1) {
-        const ord = component.sideOrds[(triangleBase + t) * 3 + side];
-        if (!ord) continue;
-        const edgeRow = edgeRowByOrd.get(ord);
-        if (edgeRow === undefined) continue;
-        const classCode = CLASS_CODES[edges[edgeRow].class] || 0;
-        if (!classCode) continue;
-        let list = halfEdgesByEdgeRow.get(edgeRow);
-        if (!list) halfEdgesByEdgeRow.set(edgeRow, (list = []));
-        list.push([edgeRow, faceRow, 0, 0, triangleBase + t, side, classCode]);
-      }
-    }
-  }
-  const surfaceHalfEdges = [];
-  const halfEdgeRanges = new Map();
-  for (const edge of edges) {
-    const row = edgeRowByOrd.get(edge.ord);
-    const list = halfEdgesByEdgeRow.get(row) || [];
-    const start = surfaceHalfEdges.length / 7;
-    for (const halfEdge of list) surfaceHalfEdges.push(...halfEdge);
-    halfEdgeRanges.set(edge.ord, { start, count: list.length });
-  }
+  // The edge table keeps the GLB manifest's surfaceHalfEdge columns for schema
+  // parity; the per-corner overlay they indexed is gone, so they read 0.
 
   // --- Shape rows --------------------------------------------------------------
   const shapeBounds = new Map();
@@ -370,7 +336,6 @@ export function buildSelectorBundleFromSurf(index, floats, options = {}) {
     const geometry = edgeGeometry.get(edge.ord);
     const relation = edgeFaceRanges.get(edge.ord);
     const segments = segmentRanges.get(edge.ord);
-    const halfEdges = halfEdgeRanges.get(edge.ord);
     let relevance = 100 * Math.sqrt(Math.max(geometry.length, 0) / totalLength);
     if (["line", "circle", "ellipse"].includes(edge.curveType)) relevance += 8;
     if (geometry.length < lengthFloor) relevance -= 45;
@@ -396,8 +361,8 @@ export function buildSelectorBundleFromSurf(index, floats, options = {}) {
       edge.continuity || "",
       edge.dihedralDeg ?? null,
       edge.class,
-      halfEdges.start,
-      halfEdges.count,
+      0,
+      0,
     ];
   });
 
@@ -427,7 +392,6 @@ export function buildSelectorBundleFromSurf(index, floats, options = {}) {
       faceProxyRunCount: component.faceRanges.length,
       edgeProxyPointCount: edgePositions.length / 3,
       edgeProxySegmentCount: edgeIds.length,
-      surfaceHalfEdgeCount: surfaceHalfEdges.length / 7,
     },
     edgeRendering: {
       visibilityClasses: [...RENDER_VISIBILITY_CLASSES],
@@ -481,7 +445,6 @@ export function buildSelectorBundleFromSurf(index, floats, options = {}) {
       edgeIds: Uint32Array.from(edgeIds),
       faceEdgeRows: Uint32Array.from(faceEdgeRows),
       edgeFaceRows: Uint32Array.from(edgeFaceRows),
-      surfaceHalfEdges: Uint32Array.from(surfaceHalfEdges),
     },
   };
 }

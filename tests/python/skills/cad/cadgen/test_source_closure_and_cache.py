@@ -140,8 +140,11 @@ class ReadStepCachedTests(unittest.TestCase):
 
             build_step_artifact(repo_root=Path(raw_dir), step=step_path)
             with mock.patch(
-                "cadgen._internal.step_scene_package.load_step_scene",
-                side_effect=AssertionError("package miss"),
+                "cadgen._internal.step_scene_package._load_step_scene_text",
+                side_effect=AssertionError("text STEP parse on warm hit"),
+            ), mock.patch(
+                "cadgen.daemon.executors.submit_compile",
+                side_effect=AssertionError("compile submitted on warm hit"),
             ):
                 warm = read_step(step_path)
             self.assertEqual(_face_count(raw.wrapped), _face_count(warm.wrapped))
