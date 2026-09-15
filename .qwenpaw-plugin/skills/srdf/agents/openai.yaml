@@ -1,0 +1,4 @@
+interface:
+  display_name: "SRDF"
+  short_description: "Author and validate MoveIt2 SRDF semantics."
+  default_prompt: "Use $srdf to author and validate MoveIt2 SRDF files as direct XML paired with their URDF, then hand new or changed SRDFs to $cad-viewer for review and optional MoveIt2 controls."

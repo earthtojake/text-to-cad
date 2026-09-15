@@ -1,0 +1,4 @@
+interface:
+  display_name: "DfAM Check"
+  short_description: "Measure meshes against DfAM printability rules"
+  default_prompt: "Use $dfam-check to measure this mesh against DfAM rules for my target process."

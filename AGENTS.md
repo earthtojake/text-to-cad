@@ -53,8 +53,9 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
 ## Repo Map
 
 - `skills/`: agent skills and their references/scripts.
-- `.claude-plugin/`, `.codex-plugin/`: agent plugin manifests. The repository
-  root is the plugin package; its skills are `skills/` directly.
+- `.claude-plugin/`, `.codex-plugin/`, `.qwenpaw-plugin/`: agent plugin
+  manifests. The repository root is the plugin package; its skills are
+  `skills/` directly.
 - `models/`: sample and durable CAD/robot-description fixtures.
 - `apps/viewer/`: the CAD Viewer's React client (its backend is `cadgen.viewer`).
 - `packages/cadgen-js`: shared JS CAD/render/runtime code, UI-framework agnostic.
