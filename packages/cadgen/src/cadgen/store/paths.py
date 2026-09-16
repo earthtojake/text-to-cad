@@ -16,7 +16,7 @@ from pathlib import Path
 
 # Mirror of TESSELLATION_VERSION in packages/cadgen-js/src/lib/surf/tessellate.js
 # (sync-tested). It is part of the MESH index key, not a store salt.
-MESH_TESSELLATION_VERSION = 3
+MESH_TESSELLATION_VERSION = 4
 
 # "document" is the ARTIFACT side (sha256 of a file's bytes → its tree); every
 # other kind is the code/dependency side. STORE.md §2, the law.
