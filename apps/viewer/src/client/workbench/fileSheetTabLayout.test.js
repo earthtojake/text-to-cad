@@ -22,10 +22,71 @@ import {
 
 const STEP_SECTIONS = ["tree", "pose", "display", "metadata"];
 
-test("only step supports the split", () => {
+test("step, dxf and the robot kinds support the split; a plain mesh does not", () => {
   assert.equal(kindSupportsSplit("step"), true);
   assert.equal(kindSupportsSplit("dxf"), true);
-  assert.equal(kindSupportsSplit("urdf"), false);
+  // Robots gained a split when Components arrived: the inventory sits above the
+  // Reference/Joints readouts, the same shape as STEP's Tree.
+  assert.equal(kindSupportsSplit("urdf"), true);
+  assert.equal(kindSupportsSplit("srdf"), true);
+  assert.equal(kindSupportsSplit("sdf"), true);
+  // A plain mesh has one readout strip and nothing to promote above it.
+  assert.equal(kindSupportsSplit("mesh"), false);
+});
+
+test("a robot with named components puts Components on top, the readouts below", () => {
+  for (const kind of ["urdf", "srdf", "sdf"]) {
+    const arrangement = defaultFileSheetTabArrangement(
+      kind,
+      ["components", "reference", "joints", "display"]
+    );
+    assert.equal(arrangement.split, true, `${kind} should split`);
+    assert.deepEqual(arrangement.top, ["components"], `${kind} top pane`);
+    assert.deepEqual(
+      arrangement.bottom,
+      ["reference", "joints", "display"],
+      `${kind} bottom pane`
+    );
+    const resolved = resolveFileSheetTabPanes(arrangement, kind, []);
+    assert.equal(resolved.panes[0].activeId, "components");
+    assert.equal(resolved.panes[1].activeId, "reference");
+  }
+});
+
+test("Components slots into the top pane of a stored robot split when it first appears", () => {
+  // The user dragged Joints up on a robot with no named objects; the next robot has
+  // some, and Components joins the pane it belongs to rather than being appended.
+  const stored = { split: true, top: ["joints"], bottom: ["display"] };
+  const normalized = normalizeFileSheetTabArrangement(
+    stored,
+    "urdf",
+    ["components", "reference", "joints", "display"]
+  );
+  assert.deepEqual(normalized.top, ["components", "joints"]);
+  assert.deepEqual(normalized.bottom, ["reference", "display"]);
+  assert.equal(normalized.split, true);
+});
+
+test("a robot with no named components opens as one strip, and can still be split", () => {
+  // Making robots splittable must not hand every existing robot a split it never
+  // had: with no Components tab there is no designated top-pane tab, so the
+  // default stays the single strip these files have always shown.
+  for (const [kind, sections] of [
+    ["urdf", ["joints", "display"]],
+    ["srdf", ["motion", "joints", "display"]],
+    ["sdf", ["sdf", "joints", "display"]]
+  ]) {
+    const arrangement = defaultFileSheetTabArrangement(kind, sections);
+    assert.equal(arrangement.split, false, `${kind} should not split by default`);
+    assert.deepEqual(arrangement.top, sections, `${kind} single strip`);
+    assert.deepEqual(arrangement.bottom, []);
+
+    // The split toggle is still honoured — it just is not the default.
+    const split = setFileSheetTabSplit(arrangement, kind, true, sections);
+    assert.equal(split.split, true, `${kind} split toggle`);
+    assert.deepEqual(split.top, sections.slice(0, 1));
+    assert.deepEqual(split.bottom, sections.slice(1));
+  }
 });
 
 test("default step arrangement puts the tree on top and everything else on the bottom", () => {
@@ -154,9 +215,9 @@ test("a stored strip picks up animation at its render-order slot", () => {
 });
 
 test("default non-split-kind arrangement is a single strip", () => {
-  const arrangement = defaultFileSheetTabArrangement("urdf", ["joints", "display", "metadata"]);
+  const arrangement = defaultFileSheetTabArrangement("mesh", ["measurements", "display", "metadata"]);
   assert.equal(arrangement.split, false);
-  assert.deepEqual(arrangement.top, ["joints", "display", "metadata"]);
+  assert.deepEqual(arrangement.top, ["measurements", "display", "metadata"]);
   assert.deepEqual(arrangement.bottom, []);
 });
 
@@ -229,10 +290,10 @@ test("normalize re-derives the default split when a requested split has an empty
 });
 
 test("normalize forces a single strip for non-split kinds", () => {
-  const stored = { split: true, top: ["joints"], bottom: ["display"] };
-  const normalized = normalizeFileSheetTabArrangement(stored, "urdf", ["joints", "display", "metadata"]);
+  const stored = { split: true, top: ["measurements"], bottom: ["display"] };
+  const normalized = normalizeFileSheetTabArrangement(stored, "mesh", ["measurements", "display", "metadata"]);
   assert.equal(normalized.split, false);
-  assert.deepEqual(normalized.top, ["joints", "display", "metadata"]);
+  assert.deepEqual(normalized.top, ["measurements", "display", "metadata"]);
   assert.deepEqual(normalized.bottom, []);
 });
 
@@ -292,11 +353,11 @@ test("resolve panes: an open id activates its tab (last in pane wins)", () => {
 });
 
 test("resolve panes: single strip for non-step uses first tab by default", () => {
-  const arrangement = defaultFileSheetTabArrangement("urdf", ["motion", "joints", "display"]);
-  const resolved = resolveFileSheetTabPanes(arrangement, "urdf", []);
+  const arrangement = defaultFileSheetTabArrangement("mesh", ["animation", "measurements", "display"]);
+  const resolved = resolveFileSheetTabPanes(arrangement, "mesh", []);
   assert.equal(resolved.split, false);
   assert.equal(resolved.panes.length, 1);
-  assert.equal(resolved.panes[0].activeId, "motion");
+  assert.equal(resolved.panes[0].activeId, "animation");
 });
 
 test("activating a tab prunes pane siblings from the open list", () => {

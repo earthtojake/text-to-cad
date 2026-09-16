@@ -268,7 +268,16 @@ highlights that mesh object in the viewport; picking it in the viewport selects
 and reveals its row. Ctrl/Cmd/Shift-click toggles additional components. Objects
 retain their visual transforms as joints move. Unnamed objects remain rendered
 but are omitted from the inventory; files without named objects have neither
-Components nor the component Reference tab.
+Components nor the component Reference tab, and their sheet is the single tab
+strip it has always been.
+
+**Components is an Inspect affordance.** The per-object split happens only while
+the Render session is off, so Render keeps the per-visual geometry a robot has
+always had: its photographic scene receives no component selection, and the
+Materials tab's targets stay the robot's visuals rather than the objects inside
+them. A mesh object whose loader ranges do not describe a slice of its visual is
+reported once on the console and leaves that visual whole — it contributes no
+component rows, and the robot renders unchanged.
 
 Reference shows the selected objects' link, visual, mesh, and object identifiers,
 with a copy button for each. Robot references are prompt locators of the form

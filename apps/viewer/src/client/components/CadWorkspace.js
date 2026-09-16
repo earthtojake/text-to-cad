@@ -1937,7 +1937,7 @@ export default function CadWorkspace({
     };
   }, [fileSessionNamespace, selectedAnimationSourceKey, selectedEntry, selectedSourceAnimation]);
 
-  const selectedUrdfMeshGeometryResult = useMemo(() => {
+  const selectedUrdfLinkMeshGeometryResult = useMemo(() => {
     if (!selectedUrdfData || !selectedUrdfMeshes) {
       return {
         meshData: null,
@@ -1946,7 +1946,7 @@ export default function CadWorkspace({
     }
     try {
       return {
-        meshData: buildRobotComponentGeometry(buildUrdfMeshGeometry(selectedUrdfData, selectedUrdfMeshes, { lightweight: true })),
+        meshData: buildUrdfMeshGeometry(selectedUrdfData, selectedUrdfMeshes, { lightweight: true }),
         error: ""
       };
     } catch (error) {
@@ -1956,6 +1956,26 @@ export default function CadWorkspace({
       };
     }
   }, [selectedUrdfData, selectedUrdfMeshes]);
+  // Splitting a visual into its named objects is an INSPECT affordance. Render owns an
+  // isolated photographic scene, and the parts it is handed are the Materials targets —
+  // so a robot in Render keeps the per-visual geometry it has always had, and the split
+  // never reaches the Materials picker. Keeping the split in its own memo also means a
+  // mode switch never rebuilds the link geometry underneath it.
+  const selectedUrdfMeshGeometryResult = useMemo(() => {
+    if (renderSession.enabled || !selectedUrdfLinkMeshGeometryResult.meshData) {
+      return selectedUrdfLinkMeshGeometryResult;
+    }
+    try {
+      return {
+        meshData: buildRobotComponentGeometry(selectedUrdfLinkMeshGeometryResult.meshData),
+        error: ""
+      };
+    } catch (error) {
+      // The split is an enhancement: a failure in it costs the components, never the robot.
+      console.warn("Failed to split robot mesh objects into components", error);
+      return selectedUrdfLinkMeshGeometryResult;
+    }
+  }, [renderSession.enabled, selectedUrdfLinkMeshGeometryResult]);
   const selectedUrdfComponents = useMemo(
     () => robotComponents(selectedUrdfMeshGeometryResult.meshData, selectedUrdfFileRef),
     [selectedUrdfMeshGeometryResult.meshData, selectedUrdfFileRef]
@@ -1963,7 +1983,12 @@ export default function CadWorkspace({
   const robotSelection = useRobotComponentSelection(
     selectedUrdfComponents, selectedUrdfMeshGeometryResult.meshData, selectedUrdfFileRef
   );
-  const robotComponentsActive = selectedEntryContentKind === VIEWPORT_CONTENT.ROBOT && selectedUrdfComponents.length > 0;
+  // Inspect only, and stated twice on purpose: the geometry above is unsplit in Render,
+  // and this keeps the viewport's picking, hover and activate wiring on main's path even
+  // if that ever changes.
+  const robotComponentsActive = !renderSession.enabled &&
+    selectedEntryContentKind === VIEWPORT_CONTENT.ROBOT &&
+    selectedUrdfComponents.length > 0;
   const movableUrdfJoints = useMemo(
     () => (
       Array.isArray(selectedUrdfData?.joints)

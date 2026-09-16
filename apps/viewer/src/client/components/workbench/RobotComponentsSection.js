@@ -29,9 +29,25 @@ function ComponentRow({ component, selected, onSelect, onHover }) {
   );
 }
 
+// A plain loop over one Map, not `Object.groupBy`: that is newer than the browsers this
+// client targets, and one pass building one Map is what the grouping actually needs.
+// Insertion order is the components' render order, so links appear as the robot lists them.
+function groupByLink(components) {
+  const groups = new Map();
+  for (const component of components) {
+    const existing = groups.get(component.linkName);
+    if (existing) {
+      existing.push(component);
+    } else {
+      groups.set(component.linkName, [component]);
+    }
+  }
+  return groups;
+}
+
 export default function RobotComponentsSection({ components, selectedIds, onSelect, onHover }) {
-  const groups = useMemo(() => Object.groupBy(components, (component) => component.linkName), [components]);
-  return Object.entries(groups).map(([linkName, entries]) => (
+  const groups = useMemo(() => groupByLink(components), [components]);
+  return [...groups].map(([linkName, entries]) => (
     <FileSheetSubsection key={linkName} title={linkName} contentClassName="space-y-0">
       {entries.map((component) => (
         <ComponentRow key={component.id} component={component} selected={selectedIds.includes(component.id)} onSelect={onSelect} onHover={onHover} />

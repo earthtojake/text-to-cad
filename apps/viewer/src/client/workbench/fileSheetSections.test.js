@@ -88,6 +88,39 @@ test("rendered file sheet sections include closed-by-default sections", () => {
   }), ["animation", "display"]);
 });
 
+test("named robot objects add Components and Reference between Motion and Joints", () => {
+  // Components is the inventory of named objects inside the linked meshes and
+  // Reference is the readout for whatever is selected, so the pair sits together
+  // ahead of Joints — the tab that MOVES the robot — and ahead of Display.
+  assert.deepEqual(
+    renderedFileSheetSectionIds("urdf", { hasRobotComponents: true }),
+    ["components", "reference", "joints", "display"]
+  );
+  assert.deepEqual(
+    renderedFileSheetSectionIds("srdf", { hasRobotComponents: true, motionEnabled: true }),
+    ["motion", "components", "reference", "joints", "display"]
+  );
+  assert.deepEqual(
+    renderedFileSheetSectionIds("sdf", { hasRobotComponents: true }),
+    ["sdf", "components", "reference", "joints", "display"]
+  );
+
+  // Without named objects — an STL-only robot, or meshes whose objects are all
+  // unnamed — neither tab is advertised, and the strip is exactly what main shows.
+  assert.deepEqual(renderedFileSheetSectionIds("urdf", { hasRobotComponents: false }), ["joints", "display"]);
+  assert.deepEqual(renderedFileSheetSectionIds("srdf"), ["joints", "display"]);
+  assert.deepEqual(renderedFileSheetSectionIds("sdf"), ["sdf", "joints", "display"]);
+
+  // Components is an Inspect-only inventory: Render mode still opens Studio alone.
+  assert.deepEqual(
+    renderedFileSheetSectionIds("urdf", { renderMode: true, hasRobotComponents: true }),
+    ["render"]
+  );
+  // The default open set is unchanged — the tab layout activates Components as the
+  // top pane's leftmost tab, so it is not listed here.
+  assert.deepEqual(defaultOpenFileSheetSectionIds("urdf", { hasRobotComponents: true }), ["joints"]);
+});
+
 test("Render mode orders Studio, Materials, Kinematics and Animation when authored", () => {
   assert.deepEqual(renderedFileSheetSectionIds("step", {
     renderMode: true,
