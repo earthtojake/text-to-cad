@@ -282,7 +282,10 @@ component rows, and the robot renders unchanged.
 Reference shows the selected objects' link, visual, mesh, and object identifiers,
 with a copy button for each. Robot references are prompt locators of the form
 `models/robot.urdf#link=arm&visual=arm%3Av1&object=3mf%3A0&index=0&name=bracket`.
-The prefix identifies the robot file; path segments and fragment values are percent-encoded.
+The prefix identifies the robot file RELATIVE TO THE SERVED ROOT — the path the
+catalog and the sidebar show, not the absolute one the session keys its pose
+state under, because the locator's whole purpose is to be pasted somewhere else.
+Path segments and fragment values are percent-encoded.
 `visual` is the parsed visual ID (`<link>:v<one-based visual ordinal>` for URDF);
 `object` is the mesh loader's object ID and `index` its zero-based position in the
 loaded mesh's parts list. `name` preserves the authored object name. Resolve the
