@@ -25,7 +25,7 @@ add_repo_path("packages/cadgen/src")
 from cadgen import step_artifact_cli  # noqa: E402
 from cadgen._internal.step_assemble import assemble_step_from_package  # noqa: E402
 from cadgen.catalog import result_view_dir  # noqa: E402
-from tests.python.support.cad_test_roots import IsolatedCadRoots  # noqa: E402
+from tests.python.support.cad_test_roots import ClassCadRoots, IsolatedCadRoots  # noqa: E402
 
 # Two occurrences of DISTINCT parts with per-occurrence colors and a
 # kinematics block — the planetary pilot's shape of metadata, minimized.
@@ -56,26 +56,46 @@ if __name__ == "__main__":
 
 
 class GeneratedStepFidelityTests(unittest.TestCase):
+    # The generated package is built ONCE for the class: every test reads it (or
+    # assembles and imports a COPY into its own store), none rebuilds it.
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls._class_roots = ClassCadRoots(prefix="cadfid-seed-")
+        cls._seed_dir = cls._class_roots.cad_root / "seed"
+        cls._seed_dir.mkdir()
+        generator = cls._seed_dir / "colored.py"
+        generator.write_text(COLORED_ASSEMBLY_GENERATOR, encoding="utf-8")
+        payload = step_artifact_cli.build_step_artifact(
+            repo_root=Path.cwd(),
+            step=cls._seed_dir / "colored.step",
+            source_path=generator,
+        )
+        if not payload.get("ok"):
+            raise RuntimeError(f"the seed package could not be built: {payload}")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._class_roots.cleanup()
+        super().tearDownClass()
+
     def setUp(self) -> None:
         self._isolated_roots = IsolatedCadRoots(self, prefix="cadfid-")
         self._tempdir = self._isolated_roots.temporary_cad_directory(prefix="tmp-cadfid-")
         self.temp_root = Path(self._tempdir.name)
+        self._class_roots.copy_store_into(self._isolated_roots)
 
     def tearDown(self) -> None:
         shutil.rmtree(self.temp_root, ignore_errors=True)
         self._tempdir.cleanup()
 
     def _build_generated_package(self) -> tuple[Path, Path]:
-        generator = self.temp_root / "colored.py"
-        generator.write_text(COLORED_ASSEMBLY_GENERATOR, encoding="utf-8")
-        logical_step = self.temp_root / "colored.step"
-        payload = step_artifact_cli.build_step_artifact(
-            repo_root=Path.cwd(),
-            step=logical_step,
-            source_path=generator,
-        )
-        self.assertTrue(payload.get("ok"), payload)
-        return generator, logical_step
+        """The seed build's script, document and sidecar, copied beside this test's store."""
+        for name in ("colored.py", "colored.step", "colored.step.json"):
+            source = self._seed_dir / name
+            if source.is_file():
+                shutil.copyfile(source, self.temp_root / name)
+        return self.temp_root / "colored.py", self.temp_root / "colored.step"
 
     def _descriptor(self, step_path: Path) -> dict:
         return json.loads(
@@ -108,7 +128,9 @@ class GeneratedStepFidelityTests(unittest.TestCase):
         self.assertNotIn("sourcePath", sidecar)
         from cadgen._internal.source_sidecar import read_source_provenance
 
-        provenance = read_source_provenance(logical_step) or {}
+        # Provenance is the model RECORD behind the document, keyed by the path the
+        # model wrote; the copied store carries it under the seed's path.
+        provenance = read_source_provenance(self._seed_dir / "colored.step") or {}
         self.assertEqual(provenance.get("sourceKind"), "python")
 
     def test_assembled_step_carries_occurrence_colors_and_no_cadgen_metadata(self) -> None:
