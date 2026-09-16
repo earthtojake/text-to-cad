@@ -3,8 +3,10 @@
 ## Rule selection
 
 1. Use the selected shop's specification for the actual material and process.
-2. Where none is supplied, consult [Plastic injection molding guidelines](https://www.protolabs.com/services/injection-molding/plastic-injection-molding/design-guidelines/) as a starting point.
-   Use the resin-specific wall guidance and draft/feature recommendations for a review within this supplier's process. Texture, wall depth, resin grade, fillers, and tooling can change the applicable limits. Verify the current guidance before citing numerical thresholds.
+2. Where none is supplied, use two references from the same supplier as a starting point:
+   - [Injection molding design guide](https://www.hubs.com/guides/injection-molding/) (Protolabs Network) for the design rules: wall thickness and hollowing thick sections, draft, ribs, bosses, undercuts and side actions, snap fits and living hinges, common defects (sink, warp), and the straight-pull cost tips.
+   - [Plastic injection molding guidelines](https://www.protolabs.com/services/injection-molding/plastic-injection-molding/design-guidelines/) (Protolabs) for that supplier's size limits, resin-specific wall thickness table, draft, undercut and radii guidance.
+   Texture, wall depth, resin grade, fillers, and tooling can change the applicable limits. Verify the current guidance before citing numerical thresholds.
 3. Record URL/document version, access date, section, units, and the applicable
    material/tooling conditions with every adopted limit. If the source cannot
    be checked, report the missing rule rather than manufacture a default.
