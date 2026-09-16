@@ -223,7 +223,8 @@ jobs:
         run: node --test scripts/bench/viewer-memory/*.test.mjs
 
   # The client is platform-agnostic JS, so Linux only. It runs on a cadgen change too:
-  # the launch step serves the bundled client through the real backend.
+  # the launch step serves the bundled client through the real backend and draws it in
+  # Playwright's Chromium, which is why this job keeps the Playwright install.
   viewer:
     name: viewer
     needs: changes
@@ -237,7 +238,6 @@ jobs:
       - name: Set up dependencies
         uses: ./.github/actions/setup-deps
         with:
-          playwright: "false"
           npm: packages/cadgen-js apps/viewer
 
       - name: Run the CAD Viewer client tests
