@@ -152,56 +152,57 @@ private, and add a subprocess only where the subject IS the process. Repeating a
 non-deterministic case N times is not coverage — if the underlying property can
 be pinned directly, pin it and run the case once.
 
-`scripts/test/python-test-weights.tsv` records what the slow files cost, and the
-CI shards are packed from it. It is a hint: a file missing from it, or listed
-with a stale number, only lands in a shard that finishes sooner than its
-siblings. Regenerate it after a change that moves the balance:
-
-```bash
-scripts/test/test-python.sh --select cadgen --print-weights > tmp/weights.txt
-```
+`scripts/test/test-python.sh --print-weights` prints what the slow files cost,
+the first thing to read when a run is slow.
 
 ### CI
 
-`test.yml` is one small job per concern rather than one long job, and a diff
-only pays for what it can break. `AGENTS.md` has the job table; this is why.
+`test.yml` is one job per thing that has to work, each conditional on the
+changes that can break it. `AGENTS.md` has the job table; this is why.
+
+**Jobs are split by condition, not by size.** Two tests belong in the same job
+unless they should run under different conditions — a different set of paths,
+or a different operating system. So the cadgen package suite is one job (one
+per platform), every skill suite plus the policy gates is one job, and there
+are no shards: each job parallelises internally (`unittest_files.py --jobs`,
+`node --test` concurrency) instead of across machines.
+
+**The conditions encode the dependency graph.** `packages/cadgen` is the engine
+everything downstream runs — the skills are thin entrypoints over its CLIs, the
+viewer is served by `cadgen.viewer`, the docs site documents its commands, the
+wheel packages it — so a cadgen change runs the cadgen, viewer, skills, docs and
+packaging jobs. `packages/cadgen-js` is bundled into the runtime cadgen
+executes and imported by the viewer and the docs hero, so it fans out the same
+way plus its own unit tests. A viewer-client change runs the viewer and
+packaging jobs; a docs change runs docs; a skills change runs skills and docs
+(the site mirrors the skills' frontmatter). `scripts/`, `.github/` and the
+version metadata can break any job, so they run all of them. The one direction
+that does NOT fan out is up: the viewer client, the skills and the docs cannot
+break cadgen, so touching them never runs the cadgen suite.
 
 **Only prose skips everything.** Root `*.md`, `notes/`, `models/`, `LICENSE`
 and issue templates are read by no test, so a pull request touching only those
-runs no test job. Markdown under `skills/` and `packages/cadgen/` is test input
-— `test_documented_commands` runs the command forms a SKILL.md teaches,
-`test_skill_requirements` reads a skill's prose for the extras it reaches,
-`test_package_boundaries` reads the package's own markdown — and is therefore
-not in that class. `apps/docs/**` runs the docs job. `apps/viewer/**` on its own
-runs JS, the Viewer's backend suite and the policy gates, because exactly one
-cadgen test file reads that tree; `packages/cadgen-js` gets no such shortcut,
-because it is bundled into the runtime every Python suite executes.
+runs Version Check and nothing else. Markdown under `skills/` and
+`packages/cadgen/` is test input — `test_documented_commands` runs the command
+forms a SKILL.md teaches, `test_skill_requirements` reads a skill's prose for
+the extras it reaches, `test_package_boundaries` reads the package's own
+markdown — and is therefore not in that class.
 
-**`Test (Linux)` and `Test (Windows)` are gates.** `main` requires those two
-names, so they always run and always report. They wait on the jobs that do the
-work and fail when one of those failed; when a diff skipped them all, they pass
-in seconds. That is what lets a docs-only pull request merge without a
-branch-protection change — and it means adding a shard or renaming a job
-beneath a gate is free, while renaming a gate is not.
+**Windows runs the cadgen suite and nothing else.** What has to be proven on
+Windows is the platform-facing code: paths, locks, subprocesses, file URLs, the
+daemon, the CAD Viewer backend — all of it in `packages/cadgen`, all of it
+covered by that one suite (four of the last five user-reported bugs were
+Windows-only bugs whose coverage existed and never ran there). Bundling,
+packaging, the policy gates and the skill suites are properties of the tree;
+the JS suites are properties of a browser or of Node; none of them has a
+Windows failure mode the cadgen suite does not already exercise, so none of
+them buys a Windows runner. Windows runs `--keep-going` so one round trip
+reports every failing suite.
 
-**The cadgen package suite is sharded because it is 92% of the wall clock.**
-`test-python.sh --select cadgen --shard I/N` runs one machine's share, packed
-longest-first from `scripts/test/python-test-weights.tsv`. Run the same split
-locally with the same flags. Adding a test file needs nothing: an unlisted file
-is packed at weight 1 and still lands in exactly one shard. Add a test to the
-suite that owns its subject — `tests/python/packages/cadgen/viewer` for the CAD
-Viewer's backend, `tests/python/skills/<skill>` for a skill's scripts,
-`tests/python/global` for a repo-wide policy — and the runners will find it;
-a collector that finds nothing fails the run rather than reporting a group that
-never ran.
-
-**Windows runs the same suite, not a subset.** Measured, it is a uniform ~1.5x
-of Linux over the whole suite with no suite that blows up there; the penalty is
-on process spawns (2-3x), which every end-to-end file pays a little of. A
-"Windows-relevant" list would be a guess about which OS-neutral suites to drop,
-and four of the last five user-reported bugs were Windows-only bugs whose
-coverage already existed and simply never ran. It gets a fourth shard where
-Linux has three, because its setup is 2.7 minutes before a test runs.
+**Every job is a required check.** `main` requires all eight names; a job
+skipped by its own condition satisfies its check, which is what lets a prose
+pull request merge. Adding a job means adding its name to branch protection
+(the `gh api` command is in the runbook below); renaming one likewise.
 
 **The packaged runtime is built per job**, not built once and passed between
 them: `ensure_packaged_runtime` takes ~13 s, and an artifact would serialise
@@ -602,14 +603,14 @@ draft release unless `--publish` is passed.
 
 ### Repository settings
 
-`main` requires a PR with the `Version Check`, `Test (Linux)` and `Test
-(Windows)` status checks (strict: up to date with `main`), no force pushes and
-no deletions. Those two `Test` jobs are GATES: the work runs in jobs beneath
-them (three Python shards per platform, JS, docs, policy, packaging), and the
-gate fails if any of them failed and passes when a diff skipped them all. Adding
-a shard or renaming a job below the gate needs no branch-protection change;
-renaming a gate does — the rules `develop` carried before the cutover. `Prepare
-Release`'s PR merges through the same gate via the API (no "allow auto-merge"
+`main` requires a PR with every `test.yml` job as a status check — `Version
+Check`, `cadgen (Linux)`, `cadgen (Windows)`, `cadgen-js`, `viewer`, `skills`,
+`docs`, `packaging` — strict (up to date with `main`), squash merges only, a
+linear history, no force pushes and no deletions. A job skipped by its path
+condition satisfies its check, so a prose pull request merges on Version Check
+alone. Adding or renaming a job means changing this list — the rules `develop`
+carried before the cutover, with the job names updated. `Prepare
+Release`'s PR merges through the same checks via the API (no "allow auto-merge"
 repository setting is needed). `build-test` needs no protection: the
 irreversible steps never run there. Keep the repository tag
 ruleset (extend its pattern to cover `v[0-9]*.[0-9]*.[0-9]*` beside the bare
@@ -652,10 +653,10 @@ done on 2026-09-04; `develop`'s protection is still in place until step 5.
    ```bash
    gh api --method PUT repos/earthtojake/text-to-cad/branches/main/protection \
      --input - <<'JSON'
-   {"required_status_checks":{"strict":true,"contexts":["Version Check","Test (Linux)","Test (Windows)"]},
+   {"required_status_checks":{"strict":true,"contexts":["Version Check","cadgen (Linux)","cadgen (Windows)","cadgen-js","viewer","skills","docs","packaging"]},
     "enforce_admins":false,
     "required_pull_request_reviews":{"dismiss_stale_reviews":false,"require_code_owner_reviews":false,"required_approving_review_count":0},
-    "restrictions":null,"allow_force_pushes":false,"allow_deletions":false,"required_linear_history":false}
+    "restrictions":null,"allow_force_pushes":false,"allow_deletions":false,"required_linear_history":true}
    JSON
    ```
 5. Delete the retired branches once nothing references them:

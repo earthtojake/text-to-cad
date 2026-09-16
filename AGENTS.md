@@ -190,41 +190,37 @@ when touching shared surfaces or before handoff:
 - Code tests: `scripts/test/test.sh` (JS, then Python, then policy).
 - Focused runners: `scripts/test/test-js.sh`, `scripts/test/test-docs.sh`,
   `scripts/test/test-python.sh`, `scripts/test/test-global.sh`.
-  `test-python.sh` takes `--select cadgen|viewer|skills|all`, `--shard I/N` and
+  `test-python.sh` takes `--select cadgen|viewer|skills|all` and
   `--print-weights`; see `scripts/README.md`.
 - In GitHub Actions, `test.yml` runs on pull requests to and pushes of `main`
-  as one small job per concern. `Publish Release` repeats the same checks on the
-  release commit before the wheel ships.
+  as one job per thing that has to work, each conditional on the changes that
+  can break it. `Publish Release` repeats the same checks on the release commit
+  before the wheel ships. `CONTRIBUTING.md` has the reasoning.
 
-  | job | OS | what |
-  | --- | --- | --- |
-  | Changed paths | ubuntu | classifies the diff; everything else waits on it |
-  | Version Check | ubuntu | `VERSION`, derived metadata, skill pins — its own job so code tests still run when version metadata is wrong |
-  | Bundle and packaging | ubuntu | packaged runtime, published-tree contract, bundled Viewer launch, wheel package data, installed-mode CLIs |
-  | JS tests | ubuntu | `test-js.sh` |
-  | Docs site | ubuntu | `test-docs.sh` |
-  | Policy and skill tests | ubuntu | `tests/python/global` + every skill suite |
-  | Python 1..3/3 | ubuntu ×3 | the cadgen package suite, CAD Viewer backend included |
-  | Viewer backend | ubuntu | that backend alone, for an `apps/viewer`-only diff |
-  | Python 1..4/4 | windows ×4 | the same cadgen suite |
-  | JS and skills | windows | `test-js.sh` + the skill suites |
-  | **Test (Linux)** | ubuntu | GATE over the ubuntu jobs |
-  | **Test (Windows)** | ubuntu | GATE over the windows jobs |
+  | job | OS | runs when the diff touches | what |
+  | --- | --- | --- | --- |
+  | Version Check | ubuntu | anything | `VERSION`, derived metadata, skill pins |
+  | cadgen (Linux) | ubuntu | cadgen, cadgen-js, infra | the cadgen package suite, CAD Viewer backend included |
+  | cadgen (Windows) | windows | cadgen, cadgen-js, infra | the same suite: the one thing that must be proven on Windows |
+  | cadgen-js | ubuntu | cadgen-js, infra | `packages/cadgen-js` unit tests |
+  | viewer | ubuntu | viewer, cadgen-js, cadgen, infra | the client's unit tests, then the bundled client through the real backend |
+  | skills | ubuntu | skills, cadgen, cadgen-js, infra | `tests/python/global` policy gates + every skill suite |
+  | docs | ubuntu | docs, skills, cadgen-js, cadgen, infra | the docs site check |
+  | packaging | ubuntu | cadgen, cadgen-js, viewer, infra | bundle from clean, published-tree contract, wheel package data, installed-mode CLIs |
 
-  What the filter skips: prose — root `*.md`, `notes/`, `models/`, `LICENSE`,
-  issue templates — runs nothing. Markdown under `skills/` and
+  The classes: `cadgen` = `packages/cadgen/**` + its tests; `cadgen-js` =
+  `packages/cadgen-js/**`; `viewer` = `apps/viewer/**`; `skills` =
+  `skills/**` + the skill and policy tests; `docs` = `apps/docs/**`; `infra` =
+  `scripts/**`, `.github/**`, `VERSION`, plugin manifests, root `package*.json`.
+  A change to cadgen fans out to everything that runs it (the skills, the
+  viewer, the docs, the wheel); a change to the viewer client runs only the
+  viewer and packaging jobs. Prose (root `*.md`, `notes/`, `models/`, `LICENSE`)
+  runs Version Check and nothing else. Markdown under `skills/` and
   `packages/cadgen/` is NOT prose: `test_documented_commands`,
   `test_skill_requirements` and `test_package_boundaries` read it.
-  `apps/docs/**` runs the docs job; `apps/viewer/**` alone runs JS, the Viewer's
-  backend suite and the policy gates — exactly one cadgen test file reads that
-  tree, while `packages/cadgen-js` is bundled into the runtime every Python
-  suite executes and so runs everything.
 
-  The two bold jobs are the names `main`'s branch protection requires. They are
-  gates, not work: they always run, they fail when a job they need failed, and
-  on a docs-only pull request every job beneath them skips and both report
-  success in seconds. Adding or renaming a job below a gate needs no
-  branch-protection change; renaming a gate does.
+  All eight job names are `main`'s required checks; a job skipped by its own
+  condition satisfies its check. Adding a job means adding its name there.
 - Canonical release version: `scripts/release/check-version.sh`
 - Packaged runtime builds and is complete: `scripts/bundle/bundle.sh --check`
 - CAD Viewer or `packages/cadgen-js`:

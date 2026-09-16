@@ -43,12 +43,13 @@ where those files ship, so these scripts are what produces them.
 
 `test/` — test runners.
 
-- `test.sh` — `test-js.sh`, then `test-python.sh`, then `test-global.sh`. Called
-  by `test.yml` and `release-publish.yml`.
+- `test.sh` — `test-js.sh`, then `test-python.sh`, then `test-global.sh`: the
+  whole tree on one machine. Called by `release-publish.yml`; `test.yml` calls
+  the focused runners per job instead.
 - `test-js.sh` — `packages/cadgen-js` and `apps/viewer` client suites, then the
   `node --test` units under `bench/viewer-memory/` (the benchmark drivers are
   manual; their pure helpers are not).
-- `test-python.sh [--keep-going] [--select GROUP] [--shard I/N] [--print-weights]`
+- `test-python.sh [--keep-going] [--select GROUP] [--print-weights]`
   — the cadgen package suite, then every skill's suite. Each test FILE runs in
   its own interpreter against its own temporary store, `CADGEN_TEST_JOBS` at a
   time (default: the core count; CI sets 4). `--keep-going` runs all suites and
@@ -56,20 +57,12 @@ where those files ship, so these scripts are what produces them.
   - `--select` picks one group: `cadgen` (the package suite, CAD Viewer backend
     included), `viewer` (that backend alone, ~11 s), `skills` (every skill's
     suite), `all` (the default).
-  - `--shard I/N` runs this shard's share of the SELECTED group's files, so N
-    machines can run one suite between them. Rejected for `skills` and `all`,
-    whose suites are separate runs of a few files each. CI runs the cadgen suite
-    as 3 shards on Linux and 4 on Windows.
   - `--print-weights` prints one `WEIGHT<TAB>path<TAB>seconds` line per slow file
-    on stdout (everything else a run says goes to stderr). CI passes it, so any
-    green run's log carries what `python-test-weights.tsv` is made of.
+    on stdout (everything else a run says goes to stderr): the first thing to
+    read when a run is slow.
 - `unittest_files.py` — the runner underneath, invoked by `common.sh`. Loads each
   test file under its full dotted path so an import failure names the file, and
-  packs `--shard` longest-first from `python-test-weights.tsv`.
-- `python-test-weights.tsv` — per-file cost hints for that packing, in seconds,
-  from the worse of the two CI platforms. A HINT: every file lands in exactly one
-  shard whatever the numbers say, an unlisted file is packed at weight 1, and an
-  empty shard is an error rather than a green run of nothing.
+  runs the files `--jobs` at a time in their own interpreters.
 - `time-python.sh [N]` — times every Python test module on its own and prints
   them sorted by wall clock (results under `tmp/timing/`); `time_module.py` is
   its helper. Manual only: the first step of a bloat check. `--print-weights` is
@@ -160,7 +153,7 @@ manual; their `*.test.mjs` helper units run in `test-js.sh`.
 
 | Workflow | Branches/events | Purpose |
 | -------- | --------------- | ------- |
-| `test.yml` | pushes to `main`; PRs to `main`; manual dispatch | Checks `VERSION`, derived metadata and the skill pins as a separate job so the test job still runs if release metadata is wrong. The test job bundles the production outputs (nothing under `_runtime/` is committed, so this is where they come from), checks the layout without rebuilding it, and runs docs, code and installed-mode tests against that output. Superseded PR runs are cancelled. |
+| `test.yml` | pushes to `main`; PRs to `main`; manual dispatch | One job per thing that has to work, each conditional on the paths that can break it (`AGENTS.md` has the table, `CONTRIBUTING.md` the reasoning): `Version Check` always; the cadgen package suite on Linux and Windows; cadgen-js, viewer, skills and docs jobs on Linux; `packaging` bundles from clean (nothing under `_runtime/` is committed, so this is where it comes from), checks the layout, inspects the wheel and runs the installed-mode tests. Superseded PR runs are cancelled. |
 | `release-prepare.yml` (`Prepare Release`) | manual dispatch | The version bump as a PR: bumps `VERSION`, stamps metadata and skill pins, opens `release/X.Y.Z` against `target` (default `main`; `build-test` rehearses) and merges it. The merge is what runs `Publish Release`. |
 | `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test`; manual dispatch (resume/republish the head) | Gate (VERSION past the latest tag, or untagged), bundle, tests, wheel build, an `unzip -l` assertion that the shipping wheel carries `_runtime`, install test, distribution artifact; then -- on `main` only -- PyPI upload, docs deploy, `v<VERSION>` tag and GitHub Release. On `build-test` it prints what it would have tagged and stops. |
 | `deploy-docs.yml` (`Deploy Docs`) | manual dispatch; called by `release-publish.yml` | Deploys the docs app to Vercel production from a ref (default `main`): configures Vercel Authentication for preview deployments only, runs `vercel pull/build/deploy --prod`, and verifies the public production URLs. |

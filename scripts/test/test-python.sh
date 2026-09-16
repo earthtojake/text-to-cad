@@ -3,7 +3,7 @@ set -euo pipefail
 
 # The repo's Python suites.
 #
-#   scripts/test/test-python.sh [--keep-going] [--select GROUP] [--shard I/N] [--print-weights]
+#   scripts/test/test-python.sh [--keep-going] [--select GROUP] [--print-weights]
 #
 # --select picks one group instead of all of them:
 #   cadgen   the cadgen package suite, the CAD Viewer backend included (92% of the time)
@@ -11,9 +11,8 @@ set -euo pipefail
 #   skills   every skill's suite
 #   all      cadgen + skills (the default)
 #
-# --shard I/N splits the SELECTED group's files across N runs; see unittest_files.py.
-# It is rejected for `skills`, whose suites are separate runs of a few files each --
-# sharding them would mean asking one shard to run a suite that is not its own.
+# --print-weights prints one `WEIGHT<TAB>path<TAB>seconds` line per slow file on
+# stdout: the first thing to read when a run is slow.
 
 # shellcheck source=scripts/test/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
@@ -26,7 +25,6 @@ LIST_SKILLS_SCRIPT="$REPO_ROOT/scripts/utils/list-skills.sh"
 # one round per suite means one ~10 minute round trip per suite.
 KEEP_GOING=0
 SELECT="all"
-export PYTHON_TEST_SHARD="${PYTHON_TEST_SHARD:-}"
 export PYTHON_TEST_PRINT_WEIGHTS="${PYTHON_TEST_PRINT_WEIGHTS:-}"
 
 while [ "$#" -gt 0 ]; do
@@ -34,8 +32,6 @@ while [ "$#" -gt 0 ]; do
     --keep-going) KEEP_GOING=1 ;;
     --select) SELECT="${2:?--select wants a group}"; shift ;;
     --select=*) SELECT="${1#--select=}" ;;
-    --shard) PYTHON_TEST_SHARD="${2:?--shard wants I/N}"; shift ;;
-    --shard=*) PYTHON_TEST_SHARD="${1#--shard=}" ;;
     --print-weights) PYTHON_TEST_PRINT_WEIGHTS=1 ;;
     *) echo "test-python.sh: unknown argument $1" >&2; exit 2 ;;
   esac
@@ -46,11 +42,6 @@ case "$SELECT" in
   all|cadgen|viewer|skills) ;;
   *) echo "test-python.sh: --select wants all|cadgen|viewer|skills, not '$SELECT'" >&2; exit 2 ;;
 esac
-
-if [ -n "$PYTHON_TEST_SHARD" ] && { [ "$SELECT" = "skills" ] || [ "$SELECT" = "all" ]; }; then
-  echo "test-python.sh: --shard needs --select cadgen or --select viewer" >&2
-  exit 2
-fi
 
 failed_suites=()
 

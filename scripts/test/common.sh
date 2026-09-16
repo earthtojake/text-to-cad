@@ -72,12 +72,9 @@ run_python_unittest() {
   # Each test FILE runs in its own interpreter with its own fresh store, CADGEN_TEST_JOBS
   # at a time (default: the machine's cores). Modules cannot see one another's builds,
   # and a module that spawns workers or a daemon does not hold the rest of the suite.
-  # PYTHON_TEST_SHARD ("I/N") and PYTHON_TEST_PRINT_WEIGHTS are how the CI matrix and the
-  # weights-table regeneration reach the runner without every caller growing two flags.
+  # PYTHON_TEST_PRINT_WEIGHTS is how --print-weights reaches the runner without every
+  # caller growing a flag.
   local extra=()
-  if [ -n "${PYTHON_TEST_SHARD:-}" ]; then
-    extra+=(--shard "$PYTHON_TEST_SHARD")
-  fi
   if [ -n "${PYTHON_TEST_PRINT_WEIGHTS:-}" ]; then
     extra+=(--print-weights)
   fi
