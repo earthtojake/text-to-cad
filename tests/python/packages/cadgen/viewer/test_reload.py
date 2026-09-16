@@ -221,9 +221,12 @@ class WhenItFires(unittest.TestCase):
         self.assertTrue(watcher.pending)
 
         edited_signature = reload_module.source_stat_signature(self.package)
-        frozen = os.stat(self.source).st_mtime
+        # The reloader digests st_mtime_ns; freezing through the float st_mtime
+        # does not round-trip on Windows, which would make the precondition
+        # below fail for a reason unrelated to the guard under test.
+        frozen = os.stat(self.source).st_mtime_ns
         self.source.write_bytes(original)
-        os.utime(self.source, (frozen, frozen))
+        os.utime(self.source, ns=(frozen, frozen))
         self.assertEqual(
             reload_module.source_stat_signature(self.package),
             edited_signature,
