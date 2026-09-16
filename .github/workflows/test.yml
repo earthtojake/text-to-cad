@@ -281,15 +281,17 @@ jobs:
   # (#260, #266, #267, #269), and every one of them passed CI. The coverage was mostly already
   # written -- test_coordination.py's holder test asserts exactly the cross-process sentinel
   # read that #269 broke -- so what was missing was a runner, not a test.
+  # Four shards where Linux runs three: a Windows runner spends 2.7 minutes on setup
+  # before a test runs, so the fixed cost is what decides the split, not the test time.
   windows-python:
-    name: Python ${{ matrix.shard }}/3 (Windows)
+    name: Python ${{ matrix.shard }}/4 (Windows)
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4]
     env:
       CADGEN_TEST_JOBS: "4"
 
@@ -306,7 +308,7 @@ jobs:
       # POSIX-isms in unrelated suites, and stopping at the first one turns a list into one
       # round trip per entry. The Linux jobs keep the fail-fast default.
       - name: Run the cadgen package suite
-        run: scripts/test/test-python.sh --keep-going --select cadgen --shard ${{ matrix.shard }}/3 --print-weights
+        run: scripts/test/test-python.sh --keep-going --select cadgen --shard ${{ matrix.shard }}/4 --print-weights
         shell: bash
 
   windows-rest:
