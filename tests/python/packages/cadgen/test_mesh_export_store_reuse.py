@@ -24,7 +24,6 @@ import unittest
 from pathlib import Path
 
 from tests.python.support.paths import add_repo_path
-from tests.python.support.warm_daemon import warm_entries
 
 add_repo_path("packages/cadgen/src")
 
@@ -60,7 +59,7 @@ class MeshExportStoreReuseTest(unittest.TestCase):
         self.store = self.root / "store"
         self.env = dict(os.environ)
         self.env.update({
-            **warm_entries(),
+            "CADGEN_DAEMON": "0",
             "CADGEN_COMPONENT_WORKERS": "1",
             "CADGEN_CACHE_DIR": str(self.store),
             "PYTHONPATH": str(REPO / "packages/cadgen/src"),

@@ -20,7 +20,6 @@ from unittest import mock
 
 from tests.python.support.paths import REPO_ROOT, add_repo_path
 from tests.python.support.tmp_root import temporary_directory
-from tests.python.support.warm_daemon import warm_entries
 
 add_repo_path("packages/cadgen/src")
 
@@ -333,7 +332,7 @@ class ColdBuild(unittest.TestCase):
                 p for p in [str(REPO_ROOT / "packages" / "cadgen" / "src"), env.get("PYTHONPATH", "")] if p
             )
             env["CADGEN_CACHE_DIR"] = str(cache)
-            env.update(warm_entries())
+            env["CADGEN_DAEMON"] = "0"
             env.pop("CADGEN_DAEMON_CHILD", None)
             result = subprocess.run(
                 [sys.executable, "holder.py", "--force"],

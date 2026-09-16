@@ -14,7 +14,6 @@ from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 from tests.python.support.tmp_root import generated_cad_directory
-from tests.python.support.warm_daemon import warm_entries
 
 CADGEN_SRC = add_repo_path("packages/cadgen/src")
 
@@ -83,7 +82,7 @@ class ImportedStepCacheTests(unittest.TestCase):
         self.environment.update(
             {
                 "CADGEN_CACHE_DIR": str(self.store),
-                **warm_entries(),
+                "CADGEN_DAEMON": "0",
                 "CADGEN_COMPONENT_WORKERS": "1",
                 "PYTHONPATH": str(CADGEN_SRC),
             }

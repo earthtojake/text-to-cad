@@ -182,7 +182,10 @@ jobs:
     if: needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.cadgenjs == 'true' || needs.changes.outputs.infra == 'true'
     runs-on: windows-latest
     env:
-      CADGEN_TEST_JOBS: "4"
+      # Six on four cores: Windows spends its time in process spawns, not CPU
+      # (measured: the same suite is ~2x Linux per file), so a fifth and sixth
+      # file fill the gaps a spawn leaves.
+      CADGEN_TEST_JOBS: "6"
 
     steps:
       - name: Check out repository

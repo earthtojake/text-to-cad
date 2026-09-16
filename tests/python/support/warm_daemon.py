@@ -13,6 +13,13 @@ opting out of it, and creates the same private endpoint itself when a file is ru
 directly (``python -m unittest tests/...``) so a direct run can never reach -- or
 retire -- the developer's own daemon.
 
+Where it pays: the pool binds a worker per SCRIPT PATH and never rebinds an idle
+one, so a module whose tests each write a fresh script into a fresh directory pays
+one kernel import per test either way -- and on Windows the spawn is dearer than
+the cold run it replaces. Route a module through the daemon when its tests run the
+SAME script several times (rerun / --force / `store why` / an edit-and-rebuild),
+which is where measured CI time halved on both platforms.
+
 What must NOT use this:
 
 * anything whose subject is the daemon, the pool or the broker;
@@ -92,6 +99,11 @@ def warm_entries() -> dict[str, str]:
     entries["CADGEN_DAEMON"] = "1"
     # Long enough to outlive one module, short enough that an abandoned one goes away.
     entries["CADGEN_DAEMON_IDLE_TIMEOUT"] = os.environ.get("CADGEN_DAEMON_IDLE_TIMEOUT", "300")
+    # No spares: a production daemon keeps two imported workers in reserve so a new
+    # model's first build pays no import, but a test module's daemon serves a handful
+    # of scripts once each and shares a 4-core runner with three other modules --
+    # every spare is a kernel import and ~450 MB taken from THEM.
+    entries["CADGEN_DAEMON_SPARES"] = os.environ.get("CADGEN_DAEMON_SPARES", "0")
     return entries
 
 
