@@ -266,11 +266,9 @@ The repository's browser gate (`test-viewer-browser.sh`, under its test
 scripts) drives the BUILT Viewer in a real Chromium against fixtures it
 generates itself. It comes in two sizes:
 
-```bash
-scripts/test/test-viewer-browser.sh --ci     # ~2 min: format, pick, kinematics, camera
-scripts/test/test-viewer-browser.sh          # ~4 min: every gate
-scripts/test/test-viewer-browser.sh --only kinematics   # one gate while working on it
-```
+- `--ci` — about 2 minutes: format, pick, kinematics, camera.
+- no flag — about 4 minutes: every gate.
+- `--only <gate>` — one gate while working on it.
 
 `--ci` is the subset that is safe to automate: it opens one file per load path
 (STEP package, mesh, drawing, robot), picks a face and toggles it, drives a

@@ -318,7 +318,9 @@ Bundle the client first and install Playwright Chromium from the development
 requirements:
 
 ```bash
-scripts/test/test-viewer-browser.sh
+scripts/test/test-viewer-browser.sh --ci                # ~2 min: format, pick, kinematics, camera (the CI job)
+scripts/test/test-viewer-browser.sh                     # ~4 min: every gate
+scripts/test/test-viewer-browser.sh --only kinematics   # one gate while working on it
 ```
 
 Mesh exports (`@stl`/`@3mf`/`@glb`) and DXF previews run the checkout's live

@@ -411,6 +411,10 @@ jobs:
         uses: ./.github/actions/setup-deps
         with:
           npm: packages/cadgen-js apps/viewer
+      # The gate drives Node Playwright (packages/cadgen-js), whose Chromium
+      # revision is not the one setup-deps installs for the Python renderer.
+      - name: Install the gate's Chromium
+        run: npx --prefix packages/cadgen-js playwright install --with-deps chromium
       - name: Bundle production outputs
         run: scripts/bundle/bundle.sh
       - name: Run the browser smoke gate
