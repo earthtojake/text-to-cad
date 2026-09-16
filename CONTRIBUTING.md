@@ -161,6 +161,61 @@ siblings. Regenerate it after a change that moves the balance:
 scripts/test/test-python.sh --select cadgen --print-weights > tmp/weights.txt
 ```
 
+### CI
+
+`test.yml` is one small job per concern rather than one long job, and a diff
+only pays for what it can break. `AGENTS.md` has the job table; this is why.
+
+**Only prose skips everything.** Root `*.md`, `notes/`, `models/`, `LICENSE`
+and issue templates are read by no test, so a pull request touching only those
+runs no test job. Markdown under `skills/` and `packages/cadgen/` is test input
+— `test_documented_commands` runs the command forms a SKILL.md teaches,
+`test_skill_requirements` reads a skill's prose for the extras it reaches,
+`test_package_boundaries` reads the package's own markdown — and is therefore
+not in that class. `apps/docs/**` runs the docs job. `apps/viewer/**` on its own
+runs JS, the Viewer's backend suite and the policy gates, because exactly one
+cadgen test file reads that tree; `packages/cadgen-js` gets no such shortcut,
+because it is bundled into the runtime every Python suite executes.
+
+**`Test (Linux)` and `Test (Windows)` are gates.** `main` requires those two
+names, so they always run and always report. They wait on the jobs that do the
+work and fail when one of those failed; when a diff skipped them all, they pass
+in seconds. That is what lets a docs-only pull request merge without a
+branch-protection change — and it means adding a shard or renaming a job
+beneath a gate is free, while renaming a gate is not.
+
+**The cadgen package suite is sharded because it is 92% of the wall clock.**
+`test-python.sh --select cadgen --shard I/N` runs one machine's share, packed
+longest-first from `scripts/test/python-test-weights.tsv`. Run the same split
+locally with the same flags. Adding a test file needs nothing: an unlisted file
+is packed at weight 1 and still lands in exactly one shard. Add a test to the
+suite that owns its subject — `tests/python/packages/cadgen/viewer` for the CAD
+Viewer's backend, `tests/python/skills/<skill>` for a skill's scripts,
+`tests/python/global` for a repo-wide policy — and the runners will find it;
+a collector that finds nothing fails the run rather than reporting a group that
+never ran.
+
+**Windows runs the same suite, not a subset.** Measured, it is a uniform ~1.5x
+of Linux over the whole suite with no suite that blows up there; the penalty is
+on process spawns (2-3x), which every end-to-end file pays a little of. A
+"Windows-relevant" list would be a guess about which OS-neutral suites to drop,
+and four of the last five user-reported bugs were Windows-only bugs whose
+coverage already existed and simply never ran. It gets a fourth shard where
+Linux has three, because its setup is 2.7 minutes before a test runs.
+
+**The packaged runtime is built per job**, not built once and passed between
+them: `ensure_packaged_runtime` takes ~13 s, and an artifact would serialise
+every test job behind a bundle job for longer than that.
+
+**Flakes are fixed by mechanism or deleted — never skipped, retried, or tuned.**
+Classify first: a real bug, a retired behaviour, or a platform problem. Then fix
+the mechanism — wait on the event that says the thing happened, not on a clock;
+give a test its own daemon, socket and store; assert a condition rather than an
+elapsed time. A negative assertion behind a sleep ("it did not exit") is worse
+than useless, because a slow runner only ever makes it pass. If a deterministic
+unit test already pins the property, delete the racy end-to-end copy instead of
+stabilising it.
+
 Keep reusable manual edge-case and debugging models in `models/tests/`, with
 reproduction instructions. Despite its name, that folder is never CI input;
 see [its manual-validation policy](models/tests/README.md).

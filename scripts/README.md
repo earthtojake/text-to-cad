@@ -48,13 +48,32 @@ where those files ship, so these scripts are what produces them.
 - `test-js.sh` — `packages/cadgen-js` and `apps/viewer` client suites, then the
   `node --test` units under `bench/viewer-memory/` (the benchmark drivers are
   manual; their pure helpers are not).
-- `test-python.sh [--keep-going]` — the cadgen package suite, then every skill's
-  suite. Each test FILE runs in its own interpreter against its own temporary
-  store, `CADGEN_TEST_JOBS` at a time (default: the core count; CI sets 4).
-  `--keep-going` runs all suites and reports every failure.
+- `test-python.sh [--keep-going] [--select GROUP] [--shard I/N] [--print-weights]`
+  — the cadgen package suite, then every skill's suite. Each test FILE runs in
+  its own interpreter against its own temporary store, `CADGEN_TEST_JOBS` at a
+  time (default: the core count; CI sets 4). `--keep-going` runs all suites and
+  reports every failure.
+  - `--select` picks one group: `cadgen` (the package suite, CAD Viewer backend
+    included), `viewer` (that backend alone, ~11 s), `skills` (every skill's
+    suite), `all` (the default).
+  - `--shard I/N` runs this shard's share of the SELECTED group's files, so N
+    machines can run one suite between them. Rejected for `skills` and `all`,
+    whose suites are separate runs of a few files each. CI runs the cadgen suite
+    as 3 shards on Linux and 4 on Windows.
+  - `--print-weights` prints one `WEIGHT<TAB>path<TAB>seconds` line per slow file
+    on stdout (everything else a run says goes to stderr). CI passes it, so any
+    green run's log carries what `python-test-weights.tsv` is made of.
+- `unittest_files.py` — the runner underneath, invoked by `common.sh`. Loads each
+  test file under its full dotted path so an import failure names the file, and
+  packs `--shard` longest-first from `python-test-weights.tsv`.
+- `python-test-weights.tsv` — per-file cost hints for that packing, in seconds,
+  from the worse of the two CI platforms. A HINT: every file lands in exactly one
+  shard whatever the numbers say, an unlisted file is packed at weight 1, and an
+  empty shard is an error rather than a green run of nothing.
 - `time-python.sh [N]` — times every Python test module on its own and prints
   them sorted by wall clock (results under `tmp/timing/`); `time_module.py` is
-  its helper. Manual only: the first step of a bloat check.
+  its helper. Manual only: the first step of a bloat check. `--print-weights` is
+  the same measurement taken from a run that was happening anyway.
 - `test-global.sh` — `tests/python/global`, the repo-wide policy suite. Like
   `test-python.sh`, it builds the `--node` and `--browser` runtime stages first
   when they are absent: the suites read them and a fresh clone has neither.

@@ -1,3 +1,47 @@
+# The repo's test workflow, as a set of small jobs rather than one long one.
+#
+# WHAT RUNS WHERE
+#   changes                   classifies the diff (see the job's own comment)
+#   Version Check    ubuntu   VERSION, the derived metadata, the skill pins
+#   Bundle and packaging
+#                    ubuntu   the packaged runtime, the published-tree contract,
+#                             the bundled Viewer launching, the wheel's package
+#                             data, and the CLIs pip-installed outside the repo
+#   JS tests         ubuntu   scripts/test/test-js.sh
+#   Docs site        ubuntu   scripts/test/test-docs.sh
+#   Policy and skill tests
+#                    ubuntu   tests/python/global + every skill's suite
+#   Python 1..3/3    ubuntu   the cadgen package suite (the CAD Viewer BACKEND
+#                    x3       included), split three ways
+#   Viewer backend   ubuntu   that backend alone, for an apps/viewer-only diff
+#   Python 1..4/4    windows  the same cadgen suite, split four ways
+#                    x4
+#   JS and skills    windows  test-js.sh + the skill suites
+#   Test (Linux)     ubuntu   GATE over the ubuntu jobs -- a required check
+#   Test (Windows)   ubuntu   GATE over the windows jobs -- a required check
+#
+# WHY IT IS SHAPED LIKE THIS
+#   The cadgen package suite is ~92% of the Python wall clock (672 s of Linux's
+#   727 s), so it is the one thing split across machines. Everything else is
+#   small enough to share a job.
+#
+#   Windows runs the same suite, not a hand-picked subset. Measured, it is a
+#   uniform ~1.5x of Linux overall with no suite that blows up there -- the
+#   penalty is on process spawns (2-3x), spread across every file that makes
+#   them -- so a "Windows-relevant" list would be a guess about which
+#   OS-neutral suites to drop. It gets a fourth shard instead, because its
+#   setup is 2.7 minutes before a test runs.
+#
+#   The packaged runtime is built per job (~13 s, scripts/test/common.sh
+#   ensure_packaged_runtime) rather than built once and passed as an artifact:
+#   the artifact would serialise every test job behind a bundle job for longer
+#   than the rebuild costs.
+#
+#   The two `Test (...)` jobs are GATES, not work. main's branch protection
+#   requires them by name, so they always run and always report; they fail when
+#   a job they need failed and pass when a diff skipped them all. Adding or
+#   renaming a job below a gate needs no branch-protection change.
+#
 name: Test
 
 on:

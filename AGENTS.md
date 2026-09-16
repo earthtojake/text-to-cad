@@ -187,27 +187,44 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
 Run the smallest path-targeted check that covers the change. Use broad wrappers
 when touching shared surfaces or before handoff:
 
-- Code tests: `scripts/test/test.sh`
-  - In GitHub Actions, `test.yml` (PRs to and pushes of `main`) checks the
-    canonical release version and the skill pins in a separate job so code
-    tests still run when version metadata is wrong. Its `changes` job classifies
-    the diff and the rest of the workflow runs only what that diff can break:
-    prose (root `*.md`, `notes/`, `models/`, `LICENSE`) reaches no test, while
-    markdown under `skills/` and `packages/cadgen/` IS test input and is not
-    prose; `apps/viewer/**` alone runs the Viewer's backend suite and the
-    policy gates. `Test (Linux)` and `Test (Windows)` stay as the two required
-    checks and are gates over the jobs that did the work, so a docs-only pull
-    request still reports them, in seconds. `Publish Release` repeats these
-    checks on the release commit before the wheel ships. GitHub branch settings
-    should require a PR for `main`.
-- Focused test runners: `scripts/test/test-js.sh`,
-  `scripts/test/test-docs.sh`, `scripts/test/test-python.sh`,
-  `scripts/test/test-global.sh`
-- `test-python.sh` takes `--select cadgen|viewer|skills|all` and `--shard I/N`.
-  The cadgen package suite is ~92% of the Python wall clock, so CI runs it as
-  three shards per platform; `scripts/test/python-test-weights.tsv` balances
-  them and is a HINT (regenerate with `--print-weights`), never an input to
-  which tests run.
+- Code tests: `scripts/test/test.sh` (JS, then Python, then policy).
+- Focused runners: `scripts/test/test-js.sh`, `scripts/test/test-docs.sh`,
+  `scripts/test/test-python.sh`, `scripts/test/test-global.sh`.
+  `test-python.sh` takes `--select cadgen|viewer|skills|all`, `--shard I/N` and
+  `--print-weights`; see `scripts/README.md`.
+- In GitHub Actions, `test.yml` runs on pull requests to and pushes of `main`
+  as one small job per concern. `Publish Release` repeats the same checks on the
+  release commit before the wheel ships.
+
+  | job | OS | what |
+  | --- | --- | --- |
+  | Changed paths | ubuntu | classifies the diff; everything else waits on it |
+  | Version Check | ubuntu | `VERSION`, derived metadata, skill pins — its own job so code tests still run when version metadata is wrong |
+  | Bundle and packaging | ubuntu | packaged runtime, published-tree contract, bundled Viewer launch, wheel package data, installed-mode CLIs |
+  | JS tests | ubuntu | `test-js.sh` |
+  | Docs site | ubuntu | `test-docs.sh` |
+  | Policy and skill tests | ubuntu | `tests/python/global` + every skill suite |
+  | Python 1..3/3 | ubuntu ×3 | the cadgen package suite, CAD Viewer backend included |
+  | Viewer backend | ubuntu | that backend alone, for an `apps/viewer`-only diff |
+  | Python 1..4/4 | windows ×4 | the same cadgen suite |
+  | JS and skills | windows | `test-js.sh` + the skill suites |
+  | **Test (Linux)** | ubuntu | GATE over the ubuntu jobs |
+  | **Test (Windows)** | ubuntu | GATE over the windows jobs |
+
+  What the filter skips: prose — root `*.md`, `notes/`, `models/`, `LICENSE`,
+  issue templates — runs nothing. Markdown under `skills/` and
+  `packages/cadgen/` is NOT prose: `test_documented_commands`,
+  `test_skill_requirements` and `test_package_boundaries` read it.
+  `apps/docs/**` runs the docs job; `apps/viewer/**` alone runs JS, the Viewer's
+  backend suite and the policy gates — exactly one cadgen test file reads that
+  tree, while `packages/cadgen-js` is bundled into the runtime every Python
+  suite executes and so runs everything.
+
+  The two bold jobs are the names `main`'s branch protection requires. They are
+  gates, not work: they always run, they fail when a job they need failed, and
+  on a docs-only pull request every job beneath them skips and both report
+  success in seconds. Adding or renaming a job below a gate needs no
+  branch-protection change; renaming a gate does.
 - Canonical release version: `scripts/release/check-version.sh`
 - Packaged runtime builds and is complete: `scripts/bundle/bundle.sh --check`
 - CAD Viewer or `packages/cadgen-js`:
