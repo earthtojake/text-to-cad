@@ -68,10 +68,10 @@ ensure_node_builder_deps() {
       meshoptimizer: '$meshoptimizer',
     };
     for (const [name, expected] of Object.entries(deps)) {
-      const actual = require('$NODE_BUILDER_BUILD_DEPS_DIR/node_modules/' + name + '/package.json').version;
+      const actual = require(process.argv[1] + '/node_modules/' + name + '/package.json').version;
       if (actual !== expected) process.exit(1);
     }
-  " 2>/dev/null; then
+  " "$NODE_BUILDER_BUILD_DEPS_DIR" 2>/dev/null; then
     return 0
   fi
 
