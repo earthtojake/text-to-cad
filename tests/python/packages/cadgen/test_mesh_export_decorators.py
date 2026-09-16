@@ -21,6 +21,7 @@ import unittest
 from pathlib import Path
 
 from tests.python.support.paths import add_repo_path
+from tests.python.support.warm_daemon import warm_entries
 
 add_repo_path("packages/cadgen/src")
 
@@ -174,7 +175,7 @@ class MeshExportProductionTest(unittest.TestCase):
         (self.project / "src" / "widget.py").write_text(MODEL, encoding="utf-8")
         self.env = dict(os.environ)
         self.env.update({
-            "CADGEN_DAEMON": "0",
+            **warm_entries(),
             "CADGEN_COMPONENT_WORKERS": "1",
             "CADGEN_CACHE_DIR": str(self.project / "store"),
             "PYTHONPATH": str(REPO / "packages/cadgen/src"),
@@ -248,7 +249,9 @@ class MeshExportProductionTest(unittest.TestCase):
         # sha-less until written, and an unwritten one reads as stale.
         import json
 
-        broken = dict(self.env, CADGEN_NODE=str(self.project / "no-such-node"))
+        # CADGEN_NODE is the CLIENT process's own resolution; a warm worker keeps the Node
+        # that spawned it. Only a cold run can be handed a broken one.
+        broken = dict(self.env, CADGEN_NODE=str(self.project / "no-such-node"), CADGEN_DAEMON="0")
         failed = subprocess.run(
             [PYTHON, "src/widget.py"], cwd=str(self.project), env=broken,
             capture_output=True, text=True, timeout=600,

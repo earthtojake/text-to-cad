@@ -5,9 +5,9 @@ targets say, and with the store behaving as the skill describes (running the
 root builds everything beneath it; a rerun is a no-op; `store why` sees the
 frame's two children).
 
-Built cold (`CADGEN_DAEMON=0`, transient workers) in a throwaway project with a
-private store, exactly as an agent following the skill would in a fresh
-workspace.
+Built through a warm daemon private to this module (an agent's own runs are
+warm by default) in a throwaway project with a private store, as an agent
+following the skill would in a fresh workspace.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ import unittest
 from pathlib import Path
 
 from tests.python.support.paths import add_repo_path, repo_path
+from tests.python.support.warm_daemon import warm_entries
 
 CADGEN_SRC = add_repo_path("packages/cadgen/src")
 
@@ -47,7 +48,7 @@ class TheTemplateBuilds(unittest.TestCase):
             target.write_text(source, encoding="utf-8")
         self.environment = {
             **os.environ,
-            "CADGEN_DAEMON": "0",
+            **warm_entries(),
             "CADGEN_COMPONENT_WORKERS": "1",
             "CADGEN_CACHE_DIR": str(self.project / "store"),
             "PYTHONPATH": str(CADGEN_SRC),

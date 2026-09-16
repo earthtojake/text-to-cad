@@ -170,7 +170,7 @@ jobs:
           npm: packages/cadgen-js
 
       - name: Run the cadgen package suite
-        run: scripts/test/test-python.sh --select cadgen
+        run: scripts/test/test-python.sh --select cadgen --print-weights
 
   # Why Windows runs at all: four of the last five user-reported bugs were Windows-only
   # (#260, #266, #267, #269) and every one passed CI -- the coverage existed, the runner
@@ -196,7 +196,7 @@ jobs:
       # --keep-going: report every failing suite in one round trip rather than one per
       # run; the Linux job keeps the fail-fast default.
       - name: Run the cadgen package suite
-        run: scripts/test/test-python.sh --keep-going --select cadgen
+        run: scripts/test/test-python.sh --keep-going --select cadgen --print-weights
         shell: bash
 
   cadgen-js:
@@ -272,7 +272,7 @@ jobs:
         run: scripts/test/test-global.sh
 
       - name: Run every skill suite
-        run: scripts/test/test-python.sh --select skills
+        run: scripts/test/test-python.sh --select skills --print-weights
 
   # The docs site mirrors the skills' frontmatter, renders through cadgen-js and
   # documents cadgen's commands, so it runs on any of those changing.

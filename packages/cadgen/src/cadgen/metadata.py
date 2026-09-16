@@ -350,20 +350,26 @@ def _script_stamp(script_path: Path) -> tuple[int, int] | None:
 def imported_model(script_path: Path, function: str):
     """The ModelDef ``function`` registered when ``script_path`` was imported.
 
-    The registry entry is reused when it was made from the bytes now on disk
-    (same mtime and size); otherwise the module is imported by path -- under a
-    loader name, so its ``__main__`` block does not run -- and read again. The
-    module top must stay kernel-free, as the cad skill requires: this import is
-    what every door pays to learn a model's declarations."""
-    from cadgen.authoring import registered_model
+    The registry entry is reused when it was made from the bytes now on disk --
+    the script's (same mtime and size) AND every file its import executed, since
+    the declarations are evaluated from what the script imports; otherwise the
+    module is imported by path -- under a loader name, so its ``__main__`` block
+    does not run -- and read again. The module top must stay kernel-free, as the
+    cad skill requires: this import is what every door pays to learn a model's
+    declarations."""
+    from cadgen.authoring import import_closure_current, registered_model
 
     resolved = Path(script_path).resolve()
     stamp = _script_stamp(resolved)
     defn = registered_model(resolved, function)
-    if defn is None or getattr(defn, "stamp", None) != stamp:
+    if defn is None or getattr(defn, "stamp", None) != stamp or not import_closure_current(resolved):
         from cadgen._internal.generation_runner import _load_generator_module, _without_bytecode_writes
+        from cadgen._internal.source_hash import evict_first_party_modules
 
-        # Like the build's own load: no .pyc for the model or its helpers.
+        # Like the build's own load: from a clean first-party module space (a helper a
+        # warm worker still holds would feed the reload its OLD values) and with no
+        # .pyc for the model or its helpers.
+        evict_first_party_modules()
         with _without_bytecode_writes():
             _load_generator_module(resolved)
         defn = registered_model(resolved, function)

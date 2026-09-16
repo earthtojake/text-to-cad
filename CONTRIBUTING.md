@@ -148,9 +148,15 @@ A test's COST is part of its design. A cold `python <model>.py` spends ~2.6 s
 importing the CAD kernel before it draws a box, so a file that runs one per
 assertion is mostly paying for imports: build a fixture the tests only READ once
 for the class and copy it in, keep each test's store, roots and freshness state
-private, and add a subprocess only where the subject IS the process. Repeating a
-non-deterministic case N times is not coverage — if the underlying property can
-be pinned directly, pin it and run the case once.
+private, and add a subprocess only where the subject IS the process. A model run
+a test does need goes through the module's private warm daemon
+(`tests/python/support/warm_daemon.py`: `**warm_entries()` where
+`"CADGEN_DAEMON": "0"` would go), which pays the import once per module — unless
+the subject is cold semantics (the daemon itself, a fresh interpreter's import
+hints or bytecode, a per-process environment override such as `CADGEN_NODE`),
+which keep `CADGEN_DAEMON=0` and say why. Repeating a non-deterministic case N
+times is not coverage — if the underlying property can be pinned directly, pin
+it and run the case once.
 
 `scripts/test/test-python.sh --print-weights` prints what the slow files cost,
 the first thing to read when a run is slow.

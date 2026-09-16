@@ -33,6 +33,7 @@ from pathlib import Path
 from unittest import mock
 
 from tests.python.support.paths import add_repo_path
+from tests.python.support.warm_daemon import warm_env
 
 CADGEN_SRC = add_repo_path("packages/cadgen/src")
 
@@ -106,15 +107,12 @@ class DiscoveredFileInputTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory(prefix="discovered-inputs-")
         self.addCleanup(self._tmp.cleanup)
         self.project = Path(self._tmp.name).resolve()
-        self.environment = dict(os.environ)
-        self.environment.update(
-            {
-                # A warm worker would serve another checkout's code.
-                "CADGEN_DAEMON": "0",
-                "CADGEN_COMPONENT_WORKERS": "1",
-                "CADGEN_CACHE_DIR": str(self.project / "store"),
-                "PYTHONPATH": str(CADGEN_SRC),
-            }
+        # One warm daemon for the module, private to it: these tests are about what a
+        # run WRITES, not about a cold interpreter, and each one is several model runs.
+        self.environment = warm_env(
+            CADGEN_COMPONENT_WORKERS="1",
+            CADGEN_CACHE_DIR=str(self.project / "store"),
+            PYTHONPATH=str(CADGEN_SRC),
         )
 
     # The vendor STEP is an INPUT: what matters is that some tool other than the model
@@ -241,12 +239,10 @@ class OwnOutputAsInputTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory(prefix="own-output-input-")
         self.addCleanup(self._tmp.cleanup)
         self.project = Path(self._tmp.name).resolve()
-        self.environment = dict(os.environ)
-        self.environment.update({
-            "CADGEN_DAEMON": "0",
-            "CADGEN_CACHE_DIR": str(self.project / "store"),
-            "PYTHONPATH": str(CADGEN_SRC),
-        })
+        self.environment = warm_env(
+            CADGEN_CACHE_DIR=str(self.project / "store"),
+            PYTHONPATH=str(CADGEN_SRC),
+        )
 
     def _run(self, name: str) -> subprocess.CompletedProcess:
         return subprocess.run(
@@ -487,14 +483,10 @@ class DeclaredDataInputTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory(prefix="declared-inputs-")
         self.addCleanup(self._tmp.cleanup)
         self.project = Path(self._tmp.name).resolve()
-        self.environment = dict(os.environ)
-        self.environment.update(
-            {
-                "CADGEN_DAEMON": "0",
-                "CADGEN_COMPONENT_WORKERS": "1",
-                "CADGEN_CACHE_DIR": str(self.project / "store"),
-                "PYTHONPATH": str(CADGEN_SRC),
-            }
+        self.environment = warm_env(
+            CADGEN_COMPONENT_WORKERS="1",
+            CADGEN_CACHE_DIR=str(self.project / "store"),
+            PYTHONPATH=str(CADGEN_SRC),
         )
         (self.project / "plate.py").write_text(_JSON_MODEL, encoding="utf-8")
         self.atlas = self.project / "atlas.json"

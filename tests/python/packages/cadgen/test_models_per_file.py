@@ -18,6 +18,7 @@ from pathlib import Path
 
 from tests.python.support.paths import REPO_ROOT, add_repo_path
 from tests.python.support.tmp_root import generated_cad_directory
+from tests.python.support.warm_daemon import warm_entries
 
 add_repo_path("packages/cadgen/src")
 
@@ -81,7 +82,7 @@ class ModelsPerFile(unittest.TestCase):
         self.env = dict(os.environ)
         self.env.update(
             {
-                "CADGEN_DAEMON": "0",
+                **warm_entries(),
                 "CADGEN_CACHE_DIR": str(self.store),
                 "PYTHONPATH": str(REPO_ROOT / "packages/cadgen/src"),
             }

@@ -16,6 +16,7 @@ import unittest.mock
 from pathlib import Path
 
 from tests.python.support.paths import add_repo_path
+from tests.python.support.warm_daemon import warm_entries
 
 add_repo_path("packages/cadgen/src")
 
@@ -49,7 +50,7 @@ def _write_model(root: Path) -> Path:
 def _run(entry: Path, args: list[str], store: Path) -> subprocess.CompletedProcess:
     env = dict(os.environ)
     env.update({
-        "CADGEN_DAEMON": "0",
+        **warm_entries(),
         "CADGEN_COMPONENT_WORKERS": "1",
         "CADGEN_CACHE_DIR": str(store),
         "PYTHONPATH": str(REPO / "packages/cadgen/src"),

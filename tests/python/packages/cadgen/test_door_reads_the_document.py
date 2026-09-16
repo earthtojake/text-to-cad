@@ -23,6 +23,7 @@ from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 from tests.python.support.cad_test_roots import IsolatedCadRoots
+from tests.python.support.warm_daemon import warm_entries
 
 add_repo_path("packages/cadgen/src")
 
@@ -60,7 +61,7 @@ class DoorReadsTheDocumentTests(unittest.TestCase):
 
     def _build(self) -> None:
         env = dict(os.environ)
-        env["CADGEN_DAEMON"] = "0"
+        env.update(warm_entries())
         env["PYTHONPATH"] = os.pathsep.join(
             [str(add_repo_path("packages/cadgen/src")), *([env["PYTHONPATH"]] if env.get("PYTHONPATH") else [])]
         )
