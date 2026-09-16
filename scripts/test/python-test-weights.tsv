@@ -1,0 +1,100 @@
+# Per-file cost hints for scripts/test/unittest_files.py --shard.
+#
+# A HINT, never a correctness input: a file missing from this table is packed at
+# the default weight (1), and a stale number only makes one shard finish sooner
+# than another. Only files that cost more than the ~5s a cold kernel boot costs
+# are listed; everything else is noise at this granularity.
+#
+# Regenerate after a change that moves the balance:
+#   scripts/test/unittest_files.py --print-weights ...   (see scripts/README.md)
+#
+# <path relative to the repo root>\t<seconds, one macOS run at --jobs 8>
+
+tests/python/packages/cadgen/test_discovered_file_inputs.py	136
+tests/python/packages/cadgen/test_mesh_export_decorators.py	107
+tests/python/packages/cadgen/test_step_reemit.py	105
+tests/python/packages/cadgen/test_daemon_slots.py	79
+tests/python/packages/cadgen/test_warm_output_equivalence.py	74
+tests/python/packages/cadgen/test_step_publication.py	73
+tests/python/packages/cadgen/test_model_run_result_line.py	69
+tests/python/packages/cadgen/test_dxf_write_determinism.py	67
+tests/python/packages/cadgen/test_source_job_results.py	58
+tests/python/packages/cadgen/test_models_per_file.py	54
+tests/python/packages/cadgen/test_flex_followups.py	52
+tests/python/packages/cadgen/test_imported_step_cache.py	48
+tests/python/packages/cadgen/test_door_first_call.py	44
+tests/python/packages/cadgen/test_mesh_export_engine_determinism.py	40
+tests/python/packages/cadgen/test_decorator_arguments_evaluated.py	36
+tests/python/packages/cadgen/test_mesh_export_store_reuse.py	36
+tests/python/packages/cadgen/test_daemon_routing.py	35
+tests/python/packages/cadgen/test_store_forget.py	34
+tests/python/packages/cadgen/test_equivalence_oracle.py	33
+tests/python/packages/cadgen/test_tree_reflects_written_step.py	32
+tests/python/skills/cad/cadgen_daemon/test_daemon.py	32
+tests/python/packages/cadgen/test_store.py	31
+tests/python/packages/cadgen/test_publish_rule.py	30
+tests/python/skills/cad/test_documented_models.py	30
+tests/python/skills/dxf/test_documented_commands.py	30
+tests/python/skills/cad/test_documented_project.py	30
+tests/python/packages/cadgen/test_daemon_artifacts_native.py	29
+tests/python/packages/cadgen/test_package_portability.py	25
+tests/python/packages/cadgen/test_saved_step_readback.py	24
+tests/python/global/test_sidecar_and_package_layering.py	23
+tests/python/packages/cadgen/test_store_two_sides.py	22
+tests/python/packages/cadgen/test_memo_build.py	20
+tests/python/packages/cadgen/test_saved_document_identity.py	20
+tests/python/packages/cadgen/test_executors.py	19
+tests/python/packages/cadgen/test_imported_compile_snapshot.py	19
+tests/python/packages/cadgen/test_kernel_import_hint.py	18
+tests/python/packages/cadgen/test_placed_frames_and_group_labels.py	17
+tests/python/packages/cadgen/test_step_export_reuse.py	16
+tests/python/packages/cadgen/test_door_reads_the_document.py	15
+tests/python/skills/cad/cadgen/test_generation.py	15
+tests/python/skills/cad/cadgen/test_instances.py	15
+tests/python/skills/cad/cadgen/test_step_scene.py	15
+tests/python/packages/cadgen/test_lazy_sibling_import.py	14
+tests/python/packages/cadgen/test_import_roots.py	14
+tests/python/packages/cadgen/test_assembly_selector_refs.py	14
+tests/python/skills/cad/cadgen/test_source_closure_and_cache.py	13
+tests/python/packages/cadgen/test_ready_children.py	13
+tests/python/packages/cadgen/test_daemon_memory.py	13
+tests/python/packages/cadgen/test_lazy_children.py	13
+tests/python/packages/cadgen/test_reference_assemblies.py	12
+tests/python/packages/cadgen/test_validity.py	12
+tests/python/packages/cadgen/viewer/test_launcher.py	12
+tests/python/packages/cadgen/test_geometry_inputs.py	12
+tests/python/packages/cadgen/test_generated_step_fidelity.py	12
+tests/python/packages/cadgen/test_step_export_target.py	12
+tests/python/packages/cadgen/test_kinematics_build.py	11
+tests/python/packages/cadgen/test_sidecar_boundary.py	11
+tests/python/packages/cadgen/test_memo.py	11
+tests/python/packages/cadgen/test_native_document_doors.py	11
+tests/python/packages/cadgen/test_retired_render_module.py	10
+tests/python/packages/cadgen/test_descriptor_bounds.py	10
+tests/python/packages/cadgen/viewer/test_http_layer.py	10
+tests/python/packages/cadgen/test_material_authoring.py	9
+tests/python/skills/cad/snapshot/test_cli.py	9
+tests/python/global/test_cli_stream_contract.py	9
+tests/python/skills/dxf/test_standalone_source.py	8
+tests/python/packages/cadgen/viewer/test_security.py	8
+tests/python/packages/cadgen/test_document_tree_packaging.py	8
+tests/python/packages/cadgen/test_op_memo.py	7
+tests/python/packages/cadgen/test_daemon_artifacts.py	7
+tests/python/skills/cad/inspect/test_cli.py	6
+tests/python/packages/cadgen/test_daemon_prewarm.py	6
+tests/python/packages/cadgen/test_cold_compile_cleanup.py	6
+tests/python/packages/cadgen/test_closure_model_boundaries.py	6
+tests/python/packages/cadgen/test_component_face_color_identity.py	6
+tests/python/packages/cadgen/viewer/test_editing_preview.py	6
+tests/python/packages/cadgen/test_component_worker_scheduling.py	6
+tests/python/packages/cadgen/test_snapshot_tess_cache.py	6
+tests/python/packages/cadgen/test_materialized_identity.py	6
+tests/python/packages/cadgen/test_step_write_determinism.py	6
+tests/python/packages/cadgen/test_no_stale_bytecode.py	6
+tests/python/packages/cadgen/test_flatten.py	5
+tests/python/packages/cadgen/test_metadata_capture.py	5
+tests/python/packages/cadgen/test_op_memo_signature.py	5
+tests/python/packages/cadgen/test_compound_assembly_generation.py	5
+tests/python/packages/cadgen/test_step_color_roundtrip.py	5
+tests/python/packages/cadgen/test_retained_revision.py	5
+tests/python/packages/cadgen/test_interference.py	5

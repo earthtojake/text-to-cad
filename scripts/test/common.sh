@@ -33,7 +33,8 @@ ensure_packaged_runtime() {
 }
 
 section() {
-  printf '\n==> %s\n' "$1"
+  # A log line, not a result: --print-weights writes the per-file costs to stdout.
+  printf '\n==> %s\n' "$1" >&2
 }
 
 run_python_unittest() {
@@ -71,9 +72,19 @@ run_python_unittest() {
   # Each test FILE runs in its own interpreter with its own fresh store, CADGEN_TEST_JOBS
   # at a time (default: the machine's cores). Modules cannot see one another's builds,
   # and a module that spawns workers or a daemon does not hold the rest of the suite.
+  # PYTHON_TEST_SHARD ("I/N") and PYTHON_TEST_PRINT_WEIGHTS are how the CI matrix and the
+  # weights-table regeneration reach the runner without every caller growing two flags.
+  local extra=()
+  if [ -n "${PYTHON_TEST_SHARD:-}" ]; then
+    extra+=(--shard "$PYTHON_TEST_SHARD")
+  fi
+  if [ -n "${PYTHON_TEST_PRINT_WEIGHTS:-}" ]; then
+    extra+=(--print-weights)
+  fi
+
   PYTHONPATH="$python_path${PYTHONPATH:+:$PYTHONPATH}" \
     "$PYTHON_BIN" "$SCRIPT_DIR/unittest_files.py" --top "$REPO_ROOT" \
-      --jobs "${CADGEN_TEST_JOBS:-$(test_jobs)}" "${test_files[@]}"
+      --jobs "${CADGEN_TEST_JOBS:-$(test_jobs)}" ${extra[@]+"${extra[@]}"} "${test_files[@]}"
 }
 
 test_jobs() {
