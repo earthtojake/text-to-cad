@@ -19,14 +19,18 @@ SNAPSHOT_RUNTIME_ESBUILD_VERSION="${CAD_SNAPSHOT_ESBUILD_VERSION:-0.27.7}"
 # sourcing.
 snapshot_runtime_locked_version() {
   local name="$1"
+  # The lockfile path travels as an ARGUMENT, not inside the script text: on
+  # Windows, Git Bash rewrites POSIX-style paths in arguments to native ones
+  # (`/d/a/x` -> `D:/a/x`), but not inside a quoted string, and Node cannot
+  # open `/d/a/x`.
   node -p "
-    const lock = require('$BUNDLE_REPO_ROOT/packages/cadgen-js/package-lock.json');
+    const lock = require(process.argv[1]);
     const entry = lock.packages && lock.packages['node_modules/$name'];
     if (!entry || !entry.version) {
       throw new Error('packages/cadgen-js/package-lock.json has no pinned $name');
     }
     entry.version;
-  "
+  " "$BUNDLE_REPO_ROOT/packages/cadgen-js/package-lock.json"
 }
 
 # The lockfile version, unless the matching CAD_SNAPSHOT_* env var overrides it.

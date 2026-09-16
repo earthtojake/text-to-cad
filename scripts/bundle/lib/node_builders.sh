@@ -25,14 +25,18 @@ NODE_BUILDER_LOCKFILE="$BUNDLE_REPO_ROOT/packages/cadgen-js/package-lock.json"
 
 node_builder_locked_version() {
   local name="$1"
+  # The lockfile path travels as an ARGUMENT, not inside the script text: on
+  # Windows, Git Bash rewrites POSIX-style paths in arguments to native ones
+  # (`/d/a/x` -> `D:/a/x`), but not inside a quoted string, and Node cannot
+  # open `/d/a/x`.
   node -p "
-    const lock = require('$NODE_BUILDER_LOCKFILE');
+    const lock = require(process.argv[1]);
     const entry = lock.packages && lock.packages['node_modules/$name'];
     if (!entry || !entry.version) {
       throw new Error('packages/cadgen-js/package-lock.json has no pinned $name');
     }
     entry.version;
-  "
+  " "$NODE_BUILDER_LOCKFILE"
 }
 
 node_builder_require_tools() {
