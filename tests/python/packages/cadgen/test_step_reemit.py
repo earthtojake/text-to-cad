@@ -62,6 +62,37 @@ ANIM_JS = "export const clips = { demo: { duration: 2, update(t, m) {} } };\n"
 
 
 class StepReemitTests(unittest.TestCase):
+    # The document being re-emitted is an INPUT here, not a subject: every test starts
+    # from `vendor.step` as a file some other tool wrote, and none of them asks anything
+    # about the run that produced it. Producing it once for the class and copying the
+    # bytes into each test's own root keeps every test's store, roots and freshness
+    # state as private as they were, and stops the class paying fourteen kernel boots
+    # for one box and one arm.
+    _vendor_bytes: bytes | None = None
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        from cadgen.catalog import StepImportOptions
+        from cadgen.generation import generate_step_targets
+
+        # IsolatedCadRoots registers its cwd and CADGEN_CACHE_DIR restores as cleanups on a
+        # TestCase; this seed build is not one, so it borrows a bare case and runs them itself.
+        seed = unittest.TestCase()
+        with mock.patch.dict(os.environ, {"CADGEN_DAEMON": "0"}):
+            roots = IsolatedCadRoots(seed, prefix="cadreemit-seed-")
+            tempdir = roots.temporary_cad_directory(prefix="tmp-cadreemit-seed-")
+            try:
+                script = Path(tempdir.name) / "hinge.py"
+                script.write_text(MODEL, encoding="utf-8")
+                if generate_step_targets(
+                    [str(script)], step_options=StepImportOptions(), force=True, verbose=False
+                ):
+                    raise RuntimeError("the seed document could not be built")
+                cls._vendor_bytes = (Path(tempdir.name) / "hinge.step").read_bytes()
+            finally:
+                tempdir.cleanup()
+                seed.doCleanups()
+
     def setUp(self) -> None:
         offline = mock.patch.dict(os.environ, {"CADGEN_DAEMON": "0"})
         offline.start()
@@ -69,29 +100,14 @@ class StepReemitTests(unittest.TestCase):
         self._roots = IsolatedCadRoots(self, prefix="cadreemit-")
         self._tempdir = self._roots.temporary_cad_directory(prefix="tmp-cadreemit-")
         self.root = Path(self._tempdir.name)
-        # A real document to re-emit, produced the way every document is: by
-        # running a model script.
-        script = self.root / "hinge.py"
-        script.write_text(MODEL, encoding="utf-8")
-        self._run_script(script)
+        # The script is written too: one test asks the door to refuse it by name.
+        (self.root / "hinge.py").write_text(MODEL, encoding="utf-8")
         self.vendor = self.root / "vendor.step"
-        self.vendor.write_bytes((self.root / "hinge.step").read_bytes())
+        self.vendor.write_bytes(self._vendor_bytes)
         self.out = self.root / "annotated.step"
 
     def tearDown(self) -> None:
         self._tempdir.cleanup()
-
-    def _run_script(self, script: Path) -> None:
-        from cadgen.catalog import StepImportOptions
-        from cadgen.generation import generate_step_targets
-
-        code = generate_step_targets(
-            [str(script)],
-            step_options=StepImportOptions(),
-            force=True,
-            verbose=False,
-        )
-        self.assertEqual(0, code)
 
     def _build(self, **kwargs):
         from cadgen import step as step_namespace
@@ -234,6 +250,12 @@ class StepReemitTests(unittest.TestCase):
         from cadgen._internal.source_sidecar import read_source_sidecar, source_sidecar_path, write_source_sidecar
         from cadgen.store.records import read_record, write_record
 
+        from cadgen import step as step_namespace
+
+        # Alone among these tests, this one reads the INPUT's tree before re-emitting,
+        # so the input has to be in the store: ask the compile door for it by name
+        # rather than leaning on some earlier build having warmed it.
+        step_namespace.compile(self.vendor)
         input_leaf = (result_descriptor_for(self.vendor) or {})["occurrences"][0]["id"]
         material = {"name": "Finish", "roughness": 0.2, "metalness": 0.7, "opacity": 0.8}
         write_source_sidecar(

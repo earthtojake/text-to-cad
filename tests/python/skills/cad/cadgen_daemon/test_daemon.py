@@ -144,6 +144,35 @@ class CadgenDaemonTests(unittest.TestCase):
         return {int(worker["pid"]) for worker in (status.get("workers") or []) if worker.get("pid")}
 
     @classmethod
+    def _wait_for_busy_worker(cls, model: str, timeout: float = 120.0) -> int:
+        """Block until a pooled worker is actually running ``model``, and say which.
+
+        The supervisor is the only thing that knows a job has STARTED: the request has
+        been accepted, a worker acquired, and the model bound to it. Waiting on that
+        rather than on a clock is what keeps these tests honest on a runner where a cold
+        worker's OCP import takes twenty seconds -- a fixed sleep either races the
+        request (the assertion then describes a job that never began) or pads every
+        green run to the length of the worst red one.
+        """
+        env = {"CADGEN_DAEMON": "1", "CADGEN_DAEMON_SOCKET": str(cls.address)}
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            with mock.patch.dict(os.environ, env):
+                os.environ.pop("CADGEN_DAEMON_CHILD", None)
+                status = daemon_client.status() or {}
+            for worker in status.get("workers") or []:
+                # THIS job's worker, not any busy one: the class shares its daemon
+                # across tests, and a worker still finishing an earlier test's job
+                # can be recycled between the poll and the kill (ProcessLookupError).
+                if worker.get("busy") and str(worker.get("model") or "").endswith(model):
+                    return int(worker["pid"])
+            time.sleep(0.05)
+        raise AssertionError(
+            f"no worker ever went busy on {model} within {timeout:.0f}s:\n"
+            f"{cls.log_path.read_text(encoding='utf-8')}"
+        )
+
+    @classmethod
     def tearDownClass(cls) -> None:
         workers: set[int] = set()
         if cls.server is not None and cls.server.poll() is None:
@@ -311,7 +340,10 @@ class CadgenDaemonTests(unittest.TestCase):
                 "cwd": str(self.model_dir),
                 "token": daemon_client.compute_version_token(),
             }).encode("utf-8"))
-            time.sleep(0.3)  # let the job start before the client "dies"
+            # The client may only "die" once there is a running job to orphan. A fixed
+            # sleep here raced a cold worker's kernel import under load and the watchdog
+            # then had nothing to kill.
+            self._wait_for_busy_worker("box_orphan.py")
         finally:
             channel.close()
 
