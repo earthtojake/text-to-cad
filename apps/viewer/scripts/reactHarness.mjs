@@ -13,7 +13,13 @@
 // in a Playwright check instead.
 import React from "react";
 
-const dispatcherRef = React.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED.ReactCurrentDispatcher;
+// React 19 renamed the shared internals object and flattened it: the hook
+// dispatcher that was `__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED
+// .ReactCurrentDispatcher.current` is now the `H` field of
+// `__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE`. Same
+// contract — read it, swap in this file's dispatcher for one call, put the
+// previous one back — so everything below is unchanged.
+const reactInternals = React.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
 
 function sameDeps(previous, next) {
   if (!previous || !next || previous.length !== next.length) return false;
@@ -113,12 +119,12 @@ export function render(type, initialProps = {}) {
       do {
         dirty = false;
         cursor = 0;
-        const previous = dispatcherRef.current;
-        dispatcherRef.current = dispatcher;
+        const previous = reactInternals.H;
+        reactInternals.H = dispatcher;
         try {
           tree = type(props);
         } finally {
-          dispatcherRef.current = previous;
+          reactInternals.H = previous;
         }
         flush();
         if (++guard > 50) throw new Error("render did not settle after 50 passes");
