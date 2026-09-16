@@ -262,8 +262,9 @@ the default software WebGL renderer is not what users see.
 
 ### The browser gate
 
-`scripts/test/test-viewer-browser.sh` drives the BUILT Viewer in a real
-Chromium against fixtures it generates itself. It comes in two sizes:
+The repository's browser gate (`test-viewer-browser.sh`, under its test
+scripts) drives the BUILT Viewer in a real Chromium against fixtures it
+generates itself. It comes in two sizes:
 
 ```bash
 scripts/test/test-viewer-browser.sh --ci     # ~2 min: format, pick, kinematics, camera

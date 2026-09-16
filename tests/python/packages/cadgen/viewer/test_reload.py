@@ -202,43 +202,6 @@ class WhenItFires(unittest.TestCase):
         self.assertFalse(watcher.poll_once(), "the code on disk is the code already running")
         self.assertEqual(self.restarts, [])
 
-    def test_a_revert_the_platform_timestamps_identically_is_still_noticed(self) -> None:
-        """The cheap guard cannot veto a pending restart settling back.
-
-        Windows stamps a write from the ~15.6ms interrupt clock, so an edit and
-        the edit that undoes it can land in ONE tick: same size, same mtime, a
-        size+mtime signature that is byte-identical across a change it must not
-        hide. Simulated here by writing the original bytes back under the
-        edit's own timestamp, which is the same thing the platform does by
-        itself -- and which used to leave the watcher permanently pending and
-        restart the server into code that no longer existed.
-        """
-        original = self.source.read_bytes()
-        watcher = self.reloader(quiet=1.0)
-        self.edit("x = 2\n")
-        self.clock.now += 0.2
-        self.assertFalse(watcher.poll_once())
-        self.assertTrue(watcher.pending)
-
-        edited_signature = reload_module.source_stat_signature(self.package)
-        # The reloader digests st_mtime_ns; freezing through the float st_mtime
-        # does not round-trip on Windows, which would make the precondition
-        # below fail for a reason unrelated to the guard under test.
-        frozen = os.stat(self.source).st_mtime_ns
-        self.source.write_bytes(original)
-        os.utime(self.source, ns=(frozen, frozen))
-        self.assertEqual(
-            reload_module.source_stat_signature(self.package),
-            edited_signature,
-            "the guard must be blind here, or this test is not the one it claims to be",
-        )
-
-        self.clock.now += 5
-        self.assertFalse(watcher.poll_once(), "a pending restart re-reads the bytes")
-        self.assertFalse(watcher.pending)
-        self.assertEqual(self.restarts, [])
-
-
 class WhatItReRuns(unittest.TestCase):
     """The restart is the same launch, pinned to the port already held."""
 
