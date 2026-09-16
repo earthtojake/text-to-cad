@@ -79,7 +79,7 @@ robot description files, simulation, and local review.
 | DfAM Check   | Measures mesh printability per process: wall thickness, overhangs, support volume, and build orientation.                                          | [skills/dfam-check](skills/dfam-check/SKILL.md)     |
 | Sheet Metal DFM | Review sheet-metal cutting and bending feasibility; guided review with explicit measurement limits. | [skills/sheet-metal-dfm](skills/sheet-metal-dfm/SKILL.md) |
 | CNC DFM | Review machining access, features, and setups; guided review with explicit measurement limits. | [skills/cnc-dfm](skills/cnc-dfm/SKILL.md) |
-| Injection Molding DFM | Measures per-face draft against a pull axis, then guides review of walls, ribs, and undercuts with explicit limits. | [skills/injection-molding-dfm](skills/injection-molding-dfm/SKILL.md) |
+| Injection Molding DFM | Measures draft, wall thickness, straight-pull undercut candidates, and projected area from a mesh, then guides the molding review. | [skills/injection-molding-dfm](skills/injection-molding-dfm/SKILL.md) |
 | G-code       | Slices supported mesh files into validated, printer-profiled FDM `.gcode` with real slicer CLIs.                                                   | [skills/gcode](skills/gcode/SKILL.md)               |
 | Bambu Labs   | Dry-runs, uploads, and cautiously starts local Bambu Lab print jobs from validated `.gcode`.                                                       | [skills/bambu-labs](skills/bambu-labs/SKILL.md)     |
 

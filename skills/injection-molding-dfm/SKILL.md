@@ -7,27 +7,40 @@ description: Review thermoplastic injection-molded parts for draft, wall transit
 
 Produce a process-specific DFM review of the supplied design. This is a guided
 review skill, not an automatic feature-recognition or manufacturing certification
-engine. It ships one measurement, draft angle, in `scripts/draft_tool.py`; every
-other check uses available CAD inspection tools or traceable supplied
-measurements. Report unavailable checks explicitly.
+engine. It ships one measurement script, `scripts/mold_tool.py`, for the
+checks a mesh can answer on its own; every other check uses available CAD
+inspection tools or traceable supplied measurements. Report unavailable checks
+explicitly.
 
-## Draft measurement
+## Geometry measurement
 
-Use `scripts/draft_tool.py` in the active project Python environment for draft
-facts (install `requirements.txt` first). The tool is fact-only: it reports
-per-face draft relative to a pull axis and never emits pass/fail. Comparisons
-against resin, texture and tooling limits belong to this workflow.
+Use `scripts/mold_tool.py` in the active project Python environment for
+geometry facts (install `requirements.txt` first). The tool is fact-only: it
+reports measurements and never emits pass/fail. Comparisons against resin,
+texture and tooling limits belong to this workflow.
 
 ```bash
-python scripts/draft_tool.py measure part.stl --pull z
-python scripts/draft_tool.py pulls part.stl
+python scripts/mold_tool.py measure part.stl --pull z
+python scripts/mold_tool.py pulls part.stl
 ```
 
-`measure` reports, for the given pull axis: wall area (faces within
-`--wall-limit`, default 45°, of the pull axis), a draft histogram by area,
-zero-draft wall area with the largest zero-draft faces pooled by normal, the
-lowest-draft walls with locations, and the area-weighted mean draft of the
-drafted walls. `pulls` repeats the summary for x, y and z so a candidate pull
+`measure` reports four fact families for the given pull axis:
+
+- `draft`: wall area (faces within `--wall-limit`, default 45°, of the pull),
+  a draft histogram by area, zero-draft wall area with the largest zero-draft
+  faces pooled by normal, the lowest-draft walls with locations and lean, and
+  the area-weighted mean draft of the drafted walls.
+- `wall_thickness`: ray-cast thickness per body, with the thinnest and the
+  thickest samples and the p95 and max ratios to the median. Thick spots at
+  rib and boss roots are where sink starts; thin spots are where fill stops.
+- `undercuts`: a straight two-half pull occlusion test. From each face a ray
+  is cast along the direction its mold half withdraws; faces the part itself
+  blocks are candidates. Zero-draft walls count only when both directions are
+  blocked. Candidate faces are pooled by normal with locations.
+- `projection`: silhouette area along the pull (rasterised, resolution
+  reported), depth along the pull, and volume.
+
+`pulls` repeats the draft and undercut summaries for x, y and z so a pull
 direction can be chosen from measured area rather than by eye.
 
 Read the output with these limits in mind:
@@ -38,28 +51,16 @@ Read the output with these limits in mind:
   because a chord facet tilts less than the analytic surface; report the
   measured value with that caveat rather than rounding it up.
 - `opens_toward` is the lean of a face's outward normal along the pull, not
-  its mold-half assignment. Assigning faces to core and cavity, deciding
-  whether a face is an undercut, and the withdrawal path need the parting
-  line, which the tool does not determine.
+  its mold-half assignment. The undercut test assumes a straight two-half
+  tool with the parting at the silhouette; a candidate may be resolved by a
+  side action, a lifter, or another parting line, and that judgement, plus
+  the full withdrawal path and shutoffs, is made in the review, not here.
+- Thickness is sampled, and each sample is the shortest hit of a small cone
+  of rays, so at an edge or corner the cone reads a little under the true
+  wall. Use `p05_mm` as the thin figure and `min_mm` as a place to look;
+  state the sample count with any finding.
 - Faces at or above `--wall-limit` from the pull axis (tops, bottoms, steep
-  chamfers) are not walls and are excluded from every wall figure.
-
-## Evidence first
-
-Read [process review guidance](references/process-review.md) before comparing
-features to limits. Prefer the user's actual supplier/tooling specification over
-general guidance. Record conflicting specifications rather than silently choosing.
-
-Identify the reviewed file and revision, units, and bodies. Prefer exact STEP/B-rep
-measurements for radii and analytic faces. If only a mesh is available, record
-its resolution and approximation limits. A screenshot supports a suspected issue,
-not a measured pass/fail. Source-code parameters describe design intent; verify
-that they match the artifact being reviewed before treating them as evidence.
-
-When $cad is available, use its documented inspection workflow for geometry facts.
-If it cannot measure a required feature, use supplied dimensions with provenance
-or mark the check unverified; do not invent commands or measurements. Never infer
-alloy, resin, strength, or stock thickness from a rendering material or color.
+  chamfers) are not walls and are excluded from every draft figure.
 
 ## Process review
 

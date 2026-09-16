@@ -17,7 +17,7 @@ measured geometry from planned manufacturing decisions.
 
 The following numbers are illustrative inputs, not default process limits.
 
-If a side wall has measured 0.5 degree draft (from `scripts/draft_tool.py measure --pull <axis>`) relative to the confirmed pull and the selected texture/tooling specification requires 2 degrees, report the shortfall for that wall. Without a confirmed pull direction, report draft as unverified rather than failing every vertical-looking face.
+If a side wall has measured 0.5 degree draft (from `scripts/mold_tool.py measure --pull <axis>`) relative to the confirmed pull and the selected texture/tooling specification requires 2 degrees, report the shortfall for that wall. Without a confirmed pull direction, report draft as unverified rather than failing every vertical-looking face.
 
 ## Finding format
 
