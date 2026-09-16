@@ -66,17 +66,14 @@ class NoStaleBytecodeTest(unittest.TestCase):
         self.assertEqual(0, generate_step_targets([str(self.project / "model.py")], force=True))
 
     def test_a_build_leaves_no_bytecode_for_the_model_or_its_helpers(self) -> None:
+        flag_before = sys.dont_write_bytecode
         self._build()
+        self.assertEqual(flag_before, sys.dont_write_bytecode, "the window must restore the flag")
         self.assertTrue((self.project / "model.step").is_file())
         leftovers = sorted(str(p.relative_to(self.project)) for p in self.project.rglob("__pycache__"))
         # Not "the purge removed them" -- none were ever written, which is what
         # makes the guarantee independent of a delete being permitted.
         self.assertEqual([], leftovers, f"a build wrote bytecode for model code: {leftovers}")
-
-    def test_the_flag_is_restored_afterwards(self) -> None:
-        before = sys.dont_write_bytecode
-        self._build()
-        self.assertEqual(before, sys.dont_write_bytecode)
 
     def test_the_window_is_what_suppresses_it(self) -> None:
         """Mutation check: with the window neutralised, bytecode reappears.

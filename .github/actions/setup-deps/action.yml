@@ -1,12 +1,34 @@
 name: Set up dependencies
 description: >-
-  Set up Python and Node.js with dependency caching, then install the repo
-  Python and Node dependencies used by tests and production bundling.
+  Set up Python and Node.js with dependency caching, then install as much of the
+  repo's Python and Node dependencies as the calling job actually uses.
+
+# Every input defaults to the full install, so a job that asks for nothing gets
+# what this action always did. Jobs that need less say so: the test matrix runs
+# six ways, and three minutes of `npm ci` for an app a job never touches is three
+# minutes on the critical path of every one of them.
+inputs:
+  python:
+    description: Install the Python dependencies (requirements-dev.txt).
+    default: "true"
+  playwright:
+    description: >-
+      Install Playwright's Chromium. Only the snapshot suites render in it; skip
+      it in jobs that run no snapshot.
+    default: "true"
+  npm:
+    description: >-
+      Space-separated npm project prefixes to `npm ci`, or "none". Building
+      cadgen's packaged runtime needs `packages/cadgen-js`; the Viewer's client
+      build and its own suite need `apps/viewer`; only the docs check needs
+      `apps/docs`.
+    default: "packages/cadgen-js apps/viewer apps/docs"
 
 runs:
   using: composite
   steps:
     - name: Set up Python
+      if: inputs.python == 'true'
       uses: actions/setup-python@v5
       with:
         python-version: "3.12"
@@ -24,6 +46,7 @@ runs:
           apps/docs/package-lock.json
 
     - name: Install Python dependencies
+      if: inputs.python == 'true'
       shell: bash
       run: |
         python -m pip install --upgrade pip
@@ -33,6 +56,7 @@ runs:
     # happens to carry one; Windows does not, and a missing browser fails the
     # snapshot suites with "Executable doesn't exist". Install it on every OS.
     - name: Install the snapshot browser
+      if: inputs.playwright == 'true'
       shell: bash
       run: |
         if [ "$RUNNER_OS" = "Linux" ]; then
@@ -42,8 +66,11 @@ runs:
         fi
 
     - name: Install Node dependencies
+      if: inputs.npm != 'none'
       shell: bash
+      env:
+        NPM_PREFIXES: ${{ inputs.npm }}
       run: |
-        npm ci --prefix packages/cadgen-js
-        npm ci --prefix apps/viewer
-        npm ci --prefix apps/docs
+        for prefix in $NPM_PREFIXES; do
+          npm ci --prefix "$prefix"
+        done

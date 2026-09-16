@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { availableParallelism } from "node:os";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -51,8 +52,17 @@ if (!tests.length) {
   process.exit(1);
 }
 
+// node:test runs availableParallelism() - 1 test PROCESSES, which is ONE on the
+// two-core runner CI gets: every file then pays its own process startup end to end
+// and the suite takes 16.6 s instead of 4.6 s. A file here spends more of its life
+// starting up and reading fixtures than on the CPU, so a floor of four overlaps
+// those waits even where there are not four cores to run them on. Measured on a
+// 10-core Mac: 16.6 s at 1, 8.5 s at 2, 4.6 s at 4, and flat from there.
+const testConcurrency = Math.max(4, availableParallelism());
+
 const result = spawnSync(process.execPath, [
   "--test",
+  `--test-concurrency=${testConcurrency}`,
   ...tests,
 ], {
   cwd: packageRoot,

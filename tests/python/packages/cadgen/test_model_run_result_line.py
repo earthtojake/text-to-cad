@@ -61,7 +61,14 @@ class _ModelRunCase(unittest.TestCase):
 
 
 class ModelRunResultLineTest(_ModelRunCase):
-    def test_mesh_only_model_names_the_mesh_it_wrote(self) -> None:
+    def test_the_result_line_names_a_document_for_every_decorator_shape(self) -> None:
+        """One test, one store, one run per shape.
+
+        The contract is a single sentence -- the result line names a path the caller can
+        open, never the tree hash -- and it was being asked three times, each from its own
+        empty store, each paying a cold kernel import and a full mesh write. The three
+        shapes it has to hold for are just three fixtures.
+        """
         self._write("spacer.py", """\
             from cadgen import build123d as bd
             from cadgen import stl
@@ -75,19 +82,6 @@ class ModelRunResultLineTest(_ModelRunCase):
             if __name__ == "__main__":
                 spacer()
             """)
-
-        built = self._run("spacer.py")
-        self.assertEqual(self._lines(built), ["built spacer.stl"])
-        self.assertTrue((self.project / "spacer.stl").is_file())
-
-        # The no-op run names the same document, not a hash.
-        self.assertEqual(self._lines(self._run("spacer.py")), ["current spacer.stl"])
-
-        payload = json.loads(self._run("spacer.py", "--json", "--force").stdout.strip())
-        self.assertEqual(payload["document"], "spacer.stl")
-        self.assertNotEqual(payload["document"], payload["tree"])
-
-    def test_mesh_only_model_with_several_formats_names_its_first(self) -> None:
         self._write("multi.py", """\
             from cadgen import build123d as bd
             from cadgen import glb, stl
@@ -102,13 +96,6 @@ class ModelRunResultLineTest(_ModelRunCase):
             if __name__ == "__main__":
                 multi()
             """)
-
-        payload = json.loads(self._run("multi.py", "--json").stdout.strip())
-        self.assertEqual(payload["document"], "STL/multi.stl")
-        self.assertTrue((self.project / "STL/multi.stl").is_file())
-        self.assertTrue((self.project / "multi.glb").is_file())
-
-    def test_step_model_with_meshes_still_names_its_step(self) -> None:
         self._write("withstep.py", """\
             from cadgen import build123d as bd
             from cadgen import step, stl
@@ -124,6 +111,24 @@ class ModelRunResultLineTest(_ModelRunCase):
                 withstep()
             """)
 
+        # A mesh-only model declares no STEP, so it names the mesh it wrote.
+        self.assertEqual(self._lines(self._run("spacer.py")), ["built spacer.stl"])
+        self.assertTrue((self.project / "spacer.stl").is_file())
+
+        # The no-op run names the same document, and --json carries it beside the tree
+        # hash it must not be confused with.
+        payload = json.loads(self._run("spacer.py", "--json").stdout.strip())
+        self.assertEqual(payload["outcome"], "current")
+        self.assertEqual(payload["document"], "spacer.stl")
+        self.assertNotEqual(payload["document"], payload["tree"])
+
+        # Several mesh formats: the FIRST declared one, at the path it declared.
+        payload = json.loads(self._run("multi.py", "--json").stdout.strip())
+        self.assertEqual(payload["document"], "STL/multi.stl")
+        self.assertTrue((self.project / "STL/multi.stl").is_file())
+        self.assertTrue((self.project / "multi.glb").is_file())
+
+        # A STEP beside meshes: the STEP is the document.
         payload = json.loads(self._run("withstep.py", "--json").stdout.strip())
         self.assertEqual(payload["document"], "withstep.step")
 

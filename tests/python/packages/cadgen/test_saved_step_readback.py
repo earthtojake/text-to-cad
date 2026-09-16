@@ -113,9 +113,10 @@ class SavedStepReadbackTest(unittest.TestCase):
                         side_effect=AssertionError("verified canonical inputs were re-encoded")), \
                 mock.patch("cadgen._internal.step_scene_loader.load_step_scene",
                            side_effect=AssertionError("exact saved bytes were reparsed")):
-            for _ in range(3):
-                self.assert_same_document(expected, self.build(shape))
-                self.assertEqual({key: read_verified_object(key) for key in tree_objects(digest)}, original)
+            # One warm build under the two guards proves no re-encode and no re-parse;
+            # a second or third would take the same hit path.
+            self.assert_same_document(expected, self.build(shape))
+            self.assertEqual({key: read_verified_object(key) for key in tree_objects(digest)}, original)
         self.assert_same_document(expected, self.build(shape, force=True))
         with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(self.root / "cold-store")}):
             cold_hash, _, _ = build_document_tree(load_step_scene_exact(self.root / "part.step"))

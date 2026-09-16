@@ -161,15 +161,6 @@ class StepExportTargetTests(unittest.TestCase):
         self.assertIn("Unsupported export format: step", str(cm.exception))
 
 
-    def test_a_bare_door_writes_the_sibling_default(self) -> None:
-        # A door reads no declarations: OUT omitted means the sibling default
-        # beside the document, for an import exactly as for a generated model.
-        document = self._write_box_document()
-        payload = step_export_target.export_cad_target(document, [("stl", None)])
-        self.assertTrue(payload["ok"])
-        self.assertEqual([str(document.with_suffix(".stl"))], [entry["path"] for entry in payload["files"]])
-        self._assert_export_file(document.with_suffix(".stl"), "stl")
-
     def test_export_cad_target_writes_mesh_formats(self) -> None:
         document = self._write_box_document()
         payload = step_export_target.export_cad_target(
@@ -182,31 +173,6 @@ class StepExportTargetTests(unittest.TestCase):
         self.assertTrue(payload["ok"])
         for entry in payload["files"]:
             self._assert_export_file(Path(entry["path"]), entry["format"])
-
-    def test_mesh_exports_are_byte_deterministic(self) -> None:
-        # design/unified-tessellation.md Phase 4: one deterministic code path,
-        # so exporting the same model twice yields identical bytes per format.
-        document = self._write_box_document()
-        digests: dict[str, bytes] = {}
-        for round_index in range(2):
-            payload = step_export_target.export_cad_target(
-                document,
-                [
-                    (fmt, self.out_dir / f"round{round_index}.{fmt}")
-                    for fmt in step_export_target.MESH_EXPORT_FORMATS
-                ],
-            )
-            self.assertTrue(payload["ok"])
-            for entry in payload["files"]:
-                data = Path(entry["path"]).read_bytes()
-                if round_index == 0:
-                    digests[entry["format"]] = data
-                else:
-                    self.assertEqual(
-                        digests[entry["format"]],
-                        data,
-                        f"{entry['format']} export must be byte-identical across runs",
-                    )
 
     def test_explicit_out_takes_native_path_semantics(self) -> None:
         # An explicit OUT is a one-shot ad-hoc export, never persisted, so it

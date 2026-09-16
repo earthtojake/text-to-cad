@@ -75,32 +75,26 @@ class _FakeArtifact:
 
 
 class PlacedPackageTestCase(unittest.TestCase):
-    def setUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory(prefix="placed-frames-")
-        self.addCleanup(self._tmp.cleanup)
-        self.root = Path(self._tmp.name)
-
-        # The store is content-addressed and shared unless told otherwise; give this fixture one
-        # of its own, and RESTORE (never pop) whatever the runner set.
-        cache_dir = self.root / "cadgen-cache"
+    # One build for the class: every test only READS the index and the descriptor
+    # (the same setUpModule shape as test_assembly_selector_refs). The store is
+    # content-addressed and shared unless told otherwise; the fixture gets one of
+    # its own for the class, and whatever the runner set is RESTORED, never popped.
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls._tmp = tempfile.TemporaryDirectory(prefix="placed-frames-")
+        cls.root = Path(cls._tmp.name)
+        cache_dir = cls.root / "cadgen-cache"
         cache_dir.mkdir()
-        previous = os.environ.get("CADGEN_CACHE_DIR")
+        cls._previous_cache = os.environ.get("CADGEN_CACHE_DIR")
         os.environ["CADGEN_CACHE_DIR"] = str(cache_dir)
-
-        def restore() -> None:
-            if previous is None:
-                os.environ.pop("CADGEN_CACHE_DIR", None)
-            else:
-                os.environ["CADGEN_CACHE_DIR"] = previous
-
-        self.addCleanup(restore)
-
-        self.package_dir = self.root / "view"
-        build_view(_demo_compound(), package_dir=self.package_dir, root_name="demo")
-        descriptor = component_package.read_package_descriptor(self.package_dir)
-        self.assertIsInstance(descriptor, dict, "fixture package has no descriptor")
-        self.descriptor = descriptor
-        self.index = assembly_lookup.index_with_assembly_occurrences(
+        cls.package_dir = cls.root / "view"
+        build_view(_demo_compound(), package_dir=cls.package_dir, root_name="demo")
+        descriptor = component_package.read_package_descriptor(cls.package_dir)
+        if not isinstance(descriptor, dict):
+            raise RuntimeError("fixture package has no descriptor")
+        cls.descriptor = descriptor
+        cls.index = assembly_lookup.index_with_assembly_occurrences(
             lookup.build_selector_index(
                 {
                     "stats": {"occurrenceCount": 1},
@@ -108,8 +102,17 @@ class PlacedPackageTestCase(unittest.TestCase):
                     "occurrences": [["o1", "demo.step", None]],
                 }
             ),
-            _FakeArtifact(kind="assembly", artifact_path=self.package_dir),
+            _FakeArtifact(kind="assembly", artifact_path=cls.package_dir),
         )
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        if cls._previous_cache is None:
+            os.environ.pop("CADGEN_CACHE_DIR", None)
+        else:
+            os.environ["CADGEN_CACHE_DIR"] = cls._previous_cache
+        cls._tmp.cleanup()
+        super().tearDownClass()
 
     def _circle_edge(self) -> dict:
         for row in self.index.edges:

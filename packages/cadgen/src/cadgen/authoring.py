@@ -296,6 +296,30 @@ class ModelDef:
 # each its own record, output and job; they share the file's closure.
 _REGISTRY: dict[str, ModelDef] = {}
 
+# Keyed by resolved script path: every first-party file EXECUTED while the
+# generation loader last loaded the script, with its (mtime_ns, size) then. A
+# model's declarations are evaluated at import from whatever the script imports
+# (``from lib.dims import NAME`` feeding ``out=``), so a registry entry is only as
+# fresh as ALL of those files, not just the script's own bytes -- a warm worker
+# that checked the script alone rebuilt an edited helper's model under its OLD
+# output name. A script that registered by running as ``__main__`` has no entry:
+# that process executed it from disk itself.
+_IMPORT_CLOSURES: dict[Path, tuple[tuple[Path, tuple[int, int] | None], ...]] = {}
+
+
+def record_import_closure(script_path: Path, executed_files) -> None:
+    """Remember which files fed ``script_path``'s registrations, and their bytes."""
+    resolved = Path(script_path).resolve()
+    _IMPORT_CLOSURES[resolved] = tuple(
+        (path, _script_stamp(path)) for path in sorted(executed_files) if path != resolved
+    )
+
+
+def import_closure_current(script_path: Path) -> bool:
+    """False once any file that fed the script's last load holds different bytes."""
+    closure = _IMPORT_CLOSURES.get(Path(script_path).resolve(), ())
+    return all(_script_stamp(path) == stamp for path, stamp in closure)
+
 
 def registered_model(script_path: Path, function: str | None = None) -> ModelDef | None:
     """The model ``function`` declares in ``script_path``, or the file's sole

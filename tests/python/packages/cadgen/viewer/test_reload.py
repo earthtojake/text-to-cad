@@ -114,6 +114,8 @@ class WhenItFires(unittest.TestCase):
         self.clock = Clock()
         self.restarts: list[float] = []
         self.idle = True
+        self._edits = 0
+        self._epoch = os.stat(self.source).st_mtime
 
     def reloader(self, **kwargs) -> reload_module.SourceReloader:
         return reload_module.SourceReloader(
@@ -125,11 +127,25 @@ class WhenItFires(unittest.TestCase):
         )
 
     def edit(self, text: str) -> None:
-        self.source.write_text(text, encoding="utf-8")
-        # A same-second write must still be seen: the guard is size+mtime, and
-        # a one-character edit of the same length on a coarse clock would not
-        # move either. Nudge mtime the way a real editor's second does.
-        stamp = os.stat(self.source).st_mtime + 1 + len(self.restarts)
+        """One distinct edit: exact bytes, and an mtime a second past the last.
+
+        The bytes are written in BINARY so the file holds what this test says it
+        holds on every platform -- text mode translates ``\n`` to ``\r\n`` on
+        Windows, and a test about a digest of file contents should not have an
+        opinion smuggled into it by the open mode.
+
+        The stamp is COUNTED, never read back from the filesystem. It used to be
+        ``os.stat(...).st_mtime + 1``, taken right after the write -- which asks
+        the platform what time it just recorded, and Windows answers from the
+        ~15.6ms interrupt clock. Two edits inside one tick came back with the
+        SAME mtime and the same size, so the second edit was invisible to a
+        size+mtime guard and a revert never registered. Counting makes every
+        edit distinct by construction, which is what a test that means to
+        perform distinct edits is entitled to.
+        """
+        self.source.write_bytes(text.encode("utf-8"))
+        self._edits += 1
+        stamp = self._epoch + self._edits
         os.utime(self.source, (stamp, stamp))
 
     def test_an_unchanged_tree_never_restarts(self) -> None:
@@ -175,7 +191,7 @@ class WhenItFires(unittest.TestCase):
         self.assertEqual(len(self.restarts), 1)
 
     def test_an_edit_undone_before_the_restart_stops_being_pending(self) -> None:
-        original = self.source.read_text(encoding="utf-8")
+        original = self.source.read_bytes().decode("utf-8")
         watcher = self.reloader(quiet=1.0)
         self.edit("x = 2\n")
         self.clock.now += 0.2
@@ -185,7 +201,6 @@ class WhenItFires(unittest.TestCase):
         self.clock.now += 5
         self.assertFalse(watcher.poll_once(), "the code on disk is the code already running")
         self.assertEqual(self.restarts, [])
-
 
 class WhatItReRuns(unittest.TestCase):
     """The restart is the same launch, pinned to the port already held."""

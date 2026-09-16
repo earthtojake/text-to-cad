@@ -27,6 +27,8 @@ __all__ = [
     "AssetMissing",
     "browser_runtime_dir",
     "node_builders_dir",
+    "require_browser_runtime",
+    "runtime_build_hint",
     "runtime_root",
     "viewer_dist_dir",
 ]
@@ -37,6 +39,59 @@ _RUNTIME = Path(__file__).resolve().parent / "_runtime"
 
 class AssetMissing(RuntimeError):
     """A runtime asset cadgen needs is not present in this installation."""
+
+
+def runtime_build_hint(path: Path | str) -> str:
+    """The sentence to append when a packaged ``_runtime`` asset is not there.
+
+    Two very different situations wear the same symptom, and the fix differs, so the
+    message has to say which one this is. In a SOURCE CHECKOUT ``_runtime`` is built
+    rather than committed -- nothing in the repository carries it, and a clone that has
+    never bundled simply has no directory -- so the fix is to run the bundler. In an
+    INSTALLED cadgen the wheel carries it and its absence is a packaging regression, so
+    the fix is to reinstall.
+
+    Sibling of :func:`dev_node_modules_missing`, which answers the neighbouring question
+    for a checkout's live builder sources rather than for the packaged copy.
+    """
+    if _in_source_checkout():
+        return (
+            "cadgen is running from a source checkout, where the packaged runtime is BUILT "
+            "and never committed: run scripts/bundle/bundle.sh to produce it. "
+            f"Expected it at {path}."
+        )
+    return (
+        f"This cadgen installation is incomplete: {path} should ship inside the "
+        "distribution. Reinstall cadgen, or point the matching CADGEN_*_DIR environment "
+        "variable at a directory that holds it."
+    )
+
+
+def _in_source_checkout() -> bool:
+    """True when this cadgen is being imported out of the repository that builds it.
+
+    The same anchor the dev resolvers below use: a ``packages`` ancestor with
+    ``cadgen-js`` beside us. A wheel matches nothing here.
+    """
+    return _dev_builders_dir() is not None
+
+
+def require_browser_runtime(directory: Path | str) -> Path:
+    """The snapshot browser runtime, or :class:`AssetMissing` naming how to get it.
+
+    Unlike the builders, this one has no live source to fall back on: ``render.html`` is
+    written by the bundler and ``snapshot-render.js`` is an esbuild of cadgen-js, so a
+    checkout that has never bundled cannot render at all. Without this the failure was a
+    404 inside a headless browser page.
+    """
+    path = Path(directory)
+    missing = [name for name in ("render.html", "snapshot-render.js") if not (path / name).is_file()]
+    if missing:
+        raise AssetMissing(
+            "cadgen's snapshot browser runtime is missing "
+            f"{', '.join(missing)}. " + runtime_build_hint(path)
+        )
+    return path
 
 
 def runtime_root() -> Path:

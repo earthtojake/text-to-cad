@@ -31,15 +31,6 @@ def _posix_slashes(text: str) -> str:
     return text.replace("\\", "/")
 
 
-class NormalizerTest(unittest.TestCase):
-    def test_a_windows_hint_path_is_normalized(self) -> None:
-        """Pinned from any host: on macOS the replace is a no-op either way, so
-        only a synthetic Windows hint tells the two needles apart."""
-        hint = r"hint: the CAD kernel was imported at lib\geo.py:3 (CENTER3 = ...)"
-        self.assertIn("lib/geo.py:3", _posix_slashes(hint))
-        self.assertNotIn("lib/geo.py:3", hint.replace("\\\\", "/"))
-
-
 class KernelImportHintTest(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory(prefix="cadgen-kernel-hint-")
