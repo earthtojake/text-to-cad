@@ -13,7 +13,7 @@ const { chromium } = createRequire(path.join(REPO, "packages/cadgen-js/package.j
 const { PNG } = createRequire(path.join(REPO, "apps/viewer/package.json"))("pngjs");
 
 function parseArgs(argv) {
-  const args = { url: "", dir: "", out: "", only: "" };
+  const args = { url: "", dir: "", out: "", only: "", ci: false };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     if (flag === "--url") args.url = argv[++i] || "";
@@ -21,6 +21,8 @@ function parseArgs(argv) {
     else if (flag === "--out") args.out = argv[++i] || "";
     // One gate at a time while working on it: --only kinematics.
     else if (flag === "--only") args.only = argv[++i] || "";
+    // The CI-sized subset. See CI_GATES.
+    else if (flag === "--ci") args.ci = true;
     else throw new Error(`unknown argument: ${flag}`);
   }
   return args;
@@ -123,7 +125,19 @@ async function openFile(page, file) {
   const canvas = page.locator("canvas").first();
   await canvas.waitFor({ state: "visible", timeout: 60_000 });
   await page.waitForFunction(() => !document.querySelector(".cad-loading-overlay"), null, { timeout: 120_000 });
-  await page.waitForTimeout(1000);
+  // Then settle on the seam that says the model reached the RENDERER, not on a
+  // second of wall clock. Every fixture format publishes it — the format gate
+  // asserts its bounds for all seven — so this is a state wait on a slow runner
+  // and a shortcut on a fast one. The short pause after it is for the frame to
+  // be painted, which has no seam of its own.
+  await page.waitForFunction(() => {
+    const placement = window.__cadModelPlacement;
+    const min = placement?.boundsMin;
+    const max = placement?.boundsMax;
+    return Array.isArray(min) && Array.isArray(max)
+      && min.some((value, axis) => Number(max[axis]) - Number(value) > 0);
+  }, null, { timeout: 120_000 });
+  await page.waitForTimeout(250);
   return canvas;
 }
 
@@ -216,6 +230,11 @@ async function chipRef(page) {
 // must not be.
 const ACTIVATION_SETTLE_MS = 700;
 
+// MEASURED, do not shorten: polling for "a chip exists" and taking the first one
+// does NOT work. A pick publishes a reference as soon as the pointer goes up and
+// the activation timer REPLACES it 220 ms later, so an early read returns the
+// pre-activation answer — the edge search saw solid references at every one of its
+// 113 probe points and found no edge at all. Sleep past the commit, then read.
 async function clickForChip(page, x, y) {
   await page.mouse.click(x, y);
   await page.waitForTimeout(ACTIVATION_SETTLE_MS);
@@ -292,7 +311,91 @@ async function restingShot(page) {
   return PNG.sync.read(await page.screenshot());
 }
 
-async function pickingGate(tag, lod) {
+// Where the model actually IS, read off the frame rather than guessed as a
+// fraction of the canvas. The fitted model is not centred on the canvas -- the
+// docked panel takes the right third -- and after a zoom it is wherever the
+// anchor left it, so a hard-coded fraction is a pixel lottery. Take the median
+// foreground pixel: for one convex-ish silhouette that point is inside it, well
+// away from the edges the 10 px edge-pick window guards.
+function drawnModelPoint(png, sceneWidth) {
+  const buckets = new Map();
+  const columns = Math.min(png.width, Math.max(1, Math.floor(sceneWidth)));
+  for (let y = 0; y < png.height; y += 2) for (let x = 0; x < columns; x += 2) {
+    const offset = (y * png.width + x) * 4;
+    const key = [png.data[offset], png.data[offset + 1], png.data[offset + 2]]
+      .map((value) => Math.round(value / 8) * 8).join(",");
+    buckets.set(key, (buckets.get(key) || 0) + 1);
+  }
+  const background = String([...buckets].sort((a, b) => b[1] - a[1])[0]?.[0] || "0,0,0")
+    .split(",").map(Number);
+  const xs = [];
+  const ys = [];
+  for (let y = 0; y < png.height; y += 2) for (let x = 0; x < columns; x += 2) {
+    const offset = (y * png.width + x) * 4;
+    const delta = Math.abs(png.data[offset] - background[0])
+      + Math.abs(png.data[offset + 1] - background[1])
+      + Math.abs(png.data[offset + 2] - background[2]);
+    if (delta > 32) { xs.push(x); ys.push(y); }
+  }
+  if (xs.length < 200) return null;
+  const median = (values) => values.sort((a, b) => a - b)[Math.floor(values.length / 2)];
+  return [median(xs), median(ys)];
+}
+
+// Pick a face and prove the pick reached the renderer: the chip names a face
+// reference, the framebuffer changes in ONE connected region (a fragmented
+// highlight means the pick and the drawn geometry disagree), and the reference
+// toggles off and back on at the same pixel. This is the whole "pick a face"
+// user flow, and it is what the CI subset runs.
+async function facePickPhase(page, box, scene, tag, { toggle = false, at = null } = {}) {
+  const baseline = await restingShot(page);
+  // `at` is the pixel the caller zoomed toward, which the wheel keeps under the
+  // cursor, so the model is still there. Without one, walk out from the canvas
+  // centre.
+  const probes = at
+    ? [[0, 0], [-24, 0], [24, 0], [0, -24], [0, 24]].map(([dx, dy]) => [at[0] + dx, at[1] + dy])
+    : [[0.5, 0.5], [0.45, 0.5], [0.55, 0.5], [0.5, 0.4], [0.5, 0.6]]
+      .map(([fx, fy]) => [box.x + box.width * fx, box.y + box.height * fy]);
+  let faceRef = "";
+  let spot = null;
+  const seen = [];
+  for (const point of probes) {
+    const ref = await clickForChip(page, point[0], point[1]);
+    seen.push(`(${Math.round(point[0])},${Math.round(point[1])})->${ref || "none"}`);
+    if (/\.f\d+$/.test(ref)) { faceRef = ref; spot = point; }
+    if (faceRef) break;
+  }
+  if (!faceRef) {
+    if (args.out) {
+      fs.mkdirSync(args.out, { recursive: true });
+      fs.writeFileSync(path.join(args.out, `${tag}-face-miss.png`), await page.screenshot());
+    }
+    fail(`${tag}: no face pick landed on the rendered cylinder — ${seen.join(", ")}`);
+  }
+  const face = highlightComponents(await restingShot(page), baseline, scene);
+  const ratio = face.total ? (face.sizes[0] || 0) / face.total : 0;
+  if (face.total < 300 || ratio < 0.97) {
+    if (args.out) {
+      fs.mkdirSync(args.out, { recursive: true });
+      fs.writeFileSync(path.join(args.out, `${tag}-face-highlight.png`), await page.screenshot());
+    }
+    fail(`${tag}: face ${faceRef} highlight fragmented (${(ratio * 100).toFixed(1)}%, ${face.total}px)`);
+  }
+  // The toggle contract: the reference's own second click empties the selection and
+  // a third at the same pixel brings the SAME reference back. The full gate asserts
+  // this on the edge it found, where the pixel is far harder to hit twice; the CI
+  // subset, which never runs the edge phase, asserts it here.
+  if (toggle) {
+    await toggleOff(page, spot[0], spot[1], faceRef, tag);
+    const retoggled = await clickUntilChip(page, spot[0], spot[1], (value) => !!value);
+    if (retoggled !== faceRef) {
+      fail(`${tag}: re-clicking the toggled ${faceRef} produced ${retoggled || "no chip"}`);
+    }
+  }
+  return { faceRef, ratio };
+}
+
+async function pickingGate(tag, lod, { depth = "full" } = {}) {
   const { context, page, errors } = await newPage({ lod });
   try {
     const canvas = await openFile(page, "smoke.step");
@@ -306,6 +409,31 @@ async function pickingGate(tag, lod) {
 
     const edgeHits = new Map();
     const probePoints = [];
+    // The CI subset stops here: opening a STEP package, settling LOD, picking a face
+    // and toggling it is the user-visible flow ("click the model, get a reference
+    // back"). The edge phase below costs ~30 probe clicks at the activation window
+    // each, which is what keeps the full gate out of a CI budget.
+    if (depth === "smoke") {
+      const scene = await sceneWidth(page);
+      // Zoom the way the full gate does before ITS face probes, anchored on the
+      // drawn model so the zoom keeps it in frame. At the fitted scale the front
+      // face is crossed by its own topology edge overlay, which splits the
+      // highlight into pieces that have nothing to do with the pick; zoomed in,
+      // the face fills the view and a fragmented highlight means what it says.
+      const fitted = drawnModelPoint(await restingShot(page), scene);
+      if (!fitted) fail(`${tag}: no drawn model to aim at`);
+      await page.mouse.move(fitted[0], fitted[1]);
+      for (let i = 0; i < 3; i += 1) {
+        await page.mouse.wheel(0, -220);
+        await page.waitForTimeout(400);
+      }
+      await settleLod(page, lod);
+      const { faceRef, ratio } = await facePickPhase(page, box, scene, tag, { toggle: true, at: fitted });
+      if (errors.length) fail(`${tag}: ${errors.join(" | ")}`);
+      console.log(`  ${tag}: face ${faceRef} picked and ${(ratio * 100).toFixed(1)}% contiguous, `
+        + "and it toggles off and back on at the same pixel");
+      return;
+    }
     // The cylinder's visible generator is vertical near the canvas center.
     // Probe it densely before the bounded general grid so edge hit tolerance
     // does not turn this into a hundreds-of-timeouts search.
@@ -395,25 +523,10 @@ async function pickingGate(tag, lod) {
     if (lod && !lodEvents.length) fail(`${tag}: no LOD swap fired`);
     if (!lod && lodEvents.length) fail(`${tag}: LOD-off page emitted swaps`);
 
-    const faceBaseline = await restingShot(page);
-    let faceRef = "";
-    for (const [fx, fy] of [[0.5, 0.5], [0.45, 0.5], [0.55, 0.5], [0.5, 0.4], [0.5, 0.6]]) {
-      const ref = await clickForChip(page, box.x + box.width * fx, box.y + box.height * fy);
-      if (/\.f\d+$/.test(ref)) faceRef = ref;
-      if (faceRef) break;
-    }
-    if (!faceRef) fail(`${tag}: no face pick landed on the rendered cylinder`);
-    const face = highlightComponents(await restingShot(page), faceBaseline, scene);
-    const ratio = face.total ? (face.sizes[0] || 0) / face.total : 0;
-    if (face.total < 300 || ratio < 0.97) {
-      if (args.out) {
-        fs.mkdirSync(args.out, { recursive: true });
-        fs.writeFileSync(path.join(args.out, `${tag}-face-highlight.png`), await page.screenshot());
-      }
-      fail(`${tag}: face ${faceRef} highlight fragmented (${(ratio * 100).toFixed(1)}%, ${face.total}px)`);
-    }
+    const { faceRef, ratio } = await facePickPhase(page, box, scene, tag);
     if (errors.length) fail(`${tag}: ${errors.join(" | ")}`);
-    console.log(`  ${tag}: ${lodEvents.length} LOD swap(s), face ${faceRef} ${(ratio * 100).toFixed(1)}% contiguous, edge ${edgeRef} coherent`);
+    console.log(`  ${tag}: ${lodEvents.length} LOD swap(s), face ${faceRef} ${(ratio * 100).toFixed(1)}% contiguous, `
+      + `edge ${edgeRef} coherent (found by ${probes} probes)`);
   } finally {
     await context.close();
   }
@@ -457,7 +570,14 @@ async function formatGate() {
   const camera = ["Reset Zoom", "Zoom To Fit"];
   const tree = ["Show all", "Expand all", "Collapse all"];
   const presentTree = ["Expand all", "Collapse all"];
-  for (const fixture of fixtures) {
+  // One fixture per LOAD PATH under --ci: an exact-surface STEP package, a mesh,
+  // a 2D drawing, a robot description. The three left out are parity cases over a
+  // path already covered here — 3mf and glb reach the same mesh loader as stl, and
+  // srdf is urdf plus planning semantics — so the full run keeps them and the CI
+  // run spends the ~8 s elsewhere.
+  const CI_FORMATS = new Set(["step", "stl", "dxf", "urdf"]);
+  const selectedFixtures = args.ci ? fixtures.filter(({ format }) => CI_FORMATS.has(format)) : fixtures;
+  for (const fixture of selectedFixtures) {
     const { context, page, errors } = await newPage();
     try {
       const canvas = await openFile(page, fixture.file);
@@ -1106,16 +1226,43 @@ const gates = [
     await pickingGate("warm+lod", true);
     await pickingGate("lod-off", false);
   }],
+  ["pick", () => pickingGate("pick", true, { depth: "smoke" })],
   ["format", formatGate],
   ["scene", sceneGates],
   ["quality", qualityGate],
   ["kinematics", kinematicsGate],
   ["camera", modeCameraGate],
 ];
-const selected = args.only ? gates.filter(([name]) => name === args.only) : gates;
+
+// The CI subset: every user-visible flow this suite owns, over the cheapest
+// fixtures that still exercise the real path — open a file (one per load path),
+// pick a face, drive a joint, switch mode. Nothing here reads a frame rate or
+// sleeps toward a conclusion; each assertion settles on published state, so a
+// slow software-GL runner is slower, not redder.
+//
+// What stays MANUAL and why:
+//   picking  the edge phase brute-force-clicks for a pixel on the silhouette and
+//            scores highlight fragmentation at 1-pixel steps. It is the single
+//            most expensive gate here and the most sensitive to how the runner
+//            rasterizes a thin line.
+//   scene    compares mean luminance between appearance presets and between the
+//            Inspect grid and the Render floor. A software rasterizer's tone is
+//            its own; these thresholds are calibrated on real GPUs.
+//   quality  deterministic, but Inspect/Render/Preview/Final is walked TWICE and
+//            re-derives a high-quality tessellation each cycle. It is the first
+//            gate to promote if the CI budget grows.
+const CI_GATES = ["format", "pick", "kinematics", "camera"];
+
+const selected = args.only
+  ? gates.filter(([name]) => name === args.only)
+  : (args.ci ? CI_GATES.map((name) => gates.find(([gate]) => gate === name)) : gates);
 if (!selected.length) fail(`unknown --only gate: ${args.only} (${gates.map(([name]) => name).join(", ")})`);
 try {
-  for (const [name, gate] of selected) { const t0 = Date.now(); await gate(); console.log(`  [gate ${name}] ${((Date.now()-t0)/1000).toFixed(1)}s`); }
+  for (const [name, gate] of selected) {
+    const startedAt = Date.now();
+    await gate();
+    console.log(`  [gate ${name}] ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
+  }
 } finally {
   await browser.close();
 }

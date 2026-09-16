@@ -154,7 +154,14 @@ Where the mechanism is written:
 
 ## Working on cadgen-js
 
-- `npm --prefix packages/cadgen-js test` (node:test; no browser needed).
+- `npm --prefix packages/cadgen-js test` (node:test; no browser needed, ~6 s).
+  Every `*.test.js` under `src/` and `scripts/` runs; the runner oversubscribes
+  `--test-concurrency` because a file here spends more of its life starting a
+  process and reading fixtures than on the CPU. Keep it that way: a test that
+  sleeps on a real clock, asserts a wall-clock ceiling, or asks the tessellator
+  for a tolerance finer than the property under test needs makes the suite a
+  function of the runner instead of the code. Tessellation fixtures live in
+  `src/lib/surf/fixtures/`; no test reads `models/`.
 - Anything here that the bundlers consume changes the shipped runtimes:
   run `scripts/bundle/bundle.sh` to rebuild them locally. Nothing to commit —
   `_runtime/` is gitignored, this source IS the reviewable artifact, and CI

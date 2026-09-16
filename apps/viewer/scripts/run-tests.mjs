@@ -59,10 +59,11 @@ const batches = [
 ];
 
 // Each test file is its own process, and most of a file's life here is process
-// startup and reading fixtures, not CPU. node:test's default of
-// availableParallelism() - 1 therefore leaves cores idle; oversubscribing by 2x
-// overlaps those waits. The floor keeps a 1- or 2-core runner overlapping too.
-const testConcurrency = Math.max(4, availableParallelism() * 2);
+// startup and reading fixtures, not CPU. node:test's default is
+// availableParallelism() - 1, which is ONE on the two-core runner CI gets, so every
+// file's startup is paid end to end. The floor of four overlaps those waits even
+// where there are not four cores to run them on.
+const testConcurrency = Math.max(4, availableParallelism());
 
 let status = 0;
 for (const batch of batches) {
