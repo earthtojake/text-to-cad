@@ -35,7 +35,6 @@ import unittest
 from pathlib import Path
 
 from tests.python.support.paths import add_repo_path, repo_path
-from tests.python.support.warm_daemon import warm_entries
 
 CADGEN_SRC = add_repo_path("packages/cadgen/src")
 
@@ -109,7 +108,7 @@ def _vendor_step() -> Path:
             cwd=str(workspace),
             env={
                 **os.environ,
-                **warm_entries(),
+                "CADGEN_DAEMON": "0",
                 "CADGEN_COMPONENT_WORKERS": "1",
                 "CADGEN_CACHE_DIR": str(workspace / "store"),
                 "PYTHONPATH": str(CADGEN_SRC),
@@ -179,8 +178,8 @@ class _DrawingHarness(unittest.TestCase):
         self.environment = dict(os.environ)
         self.environment.update(
             {
-                # One warm daemon per test module, private to it (tests/python/support/warm_daemon.py).
-                **warm_entries(),
+                # A warm worker would serve another checkout's code.
+                "CADGEN_DAEMON": "0",
                 "CADGEN_COMPONENT_WORKERS": "1",
                 "CADGEN_CACHE_DIR": str(self.project / "store"),
                 "PYTHONPATH": str(CADGEN_SRC),
@@ -271,21 +270,18 @@ class DocumentedCommandForms(_DrawingHarness):
             self.DRAWING.replace("def gasket", "def panel"), encoding="utf-8"
         )
 
-    def test_a_bare_run_writes_the_sibling(self) -> None:
+    def test_the_documented_run_sequence(self) -> None:
+        # The sequence a reader types: a bare run writes the sibling, an unchanged
+        # source is a no-op, --force rebuilds to identical bytes.
         self.run_drawing("gasket.py")
-        self.assertTrue((self.project / "gasket.dxf").is_file())
-
-    def test_an_unchanged_source_is_a_no_op(self) -> None:
+        written = self.project / "gasket.dxf"
+        self.assertTrue(written.is_file())
+        before = written.stat().st_mtime_ns
+        first = written.read_bytes()
         self.run_drawing("gasket.py")
-        before = (self.project / "gasket.dxf").stat().st_mtime_ns
-        self.run_drawing("gasket.py")
-        self.assertEqual(before, (self.project / "gasket.dxf").stat().st_mtime_ns)
-
-    def test_force_rebuilds_to_identical_bytes(self) -> None:
-        self.run_drawing("gasket.py")
-        first = (self.project / "gasket.dxf").read_bytes()
+        self.assertEqual(before, written.stat().st_mtime_ns, "an unchanged source must be a no-op")
         self.run_drawing("gasket.py", "--force")
-        self.assertEqual(first, (self.project / "gasket.dxf").read_bytes())
+        self.assertEqual(first, written.read_bytes(), "--force must rebuild to identical bytes")
 
 
     def test_there_is_no_dxf_build_door(self) -> None:

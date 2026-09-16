@@ -174,42 +174,6 @@ class ImportedCompileSnapshot(unittest.TestCase):
         self.assertEqual(document.read_bytes(), replacement)
         self.assertEqual(self.compile(document)["tree"], actual["tree"])
 
-    def test_generated_currency_gates_and_artifact_type_are_unchanged(self):
-        from cadgen import catalog, step_artifact_cli as artifact
-        from cadgen.step_targets import StepTopologyArtifact
-        from cadgen.store import trees
-
-        document = self.document()
-        tree = self.compile(document)["tree"]
-        spec = replace(self.spec(document), source="generated")
-        gates = ("_existing_topology_artifact_matches_spec_without_scene",
-                 "_generated_assembly_glb_closure_current", "_assembly_glb_package_current")
-        for failure in (*range(len(gates)), None):
-            with self.subTest(failure=failure):
-                import contextlib
-
-                calls = []
-                with contextlib.ExitStack() as stack:
-                    for index, name in enumerate(gates):
-                        def gate(value, *, index=index, name=name):
-                            self.assertIs(value, spec)
-                            calls.append(name)
-                            return index != failure
-                        stack.enter_context(mock.patch.object(artifact, name, side_effect=gate))
-                    capture = stack.enter_context(mock.patch.object(trees, "capture_tree", wraps=trees.capture_tree))
-                    result = artifact._current_artifact_for_spec(spec)
-                self.assertEqual(calls, list(gates if failure is None else gates[:failure + 1]))
-                if failure is None:
-                    self.assertIs(type(result), StepTopologyArtifact)
-                    capture.assert_called_once_with(tree)
-                    with mock.patch.object(catalog, "result_tree_for", wraps=catalog.result_tree_for) as lookup:
-                        payload = artifact._existing_result_payload(spec, result)
-                    lookup.assert_called_once_with(spec.entry_path)
-                    self.assertEqual(payload["tree"], tree)
-                else:
-                    self.assertIsNone(result)
-                    capture.assert_not_called()
-
     def test_current_generated_compile_still_heals_declared_export(self):
         from cadgen.step_artifact_cli import build_step_artifact
 

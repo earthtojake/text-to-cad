@@ -117,10 +117,7 @@ class ModelsPerFile(unittest.TestCase):
             models,
             [f"{(self.src / 'family.py').resolve()}::bracket_left", f"{(self.src / 'family.py').resolve()}::bracket_right"],
         )
-        # A second run finds both current.
-        rerun = self.run_py("family.py").stdout
-        self.assertIn("current bracket_left.step", rerun)
-        self.assertIn("current bracket_right.step", rerun)
+        # That a rerun finds both current is what `store why` asserts, below.
 
     def test_store_why_names_every_model_of_the_file_and_accepts_one(self) -> None:
         self.run_py("family.py")

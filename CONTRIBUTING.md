@@ -148,19 +148,16 @@ A test's COST is part of its design. A cold `python <model>.py` spends ~2.6 s
 importing the CAD kernel before it draws a box, so a file that runs one per
 assertion is mostly paying for imports: build a fixture the tests only READ once
 for the class and copy it in, keep each test's store, roots and freshness state
-private, and add a subprocess only where the subject IS the process. A test that
-runs the SAME script several times (rerun, `--force`, `store why`, edit and
-rebuild) routes those runs through the module's private warm daemon
-(`tests/python/support/warm_daemon.py`: `**warm_entries()` where
-`"CADGEN_DAEMON": "0"` would go), so the import is paid once — measured, that
-halved such files on both CI platforms. It does not pay for a test that writes
-a fresh script per case: the pool binds a worker per script path, so that is an
-import per test either way, and dearer than a cold run on Windows. It is wrong
-where the subject is cold semantics (the daemon itself, a fresh interpreter's
-import hints or bytecode, a per-process override such as `CADGEN_NODE`, which
-workers do not receive). Repeating a non-deterministic case N times is not
-coverage — if the underlying property can be pinned directly, pin it and run
-the case once.
+private, and add a subprocess only where the subject IS the process. Model runs
+in tests are cold (`CADGEN_DAEMON=0`): routing them through a warm daemon was
+measured on CI and moved the kernel import into a daemon process rather than
+removing it (the runners are CPU-bound at four files), and cost more than it
+saved on Windows. `tests/python/support/warm_daemon.py` is for the opposite
+purpose — a test that deliberately exercises the WARM path, the production
+default, through a daemon private to its module — and only where the test's
+subject is what a warm worker does. Repeating a non-deterministic case N times
+is not coverage — if the underlying property can be pinned directly, pin it and
+run the case once.
 
 `scripts/test/test-python.sh --print-weights` prints what the slow files cost,
 the first thing to read when a run is slow.

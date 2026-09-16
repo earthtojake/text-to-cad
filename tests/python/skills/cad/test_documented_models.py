@@ -4,8 +4,8 @@ A skill is consumed by an agent that copies what it reads, so a code block that
 has drifted from the model contract is a generator of broken models, and the
 drift is invisible to every other test. The complete model scripts in
 `skills/cad/SKILL.md`, `references/step-generation.md` and
-`references/supported-exports.md` are therefore extracted and BUILT here through a
-warm daemon private to this module, in a throwaway project with a private
+`references/supported-exports.md` are therefore extracted and BUILT here, cold
+(`CADGEN_DAEMON=0`, transient workers), in a throwaway project with a private
 store, and every output their decorators declare must exist afterwards.
 
 Blocks fall into two kinds:
@@ -38,7 +38,6 @@ import unittest
 from pathlib import Path
 
 from tests.python.support.paths import add_repo_path, repo_path
-from tests.python.support.warm_daemon import warm_entries
 
 CADGEN_SRC = add_repo_path("packages/cadgen/src")
 
@@ -95,8 +94,8 @@ def tearDownModule() -> None:
 def _environment(store: Path) -> dict[str, str]:
     return {
         **os.environ,
-        # One warm daemon per test module, private to it (tests/python/support/warm_daemon.py).
-        **warm_entries(),
+        # A warm worker would serve another checkout's code.
+        "CADGEN_DAEMON": "0",
         "CADGEN_COMPONENT_WORKERS": "1",
         "CADGEN_CACHE_DIR": str(store),
         "PYTHONPATH": str(CADGEN_SRC),

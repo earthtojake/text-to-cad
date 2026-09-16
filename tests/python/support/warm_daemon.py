@@ -1,10 +1,13 @@
-"""Route a test's model-run subprocesses through ONE warm daemon per test module.
+"""Route a test's model-run subprocesses through ONE warm daemon private to the module.
 
-A cold ``python <model>.py`` spends about 2.6 s importing build123d and OCP before it
-draws anything, and this suite runs roughly 250 of them. The import is not what those
-tests are about: they are about what the run WRITES -- bytes, records, freshness
-verdicts, result lines. Sending them through a daemon pays that import once for the
-module instead of once per run.
+The suite runs COLD by default (``CADGEN_DAEMON=0``): measured on CI's 4-core runners,
+routing runs through a daemon halves a file whose tests rerun one script but moves the
+kernel import into a daemon process rather than removing it, and on Windows a spawn is
+dearer than the cold run it replaces -- the suite's wall clock did not improve. This
+helper exists so a test can exercise the WARM path deliberately, which is the
+production default and where ``test_decorator_arguments_evaluated`` found a bug the
+cold suite could not see (a registration served stale declarations after an imported
+helper changed).
 
 The daemon is private to the module and dies with it. ``unittest_files.py`` already
 gives every test FILE its own store, daemon state directory and endpoint, and retires
@@ -13,21 +16,9 @@ opting out of it, and creates the same private endpoint itself when a file is ru
 directly (``python -m unittest tests/...``) so a direct run can never reach -- or
 retire -- the developer's own daemon.
 
-Where it pays: the pool binds a worker per SCRIPT PATH and never rebinds an idle
-one, so a module whose tests each write a fresh script into a fresh directory pays
-one kernel import per test either way -- and on Windows the spawn is dearer than
-the cold run it replaces. Route a module through the daemon when its tests run the
-SAME script several times (rerun / --force / `store why` / an edit-and-rebuild),
-which is where measured CI time halved on both platforms.
-
-What must NOT use this:
-
-* anything whose subject is the daemon, the pool or the broker;
-* anything asserting COLD semantics -- a fresh interpreter's import hints, bytecode,
-  ``__main__`` handling, hash-seed independence across processes, or the cold half of
-  a cold/warm comparison.
-
-Those keep ``CADGEN_DAEMON=0`` and say why where they set it.
+Workers receive only the forwarded environment (cache dir, PYTHONPATH, ffmpeg, memo):
+a per-run override such as ``CADGEN_NODE`` is invisible to a warm worker, so a test
+that varies one of those per run must stay cold.
 """
 
 from __future__ import annotations

@@ -27,7 +27,6 @@ import unittest
 from pathlib import Path
 
 from tests.python.support.paths import add_repo_path
-from tests.python.support.warm_daemon import warm_entries
 
 CADGEN_SRC = add_repo_path("packages/cadgen/src")
 
@@ -62,7 +61,7 @@ class RetiredRenderModuleWarns(unittest.TestCase):
         self.companion = self.root / "part.step.js"
         self.env = dict(os.environ)
         self.env.update({
-            **warm_entries(),
+            "CADGEN_DAEMON": "0",
             "CADGEN_COMPONENT_WORKERS": "1",
             "CADGEN_CACHE_DIR": str(self.root / "store"),
             "PYTHONPATH": str(CADGEN_SRC),

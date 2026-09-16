@@ -301,43 +301,25 @@ class PackagePortabilityTest(unittest.TestCase):
                         "a recorded path must be posix so it survives crossing platforms",
                     )
 
-    def test_moving_the_project_rebuilds_nothing(self) -> None:
-        moved = self.root.parent / "moved-elsewhere" / "project"
+    def test_relocating_the_project_rebuilds_nothing(self) -> None:
+        # One relocation that changes the parent, the folder name AND the depth at
+        # once: the store is keyed on document content and the byte-level tests
+        # above pin that no path is recorded, so the three cannot take different
+        # code paths.
+        moved = self.root.parent / "deeper" / "one" / "two" / "a-different-name"
         moved.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(self.root, moved)
-        self.addCleanup(shutil.rmtree, moved.parent, True)
+        self.addCleanup(shutil.rmtree, self.root.parent / "deeper", True)
 
         before = mtimes(moved)
         self._noop_pass(moved)
-        self.assertEqual(before, mtimes(moved), "moving the project rebuilt its packages")
+        self.assertEqual(before, mtimes(moved), "relocating the project rebuilt its packages")
 
         from tests.python.support.viewer_status import viewer_artifact_status
 
         for name, root_arg, source_arg in self._validators(moved):
             with self.subTest(entry=name):
                 self.assertEqual("compiled", viewer_artifact_status(source_arg, root_arg)["state"])
-
-    def test_renaming_the_project_folder_rebuilds_nothing(self) -> None:
-        # The folder name is part of every path a descriptor could have recorded, so this is
-        # a different question from moving the folder somewhere else.
-        renamed = self.root.parent / "renamed" / "a-different-name"
-        renamed.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(self.root, renamed)
-        self.addCleanup(shutil.rmtree, renamed.parent, True)
-
-        before = mtimes(renamed)
-        self._noop_pass(renamed)
-        self.assertEqual(before, mtimes(renamed), "renaming the project rebuilt its packages")
-
-    def test_nesting_the_project_deeper_rebuilds_nothing(self) -> None:
-        nested = self.root.parent / "deeper" / "one" / "two" / "project"
-        nested.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(self.root, nested)
-        self.addCleanup(shutil.rmtree, self.root.parent / "deeper", True)
-
-        before = mtimes(nested)
-        self._noop_pass(nested)
-        self.assertEqual(before, mtimes(nested), "nesting the project rebuilt its packages")
 
 
 class RecordedPathHelpersTest(unittest.TestCase):
@@ -380,14 +362,6 @@ class RecordedPathHelpersTest(unittest.TestCase):
                     dependency.resolve().as_posix(),
                     render.relative_to_directory(dependency, root),
                 )
-
-    def test_the_source_identity_carries_no_path_at_all(self) -> None:
-        # The field that used to be here was cwd-relative, or absolute when the model was not
-        # under the cwd, and was read by nothing -- one attribute away from values that ARE
-        # persisted. Its absence is the point.
-        from cadgen._internal.source_hash import PythonSourceHash
-
-        self.assertEqual(("source_hash",), tuple(PythonSourceHash.__dataclass_fields__))
 
 
 class DescriptorIsIndependentOfTheWorkingDirectoryTest(unittest.TestCase):

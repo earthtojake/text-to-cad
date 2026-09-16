@@ -27,7 +27,6 @@ import unittest
 from pathlib import Path
 
 from tests.python.support.paths import add_repo_path
-from tests.python.support.warm_daemon import warm_entries
 
 add_repo_path("packages/cadgen/src")
 
@@ -80,7 +79,7 @@ class MeshExportManifoldTest(unittest.TestCase):
         self.project = Path(self._tmp.name).resolve()
         self.env = dict(os.environ)
         self.env.update({
-            **warm_entries(),
+            "CADGEN_DAEMON": "0",
             "CADGEN_COMPONENT_WORKERS": "1",
             # Its own store, so a stale tessellation cannot stand in for the run.
             "CADGEN_CACHE_DIR": str(self.project / "store"),

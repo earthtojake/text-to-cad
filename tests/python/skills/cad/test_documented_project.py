@@ -5,9 +5,9 @@ targets say, and with the store behaving as the skill describes (running the
 root builds everything beneath it; a rerun is a no-op; `store why` sees the
 frame's two children).
 
-Built through a warm daemon private to this module (an agent's own runs are
-warm by default) in a throwaway project with a private store, as an agent
-following the skill would in a fresh workspace.
+Built cold (`CADGEN_DAEMON=0`, transient workers) in a throwaway project with a
+private store, exactly as an agent following the skill would in a fresh
+workspace.
 """
 
 from __future__ import annotations
@@ -21,7 +21,6 @@ import unittest
 from pathlib import Path
 
 from tests.python.support.paths import add_repo_path, repo_path
-from tests.python.support.warm_daemon import warm_entries
 
 CADGEN_SRC = add_repo_path("packages/cadgen/src")
 
@@ -48,7 +47,7 @@ class TheTemplateBuilds(unittest.TestCase):
             target.write_text(source, encoding="utf-8")
         self.environment = {
             **os.environ,
-            **warm_entries(),
+            "CADGEN_DAEMON": "0",
             "CADGEN_COMPONENT_WORKERS": "1",
             "CADGEN_CACHE_DIR": str(self.project / "store"),
             "PYTHONPATH": str(CADGEN_SRC),
@@ -87,12 +86,8 @@ class TheTemplateBuilds(unittest.TestCase):
         second = self.run_in_project("src/assembly.py")
         self.assertTrue(second.stdout.startswith("current "), f"the rerun was not a no-op:\n{second.stdout}")
 
-        # Every child model is current on its own too, and the frame's record
-        # pins exactly the two children its body called.
-        for relative in ("src/frame.py", "src/plate.py", "src/standoff.py", "src/bracket_right.py"):
-            with self.subTest(model=relative):
-                run = self.run_in_project(relative)
-                self.assertTrue(run.stdout.startswith("current "), run.stdout)
+        # The frame's record is current and pins exactly the two children its
+        # body called (per-child records being current is test_models_per_file's).
         why = self.run_in_project("-m", "cadgen.cli", "store", "why", "src/frame.py")
         self.assertIn("verdict current", why.stdout)
         self.assertIn("3 children (2)", why.stdout)

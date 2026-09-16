@@ -17,7 +17,6 @@ from pathlib import Path
 from unittest import mock
 
 from tests.python.support.tmp_root import generated_cad_directory
-from tests.python.support.warm_daemon import warm_entries
 
 REPO = Path(__file__).resolve().parents[4]
 PYTHON = sys.executable
@@ -969,7 +968,7 @@ class ChildrenByResult(StoreCase):
 
     def run_model(self, script: Path) -> str:
         env = dict(os.environ)
-        env.update({**warm_entries(), "PYTHONPATH": str(REPO / "packages/cadgen/src")})
+        env.update({"CADGEN_DAEMON": "0", "PYTHONPATH": str(REPO / "packages/cadgen/src")})
         completed = subprocess.run(
             [PYTHON, script.name], cwd=str(script.parent), env=env, capture_output=True, text=True, timeout=600
         )

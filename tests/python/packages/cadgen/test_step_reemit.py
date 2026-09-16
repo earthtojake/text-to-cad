@@ -158,24 +158,18 @@ class StepReemitTests(unittest.TestCase):
         # This build declares kinematics only.
         self.assertNotIn("animation", sidecar)
 
-    def test_the_output_is_ours_and_byte_deterministic(self) -> None:
-        self._build(kinematics=json.dumps(KINEMATICS))
-        first = self.out.read_bytes()
-        self.assertTrue(first.startswith(b"ISO-10303-21"))
-        self._build(kinematics=json.dumps(KINEMATICS), force=True)
-        self.assertEqual(first, self.out.read_bytes())
-
-    def test_rerunning_is_a_no_op(self) -> None:
+    def test_a_kinematics_only_edit_refreshes_the_sidecar_and_nothing_else(self) -> None:
+        # One document, four builds: the first writes it, a plain rerun is a no-op,
+        # a kinematics-only edit rewrites the sidecar alone, and --force reproduces
+        # the bytes. (The rerun and force halves are also pinned for step.build in
+        # test_native_document_doors; here they ride on the build this test needs.)
         self._build(kinematics=json.dumps(KINEMATICS))
         before = self.out.read_bytes()
+        self.assertTrue(before.startswith(b"ISO-10303-21"))
         again = self._build(kinematics=json.dumps(KINEMATICS))
         self.assertTrue(again.skipped)
         self.assertFalse(again.sidecar_only)
         self.assertEqual(before, self.out.read_bytes())
-
-    def test_a_kinematics_only_edit_refreshes_the_sidecar_and_nothing_else(self) -> None:
-        self._build(kinematics=json.dumps(KINEMATICS))
-        before = self.out.read_bytes()
 
         widened = json.loads(json.dumps(KINEMATICS))
         widened["mates"][0]["limits"] = [0, 120]
@@ -190,6 +184,8 @@ class StepReemitTests(unittest.TestCase):
         from cadgen.store.gate import stale
 
         self.assertFalse(stale(self.out).stale, "the rewritten sidecar hash must land in the record")
+        self._build(kinematics=json.dumps(widened), force=True)
+        self.assertEqual(before, self.out.read_bytes(), "a forced re-emit writes the same bytes")
 
     def test_a_missing_or_corrupt_output_sidecar_is_rebuilt_not_reported_current(self) -> None:
         from cadgen._internal.source_sidecar import source_sidecar_path
@@ -309,8 +305,13 @@ class StepReemitTests(unittest.TestCase):
     def test_the_json_and_python_kinematics_spellings_agree(self) -> None:
         import cadgen
 
-        self._build(kinematics=json.dumps(KINEMATICS))
+        # Three spellings, two builds: the first takes the JSON as a FILE PATH (the
+        # string form is what every other test here passes), the second Python objects.
+        spec = self.root / "hinge.kinematics.json"
+        spec.write_text(json.dumps(KINEMATICS), encoding="utf-8")
+        self._build(kinematics=str(spec))
         from_json = self._sidecar()["kinematics"]
+        self.assertEqual("swing", from_json["mates"][0]["name"])
 
         self.out.unlink()
         from cadgen._internal.source_sidecar import remove_source_sidecar
@@ -326,12 +327,6 @@ class StepReemitTests(unittest.TestCase):
             }
         )
         self.assertEqual(from_json, self._sidecar()["kinematics"])
-
-    def test_a_kinematics_file_path_is_accepted(self) -> None:
-        spec = self.root / "hinge.kinematics.json"
-        spec.write_text(json.dumps(KINEMATICS), encoding="utf-8")
-        self._build(kinematics=str(spec))
-        self.assertEqual("swing", self._sidecar()["kinematics"]["mates"][0]["name"])
 
     def test_animation_file_is_embedded_without_a_path_dependency(self) -> None:
         module = self.root / "source.js"
