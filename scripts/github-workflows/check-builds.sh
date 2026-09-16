@@ -12,13 +12,13 @@ usage() {
 Usage:
   scripts/github-workflows/check-builds.sh [--skip-bundle-check]
 
-Checks the production bundle layout. By default this also verifies generated
-outputs are fresh with scripts/bundle/bundle.sh --check. Use
+Checks the production bundle layout. The generated runtime is not committed, so by
+default this builds it first with scripts/bundle/bundle.sh --check. Use
 --skip-bundle-check only after the current workflow has already run
 scripts/bundle/bundle.sh --clean in the same checkout.
 
 Options:
-  --skip-bundle-check  Skip the generated-output freshness rebuild.
+  --skip-bundle-check  Do not build the runtime; check what is already there.
   -h, --help           Show this help.
 EOF
 }
@@ -53,11 +53,11 @@ check_generated_path() {
 
   if [ ! -e "$root" ]; then
     echo "Missing production bundle path: $root" >&2
-    echo "Run scripts/bundle/bundle.sh --clean and commit the generated outputs." >&2
+    echo "The packaged runtime is built, not committed: run scripts/bundle/bundle.sh." >&2
     exit 1
   fi
 
-  # Bundling installs dependencies under some roots; only committed paths matter.
+  # Bundling installs dependencies under some roots; only the emitted tree matters.
   #
   # This assertion is load-bearing, not tidiness. The three installers each treat
   # symlinks differently, and one of them loses data silently:
@@ -74,18 +74,14 @@ check_generated_path() {
   if [ -n "$first_link" ]; then
     echo "Production bundle paths must not contain symlinks." >&2
     echo "First symlink: $first_link" >&2
-    echo "Run scripts/bundle/bundle.sh --clean and commit the generated outputs." >&2
+    echo "Rebuild from nothing with scripts/bundle/bundle.sh --clean." >&2
     exit 1
   fi
 }
 
-while IFS= read -r generated_path; do
-  check_generated_path "$generated_path"
-done < <(generated_paths)
-
-# The generated paths above are cadgen's committed runtime, inside packages/. main is
-# the source branch AND what every installer clones, so the rest of the shipping
-# contract is checked over the tree itself, here, on every run:
+# The generated paths are cadgen's BUILT runtime inside packages/, which no longer
+# reaches git at all. main is the source branch AND what every installer clones, so the
+# shipping contract is checked over the tree itself, here, on every run:
 #
 #   * no symlink anywhere (tracked): Codex drops them silently -- see above;
 #   * no LFS-tracked path under skills/: installers clone without git-lfs and get
@@ -133,10 +129,16 @@ check_tree_has_no_symlinks
 check_skills_have_no_lfs_paths
 check_skills_do_not_reach_repo_roots
 
+# The runtime has to exist before its layout can be checked, and nothing in the
+# repository carries it: either this run builds it or the workflow already did.
 if [ "$RUN_BUNDLE_CHECK" -eq 1 ]; then
   "$REPO_ROOT/scripts/bundle/bundle.sh" --check
 else
-  echo "Skipping bundle freshness rebuild; current workflow already bundled outputs."
+  echo "Skipping the runtime build; the current workflow already bundled it."
 fi
+
+while IFS= read -r generated_path; do
+  check_generated_path "$generated_path"
+done < <(generated_paths)
 
 echo "Production bundle layout is valid."

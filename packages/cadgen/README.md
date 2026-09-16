@@ -190,7 +190,10 @@ store hit (13). Composition: importing binds, calling links — a parent
 depends on a child by its RESULT (the pinned tree), on a constant by its
 VALUE, on a helper by its FILE — and a model must never `read_step` its own
 output (14). The bundled runtime under `_runtime/` is the JS half of these;
-the laws' JS statements live with the cadgen-js source.
+the laws' JS statements live with the cadgen-js source. That runtime is built
+when the wheel is packaged and travels only inside it: the source tree never
+carries a built copy, so an installed cadgen and the sources that produced it
+cannot disagree.
 
 ### 15. The package ships alone
 
@@ -296,8 +299,8 @@ src/cadgen/
                          #   compiled / failed), build_progress (the daemon's
                          #   job ledger, read over its socket)
   _runtime/              # BUILT JS (browser snapshot renderer, node
-                         #   builders, the viewer client) — generated, never
-                         #   edited here
+                         #   builders, the viewer client) — produced when the
+                         #   wheel is packaged, never committed, never edited
 ```
 
 Verbs by format: `step` compile · build · snapshot · inspect;

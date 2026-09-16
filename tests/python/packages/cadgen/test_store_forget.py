@@ -55,6 +55,9 @@ class StoreForget(unittest.TestCase):
         (self.root / "src").mkdir(parents=True)
         self.cache = Path(self._tmp.name) / "store"
         (self.root / "src" / "pin.py").write_text(textwrap.dedent(PIN).lstrip(), encoding="utf-8")
+
+    def _build(self) -> None:
+        # The tests that forget something need the build; the unknown-target test does not.
         result = _run("src/pin.py", cwd=self.root, cache=self.cache)
         assert result.returncode == 0, result.stderr
 
@@ -65,6 +68,7 @@ class StoreForget(unittest.TestCase):
         return _run("-m", "cadgen.cli", "store", *argv, cwd=self.root, cache=self.cache)
 
     def test_forgetting_a_model_drops_its_record_only(self) -> None:
+        self._build()
         self.assertIn("verdict current", self._store("why", "src/pin.py").stdout)
         dry = self._store("forget", "src/pin.py", "--dry-run")
         self.assertEqual(0, dry.returncode, dry.stderr)
@@ -86,6 +90,7 @@ class StoreForget(unittest.TestCase):
         self.assertIn("verdict current", self._store("why", "src/pin.py").stdout)
 
     def test_forgetting_a_document_makes_the_next_door_call_compile_it(self) -> None:
+        self._build()
         result = self._store("forget", "src/pin.step", "--json")
         self.assertEqual(0, result.returncode, result.stderr)
         payload = json.loads(result.stdout.strip())

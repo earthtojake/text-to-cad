@@ -10,9 +10,16 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { TESSELLATION_VERSION } from "../surf/tessellate.js";
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.join(HERE, "..", "..", "..", "bin", "mesh-export.mjs");
 const FIXTURE_SURF = path.join(HERE, "..", "surf", "fixtures", "sun_gear.surf");
+// The algorithm generation comes from the constant, not a literal: this pins
+// the cache key's SHAPE, and every tessellator change bumps that number.
+const CACHE_KEY = new RegExp(
+  `^[0-9a-f]{64}-t${TESSELLATION_VERSION}-p4-l[0-9a-f]{16}-a[0-9a-f]{16}$`,
+);
 
 function makePackage(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "mesh-export-")));
@@ -94,7 +101,7 @@ test("exports every format from one package, byte-deterministically", (t) => {
   }
   const cacheEntries = fs.readdirSync(meshCacheDir(root));
   assert.equal(cacheEntries.length, 1, "one unique component, one cache entry");
-  assert.match(cacheEntries[0], /^[0-9a-f]{64}-t3-p4-l[0-9a-f]{16}-a[0-9a-f]{16}$/);
+  assert.match(cacheEntries[0], CACHE_KEY);
 });
 
 test("every occurrence lands in the mesh: distinct transforms, distinct colors", (t) => {

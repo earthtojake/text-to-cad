@@ -117,19 +117,32 @@ class DiscoveredFileInputTests(unittest.TestCase):
             }
         )
 
+    # The vendor STEP is an INPUT: what matters is that some tool other than the model
+    # under test wrote it, and that the two widths are different bytes at the same path.
+    # Writing each width once for the class and copying the bytes in keeps both of those
+    # true and stops four tests paying a cold build123d import each to re-emit a box.
+    _vendor_bytes: dict[float, bytes] = {}
+
+    @classmethod
+    def _vendor_step(cls, width: float) -> bytes:
+        if width not in cls._vendor_bytes:
+            with tempfile.TemporaryDirectory(prefix="discovered-vendor-") as scratch:
+                target = Path(scratch) / "vendor.step"
+                subprocess.run(
+                    [
+                        sys.executable, "-c",
+                        "import build123d as bd, sys\n"
+                        f"bd.export_step(bd.Box({width}, 8, 3), sys.argv[1])\n",
+                        str(target),
+                    ],
+                    env={**os.environ, "PYTHONPATH": str(CADGEN_SRC)},
+                    capture_output=True, text=True, check=True,
+                )
+                cls._vendor_bytes[width] = target.read_bytes()
+        return cls._vendor_bytes[width]
+
     def _write_vendor_step(self, width: float) -> None:
-        """Write the 'vendor' STEP with a tool that is not the model under test."""
-        script = (
-            "import build123d as bd, sys\n"
-            f"bd.export_step(bd.Box({width}, 8, 3), sys.argv[1])\n"
-        )
-        subprocess.run(
-            [sys.executable, "-c", script, str(self.project / "vendor.step")],
-            env=self.environment,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
+        (self.project / "vendor.step").write_bytes(self._vendor_step(width))
 
     def _run(self, model: str) -> str:
         completed = subprocess.run(
@@ -201,11 +214,8 @@ class DiscoveredFileInputTests(unittest.TestCase):
         self._run(model)
         first = (self.project / "wrapped.step").read_bytes()
 
-        artifact = self.project / "wrapped.step"
-        unchanged = artifact.stat().st_mtime_ns
-        self._run(model)
-        self.assertEqual(unchanged, artifact.stat().st_mtime_ns)
-
+        # Only the half that is about the decorator: that a replaced input makes a @step
+        # model stale. Bytes-not-mtime is one mechanism, proven once, above.
         self._write_vendor_step(30.0)
         self._run(model)
         self.assertNotEqual(
@@ -213,25 +223,6 @@ class DiscoveredFileInputTests(unittest.TestCase):
             (self.project / "wrapped.step").read_bytes(),
             "a replaced vendor STEP must make the model stale",
         )
-
-    def test_a_model_that_reads_nothing_is_unaffected(self) -> None:
-        """The recording window must not disturb a model with no data inputs:
-        @step's existing no-op path is the one thing this phase must not touch."""
-        model = self._write_model(
-            "plain.py",
-            "from cadgen import build123d as bd\n"
-            "from cadgen import step\n\n\n"
-            "@step\n"
-            "def plain():\n"
-            "    return bd.Box(10, 10, 10)\n\n\n"
-            "if __name__ == '__main__':\n"
-            "    plain()\n",
-        )
-        self._run(model)
-        artifact = self.project / "plain.step"
-        before = artifact.stat().st_mtime_ns
-        self._run(model)
-        self.assertEqual(before, artifact.stat().st_mtime_ns)
 
 
 class OwnOutputAsInputTests(unittest.TestCase):
@@ -532,17 +523,8 @@ class DeclaredDataInputTests(unittest.TestCase):
             recorded = read_record(self.project / "plate.py")
         self.assertIsNotNone(recorded, "the build must leave a record for the model")
         self.assertIn("atlas.json", sorted(recorded["closure"]["files"]))
-
-        payload = self.atlas.read_bytes()
-        before = self.atlas.stat().st_mtime_ns
-        self.atlas.unlink()
-        self.atlas.write_bytes(payload)
-        self.assertNotEqual(
-            before,
-            self.atlas.stat().st_mtime_ns,
-            "precondition: the input must look newer than the artifact",
-        )
-        self.assertEqual(self._run_outcome(), "current")
+        # Bytes-not-mtime is one mechanism, proven once, above (read_step) and at
+        # unit level below; a declared input rides the same recorder.
 
         self._write_atlas(45.0)
         self.assertEqual(

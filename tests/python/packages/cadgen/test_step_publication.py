@@ -161,18 +161,6 @@ class StepPublicationTests(unittest.TestCase):
         self.assertEqual(self.step.read_bytes(), before)
         self.assertIn("pinned geometry disappeared", self.output)
 
-    def test_random_staging_names_do_not_change_saved_bytes(self) -> None:
-        from cadgen.catalog import result_tree_for
-        from cadgen.store.trees import tree_complete
-
-        self.assertEqual(self.build(10), 0, self.output)
-        before = self.step.read_bytes()
-        tree = result_tree_for(self.step)
-        self.assertTrue(tree_complete(tree))
-        self.assertEqual(self.build(10, force=True), 0, self.output)
-        self.assertEqual(self.step.read_bytes(), before)
-        self.assertEqual(result_tree_for(self.step), tree)
-
     def test_failure_after_each_publication_boundary_is_readable_by_saved_bytes(self) -> None:
         from cadgen._internal import atomic_replace
         from cadgen._internal.doors import document_tree

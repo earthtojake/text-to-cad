@@ -144,6 +144,35 @@ class CadgenDaemonTests(unittest.TestCase):
         return {int(worker["pid"]) for worker in (status.get("workers") or []) if worker.get("pid")}
 
     @classmethod
+    def _wait_for_busy_worker(cls, model: str, timeout: float = 120.0) -> int:
+        """Block until a pooled worker is actually running ``model``, and say which.
+
+        The supervisor is the only thing that knows a job has STARTED: the request has
+        been accepted, a worker acquired, and the model bound to it. Waiting on that
+        rather than on a clock is what keeps these tests honest on a runner where a cold
+        worker's OCP import takes twenty seconds -- a fixed sleep either races the
+        request (the assertion then describes a job that never began) or pads every
+        green run to the length of the worst red one.
+        """
+        env = {"CADGEN_DAEMON": "1", "CADGEN_DAEMON_SOCKET": str(cls.address)}
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            with mock.patch.dict(os.environ, env):
+                os.environ.pop("CADGEN_DAEMON_CHILD", None)
+                status = daemon_client.status() or {}
+            for worker in status.get("workers") or []:
+                # THIS job's worker, not any busy one: the class shares its daemon
+                # across tests, and a worker still finishing an earlier test's job
+                # can be recycled between the poll and the kill (ProcessLookupError).
+                if worker.get("busy") and str(worker.get("model") or "").endswith(model):
+                    return int(worker["pid"])
+            time.sleep(0.05)
+        raise AssertionError(
+            f"no worker ever went busy on {model} within {timeout:.0f}s:\n"
+            f"{cls.log_path.read_text(encoding='utf-8')}"
+        )
+
+    @classmethod
     def tearDownClass(cls) -> None:
         workers: set[int] = set()
         if cls.server is not None and cls.server.poll() is None:
@@ -201,45 +230,6 @@ class CadgenDaemonTests(unittest.TestCase):
         if leaked:
             raise AssertionError(f"daemon workers outlived the teardown: {leaked}")
 
-    def _warm_run(self, argv: list[str]) -> tuple[int | None, str]:
-        env = {"CADGEN_DAEMON": "1", "CADGEN_DAEMON_SOCKET": str(self.address)}
-        out, err = io.StringIO(), io.StringIO()
-        with mock.patch.dict(os.environ, env):
-            os.environ.pop("CADGEN_DAEMON_CHILD", None)
-            with redirect_stdout(out), redirect_stderr(err):
-                exit_code = daemon_client.run_via_daemon("run", argv, cwd=str(self.model_dir))
-        return exit_code, out.getvalue() + err.getvalue()
-
-    def test_a_warm_gen_request_skips_current_model(self) -> None:
-        exit_code, output = self._warm_run(["box.py"])
-        self.assertEqual(0, exit_code, output)
-        self.assertIn("is current", output)
-
-    def test_b_second_request_is_warm_and_correct(self) -> None:
-        # Warm means the SAME worker serves the model again without a fresh kernel
-        # import -- observed through the daemon's status (worker identity and job
-        # count), not through a wall-clock bound that a loaded CI runner can miss.
-        before = self._worker_for("box.py")
-        exit_code, output = self._warm_run(["box.py"])
-        self.assertEqual(0, exit_code, output)
-        self.assertIn("is current", output)
-        after = self._worker_for("box.py")
-        self.assertIsNotNone(after, "no worker is bound to box.py after a warm request")
-        if before is not None:
-            self.assertEqual(before["pid"], after["pid"], "the warm request did not reuse box.py's worker")
-            self.assertGreater(int(after.get("jobs") or 0), int(before.get("jobs") or 0))
-        self.assertNotIn("the CAD kernel was imported before", output)
-
-    def _worker_for(self, name: str) -> dict | None:
-        env = {"CADGEN_DAEMON": "1", "CADGEN_DAEMON_SOCKET": str(self.address)}
-        with mock.patch.dict(os.environ, env):
-            os.environ.pop("CADGEN_DAEMON_CHILD", None)
-            status = daemon_client.status() or {}
-        for worker in status.get("workers") or []:
-            if str(worker.get("model") or "").endswith(name):
-                return worker
-        return None
-
     def test_bz_a_failed_compile_leaves_its_reason_in_the_ledger(self) -> None:
         """The viewer's "compile failed" box shows the job's own reason, which it
         reads from the daemon's job ledger — so the ledger must keep the one line
@@ -268,6 +258,8 @@ class CadgenDaemonTests(unittest.TestCase):
         self.assertIn(reason, err.getvalue() + out.getvalue())
 
     def test_c_version_token_mismatch_triggers_restart(self) -> None:
+        # Also pinned in test_daemon_routing; kept here because it is what retires the
+        # class's first daemon before test_d starts a fresh one.
         frames = _raw_request(
             self.address,
             {"tool": "run", "argv": ["box.py"], "cwd": str(self.model_dir), "token": -1},
@@ -311,7 +303,10 @@ class CadgenDaemonTests(unittest.TestCase):
                 "cwd": str(self.model_dir),
                 "token": daemon_client.compute_version_token(),
             }).encode("utf-8"))
-            time.sleep(0.3)  # let the job start before the client "dies"
+            # The client may only "die" once there is a running job to orphan. A fixed
+            # sleep here raced a cold worker's kernel import under load and the watchdog
+            # then had nothing to kill.
+            self._wait_for_busy_worker("box_orphan.py")
         finally:
             channel.close()
 

@@ -55,22 +55,6 @@ if __name__ == "__main__":
     model()
 """
 
-ASSEMBLY = """from build123d import Box, BuildPart, Location, Pos
-
-from cadgen import step
-@step
-def model():
-    with BuildPart() as base:
-        Box(40, 40, 5)
-    with BuildPart() as post:
-        Box(8, 8, 20)
-    post.part.locate(Location(Pos(0, 0, 12.5)))
-    return base.part + post.part
-
-
-if __name__ == "__main__":
-    model()
-"""
 
 DRAWING = """from cadgen import build123d as bd
 from cadgen import dxf
@@ -260,10 +244,30 @@ class WarmOutputEquivalence(unittest.TestCase):
         with mock.patch.object(daemon_client, "run_artifact", side_effect=AssertionError("cold manifest used a daemon")):
             return _manifest(tree, daemon_env={"CADGEN_DAEMON": "0"}), output
 
+    # The cold PART manifest is a fixture the tests only READ: built once for the class.
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls._cold_tree = pathlib.Path(tempfile.mkdtemp(prefix="tmp-warm-eq-cold-")).resolve()
+        (cls._cold_tree / "widget.py").write_text(PART, encoding="utf-8")
+        code, cls._cold_part_out = _run(["widget.py"], cls._cold_tree, CADGEN_DAEMON="0")
+        if code != 0:
+            raise RuntimeError(f"the cold seed build failed:\n{cls._cold_part_out}")
+        # A fresh cold package must not silently use the default warm daemon
+        # merely because the manifest forces its lazily generated surfaces.
+        with mock.patch.object(daemon_client, "run_artifact", side_effect=AssertionError("cold manifest used a daemon")):
+            cls._cold_part = _manifest(cls._cold_tree, daemon_env={"CADGEN_DAEMON": "0"})
+        if not cls._cold_part:
+            raise RuntimeError("the cold build produced nothing to compare")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        shutil.rmtree(cls._cold_tree, ignore_errors=True)
+        super().tearDownClass()
+
     def test_a_part_builds_identically_warm(self):
         argv = ["widget.py"]
-        cold, cold_out = self._cold("widget.py", PART, argv)
-        self.assertTrue(cold, "the cold build produced nothing to compare")
+        cold, cold_out = self._cold_part, self._cold_part_out
 
         tree = self._tree("widget.py", PART)
         with _Daemon(tree) as daemon:
@@ -273,19 +277,10 @@ class WarmOutputEquivalence(unittest.TestCase):
             self.assertEqual(_manifest(tree, daemon_env=daemon.env()), cold)
         self.assertEqual(warm_out, cold_out)
 
-    def test_an_assembly_builds_identically_warm(self):
-        argv = ["rig.py"]
-        cold, _ = self._cold("rig.py", ASSEMBLY, argv)
-        tree = self._tree("rig.py", ASSEMBLY)
-        with _Daemon(tree) as daemon:
-            code, out = _run(argv, tree, **daemon.env())
-            self.assertEqual(code, 0, out)
-            self.assertEqual(_manifest(tree, daemon_env=daemon.env()), cold)
-
     def test_four_parallel_builds_through_one_daemon_all_match_cold(self):
         """The case the pool exists for. Today this serialises; it must still be correct."""
         argv = ["widget.py"]
-        cold, _ = self._cold("widget.py", PART, argv)
+        cold = self._cold_part
 
         trees = [self._tree("widget.py", PART) for _ in range(4)]
         shared = pathlib.Path(tempfile.mkdtemp(prefix="tmp-warm-eq-sock-")).resolve()

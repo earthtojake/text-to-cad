@@ -160,7 +160,13 @@ test("macro tessellation changes the rendered surface and uses its own cache ent
   for (const stage of ["surfaceReadMs", "tessellateMs", "cacheWriteMs", "meshBuildMs"]) {
     assert.ok(coldStages.sourceLoad[stage] >= 0, stage);
   }
-  const fineJob = { ...base, quality: { tessellation: { chordTolerance: .0001, angleTolerance: .025 } } };
+  // Finer than the tessellator's own defaults (1.5e-3 chord / 0.35 rad) by enough
+  // that the mesh must visibly densify, and no finer. The property under test is
+  // "an explicit macro request re-tessellates and keys its own cache entry", which
+  // 1e-3/0.1 proves exactly as well as the floor does — at 1/10th the work. Asking
+  // for 1e-4/0.025 here built a 1.7M-index mesh and cost ~4.5 s, which was the
+  // whole cadgen-js suite's critical path.
+  const fineJob = { ...base, quality: { tessellation: { chordTolerance: .001, angleTolerance: .1 } } };
   const fine = await loadSource(fineJob);
   assert.ok(fine.meshData.indices.length > coarse.meshData.indices.length);
   assert.notEqual(requested[0], requested[1]);

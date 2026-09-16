@@ -287,7 +287,7 @@ class MeshExportProductionTest(unittest.TestCase):
         first = self._run("src/blank.py")
         for rel in ("STL/blank.stl", "3MF/blank.3mf", "src/blank.glb"):
             self.assertTrue((self.project / rel).is_file(), rel)
-        self.assertIn("wrote STL", first.stderr)
+        self.assertEqual(1, first.stderr.count("wrote STL"), "one narration per mesh output")
         for rel in ("src/blank.step", "STEP/blank.step", "src/blank.step.json"):
             self.assertFalse((self.project / rel).exists(), f"{rel} must not be written")
 
@@ -299,20 +299,13 @@ class MeshExportProductionTest(unittest.TestCase):
             self.assertTrue(record.get("tree"), "a mesh-only model has a tree like any model")
             self.assertFalse(any(p.endswith(".step") for p in record.get("outputs") or {}))
             self.assertFalse(stale(self.project / "src" / "blank.py").stale)
+        # Rerun no-op and per-export healing do not branch on @step being absent:
+        # pinned once, on widget, in test_script_run_produces_heals_and_matches_cli.
 
-        # True no-op on rerun, and healing per export like any declared output.
-        second = self._run("src/blank.py")
-        self.assertNotIn("wrote", second.stdout)
-        (self.project / "STL" / "blank.stl").unlink()
-        heal = self._run("src/blank.py")
-        self.assertIn("wrote STL", heal.stderr)
-        self.assertNotIn("wrote GLB", heal.stderr)
-
-    def test_a_bare_door_writes_one_mesh_beside_the_document(self) -> None:
-        # A door reads no declarations. Two @stl variants belong to the RUN
-        # (python src/widget.py writes both); a bare door on the document writes
-        # exactly one STL, the sibling default, and the ledger makes the second
-        # bare run a no-op.
+    def test_a_run_writes_every_declared_variant(self) -> None:
+        # Two @stl variants belong to the RUN: python src/widget.py writes both.
+        # (What a bare door writes beside the document -- one STL, the sibling
+        # default, once -- is pinned in test_script_run_produces_heals_and_matches_cli.)
         (self.project / "src" / "widget.py").write_text(
             MODEL.replace(
                 '@stl(out="../STL/widget.stl")',
@@ -326,16 +319,6 @@ class MeshExportProductionTest(unittest.TestCase):
         printed = self.project / "STL" / "widget_print.stl"
         self.assertTrue(draft.is_file() and printed.is_file(), "the run writes its declared variants")
         self.assertFalse((self.project / "STEP" / "widget.step.json").exists(), "no kinematics, no sidecar")
-
-        wrote = self._run("-c", "from cadgen.cli.stl_build import main; raise SystemExit(main())",
-                          "STEP/widget.step")
-        sibling = self.project / "STEP" / "widget.stl"
-        self.assertTrue(sibling.is_file(), wrote.stdout + wrote.stderr)
-        self.assertEqual(1, wrote.stdout.count("wrote STL"), wrote.stdout)
-
-        again = self._run("-c", "from cadgen.cli.stl_build import main; raise SystemExit(main())",
-                          "STEP/widget.step")
-        self.assertEqual(1, again.stdout.count("current STL"), again.stdout)
 
 
 if __name__ == "__main__":

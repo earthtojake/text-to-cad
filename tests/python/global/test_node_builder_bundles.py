@@ -5,6 +5,10 @@ cadgen tessellates a DXF by spawning a Node child
 node_builders_dir()`` -- the repo's live ``packages/cadgen-js/bin`` in a checkout, and the
 packaged ``cadgen/_runtime/node`` in an installed wheel.
 
+That packaged directory is BUILT, not committed, so this asserts on the bundler's output:
+the test runners build the stage before the suite starts, and a failure here means the
+bundler produced something a wheel could not ship.
+
 This is the regression guard for a failure that only ever appears at the far end: a
 distribution that ships a producer but not its builder supports a format it cannot build,
 and says so for the first time in the user's model directory. It asserts what an installed
@@ -50,8 +54,9 @@ class NodeBuilderBundleTests(unittest.TestCase):
             with self.subTest(builder=name):
                 self.assertTrue(
                     path.is_file(),
-                    f"Missing Node builder {path.relative_to(REPO_ROOT)}. Run "
-                    "scripts/bundle/bundle.sh and commit the output.",
+                    f"Missing Node builder {path.relative_to(REPO_ROOT)}. "
+                    "The packaged runtime is built, not committed: run "
+                    "scripts/bundle/bundle.sh.",
                 )
 
     def test_builders_are_real_files_not_symlinks(self) -> None:
