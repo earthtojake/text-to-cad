@@ -37,6 +37,21 @@ installer resolves from PyPI). The editable install reports that same version,
 so the pin is satisfied in a checkout — but `pip install -r skills/<s>/requirements.txt`
 on its own would fetch the previous RELEASE from PyPI over your working copy.
 
+Then build cadgen's packaged runtime once:
+
+```bash
+scripts/bundle/bundle.sh
+```
+
+`packages/cadgen/src/cadgen/_runtime/` is BUILT, not committed — the whole
+directory is gitignored, and the wheel is the only place those files ship. A
+fresh clone therefore has no Node builders, no snapshot browser bundle and no
+Viewer client until the bundler runs, and cadgen says so by name (naming this
+command) the first time it reaches for one. `scripts/test/test-python.sh` and
+`scripts/test/test-global.sh` build the two stages they read if they are
+missing, so this step is about having the whole thing, including the Viewer
+client the wheel carries.
+
 For CAD Viewer development:
 
 ```bash
@@ -174,7 +189,8 @@ Canonical source directories are:
 - `skills/*` for skill instructions, references, and the thin entrypoints.
 - `apps/viewer/` for the CAD Viewer's React client. Its backend is
   `cadgen.viewer` (in `packages/cadgen`), and its built `dist/` ships inside the
-  cadgen wheel as `cadgen/_runtime/viewer`.
+  cadgen wheel as `cadgen/_runtime/viewer` — built at release time, never
+  committed.
 - `packages/*` for the shared runtimes. `packages/cadgen` is the published
   distribution; `packages/cadgen-js` is its JS build input, and the client's.
 
@@ -195,9 +211,11 @@ nothing else from outside its directory.
 - `scripts/test/test-python.sh` (or path-targeted `unittest`) for the engine;
   `tests/python/global/` holds the policy gates that enforce the design laws in
   `packages/cadgen/README.md`.
-- Editing anything the bundlers consume? `scripts/bundle/bundle.sh`, then commit
-  the regenerated `_runtime/node` and `_runtime/browser` (`_runtime/viewer` is
-  gitignored: the wheel build writes it, a checkout serves `apps/viewer/dist`).
+- Editing anything the bundlers consume? Run `scripts/bundle/bundle.sh` and
+  there is nothing to commit: all of `_runtime/` is gitignored, so a JS edit
+  shows up in the diff as the cadgen-js source it was made in and reaches a user
+  as the wheel the release builds. A rebundle used to add ~1.3 MB of
+  `snapshot-render.js` to every commit that touched the renderer.
 - `VERSION` at the repo root is canonical; release tooling stamps every
   duplicate. Never hand-edit versions under `packages/`.
 
@@ -308,7 +326,9 @@ that builds it.
 Never let a symlink reach the published tree (see Branch Layouts):
 `scripts/github-workflows/check-builds.sh` enforces symlink-free publishes.
 
-Production-output checks are intentionally centralized:
+Production-output checks are intentionally centralized. `--clean` removes the
+`_runtime` tree first, so a renamed stage or output cannot survive into the
+wheel; `--check` builds and then asserts every file each stage owes:
 
 ```bash
 scripts/bundle/bundle.sh --clean
@@ -351,14 +371,15 @@ PR stamps them with the bump, and `scripts/release/check-version.sh` asserts
 every pin equals `VERSION` — so a bare `cadgen` line or a stale pin fails the
 `Version Check` job.
 
-The `Test` workflow runs on pushes to `main` and PRs against it: it checks
-generated outputs against their sources with `scripts/bundle/bundle.sh --check`,
-runs `scripts/bundle/bundle.sh --clean`, checks the layout without rebuilding
-it, runs documentation checks, and runs the code tests against that generated
-output. The freshness check covers the generated outputs `main` commits as real
-files — cadgen's Node builders and snapshot runtime built from
-`packages/cadgen-js` — and version metadata derived from `VERSION`. The viewer
-client (`_runtime/viewer`) is gitignored and built only for the wheel.
+The `Test` workflow runs on pushes to `main` and PRs against it: it runs
+`scripts/bundle/bundle.sh --clean` to produce the runtime, checks the layout
+without rebuilding it, runs documentation checks, and runs the code tests
+against that generated output. `main` commits no generated runtime at all —
+cadgen's Node builders, its snapshot bundle and the Viewer client are built from
+`packages/cadgen-js` and `apps/viewer` on demand, and ship only inside the
+wheel. What IS committed and therefore checked for freshness is the version
+metadata derived from `VERSION`, asserted by the separate `Version Check` job
+(`scripts/release/check-version.sh` and `sync-version.mjs --check`).
 
 ## Releases
 
@@ -396,9 +417,12 @@ is involved) and deletes the branch. The merged commit is THE release commit.
    tag (either spelling — `scripts/release/release-tags.sh` is the one place
    that knows `v0.5.0` and the bare `0.4.28` before it, and it compares
    versions, not tag strings), or equal to it with the tag missing.
-2. `bundle.sh --clean` (cadgen's committed runtime reproduced byte for byte
-   plus the gitignored viewer client), `check-builds.sh`, the docs and code
-   tests, the wheel-contents check, `python -m build`.
+2. `bundle.sh --clean` — which is where cadgen's whole runtime comes into
+   existence, Node builders, snapshot bundle and Viewer client alike, because
+   the release commit carries none of it — then `check-builds.sh`, the docs and
+   code tests, the wheel-contents check, `python -m build`, and an `unzip -l`
+   assertion that the wheel about to ship really holds `_runtime/node`,
+   `_runtime/browser` and `_runtime/viewer`.
 3. Install test: the built wheel into a fresh venv — `cadgen --help`, `cadgen
    viewer --help`, `cadgen doctor skills/cad-viewer` — then
    `scripts/test/test-installed.sh`; the distribution is uploaded as a workflow
@@ -576,7 +600,7 @@ Use path-targeted validation. Common checks from the repo root:
 ```bash
 scripts/test/test.sh
 scripts/release/check-version.sh
-scripts/bundle/bundle.sh --check          # generated runtime freshness
+scripts/bundle/bundle.sh --check          # the packaged runtime builds, whole
 npm --prefix apps/viewer run test        # the Viewer's CLIENT half only
 scripts/test/test-python.sh              # includes the Viewer's BACKEND suite
 npm --prefix apps/docs run check

@@ -125,10 +125,12 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
   interpreter; raising the declared minimum relaxes the check automatically.
 - Reserve `scripts/` for durable repo commands. Do not write temporary,
   one-off, or local-only helper scripts there; use `tmp/` or `/tmp` instead.
-- When a change reaches what the bundlers consume, regenerate the derived
-  outputs with the one bundle entry point, `scripts/bundle/bundle.sh`;
-  `bundle.sh --check` is the freshness gate. Call
-  `scripts/bundle/cadgen-runtime.sh` directly only when debugging one stage.
+- cadgen's packaged runtime (`_runtime/node`, `_runtime/browser`,
+  `_runtime/viewer`) is BUILT, never committed: the whole directory is
+  gitignored and ships only inside the wheel. Build it with the one bundle
+  entry point, `scripts/bundle/bundle.sh`; `bundle.sh --check` builds it and
+  asserts every required output. Call `scripts/bundle/cadgen-runtime.sh`
+  directly only when debugging one stage.
 - Never let a symlink reach the published tree. Agent installers disagree about
   symlinks and one loses data silently: the Skills CLI dereferences them, Claude
   Code preserves them, and Codex `plugin add` drops them with no error, shipping
@@ -136,8 +138,8 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
   this; do not relax it.
 - The CAD Viewer is `cadgen viewer`: the server is `cadgen.viewer` (Python, in
   `packages/cadgen`), the React client's source is `apps/viewer/` and its build
-  ships in the wheel at `cadgen/_runtime/viewer` (gitignored; a checkout serves
-  `apps/viewer/dist`). The cad-viewer skill is instructions over that verb.
+  ships in the wheel at `cadgen/_runtime/viewer` (built, never committed; a
+  checkout serves `apps/viewer/dist`). The cad-viewer skill is instructions over that verb.
   Nothing in `cadgen.viewer` imports the CAD kernel at module scope — the one
   kernel action, importing a foreign STEP, is a compile job in cadgen's build
   pool, never work the server process does.
@@ -187,16 +189,16 @@ when touching shared surfaces or before handoff:
 - Code tests: `scripts/test/test.sh`
   - In GitHub Actions, `test.yml` (PRs to and pushes of `main`) checks the
     canonical release version and the skill pins in a separate job so code
-    tests still run when version metadata is wrong; its test job checks
-    generated outputs against their sources, bundles production outputs, and
-    runs docs and code tests against that bundle. `Publish Release` repeats
+    tests still run when version metadata is wrong; its test job bundles the
+    production outputs and runs docs, code and installed-mode tests against
+    that bundle. `Publish Release` repeats
     those checks on the release commit before the wheel ships. GitHub branch
     settings should require a PR for `main`.
 - Focused test runners: `scripts/test/test-js.sh`,
   `scripts/test/test-docs.sh`, `scripts/test/test-python.sh`,
   `scripts/test/test-global.sh`
 - Canonical release version: `scripts/release/check-version.sh`
-- Generated runtime freshness: `scripts/bundle/bundle.sh --check`
+- Packaged runtime builds and is complete: `scripts/bundle/bundle.sh --check`
 - CAD Viewer or `packages/cadgen-js`:
   `npm --prefix packages/cadgen-js test`,
   `npm --prefix apps/viewer run test`, `npm --prefix apps/viewer run build`.
@@ -206,9 +208,10 @@ when touching shared surfaces or before handoff:
 - Docs site: `npm --prefix apps/docs run check`
 - Targeted Python tests: `./.venv/bin/python -m unittest <changed test paths>`
 
-When a task changes what the bundlers consume, run `scripts/bundle/bundle.sh`,
-rerun `scripts/bundle/bundle.sh --check`, and commit the regenerated
-`_runtime/node` and `_runtime/browser` (`_runtime/viewer` is gitignored).
+When a task changes what the bundlers consume, run `scripts/bundle/bundle.sh`
+and confirm the change lands in the built runtime. There is nothing to commit:
+`_runtime/` is gitignored end to end, so what a reviewer reads is the source and
+what a user gets is the wheel the release builds from it.
 
 ## CAD Viewer
 

@@ -55,7 +55,10 @@ class AssetServerIsMandatoryTest(unittest.TestCase):
     """
 
     def test_start_fails_loudly_when_the_loopback_server_cannot_bind(self):
-        renderer = BatchSnapshotRenderer(Path("."))
+        # The real bundled runtime, not a placeholder path: start() validates the browser
+        # bundle before it binds anything, so a made-up directory would fail on the wrong
+        # precondition and never reach the socket this test is about.
+        renderer = BatchSnapshotRenderer(browser_runtime_dir())
         with mock.patch(
             "cadgen.snapshot_core.SnapshotAssetServer",
             side_effect=OSError("Address family not supported"),

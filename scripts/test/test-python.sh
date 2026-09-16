@@ -27,6 +27,8 @@ run_suite() {
 
 cd "$REPO_ROOT"
 
+ensure_packaged_runtime
+
 # Isolate the shared caches (component store + op-memo disk tier) from the
 # developer's real ~/.cache/cadgen: tests assert exact built/reused counts and
 # byte-level outputs, and a populated user store would satisfy builds the test

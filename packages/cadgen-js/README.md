@@ -2,9 +2,9 @@
 
 The shared JavaScript half of cadgen: everything the distribution and its
 clients both need to turn cached geometry into pixels, meshes, and motion.
-This is SOURCE; the built, stamped copies that ship live in
-`packages/cadgen/src/cadgen/_runtime/` — one sentence that resolves the one
-ambiguity the name carries.
+This is SOURCE; the built, stamped copies that ship are produced into
+`packages/cadgen/src/cadgen/_runtime/` (gitignored, wheel-only) — one sentence
+that resolves the one ambiguity the name carries.
 
 **PURPOSE** — the shared dependencies between cadgen (as it relates to
 rendering files) and its clients: the CAD Viewer, the docs app, and any
@@ -156,8 +156,9 @@ Where the mechanism is written:
 
 - `npm --prefix packages/cadgen-js test` (node:test; no browser needed).
 - Anything here that the bundlers consume changes the shipped runtimes:
-  run `scripts/bundle/bundle.sh` and commit the regenerated `_runtime/node`
-  and `_runtime/browser`. The staleness gate in CI enforces this.
+  run `scripts/bundle/bundle.sh` to rebuild them locally. Nothing to commit —
+  `_runtime/` is gitignored, this source IS the reviewable artifact, and CI
+  rebuilds it from here before it tests or packages anything.
 - The viewer dev server aliases this package's source, and Vite's
   transform cache can outlive HMR — if an edit doesn't show up, restart
   the dev server and delete `apps/viewer/node_modules/.vite`.

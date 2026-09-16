@@ -11,6 +11,27 @@ if [ -z "${PYTHON_BIN:-}" ]; then
   fi
 fi
 
+# The packaged runtime (packages/cadgen/src/cadgen/_runtime) is BUILT, never committed,
+# so a fresh checkout has none of it -- and the snapshot suites drive the browser bundle
+# while the policy suite reads the emitted Node builders. Building it is idempotent and
+# fast once the pinned esbuild toolchain is in tmp/, but it is not free, so this only runs
+# when an output is actually missing.
+#
+# The two stages are asked for by name rather than going through bundle.sh: the tests read
+# exactly these, and the viewer stage is a vite build of apps/viewer that needs that app's
+# node_modules -- which a Python-only checkout has no reason to install.
+ensure_packaged_runtime() {
+  local runtime="$REPO_ROOT/packages/cadgen/src/cadgen/_runtime"
+  local name
+  for name in node/dxf-mesh.mjs node/mesh-export.mjs browser/snapshot-render.js browser/render.html; do
+    if [ ! -f "$runtime/$name" ]; then
+      section "Building cadgen's packaged runtime (missing $name)"
+      "$REPO_ROOT/scripts/bundle/cadgen-runtime.sh" --node --browser
+      return
+    fi
+  done
+}
+
 section() {
   printf '\n==> %s\n' "$1"
 }

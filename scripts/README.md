@@ -7,7 +7,7 @@ step; nothing else belongs here (one-off helpers go in `tmp/`).
 | Task | Command |
 | ---- | ------- |
 | Build the packaged runtime | `scripts/bundle/bundle.sh --clean` |
-| Check the packaged runtime is fresh | `scripts/bundle/bundle.sh --check` |
+| Build it and assert it is complete | `scripts/bundle/bundle.sh --check` |
 | Run code tests | `scripts/test/test.sh` |
 | Run docs checks | `scripts/test/test-docs.sh` |
 | Check the release version and skill pins | `scripts/release/check-version.sh` |
@@ -19,17 +19,24 @@ step; nothing else belongs here (one-off helpers go in `tmp/`).
 ## Index
 
 `bundle/` — cadgen's packaged runtime (`packages/cadgen/src/cadgen/_runtime`).
+None of it is committed: the directory is gitignored end to end and the wheel is
+where those files ship, so these scripts are what produces them.
 
 - `bundle.sh` — the one entry point: stamps derived version metadata
   (`release/sync-version.mjs`), then runs `cadgen-runtime.sh`. `--check` builds
-  into `tmp/` and fails if the committed outputs are stale. Called by `test.yml`,
-  `release-publish.yml`, `check-builds.sh`, the pre-commit hook.
+  the runtime and asserts every required output exists, and checks the derived
+  metadata (which IS committed) rather than writing it. `--clean` removes the
+  `_runtime` tree first. Called by `test.yml`, `release-publish.yml`,
+  `check-builds.sh`, the pre-commit hook.
 - `cadgen-runtime.sh` — builds the three runtime stages: `--node` (esbuilt Node
-  builders, committed), `--browser` (snapshot browser bundle, committed),
-  `--viewer` (vite build of `apps/viewer`, gitignored, wheel-only). `--print-outputs`
-  lists the committed paths. Called by `bundle.sh`, `check-builds.sh`,
-  `test/test-installed.sh`; pinned by `tests/python/global/test_node_builder_bundles.py`
-  and `test_js_runtime_reproducibility.py`. Call it directly only to debug one stage.
+  builders), `--browser` (snapshot browser bundle), `--viewer` (vite build of
+  `apps/viewer`). `--print-outputs` lists the two directories a bundle always
+  produces; `--check` skips the viewer stage, which needs the client's
+  `node_modules` and which nothing in a checkout reads. Called by `bundle.sh`,
+  `check-builds.sh`, `test/test-installed.sh`, and `test/common.sh` when a test
+  runner finds the two stages it needs missing; pinned by
+  `tests/python/global/test_node_builder_bundles.py` and
+  `test_js_runtime_reproducibility.py`. Call it directly only to debug one stage.
 - `lib/node_builders.sh`, `lib/snapshot_runtime.sh` — sourced by
   `cadgen-runtime.sh`; esbuild the Node builders and the browser bundle with
   `three`/`meshoptimizer` pinned from `packages/cadgen-js/package-lock.json`.
@@ -48,7 +55,9 @@ step; nothing else belongs here (one-off helpers go in `tmp/`).
 - `time-python.sh [N]` — times every Python test module on its own and prints
   them sorted by wall clock (results under `tmp/timing/`); `time_module.py` is
   its helper. Manual only: the first step of a bloat check.
-- `test-global.sh` — `tests/python/global`, the repo-wide policy suite.
+- `test-global.sh` — `tests/python/global`, the repo-wide policy suite. Like
+  `test-python.sh`, it builds the `--node` and `--browser` runtime stages first
+  when they are absent: the suites read them and a fresh clone has neither.
 - `test-docs.sh` — `npm --prefix apps/docs run check`, pulling the hero assets
   first. Called by `test.yml` and `release-publish.yml`.
 - `test-installed.sh` — builds the wheel, installs it into a scratch venv and
@@ -86,8 +95,9 @@ step; nothing else belongs here (one-off helpers go in `tmp/`).
   lockfile and `pyproject.toml` metadata) from `VERSION`. Called by `bundle.sh`,
   `test.yml`, `release-prepare.yml`.
 - `check-wheel-contents.sh` — builds the wheel and asserts the Python modules and
-  `_runtime/{node,browser,viewer}` are inside it. Called by `test.yml` and
-  `release-publish.yml`.
+  `_runtime/{node,browser,viewer}` are inside it, with bytes identical to the
+  bundled source. The only gate on package data, which fails quietly. Called by
+  `test.yml` and `release-publish.yml`.
 - `publish-github-release.sh [--target REF] [--dry-run] [--publish]` — creates and
   pushes the `v<VERSION>` tag and the GitHub Release (a draft unless
   `--publish`). Called by `release-publish.yml`; a local run on the merged release
@@ -98,12 +108,12 @@ step; nothing else belongs here (one-off helpers go in `tmp/`).
 
 `github-workflows/` — scripts a workflow runs whole.
 
-- `check-builds.sh [--skip-bundle-check]` — the shipping contract: every path
-  `cadgen-runtime.sh --print-outputs` names exists and holds no symlink, no
-  tracked symlink anywhere, no LFS path under `skills/`, no skill reaching into a
-  repo root; then `bundle.sh --check` unless the workflow already bundled. Called
-  by `test.yml`, `release-publish.yml`, the pre-commit hook path. The no-symlink
-  rule is load-bearing: Codex `plugin add` drops symlinks silently.
+- `check-builds.sh [--skip-bundle-check]` — the shipping contract: no tracked
+  symlink anywhere, no LFS path under `skills/`, no skill reaching into a repo
+  root; then `bundle.sh --check` unless the workflow already bundled; then every
+  path `cadgen-runtime.sh --print-outputs` names exists and holds no symlink.
+  Called by `test.yml`, `release-publish.yml`, the pre-commit hook path. The
+  no-symlink rule is load-bearing: Codex `plugin add` drops symlinks silently.
 - `deploy-vercel-app.sh` — deploys one Vercel project to production and verifies
   its public URLs. Called by `deploy-docs.yml` only.
 
@@ -114,7 +124,10 @@ step; nothing else belongs here (one-off helpers go in `tmp/`).
   step in `CONTRIBUTING.md`.
 
 `git-hooks/pre-commit` — the body `.githooks/pre-commit` runs: `bundle.sh --check`
-when staged paths touch `packages`, `apps`, `skills` or `scripts/bundle`.
+when staged paths touch `packages`, `apps`, `skills` or `scripts/bundle`. It is
+kept now that nothing is committed, because the question it asks is still worth
+asking locally and is cheap once `tmp/`'s pinned esbuild toolchain exists: does
+this edit still BUILD? It no longer has anything to say about the index.
 
 `utils/list-skills.sh` — prints every `skills/*/SKILL.md` directory. Used by the
 install scripts and `test-python.sh`.
@@ -128,9 +141,9 @@ manual; their `*.test.mjs` helper units run in `test-js.sh`.
 
 | Workflow | Branches/events | Purpose |
 | -------- | --------------- | ------- |
-| `test.yml` | pushes to `main`; PRs to `main`; manual dispatch | Checks `VERSION`, derived metadata and the skill pins as a separate job so the test job still runs if release metadata is wrong. The test job checks generated outputs against their sources, bundles production outputs, checks the layout without rebuilding it, and runs docs and code tests against the generated output. Superseded PR runs are cancelled. |
+| `test.yml` | pushes to `main`; PRs to `main`; manual dispatch | Checks `VERSION`, derived metadata and the skill pins as a separate job so the test job still runs if release metadata is wrong. The test job bundles the production outputs (nothing under `_runtime/` is committed, so this is where they come from), checks the layout without rebuilding it, and runs docs, code and installed-mode tests against that output. Superseded PR runs are cancelled. |
 | `release-prepare.yml` (`Prepare Release`) | manual dispatch | The version bump as a PR: bumps `VERSION`, stamps metadata and skill pins, opens `release/X.Y.Z` against `target` (default `main`; `build-test` rehearses) and merges it. The merge is what runs `Publish Release`. |
-| `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test`; manual dispatch (resume/republish the head) | Gate (VERSION past the latest tag, or untagged), bundle, tests, wheel build, install test, distribution artifact; then -- on `main` only -- PyPI upload, docs deploy, `v<VERSION>` tag and GitHub Release. On `build-test` it prints what it would have tagged and stops. |
+| `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test`; manual dispatch (resume/republish the head) | Gate (VERSION past the latest tag, or untagged), bundle, tests, wheel build, an `unzip -l` assertion that the shipping wheel carries `_runtime`, install test, distribution artifact; then -- on `main` only -- PyPI upload, docs deploy, `v<VERSION>` tag and GitHub Release. On `build-test` it prints what it would have tagged and stops. |
 | `deploy-docs.yml` (`Deploy Docs`) | manual dispatch; called by `release-publish.yml` | Deploys the docs app to Vercel production from a ref (default `main`): configures Vercel Authentication for preview deployments only, runs `vercel pull/build/deploy --prod`, and verifies the public production URLs. |
 
 In short: `Prepare Release` bumps, `Publish Release` ships, `Deploy Docs`

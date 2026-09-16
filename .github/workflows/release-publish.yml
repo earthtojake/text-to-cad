@@ -105,9 +105,10 @@ jobs:
         if: steps.gate.outputs.should_publish == 'true'
         uses: ./.github/actions/setup-deps
 
-      # The bundle feeds the WHEEL: cadgen's Node builders and snapshot bundle
-      # (committed, so --clean must reproduce them byte for byte) and the CAD Viewer
-      # client (gitignored, wheel-only). Nothing here writes to git.
+      # The bundle feeds the WHEEL, and it is the only thing that does: cadgen's Node
+      # builders, the snapshot browser bundle and the CAD Viewer client are all
+      # gitignored, so the release commit carries none of them. Nothing here writes to
+      # git -- the wheel is the release asset.
       - name: Bundle production outputs
         if: steps.gate.outputs.should_publish == 'true'
         run: scripts/bundle/bundle.sh --clean
@@ -165,6 +166,31 @@ jobs:
       # The distribution is kept whether or not it ships: a rehearsal's artifact is
       # what you inspect instead of a PyPI upload, and a main run's is the record of
       # exactly what was uploaded.
+      # The paranoid half of the same question check-wheel-contents.sh answers, asked of
+      # the wheel that actually ships rather than one rebuilt in scratch: the runtime is
+      # built minutes earlier by a step that could fail soft, and a wheel without it
+      # installs cleanly and then cannot render a snapshot or export a mesh.
+      - name: Assert the shipping wheel carries its built runtime
+        if: steps.gate.outputs.should_publish == 'true'
+        run: |
+          wheel="$(find packages/cadgen/dist -name '*.whl' -type f | head -n 1)"
+          [ -n "$wheel" ] || { echo "no wheel under packages/cadgen/dist" >&2; exit 1; }
+          listing="$(unzip -l "$wheel")"
+          echo "$listing" | grep -E 'cadgen/_runtime/' || true
+          for required in \
+            cadgen/_runtime/browser/snapshot-render.js \
+            cadgen/_runtime/browser/render.html \
+            cadgen/_runtime/node/mesh-export.mjs \
+            cadgen/_runtime/node/dxf-mesh.mjs \
+            cadgen/_runtime/viewer/index.html; do
+            if ! printf '%s\n' "$listing" | grep -qF " $required"; then
+              echo "$(basename "$wheel") does not contain $required" >&2
+              echo "scripts/bundle/bundle.sh produces it; [tool.setuptools.package-data] ships it." >&2
+              exit 1
+            fi
+          done
+          echo "$(basename "$wheel") carries its built runtime."
+
       - name: Upload the distribution as a workflow artifact
         if: steps.gate.outputs.should_publish == 'true'
         uses: actions/upload-artifact@v7
