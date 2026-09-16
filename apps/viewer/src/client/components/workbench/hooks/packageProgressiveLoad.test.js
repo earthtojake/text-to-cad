@@ -626,43 +626,35 @@ test("an empty package composes once and surfaces the descriptor's own error", a
   );
 });
 
-test("recomposition cost per publish: 3000 occurrences / 800 components", async (t) => {
+// The property is the DOUBLING schedule — how many times 800 components are
+// recomposed on the way in, and at what sizes. It used to also assert a wall-clock
+// ceiling (`max recompose < 500 ms`) and benchmark animation binding, neither of
+// which says anything about the code: the ceiling passes or fails on how loaded the
+// runner is, and the bind timing was measured and never asserted at all. Counting
+// the publishes pins the same regression (a schedule that stops doubling recomposes
+// 25 times instead of 8) and cannot flake.
+test("recomposition batches double: 800 components publish 8 times, not 25", async (t) => {
   const descriptor = makeDescriptor({
     componentCount: 800,
     occurrenceCount: 3000,
     transformFor: (i) => translation((i % 37) * 10, (i % 53) * 7, (i % 11) * 3)
   });
   const { loadComponent } = makeLoader(descriptor);
-  const composeMs = [];
-  const loader = createProgressivePackageLoader({
+  const publishes = [];
+  const result = await createProgressivePackageLoader({
     descriptor,
     loadComponent,
     concurrency: 8,
-    onPublish: (publish) => composeMs.push(publish.composeMs)
-  });
-  const started = performance.now();
-  const result = await loader.run();
-  const totalMs = performance.now() - started;
-  // 8 + 16 + 32 + 64 + 128 + 256 + 256 covers 760 of the 800; the remaining 40
-  // publish as the final batch. Doubling turns 800/32 = 25 recompositions into 8.
+    onPublish: (publish) => publishes.push(publish)
+  }).run();
+  // 8 + 16 + 32 + 64 + 128 + 256 covers 504; the ceiling caps at 256, so the
+  // remaining 296 arrive as 256 + 40. Doubling turns 800/32 = 25 recompositions
+  // into 8.
   assert.equal(result.publishes, 8);
-  // Per-frame animation binding (label index over every part) at this size —
-  // the cost embedded animation pays on each publish/frame, not a separate attach.
-  let bindMs = 0;
-  {
-    const lastPublish = buildComposedPackageMeshData(descriptor, Object.fromEntries(
-      Object.keys(descriptor.components).map((cid) => [cid, fakeComponent(cid)])
-    ));
-    const t0 = performance.now();
-    for (let i = 0; i < 5; i += 1) createAnimationFrame(THREE, lastPublish);
-    bindMs = (performance.now() - t0) / 5;
-  }
-  const max = Math.max(...composeMs);
-  const mean = composeMs.reduce((sum, ms) => sum + ms, 0) / composeMs.length;
-  const last = composeMs.at(-1);
-  t.diagnostic(`recompose per publish: mean ${mean.toFixed(2)} ms, max ${max.toFixed(2)} ms, final ${last.toFixed(2)} ms, ${composeMs.length} publishes, run ${totalMs.toFixed(0)} ms; animation label bind over 3000 parts ${bindMs.toFixed(2)} ms`);
-  // Generous ceiling: a publish is a reference walk of the occurrence list.
-  assert.ok(max < 500, `max recompose ${max} ms`);
+  assert.deepEqual(publishes.map((publish) => publish.loaded), [8, 24, 56, 120, 248, 504, 760, 800]);
+  assert.equal(publishes.at(-1).final, true);
+  assert.equal(publishes.at(-1).meshData.parts.length, 3000, "the last publish composes every occurrence");
+  t.diagnostic(`recompose per publish: ${publishes.map((publish) => publish.composeMs.toFixed(1)).join(", ")} ms`);
 });
 
 test("window.__cadMeshCost updates on every publish and clears on cancel", async () => {

@@ -37,6 +37,21 @@ installer resolves from PyPI). The editable install reports that same version,
 so the pin is satisfied in a checkout — but `pip install -r skills/<s>/requirements.txt`
 on its own would fetch the previous RELEASE from PyPI over your working copy.
 
+Then build cadgen's packaged runtime once:
+
+```bash
+scripts/bundle/bundle.sh
+```
+
+`packages/cadgen/src/cadgen/_runtime/` is BUILT, not committed — the whole
+directory is gitignored, and the wheel is the only place those files ship. A
+fresh clone therefore has no Node builders, no snapshot browser bundle and no
+Viewer client until the bundler runs, and cadgen says so by name (naming this
+command) the first time it reaches for one. `scripts/test/test-python.sh` and
+`scripts/test/test-global.sh` build the two stages they read if they are
+missing, so this step is about having the whole thing, including the Viewer
+client the wheel carries.
+
 For CAD Viewer development:
 
 ```bash
@@ -129,6 +144,86 @@ spelling or UI copy when observable behavior already covers the requirement.
 Real kernel and browser tests remain necessary for geometry fidelity,
 cache reuse, rendering, and process-lifecycle behavior.
 
+A test's COST is part of its design. A cold `python <model>.py` spends ~2.6 s
+importing the CAD kernel before it draws a box, so a file that runs one per
+assertion is mostly paying for imports: build a fixture the tests only READ once
+for the class and copy it in, keep each test's store, roots and freshness state
+private, and add a subprocess only where the subject IS the process. Model runs
+in tests are cold (`CADGEN_DAEMON=0`): routing them through a warm daemon was
+measured on CI and moved the kernel import into a daemon process rather than
+removing it (the runners are CPU-bound at four files), and cost more than it
+saved on Windows. `tests/python/support/warm_daemon.py` is for the opposite
+purpose — a test that deliberately exercises the WARM path, the production
+default, through a daemon private to its module — and only where the test's
+subject is what a warm worker does. Repeating a non-deterministic case N times
+is not coverage — if the underlying property can be pinned directly, pin it and
+run the case once.
+
+`scripts/test/test-python.sh --print-weights` prints what the slow files cost,
+the first thing to read when a run is slow.
+
+### CI
+
+`test.yml` is one job per thing that has to work, each conditional on the
+changes that can break it. `AGENTS.md` has the job table; this is why.
+
+**Jobs are split by condition, not by size.** Two tests belong in the same job
+unless they should run under different conditions — a different set of paths,
+or a different operating system. So the cadgen package suite is one job (one
+per platform), every skill suite plus the policy gates is one job, and there
+are no shards: each job parallelises internally (`unittest_files.py --jobs`,
+`node --test` concurrency) instead of across machines.
+
+**The conditions encode the dependency graph.** `packages/cadgen` is the engine
+everything downstream runs — the skills are thin entrypoints over its CLIs, the
+viewer is served by `cadgen.viewer`, the docs site documents its commands, the
+wheel packages it — so a cadgen change runs the cadgen, viewer, skills, docs and
+packaging jobs. `packages/cadgen-js` is bundled into the runtime cadgen
+executes and imported by the viewer and the docs hero, so it fans out the same
+way plus its own unit tests. A viewer-client change runs the viewer and
+packaging jobs; a docs change runs docs; a skills change runs skills and docs
+(the site mirrors the skills' frontmatter). `scripts/`, `.github/` and the
+version metadata can break any job, so they run all of them. The one direction
+that does NOT fan out is up: the viewer client, the skills and the docs cannot
+break cadgen, so touching them never runs the cadgen suite.
+
+**Only prose skips everything.** Root `*.md`, `notes/`, `models/`, `LICENSE`
+and issue templates are read by no test, so a pull request touching only those
+runs Version Check and nothing else. Markdown under `skills/` and
+`packages/cadgen/` is test input — `test_documented_commands` runs the command
+forms a SKILL.md teaches, `test_skill_requirements` reads a skill's prose for
+the extras it reaches, `test_package_boundaries` reads the package's own
+markdown — and is therefore not in that class.
+
+**Windows runs the cadgen suite and nothing else.** What has to be proven on
+Windows is the platform-facing code: paths, locks, subprocesses, file URLs, the
+daemon, the CAD Viewer backend — all of it in `packages/cadgen`, all of it
+covered by that one suite (four of the last five user-reported bugs were
+Windows-only bugs whose coverage existed and never ran there). Bundling,
+packaging, the policy gates and the skill suites are properties of the tree;
+the JS suites are properties of a browser or of Node; none of them has a
+Windows failure mode the cadgen suite does not already exercise, so none of
+them buys a Windows runner. Windows runs `--keep-going` so one round trip
+reports every failing suite.
+
+**Every job is a required check.** `main` requires all eight names; a job
+skipped by its own condition satisfies its check, which is what lets a prose
+pull request merge. Adding a job means adding its name to branch protection
+(the `gh api` command is in the runbook below); renaming one likewise.
+
+**The packaged runtime is built per job**, not built once and passed between
+them: `ensure_packaged_runtime` takes ~13 s, and an artifact would serialise
+every test job behind a bundle job for longer than that.
+
+**Flakes are fixed by mechanism or deleted — never skipped, retried, or tuned.**
+Classify first: a real bug, a retired behaviour, or a platform problem. Then fix
+the mechanism — wait on the event that says the thing happened, not on a clock;
+give a test its own daemon, socket and store; assert a condition rather than an
+elapsed time. A negative assertion behind a sleep ("it did not exit") is worse
+than useless, because a slow runner only ever makes it pass. If a deterministic
+unit test already pins the property, delete the racy end-to-end copy instead of
+stabilising it.
+
 Keep reusable manual edge-case and debugging models in `models/tests/`, with
 reproduction instructions. Despite its name, that folder is never CI input;
 see [its manual-validation policy](models/tests/README.md).
@@ -174,7 +269,8 @@ Canonical source directories are:
 - `skills/*` for skill instructions, references, and the thin entrypoints.
 - `apps/viewer/` for the CAD Viewer's React client. Its backend is
   `cadgen.viewer` (in `packages/cadgen`), and its built `dist/` ships inside the
-  cadgen wheel as `cadgen/_runtime/viewer`.
+  cadgen wheel as `cadgen/_runtime/viewer` — built at release time, never
+  committed.
 - `packages/*` for the shared runtimes. `packages/cadgen` is the published
   distribution; `packages/cadgen-js` is its JS build input, and the client's.
 
@@ -195,9 +291,11 @@ nothing else from outside its directory.
 - `scripts/test/test-python.sh` (or path-targeted `unittest`) for the engine;
   `tests/python/global/` holds the policy gates that enforce the design laws in
   `packages/cadgen/README.md`.
-- Editing anything the bundlers consume? `scripts/bundle/bundle.sh`, then commit
-  the regenerated `_runtime/node` and `_runtime/browser` (`_runtime/viewer` is
-  gitignored: the wheel build writes it, a checkout serves `apps/viewer/dist`).
+- Editing anything the bundlers consume? Run `scripts/bundle/bundle.sh` and
+  there is nothing to commit: all of `_runtime/` is gitignored, so a JS edit
+  shows up in the diff as the cadgen-js source it was made in and reaches a user
+  as the wheel the release builds. A rebundle used to add ~1.3 MB of
+  `snapshot-render.js` to every commit that touched the renderer.
 - `VERSION` at the repo root is canonical; release tooling stamps every
   duplicate. Never hand-edit versions under `packages/`.
 
@@ -228,7 +326,9 @@ Bundle the client first and install Playwright Chromium from the development
 requirements:
 
 ```bash
-scripts/test/test-viewer-browser.sh
+scripts/test/test-viewer-browser.sh --ci                # ~2 min: format, pick, kinematics, camera (the CI job)
+scripts/test/test-viewer-browser.sh                     # ~4 min: every gate
+scripts/test/test-viewer-browser.sh --only kinematics   # one gate while working on it
 ```
 
 Mesh exports (`@stl`/`@3mf`/`@glb`) and DXF previews run the checkout's live
@@ -308,7 +408,9 @@ that builds it.
 Never let a symlink reach the published tree (see Branch Layouts):
 `scripts/github-workflows/check-builds.sh` enforces symlink-free publishes.
 
-Production-output checks are intentionally centralized:
+Production-output checks are intentionally centralized. `--clean` removes the
+`_runtime` tree first, so a renamed stage or output cannot survive into the
+wheel; `--check` builds and then asserts every file each stage owes:
 
 ```bash
 scripts/bundle/bundle.sh --clean
@@ -351,14 +453,15 @@ PR stamps them with the bump, and `scripts/release/check-version.sh` asserts
 every pin equals `VERSION` — so a bare `cadgen` line or a stale pin fails the
 `Version Check` job.
 
-The `Test` workflow runs on pushes to `main` and PRs against it: it checks
-generated outputs against their sources with `scripts/bundle/bundle.sh --check`,
-runs `scripts/bundle/bundle.sh --clean`, checks the layout without rebuilding
-it, runs documentation checks, and runs the code tests against that generated
-output. The freshness check covers the generated outputs `main` commits as real
-files — cadgen's Node builders and snapshot runtime built from
-`packages/cadgen-js` — and version metadata derived from `VERSION`. The viewer
-client (`_runtime/viewer`) is gitignored and built only for the wheel.
+The `Test` workflow runs on pushes to `main` and PRs against it: it runs
+`scripts/bundle/bundle.sh --clean` to produce the runtime, checks the layout
+without rebuilding it, runs documentation checks, and runs the code tests
+against that generated output. `main` commits no generated runtime at all —
+cadgen's Node builders, its snapshot bundle and the Viewer client are built from
+`packages/cadgen-js` and `apps/viewer` on demand, and ship only inside the
+wheel. What IS committed and therefore checked for freshness is the version
+metadata derived from `VERSION`, asserted by the separate `Version Check` job
+(`scripts/release/check-version.sh` and `sync-version.mjs --check`).
 
 ## Releases
 
@@ -368,6 +471,29 @@ PyPI wheel and the GitHub Release all describe one commit. PRs that do touch
 release state must keep `VERSION`, the derived metadata and the pins valid; the
 `Test` workflow checks all three in a separate job so code tests still run when
 they are wrong.
+
+### Build artifacts live in the wheel, never in git
+
+`main` is source. Everything cadgen executes that is not Python — the Node
+builders and the snapshot browser bundle under `cadgen/_runtime/node` and
+`_runtime/browser`, and the CAD Viewer client under `_runtime/viewer` — is
+gitignored and produced by `scripts/bundle/bundle.sh`. Nothing built is ever
+committed: a rebundle used to add a megabyte of history per commit, and a
+committed bundle can drift from the source that claims to produce it.
+
+Where the built things live instead:
+
+- **CI** builds the runtime at the start of every `Test` run and tests against
+  that build (`bundle.sh --check` now means "the runtime builds and is
+  complete", not a diff against a committed copy).
+- **The wheel** is the release artifact. `Publish Release` bundles, builds the
+  wheel and sdist, asserts the wheel carries `_runtime/`, installs and
+  exercises it, keeps the distribution as a workflow artifact, uploads it to
+  PyPI (the install channel every skill pins against), and attaches that same
+  wheel and sdist to the GitHub Release as the provenance copy of what shipped.
+- **A checkout** builds its own: run `scripts/bundle/bundle.sh` once after
+  cloning (and after pulling changes to `packages/cadgen-js`); a missing runtime
+  fails with a message that says so.
 
 ### Shipping a release
 
@@ -396,15 +522,20 @@ is involved) and deletes the branch. The merged commit is THE release commit.
    tag (either spelling — `scripts/release/release-tags.sh` is the one place
    that knows `v0.5.0` and the bare `0.4.28` before it, and it compares
    versions, not tag strings), or equal to it with the tag missing.
-2. `bundle.sh --clean` (cadgen's committed runtime reproduced byte for byte
-   plus the gitignored viewer client), `check-builds.sh`, the docs and code
-   tests, the wheel-contents check, `python -m build`.
+2. `bundle.sh --clean` — which is where cadgen's whole runtime comes into
+   existence, Node builders, snapshot bundle and Viewer client alike, because
+   the release commit carries none of it — then `check-builds.sh`, the docs and
+   code tests, the wheel-contents check, `python -m build`, and an `unzip -l`
+   assertion that the wheel about to ship really holds `_runtime/node`,
+   `_runtime/browser` and `_runtime/viewer`.
 3. Install test: the built wheel into a fresh venv — `cadgen --help`, `cadgen
    viewer --help`, `cadgen doctor skills/cad-viewer` — then
    `scripts/test/test-installed.sh`; the distribution is uploaded as a workflow
    artifact (`cadgen-<version>`).
 4. **On `main` only:** PyPI upload (`skip-existing`, so a rerun is a no-op),
-   `Deploy Docs`, then the `v<VERSION>` tag and the GitHub Release. Nothing is
+   `Deploy Docs`, then the `v<VERSION>` tag and the GitHub Release, with the
+   wheel and sdist from that same artifact attached as release assets (PyPI
+   stays the install channel; the release page is the provenance copy). Nothing is
    committed or pushed to `main` after the release PR merge: the tag points at
    the source commit, and `git describe` on `main` is meaningful.
 
@@ -479,10 +610,14 @@ draft release unless `--publish` is passed.
 
 ### Repository settings
 
-`main` requires a PR with the `Version Check`, `Test (Linux)` and `Test
-(Windows)` status checks (strict: up to date with `main`), no force pushes and
-no deletions — the rules `develop` carried before the cutover. `Prepare
-Release`'s PR merges through the same gate via the API (no "allow auto-merge"
+`main` requires a PR with every `test.yml` job as a status check — `Version
+Check`, `cadgen (Linux)`, `cadgen (Windows)`, `cadgen-js`, `viewer`, `skills`,
+`docs`, `packaging` — strict (up to date with `main`), squash merges only, a
+linear history, no force pushes and no deletions. A job skipped by its path
+condition satisfies its check, so a prose pull request merges on Version Check
+alone. Adding or renaming a job means changing this list — the rules `develop`
+carried before the cutover, with the job names updated. `Prepare
+Release`'s PR merges through the same checks via the API (no "allow auto-merge"
 repository setting is needed). `build-test` needs no protection: the
 irreversible steps never run there. Keep the repository tag
 ruleset (extend its pattern to cover `v[0-9]*.[0-9]*.[0-9]*` beside the bare
@@ -525,10 +660,10 @@ done on 2026-09-04; `develop`'s protection is still in place until step 5.
    ```bash
    gh api --method PUT repos/earthtojake/text-to-cad/branches/main/protection \
      --input - <<'JSON'
-   {"required_status_checks":{"strict":true,"contexts":["Version Check","Test (Linux)","Test (Windows)"]},
+   {"required_status_checks":{"strict":true,"contexts":["Version Check","cadgen (Linux)","cadgen (Windows)","cadgen-js","viewer","skills","docs","packaging"]},
     "enforce_admins":false,
     "required_pull_request_reviews":{"dismiss_stale_reviews":false,"require_code_owner_reviews":false,"required_approving_review_count":0},
-    "restrictions":null,"allow_force_pushes":false,"allow_deletions":false,"required_linear_history":false}
+    "restrictions":null,"allow_force_pushes":false,"allow_deletions":false,"required_linear_history":true}
    JSON
    ```
 5. Delete the retired branches once nothing references them:
@@ -576,9 +711,10 @@ Use path-targeted validation. Common checks from the repo root:
 ```bash
 scripts/test/test.sh
 scripts/release/check-version.sh
-scripts/bundle/bundle.sh --check          # generated runtime freshness
+scripts/bundle/bundle.sh --check          # the packaged runtime builds, whole
 npm --prefix apps/viewer run test        # the Viewer's CLIENT half only
 scripts/test/test-python.sh              # includes the Viewer's BACKEND suite
+scripts/test/test-python.sh --select viewer   # the Viewer's backend alone (~11 s)
 npm --prefix apps/docs run check
 ```
 

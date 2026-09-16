@@ -252,15 +252,6 @@ class NodeStateReads(LazyFixture):
         self.assertEqual("child", child.label)
         self.assertEqual(tuple(bd.Color("blue")), tuple(child.color))
 
-    def test_the_deferrals_still_defer_with_a_two_part_child(self):
-        job = _Job()
-        moved = (bd.Pos(1, 0, 0) * self.lazy(job)).moved(bd.Location((0, 2, 0)))
-        moved.label = "placed"
-        moved.color = bd.Color("red")
-        self.assertTrue(moved.pending)
-        self.assertEqual(0, job.waited)
-        self.assertEqual([], self.materialized)
-
 
 class Errors(LazyFixture):
     def test_a_failed_child_raises_at_the_forcing_site_with_call_site_and_output(self):

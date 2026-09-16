@@ -10,8 +10,10 @@ import another skill's code (AGENTS.md). It was extracted verbatim from the CAD 
 snapshot CLI, which remains its largest caller and keeps every STEP-specific resolver.
 
 The one thing the core cannot know is where the browser runtime (render.html and
-snapshot-render.js) lives: each skill bundles its own copy. So `runtime_dir` is passed in
-by the caller rather than derived here.
+snapshot-render.js) lives: a caller may point at a directory of its own. So `runtime_dir`
+is passed in rather than derived here, and it is validated once, when the renderer starts,
+by :func:`cadgen.assets.require_browser_runtime` -- an absent bundle is a message naming
+how to produce it rather than a 404 inside a headless page.
 """
 
 from __future__ import annotations
@@ -33,6 +35,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
+from cadgen.assets import require_browser_runtime
 from cadgen.coordination import PHASE_RENDER, resolve as resolve_progress
 from cadgen.results import SnapshotFile, SnapshotResult, SnapshotTimings
 from cadgen._internal.atomic_replace import write_bytes_atomic
@@ -1500,8 +1503,9 @@ async def with_snapshot_timeout(awaitable: Any, timeout_seconds: object, label: 
         raise SnapshotError(f"{label} timed out after {timeout_seconds}s") from exc
 class BatchSnapshotRenderer:
     def __init__(self, runtime_dir: Path) -> None:
-        # Each skill bundles its own render.html/snapshot-render.js, so the driver is told
-        # where they are rather than locating them relative to itself.
+        # The driver is told where render.html/snapshot-render.js are rather than locating
+        # them relative to itself; start() is where their absence is reported, so that
+        # constructing a renderer stays free of filesystem work.
         self.runtime_dir = Path(runtime_dir)
         self.playwright = None
         self.browser = None
@@ -1514,6 +1518,9 @@ class BatchSnapshotRenderer:
     async def start(self) -> None:
         if self.started:
             return
+        # Before Playwright, before the asset server: a missing bundle otherwise surfaced
+        # as a blank page that had 404'd on its own script.
+        require_browser_runtime(self.runtime_dir)
         try:
             try:
                 self.asset_server = SnapshotAssetServer(lambda: self.active_root_path)

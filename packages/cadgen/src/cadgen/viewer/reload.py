@@ -39,6 +39,15 @@ HOW IT DECIDES
     process started, so an edit that is undone before the restart fires simply
     stops being pending.
 
+    The cheap guard is skipped ONCE A RESTART IS PENDING. It exists to keep the
+    idle path free, and it cannot be trusted to report a tree settling back:
+    Windows stamps a write from the ~15.6ms interrupt clock, so an edit and the
+    edit that undoes it can land in one tick with the same mtime and the same
+    size, and the signature is then identical across a change it must not hide.
+    Once something is pending we are already committed to restarting, so the
+    handful of ticks before it fires read the content outright and correctness
+    costs one walk rather than an unstoppable restart into code nobody wrote.
+
     Then two gates. Edits must go QUIET (every further change pushes the
     deadline out) so a rebase that touches forty files restarts once, and the
     server must be idle, so the restart never kills a compile the viewer is
@@ -280,7 +289,10 @@ class SourceReloader:
         The test seam: drive this directly and nothing here needs a thread.
         """
         signature = source_stat_signature(self._base)
-        if signature != self._stat:
+        # `or self.pending`: while a restart is queued the cheap guard is not
+        # allowed to hide the tree settling back to the running code -- see the
+        # module docstring on Windows's 15.6ms write clock.
+        if signature != self._stat or self.pending:
             self._stat = signature
             content = source_content_digest(self._base)
             if content != self._seen:

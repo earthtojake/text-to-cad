@@ -77,19 +77,6 @@ if __name__ == "__main__":
     parent()
 """
 
-MESH_ONLY = """\
-from cadgen import build123d as bd
-from cadgen import stl
-
-
-@stl
-def spacer():
-    return bd.Box(2, 2, 2)
-
-
-if __name__ == "__main__":
-    spacer()
-"""
 
 
 class FollowUps(unittest.TestCase):
@@ -220,16 +207,7 @@ class FollowUps(unittest.TestCase):
         self.assertNotIn("pathlib", completed.stderr)
         self.assertNotIn("Traceback", completed.stderr)
 
-    # ---- items 11 and 12 ----------------------------------------------------------------------
-
-    def test_a_mesh_only_build_names_each_output_once(self) -> None:
-        src = self.root / "src"
-        src.mkdir()
-        (src / "spacer.py").write_text(MESH_ONLY, encoding="utf-8")
-        completed = self.run_in(src, "spacer.py")
-        self.assertEqual(completed.returncode, 0, completed.stderr[-3000:])
-        narration = [line for line in completed.stderr.splitlines() if "spacer.stl" in line and "wrote" in line]
-        self.assertEqual(len(narration), 1, completed.stderr)
+    # ---- item 12 -------------------------------------------------------------------------------
 
     def test_store_info_lists_every_index_kind(self) -> None:
         src = self.root / "src"

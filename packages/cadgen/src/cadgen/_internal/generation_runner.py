@@ -124,7 +124,15 @@ def _load_generator_module(script_path: Path) -> object:
         importlib.import_module(package)
         module.__package__ = package
     sys.modules[module_name] = module
-    exec(source_code, module.__dict__)
+    # What the module top executes is what its declarations were evaluated from;
+    # the metadata reader reuses this load only while every one of those files
+    # still holds the bytes it had now (cadgen.authoring.import_closure_current).
+    from cadgen._internal.source_hash import record_first_party_execution
+    from cadgen.authoring import record_import_closure
+
+    with record_first_party_execution() as executed_files:
+        exec(source_code, module.__dict__)
+    record_import_closure(resolved_script_path, executed_files)
 
     return module
 

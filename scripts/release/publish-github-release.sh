@@ -9,6 +9,7 @@ source "$SCRIPT_DIR/release-tags.sh"
 DRY_RUN=0
 DRAFT=1
 TARGET_REF="HEAD"
+ASSETS=()
 
 usage() {
   cat <<'EOF'
@@ -20,10 +21,14 @@ Creates the immutable release identity for the current repo version:
 1. verifies VERSION contains a valid canonical version
 2. verifies a new version is greater than the latest local release tag
 3. creates the release tag for VERSION (`v<VERSION>`) and pushes it to origin
-4. creates a GitHub Release for that tag with generated notes
+4. creates a GitHub Release for that tag with generated notes, and attaches
+   the distribution files given with --asset (the wheel and sdist that went to
+   PyPI), so the release page carries the exact bytes that shipped
 
 Options:
   --target REF  Commit/ref to tag. Defaults to HEAD.
+  --asset PATH  A file to attach to the GitHub Release; repeatable. A release
+                that already exists gains (or replaces) the same files.
   --dry-run     Print the planned tag/release actions without writing.
   --publish     Publish the GitHub Release immediately; the default is a draft.
   -h, --help    Show this help.
@@ -47,6 +52,12 @@ while [ "$#" -gt 0 ]; do
     --target)
       [ "$#" -ge 2 ] || die "--target requires a value"
       TARGET_REF="$2"
+      shift
+      ;;
+    --asset)
+      [ "$#" -ge 2 ] || die "--asset requires a value"
+      [ -f "$2" ] || die "--asset: no such file: $2"
+      ASSETS+=("$2")
       shift
       ;;
     --dry-run)
@@ -109,6 +120,9 @@ if [ "$DRY_RUN" -eq 1 ]; then
   else
     echo "Would create published GitHub Release: $tag_name"
   fi
+  for asset in ${ASSETS[@]+"${ASSETS[@]}"}; do
+    echo "Would attach: $asset ($(wc -c < "$asset" | tr -d ' ') bytes)"
+  done
   exit 0
 fi
 
@@ -116,6 +130,12 @@ require_command gh
 
 if gh release view "$tag_name" >/dev/null 2>&1; then
   echo "GitHub Release already exists: $tag_name"
+  # A resumed run still owes the release its files: attach what is missing and
+  # replace what differs, so the page always carries the bytes that shipped.
+  if [ "${#ASSETS[@]}" -gt 0 ]; then
+    gh release upload "$tag_name" "${ASSETS[@]}" --clobber
+    echo "Attached ${#ASSETS[@]} asset(s) to GitHub Release: $tag_name"
+  fi
   exit 0
 fi
 
@@ -123,5 +143,5 @@ release_args=(release create "$tag_name" --verify-tag --generate-notes --title "
 if [ "$DRAFT" -eq 1 ]; then
   release_args+=(--draft)
 fi
-gh "${release_args[@]}"
-echo "Created GitHub Release: $tag_name"
+gh "${release_args[@]}" ${ASSETS[@]+"${ASSETS[@]}"}
+echo "Created GitHub Release: $tag_name (${#ASSETS[@]} asset(s) attached)"

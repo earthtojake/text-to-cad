@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { availableParallelism } from "node:os";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -57,12 +58,21 @@ const batches = [
   },
 ];
 
+// Each test file is its own process, and most of a file's life here is process
+// startup and reading fixtures, not CPU. node:test's default is
+// availableParallelism() - 1, which is ONE on the two-core runner CI gets, so every
+// file's startup is paid end to end. The floor of four overlaps those waits even
+// where there are not four cores to run them on.
+const testConcurrency = Math.max(4, availableParallelism());
+
 let status = 0;
 for (const batch of batches) {
   if (!batch.tests.length) {
     continue;
   }
-  const result = spawnSync(process.execPath, [...batch.nodeArgs, "--test", ...batch.tests], {
+  const result = spawnSync(process.execPath, [
+    ...batch.nodeArgs, "--test", `--test-concurrency=${testConcurrency}`, ...batch.tests,
+  ], {
     cwd: packageRoot,
     env: process.env,
     stdio: "inherit",

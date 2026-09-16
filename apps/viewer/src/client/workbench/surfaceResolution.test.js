@@ -76,14 +76,27 @@ test("pending resolution polls the same request and subscriber token", async (t)
   assert.deepEqual(bodies[1].components, bodies[0].components);
 });
 
+// Settle on the events the resolver actually produces, never on a stopwatch. The
+// abort used to be timed with `setTimeout(10)` and the cancel POST read after
+// `setTimeout(0)`, which makes the assertion depend on how fast the runner drains
+// its loop: a slow box aborts before the first poll is even in flight, and a
+// loaded one reads `calls` before the cancel lands.
 test("abort detaches only the known surface subscriber", async (t) => {
   const original = globalThis.fetch;
   t.after(() => { globalThis.fetch = original; });
   const calls = [];
   const controller = new AbortController();
+  let sawFirstPoll;
+  let sawCancel;
+  const firstPoll = new Promise((resolve) => { sawFirstPoll = resolve; });
+  const cancelled = new Promise((resolve) => { sawCancel = resolve; });
   globalThis.fetch = async (url, options) => {
     calls.push({ url, body: JSON.parse(options.body) });
-    if (url.endsWith("/cancel")) return new Response(null, { status: 204 });
+    if (url.endsWith("/cancel")) {
+      sawCancel();
+      return new Response(null, { status: 204 });
+    }
+    sawFirstPoll();
     return json({
       viewId: VIEW, job: "job-cancel",
       components: { part: { surfaceInput: D, state: "pending", job: "job-cancel" } },
@@ -92,10 +105,12 @@ test("abort detaches only the known surface subscriber", async (t) => {
   const pending = resolveSurfaceComponents(descriptor, [{ cid: "part", surfaceInput: D }], {
     signal: controller.signal,
   });
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  // The job id only exists once the first poll has answered; abort before that and
+  // there is nothing to detach.
+  await firstPoll;
   controller.abort();
   await assert.rejects(pending, (error) => error.name === "AbortError");
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await cancelled;
   assert.deepEqual(calls.at(-1), {
     url: "/__cad/surfaces/cancel", body: { job: "job-cancel" },
   });

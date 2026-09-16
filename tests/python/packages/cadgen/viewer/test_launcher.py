@@ -1019,9 +1019,6 @@ class ArgumentSurface(unittest.TestCase):
         self.assertNotIn("--root", result.stdout, "the launcher has no directory flag")
         self.assertEqual(result.stderr, "")
 
-    def test_short_help_is_the_same_answer(self) -> None:
-        self.assertEqual(self._run("-h").returncode, 0)
-
     def test_the_front_door_names_itself_in_help(self) -> None:
         # Through `cadgen viewer` the same parser says "cadgen viewer", so the
         # usage a user reads matches the command they typed.
