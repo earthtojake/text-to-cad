@@ -9,7 +9,26 @@ def box(x,y,z,at=(0,0,0)):
     return bd.Pos(*at) * bd.Box(x,y,z,align=(bd.Align.CENTER,bd.Align.CENTER,bd.Align.MIN))
 
 def tray(kind):
-    if kind == 'sheet':
+    if kind == 'injection':
+        from math import tan, radians
+        slope=tan(radians(1))
+        floor=2.4
+        # Both mold sides release along Z; nominal base wall 2.4 mm tapers.
+        outer=bd.loft([bd.Plane.XY*bd.Rectangle(80,60),
+                       bd.Plane.XY.offset(25)*bd.Rectangle(80-50*slope,60-50*slope)])
+        cavity=bd.loft([bd.Plane.XY.offset(floor)*bd.Rectangle(75.2,64),
+                        bd.Plane.XY.offset(26)*bd.Rectangle(75.2+2*(26-floor)*slope,64)])
+        part=outer-cavity
+        for sign in (-1,1):
+            for y in (-24,24):
+                # Gusset side faces taper 1 degree per side; tip overlaps the wall.
+                x=sign*37.6
+                profile=bd.Plane.XZ*bd.Polygon((x+sign*.15,floor),(x-sign*8,floor),(x+sign*.15,floor+8),align=None)
+                rib=bd.Pos(0,y,0)*bd.extrude(profile,amount=.6,both=True)
+                taper=bd.loft([bd.Plane.XY.offset(floor)*bd.Rectangle(82,1.2),
+                               bd.Plane.XY.offset(floor+8)*bd.Rectangle(82,1.2-16*slope)])
+                part += rib & (bd.Pos(0,y,0)*taper)
+    elif kind == 'sheet':
         t,r=1.5,2.0
         c=WIDTH/2-t-r
         part=box(2*c,DEPTH,t)
@@ -39,7 +58,11 @@ def tray(kind):
                     rib=bd.extrude(profile,amount=2.4,both=True)
                     part+=bd.Pos(0,y,0)*rib
     for x,y in HOLE_CENTERS:
-        part-=bd.Pos(x,y,-1)*bd.Cylinder(HOLE_RADIUS,8,align=(bd.Align.CENTER,bd.Align.CENTER,bd.Align.MIN))
+        if kind == 'injection':
+            # Fixed Ø4.5 at mounting datum, 1-degree draft opens toward +Z.
+            part-=bd.Pos(x,y,0)*bd.Cone(HOLE_RADIUS,HOLE_RADIUS+8*slope,8,align=(bd.Align.CENTER,bd.Align.CENTER,bd.Align.MIN))
+        else:
+            part-=bd.Pos(x,y,-1)*bd.Cylinder(HOLE_RADIUS,8,align=(bd.Align.CENTER,bd.Align.CENTER,bd.Align.MIN))
     part.label=f'{kind}_mounting_tray'
     assert part.is_valid and len(part.solids())==1
     return part

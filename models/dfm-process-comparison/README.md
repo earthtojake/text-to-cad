@@ -1,11 +1,10 @@
-# One mounting tray, three manufacturing processes
+# One mounting tray, four manufacturing processes
 
 Controlled design exercise using the existing `dfam-check` skill and the new
-`sheet-metal-dfm` and `cnc-dfm` guided reviews. These are authored redesigns,
-not outputs from an automatic optimization solver. Injection molding is not
-part of this three-process experiment.
+`sheet-metal-dfm`, `cnc-dfm`, and `injection-molding-dfm` guided reviews. These are authored redesigns,
+not outputs from an automatic optimization solver.
 
-Every variant retains an 80 × 60 × 25 mm envelope and four Ø4.5 mm floor holes
+Every variant retains an 80 × 60 × 25 mm envelope and four holes that are Ø4.5 mm at the underside datum
 at (±25, ±18) mm, with the underside at Z=0. Interior space changes; equal load
 capacity is not established. Materials are illustrative process assumptions,
 not measured material assignments: PLA, 5052-H32 sheet, and 6061-T6 billet.
@@ -25,7 +24,7 @@ claim cost or cycle-time optimization.
 
 ## Checks performed
 
-- Reimported all four STEP exports: each is valid, one solid, correct envelope.
+- Reimported all five STEP exports: each is valid, one solid, correct envelope.
 - Intersected exported solids with probes to measure floor/wall thickness.
 - Confirmed four hole centers and diameters from actual circular STEP edges.
 - Confirmed sheet bend radii and CNC root radius from exported edges.
@@ -67,8 +66,28 @@ CAD exports and scratch images are regenerable and ignored. The share image is
 
 ## Caption for Jake
 
-Same mounting interface, three manufacturing approaches: FDM gets thicker walls
+Same mounting interface, four manufacturing approaches: FDM gets thicker walls
 and gussets; sheet metal becomes uniform stock with two bends; CNC gets thicker
-walls and optional rounded roots. The existing DfAM checker measured the print
+walls and optional rounded roots; injection molding adds draft and thin ribs. The existing DfAM checker measured the print
 version's minimum wall thickness increasing from 0.8 to 2.4 mm. Geometry checked;
 strength, tooling, and production performance still need validation.
+
+## Injection-molding fourth process
+
+Concept assumes an untextured, unfilled thermoplastic (resin grade unspecified),
+Z pull and parting near the bottom perimeter. These are design assumptions, not
+supplier-approved limits. The floor is 2.4 mm; the two inner and two outer tall
+wall surfaces have 1° draft verified from STEP surface normals. Opposing draft
+makes walls taper (about 2.36 mm above the floor to 1.57 mm at the rim), so this
+is not a uniform-wall claim. Four triangular ribs have nominal 1.2 mm feet and
+1° tapered side faces. The holes open upward with 1° draft: Ø4.5 at Z=0, about
+Ø4.584 at the floor top. Mounting centers and the underside datum are preserved.
+
+Geometry assertions check wall draft, sampled rib widths, floor thickness,
+envelope and datum hole diameters. The STEP validator checks solid validity.
+The thin ribs illustrate reducing bulk at junctions compared with the FDM
+gussets; no sink or strength performance was simulated. Rib/root fillets are
+not modeled yet and need review alongside stress and local wall transitions.
+Toolmaker review is still required for resin, texture, shrinkage, parting and
+shutoffs, gate/vent locations, cooling, ejection and the complete withdrawal
+path. No undercut-free verdict or mold-flow result is claimed.
