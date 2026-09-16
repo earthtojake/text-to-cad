@@ -9,6 +9,7 @@ export const FILE_SHEET_SECTION_IDS = Object.freeze({
   STEP_ANIMATION: "animation",
   ROBOT_SDF: "sdf",
   ROBOT_MOTION: "motion",
+  ROBOT_COMPONENTS: "components",
   ROBOT_JOINTS: "joints",
   DXF_MATERIAL: "material",
   DXF_BENDS: "bends",
@@ -49,6 +50,7 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
   }
   const isSdf = options.isSdf === true || normalizedKind === "sdf";
   const showJoints = options.showJoints !== false;
+  const showRobotComponents = options.hasRobotComponents === true;
   switch (normalizedKind) {
     // A drawing HAS controls of its own. Thickness (and, where the drawing declares
     // them, bends) are render-time parameters applied to the cached prism rather than bake
@@ -86,10 +88,13 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
       // selectable in the viewport. The Tree panel is 556 lines inside StepFileSheet
       // reading 20 props and 33 derived locals; sharing it means extracting it, and a
       // second tree implementation for robots is exactly the parallel stack this effort
-      // exists to remove.
+      // exists to remove. Components is NOT that tree: it is the flat inventory of
+      // named objects inside the linked meshes, and it shares the viewport picker and
+      // the Reference inspector rather than the link hierarchy.
       return [
         ...(isSdf ? [FILE_SHEET_SECTION_IDS.ROBOT_SDF] : []),
         ...(options.motionEnabled ? [FILE_SHEET_SECTION_IDS.ROBOT_MOTION] : []),
+        ...(showRobotComponents ? [FILE_SHEET_SECTION_IDS.ROBOT_COMPONENTS, FILE_SHEET_SECTION_IDS.STEP_REFERENCE] : []),
         ...(showJoints ? [FILE_SHEET_SECTION_IDS.ROBOT_JOINTS] : []),
         FILE_SHEET_SECTION_IDS.DISPLAY
       ];
