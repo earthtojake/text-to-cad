@@ -394,6 +394,28 @@ jobs:
   #
   # `needs` + always() is what makes that work -- a skipped dependency is not a failed one,
   # while a failed or cancelled dependency is named below and fails the gate.
+  # The Viewer's behaviour in a real browser: opens one file per load path, picks a
+  # face, drives a joint, switches mode (`scripts/test/test-viewer-browser.sh --ci`).
+  # The pixel-sensitive gates (picking, scene) stay manual; viewer-e2e.mjs says why.
+  # Not yet a required check: it reports beside the gates until a few real-runner
+  # timings are in, then joins `Test (Linux)`'s needs.
+  viewer-browser:
+    name: Viewer browser smoke
+    needs: changes
+    if: needs.changes.outputs.code == 'true' || needs.changes.outputs.viewer == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          npm: packages/cadgen-js apps/viewer
+      - name: Bundle production outputs
+        run: scripts/bundle/bundle.sh
+      - name: Run the browser smoke gate
+        run: scripts/test/test-viewer-browser.sh --ci
+
   test-linux:
     name: Test (Linux)
     needs: [changes, hygiene, js, docs, policy, linux-python, linux-viewer-backend]
