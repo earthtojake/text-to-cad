@@ -14,6 +14,14 @@ which `-m unittest` would run silently.
 
     python scripts/test/unittest_files.py --top <repo root> [--jobs N] <test file>...
 
+``--shard I/N`` keeps only this shard's share of the files, so N machines can run one
+suite between them. The split is a longest-processing-time packing over the per-file
+costs in ``scripts/test/python-test-weights.tsv`` -- a hint table, not an input to
+correctness: an unlisted or stale file only lands in a shard that finishes sooner than
+its siblings. Every file lands in exactly one shard whatever the table says, and an
+empty shard is an error rather than a green run of nothing.
+``--print-weights`` prints this run's measured costs, which is how that table is rebuilt.
+
 With ``--jobs N`` greater than one, each FILE runs in its own interpreter, N at a time,
 with its own fresh store and private daemon endpoint/auth state. Its daemon is retired
 before the temporary directories are removed, so modules cannot see one another's
@@ -137,7 +145,8 @@ def _counts(output: str) -> dict[str, int]:
     return counts
 
 
-def _run_one_file(path: str, top: str, verbose: bool) -> tuple[str, int, str]:
+def _run_one_file(path: str, top: str, verbose: bool) -> tuple[str, int, str, float]:
+    started = time.perf_counter()
     store = tempfile.mkdtemp(prefix="cadgen-test-store.")
     # Stores alone do not isolate lazy artifact jobs: a sibling test can stop
     # the shared daemon while this module is reading its package. Keep auth,
@@ -172,19 +181,65 @@ def _run_one_file(path: str, top: str, verbose: bool) -> tuple[str, int, str]:
         finally:
             shutil.rmtree(store, ignore_errors=True)
             shutil.rmtree(state, ignore_errors=True)
-    return path, completed.returncode, (completed.stdout or "") + (completed.stderr or "")
+    return path, completed.returncode, (completed.stdout or "") + (completed.stderr or ""), time.perf_counter() - started
 
 
-def run_in_parallel(files: list[str], top: str, jobs: int, verbose: bool) -> int:
+WEIGHTS = os.path.join("scripts", "test", "python-test-weights.tsv")
+DEFAULT_WEIGHT = 1.0
+
+
+def read_weights(top: str) -> dict[str, float]:
+    """The cost hints, keyed by path relative to --top. A missing table is not an error."""
+    weights: dict[str, float] = {}
+    try:
+        with open(os.path.join(top, WEIGHTS), encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line or line.startswith("#") or "\t" not in line:
+                    continue
+                path, _, seconds = line.partition("\t")
+                try:
+                    weights[os.path.normpath(path)] = float(seconds)
+                except ValueError:
+                    continue
+    except OSError:
+        pass
+    return weights
+
+
+def shard_files(files: list[str], top: str, index: int, count: int) -> list[str]:
+    """This shard's files: longest first into the emptiest bin, ties broken by path.
+
+    Deterministic, so N runs of `--shard i/N` between them run every file exactly once
+    however the weights drift.
+    """
+    weights = read_weights(top)
+
+    def weight(path: str) -> float:
+        return weights.get(os.path.normpath(os.path.relpath(os.path.abspath(path), top)), DEFAULT_WEIGHT)
+
+    loads = [0.0] * count
+    picked: list[str] = []
+    for path in sorted(files, key=lambda path: (-weight(path), path)):
+        bin_index = min(range(count), key=lambda i: (loads[i], i))
+        if bin_index == index - 1:
+            picked.append(path)
+        loads[bin_index] += weight(path)
+    return sorted(picked)
+
+
+def run_in_parallel(files: list[str], top: str, jobs: int, verbose: bool, print_weights: bool = False) -> int:
     top = os.path.realpath(top)
     started = time.perf_counter()
     totals = {"tests": 0, "failures": 0, "errors": 0, "skipped": 0, "expected failures": 0, "unexpected successes": 0}
+    durations: list[tuple[str, float]] = []
     failed_modules: list[str] = []
     unparsed: list[str] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
         futures = [pool.submit(_run_one_file, path, top, verbose) for path in files]
         for future in concurrent.futures.as_completed(futures):
-            path, code, output = future.result()
+            path, code, output, seconds = future.result()
+            durations.append((path, seconds))
             counts = _counts(output)
             if not _RAN.search(output):
                 # The interpreter died before unittest could summarise (a crash, a
@@ -201,6 +256,13 @@ def run_in_parallel(files: list[str], top: str, jobs: int, verbose: bool) -> int
             if body:
                 sys.stderr.write(body + "\n")
     elapsed = time.perf_counter() - started
+    if print_weights:
+        # stdout is free here: every line of a run goes to stderr. One `WEIGHT` line per
+        # file, for whoever is rebuilding python-test-weights.tsv.
+        for name, seconds in sorted(durations, key=lambda entry: (-entry[1], entry[0])):
+            if seconds >= 5.0:
+                sys.stdout.write(f"WEIGHT\t{os.path.relpath(os.path.abspath(name), top)}\t{seconds:.0f}\n")
+        sys.stdout.flush()
     sys.stderr.write(f"\n{'-' * 70}\nRan {totals['tests']} tests in {elapsed:.3f}s\n\n")
     verdict_parts = []
     for key in ("failures", "errors", "skipped", "expected failures", "unexpected successes"):
@@ -227,12 +289,33 @@ def main(argv: list[str] | None = None) -> int:
         default=1,
         help="run each test file in its own interpreter, this many at a time (default 1: one process)",
     )
+    parser.add_argument(
+        "--shard",
+        metavar="I/N",
+        help="run only shard I of N (1-based), packed by scripts/test/python-test-weights.tsv",
+    )
+    parser.add_argument(
+        "--print-weights",
+        action="store_true",
+        help="print one `WEIGHT<TAB>path<TAB>seconds` line per slow file on stdout",
+    )
     parser.add_argument("files", nargs="+", metavar="TEST_FILE")
     args = parser.parse_args(argv)
 
-    if args.jobs > 1 and len(args.files) > 1:
-        return run_in_parallel(args.files, args.top, args.jobs, args.verbose)
-    return run_in_process(args.files, args.top, args.verbose)
+    files = args.files
+    if args.shard:
+        index, _, count = args.shard.partition("/")
+        if not count.isdigit() or not index.isdigit() or not 1 <= int(index) <= int(count):
+            raise SystemExit(f"unittest_files: --shard wants I/N with 1 <= I <= N, not {args.shard!r}")
+        files = shard_files(files, os.path.realpath(args.top), int(index), int(count))
+        if not files:
+            # Fewer files than shards. Silence would report a green shard that ran
+            # nothing, which is the failure this runner exists to make impossible.
+            raise SystemExit(f"unittest_files: shard {args.shard} of {len(args.files)} files is empty")
+
+    if args.jobs > 1 and len(files) > 1:
+        return run_in_parallel(files, args.top, args.jobs, args.verbose, args.print_weights)
+    return run_in_process(files, args.top, args.verbose)
 
 
 if __name__ == "__main__":
