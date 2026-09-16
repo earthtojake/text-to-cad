@@ -327,7 +327,15 @@ class DaemonRouting(unittest.TestCase):
         self.assertIn("status", frame, frame)
         self.assertIn("spares", frame["status"])
         self.assertIn("imports", frame["status"])
-        time.sleep(0.5)
+        # Half a second of sleep was standing in for "it did not exit", which a slow
+        # runner only ever makes MORE likely to pass. Asking it to serve again is the
+        # positive form of the same question and a dead daemon cannot answer it.
+        again = transport.connect(self.address, _authkey(self.address))
+        try:
+            again.send(json.dumps({"kind": "status", "token": "not-this-daemon"}).encode("utf-8"))
+            self.assertTrue(again.recv(30.0), "the daemon stopped answering after a foreign token")
+        finally:
+            again.close()
         self.assertIsNone(self.server.poll(), "a status request with a foreign token stopped the daemon")
 
     def test_a_second_daemon_on_the_same_address_stands_down(self):

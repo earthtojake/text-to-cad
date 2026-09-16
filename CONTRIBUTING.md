@@ -144,6 +144,23 @@ spelling or UI copy when observable behavior already covers the requirement.
 Real kernel and browser tests remain necessary for geometry fidelity,
 cache reuse, rendering, and process-lifecycle behavior.
 
+A test's COST is part of its design. A cold `python <model>.py` spends ~2.6 s
+importing the CAD kernel before it draws a box, so a file that runs one per
+assertion is mostly paying for imports: build a fixture the tests only READ once
+for the class and copy it in, keep each test's store, roots and freshness state
+private, and add a subprocess only where the subject IS the process. Repeating a
+non-deterministic case N times is not coverage — if the underlying property can
+be pinned directly, pin it and run the case once.
+
+`scripts/test/python-test-weights.tsv` records what the slow files cost, and the
+CI shards are packed from it. It is a hint: a file missing from it, or listed
+with a stale number, only lands in a shard that finishes sooner than its
+siblings. Regenerate it after a change that moves the balance:
+
+```bash
+scripts/test/test-python.sh --select cadgen --print-weights > tmp/weights.txt
+```
+
 Keep reusable manual edge-case and debugging models in `models/tests/`, with
 reproduction instructions. Despite its name, that folder is never CI input;
 see [its manual-validation policy](models/tests/README.md).
@@ -530,7 +547,11 @@ draft release unless `--publish` is passed.
 
 `main` requires a PR with the `Version Check`, `Test (Linux)` and `Test
 (Windows)` status checks (strict: up to date with `main`), no force pushes and
-no deletions — the rules `develop` carried before the cutover. `Prepare
+no deletions. Those two `Test` jobs are GATES: the work runs in jobs beneath
+them (three Python shards per platform, JS, docs, policy, packaging), and the
+gate fails if any of them failed and passes when a diff skipped them all. Adding
+a shard or renaming a job below the gate needs no branch-protection change;
+renaming a gate does — the rules `develop` carried before the cutover. `Prepare
 Release`'s PR merges through the same gate via the API (no "allow auto-merge"
 repository setting is needed). `build-test` needs no protection: the
 irreversible steps never run there. Keep the repository tag
@@ -628,6 +649,7 @@ scripts/release/check-version.sh
 scripts/bundle/bundle.sh --check          # the packaged runtime builds, whole
 npm --prefix apps/viewer run test        # the Viewer's CLIENT half only
 scripts/test/test-python.sh              # includes the Viewer's BACKEND suite
+scripts/test/test-python.sh --select viewer   # the Viewer's backend alone (~11 s)
 npm --prefix apps/docs run check
 ```
 

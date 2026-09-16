@@ -190,14 +190,24 @@ when touching shared surfaces or before handoff:
 - Code tests: `scripts/test/test.sh`
   - In GitHub Actions, `test.yml` (PRs to and pushes of `main`) checks the
     canonical release version and the skill pins in a separate job so code
-    tests still run when version metadata is wrong; its test job bundles the
-    production outputs and runs docs, code and installed-mode tests against
-    that bundle. `Publish Release` repeats
-    those checks on the release commit before the wheel ships. GitHub branch
-    settings should require a PR for `main`.
+    tests still run when version metadata is wrong. Its `changes` job classifies
+    the diff and the rest of the workflow runs only what that diff can break:
+    prose (root `*.md`, `notes/`, `models/`, `LICENSE`) reaches no test, while
+    markdown under `skills/` and `packages/cadgen/` IS test input and is not
+    prose; `apps/viewer/**` alone runs the Viewer's backend suite and the
+    policy gates. `Test (Linux)` and `Test (Windows)` stay as the two required
+    checks and are gates over the jobs that did the work, so a docs-only pull
+    request still reports them, in seconds. `Publish Release` repeats these
+    checks on the release commit before the wheel ships. GitHub branch settings
+    should require a PR for `main`.
 - Focused test runners: `scripts/test/test-js.sh`,
   `scripts/test/test-docs.sh`, `scripts/test/test-python.sh`,
   `scripts/test/test-global.sh`
+- `test-python.sh` takes `--select cadgen|viewer|skills|all` and `--shard I/N`.
+  The cadgen package suite is ~92% of the Python wall clock, so CI runs it as
+  three shards per platform; `scripts/test/python-test-weights.tsv` balances
+  them and is a HINT (regenerate with `--print-weights`), never an input to
+  which tests run.
 - Canonical release version: `scripts/release/check-version.sh`
 - Packaged runtime builds and is complete: `scripts/bundle/bundle.sh --check`
 - CAD Viewer or `packages/cadgen-js`:
