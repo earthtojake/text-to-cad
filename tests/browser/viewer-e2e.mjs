@@ -1115,7 +1115,7 @@ const gates = [
 const selected = args.only ? gates.filter(([name]) => name === args.only) : gates;
 if (!selected.length) fail(`unknown --only gate: ${args.only} (${gates.map(([name]) => name).join(", ")})`);
 try {
-  for (const [, gate] of selected) await gate();
+  for (const [name, gate] of selected) { const t0 = Date.now(); await gate(); console.log(`  [gate ${name}] ${((Date.now()-t0)/1000).toFixed(1)}s`); }
 } finally {
   await browser.close();
 }

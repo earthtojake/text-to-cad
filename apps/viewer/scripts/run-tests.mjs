@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { availableParallelism } from "node:os";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -57,12 +58,20 @@ const batches = [
   },
 ];
 
+// Each test file is its own process, and most of a file's life here is process
+// startup and reading fixtures, not CPU. node:test's default of
+// availableParallelism() - 1 therefore leaves cores idle; oversubscribing by 2x
+// overlaps those waits. The floor keeps a 1- or 2-core runner overlapping too.
+const testConcurrency = Math.max(4, availableParallelism() * 2);
+
 let status = 0;
 for (const batch of batches) {
   if (!batch.tests.length) {
     continue;
   }
-  const result = spawnSync(process.execPath, [...batch.nodeArgs, "--test", ...batch.tests], {
+  const result = spawnSync(process.execPath, [
+    ...batch.nodeArgs, "--test", `--test-concurrency=${testConcurrency}`, ...batch.tests,
+  ], {
     cwd: packageRoot,
     env: process.env,
     stdio: "inherit",

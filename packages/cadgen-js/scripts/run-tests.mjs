@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { availableParallelism } from "node:os";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -51,8 +52,16 @@ if (!tests.length) {
   process.exit(1);
 }
 
+// node:test defaults to availableParallelism() - 1 test PROCESSES. Every file here
+// spends a good share of its life starting a process and reading fixtures off disk,
+// not on the CPU, so that default leaves cores idle: on a 10-core Mac the whole
+// suite took 7.3 s at the default 9 and 5.3 s at 20. Oversubscribe by 2x, with a
+// floor so a 1- or 2-core runner still overlaps its waits.
+const testConcurrency = Math.max(4, availableParallelism() * 2);
+
 const result = spawnSync(process.execPath, [
   "--test",
+  `--test-concurrency=${testConcurrency}`,
   ...tests,
 ], {
   cwd: packageRoot,
