@@ -95,17 +95,26 @@ class OracleSmokeTest(unittest.TestCase):
         self.assertEqual(diff_fingerprints(fp_cold, fp_warm), [])
 
     def test_diff_reports_differences(self) -> None:
-        build = build_entry(self.stage, env=self.env)
-        self.assertEqual(build.returncode, 0, build.stderr[-2000:])
-        fp = self._fingerprint()
+        # The subject is diff_fingerprints, which takes two dicts. It used to be handed
+        # a real one by building the fixture -- a kernel boot and an assembly to reach a
+        # mapping this test then mutates by hand anyway. The shape is oracle.fingerprint's
+        # return value, and the test above is what keeps that shape honest.
+        fp = {
+            "cids": ["aa11", "bb22"],
+            "occurrences": {"base": {"component": "aa11", "transform": [0.0] * 16}},
+            "componentBytes": {"aa11.surf": "0" * 64},
+            "kinematics": None,
+            "bbox": {"min": [-20.0, -10.0, 0.0], "max": [20.0, 10.0, 16.0]},
+        }
         mutated = {
             **fp,
             "cids": fp["cids"][:-1],
             "bbox": {"min": [0, 0, 0], "max": [1, 1, 1]},
         }
         problems = diff_fingerprints(fp, mutated)
-        self.assertTrue(any("cids differ" in p for p in problems))
-        self.assertTrue(any("bbox" in p for p in problems))
+        self.assertTrue(any("cids differ" in p for p in problems), problems)
+        self.assertTrue(any("bbox" in p for p in problems), problems)
+        self.assertEqual([], diff_fingerprints(fp, dict(fp)), "equal fingerprints diff clean")
 
 
 if __name__ == "__main__":

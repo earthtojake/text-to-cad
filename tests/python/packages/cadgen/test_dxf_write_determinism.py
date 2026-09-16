@@ -78,7 +78,11 @@ class DxfWriteDeterminismTest(unittest.TestCase):
         The unset seed (``"random"``) is the case that matters and the one that
         caught the CLASSES-section ordering: ezdxf registers required classes by
         iterating a SET of entity-type strings, so a cold run wrote one of two
-        byte streams at random until the emitter sorted that registry.
+        byte streams at random until the emitter sorted that registry. That
+        registry is now pinned directly by test_class_registry_is_sorted, so the
+        random seed is run ONCE here rather than four times: four tickets in the
+        same lottery cost four cold kernel imports and add nothing a sorted
+        registry has not already settled.
         """
         script = "\n".join(
             [
@@ -91,7 +95,7 @@ class DxfWriteDeterminismTest(unittest.TestCase):
             ]
         )
         expected = _digest()
-        for seed in ("0", "12345", "random", "random", "random", "random"):
+        for seed in ("0", "12345", "random"):
             environment = dict(os.environ)
             environment.pop("PYTHONHASHSEED", None)
             if seed != "random":
@@ -435,7 +439,7 @@ class DxfRunPathDeterminismTest(unittest.TestCase):
     def test_cold_runs_under_different_seeds_write_identical_files(self) -> None:
         digests = {
             hashlib.sha256(self._build(seed)).hexdigest()
-            for seed in (None, "0", "12345", None)
+            for seed in (None, "0", "12345")
         }
         self.assertEqual(
             len(digests),
