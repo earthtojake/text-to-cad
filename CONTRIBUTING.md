@@ -390,6 +390,29 @@ release state must keep `VERSION`, the derived metadata and the pins valid; the
 `Test` workflow checks all three in a separate job so code tests still run when
 they are wrong.
 
+### Build artifacts live in the wheel, never in git
+
+`main` is source. Everything cadgen executes that is not Python — the Node
+builders and the snapshot browser bundle under `cadgen/_runtime/node` and
+`_runtime/browser`, and the CAD Viewer client under `_runtime/viewer` — is
+gitignored and produced by `scripts/bundle/bundle.sh`. Nothing built is ever
+committed: a rebundle used to add a megabyte of history per commit, and a
+committed bundle can drift from the source that claims to produce it.
+
+Where the built things live instead:
+
+- **CI** builds the runtime at the start of every `Test` run and tests against
+  that build (`bundle.sh --check` now means "the runtime builds and is
+  complete", not a diff against a committed copy).
+- **The wheel** is the release artifact. `Publish Release` bundles, builds the
+  wheel and sdist, asserts the wheel carries `_runtime/`, installs and
+  exercises it, keeps the distribution as a workflow artifact, uploads it to
+  PyPI (the install channel every skill pins against), and attaches that same
+  wheel and sdist to the GitHub Release as the provenance copy of what shipped.
+- **A checkout** builds its own: run `scripts/bundle/bundle.sh` once after
+  cloning (and after pulling changes to `packages/cadgen-js`); a missing runtime
+  fails with a message that says so.
+
 ### Shipping a release
 
 Two GitHub Actions workflows, one release. `Prepare Release`
