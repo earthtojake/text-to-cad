@@ -3,8 +3,10 @@
 ## Rule selection
 
 1. Use the selected shop's specification for the actual material and process.
-2. Where none is supplied, consult [Sheet-metal guidelines](https://www.protolabs.com/services/sheet-metal-fabrication/design-guidelines/) as a starting point.
-   Use the material/thickness tables, bending guidance, and common-feature guidance for a review using that supplier. Check the current table for the exact stock and tooling rather than importing a universal minimum radius or flange length.
+2. Where none is supplied, use two references from the same supplier as a starting point:
+   - [Sheet metal fabrication design guide](https://www.hubs.com/guides/sheet-metal-fabrication/) (Protolabs Network) for the design rules: K-factor and bend allowance, bend radius and relief, hems and curls, laser-cut hole and edge spacing, kerf, welding, tolerances.
+   - [Sheet-metal guidelines](https://www.protolabs.com/services/sheet-metal-fabrication/design-guidelines/) (Protolabs) for that supplier's component sizes, material and thickness range, tolerances, bending guidelines, and common-feature rules for flanges, hems, reliefs and holes.
+   Check the current tables for the exact stock and tooling rather than importing a universal minimum radius or flange length.
 3. Record URL/document version, access date, section, units, and the applicable
    material/tooling conditions with every adopted limit. If the source cannot
    be checked, report the missing rule rather than manufacture a default.
