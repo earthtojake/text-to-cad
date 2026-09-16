@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import threading
+import time
 import unittest
 from unittest import mock
 
@@ -16,8 +17,10 @@ from tests.python.support.tmp_root import generated_cad_directory
 add_repo_path("packages/cadgen/src")
 from cadgen.store import surfaces, trees
 from cadgen.store.build import build_tree_from_compound
-from cadgen.store.objects import object_path
+from cadgen.store.objects import iter_objects, object_path
 from cadgen.viewer.surfaces import SurfaceSubscribers, pinned_surface_object
+
+WINDOWS_TICK_NS = 15_625_000
 
 
 class PendingSurface(Future):
@@ -59,6 +62,20 @@ class MetadataCapture(unittest.TestCase):
         self.addCleanup(lambda: [self.manager.cancel(token) for token in list(self.manager._jobs)])
         trees._reset_metadata_capture_cache()
         self.addCleanup(trees._reset_metadata_capture_cache)
+        self.settle_store_objects()
+
+    @staticmethod
+    def settle_store_objects():
+        """Age every object past the resolution its filesystem stamps writes with.
+
+        A cache entry is only remembered once a later write to the object would
+        stamp a different mtime, so on a coarse-clock filesystem (Windows: a
+        ~15.6 ms tick) whether a hit is admitted at all depends on how long the
+        fixture took. These tests are about the fingerprint, not the clock.
+        """
+        for _digest, path in iter_objects():
+            stat = path.stat()
+            os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns - 2_000_000_000))
 
     def test_metadata_releases_each_payload_and_native_capture_stays_owned(self):
         live = set()
@@ -210,6 +227,7 @@ class MetadataCapture(unittest.TestCase):
         replacement = target.with_name(f".{target.name}.replacement")
         replacement.write_bytes(target.read_bytes())
         os.replace(replacement, target)
+        self.settle_store_objects()
 
         read = trees.read_verified_object
         with mock.patch.object(trees, "read_verified_object", wraps=read) as reads:
@@ -264,6 +282,38 @@ class MetadataCapture(unittest.TestCase):
                                 call()
                 finally:
                     target.write_bytes(original)
+        self.assertEqual(trees.capture_tree(self.tree), (self.geometry, self.payloads))
+
+    def test_damage_inside_one_write_clock_tick_is_never_certified(self):
+        """A stamp a later write could reproduce must not certify a cache entry.
+
+        Windows reports ``st_ctime`` as the file's CREATION time, so it does not
+        move for a rewrite at all, and stamps the last write from a ~15.6 ms
+        timer. A same-size rewrite landing in the tick the verified read observed
+        leaves dev, inode, size, mtime and ctime identical, so the cached
+        metadata would answer for bytes that no longer hash to their address.
+        """
+        entry = next(value for cid, value in self.geometry["components"].items() if cid != self.cid)
+        target = object_path(entry["brep"])
+        original = target.read_bytes()
+        tick_ns = time.time_ns() // WINDOWS_TICK_NS * WINDOWS_TICK_NS
+
+        def windows_stamp(digest):
+            stat = object_path(digest).stat()
+            return (digest, stat.st_dev, stat.st_ino, stat.st_size, tick_ns, 0)
+
+        trees._reset_metadata_capture_cache()
+        try:
+            with mock.patch.object(trees, "_object_stamp", side_effect=windows_stamp), \
+                 mock.patch("time.time_ns", return_value=tick_ns + WINDOWS_TICK_NS // 2):
+                trees.capture_tree(self.tree, retain_payloads=False)
+                target.write_bytes(bytes([original[0] ^ 1]) + original[1:])
+                with self.assertRaises((OSError, ValueError)):
+                    trees.capture_tree(self.tree, retain_payloads=False)
+        finally:
+            target.write_bytes(original)
+        trees._reset_metadata_capture_cache()
+        self.settle_store_objects()
         self.assertEqual(trees.capture_tree(self.tree), (self.geometry, self.payloads))
 
     def test_selected_surface_derivation_reads_only_its_exact_native_payload(self):

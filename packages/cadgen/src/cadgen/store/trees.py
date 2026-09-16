@@ -34,6 +34,7 @@ from collections import OrderedDict
 import json
 import math
 import threading
+import time
 from typing import Any
 
 from cadgen.store.objects import object_path, put_object, read_verified_object
@@ -53,6 +54,14 @@ FLAT_KIND = "assembly-package"
 # damage and atomic repair/replacement all change the fingerprint and force the
 # ordinary full verification path. The resolved store root is part of the key
 # because tests and long-lived embedding processes may switch CADGEN_CACHE_DIR.
+#
+# A fingerprint only reports damage when a later write could not reproduce it,
+# and a filesystem stamps writes from a clock of its own resolution: ~15.6 ms on
+# Windows (whose ``st_ctime`` is the CREATION time and never moves for a rewrite
+# at all), whole seconds on NFS and FAT. A same-size rewrite inside the tick the
+# verified read observed is therefore invisible to every stat field. Such a read
+# is never remembered: :func:`_stamp_is_settled` admits an object only once the
+# read is far enough past its write that the next write must stamp differently.
 _METADATA_CAPTURE_CACHE_CAPACITY = 64 * 1024 * 1024
 _METADATA_CAPTURE_CACHE: OrderedDict[tuple[str, str], tuple[bytes, tuple, int]] = OrderedDict()
 _METADATA_CAPTURE_CACHE_SIZE = 0
@@ -416,9 +425,36 @@ def _validate_structure(tree: Any, *, native: bool = False) -> None:
         raise ValueError("geometry rows absent from assembly structure")
 
 
+_STAMP_MTIME_NS = 4
+# A clock that ticks every T ns can only stamp multiples of T, so an observed
+# stamp's trailing zeros bound the resolution that produced it from below.
+_TIMESTAMP_TICKS_NS = (1_000_000_000, 15_625_000, 1_000_000)
+
+
 def _object_stamp(digest: str) -> tuple:
     stat = object_path(digest).stat()
     return (digest, stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+
+
+def _timestamp_resolution_ns(mtime_ns: int) -> int:
+    """How coarsely the filesystem that produced ``mtime_ns`` stamps a write."""
+    for tick in _TIMESTAMP_TICKS_NS:
+        if mtime_ns % tick == 0:
+            return tick
+    return 1
+
+
+def _stamp_is_settled(stamp: tuple) -> bool:
+    """True when a write made from here on cannot reproduce ``stamp``.
+
+    The read happened at least one timestamp tick after the write it observed,
+    so any later write lands in a tick the fingerprint does not already hold.
+    A nanosecond-resolution filesystem settles immediately; a coarse one (or a
+    clock that ran backwards) leaves a short window in which the bytes may still
+    change silently, and nothing read in it is remembered.
+    """
+    mtime_ns = stamp[_STAMP_MTIME_NS]
+    return time.time_ns() - mtime_ns >= _timestamp_resolution_ns(mtime_ns)
 
 
 def _metadata_capture_key(tree_hash: str) -> tuple[str, str]:
@@ -549,7 +585,7 @@ def capture_tree(tree_hash: str, *, retain_payloads: bool = True) -> tuple[dict,
             after = _object_stamp(digest)
         except (OSError, ValueError):
             after = None
-        if before is None or before != after:
+        if before is None or before != after or not _stamp_is_settled(after):
             cacheable = False
         else:
             stamps[digest] = after

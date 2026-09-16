@@ -1128,9 +1128,13 @@ Explicit model saves still obey every child/output/publication requirement.
   reading it. Compact process-local metadata may be reused while every required
   immutable object retains the file identity observed around its verified read;
   deletion, damage or atomic replacement invalidates that snapshot and makes the
-  next request verify the complete byte closure again. The metadata cache is
-  byte-bounded, store-root isolated and returns a newly parsed flattened view to
-  every caller.
+  next request verify the complete byte closure again. A read is only remembered
+  once it is far enough past the write it observed that a further write must
+  stamp a different mtime — a filesystem times writes by a clock of its own
+  resolution (~15.6 ms on Windows, whose `st_ctime` is the creation time and
+  never moves for a rewrite), and a same-size rewrite inside that tick is
+  invisible to every stat field. The metadata cache is byte-bounded, store-root
+  isolated and returns a newly parsed flattened view to every caller.
   Components carry `brep`, `codec` and `faceColors`; display SURF resolves
   separately through `store.surfaces` and `index/surface`.
 - `cadgen store info` sizes the store. `cadgen store gc --dry-run` lists what
