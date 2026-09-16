@@ -3,9 +3,9 @@ import { FILE_SHEET_SECTION_IDS } from "./fileSheetSections.js";
 // Layout model for the tabbed file sheet sidebar.
 //
 // The file sheet renders each section as a tab (Chrome-inspector style). For
-// STEP, drawing, and robot files can split into a top and bottom pane, with tabs that
-// can be dragged between panes and a resizable divider between them. Other file
-// kinds render a single tab strip.
+// STEP, drawing, and robot files the strip can be split into a top and bottom
+// pane, with tabs that can be dragged between panes and a resizable divider
+// between them. Other file kinds render a single tab strip.
 //
 // The CAD arrangement (which pane each tab lives in, tab order, split ratio,
 // and whether the split is active) is a global per-kind preference persisted
