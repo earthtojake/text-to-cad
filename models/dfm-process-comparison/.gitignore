@@ -2,3 +2,6 @@
 /STL/*
 /tmp/
 __pycache__/
+
+# Deliberate published review figure (other generated renders remain ignored).
+!/docs/manufacturing-comparison.png
