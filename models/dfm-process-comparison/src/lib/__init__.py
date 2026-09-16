@@ -1,0 +1,1 @@
+"""Shared process-comparison geometry."""

@@ -1,0 +1,141 @@
+{
+  "baseline": {
+    "valid": true,
+    "solids": 1,
+    "bounds_mm": [
+      80.0,
+      60.0,
+      25.0
+    ],
+    "volume_mm3": 16321.148246294413,
+    "wall_mm": 0.7999999999999972,
+    "floor_mm": 3.0,
+    "circular_edge_radii_mm": [
+      2.25
+    ],
+    "mounting_hole_xy_mm": [
+      [
+        -25.0,
+        -18.0
+      ],
+      [
+        -25.0,
+        18.0
+      ],
+      [
+        25.0,
+        -18.0
+      ],
+      [
+        25.0,
+        18.0
+      ]
+    ],
+    "hole_diameter_mm": 4.5
+  },
+  "fdm": {
+    "valid": true,
+    "solids": 1,
+    "bounds_mm": [
+      80.0,
+      60.0,
+      25.0
+    ],
+    "volume_mm3": 18490.51859703553,
+    "wall_mm": 2.3999999999999986,
+    "floor_mm": 2.4,
+    "circular_edge_radii_mm": [
+      2.25
+    ],
+    "mounting_hole_xy_mm": [
+      [
+        -25.0,
+        -18.0
+      ],
+      [
+        -25.0,
+        18.0
+      ],
+      [
+        25.0,
+        -18.0
+      ],
+      [
+        25.0,
+        18.0
+      ]
+    ],
+    "hole_diameter_mm": 4.5
+  },
+  "sheet": {
+    "valid": true,
+    "solids": 1,
+    "bounds_mm": [
+      80.0,
+      60.0,
+      25.0
+    ],
+    "volume_mm3": 11122.118304910935,
+    "wall_mm": 1.5,
+    "floor_mm": 1.5,
+    "circular_edge_radii_mm": [
+      2.0,
+      2.25,
+      3.5
+    ],
+    "mounting_hole_xy_mm": [
+      [
+        -25.0,
+        -18.0
+      ],
+      [
+        -25.0,
+        18.0
+      ],
+      [
+        25.0,
+        -18.0
+      ],
+      [
+        25.0,
+        18.0
+      ]
+    ],
+    "hole_diameter_mm": 4.5
+  },
+  "cnc": {
+    "valid": true,
+    "solids": 1,
+    "bounds_mm": [
+      80.0,
+      60.0,
+      25.0
+    ],
+    "volume_mm3": 22360.9182298249,
+    "wall_mm": 3.0,
+    "floor_mm": 3.0,
+    "circular_edge_radii_mm": [
+      2.25,
+      3.0
+    ],
+    "mounting_hole_xy_mm": [
+      [
+        -25.0,
+        -18.0
+      ],
+      [
+        -25.0,
+        18.0
+      ],
+      [
+        25.0,
+        -18.0
+      ],
+      [
+        25.0,
+        18.0
+      ]
+    ],
+    "hole_diameter_mm": 4.5
+  }
+}

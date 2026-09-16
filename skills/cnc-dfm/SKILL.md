@@ -50,7 +50,10 @@ unspecified, discuss candidate setups without claiming a verified machining plan
 - Separate geometry constraints from cost suggestions. Preserve functional
   interfaces; suggest relaxed tolerances only where function permits them.
 
-For sharp internal corners, consider larger radii or reliefs when acceptable.
+Distinguish in-plane pocket corners from floor-to-wall roots: a flat end mill
+can produce a sharp floor-to-wall junction. A root fillet is optional and may
+require a corner-radius or ball tool and an extra finishing pass. For sharp
+in-plane internal corners, consider larger radii or reliefs when acceptable.
 A feature infeasible with one end mill is not infeasible for all manufacturing;
 identify alternatives such as another setup, tooling, or EDM as proposals.
 
