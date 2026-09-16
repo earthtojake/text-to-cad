@@ -1,0 +1,6 @@
+trimesh
+numpy
+# trimesh treats these as optional extras, but loading the .3mf that SKILL.md
+# advertises needs them on every run.
+networkx
+lxml

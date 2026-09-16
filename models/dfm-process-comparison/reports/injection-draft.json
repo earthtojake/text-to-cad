@@ -1,0 +1,130 @@
+{
+  "file": "models/dfm-process-comparison/STL/injection.stl",
+  "mesh": {
+    "bbox_mm": [
+      80.0,
+      60.0,
+      25.0
+    ],
+    "triangle_count": 1244,
+    "watertight": false,
+    "surface_area_mm2": 15961.4
+  },
+  "draft": {
+    "pull_axis": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "wall_limit_deg": 45.0,
+    "zero_tol_deg": 0.05,
+    "wall_area_mm2": 6589.61,
+    "wall_area_pct_of_surface": 41.3,
+    "non_wall_area_mm2": 9371.81,
+    "wall_draft_histogram_mm2": {
+      "0-0.25deg": 8.48,
+      "0.25-0.5deg": 12.72,
+      "0.5-1deg": 47.74,
+      "1-2deg": 6495.59,
+      "2-3deg": 20.75,
+      "3-5deg": 4.33
+    },
+    "zero_draft_wall_area_mm2": 0.0,
+    "zero_draft_face_count": 0,
+    "drafted_wall_area_mm2": 6589.61,
+    "drafted_wall_mean_draft_deg": 1.005,
+    "largest_zero_draft_faces": [],
+    "method": "per-triangle angle to the pull axis; curved faces read per facet; faces at or above wall_limit_deg from the pull are not walls",
+    "min_wall_draft": {
+      "draft_deg": 0.094,
+      "location_xyz": [
+        26.56,
+        -16.38,
+        0.8
+      ],
+      "opens_toward": "-pull"
+    },
+    "lowest_draft_wall_faces": [
+      {
+        "draft_deg": 0.094,
+        "area_mm2": 0.26,
+        "location_xyz": [
+          26.56,
+          19.62,
+          0.8
+        ],
+        "opens_toward": "-pull"
+      },
+      {
+        "draft_deg": 0.094,
+        "area_mm2": 0.26,
+        "location_xyz": [
+          23.38,
+          -16.44,
+          0.8
+        ],
+        "opens_toward": "-pull"
+      },
+      {
+        "draft_deg": 0.094,
+        "area_mm2": 0.26,
+        "location_xyz": [
+          23.44,
+          16.38,
+          0.8
+        ],
+        "opens_toward": "-pull"
+      },
+      {
+        "draft_deg": 0.094,
+        "area_mm2": 0.26,
+        "location_xyz": [
+          23.38,
+          19.56,
+          0.8
+        ],
+        "opens_toward": "-pull"
+      },
+      {
+        "draft_deg": 0.094,
+        "area_mm2": 0.26,
+        "location_xyz": [
+          -23.38,
+          -19.56,
+          0.8
+        ],
+        "opens_toward": "-pull"
+      },
+      {
+        "draft_deg": 0.094,
+        "area_mm2": 0.26,
+        "location_xyz": [
+          -23.44,
+          19.62,
+          0.8
+        ],
+        "opens_toward": "-pull"
+      },
+      {
+        "draft_deg": 0.094,
+        "area_mm2": 0.26,
+        "location_xyz": [
+          26.62,
+          -19.56,
+          0.8
+        ],
+        "opens_toward": "-pull"
+      },
+      {
+        "draft_deg": 0.094,
+        "area_mm2": 0.26,
+        "location_xyz": [
+          23.44,
+          -19.62,
+          0.8
+        ],
+        "opens_toward": "-pull"
+      }
+    ]
+  }
+}

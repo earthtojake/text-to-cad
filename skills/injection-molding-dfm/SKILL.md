@@ -7,8 +7,42 @@ description: Review thermoplastic injection-molded parts for draft, wall transit
 
 Produce a process-specific DFM review of the supplied design. This is a guided
 review skill, not an automatic feature-recognition or manufacturing certification
-engine. It includes no geometry analyzer. Use available CAD inspection tools or
-traceable supplied measurements; report unavailable checks explicitly.
+engine. It ships one measurement, draft angle, in `scripts/draft_tool.py`; every
+other check uses available CAD inspection tools or traceable supplied
+measurements. Report unavailable checks explicitly.
+
+## Draft measurement
+
+Use `scripts/draft_tool.py` in the active project Python environment for draft
+facts (install `requirements.txt` first). The tool is fact-only: it reports
+per-face draft relative to a pull axis and never emits pass/fail. Comparisons
+against resin, texture and tooling limits belong to this workflow.
+
+```bash
+python scripts/draft_tool.py measure part.stl --pull z
+python scripts/draft_tool.py pulls part.stl
+```
+
+`measure` reports, for the given pull axis: wall area (faces within
+`--wall-limit`, default 45°, of the pull axis), a draft histogram by area,
+zero-draft wall area with the largest zero-draft faces pooled by normal, the
+lowest-draft walls with locations, and the area-weighted mean draft of the
+drafted walls. `pulls` repeats the summary for x, y and z so a candidate pull
+direction can be chosen from measured area rather than by eye.
+
+Read the output with these limits in mind:
+
+- Input is a mesh (`.stl`, `.obj`, `.ply`, `.3mf`). For STEP, export an STL
+  sidecar with `$cad` at a fine tessellation first, then measure the STL.
+- Curved faces are read per facet. A 1° cone bore reads a little under 1°
+  because a chord facet tilts less than the analytic surface; report the
+  measured value with that caveat rather than rounding it up.
+- `opens_toward` is the lean of a face's outward normal along the pull, not
+  its mold-half assignment. Assigning faces to core and cavity, deciding
+  whether a face is an undercut, and the withdrawal path need the parting
+  line, which the tool does not determine.
+- Faces at or above `--wall-limit` from the pull axis (tops, bottoms, steep
+  chamfers) are not walls and are excluded from every wall figure.
 
 ## Evidence first
 

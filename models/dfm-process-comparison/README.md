@@ -39,6 +39,11 @@ claim cost or cycle-time optimization.
 - Tested six axis-aligned FDM orientations. Upright: zero flagged area; upside
   down: 4,294.88 mm². This is a geometric heuristic, not slicer verification or
   proof of a globally optimal orientation.
+- Ran the new `skills/injection-molding-dfm/scripts/draft_tool.py measure --pull z`
+  on the injection and baseline STL. Injection: no zero-draft wall area, mean wall
+  draft 1.005° over 6,590 mm² of wall. Baseline: 6,233 mm² of zero-draft wall.
+  Per-facet reading; the pooled faces list merges parallel walls that share a
+  normal. Reports in `reports/*-draft.json`.
 - Visually reviewed CAD snapshots and the comparison figure. The figure uses
   real STL triangles with a depth buffer; colors only distinguish variants.
 
@@ -64,13 +69,6 @@ python -m cadgen.cli step inspect validate models/dfm-process-comparison/STEP/fd
 CAD exports and scratch images are regenerable and ignored. The share image is
 `tmp/manufacturing-comparison.png`. Recorded JSON reports capture this run.
 
-## Caption for Jake
-
-Same mounting interface, four manufacturing approaches: FDM gets thicker walls
-and gussets; sheet metal becomes uniform stock with two bends; CNC gets thicker
-walls and optional rounded roots; injection molding adds draft and thin ribs. The existing DfAM checker measured the print
-version's minimum wall thickness increasing from 0.8 to 2.4 mm. Geometry checked;
-strength, tooling, and production performance still need validation.
 
 ## Injection-molding fourth process
 
