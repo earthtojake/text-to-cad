@@ -35,9 +35,13 @@ import { cos, sin } from "./trig.js";
 // entry-format changes (the codec version in tessellationCache.js only covers
 // those). This salts every shared tessellation-cache key (-t<version>-), so
 // meshes produced by the previous algorithm become unreachable instead of
-// being served stale; `cadgen cache gc` collects the orphans. Mirrored as
-// MESH_TESSELLATION_VERSION in cadgen/_internal/cache_paths.py (sync-tested).
-export const TESSELLATION_VERSION = 3;
+// being served stale; `cadgen cache gc` collects the orphans. TWO Python
+// mirrors move with it (both sync-tested): MESH_TESSELLATION_VERSION in
+// cadgen/_internal/cache_paths.py, and TESSELLATOR_VERSION in
+// cadgen/store/meshes.py, which is the one that builds and validates the key —
+// bumping only the first leaves the store rejecting every entry the new
+// algorithm writes.
+export const TESSELLATION_VERSION = 4;
 
 export const DEFAULT_OPTIONS = {
   // Max 3D distance between the surface and a triangle edge midpoint,
@@ -1178,6 +1182,65 @@ export function finalizeFaceMesh(face, raw) {
   };
 }
 
+// Two vertices of ONE face can carry the same 3D point for exactly two
+// reasons. Either boundary snapping moved them onto the same model point — then
+// they ARE one vertex and must be welded — or the face is periodic and they are
+// the two images of its SEAM, which live at opposite ends of the wrapped
+// parameter direction and must both survive, because merging them would send
+// every later uv evaluation on that face to the wrong side of the surface.
+//
+// Which one it is follows from the face's uv BOX and nothing else. It is not a
+// question of how finely the face happens to be meshed, so it must not be
+// answered with a proximity epsilon: "are these two uv points near each other?"
+// is a proxy that holds only while mesh spacing stays under the epsilon, and
+// silently stops welding real duplicates once the spacing outgrows it — which
+// is what left zero-area triangles around small bores at coarse chord
+// tolerances. A seam pair spans the full box in the wrapped direction;
+// a duplicate lies strictly inside it.
+function seamImagePredicate(face, uvVerts) {
+  const [u0, u1, v0, v1] = face.uv;
+  const uSpan = u1 - u0;
+  const vSpan = v1 - v0;
+  // Relative slack only, so a pcurve that evaluated a hair outside the box
+  // still reads as "at the end" without admitting anything from its interior.
+  const FULL_SPAN = 1 - 1e-9;
+  return (i, j) =>
+    (uSpan > 0 && Math.abs(uvVerts[i][0] - uvVerts[j][0]) >= uSpan * FULL_SPAN) ||
+    (vSpan > 0 && Math.abs(uvVerts[i][1] - uvVerts[j][1]) >= vSpan * FULL_SPAN);
+}
+
+// Apply a weld's remap and drop every triangle that collapses under it.
+//
+// Two corners are the same point of the model when they are the same INDEX —
+// what a weld produces — or when they hold the same POSITION, which is the
+// seam case: a seam's two images stay separate vertices on purpose, so a
+// triangle that reaches across the seam to both of them has zero area and
+// carries no surface. Only exact coincidence counts. A merely thin triangle is
+// real surface, and an area threshold here would punch a hole in the mesh
+// rather than close one.
+//
+// Dropping a collapsed triangle cannot open the mesh either: it contributes
+// its one real edge TWICE (once through each coincident corner) plus a
+// self-loop that is not an edge at all, so removing it takes away a matched
+// pair and leaves every geometric edge's use count exactly as it was.
+function compactCollapsedTriangles(triangles, xyz, remap) {
+  const samePoint = (a, b) => {
+    if (a === b) return true;
+    const p = xyz[a];
+    const q = xyz[b];
+    return p[0] === q[0] && p[1] === q[1] && p[2] === q[2];
+  };
+  const kept = [];
+  for (let t = 0; t < triangles.length; t += 3) {
+    const a = remap.get(triangles[t]) ?? triangles[t];
+    const b = remap.get(triangles[t + 1]) ?? triangles[t + 1];
+    const c = remap.get(triangles[t + 2]) ?? triangles[t + 2];
+    if (samePoint(a, b) || samePoint(b, c) || samePoint(c, a)) continue;
+    kept.push(a, b, c);
+  }
+  return kept;
+}
+
 // Fan-split every face's boundary mesh edges to the UNION of boundary vertex
 // fractions across the component, so no T-junction survives: a vertex present
 // on one side of a model edge exists on the other side too, with bit-identical
@@ -1322,14 +1385,7 @@ function conformBoundaries(rawFaces, sharedEdges, floats, mergeTolerance = 0) {
     // Snapping can land two of a face's boundary vertices on the same
     // canonical point; weld them (by exact coordinates — they are
     // bit-identical by construction) and drop the triangles that collapse.
-    let spanWeld = 0;
-    for (const [u, v] of raw.uvVerts) {
-      spanWeld = Math.max(spanWeld, Math.abs(u), Math.abs(v));
-    }
-    const uvWeldEps = Math.max(spanWeld, 1) * 1e-2;
-    const uvClose = (i, j) =>
-      Math.abs(raw.uvVerts[i][0] - raw.uvVerts[j][0]) <= uvWeldEps &&
-      Math.abs(raw.uvVerts[i][1] - raw.uvVerts[j][1]) <= uvWeldEps;
+    const isSeamImage = seamImagePredicate(face, raw.uvVerts);
     const canonicalByPosition = new Map();
     const remap = new Map();
     for (const vertIndex of raw.boundary.keys()) {
@@ -1340,24 +1396,16 @@ function conformBoundaries(rawFaces, sharedEdges, floats, mergeTolerance = 0) {
         canonicalByPosition.set(key, [vertIndex]);
         continue;
       }
-      // A periodic face's SEAM pair shares 3D coordinates but lives at the
-      // two ends of the uv box; merging it corrupts every later uv-based
-      // evaluation on that face. Weld only uv-coincident duplicates.
-      const target = bucket.find((candidate) => uvClose(candidate, vertIndex));
+      // Everything sharing this position is the same vertex EXCEPT a seam
+      // image (see seamImagePredicate).
+      const target = bucket.find((candidate) => !isSeamImage(candidate, vertIndex));
       if (target !== undefined) remap.set(vertIndex, target);
       else bucket.push(vertIndex);
     }
-    if (remap.size) {
-      const mapped = [];
-      for (let t = 0; t < raw.triangles.length; t += 3) {
-        const a = remap.get(raw.triangles[t]) ?? raw.triangles[t];
-        const b = remap.get(raw.triangles[t + 1]) ?? raw.triangles[t + 1];
-        const c = remap.get(raw.triangles[t + 2]) ?? raw.triangles[t + 2];
-        if (a !== b && b !== c && c !== a) mapped.push(a, b, c);
-      }
-      raw.triangles = mapped;
-      for (const vertIndex of remap.keys()) raw.boundary.delete(vertIndex);
-    }
+    // Unconditional: a seam-spanning triangle collapses on position alone, so
+    // it must be dropped even when nothing welded.
+    raw.triangles = compactCollapsedTriangles(raw.triangles, raw.xyz, remap);
+    for (const vertIndex of remap.keys()) raw.boundary.delete(vertIndex);
   }
 
   for (const { face, raw } of rawFaces) {
@@ -1489,14 +1537,7 @@ function conformBoundaries(rawFaces, sharedEdges, floats, mergeTolerance = 0) {
     // (same model point reached through another edge's labels). Positions are
     // bit-identical by construction, so a second exact-coordinate weld folds
     // them together and drops any triangle that collapsed.
-    let spanAfter = 0;
-    for (const [u, v] of uvVerts) {
-      spanAfter = Math.max(spanAfter, Math.abs(u), Math.abs(v));
-    }
-    const uvAfterEps = Math.max(spanAfter, 1) * 1e-2;
-    const uvCloseAfter = (i, j) =>
-      Math.abs(uvVerts[i][0] - uvVerts[j][0]) <= uvAfterEps &&
-      Math.abs(uvVerts[i][1] - uvVerts[j][1]) <= uvAfterEps;
+    const isSeamImageAfter = seamImagePredicate(face, uvVerts);
     const canonicalAfter = new Map();
     const remapAfter = new Map();
     for (const vertIndex of boundary.keys()) {
@@ -1507,31 +1548,22 @@ function conformBoundaries(rawFaces, sharedEdges, floats, mergeTolerance = 0) {
         canonicalAfter.set(key, [vertIndex]);
         continue;
       }
-      const target = bucket.find((candidate) => uvCloseAfter(candidate, vertIndex));
+      const target = bucket.find((candidate) => !isSeamImageAfter(candidate, vertIndex));
       if (target !== undefined) remapAfter.set(vertIndex, target);
       else bucket.push(vertIndex);
     }
-    if (remapAfter.size) {
-      const mapped = [];
-      for (let t = 0; t < raw.triangles.length; t += 3) {
-        const a = remapAfter.get(raw.triangles[t]) ?? raw.triangles[t];
-        const b = remapAfter.get(raw.triangles[t + 1]) ?? raw.triangles[t + 1];
-        const c = remapAfter.get(raw.triangles[t + 2]) ?? raw.triangles[t + 2];
-        if (a !== b && b !== c && c !== a) mapped.push(a, b, c);
-      }
-      raw.triangles = mapped;
-      for (const [vertIndex, target] of remapAfter) {
-        const labels = boundary.get(vertIndex);
-        const targetLabels = boundary.get(target);
-        if (labels && targetLabels) {
-          for (const label of labels) {
-            if (!targetLabels.some((existing) => existing.ord === label.ord && existing.f === label.f)) {
-              targetLabels.push(label);
-            }
+    raw.triangles = compactCollapsedTriangles(raw.triangles, xyz, remapAfter);
+    for (const [vertIndex, target] of remapAfter) {
+      const labels = boundary.get(vertIndex);
+      const targetLabels = boundary.get(target);
+      if (labels && targetLabels) {
+        for (const label of labels) {
+          if (!targetLabels.some((existing) => existing.ord === label.ord && existing.f === label.f)) {
+            targetLabels.push(label);
           }
         }
-        boundary.delete(vertIndex);
       }
+      boundary.delete(vertIndex);
     }
   }
 }
