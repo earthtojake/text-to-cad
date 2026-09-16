@@ -12,6 +12,23 @@ checks a mesh can answer on its own; every other check uses available CAD
 inspection tools or traceable supplied measurements. Report unavailable checks
 explicitly.
 
+## Evidence first
+
+Read [process review guidance](references/process-review.md) before comparing
+features to limits. Prefer the user's actual supplier/tooling specification over
+general guidance. Record conflicting specifications rather than silently choosing.
+
+Identify the reviewed file and revision, units, and bodies. Prefer exact STEP/B-rep
+measurements for radii and analytic faces. If only a mesh is available, record
+its resolution and approximation limits. A screenshot supports a suspected issue,
+not a measured pass/fail. Source-code parameters describe design intent; verify
+that they match the artifact being reviewed before treating them as evidence.
+
+When $cad is available, use its documented inspection workflow for geometry facts.
+If it cannot measure a required feature, use supplied dimensions with provenance
+or mark the check unverified; do not invent commands or measurements. Never infer
+alloy, resin, strength, or stock thickness from a rendering material or color.
+
 ## Geometry measurement
 
 Use `scripts/mold_tool.py` in the active project Python environment for
