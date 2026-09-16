@@ -1,13 +1,5 @@
 # One mounting tray, four manufacturing processes
 
-![One mounting tray redesigned for four manufacturing processes](docs/manufacturing-comparison.png)
-
-*Worked example: FDM adds thicker walls and gussets; sheet metal uses uniform
-stock and bends; CNC uses thicker walls and optional rounded roots; injection
-molding adds draft and thin ribs. Geometry checked; strength and production
-performance remain unverified.*
-
-
 Controlled design exercise using the existing `dfam-check` skill and the new
 `sheet-metal-dfm`, `cnc-dfm`, and `injection-molding-dfm` guided reviews. These are authored redesigns,
 not outputs from an automatic optimization solver.
@@ -70,10 +62,7 @@ python -m cadgen.cli step inspect validate models/dfm-process-comparison/STEP/fd
 ```
 
 CAD exports and scratch images are regenerable and ignored. The share image is
-`tmp/manufacturing-comparison.png`. A deliberate, committed review copy lives at
-`docs/manufacturing-comparison.png` so the README and PR have a durable visual.
-After regenerating and visually reviewing a changed figure, copy it there to
-refresh the published comparison. Recorded JSON reports capture this run.
+`tmp/manufacturing-comparison.png`. Recorded JSON reports capture this run.
 
 ## Caption for Jake
 
