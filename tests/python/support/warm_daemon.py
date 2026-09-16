@@ -99,11 +99,10 @@ def warm_entries() -> dict[str, str]:
     entries["CADGEN_DAEMON"] = "1"
     # Long enough to outlive one module, short enough that an abandoned one goes away.
     entries["CADGEN_DAEMON_IDLE_TIMEOUT"] = os.environ.get("CADGEN_DAEMON_IDLE_TIMEOUT", "300")
-    # No spares: a production daemon keeps two imported workers in reserve so a new
-    # model's first build pays no import, but a test module's daemon serves a handful
-    # of scripts once each and shares a 4-core runner with three other modules --
-    # every spare is a kernel import and ~450 MB taken from THEM.
-    entries["CADGEN_DAEMON_SPARES"] = os.environ.get("CADGEN_DAEMON_SPARES", "0")
+    # Spares stay at the production default. Measured with them off, every warm
+    # file got slower on CI (a new script's first build then imports the kernel on
+    # the test's critical path instead of in the background) and nothing else got
+    # faster: the runner had the headroom the spares were using.
     return entries
 
 
