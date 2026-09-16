@@ -219,7 +219,9 @@ jobs:
           echo "Would have deployed the docs site from $GITHUB_SHA."
           # --dry-run computes the tag and the release it would create without
           # pushing anything; the version check inside it runs for real.
-          scripts/release/publish-github-release.sh --target HEAD --dry-run --publish
+          args=(--target HEAD --dry-run --publish)
+          for file in packages/cadgen/dist/*; do args+=(--asset "$file"); done
+          scripts/release/publish-github-release.sh "${args[@]}"
 
   # The docs site is built from the release commit itself: main is the source tree,
   # and apps/docs/package.json carries the stamped version the header reads.
@@ -262,8 +264,18 @@ jobs:
             echo "Using GITHUB_TOKEN for tag push."
           fi
 
+      # The distribution this run built and uploaded to PyPI, fetched back from the
+      # workflow artifact so the release page carries the same bytes -- not a
+      # rebuild, which could legally differ.
+      - name: Download the published distribution
+        uses: actions/download-artifact@v7
+        with:
+          name: cadgen-${{ needs.publish.outputs.version }}
+          path: packages/cadgen/dist
+
       # A push-triggered run has no `publish` input: it publishes. Only a manual
-      # dispatch can ask for a draft.
+      # dispatch can ask for a draft. The wheel and sdist are attached to the
+      # release; a resumed run attaches them to the release that already exists.
       - name: Create release tag and GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -273,4 +285,8 @@ jobs:
           if [ "${INPUT_PUBLISH:-true}" = "true" ]; then
             args+=(--publish)
           fi
+          ls -l packages/cadgen/dist
+          for file in packages/cadgen/dist/*.whl packages/cadgen/dist/*.tar.gz; do
+            [ -f "$file" ] && args+=(--asset "$file")
+          done
           scripts/release/publish-github-release.sh "${args[@]}"

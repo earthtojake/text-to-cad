@@ -428,7 +428,9 @@ is involved) and deletes the branch. The merged commit is THE release commit.
    `scripts/test/test-installed.sh`; the distribution is uploaded as a workflow
    artifact (`cadgen-<version>`).
 4. **On `main` only:** PyPI upload (`skip-existing`, so a rerun is a no-op),
-   `Deploy Docs`, then the `v<VERSION>` tag and the GitHub Release. Nothing is
+   `Deploy Docs`, then the `v<VERSION>` tag and the GitHub Release, with the
+   wheel and sdist from that same artifact attached as release assets (PyPI
+   stays the install channel; the release page is the provenance copy). Nothing is
    committed or pushed to `main` after the release PR merge: the tag points at
    the source commit, and `git describe` on `main` is meaningful.
 
