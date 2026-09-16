@@ -12,10 +12,13 @@ and a refused load is named for what it is: on Windows 11 that is Smart App
 Control blocking the unsigned ``.pyd``, which the bare ``ImportError`` never
 says (``cadgen._internal.kernel_load_hint``).
 
-Exit codes: 0 = installed cadgen matches the pin (or nothing claims a pin) and
-the kernel loads; 3 = pin mismatch, same code the shims used, since the fix is
-the same (``python -m pip install -r requirements.txt``); 4 = the kernel cannot
-be imported (the report says why when it can tell).
+Exit codes: 0 = installed cadgen matches the pin (or nothing claims a pin);
+3 = pin mismatch, same code the shims used, since the fix is the same
+(``python -m pip install -r requirements.txt``); 4 = the kernel is installed
+but cannot be loaded (the report says why when it can tell). A kernel that is
+simply not installed is reported, not failed: a no-deps install of the wheel
+(what the release workflow smoke-tests) has no OCP and is still a correct
+install, and the requirements pin is what puts the kernel there.
 
 stdlib-only on purpose: this must work when the heavy dependency set is broken.
 """
@@ -37,13 +40,20 @@ def _resolve_requirements(target: str | None) -> Path | None:
     return candidate if candidate.is_file() else None
 
 
-def _probe_kernel() -> tuple[bool, str]:
-    """Import OCP in a fresh interpreter: ``(loaded, detail)``.
+KERNEL_OK = "ok"
+KERNEL_MISSING = "missing"
+KERNEL_FAILED = "failed"
 
-    A subprocess, so a kernel that crashes the interpreter or takes the ~2.5 s
-    import cannot take the report down with it, and so this process never
-    carries the kernel itself. ``detail`` is the module's path on success, or
-    the last non-empty stderr line -- the exception -- on failure.
+
+def _probe_kernel() -> tuple[str, str]:
+    """Import OCP in a fresh interpreter: ``(state, detail)``.
+
+    ``state`` is ``KERNEL_OK`` (``detail`` is the module's path),
+    ``KERNEL_MISSING`` (no OCP installed: ``ModuleNotFoundError``), or
+    ``KERNEL_FAILED`` (installed but would not load; ``detail`` is the last
+    non-empty stderr line, the exception). A subprocess, so a kernel that
+    crashes the interpreter or takes the ~2.5 s import cannot take the report
+    down with it, and so this process never carries the kernel itself.
     """
     import subprocess
 
@@ -55,12 +65,15 @@ def _probe_kernel() -> tuple[bool, str]:
             timeout=300,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
-        return False, f"{type(error).__name__}: {error}"
+        return KERNEL_FAILED, f"{type(error).__name__}: {error}"
     if result.returncode == 0:
         lines = [text for text in result.stdout.splitlines() if text.strip()]
-        return True, lines[-1].strip() if lines else ""
+        return KERNEL_OK, lines[-1].strip() if lines else ""
     lines = [text for text in result.stderr.splitlines() if text.strip()]
-    return False, lines[-1].strip() if lines else f"exit status {result.returncode}"
+    detail = lines[-1].strip() if lines else f"exit status {result.returncode}"
+    if detail.startswith("ModuleNotFoundError:"):
+        return KERNEL_MISSING, detail
+    return KERNEL_FAILED, detail
 
 
 def main(argv: list[str] | None = None, prog: str = "cadgen doctor") -> int:
@@ -86,9 +99,17 @@ def main(argv: list[str] | None = None, prog: str = "cadgen doctor") -> int:
 
     from cadgen._internal.kernel_load_hint import kernel_load_hint
 
-    kernel_loaded, detail = _probe_kernel()
-    if kernel_loaded:
+    kernel_state, detail = _probe_kernel()
+    kernel_loaded = kernel_state != KERNEL_FAILED
+    if kernel_state == KERNEL_OK:
         sys.stdout.write(f"  kernel   OK — OCP at {detail}\n")
+    elif kernel_state == KERNEL_MISSING:
+        # Not a failure: the requirements pin installs the kernel, and a wheel
+        # installed --no-deps (the release smoke test) legitimately has none.
+        sys.stdout.write(
+            "  kernel   not installed — OCP is absent from this interpreter "
+            "(python -m pip install -r requirements.txt puts it there)\n"
+        )
     else:
         sys.stderr.write(f"  kernel   FAILED — {detail}\n")
         for hint in kernel_load_hint(detail) or ():
