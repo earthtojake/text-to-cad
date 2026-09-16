@@ -77,6 +77,9 @@ robot description files, simulation, and local review.
 | SDF          | Creates simulator models and worlds with frames, physics, sensors, and lights.                                                                     | [skills/sdf](skills/sdf/SKILL.md)                   |
 | SendCutSend  | Checks DXF and STEP files before upload to SendCutSend.                                                                                            | [skills/sendcutsend](skills/sendcutsend/SKILL.md)   |
 | DfAM Check   | Measures mesh printability per process: wall thickness, overhangs, support volume, and build orientation.                                          | [skills/dfam-check](skills/dfam-check/SKILL.md)     |
+| Sheet Metal DFM | Review sheet-metal cutting and bending feasibility; guided review with explicit measurement limits. | [skills/sheet-metal-dfm](skills/sheet-metal-dfm/SKILL.md) |
+| CNC DFM | Review machining access, features, and setups; guided review with explicit measurement limits. | [skills/cnc-dfm](skills/cnc-dfm/SKILL.md) |
+| Injection Molding DFM | Review molding draft, walls, ribs, and undercuts; guided review with explicit measurement limits. | [skills/injection-molding-dfm](skills/injection-molding-dfm/SKILL.md) |
 | G-code       | Slices supported mesh files into validated, printer-profiled FDM `.gcode` with real slicer CLIs.                                                   | [skills/gcode](skills/gcode/SKILL.md)               |
 | Bambu Labs   | Dry-runs, uploads, and cautiously starts local Bambu Lab print jobs from validated `.gcode`.                                                       | [skills/bambu-labs](skills/bambu-labs/SKILL.md)     |
 
