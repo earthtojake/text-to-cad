@@ -1,10 +1,18 @@
 """Job slots and coalescing end to end, on both executors.
 
-The same fixture -- a parent fanning out to more leaves than slots, and the 3-level link tree -- is
-built once on a private daemon started with ``CADGEN_JOBS=2`` and once on the transient
-executor with the same limit. Running never exceeds the limit (the broker's peak says so),
-a 1-slot pool still finishes the 3-level tree (yield/reacquire), and two parents that
-need one stale child build it once.
+The same fixture -- a parent fanning out to more leaves than slots -- is built once on a
+private daemon started with ``CADGEN_JOBS=2`` and once on the transient executor with the
+same limit, and running never exceeds the limit on either (the broker's peak says so).
+That is the one property the two executors can answer differently, so it is the one the
+two of them are each asked.
+
+Everything downstream of the slot itself is asked ONCE, on the transient executor: a
+1-slot pool finishing the 3-level tree (yield/reacquire) and two parents needing one
+stale child building it once. Both are the broker's behaviour, not the executor's -- the
+same broker object serves both paths -- and ``test_broker.py`` pins each of them
+deterministically, in threads, without a build. Running them through a second daemon
+proved nothing the first daemon had not, and did it by racing two processes for an
+outcome neither ordering was allowed to change.
 """
 
 from __future__ import annotations
@@ -336,63 +344,6 @@ class DaemonExecutor(_Executor):
         jobs = status.get("jobsRunning") or {}
         self.assertEqual(jobs.get("limit"), self.LIMIT, status)
         return int(jobs.get("peakRunning") or 0)
-
-    def test_two_parents_needing_one_stale_child_build_it_once(self):
-        # Two roots started together share the daemon. Whether the second root's ask for
-        # pin coalesces onto the first's job or finds it already current depends on which
-        # process reaches the daemon first; the invariant is that pin's body ran ONCE.
-        # (Coalescing itself is proven deterministically by the broker unit tests.)
-        a = subprocess.Popen([sys.executable, "parent_a.py", "--json"], cwd=str(self.src), env=self.env,
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        b = subprocess.Popen([sys.executable, "parent_b.py", "--json"], cwd=str(self.src), env=self.env,
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        outs = [p.communicate(timeout=900) for p in (a, b)]
-        for proc, (out, err) in zip((a, b), outs):
-            self.assertEqual(proc.returncode, 0, err)
-            self.assertIn('"outcome":"built"', out)
-        built = 0
-        for _out, err in outs:
-            built += sum(1 for e in self._events(err) if Path(e["model"]).stem == "pin" and e["state"] == "done")
-        status = daemon_client.status() or {}
-        coalesced = int((status.get("jobsRunning") or {}).get("coalesced", 0))
-        self.assertEqual(built, 1, f"pin was built {built} times (coalesced {coalesced}): {status}")
-
-    def test_z_a_one_slot_daemon_builds_the_three_level_tree(self):
-        # A separate daemon with ONE slot: a held slot would deadlock the parent waiting on
-        # its child. Yield/reacquire is what lets this finish.
-        env = dict(self.env)
-        env["CADGEN_JOBS"] = "1"
-        env["CADGEN_CACHE_DIR"] = str(self.work / "store-one")
-        address = self.address + ".one"
-        env["CADGEN_DAEMON_SOCKET"] = address
-        log = Path(self.socket_dir.name) / "one.log"
-        with open(log, "ab") as log_file:
-            server = subprocess.Popen(
-                [sys.executable, str(DAEMON_DIR / "__main__.py")],
-                stdin=subprocess.DEVNULL, stdout=log_file, stderr=subprocess.STDOUT, env=env,
-            )
-        try:
-            deadline = time.monotonic() + 120
-            while time.monotonic() < deadline:
-                try:
-                    transport.connect(address, _authkey(address)).close()
-                    break
-                except OSError:
-                    time.sleep(0.1)
-            code, out, err = self._run("robot.py", env=env)
-            self.assertEqual(code, 0, err)
-            self.assertIn('"outcome":"built"', out)
-            built = {Path(e["model"]).stem for e in self._events(err) if e["state"] == "done"}
-            self.assertEqual(built, {"pin", "arm", "robot"})
-            os.environ["CADGEN_DAEMON_SOCKET"] = address
-            try:
-                status = daemon_client.status() or {}
-            finally:
-                os.environ["CADGEN_DAEMON_SOCKET"] = self.address
-            self.assertEqual((status.get("jobsRunning") or {}).get("peakRunning"), 1, status)
-        finally:
-            server.terminate()
-            server.wait(timeout=15)
 
 
 class TransientExecutor(_Executor):

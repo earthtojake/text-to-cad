@@ -72,9 +72,12 @@ class TransientExecutor(unittest.TestCase):
         path.write_text(source, encoding="utf-8")
         return path
 
-    def test_a_job_builds_into_the_store_the_environment_names(self):
+    def test_a_job_builds_into_the_environments_store_and_its_events_are_tagged(self):
+        # Two properties of ONE successful job: the record and the document land
+        # where the environment says, and the events come back tagged with the
+        # root and the parent, never mixed into the child's output.
         model = self._model("plate", PART.format(name="plate", size=10.0))
-        job = executors.submit(model, root_id="root-1")
+        job = executors.submit(model, root_id="root-7", parent=Path("/models/parent.py"))
         self.assertFalse(job.done, "submit must return before the build finishes")
         self.assertEqual(job.wait(timeout=300), 0, job.output())
         from cadgen.store.records import read_record
@@ -85,10 +88,6 @@ class TransientExecutor(unittest.TestCase):
         self.assertTrue((self.store / "index" / "model").is_dir())
         self.assertTrue((self.root / "plate.step").is_file())
 
-    def test_events_come_back_tagged_with_the_root_id_and_the_parent(self):
-        model = self._model("bar", PART.format(name="bar", size=6.0))
-        job = executors.submit(model, root_id="root-7", parent=Path("/models/parent.py"))
-        self.assertEqual(job.wait(timeout=300), 0, job.output())
         states = [(e["model"], e["state"]) for e in self.events]
         self.assertEqual(states[0], (str(model), "submitted"))
         self.assertEqual(Path(self.events[0]["parent"]), Path(os.path.abspath("/models/parent.py")))

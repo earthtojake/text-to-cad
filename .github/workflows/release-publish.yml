@@ -105,9 +105,10 @@ jobs:
         if: steps.gate.outputs.should_publish == 'true'
         uses: ./.github/actions/setup-deps
 
-      # The bundle feeds the WHEEL: cadgen's Node builders and snapshot bundle
-      # (committed, so --clean must reproduce them byte for byte) and the CAD Viewer
-      # client (gitignored, wheel-only). Nothing here writes to git.
+      # The bundle feeds the WHEEL, and it is the only thing that does: cadgen's Node
+      # builders, the snapshot browser bundle and the CAD Viewer client are all
+      # gitignored, so the release commit carries none of them. Nothing here writes to
+      # git -- the wheel is the release asset.
       - name: Bundle production outputs
         if: steps.gate.outputs.should_publish == 'true'
         run: scripts/bundle/bundle.sh --clean
@@ -165,6 +166,31 @@ jobs:
       # The distribution is kept whether or not it ships: a rehearsal's artifact is
       # what you inspect instead of a PyPI upload, and a main run's is the record of
       # exactly what was uploaded.
+      # The paranoid half of the same question check-wheel-contents.sh answers, asked of
+      # the wheel that actually ships rather than one rebuilt in scratch: the runtime is
+      # built minutes earlier by a step that could fail soft, and a wheel without it
+      # installs cleanly and then cannot render a snapshot or export a mesh.
+      - name: Assert the shipping wheel carries its built runtime
+        if: steps.gate.outputs.should_publish == 'true'
+        run: |
+          wheel="$(find packages/cadgen/dist -name '*.whl' -type f | head -n 1)"
+          [ -n "$wheel" ] || { echo "no wheel under packages/cadgen/dist" >&2; exit 1; }
+          listing="$(unzip -l "$wheel")"
+          echo "$listing" | grep -E 'cadgen/_runtime/' || true
+          for required in \
+            cadgen/_runtime/browser/snapshot-render.js \
+            cadgen/_runtime/browser/render.html \
+            cadgen/_runtime/node/mesh-export.mjs \
+            cadgen/_runtime/node/dxf-mesh.mjs \
+            cadgen/_runtime/viewer/index.html; do
+            if ! printf '%s\n' "$listing" | grep -qF " $required"; then
+              echo "$(basename "$wheel") does not contain $required" >&2
+              echo "scripts/bundle/bundle.sh produces it; [tool.setuptools.package-data] ships it." >&2
+              exit 1
+            fi
+          done
+          echo "$(basename "$wheel") carries its built runtime."
+
       - name: Upload the distribution as a workflow artifact
         if: steps.gate.outputs.should_publish == 'true'
         uses: actions/upload-artifact@v7
@@ -193,7 +219,9 @@ jobs:
           echo "Would have deployed the docs site from $GITHUB_SHA."
           # --dry-run computes the tag and the release it would create without
           # pushing anything; the version check inside it runs for real.
-          scripts/release/publish-github-release.sh --target HEAD --dry-run --publish
+          args=(--target HEAD --dry-run --publish)
+          for file in packages/cadgen/dist/*; do args+=(--asset "$file"); done
+          scripts/release/publish-github-release.sh "${args[@]}"
 
   # The docs site is built from the release commit itself: main is the source tree,
   # and apps/docs/package.json carries the stamped version the header reads.
@@ -236,8 +264,18 @@ jobs:
             echo "Using GITHUB_TOKEN for tag push."
           fi
 
+      # The distribution this run built and uploaded to PyPI, fetched back from the
+      # workflow artifact so the release page carries the same bytes -- not a
+      # rebuild, which could legally differ.
+      - name: Download the published distribution
+        uses: actions/download-artifact@v7
+        with:
+          name: cadgen-${{ needs.publish.outputs.version }}
+          path: packages/cadgen/dist
+
       # A push-triggered run has no `publish` input: it publishes. Only a manual
-      # dispatch can ask for a draft.
+      # dispatch can ask for a draft. The wheel and sdist are attached to the
+      # release; a resumed run attaches them to the release that already exists.
       - name: Create release tag and GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -247,4 +285,8 @@ jobs:
           if [ "${INPUT_PUBLISH:-true}" = "true" ]; then
             args+=(--publish)
           fi
+          ls -l packages/cadgen/dist
+          for file in packages/cadgen/dist/*.whl packages/cadgen/dist/*.tar.gz; do
+            [ -f "$file" ] && args+=(--asset "$file")
+          done
           scripts/release/publish-github-release.sh "${args[@]}"

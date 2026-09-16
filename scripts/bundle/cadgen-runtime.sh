@@ -12,17 +12,22 @@ set -euo pipefail
 # debugging one stage.
 #
 # Stages (default: all of them):
-#   --node      esbuilt builders          -> _runtime/node       (committed)
-#   --browser   snapshot browser bundle   -> _runtime/browser    (committed)
-#   --viewer    CAD Viewer client (vite)  -> _runtime/viewer     (gitignored; wheel-only)
+#   --node      esbuilt builders          -> _runtime/node
+#   --browser   snapshot browser bundle   -> _runtime/browser
+#   --viewer    CAD Viewer client (vite)  -> _runtime/viewer
 #
-# The viewer stage is the odd one out: its output is NOT committed. A checkout serves
-# apps/viewer/dist directly (cadgen.assets prefers it), so the only consumer of
-# _runtime/viewer is `python -m build`, and a 2.7 MB tree that changes on every client
-# edit is noise in git. `--check` therefore skips it (nothing committed to diff against)
-# and `--print-outputs` does not list it (the release's staged-outputs assertion is about
-# what the publish COMMIT must carry). scripts/release/check-wheel-contents.sh is the gate
-# that proves the wheel got it.
+# NOTHING here is committed. The whole _runtime tree is gitignored and built on demand:
+# the wheel is the only place these files ship, and a rebundle of the snapshot renderer
+# alone was 1.3 MB of churn per commit. So there is no committed copy to diff against,
+# and `--check` means "the runtime BUILDS and every required output is there" rather than
+# "the committed copy is fresh": it builds into _runtime like a normal run and then
+# asserts the files each stage owes. scripts/release/check-wheel-contents.sh is the gate
+# that proves the wheel got them.
+#
+# `--check` skips the viewer stage because it is the expensive one (a vite build of
+# apps/viewer, which needs that app's node_modules) and because a checkout serves
+# apps/viewer/dist directly -- cadgen.assets prefers it, so nothing in a checkout reads
+# _runtime/viewer. `--print-outputs` lists the two directories a bundle always produces.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -39,8 +44,13 @@ VIEWER_DIR="$RUNTIME_DIR/viewer"
 VIEWER_APP_DIR="$REPO_ROOT/apps/viewer"
 VIEWER_PACKAGE_MANAGER="${CAD_VIEWER_PACKAGE_MANAGER:-}"
 
-CHECK_DIR="${CADGEN_RUNTIME_CHECK_DIR:-$REPO_ROOT/tmp/cadgen-runtime-check}"
 SNAPSHOT_BUILD_DEPS_DIR="${CADGEN_SNAPSHOT_BUILD_DEPS_DIR:-$REPO_ROOT/tmp/cadgen-snapshot-build}"
+
+# What each stage owes, checked after a --check build. A stage that emits nothing, or
+# emits one file and silently drops another, is the failure this catches before a wheel
+# carries the hole to a user.
+NODE_OUTPUTS=(dxf-mesh.mjs mesh-export.mjs package.json THIRD_PARTY_LICENSES.txt)
+BROWSER_OUTPUTS=(snapshot-render.js render.html THIRD_PARTY_LICENSES.txt)
 
 BUILDER_ENTRIES=(
   "$REPO_ROOT/packages/cadgen-js/bin/dxf-mesh.mjs"
@@ -61,17 +71,18 @@ Usage:
   scripts/bundle/cadgen-runtime.sh [--check] [--clean] [--print-outputs] [stages...]
 
 Builds cadgen's packaged runtime assets into packages/cadgen/src/cadgen/_runtime.
+None of it is committed; the wheel is where it ships.
 
 Stages (default: all):
-  --node      esbuilt Node builders     -> _runtime/node      (committed)
-  --browser   snapshot browser bundle   -> _runtime/browser   (committed)
-  --viewer    CAD Viewer client (vite)  -> _runtime/viewer    (gitignored; wheel-only)
+  --node      esbuilt Node builders     -> _runtime/node
+  --browser   snapshot browser bundle   -> _runtime/browser
+  --viewer    CAD Viewer client (vite)  -> _runtime/viewer
 
 Options:
-  --check          Rebuild into tmp/ and fail if the committed outputs are stale.
-                   The viewer stage is skipped: nothing of it is committed.
-  --clean          Remove the temporary check/build directories first.
-  --print-outputs  Print committed output paths (repo-relative), then exit.
+  --check          Build, then assert every required output exists. Skips the
+                   viewer stage (a vite build nothing in a checkout reads).
+  --clean          Remove the _runtime tree first, so the build starts from nothing.
+  --print-outputs  Print the generated output paths (repo-relative), then exit.
   -h, --help       Show this help.
 EOF
 }
@@ -101,8 +112,11 @@ if [ "$PRINT_OUTPUTS" -eq 1 ]; then
   exit 0
 fi
 
+# --clean builds from nothing rather than over whatever is there. Each stage already
+# clears its own directory, so this only matters when a stage or a file has been RENAMED
+# and the old one would otherwise survive to be packaged.
 if [ "$CLEAN" -eq 1 ]; then
-  rm -rf "$CHECK_DIR"
+  rm -rf "$RUNTIME_DIR"
 fi
 
 require_dir() {
@@ -229,38 +243,38 @@ build_all() {
   fi
 }
 
+mkdir -p "$RUNTIME_DIR"
+build_all "$RUNTIME_DIR"
+
 if [ "$MODE" = "check" ]; then
-  rm -rf "$CHECK_DIR"
-  mkdir -p "$CHECK_DIR"
-  build_all "$CHECK_DIR"
-  stale=0
-  for stage in node browser; do
-    case "$stage" in
-      node) [ "$STAGE_NODE" -eq 1 ] || continue ;;
-      browser) [ "$STAGE_BROWSER" -eq 1 ] || continue ;;
-    esac
-    label="packages/cadgen/src/cadgen/_runtime/$stage"
-    if [ ! -d "$RUNTIME_DIR/$stage" ]; then
-      echo "Missing generated cadgen runtime: $label" >&2
-      stale=1
-      continue
+  missing=0
+  check_stage_outputs() {
+    local stage="$1"
+    shift
+    local name gaps=0
+    for name in "$@"; do
+      if [ ! -f "$RUNTIME_DIR/$stage/$name" ]; then
+        echo "Missing runtime output: packages/cadgen/src/cadgen/_runtime/$stage/$name" >&2
+        gaps=1
+        missing=1
+      fi
+    done
+    if [ "$gaps" -eq 0 ]; then
+      echo "packages/cadgen/src/cadgen/_runtime/$stage built ($# files)."
     fi
-    diff_path="${TMPDIR:-/tmp}/cadgen-runtime-$stage-diff.txt"
-    if ! diff -qr -x __pycache__ -x '*.pyc' "$CHECK_DIR/$stage" "$RUNTIME_DIR/$stage" >"$diff_path"; then
-      cat "$diff_path" >&2
-      echo "$label is stale." >&2
-      stale=1
-    else
-      echo "$label is up to date."
-    fi
-  done
-  if [ "$stale" -ne 0 ]; then
+  }
+  if [ "$STAGE_NODE" -eq 1 ]; then
+    check_stage_outputs node "${NODE_OUTPUTS[@]}"
+  fi
+  if [ "$STAGE_BROWSER" -eq 1 ]; then
+    check_stage_outputs browser "${BROWSER_OUTPUTS[@]}"
+  fi
+  if [ "$missing" -ne 0 ]; then
     echo "" >&2
-    echo "Run scripts/bundle/bundle.sh and commit the result." >&2
+    echo "The bundler ran but did not produce everything cadgen needs. This is a bundler" >&2
+    echo "or dependency failure, not a stale checkout: rerun scripts/bundle/bundle.sh --clean" >&2
+    echo "and read the esbuild output above." >&2
     exit 1
   fi
-  echo "cadgen packaged runtime is up to date."
-else
-  mkdir -p "$RUNTIME_DIR"
-  build_all "$RUNTIME_DIR"
+  echo "cadgen packaged runtime builds and is complete."
 fi

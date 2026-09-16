@@ -25,7 +25,7 @@ add_repo_path("packages/cadgen/src")
 from cadgen import step_artifact_cli  # noqa: E402
 from cadgen._internal.step_assemble import assemble_step_from_package  # noqa: E402
 from cadgen.catalog import result_view_dir  # noqa: E402
-from tests.python.support.cad_test_roots import IsolatedCadRoots  # noqa: E402
+from tests.python.support.cad_test_roots import ClassCadRoots, IsolatedCadRoots  # noqa: E402
 
 # Two occurrences of DISTINCT parts with per-occurrence colors and a
 # kinematics block — the planetary pilot's shape of metadata, minimized.
@@ -56,26 +56,46 @@ if __name__ == "__main__":
 
 
 class GeneratedStepFidelityTests(unittest.TestCase):
+    # The generated package is built ONCE for the class: every test reads it (or
+    # assembles and imports a COPY into its own store), none rebuilds it.
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls._class_roots = ClassCadRoots(prefix="cadfid-seed-")
+        cls._seed_dir = cls._class_roots.cad_root / "seed"
+        cls._seed_dir.mkdir()
+        generator = cls._seed_dir / "colored.py"
+        generator.write_text(COLORED_ASSEMBLY_GENERATOR, encoding="utf-8")
+        payload = step_artifact_cli.build_step_artifact(
+            repo_root=Path.cwd(),
+            step=cls._seed_dir / "colored.step",
+            source_path=generator,
+        )
+        if not payload.get("ok"):
+            raise RuntimeError(f"the seed package could not be built: {payload}")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._class_roots.cleanup()
+        super().tearDownClass()
+
     def setUp(self) -> None:
         self._isolated_roots = IsolatedCadRoots(self, prefix="cadfid-")
         self._tempdir = self._isolated_roots.temporary_cad_directory(prefix="tmp-cadfid-")
         self.temp_root = Path(self._tempdir.name)
+        self._class_roots.copy_store_into(self._isolated_roots)
 
     def tearDown(self) -> None:
         shutil.rmtree(self.temp_root, ignore_errors=True)
         self._tempdir.cleanup()
 
     def _build_generated_package(self) -> tuple[Path, Path]:
-        generator = self.temp_root / "colored.py"
-        generator.write_text(COLORED_ASSEMBLY_GENERATOR, encoding="utf-8")
-        logical_step = self.temp_root / "colored.step"
-        payload = step_artifact_cli.build_step_artifact(
-            repo_root=Path.cwd(),
-            step=logical_step,
-            source_path=generator,
-        )
-        self.assertTrue(payload.get("ok"), payload)
-        return generator, logical_step
+        """The seed build's script, document and sidecar, copied beside this test's store."""
+        for name in ("colored.py", "colored.step", "colored.step.json"):
+            source = self._seed_dir / name
+            if source.is_file():
+                shutil.copyfile(source, self.temp_root / name)
+        return self.temp_root / "colored.py", self.temp_root / "colored.step"
 
     def _descriptor(self, step_path: Path) -> dict:
         return json.loads(
@@ -108,10 +128,14 @@ class GeneratedStepFidelityTests(unittest.TestCase):
         self.assertNotIn("sourcePath", sidecar)
         from cadgen._internal.source_sidecar import read_source_provenance
 
-        provenance = read_source_provenance(logical_step) or {}
+        # Provenance is the model RECORD behind the document, keyed by the path the
+        # model wrote; the copied store carries it under the seed's path.
+        provenance = read_source_provenance(self._seed_dir / "colored.step") or {}
         self.assertEqual(provenance.get("sourceKind"), "python")
 
-    def test_assembled_step_carries_occurrence_colors(self) -> None:
+    def test_assembled_step_carries_occurrence_colors_and_no_cadgen_metadata(self) -> None:
+        # One assembled file, read as text: the occurrence colours are in it, and
+        # nothing of cadgen's is -- no cadgen: properties, no source path, no hash.
         _, logical_step = self._build_generated_package()
         out = self.temp_root / "out" / "colored.step"
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -122,6 +146,8 @@ class GeneratedStepFidelityTests(unittest.TestCase):
             text,
             "assembled STEP must carry the occurrence colors the descriptor records",
         )
+        self.assertNotIn("cadgen:", text)
+        self.assertNotIn("colored.py", text)
 
     def test_generate_and_import_produce_one_descriptor_schema(self) -> None:
         """The Phase-2 invariant: assembly.json is a pure function of the STEP
@@ -146,6 +172,18 @@ class GeneratedStepFidelityTests(unittest.TestCase):
         )
         self.assertTrue(payload.get("ok"), payload)
         imported = self._descriptor(exported)
+
+        # A bare generated STEP is simply importable (nothing in the file says
+        # otherwise): the import leaves no source sidecar behind, and the derived
+        # package keeps every occurrence's colour.
+        from cadgen._internal.source_sidecar import model_is_generated
+
+        self.assertFalse(model_is_generated(exported), "an import must not leave a source sidecar behind")
+        self.assertEqual(
+            len([o for o in imported.get("occurrences") or [] if isinstance(o.get("color"), list)]),
+            len(imported.get("occurrences") or []),
+            "every imported occurrence keeps its colour",
+        )
 
         # Schema purity: one key set, no source-derived keys on either side.
         self.assertEqual(sorted(generated.keys()), sorted(imported.keys()))
@@ -173,50 +211,6 @@ class GeneratedStepFidelityTests(unittest.TestCase):
         for axis in ("min", "max"):
             for got, expected in zip(imported["bbox"][axis], generated["bbox"][axis]):
                 self.assertAlmostEqual(got, expected, places=3)
-
-    def test_written_step_carries_no_cadgen_metadata(self) -> None:
-        # The written file is a plain artifact: no cadgen: properties, no
-        # source path, no source hash — under any circumstances.
-        _, logical_step = self._build_generated_package()
-        exported_dir = self.temp_root / "clean"
-        exported_dir.mkdir()
-        exported = exported_dir / "colored.step"
-        assemble_step_from_package(result_view_dir(logical_step), exported)
-        text = exported.read_text(encoding="utf-8", errors="ignore")
-        self.assertNotIn("cadgen:", text)
-        self.assertNotIn("colored.py", text)
-
-    def test_import_of_generated_step_preserves_colors(self) -> None:
-        # A bare generated STEP is simply importable (nothing in the file says
-        # otherwise) — and thanks to the colored assembly, the derived package
-        # keeps the geometry colors. Pose/mates live in the sidecar, so they
-        # are absent until the model script runs again.
-        _, logical_step = self._build_generated_package()
-        exported_dir = self.temp_root / "imported"
-        exported_dir.mkdir()
-        exported = exported_dir / "colored.step"
-        assemble_step_from_package(result_view_dir(logical_step), exported)
-
-        payload = step_artifact_cli.build_step_artifact(
-            repo_root=Path.cwd(),
-            step=exported,
-        )
-        self.assertTrue(payload.get("ok"), payload)
-        descriptor = self._descriptor(exported)
-        self.assertNotIn("sourceKind", descriptor)
-        from cadgen._internal.source_sidecar import model_is_generated
-
-        self.assertFalse(
-            model_is_generated(exported),
-            "an import must not leave a source sidecar behind",
-        )
-        occurrences = descriptor.get("occurrences") or []
-        colored = [o for o in occurrences if isinstance(o.get("color"), list)]
-        self.assertEqual(
-            len(colored),
-            len(occurrences),
-            f"re-import must keep the STEP's colors: {occurrences}",
-        )
 
 
 if __name__ == "__main__":

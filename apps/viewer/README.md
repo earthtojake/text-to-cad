@@ -259,3 +259,30 @@ The backend's suite lives with cadgen and is not collected here; running only
 
 Headless UI verification uses Playwright with `--use-angle=metal` —
 the default software WebGL renderer is not what users see.
+
+### The browser gate
+
+The repository's browser gate (`test-viewer-browser.sh`, under its test
+scripts) drives the BUILT Viewer in a real Chromium against fixtures it
+generates itself. It comes in two sizes:
+
+- `--ci` — about 2 minutes: format, pick, kinematics, camera.
+- no flag — about 4 minutes: every gate.
+- `--only <gate>` — one gate while working on it.
+
+`--ci` is the subset that is safe to automate: it opens one file per load path
+(STEP package, mesh, drawing, robot), picks a face and toggles it, drives a
+joint five ways, and switches viewing mode. Nothing in it reads a frame rate or
+sleeps toward a conclusion — every assertion settles on state the app publishes,
+so a slower runner is slower, not redder.
+
+The rest stays manual, because it reads pixels in ways a software rasterizer
+will not reproduce: `picking` brute-force-clicks for a pixel on the silhouette
+(~26 probes at the 700 ms activation window, the most expensive gate here) and
+scores edge-highlight fragmentation pixel by pixel; `scene` compares mean
+luminance between appearance presets and between the Inspect grid and the Render
+floor. `quality` is deterministic and is the first gate to promote if the budget
+grows; it is out only on cost.
+
+Both sizes print `[setup] Ns` and `[gate NAME] Ns`, so a run that got slower
+says where.

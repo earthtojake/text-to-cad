@@ -16,6 +16,7 @@ store on first use, and every later export reuses it.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -52,10 +53,38 @@ def _write_model(root: Path, size: float) -> Path:
 
 
 class MeshExportStoreReuseTest(unittest.TestCase):
+    # block.py is built cold ONCE for the class; each test gets a copy of the
+    # project (script, document, store) and drives the doors against that copy.
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls._seed_tmp = tempfile.TemporaryDirectory(prefix="mesh-export-store-seed-")
+        cls._seed_root = Path(cls._seed_tmp.name).resolve()
+        entry = _write_model(cls._seed_root, size=6.0)
+        env = dict(os.environ)
+        env.update({
+            "CADGEN_DAEMON": "0",
+            "CADGEN_COMPONENT_WORKERS": "1",
+            "CADGEN_CACHE_DIR": str(cls._seed_root / "store"),
+            "PYTHONPATH": str(REPO / "packages/cadgen/src"),
+        })
+        build = subprocess.run(
+            [PYTHON, entry.name], cwd=str(cls._seed_root), env=env,
+            capture_output=True, text=True, timeout=600,
+        )
+        if build.returncode != 0 or not (cls._seed_root / "block.step").is_file():
+            raise RuntimeError(f"the seed build failed:\n{build.stdout}{build.stderr}")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._seed_tmp.cleanup()
+        super().tearDownClass()
+
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory(prefix="mesh-export-store-")
         self.addCleanup(self._tmp.cleanup)
         self.root = Path(self._tmp.name).resolve()
+        shutil.copytree(self._seed_root, self.root, dirs_exist_ok=True)
         self.store = self.root / "store"
         self.env = dict(os.environ)
         self.env.update({
@@ -95,9 +124,6 @@ class MeshExportStoreReuseTest(unittest.TestCase):
         return {p.name for p in records.iterdir() if p.is_file()}
 
     def test_a_generated_document_exports_current_and_after_source_edit(self) -> None:
-        entry = _write_model(self.root, size=6.0)
-        build = self._run([entry.name], self.root)
-        self.assertEqual(build.returncode, 0, build.stdout + build.stderr)
         step_file = self.root / "block.step"
         self.assertTrue(step_file.is_file(), "model script writes its STEP")
 
@@ -131,8 +157,6 @@ class MeshExportStoreReuseTest(unittest.TestCase):
     def test_an_imported_document_writes_defaults_then_reuses_one_compilation(self) -> None:
         # A door reads no declarations: a bare door tessellates the document's
         # tree and writes ONE mesh beside it — imported or generated alike.
-        entry = _write_model(self.root, size=6.0)
-        self.assertEqual(0, self._run([entry.name], self.root).returncode)
         imported = self.root / "imported_block.step"
         imported.write_bytes((self.root / "block.step").read_bytes() + b"\n")
         self.assertFalse(imported.with_suffix(".step.json").exists(), "an import has no sidecar")

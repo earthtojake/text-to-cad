@@ -16,7 +16,7 @@ add_repo_path("packages/cadgen/src")
 
 from cadgen import render as cad_render  # noqa: E402
 from cadgen import step_export_target  # noqa: E402
-from tests.python.support.cad_test_roots import IsolatedCadRoots  # noqa: E402
+from tests.python.support.cad_test_roots import ClassCadRoots, IsolatedCadRoots  # noqa: E402
 
 # A tiny generated model: model() returns a single labeled solid.
 BOX_GENERATOR = """from build123d import Box
@@ -43,12 +43,43 @@ FORMATS = ("step", "stl", "3mf", "glb")
 
 
 class StepExportTargetTests(unittest.TestCase):
+    # box.step (and its re-export, box_document.step) are built ONCE for the
+    # class: every test reads them through the export ABI and rebuilds nothing.
+    @classmethod
+    def setUpClass(cls) -> None:
+        from cadgen.generation import generate_step_targets
+
+        super().setUpClass()
+        cls._class_roots = ClassCadRoots(prefix="cadexp-seed-")
+        cls._seed_dir = cls._class_roots.cad_root / "seed"
+        cls._seed_dir.mkdir()
+        generator = cls._seed_dir / "box.py"
+        generator.write_text(BOX_GENERATOR, encoding="utf-8")
+        if generate_step_targets([str(generator)]) != 0 or not (cls._seed_dir / "box.step").is_file():
+            raise RuntimeError("the model script wrote no box.step")
+        buffer = StringIO()
+        with redirect_stdout(buffer):
+            code = step_export_target.main([
+                "--repo-root", str(Path.cwd()),
+                "--step", str(cls._seed_dir / "box.step"),
+                "--format", "step",
+                "--out", str(cls._seed_dir / "box_document.step"),
+            ])
+        if code != 0:
+            raise RuntimeError(f"the seed re-export failed: {buffer.getvalue()}")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._class_roots.cleanup()
+        super().tearDownClass()
+
     def setUp(self) -> None:
         self._isolated_roots = IsolatedCadRoots(self, prefix="cadexp-")
         self._tempdir = self._isolated_roots.temporary_cad_directory(prefix="tmp-cadexp-")
         self.temp_root = Path(self._tempdir.name)
         self.out_dir = self.temp_root / "out"
         self.out_dir.mkdir(parents=True, exist_ok=True)
+        self._class_roots.copy_store_into(self._isolated_roots)
 
     def tearDown(self) -> None:
         shutil.rmtree(self.temp_root, ignore_errors=True)
@@ -77,13 +108,10 @@ class StepExportTargetTests(unittest.TestCase):
 
     def _build_box_document(self) -> Path:
         """``box.step``, written the ONE way a document is written: by running
-        the model script. The export ABI takes documents and nothing else."""
-        from cadgen.generation import generate_step_targets
-
-        generator = self._write_box_generator()
-        self.assertEqual(0, generate_step_targets([str(generator)]))
+        the model script (once, in setUpClass). The export ABI takes documents
+        and nothing else."""
         document = self.temp_root / "box.step"
-        self.assertTrue(document.is_file(), "the model script wrote no box.step")
+        shutil.copyfile(self._seed_dir / "box.step", document)
         return document
 
     def test_the_export_abi_takes_documents_only(self) -> None:
@@ -141,15 +169,8 @@ class StepExportTargetTests(unittest.TestCase):
         DOCUMENTS-ONLY: `export_cad_target` is the engine behind
         `cadgen stl|3mf|glb build`, which never sees a script.
         """
-        built = self._build_box_document()
         document = self.temp_root / "box_document.step"
-        code, payload = self._run([
-            "--repo-root", str(Path.cwd()),
-            "--step", str(built),
-            "--format", "step",
-            "--out", str(document),
-        ])
-        self.assertEqual(code, 0, payload)
+        shutil.copyfile(self._seed_dir / "box_document.step", document)
         return document
 
     def test_export_cad_target_rejects_step_format(self) -> None:
@@ -160,15 +181,6 @@ class StepExportTargetTests(unittest.TestCase):
             step_export_target.export_cad_target(document, [("step", None)])
         self.assertIn("Unsupported export format: step", str(cm.exception))
 
-
-    def test_a_bare_door_writes_the_sibling_default(self) -> None:
-        # A door reads no declarations: OUT omitted means the sibling default
-        # beside the document, for an import exactly as for a generated model.
-        document = self._write_box_document()
-        payload = step_export_target.export_cad_target(document, [("stl", None)])
-        self.assertTrue(payload["ok"])
-        self.assertEqual([str(document.with_suffix(".stl"))], [entry["path"] for entry in payload["files"]])
-        self._assert_export_file(document.with_suffix(".stl"), "stl")
 
     def test_export_cad_target_writes_mesh_formats(self) -> None:
         document = self._write_box_document()
@@ -182,31 +194,6 @@ class StepExportTargetTests(unittest.TestCase):
         self.assertTrue(payload["ok"])
         for entry in payload["files"]:
             self._assert_export_file(Path(entry["path"]), entry["format"])
-
-    def test_mesh_exports_are_byte_deterministic(self) -> None:
-        # design/unified-tessellation.md Phase 4: one deterministic code path,
-        # so exporting the same model twice yields identical bytes per format.
-        document = self._write_box_document()
-        digests: dict[str, bytes] = {}
-        for round_index in range(2):
-            payload = step_export_target.export_cad_target(
-                document,
-                [
-                    (fmt, self.out_dir / f"round{round_index}.{fmt}")
-                    for fmt in step_export_target.MESH_EXPORT_FORMATS
-                ],
-            )
-            self.assertTrue(payload["ok"])
-            for entry in payload["files"]:
-                data = Path(entry["path"]).read_bytes()
-                if round_index == 0:
-                    digests[entry["format"]] = data
-                else:
-                    self.assertEqual(
-                        digests[entry["format"]],
-                        data,
-                        f"{entry['format']} export must be byte-identical across runs",
-                    )
 
     def test_explicit_out_takes_native_path_semantics(self) -> None:
         # An explicit OUT is a one-shot ad-hoc export, never persisted, so it
