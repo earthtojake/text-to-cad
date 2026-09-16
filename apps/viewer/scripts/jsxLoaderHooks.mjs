@@ -2,7 +2,7 @@
 // The client is authored the way Vite builds it: JSX inside `.js`, the `@/`
 // alias, and extensionless relative imports. Node resolves none of those, so
 // component and hook tests need the same two translations Vite performs — an
-// alias/extension resolver and the esbuild JSX transform (Vite's own, so tests
+// alias/extension resolver and the Oxc JSX transform (Vite's own, so tests
 // and the build never disagree about the transform).
 import fs from "node:fs";
 import path from "node:path";
@@ -18,9 +18,15 @@ const JSX_MARKER = /<\/|\/>/u;
 
 let transform = null;
 
+// Vite 8 transforms with Oxc: `transformWithEsbuild` is deprecated and now
+// needs esbuild installed separately, which the app no longer depends on.
+// `lang` replaces esbuild's `loader`, and the JSX runtime is an object.
 async function transformJsx(source, file) {
-  if (!transform) ({ transformWithEsbuild: transform } = await import("vite"));
-  const transformed = await transform(source, file, { loader: "jsx", jsx: "automatic" });
+  if (!transform) ({ transformWithOxc: transform } = await import("vite"));
+  const transformed = await transform(source, file, {
+    lang: "jsx",
+    jsx: { runtime: "automatic" },
+  });
   return transformed.code;
 }
 
