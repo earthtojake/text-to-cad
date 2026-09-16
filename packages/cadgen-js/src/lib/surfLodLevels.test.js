@@ -19,8 +19,14 @@ import {
   LOD_DEFAULT_LEVEL,
   lodTessellationForLevel,
 } from "./surf/lodPolicy.js";
+import { TESSELLATION_VERSION } from "./surf/tessellate.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+// Read the algorithm generation from the constant rather than spelling it out:
+// this asserts the key's SHAPE, and every tessellator change bumps that number.
+const IDENTITY = new RegExp(
+  `^[0-9a-f]{64}-t${TESSELLATION_VERSION}-p4-l[0-9a-f]{16}-a[0-9a-f]{16}-s[0-9a-f]{64}$`,
+);
 const SUN_GEAR = fs.readFileSync(path.join(HERE, "surf", "fixtures", "sun_gear.surf"));
 const SURFACE_OBJECT = createHash("sha256").update(SUN_GEAR).digest("hex");
 const identityFor = (url) => ({
@@ -44,9 +50,9 @@ function surfArrayBuffer() {
 test("mesh identity includes component, effective tolerances, algorithm and payload", () => {
   const defaultKey = surfTessellationCacheKey("u.surf", undefined);
   assert.equal(defaultKey, surfTessellationCacheKey("u.surf", {}));
-  assert.match(defaultKey, /^[0-9a-f]{64}-t3-p4-l[0-9a-f]{16}-a[0-9a-f]{16}-s[0-9a-f]{64}$/);
+  assert.match(defaultKey, IDENTITY);
   const l1 = surfTessellationCacheKey("u.surf", { chordTolerance: 5e-4 });
-  assert.match(l1, /^[0-9a-f]{64}-t3-p4-l[0-9a-f]{16}-a[0-9a-f]{16}-s[0-9a-f]{64}$/);
+  assert.match(l1, IDENTITY);
   assert.notEqual(l1, surfTessellationCacheKey("u.surf", { chordTolerance: 1.5e-4 }));
   assert.notEqual(l1, surfTessellationCacheKey("u.surf", { chordTolerance: 5e-4, angleTolerance: 0.2 }));
   // 0.0005 and 5e-4 hit the same entry.
