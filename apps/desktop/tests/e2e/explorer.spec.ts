@@ -53,14 +53,16 @@ const projectName = path.basename(repoRoot);
 const MARKDOWN = "AGENTS.md";
 const IMAGE = "apps/desktop/build/icon.png";
 const STEP = "tests/fixtures/cad/import-smoke.step";
+const CAD_LOAD_TIMEOUT_MS = 60_000;
 
 /**
  * The CAD tests run against whatever runtime the app resolves on its own —
  * the bundled one under `resources/runtime/<os>-<arch>/` when the bundler
  * has run, else the checkout's `.venv` — so the app is launched WITHOUT
  * `CAD_DESKTOP_PYTHON`. The first STEP test breaks the runtime on purpose
- * (an override pointing nowhere) to see the failure card; the render test
- * clears it and skips itself on a local machine with no runtime at all.
+ * (an override pointing nowhere) to see the failure card; the recovery test
+ * clears it and retries the same tab. The later render test skips itself on
+ * a local machine with no runtime at all.
  * HARDCORE_E2E_REQUIRE_CAD=1 makes missing or stale runtimes fail qualification.
  */
 let cadReady = false;
@@ -131,9 +133,6 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  // Quitting takes the app anywhere from ten seconds to a few minutes — the
-  // detector's CLI probes and the watcher over this repository are still
-  // winding down — and a hook that gives up at sixty fails the last test.
   test.setTimeout(300_000);
   await app?.close();
   const runtimeLog = path.join(userData, "cad-runtime.log");
@@ -414,15 +413,9 @@ test("opens an image with its dimensions", async () => {
 });
 
 test("shows the runtime's own error for a STEP file when the runtime cannot start", async () => {
-  // An override that points nowhere is the one way to break the runtime on
-  // every machine alike. The tab is not a placeholder: it says the runtime
-  // did not start, shows the interpreter's words, and offers to try again.
-  await page.evaluate(() => window.hardcore.settings.set({ cadPythonOverride: "/nowhere/python" }));
-  const broken = await page.evaluate(() => window.hardcore.runtime.status());
-  expect(broken.state).toBe("error");
-
-  await newTab(page, "File");
-  await openFromTree(STEP);
+  await openStepWithUnavailableRuntime();
+  // The tab is not a placeholder: it says the runtime did not start,
+  // shows the interpreter's words, and offers to try again.
   await expect(page.getByText("The CAD runtime did not start")).toBeVisible();
   await expect(page.locator("[data-cad-failure=runtime-not-ready]")).toContainText("/nowhere/python");
   await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
@@ -440,7 +433,20 @@ test("shows the runtime's own error for a STEP file when the runtime cannot star
   await expect(panels(page)).toHaveCount(1);
   await expect(panels(page)).toHaveAttribute("data-file-panel-container", "tree");
   await shoot("file-cad-failed.png");
+});
 
+test("retries the same STEP tab after restoring the CAD runtime", async () => {
+  // Keep the normal UI/setup budget separate from the full CAD load deadline.
+  test.setTimeout(60_000 + CAD_LOAD_TIMEOUT_MS);
+  // The serial suite reuses the failed tab and private cache. A filtered
+  // recovery run prepares that same starting state without loading geometry.
+  const failure = page.locator("[data-cad-failure=runtime-not-ready]");
+  if (await failure.count() === 0) {
+    await openStepWithUnavailableRuntime();
+  }
+  await expect(failure).toBeVisible();
+  const tab = page.getByRole("tab", { name: /import-smoke\.step/ });
+  const tabId = await tab.getAttribute("data-tab");
   // With the override gone the runtime is whatever the app resolves; Try
   // again asks for the viewer once more without reopening the file.
   await page.evaluate(() => window.hardcore.settings.set({ cadPythonOverride: null }));
@@ -449,12 +455,22 @@ test("shows the runtime's own error for a STEP file when the runtime cannot star
   if (cadReady) {
     expect(status.cadgenVersion).toMatch(/^\d+\.\d+\.\d+/);
     await page.getByRole("button", { name: "Try again" }).click();
-    await expect(page.locator("canvas").first()).toBeVisible({ timeout: 60_000 });
+    await expect(tab).toHaveAttribute("data-tab", tabId!);
+    await expect(page.locator("canvas").first()).toBeVisible({ timeout: CAD_LOAD_TIMEOUT_MS });
   }
   // Closed either way: the render test opens it again from a clean tab.
-  await page.getByRole("tab", { name: /import-smoke\.step/ }).hover();
-  await page.getByRole("tab", { name: /import-smoke\.step/ }).getByRole("button", { name: "Close import-smoke.step" }).click();
+  await tab.hover();
+  await tab.getByRole("button", { name: "Close import-smoke.step" }).click();
 });
+
+/** An invalid override gives every machine the same genuine runtime error. */
+async function openStepWithUnavailableRuntime() {
+  await page.evaluate(() => window.hardcore.settings.set({ cadPythonOverride: "/nowhere/python" }));
+  const broken = await page.evaluate(() => window.hardcore.runtime.status());
+  expect(broken.state).toBe("error");
+  await newTab(page, "File");
+  await openFromTree(STEP);
+}
 
 test("runs a command in a terminal tab", async () => {
   await newTab(page, "Terminal");
