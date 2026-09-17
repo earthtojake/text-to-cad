@@ -3519,6 +3519,23 @@ const CadViewer = forwardRef(function CadViewer({
   }, [bendAxisX, drawingBendLines, bendAnglesRad, drawingBends, drawingBendStyle, drawingBendRadiusMm, drawingKFactor, drawingHiddenLayers, drawingOrientation, drawingMaterialColor, drawingGeometry, drawingThicknessMm, drawingThicknessScale, meshData, viewerReadyTick]);
 
   useImperativeHandle(ref, () => ({
+    // The current frame as an image, for the file view to hold over the viewport while
+    // the next entry loads (the document/model toggle crossfades through it). Null when
+    // there is nothing rendered yet; never thrown, since a missed crossfade is no error.
+    async captureFrameBlob() {
+      const runtime = runtimeRef.current;
+      if (!runtime?.renderer || !runtime?.scene || !runtime?.camera) {
+        return null;
+      }
+      try {
+        renderDrawingOverlay();
+        return await buildCompositeScreenshotBlob(runtime, drawingCanvasRef.current, {
+          backgroundColor: resolveElementBackgroundColor(runtime.renderer.domElement)
+        });
+      } catch {
+        return null;
+      }
+    },
     // Clipboard-only: the viewer never downloads artifact or screenshot bytes
     // through a URL — copy actions hand out paths and images instead.
     async captureScreenshot() {

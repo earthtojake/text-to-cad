@@ -499,7 +499,9 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str, out_dir: 
                 # part, and stacked callouts on one side land at their own hole's height.
                 centre = model_to_sheet(dim.p1)
                 r = dim.radius * s
-                go_right = (vx1 - centre[0]) <= (centre[0] - vx0)
+                # Exit toward the sheet's outer margin: the other side of a view is
+                # usually another view, and a callout running across it is unreadable.
+                go_right = centre[0] >= sheet.width / 2
                 side = "right" if go_right else "left"
                 clear = reach[side] + 10.0
                 knee_x = (vx1 + clear) if go_right else (vx0 - clear)
