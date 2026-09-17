@@ -1176,7 +1176,10 @@ async function cameraHeld(page, zeroPose, what) {
 
 async function resetView(page) {
   await page.getByRole("button", { name: /Reset view/i }).first().click();
-  await settledCameraFrame(page, { stage: "reset view" });
+  // Reset changes framing on the presented model. The pose and zero-pose
+  // camera assertions do not require a queued LOD camera sample to finish;
+  // actual geometry adoption, presentation and camera stability still do.
+  await settledCameraFrame(page, { stage: "reset view", requireSettledLod: false });
 }
 
 // --- the camera each mode opens at ----------------------------------------
@@ -1186,14 +1189,15 @@ async function resetView(page) {
 // a perspective distance read as an orthographic frame. A view the user framed
 // by hand still stands within its own mode; it simply does not follow them
 // across the switch, because switching IS the reset.
-async function settledCameraFrame(page, { projection = null, stage, timeout = 60_000 } = {}) {
+async function settledCameraFrame(page, { projection = null, stage, requireSettledLod = true, timeout = 60_000 } = {}) {
   const startedAt = Date.now();
-  cameraReadiness.set(page, { ...cameraReadiness.get(page), pending: { stage, projection } });
+  cameraReadiness.set(page, { ...cameraReadiness.get(page), pending: { stage, projection, requireSettledLod } });
   // Projection is published during scene reconciliation, before Render's
   // environment and first frame are necessarily ready. The presentation host
-  // clears aria-busy only after drawing that destination scene. LOD and camera
-  // damping must also settle before a gesture or a framing assertion.
-  const ready = await page.waitForFunction((want) => {
+  // clears aria-busy only after drawing that destination scene. Camera damping
+  // must settle for every framing assertion; mode/gesture checks also require
+  // settled LOD refinement.
+  const ready = await page.waitForFunction(({ want, requireSettledLod }) => {
     const read = () => {
       const canvas = document.querySelector("canvas");
       const camera = window.__cadCamera?.();
@@ -1205,9 +1209,10 @@ async function settledCameraFrame(page, { projection = null, stage, timeout = 60
         || document.querySelector("[data-viewer-transition]")) return null;
       const expectedQualities = camera.projection === "perspective" ? ["standard", "high"] : ["interactive"];
       if (!quality?.standardQualityReady || !expectedQualities.includes(quality.quality)) return null;
-      if (lod?.componentCount > 0 && (lod.quality !== quality.quality || !lod.qualitySettled
-        || lod.busy || lod.pendingEvaluation || lod.collectionPending)) return null;
-      return { canvas, camera, quality: quality.quality, levelCounts: lod?.levelCounts };
+      if (lod?.componentCount > 0 && (lod.quality !== quality.quality || lod.busy || lod.collectionPending
+        || (requireSettledLod && (!lod.qualitySettled || lod.pendingEvaluation)))) return null;
+      return { canvas, camera, quality: quality.quality, levelCounts: lod?.levelCounts,
+        lodSettled: lod?.qualitySettled, lodPendingEvaluation: lod?.pendingEvaluation };
     };
     const after = read();
     if (!after) {
@@ -1228,8 +1233,9 @@ async function settledCameraFrame(page, { projection = null, stage, timeout = 60
     gl.finish();
     delete window.__viewerTestCameraFrame;
     return { camera: after.camera, quality: after.quality, levelCounts: after.levelCounts,
+      lodSettled: after.lodSettled, lodPendingEvaluation: after.lodPendingEvaluation,
       width: after.canvas.width, height: after.canvas.height };
-  }, projection, { timeout, polling: "raf" });
+  }, { want: projection, requireSettledLod }, { timeout, polling: "raf" });
   try {
     const state = { stage, waitMs: Date.now() - startedAt, ...await ready.jsonValue() };
     cameraReadiness.set(page, state);
