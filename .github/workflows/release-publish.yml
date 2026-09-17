@@ -268,7 +268,7 @@ jobs:
       # workflow artifact so the release page carries the same bytes -- not a
       # rebuild, which could legally differ.
       - name: Download the published distribution
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: cadgen-${{ needs.publish.outputs.version }}
           path: packages/cadgen/dist
