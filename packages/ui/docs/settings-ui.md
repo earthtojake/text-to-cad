@@ -103,9 +103,10 @@ muted, so a header separates from its rows by size *and* colour. Never reach
 for uppercase or letter-spacing to mark a header — and never make it smaller
 than its rows.
 
-- Sizes come from the type scale in `src/styles/globals.css`
-  (`text-micro` 10, `text-tiny` 11, `text-xs` 12, `text-sm` 13, `text-base`
-  14); never write a literal `text-[11px]`.
+- Sizes come from `src/styles/tokens.css`: `text-micro` 10px, `text-tiny`
+  11px and `text-xs` 12px preserve this compact settings scale. The app's
+  `text-ui`, `text-sm` and `text-base` default is 13px; it does not replace the
+  explicit smaller roles above. Never write a literal `text-[11px]`.
 - Muted text is always `text-muted-foreground`; passive glyphs and hints are
   `text-foreground-passive`. Colours, radii and shadows come from the same
   token file — no `rgb(...)` literals and no `--ui-*` aliases in components.

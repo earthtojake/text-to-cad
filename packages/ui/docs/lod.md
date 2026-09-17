@@ -53,7 +53,10 @@ levels can supply measured replacement sizes for another try.
 camera, viewport and per-component distances, visibility and selection neither
 restarts the settle debounce nor republishes status, so a viewport nobody is
 touching reaches settled quality and stays there. An idle scheduler reports
-memory-limited targets separately from settled quality.
+memory-limited targets separately from settled quality. Camera and distance
+comparisons ignore floating-point noise at a 1e-10 relative tolerance, measured
+against the last meaningful sample so accumulated movement still triggers work.
+Visibility, selection, quality changes and explicit retries remain meaningful.
 
 Scenes with joints, embedded animation, drawing poses or an active/collapsing
 exploded view keep conservative eligibility, including paused or disabled pose

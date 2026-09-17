@@ -15,6 +15,7 @@ import {
   projectedChordErrorPx,
   settledLevel,
 } from "@hardcore/core/lib/surf/lodPolicy.js";
+import { lodSampleNumberEqual } from "./lodSamplePrecision.js";
 
 export const LOD_DEBOUNCE_MS = 200;
 
@@ -177,7 +178,7 @@ export function createLodScheduler({
   function planningInputsChanged(sample) {
     if (!lastSample) return true;
     for (const cid of components.keys()) {
-      if (!Object.is(sample.distanceFor(cid), lastSample.distanceFor(cid))) return true;
+      if (!lodSampleNumberEqual(sample.distanceFor(cid), lastSample.distanceFor(cid))) return true;
       if ((sample.visibleFor?.(cid) !== false) !== (lastSample.visibleFor?.(cid) !== false)) return true;
       if ((sample.selectedFor?.(cid) === true) !== (lastSample.selectedFor?.(cid) === true)) return true;
     }
@@ -197,7 +198,9 @@ export function createLodScheduler({
     // hold `pendingEvaluation` — and therefore `qualitySettled` — false for as
     // long as the host keeps resampling a motionless viewport.
     const changed = fresh || planningInputsChanged(sample);
-    lastSample = sample;
+    // Preserve the baseline for ignored roundoff, so small real changes can
+    // accumulate instead of being compared only to the immediately prior tick.
+    if (changed) lastSample = sample;
     if (fresh) {
       sampleEpoch += 1;
       failed.clear();

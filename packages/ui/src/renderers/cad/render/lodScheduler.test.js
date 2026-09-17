@@ -853,6 +853,25 @@ test("an unchanged sample keeps the pending work it cannot replan away", async (
   scheduler.dispose();
 });
 
+test("roundoff in idle component distances cannot restart refinement, but real drift accumulates", async () => {
+  const clock = makeClock();
+  const scheduler = createLodScheduler({ ...clock, minimumLevel: 1,
+    loadLevel: async () => ({}), applyLevel: () => true });
+  const sampleAt = distance => ({ ...sampleWith({ part: distance }), cameraKey: "stationary" });
+  scheduler.setComponents([{ cid: "part", diagonal: 100, level: 3 }]);
+  scheduler.onCameraSample(sampleAt(52)); clock.fire(); await drain();
+  for (let i = 1; i <= 20; i++) {
+    assert.equal(scheduler.onCameraSample(sampleAt(52 + i * 1e-12)), false);
+    assert.equal(scheduler.snapshot().qualitySettled, true);
+  }
+  assert.equal(clock.count(), 0);
+  let changed = false;
+  for (let i = 1; i <= 100; i++) changed = scheduler.onCameraSample(sampleAt(52 + i * 1e-10)) || changed;
+  assert.equal(changed, true, "cumulative movement still schedules an evaluation");
+  assert.equal(scheduler.snapshot().pendingEvaluation, true);
+  scheduler.dispose();
+});
+
 test("a sample a visibility or selection change reaches is new work even at the same camera", async () => {
   const clock = makeClock(), loads = [];
   const scheduler = createLodScheduler({ ...clock, minimumLevel: 1,

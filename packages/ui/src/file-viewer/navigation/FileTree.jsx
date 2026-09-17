@@ -543,7 +543,7 @@ export function FileTree({ source, activePath, reveal = null, edit = null, onOpe
       <ContextMenu modal={false}>
         <ContextMenuTrigger asChild>
           <div
-            className="min-h-0 flex-1 overflow-auto py-1 outline-none"
+            className="min-h-0 flex-1 overflow-auto px-1 py-1 outline-none"
             onContextMenu={aim}
             onKeyDown={onKeyDown}
             ref={listRef}

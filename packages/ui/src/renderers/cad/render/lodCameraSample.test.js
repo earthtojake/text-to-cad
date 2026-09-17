@@ -286,6 +286,28 @@ test("geometry-derived clip distances preserve retry identity; physical projecti
   }
 });
 
+test("idle orbit roundoff keeps camera intent stable without swallowing accumulated movement", () => {
+  const f = fixture([["part", cube(0)]]);
+  const camera = f.runtime.camera;
+  camera.position.set(34.579468148240665, -11.752075831556004, 19.551277953156657);
+  const target = new THREE.Vector3(40.581657547652185, 0.3296735730581055, 1.999999999999993);
+  camera.up.set(0, 0, 1); camera.lookAt(target);
+  const initial = sample(f).cameraKey;
+  for (let i = 0; i < 100; i++) {
+    camera.position.z -= 1e-14;
+    camera.lookAt(target);
+    assert.equal(sample(f).cameraKey, initial, "idle camera matrix roundoff is not new retry intent");
+  }
+  for (let i = 0; i < 100; i++) {
+    camera.position.x += 1e-10;
+    sample(f);
+  }
+  assert.notEqual(sample(f).cameraKey, initial, "small movements accumulate against the retained baseline");
+  const moved = sample(f).cameraKey;
+  camera.zoom += 1e-5; camera.updateProjectionMatrix();
+  assert.notEqual(sample(f).cameraKey, moved, "a real lens change remains new intent");
+});
+
 test("actual bounds/group publication resampling cannot reopen a pressure-coarsened rung", async () => {
   const f = fixture([["part", cube(0)]]);
   f.runtime.camera.zoom = 100; f.runtime.camera.updateProjectionMatrix();

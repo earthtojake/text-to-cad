@@ -208,7 +208,12 @@ The camera session schema stores vectors and zoom while omitting runtime scope
 metadata. The viewport restores the serialized camera in its current file
 session, so a 110% view reopens at 110% while a second renderer starts from its
 own 100% default. Switching Inspect/Render fits the destination mode's camera
-without losing their separate stored snapshots.
+without losing their separate stored snapshots. Initial/reset/fit views use the
+projected bounds with 1.1 padding (roughly 91% occupancy in the limiting viewport
+dimension), rather than a bounding sphere. Saved/manual views retain their own
+zoom and pose. This policy belongs to the interactive UI; snapshot/export
+framing remains independent. The orientation control labels its positive X/Y/Z
+axes and retains its snap and drag interactions.
 
 See [settings controls](settings-ui.md), [render capabilities](render-types.md)
 and [renderer contracts](renderers.md) for changes inside the shared package.
@@ -299,8 +304,11 @@ unselectable. Selection reveals expand the required ancestors and scroll once
 per selection or explicit reveal command. Later expansion, recognition updates
 and manual scrolling must not pull the view back to that row.
 
-Selection details are collapsible and resizable. Measured extents, area, and radii
-appear first, with the existing reference details behind a disclosure. Extent and
+The selection pane is collapsible and resizable, but its reference fields are
+visible by default without a second Details disclosure. Its item header gives
+the name and multi-selection pager one row, and the kind, wrapping canonical
+reference and copy action another. Measurements, center, normal and component
+follow when available. Extent and
 radius buttons preview the selected STEP geometry using the existing temporary
 measurement overlay. Add to prompt uses canonical STEP references, optionally
 with the selected measured value. There is no separate Surfaces tab or source

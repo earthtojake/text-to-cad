@@ -242,3 +242,12 @@ so progress updates do not restart a prepared document. Native path copying and
 Copy reference live in the separate host actions adapter. Reference delivery
 uses the injected prompt port with the served workspace identity; ordinary path
 copying uses the clipboard port and retains the existing feedback labels.
+
+### Shared interface defaults
+
+The host body uses the shared `text-ui` token (13px at the normal root scale).
+Menus, tabs and tree rows follow the same default from
+[`@hardcore/ui`](../../packages/ui/README.md); settings sheets preserve their
+compact 11px labels and values. The shared renderer owns reference
+layout, projected-bounds camera fitting and labeled orientation axes, so desktop
+and web stay consistent without host-specific copies of those controls.

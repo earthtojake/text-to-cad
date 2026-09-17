@@ -129,6 +129,19 @@ clipped and floored — never how the model is framed, and never what 100% means
 **Reset view** re-fits to that same zero-pose box rather than to the pose on
 screen, so it reproduces the view the model opened at.
 
+Interactive default and explicit fit actions use the box's projected width and
+height, plus perspective depth, with a 1.1 padding multiplier: about 91% of the
+limiting viewport dimension. This avoids the excess empty space a bounding
+sphere leaves around long or flat models. The mechanism is
+[`viewportCameraFit.js`](../src/renderers/cad/components/viewer/viewportCameraFit.js).
+The destination lens is applied before fitting, so first entry and later mode
+switches use the same frame. Saved views and manual zoom are preserved. Fits
+retain the model's base clipping floor, so Render's transient near plane after
+zooming cannot change Reset or resize framing. Resizing compares the fitted box
+at its recorded orientation and scales both framing and the zoom baseline;
+ordinary orbiting never triggers another fit. Snapshot/export framing is
+independent and unchanged.
+
 Four things reopen that decision, and none of them is a pose: a different
 model; a **change of viewing mode**, because Inspect's orthographic frustum and
 Render's photographic lens are two cameras and the one being entered fits the

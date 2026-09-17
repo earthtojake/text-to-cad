@@ -10,7 +10,7 @@ export default function SelectionFilterMenu({ value, onChange, disabled, compact
   return <DropdownMenu>
     <DropdownMenuTrigger asChild>
       <button type="button" aria-label={`${menuLabel}: ${label}`} title={`${menuLabel}: ${label}`} disabled={disabled}
-        className={`inline-flex shrink-0 items-center gap-1.5 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 ${fullWidth ? 'w-full px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground' : `h-6 justify-center text-xs hover:bg-sidebar-accent ${compact ? 'px-2' : 'w-6'} ${value !== 'all' ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-foreground/70'}`}`}>
+        className={`inline-flex shrink-0 items-center gap-1.5 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 ${fullWidth ? 'w-full px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground' : `h-6 justify-center text-sm hover:bg-sidebar-accent ${compact ? 'px-2' : 'w-6'} ${value !== 'all' ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-foreground/70'}`}`}>
         <TriggerIcon className="size-3 shrink-0" aria-hidden="true" />{(compact || fullWidth) && label}{fullWidth && <ChevronDown className="ml-auto size-3 text-muted-foreground" aria-hidden="true" />}
       </button>
     </DropdownMenuTrigger>

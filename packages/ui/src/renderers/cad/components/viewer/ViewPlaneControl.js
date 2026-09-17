@@ -135,6 +135,14 @@ function getAxisId(face) {
   return id.startsWith("x") ? "x" : id.startsWith("y") ? "y" : "z";
 }
 
+function axisLabelColor(rgb) {
+  const linear = rgb.map(value => {
+    const channel = value / 255;
+    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722 > 0.179 ? '#000000' : '#ffffff';
+}
+
 export default function ViewPlaneControl({
   showViewPlane,
   previewMode,
@@ -173,6 +181,8 @@ export default function ViewPlaneControl({
       return {
         id: face.id,
         title: face.title,
+        label: face.id === axisId ? axisId.toUpperCase() : '',
+        labelColor: axisLabelColor(fillColor),
         x: 50 + x * 28,
         y: 50 - y * 28,
         z,
@@ -287,6 +297,11 @@ export default function ViewPlaneControl({
           stroke={active ? "var(--sidebar-foreground)" : node.edge}
           strokeWidth={active ? 1.35 : 1}
         />
+        {node.label ? <text
+          x={node.x} y={node.y} textAnchor="middle" dominantBaseline="central"
+          fontSize="9" fontWeight="400" fill={node.labelColor}
+          pointerEvents="none" aria-hidden="true"
+        >{node.label}</text> : null}
       </g>
     );
   };
