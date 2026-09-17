@@ -1,9 +1,7 @@
-// The scene's backdrop when the active CAD theme is "System".
+// The app background behind the resolved CAD scene.
 //
-// The resolved studio paints the scene; the app background remains the fallback
-// paints the backdrop its own settings ask for: Cinematic's radial charcoal is
-// Cinematic. "System" is the one that means *follow the app*, so it paints the
-// chrome's own ground: the `--background` token on the document.
+// Inspect and Render paint their own scene backgrounds. The app's `--background`
+// token provides the fallback for the frame around that scene.
 // A missing or unreadable token falls back to the viewer's neutral light and
 // charcoal dark palette. This is app UI resolution; the standalone snapshot
 // renderer consumes its own supplied theme settings without app preferences.
@@ -177,12 +175,12 @@ export function readChromeBackgroundToken(doc = typeof document === "undefined" 
 }
 
 /**
- * The colour the "System" theme paints the scene on: the chrome's own
- * ground, or the written-out pair when there is no chrome to read.
+ * The chrome's own background, or the written-out pair when there is no
+ * chrome to read.
  *
  * `prefersDark` is the APP's light/dark — a host's `colorScheme`, or the
- * standalone viewer's own resolved scheme — never the theme's, which has no
- * vote in what the app looks like.
+ * standalone viewer's own resolved scheme. Scene lighting and materials do
+ * not change the app's appearance.
  */
 export function resolveChromeBackdropColor({ token = "", prefersDark = false } = {}) {
   return cssColorToHex(token)

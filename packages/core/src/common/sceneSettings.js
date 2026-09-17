@@ -23,6 +23,9 @@ const SCENE_APPEARANCE = Object.freeze({
   DARK: "dark"
 });
 
+/** @type {"system" | "light" | "dark"} */
+const DEFAULT_SCENE_APPEARANCE = SCENE_APPEARANCE.SYSTEM;
+
 // The studio, quality, envelope, lighting and backdrop vocabularies are the
 // cross-language Render contract: cadgen's snapshot_core carries the same sets
 // and tests/python/global/test_snapshot_viewer_theme_parity.py reads these
@@ -346,8 +349,8 @@ function resolvedStudioId(studio, appearance) {
  * The CAD inspection scene settings — the theme model. Only the Inspect path
  * reads these. Render has no theme: it is built from the Render recipe alone.
  */
-function cadSceneSettings(appearance, theme = null) {
-  const normalized = normalizeThemeSettings(theme || cloneThemePresetSettings(
+function cadSceneSettings(appearance) {
+  const normalized = normalizeThemeSettings(cloneThemePresetSettings(
     appearance === SCENE_APPEARANCE.DARK ? "workbench-dark" : "workbench-light"
   ));
   return {
@@ -355,9 +358,7 @@ function cadSceneSettings(appearance, theme = null) {
     background: cloneValue(normalized.background),
     floor: cloneValue(normalized.floor),
     environment: cloneValue(normalized.environment),
-    lighting: cloneValue(normalized.lighting),
-    ...(theme ? { colorMode: normalized.colorMode, projection: normalized.projection } : {}),
-    ...(normalized.edges ? { edges: cloneValue(normalized.edges) } : {})
+    lighting: cloneValue(normalized.lighting)
   };
 }
 
@@ -476,18 +477,17 @@ function explicitMaterialOverrides(settings = {}) {
  * rig, stage floor or background gradients through it.
  */
 export function resolveSceneSettings({
-  appearance = SCENE_APPEARANCE.SYSTEM,
+  appearance = DEFAULT_SCENE_APPEARANCE,
   prefersDark = false,
   render = null,
   quality = null,
   camera = null,
-  display = null,
-  theme: inspectTheme = null
+  display = null
 } = {}) {
   const baseAppearance = normalizeSceneAppearance(appearance, { prefersDark });
   if (render == null) {
     const resolvedDisplay = resolveDisplay(DEFAULT_DISPLAY_SETTINGS, display);
-    const theme = applyPartColor(cadSceneSettings(baseAppearance, inspectTheme), resolvedDisplay.partColor);
+    const theme = applyPartColor(cadSceneSettings(baseAppearance), resolvedDisplay.partColor);
     return {
       appearance: baseAppearance,
       render: { enabled: false, configuration: null, payload: null },
@@ -497,8 +497,7 @@ export function resolveSceneSettings({
       // channels so authored metals do not collapse to near-black.
       materialOverrides: explicitMaterialOverrides(theme),
       quality: resolveSceneQuality(quality, { fallback: SCENE_QUALITY.INTERACTIVE }),
-      camera: resolveCamera(inspectTheme?.projection
-        ? { ...DEFAULT_NORMAL_CAMERA, projection: inspectTheme.projection } : DEFAULT_NORMAL_CAMERA, camera),
+      camera: resolveCamera(DEFAULT_NORMAL_CAMERA, camera),
       display: resolvedDisplay
     };
   }

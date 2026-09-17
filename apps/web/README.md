@@ -9,7 +9,7 @@ serves ONE directory, fixed at start; the page is always the bare origin and
 This package was renamed from the former viewer app directory. It is the browser host of
 `@hardcore/ui/file-viewer`, not the owner of the shared CAD interface.
 This is a **pure refactor**: UI, UX and functionality stay the same, including
-URL/history behavior, read-only actions, saved themes and camera state, CAD
+URL/history behavior, read-only actions, app appearance and camera state, CAD
 selection/measurements/tools, inspector layout and responsive behavior.
 
 **Owns:** URL selection, browser history, document title/appearance, catalog
@@ -179,14 +179,18 @@ handlers, availability and disabled states as the full toolbar.
 
 ## Current viewer behavior
 
-The floating toolbar switches Inspect and Render. Inspect retains CAD themes,
-geometry-based Features, prompt selections, contextual measurements and Display.
+The floating toolbar switches Inspect and Render. Each mode has an opinionated
+base that follows the app's light/dark appearance. Inspect includes geometry-based
+Features, prompt selections, contextual measurements and Display; it has no CAD
+Theme settings editor and never restores legacy custom scene themes.
 Render owns an independent camera, photographic studio, Preview/Final quality
 and material overlays. Robot files use unified Kinematics. In Inspect, linked
 meshes with authored object names also expose a Components tree grouped by link;
 primitive-only robots have no object inventory.
 These controls live in `@hardcore/ui`; the web host keeps URL/history, appearance
 and root-scoped persistence. See the UI package's Render and LOD playbooks.
+Saved references to the retired Theme panel restore the renderer's default
+Inspector. Explicitly closed panels and existing Render recipes are preserved.
 
 Large assemblies load progressively and refine visible components within memory
 budgets. Warm tessellations can render before exact surface derivation. The

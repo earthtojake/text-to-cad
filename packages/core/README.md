@@ -166,9 +166,8 @@ connection failures.
 origin-bound HTTP methods. They consume immutable runtime views and preview
 announcements; no client reads model source or starts a source build.
 
-Inspect accepts the host's custom theme and retains existing theme presets,
-editor fields and preference validation. Render resolves its own recipe and
-ignores Inspect theme input entirely.
+Inspect and Render each resolve their fixed scene base. Legacy host theme input
+cannot replace either base.
 
 ## Working on core
 

@@ -19,7 +19,7 @@ export function readViewState(rootId: string, storage: Storage = sessionStorage)
     const value = JSON.parse(storage.getItem(keyFor(rootId)) || 'null');
     if (!value || typeof value !== 'object' || Array.isArray(value)) return defaults;
     return {
-      panel: value.panel === null || typeof value.panel === 'string' ? value.panel : defaults.panel,
+      panel: value.panel === 'cad-theme' ? null : value.panel === null || typeof value.panel === 'string' ? value.panel : defaults.panel,
       panelWidth: Number.isFinite(value.panelWidth) ? clampPanelWidth(value.panelWidth) : defaults.panelWidth,
       expandedDirectories: Array.isArray(value.expandedDirectories) ? value.expandedDirectories.filter((v: unknown) => typeof v === 'string') : defaults.expandedDirectories,
       renderers: value.renderers && typeof value.renderers === 'object' && !Array.isArray(value.renderers) ? value.renderers : {},

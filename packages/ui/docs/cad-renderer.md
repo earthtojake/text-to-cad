@@ -1,7 +1,7 @@
 # CAD renderer
 
 The CAD renderer is the existing viewport, floating toolbar, file sheets,
-theme editor, reference interactions, measurement and drawing tools, animation,
+reference interactions, measurement and drawing tools, animation,
 loading artwork and alerts, extracted into `@hardcore/ui`. This migration is a
 pure refactor: every app must retain the same UI, UX and functionality. Changing
 a default, control, layout, saved preference or interaction requires separate
@@ -55,8 +55,10 @@ runtime recovery actions. Construction does not fetch files or load Three.js.
 Preparation resolves metadata with the viewer's abort signal; the component
 and viewport are imported lazily after renderer selection.
 
-Panel IDs remain `cad-theme` and `cad-file-sheet`. The shared viewer owns their
-frame and open state; the renderer portals panel contents into `panelSlot`.
+The CAD renderer declares the Inspector panel, `cad-file-sheet`. The shared
+viewer owns its frame and open state; the renderer portals panel contents into
+`panelSlot`. The retired `cad-theme` panel is not declared; hosts migrate its
+saved selection to the renderer's default Inspector.
 Preview mode calls the generic chrome visibility callback so the same preview
 can hide the shared navigation and panel frame. Leaving preview restores the
 previous panel selection through the existing controls.
@@ -71,9 +73,13 @@ assets, which remain inside `@hardcore/core`.
 `CadPreferenceSource` exposes `getSnapshot`, `subscribe` and `update`.
 `createCadPreferences` provides an in-memory implementation and an optional
 host persistence callback. A host can share one source across its CAD panes.
-It contains the theme choice/custom settings, the shared pose transition preference, the already-seen tutorial
+It contains the shared pose transition preference, the already-seen tutorial
 tips and each file kind's sheet-tab order/split arrangement. It never reads
 browser storage on import or construction.
+
+App light/dark appearance selects Inspect's fixed workbench basis, including
+the empty CAD stage. CAD preferences contain no theme choice or custom scene
+settings, and legacy saved themes cannot override either Inspect or Render.
 
 Per-file state belongs to `FileViewerState.renderers`, keyed by
 `[file.path, renderer.id]` within a host's stable source/root state. CAD stores
@@ -88,21 +94,20 @@ Hosts preserve these existing preference keys and precedence when migrating:
 
 | Data | Existing storage key / rule |
 | --- | --- |
-| Global theme | `cad-viewer:theme`, schema version 13 |
-| Directory theme and layout | `cad-viewer:directory-session:v1` |
+| Directory layout | `cad-viewer:directory-session:v1` (legacy theme fields ignored) |
 | Pose transition preference | `cad-viewer:pose-transition:v1` |
 | Seen tutorial tips | `cad-viewer:tutorial-tips:v1` |
 | Sheet tab order and split arrangement | `cad-viewer:file-sheet-tab-layout:v6` |
 | Tip reset URL | `?resetTips` remains a web-host action |
 | Per-file CAD session | `cad-viewer:file-session:v1:<namespace>:<file>` |
 
-`@hardcore/ui/renderers/cad/state` exports the existing theme/tab/file
+`@hardcore/ui/renderers/cad/state` exports the existing tab/file
 normalizers and width defaults for migration. `readFileSessionState` requires
 an explicit `{ storage }` supplied by the host. The sheet layout helpers
 `readFileSheetTabLayoutStore(storage)` and
 `writeFileSheetTabLayoutStore(storage, preferences.fileSheetTabs)` likewise use
 only supplied storage. `CAD_LEGACY_PREFERENCE_KEYS`
-exports the theme/directory/tip key names. Origins are transport locations,
+exports the directory, pose-transition, tip and sheet-layout key names. Origins are transport locations,
 not persistence namespaces for new state.
 
 ## Reference and capture callbacks
@@ -339,8 +344,8 @@ A single section shows its content directly without a redundant tab strip. Split
 so users can move them back together. Visited trees keep disclosure and scroll
 state across tab changes.
 
-The shared dark UI uses neutral charcoal tokens. Workbench Dark uses a slightly
-lighter `#333333` canvas; existing custom scene themes and light mode are preserved.
+The shared dark UI uses neutral charcoal tokens. Inspect's fixed dark workbench
+uses a slightly lighter `#333333` canvas; light app appearance selects its light basis.
 The shared loading star and desktop wordmark/icon use blue branding.
 
 ## Inspect, Render and live revisions
@@ -352,8 +357,9 @@ hash must match the saved artifact before those annotations apply. Active build
 previews carry immutable geometry revisions and never initiate a source build.
 A complete previous revision stays visible until its replacement is ready.
 
-The floating toolbar switches Inspect and Render. Inspect keeps CAD themes and
-Display, while Render has its own camera, studio and Preview/Final quality.
+The floating toolbar switches Inspect and Render. Inspect uses its fixed scene
+basis with per-file Display controls, while Render has its own camera, studio
+and Preview/Final quality.
 Entering a mode fits that mode's camera. The Studio and Materials panels load
 lazily; Render's tab arrangement is temporary and never overwrites the host's
 Inspect arrangement. Material overlays and undo are per-file session state.

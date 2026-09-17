@@ -3,13 +3,12 @@
  *
  * ONE panel column, one width, one border, one resize handle
  * (`FilePanelColumn.jsx`) — and a list of things that can be in it: the CAD
- * theme editor, the CAD Inspector, whatever else the host's renderer declares,
+ * Inspector, whatever else the host's renderer declares,
  * and the file tree LAST. The nav row draws one icon button per panel, in
  * declaration order, and highlights the open one; pressing a toggle opens that
  * panel and closes whatever was open.
  *
- * This is the shape the theme editor and the Inspector already had inside the
- * viewer's surface, now the shape of all of them in both apps: the tree is an
+ * The panel frame is shared across both apps: the tree is an
  * entry in this list, not a second column beside it with a design of its own.
  * The standalone viewer's file list used to be a LEFT sidebar with its own
  * trigger; it is the rightmost entry here instead, which is why the toggle a
@@ -22,14 +21,14 @@
  *
  * Pure but for its lucide glyphs, so `node --test` loads it with no bundler.
  */
-import { Code2, Eye, FolderTree, Palette, SlidersHorizontal } from "lucide-react";
+import { Code2, Eye, FolderTree, SlidersHorizontal } from "lucide-react";
 
 /**
  * Where a panel's content comes from — which is who draws it.
  *
  * `"tree"` and `"slot"` are both the panel column: the shared file tree, or a
  * box handed to the file's renderer to draw into (the CAD surface portals its
- * theme editor and its Inspector there, `panelSlot` in `docs/file-view.md`).
+ * Inspector there, `panelSlot` in `docs/file-view.md`).
  * `"body"` is the one panel that is not a column at all — the desktop's
  * markdown source view is the same bytes read differently, so it replaces the
  * content instead of sitting beside it. It is still in this list, and still
@@ -64,9 +63,8 @@ import { Code2, Eye, FolderTree, Palette, SlidersHorizontal } from "lucide-react
  */
 export const FILE_PANEL_TREE = "tree";
 
-/** The CAD surface's two panels, by id — the ids its host contract already uses. */
+/** The CAD Inspector's panel id, shared by both hosts. */
 export const CAD_PANEL = Object.freeze({
-  theme: "cad-theme",
   fileSheet: "cad-file-sheet"
 });
 
@@ -74,11 +72,10 @@ export const CAD_PANEL = Object.freeze({
 export const SOURCE_PANEL = "source";
 
 /**
- * The CAD surface's own two: its theme editor and its **Inspector** — the
- * file's tree, its measurements, its parameters.
+ * The CAD Inspector holds the file's tree, measurements and parameters.
  *
- * Declared here rather than in either app, because both draw them: the desktop
- * portals them into its panel column through `panelSlot`, and the standalone
+ * Declared here rather than in either app, because both draw it: the desktop
+ * portals it into its panel column through `panelSlot`, and the standalone
  * now does exactly the same thing. The Inspector is what a CAD file opens
  * with; a STEP file's tree and its measurements are the reason it is open.
  *
@@ -87,7 +84,7 @@ export const SOURCE_PANEL = "source";
  * calls the same panel `fileSheetOpen`.
  *
  * Nothing until the surface is up: a CAD pane whose runtime did not start
- * shows a failure card, and two toggles over a card would open nothing.
+ * shows a failure card, and a toggle over a card would open nothing.
  *
  * @param {boolean} ready
  * @returns {FilePanel[]}
@@ -95,12 +92,6 @@ export const SOURCE_PANEL = "source";
 export function cadPanels(ready) {
   return ready
     ? [
-      {
-        id: CAD_PANEL.theme,
-        label: "Theme settings",
-        icon: Palette,
-        content: "slot"
-      },
       {
         id: CAD_PANEL.fileSheet,
         label: "Inspector",
@@ -206,7 +197,7 @@ export function nextOpenPanel(open, id) {
  * panels open or shut.
  *
  * `true` opens it, over whatever was up. `false` is only ever about the panel
- * it names: the surface reports both of its flags on every change, so a "the
+ * it names: the surface reports its state on every change, so a "the
  * Inspector is shut" arriving while the file TREE is the open panel must leave
  * the tree alone rather than close the column.
  *

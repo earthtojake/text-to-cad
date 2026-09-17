@@ -192,28 +192,6 @@ test("projection is a per-theme trait: canvases orthographic, stages perspective
   assert.equal(normalizeThemeSettings({ projection: "fisheye" }).projection, "orthographic");
 });
 
-test("themes stay edge-agnostic unless they opt into their own outline", () => {
-  // Most themes carry no edges and leave the outline to per-file display
-  // settings; Terminal is the exception and owns a neon-green outline.
-  assert.equal(Object.hasOwn(cloneThemePresetSettings("workbench"), "edges"), false);
-  assert.equal(Object.hasOwn(cloneThemePresetSettings("cinematic"), "edges"), false);
-  assert.equal(Object.hasOwn(cloneThemePresetSettings("vibrant"), "edges"), false);
-  assert.equal(Object.hasOwn(cloneThemePresetSettings("blue"), "edges"), false);
-
-  const terminal = cloneThemePresetSettings("terminal");
-  assert.equal(terminal.edges.enabled, true);
-  assert.equal(terminal.edges.color, "#66ff99");
-
-  // When a theme declares edges, they normalize through the display-edge
-  // normalizer and survive on the theme.
-  const withEdges = normalizeThemeSettings({
-    ...cloneThemePresetSettings("workbench"),
-    edges: { enabled: true, color: "#ABC" }
-  });
-  assert.equal(withEdges.edges.enabled, true);
-  assert.equal(withEdges.edges.color, "#aabbcc");
-});
-
 test("built-in theme preset ids stay explicit with cinematic third", () => {
   assert.deepEqual(THEME_PRESETS.map((preset) => preset.id), [
     "workbench-light",
@@ -329,10 +307,8 @@ test("stylized presets keep their palettes and declare an opinionated color mode
       cycleColors: false,
       backgroundColor: "#020403",
       floorColor: "#02120a",
-      // Terminal ships a transparent grid floor (no solid stage) and owns a
-      // neon-green outline, unlike the other stylized stages.
-      floorEnabled: false,
-      hasEdges: true
+      // Terminal ships a transparent grid floor (no solid stage).
+      floorEnabled: false
     }
   ];
 
@@ -342,7 +318,6 @@ test("stylized presets keep their palettes and declare an opinionated color mode
     assert.equal(settings.materials.defaultColor, expectation.materialColor);
     assert.deepEqual(settings.materials.fillColors, expectation.fillColors);
     assert.equal(settings.materials.cycleColors, expectation.cycleColors);
-    assert.equal(Object.hasOwn(settings, "edges"), expectation.hasEdges === true);
     assert.equal(settings.background.solidColor, expectation.backgroundColor);
     assert.equal(settings.floor.color, expectation.floorColor);
     assert.equal(settings.floor.enabled, expectation.floorEnabled !== false, `${expectation.presetId} floor enabled`);

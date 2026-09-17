@@ -33,7 +33,7 @@ format. Pure data: no behaviour, no imports beyond the format enum.
 | `topology` | Face/edge/vertex references. Implies `parts`. |
 | `exploded`, `displayModes`, `clip` | STEP-tier display transforms. |
 | `planView` | Offers the 2D/3D top-down lock. |
-| `themeProjection` | Honours `themeSettings.projection`. |
+| `themeProjection` | Honours the internally resolved scene recipe's `themeSettings.projection`. |
 | `params` | `sidecar` (the model's `@step(pose=...)` block), or `null`. |
 | `animations` | Has animation clips, so transport controls apply. |
 | `artifactManaged` | Builds a package before it can render. A format listed here that the backend cannot produce a package for blocks forever, so a format the viewer renders from its own file belongs out. |
@@ -55,7 +55,7 @@ alert blocking all read it, rather than each one re-deriving the answer per form
 
 ## The render-backend contract
 
-`CadViewer` is the shell and owns the camera, `OrbitControls`, the themed stage, frame
+`CadViewer` is the shell and owns the camera, `OrbitControls`, the scene stage, frame
 insets, overlays, screenshots and the imperative viewer API. A **backend** owns geometry
 only:
 
@@ -136,26 +136,16 @@ Recorded so they are not mistaken for bugs, and so the next person knows the cos
 - **Select is inert for DXF.** It keeps the button for a uniform toolbar shape; it has no
   pickable topology.
 
-## Theme conformance
+## Scene recipe conformance
 
-Every theme field reaches the mesh renderer (STEP/STL/3MF/GLB/DXF) and changes the
-picture. `common/themeSettings.js` is the single schema: it used to be duplicated across
-two packages, and a field added to one and not the other was silently dropped for that
-renderer at normalization time — that is how `lighting.fill` and `lighting.rim` came to be
-ignored. One copy, one normalization, and that failure mode is gone.
+Inspect and Render resolve through `@hardcore/core/common/sceneSettings.js`.
+Inspect's fixed light/dark workbench basis follows app appearance; Render uses
+its independent studio configuration. Legacy CAD theme preferences are not an
+input. The internal `themeSettings` recipe remains a renderer implementation
+detail, normalized through the shared core schema so every backend receives the
+same lighting, materials and stage settings.
 
-### Conformance harness
-
-```bash
-node apps/web/scripts/e2e-theme-conformance.mjs --dir <abs-models-root> --url <viewer-url> [--out <dir>] [--baseline <file>]
-```
-
-Loads one mesh scene under all eight presets and asserts **surface response** — the
-model's own pixels must actually differ across themes. A renderer that ignores the theme
-still starts up and still draws while rendering all eight identically, which is exactly
-what happened while `lighting.fill` and `lighting.rim` were being dropped at
-normalization.
-
-Run from the repository root against the viewer launched above.
-`apps/web/scripts/theme-conformance-baseline.json` records the measured means so a change of
-look is visible in a diff rather than only in a pass/fail.
+The shared browser qualification in `scripts/test/test-viewer-browser.sh`
+checks mode framing, scene presentation and exact picking across formats; its
+full run also covers Studio, Materials and quality. It uses isolated generated
+fixtures rather than a sweep of saved theme presets.

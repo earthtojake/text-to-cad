@@ -17,7 +17,7 @@ export function normalizeViewerRenderState({
     themeSettings: normalizedThemeSettings,
     displaySettings: normalizedDisplaySettings,
     displayMode: normalizedDisplaySettings.mode,
-    edgeSettings: resolveCadEdgeSettings(normalizedDisplaySettings.edges, { themeEdges: normalizedThemeSettings.edges }),
+    edgeSettings: resolveCadEdgeSettings(normalizedDisplaySettings.edges),
     clipSettings: normalizedDisplaySettings.clip
   };
 }

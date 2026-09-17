@@ -9,10 +9,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const temporary = await mkdtemp(join(tmpdir(), 'hardcore-web-host-'));
 const output = join(temporary, 'host.mjs');
 await build({
-  stdin: { contents: `export * from './persistence/fileViewer.ts'; export * from './adapters/fileSource.ts';`, resolveDir: fileURLToPath(new URL('../', import.meta.url)) },
-  bundle: true, platform: 'node', format: 'esm', outfile: output,
+  stdin: { contents: `export * from './persistence/fileViewer.ts'; export * from './persistence/cadPreferences.ts'; export * from './adapters/fileSource.ts';`, resolveDir: fileURLToPath(new URL('../', import.meta.url)) },
+  bundle: true, platform: 'node', format: 'esm', outfile: output, loader: { '.webp': 'dataurl' },
 });
-const { readViewState, writeViewState, createWebFileSource } = await import(pathToFileURL(output).href);
+const { readViewState, writeViewState, createWebCadPreferences, createWebFileSource } = await import(pathToFileURL(output).href);
 after(() => rm(temporary, { recursive: true, force: true }));
 function storage() {
   const entries = new Map();
@@ -50,6 +50,42 @@ test('closing the legacy inspector without an explicit tree decision restores th
   const session = storage();
   session.setItem('cad-viewer:directory-session:v1', JSON.stringify({ version: 1, fileSheetOpen: false }));
   assert.equal(readViewState('root', session).panel, 'tree');
+});
+
+test('a retired theme panel restores the renderer default without resetting file state', () => {
+  viewport(1280);
+  const session = storage();
+  const renderers = { '["part.step","cad"]': { version: 1, fileSession: { render: { enabled: true } } } };
+  writeViewState('root', { panel: 'cad-theme', panelWidth: 340, expandedDirectories: ['parts'], renderers }, session);
+  assert.deepEqual(readViewState('root', session), { panel: null, panelWidth: 340, expandedDirectories: ['parts'], renderers });
+});
+
+test('web CAD preferences ignore legacy custom themes and keep tutorial persistence', () => {
+  const previousWindow = globalThis.window;
+  const previousStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  const local = storage();
+  const legacy = JSON.stringify({ version: 13, themeId: 'custom', custom: { projection: 'perspective' } });
+  local.setItem('cad-viewer:theme', legacy);
+  const listeners = new Map();
+  globalThis.window = { localStorage: local, addEventListener: (type, listener) => listeners.set(type, listener), removeEventListener: type => listeners.delete(type) };
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: local });
+  try {
+    const preferences = createWebCadPreferences();
+    const disconnect = preferences.connect();
+    const snapshot = preferences.getSnapshot();
+    assert.equal('theme' in snapshot, false);
+    listeners.get('storage')({ key: 'cad-viewer:theme' });
+    assert.equal(preferences.getSnapshot(), snapshot);
+    preferences.update({ seenTips: ['inspect-mode'] });
+    assert.deepEqual(JSON.parse(local.getItem('cad-viewer:tutorial-tips:v1')).seen, ['inspect-mode']);
+    assert.equal(local.getItem('cad-viewer:theme'), legacy);
+    disconnect();
+    assert.equal(listeners.size, 0);
+  } finally {
+    globalThis.window = previousWindow;
+    if (previousStorage) Object.defineProperty(globalThis, 'localStorage', previousStorage);
+    else delete globalThis.localStorage;
+  }
 });
 
 test('web source keeps only catalog files, native path capabilities and original copy feedback', async () => {

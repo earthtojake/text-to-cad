@@ -31,7 +31,6 @@ import {
   resolveInRoot,
   statFile,
   writeTextFile,
-  IgnoreRules,
 } from "../explorer/fs";
 import { Terminals } from "../explorer/terminal";
 import * as git from "../projects/git";
@@ -268,19 +267,16 @@ export const explorerHandlers = {
       projectId,
       root: rootPath,
       path: directory,
-      includeIgnored,
     }: {
       projectId: string;
       root?: string;
       path: string;
-      includeIgnored?: boolean;
     }) =>
       fsCall(async () => {
         const root = rootOf(projectId, rootPath);
-        return listDirectory(root, directory, {
-          rules: await IgnoreRules.read(root),
-          ...(includeIgnored === undefined ? {} : { includeIgnored }),
-        });
+        const entries = await listDirectory(root, directory);
+        await watchers?.watchListedDirectory(root, directory);
+        return entries;
       }),
 
     paths: ({

@@ -28,14 +28,13 @@ import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-r
  * second and asserts the class never once disagreed with the resolved
  * preference, boot and reload included.
  *
- * The one that was not, and is now impossible: the embedded CAD surface has a
- * colour-scheme preference of its own and used to be able to write `<html>`
- * with it. In this app only the app writes the document
+ * The embedded CAD surface once had a colour-scheme preference of its own
+ * and could write `<html>` with it. In this app only the app writes the document
  * (`src/renderer/hooks/use-theme.ts`); the surface renders from the
  * `colorScheme` prop it is handed and may only read
  * (`packages/ui/docs/cad-renderer.md`). Its signature is the two
  * attributes only IT writes — `data-theme` and `data-theme-preference` — so
- * their absence after a file, a theme panel, a slider and a preset is the
+ * their absence after a file, a mode switch and Studio edits is the
  * assertion.
  *
  * `emulateMedia` is what stands in for "dark mode for my desktop": the suite
@@ -243,7 +242,7 @@ test("comes up dark on an OS in dark, with no light frame and nothing set", asyn
     .toBe("system");
 });
 
-test("stays dark through a STEP file, its theme panel, a slider and a preset", async () => {
+test("stays dark through Inspect, Render and Studio edits", async () => {
   test.setTimeout(300_000);
   const status = await page.evaluate(() => window.hardcore.runtime.status());
   cadReady = cadRuntimeReady(status);
@@ -255,27 +254,20 @@ test("stays dark through a STEP file, its theme panel, a slider and a preset", a
   await expect(page.locator("[data-cad-surface] canvas").first()).toBeVisible({ timeout: 120_000 });
   await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible({ timeout: 120_000 });
   await expectNeverMoved(page, "dark", "the CAD surface mounting");
-  /*
-    Mounting the surface wrote NEITHER of the two attributes it writes when it
-    owns a document. It has a stored preference of its own — the standalone
-    viewer's `cad-viewer:color-scheme`, which defaults to the OS — and a write
-    from here is what turned the whole app light on a mount, on a storage
-    event from a second window, and on every theme edit.
-  */
+  // Embedded CAD consumes the host appearance and never writes the document.
   expect(await surfaceWroteTheDocument(page)).toEqual({ theme: null, preference: null });
+  await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
+  await expect(page.locator("[data-file-panel='cad-theme'], [data-file-sheet='Theme']")).toHaveCount(0);
 
-  // The theme panel: the viewer's own scene settings, drawn in the tab's
-  // panel column. Everything in it paints the SCENE and nothing around it.
-  const themePanel = page.locator("header [data-file-panel='cad-theme']");
-  await themePanel.click();
-  await expect(themePanel).toHaveAttribute("aria-pressed", "true");
-  await expectNeverMoved(page, "dark", "opening the theme panel");
+  await page.getByRole("button", { name: "Viewing mode: Inspect. Switch to Render", exact: true }).click();
+  const studio = page.locator("[data-cad-render-settings-section]");
+  await expect(studio).toBeVisible();
+  await expectNeverMoved(page, "dark", "entering Render");
 
-  // A slider — the report's "when i click a slide". A theme setting write goes
-  // to the viewer's own storage, which used to be read back as a colour scheme.
-  const sliders = page.locator("[data-file-panel-container] [role=slider]");
+  // Studio sliders modify photographic presentation, not app appearance.
+  const sliders = studio.locator("[role=slider]");
   const dragged = Math.min(await sliders.count(), 4);
-  expect(dragged, "the theme panel has sliders to drag").toBeGreaterThan(0);
+  expect(dragged, "Studio has sliders to drag").toBeGreaterThan(0);
   for (let index = 0; index < dragged; index += 1) {
     const box = await sliders.nth(index).boundingBox();
     if (!box) continue;
@@ -284,31 +276,19 @@ test("stays dark through a STEP file, its theme panel, a slider and a preset", a
     await page.mouse.move(box.x + box.width / 2 + 32, box.y + box.height / 2, { steps: 6 });
     await page.mouse.up();
   }
-  await expectNeverMoved(page, "dark", "dragging the theme panel's sliders");
-
-  /*
-    And a preset. Cinematic is the case that matters: a genuinely dark stage,
-    which the surface once read the luminance of and wrote to the document —
-    a theme that decided what the app looked like. A dark studio inside a
-    light window is a legal picture (the user's rule), so the app's scheme
-    must not move at all.
-  */
-  const preset = page.locator("[data-file-panel-container]").getByRole("combobox").first();
-  await preset.click();
-  await page.getByRole("option", { name: "Cinematic" }).click();
-  await expect(preset).toContainText("Cinematic");
-  await expect
-    .poll(() => page.evaluate(() => window.localStorage.getItem("cad-viewer:theme")))
-    .toContain("cinematic");
-  await expectNeverMoved(page, "dark", "picking the Cinematic preset");
+  const exposure = studio.getByLabel("Exposure value", { exact: true });
+  await exposure.fill("1.5");
+  await exposure.press("Enter");
+  await expect(exposure).toHaveValue("1.5 EV");
+  await expectNeverMoved(page, "dark", "editing Studio");
   expect(await surfaceWroteTheDocument(page)).toEqual({ theme: null, preference: null });
+  expect(await page.evaluate(() => window.localStorage.getItem("cad-viewer:theme"))).toBeNull();
+  await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
 
-  // Back to System — the one preset that follows the app — which is the
-  // other direction of the same rule.
-  await preset.click();
-  await page.getByRole("option", { name: "System" }).click();
-  await expect(preset).toContainText("System");
-  await expectNeverMoved(page, "dark", "putting the preset back to System");
+  await page.getByRole("button", { name: "Viewing mode: Render. Switch to Inspect", exact: true }).click();
+  await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible();
+  await expectNeverMoved(page, "dark", "returning to Inspect");
+  expect(await surfaceWroteTheDocument(page)).toEqual({ theme: null, preference: null });
 });
 
 test("stays dark across tabs, routes, a project and a reload", async () => {

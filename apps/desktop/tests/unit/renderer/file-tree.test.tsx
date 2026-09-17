@@ -74,16 +74,17 @@ const testRenderers = [defineFileRenderer({
   id: "test", priority: 0, matches: () => true,
   prepare: async () => ({ data: null }), load: async () => ({ default: () => null }),
 })];
-function Tree({ activePath = null }: { activePath?: string | null }) {
+type TreeProps = { activePath?: string | null; onOpenFile?: (path: string) => void };
+function Tree({ activePath = null, onOpenFile = () => {} }: TreeProps) {
   const source = useMemo(() => createDesktopFileSource({ projectId: "p1", root: null, projectName: "text-to-cad" }), []);
   const { open } = useTree(null);
   return <FileViewer file={activePath} source={source} renderers={testRenderers}
     state={{ panel: "tree", panelWidth: 300, expandedDirectories: [...open] }}
     onStateChange={(next) => useExplorer.getState().setTreeOpen(null, () => new Set(next.expandedDirectories))}
-    onOpenFile={() => {}} />;
+    onOpenFile={onOpenFile} />;
 }
 
-function mount(props: { activePath?: string | null } = {}) {
+function mount(props: TreeProps = {}) {
   return render(<Tree {...props} />);
 }
 
@@ -92,6 +93,37 @@ const row = (path: string) => document.querySelector(`[data-path="${path}"]`) as
 const rowExists = (path: string) => document.querySelector(`[data-path="${path}"]`) !== null;
 
 describe("FileTree", () => {
+  it("shows hidden directories and unsupported files without consulting renderer support", async () => {
+    const user = userEvent.setup();
+    const onOpenFile = vi.fn();
+    stub("list", async () => [
+      { path: ".git", name: ".git", kind: "directory", size: 0, modifiedAt: 0, symlink: false },
+      { path: "node_modules", name: "node_modules", kind: "directory", size: 0, modifiedAt: 0, symlink: false },
+      { path: "output.unsupported", name: "output.unsupported", kind: "file", size: 3, modifiedAt: 0, symlink: false },
+    ]);
+    mount({ onOpenFile });
+
+    await waitFor(() => expect(rowExists("output.unsupported")).toBe(true));
+    expect(rowExists(".git")).toBe(true);
+    expect(rowExists("node_modules")).toBe(true);
+    await user.click(row("output.unsupported"));
+    expect(onOpenFile).toHaveBeenCalledWith("output.unsupported", { target: "new" });
+  });
+
+  it("keeps ignored CAD and unknown extensions in the fuzzy filter", async () => {
+    const user = userEvent.setup();
+    stub("paths", async () => ({
+      paths: ["STEP/tom.step", "dist/output.unsupported"], truncated: false,
+    }));
+    mount();
+
+    await user.type(screen.getByLabelText("Filter files"), "tom.step");
+    await waitFor(() => expect(screen.getByRole("option")).toHaveAttribute("title", "STEP/tom.step"));
+    await user.clear(screen.getByLabelText("Filter files"));
+    await user.type(screen.getByLabelText("Filter files"), "unsupported");
+    await waitFor(() => expect(screen.getByRole("option")).toHaveAttribute("title", "dist/output.unsupported"));
+  });
+
   it("expands three levels of subfolders, one listing each", async () => {
     const user = userEvent.setup();
     mount();

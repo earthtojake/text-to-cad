@@ -1,17 +1,7 @@
 import { clonePerspectiveSnapshot, perspectiveSnapshotEqual } from "@hardcore/core/lib/perspective.js";
-import {
-  CUSTOM_THEME_ID,
-  DEFAULT_THEME_ID,
-  getThemePresetIdForSettings,
-  normalizeThemeId,
-  normalizeThemeSettings,
-  resolveThemeSettingsForId
-} from "@hardcore/core/lib/themeSettings.js";
 import { normalizeRenderFormat } from "@hardcore/core/lib/fileFormats.js";
 import { isCadWorkspaceCompactFileSheetViewport } from "./breakpoints.js";
 import { DRAWING_TOOL, RENDER_FORMAT, TAB_TOOL_MODE } from "./constants.js";
-
-export const THEME_STORAGE_VERSION = 13;
 
 export const CAD_DIRECTORY_SESSION_STORAGE_VERSION = 1;
 export const CAD_DIRECTORY_SESSION_STORAGE_KEY = `cad-viewer:directory-session:v${CAD_DIRECTORY_SESSION_STORAGE_VERSION}`;
@@ -441,21 +431,6 @@ function schemaStateEqual(schema, a = {}, b = {}) {
 
 function normalizeTabKey(value) {
   return String(value || "").trim();
-}
-
-export function createThemeState(themeId = DEFAULT_THEME_ID, custom = null, { prefersDark = false } = {}) {
-  const normalizedThemeId = normalizeThemeId(themeId) || DEFAULT_THEME_ID;
-  const normalizedCustom = custom ? normalizeThemeSettings(custom) : null;
-  return {
-    themeId: normalizedThemeId === CUSTOM_THEME_ID && !normalizedCustom
-      ? DEFAULT_THEME_ID
-      : normalizedThemeId,
-    custom: normalizedCustom,
-    settings: resolveThemeSettingsForId(normalizedThemeId, {
-      custom: normalizedCustom,
-      prefersDark
-    })
-  };
 }
 
 export function createTabSnapshot(overrides = {}) {

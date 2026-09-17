@@ -2,7 +2,6 @@ export const SYSTEM_COLOR_SCHEME_ID = "system";
 export const LIGHT_COLOR_SCHEME_ID = "light";
 export const DARK_COLOR_SCHEME_ID = "dark";
 export const DEFAULT_COLOR_SCHEME_ID = SYSTEM_COLOR_SCHEME_ID;
-export const THEME_STORAGE_KEY = "cad-viewer:theme";
 export const COLOR_SCHEME_STORAGE_KEY = "cad-viewer:color-scheme";
 export const COLOR_SCHEME_COOKIE_NAME = "cad-viewer-appearance";
 export const COLOR_SCHEME_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;

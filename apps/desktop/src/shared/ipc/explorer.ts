@@ -103,7 +103,7 @@ export const explorerIpc = {
   explorer: {
     /** One directory's children. `path` is `""` for the project root. */
     list: invoke(
-      AtPath.extend({ includeIgnored: z.boolean().optional() }),
+      AtPath,
       z.array(DirEntrySchema),
     ),
     /** Every file path under a directory, for the tree's fuzzy filter. */

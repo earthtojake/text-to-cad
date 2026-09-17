@@ -30,10 +30,8 @@ unrelated CAD Viewer sessions, so it should only hold global preferences.
 
 Current intended use:
 
-- `cad-viewer:theme`: the active theme id (`system`, a built-in preset id, or
-  `custom`) plus the single custom settings blob, if the user has edited one.
-  Presets are read-only and are never stored — only named. An absent key
-  resolves to `system` with no custom slot.
+- `cad-viewer:color-scheme`: the app's System/Light/Dark appearance preference,
+  used when its cross-port appearance cookie is unavailable.
 - `cad-viewer:tutorial-tips:v1`: ids of the one-shot tutorial tips the user has
   dismissed. A tip is recorded only when its close button is pressed — clicking
   away, Escape, and reloads all leave it unrecorded, so it comes back on the next
@@ -43,8 +41,10 @@ Current intended use:
   state.
 
 The host adapter is [cadPreferences.ts](../src/persistence/cadPreferences.ts).
-It injects preferences into the shared renderer and retains the existing theme
-storage-event synchronization.
+It injects layout, motion and tutorial preferences into the shared renderer.
+Inspect and Render own their scene bases. The retired `cad-viewer:theme` key is
+left untouched and is neither read nor written; saved custom themes cannot
+override either mode.
 
 Avoid adding file-specific state to `localStorage`. If the value depends on the
 selected file, the active root directory, a generated asset hash, or a tab
@@ -54,8 +54,8 @@ interaction, it belongs in per-file session state instead.
 
 The host reads the existing directory record through
 [persistence.js](../src/client/workbench/persistence.js). Its panel and tree
-fields seed root-scoped FileViewer state when no newer record exists. The host
-continues writing the tab's theme override here through `cadPreferences.ts`.
+fields seed root-scoped FileViewer state when no newer record exists. Legacy
+directory theme overrides are ignored.
 
 Retained key:
 
@@ -77,10 +77,7 @@ Recognized `cad-viewer:directory-session:v1` fields:
 - `fileSheetOpen`: whether the **Inspector** is the open panel, the same way.
 - `fileSheetWidthPx`: the panel column's custom width, stored only when it
   differs from the default. There is one column and so one width — the file
-  tree, the theme editor and the Inspector all take it.
-- `theme`: a directory-level theme override for the current tab, in the same
-  `{themeId, custom}` shape as the global key. The global theme itself belongs
-  to `localStorage`.
+  tree and the Inspector both take it.
 
 Do not put selected-file state, model controls, drawing state, or
 generated-asset decisions in directory session state. Those belong in per-file
@@ -129,8 +126,10 @@ The host's [fileViewer.ts](../src/persistence/fileViewer.ts) reads and writes
 panel/width, expanded directories and renderer state keyed by file and renderer.
 `rootId` is the server's normalized filesystem-root identity, independent of
 its port. The host restores legacy directory and validated per-file session
-records without deleting them or replacing newer renderer state. Global theme,
-tutorial-tip and Inspector-layout keys keep their existing names and meanings.
+records without deleting them or replacing newer renderer state. A saved
+`cad-theme` panel restores the renderer's default Inspector; explicit closed,
+tree and Inspector choices remain unchanged. Tutorial-tip and Inspector-layout
+keys keep their existing names and meanings.
 The URL remains the selected-file authority;
 opening the root without a file does not silently select a different artifact.
 
@@ -142,7 +141,7 @@ Render tab rearrangements last for the current Render visit and never change the
 global Inspect layout. Material undo and Materials-panel selection remain with
 the active file when its panel is switched. Appearance uses a host cookie across
 viewer ports, with `cad-viewer:color-scheme` as its localStorage fallback; neither
-changes the per-file Render recipe or the host's CAD theme preference.
+changes the per-file Render recipe. Legacy CAD theme preferences are ignored.
 
 Pose transition animation and speed use the existing
 `cad-viewer:pose-transition:v1` preference. The web adapter reads, writes and

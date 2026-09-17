@@ -29,16 +29,23 @@ test("normal CAD stays an orthographic responsive inspection scene", () => {
   assert.deepEqual(dark.theme.environment, light.theme.environment);
 });
 
-test("Inspect retains host custom themes while Render remains independent", () => {
-  const custom = resolveSceneSettings().theme;
-  custom.background.solidColor = "#123456";
-  custom.materials.roughness = 0.7;
-  custom.floor.reflectivity = 0.33;
-  const inspect = resolveSceneSettings({ theme: custom });
-  assert.equal(inspect.theme.background.solidColor, "#123456");
-  assert.equal(inspect.theme.materials.roughness, 0.7);
-  assert.equal(inspect.theme.floor.reflectivity, 0.33);
-  assert.deepEqual(resolveSceneSettings({ render: {}, theme: custom }), resolveSceneSettings({ render: {} }));
+test("legacy supplied themes cannot alter the fixed Inspect or Render scene bases", () => {
+  const legacy = {
+    ...resolveSceneSettings({ appearance: "light" }).theme,
+    projection: "perspective",
+    background: { solidColor: "#123456" },
+    materials: { roughness: 0.7 },
+    floor: { reflectivity: 0.33 },
+    edges: { color: "#ff6600" }
+  };
+  assert.deepEqual(
+    resolveSceneSettings({ appearance: "light", theme: legacy }),
+    resolveSceneSettings({ appearance: "light" })
+  );
+  assert.deepEqual(
+    resolveSceneSettings({ appearance: "dark", render: {}, theme: legacy }),
+    resolveSceneSettings({ appearance: "dark", render: {} })
+  );
 });
 
 test("omitted Render fields stay sparse while configuration expands effective defaults", () => {

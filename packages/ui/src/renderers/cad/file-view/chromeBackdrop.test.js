@@ -1,5 +1,5 @@
-// System follows the app's CSS background, including its fallback when the
-// document or stylesheet is unavailable.
+// A scene without a declared backdrop can fall back to the app's CSS background,
+// including a default when the document or stylesheet is unavailable.
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -90,7 +90,7 @@ test("the box behind the canvas takes the scene's edge colour", () => {
     "#0a0a0d"
   );
   // A type with no stop of its own falls back through the solid base to the
-  // caller's colour, which is the System theme's chrome background.
+  // caller's chrome background colour.
   assert.equal(sceneBackdropEdgeColor({ type: "linear", solidColor: "#222222" }), "#222222");
   assert.equal(sceneBackdropEdgeColor(null, "#0a0a0a"), "#0a0a0a");
   assert.equal(sceneBackdropEdgeColor({}, "#0a0a0a"), "#0a0a0a");

@@ -1,13 +1,9 @@
 // Every identifier the client READS must be bound somewhere: imported, declared, a
 // parameter, or a real browser global.
 //
-// This exists because nothing else in the toolchain asks that question. A bundler treats an
-// unbound identifier as a global reference and emits it without complaint, and a unit suite
-// only covers modules it imports — so `normalizeThemeSettings`, called twice in
-// ThemeSettingsPopover.js with no import, shipped through a clean `vite build` and a green
-// test run and threw a ReferenceError that crashed <CadFileView> the moment anyone changed
-// a theme colour. The same commit that removed the import removed the callers of the one
-// helper that used it, which is exactly how the survivor went unnoticed.
+// A bundler emits an unbound identifier as a global reference without complaint,
+// and a unit suite covers only the modules it imports. Removing a helper or an
+// import can therefore leave a runtime ReferenceError behind a rarely used control.
 //
 // It is a whole-tree check rather than a test of that one function on purpose: the failure
 // mode is "a deletion left a reference behind", and that can land in any file. A large merge

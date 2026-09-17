@@ -2,15 +2,14 @@
  * The file surface's panel column: the one frame every panel is drawn in.
  *
  * There is one of these beside a file and never two, because there is one
- * open panel (`panels.js`). Whatever is in it — the file tree, the CAD theme
- * editor, the CAD Inspector — gets the same border, the same width and the
+ * open panel (`panels.js`). Whatever is in it — the file tree or the CAD
+ * Inspector — gets the same border, the same width and the
  * same handle, which is the point: they used to be two columns of two
  * designs, a file list on the left and the viewer's own aside on the right,
  * each with its own idea of how wide a panel is.
  *
  * No title bar. Each panel's own top row is its header — the tree's filter,
- * the Inspector's tabs, the theme editor's preset select — and the nav row's
- * toggle is how it closes, the way the viewer's panels have always worked. A
+ * the Inspector's tabs — and the nav row's toggle is how it closes. A
  * title above a tab bar would be a second name for the same thing.
  *
  * A collapsed panel is not rendered at all, so the toggle for it exists in

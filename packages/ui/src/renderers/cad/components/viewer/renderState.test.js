@@ -53,14 +53,13 @@ test("viewer render-state normalization keeps viewer-side defaults local", () =>
 });
 
 
-test("Inspect keeps authored outline styling with per-file edge visibility", () => {
+test("Inspect edge visibility does not revive legacy custom outline styling", () => {
   const state = normalizeViewerRenderState({
     themeSettings: { edges: { color: "#28e2a3", thickness: 2.7, opacity: 0.6 } },
     displaySettings: { edges: { enabled: false, silhouette: true } },
   });
-  assert.equal(state.edgeSettings.color, "#28e2a3");
-  assert.equal(state.edgeSettings.thickness, 2.7);
-  assert.equal(state.edgeSettings.opacity, 0.6);
+  const defaults = normalizeViewerRenderState({ displaySettings: { edges: { enabled: false, silhouette: true } } });
+  assert.deepEqual(state.edgeSettings, defaults.edgeSettings);
   assert.equal(state.edgeSettings.enabled, false);
   assert.equal(state.edgeSettings.silhouette, true);
 });

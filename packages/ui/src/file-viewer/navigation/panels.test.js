@@ -20,18 +20,17 @@ import {
  * row, and no second list for the standalone viewer.
  */
 
-test("a CAD surface declares its theme editor and its Inspector, in that order", () => {
+test("a CAD surface declares only its Inspector", () => {
   assert.deepEqual(
     cadPanels(true).map((panel) => [panel.id, panel.label, panel.content]),
     [
-      ["cad-theme", "Theme settings", "slot"],
       // "Inspector" is the name a person sees; the id stays `cad-file-sheet`
       // because the desktop's stored `panel` field holds it and the viewer's
       // host contract calls the same panel `fileSheetOpen`.
       ["cad-file-sheet", "Inspector", "slot"]
     ]
   );
-  // And there are none at all until the surface behind them is up: two toggles
+  // And there are none at all until the surface behind it is up: a toggle
   // over a runtime's failure card would open nothing.
   assert.deepEqual(cadPanels(false), []);
 });
@@ -46,7 +45,7 @@ test("markdown's one panel is named by what pressing it does", () => {
 
 test("the files toggle is last in every list, and named by what it does", () => {
   const cad = panelsFor(cadPanels(true), "");
-  assert.deepEqual(cad.map((panel) => panel.id), ["cad-theme", "cad-file-sheet", "tree"]);
+  assert.deepEqual(cad.map((panel) => panel.id), ["cad-file-sheet", "tree"]);
   assert.equal(cad.at(-1)?.label, "Show files");
   // A surface with no panels of its own has the tree alone.
   assert.deepEqual(
@@ -66,13 +65,12 @@ test("one panel is open at a time, whichever was up before", () => {
 
   // A press names its panel; pressing the open one closes it and leaves
   // nothing open.
-  assert.equal(nextOpenPanel("", CAD_PANEL.theme), CAD_PANEL.theme);
-  assert.equal(nextOpenPanel(CAD_PANEL.theme, CAD_PANEL.theme), "");
+  assert.equal(nextOpenPanel("", CAD_PANEL.fileSheet), CAD_PANEL.fileSheet);
+  assert.equal(nextOpenPanel(CAD_PANEL.fileSheet, CAD_PANEL.fileSheet), "");
   // A press while ANOTHER panel is up opens this one — "show me this instead"
   // — whether the other is the surface's or the host's own tree.
-  assert.equal(nextOpenPanel(CAD_PANEL.fileSheet, CAD_PANEL.theme), CAD_PANEL.theme);
-  assert.equal(nextOpenPanel(FILE_PANEL_TREE, CAD_PANEL.theme), CAD_PANEL.theme);
-  assert.equal(nextOpenPanel(CAD_PANEL.theme, FILE_PANEL_TREE), FILE_PANEL_TREE);
+  assert.equal(nextOpenPanel(FILE_PANEL_TREE, CAD_PANEL.fileSheet), CAD_PANEL.fileSheet);
+  assert.equal(nextOpenPanel(CAD_PANEL.fileSheet, FILE_PANEL_TREE), FILE_PANEL_TREE);
   assert.equal(nextOpenPanel(SOURCE_PANEL, FILE_PANEL_TREE), FILE_PANEL_TREE);
   assert.equal(nextOpenPanel(FILE_PANEL_TREE, SOURCE_PANEL), SOURCE_PANEL);
 });
@@ -84,6 +82,7 @@ test("a panel this file does not have shows nothing", () => {
   const cad = panelsFor(cadPanels(true), "");
   assert.equal(resolveOpenPanel(cad, ""), null);
   assert.equal(resolveOpenPanel(cad, SOURCE_PANEL), null);
+  assert.equal(resolveOpenPanel(cad, "cad-theme"), null);
   const notReady = panelsFor(cadPanels(false), "");
   assert.equal(resolveOpenPanel(notReady, CAD_PANEL.fileSheet), null);
   // ...and with nobody having said, the tree is what is left.
@@ -91,7 +90,7 @@ test("a panel this file does not have shows nothing", () => {
 });
 
 test("a surface reporting its own panel shut leaves another host's panel alone", () => {
-  // The CAD surface reports BOTH of its flags on every change, so a "the
+  // The CAD surface reports its panel state, so a "the
   // Inspector is shut" arriving while the file tree is open must not close
   // the column.
   assert.equal(panelClosedBy(true, FILE_PANEL_TREE, CAD_PANEL.fileSheet), CAD_PANEL.fileSheet);

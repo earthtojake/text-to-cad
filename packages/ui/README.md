@@ -32,12 +32,12 @@ src/
   file-viewer/       FileViewer, typed source/renderer contracts, lifecycle hooks
     navigation/     breadcrumbs, file tree, entry menus and panel frame
   renderers/
-    cad/            CAD viewport, inspector, themes, tools and state schemas
+    cad/            CAD viewport, inspector, scene controls and state schemas
     markdown/       preview/editor and lossless Markdown bridge
     code/           Monaco editor and worker setup
     image/          image view and zoom
     pdf/            sandboxed PDF view
-    unsupported/    existing OS-open fallback
+    unsupported/    Not supported message and optional OS-open action
   primitives/       shared controls retaining the viewer's existing styling
   lib/              browser helpers
   loading/          shared loading animation
@@ -51,6 +51,11 @@ priority, panels, asynchronous preparation, lazy component loading and disposal.
 Each app registers only the file types its source supports. CAD, Monaco and
 TipTap load when selected; adding a renderer does not add a branch to FileViewer.
 The registry rejects duplicate IDs and ambiguous matches.
+
+File listing is independent of renderer matching: the tree shows every entry
+the host's source returns. Hosts that expose arbitrary files register the
+unsupported fallback, which shows “Not supported” without reading the file's
+contents, plus “Open externally” when the host provides that action.
 
 ```tsx
 import { FileViewer } from '@hardcore/ui/file-viewer';
@@ -122,8 +127,9 @@ The scene uses progressive component loading and demand-driven exact surfaces.
 The geometry-based Model/Features inspector and contextual measurements remain
 in Inspect, with client-bound surface requests made only while its panel is open.
 
-Inspect retains the host's CAD theme preferences. The floating toolbar switches
-to Render, whose studio, materials, camera and quality have independent per-file
+Inspect uses the fixed light or dark workbench basis selected by app appearance;
+legacy CAD theme preferences are not consumed. The floating toolbar switches to
+Render, whose studio, materials, camera and quality have independent per-file
 state. Render does not receive inspection tints or measurements. Materials
 picking is enabled only while its visible panel is active. See
 [Render modes](docs/render-mode.md) and [progressive detail](docs/lod.md).

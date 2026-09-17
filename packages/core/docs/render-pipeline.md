@@ -33,7 +33,7 @@ import {
 } from "@hardcore/core/common/sceneSettings.js";
 ```
 
-`resolveSceneSettings({ appearance, render, quality, camera, display, theme })` is the
+`resolveSceneSettings({ appearance, render, quality, camera, display })` is the
 shared Viewer/snapshot policy resolver. It resolves ONE of two scenes — an
 Inspect theme or a Render recipe — and never a blend of them.
 `resolveDisplayMaterialSettings()` belongs to the display half; see
@@ -43,8 +43,8 @@ A missing `render` selects responsive CAD inspection defaults, where the
 top-level quality, camera, and display fields apply. That result carries
 `theme`, the CAD scene settings — materials, background, floor, environment and
 the seven-light inspection rig — plus the `materialOverrides` the workbench's
-matte PBR channels imply. Only the Inspect path reads them. Hosts may pass their saved `theme` for custom
-Inspect appearance; Render ignores that input.
+matte PBR channels imply. The Inspect base is selected by appearance; legacy
+host `theme` input cannot replace it.
 
 A Render envelope is isolated from those CAD fields and resolves `theme: null`:
 Render is built from its recipe alone, so no lighting rig, stage floor or

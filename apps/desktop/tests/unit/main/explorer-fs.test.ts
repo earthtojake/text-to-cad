@@ -6,7 +6,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   FsError,
-  IgnoreRules,
   assertEntryName,
   createDirectory,
   createFile,
@@ -40,10 +39,16 @@ beforeAll(async () => {
   await fs.mkdir(path.join(root, "src", "deep"), { recursive: true });
   await fs.mkdir(path.join(root, "node_modules", "left-pad"), { recursive: true });
   await fs.mkdir(path.join(root, "dist"), { recursive: true });
-  await fs.mkdir(path.join(root, ".git"), { recursive: true });
+  await fs.mkdir(path.join(root, ".git", "info"), { recursive: true });
+  await fs.mkdir(path.join(root, "STEP", "imported"), { recursive: true });
 
-  await fs.writeFile(path.join(root, ".gitignore"), "dist/\n*.log\n\n# a comment\n");
+  await fs.writeFile(path.join(root, ".gitignore"), "dist/\n*.log\n/STEP/**\n!/STEP/**/\n!/STEP/imported/**\n");
+  await fs.writeFile(path.join(root, ".git", "info", "exclude"), "*.unsupported\n");
   await fs.writeFile(path.join(root, "README.md"), "# Title\n");
+  await fs.writeFile(path.join(root, ".DS_Store"), "test-owned metadata\n");
+  await fs.writeFile(path.join(root, "STEP", "tom.step"), "ISO-10303-21;\n");
+  await fs.writeFile(path.join(root, "STEP", "imported", "part.step"), "ISO-10303-21;\n");
+  await fs.writeFile(path.join(root, "dist", "output.unsupported"), Buffer.from([0, 1, 2]));
   await fs.writeFile(path.join(root, "noise.log"), "ignored\n");
   await fs.writeFile(path.join(root, "src", "index.ts"), "export const a = 1;\n");
   await fs.writeFile(path.join(root, "src", "deep", "part.step"), "ISO-10303-21;\n");
@@ -57,48 +62,26 @@ afterAll(async () => {
   await fs.rm(root, { recursive: true, force: true });
 });
 
-describe("ignore rules", () => {
-  it("hides .git and node_modules whether or not the file says so", () => {
-    const rules = IgnoreRules.none();
-    expect(rules.ignores(".git", true)).toBe(true);
-    expect(rules.ignores("node_modules", true)).toBe(true);
-    expect(rules.ignores("src/node_modules/x.js", false)).toBe(true);
-    expect(rules.ignores("src/index.ts", false)).toBe(false);
-  });
-
-  it("honours the root's .gitignore, directory patterns included", async () => {
-    const rules = await IgnoreRules.read(root);
-    expect(rules.ignores("dist", true)).toBe(true);
-    expect(rules.ignores("noise.log", false)).toBe(true);
-    expect(rules.ignores("README.md", false)).toBe(false);
-  });
-
-  it("does not treat a comment or a blank line as a pattern", () => {
-    const rules = IgnoreRules.fromPatterns(["", "# a comment", "build"]);
-    expect(rules.ignores("build", true)).toBe(true);
-    expect(rules.ignores("a comment", false)).toBe(false);
-  });
-
-  it("never ignores the root itself", () => {
-    expect(IgnoreRules.none().ignores("", true)).toBe(false);
-  });
-});
-
 describe("listing a directory", () => {
-  it("returns one level, ignored entries removed", async () => {
+  it("returns every entry at one level, including Git-ignored and hidden files", async () => {
     const entries = await listDirectory(root, "");
     const names = entries.map((entry) => entry.name);
     expect(names).toContain("README.md");
     expect(names).toContain("src");
-    expect(names).not.toContain("dist");
-    expect(names).not.toContain("node_modules");
-    expect(names).not.toContain(".git");
-    expect(names).not.toContain("noise.log");
+    expect(names).toEqual(expect.arrayContaining(["dist", "node_modules", ".git", ".DS_Store", "noise.log", "blob.bin"]));
+    expect(names).not.toContain("tom.step");
   });
 
-  it("shows the ignored entries when asked", async () => {
-    const entries = await listDirectory(root, "", { includeIgnored: true });
-    expect(entries.map((entry) => entry.name)).toContain("dist");
+  it("lists generated STEP outputs despite the project's output-ignore pattern", async () => {
+    const entries = await listDirectory(root, "STEP");
+    expect(entries.map((entry) => entry.name)).toEqual(["imported", "tom.step"]);
+    expect(entries.find((entry) => entry.name === "tom.step")).toMatchObject({ path: "STEP/tom.step", kind: "file" });
+  });
+
+  it("lists unsupported files even inside an ignored directory", async () => {
+    const entries = await listDirectory(root, "dist");
+    expect(entries.map((entry) => entry.name)).toEqual(["bundle.js", "output.unsupported"]);
+    expect(detectType("dist/output.unsupported").kind).toBe("binary");
   });
 
   it("puts directories first, then natural order", () => {
@@ -125,13 +108,22 @@ describe("listing a directory", () => {
 });
 
 describe("listing every path", () => {
-  it("walks the tree, skipping what the rules hide", async () => {
+  it("searches ignored, unsupported and dependency files as well as source files", async () => {
     const { paths, truncated } = await listPaths(root);
     expect(paths).toContain("README.md");
     expect(paths).toContain("src/deep/part.step");
-    expect(paths.some((entry) => entry.startsWith("node_modules/"))).toBe(false);
-    expect(paths.some((entry) => entry.startsWith("dist/"))).toBe(false);
+    expect(paths).toEqual(expect.arrayContaining(["STEP/tom.step", "dist/output.unsupported", "node_modules/left-pad/index.js", ".git/HEAD", ".DS_Store"]));
     expect(truncated).toBe(false);
+  });
+
+  it("searches project outputs before dependency files can exhaust the cap", async () => {
+    const { paths: all } = await listPaths(root);
+    const ordinaryCount = all.filter((entry) => !entry.startsWith("node_modules/") && !entry.startsWith(".git/")).length;
+    const { paths, truncated } = await listPaths(root, "", { limit: ordinaryCount });
+    expect(paths).toContain("STEP/tom.step");
+    expect(paths).toContain("dist/output.unsupported");
+    expect(paths.some((entry) => entry.startsWith("node_modules/"))).toBe(false);
+    expect(truncated).toBe(true);
   });
 
   it("says so when it hits the cap instead of returning silently short", async () => {

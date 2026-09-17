@@ -15,8 +15,8 @@ import type { Project } from "@shared/types";
  * one design — and the choice of which panel rides on the tab row, so it
  * survives switching tabs and a reload.
  *
- * The CAD pair is exercised end to end in `tests/e2e/explorer.spec.ts`: the
- * theme editor and the Inspector are the viewer's surface drawn into this
+ * The CAD Inspector is exercised end to end in `tests/e2e/explorer.spec.ts`:
+ * it is the viewer's surface drawn into this
  * column, and that needs a running `cadgen viewer`. What is testable here is
  * the host's own rule, over markdown's source panel and the tree.
  */
