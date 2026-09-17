@@ -2,9 +2,12 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { build } from 'esbuild';
 
 export async function buildLibrary(root, { css = false } = {}) {
+  // Filtered workspace installs may keep a tool beside the package that
+  // declares it. The shared script must not depend on root hoisting.
+  const require = createRequire(path.join(root, 'package.json'));
+  const { build } = require('esbuild');
   const src = path.join(root, 'src');
   const dist = path.join(root, 'dist');
   const entries = [];
@@ -25,7 +28,6 @@ export async function buildLibrary(root, { css = false } = {}) {
   await build({entryPoints: entries, outbase: src, outdir: dist, bundle: false,
     format: 'esm', platform: 'neutral', target: 'es2022', jsx: 'automatic',
     loader: { '.js': 'jsx' }, sourcemap: true, logLevel: 'warning'});
-  const require = createRequire(import.meta.url);
   const result = spawnSync(process.execPath, [require.resolve('typescript/bin/tsc'), '-p', path.join(root, 'tsconfig.json'), '--emitDeclarationOnly'], { stdio: 'inherit' });
   if (result.status !== 0) throw new Error(`Declaration build failed for ${root}`);
   // Hand-authored declarations and module-relative assets are package outputs too.
@@ -56,8 +58,8 @@ export async function buildLibrary(root, { css = false } = {}) {
     await fs.writeFile(output, code);
   }
   if (css) {
-    const { default: postcss } = await import('postcss');
-    const { default: tailwind } = await import('@tailwindcss/postcss');
+    const postcss = require('postcss');
+    const tailwind = require('@tailwindcss/postcss');
     const from = path.join(src, 'styles', 'globals.css');
     const result = await postcss([tailwind({base: root})]).process(await fs.readFile(from, 'utf8'), {from, to: path.join(dist, 'styles.css')});
     await fs.writeFile(path.join(dist, 'styles.css'), result.css);
