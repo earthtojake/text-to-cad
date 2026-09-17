@@ -287,11 +287,27 @@ grows; it is out only on cost.
 Both sizes print `[setup] Ns` and `[gate NAME] Ns`, so a run that got slower
 says where.
 
+## Kinematics
+
+Every model with poses gets the same tab, under the same name, whichever file it
+came from: a STEP model's mates and a robot's joints are one control to the
+person using them. It holds two subsections. POSE is the model's named
+configurations as a dropdown, plus how it travels between them; it renders only
+for a file that declares some, so a plain URDF opens straight onto its values.
+VALUES is one row per DOF, with Reset and Copy at its foot.
+
+Applying a pose is a MOTION, not a write: the mechanism travels to it over
+`poseTransition.js`'s tween, because reading a mechanism means watching which DOF
+turns which way. Animate and Speed in the Pose subsection govern that, and they
+are a viewer preference rather than a per-file setting — someone who wants the
+snap wants it in every file. Animation off writes the target values in the same
+frame; it is not merely a fast transition.
+
 ## Robot components
 
 URDF, SRDF, and SDF files with named objects in their linked meshes expose a
-Components tab beside Joints. A robot sheet opens on JOINTS — posing the robot
-is what the file is for — and selecting a component jumps to Components.
+Components tab beside Kinematics. A robot sheet opens on KINEMATICS — posing the
+robot is what the file is for — and selecting a component jumps to Components.
 
 Components is a tree with the STEP tree's look: a row per link, collapsed, with
 the count of objects it owns; expanding one lists its objects beneath it. Links

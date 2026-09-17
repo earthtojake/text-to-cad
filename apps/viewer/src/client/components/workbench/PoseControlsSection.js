@@ -1,4 +1,3 @@
-import { RotateCcw } from "lucide-react";
 import { cn } from "@/ui/utils";
 import { resolveParameterNumberControlStep } from "@/workbench/parameterControls";
 import {
@@ -9,6 +8,7 @@ import {
 } from "@/workbench/poseDrivenControls";
 import { Button } from "../ui/button";
 import { Slider } from "../ui/slider";
+import { CUSTOM_POSE_VALUE, KinematicsPoseSubsection, KinematicsValueActions } from "./KinematicsControls";
 import {
   FILE_SHEET_COMPACT_BUTTON_CLASSES,
   FILE_SHEET_PRECISION_SLIDER_CLASSES,
@@ -59,6 +59,26 @@ function poseNamesFromDefinition(definition) {
   return Object.keys(poses).filter((name) => String(name || "").trim());
 }
 
+// Which named pose the model is IN, or "" when a DOF has been moved since. Same
+// question the robot sheet asks of its group states, so the dropdown reads the same
+// way in both: the pose that is on, or "custom".
+export function activePoseName(definition, values) {
+  for (const poseName of poseNamesFromDefinition(definition)) {
+    const preset = poseValuesForPreset(definition, poseName);
+    const matches = Object.entries(preset).every(([dof, value]) => {
+      const current = values?.[dof];
+      if (typeof value === "number" && typeof current === "number") {
+        return Math.abs(current - value) <= 1e-6;
+      }
+      return current === value || (current == null && value == null);
+    });
+    if (matches) {
+      return poseName;
+    }
+  }
+  return "";
+}
+
 export function poseValuesForPreset(definition, poseName) {
   const preset = definition?.manifest?.poses?.[poseName];
   const values = { ...(definition?.defaultParameterValues || {}) };
@@ -73,7 +93,6 @@ export function poseValuesForPreset(definition, poseName) {
 }
 
 export default function PoseControlsSection({
-  title = "Kinematics",
   runtime = null,
   loadingLabel = "Loading pose...",
   noParametersLabel = "No pose controls.",
@@ -81,7 +100,7 @@ export default function PoseControlsSection({
   showEnableToggle = false,
   enableLabel = "Enable",
   enableAriaLabel = "",
-  resetTitle = "Reset pose"
+  resetTitle = "Reset every value to the model as authored"
 }) {
   const definition = runtime?.definition || null;
   const parameters = Array.isArray(definition?.parameters) ? definition.parameters : [];
@@ -89,6 +108,8 @@ export default function PoseControlsSection({
   const error = String(runtime?.error || "").trim();
   const values = runtime?.parameterValues || {};
   const enabled = runtime?.enabled !== false;
+  // The pose-transition preference rides the runtime like every other pose concern.
+  const transition = runtime?.transition || null;
   const poseNames = poseNamesFromDefinition(definition);
   // Back-drive routing: which members a coupling drives, and what every DOF's
   // effective value is. Both are pure functions of the definition and the
@@ -112,9 +133,19 @@ export default function PoseControlsSection({
         <FileSheetStatusText tone="error" className="py-2">{error}</FileSheetStatusText>
       ) : null}
 
+      {definition && poseNames.length ? (
+        <KinematicsPoseSubsection
+          poses={poseNames.map((poseName) => ({ value: poseName, label: poseName }))}
+          activeValue={activePoseName(definition, values) || CUSTOM_POSE_VALUE}
+          onSelect={(poseName) => runtime?.onApplyPose?.(poseName)}
+          transition={transition}
+          disabled={!enabled}
+        />
+      ) : null}
+
       {definition ? (
         <FileSheetSubsection
-          title={title}
+          title="Values"
           // The mate gate rides this heading on the shared right-edge control axis rather
           // than owning a "Module" section for one switch.
           trailing={showEnableToggle ? (
@@ -249,44 +280,12 @@ export default function PoseControlsSection({
               </FileSheetSliderField>
             );
           })}
-          {runtime?.onResetParameters ? (
-            <FileSheetButtonRow>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className={cn(compactButtonClasses, "justify-center")}
-                onClick={() => runtime.onResetParameters()}
-                title={resetTitle}
-              >
-                <RotateCcw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-                <span>Reset</span>
-              </Button>
-            </FileSheetButtonRow>
-          ) : null}
-        </FileSheetSubsection>
-      ) : null}
-
-      {/* Presets follow the sliders they drive: each one is a named configuration
-          the model itself declares, so it belongs to this tab and not to a menu. */}
-      {definition && poseNames.length ? (
-        <FileSheetSubsection title="Presets">
-          <FileSheetButtonRow columns={poseNames.length > 1 ? 2 : 1}>
-            {poseNames.map((poseName) => (
-              <Button
-                key={poseName}
-                type="button"
-                variant="outline"
-                size="sm"
-                className={cn(compactButtonClasses, "justify-center")}
-                onClick={() => runtime?.onApplyPose?.(poseName)}
-                disabled={!enabled}
-                title={`Apply the ${poseName} pose`}
-              >
-                <span className="truncate">{poseName}</span>
-              </Button>
-            ))}
-          </FileSheetButtonRow>
+          <KinematicsValueActions
+            onReset={runtime?.onResetParameters ? () => runtime.onResetParameters() : null}
+            onCopy={runtime?.onCopyParams ? () => runtime.onCopyParams() : null}
+            resetTitle={resetTitle}
+            copyTitle="Copy the current parameter values"
+          />
         </FileSheetSubsection>
       ) : null}
     </div>

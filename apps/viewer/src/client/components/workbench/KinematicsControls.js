@@ -1,0 +1,125 @@
+import { Copy, RotateCcw } from "lucide-react";
+import { cn } from "@/ui/utils";
+import { POSE_TRANSITION_SPEEDS } from "@/workbench/poseTransition";
+import { Button } from "../ui/button";
+import {
+  FILE_SHEET_COMPACT_BUTTON_CLASSES,
+  FileSheetButtonRow,
+  FileSheetSelectRow,
+  FileSheetSubsection,
+  FileSheetToggleRow
+} from "./FileSheet";
+
+// The parts of the Kinematics tab that are the SAME for every kind of model that has
+// poses: which pose is on, how the model gets there, and the two actions on the values.
+//
+// A STEP model's mates and a robot's joints are one control to the person using them —
+// pick a pose, watch it move, nudge a DOF, copy the result — and they were two panels
+// that had drifted into two vocabularies ("Presets" and buttons here, "Group state" and
+// a dropdown there). These are the shared halves; each sheet still renders its own DOF
+// rows, because a typed parameter and a joint limit are genuinely different things.
+
+// A pose the model is NOT in. The sentinel is a value rather than an empty string
+// because a Select with no value shows its placeholder, and "no pose" is a state worth
+// naming: the person moved a DOF and left the named configuration behind.
+export const CUSTOM_POSE_VALUE = "__custom__";
+
+export function KinematicsPoseSubsection({
+  poses,
+  activeValue,
+  onSelect,
+  transition,
+  disabled = false,
+  label = "Pose",
+  ariaLabel = "Pose"
+}) {
+  if (!Array.isArray(poses) || !poses.length) {
+    return null;
+  }
+  const active = poses.some((pose) => pose.value === activeValue) ? activeValue : CUSTOM_POSE_VALUE;
+  const activeLabel = active === CUSTOM_POSE_VALUE
+    ? "custom"
+    : String(poses.find((pose) => pose.value === active)?.label || active);
+  return (
+    <FileSheetSubsection title="Pose">
+      <FileSheetSelectRow
+        stacked
+        label={label}
+        value={active}
+        onValueChange={(value) => {
+          if (value === CUSTOM_POSE_VALUE) {
+            return;
+          }
+          onSelect?.(value);
+        }}
+        ariaLabel={ariaLabel}
+        disabled={disabled}
+        triggerContent={<span className="truncate">{activeLabel}</span>}
+        options={poses.map((pose) => ({ value: pose.value, label: pose.label }))}
+      />
+      {transition ? (
+        <>
+          <FileSheetToggleRow
+            label="Animate"
+            checked={transition.animate !== false}
+            onCheckedChange={(checked) => transition.setAnimate?.(checked)}
+            ariaLabel="Animate pose changes"
+          />
+          <FileSheetSelectRow
+            label="Speed"
+            value={String(transition.speed ?? 1)}
+            onValueChange={(value) => transition.setSpeed?.(Number(value))}
+            ariaLabel="Pose transition speed"
+            // Off is off: a speed for a transition that does not happen is a dead control.
+            disabled={disabled || transition.animate === false}
+            options={POSE_TRANSITION_SPEEDS}
+          />
+        </>
+      ) : null}
+    </FileSheetSubsection>
+  );
+}
+
+// The foot of Values: what the person does to the numbers above, in both sheets. The
+// labels are the verbs alone -- "Reset pose" and "Copy angles" said which noun the file
+// happened to use, under a heading that already says it.
+export function KinematicsValueActions({
+  onReset,
+  onCopy,
+  resetTitle = "Reset every value to the model as authored",
+  copyTitle = "Copy the current values"
+}) {
+  if (!onReset && !onCopy) {
+    return null;
+  }
+  return (
+    <FileSheetButtonRow columns={onReset && onCopy ? 2 : 1}>
+      {onReset ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn(FILE_SHEET_COMPACT_BUTTON_CLASSES, "justify-center")}
+          onClick={() => onReset()}
+          title={resetTitle}
+        >
+          <RotateCcw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+          <span>Reset</span>
+        </Button>
+      ) : null}
+      {onCopy ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn(FILE_SHEET_COMPACT_BUTTON_CLASSES, "justify-center")}
+          onClick={() => { void onCopy(); }}
+          title={copyTitle}
+        >
+          <Copy className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+          <span>Copy</span>
+        </Button>
+      ) : null}
+    </FileSheetButtonRow>
+  );
+}

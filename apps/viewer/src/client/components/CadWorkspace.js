@@ -46,6 +46,7 @@ import {
 import { buildDxfLayersTab } from "./workbench/DxfLayersSection";
 import StepFileSheet from "./workbench/StepFileSheet";
 import { poseValuesForPreset } from "./workbench/PoseControlsSection";
+import { usePoseTransition, usePoseValueAnimation } from "../workbench/poseTransition.js";
 import StatusToast from "./workbench/StatusToast";
 import UrdfFileSheet from "./workbench/UrdfFileSheet";
 import ViewerAlertDialog from "./workbench/ViewerAlertDialog";
@@ -287,7 +288,6 @@ import {
   advanceUrdfJointValues,
   interpolateUrdfJointValues,
   jointValueMapsClose,
-  URDF_JOINT_ANIMATION_DURATION_MS,
   URDF_JOINT_ANIMATION_EPSILON,
   URDF_JOINT_ANIMATION_FOLLOW_MS
 } from "cadgen-js/lib/urdf/jointAnimation";
@@ -2143,6 +2143,14 @@ export default function CadWorkspace({
   // A named pose is a full configuration, not a patch: every DOF the preset
   // does not mention returns to 0 (the artifact as written), so two presets in
   // a row can never leave a joint behind from the first.
+  // One preference for every sheet that has poses; see workbench/poseTransition.js.
+  const poseTransition = usePoseTransition();
+  const stepPoseAnimation = usePoseValueAnimation();
+  // Read at call time, not closed over: the robot tween is a useCallback with the joint
+  // state in its dependencies, and changing the speed must not rebuild it mid-drag.
+  const poseTransitionDurationMsRef = useRef(poseTransition.durationMs);
+  poseTransitionDurationMsRef.current = poseTransition.durationMs;
+
   const handleApplyPose = useCallback((poseName) => {
     if (!selectedStepModuleDefinition) {
       return;
@@ -2151,9 +2159,19 @@ export default function CadWorkspace({
       selectedStepModuleDefinition,
       poseValuesForPreset(selectedStepModuleDefinition, poseName)
     );
-    stepModuleParameterValuesRef.current = nextParameterValues;
-    setStepModuleParameterValues(nextParameterValues);
-  }, [selectedStepModuleDefinition]);
+    // A pose is a place the mechanism GOES, so it travels there: the same tween the
+    // robot sheet has always used, at the duration this viewer is set to. With
+    // animation off the duration is 0 and the values are written in this frame.
+    stepPoseAnimation.run({
+      start: stepModuleParameterValuesRef.current || {},
+      target: nextParameterValues,
+      durationMs: poseTransition.durationMs,
+      onFrame: (frameValues) => {
+        stepModuleParameterValuesRef.current = frameValues;
+        setStepModuleParameterValues(frameValues);
+      }
+    });
+  }, [poseTransition.durationMs, selectedStepModuleDefinition, stepPoseAnimation]);
 
   // Turning the mate graph off leaves the model at rest — and leaves any playing
   // clip alone. Animation is not downstream of pose and never stops with it.
@@ -5112,8 +5130,10 @@ export default function CadWorkspace({
     const startValues = cloneJointValueMap(startJointValues);
     const finalValues = cloneJointValueMap(targetJointValues);
     cancelUrdfTrajectoryPlayback();
+    // Animation off writes the target in this frame, exactly as an unchanged pose does.
     if (
       typeof requestAnimationFrame !== "function" ||
+      toFiniteNumber(options?.durationMs, poseTransitionDurationMsRef.current) <= 0 ||
       jointValueMapsClose(startValues, finalValues)
     ) {
       setJointValuesByFileRef((current) => ({
@@ -5126,7 +5146,7 @@ export default function CadWorkspace({
     const token = playback.token + 1;
     playback.token = token;
     const startedAtMs = animationNowMs();
-    const durationMs = Math.max(toFiniteNumber(options?.durationMs, URDF_JOINT_ANIMATION_DURATION_MS), 1);
+    const durationMs = Math.max(toFiniteNumber(options?.durationMs, poseTransitionDurationMsRef.current), 1);
     const step = (timestamp) => {
       if (urdfJointAnimationRef.current.token !== token) {
         return;
@@ -7764,6 +7784,7 @@ export default function CadWorkspace({
                   onParameterChange: handleStepModuleParameterChange,
                   onResetParameters: handleResetParameters,
                   onApplyPose: handleApplyPose,
+                  transition: poseTransition,
                   onEnabledChange: handleStepModuleEnabledChange,
                   onCopyParams: handleCopyParameters,
                   onPasteParams: handlePasteParameters
@@ -7816,6 +7837,7 @@ export default function CadWorkspace({
                 jointValues={selectedUrdfJointValues}
                 onJointValueChange={handleUrdfJointValueChange}
                 onGroupStateSelect={handleSelectUrdfGroupState}
+                poseTransition={poseTransition}
                 onCopyJointAngles={handleCopyUrdfJointAngles}
                 onResetPose={handleResetUrdfPose}
                 sdf={selectedFileSheetKind === "sdf" ? {
