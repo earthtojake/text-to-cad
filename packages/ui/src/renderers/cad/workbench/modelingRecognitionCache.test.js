@@ -31,6 +31,34 @@ test("completed recognition metadata obeys count and byte bounds", () => {
   assert.deepEqual(bytes.get("b"), value, "an oversized result does not evict admitted metadata");
 });
 
+test("a 317-component assembly reopens without recognizing its components again", () => {
+  const cache = createModelingRecognitionCache();
+  const components = Array.from({ length: 317 }, (_, index) => {
+    const digest = index.toString(16).padStart(64, "0");
+    return {
+      key: modelingRecognitionKey({ surfaceInput: digest, surfaceObject: digest }, ""),
+      result: { tree: [{ id: `feature-${index}`, label: "Base extrude", faces: [1, 2, 3],
+        measurements: [["Depth", index + 1, "mm"]], children: [] }], hasFaces: true },
+    };
+  });
+  const bytes = components.reduce((sum, { key, result }) => sum + 2 * (key.length + JSON.stringify(result).length), 0);
+  assert.ok(bytes < 8 * 1024 * 1024, "the complete assembly fits the metadata byte budget");
+  let recognized = 0;
+  const open = () => {
+    for (const { key, result } of components) {
+      const completed = cache.get(key);
+      if (completed) assert.deepEqual(completed, result);
+      else { recognized += 1; cache.set(key, result); }
+    }
+  };
+  open();
+  assert.equal(recognized, 317);
+  // Reopening visits the same component order and inserts every miss. With a
+  // count cap below the working set, those insertions evict the whole warm tail.
+  open();
+  assert.equal(recognized, 317, "every exact component remains reusable on reopen");
+});
+
 test("cached metadata is private on read and failures never become reusable results", () => {
   const cache = createModelingRecognitionCache();
   const value = { tree: [{ label: "Original" }] };

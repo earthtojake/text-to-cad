@@ -17,7 +17,6 @@ import {
   peekRenderSrdf,
   peekRenderTopologyIndex,
   peekRenderUrdf,
-  renderAssetCacheStats,
   releaseRenderSurfLevel,
   releaseSurfWorkers,
   surfTessellationCacheKey
@@ -41,7 +40,8 @@ import {
 import { resolvePackageAssetUrl } from "@hardcore/core/client";
 import {
   installRuntimePackageDescriptor,
-  loadPackageDescriptor
+  loadPackageDescriptor,
+  peekPackageDescriptor
 } from "./packageDescriptorCache.js";
 import {
   createProgressivePackageLoader,
@@ -90,6 +90,7 @@ import { selectRequestedAssemblyComponents } from "../../../workbench/referenceS
 import { viewerMemoryPolicy } from "../../../render/viewerMemoryPolicy.js";
 import { syncSurfWorkerMemory } from "../../../render/surfWorkerMemoryPolicy.js";
 import { componentMemoryAccounting } from "../../../render/renderMemoryAccounting.js";
+import { completedPackages, renderAssetCacheStatsWithPackages } from "../../../render/completedPackageCache.js";
 import { createLodSceneAdoption } from "../../../render/lodSceneAdoption.js";
 import { lodStagingBuffers, syncSelectorCacheAccounting } from "../../../render/lodStagingMemory.js";
 import { matchesLodPayloadRequest } from "../../../render/lodPayloadRequest.js";
@@ -109,10 +110,10 @@ const GPU_BUFFER_ESTIMATE_MULTIPLIER = 1.15;
 const SURF_WORKER_TEMP_ESTIMATE_MULTIPLIER = 2;
 
 function syncAssetCacheMemory(excludeBuffers = []) {
-  const caches = renderAssetCacheStats({ excludeBuffers: lodStagingBuffers(excludeBuffers) });
+  const caches = renderAssetCacheStatsWithPackages({ excludeBuffers: lodStagingBuffers(excludeBuffers) });
   syncSelectorCacheAccounting(viewerMemoryPolicy, Number(caches.selector?.typedBytes) || 0);
   const assetCaches = Object.entries(caches).reduce((sum, [name, stats]) => (
-    name === "surfLeash" || name === "selector" ? sum : sum + (Number(stats?.typedBytes) || 0)
+    name === "surfLeash" || name === "selector" ? sum : sum + (Number(stats?.typedBytes) || 0) + (Number(stats?.metadataBytes) || 0)
   ), 0);
   viewerMemoryPolicy.setRetained("assetCaches", assetCaches);
 }
@@ -255,6 +256,14 @@ function createAssemblyPreviewMeshData(meshData, topologyManifest = null) {
   };
 }
 
+function completedPackageMeshState(entry, meshData) {
+  return {
+    file: entry.file, kind: entry.kind, meshHash: entryMeshAssetSignature(entry), meshData,
+    assemblyStructureReady: true, assemblyInteractionReady: true,
+    assemblyBackgroundError: "", assemblyBackgroundErrorMeshHash: "",
+  };
+}
+
 export function useCadAssets({
   initialEntry = null,
   client,
@@ -282,15 +291,19 @@ export function useCadAssets({
     };
   }, [getAssemblyMeshHash]);
 
+  const restoreCompletedPackage = useCallback(entry => entryHasMesh(entry)
+    ? completedPackages.get(client, entry, { descriptor: peekPackageDescriptor(entryAssetUrl(entry, "glb")) })
+    : null, [client, entryHasMesh]);
+
   const getCachedMeshState = useCallback((entry) => {
     if (!entryHasMesh(entry)) {
       return null;
     }
-    // Every STEP entry — single-component part OR multi-occurrence assembly — is a
-    // component-GLB package (a directory of content-addressed component GLBs + an
-    // assembly.json descriptor), composed asynchronously in the browser. The synchronous
-    // cache only yields the lightweight preview; the full mesh is built in loadMeshForEntry.
+    // Complete STEP packages may exceed the per-component SURF LRU. Reuse their
+    // bounded CPU working set, with fresh occurrence metadata for this mount.
     if (entrySourceFormat(entry) === RENDER_FORMAT.STEP) {
+      const completed = restoreCompletedPackage(entry);
+      if (completed) return completedPackageMeshState(entry, completed.meshData);
       const glbUrl = entryAssetUrl(entry, "glb");
       const topologyUrl = entryTopologyAssetUrl(entry);
       const previewMeshData = peekRenderGlb(glbUrl);
@@ -318,7 +331,7 @@ export function useCadAssets({
       meshHash: entryMeshAssetHash(entry),
       meshData
     };
-  }, [buildAssemblyPreviewMeshState, entryHasMesh]);
+  }, [buildAssemblyPreviewMeshState, entryHasMesh, restoreCompletedPackage]);
 
   const getCachedUrdfState = useCallback((entry) => {
     const kind = String(entry?.kind || "").trim().toLowerCase();
@@ -357,9 +370,13 @@ export function useCadAssets({
 
   // FileViewer remounts file-owned controls. Restore immutable warm assets on
   // the first render, as main's in-place tab activation did, without retaining
-  // inactive scenes or duplicating the bounded core caches.
+  // inactive scenes or copying component buffers.
+  const initialPackageRef = useRef(undefined);
+  if (initialPackageRef.current === undefined) initialPackageRef.current = restoreCompletedPackage(initialEntry);
+  const initialPackage = initialPackageRef.current;
   const [meshEnvelope, setMeshEnvelope] = useState(() => ({
-    value: getCachedMeshState(initialEntry), reference: null, receipt: null,
+    value: initialPackage ? completedPackageMeshState(initialEntry, initialPackage.meshData) : getCachedMeshState(initialEntry),
+    reference: null, receipt: null,
   }));
   const meshState = meshEnvelope.value;
   const setMeshState = useCallback(update => {
@@ -411,7 +428,7 @@ export function useCadAssets({
   // state pair: the ref is the mutable working set, the state is the reactive
   // summary the LOD hook consumes (component diagonals, occurrence centers in
   // model coordinates, and each component's surf URL).
-  const lodPackageRef = useRef(null);
+  const lodPackageRef = useRef(initialPackage);
   const lodSceneAdoptionRef = useRef(null);
   if (!lodSceneAdoptionRef.current) {
     lodSceneAdoptionRef.current = createLodSceneAdoption({ currentContext: () => lodPackageRef.current });
@@ -433,7 +450,7 @@ export function useCadAssets({
   // only the complete package whose meshState is actually displayed. Keeping
   // it separate lets A survive a failed/cancelled B and seed C without letting
   // B regain publication or LOD ownership.
-  const displayedLodPackageRef = useRef(null);
+  const displayedLodPackageRef = useRef(initialPackage);
   const [lodPackage, setLodPackage] = useState(null);
   useEffect(() => {
     lodSceneAdoptionRef.current.checkContext();
@@ -540,7 +557,17 @@ export function useCadAssets({
     return { file: entry.file,
       modelKey: `${entry.file}:${entryMeshAssetSignature(entry) || entry.hash || ""}`,
       components };
-  }, []);
+  }, [client]);
+
+  useLayoutEffect(() => {
+    if (!initialPackage) return;
+    initialPackageRef.current = null;
+    setLodPackage(buildLodPackageSummary(initialPackage.entry, initialPackage.meshUrl, initialPackage.descriptor,
+      initialPackage.componentMeshDataByCid, initialPackage.componentIdentityByCid));
+    const count = Object.keys(initialPackage.componentMeshDataByCid).length;
+    publishMeshCostAccounting({ ...initialPackage, loaded: count, total: count, final: true, meshRevision: initialPackage.meshHash });
+    syncDisplayedMemory(initialPackage.componentMeshDataByCid);
+  }, [initialPackage, buildLodPackageSummary]);
 
   // This preparation is called by the scheduler's sole loader lane. Batch
   // publication itself performs no asynchronous geometry/selector work.
@@ -627,6 +654,9 @@ export function useCadAssets({
           }
         }
         if (ctx.lodPending === pending) delete ctx.lodPending;
+        // The inactive snapshot must not keep obsolete detail levels alive.
+        // Cleanup captures this newly committed CPU working set instead.
+        completedPackages.delete(client, ctx.entry);
         for (const item of items) if (item.previousLevel !== item.normalizedLevel) releaseRenderSurfLevel(item.surfUrl, {
           tessellation: lodTessellationForLevel(item.previousLevel), identity: item.component,
         });
@@ -675,7 +705,7 @@ export function useCadAssets({
     if (pending.adopted) return { status: outcome.status === "adopted" && !signal?.aborted ? "adopted" : "retained",
       components: items.map(item => ({ cid: item.cid, level: item.normalizedLevel, meshData: item.nextMesh })) };
     return false;
-  }, [componentLodNeedsSelectors]);
+  }, [componentLodNeedsSelectors, client]);
 
   // Rebuild the composed selector runtime with one component's bundle swapped
   // to the level the display mesh just moved to. Scoped to the composition's
@@ -705,17 +735,8 @@ export function useCadAssets({
   prepareReferenceStateForLodRef.current = prepareReferenceStateForLod;
 
   const buildComposedPackageMeshState = useCallback((entry, descriptor, meshData) => {
-    return {
-      file: entry.file,
-      kind: entry.kind,
-      meshHash: getAssemblyMeshHash(entry),
-      meshData,
-      assemblyStructureReady: true,
-      assemblyInteractionReady: true,
-      assemblyBackgroundError: "",
-      assemblyBackgroundErrorMeshHash: ""
-    };
-  }, [getAssemblyMeshHash]);
+    return completedPackageMeshState(entry, meshData);
+  }, []);
   // Defined after applyComponentLodPayload, consumed by it through a ref.
   const buildComposedPackageMeshStateRef = useRef(buildComposedPackageMeshState);
   buildComposedPackageMeshStateRef.current = buildComposedPackageMeshState;
@@ -809,6 +830,8 @@ export function useCadAssets({
   }, []);
 
   const loadMeshForEntry = useCallback(async (entry) => {
+    const previousDisplayed = displayedLodPackageRef.current;
+    if (previousDisplayed) completedPackages.set(client, previousDisplayed.entry, previousDisplayed);
     cancelMeshLoad();
     const requestId = requestIdRef.current;
 
@@ -824,6 +847,24 @@ export function useCadAssets({
 
     const surfaceViewReplacement = entry?.runtimeSurfaceViewReplacement === true;
     const targetMeshHash = getAssemblyMeshHash(entry);
+    const completed = surfaceViewReplacement ? null : restoreCompletedPackage(entry);
+    syncAssetCacheMemory(componentMemoryAccounting(previousDisplayed?.componentMeshDataByCid).buffers);
+    if (completed) {
+      completed.requestId = requestId;
+      lodPackageRef.current = completed;
+      displayedLodPackageRef.current = completed;
+      displayedReferenceCompositionRef.current = null;
+      referenceCompositionRef.current = null;
+      setLodPackage(buildLodPackageSummary(entry, completed.meshUrl, completed.descriptor,
+        completed.componentMeshDataByCid, completed.componentIdentityByCid));
+      setMeshState(completedPackageMeshState(entry, completed.meshData));
+      const count = Object.keys(completed.componentMeshDataByCid).length;
+      publishMeshCostAccounting({ ...completed, loaded: count, total: count, final: true, meshRevision: completed.meshHash });
+      syncDisplayedMemory(completed.componentMeshDataByCid);
+      setStatus(ASSET_STATUS.READY);
+      setError("");
+      return;
+    }
     const atomicSameFileReplacement = shouldRetainCompleteSameFileMesh(
       meshStateRef.current,
       entry,
@@ -1059,6 +1100,10 @@ export function useCadAssets({
               syncSurfWorkerMemory();
             },
             recoverMemoryPressure: async () => {
+              if (completedPackages.clear()) {
+                syncAssetCacheMemory(componentMemoryAccounting(displayedLodPackageRef.current?.componentMeshDataByCid).buffers);
+                return true;
+              }
               const reclaimed = reclaimIdleSurfWorkers();
               syncSurfWorkerMemory();
               if (reclaimed.reclaimedSlots > 0 || reclaimed.fullyReleased) return true;
@@ -1150,10 +1195,11 @@ export function useCadAssets({
                 ctx.complete = final;
               } else {
                 lodPackageRef.current = {
-                  entry,
+                  entry: surfaceViewReplacement ? { ...entry, runtimeSurfaceViewReplacement: false } : entry,
                   file: entry.file,
                   meshUrl,
                   descriptor: packageDescriptor,
+                  runtimeDescriptor: storedPackageDescriptor,
                   componentIdentityByCid: Object.fromEntries(componentIdentityByCid),
                   componentMeshDataByCid,
                   meshData,
@@ -1336,10 +1382,12 @@ export function useCadAssets({
         meshAbortControllerRef.current = null;
       }
     }
-  }, [buildAssemblyPreviewMeshState, buildLodPackageSummary, cancelMeshLoad, entryHasMesh, getAssemblyMeshHash, getCachedMeshState]);
+  }, [buildAssemblyPreviewMeshState, buildLodPackageSummary, cancelMeshLoad, entryHasMesh, getAssemblyMeshHash, getCachedMeshState,
+    client, restoreCompletedPackage]);
 
   surfaceViewReplacementRef.current = (entry, meshUrl, replacementView) => {
     if (!replacementView?.viewId) return Promise.resolve();
+    completedPackages.delete(client, entry);
     installRuntimePackageDescriptor(meshUrl, replacementView);
     if (lodPackageRef.current?.descriptor?.viewId === replacementView.viewId) {
       return Promise.resolve();
@@ -1817,7 +1865,10 @@ export function useCadAssets({
     abortLoad(urdfAbortControllerRef);
     abortLoad(referenceAbortControllerRef);
     abortLoad(displayEdgeAbortControllerRef);
-  }, []);
+    const displayed = displayedLodPackageRef.current;
+    if (displayed) completedPackages.set(client, displayed.entry, displayed);
+    syncAssetCacheMemory();
+  }, [client]);
 
   return {
     meshState,

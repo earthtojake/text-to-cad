@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { createHash } from "node:crypto";
-import os from "node:os";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { _electron as electron, expect, test, type ElectronApplication, type Page, type Request } from "@playwright/test";
@@ -19,12 +19,48 @@ let app: ElectronApplication;
 let page: Page;
 let userData: string;
 let project: string;
+let projectParentCreated = false;
 const errors: string[] = [];
+const MANY_COMPONENT_COUNT = 32;
+const MANY_COMPONENT_STEP_SCRIPT = `
+import sys
+from pathlib import Path
+import build123d as bd
+from cadgen.step_export import export_build123d_step_file
+
+parts = []
+for index in range(${MANY_COMPONENT_COUNT}):
+    size_x = 1.0 + index * 0.01
+    size_y = 1.0 + (index % 3) * 0.02
+    size_z = 1.0 + (index % 5) * 0.01
+    part = bd.Box(size_x, size_y, size_z).moved(
+        bd.Location(((index % 8) * 3.0, (index // 8) * 3.0, 0.0))
+    )
+    part.label = f"component_{index:02d}"
+    parts.append(part)
+
+export_build123d_step_file(
+    bd.Compound(children=parts, label="many_components"),
+    Path(sys.argv[1]),
+)
+`;
+
+function writeManyComponentStep(python: string, output: string) {
+  execFileSync(python, ["-c", MANY_COMPONENT_STEP_SCRIPT, output], {
+    cwd: project,
+    env: { ...process.env, CADGEN_DAEMON: "0" },
+    stdio: "pipe",
+    timeout: 120_000,
+  });
+}
 
 test.describe.configure({ mode: "serial" });
 test.beforeAll(async () => {
   // This project owns its tiny fixtures and never reads the shared models corpus.
-  project = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-cad-scenes-project-"));
+  const projectParent = path.join(repoRoot, "models/tests/electron");
+  projectParentCreated = !fs.existsSync(projectParent);
+  fs.mkdirSync(projectParent, { recursive: true });
+  project = fs.mkdtempSync(path.join(projectParent, "cad-scenes-"));
   fs.copyFileSync(path.join(repoRoot, "tests/fixtures/cad/import-smoke.step"), path.join(project, "part.step"));
   const animatedStep = fs.readFileSync(path.join(project, "part.step"));
   fs.writeFileSync(path.join(project, "animated.step"), animatedStep);
@@ -68,6 +104,9 @@ test.beforeAll(async () => {
   console.info(`[CAD runtime] ${JSON.stringify({ python: runtime.python, source: runtime.source, cadgenVersion: runtime.cadgenVersion })}`);
   test.skip(!cadRuntimeReady(runtime), "CAD runtime required");
   if (process.env.CAD_DESKTOP_PYTHON) expect(runtime.python).toBe(process.env.CAD_DESKTOP_PYTHON);
+  if (!runtime.python) throw new Error("Ready CAD runtime has no Python interpreter");
+  writeManyComponentStep(runtime.python, path.join(project, "many-a.step"));
+  fs.copyFileSync(path.join(project, "many-a.step"), path.join(project, "many-b.step"));
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1600, 900));
   await page.evaluate(() => window.hardcore.settings.set({ theme: "dark", reduceMotion: true, defaultGitMode: "none", fetchBeforeCreate: false }));
   await page.evaluate(root => window.hardcore.projects.addPath({ path: root }), project);
@@ -80,6 +119,9 @@ test.afterAll(async () => {
   const runtimeLog = userData && path.join(userData, "cad-runtime.log");
   if (runtimeLog && fs.existsSync(runtimeLog)) fs.copyFileSync(runtimeLog, test.info().outputPath("cad-runtime.log"));
   for (const directory of [userData, project]) if (directory) fs.rmSync(directory, { recursive: true, force: true });
+  if (projectParentCreated) {
+    try { fs.rmdirSync(path.join(repoRoot, "models/tests/electron")); } catch { /* Another test now owns it. */ }
+  }
 });
 
 async function openFile(file: string) {
@@ -120,23 +162,26 @@ async function expectDisplayMode(mode: string) {
   await page.keyboard.press("Escape");
 }
 
-async function expectCadReady(file: string) {
-  await expect.poll(async () => page.evaluate((expectedFile) => {
+async function expectCadReady(file: string, componentCount = 1) {
+  await expect.poll(async () => page.evaluate(({ expectedFile, expectedComponents }) => {
     const placement = window.__cadModelPlacement?.modelKey || "";
     const quality = window.__cadViewerQuality;
     return placement.includes(expectedFile)
       && String(quality?.modelKey || "").includes(expectedFile)
       && quality?.standardQualityReady === true
-      && (window.__cadDisplayRecords?.().length || 0) > 0;
-  }, file), {
+      && (window.__cadDisplayRecords?.().length || 0) >= expectedComponents;
+  }, { expectedFile: file, expectedComponents: componentCount }), {
     timeout: 90_000,
   }).toBe(true);
   await expect(page.locator("[data-file-status] .animate-spin")).toHaveCount(0);
   await expect(page.getByRole("status").filter({
     hasText: /Recognizing geometry|Loading model geometry/,
   })).toHaveCount(0);
-  await expect(page.getByRole("list", { name: "Model", exact: true })
-    .getByText("1 feature", { exact: true })).toBeVisible({ timeout: 15_000 });
+  const model = page.getByRole("list", { name: "Model", exact: true });
+  await expect(model).toBeVisible({ timeout: 15_000 });
+  if (componentCount === 1) {
+    await expect(model.getByText("1 feature", { exact: true })).toBeVisible({ timeout: 15_000 });
+  }
 }
 
 test("Inspect and Render keep separate controls and preserve display, studio and material edits", async () => {
@@ -254,37 +299,64 @@ test("embedded STEP animation loads, plays and scrubs under the desktop CSP", as
   expect(errors).toEqual([]);
 });
 
-test("reopening exact STEP geometry reuses its backend and prepared bodies", async () => {
+test("reopening a many-component STEP reuses its backend and every prepared body", async () => {
   test.setTimeout(150_000);
-  const requests: {
+  type RecordedRequest = {
     method: string; origin: string; pathname: string; file: string; surfaceInput: string; object: string;
-  }[] = [];
-  const recordRequest = (request: Request) => {
+  };
+  const requests: RecordedRequest[] = [];
+  const activeBodyRequests = new Set<Request>();
+  let lastBodyActivityAt = Date.now();
+  const isBodyRequest = (request: RecordedRequest) => {
+    if (request.pathname === "/__cad/asset" && /\.step(?:\.json)?$/i.test(request.file)) return true;
+    if (request.pathname === "/__cad/store" && request.surfaceInput) return true;
+    return request.pathname.startsWith("/__tess_cache/")
+      && request.pathname !== "/__tess_cache/probe";
+  };
+  const requestFacts = (request: Request): RecordedRequest => {
     const url = new URL(request.url());
-    if (!url.pathname.startsWith("/__cad/") && !url.pathname.startsWith("/__tess_cache/")) return;
-    requests.push({
+    return {
       method: request.method(),
       origin: url.origin,
       pathname: url.pathname,
       file: url.searchParams.get("file") || "",
       surfaceInput: url.searchParams.get("surfaceInput") || "",
       object: url.searchParams.get("object") || "",
-    });
+    };
+  };
+  const recordRequest = (request: Request) => {
+    const facts = requestFacts(request);
+    if (!facts.pathname.startsWith("/__cad/") && !facts.pathname.startsWith("/__tess_cache/")) return;
+    requests.push(facts);
+    if (isBodyRequest(facts)) {
+      activeBodyRequests.add(request);
+      lastBodyActivityAt = Date.now();
+    }
+  };
+  const finishRequest = (request: Request) => {
+    if (activeBodyRequests.delete(request)) lastBodyActivityAt = Date.now();
+  };
+  const expectBodyRequestsDrained = async () => {
+    await expect.poll(() => activeBodyRequests.size === 0 && Date.now() - lastBodyActivityAt >= 300, {
+      timeout: 30_000,
+    }).toBe(true);
   };
   page.on("request", recordRequest);
+  page.on("requestfinished", finishRequest);
+  page.on("requestfailed", finishRequest);
   try {
     // These documents have the same STEP bytes but distinct per-file state.
     // Warm both before measuring the A -> B -> A reopen path.
-    await selectOrOpenFile("part.step");
-    await expectCadReady("part.step");
+    await selectOrOpenFile("many-a.step");
+    await expectCadReady("many-a.step", MANY_COMPONENT_COUNT);
     await setDisplayMode("Wire");
-    await expectCadReady("part.step");
-    await selectOrOpenFile("animated.step");
-    await expectCadReady("animated.step");
+    await expectCadReady("many-a.step", MANY_COMPONENT_COUNT);
+    await selectOrOpenFile("many-b.step");
+    await expectCadReady("many-b.step", MANY_COMPONENT_COUNT);
     await setDisplayMode("Flat");
-    await expectCadReady("animated.step");
-    await selectOrOpenFile("part.step");
-    await expectCadReady("part.step");
+    await expectCadReady("many-b.step", MANY_COMPONENT_COUNT);
+    await selectOrOpenFile("many-a.step");
+    await expectCadReady("many-a.step", MANY_COMPONENT_COUNT);
     await expectDisplayMode("Wire");
     await expect(page.locator("[data-cad-surface]")).toHaveCount(1);
     await expect(page.locator("[data-cad-surface] canvas").first()).toBeVisible();
@@ -292,41 +364,42 @@ test("reopening exact STEP geometry reuses its backend and prepared bodies", asy
     // The shared cache defers its best-effort first write for 1.5s. Drain that
     // cold-load write before measuring so a later POST means new tessellation.
     await page.waitForTimeout(1_700);
+    await expectBodyRequestsDrained();
 
     const measuredAt = requests.length;
     const transitionStartedAt = Date.now();
-    await selectOrOpenFile("animated.step");
-    await expectCadReady("animated.step");
+    await selectOrOpenFile("many-b.step");
+    await expectCadReady("many-b.step", MANY_COMPONENT_COUNT);
     await expectDisplayMode("Flat");
     await expect(page.locator("[data-cad-surface]")).toHaveCount(1);
     await expect(page.locator("[data-cad-surface] canvas").first()).toBeVisible();
-    await selectOrOpenFile("part.step");
-    await expectCadReady("part.step");
+    await selectOrOpenFile("many-a.step");
+    await expectCadReady("many-a.step", MANY_COMPONENT_COUNT);
     await expectDisplayMode("Wire");
     await expect(page.locator("[data-cad-surface]")).toHaveCount(1);
     await expect(page.locator("[data-cad-surface] canvas").first()).toBeVisible();
+    const switchElapsedMs = Date.now() - transitionStartedAt;
 
     // Admit the same deferred-write interval after the warm transition too.
     await page.waitForTimeout(1_700);
+    await expectBodyRequestsDrained();
     const origins = [...new Set(requests.map(request => request.origin))];
     expect(origins).toHaveLength(1);
 
     const transition = requests.slice(measuredAt);
-    const bodyRequests = transition.filter(request => {
-      if (request.pathname === "/__cad/asset" && /\.step(?:\.json)?$/i.test(request.file)) return true;
-      if (request.pathname === "/__cad/store" && request.surfaceInput) return true;
-      if (request.pathname.startsWith("/__tess_cache/")
-        && request.pathname !== "/__tess_cache/probe") return true;
-      return false;
-    });
+    const bodyRequests = transition.filter(isBodyRequest);
     const counts = Object.fromEntries([...new Set(transition.map(request => request.pathname))]
       .map(pathname => [pathname, transition.filter(request => request.pathname === pathname).length]));
-    console.info(`[CAD tab reopen] ${JSON.stringify({ elapsedMs: Date.now() - transitionStartedAt,
+    const displayedComponents = await page.evaluate(() => window.__cadDisplayRecords?.().length || 0);
+    console.info(`[CAD tab reopen] ${JSON.stringify({ componentCount: MANY_COMPONENT_COUNT,
+      displayedComponents, switchElapsedMs, observedElapsedMs: Date.now() - transitionStartedAt,
       origins, counts, transition, bodyRequests })}`);
     expect(bodyRequests).toEqual([]);
-    expect(await page.evaluate(() => window.__cadDisplayRecords?.().length || 0)).toBeGreaterThan(0);
+    expect(displayedComponents).toBe(MANY_COMPONENT_COUNT);
     expect(errors).toEqual([]);
   } finally {
     page.off("request", recordRequest);
+    page.off("requestfinished", finishRequest);
+    page.off("requestfailed", finishRequest);
   }
 });

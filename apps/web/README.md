@@ -128,8 +128,11 @@ the build — detection only; it keeps serving.
   selected file explicitly and polls active files. Other files' placeholders
   must not erase resolved metadata; a newer complete entry still invalidates
   that file's view. The app retains one root client across navigation, so its
-  bounded mesh-cache write queue survives file switches. Decoded geometry uses
-  the shared content-addressed LRU, including when a renderer remounts.
+  bounded mesh-cache write queue survives file switches. The shared renderer
+  retains completed STEP working sets in a bounded CPU cache, so reopening a
+  warm assembly does not reload each component. Root, origin and revision
+  identities isolate reuse; changed files and evicted entries load normally.
+  Inactive WebGL scenes are released and camera state remains file-scoped.
 - **Vite's transform cache can outlive HMR and hard reloads.** If a source
   edit does not show up, restart the dev server and delete
   `node_modules/.vite`.

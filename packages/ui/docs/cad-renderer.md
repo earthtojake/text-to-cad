@@ -159,8 +159,32 @@ the shared Python cache and its original component-key codec.
 On mount, immutable mesh and complete robot state are read synchronously from
 the existing bounded decoded caches. Reopening a warm file can therefore show
 those assets on its first render while file-owned controls restore their own
-camera and pose. STEP packages still compose their exact cached components;
-mutable native GLB scenes and animation mixers remain separately owned.
+camera and pose. Completed STEP working sets have a separate LRU of at most
+eight packages and 256 MiB, so an assembly that exceeds the core SURF cache's
+24-entry limit can reopen without fetching or decoding every component again.
+The bound includes unique full backing buffers and estimated structural metadata;
+an oversized package is not retained. Memory pressure evicts these disposable
+snapshots before reclaiming workers. The existing memory probe reports their
+bytes under `assetCaches.completedPackages`, excluding buffers already charged
+to the displayed scene, LOD staging or another cache.
+
+Only complete committed CPU display data enters this cache. Component typed
+arrays remain immutable and share their existing allocations; cache admission
+copies plain bounds, part and descriptor metadata, and every restore gives the
+renderer fresh occurrence/material objects and LOD maps. Scene code must not
+mutate or transfer the shared component arrays. WebGL scenes, selector runtimes,
+workers, pending work, cameras, selections and pose state are never retained.
+Refinement drops the old snapshot when its replacement commits; closing the
+renderer captures the latest complete working set.
+
+Reuse requires the same transport origin, stable root, file, entry/document and
+appearance revision, package URL and runtime descriptor view. Anonymous clients
+remain object-isolated. Each component retains its exact surface-input/object
+binding and concrete tessellation key and level. Editing previews, changed
+revisions and runtime replacement views invalidate the snapshot. A fresh client
+for the same origin and root can therefore reopen a closed tab while the
+bounded entry survives. Mutable native GLB scenes and animation mixers remain
+separately owned.
 
 Worker infrastructure is reference-counted across live render sessions. The
 last session releases workers and pending work. Playback clocks are separate
@@ -307,8 +331,10 @@ Annotation-only components show a no-faces state. Recognition continues while
 the current file’s Geometry/Features views switch, and stops on disposal or when the
 viewer invalidates its geometry. Completed recognition metadata is retained across
 file mounts under the exact surface input/object identity, or an origin-qualified
-immutable SURF URL for static packages. Its separate LRU holds at most 256 unique
-components and 8 MiB of serialized metadata; it retains no SURF bytes, workers,
+immutable SURF URL for static packages. Its separate LRU holds at most 512 unique
+components and 8 MiB of serialized metadata. The count guard accommodates
+assemblies with hundreds of small parts; the byte limit still evicts large
+metadata results. It retains no SURF bytes, workers,
 pending work or failures. The descriptor uses the existing package cache. A new
 surface identity reruns recognition, and retry processes only failed components.
 Every displayed operation and selection remains scoped to its assembly occurrence.
