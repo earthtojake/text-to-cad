@@ -81,8 +81,42 @@ test("root, origin, revision, source appearance and replacement runtime view are
   assert.ok(cache.get(anonymous, a.entry));
 });
 
+test("recognition reads only private exact identities from the matching root, revision and runtime view", () => {
+  const cache = createCompletedPackageCache(), a = model("identities.step", 317);
+  const populate = () => assert.equal(cache.set(root, a.entry, a.context), true);
+  populate();
+  const before = cache.stats();
+  const identities = cache.peekComponentIdentities({ ...root }, a.entry, { descriptor: a.context.descriptor });
+  assert.equal(Object.keys(identities).length, 317);
+  assert.deepEqual(Object.keys(identities.c0).sort(), ["surfaceInput", "surfaceObject"]);
+  assert.deepEqual(identities.c0, { surfaceInput: "0".repeat(64), surfaceObject: "a".repeat(64) });
+  identities.c0.surfaceObject = "b".repeat(64);
+  delete identities.c1;
+  const again = cache.peekComponentIdentities(root, a.entry, { descriptor: a.context.descriptor });
+  assert.equal(again.c0.surfaceObject, "a".repeat(64));
+  assert.ok(again.c1);
+  assert.equal(cache.stats().bytes, before.bytes, "identity reads retain no geometry or metadata copies");
+  assert.equal(cache.peekComponentIdentities(root, a.entry), null, "a descriptor is required to prove the runtime view");
+  for (const client of [{ ...root, workspaceId: "other" }, { ...root, origin: "http://other.test" }]) {
+    assert.equal(cache.peekComponentIdentities(client, a.entry, { descriptor: a.context.descriptor }), null);
+  }
+  for (const change of [{ hash: "new" }, { documentHash: "new" }, { editingPreview: true }]) {
+    populate();
+    assert.equal(cache.peekComponentIdentities(root, { ...a.entry, ...change }, { descriptor: a.context.descriptor }), null);
+  }
+  for (const descriptor of [{ ...a.context.descriptor, viewId: "new-view" },
+    { ...a.context.descriptor, components: { ...a.context.descriptor.components, c0: { surfaceInput: "b".repeat(64) } } }]) {
+    populate();
+    assert.equal(cache.peekComponentIdentities(root, a.entry, { descriptor }), null);
+  }
+});
+
 test("only complete exact display publications are admitted; pending work and runtime objects are excluded", () => {
   const cache = createCompletedPackageCache(), a = model();
+  for (const sourceFormat of ["stl", "glb", "urdf", "dxf"]) {
+    assert.equal(cache.set(root, { ...a.entry, kind: sourceFormat, sourceFormat }, a.context), false,
+      "a format without exact topology cannot enter the package working-set cache");
+  }
   for (const context of [{ ...a.context, complete: false }, { ...a.context, lodPending: {} },
     { ...a.context, componentMeshDataByCid: {} }, { ...a.context, meshHash: "old" }]) {
     assert.equal(cache.set(root, a.entry, context), false);

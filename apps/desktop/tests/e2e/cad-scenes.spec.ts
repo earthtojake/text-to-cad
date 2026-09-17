@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
@@ -19,7 +20,6 @@ let app: ElectronApplication;
 let page: Page;
 let userData: string;
 let project: string;
-let projectParentCreated = false;
 const errors: string[] = [];
 const MANY_COMPONENT_COUNT = 32;
 const MANY_COMPONENT_STEP_SCRIPT = `
@@ -48,7 +48,8 @@ export_build123d_step_file(
 function writeManyComponentStep(python: string, output: string) {
   execFileSync(python, ["-c", MANY_COMPONENT_STEP_SCRIPT, output], {
     cwd: project,
-    env: { ...process.env, CADGEN_DAEMON: "0" },
+    env: { ...process.env, ...cadRegistryEnvironment(userData), CADGEN_DAEMON: "0",
+      CADGEN_CACHE_DIR: path.join(userData, "cad-cache"), CADGEN_DAEMON_STATE_DIR: path.join(userData, "cad-daemon") },
     stdio: "pipe",
     timeout: 120_000,
   });
@@ -57,10 +58,7 @@ function writeManyComponentStep(python: string, output: string) {
 test.describe.configure({ mode: "serial" });
 test.beforeAll(async () => {
   // This project owns its tiny fixtures and never reads the shared models corpus.
-  const projectParent = path.join(repoRoot, "models/tests/electron");
-  projectParentCreated = !fs.existsSync(projectParent);
-  fs.mkdirSync(projectParent, { recursive: true });
-  project = fs.mkdtempSync(path.join(projectParent, "cad-scenes-"));
+  project = fs.mkdtempSync(path.join(os.tmpdir(), "cad-scenes-"));
   fs.copyFileSync(path.join(repoRoot, "tests/fixtures/cad/import-smoke.step"), path.join(project, "part.step"));
   const animatedStep = fs.readFileSync(path.join(project, "part.step"));
   fs.writeFileSync(path.join(project, "animated.step"), animatedStep);
@@ -115,12 +113,16 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  await app?.close();
-  const runtimeLog = userData && path.join(userData, "cad-runtime.log");
-  if (runtimeLog && fs.existsSync(runtimeLog)) fs.copyFileSync(runtimeLog, test.info().outputPath("cad-runtime.log"));
-  for (const directory of [userData, project]) if (directory) fs.rmSync(directory, { recursive: true, force: true });
-  if (projectParentCreated) {
-    try { fs.rmdirSync(path.join(repoRoot, "models/tests/electron")); } catch { /* Another test now owns it. */ }
+  try {
+    await app?.close();
+  } finally {
+    try {
+      const runtimeLog = userData && path.join(userData, "cad-runtime.log");
+      if (runtimeLog && fs.existsSync(runtimeLog)) fs.copyFileSync(runtimeLog, test.info().outputPath("cad-runtime.log"));
+    } finally {
+      try { if (userData) fs.rmSync(userData, { recursive: true, force: true }); }
+      finally { if (project) fs.rmSync(project, { recursive: true, force: true }); }
+    }
   }
 });
 
@@ -388,13 +390,17 @@ test("reopening a many-component STEP reuses its backend and every prepared body
 
     const transition = requests.slice(measuredAt);
     const bodyRequests = transition.filter(isBodyRequest);
+    const surfaceResolutionRequests = transition.filter(request => (
+      request.method === "POST" && request.pathname === "/__cad/surfaces"
+    ));
     const counts = Object.fromEntries([...new Set(transition.map(request => request.pathname))]
       .map(pathname => [pathname, transition.filter(request => request.pathname === pathname).length]));
     const displayedComponents = await page.evaluate(() => window.__cadDisplayRecords?.().length || 0);
     console.info(`[CAD tab reopen] ${JSON.stringify({ componentCount: MANY_COMPONENT_COUNT,
       displayedComponents, switchElapsedMs, observedElapsedMs: Date.now() - transitionStartedAt,
-      origins, counts, transition, bodyRequests })}`);
+      origins, counts, transition, bodyRequests, surfaceResolutionRequests })}`);
     expect(bodyRequests).toEqual([]);
+    expect(surfaceResolutionRequests).toEqual([]);
     expect(displayedComponents).toBe(MANY_COMPONENT_COUNT);
     expect(errors).toEqual([]);
   } finally {

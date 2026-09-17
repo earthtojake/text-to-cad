@@ -92,6 +92,9 @@ bounded cache. They retain exact decoded component buffers and copy structural
 metadata for each mount; scene objects, controls and pending work are not cached.
 Reuse is scoped to root, origin and file revision. See
 [CAD resource lifetime](docs/cad-renderer.md) for cache bounds and invalidation.
+The Model inspector can reuse those accepted component identities for completed
+recognition metadata after the runtime descriptor also matches, avoiding surface
+requests on a warm reopen without retaining another copy of the geometry.
 
 The host owns stored state. The web adapter retains browser URL/history and
 session preferences; desktop retains its explorer/project preferences and IPC
