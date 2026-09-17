@@ -1,4 +1,5 @@
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { once } from "node:events";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { execa } from "execa";
@@ -56,6 +57,34 @@ describe("tracked children", () => {
     expect(trackedChildren()).toHaveLength(0);
   });
 
+  it.skipIf(process.platform === "win32")("ends an owned worker when its service exits first, preserving a separate daemon session", async () => {
+    const { service, worker, daemon } = await serviceTree();
+    try {
+      // All three handlers are ready. The worker deliberately ignores this
+      // signal; the service exits before will-quit gets to its registry.
+      process.kill(-service.pid!, "SIGTERM");
+      expect(await exited(service)).toBe(0);
+      await expect.poll(() => running(worker), { timeout: 5_000 }).toBe(false);
+      expect(trackedChildren().map((entry) => entry.pid)).not.toContain(service.pid);
+      killTrackedChildren();
+      expect(running(daemon)).toBe(true);
+    } finally {
+      cleanTree(service, worker, daemon);
+    }
+  });
+
+  it.skipIf(process.platform === "win32")("will-quit ends every member of an owned service group", async () => {
+    const { service, worker, daemon } = await serviceTree();
+    try {
+      killTrackedChildren();
+      expect(await exited(service)).toBe("SIGKILL");
+      await expect.poll(() => running(worker), { timeout: 5_000 }).toBe(false);
+      expect(running(daemon)).toBe(true);
+    } finally {
+      cleanTree(service, worker, daemon);
+    }
+  });
+
   it("tracks an execa subprocess, which is a promise rather than an emitter", async () => {
     const subprocess = trackChild(execa(process.execPath, ["-e", sleepScript], { reject: false }), "probe");
     expect(trackedChildren().map((entry) => entry.pid)).toContain(subprocess.pid);
@@ -72,3 +101,46 @@ describe("tracked children", () => {
     expect(result.stdout).toContain("git version");
   });
 });
+
+/** Real group membership, with IPC acknowledgments instead of startup sleeps. */
+async function serviceTree() {
+  const workerScript = `process.on("SIGTERM", () => {});
+process.send(process.pid);
+setInterval(() => {}, 1000);`;
+  const service = trackChild(spawn(process.execPath, ["-e", `
+const { spawn } = require("node:child_process");
+process.on("SIGTERM", () => process.exit(0));
+const launch = (detached) => new Promise((resolve) => {
+  const child = spawn(process.execPath, ["-e", ${JSON.stringify(workerScript)}], {
+    detached, stdio: ["ignore", "ignore", "ignore", "ipc"],
+  });
+  child.once("message", resolve);
+});
+Promise.all([launch(false), launch(true)]).then(([worker, daemon]) => process.send({ worker, daemon }));
+setInterval(() => {}, 1000);
+`], { detached: true, stdio: ["ignore", "ignore", "pipe", "ipc"] }), "service", { ownedProcessGroup: true });
+  const [message] = await once(service, "message");
+  const { worker, daemon } = message as { worker: number; daemon: number };
+  expect(running(worker)).toBe(true);
+  expect(running(daemon)).toBe(true);
+  return { service, worker, daemon };
+}
+
+function running(pid: number): boolean {
+  try {
+    // An orphan can briefly await its reaper as a zombie; it has already
+    // exited and cannot perform work. Keep the actual state in diagnostics.
+    const state = execFileSync("ps", ["-o", "stat=", "-p", String(pid)], { encoding: "utf8" }).trim();
+    return state !== "" && !state.startsWith("Z");
+  } catch {
+    return false;
+  }
+}
+
+function cleanTree(service: ReturnType<typeof spawn>, ...pids: number[]): void {
+  for (const pid of [service.pid, ...pids]) {
+    if (pid) {
+      try { process.kill(pid, "SIGKILL"); } catch { /* already gone */ }
+    }
+  }
+}

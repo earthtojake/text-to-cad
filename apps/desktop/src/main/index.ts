@@ -256,8 +256,10 @@ if (!app.requestSingleInstanceLock()) {
    * `--version` probe mid-`import cadgen` with a sixty-second timeout is what
    * made quitting take sixty seconds.
    */
+  let quitStartedAt: number | undefined;
   app.on("before-quit", () => {
     const started = Date.now();
+    quitStartedAt = started;
     stopUpdater();
     // The viewers this app started, the bridge, and any tool call still
     // waiting on a window.
@@ -275,7 +277,6 @@ if (!app.requestSingleInstanceLock()) {
   // Chromium's own shutdown gets a deadline (src/main/quit-deadline.ts).
   app.on("will-quit", () => {
     killTrackedChildren();
-    armQuitDeadline();
+    armQuitDeadline(quitStartedAt);
   });
 }
-
