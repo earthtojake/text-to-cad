@@ -18,7 +18,7 @@
     "@vercel/analytics": "^2.0.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "lucide-react": "^1.45.0",
+    "lucide-react": "^1.46.0",
     "meshoptimizer": "^1.2.0",
     "next": "16.3.5",
     "radix-ui": "^1.6.7",
