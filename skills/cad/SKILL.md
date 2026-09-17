@@ -24,6 +24,11 @@ Rendering additionally needs a browser, which pip cannot supply:
 python -m playwright install chromium
 ```
 
+If a command then fails with `ImportError: DLL load failed while importing OCP`,
+run `cadgen doctor`: it probes the CAD kernel and names the cause (on Windows 11,
+Smart App Control blocking the unsigned kernel module) and what to do. That is
+a machine setting, not something to fix by reinstalling.
+
 ## Purpose
 
 Create or modify parametric CAD models from natural-language requirements, build validated STEP/STP (or mesh) outputs, inspect geometry references, and return checked outputs. STEP is the default output of CAD geometry and the one the inspection tools read; STL, 3MF, and native GLB are mesh outputs a model declares beside it — or instead of it, when the part is print-only. For assemblies, prefer `cadgen.assembly.AssemblyHelper` with source-level build123d joints, named mating datums, and native labels when the parts have functional assembly relationships.
@@ -80,7 +85,7 @@ a job in the pool — generated or imported alike. **A door never refuses a
 document and never runs a script.** Whether a document is behind its script
 is the model's business (`cadgen store why`), not the door's.
 
-Use the active project Python interpreter; treat `python` in examples as an interpreter placeholder. Every operational verb is a `cadgen` subcommand (`python -m cadgen.cli <verb>` is the PATH-independent equivalent). Use `cadgen <verb> --help` for the complete current interface; reference docs show recommended workflows, not every flag. Install per `requirements.txt`; `cadgen doctor <skill-dir>` verifies the installed cadgen matches this skill's pin (docs drift silently on a mismatched install).
+Use the active project Python interpreter; treat `python` in examples as an interpreter placeholder. Every operational verb is a `cadgen` subcommand (`python -m cadgen.cli <verb>` is the PATH-independent equivalent). Use `cadgen <verb> --help` for the complete current interface; reference docs show recommended workflows, not every flag. Install per `requirements.txt`; `cadgen doctor <skill-dir>` verifies the installed cadgen matches this skill's pin (docs drift silently on a mismatched install) and that the CAD kernel loads.
 
 Target paths resolve from the command's current working directory, not from the skill directory. Run commands from the workspace that owns the artifacts and pass cwd-relative target paths so project CAD files never resolve accidentally under the skill directory.
 
