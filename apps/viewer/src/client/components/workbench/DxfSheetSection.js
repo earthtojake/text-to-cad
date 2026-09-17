@@ -1,6 +1,9 @@
-import { RotateCcw } from "lucide-react";
+import { Move, Plus, RotateCcw, Send, X } from "lucide-react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/ui/utils";
 
 import {
   FILE_SHEET_COMPACT_BUTTON_CLASSES,
@@ -12,8 +15,10 @@ import {
   FileSheetStatusText,
   FileSheetSubsection,
   FileSheetToggleRow,
-  FileSheetValueField
+  FileSheetValueField,
+  FILE_SHEET_COMPACT_INPUT_CLASSES
 } from "./FileSheet";
+import { drawingEditSnippet } from "@/workbench/drawingEdits";
 import { FILE_SHEET_SECTION_IDS } from "@/workbench/fileSheetSections";
 
 /**
@@ -112,8 +117,24 @@ export function DxfSheetSettings({
   layers = [],
   hiddenLayers = [],
   onLayerVisibilityChange,
-  onReset
+  onReset,
+  // Editing (a cadgen sheet with tagged views): the views to move, the dimensions
+  // to select and tolerance, the staged edits, and the tool in hand.
+  views = [],
+  sheetDimensions = [],
+  edits = [],
+  editTool = "",
+  onEditToolChange,
+  pickedPointCount = 0,
+  selectedDimension = "",
+  onSelectDimension,
+  onAddTolerance,
+  onDiscardEdit,
+  onDiscardEdits,
+  onSendEdits,
+  sendLabel = "Send to drawing"
 }) {
+  const [toleranceDraft, setToleranceDraft] = useState("");
   const layerNames = new Set(layers.map((layer) => String(layer?.name || "").toUpperCase()));
   const hidden = new Set(Array.isArray(hiddenLayers) ? hiddenLayers : []);
   const lineWork = DXF_DRAWING_LINE_WORK.filter((entry) => layerNames.has(entry.layer));
@@ -145,8 +166,106 @@ export function DxfSheetSettings({
         )}
       </FileSheetSubsection>
 
+      {views.length ? (
+        <FileSheetSubsection title={`Views · ${views.length}`}>
+          <div className="space-y-px px-1">
+            {views.map((view) => (
+              <div key={view.name} className="flex min-w-0 items-center gap-2 rounded-md px-1 py-1 text-[11px]">
+                <span className="min-w-0 flex-1 truncate font-medium uppercase text-sidebar-foreground">{view.name}</span>
+                <span className="shrink-0 tabular-nums text-muted-foreground">
+                  {view.at ? `at ${Math.round(view.at[0])}, ${Math.round(view.at[1])}` : `${Math.round(view.maxX - view.minX)} × ${Math.round(view.maxY - view.minY)}`}
+                </span>
+              </div>
+            ))}
+          </div>
+          <FileSheetControlRow label={null}>
+            <Button
+              type="button"
+              variant={editTool === "move" ? "secondary" : "outline"}
+              size="sm"
+              className={`${FILE_SHEET_COMPACT_BUTTON_CLASSES} w-full justify-center`}
+              aria-pressed={editTool === "move"}
+              aria-label="Move views"
+              onClick={() => onEditToolChange?.(editTool === "move" ? "" : "move")}
+            >
+              <Move className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+              <span>{editTool === "move" ? "Drag a view on the sheet, then click again to stop" : "Move views"}</span>
+            </Button>
+          </FileSheetControlRow>
+        </FileSheetSubsection>
+      ) : null}
+
       {dimensionCount > 0 ? (
         <FileSheetSubsection title={`Dimensions · ${dimensionCount}`}>
+          {sheetDimensions.length ? (
+            <div className="max-h-48 space-y-px overflow-y-auto px-1">
+              {sheetDimensions.map((dimension) => {
+                const key = `${dimension.view}:${dimension.index}`;
+                const selected = selectedDimension === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    className={cn(
+                      "flex w-full min-w-0 items-center gap-2 rounded-md px-1 py-1 text-left text-[11px] hover:bg-sidebar-accent/60",
+                      selected && "bg-sidebar-accent text-sidebar-accent-foreground"
+                    )}
+                    aria-pressed={selected}
+                    onClick={() => { onSelectDimension?.(selected ? "" : key); setToleranceDraft(""); }}
+                  >
+                    <span className="shrink-0 uppercase text-muted-foreground">{dimension.view}</span>
+                    <span className="min-w-0 flex-1 truncate font-medium tabular-nums text-sidebar-foreground">{dimension.value || "—"}</span>
+                    <span className="shrink-0 text-muted-foreground">{dimension.kind === "callout" ? "callout" : `#${Number(dimension.index) + 1 || dimension.index}`}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+          {selectedDimension && onAddTolerance ? (
+            <FileSheetControlRow label="Tolerance">
+              <div className="flex items-center gap-2">
+                <Input
+                  className={`${FILE_SHEET_COMPACT_INPUT_CLASSES} flex-1`}
+                  placeholder="±0.1, 0.05/0.02 or H7"
+                  aria-label="Tolerance or fit for the selected dimension"
+                  value={toleranceDraft}
+                  onChange={(event) => setToleranceDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && toleranceDraft.trim()) {
+                      onAddTolerance(selectedDimension, toleranceDraft.trim());
+                      setToleranceDraft("");
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className={FILE_SHEET_COMPACT_BUTTON_CLASSES}
+                  disabled={!toleranceDraft.trim()}
+                  onClick={() => { onAddTolerance(selectedDimension, toleranceDraft.trim()); setToleranceDraft(""); }}
+                >
+                  Apply
+                </Button>
+              </div>
+            </FileSheetControlRow>
+          ) : null}
+          {onEditToolChange && views.length ? (
+            <FileSheetControlRow label={null}>
+              <Button
+                type="button"
+                variant={editTool === "pick" ? "secondary" : "outline"}
+                size="sm"
+                className={`${FILE_SHEET_COMPACT_BUTTON_CLASSES} w-full justify-center`}
+                aria-pressed={editTool === "pick"}
+                aria-label="Add dimension"
+                onClick={() => onEditToolChange(editTool === "pick" ? "" : "pick")}
+              >
+                <Plus className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+                <span>{editTool === "pick" ? (pickedPointCount ? "Click the second point" : "Click the first point on the sheet") : "Add dimension"}</span>
+              </Button>
+            </FileSheetControlRow>
+          ) : null}
           <FileSheetInlineControlRow label="Units">
             <FileSheetSegmentedControl
               ariaLabel="Dimension units"
@@ -173,6 +292,40 @@ export function DxfSheetSettings({
               fit
             />
           </FileSheetInlineControlRow>
+        </FileSheetSubsection>
+      ) : null}
+
+      {edits.length ? (
+        <FileSheetSubsection title={`Staged edits · ${edits.length}`}>
+          <div className="space-y-px px-1">
+            {edits.map((edit) => (
+              <div key={edit.id} className="flex min-w-0 items-start gap-1 rounded-md px-1 py-1 text-[11px]">
+                <span className="min-w-0 flex-1 break-words text-sidebar-foreground" title={drawingEditSnippet(edit, { views, dimensions: sheetDimensions })}>
+                  {edit.kind === "move" ? `Move ${edit.view} by ${edit.dx}, ${edit.dy}`
+                    : edit.kind === "dim" ? `New dimension in ${edit.view}`
+                      : `${edit.view} #${Number(edit.index) + 1 || edit.index}: ${edit.spec}`}
+                </span>
+                <Button type="button" variant="ghost" size="icon-sm" className="size-5 shrink-0 text-muted-foreground hover:text-foreground"
+                  aria-label="Discard this edit" onClick={() => onDiscardEdit?.(edit.id)}>
+                  <X className="size-3" strokeWidth={1.8} aria-hidden="true" />
+                </Button>
+              </div>
+            ))}
+          </div>
+          <FileSheetStatusText>Previewed in red on the sheet. Nothing is saved until the script changes.</FileSheetStatusText>
+          <FileSheetControlRow label={null}>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="default" size="sm" className="h-7 flex-1 justify-center text-[11px]"
+                aria-label={sendLabel} onClick={() => onSendEdits?.()}>
+                <Send className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+                <span>{sendLabel}</span>
+              </Button>
+              <Button type="button" variant="outline" size="sm" className={FILE_SHEET_COMPACT_BUTTON_CLASSES}
+                aria-label="Discard all edits" onClick={() => onDiscardEdits?.()}>
+                Discard
+              </Button>
+            </div>
+          </FileSheetControlRow>
         </FileSheetSubsection>
       ) : null}
 

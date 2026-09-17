@@ -1058,12 +1058,17 @@ function parseEntities(records, { blocks = new Map(), transform = null, depth = 
         apparatus.dimensions += 1;
         if (currentTags.view && currentTags.dim !== undefined && Array.isArray(apparatus.sheetDimensions)) {
           const marking = parseDimensionEntity(entityRecords);
+          // The value as the file rendered it (tolerance included) comes from the
+          // dimension's block text, filled in below once the block is expanded.
           apparatus.sheetDimensions.push({
             kind: "dimension",
             view: currentTags.view,
             index: currentTags.dim,
             value: marking?.value || "",
-            position: marking?.position || [0, 0]
+            position: marking?.position || [
+              toFiniteNumber(entityRecords.find((record) => record.code === 11)?.value),
+              toFiniteNumber(entityRecords.find((record) => record.code === 21)?.value)
+            ]
           });
         }
       } else if (entityType === "LEADER" || entityType === "MLEADER" || entityType === "MULTILEADER") {
@@ -1104,6 +1109,16 @@ function parseEntities(records, { blocks = new Map(), transform = null, depth = 
     }
     if (entityType === "TEXT") {
       const text = parseTextEntity(entityRecords);
+      if (depth === 0 && currentTags.view && currentTags.map && apparatus?.sheetViewPlacement) {
+        const numbers = String(currentTags.map).split(",").map(Number);
+        const at = String(currentTags.at || "").split(",").map(Number);
+        if (numbers.length === 8 && numbers.every(Number.isFinite)) {
+          apparatus.sheetViewPlacement.set(currentTags.view, {
+            at: at.length === 2 && at.every(Number.isFinite) ? at : null,
+            map: numbers
+          });
+        }
+      }
       if (text && depth === 0 && currentTags.view && currentTags.dim !== undefined && Array.isArray(apparatus?.sheetDimensions)) {
         // A callout (hole, diameter, note): a leader plus this text, tagged like a dimension.
         apparatus.sheetDimensions.push({
@@ -1126,10 +1141,22 @@ function parseEntities(records, { blocks = new Map(), transform = null, depth = 
       if (blockRecords && depth < MAX_BLOCK_NESTING) {
         // The rendered dimension, exactly as the authoring package drew it.
         const dimensionLayer = normalizeLayerName(entityRecords.find((record) => record.code === 8)?.value);
-        pushNested(inheritBlockLayer(
+        const expanded = inheritBlockLayer(
           parseEntities(blockRecords, { blocks, transform, depth: depth + 1 }),
           dimensionLayer
-        ));
+        );
+        const listed = Array.isArray(apparatus?.sheetDimensions) && currentTags.dim !== undefined
+          ? apparatus.sheetDimensions[apparatus.sheetDimensions.length - 1]
+          : null;
+        if (listed && listed.kind === "dimension" && !listed.value) {
+          // The block's MTEXT stacks a tolerance right after the value; a space keeps it readable.
+          const rendered = expanded.texts.map((text) => stripMtextFormatting(String(text.value || "")).trim()).filter(Boolean);
+          listed.value = rendered.join(" ").replace(/(\d)([±+])/g, "$1 $2");
+          if (expanded.texts[0]) {
+            listed.position = [expanded.texts[0].position[0], expanded.texts[0].position[1]];
+          }
+        }
+        pushNested(expanded);
       } else {
         pushText(parseDimensionEntity(entityRecords));
       }
@@ -1369,7 +1396,7 @@ export function parseDxf(dxfText, { fileRef = "", sourceUrl = "" } = {}) {
   const layerTable = parseLayerTable(sections.get("TABLES") || []);
   const blocks = parseBlocks(sections.get("BLOCKS") || []);
   const unitsScaleMm = dxfUnitsScaleMm(header.sourceUnits);
-  const apparatus = { dimensions: 0, leaders: 0, paperspaceEntities: 0, sheetDimensions: [] };
+  const apparatus = { dimensions: 0, leaders: 0, paperspaceEntities: 0, sheetDimensions: [], sheetViewPlacement: new Map() };
   const entities = scaleEntitiesToMm(
     parseEntities(sections.get("ENTITIES") || [], { blocks, apparatus }),
     unitsScaleMm
@@ -1468,14 +1495,19 @@ export function parseDxf(dxfText, { fileRef = "", sourceUrl = "" } = {}) {
     ...dimension,
     position: [formatNumber(dimension.position[0] * unitsScaleMm), formatNumber(dimension.position[1] * unitsScaleMm)]
   }));
+  const viewPlacement = apparatus.sheetViewPlacement || new Map();
   const views = [...viewBounds.entries()].map(([name, bounds]) => ({
     name,
     minX: formatNumber(bounds.minX),
     minY: formatNumber(bounds.minY),
     maxX: formatNumber(bounds.maxX),
     maxY: formatNumber(bounds.maxY),
-    dimensionCount: sheetDimensions.filter((dimension) => dimension.view === name).length
+    dimensionCount: sheetDimensions.filter((dimension) => dimension.view === name).length,
+    // Placement (at=) and the model->sheet affine map (map=b, a0, a1, a2) the sheet wrote.
+    at: viewPlacement.get(name)?.at || null,
+    map: viewPlacement.get(name)?.map || null
   }));
+  delete apparatus.sheetViewPlacement;
   delete apparatus.sheetDimensions;
 
   return {

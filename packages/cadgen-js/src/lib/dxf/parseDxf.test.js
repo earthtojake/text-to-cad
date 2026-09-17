@@ -433,22 +433,33 @@ test("a cadgen sheet's tags give each view an extent and each dimension a home",
   const parsed = parseDxf(dxfText([
     "0", "SECTION", "2", "HEADER", "9", "$INSUNITS", "70", "4", "0", "ENDSEC",
     "0", "SECTION", "2", "TABLES", "0", "TABLE", "2", "APPID", "0", "APPID", "2", "CADGEN", "70", "0", "0", "ENDTAB", "0", "ENDSEC",
+    "0", "SECTION", "2", "BLOCKS",
+    "0", "BLOCK", "8", "0", "2", "*D9", "10", "0", "20", "0",
+    "0", "MTEXT", "8", "0", "10", "30", "20", "-9", "40", "2.5", "1", "\\A0;40{\\H0.7x;±0.1}",
+    "0", "ENDBLK", "0", "ENDSEC",
     "0", "SECTION", "2", "ENTITIES",
     "0", "LINE", "8", "VISIBLE", "10", "10", "20", "10", "11", "50", "21", "10", "1001", "CADGEN", "1000", "view=front",
     "0", "LINE", "8", "VISIBLE", "10", "10", "20", "10", "11", "10", "21", "40", "1001", "CADGEN", "1000", "view=front",
     "0", "LINE", "8", "VISIBLE", "10", "100", "20", "100", "11", "130", "21", "100", "1001", "CADGEN", "1000", "view=top",
     "0", "DIMENSION", "8", "DIM", "2", "*NOBLOCK", "10", "10", "20", "0", "11", "30", "21", "-2", "42", "40", "1", "<>",
     "1001", "CADGEN", "1000", "view=front", "1000", "dim=0",
+    "0", "DIMENSION", "8", "DIM", "2", "*D9", "10", "10", "20", "0", "11", "30", "21", "-9", "1", "<>",
+    "1001", "CADGEN", "1000", "view=front", "1000", "dim=1",
     "0", "TEXT", "8", "DIM", "10", "140", "20", "110", "40", "3.5", "1", "%%c6 THRU", "1001", "CADGEN", "1000", "view=top", "1000", "dim=0",
+    "0", "TEXT", "8", "NOTES", "10", "30", "20", "4", "40", "3.5", "1", "FRONT", "1001", "CADGEN", "1000", "view=front", "1000", "at=30,25", "1000", "map=10,20,1,0,0,0,0,1",
     "0", "LINE", "8", "SHEET", "10", "0", "20", "0", "11", "200", "21", "0",
     "0", "ENDSEC", "0", "EOF"
   ]));
   assert.deepEqual(parsed.views.map((view) => [view.name, view.minX, view.minY, view.maxX, view.maxY, view.dimensionCount]), [
-    ["front", 10, 10, 50, 40, 1],
+    ["front", 10, 10, 50, 40, 2],
     ["top", 100, 100, 130, 100, 1]
   ]);
+  assert.deepEqual(parsed.views[0].at, [30, 25]);
+  assert.deepEqual(parsed.views[0].map, [10, 20, 1, 0, 0, 0, 0, 1]);
+  assert.equal(parsed.views[1].map, null);
   assert.deepEqual(parsed.sheetDimensions, [
     { kind: "dimension", view: "front", index: "0", value: "40", position: [30, -2] },
+    { kind: "dimension", view: "front", index: "1", value: "40 ±0.1", position: [30, -9] },
     { kind: "callout", view: "top", index: "0", value: "∅6 THRU", position: [140, 110] }
   ]);
   assert.equal(parsed.geometry.lines.find((line) => line.layer === "SHEET").view, undefined);

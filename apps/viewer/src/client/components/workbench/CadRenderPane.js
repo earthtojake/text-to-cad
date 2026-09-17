@@ -281,6 +281,11 @@ export default function CadRenderPane({
   drawingGeometry = null,
   drawingIsDocument = false,
   drawingSvgUrl = "",
+  sheetEditTool = "",
+  sheetEditViews = null,
+  sheetEditPickedPoints = null,
+  onSheetEditPick = null,
+  onSheetEditViewMove = null,
   drawingThicknessMm = 0,
   onCameraZoomPercentChange = null,
   onLodCameraChange = null,
@@ -511,6 +516,11 @@ export default function CadRenderPane({
         drawingGeometry={drawingGeometry}
         drawingIsDocument={drawingIsDocument}
       drawingSvgUrl={drawingSvgUrl}
+      sheetEditTool={sheetEditTool}
+      sheetEditViews={sheetEditViews}
+      sheetEditPickedPoints={sheetEditPickedPoints}
+      onSheetEditPick={onSheetEditPick}
+      onSheetEditViewMove={onSheetEditViewMove}
         drawingThicknessMm={drawingThicknessMm}
         onCameraZoomPercentChange={onCameraZoomPercentChange}
         onLodCameraChange={onLodCameraChange}

@@ -188,6 +188,19 @@ class DrawingSheetTests(unittest.TestCase):
         self.assertEqual(tags["top"], {"dim=0", "dim=1"})
         tagged_lines = [e for e in msp.query("LINE LWPOLYLINE") if e.has_xdata("CADGEN")]
         self.assertGreater(len(tagged_lines), 4, "the projected edges carry their view")
+        # The view label carries the placement and the model->sheet map, and the map
+        # sends the dimension's model points where the dimension landed.
+        label = next(e for e in msp.query("TEXT[layer=='NOTES']") if e.dxf.text == "FRONT")
+        values = {str(t.value).split("=")[0]: str(t.value).split("=", 1)[1] for t in label.get_xdata("CADGEN") if "=" in str(t.value)}
+        self.assertEqual(values["at"], "100,50")
+        m = [float(v) for v in values["map"].split(",")]
+        self.assertEqual(len(m), 8)
+        def to_sheet(p):
+            return (m[0] + m[2] * p[0] + m[4] * p[1] + m[6] * p[2], m[1] + m[3] * p[0] + m[5] * p[1] + m[7] * p[2])
+        front_dim = next(d for d in msp.query("DIMENSION") if "dim=0" in [str(t.value) for t in d.get_xdata("CADGEN")] and "view=front" in [str(t.value) for t in d.get_xdata("CADGEN")])
+        expected = to_sheet((20, -15, 0))
+        self.assertAlmostEqual(front_dim.dxf.defpoint2.x, expected[0], places=3)
+        self.assertAlmostEqual(front_dim.dxf.defpoint2.y, expected[1], places=3)
 
         def dim_texts():
             out = []

@@ -125,6 +125,9 @@ class DrawingPreviewEditTests(unittest.TestCase):
         self.assertEqual(parse_tolerance_spec("0.05/0.02")["dimtm"], 0.02)
         self.assertEqual(parse_tolerance_spec("H7"), {"fit": "H7"})
         self.assertEqual(parse_tolerance_spec(""), {})
+        from cadgen.viewer.drawing_svg import parse_draft_dimensions, parse_tolerances
+        self.assertEqual(parse_draft_dimensions("1,2,3,4,5;6,7,8,9,10,v;bad"), [(1.0, 2.0, 3.0, 4.0, 5.0, None), (6.0, 7.0, 8.0, 9.0, 10.0, "v")])
+        self.assertEqual(parse_tolerances("front:0=±0.1;top:1=H7;junk"), [("front:0", "±0.1"), ("top:1", "H7")])
 
     def test_moving_a_view_shifts_only_that_view(self) -> None:
         from cadgen.viewer.drawing_svg import _entity_tags, preview_edits

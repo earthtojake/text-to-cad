@@ -118,8 +118,34 @@ def parse_tolerance_spec(spec: str) -> dict:
     return {"dimtol": 1, "dimtp": value, "dimtm": value, "dimtdec": 2, "dimtfac": 0.7}
 
 
-def preview_edits(document, *, moves: dict | None = None, draft_dimension: tuple | None = None,
-                  highlight: str = "", tolerance: tuple[str, str] | None = None) -> None:
+def parse_draft_dimensions(spec: str) -> list[tuple]:
+    """``"x1,y1,x2,y2,off[,h|v];..."`` -> [(x1, y1, x2, y2, off, orientation), ...]; bad parts skipped."""
+    drafts = []
+    for part in str(spec or "").split(";"):
+        fields = [f.strip() for f in part.split(",")]
+        try:
+            numbers = [float(v) for v in fields[:5]]
+        except ValueError:
+            continue
+        if len(numbers) != 5:
+            continue
+        orientation = fields[5].lower() if len(fields) > 5 and fields[5] else None
+        drafts.append((*numbers, orientation if orientation in ("h", "v") else None))
+    return drafts
+
+
+def parse_tolerances(spec: str) -> list[tuple[str, str]]:
+    """``"view:index=SPEC;..."`` -> [("view:index", "SPEC"), ...]."""
+    out = []
+    for part in str(spec or "").split(";"):
+        key, _, value = part.partition("=")
+        if key.strip() and value.strip():
+            out.append((key.strip(), value.strip()))
+    return out
+
+
+def preview_edits(document, *, moves: dict | None = None, draft_dimension=None,
+                  highlight: str = "", tolerance=None) -> None:
     """Apply the viewer's PREVIEW edits to an in-memory document. Nothing is saved:
     these show what a script change would look like before the agent makes it.
 
@@ -131,8 +157,12 @@ def preview_edits(document, *, moves: dict | None = None, draft_dimension: tuple
     msp = document.modelspace()
     moves = {k.lower(): v for k, v in (moves or {}).items()}
     hl_view, _, hl_index = str(highlight or "").partition(":")
-    tol_key, tol_spec = tolerance or ("", "")
-    tol_view, _, tol_index = str(tol_key).partition(":")
+    if isinstance(tolerance, tuple):
+        tolerance = [tolerance]
+    tolerances = {}
+    for key, spec in (tolerance or []):
+        view_name, _, index = str(key).partition(":")
+        tolerances[(view_name.lower(), index)] = spec
     for entity in list(msp):
         tags = _entity_tags(entity)
         view = str(tags.get("view", "")).lower()
@@ -144,8 +174,8 @@ def preview_edits(document, *, moves: dict | None = None, draft_dimension: tuple
         index = tags.get("dim")
         if index is None:
             continue
-        is_target = lambda v, i: v and v.lower() == view and i == index  # noqa: E731
-        if is_target(tol_view, tol_index) and entity.dxftype() == "DIMENSION":
+        tol_spec = tolerances.get((view, index))
+        if tol_spec and entity.dxftype() == "DIMENSION":
             attribs = parse_tolerance_spec(tol_spec)
             fit = attribs.pop("fit", None)
             override = entity.override()
@@ -156,14 +186,16 @@ def preview_edits(document, *, moves: dict | None = None, draft_dimension: tuple
                 base = str(entity.dxf.text or "<>").split(" ")[0] or "<>"
                 entity.dxf.text = f"{base} {fit}"
             entity.render()
-        if is_target(hl_view, hl_index):
+        if hl_view and hl_view.lower() == view and hl_index == index:
             entity.dxf.color = 1
             if entity.dxftype() == "DIMENSION":
                 block = document.blocks.get(entity.dxf.geometry)
                 for part in block:
                     part.dxf.color = 1
-    if draft_dimension:
-        x1, y1, x2, y2, offset, orientation = draft_dimension
+    if isinstance(draft_dimension, tuple):
+        draft_dimension = [draft_dimension]
+    for draft in (draft_dimension or []):
+        x1, y1, x2, y2, offset, orientation = draft
         horizontal = (orientation or ("h" if abs(x2 - x1) >= abs(y2 - y1) else "v")) == "h"
         if horizontal:
             base = (x1, (max(y1, y2) if offset >= 0 else min(y1, y2)) + offset)

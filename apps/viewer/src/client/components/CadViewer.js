@@ -184,6 +184,7 @@ import {
 } from "cadgen-js/lib/themeSettings";
 import ViewPlaneControl from "./viewer/ViewPlaneControl";
 import { useViewerDrawingOverlay } from "./viewer/hooks/useViewerDrawingOverlay";
+import { useViewerSheetEdit } from "./viewer/hooks/useViewerSheetEdit";
 import { useViewerMeasureOverlay } from "./viewer/hooks/useViewerMeasureOverlay";
 import { useViewerPicking } from "./viewer/hooks/useViewerPicking";
 import { useViewerRuntime } from "./viewer/hooks/useViewerRuntime";
@@ -1792,6 +1793,8 @@ function disposeOverlayChild(runtime, child) {
   }
 }
 
+const EMPTY_SHEET_EDIT_LIST = Object.freeze([]);
+
 function clearOverlayGroup(runtime, group) {
   while (group?.children?.length) {
     const child = group.children[group.children.length - 1];
@@ -1853,6 +1856,13 @@ const CadViewer = forwardRef(function CadViewer({
   drawingGeometry = null,
   drawingIsDocument = false,
   drawingSvgUrl = "",
+  // Sheet editing on a document: "" | "pick" | "move"; the views to drag; the points
+  // picked so far; and the reports back to the workspace.
+  sheetEditTool = "",
+  sheetEditViews = null,
+  sheetEditPickedPoints = null,
+  onSheetEditPick = null,
+  onSheetEditViewMove = null,
   drawingThicknessMm = 0,
   onCameraZoomPercentChange = null,
   perspective = null,
@@ -5994,6 +6004,18 @@ const CadViewer = forwardRef(function CadViewer({
     viewerReadyTick,
     suppressTopologyPicking: (renderMode && !materialPickingEnabled) || stepAnimationPlaying,
     allowMeshVertexSnap
+  });
+
+  useViewerSheetEdit({
+    runtimeRef,
+    mountRef: interactionHostRef,
+    enabled: Boolean(drawingIsDocument && !previewMode),
+    tool: sheetEditTool,
+    views: Array.isArray(sheetEditViews) ? sheetEditViews : EMPTY_SHEET_EDIT_LIST,
+    pickedPoints: Array.isArray(sheetEditPickedPoints) ? sheetEditPickedPoints : EMPTY_SHEET_EDIT_LIST,
+    onPick: onSheetEditPick,
+    onViewMove: onSheetEditViewMove,
+    viewerReadyTick
   });
 
   const hasPresentableContent = hasViewportContent || Boolean(drawingIsDocument && drawingGeometry?.geometry);

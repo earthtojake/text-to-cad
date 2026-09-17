@@ -440,10 +440,11 @@ def _dimstyle(doc, text_height: float):
 XDATA_APPID = "CADGEN"
 
 
-def _tag(entity, view_name: str, dim_index: str | None = None) -> None:
+def _tag(entity, view_name: str, dim_index: str | None = None, extra: Sequence[str] = ()) -> None:
     tags = [(1000, f"view={view_name}")]
     if dim_index is not None:
         tags.append((1000, f"dim={dim_index}"))
+    tags += [(1000, value) for value in extra]
     entity.set_xdata(XDATA_APPID, tags)
 
 
@@ -542,7 +543,14 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
         xs = [to_sheet(p)[0] for p in pts]
         ys = [to_sheet(p)[1] for p in pts]
         vx0, vx1, vy0, vy1 = min(xs), max(xs), min(ys), max(ys)
-        _tag(text((view.label or view.name).upper(), view.at[0], vy0 - 6, 3.5, TextEntityAlignment.TOP_CENTER, "NOTES"), view.name)
+        # The view label also carries the view's placement (at=) and the affine map
+        # from model to sheet millimetres (map=bx,by,a00,a01,a10,a11,a20,a21: b plus
+        # the sheet image of each model axis), so a viewer can turn a sheet point
+        # back into model coordinates and state a new dimension the way this script does.
+        b = (view.at[0] + (proj.c[0] - cx) * s, view.at[1] + (proj.c[1] - cy) * s)
+        map_values = [b[0], b[1]] + [proj.m[i][j] * s for i in range(3) for j in range(2)]
+        _tag(text((view.label or view.name).upper(), view.at[0], vy0 - 6, 3.5, TextEntityAlignment.TOP_CENTER, "NOTES"),
+             view.name, extra=[f"at={_fmt(view.at[0])},{_fmt(view.at[1])}", "map=" + ",".join(f"{v:.6g}" for v in map_values)])
 
         # How far annotation already reaches past each side of the view, so a later
         # callout lands outside the dimensions that came before it.
