@@ -8,19 +8,89 @@ fixture/artifact area.
 
 `main` is the only long-lived branch: branch from it and open PRs back to it.
 
+### Repository remotes
+
+Maintainers with write access can clone the upstream repository directly:
+
 ```bash
 git clone https://github.com/earthtojake/text-to-cad.git
 cd text-to-cad
 git switch -c my-change
 ```
 
-Create the repo-local Python development environment:
+External contributors should first fork the repository on GitHub, then keep the
+fork as `origin` and the canonical repository as `upstream`:
 
 ```bash
+git clone https://github.com/<username>/text-to-cad.git
+cd text-to-cad
+git remote add upstream https://github.com/earthtojake/text-to-cad.git
+git fetch upstream main
+git switch -c my-change upstream/main
+```
+
+Push the branch to `origin` and open the pull request against
+`earthtojake/text-to-cad:main`.
+
+### Development environment
+
+Choose the setup for the environment where the tools and tests will run. Every
+environment needs Git LFS and Python 3.11 or newer. Install Node.js 22 for the
+packaged runtime, Viewer, `cadgen-js`, or documentation site; Python-only work
+can defer Node until a selected test needs a generated runtime stage.
+
+### Linux, macOS, and WSL
+
+Use the POSIX shell. On WSL, install dependencies inside the distribution; do
+not reuse a Windows `.venv` or `node_modules` directory across the boundary.
+
+```bash
+git lfs install
 python3.12 -m venv .venv
 ./.venv/bin/python -m pip install --upgrade pip
 ./.venv/bin/python -m pip install -r requirements-dev.txt
 ```
+
+Build the packaged runtime when the work needs it, and use the virtual
+environment's interpreter for direct CLI calls:
+
+```bash
+scripts/bundle/bundle.sh
+./.venv/bin/python -m cadgen.cli step inspect --help
+./.venv/bin/python -m cadgen.cli urdf validate --help
+```
+
+### Native Windows
+
+Use PowerShell for Python and npm commands. Git for Windows supplies Git Bash,
+which runs the repository's checked-in `.sh` entry points just as Windows CI
+does.
+
+```powershell
+git lfs install
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+```
+
+Invoke repository scripts through Git Bash. The default installation path is
+shown here; adjust it if Git is installed elsewhere. The runners discover the
+Windows `.venv\Scripts\python.exe` layout automatically.
+
+```powershell
+$gitBash = 'C:\Program Files\Git\bin\bash.exe'
+& $gitBash scripts/bundle/bundle.sh
+& $gitBash scripts/test/test-python.sh --select cadgen
+```
+
+Use the Windows virtual-environment path for direct CLI or focused test calls:
+
+```powershell
+.\.venv\Scripts\python.exe -m cadgen.cli step inspect --help
+.\.venv\Scripts\python.exe -m unittest tests/python/skills/urdf/test_cli.py
+```
+
+### Development dependencies
 
 `requirements-dev.txt` installs the source packages from `packages/` and the
 small set of Python extras mirrored from skill runtime requirements. This is
@@ -37,17 +107,11 @@ installer resolves from PyPI). The editable install reports that same version,
 so the pin is satisfied in a checkout — but `pip install -r skills/<s>/requirements.txt`
 on its own would fetch the previous RELEASE from PyPI over your working copy.
 
-Then build cadgen's packaged runtime once:
-
-```bash
-scripts/bundle/bundle.sh
-```
-
 `packages/cadgen/src/cadgen/_runtime/` is BUILT, not committed — the whole
 directory is gitignored, and the wheel is the only place those files ship. A
 fresh clone therefore has no Node builders, no snapshot browser bundle and no
-Viewer client until the bundler runs, and cadgen says so by name (naming this
-command) the first time it reaches for one. `scripts/test/test-python.sh` and
+Viewer client until `scripts/bundle/bundle.sh` runs, and cadgen says so by name
+the first time it reaches for one. `scripts/test/test-python.sh` and
 `scripts/test/test-global.sh` build the two stages they read if they are
 missing, so this step is about having the whole thing, including the Viewer
 client the wheel carries.
@@ -56,14 +120,6 @@ For CAD Viewer development:
 
 ```bash
 npm --prefix apps/viewer install
-```
-
-When running a tool manually, use an interpreter that can import cadgen (the
-repo `.venv`, or a skill-specific one) and invoke the `cadgen` front door:
-
-```bash
-./.venv/bin/python -m cadgen.cli step inspect --help
-./.venv/bin/python -m cadgen.cli urdf validate --help
 ```
 
 The skills ship no launcher scripts: every operational verb is a `cadgen`
