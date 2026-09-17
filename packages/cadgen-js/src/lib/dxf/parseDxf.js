@@ -963,32 +963,71 @@ function composeTransforms(outer, inner) {
   return { cos, sin, sx: outer.sx * inner.sx, sy: outer.sy * inner.sy, tx: placed[0], ty: placed[1] };
 }
 
+/** The XDATA a cadgen sheet writes on each entity (application CADGEN, strings
+ *  "view=<name>" and "dim=<index>"), as {view, dim}. Other files have none. */
+export const DXF_SHEET_XDATA_APPID = "CADGEN";
+
+function sheetTagsFromRecords(entityRecords) {
+  const tags = {};
+  let inside = false;
+  for (const record of entityRecords) {
+    if (record.code === 1001) {
+      inside = String(record.value || "").trim().toUpperCase() === DXF_SHEET_XDATA_APPID;
+      continue;
+    }
+    if (inside && record.code === 1000) {
+      const text = String(record.value || "");
+      const eq = text.indexOf("=");
+      if (eq > 0) {
+        tags[text.slice(0, eq).trim()] = text.slice(eq + 1).trim();
+      }
+    }
+  }
+  return tags;
+}
+
+function stampSheetTags(items, tags) {
+  if (!tags.view) {
+    return items;
+  }
+  for (const item of items) {
+    item.view = tags.view;
+    if (tags.dim !== undefined) {
+      item.dim = tags.dim;
+    }
+  }
+  return items;
+}
+
 function parseEntities(records, { blocks = new Map(), transform = null, depth = 0, apparatus = null } = {}) {
   const lines = [];
   const arcs = [];
   const circles = [];
   const texts = [];
   const fills = [];
+  // The sheet tags of the entity being parsed, stamped on everything it produces
+  // (a DIMENSION's expanded block included) so a view's extent can be found later.
+  let currentTags = {};
   const push = (geometry) => {
     const placed = transformGeometry(
       { lines: geometry.lines || [], arcs: geometry.arcs || [], circles: geometry.circles || [], fills: geometry.fills || [] },
       transform
     );
-    lines.push(...placed.lines);
-    arcs.push(...placed.arcs);
-    circles.push(...placed.circles);
-    fills.push(...placed.fills);
+    lines.push(...stampSheetTags(placed.lines, currentTags));
+    arcs.push(...stampSheetTags(placed.arcs, currentTags));
+    circles.push(...stampSheetTags(placed.circles, currentTags));
+    fills.push(...stampSheetTags(placed.fills, currentTags));
   };
   const pushNested = (nested) => {
-    lines.push(...nested.lines);
-    arcs.push(...nested.arcs);
-    circles.push(...nested.circles);
-    texts.push(...nested.texts);
-    fills.push(...nested.fills);
+    lines.push(...stampSheetTags(nested.lines, currentTags));
+    arcs.push(...stampSheetTags(nested.arcs, currentTags));
+    circles.push(...stampSheetTags(nested.circles, currentTags));
+    texts.push(...stampSheetTags(nested.texts, currentTags));
+    fills.push(...stampSheetTags(nested.fills, currentTags));
   };
   const pushText = (text) => {
     if (text) {
-      texts.push(transformTextMarking(text, transform));
+      texts.push(...stampSheetTags([transformTextMarking(text, transform)], currentTags));
     }
   };
 
@@ -1010,12 +1049,23 @@ function parseEntities(records, { blocks = new Map(), transform = null, depth = 
       index += 1;
     }
 
+    currentTags = depth === 0 ? sheetTagsFromRecords(entityRecords) : currentTags;
     if (apparatus) {
       // Dimensioned-drawing evidence (the profile predicate's inputs). Mirrors
       // cadgen.drawing_checks.document_is_drawing: positive evidence only — a
       // cut layout has no dimensions, leaders, or paper-space entities.
       if (entityType === "DIMENSION" || entityType === "ARC_DIMENSION") {
         apparatus.dimensions += 1;
+        if (currentTags.view && currentTags.dim !== undefined && Array.isArray(apparatus.sheetDimensions)) {
+          const marking = parseDimensionEntity(entityRecords);
+          apparatus.sheetDimensions.push({
+            kind: "dimension",
+            view: currentTags.view,
+            index: currentTags.dim,
+            value: marking?.value || "",
+            position: marking?.position || [0, 0]
+          });
+        }
       } else if (entityType === "LEADER" || entityType === "MLEADER" || entityType === "MULTILEADER") {
         apparatus.leaders += 1;
       }
@@ -1053,7 +1103,18 @@ function parseEntities(records, { blocks = new Map(), transform = null, depth = 
       continue;
     }
     if (entityType === "TEXT") {
-      pushText(parseTextEntity(entityRecords));
+      const text = parseTextEntity(entityRecords);
+      if (text && depth === 0 && currentTags.view && currentTags.dim !== undefined && Array.isArray(apparatus?.sheetDimensions)) {
+        // A callout (hole, diameter, note): a leader plus this text, tagged like a dimension.
+        apparatus.sheetDimensions.push({
+          kind: "callout",
+          view: currentTags.view,
+          index: currentTags.dim,
+          value: stripMtextFormatting(String(text.value || "")),
+          position: [text.position[0], text.position[1]]
+        });
+      }
+      pushText(text);
       continue;
     }
     if (entityType === "MTEXT") {
@@ -1308,7 +1369,7 @@ export function parseDxf(dxfText, { fileRef = "", sourceUrl = "" } = {}) {
   const layerTable = parseLayerTable(sections.get("TABLES") || []);
   const blocks = parseBlocks(sections.get("BLOCKS") || []);
   const unitsScaleMm = dxfUnitsScaleMm(header.sourceUnits);
-  const apparatus = { dimensions: 0, leaders: 0, paperspaceEntities: 0 };
+  const apparatus = { dimensions: 0, leaders: 0, paperspaceEntities: 0, sheetDimensions: [] };
   const entities = scaleEntitiesToMm(
     parseEntities(sections.get("ENTITIES") || [], { blocks, apparatus }),
     unitsScaleMm
@@ -1384,10 +1445,45 @@ export function parseDxf(dxfText, { fileRef = "", sourceUrl = "" } = {}) {
     touchLayer(layerSummary, text.layer).textCount += 1;
   }
 
+  // Sheet views (from the tags a cadgen sheet writes): each view's extent on the sheet,
+  // from its tagged line work, and the dimensions authored in it.
+  const viewBounds = new Map();
+  const grow = (view, xs, ys) => {
+    if (!view) return;
+    const current = viewBounds.get(view) || { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+    for (const x of xs) { current.minX = Math.min(current.minX, x); current.maxX = Math.max(current.maxX, x); }
+    for (const y of ys) { current.minY = Math.min(current.minY, y); current.maxY = Math.max(current.maxY, y); }
+    viewBounds.set(view, current);
+  };
+  for (const line of entities.lines) {
+    if (line.view && line.dim === undefined) grow(line.view, [line.start[0], line.end[0]], [line.start[1], line.end[1]]);
+  }
+  for (const arc of entities.arcs) {
+    if (arc.view && arc.dim === undefined) grow(arc.view, [arc.center[0] - arc.radius, arc.center[0] + arc.radius], [arc.center[1] - arc.radius, arc.center[1] + arc.radius]);
+  }
+  for (const circle of entities.circles) {
+    if (circle.view && circle.dim === undefined) grow(circle.view, [circle.center[0] - circle.radius, circle.center[0] + circle.radius], [circle.center[1] - circle.radius, circle.center[1] + circle.radius]);
+  }
+  const sheetDimensions = (apparatus.sheetDimensions || []).map((dimension) => ({
+    ...dimension,
+    position: [formatNumber(dimension.position[0] * unitsScaleMm), formatNumber(dimension.position[1] * unitsScaleMm)]
+  }));
+  const views = [...viewBounds.entries()].map(([name, bounds]) => ({
+    name,
+    minX: formatNumber(bounds.minX),
+    minY: formatNumber(bounds.minY),
+    maxX: formatNumber(bounds.maxX),
+    maxY: formatNumber(bounds.maxY),
+    dimensionCount: sheetDimensions.filter((dimension) => dimension.view === name).length
+  }));
+  delete apparatus.sheetDimensions;
+
   return {
     fileRef,
     sourceUrl,
     sourceUnits: header.sourceUnits,
+    views,
+    sheetDimensions,
     unitsScaleMm,
     defaultThicknessMm: formatNumber(header.defaultThicknessMm),
     bounds: {

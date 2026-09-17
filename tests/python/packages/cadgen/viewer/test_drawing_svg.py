@@ -99,5 +99,72 @@ class DrawingSvgTests(unittest.TestCase):
             self.assertIn("<svg", svg)
 
 
+
+class DrawingPreviewEditTests(unittest.TestCase):
+    """The viewer's preview edits on a cadgen sheet: moves, draft dimensions, highlight, tolerance."""
+
+    def _sheet(self, td: Path) -> Path:
+        from build123d import Align, Box
+        from cadgen.drawing import Sheet, _render_sheet
+
+        part = Box(40, 30, 10, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        sheet = Sheet("A4", title="PREVIEW")
+        front = sheet.view(part, "front", at=(100, 60))
+        sheet.view(part, "top", at=(100, 140))
+        front.dim((-20, -15, 0), (20, -15, 0), offset=-12)
+        doc = _render_sheet(sheet, index=1, count=1, label="preview")
+        path = td / "preview.dxf"
+        doc.saveas(path)
+        return path
+
+    def test_parsers_accept_the_query_shapes(self) -> None:
+        from cadgen.viewer.drawing_svg import parse_tolerance_spec, parse_view_moves
+
+        self.assertEqual(parse_view_moves("FRONT:10,-5;right:0,20;bad"), {"front": (10.0, -5.0), "right": (0.0, 20.0)})
+        self.assertEqual(parse_tolerance_spec("±0.1")["dimtp"], 0.1)
+        self.assertEqual(parse_tolerance_spec("0.05/0.02")["dimtm"], 0.02)
+        self.assertEqual(parse_tolerance_spec("H7"), {"fit": "H7"})
+        self.assertEqual(parse_tolerance_spec(""), {})
+
+    def test_moving_a_view_shifts_only_that_view(self) -> None:
+        from cadgen.viewer.drawing_svg import _entity_tags, preview_edits
+
+        with temporary_directory(prefix="tmp-cad-drawing-preview-") as td:
+            path = self._sheet(Path(td))
+            doc = ezdxf.readfile(path)
+
+            def centre(view):
+                xs = []
+                for e in doc.modelspace().query("LINE"):
+                    if _entity_tags(e).get("view") == view:
+                        xs += [e.dxf.start.x, e.dxf.end.x]
+                return sum(xs) / len(xs)
+
+            before_front, before_top = centre("front"), centre("top")
+            preview_edits(doc, moves={"front": (25.0, 0.0)})
+            self.assertAlmostEqual(centre("front"), before_front + 25.0, places=6)
+            self.assertAlmostEqual(centre("top"), before_top, places=6)
+            # The view's dimension moved with it.
+            dim = next(d for d in doc.modelspace().query("DIMENSION") if _entity_tags(d).get("view") == "front")
+            self.assertGreater(dim.dxf.defpoint2.x, 100)
+
+    def test_draft_dimension_highlight_and_tolerance_render_in_red(self) -> None:
+        from cadgen.viewer.drawing_svg import preview_edits, render_drawing_svg
+
+        with temporary_directory(prefix="tmp-cad-drawing-preview-") as td:
+            path = self._sheet(Path(td))
+            doc = ezdxf.readfile(path)
+            before = len(doc.modelspace().query("DIMENSION"))
+            preview_edits(doc, draft_dimension=(80, 40, 120, 40, 15, None), highlight="front:0",
+                          tolerance=("front:0", "±0.1"))
+            dims = doc.modelspace().query("DIMENSION")
+            self.assertEqual(len(dims), before + 1)
+            texts = [e.text for d in dims for e in doc.blocks.get(d.dxf.geometry) if e.dxftype() == "MTEXT"]
+            self.assertTrue(any("±0.1" in t for t in texts), texts)
+            self.assertTrue(any(d.dxf.color == 1 for d in dims))
+            svg = render_drawing_svg(path, draft_dimension=(80, 40, 120, 40, 15, None), highlight="front:0")
+            self.assertIn("#ff0000", svg.lower(), "red strokes reach the SVG")
+
+
 if __name__ == "__main__":
     unittest.main()

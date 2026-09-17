@@ -606,13 +606,16 @@ class CadApp:
         switches apply to the printed look as well, and ``lw`` scales every
         stroke (the Sheet tab's line weight; 1 is the file's own). ``dunits``
         (drawn|mm|in), ``ddec`` (0-3) and ``dtext`` (scale) re-state how the
-        dimensions read without changing what they measure.
+        dimensions read without changing what they measure. Preview edits, never
+        saved: ``move=VIEW:dx,dy;...`` shifts a tagged view, ``dim=x1,y1,x2,y2,off[,h|v]``
+        adds a draft dimension in red, ``hl=VIEW:INDEX`` paints a dimension red and
+        ``tol=VIEW:INDEX=SPEC`` restates it with a tolerance or fit.
         """
         candidate = self.backend.asset_path_for_file_ref(query.get("file") or "")
         if not candidate or not os.path.isfile(candidate) or not str(candidate).lower().endswith(".dxf"):
             response.send_json(404, {"error": "Not found"})
             return
-        from .drawing_svg import DIMENSION_DECIMALS, DIMENSION_UNITS, render_drawing_svg
+        from .drawing_svg import DIMENSION_DECIMALS, DIMENSION_UNITS, parse_view_moves, render_drawing_svg
 
         hidden = tuple(name for name in str(query.get("hide") or "").split(",") if name)
         try:
@@ -632,9 +635,25 @@ class CadApp:
             text_scale = float(query.get("dtext") or 1.0)
         except (TypeError, ValueError):
             text_scale = 1.0
+        moves = parse_view_moves(query.get("move") or "")
+        draft = None
+        if query.get("dim"):
+            fields = str(query.get("dim")).split(",")
+            try:
+                numbers = [float(v) for v in fields[:5]]
+                if len(numbers) == 5:
+                    draft = (*numbers, (fields[5].strip().lower() if len(fields) > 5 else None) or None)
+            except ValueError:
+                draft = None
+        tolerance = None
+        if query.get("tol"):
+            key, _, spec = str(query.get("tol")).partition("=")
+            if key and spec:
+                tolerance = (key, spec)
         svg = render_drawing_svg(
             candidate, hidden_layers=hidden, lineweight_scale=lineweight_scale,
             dimension_units=units, dimension_decimals=decimals, dimension_text_scale=text_scale,
+            moves=moves, draft_dimension=draft, highlight=str(query.get("hl") or ""), tolerance=tolerance,
         )
         response.send_bytes(200, svg.encode("utf-8"), "image/svg+xml; charset=utf-8")
 

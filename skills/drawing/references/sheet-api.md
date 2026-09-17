@@ -43,12 +43,16 @@ next to the DXF folder. `pdf="path.pdf"` places it; `pdf=False` skips it.
 Reads the STEP the drawing documents, relative to the script. Missing file →
 `FileNotFoundError` telling you to run the model first.
 
-## `Sheet(size="A3", scale=1.0, title=..., part_number="", material="", revision="A", author="", units="mm", projection="THIRD ANGLE", notes=(), ink="color", text_height=3.5)`
+## `Sheet(size="A3", scale=1.0, title=..., part_number="", material="", revision="A", author="", units="mm", projection="THIRD ANGLE", notes=(), ink="mono", text_height=3.5, general_tolerance="", revisions=())`
 
 - `size`: `A4`, `A3`, `A2`, `A1`, `A0`, landscape. `width`/`height` in mm.
 - `scale`: drawing scale, 1 = 1:1, 0.5 = 1:2. Dimension values stay true size.
 - `ink`: `"mono"` (default) is black ink with grey hidden lines, the printed look;
   `"color"` keeps per-layer colours (red dimensions, green notes) for review.
+- `general_tolerance="ISO 2768-m"`: written as note 1, "TOLERANCES PER ISO 2768-m
+  UNLESS OTHERWISE SPECIFIED." Give one on any drawing a shop will quote from.
+- `revisions=[("A", "2026-09-01", "INITIAL RELEASE"), ...]`: a revision table
+  (REV, DATE, DESCRIPTION) top-right inside the frame.
 - `sheet.three_views(shape, gap=30)` → `(top, front, right)` placed in
   third-angle arrangement from the part's extents. Use `view()` with `at=` when
   you need other views or a custom layout.
@@ -62,12 +66,18 @@ All points are MODEL coordinates (3-tuples; a 2-tuple means z = 0). Offsets
 are sheet millimetres.
 
 - `view.overall()`: overall width above and height left of the view.
-- `view.dim(p1, p2, offset=12, text=None, orientation=None)`: linear dimension.
-  `orientation` `"h"`/`"v"` or None (whichever the pair spans more). The sign
-  of `offset` picks the side. `text` overrides the measured value; `"<>"`
-  inside it inserts the measurement (`"<> ±0.1"`).
+- `view.dim(p1, p2, offset=12, text=None, orientation=None, tol=None, fit=None)`:
+  linear dimension. `orientation` `"h"`/`"v"` or None (whichever the pair spans
+  more). The sign of `offset` picks the side. `tol=0.1` states ±0.1 as a
+  proper tolerance (stacked, smaller text); `tol=(0.05, 0.02)` states +0.05/-0.02
+  deviations; `fit="H7"` appends an ISO fit class. `text` overrides the value;
+  `"<>"` inside it inserts the measurement.
+- `view.hole(center, diameter, depth=None, thru=False, cbore=(dia, depth), csk=(dia, angle), thread=None, count=None, angle=45, tol=None, fit=None)`:
+  a hole callout in the standard symbols, e.g. `4× ⌀6.6 ↧12`, `⌀6 THRU`,
+  `⌴ ⌀11 ↧6.5` (counterbore), `⌵ ⌀12 × 90°` (countersink), or `M6x1 - 6H THRU`
+  when `thread` is given. Prefer it to `diameter()` for any hole a shop drills.
 - `view.diameter(center, radius, angle=45, text=None)` and
-  `view.radius(...)`: on a circular feature at `center`.
+  `view.radius(...)`: on a circular feature at `center`, plain value only.
 - `view.note(text, at, offset=(10, 10))`: a leader from a model point to text.
 
 ## Layers written
@@ -81,3 +91,11 @@ are sheet millimetres.
 | CENTER | CENTER | 0.18 | centre marks |
 | DIM | continuous | 0.18 | dimensions |
 | NOTES | continuous | 0.25 | notes, view labels, leaders |
+
+## Tags the viewer reads
+
+Every entity a view writes carries XDATA (`CADGEN`: `view=<name>`, and for a
+dimension `dim=<index>` into that view's authoring order, `overall-w`/`overall-h`
+for `overall()`). The CAD Viewer uses them to list views and dimensions, to
+preview a moved view or a new dimension, and to hand the matching line of this
+script back to the agent. Nothing in the tags points outside the file.
