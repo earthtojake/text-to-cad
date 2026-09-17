@@ -27,7 +27,6 @@ import os
 import stat
 import threading
 import time
-from hashlib import sha256
 from pathlib import Path
 
 from . import reload as dev_reload
@@ -230,12 +229,6 @@ class CadApp:
         root_path = self.backend.root_path
         self.root_path = root_path
         self.root_name = self.backend.root_name
-        # A connection port is ephemeral; persisted view state follows the
-        # canonical directory this server exposes.  Hash the realpath so
-        # symlink spellings share an identity without adding another machine
-        # path to every catalog response.
-        canonical_root = os.path.normcase(os.path.realpath(root_path))
-        self.root_id = f"local-fs:{sha256(os.fsencode(canonical_root)).hexdigest()}"
         self.host = host
         self.port = port
         # dist_dir is compared as a string prefix, so resolve it ONCE here and
@@ -284,7 +277,6 @@ class CadApp:
             "serverMode": "serve",
             "serverFeatures": LOCAL_SERVER_FEATURES,
             "backend": "local-fs",
-            "rootId": self.root_id,
             # path.resolve(), NOT realpath: the launcher's registry and the
             # client both compare the spelling the operator gave.
             "rootPath": self.root_path,
@@ -298,11 +290,6 @@ class CadApp:
             "startedAt": self.started_at,
             "url": f"http://{self.host}:{self.port}",
         }
-
-    def read_catalog(self, preferred_file=None) -> dict:
-        """The backend catalog plus this connection's stable root identity."""
-        catalog = self.backend.read_catalog(preferred_file)
-        return {**catalog, "rootId": self.root_id}
 
     # --- gates ------------------------------------------------------------
 
@@ -443,6 +430,8 @@ class CadApp:
                     self._handle_asset(request, response, query)
                 elif pathname == "/__cad/drawing":
                     self._handle_drawing_svg(request, response, query)
+                elif pathname == "/__cad/drawings-of":
+                    self._handle_drawings_of(request, response, query)
                 else:
                     # An unrecognised /__cad/* path is a bad API call, not a
                     # page. Falling through to the SPA answered typo'd and
@@ -504,7 +493,7 @@ class CadApp:
     # --- placeholders filled by later steps of the port -------------------
 
     def _handle_catalog(self, request, response):
-        response.send_json(200, self.read_catalog(request.query.get("file")))
+        response.send_json(200, self.backend.read_catalog(request.query.get("file")))
 
     def _entry_ref_for_status(self, file_ref, catalog=None) -> str:
         """The catalog URL for this ref, or ``""``.
@@ -515,7 +504,7 @@ class CadApp:
         every model in the root per tick.
         """
         if catalog is None:
-            catalog = self.read_catalog(file_ref)
+            catalog = self.backend.read_catalog()
         entry = self.backend.catalog_entry_for_file_ref(catalog, file_ref)
         return str((entry or {}).get("url") or "")
 
@@ -554,7 +543,7 @@ class CadApp:
         # Scanned AFTER the build, success or failure, and republished by the
         # client — the import is precisely the event that changes what the
         # catalog says about this entry.
-        catalog = self.read_catalog(file_ref)
+        catalog = self.backend.read_catalog()
         payload = {
             **result,
             "ref": self._entry_ref_for_status(file_ref, catalog),
@@ -627,6 +616,17 @@ class CadApp:
         hidden = tuple(name for name in str(query.get("hide") or "").split(",") if name)
         svg = render_drawing_svg(candidate, hidden_layers=hidden)
         response.send_bytes(200, svg.encode("utf-8"), "image/svg+xml; charset=utf-8")
+
+    def _handle_drawings_of(self, request, response, query):
+        """The drawings under the root that document this model, as root-relative
+        paths: the link a part has back to its sheets."""
+        candidate = self.backend.asset_path_for_file_ref(query.get("file") or "")
+        if not candidate or not os.path.isfile(candidate):
+            response.send_json(404, {"error": "Not found"})
+            return
+        from .drawing_links import drawings_of
+
+        response.send_json(200, {"drawings": drawings_of(candidate, self.backend.root_path)})
 
     def _handle_tess_get(self, request, response):
         """403 refused name, 404 miss, 200 hit.

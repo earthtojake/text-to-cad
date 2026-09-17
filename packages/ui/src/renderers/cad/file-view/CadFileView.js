@@ -1,3 +1,4 @@
+import { viewerOriginUrl } from "@hardcore/core/client";
 import { buildEdgeChainGraph } from "../workbench/edgeChainSelection.js";
 "use client";
 
@@ -868,6 +869,10 @@ function CadFileViewSurface({
   // A dimensioned drawing renders its own 2D geometry: there is no mesh to wait
   // for. Decided from the PARSED data (dimension/leader/paper-space evidence) —
   // the client twin of cadgen's drawing_checks predicate.
+  // A part: a model entry that is neither a drawing nor a robot. A part with drawings
+  // gets the 2D/3D pill so 2D can open its sheet.
+  const selectedEntryIsPart = Boolean(selectedEntry) && selectedEntrySourceFormat !== RENDER_FORMAT.DXF
+    && selectedEntryContentKind !== VIEWPORT_CONTENT.ROBOT;
   const selectedEntryIsDrawingDocument =
     assetKindForRenderFormat(selectedEntrySourceFormat) === ASSET_KIND.DRAWING
     && dxfDataIsDocument(drawingGeometry);
@@ -2361,10 +2366,15 @@ function CadFileViewSurface({
   // what the button means for a document. Set during render, below, once the catalog
   // lookup and the entry opener exist.
   const openDrawingSourceRef = useRef(null);
+  const openPartDrawingRef = useRef(null);
   const handleDrawingViewModeChange = useCallback((mode) => {
     const next = mode === "2d" ? "2d" : "3d";
     if (next === "3d" && openDrawingSourceRef.current) {
       openDrawingSourceRef.current();
+      return;
+    }
+    if (next === "2d" && openPartDrawingRef.current) {
+      openPartDrawingRef.current();
       return;
     }
     setDrawingViewMode(next);
@@ -5874,6 +5884,32 @@ function CadFileViewSurface({
   openDrawingSourceRef.current = drawingSourceEntry && onOpenFile
     ? () => onOpenFile(drawingSourceEntry)
     : null;
+  // The other direction: the sheets that document the selected part, found by the
+  // server from their headers. The host opens the first one in this tab.
+  const [partDrawings, setPartDrawings] = useState([]);
+  const partDrawingsFileRef = selectedEntryIsPart ? fileKey(selectedEntry) : "";
+  useEffect(() => {
+    if (!partDrawingsFileRef) {
+      setPartDrawings([]);
+      return undefined;
+    }
+    let cancelled = false;
+    const url = viewerOriginUrl(client?.origin, `/__cad/drawings-of?file=${encodeURIComponent(partDrawingsFileRef)}`);
+    fetch(url)
+      .then((res) => (res.ok ? res.json() : { drawings: [] }))
+      .then((payload) => {
+        if (!cancelled) setPartDrawings(Array.isArray(payload?.drawings) ? payload.drawings : []);
+      })
+      .catch(() => {
+        if (!cancelled) setPartDrawings([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [partDrawingsFileRef, client]);
+  openPartDrawingRef.current = partDrawings[0] && onOpenFile
+    ? () => onOpenFile(partDrawings[0])
+    : null;
 
   const handleSelectTabToolMode = useCallback((mode) => {
     setViewerAlertOpen(false);
@@ -6537,8 +6573,8 @@ function CadFileViewSurface({
                 selectedEntry={selectedEntry}
                 renderFormat={effectiveRenderFormat}
                 floatingCadToolbarPosition={floatingCadToolbarPosition}
-                drawingViewToggle={selectedEntryIsDrawing}
-                drawingViewMode={drawingViewMode}
+                drawingViewToggle={selectedEntryIsDrawing || partDrawings.length > 0}
+                drawingViewMode={selectedEntryIsDrawing ? drawingViewMode : "3d"}
                 onDrawingViewModeChange={handleDrawingViewModeChange}
                 zoomControlsVisible={!!selectedViewportContent}
                 zoomPercent={viewerZoomPercent}
