@@ -25,7 +25,11 @@ import FileSheet, {
 import FileSheetTabbedSurface from "./FileSheetTabbedSurface";
 import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections";
 import RobotComponentsSection from "./RobotComponentsSection";
-import { KinematicsPoseSubsection, KinematicsValueActions } from "./KinematicsControls";
+import {
+  KinematicsPoseSubsection,
+  KinematicsTransitionSubsection,
+  KinematicsValueActions
+} from "./KinematicsControls";
 
 const compactNumericInputClasses = FILE_SHEET_COMPACT_NUMERIC_INPUT_CLASSES;
 const JOINT_CONTROL_SYNC_EPSILON = 0.001;
@@ -372,7 +376,6 @@ export default function UrdfFileSheet({
                       onGroupStateSelect?.(groupState);
                     }
                   }}
-                  transition={poseTransition}
                 />
                 <FileSheetSubsection title="Values">
                 {movableJoints.map((joint) => (
@@ -390,6 +393,9 @@ export default function UrdfFileSheet({
                   copyTitle={isSdf ? "Copy the current values" : "Copy the current joint angles"}
                 />
                 </FileSheetSubsection>
+                {groupStatePresets.length ? (
+                  <KinematicsTransitionSubsection transition={poseTransition} />
+                ) : null}
               </>
             ) : (
               <FileSheetStatusText className="py-2">No movable joints.</FileSheetStatusText>

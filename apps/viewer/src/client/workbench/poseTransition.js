@@ -10,7 +10,10 @@
 // frame, so nothing has to interpolate through a pose nobody asked to see.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { URDF_JOINT_ANIMATION_DURATION_MS } from "cadgen-js/lib/urdf/jointAnimation.js";
+import {
+  URDF_JOINT_ANIMATION_DURATION_MS,
+  easeUrdfJointAnimation
+} from "cadgen-js/lib/urdf/jointAnimation.js";
 
 export const POSE_TRANSITION_STORAGE_KEY = "cad-viewer:pose-transition:v1";
 
@@ -97,14 +100,6 @@ export function usePoseTransition() {
 }
 
 
-// Ease in and out, so a pose change reads as a mechanism moving rather than a value
-// being scrubbed. The robot tween eases the same way.
-function easeInOut(progress) {
-  return progress < 0.5
-    ? 2 * progress * progress
-    : 1 - ((-2 * progress + 2) ** 2) / 2;
-}
-
 // Walk a map of NUMBERS from start to target over durationMs, calling onFrame with the
 // whole map each frame and exactly once with the target at the end.
 //
@@ -139,7 +134,7 @@ export function animatePoseValues({ start, target, durationMs, onFrame }) {
       onFrame(finalValues);
       return;
     }
-    const eased = easeInOut(progress);
+    const eased = easeUrdfJointAnimation(progress);
     const frame = { ...finalValues };
     for (const key of tweened) {
       frame[key] = start[key] + (finalValues[key] - start[key]) * eased;

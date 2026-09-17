@@ -11,7 +11,8 @@ import {
 } from "./FileSheet";
 
 // The parts of the Kinematics tab that are the SAME for every kind of model that has
-// poses: which pose is on, how the model gets there, and the two actions on the values.
+// poses: which pose is on, what the person does to the values, and how the model
+// travels between poses.
 //
 // A STEP model's mates and a robot's joints are one control to the person using them —
 // pick a pose, watch it move, nudge a DOF, copy the result — and they were two panels
@@ -24,11 +25,12 @@ import {
 // naming: the person moved a DOF and left the named configuration behind.
 export const CUSTOM_POSE_VALUE = "__custom__";
 
+// The named configurations, at the top of the tab: the fastest way to put the model
+// somewhere, above the values it rewrites.
 export function KinematicsPoseSubsection({
   poses,
   activeValue,
   onSelect,
-  transition,
   disabled = false,
   label = "Pose",
   ariaLabel = "Pose"
@@ -57,24 +59,36 @@ export function KinematicsPoseSubsection({
         triggerContent={<span className="truncate">{activeLabel}</span>}
         options={poses.map((pose) => ({ value: pose.value, label: pose.label }))}
       />
-      {transition ? (
-        <>
-          <FileSheetToggleRow
-            label="Animate"
-            checked={transition.animate !== false}
-            onCheckedChange={(checked) => transition.setAnimate?.(checked)}
-            ariaLabel="Animate pose changes"
-          />
-          <FileSheetSelectRow
-            label="Speed"
-            value={String(transition.speed ?? 1)}
-            onValueChange={(value) => transition.setSpeed?.(Number(value))}
-            ariaLabel="Pose transition speed"
-            // Off is off: a speed for a transition that does not happen is a dead control.
-            disabled={disabled || transition.animate === false}
-            options={POSE_TRANSITION_SPEEDS}
-          />
-        </>
+    </FileSheetSubsection>
+  );
+}
+
+// How the model TRAVELS between poses, at the FOOT of the tab: a setting about the
+// controls above it rather than one of them.
+//
+// Speed is hidden when animation is off, not greyed. A disabled control still asks to
+// be read and still says "this applies to you"; one that cannot apply is better gone.
+export function KinematicsTransitionSubsection({ transition }) {
+  if (!transition) {
+    return null;
+  }
+  const animate = transition.animate !== false;
+  return (
+    <FileSheetSubsection title="Transition">
+      <FileSheetToggleRow
+        label="Animate"
+        checked={animate}
+        onCheckedChange={(checked) => transition.setAnimate?.(checked)}
+        ariaLabel="Animate pose changes"
+      />
+      {animate ? (
+        <FileSheetSelectRow
+          label="Speed"
+          value={String(transition.speed ?? 1)}
+          onValueChange={(value) => transition.setSpeed?.(Number(value))}
+          ariaLabel="Pose transition speed"
+          options={POSE_TRANSITION_SPEEDS}
+        />
       ) : null}
     </FileSheetSubsection>
   );

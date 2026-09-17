@@ -8,7 +8,12 @@ import {
 } from "@/workbench/poseDrivenControls";
 import { Button } from "../ui/button";
 import { Slider } from "../ui/slider";
-import { CUSTOM_POSE_VALUE, KinematicsPoseSubsection, KinematicsValueActions } from "./KinematicsControls";
+import {
+  CUSTOM_POSE_VALUE,
+  KinematicsPoseSubsection,
+  KinematicsTransitionSubsection,
+  KinematicsValueActions
+} from "./KinematicsControls";
 import {
   FILE_SHEET_COMPACT_BUTTON_CLASSES,
   FILE_SHEET_PRECISION_SLIDER_CLASSES,
@@ -19,7 +24,6 @@ import {
   FileSheetSliderField,
   FileSheetStatusText,
   FileSheetSubsection,
-  FileSheetBooleanToggle,
   FileSheetToggleRow,
   FileSheetValueInput,
   parseFileSheetNumberInput
@@ -98,7 +102,7 @@ export default function PoseControlsSection({
   noParametersLabel = "No pose controls.",
   hideWhenEmpty = false,
   showEnableToggle = false,
-  enableLabel = "Enable",
+  enableLabel = "Enable kinematics",
   enableAriaLabel = "",
   resetTitle = "Reset every value to the model as authored"
 }) {
@@ -133,29 +137,29 @@ export default function PoseControlsSection({
         <FileSheetStatusText tone="error" className="py-2">{error}</FileSheetStatusText>
       ) : null}
 
+      {/* The gate is the whole mate graph, not the numbers under one heading: a bare
+          switch on "Values" read as "turn the values off". It says what it governs and
+          sits above everything it governs. */}
+      {definition && showEnableToggle ? (
+        <FileSheetToggleRow
+          label={enableLabel}
+          checked={enabled}
+          onCheckedChange={(checked) => runtime?.onEnabledChange?.(checked)}
+          ariaLabel={enableAriaLabel || enableLabel}
+        />
+      ) : null}
+
       {definition && poseNames.length ? (
         <KinematicsPoseSubsection
           poses={poseNames.map((poseName) => ({ value: poseName, label: poseName }))}
           activeValue={activePoseName(definition, values) || CUSTOM_POSE_VALUE}
           onSelect={(poseName) => runtime?.onApplyPose?.(poseName)}
-          transition={transition}
           disabled={!enabled}
         />
       ) : null}
 
       {definition ? (
-        <FileSheetSubsection
-          title="Values"
-          // The mate gate rides this heading on the shared right-edge control axis rather
-          // than owning a "Module" section for one switch.
-          trailing={showEnableToggle ? (
-            <FileSheetBooleanToggle
-              checked={enabled}
-              onCheckedChange={(checked) => runtime?.onEnabledChange?.(checked)}
-              ariaLabel={enableAriaLabel || enableLabel}
-            />
-          ) : null}
-        >
+        <FileSheetSubsection title="Values">
           {!parameters.length ? (
             <FileSheetStatusText>{noParametersLabel}</FileSheetStatusText>
           ) : null}
@@ -287,6 +291,10 @@ export default function PoseControlsSection({
             copyTitle="Copy the current parameter values"
           />
         </FileSheetSubsection>
+      ) : null}
+
+      {definition && poseNames.length ? (
+        <KinematicsTransitionSubsection transition={transition} />
       ) : null}
     </div>
   );

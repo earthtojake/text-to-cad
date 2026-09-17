@@ -291,17 +291,21 @@ says where.
 
 Every model with poses gets the same tab, under the same name, whichever file it
 came from: a STEP model's mates and a robot's joints are one control to the
-person using them. It holds two subsections. POSE is the model's named
-configurations as a dropdown, plus how it travels between them; it renders only
-for a file that declares some, so a plain URDF opens straight onto its values.
-VALUES is one row per DOF, with Reset and Copy at its foot.
+person using them. It holds three subsections, top to bottom. POSE is the
+model's named configurations as a dropdown. VALUES is one row per DOF, with Reset
+and Copy at its foot. TRANSITION is how the model travels between poses. Pose and
+Transition render only for a file that declares poses, so a plain URDF opens
+straight onto its values.
 
 Applying a pose is a MOTION, not a write: the mechanism travels to it over
 `poseTransition.js`'s tween, because reading a mechanism means watching which DOF
-turns which way. Animate and Speed in the Pose subsection govern that, and they
-are a viewer preference rather than a per-file setting — someone who wants the
-snap wants it in every file. Animation off writes the target values in the same
-frame; it is not merely a fast transition.
+turns which way. Both sheets ease the same way — the curve is
+`easeUrdfJointAnimation`, taken from the robot module rather than restated, so
+one pose change cannot feel unlike another. Animate and Speed are a viewer
+preference rather than a per-file setting, since someone who wants the snap wants
+it in every file, and OFF writes the target values in the same frame rather than
+transitioning quickly. Speed is hidden while Animate is off, not greyed: a
+control that cannot apply is better gone than present and refusing.
 
 ## Robot components
 
