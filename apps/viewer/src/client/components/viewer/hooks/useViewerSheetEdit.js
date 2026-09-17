@@ -2,8 +2,9 @@ import { useEffect, useRef } from "react";
 
 /**
  * Pointer editing on a drawing SHEET: pick points for a new dimension, or drag a
- * view to a new place. The sheet is the plane y = 0 in the scene (sheet x -> x,
- * sheet y -> -z), so a pointer ray meets it directly; there is no mesh to hit.
+ * view to a new place. The document arm lays the sheet in the scene's x-y plane
+ * at z = 0 (sheet x -> x, sheet y -> y; the paper sits just behind it), so a
+ * pointer ray meets it directly; there is no mesh to hit.
  *
  * The hook only reports: `onPick([x, y])` with sheet millimetres when the tool
  * is "pick", and `onViewMove(name, dx, dy)` when a drag under the "move" tool
@@ -37,7 +38,7 @@ export function useViewerSheetEdit({
     const overlay = new THREE.Group();
     overlay.userData.sheetEditOverlay = true;
     runtime.scene.add(overlay);
-    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
     const hit = new THREE.Vector3();
 
     const sheetPointFromEvent = (event) => {
@@ -47,7 +48,7 @@ export function useViewerSheetEdit({
       runtime.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
       runtime.raycaster.setFromCamera(runtime.pointer, runtime.camera);
       if (!runtime.raycaster.ray.intersectPlane(plane, hit)) return null;
-      return [hit.x, -hit.z];
+      return [hit.x, hit.y];
     };
 
     const clearOverlay = () => {
@@ -63,7 +64,7 @@ export function useViewerSheetEdit({
       const x1 = view.maxX + dx + 3;
       const y0 = view.minY + dy - 3;
       const y1 = view.maxY + dy + 3;
-      const points = [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]].map(([x, y]) => new THREE.Vector3(x, 0.2, -y));
+      const points = [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]].map(([x, y]) => new THREE.Vector3(x, y, 0.2));
       const line = new THREE.Line(
         new THREE.BufferGeometry().setFromPoints(points),
         new THREE.LineDashedMaterial({ color: accent, dashSize: 3, gapSize: 2, depthTest: false, transparent: true, opacity: 0.9 })
@@ -77,8 +78,7 @@ export function useViewerSheetEdit({
         new THREE.RingGeometry(1.2, 2.0, 24),
         new THREE.MeshBasicMaterial({ color: accent, depthTest: false, transparent: true, opacity: 0.95, side: THREE.DoubleSide })
       );
-      ring.rotation.x = -Math.PI / 2;
-      ring.position.set(x, 0.2, -y);
+      ring.position.set(x, y, 0.2);
       ring.renderOrder = 61;
       return ring;
     };
@@ -125,7 +125,7 @@ export function useViewerSheetEdit({
       event.stopImmediatePropagation();
       const dx = point[0] - drag.start[0];
       const dy = point[1] - drag.start[1];
-      drag.ghost.position.set(dx, 0, -dy);
+      drag.ghost.position.set(dx, dy, 0);
       runtime.requestRender?.();
     };
     const onPointerUp = (event) => {
