@@ -26,6 +26,7 @@ import FileSheetTabbedSurface from "./FileSheetTabbedSurface";
 import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections";
 import RobotComponentsSection from "./RobotComponentsSection";
 import {
+  NO_PRESET_VALUE,
   KinematicsPoseRow,
   KinematicsTransitionSubsection,
   KinematicsValueActions
@@ -301,7 +302,7 @@ export default function UrdfFileSheet({
   );
   const activeGroupStateValue = groupStatePresets.some((state) => String(state?.id || "").trim() === activeGroupStateId)
     ? activeGroupStateId
-    : "__custom__";
+    : NO_PRESET_VALUE;
 
   const allSections = [
     isSdf ? {
@@ -356,13 +357,13 @@ export default function UrdfFileSheet({
       title: "Kinematics",
       content: (
             movableJoints.length ? (
-              <>
-                <FileSheetSubsection title="Values">
+              // py-2, as the STEP Kinematics panel wraps its own: without it the first
+              // heading sat 8px under the tab strip while Transition got the full gap.
+              <div className="py-2">
+                <FileSheetSubsection title="Position">
                 {/* A named state is a way of SETTING the joints, so it leads them. A
                     plain URDF declares none and opens straight onto its values. */}
                 <KinematicsPoseRow
-                  label="Group state"
-                  ariaLabel="Group state"
                   poses={groupStatePresets.map((groupState) => {
                     const groupStateId = String(groupState?.id || "").trim();
                     return {
@@ -396,7 +397,7 @@ export default function UrdfFileSheet({
                 {groupStatePresets.length ? (
                   <KinematicsTransitionSubsection transition={poseTransition} />
                 ) : null}
-              </>
+              </div>
             ) : (
               <FileSheetStatusText className="py-2">No movable joints.</FileSheetStatusText>
             )

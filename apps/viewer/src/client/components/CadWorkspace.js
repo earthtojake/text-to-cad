@@ -1843,6 +1843,7 @@ export default function CadWorkspace({
       setStepModuleLoadState(resolved.loadState);
       stepModuleParameterValuesRef.current = resolved.parameterValues;
       setStepModuleParameterValues(resolved.parameterValues);
+      setAppliedStepPoseName("");
     }).catch((error) => {
       if (cancelled) {
         return;
@@ -2104,12 +2105,20 @@ export default function CadWorkspace({
     animationStateRef.current = animationState;
   }, [animationState]);
 
+  // The pose the person PICKED, which the dropdown shows until they move a DOF. Without
+  // it the name is re-derived from the values every frame, so a pose read as "None"
+  // for the whole of its own transition and only became itself once it arrived.
+  const [appliedStepPoseName, setAppliedStepPoseName] = useState("");
+
   const handleStepModuleParameterChange = useCallback((parameterId, value) => {
     const id = String(parameterId || "").trim();
     const parameter = selectedStepModuleDefinition?.parameterMap?.[id];
     if (!parameter) {
       return;
     }
+    // Moving a DOF by hand leaves the named pose behind, so the dropdown stops claiming
+    // it and goes back to reading the values (the robot's group state does the same).
+    setAppliedStepPoseName("");
     setStepModuleParameterValues((current) => ({
       ...current,
       [id]: normalizeParameterValue(parameter, value)
@@ -2154,6 +2163,7 @@ export default function CadWorkspace({
       selectedStepModuleDefinition,
       poseValuesForPreset(selectedStepModuleDefinition, poseName)
     );
+    setAppliedStepPoseName(String(poseName || ""));
     // A pose is a place the mechanism GOES, so it travels there: the same tween the
     // robot sheet has always used, at the duration this viewer is set to. With
     // animation off the duration is 0 and the values are written in this frame.
@@ -7767,6 +7777,7 @@ export default function CadWorkspace({
                   onParameterChange: handleStepModuleParameterChange,
                   onResetParameters: handleResetParameters,
                   onApplyPose: handleApplyPose,
+                  activePose: appliedStepPoseName,
                   transition: poseTransition,
 
                   onCopyParams: handleCopyParameters,

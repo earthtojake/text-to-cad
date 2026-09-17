@@ -20,28 +20,33 @@ import {
 // a dropdown there). These are the shared halves; each sheet still renders its own DOF
 // rows, because a typed parameter and a joint limit are genuinely different things.
 
-// A pose the model is NOT in. The sentinel is a value rather than an empty string
-// because a Select with no value shows its placeholder, and "no pose" is a state worth
-// naming: the person moved a DOF and left the named configuration behind.
-export const CUSTOM_POSE_VALUE = "__custom__";
+// The model is in no preset. The sentinel is a value rather than an empty string
+// because a Select with no value shows its placeholder, and "None" is a state worth
+// reading: the person moved a DOF and left every named position behind.
+export const NO_PRESET_VALUE = "__none__";
 
-// The named configurations, as the FIRST row of Values: a pose is a way of setting the
-// values, so it belongs among them rather than in a section of its own with one control
-// in it.
+// The named positions, as the FIRST row of Position: a preset is a way of setting the
+// position, so it belongs among the DOFs rather than in a section of its own with one
+// control in it.
+//
+// "Preset", not "Pose" or "Group state": the tab already says Kinematics and the section
+// already says Position, so the row names what these ARE to the person using them -- a
+// named position to jump to -- in the same word for a STEP model's poses and a robot's
+// SRDF group states.
 export function KinematicsPoseRow({
   poses,
   activeValue,
   onSelect,
   disabled = false,
-  label = "Pose",
-  ariaLabel = "Pose"
+  label = "Preset",
+  ariaLabel = "Preset position"
 }) {
   if (!Array.isArray(poses) || !poses.length) {
     return null;
   }
-  const active = poses.some((pose) => pose.value === activeValue) ? activeValue : CUSTOM_POSE_VALUE;
-  const activeLabel = active === CUSTOM_POSE_VALUE
-    ? "custom"
+  const active = poses.some((pose) => pose.value === activeValue) ? activeValue : NO_PRESET_VALUE;
+  const activeLabel = active === NO_PRESET_VALUE
+    ? "None"
     : String(poses.find((pose) => pose.value === active)?.label || active);
   return (
     <FileSheetSelectRow
@@ -49,7 +54,7 @@ export function KinematicsPoseRow({
       label={label}
       value={active}
       onValueChange={(value) => {
-        if (value === CUSTOM_POSE_VALUE) {
+        if (value === NO_PRESET_VALUE) {
           return;
         }
         onSelect?.(value);

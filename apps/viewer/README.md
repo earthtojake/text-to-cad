@@ -295,12 +295,18 @@ person using them. A model that declares mates HAS them: there is no switch that
 turns its kinematics off. The tab is absent for a model with none, which is the
 only "off" that ever meant anything.
 
-It holds two subsections. VALUES leads with the model's
-named poses as a dropdown — a pose is a way of SETTING the values, so it sits
-among them rather than in a section of its own with one control in it — then one
-row per DOF, with Reset and Copy at its foot. TRANSITION is how the model travels
-between poses. The pose row and Transition render only for a file that declares
-poses, so a plain URDF opens straight onto its values.
+It holds two subsections. POSITION leads with a PRESET
+dropdown — a STEP model's named poses, a robot's SRDF group states, one word for
+both — then one row per DOF, with Reset and Copy at its foot. A preset is a way of
+setting the position, so it sits among the DOFs rather than in a section of its own
+with one control in it. TRANSITION is how the model travels between presets. The
+preset row and Transition render only for a file that declares presets, so a plain
+URDF opens straight onto its position.
+
+The dropdown shows the preset the person PICKED until they move a DOF by hand, then
+whichever preset the values match, or "None". Both sheets read it that way. Re-
+deriving it from the values every frame instead made a preset read as unmatched for
+the whole of its own transition and become itself only on arrival.
 
 Applying a pose is a MOTION, not a write: the mechanism travels to it over
 `poseTransition.js`'s tween, because reading a mechanism means watching which DOF

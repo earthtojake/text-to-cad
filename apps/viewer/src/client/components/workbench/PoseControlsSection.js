@@ -9,7 +9,7 @@ import {
 import { Button } from "../ui/button";
 import { Slider } from "../ui/slider";
 import {
-  CUSTOM_POSE_VALUE,
+  NO_PRESET_VALUE,
   KinematicsPoseRow,
   KinematicsTransitionSubsection,
   KinematicsValueActions
@@ -65,7 +65,7 @@ function poseNamesFromDefinition(definition) {
 
 // Which named pose the model is IN, or "" when a DOF has been moved since. Same
 // question the robot sheet asks of its group states, so the dropdown reads the same
-// way in both: the pose that is on, or "custom".
+// way in both: the preset that is on, or "None".
 export function activePoseName(definition, values) {
   for (const poseName of poseNamesFromDefinition(definition)) {
     const preset = poseValuesForPreset(definition, poseName);
@@ -111,6 +111,13 @@ export default function PoseControlsSection({
   // The pose-transition preference rides the runtime like every other pose concern.
   const transition = runtime?.transition || null;
   const poseNames = poseNamesFromDefinition(definition);
+  // Which pose is on: the one the person picked, until they move a DOF by hand; then
+  // whichever preset the values match, or "None". The robot's group state reads the
+  // same way, so the two dropdowns cannot disagree about what "the current pose" means.
+  const pickedPose = String(runtime?.activePose || "");
+  const activePose = pickedPose && poseNames.includes(pickedPose)
+    ? pickedPose
+    : (activePoseName(definition, values) || NO_PRESET_VALUE);
   // Back-drive routing: which members a coupling drives, and what every DOF's
   // effective value is. Both are pure functions of the definition and the
   // current values, so a driven slider needs no state of its own.
@@ -134,12 +141,12 @@ export default function PoseControlsSection({
       ) : null}
 
       {definition ? (
-        <FileSheetSubsection title="Values">
+        <FileSheetSubsection title="Position">
           {/* A pose is a way of SETTING the values, so it leads them. */}
           {poseNames.length ? (
             <KinematicsPoseRow
               poses={poseNames.map((poseName) => ({ value: poseName, label: poseName }))}
-              activeValue={activePoseName(definition, values) || CUSTOM_POSE_VALUE}
+              activeValue={activePose}
               onSelect={(poseName) => runtime?.onApplyPose?.(poseName)}
             />
           ) : null}
