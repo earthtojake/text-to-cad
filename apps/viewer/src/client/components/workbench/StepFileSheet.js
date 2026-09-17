@@ -1193,8 +1193,6 @@ export default function StepFileSheet({
       runtime: stepModule,
       loadingLabel: "Loading kinematics...",
       noParametersLabel: "No pose controls.",
-      showEnableToggle: true,
-      enableAriaLabel: "Enable pose",
       resetTitle: "Reset pose"
     }),
     buildAnimationControlsTab({

@@ -101,9 +101,6 @@ export default function PoseControlsSection({
   loadingLabel = "Loading pose...",
   noParametersLabel = "No pose controls.",
   hideWhenEmpty = false,
-  showEnableToggle = false,
-  enableLabel = "Enable kinematics",
-  enableAriaLabel = "",
   resetTitle = "Reset every value to the model as authored"
 }) {
   const definition = runtime?.definition || null;
@@ -111,7 +108,6 @@ export default function PoseControlsSection({
   const status = String(runtime?.status || "").trim();
   const error = String(runtime?.error || "").trim();
   const values = runtime?.parameterValues || {};
-  const enabled = runtime?.enabled !== false;
   // The pose-transition preference rides the runtime like every other pose concern.
   const transition = runtime?.transition || null;
   const poseNames = poseNamesFromDefinition(definition);
@@ -137,24 +133,11 @@ export default function PoseControlsSection({
         <FileSheetStatusText tone="error" className="py-2">{error}</FileSheetStatusText>
       ) : null}
 
-      {/* The gate is the whole mate graph, not the numbers under one heading: a bare
-          switch on "Values" read as "turn the values off". It says what it governs and
-          sits above everything it governs. */}
-      {definition && showEnableToggle ? (
-        <FileSheetToggleRow
-          label={enableLabel}
-          checked={enabled}
-          onCheckedChange={(checked) => runtime?.onEnabledChange?.(checked)}
-          ariaLabel={enableAriaLabel || enableLabel}
-        />
-      ) : null}
-
       {definition && poseNames.length ? (
         <KinematicsPoseSubsection
           poses={poseNames.map((poseName) => ({ value: poseName, label: poseName }))}
           activeValue={activePoseName(definition, values) || CUSTOM_POSE_VALUE}
           onSelect={(poseName) => runtime?.onApplyPose?.(poseName)}
-          disabled={!enabled}
         />
       ) : null}
 
@@ -179,8 +162,7 @@ export default function PoseControlsSection({
                   label={parameter.label}
                   checked={currentValue === true}
                   onCheckedChange={(checked) => runtime?.onParameterChange?.(parameter.id, checked)}
-                  disabled={!enabled}
-                  ariaLabel={parameter.label}
+                          ariaLabel={parameter.label}
                 />
               );
             }
@@ -191,8 +173,7 @@ export default function PoseControlsSection({
                   label={parameter.label}
                   value={String(currentValue ?? "")}
                   onValueChange={(nextValue) => runtime?.onParameterChange?.(parameter.id, nextValue)}
-                  disabled={!enabled}
-                  ariaLabel={parameter.label}
+                          ariaLabel={parameter.label}
                   options={parameter.options}
                 />
               );
@@ -206,8 +187,7 @@ export default function PoseControlsSection({
                     <FileSheetColorPicker
                       value={String(currentValue || "#ffffff")}
                       onChange={(nextValue) => runtime?.onParameterChange?.(parameter.id, nextValue)}
-                      disabled={!enabled}
-                      aria-label={parameter.label}
+                                  aria-label={parameter.label}
                     />
                   )}
                 />
@@ -222,8 +202,7 @@ export default function PoseControlsSection({
                     size="sm"
                     className={cn(compactButtonClasses, "justify-center")}
                     onClick={() => runtime?.onParameterChange?.(parameter.id, Number(currentValue || 0) + 1)}
-                    disabled={!enabled}
-                  >
+                            >
                     {parameter.label}
                   </Button>
                 </FileSheetButtonRow>
@@ -238,8 +217,7 @@ export default function PoseControlsSection({
                     <FileSheetValueInput
                       value={String(currentValue ?? "")}
                       onValueCommit={(nextValue) => runtime?.onParameterChange?.(parameter.id, nextValue)}
-                      disabled={!enabled}
-                      inputMode="text"
+                                  inputMode="text"
                       ariaLabel={`${parameter.label} value`}
                       className="w-40 max-w-[min(12rem,55vw)] text-left font-medium tabular-nums"
                     />
@@ -267,7 +245,6 @@ export default function PoseControlsSection({
                   }));
                 }}
                 valueInputProps={{
-                  disabled: !enabled,
                   ariaLabel: `${parameter.label} slider value`
                 }}
               >
@@ -278,8 +255,7 @@ export default function PoseControlsSection({
                   max={parameter.max}
                   step={controlStep}
                   onValueChange={(nextValue) => changeParameter(parameter.id, nextValue?.[0] ?? currentValue)}
-                  disabled={!enabled}
-                  aria-label={parameter.label}
+                          aria-label={parameter.label}
                 />
               </FileSheetSliderField>
             );

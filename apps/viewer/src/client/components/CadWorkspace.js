@@ -1325,7 +1325,6 @@ export default function CadWorkspace({
     definition: null
   });
   const [stepModuleParameterValues, setStepModuleParameterValues] = useState({});
-  const [stepModuleEnabled, setStepModuleEnabled] = useState(true);
   // The ANIMATION system, loaded and held entirely apart from the kinematics
   // state above: kinematics and choreography are independent declarations in
   // the embedded source sidecar, and a model may ship either,
@@ -1795,7 +1794,6 @@ export default function CadWorkspace({
         definition: null
       });
       setStepModuleParameterValues({});
-      setStepModuleEnabled(true);
       return () => {
         cancelled = true;
       };
@@ -1808,7 +1806,6 @@ export default function CadWorkspace({
       definition: null
     });
     setStepModuleParameterValues({});
-    setStepModuleEnabled(true);
 
     const modulePromise = selectedEntry?.editingPreview
       ? Promise.resolve().then(() => previewKinematicsModuleDefinition(selectedEntry.previewKinematics, {
@@ -1846,7 +1843,6 @@ export default function CadWorkspace({
       setStepModuleLoadState(resolved.loadState);
       stepModuleParameterValuesRef.current = resolved.parameterValues;
       setStepModuleParameterValues(resolved.parameterValues);
-      setStepModuleEnabled(resolved.enabled);
     }).catch((error) => {
       if (cancelled) {
         return;
@@ -1858,7 +1854,6 @@ export default function CadWorkspace({
         definition: null
       });
       setStepModuleParameterValues({});
-      setStepModuleEnabled(true);
     });
 
     return () => {
@@ -2073,7 +2068,7 @@ export default function CadWorkspace({
   const selectedMeshPartial = selectedMeshMatches && !meshStateIsComplete(meshState);
   const selectedStepModuleTopologyRequired = stepModuleRequiresTopology(selectedStepModuleDefinition);
   const selectedStepModuleTopologyRequested =
-    !renderSession.enabled && stepModuleEnabled && selectedStepModuleTopologyRequired;
+    !renderSession.enabled && selectedStepModuleTopologyRequired;
   // What the viewport needs to draw one animated frame: the compiled clip and a
   // time. The render pane swaps in the live clock while playing; everything else
   // about playback stays out of the render path.
@@ -2172,12 +2167,6 @@ export default function CadWorkspace({
       }
     });
   }, [poseTransition.durationMs, selectedStepModuleDefinition, stepPoseAnimation]);
-
-  // Turning the mate graph off leaves the model at rest — and leaves any playing
-  // clip alone. Animation is not downstream of pose and never stops with it.
-  const handleStepModuleEnabledChange = useCallback((enabled) => {
-    setStepModuleEnabled(enabled !== false);
-  }, []);
 
   // --- Animation transport -------------------------------------------------
   //
@@ -2584,7 +2573,7 @@ export default function CadWorkspace({
     return uniqueStringList(
       [
         ...expandedStepTreeNodeIds,
-        ...(stepModuleEnabled ? stepModuleTopologyOccurrenceIds(selectedStepModuleDefinition) : [])
+        ...stepModuleTopologyOccurrenceIds(selectedStepModuleDefinition)
       ]
         .map((id) => String(id || "").trim())
         .filter((id) => id && loadableStepTreeTopologyNodeIdSet.has(id))
@@ -2596,7 +2585,6 @@ export default function CadWorkspace({
     loadableStepTreeTopologyNodeIdSet,
     selectedStepModuleDefinition,
     selectedEntryHasReferences,
-    stepModuleEnabled,
   ]);
   const viewerSelectableAssemblyNodeIds = useMemo(
     () => (isAssemblyView
@@ -3564,7 +3552,6 @@ export default function CadWorkspace({
         render: snapshotRenderSession,
         tab: buildActiveTabSnapshot(),
         stepModule: {
-          enabled: stepModuleEnabled,
           parameterValues: stepModuleParameterValues
         },
         animation: {
@@ -3593,7 +3580,6 @@ export default function CadWorkspace({
     renderSession,
     resolvedScene.camera.projection,
     selectedEntry,
-    stepModuleEnabled,
     stepModuleParameterValues,
   ]);
 
@@ -3674,7 +3660,6 @@ export default function CadWorkspace({
 
     const stepModuleSlice = sessionState?.slices?.stepModule || null;
     if (stepModuleSlice) {
-      setStepModuleEnabled(stepModuleSlice.enabled !== false);
       setStepModuleParameterValues(stepModuleSlice.parameterValues || {});
     }
 
@@ -4353,7 +4338,6 @@ export default function CadWorkspace({
   const selectedStepParameterRuntime = useMemo(() => {
     if (
       !selectedStepModuleDefinition ||
-      !stepModuleEnabled ||
       (selectedStepModuleTopologyRequested && !selectedSelectorRuntime)
     ) {
       return null;
@@ -4371,7 +4355,6 @@ export default function CadWorkspace({
     selectedStepModuleDefinition,
     selectedStepModuleTopologyRequested,
     selectedStepModuleUrl,
-    stepModuleEnabled,
     stepModuleParameterValues
   ]);
   const selectedDisplayEdgesMatch =
@@ -7779,13 +7762,13 @@ export default function CadWorkspace({
                   status: selectedStepModuleStatus,
                   error: selectedStepModuleError,
                   definition: selectedStepModuleDefinition,
-                  enabled: stepModuleEnabled,
+
                   parameterValues: stepModuleParameterValues,
                   onParameterChange: handleStepModuleParameterChange,
                   onResetParameters: handleResetParameters,
                   onApplyPose: handleApplyPose,
                   transition: poseTransition,
-                  onEnabledChange: handleStepModuleEnabledChange,
+
                   onCopyParams: handleCopyParameters,
                   onPasteParams: handlePasteParameters
                 }}

@@ -291,7 +291,11 @@ says where.
 
 Every model with poses gets the same tab, under the same name, whichever file it
 came from: a STEP model's mates and a robot's joints are one control to the
-person using them. It holds three subsections, top to bottom. POSE is the
+person using them. A model that declares mates HAS them: there is no switch that
+turns its kinematics off. The tab is absent for a model with none, which is the
+only "off" that ever meant anything.
+
+It holds three subsections, top to bottom. POSE is the
 model's named configurations as a dropdown. VALUES is one row per DOF, with Reset
 and Copy at its foot. TRANSITION is how the model travels between poses. Pose and
 Transition render only for a file that declares poses, so a plain URDF opens
