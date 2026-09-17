@@ -159,6 +159,68 @@ class DrawingSheetTests(unittest.TestCase):
             # matplotlib writes the page tree uncompressed: the tree's /Count is the page count.
             self.assertIn(b"/Count 2", pdf[0].read_bytes())
 
+    def test_views_are_tagged_and_shop_annotations_are_written(self) -> None:
+        import ezdxf
+        from cadgen.drawing import Sheet, _render_sheet, hole_callout_text
+
+        part = _part()
+        sheet = Sheet("A4", title="TAGGED", general_tolerance="ISO 2768-m",
+                      revisions=[("A", "2026-09-01", "INITIAL RELEASE"), ("B", "2026-09-17", "HOLE MOVED")])
+        top = sheet.view(part, "top", at=(100, 120))
+        front = sheet.view(part, "front", at=(100, 50))
+        front.dim((20, -15, 0), (20, -15, 10), offset=12, tol=0.1)
+        front.dim((-20, -15, 0), (20, -15, 0), offset=-12, tol=(0.05, 0.02), fit="h6")
+        top.hole((10, 5, 10), 6, thru=True, count=1)
+        top.hole((10, 5, 10), 6.6, depth=12, cbore=(11, 6.5), thread="M6x1 - 6H")
+        doc = _render_sheet(sheet, index=1, count=1, label="tagged")
+        msp = doc.modelspace()
+
+        # Every view entity names its view; every dimension names its authoring index.
+        tags = {}
+        for entity in msp:
+            xdata = entity.get_xdata("CADGEN") if entity.has_xdata("CADGEN") else []
+            values = [str(tag.value) for tag in xdata]
+            view = next((v[5:] for v in values if v.startswith("view=")), None)
+            if view:
+                tags.setdefault(view, set()).update(v for v in values if v.startswith("dim="))
+        self.assertEqual(set(tags), {"top", "front"})
+        self.assertEqual(tags["front"], {"dim=0", "dim=1"})
+        self.assertEqual(tags["top"], {"dim=0", "dim=1"})
+        tagged_lines = [e for e in msp.query("LINE LWPOLYLINE") if e.has_xdata("CADGEN")]
+        self.assertGreater(len(tagged_lines), 4, "the projected edges carry their view")
+        # The view label carries the placement and the model->sheet map, and the map
+        # sends the dimension's model points where the dimension landed.
+        label = next(e for e in msp.query("TEXT[layer=='NOTES']") if e.dxf.text == "FRONT")
+        values = {str(t.value).split("=")[0]: str(t.value).split("=", 1)[1] for t in label.get_xdata("CADGEN") if "=" in str(t.value)}
+        self.assertEqual(values["at"], "100,50")
+        m = [float(v) for v in values["map"].split(",")]
+        self.assertEqual(len(m), 8)
+        def to_sheet(p):
+            return (m[0] + m[2] * p[0] + m[4] * p[1] + m[6] * p[2], m[1] + m[3] * p[0] + m[5] * p[1] + m[7] * p[2])
+        front_dim = next(d for d in msp.query("DIMENSION") if "dim=0" in [str(t.value) for t in d.get_xdata("CADGEN")] and "view=front" in [str(t.value) for t in d.get_xdata("CADGEN")])
+        expected = to_sheet((20, -15, 0))
+        self.assertAlmostEqual(front_dim.dxf.defpoint2.x, expected[0], places=3)
+        self.assertAlmostEqual(front_dim.dxf.defpoint2.y, expected[1], places=3)
+
+        def dim_texts():
+            out = []
+            for d in msp.query("DIMENSION"):
+                out += [e.text for e in doc.blocks.get(d.dxf.geometry) if e.dxftype() == "MTEXT"]
+            return out
+
+        texts = dim_texts()
+        self.assertTrue(any("±0.10" in t for t in texts), texts)
+        self.assertTrue(any("+0.05" in t and "0.02" in t and "h6" in t for t in texts), texts)
+        notes = [e.dxf.text for e in msp.query("TEXT[layer=='NOTES']")]
+        self.assertTrue(any("ISO 2768-m" in n for n in notes), notes)
+        title_texts = [e.dxf.text for e in msp.query("TEXT[layer=='TITLE']")]
+        self.assertIn("DESCRIPTION", title_texts)
+        self.assertIn("HOLE MOVED", title_texts)
+        callouts = [e.dxf.text for e in msp.query("TEXT[layer=='DIM']")]
+        self.assertIn("1× %%c6 THRU", callouts)
+        self.assertEqual(hole_callout_text({"diameter": 6.6, "depth": 12, "thru": False, "cbore": (11, 6.5), "csk": None,
+                                            "thread": "M6x1 - 6H", "count": None}), "M6x1 - 6H \u21a712   \u2334 %%c11 \u21a76.5")
+
     def test_unknown_view_and_sheet_are_refused(self) -> None:
         from cadgen.drawing import Sheet
 

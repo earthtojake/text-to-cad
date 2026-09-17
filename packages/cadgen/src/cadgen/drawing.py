@@ -127,6 +127,9 @@ class _Dim:
     orientation: str | None
     radius: float = 0.0
     angle: float = 45.0
+    tol: Any = None
+    fit: str | None = None
+    hole: dict | None = None
 
 
 @dataclass
@@ -148,12 +151,28 @@ class View:
     _dims: list[_Dim] = field(default_factory=list)
     _overall: bool = False
 
-    def dim(self, p1, p2, *, offset: float = 12.0, text: str | None = None, orientation: str | None = None) -> "View":
+    def dim(self, p1, p2, *, offset: float = 12.0, text: str | None = None, orientation: str | None = None,
+            tol: float | tuple[float, float] | None = None, fit: str | None = None) -> "View":
         """A linear dimension between two model points. ``orientation`` is ``"h"``,
         ``"v"`` or None (whichever the projected pair spans more); ``offset`` is
         the dimension line's distance from the farther point, in sheet mm, and its
-        sign picks the side."""
-        self._dims.append(_Dim("linear", _p3(p1), _p3(p2), offset, text, orientation))
+        sign picks the side. ``tol=0.1`` states ±0.1; ``tol=(0.05, 0.02)`` states
+        +0.05/-0.02 deviations; ``fit="H7"`` appends an ISO fit class."""
+        self._dims.append(_Dim("linear", _p3(p1), _p3(p2), offset, text, orientation, tol=_tol(tol), fit=fit))
+        return self
+
+    def hole(self, center, diameter: float, *, depth: float | None = None, thru: bool = False,
+             cbore: tuple[float, float] | None = None, csk: tuple[float, float] | None = None,
+             thread: str | None = None, count: int | None = None, angle: float = 45.0,
+             tol: float | tuple[float, float] | None = None, fit: str | None = None) -> "View":
+        """A hole callout in the standard symbols: ``4× ⌀6.6 ↧12``, ``THRU``, a
+        counterbore ``⌴ ⌀11 ↧6.5``, a countersink ``⌵ ⌀12 × 90°``, or a thread
+        such as ``M6x1 - 6H`` in place of the diameter. ``tol``/``fit`` qualify the
+        diameter the way :meth:`dim` does."""
+        spec = {"diameter": float(diameter), "depth": depth, "thru": thru, "cbore": cbore, "csk": csk,
+                "thread": thread, "count": count}
+        self._dims.append(_Dim("hole", _p3(center), None, 0.0, None, None, radius=float(diameter) / 2, angle=angle,
+                               tol=_tol(tol), fit=fit, hole=spec))
         return self
 
     def diameter(self, center, radius: float, *, angle: float = 45.0, text: str | None = None) -> "View":
@@ -180,6 +199,45 @@ class View:
 def _fmt(value: float) -> str:
     text = f"{value:.2f}".rstrip("0").rstrip(".")
     return text or "0"
+
+
+def _tol(value):
+    """Normalise a tolerance argument to (plus, minus) or None."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return (abs(float(value)), abs(float(value)))
+    plus, minus = value
+    return (abs(float(plus)), abs(float(minus)))
+
+
+def _tol_suffix(tol) -> str:
+    if not tol:
+        return ""
+    plus, minus = tol
+    if abs(plus - minus) < 1e-9:
+        return f" ±{_fmt(plus)}"
+    return f" +{_fmt(plus)}/-{_fmt(minus)}"
+
+
+def hole_callout_text(spec: dict, *, tol=None, fit: str | None = None) -> str:
+    """The text of a hole callout, in the ISO/ASME symbols a shop reads."""
+    parts = []
+    lead = f"{spec['count']}× " if spec.get("count") else ""
+    size = spec["thread"] if spec.get("thread") else f"%%c{_fmt(spec['diameter'])}"
+    size += _tol_suffix(tol) + (f" {fit}" if fit else "")
+    if spec.get("thru"):
+        size += " THRU"
+    elif spec.get("depth") is not None:
+        size += f" \u21a7{_fmt(spec['depth'])}"
+    parts.append(lead + size)
+    if spec.get("cbore"):
+        d, depth = spec["cbore"]
+        parts.append(f"\u2334 %%c{_fmt(d)} \u21a7{_fmt(depth)}")
+    if spec.get("csk"):
+        d, ang = spec["csk"]
+        parts.append(f"\u2335 %%c{_fmt(d)} × {_fmt(ang)}°")
+    return "   ".join(parts)
 
 
 def _p3(p) -> tuple[float, float, float]:
@@ -211,6 +269,10 @@ class Sheet:
     notes: Sequence[str] = ()
     ink: str = "mono"
     text_height: float = 3.5
+    #: A general tolerance standard, e.g. "ISO 2768-m": written as the first note.
+    general_tolerance: str = ""
+    #: Revision history rows (rev, date, description), drawn as a table top-right.
+    revisions: Sequence[tuple[str, str, str]] = ()
     views: list[View] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -365,8 +427,25 @@ def _dimstyle(doc, text_height: float):
     style.dxf.dimtad = 1
     style.dxf.dimdec = 2
     style.dxf.dimzin = 8
+    style.dxf.dimdsep = ord(".")
+    style.dxf.dimtdec = 2
     style.dxf.dimblk = "_CLOSEDFILLED"
     return "Standard"
+
+
+#: XDATA application every sheet entity is tagged with: ``view=<NAME>`` names the
+#: view an entity belongs to and ``dim=<index>`` the dimension in that view's
+#: list (``overall-w``/``overall-h`` for the overall pair), so a viewer can find
+#: a view's extent and a dimension's authoring line without a second file.
+XDATA_APPID = "CADGEN"
+
+
+def _tag(entity, view_name: str, dim_index: str | None = None, extra: Sequence[str] = ()) -> None:
+    tags = [(1000, f"view={view_name}")]
+    if dim_index is not None:
+        tags.append((1000, f"dim={dim_index}"))
+    tags += [(1000, value) for value in extra]
+    entity.set_xdata(XDATA_APPID, tags)
 
 
 def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
@@ -381,10 +460,14 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
         aci = 7 if sheet.ink == "mono" and name != "HIDDEN" else color
         doc.layers.add(name, color=aci, linetype=linetype, lineweight=int(round(weight * 100)))
     dimstyle = _dimstyle(doc, sheet.text_height)
+    if XDATA_APPID not in doc.appids:
+        doc.appids.add(XDATA_APPID)
     W, H = sheet.width, sheet.height
 
     def text(value, x, y, height, align, layer="TITLE"):
-        msp.add_text(value, dxfattribs={"height": height, "layer": layer}).set_placement((x, y), align=align)
+        entity = msp.add_text(value, dxfattribs={"height": height, "layer": layer})
+        entity.set_placement((x, y), align=align)
+        return entity
 
     # Frame and title block.
     m = _MARGIN
@@ -401,10 +484,27 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
     scale_text = "1:1" if abs(sheet.scale - 1) < 1e-9 else (f"1:{1 / sheet.scale:g}" if sheet.scale < 1 else f"{sheet.scale:g}:1")
     text(f"SCALE {scale_text}   {sheet.units.upper()}   {sheet.projection}", x0 + tw - 3, y0 + th * 0.75, 2.5, TextEntityAlignment.MIDDLE_RIGHT)
     text(f"SHEET {index} OF {count}   REV {sheet.revision}   {label}", x0 + tw - 3, y0 + th * 0.25, 2.5, TextEntityAlignment.MIDDLE_RIGHT)
-    if sheet.notes:
-        for row, note in enumerate(sheet.notes):
+    notes = ([f"TOLERANCES PER {sheet.general_tolerance} UNLESS OTHERWISE SPECIFIED."] if sheet.general_tolerance else []) + list(sheet.notes)
+    if notes:
+        for row, note in enumerate(notes):
             prefix = "NOTES:  " if row == 0 else "        "
-            text(f"{prefix}{row + 1}. {note}", m + 3, y0 + th + 4 + (len(sheet.notes) - 1 - row) * 5, 2.5, TextEntityAlignment.BOTTOM_LEFT, "NOTES")
+            text(f"{prefix}{row + 1}. {note}", m + 3, y0 + th + 4 + (len(notes) - 1 - row) * 5, 2.5, TextEntityAlignment.BOTTOM_LEFT, "NOTES")
+    if sheet.revisions:
+        # Revision table, top-right inside the frame: REV | DATE | DESCRIPTION.
+        cols = (14.0, 26.0, 70.0)
+        rw = sum(cols)
+        rh = 6.0
+        rx, ry = W - m - rw, H - m - rh
+        rows = [("REV", "DATE", "DESCRIPTION")] + [tuple(str(v) for v in row) for row in sheet.revisions]
+        for r, row in enumerate(rows):
+            y = ry - r * rh
+            msp.add_lwpolyline([(rx, y), (rx + rw, y), (rx + rw, y + rh), (rx, y + rh)], close=True, dxfattribs={"layer": "TITLE"})
+            x = rx
+            for c, (width, value) in enumerate(zip(cols, row)):
+                if c:
+                    msp.add_line((x, y), (x, y + rh), dxfattribs={"layer": "TITLE"})
+                text(value, x + 2, y + rh / 2, 2.5, TextEntityAlignment.MIDDLE_LEFT)
+                x += width
 
     # Views.
     s = sheet.scale
@@ -427,9 +527,9 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
             for edge in edges:
                 poly = [to_sheet(p) for p in _edge_polyline(edge)]
                 if len(poly) == 2:
-                    msp.add_line(poly[0], poly[1], dxfattribs={"layer": layer})
+                    _tag(msp.add_line(poly[0], poly[1], dxfattribs={"layer": layer}), view.name)
                 else:
-                    msp.add_lwpolyline(poly, dxfattribs={"layer": layer})
+                    _tag(msp.add_lwpolyline(poly, dxfattribs={"layer": layer}), view.name)
 
         put(proj.visible, "VISIBLE")
         if view.hidden:
@@ -438,41 +538,55 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
             for centre, radius in _circles(proj.visible):
                 c = to_sheet(centre)
                 arm = radius * s + 2.0
-                msp.add_line((c[0] - arm, c[1]), (c[0] + arm, c[1]), dxfattribs={"layer": "CENTER"})
-                msp.add_line((c[0], c[1] - arm), (c[0], c[1] + arm), dxfattribs={"layer": "CENTER"})
+                _tag(msp.add_line((c[0] - arm, c[1]), (c[0] + arm, c[1]), dxfattribs={"layer": "CENTER"}), view.name)
+                _tag(msp.add_line((c[0], c[1] - arm), (c[0], c[1] + arm), dxfattribs={"layer": "CENTER"}), view.name)
         xs = [to_sheet(p)[0] for p in pts]
         ys = [to_sheet(p)[1] for p in pts]
         vx0, vx1, vy0, vy1 = min(xs), max(xs), min(ys), max(ys)
-        text((view.label or view.name).upper(), view.at[0], vy0 - 6, 3.5, TextEntityAlignment.TOP_CENTER, "NOTES")
+        # The view label also carries the view's placement (at=) and the affine map
+        # from model to sheet millimetres (map=bx,by,a00,a01,a10,a11,a20,a21: b plus
+        # the sheet image of each model axis), so a viewer can turn a sheet point
+        # back into model coordinates and state a new dimension the way this script does.
+        b = (view.at[0] + (proj.c[0] - cx) * s, view.at[1] + (proj.c[1] - cy) * s)
+        map_values = [b[0], b[1]] + [proj.m[i][j] * s for i in range(3) for j in range(2)]
+        _tag(text((view.label or view.name).upper(), view.at[0], vy0 - 6, 3.5, TextEntityAlignment.TOP_CENTER, "NOTES"),
+             view.name, extra=[f"at={_fmt(view.at[0])},{_fmt(view.at[1])}", "map=" + ",".join(f"{v:.6g}" for v in map_values)])
 
         # How far annotation already reaches past each side of the view, so a later
         # callout lands outside the dimensions that came before it.
         reach = {"left": 0.0, "right": 0.0, "top": 0.0, "bottom": 0.0}
 
-        def linear(a, b, offset, override, orientation):
+        def linear(a, b, offset, override, orientation, tag_index, tol=None, fit=None):
             dx, dy = abs(b[0] - a[0]), abs(b[1] - a[1])
             horizontal = (orientation or ("h" if dx >= dy else "v")) == "h"
+            label = (override or "<>") + (f" {fit}" if fit else "")
+            style_override = {}
+            if tol:
+                style_override = {"dimtol": 1, "dimtp": tol[0], "dimtm": tol[1], "dimtdec": 2, "dimtfac": 0.7}
             if horizontal:
                 base = (a[0], (max(a[1], b[1]) if offset >= 0 else min(a[1], b[1])) + offset)
-                d = msp.add_linear_dim(base=base, p1=a, p2=b, angle=0, dimstyle=dimstyle, text=override or "<>", dxfattribs={"layer": "DIM"})
+                d = msp.add_linear_dim(base=base, p1=a, p2=b, angle=0, dimstyle=dimstyle, text=label,
+                                       override=style_override, dxfattribs={"layer": "DIM"})
                 side = "top" if offset >= 0 else "bottom"
                 edge = vy1 if offset >= 0 else vy0
                 reach[side] = max(reach[side], abs(base[1] - edge) + sheet.text_height * 1.5)
             else:
                 base = ((max(a[0], b[0]) if offset >= 0 else min(a[0], b[0])) + offset, a[1])
-                d = msp.add_linear_dim(base=base, p1=a, p2=b, angle=90, dimstyle=dimstyle, text=override or "<>", dxfattribs={"layer": "DIM"})
+                d = msp.add_linear_dim(base=base, p1=a, p2=b, angle=90, dimstyle=dimstyle, text=label,
+                                       override=style_override, dxfattribs={"layer": "DIM"})
                 side = "right" if offset >= 0 else "left"
                 edge = vx1 if offset >= 0 else vx0
                 reach[side] = max(reach[side], abs(base[0] - edge) + sheet.text_height * 1.5)
             d.render()
+            _tag(d.dimension, view.name, tag_index)
 
         if view._overall:
-            linear((vx0, vy1), (vx1, vy1), 12.0, None, "h")
-            linear((vx0, vy0), (vx0, vy1), -12.0, None, "v")
-        for dim in view._dims:
+            linear((vx0, vy1), (vx1, vy1), 12.0, None, "h", "overall-w")
+            linear((vx0, vy0), (vx0, vy1), -12.0, None, "v", "overall-h")
+        for index, dim in enumerate(view._dims):
             if dim.kind == "linear":
-                linear(model_to_sheet(dim.p1), model_to_sheet(dim.p2), dim.offset, dim.text, dim.orientation)
-            elif dim.kind in ("diameter", "radius"):
+                linear(model_to_sheet(dim.p1), model_to_sheet(dim.p2), dim.offset, dim.text, dim.orientation, str(index), dim.tol, dim.fit)
+            elif dim.kind in ("diameter", "radius", "hole"):
                 # A hole callout: a leader from the circle's edge to a horizontal landing
                 # outside the view, past whatever dimensions already stand on that side,
                 # with the text reading along the landing. Nothing is drawn across the
@@ -491,19 +605,22 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
                 start = (centre[0] + sign * r * math.cos(math.radians(45)), centre[1] + r * math.sin(math.radians(45)))
                 knee = (knee_x, start[1] + abs(knee_x - start[0]) * 0.0 + 6.0)
                 landing = (knee[0] + sign * 6.0, knee[1])
-                msp.add_leader([start, knee, landing], dxfattribs={"layer": "DIM"},
-                               override={"dimasz": sheet.text_height * 0.85, "dimldrblk": "_CLOSEDFILLED"})
-                prefix = "%%c" if dim.kind == "diameter" else "R"
-                value = dim.text if dim.text else f"{prefix}{_fmt(2 * dim.radius if dim.kind == 'diameter' else dim.radius)}"
+                _tag(msp.add_leader([start, knee, landing], dxfattribs={"layer": "DIM"},
+                                    override={"dimasz": sheet.text_height * 0.85, "dimldrblk": "_CLOSEDFILLED"}), view.name, str(index))
+                if dim.kind == "hole":
+                    value = hole_callout_text(dim.hole, tol=dim.tol, fit=dim.fit)
+                else:
+                    prefix = "%%c" if dim.kind == "diameter" else "R"
+                    value = dim.text if dim.text else f"{prefix}{_fmt(2 * dim.radius if dim.kind == 'diameter' else dim.radius)}"
                 align = TextEntityAlignment.MIDDLE_LEFT if go_right else TextEntityAlignment.MIDDLE_RIGHT
-                text(value, landing[0] + sign * 2.0, landing[1], sheet.text_height, align, "DIM")
+                _tag(text(value, landing[0] + sign * 2.0, landing[1], sheet.text_height, align, "DIM"), view.name, str(index))
                 reach[side] = clear + 8.0 + len(value) * sheet.text_height * 0.7
             elif dim.kind == "note":
                 p = model_to_sheet(dim.p1)
                 q = (p[0] + dim.radius, p[1] + dim.angle)
-                msp.add_leader([p, q, (q[0] + (3 if dim.radius >= 0 else -3), q[1])], dxfattribs={"layer": "NOTES"})
+                _tag(msp.add_leader([p, q, (q[0] + (3 if dim.radius >= 0 else -3), q[1])], dxfattribs={"layer": "NOTES"}), view.name, str(index))
                 align = TextEntityAlignment.BOTTOM_LEFT if dim.radius >= 0 else TextEntityAlignment.BOTTOM_RIGHT
-                text(dim.text, q[0] + (4 if dim.radius >= 0 else -4), q[1] + 1, sheet.text_height, align, "NOTES")
+                _tag(text(dim.text, q[0] + (4 if dim.radius >= 0 else -4), q[1] + 1, sheet.text_height, align, "NOTES"), view.name, str(index))
     return doc
 
 

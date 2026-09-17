@@ -64,6 +64,14 @@ import {
   normalizeDxfLineWeight
 } from "../components/workbench/DxfSheetSection.js";
 import { drawingSheetFacts } from "../workbench/drawingSheetFacts.js";
+import {
+  createDrawingEditId,
+  draftDimensionFromPicks,
+  drawingEditParams,
+  drawingEditsPromptText,
+  nearestView,
+  viewAtSheetPoint
+} from "../workbench/drawingEdits.js";
 import StepFileSheet from "../components/workbench/StepFileSheet.js";
 import { FileSheetPortalContext, HostPanelSlotContext } from "../components/workbench/FileSheet.js";
 import { poseValuesForPreset } from "../components/workbench/PoseControlsSection.js";
@@ -310,6 +318,7 @@ import {
 import { copyTextToClipboard, readTextFromClipboard } from "@hardcore/ui/clipboard";
 import { HostReferenceContext, referenceLabel, referencesFromCopyText, resolveSelectorSelection } from "./hostReference.js";
 import { applySourceMaterialOverlayToMeshData, sourceAppearanceHasMaterials, sourceMaterialGeometry } from "../workbench/sourceMaterialSession.js";
+
 const EMPTY_MATERIAL_OVERRIDES = Object.freeze({});
 function sourceAnimationForEntry(entry) { return (entry?.editingPreview ? entry.previewAnimation : entry?.sourceSidecar?.animation) || null; }
 function sourceAnimationKeyForEntry(entry) { return sourceAnimationForEntry(entry) ? `${fileKey(entry)}:${entry?.animationHash || entry?.documentHash || entry?.hash || "animation"}` : ""; }
@@ -509,6 +518,13 @@ function CadFileViewSurface({
   const [drawingLineWeight, setDrawingLineWeight] = useState(DXF_DEFAULT_LINE_WEIGHT);
   // How a document's dimensions read (units, places, text size): re-rendered server-side.
   const [drawingDimensionDisplay, setDrawingDimensionDisplay] = useState(DXF_DEFAULT_DIMENSION_DISPLAY);
+  // Sheet editing: staged edits (previewed by the server, sent to the agent as script
+  // changes), the tool in hand ("" | "pick" | "move"), the points picked for a new
+  // dimension, and the dimension selected in the list (highlighted in red).
+  const [drawingEdits, setDrawingEdits] = useState([]);
+  const [drawingEditTool, setDrawingEditTool] = useState("");
+  const [drawingPickedPoints, setDrawingPickedPoints] = useState([]);
+  const [drawingSelectedDimension, setDrawingSelectedDimension] = useState("");
   // The package's parsed contours, fetched once per entry and kept by URL. Curved bends
   // re-mesh from these; the URL carries the package version, so a rebuild refetches.
   const drawingGeometryCacheRef = useRef(new Map());
@@ -2272,8 +2288,18 @@ function CadFileViewSurface({
     for (const [key, value] of Object.entries(dxfDimensionDisplayParams(drawingDimensionDisplay))) {
       params.set(key, value);
     }
+    for (const [key, value] of Object.entries(drawingEditParams(drawingEdits, { highlight: drawingSelectedDimension }))) {
+      params.set(key, value);
+    }
     return `${origin}/__cad/drawing?${params.toString()}`;
-  }, [drawingGeometryUrl, selectedEntryIsDrawingDocument, drawingHiddenLayers, drawingLineWeight, drawingDimensionDisplay]);
+  }, [drawingGeometryUrl, selectedEntryIsDrawingDocument, drawingHiddenLayers, drawingLineWeight, drawingDimensionDisplay, drawingEdits, drawingSelectedDimension]);
+  // Edits belong to one sheet: switching files drops them and the tool.
+  useEffect(() => {
+    setDrawingEdits([]);
+    setDrawingEditTool("");
+    setDrawingPickedPoints([]);
+    setDrawingSelectedDimension("");
+  }, [selectedKey]);
   useEffect(() => {
     if (!drawingGeometryUrl) {
       setDrawingGeometry(null);
@@ -2317,6 +2343,77 @@ function CadFileViewSurface({
     setDrawingUnits(DXF_DEFAULT_UNITS);
     setDrawingMaterial(DXF_DEFAULT_MATERIAL);
   }, []);
+
+  const drawingViews = useMemo(
+    () => (Array.isArray(drawingGeometry?.views) ? drawingGeometry.views : EMPTY_LIST),
+    [drawingGeometry]
+  );
+  const drawingSheetDimensions = useMemo(
+    () => (Array.isArray(drawingGeometry?.sheetDimensions) ? drawingGeometry.sheetDimensions : EMPTY_LIST),
+    [drawingGeometry]
+  );
+  const handleDrawingEditToolChange = useCallback((tool) => {
+    setDrawingEditTool(tool);
+    setDrawingPickedPoints([]);
+  }, []);
+  const handleDrawingSheetPick = useCallback((point) => {
+    setDrawingPickedPoints((current) => {
+      if (!current.length) {
+        return [point];
+      }
+      const [first] = current;
+      const view = viewAtSheetPoint(drawingViews, first) || viewAtSheetPoint(drawingViews, point)
+        || nearestView(drawingViews, first);
+      if (view) {
+        const draft = draftDimensionFromPicks(view, first, point);
+        setDrawingEdits((edits) => [...edits, { id: createDrawingEditId(), kind: "dim", view: view.name, ...draft }]);
+      }
+      return [];
+    });
+  }, [drawingViews]);
+  const handleDrawingViewMove = useCallback((view, dx, dy) => {
+    setDrawingEdits((edits) => [...edits, { id: createDrawingEditId(), kind: "move", view, dx, dy }]);
+  }, []);
+  const handleDrawingAddTolerance = useCallback((key, spec) => {
+    const [view, index] = String(key).split(":");
+    if (!view || index === undefined) return;
+    setDrawingEdits((edits) => [
+      ...edits.filter((edit) => !(edit.kind === "tol" && edit.view === view && String(edit.index) === index)),
+      { id: createDrawingEditId(), kind: "tol", view, index, spec }
+    ]);
+  }, []);
+  const handleDrawingDiscardEdit = useCallback((id) => {
+    setDrawingEdits((edits) => edits.filter((edit) => edit.id !== id));
+  }, []);
+  const handleDrawingDiscardEdits = useCallback(() => {
+    setDrawingEdits([]);
+    setDrawingEditTool("");
+    setDrawingPickedPoints([]);
+  }, []);
+  // In Hardcore the request goes straight into the chat composer; without a host
+  // channel it is copied for pasting into one.
+  const handleDrawingSendEdits = useCallback(() => {
+    const text = drawingEditsPromptText({
+      drawingPath: selectedEntry ? cadFileParamForEntry(selectedEntry) : "",
+      edits: drawingEdits,
+      views: drawingViews,
+      dimensions: drawingSheetDimensions
+    });
+    if (!text) return;
+    if (typeof onPromptContext === "function") {
+      onPromptContext({ text });
+      setDrawingEdits([]);
+      setDrawingEditTool("");
+      setDrawingPickedPoints([]);
+      return;
+    }
+    const done = () => setCopyStatus("Drawing edits copied. Paste them to the agent that owns the script.");
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(done, () => setCopyStatus("Could not copy the drawing edits."));
+    } else {
+      done();
+    }
+  }, [selectedEntry, drawingEdits, drawingViews, drawingSheetDimensions, onPromptContext]);
 
   // The Sheet tab's Reset: the document's own look, every layer shown.
   const handleDrawingSheetReset = useCallback(() => {
@@ -6435,6 +6532,11 @@ function CadFileViewSurface({
                 drawingGeometry={selectedEntryIsDrawing ? drawingGeometry : null}
                 drawingIsDocument={selectedEntryIsDrawingDocument}
                 drawingSvgUrl={drawingSvgUrl}
+          sheetEditTool={selectedEntryIsDrawingDocument ? drawingEditTool : ""}
+          sheetEditViews={drawingViews}
+          sheetEditPickedPoints={drawingPickedPoints}
+          onSheetEditPick={handleDrawingSheetPick}
+          onSheetEditViewMove={handleDrawingViewMove}
                 drawingThicknessMm={selectedEntryIsDrawing && !renderSession.enabled
             ? drawingThicknessMm
             : DXF_DEFAULT_THICKNESS_MM}
@@ -6776,6 +6878,19 @@ function CadFileViewSurface({
                     dimensionDisplay: drawingDimensionDisplay,
                     onDimensionDisplayChange: setDrawingDimensionDisplay,
                     dimensionCount: Number(drawingGeometry?.apparatus?.dimensions) || 0,
+                    views: drawingViews,
+                    sheetDimensions: drawingSheetDimensions,
+                    edits: drawingEdits,
+                    editTool: drawingEditTool,
+                    onEditToolChange: handleDrawingEditToolChange,
+                    pickedPointCount: drawingPickedPoints.length,
+                    selectedDimension: drawingSelectedDimension,
+                    onSelectDimension: setDrawingSelectedDimension,
+                    onAddTolerance: handleDrawingAddTolerance,
+                    onDiscardEdit: handleDrawingDiscardEdit,
+                    onDiscardEdits: handleDrawingDiscardEdits,
+                    onSendEdits: handleDrawingSendEdits,
+                    sendLabel: typeof onPromptContext === "function" ? "Send to chat" : "Copy for the agent",
                     layers: drawingLayers,
                     hiddenLayers: drawingHiddenLayers,
                     onLayerVisibilityChange: handleDrawingLayerVisibilityChange,
