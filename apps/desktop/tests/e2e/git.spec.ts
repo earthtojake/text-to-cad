@@ -61,7 +61,6 @@ declare const window: {
 };
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const screenshots = path.join(appRoot, "tests", "e2e", "__screenshots__");
 const fakeAgent = path.join(appRoot, "tests", "fake-agent", "index.mjs");
 
 /**
@@ -264,7 +263,7 @@ test("a worktree session gets its own branch, directory and sidebar glyph", asyn
   ).toBeVisible();
   await page.screenshot({
     animations: "disabled",
-    path: path.join(screenshots, "git-sidebar-glyph.png"),
+    path: test.info().outputPath("git-sidebar-glyph.png"),
   });
 });
 
@@ -353,7 +352,7 @@ async function chooseScope(label: string) {
 /** The explorer pane, or the whole window when the shot is about the window. */
 async function shoot(name: string, whole = false) {
   const target = whole ? page : page.getByTestId("explorer");
-  await target.screenshot({ path: path.join(screenshots, name), animations: "disabled" });
+  await target.screenshot({ path: test.info().outputPath(name), animations: "disabled" });
 }
 
 /**

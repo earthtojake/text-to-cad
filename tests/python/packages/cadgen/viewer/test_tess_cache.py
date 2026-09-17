@@ -248,7 +248,7 @@ class BatchFramingMatchesTheAuthoritativeCodec(TessCacheTestCase):
         # Framing also accepts odd-length body readers; real TESS v4 bodies
         # themselves are aligned. Keep this isolated from payload validation.
         entries = [bytes(range(size)) for size in (1, 2, 3, 4, 5)]
-        with mock.patch("cadgen.viewer.tess_cache._read_cached_tessellation_bytes", side_effect=entries):
+        with mock.patch("cadgen.store.tess_cache.read_tessellation_cache", side_effect=entries):
             container = read_tess_cache_batch(json.dumps({"entries": [admitted()] * 5}).encode())
         self.assertEqual(self.decode_with_node(container), [list(entry) for entry in entries])
 

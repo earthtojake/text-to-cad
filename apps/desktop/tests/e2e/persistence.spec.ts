@@ -20,6 +20,7 @@ import { _electron as electron, expect, test, type ElectronApplication, type Pag
  */
 declare const window: {
   hardcore: {
+    settings: { set(patch: { defaultAgentId: string }): Promise<unknown> };
     projects: { addPath(input: { path: string }): Promise<{ id: string }> };
     sessions: { list(input: Record<string, never>): Promise<Array<{ id: string; title: string; acpSessionId: string | null }>> };
   };
@@ -62,6 +63,10 @@ test("a project and its session survive a quit and a relaunch", async () => {
 
   // First launch: a project, one prompt to the fake agent.
   const first = await launch();
+  // Every provider uses the same fake model names. Pin the provider under
+  // test so the machine's installed agents and login state cannot change
+  // whose preferences the new-session screen restores.
+  await first.page.evaluate(() => window.hardcore.settings.set({ defaultAgentId: "claude-code" }));
   await first.page.evaluate((dir) => window.hardcore.projects.addPath({ path: dir }), project);
   await expect(first.page.getByRole("heading", { name: `What should we build in ${projectName}?` })).toBeVisible();
   const row = first.page.locator("[data-new-session] [data-composer-row]");
@@ -74,8 +79,7 @@ test("a project and its session survive a quit and a relaunch", async () => {
   // Pick the other model and a different effort. Both are stored against the
   // agent — the model per provider, the effort against the model it was
   // picked under — and the second launch has to come back to them.
-  await row.locator("[data-chip=model]").click();
-  await first.page.getByRole("menuitemradio", { name: "Smart" }).first().click();
+  await pick(first.page, row.locator("[data-chip=model]"), "Smart");
   await expect(row.locator("[data-chip=model]")).toContainText("Smart");
   await row.locator("[data-chip=effort]").click();
   // `exact`, because `Xhigh` is one of Smart's levels and contains this one.
@@ -161,7 +165,17 @@ async function pick(page: Page, chip: ReturnType<Page["locator"]>, name: string)
   await expect(menu).toHaveCount(0);
   await chip.click();
   await expect(menu).toHaveCount(1);
-  await menu.getByRole("menuitemradio", { name, exact: true }).first().click();
+  const choices = menu.getByRole("menuitemradio", { name, exact: true });
+  // The new-session menu groups the providers; a live session exposes only
+  // its own provider. Selecting the first identical label can silently
+  // switch providers and then assert against another provider's effort.
+  if ((await choices.count()) > 1) {
+    const provider = menu.locator('[data-slot="dropdown-menu-radio-group"] > div')
+      .filter({ has: page.getByText("Claude Code", { exact: true }) });
+    await provider.getByRole("menuitemradio", { name, exact: true }).click();
+  } else {
+    await choices.click();
+  }
   await expect(menu).toHaveCount(0);
 }
 
@@ -173,6 +187,7 @@ test("the effort is remembered per model, and the mode per provider", async () =
 
   const first = await launch(data);
   try {
+    await first.page.evaluate(() => window.hardcore.settings.set({ defaultAgentId: "claude-code" }));
     await first.page.evaluate((target) => window.hardcore.projects.addPath({ path: target }), dir);
     const row = first.page.locator("[data-new-session] [data-composer-row]");
     await expect(row.locator("[data-chip=model]")).toContainText("Fast", { timeout: 30_000 });

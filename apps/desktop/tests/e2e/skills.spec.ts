@@ -159,6 +159,9 @@ test("cadgen inside a session is the app's own", async () => {
   const shipped = [path.join(first, "cadgen"), path.join(first, "cadgen.cmd")].find((candidate) =>
     fs.existsSync(candidate),
   );
+  if (process.env.HARDCORE_E2E_REQUIRE_CAD === "1") {
+    expect(shipped, "CAD qualification requires the app's cadgen command in the session PATH").toBeDefined();
+  }
   if (!shipped) {
     // No CAD runtime resolved on this machine (no bundle, no checkout venv):
     // there is nothing for a session to find, which is not this test's fault.

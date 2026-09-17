@@ -280,7 +280,8 @@ class DiscoveryTest(NodeRuntimeTestCase):
 
     def test_node_path_is_derived_from_the_configured_builder_location(self):
         root = node_package_root()
-        self.assertEqual(root, node_runtime.node_builders_dir().parent.parent)
+        builders = node_runtime.node_builders_dir()
+        self.assertEqual(root, builders.parents[2] / "node_modules")
         env = node_child_env()
         self.assertEqual(str(root), env["NODE_PATH"].split(os.pathsep)[0])
 
@@ -438,16 +439,27 @@ class BuilderErrorMessageTests(unittest.TestCase):
 
 
 class ExplicitRuntimeAssets(unittest.TestCase):
-    def test_defaults_are_packaged_even_when_app_sources_exist_nearby(self):
+    def test_an_installed_package_uses_bundled_assets(self):
         from cadgen import assets
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             packaged = root / "packages" / "cadgen" / "src" / "cadgen" / "_runtime"
             (root / "apps" / "web" / "dist").mkdir(parents=True)
             (root / "apps" / "web" / "dist" / "index.html").write_text("host", encoding="utf-8")
-            with mock.patch.object(assets, "_RUNTIME", packaged), mock.patch.dict(os.environ, {"CADGEN_VIEWER_DIST": "", "CADGEN_NODE_BUILDERS_DIR": ""}):
+            with mock.patch.object(assets, "_RUNTIME", packaged), \
+                    mock.patch.object(assets, "_dev_builders_dir", return_value=None), \
+                    mock.patch.object(assets, "_dev_viewer_dist_dir", return_value=None), \
+                    mock.patch.dict(os.environ, {"CADGEN_VIEWER_DIST": "", "CADGEN_NODE_BUILDERS_DIR": ""}):
                 self.assertEqual(assets.viewer_dist_dir(), packaged / "viewer")
                 self.assertEqual(assets.node_builders_dir(), packaged / "node")
+
+    def test_a_checkout_uses_compiled_core_and_web_outputs(self):
+        from cadgen import assets
+        root = Path(__file__).resolve().parents[4]
+        self.assertEqual(assets.node_builders_dir(), root / "packages" / "core" / "bin")
+        web_dist = root / "apps" / "web" / "dist"
+        if (web_dist / "index.html").is_file():
+            self.assertEqual(assets.viewer_dist_dir(), web_dist)
 
     def test_development_overrides_are_explicit(self):
         from cadgen import assets

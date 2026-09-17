@@ -32,7 +32,6 @@ declare const window: {
 };
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const screenshots = path.join(appRoot, "tests", "e2e", "__screenshots__");
 
 let app: ElectronApplication;
 let page: Page;
@@ -399,5 +398,5 @@ async function setTheme(theme: "dark" | "light") {
  * `animations: "disabled"` fast-forwards them to their end state.
  */
 async function shoot(target: Page, name: string) {
-  await target.screenshot({ path: path.join(screenshots, name), animations: "disabled" });
+  await target.screenshot({ path: test.info().outputPath(name), animations: "disabled" });
 }

@@ -46,9 +46,17 @@ function animatedJointDeltaDeg(name, currentValue, targetValue, wrappedJointName
   return wrapAngleDeltaDeg(numericTarget - numericCurrent);
 }
 
+// Ease in and out, quadratic: the curve every pose transition in the viewer uses, for a
+// STEP model's mates and a robot's joints alike (apps/web .. workbench/poseTransition.js
+// takes it from here rather than keeping a second one).
+//
+// It replaced smootherstep, whose tails are flat enough that a pose change READ as slow
+// next to the same 840 ms elsewhere: most of a heavy robot's few frames landed in the
+// stretches where almost nothing moves, so it drifted off and settled in, and the middle
+// went by unseen.
 export function easeUrdfJointAnimation(progress) {
   const t = clampUnit(progress);
-  return (t * t * t) * (t * ((6 * t) - 15) + 10);
+  return t < 0.5 ? 2 * t * t : 1 - (((-2 * t) + 2) ** 2) / 2;
 }
 
 export function jointValueMapsClose(left, right, epsilon = URDF_JOINT_ANIMATION_EPSILON) {

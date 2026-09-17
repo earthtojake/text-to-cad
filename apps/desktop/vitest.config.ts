@@ -57,6 +57,8 @@ export default defineConfig({
   resolve: { alias, dedupe },
   define: { __APP_VERSION__: JSON.stringify("0.0.0-test") },
   test: {
+    // Bound the independent Node/jsdom workers instead of using every host core.
+    maxWorkers: 4,
     projects: [
       {
         resolve: { alias, dedupe },

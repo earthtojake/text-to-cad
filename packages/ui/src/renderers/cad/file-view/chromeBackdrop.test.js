@@ -1,10 +1,5 @@
-// The "System" theme's backdrop: the chrome's own ground, in the three
-// contexts the surface renders in.
-//
-// The load-bearing case is the LAST one. A headless snapshot has no document
-// and no stylesheet, so the fallback pair is the whole answer there — and it
-// has to be the same colour the tokens resolve to, or the same theme would
-// paint one background on screen and another in a rendered picture.
+// System follows the app's CSS background, including its fallback when the
+// document or stylesheet is unavailable.
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -16,10 +11,9 @@ import {
   sceneBackdropEdgeColor
 } from "./chromeBackdrop.js";
 
-test("the shadcn pair resolves to the written-out fallback, exactly", () => {
-  // If these two ever disagree, a snapshot and the screen disagree.
+test("the viewer palette resolves to the written-out fallback", () => {
   assert.equal(cssColorToHex("oklch(1 0 0)"), CHROME_BACKDROP_FALLBACK.light);
-  assert.equal(cssColorToHex("oklch(0.145 0 0)"), CHROME_BACKDROP_FALLBACK.dark);
+  assert.equal(cssColorToHex("oklch(0.28 0 0)"), CHROME_BACKDROP_FALLBACK.dark);
 });
 
 test("oklch: percentages, hue units, chroma and `none`", () => {
@@ -70,17 +64,17 @@ test("with a document, the token is the backdrop", () => {
   );
 });
 
-test("with no document — a headless snapshot — the fallback pair is the answer", () => {
+test("with no document the viewer fallback pair is the answer", () => {
   assert.equal(readChromeBackgroundToken(null), "");
   assert.equal(readChromeBackgroundToken({}), "");
   assert.equal(readChromeBackgroundToken({ documentElement: {} }), "");
   assert.equal(resolveChromeBackdropColor({ token: "", prefersDark: false }), "#ffffff");
-  assert.equal(resolveChromeBackdropColor({ token: "", prefersDark: true }), "#0a0a0a");
+  assert.equal(resolveChromeBackdropColor({ token: "", prefersDark: true }), "#292929");
   assert.equal(resolveChromeBackdropColor(), "#ffffff");
   // An unreadable token is a missing one, not a crash.
   assert.equal(
     resolveChromeBackdropColor({ token: "color-mix(in srgb, var(--x) 38%, transparent)", prefersDark: true }),
-    "#0a0a0a"
+    "#292929"
   );
 });
 
@@ -101,4 +95,8 @@ test("the box behind the canvas takes the scene's edge colour", () => {
   assert.equal(sceneBackdropEdgeColor(null, "#0a0a0a"), "#0a0a0a");
   assert.equal(sceneBackdropEdgeColor({}, "#0a0a0a"), "#0a0a0a");
   assert.equal(sceneBackdropEdgeColor(null), "#ffffff");
+  assert.equal(
+    sceneBackdropEdgeColor({ type: "transparent", solidColor: "#123456" }, "#292929"),
+    "#292929"
+  );
 });

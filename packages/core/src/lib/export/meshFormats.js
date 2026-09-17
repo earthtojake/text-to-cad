@@ -39,7 +39,9 @@ export function triangleNormal(positions, offset) {
   const nx = uy * vz - uz * vy;
   const ny = uz * vx - ux * vz;
   const nz = ux * vy - uy * vx;
-  const length = Math.hypot(nx, ny, nz);
+// Math.sqrt, not Math.hypot: exactly defined arithmetic only, so these
+// bytes do not depend on the engine (lib/surf/trig.js).
+  const length = Math.sqrt(nx * nx + ny * ny + nz * nz);
   return length > 1e-12 ? [nx / length, ny / length, nz / length] : [0, 0, 1];
 }
 

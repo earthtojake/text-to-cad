@@ -71,7 +71,7 @@ assets, which remain inside `@hardcore/core`.
 `CadPreferenceSource` exposes `getSnapshot`, `subscribe` and `update`.
 `createCadPreferences` provides an in-memory implementation and an optional
 host persistence callback. A host can share one source across its CAD panes.
-It contains the theme choice/custom settings, the already-seen tutorial
+It contains the theme choice/custom settings, the shared pose transition preference, the already-seen tutorial
 tips and each file kind's sheet-tab order/split arrangement. It never reads
 browser storage on import or construction.
 
@@ -90,6 +90,7 @@ Hosts preserve these existing preference keys and precedence when migrating:
 | --- | --- |
 | Global theme | `cad-viewer:theme`, schema version 13 |
 | Directory theme and layout | `cad-viewer:directory-session:v1` |
+| Pose transition preference | `cad-viewer:pose-transition:v1` |
 | Seen tutorial tips | `cad-viewer:tutorial-tips:v1` |
 | Sheet tab order and split arrangement | `cad-viewer:file-sheet-tab-layout:v6` |
 | Tip reset URL | `?resetTips` remains a web-host action |
@@ -165,13 +166,11 @@ session-local writes. The browser integration harness exercises actual WebGL
 rendering with two roots, panel switching, PNG captures, host title ownership
 and state round trips through unmount/remount.
 
-The original camera session schema stores vectors and zoom but removes runtime
-scope metadata. The original viewport requires that metadata to restore a
-camera, so a remount can retain the saved record while opening at its default
-camera/100% readout. This was verified against the pre-migration
-`normalizeTabCameraSnapshot`, its file-session test, and `CadViewer` scope
-checks. The migration test preserves that observed baseline; this refactor
-does not claim to fix it.
+The camera session schema stores vectors and zoom while omitting runtime scope
+metadata. The viewport restores the serialized camera in its current file
+session, so a 110% view reopens at 110% while a second renderer starts from its
+own 100% default. Switching Inspect/Render fits the destination mode's camera
+without losing their separate stored snapshots.
 
 See [settings controls](settings-ui.md), [render capabilities](render-types.md)
 and [renderer contracts](renderers.md) for changes inside the shared package.
@@ -191,6 +190,8 @@ selected entities, without attaching a source filename or source line.
 STEP's Select tool offers All, Parts, Faces, Tangent faces, and Edges. Explicit
 filters never fall back to a different entity type. Face and edge filters load topology
 for the selected leaf part; selecting another part in Tree changes that target.
+Opening a STEP starts with render geometry; activating Select or Measure requests
+exact inspection topology when it is needed.
 Shift-click adds/removes entities. Escape clears the
 selection after any open menu or first-use tip has been dismissed. Input fields
 keep their own Escape behaviour.
@@ -323,6 +324,11 @@ Switching tabs gives the selected controls the full panel height; playback
 remains accessible from the viewer toolbar. The v6 layout resets saved STEP
 arrangements to this default and preserves other file kinds’ arrangements.
 
+Robot Kinematics uses the same preset, value and transition controls. Inspect
+adds Components when a linked mesh contains authored object names, grouping
+those objects under their links and connecting tree selection to the viewport.
+Built-in robot primitives and unnamed mesh objects contribute no component rows.
+
 
 ### Inspector tabs and dark surfaces
 
@@ -336,3 +342,27 @@ state across tab changes.
 The shared dark UI uses neutral charcoal tokens. Workbench Dark uses a slightly
 lighter `#333333` canvas; existing custom scene themes and light mode are preserved.
 The shared loading star and desktop wordmark/icon use blue branding.
+
+## Inspect, Render and live revisions
+
+The Model tree keeps geometry-based Features, contextual dimensions, selection
+filters and prompt-reference actions. It does not inspect model source.
+Schema-9 annotations embed appearance, animation and kinematics; the content
+hash must match the saved artifact before those annotations apply. Active build
+previews carry immutable geometry revisions and never initiate a source build.
+A complete previous revision stays visible until its replacement is ready.
+
+The floating toolbar switches Inspect and Render. Inspect keeps CAD themes and
+Display, while Render has its own camera, studio and Preview/Final quality.
+Entering a mode fits that mode's camera. The Studio and Materials panels load
+lazily; Render's tab arrangement is temporary and never overwrites the host's
+Inspect arrangement. Material overlays and undo are per-file session state.
+
+The host-supplied render session owns its tessellation cache and worker leases.
+Photographic scene state is a separate value. Surface derivation and preview
+requests use that file's client origin and abort when the consumer leaves.
+The Features inspector resolves exact surfaces on demand through the same client.
+
+File status reports Opening, Updating, Limited detail and actionable failures.
+Full diagnostics stay expandable; Try again uses FileViewer's renderer reload,
+which rechecks the artifact and does not restart the desktop window.

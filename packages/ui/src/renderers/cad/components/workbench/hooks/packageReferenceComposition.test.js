@@ -19,9 +19,12 @@ import { buildSelectorBundleFromSurf } from "@hardcore/core/lib/surf/surfSelecto
 import { buildGlbFaceIdsForPart, TOPOLOGY_FACE_ID_NONE } from "@hardcore/core/lib/viewer/selectorPickGroups.js";
 
 import {
+  baseLodReferenceComposition,
+  reconcileLodReferencePublication,
   buildPackageOccurrenceRuntimes,
   composePackageSelectorRuntime,
   compositionUsesComponent,
+  reconcileLivePackageSelectorBundles,
   swapCompositionBundle
 } from "./packageReferenceComposition.js";
 
@@ -162,4 +165,105 @@ test("occurrence runtimes build identically through both entrypoints", () => {
   // mesh's sourcePartRanges — pin it.
   const reference = runtimes[0].references?.[0];
   assert.ok(String(reference?.id || "").includes("o1.1"), `reference ids carry the occurrence: ${reference?.id}`);
+});
+
+test("topology landing after a LOD swap composes from the live bundle", async () => {
+  let releaseLevel0;
+  const level0Pending = new Promise((resolve) => { releaseLevel0 = resolve; });
+  let live = { levelByCid: { c0: 0 }, bundleByCid: {} };
+  const load = (async () => {
+    const level0Bundle = await level0Pending;
+    return reconcileLivePackageSelectorBundles({
+      cids: ["c0"],
+      initialBundleByCid: { c0: level0Bundle },
+      initialKeyByCid: { c0: "c0:t0" },
+      snapshotLiveLod: () => live,
+      keyForLevel: (cid, level) => `${cid}:t${level}`,
+      loadForLevel: async () => assert.fail("published live bundle needs no second fetch")
+    });
+  })();
+  const level0Bundle = { level: 0 };
+  const level1Bundle = { level: 1 };
+  live = { levelByCid: { c0: 1 }, bundleByCid: { c0: level1Bundle } };
+  releaseLevel0(level0Bundle);
+  assert.deepEqual(await load, { c0: level1Bundle });
+});
+
+test("missing live selector state fetches the exact level and rechecks after another swap", async () => {
+  let live = { levelByCid: { c0: 1 }, bundleByCid: {} };
+  const fetched = [];
+  const level2Bundle = { level: 2 };
+  const result = await reconcileLivePackageSelectorBundles({
+    cids: ["c0"],
+    initialBundleByCid: { c0: { level: 0 } },
+    initialKeyByCid: { c0: "c0:t0" },
+    snapshotLiveLod: () => live,
+    keyForLevel: (cid, level) => `${cid}:t${level}`,
+    loadForLevel: async (cid, level, key) => {
+      fetched.push({ cid, level, key });
+      live = { levelByCid: { c0: 2 }, bundleByCid: { c0: level2Bundle } };
+      return { level: 1 };
+    }
+  });
+  assert.deepEqual(fetched, [{ cid: "c0", level: 1, key: "c0:t1" }]);
+  assert.deepEqual(result, { c0: level2Bundle });
+});
+
+test("an obsolete reference job stops before publishing", async () => {
+  let current = true;
+  const result = await reconcileLivePackageSelectorBundles({
+    cids: ["c0"],
+    initialBundleByCid: { c0: { level: 0 } },
+    initialKeyByCid: { c0: "c0:t0" },
+    snapshotLiveLod: () => ({ levelByCid: { c0: 1 }, bundleByCid: {} }),
+    keyForLevel: (cid, level) => `${cid}:t${level}`,
+    loadForLevel: async () => {
+      current = false;
+      return { level: 1 };
+    },
+    isCurrent: () => current
+  });
+  assert.equal(result, null);
+});
+
+test("late selectors preserve unrelated CIDs in the candidate and exact base-level recovery overlay", () => {
+  const low = { level: "base" }, high = { level: "live" }, unrelated = { level: "unrelated" };
+  const composition = { entry: ENTRY, loadedTopologyKey: "newly-demanded-subset",
+    occurrencesToLoad: [...OCCURRENCES, { id: "other", component: "other" }],
+    bundleByCid: { c0: high, other: unrelated } };
+  const base = baseLodReferenceComposition(composition, { cid: "c0" }, low);
+  assert.equal(base.occurrencesToLoad, composition.occurrencesToLoad);
+  assert.equal(base.loadedTopologyKey, composition.loadedTopologyKey);
+  assert.equal(base.bundleByCid.other, unrelated); assert.equal(base.bundleByCid.c0, low);
+  assert.equal(composition.bundleByCid.c0, high, "candidate remains immutable");
+  assert.equal(baseLodReferenceComposition(composition, { cid: "not-demanded" }, null), composition);
+  assert.equal(baseLodReferenceComposition(composition, { cid: "c0", phase: "restoring" }, null), composition);
+  assert.throws(() => baseLodReferenceComposition(composition, { cid: "c0" }, null), /Previous detail/);
+});
+
+test("reference publication rechecks pending ownership after base-selector and live-selector awaits", async () => {
+  const first = { cid: "a" }, second = { cid: "b" };
+  let pending = first, current = true, calls = 0;
+  const result = await reconcileLodReferencePublication({ pendingForContext: () => pending,
+    loadBaseBundle: async owner => { if (owner === first) pending = second; return owner.cid; },
+    reconcile: async () => { calls++; return { current: pending.cid }; }, isCurrent: () => current });
+  assert.equal(result.pending, second); assert.equal(result.baseBundle, "b"); assert.equal(calls, 2);
+  const stopped = await reconcileLodReferencePublication({ pendingForContext: () => pending,
+    loadBaseBundle: async () => { current = false; return "unused"; },
+    reconcile: async () => { throw new Error("must not publish after abort"); }, isCurrent: () => current });
+  assert.equal(stopped, null);
+});
+
+test("a mixed-level batch restores every changed selector bundle while keeping late unrelated demand", () => {
+  const lowA = { level: "base-a" }, highA = { level: "live-a" };
+  const lowB = { level: "base-b" }, highB = { level: "live-b" }, other = {};
+  const occurrencesToLoad = [...OCCURRENCES, { id: "b", component: "b" }, { id: "late", component: "late" }];
+  const candidate = { entry: ENTRY, occurrencesToLoad, loadedTopologyKey: "late-demand",
+    bundleByCid: { c0: highA, b: highB, late: other } };
+  const base = baseLodReferenceComposition(candidate, { items: [{ cid: "c0" }, { cid: "b" }] },
+    { c0: lowA, b: lowB });
+  assert.equal(base.occurrencesToLoad, occurrencesToLoad); assert.equal(base.loadedTopologyKey, "late-demand");
+  assert.equal(base.bundleByCid.c0, lowA); assert.equal(base.bundleByCid.b, lowB); assert.equal(base.bundleByCid.late, other);
+  assert.equal(candidate.bundleByCid.c0, highA); assert.equal(candidate.bundleByCid.b, highB);
+  assert.throws(() => baseLodReferenceComposition(candidate, { items: [{ cid: "c0" }, { cid: "b" }] }, { c0: lowA }), /Previous detail/);
 });

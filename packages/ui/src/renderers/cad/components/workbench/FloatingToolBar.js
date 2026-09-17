@@ -9,10 +9,13 @@ import {
   Hand,
   MousePointer2,
   Orbit,
+  Box,
+  Clapperboard,
   Pause,
   Play,
   PenTool,
   Ruler,
+  Maximize2,
   X
 } from "lucide-react";
 import {
@@ -136,9 +139,12 @@ function DesktopFloatingToolBar({
   drawingViewMode = "3d",
   onDrawingViewModeChange,
   previewMode = false,
+  renderMode = false,
+  onRenderModeChange = null,
   toolbarHidden = false,
   onToolbarEnter,
   onToolbarLeave,
+  handleEnterPreviewMode,
   handleExitPreviewMode,
   selectionFilter = null,
   onSelectionFilterChange,
@@ -156,6 +162,7 @@ function DesktopFloatingToolBar({
   measurementPanel = null,
   displayPanel = null,
   measureDisabled = false,
+  measureSupported = null,
   panToolActive,
   handleSelectTabToolMode,
   viewerLoading,
@@ -170,7 +177,6 @@ function DesktopFloatingToolBar({
   canUndoDrawing,
   canRedoDrawing,
   drawingStrokes,
-  handleEnterPreviewMode,
   handleScreenshotCopy,
   handleCapture = null,
   selectedEntry
@@ -185,6 +191,7 @@ function DesktopFloatingToolBar({
     supportsTool(renderFormat, "pan") ||
     supportsTool(renderFormat, "draw");
   const captureDisabled = viewerLoading || !viewportContent;
+  const canMeasure = measureSupported ?? capabilities.measure;
   const selectDisabled = viewerLoading ||
     !viewportContent ||
     referenceSelectionPending ||
@@ -259,7 +266,7 @@ function DesktopFloatingToolBar({
   // A drawing's own toolbar, in its own pill to the LEFT of the shared one: 2D and 3D are a
   // property of the drawing being viewed, not a tool that acts on it, so grouping them with
   // select/pan/draw would read as a fourth mode of the same kind.
-  const drawingViewToolbar = drawingViewToggle ? (
+  const drawingViewToolbar = !renderMode && drawingViewToggle ? (
     <div
       className={`${toolbarHidden ? "pointer-events-none" : "pointer-events-auto"} inline-flex h-8 w-fit items-center gap-0.5 rounded-md p-1 ${FLOATING_TOOL_BAR_SURFACE_CLASS}`}
       onPointerEnter={onToolbarEnter}
@@ -296,7 +303,7 @@ function DesktopFloatingToolBar({
         onZoomPercentChange={onZoomPercentChange}
         onZoomReset={onZoomReset}
       />}
-      {!previewMode && showToolCluster && viewMenu}
+      {!renderMode && !previewMode && showToolCluster && viewMenu}
       {displayPanel && <><span className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" /><DisplayPopover key={selectedEntry?.file} disabled={viewerLoading || !viewportContent}>{displayPanel}</DisplayPopover></>}
     </div>
   ) : null;
@@ -314,20 +321,26 @@ function DesktopFloatingToolBar({
         <div className="flex w-fit max-w-full flex-wrap items-center justify-end gap-1 self-end">
         {zoomToolbar}
         {drawingViewToolbar}
-        {!previewMode && showToolCluster && <div role="group" aria-label="Inspect" className={groupClasses} onPointerEnter={onToolbarEnter} onPointerLeave={onToolbarLeave}>
+        {!renderMode && !previewMode && showToolCluster && <div role="group" aria-label="Inspect" className={groupClasses} onPointerEnter={onToolbarEnter} onPointerLeave={onToolbarLeave}>
           <ToolbarButton label={selectLabel} active={referenceSelectionDeferred ? false : selectionToolActive}
             onClick={() => handleSelectTabToolMode("references")} disabled={selectDisabled}
             aria-pressed={referenceSelectionDeferred ? false : selectionToolActive}>
             <MousePointer2 className="size-3" strokeWidth={2} aria-hidden="true" />
           </ToolbarButton>
           {selectionFilter !== null && <SelectionFilterMenu value={selectionFilter} onChange={onSelectionFilterChange} disabled={viewerLoading || !viewportContent} />}
-          <ToolbarButton label="Measure" active={measureModeActive} onClick={() => handleSelectTabToolMode("measure")}
+          {canMeasure && <ToolbarButton label="Measure" active={measureModeActive} onClick={() => handleSelectTabToolMode("measure")}
             disabled={measureDisabled} aria-pressed={measureModeActive}>
             <Ruler className="size-3" strokeWidth={2} aria-hidden="true" />
-          </ToolbarButton>
+          </ToolbarButton>}
         </div>}
+        {!previewMode && onRenderModeChange ? <div role="group" aria-label="Viewing mode" className={groupClasses}>
+          <ToolbarButton label={renderMode ? "Viewing mode: Render. Switch to Inspect" : "Viewing mode: Inspect. Switch to Render"}
+            onClick={() => onRenderModeChange(!renderMode)} active={renderMode}>
+            {renderMode ? <Clapperboard className="size-3" aria-hidden="true" /> : <Box className="size-3" aria-hidden="true" />}
+          </ToolbarButton>
+        </div> : null}
         <div role="group" aria-label="Markup and capture" className={groupClasses} onPointerEnter={onToolbarEnter} onPointerLeave={onToolbarLeave}>
-          {!previewMode && supportsTool(renderFormat, "draw") && <>
+          {!renderMode && !previewMode && supportsTool(renderFormat, "draw") && <>
             <ToolbarButton label="Draw" active={drawToolActive} onClick={() => handleSelectTabToolMode("draw")}
               disabled={viewerLoading || !viewportContent} aria-pressed={drawToolActive}>
               <PenTool className="size-3" strokeWidth={2} aria-hidden="true" />
@@ -350,13 +363,13 @@ function DesktopFloatingToolBar({
       {!previewMode && selectionToolActive && selectionFilterNotice && <p role="status" className="max-w-56 rounded-md border bg-background px-2 py-1 text-micro text-muted-foreground shadow-sm">{selectionFilterNotice}</p>}
 
 
-      {!previewMode && measureModeActive && measurementPanel && <ToolbarShell
+      {!renderMode && !previewMode && measureModeActive && measurementPanel && <ToolbarShell
         title="Measure" label="Measurements" className="max-h-64"
         onClose={() => handleSelectTabToolMode("references")} closeLabel="Finish measuring"
         footer="Clears when you leave Measure.">
         {measurementPanel}
       </ToolbarShell>}
-      {!previewMode && supportsTool(renderFormat, "draw") && drawToolActive ? (
+      {!renderMode && !previewMode && supportsTool(renderFormat, "draw") && drawToolActive ? (
         <DrawingToolbar
           onClose={() => handleSelectTabToolMode("references")}
           drawingToolOptions={drawingToolOptions}

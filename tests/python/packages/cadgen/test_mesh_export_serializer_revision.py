@@ -49,7 +49,7 @@ class GlbSerializerFreshnessTests(unittest.TestCase):
 
     def test_python_and_shared_writer_revisions_match(self) -> None:
         source = (
-            REPO_ROOT / "packages/cadgen-js/src/lib/glb/writeGlb.js"
+            REPO_ROOT / "packages/core/src/lib/glb/writeGlb.js"
         ).read_text(encoding="utf-8")
         match = re.search(r"export const GLB_SERIALIZATION_VERSION\s*=\s*(\d+)", source)
         self.assertIsNotNone(match, "writeGlb must export its final-byte serialization revision")

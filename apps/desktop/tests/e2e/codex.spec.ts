@@ -20,7 +20,6 @@ declare const window: {
 };
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const screenshots = path.join(appRoot, "tests", "e2e", "__screenshots__");
 
 test.skip(!process.env.HARDCORE_E2E_CODEX, "set HARDCORE_E2E_CODEX=1 to run a real Codex session");
 
@@ -84,5 +83,5 @@ test("Codex writes a file, runs a command and answers", async () => {
 });
 
 async function shoot(name: string) {
-  await page.screenshot({ path: path.join(screenshots, name), animations: "disabled" });
+  await page.screenshot({ path: test.info().outputPath(name), animations: "disabled" });
 }

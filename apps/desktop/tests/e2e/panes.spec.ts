@@ -48,7 +48,6 @@ declare const window: {
 };
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const screenshots = path.join(appRoot, "tests", "e2e", "__screenshots__");
 const fakeAgent = path.join(appRoot, "tests", "fake-agent", "index.mjs");
 
 let app: ElectronApplication;
@@ -366,5 +365,5 @@ async function setContentSize(width: number, height: number) {
 }
 
 async function shoot(name: string) {
-  await page.screenshot({ path: path.join(screenshots, name), animations: "disabled" });
+  await page.screenshot({ path: test.info().outputPath(name), animations: "disabled" });
 }

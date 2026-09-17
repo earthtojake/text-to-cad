@@ -10,7 +10,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { parseSurf } from "./container.js";
-import { evaluateCurve3, evaluatePCurve, evaluateSurface } from "./evaluate.js";
+import { evaluateCurve3, evaluatePCurve, evaluateSurface, evaluateSurfaceNormal } from "./evaluate.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -90,6 +90,24 @@ test("every fixture edge curve evaluates against OCCT samples", () => {
 
 test("pcurve loops close: consecutive pcurves connect within tolerance in UV", () => {
   for (const { index, floats } of FIXTURES) closureCheck(index, floats);
+});
+
+test("analytic normals remain unit and oriented at singularities and in left-handed frames", () => {
+  // A large translation must not erase finite-difference derivatives; the
+  // normals depend only on the surface frame and parameters.
+  const frame = { origin: [1e14, -1e14, 1e14], xdir: [1, 0, 0], ydir: [0, 1, 0], zdir: [0, 0, 1] };
+  const floats = new Float32Array();
+  const sphere = { kind: "sphere", radius: 10, ...frame };
+  for (const v of [-Math.PI / 2, Math.PI / 2]) {
+    const normal = evaluateSurfaceNormal(sphere, floats, 1.3, v, [0, 2 * Math.PI, -Math.PI / 2, Math.PI / 2], false);
+    assert.ok(distance(normal, [0, 0, Math.sign(v)]) < 1e-12);
+  }
+  const cone = { kind: "cone", radius: 8, semiAngle: -Math.atan2(8, 12), ...frame };
+  const normal = evaluateSurfaceNormal(cone, floats, 0, Math.hypot(8, 12), [0, 2 * Math.PI, 0, Math.hypot(8, 12)], false);
+  assert.ok(distance(normal, [12 / Math.hypot(8, 12), 0, 8 / Math.hypot(8, 12)]) < 1e-12);
+  const cylinder = { kind: "cylinder", radius: 8, ...frame, zdir: [0, 0, -1] };
+  assert.ok(distance(evaluateSurfaceNormal(cylinder, floats, 0, 2, [0, 2 * Math.PI, 0, 4], false), [-1, 0, 0]) < 1e-12);
+  assert.ok(distance(evaluateSurfaceNormal(cylinder, floats, 0, 2, [0, 2 * Math.PI, 0, 4], true), [1, 0, 0]) < 1e-12);
 });
 
 function closureCheck(index, floats) {

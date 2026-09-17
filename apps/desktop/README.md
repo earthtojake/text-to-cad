@@ -122,6 +122,24 @@ bundles their lazy renderers, CSS, assets and workers. Run
 `npm run build:packages` from the repository root after shared code changes;
 app source continues to use HMR. Tests consume the same exports.
 
+The unit suite caps workers at four; Electron uses one worker and no automatic
+retries. CAD integration tests use `tests/fixtures/cad/import-smoke.step` and
+private caches beneath their temporary user-data directories. CAD profiles use
+short temporary paths on POSIX so Python's Unix sockets stay within platform
+limits. They disable the shared build daemon (except its explicit prewarm test)
+and discard inherited broker settings, so an interactive
+cache or another running viewer cannot satisfy a cold test. Optional live-agent
+suites remain explicit opt-ins. CI selects this app only for changes to desktop,
+shared UI/core, cadgen or shared build infrastructure; see the dependency graph
+in the root `CONTRIBUTING.md`.
+
+`HARDCORE_E2E_REQUIRE_CAD=1` requires the resolved runtime to be ready and match
+`VERSION`, so CAD qualification cannot pass by skipping its render, toolbar,
+selection, prewarm or shutdown coverage. The macOS test job uses the checkout's
+`.venv` with fresh Node/browser assets; embedded-runtime packaging has its own
+qualification. The invalid-interpreter test still verifies the failure card
+before clearing its override and returning to the resolved runtime.
+
 ### Windows nobody sees
 
 The suite's windows are never shown. Every spec launches the real app, and a
@@ -140,7 +158,9 @@ so an unshown window keeps its frames and its timers. To watch a spec instead,
 A manual relaunch is unaffected: `HARDCORE_LAUNCH_INACTIVE=1 npx electron .`
 still shows the window, without taking focus.
 
-`npm run e2e` writes `tests/e2e/__screenshots__/`: the shell in both themes,
+`npm run e2e` writes screenshots beneath each test's Playwright output directory
+(`test-results/` by default, or `--output`); it never rewrites the committed
+design evidence in `tests/e2e/__screenshots__/`. Captures include the shell in both themes,
 Settings, the traffic lights' corner in the two states that own it
 (`titlebar-sidebar`, `titlebar-session`, `titlebar-settings` — the reserved
 rectangle drawn over it), one per explorer surface — `file-markdown-preview`,
@@ -230,8 +250,8 @@ CAD runtime, below): the bundled one once `npm run bundle:runtime` has run,
 else the checkout's `.venv`. The explorer suite first breaks the runtime on
 purpose — an override pointing nowhere — to see the failure card with the
 interpreter's words in it, then clears the override and renders the STEP;
-that render is skipped on a machine with no runtime at all (CI's test job,
-which bundles nothing). The first render compiles the STEP in cadgen's build
+that render is skipped only in local runs without a runtime and without
+`HARDCORE_E2E_REQUIRE_CAD=1`. The first render compiles the STEP in cadgen's build
 pool and is the slow assertion of the suite.
 
 `tests/e2e/codex-open-file.spec.ts` runs a real Codex session in a scratch
@@ -315,6 +335,7 @@ directory and must stay there.
 ```sh
 npm run brand            # the wordmark and the H into resources/brand (committed)
 npm run icons            # the sidebar star onto a tile -> build/icon.png (committed)
+scripts/bundle/bundle.sh --clean  # cadgen's package runtime; ignored build output
 npm run cad:resources    # the cadgen wheel + constraints into resources/cadgen (from the .venv)
 npm run bundle:runtime   # THE CAD RUNTIME into resources/runtime/<os>-<arch> (~1.2 GB, once per pin)
 npm run package:mac      # or :win, :linux -> release/
@@ -375,9 +396,11 @@ either way, so the first signed build is not the first time they are exercised.
 
 ### Updates
 
-`electron-updater` against the GitHub Releases of `earthtojake/text-to-cad` —
-the same Release the repo tags, which is where `release-publish.yml`'s `desktop`
-job attaches the installers. `src/main/updater.ts` checks ten seconds after
+`electron-updater` checks the GitHub Releases of `earthtojake/text-to-cad`.
+Release CI builds every installer from the exact commit it tags, then creates
+or resumes that commit's Release with the cadgen wheel and sdist, installers,
+blockmaps and `latest*.yml` feeds as peer assets. None of those build outputs
+is committed. `src/main/updater.ts` checks ten seconds after
 launch and every six hours, with `autoDownload` off: the app says an update
 exists and downloads when asked. Settings › About & Updates is the whole UI.
 Development builds report `unsupported` and check nothing.
@@ -389,7 +412,8 @@ cadgen and its whole closure installed), `resources/cadgen/` (the wheel and
 its constraints) and `resources/skills/` (the composed skills) ship beside
 the app as `extraResources`; all three are build outputs, gitignored under a
 committed `.gitkeep`. `npm run build` fills the skills; `npm run
-cad:resources` fills the wheel directory from a checkout (the release
+cad:resources` fills the wheel directory from a checkout after verifying the
+ignored cadgen `_runtime` bundle is complete (the release
 workflow drops the wheel it just built into it instead); `npm run
 bundle:runtime` fills the runtime from those two (the release workflow runs
 it per leg: macOS bundles `mac-arm64` natively and `mac-x64` cross, Windows

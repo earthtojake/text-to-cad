@@ -54,3 +54,5 @@ export const cadWorkspaceDefaultFileSheetWidthForViewport = state.cadWorkspaceDe
 export const fileSheetWidthPxForSessionState = state.fileSheetWidthPxForSessionState as (value: unknown, defaultWidth?: number) => number | null;
 export { THEME_STORAGE_VERSION, CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH, CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH } from './workbench/state.js';
 export { FILE_SESSION_STORAGE_VERSION } from './workbench/fileSessionState.js';
+
+export { POSE_TRANSITION_STORAGE_KEY, readPoseTransition, writePoseTransition, normalizePoseTransition } from "./workbench/poseTransition.js";

@@ -15,6 +15,8 @@ export interface CadEntry {
 }
 export interface CadServerInfo {
   rootId: string;
+  autoReload?: boolean;
+  identityToken?: string;
   rootPath?: string;
   rootDir?: string;
   backend?: string;
@@ -49,9 +51,12 @@ export interface CadClient {
   subscribe(listener: () => void): () => void;
   refresh(options?: CadRequestOptions & {file?: string;markRefreshing?: boolean}): Promise<CadCatalog>;
   resolveEntry(path: string, options?: CadRequestOptions): Promise<CadEntry>;
-  serverInfo(options?: CadRequestOptions): Promise<CadServerInfo>;
+  serverInfo(options?: CadRequestOptions & { fresh?: boolean }): Promise<CadServerInfo>;
   requestArtifactStatus(file: string, options?: CadRequestOptions): Promise<CadArtifactResult>;
   requestArtifact(file: string, options?: CadRequestOptions & {force?: boolean}): Promise<CadArtifactResult>;
+  requestSurfaces(body: Record<string, unknown>, options?: CadRequestOptions): Promise<Record<string, unknown>>;
+  cancelSurfaceRequest(body: { job: string }, options?: CadRequestOptions): Promise<Record<string, unknown>>;
+  editingPreview(file: string, options?: CadRequestOptions & { after?: string }): Promise<Record<string, unknown>>;
   createRenderSession(): CadRenderSession;
   dispose(): void;
 }

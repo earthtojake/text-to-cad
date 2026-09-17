@@ -38,8 +38,7 @@ declare const window: {
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const repoRoot = path.resolve(appRoot, "..", "..");
-const screenshots = path.join(appRoot, "tests", "e2e", "__screenshots__");
-const STEP_SOURCE = path.join(repoRoot, "models", "examples", "imported", "import-smoke.step");
+const STEP_SOURCE = path.join(repoRoot, "tests", "fixtures", "cad", "import-smoke.step");
 
 const CAD_PYTHON =
   process.env.CAD_DESKTOP_PYTHON ??
@@ -68,7 +67,7 @@ test.beforeAll(async () => {
   // default run never spends them (the build once ran into Codex's usage limit).
   test.skip(process.env.HARDCORE_E2E_CODEX !== "1", "set HARDCORE_E2E_CODEX=1 to run the real Codex session");
   test.skip(!codexSignedIn(), "codex is not installed or not signed in");
-  test.skip(!fs.existsSync(STEP_SOURCE) || fs.statSync(STEP_SOURCE).size < 1000, "the STEP fixture is an LFS pointer; git lfs checkout it");
+  expect(fs.readFileSync(STEP_SOURCE, "utf8")).toContain("ISO-10303-21");
 
   project = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-codex-project-"));
   fs.mkdirSync(path.join(project, "STEP"));
@@ -78,7 +77,7 @@ test.beforeAll(async () => {
   userData = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-codex-e2e-"));
   app = await electron.launch({
     args: [path.join(appRoot, "out", "main", "index.js"), `--user-data-dir=${userData}`],
-    env: { ...process.env, NODE_ENV: "test", ...(CAD_PYTHON ? { CAD_DESKTOP_PYTHON: CAD_PYTHON } : {}) },
+    env: { ...process.env, NODE_ENV: "test", CADGEN_DAEMON: "0", CADGEN_CACHE_DIR: path.join(userData, "cad-cache"), CADGEN_DAEMON_STATE_DIR: path.join(userData, "cad-daemon"), ...(CAD_PYTHON ? { CAD_DESKTOP_PYTHON: CAD_PYTHON } : {}) },
   });
   page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
@@ -143,5 +142,5 @@ test("a Codex session opens a STEP in the explorer through open_file", async () 
   expect(openFile!.status).toBe("completed");
 
   await page.waitForTimeout(1500);
-  await page.screenshot({ path: path.join(screenshots, "codex-open-file.png"), animations: "disabled" });
+  await page.screenshot({ path: test.info().outputPath("codex-open-file.png"), animations: "disabled" });
 });

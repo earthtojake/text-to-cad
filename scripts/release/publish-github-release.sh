@@ -14,7 +14,7 @@ ASSETS=()
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/release/publish-github-release.sh [--target REF] [--dry-run] [--publish]
+  scripts/release/publish-github-release.sh [--target REF] [--asset PATH]... [--dry-run] [--publish]
 
 Creates the immutable release identity for the current repo version:
 
@@ -22,8 +22,9 @@ Creates the immutable release identity for the current repo version:
 2. verifies a new version is greater than the latest local release tag
 3. creates the release tag for VERSION (`v<VERSION>`) and pushes it to origin
 4. creates a GitHub Release for that tag with generated notes, and attaches
-   the distribution files given with --asset (the wheel and sdist that went to
-   PyPI), so the release page carries the exact bytes that shipped
+   every file given with --asset (Python distributions, desktop installers,
+   updater manifests and blockmaps), so the release page carries the exact
+   bytes that shipped
 
 Options:
   --target REF  Commit/ref to tag. Defaults to HEAD.
@@ -135,6 +136,12 @@ if gh release view "$tag_name" >/dev/null 2>&1; then
   if [ "${#ASSETS[@]}" -gt 0 ]; then
     gh release upload "$tag_name" "${ASSETS[@]}" --clobber
     echo "Attached ${#ASSETS[@]} asset(s) to GitHub Release: $tag_name"
+  fi
+  # A manual resume with --publish must also finish a draft created by an
+  # earlier run. Never turn an already-published release back into a draft.
+  if [ "$DRAFT" -eq 0 ]; then
+    gh release edit "$tag_name" --draft=false
+    echo "Published GitHub Release: $tag_name"
   fi
   exit 0
 fi

@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,6 +9,7 @@ import {
   type ElectronApplication,
   type Page,
 } from "@playwright/test";
+import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-runtime";
 
 /**
  * The colour scheme, end to end: who is allowed to write it, and whether it
@@ -60,14 +60,14 @@ declare const window: {
       get(): Promise<{ theme: string }>;
       set(patch: { theme?: string }): Promise<unknown>;
     };
-    runtime: { status(): Promise<{ state: string }> };
+    runtime: { status(): Promise<{ state: string; cadgenVersion: string | null }> };
   };
 };
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const repoRoot = path.resolve(appRoot, "..", "..");
 const projectName = path.basename(repoRoot);
-const STEP = "models/examples/imported/import-smoke.step";
+const STEP = "tests/fixtures/cad/import-smoke.step";
 
 /**
  * The document's scheme, sampled on every animation frame — every paint —
@@ -187,7 +187,7 @@ let cadReady = false;
  * of a launch looks like.
  */
 test.beforeAll(async () => {
-  userData = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-theme-e2e-"));
+  userData = cadTestProfile("theme");
   app = await launch();
   await page.evaluate((root) => window.hardcore.projects.addPath({ path: root }), repoRoot);
   await expect(page.getByText(projectName).first()).toBeVisible();
@@ -216,7 +216,7 @@ async function launch(): Promise<ElectronApplication> {
   const { CAD_DESKTOP_PYTHON: _unset, ...inherited } = process.env;
   const started = await electron.launch({
     args: [path.join(appRoot, "out", "main", "index.js"), `--user-data-dir=${userData}`],
-    env: { ...inherited, NODE_ENV: "test" },
+    env: { ...inherited, ...cadRegistryEnvironment(userData), NODE_ENV: "test", CADGEN_DAEMON: "0", CADGEN_CACHE_DIR: path.join(userData, "cad-cache"), CADGEN_DAEMON_STATE_DIR: path.join(userData, "cad-daemon") },
   });
   page = await started.firstWindow();
   await page.addInitScript(SAMPLER);
@@ -246,7 +246,7 @@ test("comes up dark on an OS in dark, with no light frame and nothing set", asyn
 test("stays dark through a STEP file, its theme panel, a slider and a preset", async () => {
   test.setTimeout(300_000);
   const status = await page.evaluate(() => window.hardcore.runtime.status());
-  cadReady = status.state === "ready";
+  cadReady = cadRuntimeReady(status);
   test.skip(!cadReady, "no CAD runtime on this machine: no bundle under resources/runtime and no .venv");
 
   await newTab("File");

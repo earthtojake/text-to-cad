@@ -221,52 +221,39 @@ the first thing to read when a run is slow.
 
 ### CI
 
-`test.yml` is one job per thing that has to work, each conditional on the
-changes that can break it. `AGENTS.md` has the job table; this is why.
+`test.yml` selects work from the dependency graph. Each job installs only its
+root npm workspaces; Python and the two Playwright browser installations are
+requested separately. A manual dispatch runs every job.
 
-**Jobs are split by condition, not by size.** Two tests belong in the same job
-unless they should run under different conditions — a different set of paths,
-or a different operating system. So the cadgen package suite is one job (one
-per platform), every skill suite plus the policy gates is one job, and there
-are no shards: each job parallelises internally (`unittest_files.py --jobs`,
-`node --test` concurrency) instead of across machines.
+| Check | Runs for | Coverage |
+| --- | --- | --- |
+| Version Check | every change | canonical version, derived metadata, skill pins |
+| cadgen (Linux/Windows) | cadgen, core, infrastructure | Python engine, daemon, CLI and viewer backend |
+| cadgen-js | core, infrastructure | `@hardcore/core` and benchmark helper units |
+| viewer | web, UI, core, cadgen, infrastructure | affected UI/web units, bundled launch, format/picking/kinematics/camera browser checks |
+| skills | skills or runtime/host contracts | repo policy; skill CLI suites only for skills, cadgen, core or infrastructure |
+| docs | docs, skills, cadgen, core, infrastructure | static asset contract, lint, Next build, icon verification |
+| packaging | cadgen, core, UI, web, infrastructure | clean bundle, wheel contents, installed CLI behavior |
+| Desktop (macOS) | desktop, UI, core, cadgen, infrastructure | native dependencies, typecheck, lint, unit tests, build, Electron tests |
 
-**The conditions encode the dependency graph.** `packages/cadgen` is the engine
-everything downstream runs — the skills are thin entrypoints over its CLIs, the
-viewer is served by `cadgen.viewer`, the docs site documents its commands, the
-wheel packages it — so a cadgen change runs the cadgen, viewer, skills, docs and
-packaging jobs. `packages/core` is bundled into the runtime cadgen
-executes and imported by the viewer and the docs hero, so it fans out the same
-way plus its own unit tests. A viewer-client change runs the viewer and
-packaging jobs; a docs change runs docs; a skills change runs skills and docs
-(the site mirrors the skills' frontmatter). `scripts/`, `.github/` and the
-version metadata can break any job, so they run all of them. The one direction
-that does NOT fan out is up: the viewer client, the skills and the docs cannot
-break cadgen, so touching them never runs the cadgen suite.
+Here `cadgen`, `core` and `UI` mean their package directories and tests;
+`web`, `docs` and `desktop` mean their app directories. Infrastructure includes
+`scripts/`, `.github/`, the root lockfile/manifests and version/plugin metadata.
+Root prose, manual model changes and `LICENSE` run only Version Check. Skill
+and package Markdown is test input and follows its owning component.
 
-**Only prose skips everything.** Root `*.md`, `notes/`, `models/`, `LICENSE`
-and issue templates are read by no test, so a pull request touching only those
-runs Version Check and nothing else. Markdown under `skills/` and
-`packages/cadgen/` is test input — `test_documented_commands` runs the command
-forms a SKILL.md teaches, `test_skill_requirements` reads a skill's prose for
-the extras it reaches, `test_package_boundaries` reads the package's own
-markdown — and is therefore not in that class.
+The eight existing required check names remain unchanged; `cadgen-js` is the
+legacy GitHub check name for `@hardcore/core`, not a package to install. Desktop
+has its own conditional check. A skipped job satisfies its required check;
+renaming required checks needs a matching branch-protection update. Do not
+change repository settings as a side effect of a code refactor.
 
-**Windows runs the cadgen suite and nothing else.** What has to be proven on
-Windows is the platform-facing code: paths, locks, subprocesses, file URLs, the
-daemon, the CAD Viewer backend — all of it in `packages/cadgen`, all of it
-covered by that one suite (four of the last five user-reported bugs were
-Windows-only bugs whose coverage existed and never ran there). Bundling,
-packaging, the policy gates and the skill suites are properties of the tree;
-the JS suites are properties of a browser or of Node; none of them has a
-Windows failure mode the cadgen suite does not already exercise, so none of
-them buys a Windows runner. Windows runs `--keep-going` so one round trip
-reports every failing suite.
-
-**Every job is a required check.** `main` requires all eight names; a job
-skipped by its own condition satisfies its check, which is what lets a prose
-pull request merge. Adding a job means adding its name to branch protection
-(the `gh api` command is in the runbook below); renaming one likewise.
+A web-only edit does not run desktop or the Python engine. A UI edit exercises
+both hosts, while a desktop-only edit runs desktop and policy. Core changes
+reach every consumer. Policy checks for a host edit do not also run every skill
+CLI suite. Windows runs the Python package suite because paths, locks,
+subprocesses, file URLs and daemon behavior are platform-sensitive; Electron's
+native integration is covered separately on macOS.
 
 **The packaged runtime is built per job**, not built once and passed between
 them: `ensure_packaged_runtime` takes ~13 s, and an artifact would serialise
@@ -328,8 +315,10 @@ Canonical source directories are:
   `cadgen.viewer` (in `packages/cadgen`), and its built `dist/` ships inside the
   cadgen wheel as `cadgen/_runtime/viewer` — built at release time, never
   committed.
-- `packages/*` for the shared runtimes. `packages/cadgen` is the published
-  distribution; `packages/core` is its JS build input, and the client's.
+- `apps/desktop/` for Electron workflows and native services; `apps/docs/` for the site.
+- `packages/cadgen/` for the Python distribution and bundled runtime assets.
+- `packages/core/` for non-React CAD/client code.
+- `packages/ui/` for FileViewer, renderers, controls and shared styles.
 
 One source tree ships whole and must work in isolation outside this repo — the
 ships-alone law, enforced by the markdown-isolation check in
@@ -350,7 +339,7 @@ imports remain inside its directory.
   `packages/cadgen/README.md`.
 - Editing anything the bundlers consume? Run `scripts/bundle/bundle.sh` and
   there is nothing to commit: all of `_runtime/` is gitignored, so a JS edit
-  shows up in the diff as the cadgen-js source it was made in and reaches a user
+  shows up in the diff as the shared package source it was made in and reaches a user
   as the wheel the release builds. A rebundle used to add ~1.3 MB of
   `snapshot-render.js` to every commit that touched the renderer.
 - `VERSION` at the repo root is canonical; release tooling stamps every
@@ -358,143 +347,101 @@ imports remain inside its directory.
 
 ## Viewer Development In This Repo
 
-The three apps are docs, web and desktop. Shared framework-independent code is
-`@hardcore/core`; the complete FileViewer and injectable renderers are
-`@hardcore/ui`. Apps import public compiled exports. No app imports another
-app, and no shared package imports app source. `npm run check:boundaries`
-checks the source graph, including aliases, re-exports and dynamic imports.
+The apps are `docs`, `web` and `desktop`. Framework-independent CAD code lives
+in `@hardcore/core`; `@hardcore/ui` owns the complete FileViewer and injectable
+renderers. Apps consume compiled public exports. Apps never import another app,
+and packages never import apps. `npm run check:boundaries` checks the graph,
+including aliases, re-exports and dynamic imports.
 
-This restructure is a pure refactor. Preserve every app's UI, UX and behavior;
-renderer/package extraction is not permission to change controls, layouts,
-defaults, file actions or persistence. Package/app READMEs describe ownership.
+Package movement is a pure refactor: preserve UI, UX, file actions, defaults and
+persistence. Incorporate explicitly requested upstream features in the shared
+components so web and desktop receive the same behavior. Package/app READMEs
+state the ownership rules.
 
-Keep worktrees lightweight. Install only the workflow being exercised:
+Install from the repository root, selecting only the workflow being exercised:
 
 ```bash
-# Web/docs work (no Electron rebuild):
-npm ci --workspace @hardcore/core --workspace @hardcore/ui --workspace @hardcore/web --workspace cad-skills-docs
+# Python engine/runtime or shared core work:
+npm ci --workspace @hardcore/core
+npm run build --workspace @hardcore/core
+# Viewer and shared UI work:
+npm ci --workspace @hardcore/core --workspace @hardcore/ui --workspace @hardcore/web
 npm run build:packages
-# All JS work, including desktop:
-npm ci
+# Docs work:
+npm ci --workspace @hardcore/core --workspace cad-skills-docs
+npm run build:docs
+# Desktop work:
+npm ci --workspace @hardcore/core --workspace @hardcore/ui --workspace hardcore
 npm run native:rebuild --workspace hardcore
+npm run build:desktop
 ```
 
-There is one root lockfile. Do not run standalone installs that create nested
-lockfiles. Do not link desktop dependencies to another checkout. Rebuild the
-shared packages after editing them; Vite/Next consume their `dist` exports.
+There is one root lockfile. Do not create nested lockfiles or symlink dependency
+trees from another checkout. Rebuild shared packages after editing them;
+Vite, Next and Electron consume their `dist` exports. `npm ci` without a
+workspace filter installs the whole workspace.
 
-Shared UI tests also need `npx --no-install playwright install chromium` from
-the root (add `--with-deps` on Linux if needed). This is the npm Playwright
-browser; Python's snapshot browser may be a different Chromium revision.
-
-The backend remains `cadgen viewer`; its cwd is the served root. Create a local
-`.venv` with `requirements-dev.txt` when Python is needed. Development assets
-are explicit overrides; Python no longer searches parent directories for JS
-source or a web build:
-
-The self-contained browser regression suite checks supported formats, picking,
-placement, and Inspect/Render quality transitions. It creates tiny inputs and
-starts its own viewer with an isolated cache; no sample builds are needed.
-Bundle the client first and install Playwright Chromium from the development
-requirements:
+Create this worktree's `.venv` with `requirements-dev.txt` when Python is
+needed. For web development, invoke Vite from the directory you want served:
 
 ```bash
-scripts/test/test-viewer-browser.sh --ci                # ~2 min: format, pick, kinematics, camera (the CI job)
-scripts/test/test-viewer-browser.sh                     # ~4 min: every gate
-scripts/test/test-viewer-browser.sh --only kinematics   # one gate while working on it
+cd <the directory to serve>
+VIEWER_PYTHON=<checkout>/.venv/bin/python \
+  npm --prefix <checkout>/apps/web run dev -- --host 127.0.0.1
 ```
 
-Mesh exports (`@stl`/`@3mf`/`@glb`) and DXF previews run the checkout's live
-`packages/core/bin` builders in Node, which import `three` and friends
-from `packages/core/node_modules`. A fresh worktree has none, and cadgen
-refuses with an error naming this paragraph rather than letting the child die
-with `ERR_MODULE_NOT_FOUND`. Symlink both `node_modules` directories from the
-primary checkout (they are gitignored) or `npm install` in each package:
+Vite owns its API-only Python backend. `VIEWER_PYTHON` must name an interpreter
+that satisfies cadgen's Python floor and imports this checkout. The backend's
+stable `rootId` identifies a normalized real filesystem root across port
+changes. The web app owns URL/history and browser preferences; desktop owns
+IPC, projects and native processes. FileViewer state is scoped by root, file
+and renderer; each CAD render session owns its cache provider and worker lease.
+
+The standalone launcher is `cadgen viewer`. A source checkout can serve the
+local web build; `CADGEN_VIEWER_DIST`, `CADGEN_NODE_BUILDERS_DIR` and
+`CADGEN_BROWSER_RUNTIME_DIR` are explicit asset overrides. A wheel resolves its
+own bundled assets without the repository. Run `scripts/bundle/bundle.sh` after
+editing build inputs to refresh all packaged outputs.
+
+The self-contained browser suite creates tiny inputs and owns its project,
+viewer and cache. It never reads the sample-model corpus. Install the npm
+Playwright Chromium for UI/web tests and Python Playwright Chromium for
+snapshot tests; their revisions can differ:
 
 ```bash
-ln -s <main>/packages/core/node_modules <worktree>/packages/core/node_modules
-mkdir <worktree>/apps/web/node_modules
-for e in <main>/apps/web/node_modules/* <main>/apps/web/node_modules/.bin; do
-  [ "$(basename "$e")" = cadgen-js ] || ln -s "$e" <worktree>/apps/web/node_modules/
-done
-ln -s <worktree>/packages/core <worktree>/apps/web/node_modules/cadgen-js
+npx --no-install playwright install chromium
+.venv/bin/python -m playwright install chromium
+scripts/bundle/bundle.sh
+scripts/test/test-viewer-browser.sh --ci
+scripts/test/test-viewer-browser.sh --only kinematics
+scripts/test/test-viewer-browser.sh
 ```
 
-Do NOT symlink the Viewer's `node_modules` directory whole. Its `cadgen-js`
-entry is a RELATIVE link (`../../../packages/core`) that resolves against
-the primary checkout, so the worktree's Viewer tests and dev server would run
-the primary checkout's cadgen-js and silently ignore every cadgen-js edit in
-the worktree. Link the entries individually and point `cadgen-js` at the
-worktree's package, as above.
+Use `--with-deps` when installing browsers on Linux. The CI subset covers
+formats, picking, kinematics and camera behavior; the full browser gate adds
+placement, appearance and quality transitions. Backend tests live in
+`tests/python/packages/cadgen/viewer` and are selected with
+`scripts/test/test-python.sh --select viewer`. Client tests do not cover them.
+Nothing in `cadgen.viewer` imports the CAD kernel at module scope.
 
-For `npm run dev`, set `VIEWER_PYTHON` the same way — it defaults to `python3`,
-which is usually wrong here: on macOS `python3` is still 3.9, BELOW the
-server's floor and refused at startup with a message naming the version and
-this variable, and a `python3` without cadgen has no server to run at all. The
-dev plugin logs the interpreter it resolved:
+Launcher reuse keys on realpath(root) and an identity token derived from the
+Python runtime and selected built client. Another checkout, a different
+`--dist`, or a changed runtime cannot silently reuse a stale instance. A running
+instance that detects changed files refuses new model-data requests with a
+restart-required response. Never stop an instance you did not start; see
+`apps/web/README.md` for ports, reuse and catalog/link behavior.
 
-The stable HTTP `rootId` identifies a normalized real filesystem root across
-port changes. The web host owns URL/history and browser preferences; desktop
-owns IPC services, projects and native processes. FileViewer state is scoped by
-root, path and renderer. A CAD client owns its subscriptions and render sessions;
-each session owns cache-provider and worker lifetimes.
-
-Viewer backend tests remain under `tests/python/packages/cadgen/viewer`.
-Nothing in `cadgen.viewer` loads the CAD kernel at module scope. Launcher reuse,
-root containment, `--api-only`, fixed ports and instance ownership are unchanged.
-Never stop an instance you did not start. See `apps/web/README.md` for the
-launcher contract and catalog/link behavior.
-
-The backend's tests live at `tests/python/packages/cadgen/viewer/` and run with
-the cadgen package suite (`scripts/test/test-python.sh`, on Linux through
-`test.sh` and directly in the Windows CI job); `npm run test` covers the client's
-`src/` and `scripts/` only. `test_module_boundaries.py` holds the one structural
-law: nothing in `cadgen.viewer` imports the CAD kernel at module scope, so
-`cadgen viewer` starts as fast as `cadgen --help` and the kernel loads only in
-the compile worker.
-
-Launcher reuse keys on realpath(root) × identity token (the cadgen version plus
-a content digest of every cadgen Python runtime file and the exact built client
-selected for the launch), so another checkout's instance can never be handed
-back for a worktree's root, `--dist` cannot reuse a different client, and a
-resident instance running pre-pull or pre-rebuild code fails the match. A
-resident that sees those files change refuses new model-data requests with a
-restart-required response while leaving its existing process and view alone.
-
-Worktrees deliberately carry no `node_modules`; link them from the primary
-checkout before building. cadgen-js needs all three of its runtime
-dependencies linked — `three-mesh-bvh` included, which an earlier version of
-this recipe omitted:
-
-```bash
-# apps/web/node_modules: per-entry links with cadgen-js pointing at THIS
-# worktree -- see "Viewer Development In This Repo" above for why not one link.
-mkdir -p packages/core/node_modules
-for dep in three three-mesh-bvh meshoptimizer; do
-  ln -s <main>/packages/core/node_modules/$dep packages/core/node_modules/$dep
-done
-npm --prefix apps/web run build
-```
-
-Do not extend the trick to the docs app: Turbopack rejects a symlinked
-`apps/docs/node_modules`, so the docs app needs a real install in any checkout
-that builds it.
-
-Never let a symlink reach the published tree (see Branch Layouts):
-`scripts/github-workflows/check-builds.sh` enforces symlink-free publishes.
-
-Production-output checks are intentionally centralized. `--clean` removes the
-`_runtime` tree first, so a renamed stage or output cannot survive into the
-wheel; `--check` builds and then asserts every file each stage owes:
+Production outputs are centralized and ignored by Git:
 
 ```bash
 scripts/bundle/bundle.sh --clean
 scripts/bundle/bundle.sh --check
 ```
 
-Do not call `scripts/bundle/cadgen-runtime.sh` directly as part of routine
-iteration; its per-stage flags (`scripts/README.md`) are for debugging a
-production-output check.
+`--clean` removes old runtime outputs before building. `--check` builds and
+asserts required Node/browser outputs; wheel validation checks the complete
+packaged viewer too. Per-stage `cadgen-runtime.sh` flags are for debugging;
+normal iteration goes through `bundle.sh`.
 
 ## Branch Layout
 
@@ -533,7 +480,7 @@ The `Test` workflow runs on pushes to `main` and PRs against it: it runs
 without rebuilding it, runs documentation checks, and runs the code tests
 against that generated output. `main` commits no generated runtime at all —
 cadgen's Node builders, its snapshot bundle and the Viewer client are built from
-`packages/core` and `apps/web` on demand, and ship only inside the
+`packages/core`, `packages/ui` and `apps/web` on demand, and ship only inside the
 wheel. What IS committed and therefore checked for freshness is the version
 metadata derived from `VERSION`, asserted by the separate `Version Check` job
 (`scripts/release/check-version.sh` and `sync-version.mjs --check`).
@@ -558,14 +505,18 @@ committed bundle can drift from the source that claims to produce it.
 
 Where the built things live instead:
 
-- **CI** builds the runtime at the start of every `Test` run and tests against
-  that build (`bundle.sh --check` now means "the runtime builds and is
+- **CI** builds the runtime stages needed by each selected test job and tests
+  against that build (`bundle.sh --check` now means "the runtime builds and is
   complete", not a diff against a committed copy).
 - **The wheel** is the release artifact. `Publish Release` bundles, builds the
   wheel and sdist, asserts the wheel carries `_runtime/`, installs and
   exercises it, keeps the distribution as a workflow artifact, uploads it to
   PyPI (the install channel every skill pins against), and attaches that same
   wheel and sdist to the GitHub Release as the provenance copy of what shipped.
+- **Desktop** embeds that same wheel in a private Python runtime for each
+  platform. Installers, blockmaps and `latest*.yml` update feeds are workflow
+  artifacts until the tag job attaches them alongside the wheel and sdist on
+  the same GitHub Release. These generated assets are never committed.
 - **A checkout** builds its own: run `scripts/bundle/bundle.sh` once after
   cloning (and after pulling changes to `packages/core`); a missing runtime
   fails with a message that says so.
@@ -605,14 +556,20 @@ is involved) and deletes the branch. The merged commit is THE release commit.
    `_runtime/browser` and `_runtime/viewer`.
 3. Install test: the built wheel into a fresh venv — `cadgen --help`, `cadgen
    viewer --help`, `cadgen doctor skills/cad-viewer` — then
-   `scripts/test/test-installed.sh`; the distribution is uploaded as a workflow
+   `scripts/test/test-installed.sh --wheel <built-wheel>`; the distribution is uploaded as a workflow
    artifact (`cadgen-<version>`).
-4. **On `main` only:** PyPI upload (`skip-existing`, so a rerun is a no-op),
-   `Deploy Docs`, then the `v<VERSION>` tag and the GitHub Release, with the
-   wheel and sdist from that same artifact attached as release assets (PyPI
-   stays the install channel; the release page is the provenance copy). Nothing is
-   committed or pushed to `main` after the release PR merge: the tag points at
-   the source commit, and `git describe` on `main` is meaningful.
+4. The desktop matrix downloads that exact wheel, freezes its dependency
+   closure, builds private Python runtimes and packages macOS, Windows and
+   Linux installers. Each completed platform uploads its installers, blockmaps
+   and update feeds as workflow artifacts. See `apps/desktop/README.md` for
+   signing, packaging and local qualification.
+5. **On `main` only:** PyPI upload (`skip-existing`, so a rerun is a no-op),
+   `Deploy Docs`, then the `v<VERSION>` tag and GitHub Release. The tag job
+   attaches the wheel, sdist and all completed desktop artifacts through one
+   create/resume path; it does not rebuild them. A failed desktop platform does
+   not leave an already published Python release untagged, but failures to
+   download existing artifacts fail the job. Nothing is committed or pushed
+   to `main` after the release PR merge: the tag points at the source commit.
 
 ### Resuming and republishing
 
@@ -685,14 +642,14 @@ draft release unless `--publish` is passed.
 
 ### Repository settings
 
-`main` requires a PR with every `test.yml` job as a status check — `Version
+`main` requires a PR with eight stable status checks — `Version
 Check`, `cadgen (Linux)`, `cadgen (Windows)`, `cadgen-js`, `viewer`, `skills`,
 `docs`, `packaging` — strict (up to date with `main`), squash merges only, a
 linear history, no force pushes and no deletions. A job skipped by its path
 condition satisfies its check, so a prose pull request merges on Version Check
-alone. Adding or renaming a job means changing this list — the rules `develop`
-carried before the cutover, with the job names updated. `Prepare
-Release`'s PR merges through the same checks via the API (no "allow auto-merge"
+alone. The additional conditional `Desktop (macOS)` check exercises the app;
+changing required check names also requires updating GitHub branch protection.
+`Prepare Release`'s PR merges through the same checks via the API (no "allow auto-merge"
 repository setting is needed). `build-test` needs no protection: the
 irreversible steps never run there. Keep the repository tag
 ruleset (extend its pattern to cover `v[0-9]*.[0-9]*.[0-9]*` beside the bare
@@ -702,68 +659,13 @@ Dependency updates arrive as Dependabot PRs (`.github/dependabot.yml`: weekly,
 one grouped PR per ecosystem for minor + patch bumps, labelled `dependencies`
 so they land in the release notes' Maintenance category).
 
-### Cutover runbook (one time, manual)
+### Source-tree history
 
-`main` today holds the OLD publish tree: 29 generated commits, each with the
-release source commit as its second parent, whose trees carry the materialized
-skill runtime and no `models/`. The last is `0e94cd1d Publish 0.4.28 from develop
-to main`. A plain merge of the source branch into it conflicted on every path
-the publish transformation touched, so the source branch recorded that history
-as an ancestor instead: `release/0.5.0` carries `git merge -s ours origin/main`
-(dc4f501d), a merge whose tree is the source tree unchanged. Since then PR #273
-(`release/0.5.0` → `main`) is an ordinary pull request: the required checks run
-on it, and merging it lands the source history on `main` with the old publish
-commits reachable as ancestors. Nothing is force-pushed.
-
-Steps, in order (none of these are run by the workflow). Steps 1, 2 and 4 were
-done on 2026-09-04; `develop`'s protection is still in place until step 5.
-
-1. Record the current rules (read-only):
-   ```bash
-   gh repo view --json defaultBranchRef --jq .defaultBranchRef.name     # main
-   gh api repos/earthtojake/text-to-cad/branches/develop/protection
-   gh api repos/earthtojake/text-to-cad/rulesets
-   ```
-2. Retire the `main publish only` ruleset (it blocked updates, deletions and
-   non-fast-forward pushes and required linear history, which would refuse
-   every PR merge). Done: ruleset 17058028 deleted.
-3. Land the history: merge PR #273 once its required checks are green. Done
-   2026-09-04 as a squash (`gh pr merge 273 --squash`, `main` = 3eb1f9b8); the
-   granular source history is kept at `history/0.5.0-source`.
-4. Protect `main` the way `develop` was protected (done; the classic
-   branch-protection API):
-   ```bash
-   gh api --method PUT repos/earthtojake/text-to-cad/branches/main/protection \
-     --input - <<'JSON'
-   {"required_status_checks":{"strict":true,"contexts":["Version Check","cadgen (Linux)","cadgen (Windows)","cadgen-js","viewer","skills","docs","packaging"]},
-    "enforce_admins":false,
-    "required_pull_request_reviews":{"dismiss_stale_reviews":false,"require_code_owner_reviews":false,"required_approving_review_count":0},
-    "restrictions":null,"allow_force_pushes":false,"allow_deletions":false,"required_linear_history":true}
-   JSON
-   ```
-5. Delete the retired branches once nothing references them:
-   ```bash
-   gh api --method DELETE repos/earthtojake/text-to-cad/branches/develop/protection
-   git push origin --delete develop release/0.5.0
-   git branch -r | sed -n 's#^ *origin/\(release/.*\)#\1#p' | xargs -n1 git push origin --delete
-   ```
-6. Archive the mirror and drop its secret: `gh repo archive earthtojake/cad-viewer`
-   and `gh secret delete CAD_VIEWER_SYNC_TOKEN`. `BUILD_TEST_PUSH_TOKEN` is
-   unused too and can go.
-7. Create `build-test` from `main` (`git push origin main:build-test`) so the
-   rehearsal target exists; optionally rehearse first with
-   `gh workflow run release-prepare.yml --ref main -f bump=minor -f target=build-test`.
-8. Re-point PyPI trusted publishing at the new workflow file. A trusted
-   publisher is bound to the workflow FILENAME, and the upload used to run from
-   `release.yml`; it now runs from `release-publish.yml`. On pypi.org → project
-   `cadgen` → Publishing, add a publisher for `earthtojake/text-to-cad`,
-   workflow `release-publish.yml` (no environment), then remove the
-   `release.yml` one. Skipping this makes the first real upload fail with an
-   OIDC "invalid publisher" error after every other gate has passed; the
-   rehearsal on `build-test` cannot catch it because it never uploads.
-9. The first release after the cutover is an ordinary
-   `gh workflow run release-prepare.yml --ref main -f bump=minor` (0.5.0). The
-   gate compares against the latest tag (`0.4.28`, bare) and creates `v0.5.0`.
+Before 0.5.0, `main` held a generated publish tree copied from `develop`.
+The source-tree cutover landed on 2026-09-04 in commit `3eb1f9b8a`; the
+original granular source history remains at `history/0.5.0-source`.
+The old publish transformation and mirror workflow are retired. Use the
+current release workflow above for future releases.
 
 ## Iteration Loop
 

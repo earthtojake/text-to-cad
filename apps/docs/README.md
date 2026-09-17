@@ -28,6 +28,8 @@ local development.
 ## Build and deploy
 
 ```bash
+npm ci --workspace packages/core --workspace apps/docs
+npm run build --workspace @hardcore/core
 npm --prefix apps/docs run check    # the CI gate: lint + typecheck + build
 ```
 

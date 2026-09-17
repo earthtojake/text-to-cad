@@ -1,5 +1,5 @@
 import { createCadPreferences, type CadPreferences } from '@hardcore/ui/renderers/cad';
-import { readFileSheetTabLayoutStore, writeFileSheetTabLayoutStore } from '@hardcore/ui/renderers/cad/state';
+import { readFileSheetTabLayoutStore, writeFileSheetTabLayoutStore, readPoseTransition, writePoseTransition, POSE_TRANSITION_STORAGE_KEY } from '@hardcore/ui/renderers/cad/state';
 import { readDirectoryThemeSettingsState, readThemeSettingsState, readSeenTutorialTipIds, writeCadDirectorySessionState,
   readCadDirectorySessionState, createDirectorySessionThemeSlice, markTutorialTipSeen,
   THEME_STORAGE_KEY, THEME_STORAGE_VERSION } from '../client/workbench/persistence.js';
@@ -9,9 +9,10 @@ export function createWebCadPreferences() {
   const theme = readDirectoryThemeSettingsState();
   let syncing = false;
   const source = createCadPreferences({
-    initial: { theme: { themeId: theme.themeId, custom: theme.custom }, seenTips: readSeenTutorialTipIds(), fileSheetTabs: readFileSheetTabLayoutStore(localStorage) } as CadPreferences,
+    initial: { poseTransition: readPoseTransition(localStorage), theme: { themeId: theme.themeId, custom: theme.custom }, seenTips: readSeenTutorialTipIds(), fileSheetTabs: readFileSheetTabLayoutStore(localStorage) } as CadPreferences,
     onChange(preferences) {
       if (syncing) return;
+      if (preferences.poseTransition) writePoseTransition(localStorage, preferences.poseTransition);
       if (preferences.fileSheetTabs) writeFileSheetTabLayoutStore(localStorage, preferences.fileSheetTabs);
       if (preferences.theme) {
         try {
@@ -26,6 +27,12 @@ export function createWebCadPreferences() {
     ...source,
     connect() {
       const sync = (event: StorageEvent) => {
+        if (event.key === POSE_TRANSITION_STORAGE_KEY) {
+          syncing = true;
+          try { source.update({ poseTransition: readPoseTransition(localStorage) }); }
+          finally { syncing = false; }
+          return;
+        }
         if (event.key !== THEME_STORAGE_KEY) return;
         const next = readThemeSettingsState();
         syncing = true;

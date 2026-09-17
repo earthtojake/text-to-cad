@@ -6,11 +6,33 @@
 // thrashes the tessellator. The scheduler (viewer-side) owns time — debounce,
 // in-flight limits, cancellation — this module owns only the geometry.
 
-// Chord-tolerance ladder, relative to the component diagonal. Index 0 is the
-// tessellator default every component loads at; higher indices are finer.
-// angleTolerance stays at the tessellator default for every level: angular
-// error is scale-free, so zoom starves only the chord criterion.
-export const LOD_CHORD_LEVELS = [1.5e-3, 5e-4, 1.5e-4];
+// Effective tessellation ladder, ordered coarse -> fine. L1 is the canonical
+// viewer default and therefore keeps the existing empty-options cache key.
+// L0 loosens BOTH geometric criteria; changing chord alone is not reliably
+// cheaper for trimmed surfaces. Every non-default rung is explicit so a mesh
+// key describes the bytes it actually requested.
+export const LOD_DEFAULT_LEVEL = 1;
+export const LOD_TESSELLATION_LEVELS = Object.freeze([
+  Object.freeze({ chordTolerance: 2e-3, angleTolerance: 1.4 }),
+  Object.freeze({ chordTolerance: 1.5e-3, angleTolerance: 0.35 }),
+  Object.freeze({ chordTolerance: 5e-4, angleTolerance: 0.35 }),
+  Object.freeze({ chordTolerance: 1.5e-4, angleTolerance: 0.35 }),
+]);
+export const LOD_CHORD_LEVELS = Object.freeze(
+  LOD_TESSELLATION_LEVELS.map((level) => level.chordTolerance),
+);
+
+export function normalizeLodLevel(level) {
+  const numeric = Number(level);
+  if (!Number.isFinite(numeric)) return LOD_DEFAULT_LEVEL;
+  return Math.max(0, Math.min(LOD_TESSELLATION_LEVELS.length - 1, Math.trunc(numeric)));
+}
+
+export function lodTessellationForLevel(level) {
+  const normalized = normalizeLodLevel(level);
+  if (normalized === LOD_DEFAULT_LEVEL) return undefined;
+  return { ...LOD_TESSELLATION_LEVELS[normalized] };
+}
 
 // The band: a component upgrades when its current level projects worse than
 // UPGRADE_PX, and downgrades only when the coarser level would still sit
@@ -72,8 +94,8 @@ export function desiredLevel(sample, levels = LOD_CHORD_LEVELS, targetPx = LOD_T
 
 /**
  * The level to render next, given the current one — the hysteresis step.
- * Moves at most one level per call (the scheduler re-evaluates after each
- * swap, so sustained zoom still climbs the whole ladder).
+ * Moves at most one level per call. Pressure coarsening uses this step;
+ * settledLevel folds repeated steps for an unchanged camera sample.
  */
 export function nextLevel(sample, currentLevel, levels = LOD_CHORD_LEVELS) {
   const current = Math.max(0, Math.min(levels.length - 1, currentLevel | 0));
@@ -88,6 +110,22 @@ export function nextLevel(sample, currentLevel, levels = LOD_CHORD_LEVELS) {
     }
   }
   return current;
+}
+
+/**
+ * Final hysteresis level for one unchanged numeric sample. An upgrade's
+ * previous error (>1.25) forbids reversing below .6; a downgrade lands below
+ * .6 and cannot reverse above 1.25. There are at most N-1 moves. Keep nextLevel
+ * as the authority so threshold arithmetic and starting-rung history agree.
+ */
+export function settledLevel(sample, currentLevel, levels = LOD_CHORD_LEVELS) {
+  let level = Math.max(0, Math.min(levels.length - 1, currentLevel | 0));
+  for (let check = 0; check < Math.max(1, levels.length); check += 1) {
+    const next = nextLevel(sample, level, levels);
+    if (next === level) return level;
+    level = next;
+  }
+  throw new Error("LOD policy did not settle for an unchanged sample");
 }
 
 /**

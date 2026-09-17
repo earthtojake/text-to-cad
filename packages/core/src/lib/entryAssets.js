@@ -108,11 +108,15 @@ export function entryUrdfAssetHash(entry) {
 }
 
 export function entryMeshAssetSignature(entry) {
-  return String(
+  const mesh = String(
     entry?.kind === "assembly"
       ? entryAssetHash(entry, "glb")
       : entryMeshAssetHash(entry)
   );
+  const appearance = entrySourceFormat(entry) === RENDER_FORMAT.STEP && !entry?.editingPreview
+    ? normalizeString(entry?.appearanceHash)
+    : "";
+  return appearance ? `${mesh}:${appearance}` : mesh;
 }
 
 export function entryReferenceAssetSignature(entry) {
@@ -167,11 +171,8 @@ export function entryPoseUrl(entry) {
     : "";
 }
 
-export function entryRenderModuleUrl(entry) {
-  // The render module beside a STEP document (<name>.step.js), published by
-  // the catalog when the file exists. Authored, discovered by name, loaded by
-  // the client — the source of the viewer's Animation tab.
+export function entrySourceSidecarUrl(entry) {
   return entrySourceFormat(entry) === RENDER_FORMAT.STEP
-    ? normalizeString(entry?.renderModuleUrl)
+    ? normalizeString(entry?.sourceUrl)
     : "";
 }

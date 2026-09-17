@@ -1,13 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
+import vm from "node:vm";
 
 import {
   applyColorSchemeToDocument,
   COLOR_SCHEME_STORAGE_KEY,
+  COLOR_SCHEME_COOKIE_NAME,
+  COLOR_SCHEME_COOKIE_MAX_AGE,
   DARK_COLOR_SCHEME_ID,
   DEFAULT_COLOR_SCHEME_ID,
   LIGHT_COLOR_SCHEME_ID,
   readColorSchemePreference,
+  readColorSchemeCookie,
   resolveColorSchemeMode,
   writeColorSchemePreference
 } from "./colorScheme.js";

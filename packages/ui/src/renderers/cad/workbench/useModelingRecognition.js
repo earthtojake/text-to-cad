@@ -1,9 +1,10 @@
+import { resolveSurfaceComponents } from "./surfaceResolution.js";
 import { useEffect, useRef, useState } from 'react';
 import { resolvePackageAssetUrl } from '@hardcore/core/client';
 const EMPTY_RESULTS = {};
 
 /** One worker at a time; completed components survive tab switches and repeated instances. */
-export function useModelingRecognition(meshUrl, enabled) {
+export function useModelingRecognition(meshUrl, enabled, { client } = {}) {
   const [document,setDocument]=useState(null),[results,setResults]=useState({}),[error,setError]=useState('');
   const [retry,setRetry]=useState(0);
   const cache=useRef(new Map());
@@ -26,6 +27,7 @@ export function useModelingRecognition(meshUrl, enabled) {
   useEffect(()=>{
     if(!enabled || !descriptor)return;
     let cancelled=false,worker=null,timer;
+    const controller = new AbortController();
     const stop=()=>{worker?.terminate();worker=null;clearTimeout(timer);};
     async function recognize() {
       // Component identity is shared; face references are scoped to occurrences in the UI.
@@ -33,7 +35,12 @@ export function useModelingRecognition(meshUrl, enabled) {
       for(const id of components) {
         if(cancelled)return;
         if(cache.current.has(id))continue;
-        const surf=descriptor.components[id]?.surf;
+        const component=descriptor.components[id];
+        let surf=component?.surf ? resolvePackageAssetUrl(meshUrl, component.surf) : "";
+        if (!surf && component?.surfaceInput && client) {
+          try { surf=(await resolveSurfaceComponents(descriptor, [{ cid:id, surfaceInput:component.surfaceInput, surfaceObject:component.surfaceObject }], { client, signal:controller.signal })).get(id)?.surfUrl || ""; }
+          catch (error) { if (cancelled) return; cache.current.set(id,{error:error.message}); setResults(current=>({...current,[id]:{error:error.message}})); continue; }
+        }
         const result=await new Promise(resolve=>{
           let settled=false;
           const finish=value=>{if(settled || cancelled)return;settled=true;stop();resolve(value);};
@@ -43,7 +50,7 @@ export function useModelingRecognition(meshUrl, enabled) {
             timer=setTimeout(()=>finish({error:'Recognition timed out for this part.'}),10000);
             worker.onmessage=event=>finish(event.data);
             worker.onerror=()=>finish({error:'Could not recognize this part.'});
-            worker.postMessage({url:resolvePackageAssetUrl(meshUrl,surf)});
+            worker.postMessage({url:surf});
           }catch{finish({error:'Could not start recognition.'});}
         });
         if(cancelled)return;
@@ -52,8 +59,8 @@ export function useModelingRecognition(meshUrl, enabled) {
       }
     }
     void recognize();
-    return ()=>{cancelled=true;stop();};
-  },[enabled,descriptor,meshUrl,retry]);
+    return ()=>{cancelled=true;controller.abort();stop();};
+  },[enabled,descriptor,meshUrl,retry,client]);
   const retryFailed=()=>{
     for(const [id,result] of cache.current)if(result.error)cache.current.delete(id);
     setResults(Object.fromEntries(cache.current));setRetry(n=>n+1);

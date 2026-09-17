@@ -51,6 +51,10 @@ it("preserves the dirty editor and its save revision when a project label change
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() => expect(window.hardcore.explorer.writeText).toHaveBeenCalledWith(expect.objectContaining({ content: "unsaved draft", expectedRevision: "r1" })));
   await waitFor(() => expect(screen.queryByLabelText("Unsaved changes")).not.toBeInTheDocument());
+  // The explorer owns a debounced IPC write; finish it before jsdom is torn down.
+  await waitFor(() => expect(window.hardcore.explorer.saveTabs).toHaveBeenCalledWith(
+    expect.objectContaining({ projectId: project.id, tabs: expect.arrayContaining([expect.objectContaining({ path: "notes.txt" })]) }),
+  ));
 });
 
 it("creates and releases an image asset without a data-URL network fetch", async () => {

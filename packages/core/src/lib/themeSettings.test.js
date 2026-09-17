@@ -131,6 +131,7 @@ test("workbench-light preset uses neutral material treatment while preserving so
 
 test("workbench-dark preset uses the workbench dark color treatment", () => {
   const dark = cloneThemePresetSettings("workbench-dark");
+  const light = cloneThemePresetSettings("workbench-light");
 
   assert.equal(THEME_PRESETS.some((preset) => preset.id === "dark"), false);
   assert.equal(dark.colorMode, THEME_COLOR_MODES.DARK);
@@ -146,10 +147,7 @@ test("workbench-dark preset uses the workbench dark color treatment", () => {
   assert.equal(dark.background.radialInner, "#404040");
   assert.equal(dark.background.radialOuter, "#2b2b2b");
   assert.equal(dark.floor.color, "#383838");
-  assert.equal(dark.lighting.spot.color, "#b3d4f2");
-  assert.equal(dark.lighting.point.color, "#bfd8f0");
-  assert.equal(dark.lighting.ambient.color, "#dfe7f0");
-  assert.equal(dark.lighting.hemisphere.groundColor, "#333d4b");
+  assert.deepEqual(dark.lighting, light.lighting);
   assert.equal(getThemePresetIdForSettings(dark), "workbench-dark");
 });
 

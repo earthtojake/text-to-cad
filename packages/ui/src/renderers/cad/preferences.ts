@@ -4,6 +4,7 @@ import { FILE_SHEET_TAB_LAYOUT_STORAGE_KEY } from './workbench/fileSheetTabLayou
 export interface CadPreferences {
   theme?: { themeId: string; custom: JsonValue | null };
   seenTips?: string[];
+  poseTransition?: { animate: boolean; speed: number };
   fileSheetTabs?: { [kind: string]: JsonValue };
 }
 export interface CadPreferenceSource {
@@ -33,6 +34,7 @@ export function createCadPreferences({ initial = {}, onChange }: {
 
 export const CAD_LEGACY_PREFERENCE_KEYS = Object.freeze({
   theme: 'cad-viewer:theme',
+  poseTransition: 'cad-viewer:pose-transition:v1',
   themeVersion: 13,
   directory: 'cad-viewer:directory-session:v1',
   tips: 'cad-viewer:tutorial-tips:v1',

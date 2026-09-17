@@ -84,7 +84,6 @@ declare const document: {
 declare function getComputedStyle(node: DomNode): { getPropertyValue(name: string): string };
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const screenshots = path.join(appRoot, "tests", "e2e", "__screenshots__");
 const isMac = process.platform === "darwin";
 
 let app: ElectronApplication;
@@ -423,7 +422,7 @@ async function shootTitlebar(name: string) {
     [inset, TITLEBAR_HEIGHT] as const,
   );
   await page.screenshot({
-    path: path.join(screenshots, name),
+    path: test.info().outputPath(name),
     animations: "disabled",
     clip: { x: 0, y: 0, width: 720, height: 96 },
   });

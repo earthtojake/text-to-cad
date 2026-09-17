@@ -1,9 +1,9 @@
 import { _electron as electron, expect, test } from '@playwright/test';
 import path from 'node:path';
-import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from './cad-runtime.ts';
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = path.resolve(appRoot, '../..');
 // Playwright REQUIRES the first argument to be a destructuring pattern, and this
@@ -12,7 +12,7 @@ const root = path.resolve(appRoot, '../..');
 // eslint-disable-next-line no-empty-pattern
 test('CAD toolbar compacts to its scene and restores every tool on widening', async ({}, testInfo) => {
   test.setTimeout(120000);
-  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'hardcore-toolbar-'));
+  const profile = cadTestProfile('toolbar');
   const output = testInfo.outputPath('screenshots');
   fs.mkdirSync(output, {
     recursive: true
@@ -21,20 +21,35 @@ test('CAD toolbar compacts to its scene and restores every tool on widening', as
     args: [`${root}/apps/desktop/out/main/index.js`, `--user-data-dir=${profile}`],
     env: {
       ...process.env,
+      ...cadRegistryEnvironment(profile),
       NODE_ENV: 'test',
       HARDCORE_E2E_HIDDEN: '1',
       HARDCORE_FAKE_AGENT: `${root}/apps/desktop/tests/fake-agent/index.mjs`,
-      CADGEN_DAEMON: '0'
+      CADGEN_DAEMON: '0',
+      CADGEN_CACHE_DIR: path.join(profile, 'cad-cache'),
+      CADGEN_DAEMON_STATE_DIR: path.join(profile, 'cad-daemon')
     }
   });
+  let page;
   try {
-    const page = await app.firstWindow();
-    test.skip((await page.evaluate(() => window.hardcore.runtime.status())).state !== 'ready', 'CAD runtime required');
+    page = await app.firstWindow();
+    test.skip(!cadRuntimeReady(await page.evaluate(() => window.hardcore.runtime.status())), 'CAD runtime required');
     const sourceRequests = [];
     page.on('request', request => { if (request.url().includes('/__cad/design-outline')) sourceRequests.push(request.url()); });
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
     let loading = false;
+    await page.route(/\/__cad\/catalog(?:\?|$)/, async route => {
+      if (!loading) return route.continue();
+      const response = await route.fetch();
+      const catalog = await response.json();
+      // A build with a saved view keeps that view interactive. Model the cold
+      // build contract here: no complete geometry exists to display yet.
+      await route.fulfill({ response, json: { ...catalog, entries: catalog.entries.map(entry =>
+        entry.file.endsWith('/import-smoke.step')
+          ? { ...entry, url: '', hash: '', bytes: 0 }
+          : entry) } });
+    });
     await page.route('**/__cad/artifact?*', route => loading ? route.fulfill({
       json: {
         ok: true,
@@ -71,9 +86,9 @@ test('CAD toolbar compacts to its scene and restores every tool on widening', as
       name: 'File',
       exact: false
     }).click();
-    await page.getByLabel('Filter files').fill('models/examples/imported/import-smoke.step');
+    await page.getByLabel('Filter files').fill('tests/fixtures/cad/import-smoke.step');
     await page.getByRole('option', {
-      name: 'models/examples/imported/import-smoke.step',
+      name: 'tests/fixtures/cad/import-smoke.step',
       exact: false
     }).first().click();
     await expect(page.getByLabel('Zoom level percent', {
@@ -179,6 +194,7 @@ test('CAD toolbar compacts to its scene and restores every tool on widening', as
     await expect(page.getByRole('tab', { name: 'Source features' })).toHaveCount(0);
     console.info('PASS: semantic groups at both widths; View and Capture menus; Draw; Pan/Orbit; focus; scene bounds; loading; no renderer errors');
   } finally {
+    await page?.unrouteAll({ behavior: 'wait' });
     await app.close();
     fs.rmSync(profile, {
       recursive: true,
