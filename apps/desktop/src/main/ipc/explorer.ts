@@ -294,8 +294,13 @@ export const explorerHandlers = {
         listPaths(rootOf(projectId, root), directory, limit === undefined ? {} : { limit }),
       ),
 
-    stat: ({ projectId, root, path: target }: AtPath) =>
-      fsCall(() => statFile(rootOf(projectId, root), target)),
+    stat: ({ projectId, root: rootPath, path: target }: AtPath) =>
+      fsCall(async () => {
+        const root = rootOf(projectId, rootPath);
+        const entry = await statFile(root, target);
+        await watchers?.watchEntry(root, entry);
+        return entry;
+      }),
 
     exists: ({ projectId, root, paths }: { projectId: string; root?: string; paths: string[] }) =>
       fsCall(() => pathKinds(rootOf(projectId, root), paths)),
