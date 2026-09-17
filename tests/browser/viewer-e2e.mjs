@@ -29,6 +29,7 @@ function parseArgs(argv) {
 }
 
 const args = parseArgs(process.argv.slice(2));
+const diagnosticDir = args.out || process.env.VIEWER_TEST_DIAGNOSTICS_DIR || "";
 const root = path.resolve(args.dir || ".");
 const fixtures = [
   // `measure` mirrors renderCapabilities: a view that cannot measure has NO Measure
@@ -142,9 +143,9 @@ async function newPage({ lod = true } = {}) {
     try {
       await Promise.race([Promise.all([...responseReads]), new Promise(resolve => { responseTimer = setTimeout(resolve, 3000); })]);
     } finally { clearTimeout(responseTimer); }
-    if (args.out && !page.isClosed()) {
-      fs.mkdirSync(args.out, { recursive: true });
-      const stem = path.join(args.out, `diagnostic-${activeGate}`);
+    if (diagnosticDir && !page.isClosed()) {
+      fs.mkdirSync(diagnosticDir, { recursive: true });
+      const stem = path.join(diagnosticDir, `diagnostic-${activeGate}`);
       let timer;
       try {
         const state = await Promise.race([
@@ -162,7 +163,7 @@ async function newPage({ lod = true } = {}) {
           new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('diagnostic state timed out')), 3000); }),
         ]);
         fs.writeFileSync(`${stem}.json`, JSON.stringify({ ...state, errors: errors.slice(-15).map(error => error.slice(0, 2500)) }, null, 2));
-        await page.screenshot({ path: `${stem}.png`, timeout: 3000 });
+        if (args.out) await page.screenshot({ path: `${stem}.png`, timeout: 3000 });
       } catch (error) {
         console.error(`  diagnostic ${activeGate}: ${error.message}`);
       } finally { clearTimeout(timer); }
@@ -364,12 +365,51 @@ async function settleLod(page, lod) {
   }, null, { timeout: 60_000 });
 }
 
-// Park the pointer over the panel so a hover highlight cannot join the mask,
-// and settle the frame before reading it.
+// LOD completion means the replacement is adopted, not that the WebGL command
+// queue has reached the compositor. In particular, SwiftShader can still be
+// drawing after a fixed sleep. Let the hover-clear render run, finish its GPU
+// work, then yield two frames for presentation before asking Chromium to copy
+// the framebuffer. Keep the screenshot's own deadline unchanged.
+async function presentedFrame(page) {
+  const ready = await page.waitForFunction(async () => {
+    const startedAt = performance.now();
+    const nextFrame = () => new Promise(resolve => requestAnimationFrame(resolve));
+    await nextFrame();
+    await nextFrame();
+    const canvas = document.querySelector('canvas');
+    if (!canvas || canvas.getBoundingClientRect().width === 0 || getComputedStyle(canvas).visibility === 'hidden') return false;
+    const gl = canvas.getContext('webgl2');
+    if (!gl || gl.isContextLost()) throw new Error('capture: visible CAD canvas has no live WebGL2 context');
+    const gpuStartedAt = performance.now();
+    gl.finish();
+    const gpuMs = performance.now() - gpuStartedAt;
+    await nextFrame();
+    await nextFrame();
+    return { gpuMs, presentationMs: performance.now() - startedAt, width: canvas.width, height: canvas.height };
+  }, null, { timeout: 60_000, polling: 100 });
+  try {
+    return await ready.jsonValue();
+  } finally {
+    await ready.dispose();
+  }
+}
+
+// Park the pointer over the panel so a hover highlight cannot join the mask.
 async function restingShot(page) {
   await page.mouse.move(viewport.width - 4, viewport.height - 4);
-  await page.waitForTimeout(400);
-  return PNG.sync.read(await page.screenshot());
+  const frame = await presentedFrame(page);
+  const startedAt = Date.now();
+  try {
+    const png = PNG.sync.read(await page.screenshot());
+    const captureMs = Date.now() - startedAt;
+    if (frame.presentationMs > 1000 || captureMs > 1000) {
+      console.log(`  capture: ${JSON.stringify({ ...frame, captureMs })}`);
+    }
+    return png;
+  } catch (error) {
+    console.error(`  capture failed after presentation: ${JSON.stringify({ ...frame, captureMs: Date.now() - startedAt })}`);
+    throw error;
+  }
 }
 
 async function saveReview(page, name) {

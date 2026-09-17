@@ -216,7 +216,18 @@ jobs:
         run: scripts/test/test-viewer-launch.sh
 
       - name: Exercise the bundled viewer in Chromium
+        env:
+          VIEWER_TEST_DIAGNOSTICS_DIR: ${{ runner.temp }}/viewer-browser
         run: scripts/test/test-viewer-browser.sh --ci
+
+      - name: Upload failed viewer diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: viewer-browser-diagnostics
+          path: ${{ runner.temp }}/viewer-browser
+          if-no-files-found: ignore
+          retention-days: 3
 
   # The policy gates read the repo's markdown and manifests; the skill suites run the
   # cadgen CLIs. Repository properties, so Linux only.
