@@ -3189,8 +3189,17 @@ export default function CadWorkspace({
     [drawingBends]
   );
 
+  // A drawing that names the model it documents (CADGEN_SOURCE in its header, written
+  // by cadgen's @drawing) links to it: "3D" on such a sheet opens that model, which is
+  // what the button means for a document. Set during render, below, once the catalog
+  // lookup and the entry opener exist.
+  const openDrawingSourceRef = useRef(null);
   const handleDrawingViewModeChange = useCallback((mode) => {
     const next = mode === "2d" ? "2d" : "3d";
+    if (next === "3d" && openDrawingSourceRef.current) {
+      openDrawingSourceRef.current();
+      return;
+    }
     setDrawingViewMode(next);
     if (next === "2d") {
       // "z" is the top face in VIEW_PLANE_FACES — looking straight down at a flat pattern
@@ -6945,6 +6954,27 @@ export default function CadWorkspace({
       setSidebarOpen(false);
     }
   }, [activateEntryTab, entryMap, isDesktop, writeCadParam]);
+
+  // The model a drawing documents, resolved against the drawing's own folder.
+  const drawingSourceEntry = useMemo(() => {
+    const relative = String(drawingGeometry?.sourceModel || "").trim();
+    if (!selectedEntryIsDrawingDocument || !relative || !selectedEntry) {
+      return null;
+    }
+    const drawingPath = cadFileParamForEntry(selectedEntry).replace(/\\/g, "/");
+    const base = drawingPath.includes("/") ? drawingPath.slice(0, drawingPath.lastIndexOf("/") + 1) : "";
+    const parts = [];
+    for (const segment of `${base}${relative}`.replace(/\\/g, "/").split("/")) {
+      if (!segment || segment === ".") continue;
+      if (segment === "..") { parts.pop(); continue; }
+      parts.push(segment);
+    }
+    const wanted = parts.join("/").toLowerCase();
+    return catalogEntries.find((entry) => cadFileParamForEntry(entry).replace(/\\/g, "/").toLowerCase() === wanted) || null;
+  }, [drawingGeometry, selectedEntryIsDrawingDocument, selectedEntry, catalogEntries]);
+  openDrawingSourceRef.current = drawingSourceEntry
+    ? () => handleSelectEntry(fileKey(drawingSourceEntry))
+    : null;
 
   const handleRevealEntryInExplorerView = useCallback((entry) => {
     const targetKey = fileKey(entry);

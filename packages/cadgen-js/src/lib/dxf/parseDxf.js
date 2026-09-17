@@ -177,8 +177,16 @@ function parseRecordPairs(text) {
   return pairs;
 }
 
+/** The custom header property a drawing uses to name the model it documents: a path
+ *  relative to the DXF itself, written by cadgen's @drawing. */
+export const DXF_SOURCE_MODEL_PROPERTY = "CADGEN_SOURCE";
+
 function parseHeader(records) {
   let sourceUnits = 0;
+  // $CUSTOMPROPERTYTAG / $CUSTOMPROPERTY come in pairs: the tag names the property,
+  // the next $CUSTOMPROPERTY carries its value (both as group code 1).
+  const customProperties = {};
+  let pendingTag = "";
   for (let index = 0; index < records.length; index += 1) {
     const record = records[index];
     if (record.code !== 9) {
@@ -191,11 +199,18 @@ function parseHeader(records) {
     }
     if (variableName === "$INSUNITS") {
       sourceUnits = Math.max(0, Math.trunc(toFiniteNumber(valueRecord.value, 0)));
+    } else if (variableName === "$CUSTOMPROPERTYTAG") {
+      pendingTag = String(valueRecord.value || "").trim();
+    } else if (variableName === "$CUSTOMPROPERTY" && pendingTag) {
+      customProperties[pendingTag] = String(valueRecord.value || "").trim();
+      pendingTag = "";
     }
   }
   return {
     sourceUnits,
-    defaultThicknessMm: 0
+    defaultThicknessMm: 0,
+    customProperties,
+    sourceModel: customProperties[DXF_SOURCE_MODEL_PROPERTY] || ""
   };
 }
 
@@ -1389,6 +1404,9 @@ export function parseDxf(dxfText, { fileRef = "", sourceUrl = "" } = {}) {
     sourceUrl,
     sourceUnits: header.sourceUnits,
     unitsScaleMm,
+    // The model this drawing documents, relative to the DXF, when the file says.
+    sourceModel: header.sourceModel,
+    customProperties: header.customProperties,
     defaultThicknessMm: formatNumber(header.defaultThicknessMm),
     bounds: {
       minX: 0,

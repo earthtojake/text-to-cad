@@ -159,6 +159,29 @@ class DrawingSheetTests(unittest.TestCase):
             # matplotlib writes the page tree uncompressed: the tree's /Count is the page count.
             self.assertIn(b"/Count 2", pdf[0].read_bytes())
 
+    def test_a_drawing_from_a_step_names_that_step_in_its_header(self) -> None:
+        from build123d import export_step
+        from cadgen.drawing import drawing, Sheet, source_step
+        import ezdxf
+
+        with temporary_directory(prefix="tmp-cad-drawing-") as td:
+            root = Path(td)
+            (root / "STEP").mkdir()
+            (root / "src").mkdir()
+            export_step(_part(), str(root / "STEP" / "block.step"))
+            out = root / "DXF" / "block_drawing.dxf"
+
+            @drawing(out=str(out), pdf=False)
+            def block_drawing():
+                part = source_step(str(root / "STEP" / "block.step"))
+                sheet = Sheet("A4")
+                sheet.view(part, "top", at=(100, 100))
+                return sheet
+
+            block_drawing()
+            doc = ezdxf.readfile(out)
+            self.assertEqual(dict(doc.header.custom_vars), {"CADGEN_SOURCE": "../STEP/block.step"})
+
     def test_unknown_view_and_sheet_are_refused(self) -> None:
         from cadgen.drawing import Sheet
 
