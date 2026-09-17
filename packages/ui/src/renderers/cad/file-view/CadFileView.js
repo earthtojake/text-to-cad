@@ -2222,6 +2222,34 @@ function CadFileViewSurface({
   const drawingGeometryUrl = selectedEntryIsDrawing
     ? String(entryAssetUrl(selectedEntry, "dxf") || "")
     : "";
+  // A dimensioned DOCUMENT is shown as ezdxf renders it (the same renderer that prints
+  // the PDF): the server answers /__cad/drawing with SVG for the same file ref the asset
+  // URL carries, minus whichever layers are switched off.
+  const drawingSvgUrl = useMemo(() => {
+    if (!drawingGeometryUrl || !selectedEntryIsDrawingDocument) {
+      return "";
+    }
+    let fileRef = "";
+    let origin = "";
+    try {
+      // The asset URL is relative in the web viewer and absolute (the viewer server's
+      // origin) in the desktop; the drawing route lives wherever the asset does.
+      const parsed = new URL(drawingGeometryUrl, "http://cad.local");
+      fileRef = parsed.searchParams.get("file") || "";
+      origin = parsed.origin === "http://cad.local" ? "" : parsed.origin;
+    } catch {
+      fileRef = "";
+    }
+    if (!fileRef) {
+      return "";
+    }
+    const params = new URLSearchParams({ file: fileRef });
+    const hidden = (Array.isArray(drawingHiddenLayers) ? drawingHiddenLayers : []).filter(Boolean);
+    if (hidden.length) {
+      params.set("hide", hidden.join(","));
+    }
+    return `${origin}/__cad/drawing?${params.toString()}`;
+  }, [drawingGeometryUrl, selectedEntryIsDrawingDocument, drawingHiddenLayers]);
   useEffect(() => {
     if (!drawingGeometryUrl) {
       setDrawingGeometry(null);
@@ -2339,6 +2367,21 @@ function CadFileViewSurface({
     }
     viewerRef.current?.activateDefaultViewPlane?.();
   }, []);
+
+  // A dimensioned drawing is a sheet: it opens looking straight down at it. The 3D toggle
+  // is still there for anyone who wants the tilt; the default is the drawing's own view.
+  const documentPlanKeyRef = useRef(null);
+  useEffect(() => {
+    if (!selectedEntryIsDrawingDocument) {
+      documentPlanKeyRef.current = null;
+      return;
+    }
+    if (documentPlanKeyRef.current === selectedKey) {
+      return;
+    }
+    documentPlanKeyRef.current = selectedKey;
+    handleDrawingViewModeChange("2d");
+  }, [selectedEntryIsDrawingDocument, selectedKey, handleDrawingViewModeChange]);
 
   const handleViewerZoomPercentChange = useCallback((nextZoomPercent) => {
     viewerRef.current?.applyZoomPercent?.(nextZoomPercent);
@@ -6352,6 +6395,7 @@ function CadFileViewSurface({
             : null}
                 drawingGeometry={selectedEntryIsDrawing ? drawingGeometry : null}
                 drawingIsDocument={selectedEntryIsDrawingDocument}
+                drawingSvgUrl={drawingSvgUrl}
                 drawingThicknessMm={selectedEntryIsDrawing && !renderSession.enabled
             ? drawingThicknessMm
             : DXF_DEFAULT_THICKNESS_MM}

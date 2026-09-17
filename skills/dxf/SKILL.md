@@ -296,7 +296,11 @@ python path/to/source.py --force
 The CAD Viewer catalogs `.dxf` files only (artifacts, never scripts) and is a static
 visualization tool: it renders the `.dxf` that exists on disk (parsing and meshing it
 itself — 2D line work for dimensioned drawings, a fold-able 3D flat pattern for cut
-layouts) and never runs a script. A drawing with no `.dxf` yet simply does not appear
+layouts) and never runs a script. A dimensioned drawing from another CAD package renders
+with its dimensions: each DIMENSION's rendered block (witness lines, dimension line,
+arrowheads, value) is expanded as the authoring package drew it, TEXT and MTEXT are
+placed by their own alignment, and LEADER lines are drawn. A DIMENSION whose file
+carries no rendered block shows only its value at the text point. A drawing with no `.dxf` yet simply does not appear
 until its script has been run; regenerating after edits is likewise the script's job.
 There is no in-viewer export. An imported `.dxf` renders directly with no artifact
 management.

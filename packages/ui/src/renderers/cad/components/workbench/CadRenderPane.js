@@ -279,6 +279,7 @@ export default function CadRenderPane({
   drawingMaterialColor = null,
   drawingGeometry = null,
   drawingIsDocument = false,
+  drawingSvgUrl = "",
   drawingThicknessMm = 0,
   onCameraZoomPercentChange = null,
   onLodCameraChange = null,
@@ -475,6 +476,7 @@ export default function CadRenderPane({
         drawingMaterialColor={drawingMaterialColor}
         drawingGeometry={drawingGeometry}
         drawingIsDocument={drawingIsDocument}
+      drawingSvgUrl={drawingSvgUrl}
         drawingThicknessMm={drawingThicknessMm}
         onCameraZoomPercentChange={onCameraZoomPercentChange}
         onLodCameraChange={onLodCameraChange}
