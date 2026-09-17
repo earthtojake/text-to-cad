@@ -76,3 +76,30 @@ updates:
         update-types:
           - minor
           - patch
+    # Two ceilings are raised by hand, and a bot cannot tell that it has raised
+    # them: both are satisfied by the version already installed, so widening
+    # them changes nothing that CI can run and everything about what a LATER
+    # install resolves.
+    #
+    # cadquery-ocp-novtk is the geometry kernel. OCCT 7.8 -> 7.9 re-hashed ~20k
+    # STEP lines in one downstream part with no design change, so a major is a
+    # geometry event, not a dependency event. It is also invisible to CI while
+    # build123d's own `<8.0` caps the resolver: a widening PR passes every job
+    # without OCP 8 ever being installed, then takes effect silently the day
+    # build123d widens too.
+    #
+    # build123d is capped for the reason pyproject.toml gives at length -- cadgen
+    # replaces its op memo, its topology entry points and `Compound.__init__`,
+    # and a release that moves those stops applying the patch rather than
+    # failing. 0.11 -> 0.12 is a semver MINOR, so without this it would arrive
+    # inside the grouped minor/patch PR above.
+    #
+    # Raise either ceiling in its own PR, after running the suite against it.
+    ignore:
+      - dependency-name: cadquery-ocp-novtk
+        update-types:
+          - version-update:semver-major
+      - dependency-name: build123d
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
