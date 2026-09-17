@@ -337,6 +337,12 @@ assemblies with hundreds of small parts; the byte limit still evicts large
 metadata results. It retains no SURF bytes, workers,
 pending work or failures. The descriptor uses the existing package cache. A new
 surface identity reruns recognition, and retry processes only failed components.
+On a warm reopen, recognition reads the accepted component identities from the
+completed package only after the root, origin, entry revision and runtime
+descriptor all match. This copies small identity records once, without composing
+or copying geometry. Completed metadata then needs no surface request or worker;
+a missing package identity or evicted recognition result follows the usual exact
+surface-resolution path. The existing cache byte limits remain unchanged.
 Every displayed operation and selection remains scoped to its assembly occurrence.
 
 Independent local OCP validation rebuilds the inferred complete plans and compares

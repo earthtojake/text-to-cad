@@ -2,18 +2,22 @@ import { resolveSurfaceComponents } from "./surfaceResolution.js";
 import { useEffect, useRef, useState } from 'react';
 import { resolvePackageAssetUrl } from '@hardcore/core/client';
 import { loadPackageDescriptor } from '../components/workbench/hooks/packageDescriptorCache.js';
+import { completedPackages, completedPackageRevision } from '../render/completedPackageCache.js';
 import { completedModelingRecognition, modelingRecognitionKey } from './modelingRecognitionCache.js';
 const EMPTY_RESULTS = {};
 
 /** One worker at a time; completed components survive tab switches and repeated instances. */
-export function useModelingRecognition(meshUrl, enabled, { client } = {}) {
+export function useModelingRecognition(meshUrl, enabled, { client, entry } = {}) {
   const [document,setDocument]=useState(null),[results,setResults]=useState({}),[error,setError]=useState('');
   const [retry,setRetry]=useState(0);
   const cache=useRef(new Map());
-  const descriptor=document?.url===meshUrl ? document.value : null;
+  const entryRef=useRef(entry);entryRef.current=entry;
+  const entryRevision=completedPackageRevision(entry);
+  const documentKey=JSON.stringify([meshUrl,entryRevision]);
+  const descriptor=document?.key===documentKey ? document.value : null;
   useEffect(()=>{
     cache.current.clear();setResults({});setDocument(null);setError('');
-  },[meshUrl]);
+  },[documentKey]);
   useEffect(()=>{
     if(!enabled || !meshUrl || descriptor)return;
     const controller=new AbortController();setError('');
@@ -22,10 +26,10 @@ export function useModelingRecognition(meshUrl, enabled, { client } = {}) {
         if(controller.signal.aborted)return;
         if(!value)throw new Error('Geometry is unavailable.');
         if(!value.components || !value.occurrences?.length)throw new Error('This file has no supported STEP geometry.');
-        setDocument({url:meshUrl,value});
+        setDocument({key:documentKey,value});
       }).catch(e=>{if(!controller.signal.aborted)setError(e.message);});
     return ()=>controller.abort();
-  },[enabled,meshUrl,descriptor,retry]);
+  },[enabled,meshUrl,documentKey,descriptor,retry]);
   useEffect(()=>{
     if(!enabled || !descriptor)return;
     let cancelled=false,worker=null,timer;
@@ -33,12 +37,13 @@ export function useModelingRecognition(meshUrl, enabled, { client } = {}) {
     const stop=()=>{worker?.terminate();worker=null;clearTimeout(timer);};
     async function recognize() {
       // Component identity is shared; face references are scoped to occurrences in the UI.
+      const accepted=completedPackages.peekComponentIdentities(client,entryRef.current,{descriptor});
       const components=[...new Set(descriptor.occurrences.map(o=>o.component))];
       for(const id of components) {
         if(cancelled)return;
         if(cache.current.has(id))continue;
         const component=descriptor.components[id];
-        let identity=component;
+        let identity=accepted?.[id] || component;
         let surf=component?.surf ? resolvePackageAssetUrl(meshUrl, component.surf) : "";
         const known=completedModelingRecognition.get(modelingRecognitionKey(identity,surf));
         if(known){cache.current.set(id,known);setResults(current=>({...current,[id]:known}));continue;}
@@ -73,7 +78,7 @@ export function useModelingRecognition(meshUrl, enabled, { client } = {}) {
     }
     void recognize();
     return ()=>{cancelled=true;controller.abort();stop();};
-  },[enabled,descriptor,meshUrl,retry,client]);
+  },[enabled,descriptor,meshUrl,entryRevision,retry,client]);
   const retryFailed=()=>{
     for(const [id,result] of cache.current)if(result.error)cache.current.delete(id);
     setResults(Object.fromEntries(cache.current));setRetry(n=>n+1);

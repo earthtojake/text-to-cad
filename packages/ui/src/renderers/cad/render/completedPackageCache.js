@@ -1,14 +1,15 @@
 import { buildComposedPackageMeshData } from "@hardcore/core/lib/assembly/meshData.js";
 import { entryAssetUrl, entryMeshAssetSignature } from "@hardcore/core/lib/entryAssets.js";
-import { entrySourceFormat, RENDER_FORMAT } from "@hardcore/core/lib/fileFormats.js";
+import { entrySourceFormat } from "@hardcore/core/lib/fileFormats.js";
+import { renderCapabilities } from "@hardcore/core/lib/renderCapabilities.js";
 import { renderAssetCacheStats, surfTessellationCacheKey } from "@hardcore/core/lib/renderAssetClient.js";
 import { lodTessellationForLevel, normalizeLodLevel } from "@hardcore/core/lib/surf/lodPolicy.js";
 
 const MAX_PACKAGES = 8;
 const MAX_BYTES = 256 * 1024 * 1024;
 
-function revision(entry) {
-  if (entrySourceFormat(entry) !== RENDER_FORMAT.STEP || entry?.editingPreview
+export function completedPackageRevision(entry) {
+  if (!renderCapabilities(entrySourceFormat(entry)).topology || entry?.editingPreview
       || entry?.runtimeSurfaceViewReplacement || !entry?.file || !entry?.hash) return "";
   return JSON.stringify([entry.file, entry.kind, entry.hash, entryAssetUrl(entry, "glb"),
     entryMeshAssetSignature(entry), entry.documentHash || "", entry.sourceSidecar?.appearance || null]);
@@ -85,16 +86,21 @@ export function createCompletedPackageCache({ maxEntries = MAX_PACKAGES, maxByte
     return { entries: entries.size, typedBytes, metadataBytes, bytes: typedBytes + metadataBytes,
       maxEntries, maxBytes, buffers };
   };
+  const matchingEntry = (client, entry, descriptor) => {
+    const id = key(client, entry), cached = entries.get(id), expected = completedPackageRevision(entry);
+    if (!cached) return null;
+    if (!expected || cached.revision !== expected
+        || (descriptor && cached.descriptorIdentity !== descriptorIdentity(descriptor))) {
+      entries.delete(id);
+      return null;
+    }
+    entries.delete(id); entries.set(id, cached);
+    return cached;
+  };
   return {
     get(client, entry, { descriptor = null } = {}) {
-      const id = key(client, entry), cached = entries.get(id), expected = revision(entry);
+      const cached = matchingEntry(client, entry, descriptor);
       if (!cached) return null;
-      if (!expected || cached.revision !== expected
-          || (descriptor && cached.descriptorIdentity !== descriptorIdentity(descriptor))) {
-        entries.delete(id);
-        return null;
-      }
-      entries.delete(id); entries.set(id, cached);
       try {
         const data = copyDisplayData(cached.value).value;
         // No cached occurrence/material objects are handed to the scene. This
@@ -103,12 +109,23 @@ export function createCompletedPackageCache({ maxEntries = MAX_PACKAGES, maxByte
           meshUrl: entryAssetUrl(entry, "glb"), complete: true, publishCount: 1,
           meshData: buildComposedPackageMeshData(data.descriptor, data.componentMeshDataByCid) };
       } catch {
-        entries.delete(id);
+        entries.delete(key(client, entry));
         return null;
       }
     },
+    // Recognition only needs the accepted D/O bindings. Validate the whole view
+    // once, then copy these small records without traversing geometry or exposing
+    // the cache's mutable metadata. A missing descriptor cannot prove this view.
+    peekComponentIdentities(client, entry, { descriptor } = {}) {
+      if (!descriptor) return null;
+      const cached = matchingEntry(client, entry, descriptor);
+      if (!cached) return null;
+      return Object.fromEntries(Object.entries(cached.value.componentIdentityByCid).map(([cid, identity]) => [cid, {
+        surfaceInput: identity.surfaceInput, surfaceObject: identity.surfaceObject,
+      }]));
+    },
     set(client, entry, context) {
-      const expected = revision(entry), id = key(client, entry);
+      const expected = completedPackageRevision(entry), id = key(client, entry);
       // A declined newer publication must not expose a previous detail tier
       // under the same document revision on the next mount.
       entries.delete(id);
