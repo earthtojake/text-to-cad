@@ -13,7 +13,7 @@
 import faviconUrl from "../../assets/favicon.ico";
 
 import ViewerLinks from "./ViewerLinks";
-import { Moon, Sun } from "lucide-react";
+import { Monitor, Moon, Sun } from "lucide-react";
 import { Button } from "@hardcore/ui/primitives/button";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@hardcore/ui/primitives/dropdown-menu";
 import { COLOR_SCHEMES } from "../../ui/colorScheme.js";
@@ -33,7 +33,15 @@ export default function ViewerTopBar({ colorSchemePreference = "system", resolve
           <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:text-foreground" aria-label={label} title={label}><AppearanceIcon className="size-3.5" aria-hidden="true" /></Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-36">
             <DropdownMenuRadioGroup value={colorSchemePreference} onValueChange={onColorSchemePreferenceChange}>
-              {COLOR_SCHEMES.map(option => <DropdownMenuRadioItem key={option.id} value={option.id} className="text-xs">{option.label}</DropdownMenuRadioItem>)}
+              {COLOR_SCHEMES.map(option => {
+                const Icon = option.id === "light" ? Sun : option.id === "dark" ? Moon : Monitor;
+                return (
+                  <DropdownMenuRadioItem key={option.id} value={option.id} className="text-xs">
+                    <Icon className="size-3.5" aria-hidden="true" />
+                    {option.label}
+                  </DropdownMenuRadioItem>
+                );
+              })}
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>
