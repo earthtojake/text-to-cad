@@ -58,7 +58,8 @@ FLAT_KIND = "assembly-package"
 # A fingerprint only reports damage when a later write could not reproduce it,
 # and a filesystem stamps writes from a clock of its own resolution: ~15.6 ms on
 # Windows (whose ``st_ctime`` is the CREATION time and never moves for a rewrite
-# at all), whole seconds on NFS and FAT. A same-size rewrite inside the tick the
+# at all), whole seconds on NFS and two whole seconds on FAT. A same-size
+# rewrite inside the tick the
 # verified read observed is therefore invisible to every stat field. Such a read
 # is never remembered: :func:`_stamp_is_settled` admits an object only once the
 # read is far enough past its write that the next write must stamp differently.
@@ -428,7 +429,12 @@ def _validate_structure(tree: Any, *, native: bool = False) -> None:
 _STAMP_MTIME_NS = 4
 # A clock that ticks every T ns can only stamp multiples of T, so an observed
 # stamp's trailing zeros bound the resolution that produced it from below.
-_TIMESTAMP_TICKS_NS = (1_000_000_000, 15_625_000, 1_000_000)
+# Coarsest first: a stamp is attributed to the coarsest clock that could have
+# produced it, because over-estimating the tick costs one cache miss while
+# under-estimating certifies a read a later write can still reproduce. FAT's
+# 2 s write time divides by 1 s, so it needs an entry of its own -- read as a
+# 1 s clock it would admit a rewrite in the back half of its own tick.
+_TIMESTAMP_TICKS_NS = (2_000_000_000, 1_000_000_000, 15_625_000, 1_000_000)
 
 
 def _object_stamp(digest: str) -> tuple:
@@ -585,7 +591,7 @@ def capture_tree(tree_hash: str, *, retain_payloads: bool = True) -> tuple[dict,
             after = _object_stamp(digest)
         except (OSError, ValueError):
             after = None
-        if before is None or before != after or not _stamp_is_settled(after):
+        if before is None or after is None or before != after or not _stamp_is_settled(after):
             cacheable = False
         else:
             stamps[digest] = after

@@ -21,6 +21,9 @@ from cadgen.store.objects import iter_objects, object_path
 from cadgen.viewer.surfaces import SurfaceSubscribers, pinned_surface_object
 
 WINDOWS_TICK_NS = 15_625_000
+# Twice the coarsest tick trees.py knows (FAT's 2 s write time), and a whole
+# multiple of every finer one.
+SETTLE_OFFSET_NS = 4_000_000_000
 
 
 class PendingSurface(Future):
@@ -72,10 +75,17 @@ class MetadataCapture(unittest.TestCase):
         stamp a different mtime, so on a coarse-clock filesystem (Windows: a
         ~15.6 ms tick) whether a hit is admitted at all depends on how long the
         fixture took. These tests are about the fingerprint, not the clock.
+
+        The offset is a whole multiple of every tick in
+        ``trees._TIMESTAMP_TICKS_NS``, so aging an object cannot change which
+        clock its stamp is attributed to -- only how far past it the read sits.
+        Twice the coarsest tick leaves the admission a tick of headroom; an
+        offset that is not such a multiple (1.5 s, say) would reclassify a
+        whole-second stamp and age it against the wrong resolution.
         """
         for _digest, path in iter_objects():
             stat = path.stat()
-            os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns - 2_000_000_000))
+            os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns - SETTLE_OFFSET_NS))
 
     def test_metadata_releases_each_payload_and_native_capture_stays_owned(self):
         live = set()
