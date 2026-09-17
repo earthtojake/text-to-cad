@@ -86,7 +86,14 @@ def private_address(key: str) -> str:
     """
     if os.name == "nt":
         return rf"\\.\pipe\cadgen-b{PROTOCOL}-{key}"
-    return str(Path(tempfile.gettempdir()) / f"cadgen-b{PROTOCOL}-{key}.sock")
+    name = f"cadgen-b{PROTOCOL}-{key}.sock"
+    address = Path(tempfile.gettempdir()) / name
+    # tempfile honors TMPDIR, which callers may deliberately point at a deep
+    # private profile. Keep enough room for macOS' 104-byte sockaddr_un limit;
+    # the random authenticated name remains private even in the shared /tmp.
+    if len(os.fsencode(address)) >= 100:
+        address = Path("/tmp") / name
+    return str(address)
 
 
 def _authkey_path(address: str) -> Path:

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   PYTHON_BUILD,
+  CADGEN_RUNTIME_FILES,
   TARGETS,
   bundledRuntime,
   hostTarget,
@@ -87,6 +88,12 @@ describe("the layout", () => {
     fs.writeFileSync(layout.marker, JSON.stringify({ target: "mac-arm64", cadgen: "9.9.8", python: "3.13.15" }));
     expect(bundledRuntime(out, "mac-arm64", "9.9.9")).toBeNull();
     fs.writeFileSync(layout.marker, JSON.stringify({ target: "mac-arm64", cadgen: "9.9.9", python: "3.13.15" }));
+    expect(bundledRuntime(out, "mac-arm64", "9.9.9")).toBeNull();
+    for (const name of CADGEN_RUNTIME_FILES) {
+      const file = path.join(layout.sitePackages, "cadgen", name);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, "built");
+    }
     expect(bundledRuntime(out, "mac-arm64", "9.9.9")).toMatchObject({ cadgen: "9.9.9", target: "mac-arm64" });
   });
 });

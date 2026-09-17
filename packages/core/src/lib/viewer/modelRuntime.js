@@ -5,6 +5,7 @@ import {
   readBoundsCenter,
   syncMaterialClipPlanes
 } from "../../common/cadScene.js";
+import { cadEdgeInstanceSets } from "../../common/cadEdgeInstances.js";
 import {
   clampSceneModelRadius,
   getShadowCameraSettings
@@ -78,7 +79,8 @@ export function applyRuntimeModelBounds(THREE, runtime, bounds, sceneScaleMode, 
       : 0;
     const shadowSettings = getShadowCameraSettings(sceneScaleMode, {
       radius,
-      keyLightDistance
+      keyLightDistance,
+      shadowMapSize
     });
     runtime.keyLight.shadow.mapSize.set(shadowMapSize, shadowMapSize);
     runtime.keyLight.shadow.bias = -0.00025;
@@ -126,7 +128,10 @@ export function syncRuntimeStepClipPlane(runtime, clipSettings) {
   }
   for (const record of Array.isArray(runtime.displayRecords) ? runtime.displayRecords : []) {
     syncMaterialClipPlanes(record.material, clipPlanes);
-    syncMaterialClipPlanes(record.edgeMaterial, clipPlanes);
+    syncMaterialClipPlanes(record.edgeMaterials, clipPlanes);
+  }
+  for (const set of cadEdgeInstanceSets(runtime)) {
+    syncMaterialClipPlanes(set.materials, clipPlanes);
   }
   syncObjectClipPlanes(runtime.facePickGroup, clipPlanes);
   syncObjectClipPlanes(runtime.edgePickGroup, clipPlanes);
@@ -134,4 +139,14 @@ export function syncRuntimeStepClipPlane(runtime, clipSettings) {
   syncObjectClipPlanes(runtime.surfaceLineGroup, clipPlanes);
   syncObjectClipPlanes(runtime.topologyDisplayEdgeLine, clipPlanes);
   syncSectionCaps(runtime, clipPlane);
+  // Clipping changes draw materials, not occurrence membership, transforms or
+  // colours. A visual/effects pass still reconciles those independently.
+  const seenSurfaceSets = new Set();
+  for (const sets of [runtime.cadSurfaceInstanceSets, runtime.cadScene?.runtime?.cadSurfaceInstanceSets]) {
+    for (const set of sets || []) {
+      if (!set || set.disposed || seenSurfaceSets.has(set)) continue;
+      seenSurfaceSets.add(set);
+      syncMaterialClipPlanes(set.object?.material, clipPlanes);
+    }
+  }
 }

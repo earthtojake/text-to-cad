@@ -2,9 +2,9 @@ import {
   CAMERA_PROJECTION,
   DEFAULT_DISPLAY_EDGE_SETTINGS,
   DISABLED_DISPLAY_EDGE_SETTINGS,
-  normalizeCameraProjection,
-  normalizeDisplayEdgeSettings
+  normalizeCameraProjection
 } from "./displaySettings.js";
+import { normalizeThemeEdgeSettings } from "./cadInk.js";
 
 export {
   CAD_EDGE_CLASS_IDS,
@@ -1125,9 +1125,9 @@ const WORKBENCH_BASE_THEME_SETTINGS = Object.freeze({
 const WORKBENCH_DARK_FLOOR_COLOR = "#383838";
 
 const WORKBENCH_DARK_THEME_SETTINGS = Object.freeze({
-  ...DARKOAL_THEME_SETTINGS,
+  ...WORKBENCH_BASE_THEME_SETTINGS,
   background: {
-    ...DARKOAL_THEME_SETTINGS.background,
+    ...WORKBENCH_BASE_THEME_SETTINGS.background,
     solidColor: "#333333",
     linearStart: "#3b3b3b",
     linearEnd: "#2b2b2b",
@@ -1135,7 +1135,7 @@ const WORKBENCH_DARK_THEME_SETTINGS = Object.freeze({
     radialOuter: "#2b2b2b"
   },
   floor: {
-    ...DARKOAL_THEME_SETTINGS.floor,
+    ...WORKBENCH_BASE_THEME_SETTINGS.floor,
     color: WORKBENCH_DARK_FLOOR_COLOR,
     enabled: false,
     // Only the colors here reach the dark preset: mode overrides swap colors,
@@ -1144,25 +1144,6 @@ const WORKBENCH_DARK_THEME_SETTINGS = Object.freeze({
     ...createFloorGridSettings(WORKBENCH_DARK_FLOOR_COLOR, { enabled: true, opacity: 0.16 }),
     ...createFloorAxisSettings(WORKBENCH_DARK_FLOOR_COLOR, { enabled: true, opacity: 0.28 })
   },
-  lighting: {
-    ...DARKOAL_THEME_SETTINGS.lighting,
-    spot: {
-      ...DARKOAL_THEME_SETTINGS.lighting.spot,
-      color: "#b3d4f2"
-    },
-    point: {
-      ...DARKOAL_THEME_SETTINGS.lighting.point,
-      color: "#bfd8f0"
-    },
-    ambient: {
-      ...DARKOAL_THEME_SETTINGS.lighting.ambient,
-      color: "#dfe7f0"
-    },
-    hemisphere: {
-      ...DARKOAL_THEME_SETTINGS.lighting.hemisphere,
-      groundColor: "#333d4b"
-    }
-  }
 });
 
 // Workbench ships as two distinct, single-palette themes (light + dark) rather
@@ -1841,7 +1822,7 @@ export function normalizeThemeSettings(value = {}) {
   // Terminal's neon-green linework); when it does, the viewer/snapshot use it
   // as the base edge appearance. Only carry it when explicitly declared.
   if (source.edges && typeof source.edges === "object" && !Array.isArray(source.edges)) {
-    normalized.edges = normalizeDisplayEdgeSettings(source.edges);
+    normalized.edges = normalizeThemeEdgeSettings(source.edges);
   }
   normalized.modeColors = normalizeThemeModeColors(source.modeColors, normalized);
 

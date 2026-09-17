@@ -14,12 +14,22 @@ import {
   solveUrdfLinkWorldTransforms,
   transformPoint
 } from "./kinematics.js";
+import { displayTransformForPart } from "../../common/stepModuleEffects.js";
 
 function translationTransform(x, y, z) {
   return [
     1, 0, 0, x,
     0, 1, 0, y,
     0, 0, 1, z,
+    0, 0, 0, 1
+  ];
+}
+
+function scaleTransform(factor) {
+  return [
+    factor, 0, 0, 0,
+    0, factor, 0, 0,
+    0, 0, factor, 0,
     0, 0, 0, 1
   ];
 }
@@ -318,6 +328,36 @@ test("posed mesh bounds update after joint motion", () => {
   assert.equal(rotatedPose.meshData.parts.length, 3);
 });
 
+// The camera that renders this robot is grounded on the zero pose, so a posed
+// wrapper has to keep that box beside its live one. Without it a viewer has no
+// way back: `bounds` is the only box it holds, and re-fitting to that one makes
+// the zoom a function of wherever the joints happen to be.
+test("a posed robot carries the zero-pose bounds whatever the joints are driven to", () => {
+  const meshGeometry = buildUrdfMeshGeometry(sampleUrdf(), PART_MESHES);
+  const zeroPose = poseUrdfMeshData(sampleUrdf(), meshGeometry, { base_to_arm: 0 });
+  const rotatedPose = poseUrdfMeshData(sampleUrdf(), meshGeometry, { base_to_arm: 90 });
+  const farPose = poseUrdfMeshData(sampleUrdf(), meshGeometry, { base_to_arm: -60 });
+
+  assert.deepEqual(zeroPose.meshData.restBounds, zeroPose.meshData.bounds,
+    "at the joint defaults the two boxes are the same box");
+  assert.notDeepEqual(rotatedPose.meshData.bounds, zeroPose.meshData.bounds);
+  assert.deepEqual(rotatedPose.meshData.restBounds, zeroPose.meshData.bounds);
+  assert.deepEqual(farPose.meshData.restBounds, zeroPose.meshData.bounds);
+});
+
+test("an in-place URDF pose republishes the same zero-pose bounds", () => {
+  const meshGeometry = buildUrdfMeshGeometry(sampleUrdf(), PART_MESHES);
+  const restBounds = applyUrdfPoseToMeshData(sampleUrdf(), meshGeometry, {}).meshData.restBounds;
+  // Posing mutates the wrapper, so a second pose reads back parts a previous
+  // pose already moved -- the rest box has to be rebuilt from sourceBounds, not
+  // accumulated from the last one.
+  applyUrdfPoseToMeshData(sampleUrdf(), meshGeometry, { base_to_arm: 90 });
+  const posed = applyUrdfPoseToMeshData(sampleUrdf(), meshGeometry, { base_to_arm: -60 });
+
+  assert.deepEqual(posed.meshData.restBounds, restBounds);
+  assert.notDeepEqual(posed.meshData.bounds, restBounds);
+});
+
 test("posing URDF mesh data reuses the static geometry buffers", () => {
   const meshGeometry = buildUrdfMeshGeometry(sampleUrdf(), PART_MESHES);
   const zeroPose = poseUrdfMeshData(sampleUrdf(), meshGeometry, { base_to_arm: 0 });
@@ -557,6 +597,70 @@ test("URDF mesh geometry can keep source meshes for lightweight viewer rendering
   });
 });
 
+// Regression: a robot's link meshes are never in world space -- each keeps its own mesh
+// file's units and frame, and `<mesh scale>` + the visual origin + the joint FK live in the
+// part transform. The renderer only applies that transform when the mesh data declares
+// partTransformsBaked: false. Without the flag every link drew once, unscaled, at the
+// origin -- a metre-scale robot rendered as a pile of millimetre-scale link meshes.
+test("URDF mesh geometry declares that part transforms are not baked", () => {
+  const urdfData = {
+    rootLink: "base_link",
+    rootWorldTransform: translationTransform(0, 0, 0),
+    links: [
+      {
+        name: "base_link",
+        visuals: [
+          {
+            id: "base_link:visual",
+            partFileRef: "link-mesh",
+            localTransform: scaleTransform(0.001)
+          }
+        ]
+      },
+      {
+        name: "second_link",
+        visuals: [
+          {
+            id: "second_link:visual",
+            partFileRef: "link-mesh",
+            localTransform: scaleTransform(0.001)
+          }
+        ]
+      }
+    ],
+    joints: [
+      {
+        name: "fixed_joint",
+        type: "fixed",
+        parentLink: "base_link",
+        childLink: "second_link",
+        originTransform: translationTransform(0.3, 0, 0)
+      }
+    ]
+  };
+  const meshes = new Map([["link-mesh", partMesh({ min: [0, 0, 0], max: [100, 10, 10] })]]);
+
+  for (const options of [{ lightweight: true }, {}]) {
+    const meshGeometry = buildUrdfMeshGeometry(urdfData, meshes, options);
+    assert.equal(meshGeometry.partTransformsBaked, false);
+
+    const posed = poseUrdfMeshData(urdfData, meshGeometry, {});
+    const [first, second] = posed.meshData.parts;
+    // displayTransformForPart is the renderer's hook: it hands the part transform to the
+    // scene ONLY for unbaked mesh data, so this is the assertion that fails without the flag.
+    assert.deepEqual(displayTransformForPart(posed.meshData, first), first.transform);
+    assert.deepEqual(displayTransformForPart(posed.meshData, second), second.transform);
+    // The mesh stays in its own units; the scale and the joint offset live in the transform.
+    assert.equal(first.transform[0], 0.001);
+    assert.equal(second.transform[0], 0.001);
+    assert.equal(second.transform[3], 0.3);
+    assert.deepEqual(posed.meshData.bounds, {
+      min: [0, 0, 0],
+      max: [0.4, 0.01, 0.01]
+    });
+  }
+});
+
 test("URDF mesh data leaves uncolored robots for theme fill colors", () => {
   const urdfData = {
     rootLink: "base_link",
@@ -605,4 +709,97 @@ test("URDF mesh data leaves uncolored robots for theme fill colors", () => {
     ["o1.2.10", "o1.2.11"]
   );
   assert.equal(meshGeometry.colors.length, 0);
+});
+
+// A link mesh whose colour is PER PART rather than per vertex — a GLB with one material per
+// primitive is the ordinary case. `has_source_colors` is true, the `colors` buffer is empty,
+// and the colour sits on `parts[].color`. The composer only read the buffer, so an authored
+// two-colour mesh rendered as one grey link with nothing said about it.
+function multiMaterialPartMesh() {
+  const vertices = new Float32Array([
+    0, 0, 0, 1, 0, 0, 0, 1, 0,
+    2, 0, 0, 3, 0, 0, 2, 1, 0
+  ]);
+  return {
+    vertices,
+    normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1]),
+    indices: new Uint32Array([0, 1, 2, 3, 4, 5]),
+    bounds: { min: [0, 0, 0], max: [3, 1, 0] },
+    colors: new Float32Array(0),
+    has_source_colors: true,
+    parts: [
+      { name: "shell", color: "#e4572e", vertexOffset: 0, vertexCount: 3 },
+      { name: "cap", color: "#17bebb", vertexOffset: 3, vertexCount: 3 }
+    ]
+  };
+}
+
+function multiMaterialUrdf() {
+  return {
+    rootLink: "base_link",
+    rootWorldTransform: translationTransform(0, 0, 0),
+    links: [
+      {
+        name: "base_link",
+        visuals: [
+          {
+            id: "base_link:hand",
+            label: "hand",
+            partFileRef: "hand-part",
+            localTransform: translationTransform(0, 0, 0)
+          }
+        ]
+      }
+    ],
+    joints: []
+  };
+}
+
+test("a link mesh coloured by material keeps its colours through the URDF composer", () => {
+  const meshes = new Map([["hand-part", multiMaterialPartMesh()]]);
+
+  const meshGeometry = buildUrdfMeshGeometry(multiMaterialUrdf(), meshes);
+
+  assert.equal(meshGeometry.has_source_colors, true);
+  assert.deepEqual(
+    rounded(meshGeometry.colors.slice(0, 9)),
+    rounded(repeatedTriplet(linearHexTriplet("#e4572e"))),
+    "the first primitive keeps its own material colour"
+  );
+  assert.deepEqual(
+    rounded(meshGeometry.colors.slice(9, 18)),
+    rounded(repeatedTriplet(linearHexTriplet("#17bebb"))),
+    "and so does the second"
+  );
+});
+
+test("the lightweight composer reports the same material-coloured link as coloured", () => {
+  const meshes = new Map([["hand-part", multiMaterialPartMesh()]]);
+
+  const meshGeometry = buildUrdfMeshGeometry(multiMaterialUrdf(), meshes, { lightweight: true });
+
+  assert.equal(meshGeometry.has_source_colors, true);
+  assert.equal(meshGeometry.parts[0].hasSourceColors, true);
+  assert.equal(
+    meshGeometry.parts[0].sourceMesh.colors.length,
+    meshGeometry.parts[0].sourceMesh.vertices.length,
+    "the part the renderer draws from carries a full colour buffer"
+  );
+});
+
+test("a URDF <material> still wins over the mesh's own materials", () => {
+  const urdfData = multiMaterialUrdf();
+  urdfData.links[0].visuals[0].color = "#2b2f33";
+  const meshes = new Map([["hand-part", multiMaterialPartMesh()]]);
+
+  const meshGeometry = buildUrdfMeshGeometry(urdfData, meshes);
+
+  assert.deepEqual(
+    rounded(meshGeometry.colors.slice(0, 9)),
+    rounded(repeatedTriplet(linearHexTriplet("#2b2f33")))
+  );
+  assert.deepEqual(
+    rounded(meshGeometry.colors.slice(9, 18)),
+    rounded(repeatedTriplet(linearHexTriplet("#2b2f33")))
+  );
 });

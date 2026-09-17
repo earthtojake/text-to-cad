@@ -443,24 +443,75 @@ test("parseSdf ignores CAD Viewer link pose playback tracks as static metadata",
   assert.equal(sdfData.sdf.staticMetadata.plugins[0].customAnimation, true);
 });
 
-test("parseSdf keeps unsupported geometry as static placeholders", () => {
-  const sdfData = parseWithRoot(sdfRoot([
+// Geometry the renderer cannot draw used to become a silent placeholder: the composer
+// dropped it and the model rendered as empty space at exit 0. URDF has always thrown on
+// unsupported visual geometry; SDF now matches it.
+test("parseSdf refuses a visual mesh with no uri and a visual shape with no dimensions", () => {
+  const withMeshNoUri = () => parseWithRoot(sdfRoot([
     el("model", { name: "robot" }, [
-      el("link", { name: "base_link" }, [
-        el("visual", {}, [
-          el("geometry", {}, [el("mesh")])
+      el("link", { name: "base_link" }, [el("visual", {}, [el("geometry", {}, [el("mesh")])])])
+    ])
+  ]));
+  assert.throws(withMeshNoUri, /SDF link base_link visual 1 is a <mesh> with no <uri>/);
+
+  const withEmptyBox = () => parseWithRoot(sdfRoot([
+    el("model", { name: "robot" }, [
+      el("link", { name: "base_link" }, [el("visual", {}, [el("geometry", {}, [el("box")])])])
+    ])
+  ]));
+  // A <box> IS drawable; saying "box is unsupported" would send the reader to the wrong place.
+  assert.throws(withEmptyBox, /visual 1 is a <box> with missing or non-positive dimensions/);
+});
+
+test("parseSdf refuses a VISUAL shape the renderer has never drawn, naming the supported set", () => {
+  for (const shape of ["capsule", "plane", "ellipsoid", "heightmap", "polyline"]) {
+    const parse = () => parseWithRoot(sdfRoot([
+      el("model", { name: "robot" }, [
+        el("link", { name: "ground" }, [el("visual", {}, [el("geometry", {}, [el(shape)])])])
+      ])
+    ]));
+    assert.throws(parse, new RegExp(`SDF link ground visual 1 uses <${shape}> geometry`), shape);
+    assert.throws(parse, /Supported: box, cylinder, mesh, sphere/, shape);
+  }
+});
+
+// Collision geometry is never drawn, so an undrawable one costs the picture nothing and must
+// not block a load. A <plane> ground collision is the commonest shape in a real Gazebo world.
+test("parseSdf loads a world whose COLLISION geometry it cannot draw, and counts it", () => {
+  const sdfData = parseWithRoot(sdfRoot([
+    el("model", { name: "world" }, [
+      el("link", { name: "ground" }, [
+        el("visual", { name: "v" }, [
+          el("geometry", {}, [el("box", {}, [textEl("size", "10 10 0.1")])])
         ]),
-        el("collision", {}, [
-          el("geometry", {}, [el("box")])
+        el("collision", { name: "c" }, [
+          el("geometry", {}, [el("plane", {}, [textEl("size", "100 100")])])
         ])
+      ]),
+      el("link", { name: "pillar" }, [
+        el("collision", { name: "c" }, [el("geometry", {}, [el("capsule")])]),
+        el("collision", { name: "c2" }, [el("geometry", {}, [el("mesh")])])
       ])
     ])
   ]));
 
-  assert.equal(sdfData.sdf.unsupportedVisualCount, 1);
-  assert.equal(sdfData.sdf.unsupportedCollisionCount, 1);
-  assert.equal(sdfData.links[0].visuals[0].unsupportedGeometry, "mesh");
-  assert.equal(sdfData.links[0].collisions[0].unsupportedGeometry, "box");
+  const byName = new Map(sdfData.links.map((entry) => [entry.name, entry]));
+  assert.deepEqual(byName.get("ground").visuals[0].primitive, { type: "box", size: [10, 10, 0.1] });
+  assert.equal(byName.get("ground").collisions[0].unsupportedGeometry, "plane");
+  assert.equal(byName.get("pillar").collisions[0].unsupportedGeometry, "capsule");
+  assert.equal(byName.get("pillar").collisions[1].unsupportedGeometry, "mesh");
+  // The count is the Viewer's non-blocking channel: its SDF sheet shows "Unsupported geom."
+  assert.equal(sdfData.sdf.unsupportedCollisionCount, 3);
+  assert.equal(sdfData.sdf.unsupportedVisualCount, 0);
+});
+
+test("parseSdf refuses a visual with no geometry at all", () => {
+  assert.throws(
+    () => parseWithRoot(sdfRoot([
+      el("model", { name: "robot" }, [el("link", { name: "ghost" }, [el("visual", {}, [])])])
+    ])),
+    /SDF link ghost visual 1 has no <geometry>\. Give it one of: box, cylinder, mesh, sphere/
+  );
 });
 
 test("parseSdf rejects unsupported pose frames", () => {
@@ -480,4 +531,111 @@ test("parseSdf rejects unsupported pose frames", () => {
     ])),
     /unknown frame|unsupported pose frame/
   );
+});
+
+// Box, cylinder and sphere are the ordinary way an SDF link carries geometry. Until the
+// parser read them, every such visual became a placeholder with no `primitive`, the
+// composer dropped it for having neither a primitive nor a mesh, and a model built that way
+// rendered as empty space — exit 0, no warning, nothing on screen.
+test("parseSdf reads box, cylinder and sphere link geometry", () => {
+  const sdfData = parseWithRoot(sdfRoot([
+    el("model", { name: "rig" }, [
+      el("link", { name: "plate" }, [
+        el("visual", { name: "plate_v" }, [
+          el("geometry", {}, [el("box", {}, [textEl("size", "0.4 0.24 0.02")])]),
+          el("material", {}, [textEl("diffuse", "0.85 0.15 0.12 1")])
+        ])
+      ]),
+      el("link", { name: "mast" }, [
+        el("visual", { name: "mast_v" }, [
+          el("geometry", {}, [el("cylinder", {}, [
+            textEl("radius", "0.03"),
+            textEl("length", "0.18")
+          ])])
+        ])
+      ]),
+      el("link", { name: "lamp" }, [
+        el("visual", { name: "lamp_v" }, [
+          el("geometry", {}, [el("sphere", {}, [textEl("radius", "0.018")])])
+        ])
+      ])
+    ])
+  ]));
+
+  const byName = new Map(sdfData.links.map((entry) => [entry.name, entry]));
+  const plate = byName.get("plate");
+  const mast = byName.get("mast");
+  const lamp = byName.get("lamp");
+  assert.deepEqual(plate.visuals[0].primitive, { type: "box", size: [0.4, 0.24, 0.02] });
+  assert.equal(plate.visuals[0].unsupportedGeometry, undefined);
+  // A `<material>` on a primitive visual reaches it, exactly as it does on a mesh visual.
+  assert.equal(plate.visuals[0].color, "#d9261f");
+  assert.deepEqual(mast.visuals[0].primitive, { type: "cylinder", radius: 0.03, length: 0.18 });
+  assert.deepEqual(lamp.visuals[0].primitive, { type: "sphere", radius: 0.018 });
+  assert.equal(sdfData.sdf.unsupportedVisualCount, 0);
+});
+
+test("parseSdf refuses a drawable VISUAL shape whose dimensions are degenerate", () => {
+  assert.throws(
+    () => parseWithRoot(sdfRoot([
+      el("model", { name: "rig" }, [
+        el("link", { name: "base_link" }, [
+          el("visual", {}, [el("geometry", {}, [el("box", {}, [textEl("size", "0.4 0")])])])
+        ])
+      ])
+    ])),
+    /is a <box> with missing or non-positive dimensions/
+  );
+  // The same shape in a collision is counted, not refused.
+  const sdfData = parseWithRoot(sdfRoot([
+    el("model", { name: "rig" }, [
+      el("link", { name: "base_link" }, [
+        el("visual", {}, [el("geometry", {}, [el("box", {}, [textEl("size", "1 1 1")])])]),
+        el("collision", {}, [el("geometry", {}, [el("cylinder", {}, [textEl("radius", "0.03")])])])
+      ])
+    ])
+  ]));
+  assert.equal(sdfData.links[0].collisions[0].unsupportedGeometry, "cylinder");
+});
+
+// The Viewer serves a description from `/__cad/asset?file=<path>`, so the mesh is relative
+// to the QUERY. Resolving it against the PATH gave `/__cad/meshes/wedge.stl`, the backend
+// 404'd it, and every SDF naming a mesh failed to load — while the URDF beside it, same
+// relative path, loaded fine, because only the URDF parser knew about that route.
+test("parseSdf resolves a mesh URI against a /__cad/asset description URL", () => {
+  const sdfData = parseWithRoot(
+    sdfRoot([
+      el("model", { name: "rig" }, [
+        el("link", { name: "boom" }, [
+          el("visual", { name: "boom_v" }, [
+            el("geometry", {}, [el("mesh", {}, [textEl("uri", "meshes/wedge.stl")])])
+          ])
+        ])
+      ])
+    ]),
+    "/__cad/asset?file=%2Fworkspace%2Frobots%2Fworld.sdf&v=abc123"
+  );
+
+  assert.equal(
+    sdfData.links[0].visuals[0].meshUrl,
+    "/__cad/asset?file=%2Fworkspace%2Frobots%2Fmeshes%2Fwedge.stl&v=abc123",
+    "the mesh keeps the asset route and the description's cache-busting v"
+  );
+});
+
+test("parseSdf still resolves a mesh URI against a plain static URL", () => {
+  const sdfData = parseWithRoot(
+    sdfRoot([
+      el("model", { name: "rig" }, [
+        el("link", { name: "boom" }, [
+          el("visual", { name: "boom_v" }, [
+            el("geometry", {}, [el("mesh", {}, [textEl("uri", "../shared/wedge.stl")])])
+          ])
+        ])
+      ])
+    ]),
+    "/workspace/robots/world.sdf"
+  );
+
+  assert.equal(sdfData.links[0].visuals[0].meshUrl, "/workspace/shared/wedge.stl");
 });

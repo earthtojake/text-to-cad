@@ -59,19 +59,21 @@ snapshot_runtime_need_install() {
   local three="$2"
   local meshoptimizer="$3"
   [ -x "$deps_dir/node_modules/.bin/esbuild" ] || return 0
-  node <<EOF || return 0
+  # Pass the directory as an argument so Git Bash translates it for Node on
+  # Windows; embedding `/d/a/...` in JavaScript leaves Node unable to open it.
+  node -e '
 const deps = {
-  esbuild: "$SNAPSHOT_RUNTIME_ESBUILD_VERSION",
-  three: "$three",
-  meshoptimizer: "$meshoptimizer",
+  esbuild: process.argv[2],
+  three: process.argv[3],
+  meshoptimizer: process.argv[4],
 };
 for (const [name, expected] of Object.entries(deps)) {
-  const actual = require("$deps_dir/node_modules/" + name + "/package.json").version;
+  const actual = require(process.argv[1] + "/node_modules/" + name + "/package.json").version;
   if (actual !== expected) {
     process.exit(1);
   }
 }
-EOF
+' "$deps_dir" "$SNAPSHOT_RUNTIME_ESBUILD_VERSION" "$three" "$meshoptimizer" || return 0
   return 1
 }
 

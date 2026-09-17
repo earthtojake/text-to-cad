@@ -40,7 +40,6 @@ declare const window: {
 };
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const screenshots = path.join(appRoot, "tests", "e2e", "__screenshots__");
 const fakeAgent = path.join(appRoot, "tests", "fake-agent", "index.mjs");
 
 const gitEnv = {
@@ -150,7 +149,7 @@ test("an agent in a worktree opens the file it wrote there, and the explorer roo
 
   await page.getByRole("tab", { name: /hello\.txt/ }).click();
   await page.waitForTimeout(400);
-  await page.screenshot({ path: path.join(screenshots, "worktree-explorer.png"), animations: "disabled" });
+  await page.screenshot({ path: test.info().outputPath("worktree-explorer.png"), animations: "disabled" });
 });
 
 test("the new-session state roots the explorer at the project again", async () => {

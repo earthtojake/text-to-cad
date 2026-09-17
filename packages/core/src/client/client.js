@@ -1,3 +1,4 @@
+import { requestViewerJson, ViewerRequestError } from "./request.js";
 import { retainSurfWorkerPool } from '../lib/surf/surfWorkerClient.js';
 import { retainGlbMeshWorker } from '../lib/render/glbMeshWorkerClient.js';
 import { retainStlMeshWorker } from '../lib/render/stlMeshWorkerClient.js';
@@ -47,31 +48,25 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
     for (const listener of listeners) listener();
   }
 
-  async function request(path, { signal, file = '', params = {}, method = 'GET', headers = {}, timeoutMs = 0 } = {}) {
+  async function request(path, { signal, file = '', params = {}, method = 'GET', headers = {}, body, timeoutMs = 0, operation = 'request' } = {}) {
     if (disposed || signal?.aborted) throw abortError();
     const controller = new AbortController();
-    const abort = () => controller.abort();
-    let timedOut = false;
-    const timeout = timeoutMs > 0 ? setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs) : null;
+    const abort = () => controller.abort(signal?.reason);
     signal?.addEventListener('abort', abort, { once: true });
     requests.add(controller);
     try {
-      const response = await fetchImpl(cadApiUrl(path, { origin, file, params }), {
-        method, headers, signal: controller.signal, cache: 'no-store'
-      });
+      const payload = await requestViewerJson(cadApiUrl(path, { origin, file, params }), {
+        method, headers, signal: controller.signal, cache: 'no-store',
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      }, operation, { timeoutMs, fetch: fetchImpl });
       if (disposed || controller.signal.aborted) throw abortError();
-      let payload;
-      try { payload = await response.json(); } catch (error) { if (response.ok) throw error; }
-      if (disposed || controller.signal.aborted) throw abortError();
-      if (!response.ok) throw new Error(payload?.error || payload?.result?.error || payload?.result?.validation?.error?.message || (
-        path === '/__cad/catalog' ? `Failed to read CAD catalog: ${response.status} ${response.statusText}` : `CAD request failed: ${response.status} ${response.statusText}`
-      ));
       return payload;
     } catch (error) {
-      if (timedOut && !disposed && !signal?.aborted) throw new Error(`Timed out loading CAD catalog after ${timeoutMs / 1000}s`);
+      if (path === '/__cad/catalog' && error?.failure?.kind === 'timeout') {
+        throw new ViewerRequestError({ ...error.failure, detail: `Timed out loading CAD catalog after ${timeoutMs / 1000}s` }, error);
+      }
       throw error;
     } finally {
-      if (timeout !== null) clearTimeout(timeout);
       signal?.removeEventListener('abort', abort);
       requests.delete(controller);
     }
@@ -93,7 +88,7 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
     if (markRefreshing) publish({ refreshing: true, error: '' });
     const work = (async () => {
       try {
-        const catalog = await request('/__cad/catalog', { file, signal, timeoutMs: 10_000 });
+        const catalog = await request('/__cad/catalog', { file, signal, timeoutMs: 10_000, operation: 'catalog' });
         if (sequence === refreshSequence) publishCatalog(catalog);
         return catalog;
       } catch (error) {
@@ -151,22 +146,37 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
       if (!entry) throw new Error(`CAD file was not found in this workspace: ${path}`);
       return entry;
     },
-    async serverInfo({ signal } = {}) {
-      if (!server) server = await request('/__cad/server', { signal });
+    async serverInfo({ signal, fresh = false } = {}) {
+      if (!server || fresh) server = await request('/__cad/server', { signal, operation: 'server' });
       if (!snapshot.rootId && server?.rootId) publish({ rootId: server.rootId });
       return server;
     },
     requestArtifactStatus(file, { signal } = {}) {
       if (!file) return Promise.reject(new Error('Missing file'));
-      return request('/__cad/artifact', { file, signal });
+      return request('/__cad/artifact', { file, signal, timeoutMs: 10_000, operation: 'status' });
     },
     async requestArtifact(file, { force = false, signal } = {}) {
       if (!file) throw new Error('Missing file');
       const payload = await request('/__cad/artifact', {
-        file, signal, method: 'POST', params: force ? { force: '1' } : {}, headers: { 'x-cadgen-viewer': '1' }
+        file, signal, method: 'POST', operation: 'compile', params: force ? { force: '1' } : {}, headers: { 'x-cadgen-viewer': '1' }
       });
       if (payload?.catalog) publishCatalog(payload.catalog);
       return payload;
+    },
+    requestSurfaces(body, { signal } = {}) {
+      return request('/__cad/surfaces', {
+        body, signal, method: 'POST', operation: 'surfaces',
+        headers: { 'content-type': 'application/json', 'x-cadgen-viewer': '1' },
+      });
+    },
+    cancelSurfaceRequest(body, { signal } = {}) {
+      return request('/__cad/surfaces/cancel', {
+        body, signal, method: 'POST', operation: 'cancel-surfaces',
+        headers: { 'content-type': 'application/json', 'x-cadgen-viewer': '1' },
+      });
+    },
+    editingPreview(file, { after = '', signal } = {}) {
+      return request('/__cad/preview', { file, signal, params: { after }, operation: 'preview' });
     },
     createRenderSession() {
       if (disposed) throw new Error('This CAD client has been disposed.');
@@ -176,7 +186,10 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
         provider: createHttpTessellationCacheProvider({ origin, headers: { 'x-cadgen-viewer': '1' }, fetch: fetchImpl, signal: controller.signal }),
         writeBack: { deferMs: 1500, concurrency: 2 }
       });
+      let sessionDisposed = false;
       const session = { tessellationCache: cache, signal: controller.signal, dispose() {
+        if (sessionDisposed) return;
+        sessionDisposed = true;
         controller.abort(); cache.dispose();
         for (const release of releases) release();
         sessions.delete(session);

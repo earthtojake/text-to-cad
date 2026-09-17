@@ -69,7 +69,7 @@ export interface DocumentSession {
 }
 export interface PrepareContext { file: FileMetadata; source: FileSource; signal: AbortSignal }
 export interface PreparedDocument<T> { data: T; text?: TextDocument; dispose?: () => void }
-export interface FileActivity { loading: boolean; label?: string; title?: string }
+export interface FileActivity { loading: boolean; label?: string; title?: string; tone?: "neutral" | "info" | "warning" | "error"; onActivate?: () => void }
 export interface RendererViewProps {
   file: FileMetadata;
   source: FileSource;

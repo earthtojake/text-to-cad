@@ -12,6 +12,7 @@ import {
   type Locator,
   type Page,
 } from "@playwright/test";
+import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-runtime";
 
 /**
  * The explorer, against this repository.
@@ -43,7 +44,6 @@ const repoRoot = path.resolve(appRoot, "..", "..");
 // The project's display name is the directory's basename — which in a git
 // worktree is the worktree's name, not the repository's.
 const projectName = path.basename(repoRoot);
-const screenshots = path.join(appRoot, "tests", "e2e", "__screenshots__");
 
 /** Files in this repository the suite opens. All tracked, none generated. */
 // AGENTS.md rather than README.md: its source opens with a literal
@@ -52,7 +52,7 @@ const screenshots = path.join(appRoot, "tests", "e2e", "__screenshots__");
 // two apart far less clearly.
 const MARKDOWN = "AGENTS.md";
 const IMAGE = "apps/desktop/build/icon.png";
-const STEP = "models/examples/imported/import-smoke.step";
+const STEP = "tests/fixtures/cad/import-smoke.step";
 
 /**
  * The CAD tests run against whatever runtime the app resolves on its own —
@@ -60,8 +60,8 @@ const STEP = "models/examples/imported/import-smoke.step";
  * has run, else the checkout's `.venv` — so the app is launched WITHOUT
  * `CAD_DESKTOP_PYTHON`. The first STEP test breaks the runtime on purpose
  * (an override pointing nowhere) to see the failure card; the render test
- * clears it and skips itself on a machine with no runtime at all (CI's
- * test job, which bundles nothing and has no venv).
+ * clears it and skips itself on a local machine with no runtime at all.
+ * HARDCORE_E2E_REQUIRE_CAD=1 makes missing or stale runtimes fail qualification.
  */
 let cadReady = false;
 
@@ -96,15 +96,22 @@ test.beforeAll(async () => {
   for (const name of ["README.md", "AGENTS.md"]) {
     fs.copyFileSync(path.join(repoRoot, name), path.join(docsDir, name));
   }
-  userData = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-explorer-e2e-"));
+  userData = cadTestProfile("explorer");
   const { CAD_DESKTOP_PYTHON: _unset, ...inherited } = process.env;
-  const env = { ...inherited, NODE_ENV: "test" };
+  const env = { ...inherited, ...cadRegistryEnvironment(userData), NODE_ENV: "test", CADGEN_DAEMON: "0", CADGEN_CACHE_DIR: path.join(userData, "cad-cache"), CADGEN_DAEMON_STATE_DIR: path.join(userData, "cad-daemon") };
   app = await electron.launch({
     args: [path.join(appRoot, "out", "main", "index.js"), `--user-data-dir=${userData}`],
     env,
   });
   page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
+  page.on("console", message => { if (message.type() === "error") console.error(`[explorer renderer] ${message.text()}`); });
+  page.on("response", async response => {
+    if (response.status() >= 400 && response.url().includes("/__cad/")) {
+      console.error(`[explorer request] ${JSON.stringify({ status: response.status(), url: response.url(),
+        request: response.request().postData(), response: (await response.text().catch(String)).slice(0, 4000) })}`);
+    }
+  });
 
   // Dark, so every screenshot in this file is comparable with the others.
   await page.evaluate(() => window.hardcore.settings.set({ theme: "dark" }));
@@ -129,6 +136,8 @@ test.afterAll(async () => {
   // winding down — and a hook that gives up at sixty fails the last test.
   test.setTimeout(300_000);
   await app?.close();
+  const runtimeLog = path.join(userData, "cad-runtime.log");
+  if (fs.existsSync(runtimeLog)) fs.copyFileSync(runtimeLog, test.info().outputPath("cad-runtime.log"));
   fs.rmSync(userData, { recursive: true, force: true });
   fs.rmSync(reviewRepo, { recursive: true, force: true });
   fs.rmSync(docsDir, { recursive: true, force: true });
@@ -436,7 +445,7 @@ test("shows the runtime's own error for a STEP file when the runtime cannot star
   // again asks for the viewer once more without reopening the file.
   await page.evaluate(() => window.hardcore.settings.set({ cadPythonOverride: null }));
   const status = await page.evaluate(() => window.hardcore.runtime.status());
-  cadReady = status.state === "ready";
+  cadReady = cadRuntimeReady(status);
   if (cadReady) {
     expect(status.cadgenVersion).toMatch(/^\d+\.\d+\.\d+/);
     await page.getByRole("button", { name: "Try again" }).click();
@@ -518,11 +527,11 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await newTab(page, "File");
   await openFromTree(STEP);
 
-  // The viewer's surface: a WebGL canvas, and the STEP sheet's tabs. The
+  // The viewer's surface: a WebGL canvas and the STEP model list. The
   // first open compiles the document in cadgen's build pool, so this is the
   // slow assertion of the suite.
   await expect(page.locator("canvas").first()).toBeVisible({ timeout: 60_000 });
-  const tree = page.getByRole("tab", { name: "Model" });
+  const tree = page.getByRole("list", { name: "Model", exact: true });
   await expect(tree).toBeVisible({ timeout: 90_000 });
   await expect(page.getByRole("tab", { name: "Source features" })).toHaveCount(0);
   await expect(page.getByRole("tab", { name: "Surfaces" })).toHaveCount(0);
@@ -569,7 +578,7 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   // never taken away, so this is as wide as the explorer gets. The tree lists
   // the document's solids once the compile lands.
   await widenExplorer();
-  await expect(page.getByRole("treeitem", { name: /import-smoke/ }).first()).toBeVisible();
+  await expect(tree.getByRole("button", { name: /^Select / }).first()).toBeVisible();
   await expectInspectorBesideModel();
   await page.waitForTimeout(1500);
   await shoot("file-cad.png", true);
@@ -583,17 +592,17 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await display.click();
   const displayPanel = page.getByRole("dialog", { name: "Display settings" });
   await expect(displayPanel).toBeVisible();
-  await displayPanel.getByRole("combobox", { name: "Display mode" }).click();
+  await displayPanel.getByRole("combobox", { name: "Mode" }).click();
   await page.getByRole("option", { name: "Wire", exact: true }).click();
   await displayPanel.getByRole("button", { name: "Close Display" }).click();
   await expect(displayPanel).toHaveCount(0);
   await display.click();
-  await expect(displayPanel.getByRole("combobox", { name: "Display mode" })).toContainText("Wire");
-  await displayPanel.getByRole("combobox", { name: "Display mode" }).click();
-  await page.getByRole("option", { name: "Solid", exact: true }).click();
+  await expect(displayPanel.getByRole("combobox", { name: "Mode" })).toContainText("Wire");
+  await displayPanel.getByRole("combobox", { name: "Mode" }).click();
+  await page.getByRole("option", { name: "Shaded with edges", exact: true }).click();
   await expect(page.getByRole("listbox")).toHaveCount(0);
   await expect(displayPanel).toBeVisible();
-  await expect(displayPanel.getByRole("combobox", { name: "Display mode" })).toBeFocused();
+  await expect(displayPanel.getByRole("combobox", { name: "Mode" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(displayPanel).toHaveCount(0);
   await expect(display).toHaveAttribute("aria-expanded", "false");
@@ -660,7 +669,7 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await themePanel.click();
   await expect(themePanel).toHaveAttribute("aria-pressed", "true");
   await expect(sheetPanel).toHaveAttribute("aria-pressed", "false");
-  await expect(page.getByRole("tab", { name: "Model" })).toHaveCount(0);
+  await expect(tree).toBeHidden();
   // The theme panel takes the Inspector's place in the SAME column: the viewer
   // portals it into this app's panel container, so there is one of those and
   // it names the panel that is in it.
@@ -694,7 +703,7 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await sheetPanel.click();
   await expect(sheetPanel).toHaveAttribute("aria-pressed", "true");
   await expect(themePanel).toHaveAttribute("aria-pressed", "false");
-  await expect(page.getByRole("tab", { name: "Model" })).toBeVisible();
+  await expect(tree).toBeVisible();
   await expect(page.getByRole("tab", { name: "Source features" })).toHaveCount(0);
   await expect(panels(page)).toHaveCount(1);
   await expect(panels(page)).toHaveAttribute("data-file-panel-container", "cad-file-sheet");
@@ -854,7 +863,7 @@ test("renders the explorer in light as well as dark", async () => {
   await shoot("browser-light.png");
   if (cadReady) {
     await page.getByRole("tab", { name: /import-smoke\.step/ }).click();
-    await expect(page.getByRole("tab", { name: "Model" })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible({ timeout: 60_000 });
     // The app stays light: the surface follows the app's theme rather than
     // flipping the document to the CAD theme's own.
     await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
@@ -1097,7 +1106,7 @@ async function pick(item: string) {
  */
 async function shoot(name: string, whole = false) {
   const target = whole ? page : page.getByTestId("explorer");
-  await target.screenshot({ path: path.join(screenshots, name), animations: "disabled" });
+  await target.screenshot({ path: test.info().outputPath(name), animations: "disabled" });
 }
 
 /** How wide the explorer was before `widenExplorer`, so it can be put back. */
@@ -1183,7 +1192,7 @@ async function expectInspectorBesideModel() {
   const surface = page.locator("[data-cad-surface]");
   const sheet = panels(page);
   await expect(sheet).toHaveAttribute("data-file-panel-container", "cad-file-sheet");
-  await expect(page.getByRole("tab", { name: "Model" })).toBeVisible();
+  await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible();
   const surfaceBox = (await surface.boundingBox())!;
   const sheetBox = (await sheet.boundingBox())!;
   const where = `surface ${JSON.stringify(surfaceBox)} sheet ${JSON.stringify(sheetBox)}`;

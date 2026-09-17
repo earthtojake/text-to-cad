@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   estimateMeshRenderCost,
+  hasMeshGeometry,
   isLargeMeshData,
   isLargeNativeGlbEntry,
   isLargeStepGlbEntry,
@@ -39,6 +40,22 @@ test("large STEP GLBs are classified from catalog asset bytes", () => {
   assert.equal(shouldUseGlbMeshWorkerForEntry(largeNativeGlb), true);
 });
 
+test("component geometry is renderable and its memory is counted once per array", () => {
+  const component = { vertices: new Float32Array(9), indices: new Uint32Array(3) };
+  const packageMesh = { parts: [
+    { sourceMesh: component, triangleCount: 1 },
+    { sourceMesh: component, triangleCount: 1 }
+  ] };
+  assert.equal(hasMeshGeometry(packageMesh), true);
+  assert.equal(hasMeshGeometry(component), true);
+  assert.equal(hasMeshGeometry({ parts: [{ sourceMesh: { vertices: [] } }] }), false);
+  assert.equal(hasMeshGeometry(null), false);
+  assert.deepEqual(estimateMeshRenderCost(packageMesh), { triangleCount: 2, typedArrayBytes: 48 });
+  assert.deepEqual(estimateMeshRenderCost({ ...component, parts: packageMesh.parts }), {
+    triangleCount: 2, typedArrayBytes: 48
+  });
+});
+
 test("mesh render cost uses triangle count and typed-array bytes", () => {
   const meshData = {
     vertices: new Float32Array(9),
@@ -46,14 +63,14 @@ test("mesh render cost uses triangle count and typed-array bytes", () => {
     colors: new Float32Array(0),
     indices: new Uint32Array(3),
     edge_indices: new Uint32Array(2),
-    surfaceEdgeBarycentric: new Float32Array(9),
-    surfaceEdgeClass: new Uint8Array(9),
+    cadEdgePositions: new Float32Array(6),
+    cadEdgeIndices: new Uint32Array(2),
     parts: [{ triangleCount: LARGE_MESH_TRIANGLE_COUNT }]
   };
 
   assert.deepEqual(estimateMeshRenderCost(meshData), {
     triangleCount: LARGE_MESH_TRIANGLE_COUNT,
-    typedArrayBytes: 137
+    typedArrayBytes: 124
   });
   assert.equal(isLargeMeshData(meshData), true);
   assert.equal(isLargeMeshData({

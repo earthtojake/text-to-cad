@@ -19,6 +19,7 @@ import {
 // look like (or collide with) a launched Viewer. Taken port → pick another
 // with --port; nothing rolls or reuses here.
 const DEFAULT_DEV_PORT = 5173;
+function devPort() { const port=Number(process.env.PORT); return Number.isInteger(port) && port>0 ? port : DEFAULT_DEV_PORT; }
 
 const viewerAppRoot = path.dirname(fileURLToPath(import.meta.url));
 const viewerClientRoot = path.join(viewerAppRoot, "src", "client");
@@ -193,35 +194,19 @@ export default defineConfig(async ({ command }) => ({
   resolve: { alias: { "@": viewerClientRoot }, dedupe: ["react", "react-dom", "three", "lucide-react"] },
   build: {
     chunkSizeWarningLimit: 800,
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (!id.includes("node_modules")) {
-            return undefined;
-          }
-          if (id.includes("/three/")) {
-            return "vendor-three";
-          }
-          if (id.includes("/react/") || id.includes("/react-dom/")) {
-            return "vendor-react";
-          }
-          if (id.includes("/radix-ui/") || id.includes("/@radix-ui/")) {
-            return "vendor-ui";
-          }
-          if (id.includes("/lucide-react/")) {
-            return "vendor-icons";
-          }
-          return undefined;
-        },
-      },
-    },
+    rolldownOptions: { output: { codeSplitting: { groups: [
+      { name: "vendor-three", test: /[\\/]node_modules[\\/]three[\\/]/ },
+      { name: "vendor-react", test: /[\\/]node_modules[\\/]react(?:-dom)?[\\/]/ },
+      { name: "vendor-ui", test: /[\\/]node_modules[\\/]@?radix-ui[\\/]/ },
+      { name: "vendor-icons", test: /[\\/]node_modules[\\/]lucide-react[\\/]/ },
+    ] } } },
   },
   worker: {
     format: "es",
   },
   server: {
     host: "127.0.0.1",
-    port: DEFAULT_DEV_PORT,
+    port: devPort(),
     // Fail on a taken port instead of silently rolling: dev is hand-managed,
     // so the agent picks another port explicitly. (The bundled launcher is the
     // one that rolls/reuses; dev stays out of that machinery entirely.)

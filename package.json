@@ -1,6 +1,6 @@
 {
   "name": "hardcore-workspace",
-  "version": "0.5.1",
+  "version": "0.6.3",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -31,6 +31,7 @@
     "electron-winstaller@5.4.0": true,
     "esbuild@0.25.12": true,
     "esbuild@0.28.2": true,
-    "fsevents@2.3.3": true
+    "fsevents@2.3.3": true,
+    "esbuild@0.27.7": true
   }
 }

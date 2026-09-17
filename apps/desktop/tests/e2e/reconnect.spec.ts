@@ -29,7 +29,7 @@ import { _electron as electron, expect, test, type ElectronApplication, type Pag
 declare const window: {
   hardcore: {
     projects: { addPath(input: { path: string }): Promise<{ id: string }> };
-    sessions: { list(input: Record<string, never>): Promise<{ id: string; title: string }[]> };
+    sessions: { list(input: Record<string, never>): Promise<{ id: string; title: string; agentId: string }[]> };
     settings: { set(patch: { theme: string }): Promise<unknown> };
   };
 };
@@ -213,10 +213,16 @@ test("the first session opened after a launch adopts the warm adapter", async ()
   try {
     const row = second.page.locator("[data-session-row]").first();
     await expect(row).toContainText("leave me here", { timeout: 30_000 });
+    // The default provider follows this machine's installed agents and login
+    // state. Check the provider that owns the persisted session, not an
+    // assumed Claude session on a machine that selected Codex.
+    const [session] = await second.page.evaluate(() => window.hardcore.sessions.list({}));
+    expect(session?.agentId).toBeTruthy();
+    const warmed = `[acp] ${session!.agentId} warmed in `;
     // The pre-warm is delayed so it does not compete with the first paint,
     // and it says so on stdout when the adapter is up.
     await expect
-      .poll(() => second.lines.some((line) => /\[acp\] claude-code warmed in /.test(line)), {
+      .poll(() => second.lines.some((line) => line.includes(warmed)), {
         timeout: 60_000,
       })
       .toBe(true);
@@ -230,7 +236,7 @@ test("the first session opened after a launch adopts the warm adapter", async ()
     expect(load).toContain("warm=yes");
     // And the pool put another one up behind it, for the next session.
     await expect
-      .poll(() => second.lines.filter((line) => /\[acp\] claude-code warmed in /.test(line)).length, {
+      .poll(() => second.lines.filter((line) => line.includes(warmed)).length, {
         timeout: 60_000,
       })
       .toBeGreaterThanOrEqual(2);

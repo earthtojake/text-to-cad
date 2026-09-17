@@ -4,9 +4,9 @@
  *
  * A source checkout runs builders from `packages/core` with no `node_modules` beside the
  * entry, so a builder's bare `import … from "@hardcore/core/glb/…"` has
- * nothing to resolve against. `NODE_PATH=<packages>` fixes that for CommonJS -- a NODE_PATH
- * entry is treated as a `node_modules` directory, so `packages/core` resolves as the
- * package `@hardcore/core` *through its exports map* -- but **Node's ESM resolver ignores
+ * nothing to resolve against. `NODE_PATH=<root node_modules>` fixes that for CommonJS,
+ * resolving the workspace link for `@hardcore/core` *through its exports map* -- but
+ * **Node's ESM resolver ignores
  * NODE_PATH entirely** (verified on v22.22.0: the import throws ERR_MODULE_NOT_FOUND while
  * `require.resolve` on the same specifier, same env, returns the right file). esbuild honors
  * NODE_PATH itself, which is why the bundling path never hit this.

@@ -84,7 +84,7 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
     `Shape` identity it installs), `SNAPSHOTS.md` (snapshot `--debug` timings).
   - `packages/core/docs/`: `render-pipeline.md`, `resource-ownership.md`,
     `tube-deformation.md`.
-  - `apps/web/docs/`: `settings-ui.md` (BINDING for any settings control),
+  - `packages/ui/docs/`: `settings-ui.md` (BINDING for any settings control),
     `render-types.md`, `render-mode.md`, `lod.md`, `storage.md`, `backend.md`.
 - Ships-alone law: `packages/cadgen` (the built PyPI wheel) works in isolation
   outside this repo, so its markdown must not refer to anything outside the
@@ -196,40 +196,16 @@ when touching shared surfaces or before handoff:
 - Focused runners: `scripts/test/test-js.sh`, `scripts/test/test-docs.sh`,
   `scripts/test/test-python.sh`, `scripts/test/test-global.sh`.
   `test-python.sh` takes `--select cadgen|viewer|skills|all` and
-  `--print-weights`; see `scripts/README.md`.
-- In GitHub Actions, `test.yml` runs on pull requests to and pushes of `main`
-  as one job per thing that has to work, each conditional on the changes that
-  can break it. `Publish Release` repeats the same checks on the release commit
-  before the wheel ships. `CONTRIBUTING.md` has the reasoning.
-
-  | job | OS | runs when the diff touches | what |
-  | --- | --- | --- | --- |
-  | Version Check | ubuntu | anything | `VERSION`, derived metadata, skill pins |
-  | cadgen (Linux) | ubuntu | cadgen, cadgen-js, infra | the cadgen package suite, CAD Viewer backend included |
-  | cadgen (Windows) | windows | cadgen, cadgen-js, infra | the same suite: the one thing that must be proven on Windows |
-  | cadgen-js | ubuntu | cadgen-js, infra | `packages/core` unit tests |
-  | viewer | ubuntu | viewer, cadgen-js, cadgen, infra | the client's unit tests, then the bundled client through the real backend |
-  | skills | ubuntu | skills, cadgen, cadgen-js, infra | `tests/python/global` policy gates + every skill suite |
-  | docs | ubuntu | docs, skills, cadgen-js, cadgen, infra | the docs site check |
-  | packaging | ubuntu | cadgen, cadgen-js, viewer, infra | bundle from clean, published-tree contract, wheel package data, installed-mode CLIs |
-
-  The classes: `cadgen` = `packages/cadgen/**` + its tests; `cadgen-js` =
-  `packages/core/**`; `viewer` = `apps/web/**`; `skills` =
-  `skills/**` + the skill and policy tests; `docs` = `apps/docs/**`; `infra` =
-  `scripts/**`, `.github/**`, `VERSION`, plugin manifests, root `package*.json`.
-  A change to cadgen fans out to everything that runs it (the skills, the
-  viewer, the docs, the wheel); a change to the viewer client runs only the
-  viewer and packaging jobs. Prose (root `*.md`, `notes/`, `models/`, `LICENSE`)
-  runs Version Check and nothing else. Markdown under `skills/` and
-  `packages/cadgen/` is NOT prose: `test_documented_commands`,
-  `test_skill_requirements` and `test_package_boundaries` read it.
-
-  All eight job names are `main`'s required checks; a job skipped by its own
-  condition satisfies its check. Adding a job means adding its name there.
+  `--print-weights`; `test-js.sh` takes `--select core|ui|web|all`. Desktop uses
+  its workspace unit/Electron runners. See `scripts/README.md`.
+- In GitHub Actions, `test.yml` runs one conditional job per concern. The graph,
+  stable required check names and workspace install recipes are in
+  `CONTRIBUTING.md#ci`. Core changes reach all consumers; UI reaches web and
+  desktop; app changes do not run unrelated apps. Manual dispatch runs all jobs.
 - Canonical release version: `scripts/release/check-version.sh`
 - Packaged runtime builds and is complete: `scripts/bundle/bundle.sh --check`
-- CAD Viewer or `packages/core`:
-  `npm --prefix packages/core test`,
+- CAD Viewer or shared packages: build exports with `npm run build:packages`,
+  then `npm --prefix packages/core test`, `npm --prefix packages/ui test`,
   `npm --prefix apps/web run test`, `npm --prefix apps/web run build`.
   The Viewer is two languages and `npm run test` covers only the client — the
   backend's suite is `tests/python/packages/cadgen/viewer`, run by

@@ -42,7 +42,6 @@ test("a model with animation but no kinematics resolves to nothing to pose", () 
   // outcome: a model with no mates has no Kinematics tab, exactly as a model
   // with no clips has no Animation tab.
   assert.deepEqual(resolved.parameterValues, {});
-  assert.equal(resolved.enabled, true);
 });
 
 test("a model with kinematics opens at the definition's own defaults", () => {
@@ -50,18 +49,16 @@ test("a model with kinematics opens at the definition's own defaults", () => {
 
   assert.equal(resolved.loadState.definition, HINGE);
   assert.deepEqual(resolved.parameterValues, { swing: 15 });
-  assert.equal(resolved.enabled, true);
 });
 
 test("a restored session's DOF values and pose gate win over the defaults", () => {
   const resolved = resolveStepModuleLoad({
     url: "/hinge.step.json",
     definition: HINGE,
-    restored: { enabled: false, parameterValues: { swing: 90 } }
+    restored: { parameterValues: { swing: 90 } }
   });
 
   assert.deepEqual(resolved.parameterValues, { swing: 90 });
-  assert.equal(resolved.enabled, false);
 });
 
 test("a restored session for a model with no kinematics carries no pose values", () => {
@@ -71,9 +68,8 @@ test("a restored session for a model with no kinematics carries no pose values",
   const resolved = resolveStepModuleLoad({
     url: "/w16.step.json",
     definition: null,
-    restored: { enabled: false, parameterValues: { swing: 90 } }
+    restored: { parameterValues: { swing: 90 } }
   });
 
   assert.deepEqual(resolved.parameterValues, {});
-  assert.equal(resolved.enabled, false);
 });

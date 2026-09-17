@@ -1,75 +1,105 @@
 // meshData from a .surf container (design/surface-rendering.md R2/R5).
 //
-// Produces the exact structure buildMeshDataFromGlbBuffer produced from a
-// component GLB, so everything downstream — package composition, themes,
-// the barycentric edge overlay, selection ranges — is untouched by the
-// artifact swap. Geometry is tessellated client-side from exact surfaces
-// (grid + clip, curvature-driven), in CAD units, de-indexed to carry the
-// per-corner `_cad_edge_barycentric` / `_cad_edge_class` attributes in the
-// same half-edge convention as the GLB writer (side 0 = (v1,v2),
-// side 1 = (v2,v0), side 2 = (v0,v1)).
+// Produces the structure buildMeshDataFromGlbBuffer produced from a component
+// GLB, so everything downstream — package composition, themes, selection
+// ranges — is untouched by the artifact swap. Geometry is tessellated
+// client-side from exact surfaces (grid + clip, curvature-driven), in CAD
+// units, and handed on INDEXED: the tessellator's shared vertices, normals and
+// index buffer are the render buffers, never expanded per corner. CAD edges
+// ride beside the triangles as indexed line segments built from the same
+// tessellation's boundary polylines (design/viewer-memory.md lever B).
 
 import { linearRgbToHex } from "../color.js";
 import { parseSurf } from "./container.js";
 import { tessellateComponent } from "./tessellate.js";
 
-// Mirror of cadgen's STEP_EDGE_SURFACE_CLASS_CODES.
-const SURFACE_CLASS_CODES = {
-  none: 0,
-  feature: 1,
-  tangent: 2,
-  seam: 3,
-  degenerate: 4,
-  boundary: 5,
-  nonManifold: 6,
-  unknown: 7,
-};
+// The line pass groups CAD edges by class so display.edges.classes styles each
+// one; every other edge class the extractor knows (boundary, nonManifold,
+// unknown) draws as a feature edge, `none` is not drawn at all.
+export const CAD_EDGE_LINE_CLASSES = Object.freeze(["feature", "tangent", "seam", "degenerate"]);
+
+function lineClassForEdge(edge) {
+  const visibilityClass = String(edge?.visibilityClass || "").trim();
+  if (visibilityClass === "none") {
+    return "";
+  }
+  return CAD_EDGE_LINE_CLASSES.includes(visibilityClass) ? visibilityClass : "feature";
+}
+
+// A typed array is shared when it owns its buffer (a fresh tessellation) and
+// copied when it is a view (a decoded .tess cache entry is one buffer holding
+// positions, normals, face ords, indices, side ords and every polyline; sharing
+// a view would keep the whole entry resident once the meshData outlives it).
+function ownedArray(array, Ctor) {
+  if (array instanceof Ctor && array.byteOffset === 0 && array.byteLength === array.buffer.byteLength) {
+    return array;
+  }
+  return Ctor.from(array || []);
+}
+
+// Indexed line segments for the GL_LINES edge pass: every polyline point once
+// (`positions`, xyz), one Uint32 pair per segment (`indices`), both grouped by
+// class in CAD_EDGE_LINE_CLASSES order so a class is a contiguous point range
+// and a contiguous segment range (`classRanges`). Per segment this is 8 bytes
+// plus ~14 bytes of shared points — about 1.5 bytes per surface triangle.
+export function buildCadEdgeLines(edges) {
+  const byClass = new Map(CAD_EDGE_LINE_CLASSES.map((classId) => [classId, []]));
+  let pointTotal = 0;
+  let segmentTotal = 0;
+  for (const edge of Array.isArray(edges) ? edges : []) {
+    const classId = lineClassForEdge(edge);
+    const polyline = edge?.polyline;
+    if (!classId || !(polyline instanceof Float32Array) || polyline.length < 6) {
+      continue;
+    }
+    byClass.get(classId).push(polyline);
+    pointTotal += polyline.length / 3;
+    segmentTotal += polyline.length / 3 - 1;
+  }
+  const positions = new Float32Array(pointTotal * 3);
+  const indices = new Uint32Array(segmentTotal * 2);
+  const classRanges = [];
+  let pointCursor = 0;
+  let segmentCursor = 0;
+  for (const classId of CAD_EDGE_LINE_CLASSES) {
+    const pointStart = pointCursor;
+    const segmentStart = segmentCursor;
+    for (const polyline of byClass.get(classId)) {
+      positions.set(polyline, pointCursor * 3);
+      const pointCount = polyline.length / 3;
+      for (let point = 0; point + 1 < pointCount; point += 1) {
+        indices[segmentCursor * 2] = pointCursor + point;
+        indices[segmentCursor * 2 + 1] = pointCursor + point + 1;
+        segmentCursor += 1;
+      }
+      pointCursor += pointCount;
+    }
+    if (segmentCursor > segmentStart) {
+      classRanges.push({
+        classId,
+        pointStart,
+        pointCount: pointCursor - pointStart,
+        segmentStart,
+        segmentCount: segmentCursor - segmentStart,
+      });
+    }
+  }
+  return { positions, indices, classRanges };
+}
 
 export function buildMeshDataFromSurf(index, floats, options = {}) {
   const component = options.component || tessellateComponent(index, floats, options);
-  const triangleCount = component.indices.length / 3;
-  const vertexCount = triangleCount * 3;
-
-  const vertices = new Float32Array(vertexCount * 3);
-  const normals = new Float32Array(vertexCount * 3);
-  const indices = new Uint32Array(vertexCount);
-  const surfaceEdgeBarycentric = new Float32Array(vertexCount * 3);
-  const surfaceEdgeClass = new Uint8Array(vertexCount * 3);
-
-  const classByOrd = new Map();
-  for (const edge of index.edges) {
-    classByOrd.set(edge.ord, SURFACE_CLASS_CODES[edge.class] ?? 0);
-  }
+  const vertices = ownedArray(component.positions, Float32Array);
+  const normals = ownedArray(component.normals, Float32Array);
+  const indices = ownedArray(component.indices, Uint32Array);
+  const vertexCount = vertices.length / 3;
+  const triangleCount = indices.length / 3;
+  const cadEdges = buildCadEdgeLines(component.edges);
 
   const bounds = {
     min: [...component.bounds.min],
     max: [...component.bounds.max],
   };
-  const BARYCENTRIC = [1, 0, 0, 0, 1, 0, 0, 0, 1];
-  for (let t = 0; t < triangleCount; t += 1) {
-    const sideClasses = [
-      classByOrd.get(component.sideOrds[t * 3]) || 0,
-      classByOrd.get(component.sideOrds[t * 3 + 1]) || 0,
-      classByOrd.get(component.sideOrds[t * 3 + 2]) || 0,
-    ];
-    for (let corner = 0; corner < 3; corner += 1) {
-      const sourceVertex = component.indices[t * 3 + corner];
-      const out = (t * 3 + corner) * 3;
-      vertices[out] = component.positions[sourceVertex * 3];
-      vertices[out + 1] = component.positions[sourceVertex * 3 + 1];
-      vertices[out + 2] = component.positions[sourceVertex * 3 + 2];
-      normals[out] = component.normals[sourceVertex * 3];
-      normals[out + 1] = component.normals[sourceVertex * 3 + 1];
-      normals[out + 2] = component.normals[sourceVertex * 3 + 2];
-      surfaceEdgeBarycentric[out] = BARYCENTRIC[corner * 3];
-      surfaceEdgeBarycentric[out + 1] = BARYCENTRIC[corner * 3 + 1];
-      surfaceEdgeBarycentric[out + 2] = BARYCENTRIC[corner * 3 + 2];
-      surfaceEdgeClass[out] = sideClasses[0];
-      surfaceEdgeClass[out + 1] = sideClasses[1];
-      surfaceEdgeClass[out + 2] = sideClasses[2];
-      indices[t * 3 + corner] = t * 3 + corner;
-    }
-  }
 
   // The surf's partColor is LINEAR RGBA (a build123d/OCCT Color), while
   // `part.color` is the sRGB hex the viewer decodes with new THREE.Color.
@@ -98,10 +128,11 @@ export function buildMeshDataFromSurf(index, floats, options = {}) {
     vertices,
     indices,
     normals,
-    surfaceEdgeBarycentric,
-    surfaceEdgeClass,
     colors: new Float32Array(0),
     edge_indices: new Uint32Array(0),
+    cadEdgePositions: cadEdges.positions,
+    cadEdgeIndices: cadEdges.indices,
+    cadEdgeClassRanges: cadEdges.classRanges,
     bounds,
     parts: [part],
     has_source_colors: Boolean(color),

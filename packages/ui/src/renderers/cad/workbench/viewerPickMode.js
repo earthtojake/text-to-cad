@@ -1,5 +1,47 @@
 import { VIEWER_PICK_MODE } from "@hardcore/core/lib/viewer/constants.js";
 
+export function viewerSelectorRuntimeForRenderPane({
+  renderMode = false,
+  hasTopology = false,
+  retainingPreviousStepMesh = false,
+  selectorRuntime = null
+} = {}) {
+  // Animation evaluates occurrence labels and mesh data. Inspection selectors
+  // would only allocate invisible picking geometry in the photographic scene.
+  return !renderMode && hasTopology && !retainingPreviousStepMesh ? selectorRuntime : null;
+}
+
+// One shared empty list for every part-state prop this module hands the scene.
+// A fresh [] per call is a new prop identity on every render, which re-runs the
+// viewer's scene-effects effect — and the viewport LOD resample it ends with —
+// on renders that changed nothing. That resample publishes LOD status, whose
+// React state re-renders the workspace: the viewport never stops sampling
+// itself and never reports settled quality.
+const EMPTY_PART_IDS = Object.freeze([]);
+
+// The part selection the scene may highlight. Render is a photographic view:
+// the Inspect selection effect tints the selected surface and draws a dithered
+// occlusion ghost through everything in front of it, which would repaint the
+// very material the Materials tab just applied. The Materials tab's Parts list
+// carries the selection instead, so Render hands the scene no selected parts.
+export function viewerSelectedPartIdsForRenderPane({
+  renderMode = false,
+  hasParts = false,
+  selectedPartIds = []
+} = {}) {
+  return !renderMode && hasParts && Array.isArray(selectedPartIds) ? selectedPartIds : EMPTY_PART_IDS;
+}
+
+// The parts the scene hides. Inspect owns part visibility; Render and formats
+// without parts hide nothing, and say so with the shared empty list.
+export function viewerHiddenPartIdsForRenderPane({
+  inspectionEnabled = false,
+  hasParts = false,
+  hiddenPartIds = []
+} = {}) {
+  return inspectionEnabled && hasParts && Array.isArray(hiddenPartIds) ? hiddenPartIds : EMPTY_PART_IDS;
+}
+
 // Callers decide whether picking is enabled (parts, topology, or Measure).
 // This helper stays format-agnostic.
 export function viewerPickModeForRenderPane({

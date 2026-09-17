@@ -1,9 +1,9 @@
 import { _electron as electron, expect, test } from '@playwright/test';
 import path from 'node:path';
-import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from './cad-runtime.ts';
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = path.resolve(appRoot, '../..');
 // Playwright REQUIRES the first argument to be a destructuring pattern, and this
@@ -12,7 +12,7 @@ const root = path.resolve(appRoot, '../..');
 // eslint-disable-next-line no-empty-pattern
 test('Model tree preserves part controls and adds precise viewport references to the prompt', async ({}, testInfo) => {
   test.setTimeout(120000);
-  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'hardcore-surfaces-'));
+  const profile = cadTestProfile('surfaces');
   const output = testInfo.outputPath('screenshots');
   fs.mkdirSync(output, {
     recursive: true
@@ -21,34 +21,22 @@ test('Model tree preserves part controls and adds precise viewport references to
     args: [`${root}/apps/desktop/out/main/index.js`, `--user-data-dir=${profile}`],
     env: {
       ...process.env,
+      ...cadRegistryEnvironment(profile),
       NODE_ENV: 'test',
       HARDCORE_E2E_HIDDEN: '1',
       HARDCORE_FAKE_AGENT: `${root}/apps/desktop/tests/fake-agent/index.mjs`,
-      CADGEN_DAEMON: '0'
+      CADGEN_DAEMON: '0',
+      CADGEN_CACHE_DIR: path.join(profile, 'cad-cache'),
+      CADGEN_DAEMON_STATE_DIR: path.join(profile, 'cad-daemon')
     }
   });
   try {
     const page = await app.firstWindow();
-    test.skip((await page.evaluate(() => window.hardcore.runtime.status())).state !== 'ready', 'CAD runtime required');
+    test.skip(!cadRuntimeReady(await page.evaluate(() => window.hardcore.runtime.status())), 'CAD runtime required');
     const sourceRequests = [];
     page.on('request', request => { if (/\/__cad\/(design-outline|reconstruction)/.test(request.url())) sourceRequests.push(request.url()); });
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
-    let loading = false;
-    await page.route('**/__cad/artifact?*', route => loading ? route.fulfill({
-      json: {
-        ok: true,
-        state: 'compiling',
-        runId: 'toolbar-loading-test',
-        progress: {
-          phase: 'mesh',
-          label: 'Loading components',
-          done: 12,
-          total: 50,
-          determinate: true
-        }
-      }
-    }) : route.continue());
     await page.evaluate(() => window.hardcore.settings.set({
       theme: 'dark',
       reduceMotion: false,
@@ -71,9 +59,9 @@ test('Model tree preserves part controls and adds precise viewport references to
       name: 'File',
       exact: false
     }).click();
-    await page.getByLabel('Filter files').fill('models/examples/imported/import-smoke.step');
+    await page.getByLabel('Filter files').fill('tests/fixtures/cad/import-smoke.step');
     await page.getByRole('option', {
-      name: 'models/examples/imported/import-smoke.step',
+      name: 'tests/fixtures/cad/import-smoke.step',
       exact: false
     }).first().click();
     await expect(page.getByLabel('Zoom level percent', {
@@ -96,10 +84,16 @@ test('Model tree preserves part controls and adds precise viewport references to
     await expect(tree.getByRole('button',{name:/^Reveal /}).first()).toBeVisible();
     await page.getByRole('button',{name:'Show all',exact:true}).click();
     await expect(tree.getByRole('button',{name:/^Hide /}).first()).toBeVisible();
+    // Explicit selection requests exact topology; the initial display remains lightweight.
+    const selectTool = page.getByRole('button', {name:'Select', exact:true});
+    await selectTool.click();
+    await expect(selectTool).toBeEnabled({timeout:30000});
     // Pick the model itself; no exhaustive topology list is needed to inspect faces or edges.
     const canvas=page.locator('[data-cad-surface] canvas').first();
     const box=await canvas.boundingBox();
+    await page.screenshot({path:`${output}/before-pick.png`,animations:'disabled'});
     await canvas.click({position:{x:box.width*0.5,y:box.height*0.5}});
+    await page.screenshot({path:`${output}/after-pick.png`,animations:'disabled'});
     await expect(page.getByRole('button',{name:'Add to prompt',exact:true})).toBeVisible();
     const reference=page.locator('[data-file-sheet-tab-panel=tree]').getByText(/^o[0-9.]+\.[fe][0-9]+$/);
     await expect(reference).toBeVisible();
@@ -107,7 +101,7 @@ test('Model tree preserves part controls and adds precise viewport references to
     await page.getByRole('button',{name:'Add to prompt',exact:true}).click();
     const chip=page.locator('[data-composer] [data-reference-chip]');
     await expect(chip).toHaveCount(1);
-    await expect(chip).toHaveAttribute('data-file','models/examples/imported/import-smoke.step');
+    await expect(chip).toHaveAttribute('data-file','tests/fixtures/cad/import-smoke.step');
     await expect(chip).toHaveAttribute('data-selector',selector);
     await expect(page.locator('[data-composer]')).not.toContainText('.py');
     await expect(page.getByRole('button',{name:/Play (build|assembly)/})).toHaveCount(0);

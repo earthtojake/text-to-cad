@@ -1,9 +1,9 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { _electron as electron, expect, test } from "@playwright/test";
+import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-runtime";
 
 /**
  * Opening a project starts its CAD runtime before any file asks for it
@@ -13,14 +13,14 @@ import { _electron as electron, expect, test } from "@playwright/test";
  * `[daemon] warming …` — and this test reads that narration, with no file
  * opened at all.
  *
- * Skipped on a machine with no runtime (CI's test job bundles nothing and
- * has no venv): there is nothing to warm, and `runtime.status` says so.
+ * Local UI-only runs can skip when no runtime is installed. CAD qualification
+ * sets HARDCORE_E2E_REQUIRE_CAD=1, so missing or stale runtimes fail the test.
  */
 
 declare const window: {
   hardcore: {
     projects: { addPath(request: { path: string }): Promise<{ id: string; name: string }> };
-    runtime: { status(): Promise<{ state: string }> };
+    runtime: { status(): Promise<{ state: string; cadgenVersion: string | null }> };
   };
 };
 
@@ -29,14 +29,18 @@ const repoRoot = path.resolve(appRoot, "..", "..");
 
 test("opening a project starts the viewer and the daemon before any file is opened", async () => {
   test.setTimeout(120_000);
-  const userData = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-prewarm-e2e-"));
+  const userData = cadTestProfile("prewarm");
   const socketDir = fs.mkdtempSync("/tmp/hc-pw-");
   const { CAD_DESKTOP_PYTHON: _unset, ...inherited } = process.env;
   // A private daemon socket, so the daemon this launch starts is provably
   // its own (and is killed below); Windows names a pipe and keeps the default.
   const env = {
     ...inherited,
+    ...cadRegistryEnvironment(userData),
     NODE_ENV: "test",
+    CADGEN_DAEMON: "1",
+    CADGEN_CACHE_DIR: path.join(userData, "cad-cache"),
+    CADGEN_DAEMON_STATE_DIR: path.join(userData, "cad-daemon"),
     // Pre-warming is off under test for every other spec; this one is about it.
     HARDCORE_PREWARM: "1",
     ...(process.platform === "win32" ? {} : { CADGEN_DAEMON_SOCKET: path.join(socketDir, "d.sock") }),
@@ -52,7 +56,7 @@ test("opening a project starts the viewer and the daemon before any file is open
     const page = await app.firstWindow();
     await page.waitForLoadState("domcontentloaded");
     const runtime = await page.evaluate(() => window.hardcore.runtime.status());
-    test.skip(runtime.state !== "ready", `no CAD runtime on this machine (${runtime.state})`);
+    test.skip(!cadRuntimeReady(runtime), `no CAD runtime on this machine (${runtime.state})`);
 
     await page.evaluate((root) => window.hardcore.projects.addPath({ path: root }), repoRoot);
     // The strip binds to the project on its own; binding is what warms.

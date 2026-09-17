@@ -48,6 +48,35 @@ test('two clients keep root identity, catalog data, cancellation and absolute as
   b.dispose();
 });
 
+test('fresh server reads observe restarts and transport errors while cached consumers remain inert', async () => {
+  let calls = 0;
+  let identityToken = 'before-restart';
+  let unavailable = false;
+  const client = createCadClient({ origin: 'http://one.test', fetch: async () => {
+    calls += 1;
+    if (unavailable) throw new TypeError('Backend is restarting');
+    return json({ rootId: 'workspace', identityToken, autoReload: true });
+  } });
+  try {
+    assert.equal((await client.serverInfo()).identityToken, 'before-restart');
+    identityToken = 'after-restart';
+    assert.equal((await client.serverInfo()).identityToken, 'before-restart');
+    assert.equal(calls, 1, 'ordinary server metadata consumers retain their cache');
+    assert.equal((await client.serverInfo({ fresh: true })).identityToken, 'after-restart');
+    unavailable = true;
+    await assert.rejects(client.serverInfo({ fresh: true }), (error) => {
+      assert.equal(error.failure.kind, 'network');
+      assert.equal(error.failure.operation, 'server');
+      assert.equal(error.failure.url, 'http://one.test/__cad/server');
+      return true;
+    });
+    assert.equal((await client.serverInfo()).identityToken, 'after-restart');
+    assert.equal(calls, 3, 'a failed poll never replaces the last successful cached response');
+  } finally {
+    client.dispose();
+  }
+});
+
 test('file-specific requests use independent AbortSignals and late replies cannot replace a newer catalog', async () => {
   const pending = [];
   const client = createCadClient({ pollIntervalMs: 0, fetch: (url, options) => {
@@ -119,4 +148,25 @@ test('polling keeps its two-second cadence, obeys host visibility and stops with
   await settle();
   assert.equal(count, 2);
   client.dispose();
+});
+
+test('surface and preview requests are origin-bound, guarded and cancelled with their owner', async () => {
+  const calls = [];
+  const client = createCadClient({ origin: 'http://workspace.test', fetch: async (url, options) => {
+    calls.push({ url, options });
+    return json({ job: 'subscriber', feedCursor: 'next' });
+  } });
+  const body = { tree: 'tree', components: [{ cid: 'one', surfaceInput: 'input' }] };
+  assert.equal((await client.requestSurfaces(body)).job, 'subscriber');
+  await client.cancelSurfaceRequest({ job: 'subscriber' });
+  await client.editingPreview('part.step', { after: 'cursor' });
+  assert.equal(new URL(calls[0].url).origin, 'http://workspace.test');
+  assert.deepEqual(JSON.parse(calls[0].options.body), body);
+  assert.equal(calls[0].options.headers['x-cadgen-viewer'], '1');
+  assert.equal(new URL(calls[1].url).pathname, '/__cad/surfaces/cancel');
+  assert.equal(new URL(calls[2].url).pathname, '/__cad/preview');
+  assert.equal(new URL(calls[2].url).searchParams.get('file'), 'part.step');
+  assert.equal(new URL(calls[2].url).searchParams.get('after'), 'cursor');
+  client.dispose();
+  await assert.rejects(client.editingPreview('part.step'), { name: 'AbortError' });
 });

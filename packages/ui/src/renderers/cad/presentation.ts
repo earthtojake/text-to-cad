@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react';
+import { createElement, type ComponentType } from 'react';
 import Overlay from './components/workbench/ViewerLoadingOverlay.js';
 import Toast from './components/workbench/StatusToast.js';
 
@@ -22,7 +22,10 @@ export interface ViewerLoadingOverlayProps {
   progress?: CadArtifactProgress | null;
 }
 /** The original CAD loading artwork, available before loading the renderer. */
-export const ViewerLoadingOverlay = Overlay as ComponentType<ViewerLoadingOverlayProps>;
+export function ViewerLoadingOverlay({ viewerLoading, previewMode, progress }: ViewerLoadingOverlayProps) {
+  return createElement(Overlay, { loading: { opening: viewerLoading, headline: "Opening model", progress }, previewMode, operationKey: "preparing-document" });
+}
+export { useViewerAutoReload } from './workbench/useViewerAutoReload.js';
 
 export interface StatusToastProps {
   copyStatus?: string;

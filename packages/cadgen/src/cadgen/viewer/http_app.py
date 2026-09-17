@@ -299,9 +299,9 @@ class CadApp:
             "url": f"http://{self.host}:{self.port}",
         }
 
-    def read_catalog(self) -> dict:
+    def read_catalog(self, preferred_file=None) -> dict:
         """The backend catalog plus this connection's stable root identity."""
-        catalog = self.backend.read_catalog()
+        catalog = self.backend.read_catalog(preferred_file)
         return {**catalog, "rootId": self.root_id}
 
     # --- gates ------------------------------------------------------------
@@ -502,7 +502,7 @@ class CadApp:
     # --- placeholders filled by later steps of the port -------------------
 
     def _handle_catalog(self, request, response):
-        response.send_json(200, self.backend.read_catalog(request.query.get("file")))
+        response.send_json(200, self.read_catalog(request.query.get("file")))
 
     def _entry_ref_for_status(self, file_ref, catalog=None) -> str:
         """The catalog URL for this ref, or ``""``.
@@ -513,7 +513,7 @@ class CadApp:
         every model in the root per tick.
         """
         if catalog is None:
-            catalog = self.read_catalog()
+            catalog = self.read_catalog(file_ref)
         entry = self.backend.catalog_entry_for_file_ref(catalog, file_ref)
         return str((entry or {}).get("url") or "")
 
@@ -552,7 +552,7 @@ class CadApp:
         # Scanned AFTER the build, success or failure, and republished by the
         # client — the import is precisely the event that changes what the
         # catalog says about this entry.
-        catalog = self.read_catalog()
+        catalog = self.read_catalog(file_ref)
         payload = {
             **result,
             "ref": self._entry_ref_for_status(file_ref, catalog),

@@ -463,7 +463,7 @@ async function script(conn, params) {
 
   if (text.includes("mention")) {
     const prose =
-      "Look at README.md and `apps/desktop/AGENTS.md`; the part is models/examples/imported/import-smoke.step#o1 " +
+      "Look at README.md and `apps/desktop/AGENTS.md`; the part is tests/fixtures/cad/import-smoke.step#o1 " +
       "(nope/missing.md does not exist, and 0.5.0 is a version).\n";
     await send({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: prose } });
   }

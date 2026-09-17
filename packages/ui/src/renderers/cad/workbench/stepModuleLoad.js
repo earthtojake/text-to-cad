@@ -25,7 +25,6 @@ export function resolveStepModuleLoad({ url = "", definition = null, restored = 
     parameterValues: normalizeStepModuleParameterValues(
       definition,
       restored?.parameterValues || definition?.defaultParameterValues
-    ),
-    enabled: restored ? restored.enabled !== false : true
+    )
   };
 }

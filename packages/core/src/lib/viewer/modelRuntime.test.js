@@ -8,10 +8,16 @@ import {
   runtimeModelKeyMatches,
   readBoundsCenter,
   resolveRuntimeModelFloorZ,
+  syncMaterialClipPlanes,
   syncRuntimeStepClipPlane,
   toNumber
 } from "./modelRuntime.js";
 import { VIEWER_SCENE_SCALE } from "./sceneScale.js";
+import {
+  dissolveCadSurfaceInstanceSets,
+  reconcileCadSurfaceInstanceSets,
+  syncCadSurfaceInstanceRecord
+} from "../../common/cadSurfaceInstances.js";
 
 const EPSILON = 1e-6;
 
@@ -113,7 +119,7 @@ test("model runtime helpers build and sync STEP clip planes", () => {
     },
     modelGroup: new THREE.Group(),
     renderer: {},
-    displayRecords: [{ material, edgeMaterial }],
+    displayRecords: [{ material, edgeMaterials: [edgeMaterial] }],
     facePickGroup: new THREE.Group(),
     edgePickGroup: new THREE.Group(),
     vertexPickGroup: new THREE.Group(),
@@ -151,4 +157,112 @@ test("model runtime helpers build and sync STEP clip planes", () => {
   assert.equal(edgeMaterial.clippingPlanes, null);
   assert.equal(overlayMaterial.clippingPlanes, null);
   assert.equal(material.userData.cadClipPlaneEnabled, false);
+});
+
+test("clip-only changes update live instance materials without reconciling membership", () => {
+  const geometry = new THREE.BoxGeometry(1, 1, 1);
+  const group = new THREE.Group();
+  const records = Array.from({ length: 4 }, (_, index) => {
+    const material = new THREE.MeshStandardMaterial({ color: index % 2 ? 0xff0000 : 0x00ff00 });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(index * 2, 0, 0);
+    mesh.updateMatrix();
+    return { partId: `part${index}`, geometry, mesh, material };
+  });
+  const sets = reconcileCadSurfaceInstanceSets(THREE, records, group);
+  const set = [...sets][0];
+  assert.equal(sets.size, 1);
+  const matrix = set.object.instanceMatrix;
+  const color = set.object.instanceColor;
+  const matrices = [...matrix.array], colors = [...color.array], slots = records.map(r => r.surfaceInstance.slot);
+  const matrixVersion = matrix.version, colorVersion = color.version;
+  const drawMaterial = set.object.material;
+  const disposedMaterial = new THREE.MeshStandardMaterial();
+  const disposedSet = { disposed: true, object: { material: disposedMaterial } };
+  const directMaterial = new THREE.MeshStandardMaterial();
+  const directSet = { disposed: false, object: { material: directMaterial } };
+  const runtime = {
+    THREE, displayRecords: records, modelGroup: group,
+    modelBounds: { min: [0, 0, 0], max: [10, 1, 1] },
+    cadSurfaceInstanceSets: new Set([set, directSet, disposedSet]),
+    cadScene: { runtime: { cadSurfaceInstanceSets: sets }, syncSurfaceInstances() {
+      assert.fail("clipping must not run membership reconciliation");
+    } }
+  };
+  group.position.x = 2;
+  try {
+    for (const offset of [0.25, 0.75]) {
+      syncRuntimeStepClipPlane(runtime, { enabled: true, axis: "x", offsets: { x: offset } });
+      assertNear(drawMaterial.clippingPlanes[0].constant, -(2 + 10 * offset));
+      assert.equal(drawMaterial.clippingPlanes, records[0].material.clippingPlanes);
+      assert.equal(directMaterial.clippingPlanes, drawMaterial.clippingPlanes);
+      assert.equal(disposedMaterial.clippingPlanes, null);
+      assert.equal(set.object.material, drawMaterial);
+      assert.equal(set.object.instanceMatrix, matrix);
+      assert.equal(set.object.instanceColor, color);
+      assert.deepEqual(records.map(r => r.surfaceInstance.slot), slots);
+      assert.ok(records.every(r => r.surfaceInstance.set === set));
+      assert.deepEqual([...matrix.array], matrices);
+      assert.deepEqual([...color.array], colors);
+      assert.equal(matrix.version, matrixVersion);
+      assert.equal(color.version, colorVersion);
+    }
+    // The ordinary sync may refresh its prior material recipe afterward. It
+    // must retain the current clip values and leave instance attributes alone.
+    records.forEach(syncCadSurfaceInstanceRecord);
+    assertNear(drawMaterial.clippingPlanes[0].constant, -9.5);
+    syncRuntimeStepClipPlane(runtime, { enabled: false });
+    assert.equal(drawMaterial.clippingPlanes, null);
+    assert.equal(directMaterial.clippingPlanes, null);
+    assert.deepEqual([...matrix.array], matrices);
+    assert.deepEqual([...color.array], colors);
+    assert.equal(matrix.version, matrixVersion);
+    assert.equal(color.version, colorVersion);
+    dissolveCadSurfaceInstanceSets(sets, group);
+    assert.equal(set.disposed, true);
+    runtime.cadSurfaceInstanceSets = new Set([set]);
+    syncRuntimeStepClipPlane(runtime, { enabled: true });
+    assert.equal(drawMaterial.clippingPlanes, null, "late clip pass cannot mutate a retired draw");
+  } finally {
+    dissolveCadSurfaceInstanceSets(sets, group);
+    geometry.dispose();
+    records.forEach(record => record.material.dispose());
+    directMaterial.dispose(); disposedMaterial.dispose();
+  }
+});
+
+test("stable clip state preserves userData while live planes and shader transitions update", () => {
+  const material = new THREE.MeshStandardMaterial();
+  const owner = {};
+  material.userData = { owner };
+  const original = material.userData;
+  syncMaterialClipPlanes(material, []);
+  const disabled = material.userData;
+  assert.notEqual(disabled, original, "initialize explicit clip flags without mutating the previous object");
+  assert.equal(original.cadClipPlaneEnabled, undefined);
+  assert.equal(disabled.owner, owner);
+  syncMaterialClipPlanes(material, []);
+  assert.equal(material.userData, disabled);
+  const version = material.version;
+  const first = [new THREE.Plane(new THREE.Vector3(1, 0, 0), -1)];
+  syncMaterialClipPlanes(material, first);
+  const enabled = material.userData;
+  assert.notEqual(enabled, disabled);
+  assert.equal(disabled.cadClipPlaneEnabled, false);
+  assert.equal(material.version, version + 1);
+  const shifted = [new THREE.Plane(new THREE.Vector3(1, 0, 0), -2)];
+  syncMaterialClipPlanes(material, shifted);
+  assert.equal(material.clippingPlanes, shifted, "offset changes still bind the current plane");
+  assert.equal(material.userData, enabled, "offset-only changes allocate no new metadata");
+  assert.equal(material.version, version + 1, "offset changes do not change shader structure");
+  syncMaterialClipPlanes(material, [...shifted, new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)]);
+  assert.equal(material.userData.cadClipPlaneCount, 2);
+  assert.notEqual(material.userData, enabled);
+  assert.equal(material.version, version + 2);
+  syncMaterialClipPlanes(material, []);
+  assert.equal(material.userData.cadClipPlaneEnabled, false);
+  assert.equal(material.userData.cadClipPlaneCount, 0);
+  assert.equal(material.clippingPlanes, null);
+  assert.equal(material.version, version + 3);
+  material.dispose();
 });

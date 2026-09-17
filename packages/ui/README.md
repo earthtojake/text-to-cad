@@ -22,9 +22,9 @@ persistence, appearance and CAD services. Importing a package starts no polling,
 workers or host storage writes and changes neither document title nor theme.
 
 React, ReactDOM, Three.js and Lucide are host-supplied peers. React 18 and 19
-are supported: web retains React 18.3.1, while desktop retains 19.2.8. Each
+are supported: web and desktop use React 19.3.0. Each
 host must resolve one copy of each peer in its browser bundle. Web uses Vite
-deduplication so shared imports use its original React and Lucide versions;
+deduplication so shared imports use its host React and Lucide versions;
 these peers are not bundled into UI.
 
 ```text
@@ -105,8 +105,30 @@ Rebuild shared packages after editing them; hosts resolve `dist`, never `src`.
 Install the npm Playwright browser even if Python's snapshot browser is already
 installed; they may require different Chromium revisions. On Linux, add
 `--with-deps` to the browser install command if its system libraries are absent.
-The UI suite includes Node helper tests, React/editor tests and real Chromium
+The Node runner caps file concurrency at four so JSX transforms and Chromium
+setup do not compete with one process per host CPU. The UI suite includes Node
+helper tests, React/editor tests and real Chromium
 integration tests for renderer preparation, saves/conflicts, root changes,
 multiple instances, cancellation and disposal. App integration and packaged
 runtime checks remain with their hosts. See [renderer contracts](docs/renderers.md)
 for the non-CAD behavior that must remain unchanged.
+
+## CAD document updates
+
+The shared CAD renderer consumes the artifact, its schema-9 `.step.json`
+sidecar and immutable store views. Embedded animation, authored appearance and
+kinematics travel in the sidecar; an adjacent `.step.js` is a retired input.
+The scene uses progressive component loading and demand-driven exact surfaces.
+The geometry-based Model/Features inspector and contextual measurements remain
+in Inspect, with client-bound surface requests made only while its panel is open.
+
+Inspect retains the host's CAD theme preferences. The floating toolbar switches
+to Render, whose studio, materials, camera and quality have independent per-file
+state. Render does not receive inspection tints or measurements. Materials
+picking is enabled only while its visible panel is active. See
+[Render modes](docs/render-mode.md) and [progressive detail](docs/lod.md).
+
+A renderer publishes `FileActivity` with a loading flag, label, title, optional
+tone and optional activation callback. FileViewer shows a generic filename
+indicator unless the host supplies `presentation.activity`. CAD status activation
+opens the shared diagnostic; Try again reloads only the selected renderer.

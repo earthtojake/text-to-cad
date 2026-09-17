@@ -620,7 +620,7 @@ class DevelopmentAutoReload(StagedApp):
         self.assertEqual(reused["port"], a["port"])
 
     def test_the_dev_server_backend_comes_back_on_its_ephemeral_port(self) -> None:
-        # Exactly what apps/viewer/vite.config.mjs spawns. Vite reads the port
+        # Exactly what apps/web/vite.config.mjs spawns. Vite reads the port
         # off the announce line ONCE and proxies there for the rest of the
         # session, so a restart that moved would strand the dev server.
         staged = self.stage_app(checkout=True)

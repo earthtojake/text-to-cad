@@ -197,7 +197,7 @@ class SnapshotAssetServerTests(unittest.TestCase):
 
     def test_oversized_metadata_headers_are_rejected_without_reading_a_body(self) -> None:
         import http.client
-        from cadgen.viewer.tess_cache import TESS_CACHE_METADATA_MAX_BYTES
+        from cadgen.store.tess_cache import TESS_CACHE_METADATA_MAX_BYTES
 
         for path in ("/__tess_cache/probe", TESS_CACHE_BATCH_PATH):
             with self.subTest(path=path):

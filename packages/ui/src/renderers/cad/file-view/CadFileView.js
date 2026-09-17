@@ -9,6 +9,9 @@ import { buildTangentFaceGraph } from "../workbench/tangentFaceSelection.js";
 
 import { TutorialTipsContext } from "../workbench/tutorialTips.js";
 import { FileSheetTabPreferencesContext } from "../workbench/fileSheetTabPreferences.js";
+import { buildRobotComponentGeometry, robotComponents } from "../workbench/robotComponents.js";
+import { useRobotComponentSelection } from "../workbench/useRobotComponentSelection.js";
+
 import * as THREE from "three";
 import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ArrowLeftRight, ArrowRight, Circle, Eraser, FileText, Minus, PaintBucket, PenTool, Square } from "lucide-react";
@@ -16,10 +19,13 @@ import { CAD_PANEL, EmptyState } from "@hardcore/ui/navigation";
 import { cn } from "@hardcore/ui/utils";
 import CadRenderPane from "../components/workbench/CadRenderPane.js";
 import { useViewportLod } from "../render/useViewportLod.js";
-import {
-  ThemeEditorPanel,
-  buildDisplaySettingsTab
-} from "../components/workbench/ThemeSettingsPopover.js";
+import { ThemeEditorPanel } from "../components/workbench/ThemeSettingsPopover.js";
+import { lodSceneMayMove } from "../render/lodCameraSample.js";
+import { registerLodDisplaySource } from "../render/lodSceneAdoption.js";
+import { buildDisplaySettingsTab } from "../components/workbench/DisplaySettingsTab.js";
+import { buildRenderSettingsTab } from "../components/workbench/RenderSettingsTab.js";
+import { buildMaterialsSettingsTab } from "../components/workbench/MaterialsSettingsTab.js";
+import { prefetchRenderStudio } from "../render/renderStudioChunk.js";
 import MeshFileSheet from "../components/workbench/MeshFileSheet.js";
 import { DXF_PREVIEW_REFERENCE_THICKNESS_MM } from "@hardcore/core/lib/dxf/previewGlb.js";
 import { dxfDataIsDocument } from "@hardcore/core/lib/dxf/parseDxf.js";
@@ -51,21 +57,28 @@ import { buildDxfLayersTab } from "../components/workbench/DxfLayersSection.js";
 import StepFileSheet from "../components/workbench/StepFileSheet.js";
 import { FileSheetPortalContext, HostPanelSlotContext } from "../components/workbench/FileSheet.js";
 import { poseValuesForPreset } from "../components/workbench/PoseControlsSection.js";
+import { usePoseTransition, usePoseValueAnimation } from "../workbench/poseTransition.js";
 import StatusToast from "../components/workbench/StatusToast.js";
 import UrdfFileSheet from "../components/workbench/UrdfFileSheet.js";
 import ViewerAlertDialog from "../components/workbench/ViewerAlertDialog.js";
 import ViewerLoadingOverlay from "../components/workbench/ViewerLoadingOverlay.js";
 import {
-  ARTIFACT_PROGRESS_POLL_MS,
-  formatArtifactProgress,
-  normalizeArtifactProgress
+  ARTIFACT_PROGRESS_POLL_MS
 } from "../workbench/artifactProgress.js";
 import FloatingToolBar from "../components/workbench/FloatingToolBar.js";
 import { useCadAssets } from "../components/workbench/hooks/useCadAssets.js";
 import { resolveDesktopPanelWidth } from "./fileViewState.js";
+import { useEditingPreview } from "../components/workbench/hooks/useEditingPreview.js";
+import { useViewportQualityStatus } from "../components/workbench/hooks/useViewportQualityStatus.js";
+import { previewGeometryChanged } from "../workbench/editingPreview.js";
+import { buildArtifactWarningAlert } from "../workbench/artifactWarnings.js";
+import { resolveFileStatus } from "../workbench/fileStatus.js";
+import { useViewerAutoReload } from "../workbench/useViewerAutoReload.js";
+import { viewerLoadingState } from "../workbench/viewerLoading.js";
 import { useCadWorkspaceSelection } from "../components/workbench/hooks/useCadWorkspaceSelection.js";
 import { useCadWorkspaceSelectors } from "../components/workbench/hooks/useCadWorkspaceSelectors.js";
 import { useCadWorkspaceShortcuts } from "../components/workbench/hooks/useCadWorkspaceShortcuts.js";
+import { useSourceMaterialSession } from "../components/workbench/hooks/useSourceMaterialSession.js";
 import {
   CUSTOM_THEME_ID,
   getThemePresetIdForSettings,
@@ -77,7 +90,11 @@ import {
   normalizeDisplayEdgeSettings,
   normalizeDisplaySettings
 } from "@hardcore/core/lib/displaySettings.js";
-import { clonePerspectiveSnapshot } from "@hardcore/core/lib/perspective.js";
+import { RENDER_QUALITY, resolveSceneSettings } from "@hardcore/core/common/sceneSettings.js";
+import {
+  annotatePerspectiveSnapshot,
+  clonePerspectiveSnapshot
+} from "@hardcore/core/lib/perspective.js";
 import {
   ASSET_STATUS,
   DRAWING_TOOL,
@@ -88,11 +105,11 @@ import {
 import {
   FILE_SHEET_SECTION_IDS,
   defaultOpenFileSheetSectionIds,
-  fileSheetSectionIdsWithOpenSection,
   normalizeFileSheetOpenSectionIds,
   renderedFileSheetSectionIds,
   shouldOpenFileSheetForSelectionReveal
 } from "../workbench/fileSheetSections.js";
+import { useEmbeddedGlbAnimation } from "../workbench/useEmbeddedGlbAnimation.js";
 import {
   entrySourceFormat,
   fileSheetKindForEntry,
@@ -103,6 +120,7 @@ import {
   hasCapability,
   isArtifactManagedFormat,
   parameterSourceKind,
+  renderCapabilities,
   renderFormatLabel,
   supportsTool,
   viewportContentKind,
@@ -111,7 +129,11 @@ import {
   VIEWPORT_CONTENT
 } from "@hardcore/core/lib/renderCapabilities.js";
 import {
-  buildViewerMeshAlert
+  buildViewerAnnotationAlert,
+  buildViewerMeshAlert,
+  buildViewerEditAlert,
+  fileStatusAlertKey,
+  resolveFileStatusAlert
 } from "../workbench/viewerAlerts.js";
 import {
   buildParameterValuesCopyText,
@@ -127,8 +149,11 @@ import {
   canonicalCadRefCopyText,
   withFileRefPrefix,
   computeNextSelectionIds,
+  modelReferenceActivationDecision,
   orderedStringListEqual,
   parseAssemblyPartReferenceSelectionId,
+  pendingReferenceActivationMatches,
+  topologyCompositionKeyMatches,
   uniqueStringList
 } from "../workbench/referenceSelection.js";
 import {
@@ -141,7 +166,6 @@ import {
   entryHasUrdf,
   entryMeshAssetSignature,
   entryPoseUrl,
-  entryRenderModuleUrl,
   entryUrdfAssetHash
 } from "@hardcore/core/lib/entryAssets.js";
 import {
@@ -152,7 +176,20 @@ import {
 import { cloneDrawingStrokes, cloneTabSnapshot, createTabRecord, drawingStrokesEqual,
   tabSnapshotEqual, createThemeState } from "../workbench/state.js";
 import { createFileSessionSnapshot, normalizeFileSessionState } from "../workbench/fileSessionState.js";
-import { toFiniteNumber } from "../workbench/valueUtils.js";
+import { shallowObjectValuesEqual, toFiniteNumber } from "../workbench/valueUtils.js";
+import {
+  createRenderSessionState,
+  renderCameraSeed,
+  renderCameraSnapshot,
+  renderSessionForEnabledChange,
+  renderSessionForReset,
+  renderVisualPayload,
+  renderVisualSettingsKey,
+  resolveRenderSessionQuality,
+  resolveRenderCameraSnapshot,
+  readRenderSessionCamera,
+  setRenderPayloadValue
+} from "../workbench/renderSessionState.js";
 import {
   advanceAnimationElapsed,
   animationClipDuration,
@@ -167,6 +204,7 @@ import {
   restoreAnimationState,
   shouldPublishAnimationFrame
 } from "@hardcore/core/common/animationClock.js";
+import { createEmbeddedGlbAnimationClock, EmbeddedGlbAnimationClockProvider } from "../workbench/embeddedGlbAnimationClockStore.js";
 import { createAnimationClock, AnimationClockProvider, useAnimationClockStore } from "../workbench/animationClockStore.js";
 import { resolveStepModuleLoad } from "../workbench/stepModuleLoad.js";
 import {
@@ -187,6 +225,11 @@ import {
 } from "../workbench/robotMotionControls.js";
 import { CAD_WORKSPACE_LAYOUT_MODE } from "../workbench/breakpoints.js";
 import { cadFileParamForEntry, cadPathForEntry, fileKey, sidebarLabelForEntry } from "../workbench/entryPaths.js";
+import { buildCadRefToken, isNativeCadSelector } from "@hardcore/core/lib/cadRefs.js";
+import {
+  stepModuleRequiresTopology,
+  stepModuleTopologyOccurrenceIds
+} from "../workbench/topologyCapabilities.js";
 import { shortestUniquePathSuffixes } from "@hardcore/core/lib/filePathSuffix.js";
 import {
   applyUrdfPoseToMeshData,
@@ -200,7 +243,6 @@ import {
   advanceUrdfJointValues,
   interpolateUrdfJointValues,
   jointValueMapsClose,
-  URDF_JOINT_ANIMATION_DURATION_MS,
   URDF_JOINT_ANIMATION_EPSILON,
   URDF_JOINT_ANIMATION_FOLLOW_MS
 } from "@hardcore/core/lib/urdf/jointAnimation.js";
@@ -216,6 +258,7 @@ import {
   buildAssemblyLeafToNodePickMap,
   descendantLeafPartIds,
   findAssemblyNode,
+  findAssemblyNodes,
   flattenAssemblyNodes,
   flattenAssemblyLeafParts,
   leafPartIdsForAssemblySelection,
@@ -237,14 +280,35 @@ import {
 import {
   normalizeStepModuleParameterValues
 } from "@hardcore/core/common/stepModule.js";
-import { loadKinematicsModuleDefinition } from "@hardcore/core/common/kinematicsModule.js";
-import { loadRenderModule, validateRenderModuleClips } from "@hardcore/core/common/renderModule.js";
+import {
+  meshStateIsComplete,
+  shouldRetainCompleteSameFileMesh,
+  tolerantAnimationClip
+} from "../components/workbench/hooks/packageProgressiveLoad.js";
+import { meshLoadErrorForViewer, shouldStartMeshLoad } from "../components/workbench/hooks/meshLoadTarget.js";
+import {
+  kinematicsModuleDefinitionFromSidecar,
+  loadKinematicsModuleDefinition,
+  previewKinematicsModuleDefinition
+} from "@hardcore/core/common/kinematicsModule.js";
+import { validateSourceSidecar } from "@hardcore/core/common/sourceSidecar.js";
+import { loadSourceAnimation, validateAnimationClips } from "@hardcore/core/common/renderModule.js";
 import {
   normalizeParameterValue,
   normalizeParameterValues
 } from "@hardcore/core/common/parameters.js";
 import { copyTextToClipboard, readTextFromClipboard } from "@hardcore/ui/clipboard";
 import { HostReferenceContext, referenceLabel, referencesFromCopyText, resolveSelectorSelection } from "./hostReference.js";
+import { applySourceMaterialOverlayToMeshData, sourceAppearanceHasMaterials, sourceMaterialGeometry } from "../workbench/sourceMaterialSession.js";
+const EMPTY_MATERIAL_OVERRIDES = Object.freeze({});
+function sourceAnimationForEntry(entry) { return (entry?.editingPreview ? entry.previewAnimation : entry?.sourceSidecar?.animation) || null; }
+function sourceAnimationKeyForEntry(entry) { return sourceAnimationForEntry(entry) ? `${fileKey(entry)}:${entry?.animationHash || entry?.documentHash || entry?.hash || "animation"}` : ""; }
+function scopedWorkspacePerspective(snapshot, modelKey, entry) {
+ const normalized = clonePerspectiveSnapshot(snapshot);
+ if (!normalized) return null;
+ const sceneScaleMode = renderCapabilities(entrySourceFormat(entry)).sceneScale;
+ return annotatePerspectiveSnapshot(normalized, { modelKey, sceneScaleMode, coordinateSystem: sceneScaleMode === "urdf" ? "cad-z-up-robot-framing-v2" : "cad-z-up-v1" });
+}
 
 import {
   ARTIFACT_GENERATING_LABEL,
@@ -281,14 +345,15 @@ import {
 // panel placement and persistence; the connection owns catalog subscriptions.
 export default function CadFileView(props) {
   const clock = useMemo(() => createAnimationClock(), []);
-  return <AnimationClockProvider value={clock}><CadFileViewSurface {...props} /></AnimationClockProvider>;
+  const glbClock = useMemo(() => createEmbeddedGlbAnimationClock(), []);
+  return <AnimationClockProvider value={clock}><EmbeddedGlbAnimationClockProvider value={glbClock}><CadFileViewSurface {...props} /></EmbeddedGlbAnimationClockProvider></AnimationClockProvider>;
 }
 
 
 function CadFileViewSurface({
-  client, entry, serverInfo, renderSession, preferences, onPreferenceChange, onOpenFile, className = "",
+  client, entry, serverInfo, renderSession: cadRenderSession, preferences, onPreferenceChange, onOpenFile, className = "",
   panelSlot, colorScheme = "light", selectReference, onReference, onPromptContext, onCapture, captureRequest,
-  openPanel = "", onPanelOpen, onChromeVisibilityChange, onActivityChange, state, onStateChange
+  openPanel = "", onPanelOpen, onChromeVisibilityChange, onActivityChange, onReload, state, onStateChange
 }) {
   const animationClock = useAnimationClockStore();
   const { getAnimationClock, resetAnimationClock, setAnimationClock } = animationClock;
@@ -339,6 +404,10 @@ function CadFileViewSurface({
   const manifestRevision = storeSnapshot.revision;
   const explicitFileParam = cadFileParamForEntry(entry);
   const viewerServerInfo = serverInfo;
+  const catalogHydrated = storeSnapshot.hydrated;
+  const catalogError = storeSnapshot.error || "";
+  const selectedCatalogPending = liveEntry?.catalogPending === true;
+  const viewerReloading = false;
   const viewerServerBackend = String(viewerServerInfo?.backend || "").trim().toLowerCase();
   const [fileSheetOpenSectionIds, setFileSheetOpenSectionIds] = useState(null);
   const [dxfThicknessMm, setDxfThicknessMm] = useState(0);
@@ -347,6 +416,10 @@ function CadFileViewSurface({
   const [referenceQuery, setReferenceQuery] = useState("");
   const [selectedReferenceIds, setSelectedReferenceIds] = useState([]);
   const [largeFileState, setLargeFileState] = useState(() => normalizeLargeFileState(DEFAULT_LARGE_FILE_STATE));
+  // Capability demand is scoped to the artifact the user acted on. The
+  // default Select tool alone does not imply topology work during file open.
+  const [requestedTopologyFileRef, setRequestedTopologyFileRef] = useState("");
+  const pendingModelReferenceActivationRef = useRef(null);
   const [hoveredListReferenceId, setHoveredListReferenceId] = useState("");
   const [hoveredModelReferenceId, setHoveredModelReferenceId] = useState("");
   const [selectionFilter, setSelectionFilter] = useState("all");
@@ -364,6 +437,10 @@ function CadFileViewSurface({
   const [isolatedAssemblyNodeIds, setIsolatedAssemblyNodeIds] = useState([]);
   const [viewerContextMenu, setViewerContextMenu] = useState(null);
   const [displaySettings, setDisplaySettings] = useState(() => normalizeDisplaySettings());
+  const [renderSession, setRenderSession] = useState(createRenderSessionState);
+  const renderEnabledRef = useRef(renderSession.enabled);
+  renderEnabledRef.current = renderSession.enabled;
+  const [viewerPerspective, setViewerPerspective] = useState(null);
   const [hoveredListPartId, setHoveredListPartId] = useState("");
   const [hoveredModelPartId, setHoveredModelPartId] = useState("");
   const [copyStatus, setCopyStatus] = useState("");
@@ -422,14 +499,82 @@ function CadFileViewSurface({
   // re-mesh from these; the URL carries the package version, so a rebuild refetches.
   const drawingGeometryCacheRef = useRef(new Map());
   const [drawingGeometry, setDrawingGeometry] = useState(null);
-  const resolvedThemeSettings = useMemo(
-    () => resolveCadThemeSettings(themeSettings, themeId, { prefersDark: uiPrefersDark, chromeBackdropColor }),
-    [chromeBackdropColor, themeId, themeSettings, uiPrefersDark]
-  );
-  // The colour behind the canvas, which is the scene's own at its edges.
+  const inspectThemeSettings = useMemo(() => resolveCadThemeSettings(themeSettings, themeId, { prefersDark: uiPrefersDark, chromeBackdropColor }), [themeSettings, themeId, uiPrefersDark, chromeBackdropColor]);
+  const renderVisualKey = renderVisualSettingsKey(renderSession.payload);
+  const resolvedVisualScene = useMemo(() => resolveSceneSettings({
+    appearance: resolvedColorSchemeMode,
+    prefersDark: uiPrefersDark,
+    theme: renderSession.enabled ? null : inspectThemeSettings,
+    render: renderSession.enabled ? renderVisualPayload(renderSession.payload) : null,
+    display: renderSession.enabled ? null : displaySettings
+  }), [
+    inspectThemeSettings,
+    resolvedColorSchemeMode,
+    displaySettings,
+    renderSession.enabled,
+    renderVisualKey,
+    uiPrefersDark
+  ]);
+  const resolvedCamera = useMemo(() => resolveSceneSettings({
+    render: renderSession.enabled ? {
+      ...(renderSession.payload.camera ? { camera: renderSession.payload.camera } : {})
+    } : null,
+    camera: renderSession.enabled ? null : { projection: renderSession.cadProjection }
+  }).camera, [
+    renderSession.cadProjection,
+    renderSession.enabled,
+    renderSession.payload.camera
+  ]);
+  const resolvedQuality = useMemo(() => resolveRenderSessionQuality(renderSession), [
+    renderSession.enabled,
+    renderSession.payload.quality
+  ]);
+  const resolvedRenderConfiguration = useMemo(() => {
+    const visualConfiguration = resolvedVisualScene.render.configuration || resolveSceneSettings({
+      appearance: resolvedColorSchemeMode,
+      prefersDark: uiPrefersDark,
+      render: renderVisualPayload(renderSession.payload)
+    }).render.configuration;
+    // The visual resolve deliberately excludes camera and quality so an orbit
+    // does not rebuild the scene. Put the session's own values back so the
+    // recipe the rig and the settings UI read stays complete.
+    return {
+      ...visualConfiguration,
+      // In Inspect the recipe describes the Render defaults the panel shows, so
+      // it keeps its own default camera rather than borrowing the CAD one.
+      ...(renderSession.enabled ? { camera: resolvedCamera } : {}),
+      quality: renderSession.payload.quality || RENDER_QUALITY.FINAL
+    };
+  }, [
+    resolvedColorSchemeMode,
+    renderSession.enabled,
+    renderSession.payload.quality,
+    renderVisualKey,
+    resolvedCamera,
+    resolvedVisualScene.render.configuration,
+    uiPrefersDark
+  ]);
+  const resolvedScene = useMemo(() => ({
+    ...resolvedVisualScene,
+    camera: resolvedCamera,
+    quality: resolvedQuality,
+    render: {
+      ...resolvedVisualScene.render,
+      configuration: resolvedRenderConfiguration,
+      payload: renderSession.payload
+    }
+  }), [resolvedCamera, resolvedQuality, resolvedRenderConfiguration, resolvedVisualScene, renderSession.payload]);
+  // Render has no theme: the viewer builds it from the recipe in
+  // `render.configuration`, and the CAD scene settings stay behind in Inspect.
+  const resolvedThemeSettings = resolvedScene.theme;
+  const resolvedMaterialOverrides = renderSession.enabled
+    ? EMPTY_MATERIAL_OVERRIDES
+    : resolvedScene.materialOverrides;
   const sceneBackdrop = useMemo(
-    () => sceneBackdropEdgeColor(resolvedThemeSettings.background, chromeBackdropColor),
-    [chromeBackdropColor, resolvedThemeSettings]
+    () => renderSession.enabled
+      ? resolvedScene.render.configuration.backdrop.color
+      : sceneBackdropEdgeColor(resolvedThemeSettings.background, chromeBackdropColor),
+    [chromeBackdropColor, renderSession.enabled, resolvedScene.render.configuration, resolvedThemeSettings]
   );
   const resolvedDisplayEdgeSettings = useMemo(() => {
     // Edge theme — colour, opacity, thickness — is fixed, not a user
@@ -440,22 +585,23 @@ function CadFileViewSurface({
     // Persisted per-file edge settings written by an older build are ignored
     // rather than merged: with the controls gone they could never be changed
     // back, so a stale value would be stuck forever.
-    const themeEdges = resolvedThemeSettings.edges;
+    const themeEdges = resolvedThemeSettings?.edges;
     if (themeEdges && themeEdges.enabled === true) {
       return normalizeDisplayEdgeSettings(themeEdges);
     }
     return normalizeDisplayEdgeSettings();
   }, [resolvedThemeSettings]);
   const updateDisplaySettings = useCallback((nextValue) => {
-    setDisplaySettings((current) => normalizeDisplaySettings(
-      typeof nextValue === "function" ? nextValue(current) : nextValue
-    ));
-  }, []);
+    const next = normalizeDisplaySettings(
+      typeof nextValue === "function" ? nextValue(resolvedScene.display) : nextValue,
+      { fallback: resolvedScene.display }
+    );
+    setDisplaySettings(next);
+  }, [resolvedScene.display]);
   const [previewMode, setPreviewMode] = useState(false);
   useEffect(() => { onChromeVisibilityChange?.(!previewMode); }, [onChromeVisibilityChange, previewMode]);
   const tabToolsWidth = 365;
   const [drawingTool, setDrawingTool] = useState(DRAWING_TOOL.FREEHAND);
-  const [viewerPerspective, setViewerPerspective] = useState(null);
   const [tabToolMode, setTabToolMode] = useState(TAB_TOOL_MODE.REFERENCES);
   const [drawingStrokes, setDrawingStrokes] = useState([]);
   const [drawingUndoStack, setDrawingUndoStack] = useState([]);
@@ -469,10 +615,9 @@ function CadFileViewSurface({
     definition: null
   });
   const [stepModuleParameterValues, setStepModuleParameterValues] = useState({});
-  const [stepModuleEnabled, setStepModuleEnabled] = useState(true);
   // The ANIMATION system, loaded and held entirely apart from the kinematics
-  // state above: kinematics is the sidecar's, choreography is the render
-  // module beside the document (<name>.step.js), and a model may ship either,
+  // state above: kinematics and choreography are independent declarations in
+  // the embedded source sidecar, and a model may ship either,
   // both, or neither.
   const [animationLoadState, setAnimationLoadState] = useState({
     url: "",
@@ -514,10 +659,14 @@ function CadFileViewSurface({
     meshState,
     setMeshState,
     lodPackage,
-    applyComponentLodPayload,
+    applyComponentLodBatch,
+    prepareComponentLodPayload,
+    onMeshSourceAdoption,
+    componentLodNeedsSelectors,
     meshLoadInProgress,
     meshLoadTargetFile,
-    meshLoadStage,
+    meshLoadTargetHash,
+    meshLoadProgress,
     status,
     setStatus,
     error,
@@ -528,7 +677,6 @@ function CadFileViewSurface({
     setUrdfStatus,
     urdfError,
     setUrdfError,
-    urdfLoadStage,
     urdfLoadProgress,
     referenceState,
     setReferenceState,
@@ -536,10 +684,11 @@ function CadFileViewSurface({
     setReferenceStatus,
     referenceError,
     setReferenceError,
-    referenceLoadStage,
     displayEdgeState,
     setDisplayEdgeState,
+    displayEdgeStatus,
     setDisplayEdgeStatus,
+    displayEdgeError,
     setDisplayEdgeError,
     getCachedMeshState,
     getCachedReferenceState,
@@ -553,7 +702,8 @@ function CadFileViewSurface({
     loadReferencesForEntry,
     loadDisplayEdgesForEntry
   } = useCadAssets({
-    tessellationCache: renderSession.tessellationCache,
+    client,
+    tessellationCache: cadRenderSession.tessellationCache,
     entryHasMesh,
     entryHasReferences,
     entryHasDisplayEdges,
@@ -564,6 +714,14 @@ function CadFileViewSurface({
   const fileParamSelectionPending = false;
   const missingFileRef = "";
   const catalogSelectedEntrySourceFormat = entrySourceFormat(catalogSelectedEntry);
+  // File state uses the host's absolute identity; server requests use the
+  // catalog's path relative to this client's served root.
+  const editingFile = catalogSelectedEntry ? cadFileParamForEntry(catalogSelectedEntry) : explicitFileParam;
+  const editingAvailable = /\.st(?:ep|p)$/i.test(editingFile || "");
+  const editingPreview = useEditingPreview(editingFile, { client,
+    enabled: editingAvailable && !selectedCatalogPending,
+    catalogEntry: catalogSelectedEntry,
+  });
   // Unified render-artifact status for the selected entry: ready (render) | generating (loading) |
   // error (fatal). A missing/stale cache is not an issue — it just triggers a (re)build. Replaces
   // the per-entry step-source-status fetch, the mesh-stripping merge, and the build effect.
@@ -573,25 +731,19 @@ function CadFileViewSurface({
   // entities in the browser. It renders from the package's baked preview.glb now, so it needs
   // the build for exactly the reason a generated one does.
   const selectedArtifact = useArtifact(
-    catalogSelectedEntry ? fileKey(catalogSelectedEntry) : "",
+    catalogSelectedEntry ? cadFileParamForEntry(catalogSelectedEntry) : "",
     {
-      enabled: isArtifactManagedFormat(catalogSelectedEntrySourceFormat),
+      enabled: !selectedCatalogPending && isArtifactManagedFormat(catalogSelectedEntrySourceFormat),
       freshnessKey: `${catalogSelectedEntry?.hash || ""}:${manifestRevision}`,
       client,
     }
   );
-  const selectedArtifactGenerating = selectedArtifact.status === "compiling";
+  const editingHasView = Boolean(editingPreview.entry || entryHasMesh(catalogSelectedEntry));
+  const selectedArtifactGenerating = selectedArtifact.status === "compiling" && !editingHasView;
   // The in-flight build's own report of where it is (null until it reports, and for
   // every loading state that is not an artifact build). Only meaningful while
   // generating — a stale frame must not outlive the build that produced it.
   const selectedArtifactProgress = selectedArtifactGenerating ? selectedArtifact.progress : null;
-  // What the loading overlay reports. A model being BUILT reports through the artifact
-  // pipeline; a robot has no build behind it at all — it is a URDF plus a pile of meshes —
-  // and its loader's own mesh count is then the only progress in existence. The two are
-  // mutually exclusive in practice, and normalizing both through one function is what keeps
-  // the overlay from having to know which subsystem it is looking at.
-  const selectedLoadProgress =
-    selectedArtifactProgress || normalizeArtifactProgress(urdfLoadProgress);
   const activeStepArtifactGenerationFiles = useMemo(
     () => (selectedArtifactGenerating && catalogSelectedEntry ? [fileKey(catalogSelectedEntry)] : []),
     [selectedArtifactGenerating, catalogSelectedEntry]
@@ -607,19 +759,33 @@ function CadFileViewSurface({
   );
   const selectedEntry = useMemo(
     () => {
-      const base = !catalogSelectedEntry || selectedArtifact.status === "rendered"
+      const base = editingPreview.entry || (!catalogSelectedEntry || selectedArtifact.status === "compiled" ||
+        entryHasMesh(catalogSelectedEntry)
         ? catalogSelectedEntry
-        : entryWithoutRenderAssets(catalogSelectedEntry);
+        : entryWithoutRenderAssets(catalogSelectedEntry));
       if (!base) {
         return base;
       }
       const fileRefPrefix = fileRefPrefixByPath.get(cadFileParamForEntry(base)) || "";
       return fileRefPrefix ? { ...base, fileRefPrefix } : base;
     },
-    [catalogSelectedEntry, selectedArtifact.status, fileRefPrefixByPath]
+    [catalogSelectedEntry, selectedArtifact.status, fileRefPrefixByPath, editingPreview.entry]
   );
+  const previousPreviewTree = useRef(null);
+  useEffect(() => {
+    const previous = previousPreviewTree.current;
+    const next = { file: selectedEntry?.file, hash: selectedEntry?.hash, preview: selectedEntry?.editingPreview };
+    if (previewGeometryChanged(previous, next)) {
+      pendingModelReferenceActivationRef.current = null;
+      setSelectedReferenceIds([]);
+      setSelectedPartIds([]);
+      setSelectedRenderPartIdByAssemblyPartId({});
+      setSelectedWholeEntryCadRefToken("");
+    }
+    previousPreviewTree.current = next;
+  }, [selectedEntry?.file, selectedEntry?.hash, selectedEntry?.editingPreview]);
   // Cache states never become user-facing "issues"; only a fatal build/source failure does.
-  const selectedStepSourceStatus = selectedArtifact.status === "failed"
+  const selectedStepSourceStatus = selectedArtifact.status === "failed" && !editingHasView
     ? {
         artifact: {
           ok: false,
@@ -668,19 +834,23 @@ function CadFileViewSurface({
       urdfTrajectoryPlaybackRef.current?.frameId
     )
   );
-  const selectedStepModuleUrl = supportsSidecarParams ? entryPoseUrl(selectedEntry) : "";
+  const selectedStepModuleUrl = selectedEntry?.editingPreview && selectedEntry.previewKinematics
+    ? `preview:${selectedEntry.hash}` : supportsSidecarParams ? entryPoseUrl(selectedEntry) : "";
   const selectedStepModuleCadPath = selectedStepModuleUrl ? cadPathForEntry(selectedEntry) : "";
   const selectedStepModuleDefinition = stepModuleLoadState.url === selectedStepModuleUrl
     ? stepModuleLoadState.definition
     : null;
-  const selectedRenderModuleUrl = supportsSidecarParams ? entryRenderModuleUrl(selectedEntry) : "";
-  const selectedAnimationClips = animationLoadState.url === selectedRenderModuleUrl
+  const selectedSourceAnimation = supportsSidecarParams
+    ? sourceAnimationForEntry(selectedEntry)
+    : null;
+  const selectedAnimationSourceKey = selectedSourceAnimation ? sourceAnimationKeyForEntry(selectedEntry) : "";
+  const selectedAnimationClips = animationLoadState.url === selectedAnimationSourceKey
     ? animationLoadState.clips
     : null;
-  const selectedAnimationStatus = selectedRenderModuleUrl
-    ? (animationLoadState.url === selectedRenderModuleUrl ? animationLoadState.status : "loading")
+  const selectedAnimationStatus = selectedAnimationSourceKey
+    ? (animationLoadState.url === selectedAnimationSourceKey ? animationLoadState.status : "loading")
     : "idle";
-  const selectedAnimationLoadError = animationLoadState.url === selectedRenderModuleUrl
+  const selectedAnimationLoadError = animationLoadState.url === selectedAnimationSourceKey
     ? animationLoadState.error
     : "";
   const selectedStepModuleStatus = selectedStepModuleUrl
@@ -710,6 +880,22 @@ function CadFileViewSurface({
     !!selectedEntry &&
     meshState.file === fileKey(selectedEntry) &&
     meshState.meshHash === selectedMeshHash;
+  // useCadAssets retains the complete scene while a same-file STEP revision
+  // stages. Keep that predecessor renderable across the short entry-hash gap;
+  // reference matching remains hash-strict below, so its stale topology cannot
+  // be picked while the replacement geometry/selectors are loading.
+  const retainingPreviousStepMesh =
+    selectedEntryHasMesh &&
+    !!selectedMeshHash &&
+    selectedEntrySourceFormat === RENDER_FORMAT.STEP &&
+    !selectedStepModuleUrl &&
+    !selectedAnimationSourceKey &&
+    shouldRetainCompleteSameFileMesh(meshState, selectedEntry, selectedMeshHash);
+  const retainedPreviousStepMeshError = retainingPreviousStepMesh &&
+    meshState?.assemblyBackgroundErrorMeshHash === selectedMeshHash
+    ? String(meshState?.assemblyBackgroundError || "").trim()
+    : "";
+  const stepInteractionBlocked = stepUpdateInProgress || retainingPreviousStepMesh;
   const selectedAssemblyStructureReady =
     selectedEntry?.kind === "assembly" &&
     selectedMeshMatches &&
@@ -720,8 +906,8 @@ function CadFileViewSurface({
     !!meshState?.assemblyInteractionReady;
   const selectedAssemblyHydrationFailed =
     selectedEntry?.kind === "assembly" &&
-    selectedMeshMatches &&
-    !!meshState?.assemblyBackgroundError;
+    !!meshState?.assemblyBackgroundError &&
+    (selectedMeshMatches || !!retainedPreviousStepMeshError);
   const selectedUrdfMatches =
     !!urdfState &&
     !!selectedEntry &&
@@ -816,7 +1002,6 @@ function CadFileViewSurface({
         definition: null
       });
       setStepModuleParameterValues({});
-      setStepModuleEnabled(true);
       return () => {
         cancelled = true;
         controller.abort();
@@ -830,12 +1015,23 @@ function CadFileViewSurface({
       definition: null
     });
     setStepModuleParameterValues({});
-    setStepModuleEnabled(true);
 
-    loadKinematicsModuleDefinition(selectedStepModuleUrl, {
-      signal: controller.signal,
-      cadPath: selectedStepModuleCadPath
-    }).then((definition) => {
+    const modulePromise = selectedEntry?.editingPreview
+      ? Promise.resolve().then(() => previewKinematicsModuleDefinition(selectedEntry.previewKinematics, {
+          cadPath: selectedStepModuleCadPath,
+        }))
+      : selectedEntry?.sourceSidecar
+        ? Promise.resolve().then(() => kinematicsModuleDefinitionFromSidecar(
+            validateSourceSidecar(selectedEntry.sourceSidecar, {
+              url: selectedStepModuleUrl || selectedEntry.file,
+              documentHash: selectedEntry.documentHash,
+            }),
+            { cadPath: selectedStepModuleCadPath, url: selectedStepModuleUrl }
+          ))
+      : loadKinematicsModuleDefinition(selectedStepModuleUrl, {
+          signal: controller.signal, cadPath: selectedStepModuleCadPath, documentHash: selectedEntry?.documentHash,
+        });
+    modulePromise.then((definition) => {
       if (cancelled) {
         return;
       }
@@ -853,7 +1049,7 @@ function CadFileViewSurface({
       setStepModuleLoadState(resolved.loadState);
       stepModuleParameterValuesRef.current = resolved.parameterValues;
       setStepModuleParameterValues(resolved.parameterValues);
-      setStepModuleEnabled(resolved.enabled);
+      setAppliedStepPoseName("");
     }).catch((error) => {
       if (cancelled) {
         return;
@@ -865,7 +1061,6 @@ function CadFileViewSurface({
         definition: null
       });
       setStepModuleParameterValues({});
-      setStepModuleEnabled(true);
     });
 
     return () => {
@@ -874,10 +1069,10 @@ function CadFileViewSurface({
     };
   }, [fileSessionNamespace, selectedEntry, selectedStepModuleCadPath, selectedStepModuleUrl]);
 
-  // The animation half of the same sidecar, loaded on its own: the copied
-  // .anim.js text compiles to clips through a Blob import. A model with no
-  // animation section resolves to no clips and no Animation tab, and a broken
-  // one reports its own error without disturbing the Pose tab.
+  // The animation half compiles the exact source embedded in the selected
+  // sidecar. A document with no animation resolves to no clips and no
+  // Animation tab, and a broken one reports its own error without disturbing
+  // the Pose tab.
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
@@ -888,7 +1083,7 @@ function CadFileViewSurface({
       resetAnimationClock();
     };
 
-    if (!selectedRenderModuleUrl) {
+    if (!selectedAnimationSourceKey || !selectedSourceAnimation) {
       setAnimationLoadState({ url: "", status: "idle", error: "", clips: null });
       resetAnimation();
       return () => {
@@ -898,21 +1093,24 @@ function CadFileViewSurface({
     }
 
     setAnimationLoadState({
-      url: selectedRenderModuleUrl,
+      url: selectedAnimationSourceKey,
       status: "loading",
       error: "",
       clips: null
     });
     resetAnimation();
 
-    loadRenderModule(selectedRenderModuleUrl, { signal: controller.signal })
-      .then((renderModule) => {
+    loadSourceAnimation({ animation: selectedSourceAnimation }, {
+      signal: controller.signal,
+      name: `${fileKey(selectedEntry) || "STEP"} animation`
+    })
+      .then((animationModule) => {
         if (cancelled) {
           return;
         }
-        const clips = renderModule?.clips || {};
+        const clips = animationModule?.clips || {};
         setAnimationLoadState({
-          url: selectedRenderModuleUrl,
+          url: selectedAnimationSourceKey,
           status: "ready",
           error: "",
           clips
@@ -929,7 +1127,7 @@ function CadFileViewSurface({
           return;
         }
         setAnimationLoadState({
-          url: selectedRenderModuleUrl,
+          url: selectedAnimationSourceKey,
           status: "error",
           error: error instanceof Error ? error.message : String(error),
           clips: null
@@ -941,9 +1139,9 @@ function CadFileViewSurface({
       cancelled = true;
       controller.abort();
     };
-  }, [fileSessionNamespace, selectedEntry, selectedRenderModuleUrl]);
+  }, [fileSessionNamespace, selectedAnimationSourceKey, selectedEntry, selectedSourceAnimation]);
 
-  const selectedUrdfMeshGeometryResult = useMemo(() => {
+  const selectedUrdfLinkMeshGeometryResult = useMemo(() => {
     if (!selectedUrdfData || !selectedUrdfMeshes) {
       return {
         meshData: null,
@@ -962,6 +1160,39 @@ function CadFileViewSurface({
       };
     }
   }, [selectedUrdfData, selectedUrdfMeshes]);
+  // Splitting a visual into its named objects is an INSPECT affordance. Render owns an
+  // isolated photographic scene, and the parts it is handed are the Materials targets —
+  // so a robot in Render keeps the per-visual geometry it has always had, and the split
+  // never reaches the Materials picker. Keeping the split in its own memo also means a
+  // mode switch never rebuilds the link geometry underneath it.
+  const selectedUrdfMeshGeometryResult = useMemo(() => {
+    if (renderSession.enabled || !selectedUrdfLinkMeshGeometryResult.meshData) {
+      return selectedUrdfLinkMeshGeometryResult;
+    }
+    try {
+      return {
+        meshData: buildRobotComponentGeometry(selectedUrdfLinkMeshGeometryResult.meshData),
+        error: ""
+      };
+    } catch (error) {
+      // The split is an enhancement: a failure in it costs the components, never the robot.
+      console.warn("Failed to split robot mesh objects into components", error);
+      return selectedUrdfLinkMeshGeometryResult;
+    }
+  }, [renderSession.enabled, selectedUrdfLinkMeshGeometryResult]);
+  const selectedUrdfComponents = useMemo(
+    () => robotComponents(selectedUrdfMeshGeometryResult.meshData),
+    [selectedUrdfMeshGeometryResult.meshData]
+  );
+  const robotSelection = useRobotComponentSelection(
+    selectedUrdfComponents, selectedUrdfMeshGeometryResult.meshData, selectedUrdfFileRef
+  );
+  // Inspect only, and stated twice on purpose: the geometry above is unsplit in Render,
+  // and this keeps the viewport's picking, hover and activate wiring on main's path even
+  // if that ever changes.
+  const robotComponentsActive = !renderSession.enabled &&
+    selectedEntryContentKind === VIEWPORT_CONTENT.ROBOT &&
+    selectedUrdfComponents.length > 0;
   const movableUrdfJoints = useMemo(
     () => (
       Array.isArray(selectedUrdfData?.joints)
@@ -982,7 +1213,7 @@ function CadFileViewSurface({
       const posedPreview = applyUrdfPoseToMeshData(
         selectedUrdfData,
         selectedUrdfMeshGeometryResult.meshData,
-        selectedUrdfJointValues
+        renderSession.enabled ? defaultSelectedUrdfJointValues : selectedUrdfJointValues
       );
       return {
         ...posedPreview,
@@ -995,12 +1226,39 @@ function CadFileViewSurface({
         linkWorldTransforms: new Map()
       };
     }
-  }, [selectedUrdfData, selectedUrdfJointValues, selectedUrdfMeshGeometryResult]);
+  }, [
+    defaultSelectedUrdfJointValues,
+    renderSession.enabled,
+    selectedUrdfData,
+    selectedUrdfJointValues,
+    selectedUrdfMeshGeometryResult
+  ]);
   const selectedMeshData = selectedEntryContentKind === VIEWPORT_CONTENT.ROBOT
     ? selectedUrdfPreview.meshData
-    : selectedMeshMatches
+    : (selectedMeshMatches || retainingPreviousStepMesh)
       ? meshState.meshData
       : null;
+  const selectedSourceAppearance = selectedEntry?.editingPreview
+    ? selectedEntry.previewAppearance || null
+    : selectedEntry?.sourceSidecar?.appearance || selectedMeshData?.appearance || null;
+  const materialSession = useSourceMaterialSession(selectedEntry, selectedMeshData, {
+    appearance: selectedSourceAppearance,
+    fileSheetKind: selectedFileSheetKind,
+    renderEnabled: renderSession.enabled
+  });
+  const selectedDisplayMeshData = useMemo(() => {
+    return registerLodDisplaySource(
+      applySourceMaterialOverlayToMeshData(selectedMeshData, materialSession.overlay, selectedSourceAppearance),
+      selectedMeshData
+    );
+  }, [materialSession.overlay, selectedMeshData, selectedSourceAppearance]);
+  const handleDisplayMeshAdoption = useCallback((source, ok, detail) =>
+    onMeshSourceAdoption(sourceMaterialGeometry(source), ok, detail), [onMeshSourceAdoption]);
+  const selectedGlbDocument = selectedMeshMatches ? meshState?.glbDocument || null : null;
+  const embeddedGlbAnimationRuntime = useEmbeddedGlbAnimation(selectedGlbDocument);
+  // Animated direct GLBs render their live hierarchy. Flattened triangle picks
+  // describe only the rest pose, so exposing them would create stale rulers.
+  const effectiveSupportsMeasure = supportsMeasure && !embeddedGlbAnimationRuntime;
   const selectedAnimationClipList = useMemo(
     () => animationClipList(selectedAnimationClips),
     [selectedAnimationClips]
@@ -1009,23 +1267,17 @@ function CadFileViewSurface({
     () => findAnimationClip(selectedAnimationClips, animationState.activeClipId),
     [selectedAnimationClips, animationState.activeClipId]
   );
-  const selectedStepParameterRuntime = useMemo(() => {
-    if (!selectedStepModuleDefinition || !stepModuleEnabled) {
-      return null;
-    }
-    return {
-      definition: selectedStepModuleDefinition,
-      parameterValues: normalizeStepModuleParameterValues(selectedStepModuleDefinition, stepModuleParameterValues),
-      cadPath: selectedStepModuleDefinition.cadPath || selectedStepModuleCadPath,
-      sourceUrl: selectedStepModuleUrl
-    };
-  }, [
-    selectedStepModuleCadPath,
-    selectedStepModuleDefinition,
-    selectedStepModuleUrl,
-    stepModuleEnabled,
-    stepModuleParameterValues
-  ]);
+  // Progressive publish (design/viewer-memory.md §6): a STEP package paints
+  // while it loads, and the partial states carry assemblyInteractionReady=false.
+  // Embedded animation attaches on the FIRST publish and stays live: the viewer
+  // re-runs its setup on every meshData change (the same path a LOD swap
+  // takes), so occurrences bind as they arrive. Pose and animation controls
+  // act on whatever is present; only clip validation waits for the complete
+  // model, and a partial model's clip tolerates labels not yet loaded.
+  const selectedMeshPartial = selectedMeshMatches && !meshStateIsComplete(meshState);
+  const selectedStepModuleTopologyRequired = stepModuleRequiresTopology(selectedStepModuleDefinition);
+  const selectedStepModuleTopologyRequested =
+    !renderSession.enabled && selectedStepModuleTopologyRequired;
   // What the viewport needs to draw one animated frame: the compiled clip and a
   // time. The render pane swaps in the live clock while playing; everything else
   // about playback stays out of the render path.
@@ -1034,16 +1286,20 @@ function CadFileViewSurface({
   // the pose gate above: switched off this memo is null, and null is already how
   // the viewport draws the rest scene — pose only, evaluator never run. So there
   // is no "disabled" render path, only the absence of a frame.
+  const selectedPlayableAnimationClip = useMemo(
+    () => (selectedMeshPartial ? tolerantAnimationClip(selectedActiveAnimationClip) : selectedActiveAnimationClip),
+    [selectedActiveAnimationClip, selectedMeshPartial]
+  );
   const selectedAnimationRuntime = useMemo(() => animationRenderFrame({
     enabled: animationState.enabled !== false,
-    clip: selectedActiveAnimationClip,
+    clip: selectedPlayableAnimationClip,
     elapsedSec: animationState.elapsedSec,
     playing: animationState.playing
   }), [
     animationState.elapsedSec,
     animationState.enabled,
     animationState.playing,
-    selectedActiveAnimationClip
+    selectedPlayableAnimationClip
   ]);
   const handleStepModuleTransformDetectedChange = useCallback(() => {}, []);
   const stepModuleTreeSelectionDisabled = false;
@@ -1057,12 +1313,20 @@ function CadFileViewSurface({
     animationStateRef.current = animationState;
   }, [animationState]);
 
+  // The pose the person PICKED, which the dropdown shows until they move a DOF. Without
+  // it the name is re-derived from the values every frame, so a pose read as "None"
+  // for the whole of its own transition and only became itself once it arrived.
+  const [appliedStepPoseName, setAppliedStepPoseName] = useState("");
+
   const handleStepModuleParameterChange = useCallback((parameterId, value) => {
     const id = String(parameterId || "").trim();
     const parameter = selectedStepModuleDefinition?.parameterMap?.[id];
     if (!parameter) {
       return;
     }
+    // Moving a DOF by hand leaves the named pose behind, so the dropdown stops claiming
+    // it and goes back to reading the values (the robot's group state does the same).
+    setAppliedStepPoseName("");
     setStepModuleParameterValues((current) => ({
       ...current,
       [id]: normalizeParameterValue(parameter, value)
@@ -1091,6 +1355,15 @@ function CadFileViewSurface({
   // A named pose is a full configuration, not a patch: every DOF the preset
   // does not mention returns to 0 (the artifact as written), so two presets in
   // a row can never leave a joint behind from the first.
+  // One preference for every sheet that has poses; see workbench/poseTransition.js.
+  const updatePoseTransition = useCallback((poseTransition) => onPreferenceChange({ poseTransition }), [onPreferenceChange]);
+  const poseTransition = usePoseTransition(preferences.poseTransition, updatePoseTransition);
+  const stepPoseAnimation = usePoseValueAnimation();
+  // Read at call time, not closed over: the robot tween is a useCallback with the joint
+  // state in its dependencies, and changing the speed must not rebuild it mid-drag.
+  const poseTransitionDurationMsRef = useRef(poseTransition.durationMs);
+  poseTransitionDurationMsRef.current = poseTransition.durationMs;
+
   const handleApplyPose = useCallback((poseName) => {
     if (!selectedStepModuleDefinition) {
       return;
@@ -1099,15 +1372,20 @@ function CadFileViewSurface({
       selectedStepModuleDefinition,
       poseValuesForPreset(selectedStepModuleDefinition, poseName)
     );
-    stepModuleParameterValuesRef.current = nextParameterValues;
-    setStepModuleParameterValues(nextParameterValues);
-  }, [selectedStepModuleDefinition]);
-
-  // Turning the mate graph off leaves the model at rest — and leaves any playing
-  // clip alone. Animation is not downstream of pose and never stops with it.
-  const handleStepModuleEnabledChange = useCallback((enabled) => {
-    setStepModuleEnabled(enabled !== false);
-  }, []);
+    setAppliedStepPoseName(String(poseName || ""));
+    // A pose is a place the mechanism GOES, so it travels there: the same tween the
+    // robot sheet has always used, at the duration this viewer is set to. With
+    // animation off the duration is 0 and the values are written in this frame.
+    stepPoseAnimation.run({
+      start: stepModuleParameterValuesRef.current || {},
+      target: nextParameterValues,
+      durationMs: poseTransition.durationMs,
+      onFrame: (frameValues) => {
+        stepModuleParameterValuesRef.current = frameValues;
+        setStepModuleParameterValues(frameValues);
+      }
+    });
+  }, [poseTransition.durationMs, selectedStepModuleDefinition, stepPoseAnimation]);
 
   // --- Animation transport -------------------------------------------------
   //
@@ -1323,17 +1601,23 @@ function CadFileViewSurface({
   // THE content signal: "is there anything on screen?", answered once for every format.
   // Consumers (toolbar gates, CTA, preview mode, zoom pill, alert blocking) read this
   // instead of each one guessing which loaded object backs the viewport.
-  // The render module's clips are checked against the compiled tree once it is
+  // Embedded animation clips are checked against the compiled tree once it is
   // in hand: a target no part carries fails HERE, in the Status tab, not the
   // first time playback reaches that frame.
   const selectedAnimationValidationError = useMemo(() => {
     if (!selectedAnimationClips || !Array.isArray(selectedMeshData?.parts) || !selectedMeshData.parts.length) {
       return "";
     }
-    return validateRenderModuleClips(THREE, selectedMeshData, selectedAnimationClips)
+    // A partial progressive state lacks occurrences by design; validating
+    // against it would report every not-yet-loaded label as a clip error, so
+    // validation runs on the complete model only.
+    if (selectedMeshPartial) {
+      return "";
+    }
+    return validateAnimationClips(THREE, selectedMeshData, selectedAnimationClips)
       .map((problem) => `${problem.clip}: ${problem.error}`)
       .join("\n");
-  }, [selectedAnimationClips, selectedMeshData]);
+  }, [selectedAnimationClips, selectedMeshData, selectedMeshPartial]);
   const selectedAnimationError = selectedAnimationLoadError || selectedAnimationValidationError;
   const selectedViewportContent = selectedMeshData;
 
@@ -1429,6 +1713,9 @@ function CadFileViewSurface({
   const assemblyRoot = selectedAssemblyStructureReady
     ? selectedMeshData?.assemblyRoot || null
     : null;
+  // An assembly tree already contains its occurrence metadata. Display-only
+  // tessellation changes must not invalidate tree consumers through meshData.
+  const stepPartMeshData = assemblyRoot ? null : selectedMeshData;
   const stepTreeRoot = useMemo(() => {
     if (!supportsParts) {
       return null;
@@ -1436,9 +1723,9 @@ function CadFileViewSurface({
     return buildStepTreeRoot({
       selectedEntry,
       assemblyRoot,
-      meshData: selectedMeshData
+      meshData: stepPartMeshData
     });
-  }, [assemblyRoot, supportsParts, selectedEntry, selectedMeshData]);
+  }, [assemblyRoot, supportsParts, selectedEntry, stepPartMeshData]);
   const assemblyLeafParts = useMemo(() => {
     return Array.isArray(selectedMeshData?.parts) ? selectedMeshData.parts : flattenAssemblyLeafParts(assemblyRoot);
   }, [assemblyRoot, selectedMeshData?.parts]);
@@ -1503,7 +1790,10 @@ function CadFileViewSurface({
       return [];
     }
     return uniqueStringList(
-      expandedStepTreeNodeIds
+      [
+        ...expandedStepTreeNodeIds,
+        ...stepModuleTopologyOccurrenceIds(selectedStepModuleDefinition)
+      ]
         .map((id) => String(id || "").trim())
         .filter((id) => id && loadableStepTreeTopologyNodeIdSet.has(id))
     );
@@ -1512,7 +1802,8 @@ function CadFileViewSurface({
     isAssemblyView,
     supportsTopology,
     loadableStepTreeTopologyNodeIdSet,
-    selectedEntryHasReferences
+    selectedStepModuleDefinition,
+    selectedEntryHasReferences,
   ]);
   const viewerSelectableAssemblyNodeIds = useMemo(
     () => (isAssemblyView
@@ -1537,8 +1828,7 @@ function CadFileViewSurface({
   );
   const assemblyParts = useMemo(() => {
     return viewerSelectableAssemblyNodeIds.length
-      ? viewerSelectableAssemblyNodeIds
-        .map((nodeId) => findAssemblyNode(assemblyRoot, nodeId))
+      ? findAssemblyNodes(assemblyRoot, viewerSelectableAssemblyNodeIds)
         .filter(Boolean)
         .map((node) => ({
           ...node,
@@ -1651,7 +1941,7 @@ function CadFileViewSurface({
   // otherwise spin forever behind its own error.
   const artifactBlocksRender =
     isArtifactManagedFormat(effectiveRenderFormat) &&
-    selectedArtifact.status === "failed";
+    selectedArtifact.status === "failed" && !editingHasView;
   const meshViewerLoading =
     !!selectedEntry &&
     // A DRAWING has no flat pattern and bakes nothing, so "no mesh yet" is its finished state,
@@ -1659,7 +1949,8 @@ function CadFileViewSurface({
     !selectedEntryIsDrawingDocument &&
     (selectedStepArtifactRenderPending || !artifactBlocksRender) &&
     status !== ASSET_STATUS.ERROR &&
-    (!selectedMeshMatches || status === ASSET_STATUS.LOADING || selectedStepModuleLoading);
+    ((!selectedMeshMatches && !retainedPreviousStepMeshError) ||
+      status === ASSET_STATUS.LOADING || selectedStepModuleLoading);
   // DXF has no arm -- it renders its baked preview through the mesh path like everything
   // else.
   const viewerLoading = {
@@ -1669,7 +1960,7 @@ function CadFileViewSurface({
     // mesh path, so its readiness is the mesh loader's.
     [ASSET_KIND.DRAWING]: meshViewerLoading
   }[assetKindForRenderFormat(effectiveRenderFormat)];
-  const effectiveViewerLoading = viewerLoading || selectedArtifactGenerating || fileParamSelectionPending;
+  const effectiveViewerLoading = viewerLoading || selectedArtifactGenerating || selectedCatalogPending || (fileParamSelectionPending && !editingPreview.entry);
   // The file explorer spins the entry the viewer is actually working on. Artifact
   // generation is only half of that -- a built package still has to be fetched and
   // decoded, and an entry sitting un-built is NOT loading (nothing loads in a static
@@ -1680,43 +1971,26 @@ function CadFileViewSurface({
     selectedMeshMatches &&
     !assemblyPartsLoaded &&
     !selectedAssemblyHydrationFailed;
-  const assemblyHydrationLoading =
-    isAssemblyView &&
-    selectedMeshMatches &&
-    selectedAssemblyStructureReady &&
-    !selectedAssemblyInteractionReady &&
-    !selectedAssemblyHydrationFailed;
-  // Six format arms said one thing: name the asset being fetched. Formats the viewer does
-  // not build ARE their own asset, so the label is just their name; artifact-managed ones
-  // fall through to the build/parameter progression below, which is about the package
-  // rather than the file.
-  // A robot assembles from many meshes and the loader already counts them off. Reporting
-  // "loading meshes 7/13" instead of a static card is the difference between a 15-second
-  // wait that looks like progress and one that looks like a hang; the count was already
-  // computed and only ever reached the file-list chip.
-  const robotLoadingLabel = `Loading ${renderFormatLabel(effectiveRenderFormat)} robot...`;
-  const simpleLoadingLabel = selectedArtifactGenerating || isArtifactManagedFormat(effectiveRenderFormat)
-    ? ""
-    : {
-        [ASSET_KIND.ROBOT]: urdfLoadStage
-          ? `${capitalizeFirst(urdfLoadStage)}...`
-          : robotLoadingLabel,
-        [ASSET_KIND.MESH]: `Loading ${renderFormatLabel(effectiveRenderFormat)}...`,
-        [ASSET_KIND.DRAWING]: ""
-      }[assetKindForRenderFormat(effectiveRenderFormat)];
-  const viewerLoadingLabel = selectedArtifactGenerating
-    ? "Generating file..."
-    : simpleLoadingLabel
-      ? simpleLoadingLabel
-      : stepUpdateInProgress
-                ? ARTIFACT_GENERATING_LABEL
-                : selectedStepArtifactRenderPending
-                  ? ARTIFACT_GENERATING_LABEL
-                  : selectedStepModuleLoading
-                    ? "Loading STEP module..."
-                  : selectedEntry && !selectedEntryHasMesh
-                    ? ARTIFACT_GENERATING_LABEL
-                    : "Loading CAD...";
+  const activeMeshLoadProgress = meshLoadInProgress && meshLoadTargetFile === fileKey(selectedEntry)
+    ? meshLoadProgress : null;
+  const selectedLoadProgress = selectedArtifactProgress || activeMeshLoadProgress || urdfLoadProgress || null;
+  const presentationKey = selectedKey ? `${selectedKey}:${selectedMeshData ? meshState?.meshHash || selectedMeshHash : selectedMeshHash}:${selectedMeshPartial ? "partial" : "complete"}` : "";
+  const [presentationState, setPresentationState] = useState(null);
+  const handlePresentationChange = useCallback((next) => {
+    setPresentationState(previous => previous?.file === next.file && previous?.renderMode === next.renderMode &&
+      previous?.key === next.key && previous?.covering === next.covering && previous?.preparing === next.preparing ? previous : next);
+  }, []);
+  const presentationPending = Boolean(selectedMeshData || selectedEntryIsDrawingDocument) && (
+    presentationState?.file !== selectedKey || presentationState?.key !== presentationKey || presentationState?.renderMode !== renderSession.enabled ||
+    presentationState?.preparing === true
+  );
+  const currentPreviewVisible = Boolean(editingPreview.entry && selectedMeshMatches && !selectedMeshPartial &&
+    !presentationPending && Number(editingPreview.state.preview?.revision) === Number(editingPreview.state.revision));
+  const completedViewFile = useRef("");
+  useEffect(() => {
+    if (!effectiveViewerLoading && !selectedMeshPartial && !presentationPending &&
+        (selectedMeshData || selectedEntryIsDrawingDocument)) completedViewFile.current = selectedKey;
+  }, [effectiveViewerLoading, selectedMeshPartial, presentationPending, selectedMeshData, selectedEntryIsDrawingDocument, selectedKey]);
   const selectedDrawingBendAxisCount = useMemo(() => {
     if (!drawingGeometry?.geometry) {
       return 0;
@@ -1735,7 +2009,24 @@ function CadFileViewSurface({
     ? normalizeDxfThicknessMm(drawingThicknessMm) / DXF_PREVIEW_REFERENCE_THICKNESS_MM
     : 1;
 
+  // What the backend says about the document's NEIGHBOURS (a retired render
+  // module still sitting beside it, say). The geometry is correct, so this is
+  // the LAST alert considered below: any real failure outranks it, and it never
+  // blocks the viewport -- it rides the file-status badge and its dialog.
+  const artifactWarningAlert = useMemo(
+    () => buildArtifactWarningAlert(fileKey(selectedEntry), selectedArtifact.warnings),
+    [selectedEntry, selectedArtifact.warnings]
+  );
   const viewerAlert = useMemo(() => {
+    const editFailure = buildViewerEditAlert(editingPreview.state, currentPreviewVisible, Boolean(selectedMeshData && !selectedMeshPartial));
+    if (editFailure) return editFailure;
+    if (catalogError && !selectedMeshData) return {
+      severity: "error", kind: "status", title: "Couldn’t open the model",
+      message: "The viewer couldn’t retrieve this file’s information.",
+      tooltip: "The viewer couldn’t retrieve information about this file. Try reloading the viewer.",
+      recovery: "Try again. If this continues, check that the viewer is running.",
+      details: catalogError, reload: true,
+    };
     if (viewerRuntimeAlert?.blocking) {
       return viewerRuntimeAlert;
     }
@@ -1747,21 +2038,36 @@ function CadFileViewSurface({
         selectedEntry,
         !!selectedMeshData,
         urdfStatus === ASSET_STATUS.ERROR ? urdfError : selectedUrdfPreviewError
-      ) || viewerRuntimeAlert;
+      ) || viewerRuntimeAlert || artifactWarningAlert;
     }
     const meshAlert = buildViewerMeshAlert(
       selectedEntry,
       !!selectedMeshData,
-      status === ASSET_STATUS.ERROR ? error : "",
-      selectedArtifact
+      meshLoadErrorForViewer({
+        fatalError: status === ASSET_STATUS.ERROR ? error : "",
+        hydrationFailed: selectedAssemblyHydrationFailed,
+        backgroundError: meshState?.assemblyBackgroundError,
+      }),
+      selectedMeshData && !selectedMeshPartial &&
+        !["submitted", "queued", "building"].includes(editingPreview.state?.state) &&
+        ["network", "timeout", "status"].includes(selectedArtifact.failure?.kind)
+        ? null : selectedArtifact,
+      { partial: selectedMeshPartial }
     );
-    return meshAlert || viewerRuntimeAlert;
+    return meshAlert || viewerRuntimeAlert || artifactWarningAlert;
   }, [
+    artifactWarningAlert,
+    editingPreview.state,
+    currentPreviewVisible,
+    catalogError,
     effectiveRenderFormat,
     error,
+    meshState?.assemblyBackgroundError,
+    selectedAssemblyHydrationFailed,
     selectedEntry,
     selectedArtifact,
     selectedArtifactGenerating,
+    selectedMeshPartial,
     selectedMeshData,
     selectedUrdfPreviewError,
     status,
@@ -1770,14 +2076,6 @@ function CadFileViewSurface({
     viewerLoading,
     viewerRuntimeAlert
   ]);
-  const viewerAlertKey = viewerAlert
-    ? [
-      fileKey(selectedEntry),
-      viewerAlert.severity,
-      viewerAlert.summary,
-      viewerAlert.title
-    ].join(":")
-    : "";
   const focusedAssemblyTopologyActive = Boolean(
     isAssemblyView &&
     requestedStepTreeTopologyNodeIds.length > 0 &&
@@ -1814,13 +2112,37 @@ function CadFileViewSurface({
   useEffect(() => {
     setHostElement(hostRef.current);
   }, []);
+  // This is the displayed render revision, so same-file saves cannot inherit
+  // a predecessor's scheduler or benchmark milestones.
+  const viewportQualityModelKey = `${selectedEntry?.file || ""}:${selectedMeshHash || selectedEntry?.hash || ""}`;
   // Viewport LOD (design/unified-tessellation.md Phase 5): camera-settle
   // driven re-tessellation of the components that project the worst error.
   const { onCameraMoved: onLodCameraMoved } = useViewportLod({
     viewerRef,
+    modelKey: viewportQualityModelKey,
+    quality: resolvedScene.quality,
     lodPackage,
-    applyComponentLodPayload,
-    tessellationCache: renderSession.tessellationCache
+    tessellationCache: cadRenderSession.tessellationCache,
+    applyComponentLodBatch,
+    prepareComponentLodPayload,
+    componentLodNeedsSelectors,
+    // Capability, not just the current pose: a paused/disabled module can move
+    // an offscreen part without a camera event when re-enabled.
+    dynamicScene: lodSceneMayMove({ robot: isUrdfView, drawing: selectedEntryIsDrawing,
+      kinematics: selectedStepModuleDefinition, kinematicsLoading: selectedStepModuleLoading,
+      animation: selectedSourceAnimation, exploded: resolvedScene.display?.exploded?.enabled })
+  });
+  const viewportQualityStatus = useViewportQualityStatus({
+    modelKey: viewportQualityModelKey,
+    quality: resolvedScene.quality,
+    file: selectedEntry?.file || "",
+    hasGeometry: Boolean(selectedMeshData),
+    // A progressive assembly's first paint is a real preview, but more
+    // components can still arrive. It must not look fully refined yet.
+    modelComplete: !selectedMeshPartial && !meshLoadInProgress,
+    // The scheduler installs its snapshot after React commits this package.
+    // Its current scope must match this package before it can finish quality.
+    lodExpectedComponentCount: Array.isArray(lodPackage?.components) ? lodPackage.components.length : 0
   });
   const previewUiStateRef = useRef(null);
   const fileSessionSaveTimerRef = useRef(0);
@@ -2096,54 +2418,73 @@ function CadFileViewSurface({
     ),
     hasStepAnimationPanel: Boolean(
       selectedAnimationClipList.length ||
-      (selectedRenderModuleUrl && selectedAnimationStatus === "loading") ||
+      (selectedAnimationSourceKey && selectedAnimationStatus === "loading") ||
       selectedAnimationError
     ),
-    hasFileStatus: selectedFileHasWarningOrErrorStatus,
+    hasEmbeddedGlbAnimationPanel: Boolean(embeddedGlbAnimationRuntime),
+    hasMaterialsPanel: materialSession.enabled,
+    measurementAvailable: effectiveSupportsMeasure,
     hasDxfBendsPanel: selectedFileSheetKind === "dxf" && drawingBends.length > 0,
     hasDxfLayersPanel: selectedFileSheetKind === "dxf" && drawingLayers.length > 1,
+    renderMode: renderSession.enabled,
     isSdf: selectedFileSheetKind === "sdf",
+    hasRobotComponents: selectedUrdfComponents.length > 0,
     showJoints: selectedFileSheetKind === "urdf" || selectedFileSheetKind === "srdf" || selectedFileSheetKind === "sdf"
   }), [
     selectedAnimationClipList,
     selectedAnimationError,
     selectedAnimationStatus,
+    embeddedGlbAnimationRuntime,
+    materialSession.enabled,
+    effectiveSupportsMeasure,
     selectedFileSheetKind,
-    selectedFileHasWarningOrErrorStatus,
     selectedStepModuleDefinition,
     selectedStepModuleError,
     selectedStepModuleStatus,
     selectedStepModuleUrl,
+    selectedUrdfComponents,
     drawingBends,
-    drawingLayers
+    drawingLayers,
+    renderSession.enabled
   ]);
 
   const renderedSelectedFileSheetSectionIds = useMemo(
     () => renderedFileSheetSectionIds(selectedFileSheetKind, fileSheetSectionOptions),
     [fileSheetSectionOptions, selectedFileSheetKind]
   );
-  const defaultSelectedFileSheetOpenSectionIds = useMemo(
-    () => defaultOpenFileSheetSectionIds(selectedFileSheetKind, fileSheetSectionOptions),
+  const renderedCadFileSheetSectionIds = useMemo(
+    () => renderedFileSheetSectionIds(selectedFileSheetKind, { ...fileSheetSectionOptions, renderMode: false }),
     [fileSheetSectionOptions, selectedFileSheetKind]
   );
-  const effectiveFileSheetOpenSectionIds = useMemo(() => (
+  const defaultCadFileSheetOpenSectionIds = useMemo(
+    () => defaultOpenFileSheetSectionIds(selectedFileSheetKind, { ...fileSheetSectionOptions, renderMode: false }),
+    [fileSheetSectionOptions, selectedFileSheetKind]
+  );
+  const effectiveCadFileSheetOpenSectionIds = useMemo(() => (
     normalizeFileSheetOpenSectionIds(
       Array.isArray(fileSheetOpenSectionIds)
         ? fileSheetOpenSectionIds
-        : defaultSelectedFileSheetOpenSectionIds,
-      renderedSelectedFileSheetSectionIds
+        : defaultCadFileSheetOpenSectionIds,
+      renderedCadFileSheetSectionIds
     )
   ), [
-    defaultSelectedFileSheetOpenSectionIds,
+    defaultCadFileSheetOpenSectionIds,
     fileSheetOpenSectionIds,
-    renderedSelectedFileSheetSectionIds
+    renderedCadFileSheetSectionIds
   ]);
+  const effectiveFileSheetOpenSectionIds = useMemo(() => renderSession.enabled
+    ? normalizeFileSheetOpenSectionIds(renderSession.openSectionIds, renderedSelectedFileSheetSectionIds)
+    : effectiveCadFileSheetOpenSectionIds,
+  [renderSession.enabled, renderSession.openSectionIds, renderedSelectedFileSheetSectionIds, effectiveCadFileSheetOpenSectionIds]);
 
   const handleFileSheetOpenSectionIdsChange = useCallback((nextSectionIds) => {
-    setFileSheetOpenSectionIds(
-      normalizeFileSheetOpenSectionIds(nextSectionIds, renderedSelectedFileSheetSectionIds)
-    );
-  }, [renderedSelectedFileSheetSectionIds]);
+    const normalized = normalizeFileSheetOpenSectionIds(nextSectionIds, renderedSelectedFileSheetSectionIds);
+    if (renderSession.enabled) {
+      setRenderSession((current) => createRenderSessionState({ ...current, openSectionIds: normalized }));
+    } else {
+      setFileSheetOpenSectionIds(normalized);
+    }
+  }, [renderSession.enabled, renderedSelectedFileSheetSectionIds]);
 
   const openFileSheetSection = useCallback((sectionId, { openSheet = true, activate = false } = {}) => {
     const normalizedSectionId = String(sectionId || "").trim();
@@ -2180,36 +2521,26 @@ function CadFileViewSurface({
     }
     const normalizedSectionIds = normalizeFileSheetOpenSectionIds(
       fileSheetOpenSectionIds,
-      renderedSelectedFileSheetSectionIds
+      renderedCadFileSheetSectionIds
     );
     if (orderedStringListEqual(normalizedSectionIds, fileSheetOpenSectionIds)) {
       return;
     }
     setFileSheetOpenSectionIds(normalizedSectionIds);
-  }, [fileSheetOpenSectionIds, renderedSelectedFileSheetSectionIds]);
+  }, [fileSheetOpenSectionIds, renderedCadFileSheetSectionIds]);
 
-  useEffect(() => {
-    if (selectedFileStatusLevel !== FILE_STATUS_LEVELS.ERROR) {
-      return;
+  const selectRobotComponent = useCallback((id, options) => {
+    robotSelection.select(id, options);
+    if (selectedUrdfComponents.some((component) => component.id === id)) {
+      if (isDesktop) setTabToolsOpen(true);
+      // Components carries the reference at its foot, so revealing it is the whole jump.
+      const revealIds = [FILE_SHEET_SECTION_IDS.ROBOT_COMPONENTS];
+      setFileSheetOpenSectionIds((current) => [
+        ...(current || []).filter((sectionId) => !revealIds.includes(sectionId)),
+        ...revealIds
+      ]);
     }
-    setFileSheetOpenSectionIds((current) => {
-      const baseSectionIds = normalizeFileSheetOpenSectionIds(
-        Array.isArray(current) ? current : defaultSelectedFileSheetOpenSectionIds,
-        renderedSelectedFileSheetSectionIds
-      );
-      const nextSectionIds = fileSheetSectionIdsWithOpenSection(
-        baseSectionIds,
-        renderedSelectedFileSheetSectionIds,
-        FILE_SHEET_SECTION_IDS.FILE_STATUS
-      );
-      return orderedStringListEqual(nextSectionIds, baseSectionIds) ? current : nextSectionIds;
-    });
-  }, [
-    defaultSelectedFileSheetOpenSectionIds,
-    renderedSelectedFileSheetSectionIds,
-    selectedFileStatusLevel,
-    selectedKey
-  ]);
+  }, [robotSelection.select, selectedUrdfComponents, isDesktop]);
 
   const buildActiveTabSnapshot = useCallback(() => {
     return cloneTabSnapshot({
@@ -2218,7 +2549,7 @@ function CadFileViewSurface({
       selectedPartIds,
       inspectedAssemblyNodeId: "",
       expandedStepTreeNodeIds,
-      fileSheetOpenSectionIds: effectiveFileSheetOpenSectionIds,
+      fileSheetOpenSectionIds: effectiveCadFileSheetOpenSectionIds,
       hiddenPartIds,
       camera: activePerspectiveRef.current,
       drawingTool,
@@ -2232,7 +2563,7 @@ function CadFileViewSurface({
     drawingRedoStack,
     drawingStrokes,
     drawingUndoStack,
-    effectiveFileSheetOpenSectionIds,
+    effectiveCadFileSheetOpenSectionIds,
     expandedStepTreeNodeIds,
     hiddenPartIds,
     referenceQuery,
@@ -2253,19 +2584,39 @@ function CadFileViewSurface({
     const targetUrdfJointValues = targetFileKey && jointValuesByFileRef?.[targetFileKey]
       ? jointValuesByFileRef[targetFileKey]
       : {};
+    const targetMaterialOverlay = materialSession.snapshotSlice(targetEntry);
     // While a clip plays the authoritative time is the clock store's, not React
     // state's — the loop only writes back when playback stops.
     const snapshotAnimationElapsedSec = animationState.playing
       ? getAnimationClock()
       : animationState.elapsedSec;
+    const activeCamera = renderCameraSnapshot(activePerspectiveRef.current);
+    const snapshotRenderSession = createRenderSessionState(renderSession.enabled
+      ? {
+          ...renderSession,
+          payload: activeCamera
+            ? {
+                ...renderSession.payload,
+                camera: {
+                  ...renderCameraSeed(activeCamera),
+                  projection: activeCamera.projection || resolvedScene.camera.projection
+                }
+              }
+            : renderSession.payload
+        }
+      : {
+          ...renderSession,
+          cadCamera: activeCamera || renderSession.cadCamera,
+          cadProjection: activeCamera?.projection || renderSession.cadProjection
+        });
     return createFileSessionSnapshot({
       fileKey: targetFileKey,
       entry: targetEntry,
       slices: {
-        ...(entrySourceFormat(targetEntry) === RENDER_FORMAT.STEP ? { display: displaySettings } : {}),
+        ...(entrySourceFormat(targetEntry) !== RENDER_FORMAT.DXF ? { display: displaySettings } : {}),
+        render: snapshotRenderSession,
         tab: buildActiveTabSnapshot(),
         stepModule: {
-          enabled: stepModuleEnabled,
           parameterValues: stepModuleParameterValues
         },
         animation: {
@@ -2275,6 +2626,7 @@ function CadFileViewSurface({
           speed: animationState.speed,
           loopEnabled: animationState.loopEnabled
         },
+        ...(targetMaterialOverlay ? { materials: targetMaterialOverlay } : {}),
         urdf: {
           jointValues: targetUrdfJointValues,
         },
@@ -2289,8 +2641,10 @@ function CadFileViewSurface({
     displaySettings,
     jointValuesByFileRef,
     largeFileState,
+    materialSession.snapshotSlice,
+    renderSession,
+    resolvedScene.camera.projection,
     selectedEntry,
-    stepModuleEnabled,
     stepModuleParameterValues,
   ]);
 
@@ -2336,15 +2690,33 @@ function CadFileViewSurface({
     const sessionState = fileSessionState || readEntrySessionState(normalizedKey);
     setLargeFileState(normalizeLargeFileState(sessionState?.slices?.largeFile));
     const entry = entryMap.get(normalizedKey);
-    setDisplaySettings(
-      entrySourceFormat(entry) === RENDER_FORMAT.STEP
-        ? normalizeDisplaySettings(sessionState?.slices?.display)
-        : normalizeDisplaySettings()
-    );
+    const supportsDisplaySettings = entrySourceFormat(entry) !== RENDER_FORMAT.DXF;
+    setDisplaySettings(supportsDisplaySettings
+      ? normalizeDisplaySettings(sessionState?.slices?.display)
+      : normalizeDisplaySettings());
+    const nextRenderSession = createRenderSessionState(sessionState?.slices?.render);
+    setRenderSession(nextRenderSession);
+    // Only a camera this file's session actually RECORDED comes back. A file
+    // opened for the first time has none, and the viewer then fits the mode
+    // being opened to the model's zero pose. Synthesizing a stand-in here
+    // framed the model against a bounds-radius rule of its own, tagged it with
+    // the new model's key, and so suppressed that fit -- which is how a fresh
+    // model opened at a pose nothing had measured.
+    const restoredCamera = nextRenderSession.enabled
+      ? renderCameraSnapshot(resolveSceneSettings({
+          appearance: resolvedColorSchemeMode,
+          prefersDark: uiPrefersDark,
+          render: nextRenderSession.payload
+        }).camera)
+      : nextRenderSession.cadCamera;
+    if (restoredCamera) {
+      const scopedCamera = scopedWorkspacePerspective(restoredCamera, normalizedKey, entry);
+      activePerspectiveRef.current = scopedCamera;
+      setViewerPerspective(scopedCamera);
+    }
 
     const stepModuleSlice = sessionState?.slices?.stepModule || null;
     if (stepModuleSlice) {
-      setStepModuleEnabled(stepModuleSlice.enabled !== false);
       setStepModuleParameterValues(stepModuleSlice.parameterValues || {});
     }
 
@@ -2355,12 +2727,14 @@ function CadFileViewSurface({
     if (animationSlice) {
       const restoredAnimationState = restoreAnimationState(
         animationSlice,
-        animationLoadState.url === entryRenderModuleUrl(entry) ? animationLoadState.clips : null
+        animationLoadState.url === sourceAnimationKeyForEntry(entry) ? animationLoadState.clips : null
       );
       animationStateRef.current = restoredAnimationState;
       setAnimationState(restoredAnimationState);
       setAnimationClock(restoredAnimationState.elapsedSec);
     }
+
+    materialSession.restoreSlice(normalizedKey, entry, sessionState?.slices?.materials || null);
 
     const urdfSlice = sessionState?.slices?.urdf || null;
     if (urdfSlice) {
@@ -2378,7 +2752,14 @@ function CadFileViewSurface({
         return next;
       });
     }
-  }, [animationLoadState, entryMap, readEntrySessionState]);
+  }, [
+    animationLoadState,
+    resolvedColorSchemeMode,
+    entryMap,
+    materialSession.restoreSlice,
+    readEntrySessionState,
+    uiPrefersDark
+  ]);
 
   const fileSheetSelectionKeyForTab = useCallback((key) => {
     const normalizedKey = String(key || "").trim();
@@ -2388,7 +2769,11 @@ function CadFileViewSurface({
 
   const applyTabRecord = useCallback((tabRecord) => {
     const nextTab = createTabRecord(tabRecord?.key || "", tabRecord || {});
-    const nextPerspective = clonePerspectiveSnapshot(nextTab.camera);
+    const nextPerspective = scopedWorkspacePerspective(
+      nextTab.camera,
+      nextTab.key,
+      entryMap.get(nextTab.key)
+    );
     selectedFileSheetKeyRef.current = fileSheetSelectionKeyForTab(nextTab.key);
     setReferenceQuery(nextTab.referenceQuery);
     selectedReferenceIdsRef.current = nextTab.selectedReferenceIds;
@@ -2544,10 +2929,14 @@ function CadFileViewSurface({
       setStepUpdateInProgress(false);
       return;
     }
+    if (retainedPreviousStepMeshError) {
+      setStepUpdateInProgress(false);
+      return;
+    }
     if (selectedMeshMatches && status !== ASSET_STATUS.LOADING) {
       setStepUpdateInProgress(false);
     }
-  }, [selectedEntry, selectedMeshMatches, status, stepUpdateInProgress]);
+  }, [retainedPreviousStepMeshError, selectedEntry, selectedMeshMatches, status, stepUpdateInProgress]);
 
   useEffect(() => {
     drawingStrokesRef.current = drawingStrokes;
@@ -2574,10 +2963,6 @@ function CadFileViewSurface({
   }, [effectiveRenderFormat, selectedKey, selectedEntryHasReferences]);
 
   useEffect(() => {
-    setViewerAlertOpen(false);
-  }, [viewerAlertKey]);
-
-  useEffect(() => {
     setViewerRuntimeAlert(null);
   }, [selectedKey]);
 
@@ -2600,17 +2985,19 @@ function CadFileViewSurface({
       cancelMeshLoad();
       return;
     }
-    if (meshLoadInProgress && meshLoadTargetFile === fileKey(selectedEntry)) {
-      return;
-    }
-    if (
-      selectedMeshMatches &&
-      (
-        !isAssemblyView ||
-        selectedAssemblyInteractionReady ||
-        selectedAssemblyHydrationFailed
-      )
-    ) {
+    if (!shouldStartMeshLoad({
+      inProgress: meshLoadInProgress,
+      targetFile: meshLoadTargetFile,
+      targetHash: meshLoadTargetHash,
+      entryFile: fileKey(selectedEntry),
+      entryHash: selectedMeshHash,
+      selectedMeshMatches,
+      isAssembly: isAssemblyView,
+      interactionReady: selectedAssemblyInteractionReady,
+      hydrationFailed: selectedAssemblyHydrationFailed,
+      failedTargetFile: meshState?.file,
+      failedTargetHash: meshState?.assemblyBackgroundErrorMeshHash,
+    })) {
       return;
     }
     loadMeshForEntry(selectedEntry).catch((err) => {
@@ -2624,6 +3011,9 @@ function CadFileViewSurface({
     loadMeshForEntry,
     meshLoadInProgress,
     meshLoadTargetFile,
+    meshLoadTargetHash,
+    meshState?.file,
+    meshState?.assemblyBackgroundErrorMeshHash,
     selectedAssemblyHydrationFailed,
     selectedAssemblyInteractionReady,
     selectedEntry,
@@ -2679,7 +3069,7 @@ function CadFileViewSurface({
     selectedEntryHasReferences &&
     referenceState.fileRef === fileKey(selectedEntry) &&
     referenceState.referenceHash === buildReferenceCacheKey(selectedEntry) &&
-    (referenceState.loadedTopologyKey || "*") === requestedTopologyKey;
+    topologyCompositionKeyMatches(referenceState.loadedTopologyKey, requestedTopologyKey);
   const selectedSelectorRuntime = selectedReferencesMatch ? referenceState?.selectorRuntime || null : null;
   const artifactRevision = buildReferenceCacheKey(selectedEntry);
   useEffect(() => {
@@ -2687,58 +3077,99 @@ function CadFileViewSurface({
     setSelectionFilterNotice("");
     setInspectionHighlight(null);
   }, [selectedKey, artifactRevision]);
+  const selectedStepParameterRuntime = useMemo(() => {
+    if (
+      !selectedStepModuleDefinition ||
+      (selectedStepModuleTopologyRequested && !selectedSelectorRuntime)
+    ) {
+      return null;
+    }
+    return {
+      definition: selectedStepModuleDefinition,
+      parameterValues: normalizeStepModuleParameterValues(selectedStepModuleDefinition, stepModuleParameterValues),
+      selectorRuntime: selectedSelectorRuntime,
+      cadPath: selectedStepModuleDefinition.cadPath || selectedStepModuleCadPath,
+      sourceUrl: selectedStepModuleUrl
+    };
+  }, [
+    selectedSelectorRuntime,
+    selectedStepModuleCadPath,
+    selectedStepModuleDefinition,
+    selectedStepModuleTopologyRequested,
+    selectedStepModuleUrl,
+    stepModuleParameterValues
+  ]);
   const selectedDisplayEdgesMatch =
     !!displayEdgeState &&
     !!selectedEntry &&
     selectedEntryHasDisplayEdges &&
     displayEdgeState.fileRef === fileKey(selectedEntry) &&
     displayEdgeState.displayEdgeHash === entryAssetHash(selectedEntry, "displayEdgeTopology");
-  const selectedDisplayEdgeRuntime = selectedDisplayEdgesMatch ? displayEdgeState?.displayEdgeRuntime || null : null;
+  const selectedDisplayEdgeRuntime = selectedDisplayEdgesMatch && !retainingPreviousStepMesh
+    ? displayEdgeState?.displayEdgeRuntime || null
+    : null;
   const selectedStepPartRootActive = !isAssemblyView && selectedPartIds.includes(STEP_MODEL_ROOT_ID);
   const plainStepReferencePickingEnabled =
     effectiveRenderFormat === RENDER_FORMAT.STEP &&
     selectedEntryHasReferences &&
     !isAssemblyView;
+  const topologyCapabilityRequested = Boolean(
+    selectedEntry && requestedTopologyFileRef === fileKey(selectedEntry)
+  );
+  const plainStepReferencePickingRequested =
+    plainStepReferencePickingEnabled &&
+    (topologyCapabilityRequested || selectedStepModuleTopologyRequested);
   const assemblyStepTreeTopologyLoadingEnabled =
+    !renderSession.enabled &&
     effectiveRenderFormat === RENDER_FORMAT.STEP &&
     selectedEntryHasReferences &&
     isAssemblyView &&
     requestedStepTreeTopologyNodeIds.length > 0;
   const selectedStepDisplayEdgesRequested =
+    !renderSession.enabled &&
     effectiveRenderFormat === RENDER_FORMAT.STEP &&
     selectedEntryHasDisplayEdges &&
-    !displayModeIsWireframe(displaySettings.mode) &&
-    (displayModeForcesEdges(displaySettings.mode) || resolvedDisplayEdgeSettings.enabled !== false);
+    !displayModeIsWireframe(resolvedScene.display.mode) &&
+    (displayModeForcesEdges(resolvedScene.display.mode) || resolvedDisplayEdgeSettings.enabled !== false);
   const selectedTopologyExplicitlyEnabled = largeFileState.selectableTopologyEnabled === true;
   const selectedTopologyLargeByCost = Boolean(
     isLargeStepGlbEntry(selectedEntry) ||
     (selectedMeshMatches && isLargeMeshData(selectedMeshData))
   );
   const selectedTopologyWaitingForMeshCost = Boolean(
-    plainStepReferencePickingEnabled &&
+    plainStepReferencePickingRequested &&
     !hasStepGlbByteCost(selectedEntry) &&
     !selectedMeshMatches
   );
-  const referenceLoadingExplicitlyRequested = selectedStepPartRootActive;
+  const referenceLoadingExplicitlyRequested =
+    selectedStepPartRootActive ||
+    topologyCapabilityRequested ||
+    selectedStepModuleTopologyRequested;
   const selectedTopologyDeferredByCost = Boolean(
-    plainStepReferencePickingEnabled &&
+    plainStepReferencePickingRequested &&
     selectedTopologyLargeByCost &&
     !selectedTopologyExplicitlyEnabled &&
     !referenceLoadingExplicitlyRequested
   );
   const topLevelReferenceSelectionActive =
     selectedStepPartRootActive ||
-    plainStepReferencePickingEnabled;
+    plainStepReferencePickingRequested;
   const referenceLoadingEnabled =
-    selectedStepPartRootActive ||
-    assemblyStepTreeTopologyLoadingEnabled ||
-    (
-      plainStepReferencePickingEnabled &&
-      !selectedTopologyDeferredByCost &&
-      !selectedTopologyWaitingForMeshCost
+    !renderSession.enabled && (
+      selectedStepPartRootActive ||
+      assemblyStepTreeTopologyLoadingEnabled ||
+      (
+        plainStepReferencePickingRequested &&
+        !selectedTopologyDeferredByCost &&
+        !selectedTopologyWaitingForMeshCost
+      )
     );
 
   useEffect(() => {
+    if (renderSession.enabled) {
+      cancelReferenceLoad();
+      return;
+    }
     if (!selectedEntry) {
       cancelReferenceLoad();
       return;
@@ -2769,6 +3200,7 @@ function CadFileViewSurface({
     isAssemblyView,
     loadReferencesForEntry,
     referenceLoadingEnabled,
+    renderSession.enabled,
     requestedStepTreeTopologyNodeIds,
     selectedEntry,
     selectedEntryHasReferences,
@@ -2776,6 +3208,10 @@ function CadFileViewSurface({
   ]);
 
   useEffect(() => {
+    if (renderSession.enabled) {
+      cancelDisplayEdgeLoad();
+      return;
+    }
     if (!selectedEntry) {
       cancelDisplayEdgeLoad();
       return;
@@ -2797,6 +3233,7 @@ function CadFileViewSurface({
   }, [
     cancelDisplayEdgeLoad,
     loadDisplayEdgesForEntry,
+    renderSession.enabled,
     selectedDisplayEdgesMatch,
     selectedEntry,
     selectedStepDisplayEdgesRequested,
@@ -3024,7 +3461,7 @@ function CadFileViewSurface({
     () => buildStepTreeCopyReferenceMap(displayStepTreeRoot),
     [displayStepTreeRoot]
   );
-  const effectiveSelectorRuntime = selectedSelectorRuntime;
+  const effectiveSelectorRuntime = retainingPreviousStepMesh ? null : selectedSelectorRuntime;
 
   const effectiveActiveReferenceMap = useMemo(() => {
     const map = new Map(activeReferenceMap);
@@ -3087,7 +3524,7 @@ function CadFileViewSurface({
   ]);
 
   const viewerPickableReferences = useMemo(() => {
-    if (stepModuleTreeSelectionDisabled) {
+    if (stepInteractionBlocked || stepModuleTreeSelectionDisabled) {
       return [];
     }
     // Viewport picking is independent of which inspector rows are expanded.
@@ -3097,6 +3534,7 @@ function CadFileViewSurface({
     assemblyStepTreeTopologyReferences,
     effectiveVisibleReferences,
     isAssemblyView,
+    stepInteractionBlocked,
     stepModuleTreeSelectionDisabled,
   ]);
   const viewerPickableFaces = useMemo(
@@ -3116,9 +3554,10 @@ function CadFileViewSurface({
   );
   // Measuring needs a mesh to hit. Topology, when loaded, upgrades STEP hits
   // from free points to edge and face snaps.
-  const measureModeActive = supportsMeasure &&
+  const measureModeActive = effectiveSupportsMeasure &&
     tabToolMode === TAB_TOOL_MODE.MEASURE &&
     Boolean(selectedMeshData) &&
+    !stepInteractionBlocked &&
     !viewerLoading;
   const [measureSelectionFilter, setMeasureSelectionFilter] = useState("all");
   useEffect(() => setMeasureSelectionFilter("all"), [selectedKey]);
@@ -3158,7 +3597,7 @@ function CadFileViewSurface({
   }, [measureMeasurements]);
   useEffect(() => {
     setMeasureRulerState((current) => measureRulerStateForChange(current, { entryChanged: true }));
-  }, [selectedKey]);
+  }, [selectedKey, selectedEntry?.hash]);
   useEffect(() => {
     setMeasureRulerState((current) => measureRulerStateForChange(current, { toolActive: measureModeActive }));
     if (measureModeActive) setInspectionHighlight(null);
@@ -3220,138 +3659,51 @@ function CadFileViewSurface({
     !viewerInAssemblyMode &&
     !selectedTopologyDeferredByCost &&
     !referenceSelectionUnavailable &&
+    !retainedPreviousStepMeshError &&
     (
-      stepUpdateInProgress ||
+      stepInteractionBlocked ||
       referenceSelectionStatus === REFERENCE_STATUS.IDLE ||
       referenceSelectionStatus === REFERENCE_STATUS.LOADING ||
       !effectiveSelectorRuntime
     )
   );
-  const filenameLoadActivity = useMemo(() => {
-    if (!selectedEntry) {
-      return null;
-    }
-
-    if (selectedArtifactGenerating) {
-      const frame = selectedArtifactProgress ? formatArtifactProgress(selectedArtifactProgress) : null;
-      // One number, and only a measured one: a phase's own count. An uncountable phase adds
-      // nothing here rather than a percentage of the whole build, which nothing can honestly
-      // compute. The phase name and sub-unit live in the tooltip, which is opened on purpose.
-      const chip = frame?.determinate ? frame.counts : "";
-      return {
-        loading: true,
-        label: chip ? `${ARTIFACT_GENERATING_LABEL} ${chip}` : ARTIFACT_GENERATING_LABEL,
-        title: frame
-          ? [frame.label, frame.ordinal && `phase ${frame.ordinal}`, frame.detail]
-              .filter(Boolean)
-              .join(" — ")
-          : "Generator script is running"
-      };
-    }
-
-    if (isRobotRenderFormat(effectiveRenderFormat) && urdfViewerLoading) {
-      return {
-        loading: true,
-        label: selectedEntryHasUrdf ? (urdfLoadStage || (effectiveRenderFormat === RENDER_FORMAT.SDF ? "loading SDF" : "loading URDF")) : "building",
-        title: viewerLoadingLabel
-      };
-    }
-
-    if (effectiveRenderFormat === RENDER_FORMAT.STEP && stepUpdateInProgress) {
-      return {
-        loading: true,
-        label: ARTIFACT_GENERATING_LABEL,
-        title: viewerLoadingLabel
-      };
-    }
-
-    if (effectiveRenderFormat === RENDER_FORMAT.STEP && selectedStepArtifactRenderPending) {
-      return {
-        loading: true,
-        label: ARTIFACT_GENERATING_LABEL,
-        title: viewerLoadingLabel
-      };
-    }
-
-    if (effectiveRenderFormat === RENDER_FORMAT.STEP && selectedStepModuleLoading) {
-      return {
-        loading: true,
-        label: "loading STEP module",
-        title: viewerLoadingLabel
-      };
-    }
-
-    if ([RENDER_FORMAT.STEP, RENDER_FORMAT.STL, RENDER_FORMAT.THREE_MF, RENDER_FORMAT.GLB].includes(effectiveRenderFormat) && meshViewerLoading) {
-      const activeMeshLoadStage = meshLoadTargetFile === fileKey(selectedEntry)
-        ? meshLoadStage
-        : "";
-      return {
-        loading: true,
-        label: selectedEntryHasMesh ? (activeMeshLoadStage || "loading mesh") : "building",
-        title: viewerLoadingLabel
-      };
-    }
-
-    if (effectiveRenderFormat === RENDER_FORMAT.STEP && assemblyHydrationLoading) {
-      const activeMeshLoadStage = meshLoadTargetFile === fileKey(selectedEntry)
-        ? meshLoadStage
-        : "";
-      return {
-        loading: true,
-        label: activeMeshLoadStage || "loading meshes",
-        title: "Loading assembly meshes"
-      };
-    }
-
-    if (effectiveRenderFormat === RENDER_FORMAT.STEP && referenceSelectionStatus === REFERENCE_STATUS.LOADING) {
-      return {
-        loading: true,
-        label: referenceLoadStage || "loading topology",
-        title: "Loading selectable topology"
-      };
-    }
-
-    if (effectiveRenderFormat === RENDER_FORMAT.STEP && referenceSelectionPending) {
-      return {
-        loading: true,
-        label: "building topology",
-        title: "Preparing selectable topology"
-      };
-    }
-
-    if (assemblySidebarLoading) {
-      return {
-        loading: true,
-        label: "building assembly",
-        title: "Preparing assembly parts"
-      };
-    }
-
-    return null;
-  }, [
-    assemblyHydrationLoading,
-    assemblySidebarLoading,
-    effectiveRenderFormat,
-    meshLoadStage,
-    meshLoadTargetFile,
-    referenceLoadStage,
-    referenceSelectionPending,
-    referenceSelectionStatus,
-    selectedEntry,
-    selectedEntryHasDxf,
-    selectedEntryHasMesh,
-    selectedEntryHasUrdf,
-    selectedArtifactGenerating,
-    selectedArtifactProgress,
-    selectedStepArtifactRenderPending,
-    selectedStepModuleLoading,
-    stepUpdateInProgress,
-    meshViewerLoading,
-    urdfLoadStage,
-    urdfViewerLoading,
-    viewerLoadingLabel
-  ]);
-  useEffect(() => { onActivityChange?.(filenameLoadActivity); }, [filenameLoadActivity, onActivityChange]);
+  const loading = viewerLoadingState({
+    busy: effectiveViewerLoading || selectedMeshPartial || presentationPending,
+    editPending: ["submitted", "queued", "building"].includes(editingPreview.state?.state) && !editingPreview.state?.saved,
+    previousView: completedViewFile.current === selectedKey && Boolean(selectedMeshData || selectedEntryIsDrawingDocument),
+    currentPreview: currentPreviewVisible,
+    error: viewerAlert || (!selectedMeshData && catalogError) || missingFileRef,
+    renderMode: renderSession.enabled,
+    progress: selectedLoadProgress || (editingPreview.state.phase ? { phase: editingPreview.state.phase, detail: editingPreview.state.detail } : null),
+    finding: !catalogHydrated || selectedCatalogPending || fileParamSelectionPending,
+    preparing: presentationPending && !effectiveViewerLoading && !selectedMeshPartial,
+  });
+  const annotationAlert = buildViewerAnnotationAlert(selectedEntry);
+  const fileStatus = resolveFileStatus({
+    hasFile: Boolean(selectedEntry || explicitFileParam),
+    error: viewerAlert || (catalogError && !selectedMeshData ? catalogError : null) || (missingFileRef
+      ? {
+        title: "File unavailable", message: "The selected file could not be found.",
+        tooltip: "This file isn’t in the folder served by the viewer. Check the file path or choose another file.",
+      }
+      : null) || annotationAlert,
+    opening: loading.opening,
+    updating: loading.updating,
+    loadingProgress: loading.progress,
+    renderMode: renderSession.enabled,
+    editingState: editingAvailable ? editingPreview.state : null,
+    showingPreview: currentPreviewVisible,
+    qualityStatus: viewportQualityStatus,
+    hasGeometry: Boolean((selectedMeshData && !selectedMeshPartial) || selectedEntryIsDrawingDocument),
+    reloading: viewerReloading
+  });
+  const fileStatusAlert = resolveFileStatusAlert(fileStatus, viewerAlert, annotationAlert);
+  const currentFileStatusAlertKey = fileStatusAlertKey(fileKey(selectedEntry), fileStatusAlert);
+  useEffect(() => {
+    setViewerAlertOpen(false);
+  }, [currentFileStatusAlertKey]);
+  const filenameLoadActivity = useMemo(() => fileStatus ? { loading: fileStatus.busy === true, label: fileStatus.label, title: fileStatus.title, tone: fileStatus.tone, onActivate: fileStatusAlert ? () => setViewerAlertOpen(true) : undefined } : null, [fileStatus?.busy, fileStatus?.label, fileStatus?.title, fileStatus?.tone, Boolean(fileStatusAlert)]);
+  useEffect(() => { onActivityChange?.(filenameLoadActivity); return () => onActivityChange?.(null); }, [filenameLoadActivity, onActivityChange]);
   const selectedWholeTopologyReferencePartIds = useMemo(() => (
     uniqueStringList(
       selectedReferenceIds.flatMap((referenceId) => renderPartIdsForWholeTopologyReference(referenceId))
@@ -3501,8 +3853,10 @@ function CadFileViewSurface({
     const startValues = cloneJointValueMap(startJointValues);
     const finalValues = cloneJointValueMap(targetJointValues);
     cancelUrdfTrajectoryPlayback();
+    // Animation off writes the target in this frame, exactly as an unchanged pose does.
     if (
       typeof requestAnimationFrame !== "function" ||
+      toFiniteNumber(options?.durationMs, poseTransitionDurationMsRef.current) <= 0 ||
       jointValueMapsClose(startValues, finalValues)
     ) {
       setJointValuesByFileRef((current) => ({
@@ -3515,7 +3869,7 @@ function CadFileViewSurface({
     const token = playback.token + 1;
     playback.token = token;
     const startedAtMs = animationNowMs();
-    const durationMs = Math.max(toFiniteNumber(options?.durationMs, URDF_JOINT_ANIMATION_DURATION_MS), 1);
+    const durationMs = Math.max(toFiniteNumber(options?.durationMs, poseTransitionDurationMsRef.current), 1);
     const step = (timestamp) => {
       if (urdfJointAnimationRef.current.token !== token) {
         return;
@@ -3910,7 +4264,7 @@ function CadFileViewSurface({
   ]);
 
   const toggleReferenceSelection = useCallback((referenceId, { multiSelect = false, source = "viewer" } = {}) => {
-    if (stepUpdateInProgress || stepModuleTreeSelectionDisabled) {
+    if (stepInteractionBlocked || stepModuleTreeSelectionDisabled) {
       return;
     }
     if (source !== "viewer") {
@@ -3961,8 +4315,8 @@ function CadFileViewSurface({
     isAssemblyView,
     referencePartId,
     revealStepTreeNode,
-    stepModuleTreeSelectionDisabled,
-    stepUpdateInProgress
+    stepInteractionBlocked,
+    stepModuleTreeSelectionDisabled
   ]);
 
   const clearReferenceSelection = useCallback(() => {
@@ -4063,8 +4417,10 @@ function CadFileViewSurface({
 
   const handleCopySelection = useCallback(async () => {
     setScreenshotStatus("");
-    if (stepUpdateInProgress) {
-      setCopyStatus("STEP update in progress. Please wait.");
+    if (stepInteractionBlocked) {
+      setCopyStatus(retainedPreviousStepMeshError
+        ? "Selection unavailable because the STEP update failed."
+        : "STEP update in progress. Please wait.");
       return;
     }
     const selectedReferencesForCopy = selectedReferenceIdsRef.current
@@ -4153,10 +4509,11 @@ function CadFileViewSurface({
     displayStepTreeRoot,
     effectiveActiveReferenceMap,
     selectedEntry,
+    retainedPreviousStepMeshError,
     setScreenshotStatus,
     stepTreeCopyReferenceMap,
     stepTreeRoot,
-    stepUpdateInProgress
+    stepInteractionBlocked
   ]);
 
   const toggleStepTreeNode = useCallback((nodeId) => {
@@ -4221,7 +4578,7 @@ function CadFileViewSurface({
   }, []);
 
   const togglePartSelection = useCallback((partId, { multiSelect = false, renderPartId = "", source = "viewer" } = {}) => {
-    if (stepUpdateInProgress || stepModuleTreeSelectionDisabled) {
+    if (stepInteractionBlocked || stepModuleTreeSelectionDisabled) {
       return selectedPartIdsRef.current;
     }
     if (source !== "viewer") {
@@ -4280,8 +4637,8 @@ function CadFileViewSurface({
     renderPartIdForAssemblySelection,
     validAssemblySelectionIdSet,
     viewerSelectableAssemblyNodeIdSet,
+    stepInteractionBlocked,
     stepModuleTreeSelectionDisabled,
-    stepUpdateInProgress
   ]);
 
   const selectStepTreeNode = useCallback((nodeId, { multiSelect = false } = {}) => {
@@ -4731,7 +5088,7 @@ function CadFileViewSurface({
   }, []);
 
   const handleModelHoverChange = useCallback((referenceId) => {
-    if (stepModuleTreeSelectionDisabled) {
+    if (stepInteractionBlocked || stepModuleTreeSelectionDisabled) {
       setHoveredModelReferenceId("");
       setHoveredModelPartId("");
       return;
@@ -4760,6 +5117,7 @@ function CadFileViewSurface({
     isViewerTopologyReference,
     viewerInAssemblyMode,
     resolvePickedAssemblyPartId,
+    stepInteractionBlocked,
     stepModuleTreeSelectionDisabled
   ]);
 
@@ -4772,9 +5130,12 @@ function CadFileViewSurface({
   ), [selectionFilter, effectiveActiveReferenceMap]);
 
   const handleModelReferenceActivate = useCallback((referenceId, { multiSelect = false } = {}) => {
-    if (stepUpdateInProgress || stepModuleTreeSelectionDisabled) {
+    if (stepInteractionBlocked || stepModuleTreeSelectionDisabled) {
       return;
     }
+    // A newer gesture supersedes any click waiting for selector topology. If
+    // this gesture also needs topology, its exact file/tree/id replaces it below.
+    pendingModelReferenceActivationRef.current = null;
     const nextReferenceId = String(referenceId || "").trim();
     if (!nextReferenceId) {
       if (multiSelect) return;
@@ -4812,10 +5173,12 @@ function CadFileViewSurface({
       togglePartSelection(nextPartId, { multiSelect, renderPartId: pickedPartId });
       return;
     }
-    if (!effectiveActiveReferenceMap.has(nextReferenceId)) {
-      return;
+    if (selectedEntry && selectedEntryHasReferences && effectiveRenderFormat === RENDER_FORMAT.STEP && !selectedReferencesMatch) {
+      pendingModelReferenceActivationRef.current = nextReferenceId
+        ? { fileRef: fileKey(selectedEntry), tree: selectedEntry.hash, referenceId: nextReferenceId, multiSelect }
+        : null;
+      setRequestedTopologyFileRef(fileKey(selectedEntry));
     }
-    toggleReferenceSelection(nextReferenceId, { multiSelect });
   }, [
     clearAssemblySelection,
     selectionFilter,
@@ -4823,18 +5186,41 @@ function CadFileViewSurface({
     edgeChains,
     selectReferenceGroup,
     isAssemblyView,
+    effectiveRenderFormat,
     effectiveActiveReferenceMap,
-    isViewerTopologyReference,
     resolvePickedAssemblyPartId,
-    stepUpdateInProgress,
+    selectedEntry,
+    selectedEntryHasReferences,
+    selectedReferencesMatch,
+    stepInteractionBlocked,
     toggleReferenceSelection,
     togglePartSelection,
     viewerInAssemblyMode,
     stepModuleTreeSelectionDisabled
   ]);
 
+  // A click that first demands topology is not discarded. Once the selector
+  // runtime for that exact artifact is ready, replay the same activation so
+  // the first click selects the intended face/edge/part.
+  useEffect(() => {
+    const pending = pendingModelReferenceActivationRef.current;
+    if (!pending) return;
+    if (!pendingReferenceActivationMatches(pending, {
+      fileRef: fileKey(selectedEntry),
+      tree: selectedEntry?.hash
+    })) {
+      pendingModelReferenceActivationRef.current = null;
+      return;
+    }
+    if (!selectedReferencesMatch) {
+      return;
+    }
+    pendingModelReferenceActivationRef.current = null;
+    handleModelReferenceActivate(pending.referenceId, { multiSelect: pending.multiSelect });
+  }, [handleModelReferenceActivate, selectedEntry, selectedReferencesMatch]);
+
   const handleModelReferenceDoubleActivate = useCallback((referenceId) => {
-    if (stepUpdateInProgress || stepModuleTreeSelectionDisabled || !isAssemblyView) {
+    if (stepInteractionBlocked || stepModuleTreeSelectionDisabled || !isAssemblyView) {
       return;
     }
     const pickedPartId = String(referenceId || "").trim();
@@ -4868,8 +5254,8 @@ function CadFileViewSurface({
     viewerInAssemblyMode,
     isAssemblyView,
     resolvePickedAssemblyPartId,
+    stepInteractionBlocked,
     stepModuleTreeSelectionDisabled,
-    stepUpdateInProgress
   ]);
 
   const closeViewerContextMenu = useCallback(() => {
@@ -4928,7 +5314,7 @@ function CadFileViewSurface({
   ]);
 
   const handleModelReferenceContext = useCallback((referenceId, { clientX = 0, clientY = 0 } = {}) => {
-    if (stepUpdateInProgress || stepModuleTreeSelectionDisabled) {
+    if (stepInteractionBlocked || stepModuleTreeSelectionDisabled) {
       setViewerContextMenu(null);
       return;
     }
@@ -5111,12 +5497,18 @@ function CadFileViewSurface({
     selectedEntry,
     stepTreeCopyReferenceMap,
     expandedStepTreeNodeIds,
+    stepInteractionBlocked,
     stepModuleTreeSelectionDisabled,
-    stepUpdateInProgress,
     viewerInAssemblyMode
   ]);
 
   const copyViewerContextMenuReference = useCallback(async (menu) => {
+    if (stepInteractionBlocked) {
+      setCopyStatus(retainedPreviousStepMeshError
+        ? "Selection unavailable because the STEP update failed."
+        : "STEP update in progress. Please wait.");
+      return;
+    }
     const copyText = String(menu?.copyText || "")
       .split("\n")
       .map((line) => canonicalCadRefCopyText(line))
@@ -5132,9 +5524,15 @@ function CadFileViewSurface({
     } catch (error) {
       setCopyStatus(error instanceof Error ? error.message : "Failed to copy reference");
     }
-  }, [deliverReferenceText]);
+  }, [deliverReferenceText, retainedPreviousStepMeshError, stepInteractionBlocked]);
 
   const copyStepTreeContextMenuReference = useCallback(async (id, { topology = false, toPrompt = false } = {}) => {
+    if (stepInteractionBlocked) {
+      setCopyStatus(retainedPreviousStepMeshError
+        ? "Selection unavailable because the STEP update failed."
+        : "STEP update in progress. Please wait.");
+      return;
+    }
     const normalizedId = String(id || "").trim();
     if (!normalizedId) {
       setCopyStatus("No selector ref is available for this node");
@@ -5206,7 +5604,9 @@ function CadFileViewSurface({
     displayStepTreeRoot,
     effectiveActiveReferenceMap,
     isAssemblyView,
+    retainedPreviousStepMeshError,
     selectedEntry,
+    stepInteractionBlocked,
     stepTreeCopyReferenceMap,
     stepTreeRoot
   ]);
@@ -5409,10 +5809,17 @@ function CadFileViewSurface({
       ? mode
       : TAB_TOOL_MODE.REFERENCES;
     setTabToolMode(current => normalizedMode === TAB_TOOL_MODE.MEASURE && current === normalizedMode ? TAB_TOOL_MODE.REFERENCES : normalizedMode);
+    if (
+      selectedEntry &&
+      selectedEntryHasReferences &&
+      (normalizedMode === TAB_TOOL_MODE.REFERENCES || normalizedMode === TAB_TOOL_MODE.MEASURE)
+    ) {
+      setRequestedTopologyFileRef(fileKey(selectedEntry));
+    }
     if (normalizedMode === TAB_TOOL_MODE.DRAW && drawingTool === DRAWING_TOOL.SURFACE_LINE) {
       setDrawingTool(DRAWING_TOOL.FREEHAND);
     }
-  }, [drawingTool]);
+  }, [drawingTool, selectedEntry, selectedEntryHasReferences]);
 
   const handleEnableSelectableTopology = useCallback(() => {
     if (!selectedEntry || !selectedEntryHasReferences) {
@@ -5426,6 +5833,7 @@ function CadFileViewSurface({
     });
     setViewerAlertOpen(false);
     setTabToolMode(TAB_TOOL_MODE.REFERENCES);
+    setRequestedTopologyFileRef(fileKey(selectedEntry));
   }, [selectedEntry, selectedEntryHasReferences]);
 
   const handleDrawingStrokesChange = useCallback((nextStrokes) => {
@@ -5485,6 +5893,12 @@ function CadFileViewSurface({
     }
     // Camera moved: give the LOD scheduler a sample (it debounces internally).
     onLodCameraMoved();
+    // Freehand strokes are anchored to the view they were drawn in, so a
+    // camera move ends them -- an orbit, Reset view, or the fit a mode switch
+    // performs. Render owns no CAD drawing layer, so its camera never does.
+    if (renderEnabledRef.current) {
+      return;
+    }
     const hasPerspectiveDependentDrawings =
       drawingStrokesRef.current.length > 0 ||
       drawingUndoStackRef.current.some((strokes) => strokes.length > 0) ||
@@ -5498,7 +5912,118 @@ function CadFileViewSurface({
     setDrawingStrokes([]);
     setDrawingUndoStack([]);
     setDrawingRedoStack([]);
-  }, [scheduleActiveFileSessionSave, onLodCameraMoved]);
+  }, [onLodCameraMoved, scheduleActiveFileSessionSave]);
+
+  const applyActiveCamera = useCallback((camera, { resetZoomBaseline = false } = {}) => {
+    let snapshot = null;
+    try {
+      snapshot = resolveRenderCameraSnapshot(camera, selectedMeshData?.bounds || null, {
+        sceneScale: isUrdfView ? "urdf" : "cad"
+      });
+    } catch {
+      snapshot = renderCameraSnapshot(camera);
+    }
+    if (snapshot) {
+      viewerRef.current?.setPerspective?.(snapshot, { resetZoomBaseline });
+    }
+    const scopedSnapshot = scopedWorkspacePerspective(snapshot, selectedKey, selectedEntry);
+    activePerspectiveRef.current = scopedSnapshot;
+    setViewerPerspective(scopedSnapshot);
+  }, [isUrdfView, selectedEntry, selectedKey, selectedMeshData?.bounds]);
+
+  const handleRenderEnabledChange = useCallback((enabled) => {
+    if (enabled === renderSession.enabled) {
+      return;
+    }
+    // The switch carries no camera. Each mode owns a camera of its own -- an
+    // orthographic CAD frustum, a photographic lens -- and the viewer fits the
+    // one being entered to the model's zero pose (CadViewer's "mode" reframe).
+    // Handing it the other mode's pose only produced the framing this reset
+    // exists to replace. The session still RECORDS each mode's last camera, for
+    // the file session and for a snapshot request; nothing replays it on a
+    // switch.
+    const activeCamera = readRenderSessionCamera(viewerRef.current, activePerspectiveRef.current);
+    if (enabled) {
+      // Render's studio and its two settings panels are one lazy chunk. Asking
+      // for them here rather than waiting for the viewport effect and the
+      // Suspense boundary to ask separately is what keeps the switch to one
+      // request; the mode flips immediately either way, and the viewport stays
+      // under its destination backdrop until the studio has applied.
+      prefetchRenderStudio();
+      setTabToolsOpen(true);
+      renderEnabledRef.current = true;
+      setRenderSession(renderSessionForEnabledChange(renderSession, true, {
+        activeCamera,
+        activeProjection: resolvedScene.camera.projection
+      }));
+      setTabToolsOpen(true);
+      return;
+    }
+
+    renderEnabledRef.current = false;
+    // The projection travels, because orthographic-or-perspective is an Inspect
+    // display choice rather than a pose; the fit applies it to the new frame.
+    setRenderSession(renderSessionForEnabledChange(renderSession, false, {
+      activeCamera,
+      activeProjection: resolvedScene.camera.projection
+    }));
+  }, [
+    renderSession,
+    resolvedScene.camera.projection,
+    setTabToolsOpen
+  ]);
+
+  const handleRenderQualityChange = useCallback((quality) => {
+    setRenderSession((current) => createRenderSessionState({
+      ...current,
+      payload: { ...current.payload, quality }
+    }));
+  }, []);
+
+  const handleRenderPayloadValueChange = useCallback((path, value) => {
+    setRenderSession((current) => createRenderSessionState({
+      ...current,
+      payload: setRenderPayloadValue(
+        path?.[0] === "camera"
+          ? {
+              ...current.payload,
+              camera: renderCameraSeed(activePerspectiveRef.current) || current.payload.camera || {}
+            }
+          : current.payload,
+        path,
+        value
+      )
+    }));
+  }, []);
+
+  const handleProjectionChange = useCallback((projection) => {
+    const camera = renderCameraSnapshot(activePerspectiveRef.current);
+    if (renderSession.enabled) {
+      const payload = {
+        ...renderSession.payload,
+        camera: {
+          ...(renderCameraSeed(camera) || renderSession.payload.camera || {}),
+          projection
+        }
+      };
+      setRenderSession(createRenderSessionState({ ...renderSession, payload }));
+    } else {
+      setRenderSession(createRenderSessionState({
+        ...renderSession,
+        cadCamera: camera ? { ...camera, projection } : renderSession.cadCamera,
+        cadProjection: projection
+      }));
+    }
+    if (camera) {
+      applyActiveCamera({ ...camera, projection });
+    }
+  }, [applyActiveCamera, renderSession]);
+
+  const handleRenderReset = useCallback(() => {
+    const camera = renderCameraSnapshot(activePerspectiveRef.current);
+    const next = renderSessionForReset(renderSession, { activeCamera: camera });
+    setRenderSession(next);
+  }, [renderSession]);
 
   useCadWorkspaceShortcuts({
     selectionActive: selectedPartIds.length > 0 || selectedReferenceIds.length > 0,
@@ -5508,8 +6033,8 @@ function CadFileViewSurface({
     setCopyStatus,
     setScreenshotStatus,
     previewMode,
+    inspectionEnabled: !renderSession.enabled,
     viewerAlertOpen,
-    themeSheetOpen: false,
     tabToolsOpen,
     isDesktop,
     filesPanelOpen,
@@ -5523,7 +6048,6 @@ function CadFileViewSurface({
     handleRedoDrawing,
     setPreviewMode,
     setViewerAlertOpen,
-    setThemeEditing,
     setTabToolsOpen,
     setFilesPanelOpen,
     setTabToolMode
@@ -5595,7 +6119,6 @@ function CadFileViewSurface({
       filesPanelOpen,
       tabToolsOpen,
       tabToolMode,
-      themeEditing,
       viewerAlertOpen
     };
     setCopyStatus("");
@@ -5620,8 +6143,8 @@ function CadFileViewSurface({
     viewerLoading
   ]);
 
-  // Exit orbit/preview mode and restore the pre-preview UI, from the floating
-  // toolbar's "Exit orbit" button. Mirrors the Escape-key exit in
+  // Exit fullscreen and restore the pre-preview UI, from the floating
+  // toolbar's "Exit fullscreen" button. Mirrors the Escape-key exit in
   // useCadWorkspaceShortcuts; keep the two restore paths in sync.
   const handleExitPreviewMode = useCallback(() => {
     if (!previewMode) {
@@ -5717,20 +6240,41 @@ function CadFileViewSurface({
   ];
   // Handed over unconditionally: the pane gates it on the `displayModes` capability, so
   // gating it a second time here only creates a place for the two to disagree.
-  const renderDisplaySettings = displaySettings;
-  const themeTabs = [
-    // One tab for everything about how this file is drawn right now: display
-    // mode, plus the section-plane and exploded-view transforms. All three are
-    // per-file session state. The theme is global, not file-specific —
-    // it lives in the navbar-triggered theme editor (ThemeEditorPanel).
-    supportsDisplayModes
+  const renderDisplaySettings = resolvedScene.display;
+  const materialPickingEnabled = fileSheetOpen && renderSession.enabled && selectedFileSheetKind === "step" && effectiveFileSheetOpenSectionIds.includes(FILE_SHEET_SECTION_IDS.MATERIALS);
+  const materialParts = materialSession.withViewerSelection(viewerSelectedPartIds);
+  const settingsTabs = [
+    supportsDisplayModes && !renderSession.enabled
       ? buildDisplaySettingsTab({
-          displaySettings,
+          displaySettings: resolvedScene.display,
           updateDisplaySettings,
+          projection: resolvedScene.camera.projection,
+          onProjectionChange: handleProjectionChange,
           clipBounds: selectedMeshData?.bounds || null,
-          explodeMeshData: selectedMeshData || null
+          explodeMeshData: selectedMeshData || null,
+          edgeStatus: displayEdgeStatus,
+          edgeError: displayEdgeError
         })
-      : null
+      : null,
+    renderSession.enabled ? buildRenderSettingsTab({
+      scene: resolvedScene,
+      onQualityChange: handleRenderQualityChange,
+      onPayloadValueChange: handleRenderPayloadValueChange,
+      onReset: handleRenderReset
+    }) : null,
+    renderSession.enabled ? buildMaterialsSettingsTab({
+      appearance: selectedSourceAppearance,
+      overlay: materialSession.overlay,
+      undo: materialSession.undo,
+      targets: materialSession.targets,
+      scope: materialSession.scope,
+      enabled: materialSession.enabled,
+      selectedPartIds: materialParts.selectedIds,
+      onSelectParts: materialParts.select,
+      onOverlayChange: materialSession.change,
+      onUndo: materialSession.undoLast,
+      onReset: materialSession.reset
+    }) : null
   ].filter(Boolean);
 
   return (
@@ -5773,105 +6317,148 @@ function CadFileViewSurface({
             >
               <div className="pointer-events-auto absolute inset-0 z-0">
                 <CadRenderPane
-                  viewerRef={viewerRef}
-                  renderFormat={effectiveRenderFormat}
-                  drawingThicknessScale={drawingThicknessScale}
-                  planMode={selectedEntryIsDrawing && drawingViewMode === "2d"}
-                  bendAxisX={selectedEntryIsDrawing ? selectedEntry?.bendAxisX || null : null}
-                  drawingBendLines={selectedEntryIsDrawing ? drawingBendLines : null}
-                  bendAnglesRad={selectedEntryIsDrawing ? drawingBendAnglesRad : null}
-                  drawingBends={selectedEntryIsDrawing ? drawingBends : null}
-                  drawingBendStyle={selectedEntryIsDrawing ? drawingBendStyle : "boxed"}
-                  drawingBendRadiusMm={selectedEntryIsDrawing ? drawingBendRadiusMm : 0}
-                  drawingKFactor={selectedEntryIsDrawing ? drawingKFactor : DXF_DEFAULT_KFACTOR}
-                  drawingHiddenLayers={selectedEntryIsDrawing ? drawingHiddenLayers : null}
-                  drawingOrientation={selectedEntryIsDrawing ? drawingOrientation : null}
-                  drawingMaterialColor={selectedEntryIsDrawing ? dxfMaterialPreset(drawingMaterial).colorHex : null}
-                  drawingGeometry={selectedEntryIsDrawing ? drawingGeometry : null}
-                  drawingIsDocument={selectedEntryIsDrawingDocument}
-                  drawingThicknessMm={selectedEntryIsDrawing ? drawingThicknessMm : 0}
-                  onCameraZoomPercentChange={setViewerZoomPercent}
-                  renderPartsIndividually={
-                    isUrdfView || Boolean(selectedStepParameterRuntime) || Boolean(selectedAnimationRuntime)
-                  }
-                  stepParameters={selectedStepParameterRuntime}
-                  stepAnimation={selectedAnimationRuntime}
-                  selectedMeshData={selectedMeshData}
-                  selectedKey={selectedKey}
-                  missingFileRef={missingFileRef}
-                  viewerServerInfo={viewerServerInfo}
-                  viewerPerspective={viewerPerspective}
-                  viewerPerspectiveRef={activePerspectiveRef}
-                  themeSettings={resolvedThemeSettings}
-                  displaySettings={renderDisplaySettings}
-                  previewMode={previewMode}
-                  viewerLoading={viewerLoading}
-                  viewerAlert={viewerAlert}
-                  stepUpdateInProgress={effectiveRenderFormat === RENDER_FORMAT.STEP && stepUpdateInProgress}
-                  referenceSelectionPending={referenceSelectionPending}
-                  referenceSelectionUnavailable={referenceSelectionUnavailable}
-                  referenceSelectionDeferred={selectedTopologyDeferredByCost}
-                  viewerMode={viewerMode}
-                  assemblyPickingActive={viewerInAssemblyMode}
-                  assemblyParts={viewerAssemblyRenderParts}
-                  hiddenPartIds={viewerHiddenPartIds}
-                  selectedPartIds={inspectionHighlight ? inspectionHighlight.partIds : viewerSelectedPartIds}
-                  hoveredPartId={viewerHoveredPartIds}
-                  hoveredReferenceId={effectiveHoveredReferenceId}
-                  selectedReferenceIds={inspectionHighlight ? inspectionHighlight.faceIds : selectedReferenceIds}
-                  selectorRuntime={effectiveSelectorRuntime}
-                  displayEdgeRuntime={selectedDisplayEdgeRuntime}
-                  selectionFilter={selectionFilter}
-                  pickableFaces={measureModeActive ? (["all", "faces"].includes(measureSelectionFilter) ? viewerPickableFaces : EMPTY_LIST) : filteredViewerFaces}
-                  pickableEdges={measureModeActive ? (["all", "edges"].includes(measureSelectionFilter) ? viewerPickableEdges : EMPTY_LIST) : filteredViewerEdges}
-                  pickableVertices={(measureModeActive ? ["all", "points"].includes(measureSelectionFilter) : selectionFilter === "all") ? viewerPickableVertices : EMPTY_LIST}
-                  focusedPartIds={viewerFocusedPartIds}
-                  boundsAnimationActive={robotBoundsAnimationActive}
-                  drawToolActive={drawToolActive}
-                  measureModeActive={measureModeActive}
-                  drawingTool={drawingTool}
-                  drawingStrokes={drawingStrokes}
-                  handleDrawingStrokesChange={handleDrawingStrokesChange}
-                  handlePerspectiveChange={handlePerspectiveChange}
-                  handleModelHoverChange={handleModelHoverChange}
-                  handleModelReferenceActivate={handleModelReferenceActivate}
-                  handleModelReferenceDoubleActivate={handleModelReferenceDoubleActivate}
-                  handleModelReferenceContext={handleModelReferenceContext}
-                  onMeasurePick={handleMeasurePick}
-                  onMeasureHoverPoint={handleMeasureHoverPoint}
-                  activeMeasurementId={inspectionHighlight?.measurement?.id || activeMeasureId}
-                  measureState={inspectionHighlight?.measurement ? { measurements: [inspectionHighlight.measurement] } : measureRulerState}
-                  viewerContextMenu={viewerContextMenu}
-                  onViewerContextMenuClose={closeViewerContextMenu}
-                  onViewerContextMenuCopyReference={copyViewerContextMenuReference}
-                  onViewerContextMenuSelect={selectViewerContextMenuNode}
-                  onViewerContextMenuFocus={focusViewerContextMenuNode}
-                  onViewerContextMenuExitAllIsolate={handleExitIsolate}
-                  onViewerContextMenuHideOther={hideOtherViewerContextMenuNode}
-                  onViewerContextMenuHideAll={hideAllViewerContextMenuNodes}
-                  onViewerContextMenuHide={hideViewerContextMenuNode}
-                  onViewerContextMenuReveal={revealViewerContextMenuNode}
-                  onViewerContextMenuResetZoom={resetZoomViewerContextMenu}
-                  onViewerContextMenuZoomToFit={zoomToFitViewerContextMenu}
-                  onViewerContextMenuExpandSelected={expandSelectedViewerContextMenuNodes}
-                  onViewerContextMenuCollapseSelected={collapseSelectedViewerContextMenuNodes}
-                  onViewerContextMenuExpandAll={expandAllViewerContextMenuNodes}
-                  onViewerContextMenuCollapseAll={collapseAllViewerContextMenuNodes}
-                  handleViewerAlertChange={handleViewerAlertChange}
-                  handleStepModuleTransformDetectedChange={handleStepModuleTransformDetectedChange}
-                  selectionCount={selectionCount}
-                  copyButtonLabel={copyButtonLabel}
-                  copyButtonCountLabel={copyButtonCountLabel}
-                  copyReferenceTipActive={copyReferenceTipActive}
-                  panToolActive={panToolActive}
-                  handleCopySelection={handleCopySelection}
-                  handleAddSelection={typeof onReference === "function" || typeof onPromptContext === "function" ? handleAddCurrentSelection : null}
-                  handleScreenshotCopy={handleScreenshotCopy}
-                />
+                onReload={onReload}
+                viewerRef={viewerRef}
+                renderFormat={effectiveRenderFormat}
+                drawingThicknessScale={renderSession.enabled && selectedEntryIsDrawing
+            ? DXF_DEFAULT_THICKNESS_MM / DXF_PREVIEW_REFERENCE_THICKNESS_MM
+            : drawingThicknessScale}
+                planMode={selectedEntryIsDrawing && drawingViewMode === "2d"}
+                bendAxisX={selectedEntryIsDrawing ? selectedEntry?.bendAxisX || null : null}
+                drawingBendLines={selectedEntryIsDrawing ? drawingBendLines : null}
+                bendAnglesRad={selectedEntryIsDrawing
+            ? (renderSession.enabled ? EMPTY_LIST : drawingBendAnglesRad)
+            : null}
+                drawingBends={selectedEntryIsDrawing
+            ? (renderSession.enabled ? EMPTY_LIST : drawingBends)
+            : null}
+                drawingBendStyle={selectedEntryIsDrawing && !renderSession.enabled
+            ? drawingBendStyle
+            : DXF_DEFAULT_BEND_STYLE}
+                drawingBendRadiusMm={selectedEntryIsDrawing && !renderSession.enabled
+            ? drawingBendRadiusMm
+            : DXF_DEFAULT_BEND_RADIUS_MM}
+                drawingKFactor={selectedEntryIsDrawing && !renderSession.enabled
+            ? drawingKFactor
+            : DXF_DEFAULT_KFACTOR}
+                drawingHiddenLayers={selectedEntryIsDrawing
+            ? (renderSession.enabled ? EMPTY_LIST : drawingHiddenLayers)
+            : null}
+                drawingOrientation={selectedEntryIsDrawing
+            ? (renderSession.enabled ? DXF_DEFAULT_ORIENTATION : drawingOrientation)
+            : null}
+                drawingMaterialColor={selectedEntryIsDrawing && !renderSession.enabled
+            ? dxfMaterialPreset(drawingMaterial).colorHex
+            : null}
+                drawingGeometry={selectedEntryIsDrawing ? drawingGeometry : null}
+                drawingIsDocument={selectedEntryIsDrawingDocument}
+                drawingThicknessMm={selectedEntryIsDrawing && !renderSession.enabled
+            ? drawingThicknessMm
+            : DXF_DEFAULT_THICKNESS_MM}
+                onCameraZoomPercentChange={setViewerZoomPercent}
+                onLodCameraChange={onLodCameraMoved}
+                onMeshSourceAdoption={handleDisplayMeshAdoption}
+                materialPickingEnabled={materialPickingEnabled}
+                onMaterialPartActivate={materialParts.activate}
+                renderPartsIndividually={
+            isUrdfView || Boolean(selectedStepParameterRuntime) || Boolean(selectedAnimationRuntime) ||
+            sourceAppearanceHasMaterials(selectedDisplayMeshData?.appearance)
+          }
+                stepParameters={selectedStepParameterRuntime}
+                stepAnimation={selectedAnimationRuntime}
+                glbDocument={selectedGlbDocument}
+                embeddedGlbAnimation={embeddedGlbAnimationRuntime?.render || null}
+                selectedMeshData={selectedDisplayMeshData}
+                selectedKey={selectedKey}
+                missingFileRef={editingPreview.entry ? "" : missingFileRef}
+                viewerServerInfo={viewerServerInfo}
+                viewerPerspective={viewerPerspective}
+                viewerPerspectiveRef={activePerspectiveRef}
+                projection={resolvedScene.camera.projection}
+                focalLength={resolvedScene.camera.focalLength}
+                themeSettings={resolvedThemeSettings}
+                appearance={resolvedScene.appearance}
+                materialOverrides={resolvedMaterialOverrides}
+                receiveShadows={resolvedScene.render.enabled}
+                renderMode={resolvedScene.render.enabled}
+                renderConfiguration={resolvedScene.render.configuration}
+                quality={resolvedScene.quality}
+                displaySettings={renderDisplaySettings}
+                previewMode={previewMode}
+                viewerLoading={viewerLoading}
+                retainingPreviousStepMesh={retainingPreviousStepMesh}
+                viewerAlert={viewerAlert}
+                onPresentationChange={handlePresentationChange}
+                presentationKey={presentationKey}
+                loadingPresentation={loading}
+                stepUpdateInProgress={effectiveRenderFormat === RENDER_FORMAT.STEP && stepUpdateInProgress}
+                referenceSelectionPending={referenceSelectionPending}
+                referenceSelectionUnavailable={referenceSelectionUnavailable}
+                referenceSelectionDeferred={selectedTopologyDeferredByCost}
+                viewerMode={robotComponentsActive ? "assembly" : viewerMode}
+                robotComponentPicking={robotComponentsActive}
+                assemblyPickingActive={robotComponentsActive || viewerInAssemblyMode}
+                assemblyParts={robotComponentsActive ? (selectedUrdfPreview.meshData?.parts || EMPTY_LIST) : viewerAssemblyRenderParts}
+                hiddenPartIds={viewerHiddenPartIds}
+                selectedPartIds={robotComponentsActive ? robotSelection.selectedIds : inspectionHighlight ? inspectionHighlight.partIds : viewerSelectedPartIds}
+                hoveredPartId={robotComponentsActive ? robotSelection.hoveredId : viewerHoveredPartIds}
+                hoveredReferenceId={effectiveHoveredReferenceId}
+                selectedReferenceIds={inspectionHighlight ? inspectionHighlight.faceIds : selectedReferenceIds}
+                selectorRuntime={effectiveSelectorRuntime}
+                displayEdgeRuntime={selectedDisplayEdgeRuntime}
+                pickableFaces={measureModeActive ? (["all", "faces"].includes(measureSelectionFilter) ? viewerPickableFaces : EMPTY_LIST) : filteredViewerFaces}
+                pickableEdges={measureModeActive ? (["all", "edges"].includes(measureSelectionFilter) ? viewerPickableEdges : EMPTY_LIST) : filteredViewerEdges}
+                pickableVertices={(measureModeActive ? ["all", "points"].includes(measureSelectionFilter) : selectionFilter === "all") ? viewerPickableVertices : EMPTY_LIST}
+                focusedPartIds={viewerFocusedPartIds}
+                boundsAnimationActive={robotBoundsAnimationActive}
+                drawToolActive={drawToolActive}
+                measureModeActive={measureModeActive}
+                drawingTool={drawingTool}
+                drawingStrokes={drawingStrokes}
+                handleDrawingStrokesChange={handleDrawingStrokesChange}
+                handlePerspectiveChange={handlePerspectiveChange}
+                handleModelHoverChange={robotComponentsActive ? robotSelection.hover : handleModelHoverChange}
+                handleModelReferenceActivate={robotComponentsActive ? selectRobotComponent : handleModelReferenceActivate}
+                handleModelReferenceDoubleActivate={robotComponentsActive ? undefined : handleModelReferenceDoubleActivate}
+                handleModelReferenceContext={robotComponentsActive ? undefined : handleModelReferenceContext}
+                onMeasurePick={handleMeasurePick}
+                onMeasureHoverPoint={handleMeasureHoverPoint}
+                activeMeasurementId={inspectionHighlight?.measurement?.id || activeMeasureId}
+                measureState={inspectionHighlight?.measurement ? { measurements: [inspectionHighlight.measurement] } : measureRulerState}
+                viewerContextMenu={viewerContextMenu}
+                onViewerContextMenuClose={closeViewerContextMenu}
+                onViewerContextMenuCopyReference={copyViewerContextMenuReference}
+                onViewerContextMenuSelect={selectViewerContextMenuNode}
+                onViewerContextMenuFocus={focusViewerContextMenuNode}
+                onViewerContextMenuExitAllIsolate={handleExitIsolate}
+                onViewerContextMenuHideOther={hideOtherViewerContextMenuNode}
+                onViewerContextMenuHideAll={hideAllViewerContextMenuNodes}
+                onViewerContextMenuHide={hideViewerContextMenuNode}
+                onViewerContextMenuReveal={revealViewerContextMenuNode}
+                onViewerContextMenuResetZoom={resetZoomViewerContextMenu}
+                onViewerContextMenuZoomToFit={zoomToFitViewerContextMenu}
+                onViewerContextMenuExpandSelected={expandSelectedViewerContextMenuNodes}
+                onViewerContextMenuCollapseSelected={collapseSelectedViewerContextMenuNodes}
+                onViewerContextMenuExpandAll={expandAllViewerContextMenuNodes}
+                onViewerContextMenuCollapseAll={collapseAllViewerContextMenuNodes}
+                handleViewerAlertChange={handleViewerAlertChange}
+                handleStepModuleTransformDetectedChange={handleStepModuleTransformDetectedChange}
+                selectionCount={selectionCount}
+                copyButtonLabel={copyButtonLabel}
+                copyButtonCountLabel={copyButtonCountLabel}
+                copyReferenceTipActive={copyReferenceTipActive}
+                panToolActive={panToolActive}
+                handleCopySelection={handleCopySelection}
+                handleScreenshotCopy={handleScreenshotCopy}
+                selectionFilter={selectionFilter}
+                handleAddSelection={typeof onReference === "function" || typeof onPromptContext === "function" ? handleAddCurrentSelection : null}
+              />
               </div>
 
               <FloatingToolBar
+                onRenderModeChange={handleRenderEnabledChange}
                 previewMode={previewMode}
+                renderMode={renderSession.enabled}
                 selectedEntry={selectedEntry}
                 renderFormat={effectiveRenderFormat}
                 floatingCadToolbarPosition={floatingCadToolbarPosition}
@@ -5882,7 +6469,7 @@ function CadFileViewSurface({
                 zoomPercent={viewerZoomPercent}
                 onZoomPercentChange={handleViewerZoomPercentChange}
                 onZoomReset={handleViewerZoomReset}
-                selectionFilter={effectiveRenderFormat === RENDER_FORMAT.STEP ? selectionFilter : null}
+                selectionFilter={supportsTopology ? selectionFilter : null}
                 onSelectionFilterChange={value => { setSelectionFilter(value); handleSelectTabToolMode("references"); }}
                 selectionFilterNotice={selectionFilterNotice}
                 selectionToolActive={selectionToolActive}
@@ -5895,8 +6482,8 @@ function CadFileViewSurface({
                 handleAnimationPlayToggle={activeAnimationRuntime?.onPlayToggle}
                 drawToolActive={drawToolActive}
                 measureModeActive={measureModeActive}
-                displayPanel={effectiveRenderFormat === RENDER_FORMAT.STEP ? themeTabs[0]?.content : null}
-                measurementPanel={effectiveRenderFormat === RENDER_FORMAT.STEP ? <>
+                displayPanel={supportsDisplayModes ? settingsTabs.find(tab => tab.id === FILE_SHEET_SECTION_IDS.DISPLAY)?.content : null}
+                measurementPanel={supportsTopology && supportsMeasure ? <>
                   <div className="py-1">
                     <p className="px-2 py-1 text-micro text-muted-foreground">Snap to</p>
                     <SelectionFilterMenu fullWidth options={MEASURE_SELECTION_FILTERS} menuLabel="Measure selection filter" hint="" value={measureSelectionFilter} onChange={value => {
@@ -5908,6 +6495,7 @@ function CadFileViewSurface({
                   measurements={measureMeasurements} activeId={activeMeasureId} measureModeActive={measureModeActive}
                   onActivate={setActiveMeasureId} onDelete={handleMeasureDelete} onClear={handleMeasureClear}
                 /></> : null}
+                measureSupported={effectiveSupportsMeasure}
                 measureDisabled={measureToolDisabled}
                 panToolActive={panToolActive}
                 handleSelectTabToolMode={handleSelectTabToolMode}
@@ -5947,14 +6535,15 @@ function CadFileViewSurface({
               ) : null}
 
               <ViewerLoadingOverlay
-                viewerLoading={effectiveViewerLoading}
+                loading={presentationState?.file === selectedKey && presentationState?.covering ? null : loading}
                 previewMode={previewMode}
-                progress={selectedLoadProgress}
+                operationKey={selectedKey || explicitFileParam}
               />
             </div>
 
             {selectedFileSheetKind === "step" ? (
               <StepFileSheet
+                client={client}
                 key={`step:${selectedKey}`}
                 geometryInspection={{ file: selectedEntry?.file, revision: artifactRevision, references: !viewerLoading && !stepUpdateInProgress ? isAssemblyView ? assemblyStepTreeTopologyReferences : selectedSelectorRuntime?.references || EMPTY_LIST : EMPTY_LIST, parts: !viewerLoading && !stepUpdateInProgress ? selectedMeshData?.parts || EMPTY_LIST : EMPTY_LIST, onHighlight: handleInspectionHighlight, onLoadTopology: loadInspectionTopology }}
                 open={fileSheetOpen}
@@ -5991,8 +6580,12 @@ function CadFileViewSurface({
                 onClearSelection={clearAssemblySelection}
                 onHoverTreeNode={setHoveredListPartId}
                 onHoverReferenceNode={setHoveredListReferenceId}
-                treeSelectionDisabled={stepModuleTreeSelectionDisabled}
-                treeSelectionDisabledReason={stepModuleTreeSelectionDisabledReason}
+                treeSelectionDisabled={stepInteractionBlocked || stepModuleTreeSelectionDisabled}
+                treeSelectionDisabledReason={stepInteractionBlocked
+                  ? (retainedPreviousStepMeshError
+                    ? "Selection is unavailable because the STEP update failed."
+                    : "STEP update in progress. Please wait.")
+                  : stepModuleTreeSelectionDisabledReason}
                 onTogglePartVisibility={togglePartVisibility}
                 hideOtherSelectedParts={handleHideOtherSelectedParts}
                 hideAllParts={handleHideAllParts}
@@ -6002,12 +6595,14 @@ function CadFileViewSurface({
                   status: selectedStepModuleStatus,
                   error: selectedStepModuleError,
                   definition: selectedStepModuleDefinition,
-                  enabled: stepModuleEnabled,
+
                   parameterValues: stepModuleParameterValues,
                   onParameterChange: handleStepModuleParameterChange,
                   onResetParameters: handleResetParameters,
                   onApplyPose: handleApplyPose,
-                  onEnabledChange: handleStepModuleEnabledChange,
+                  activePose: appliedStepPoseName,
+                  transition: poseTransition,
+
                   onCopyParams: handleCopyParameters,
                   onPasteParams: handlePasteParameters
                 }}
@@ -6033,6 +6628,8 @@ function CadFileViewSurface({
                 suppressDynamicMetadataStatus={selectedArtifactGenerating}
                 statusItems={selectedFileStatusItems}
                 themeTabs={[]}
+                renderMode={renderSession.enabled}
+                settingsTabs={settingsTabs}
                 openSectionIds={effectiveFileSheetOpenSectionIds}
                 onOpenSectionIdsChange={handleFileSheetOpenSectionIdsChange}
               />
@@ -6052,11 +6649,14 @@ function CadFileViewSurface({
                 onOpenChange={setTabToolsOpen}
                 onStartResize={fileSheetResizeHandler}
                 joints={movableUrdfJoints}
+                components={selectedUrdfComponents}
+                componentSelection={{ ...robotSelection, select: selectRobotComponent }}
                 groupStates={selectedUrdfGroupStates}
                 activeGroupStateId={activeSelectedUrdfGroupStateId}
                 jointValues={selectedUrdfJointValues}
                 onJointValueChange={handleUrdfJointValueChange}
                 onGroupStateSelect={handleSelectUrdfGroupState}
+                poseTransition={poseTransition}
                 onCopyJointAngles={handleCopyUrdfJointAngles}
                 onResetPose={handleResetUrdfPose}
                 sdf={selectedFileSheetKind === "sdf" ? {
@@ -6064,8 +6664,8 @@ function CadFileViewSurface({
                 } : null}
                 viewerServerInfo={viewerServerInfo}
                 suppressDynamicMetadataStatus={selectedArtifactGenerating}
-                statusItems={selectedFileStatusItems}
-                themeTabs={themeTabs}
+                renderMode={renderSession.enabled}
+                settingsTabs={settingsTabs}
                 openSectionIds={effectiveFileSheetOpenSectionIds}
                 onOpenSectionIdsChange={handleFileSheetOpenSectionIdsChange}
               />
@@ -6084,8 +6684,8 @@ function CadFileViewSurface({
                 onStartResize={fileSheetResizeHandler}
                 viewerServerInfo={viewerServerInfo}
                 suppressDynamicMetadataStatus={selectedArtifactGenerating}
-                statusItems={selectedFileStatusItems}
-                themeTabs={[
+                renderMode={renderSession.enabled}
+                settingsTabs={renderSession.enabled ? settingsTabs : [
                   buildDxfMaterialTab({
                     thicknessMm: drawingThicknessMm,
                     onThicknessChange: setDrawingThicknessMm,
@@ -6114,7 +6714,7 @@ function CadFileViewSurface({
                     hiddenLayers: drawingHiddenLayers,
                     onLayerVisibilityChange: handleDrawingLayerVisibilityChange
                   })] : []),
-                  ...themeTabs
+                  ...settingsTabs
                 ]}
                 openSectionIds={effectiveFileSheetOpenSectionIds}
                 onOpenSectionIdsChange={handleFileSheetOpenSectionIdsChange}
@@ -6133,8 +6733,10 @@ function CadFileViewSurface({
                 onStartResize={fileSheetResizeHandler}
                 viewerServerInfo={viewerServerInfo}
                 suppressDynamicMetadataStatus={selectedArtifactGenerating}
-                statusItems={selectedFileStatusItems}
-                themeTabs={themeTabs}
+                renderMode={renderSession.enabled}
+                settingsTabs={settingsTabs}
+                animationRuntime={embeddedGlbAnimationRuntime}
+                measurementAvailable={effectiveSupportsMeasure}
                 openSectionIds={effectiveFileSheetOpenSectionIds}
                 onOpenSectionIdsChange={handleFileSheetOpenSectionIdsChange}
                 measurements={measureMeasurements}
@@ -6187,8 +6789,9 @@ function CadFileViewSurface({
         />
 
         <ViewerAlertDialog
+          onReload={onReload}
           viewerAlertOpen={viewerAlertOpen}
-          viewerAlert={viewerAlert}
+          viewerAlert={fileStatusAlert}
           previewMode={previewMode}
           setViewerAlertOpen={setViewerAlertOpen}
         />
