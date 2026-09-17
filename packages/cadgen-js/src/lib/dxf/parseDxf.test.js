@@ -345,8 +345,12 @@ test("a DIMENSION expands its rendered block: lines, arrowhead SOLIDs and the va
 
   // One part line, three dimension lines, two arrowheads of three edges each.
   assert.equal(parsed.geometry.lines.length, 1 + 3 + 2 * 3);
-  const arrowTip = parsed.geometry.lines.find((line) => line.layer === "0" && line.start[0] === 100 && line.start[1] === -15);
-  assert.ok(arrowTip, "the right arrowhead's tip sits on the dimension line's end");
+  const arrowTip = parsed.geometry.lines.find((line) => line.layer === "DIM" && line.start[0] === 100 && line.start[1] === -15);
+  assert.ok(arrowTip, "the right arrowhead's tip sits on the dimension line's end, on the DIMENSION's layer (block layer 0 inherits)");
+  assert.equal(parsed.geometry.lines.filter((line) => line.layer === "0").length, 0, "nothing is left on layer 0");
+  assert.equal(parsed.geometry.fills.length, 2, "each arrowhead is also a filled polygon");
+  assert.equal(parsed.geometry.fills[0].layer, "DIM");
+  assert.deepEqual(parsed.layers.map((layer) => layer.name), ["CUT", "DIM"]);
   assert.equal(parsed.geometry.texts.length, 1, "the value comes from the block's MTEXT, not from the entity again");
   assert.deepEqual(parsed.geometry.texts[0], {
     layer: "DIM", position: [50, -15], heightMm: 2.5, rotationDeg: 0,
@@ -380,6 +384,7 @@ test("SOLID and LEADER are outlines; a SOLID quad walks its bow-tie corners in o
   ]));
   const solid = parsed.geometry.lines.filter((line) => line.layer === "ARROWS");
   assert.equal(solid.length, 4);
+  assert.deepEqual(parsed.geometry.fills, [{ layer: "ARROWS", kind: "cut", points: [[0, 0], [10, 0], [10, 10], [0, 10]] }]);
   // Corners 1, 2, 4, 3: (0,0) -> (10,0) -> (10,10) -> (0,10) -> back, never the diagonal.
   assert.deepEqual(solid.map((line) => [line.start, line.end]), [
     [[0, 0], [10, 0]], [[10, 0], [10, 10]], [[10, 10], [0, 10]], [[0, 10], [0, 0]]
@@ -402,4 +407,24 @@ test("TEXT alignment and MTEXT attachment reach the marking", () => {
     "an aligned TEXT anchors at its second alignment point");
   assert.deepEqual([plain.position, plain.hAlign, plain.vAlign], [[5, 5], "left", "baseline"]);
   assert.deepEqual([mtext.hAlign, mtext.vAlign], ["right", "bottom"]);
+});
+
+test("the LAYER table's linetype and lineweight reach the layer summary", () => {
+  const parsed = parseDxf(dxfText([
+    "0", "SECTION", "2", "TABLES",
+    "0", "TABLE", "2", "LAYER",
+    "0", "LAYER", "2", "HIDDEN", "62", "3", "6", "HIDDEN", "370", "18",
+    "0", "LAYER", "2", "CUT", "62", "7",
+    "0", "ENDTAB",
+    "0", "ENDSEC",
+    "0", "SECTION", "2", "ENTITIES",
+    "0", "LINE", "8", "CUT", "10", "0", "20", "0", "11", "10", "21", "0",
+    "0", "LINE", "8", "HIDDEN", "10", "0", "20", "5", "11", "10", "21", "5",
+    "0", "ENDSEC", "0", "EOF"
+  ]));
+  const byName = new Map(parsed.layers.map((layer) => [layer.name, layer]));
+  assert.equal(byName.get("HIDDEN").linetype, "HIDDEN");
+  assert.equal(byName.get("HIDDEN").lineweightMm, 0.18);
+  assert.equal(byName.get("CUT").linetype, "CONTINUOUS");
+  assert.equal(byName.get("CUT").lineweightMm, null);
 });

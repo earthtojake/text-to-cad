@@ -269,9 +269,15 @@ function parseLayerTable(records) {
     }
     const name = normalizeLayerName(body.find((entry) => entry.code === 2)?.value);
     const colorValue = Math.trunc(toFiniteNumber(body.find((entry) => entry.code === 62)?.value, 7));
+    // Code 6 is the linetype name (CONTINUOUS, HIDDEN, CENTER, ...); 370 the lineweight in
+    // hundredths of a millimetre, negative for "by default / by layer / by block".
+    const linetype = String(body.find((entry) => entry.code === 6)?.value || "").trim().toUpperCase() || "CONTINUOUS";
+    const lineweightRaw = Math.trunc(toFiniteNumber(body.find((entry) => entry.code === 370)?.value, -3));
     layers.set(name, {
       aci: Math.abs(colorValue),
-      visibleDefault: colorValue >= 0
+      visibleDefault: colorValue >= 0,
+      linetype,
+      lineweightMm: lineweightRaw > 0 ? lineweightRaw / 100 : null
     });
   }
   return layers;
@@ -675,9 +681,10 @@ function parseSolidEntity(records) {
     return !previous || previous[0] !== point[0] || previous[1] !== point[1];
   });
   if (points.length < 3) {
-    return { lines: [], arcs: [] };
+    return { lines: [], arcs: [], fills: [] };
   }
-  return { lines: samplePolylinePoints(layer, points, { closed: true }), arcs: [] };
+  // The outline serves the cut/engrave consumers; the fill is what a drawing shows.
+  return { lines: samplePolylinePoints(layer, points, { closed: true }), arcs: [], fills: [{ layer, points }] };
 }
 
 /** LEADER: a polyline from the note to the feature, vertices as repeated 10/20 pairs. Its
@@ -865,9 +872,9 @@ function transformPoint(point, transform) {
   return [x * cos - y * sin + tx, x * sin + y * cos + ty];
 }
 
-function transformGeometry({ lines, arcs, circles }, transform) {
+function transformGeometry({ lines, arcs, circles, fills = [] }, transform) {
   if (!transform) {
-    return { lines, arcs, circles };
+    return { lines, arcs, circles, fills };
   }
   const { cos, sin, sx, sy, tx, ty } = transform;
   const scale = Math.abs(sx);
@@ -892,6 +899,27 @@ function transformGeometry({ lines, arcs, circles }, transform) {
       center: transformPoint(circle.center, transform),
       radius: circle.radius * scale,
     })),
+    fills: fills.map((fill) => ({
+      ...fill,
+      points: fill.points.map((point) => transformPoint(point, transform)),
+    })),
+  };
+}
+
+/** Entities on layer "0" inside a block belong to whatever placed the block: that is the
+ *  format's rule for block contents, and it is how an arrowhead block drawn on layer 0
+ *  lands on the DIM layer of the dimension that uses it. */
+function inheritBlockLayer(parsed, blockLayer) {
+  if (!blockLayer || blockLayer === "0") {
+    return parsed;
+  }
+  const relayer = (entity) => (entity.layer === "0" ? { ...entity, layer: blockLayer } : entity);
+  return {
+    lines: parsed.lines.map(relayer),
+    arcs: parsed.arcs.map(relayer),
+    circles: parsed.circles.map(relayer),
+    texts: parsed.texts.map(relayer),
+    fills: parsed.fills.map(relayer),
   };
 }
 
@@ -940,14 +968,23 @@ function parseEntities(records, { blocks = new Map(), transform = null, depth = 
   const arcs = [];
   const circles = [];
   const texts = [];
+  const fills = [];
   const push = (geometry) => {
     const placed = transformGeometry(
-      { lines: geometry.lines || [], arcs: geometry.arcs || [], circles: geometry.circles || [] },
+      { lines: geometry.lines || [], arcs: geometry.arcs || [], circles: geometry.circles || [], fills: geometry.fills || [] },
       transform
     );
     lines.push(...placed.lines);
     arcs.push(...placed.arcs);
     circles.push(...placed.circles);
+    fills.push(...placed.fills);
+  };
+  const pushNested = (nested) => {
+    lines.push(...nested.lines);
+    arcs.push(...nested.arcs);
+    circles.push(...nested.circles);
+    texts.push(...nested.texts);
+    fills.push(...nested.fills);
   };
   const pushText = (text) => {
     if (text) {
@@ -1027,11 +1064,11 @@ function parseEntities(records, { blocks = new Map(), transform = null, depth = 
       const blockRecords = blocks.get(dimensionBlockName(entityRecords).toUpperCase());
       if (blockRecords && depth < MAX_BLOCK_NESTING) {
         // The rendered dimension, exactly as the authoring package drew it.
-        const nested = parseEntities(blockRecords, { blocks, transform, depth: depth + 1 });
-        lines.push(...nested.lines);
-        arcs.push(...nested.arcs);
-        circles.push(...nested.circles);
-        texts.push(...nested.texts);
+        const dimensionLayer = normalizeLayerName(entityRecords.find((record) => record.code === 8)?.value);
+        pushNested(inheritBlockLayer(
+          parseEntities(blockRecords, { blocks, transform, depth: depth + 1 }),
+          dimensionLayer
+        ));
       } else {
         pushText(parseDimensionEntity(entityRecords));
       }
@@ -1090,16 +1127,16 @@ function parseEntities(records, { blocks = new Map(), transform = null, depth = 
         // define, and one dangling name should not cost the whole profile.
         continue;
       }
+      const insertLayer = normalizeLayerName(entityRecords.find((record) => record.code === 8)?.value);
       for (const placement of insertTransforms(entityRecords)) {
-        const nested = parseEntities(blockRecords, {
-          blocks,
-          transform: composeTransforms(transform, placement),
-          depth: depth + 1,
-        });
-        lines.push(...nested.lines);
-        arcs.push(...nested.arcs);
-        circles.push(...nested.circles);
-        texts.push(...nested.texts);
+        pushNested(inheritBlockLayer(
+          parseEntities(blockRecords, {
+            blocks,
+            transform: composeTransforms(transform, placement),
+            depth: depth + 1,
+          }),
+          insertLayer
+        ));
       }
       continue;
     }
@@ -1109,7 +1146,7 @@ function parseEntities(records, { blocks = new Map(), transform = null, depth = 
     throw new Error(`Unsupported DXF entity ${entityType}`);
   }
 
-  return { lines, arcs, circles, texts };
+  return { lines, arcs, circles, texts, fills };
 }
 
 /** BLOCKS as name -> its entity records, so an INSERT can be expanded in place.
@@ -1227,6 +1264,10 @@ function scaleEntitiesToMm(entities, scale) {
       ...text,
       position: scalePoint(text.position),
       heightMm: text.heightMm * scale
+    })),
+    fills: (entities.fills || []).map((fill) => ({
+      ...fill,
+      points: fill.points.map(scalePoint)
     }))
   };
 }
@@ -1370,7 +1411,9 @@ export function parseDxf(dxfText, { fileRef = "", sourceUrl = "" } = {}) {
         ...summary,
         colorAci: tableEntry ? tableEntry.aci : null,
         colorHex: tableEntry ? aciColorHex(tableEntry.aci) : null,
-        visibleDefault: tableEntry ? tableEntry.visibleDefault : true
+        visibleDefault: tableEntry ? tableEntry.visibleDefault : true,
+        linetype: tableEntry ? tableEntry.linetype : "CONTINUOUS",
+        lineweightMm: tableEntry ? tableEntry.lineweightMm : null
       };
     }),
     geometry: {
@@ -1403,6 +1446,11 @@ export function parseDxf(dxfText, { fileRef = "", sourceUrl = "" } = {}) {
         hAlign: text.hAlign || "left",
         vAlign: text.vAlign || "baseline",
         value: text.value
+      })),
+      fills: (entities.fills || []).map((fill) => ({
+        layer: fill.layer,
+        kind: semanticKindForLayer(fill.layer),
+        points: fill.points.map((point) => [formatNumber(point[0]), formatNumber(point[1])])
       }))
     },
     paths: pathRecords,

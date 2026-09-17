@@ -3178,6 +3178,21 @@ export default function CadWorkspace({
     viewerRef.current?.activateDefaultViewPlane?.();
   }, []);
 
+  // A dimensioned drawing is a sheet: it opens looking straight down at it. The 3D toggle
+  // is still there for anyone who wants the tilt; the default is the drawing's own view.
+  const documentPlanKeyRef = useRef(null);
+  useEffect(() => {
+    if (!selectedEntryIsDrawingDocument) {
+      documentPlanKeyRef.current = null;
+      return;
+    }
+    if (documentPlanKeyRef.current === selectedKey) {
+      return;
+    }
+    documentPlanKeyRef.current = selectedKey;
+    handleDrawingViewModeChange("2d");
+  }, [selectedEntryIsDrawingDocument, selectedKey, handleDrawingViewModeChange]);
+
   const handleViewerZoomPercentChange = useCallback((nextZoomPercent) => {
     viewerRef.current?.applyZoomPercent?.(nextZoomPercent);
   }, []);
