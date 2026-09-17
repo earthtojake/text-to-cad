@@ -3,12 +3,14 @@ import { desktopCadPreferences, migrateCadFileStates, migrateCadPreferences } fr
 
 beforeEach(() => { localStorage.clear(); sessionStorage.clear(); });
 describe("FileViewer persisted CAD state migration", () => {
-  it("keeps the old theme and tutorial seen state without reinterpreting versioned records", () => {
-    localStorage.setItem("cad-viewer:theme", JSON.stringify({ version: 13, themeId: "cinematic", custom: { exposure: 1.2 } }));
+  it("ignores retired CAD themes while preserving versioned tutorial state", () => {
+    const retiredTheme = JSON.stringify({ version: 13, themeId: "cinematic", custom: { exposure: 1.2 } });
+    localStorage.setItem("cad-viewer:theme", retiredTheme);
     localStorage.setItem("cad-viewer:tutorial-tips:v1", JSON.stringify({ version: 1, seen: ["copyReference", 5] }));
-    expect(migrateCadPreferences(localStorage)).toEqual({ theme: { themeId: "cinematic", custom: { exposure: 1.2 } }, seenTips: ["copyReference"], poseTransition: { animate: true, speed: 1 }, fileSheetTabs: {} });
-    localStorage.setItem("cad-viewer:theme", JSON.stringify({ version: 12, themeId: "cinematic" }));
-    expect(migrateCadPreferences(localStorage).theme).toBeUndefined();
+    expect(migrateCadPreferences(localStorage)).toEqual({ seenTips: ["copyReference"], poseTransition: { animate: true, speed: 1 }, fileSheetTabs: {} });
+    expect(localStorage.getItem("cad-viewer:theme")).toBe(retiredTheme);
+    localStorage.setItem("cad-viewer:tutorial-tips:v1", JSON.stringify({ version: 0, seen: ["copyReference"] }));
+    expect(migrateCadPreferences(localStorage).seenTips).toBeUndefined();
   });
   it("maps file state only from the exact root namespace and leaves other records intact", () => {
     const key = (root: string, file: string) => `cad-viewer:file-session:v1:${encodeURIComponent(root)}:${encodeURIComponent(file)}`;
@@ -29,17 +31,27 @@ describe("FileViewer persisted CAD state migration", () => {
     migrateCadFileStates("root-a", "/projects/a", localStorage, sessionStorage);
     expect(JSON.parse(localStorage.getItem("hardcore.fileViewer.v1")!)["root-a"]).toEqual({ '["part.step","cad"]': { version: 1, drawing: "new" } });
   });
-  it("keeps one global theme/tips preference shared by active and newly opened roots", () => {
+  it("shares tips and panel layouts across roots without reviving or rewriting CAD themes", () => {
+    const retiredTheme = JSON.stringify({ version: 13, themeId: "cinematic", custom: null });
+    localStorage.setItem("cad-viewer:theme", retiredTheme);
     const firstRoot = desktopCadPreferences();
     const secondRoot = desktopCadPreferences();
-    firstRoot.update({ theme: { themeId: "cinematic", custom: null }, seenTips: ["copyReference"] });
-    expect(secondRoot.getSnapshot().theme?.themeId).toBe("cinematic");
+    const fileSheetTabs = { step: { split: false, top: ["tree", "pose"], bottom: [], ratio: 0.5 } };
+    firstRoot.update({ fileSheetTabs, seenTips: ["copyReference"] });
+    expect(secondRoot.getSnapshot().fileSheetTabs).toEqual(fileSheetTabs);
     expect(desktopCadPreferences().getSnapshot().seenTips).toEqual(["copyReference"]);
-    expect(JSON.parse(localStorage.getItem("cad-viewer:theme")!)).toEqual({ version: 13, themeId: "cinematic", custom: null });
+    expect(secondRoot.getSnapshot()).not.toHaveProperty("theme");
+    expect(localStorage.getItem("cad-viewer:theme")).toBe(retiredTheme);
+    expect(JSON.parse(localStorage.getItem("cad-viewer:tutorial-tips:v1")!)).toEqual({ version: 1, seen: ["copyReference"] });
     expect(localStorage.getItem("hardcore.cadPreferences.v1")).toBeNull();
+    const beforeRetiredEvent = firstRoot.getSnapshot();
     localStorage.setItem("cad-viewer:theme", JSON.stringify({ version: 13, themeId: "system", custom: null }));
     window.dispatchEvent(new StorageEvent("storage", { key: "cad-viewer:theme" }));
-    expect(firstRoot.getSnapshot().theme?.themeId).toBe("system");
+    expect(firstRoot.getSnapshot()).toBe(beforeRetiredEvent);
+    localStorage.setItem("cad-viewer:tutorial-tips:v1", JSON.stringify({ version: 1, seen: ["orbit"] }));
+    window.dispatchEvent(new StorageEvent("storage", { key: "cad-viewer:tutorial-tips:v1" }));
+    expect(firstRoot.getSnapshot().seenTips).toEqual(["orbit"]);
+    expect(firstRoot.getSnapshot()).not.toHaveProperty("theme");
   });
   it("preserves pose transition preferences across roots and synchronizes another window without rewriting it", () => {
     const key = "cad-viewer:pose-transition:v1";

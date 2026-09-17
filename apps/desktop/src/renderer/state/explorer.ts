@@ -43,7 +43,7 @@ const SAVE_DEBOUNCE_MS = 400;
 
 /**
  * The file tab's panel column, in pixels — one width for every panel that
- * can be in it (the tree, the CAD theme editor, the CAD Inspector), because
+ * can be in it (the tree or the CAD Inspector), because
  * it is one column. A preference, not a per-tab property; WHICH panel is
  * open is per tab (`FileTabSchema.panel`).
  */

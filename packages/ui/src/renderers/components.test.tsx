@@ -145,6 +145,16 @@ describe("asset and fallback renderers", () => {
     })} />);
     fireEvent.click(screen.getByRole("button", { name: "Open externally" }));
     expect(openDefault).toHaveBeenCalledWith({ path: "archive.zip", kind: "file" });
-    expect(screen.getByText(/Hardcore has no preview/)).toBeTruthy();
+    expect(screen.getByText("Not supported")).toBeTruthy();
+    expect(screen.getByText(/This file type does not have a preview/)).toBeTruthy();
+  });
+
+  it("shows unsupported files without requiring an external-open capability", () => {
+    render(<UnsupportedRenderer {...common(null, {
+      file: { path: "capture.bin", name: "capture.bin", kind: "file", size: 64, extension: "bin", mediaType: "binary" },
+    })} />);
+    expect(screen.getByText("Not supported")).toBeTruthy();
+    expect(screen.getByText(/capture.bin/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Open externally" })).toBeNull();
   });
 });

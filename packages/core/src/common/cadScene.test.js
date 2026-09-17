@@ -79,20 +79,6 @@ function sampleMeshData() {
   };
 }
 
-test("custom Inspect outlines survive the instanced edge policy and later theme changes", () => {
-  const theme = cloneThemePresetSettings("terminal");
-  const scene = buildModel(THREE, sampleMeshData(), { theme, displayMode: "shaded_edges" });
-  try {
-    assert.equal(scene.runtime.edgeSettings.color, "#66ff99");
-    assert.equal(scene.runtime.edgeSettings.classes.feature.color, "#66ff99");
-    scene.update({ theme: { ...theme, edges: { ...theme.edges, color: "#ff6600", classes: {} } } });
-    assert.equal(scene.runtime.edgeSettings.color, "#ff6600");
-    assert.equal(scene.runtime.edgeSettings.classes.feature.color, "#ff6600");
-  } finally {
-    scene.dispose();
-  }
-});
-
 function nestedAssemblyMeshData() {
   return {
     vertices: new Float32Array([

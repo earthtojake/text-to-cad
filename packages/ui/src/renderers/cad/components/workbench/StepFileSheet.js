@@ -22,7 +22,7 @@ export default function StepFileSheet({
   onFocusTreeNode, onUnfocusTreeNode, onExitAllIsolate, onTogglePartVisibility,
   onCopyTreeNodeReference, onHoverTreeNode, showAllHiddenParts,
   treeSelectionDisabled = false, treeSelectionDisabledReason = '',
-  stepModule = null, stepAnimation = null, statusItems = EMPTY, themeTabs = EMPTY,
+  stepModule = null, stepAnimation = null, statusItems = EMPTY,
   openSectionIds = EMPTY, onOpenSectionIdsChange, renderMode = false, settingsTabs = EMPTY,
 }) {
   const modeling = useStepModeling(selectedEntry, open && !renderMode && !treeSelectionDisabled && !viewerLoading, { client });
@@ -77,7 +77,7 @@ export default function StepFileSheet({
     loadingLabel: 'Loading kinematics...', noParametersLabel: 'No pose controls.',
     showEnableToggle: true, enableAriaLabel: 'Enable pose', resetTitle: 'Reset pose',
   }), buildAnimationControlsTab({ value: FILE_SHEET_SECTION_IDS.STEP_ANIMATION, runtime: stepAnimation }),
-  ...settingsTabs.filter(tab => renderMode || tab?.id !== FILE_SHEET_SECTION_IDS.DISPLAY), ...themeTabs, !renderMode && buildFileStatusTab(statusItems)].filter(Boolean);
+  ...settingsTabs.filter(tab => renderMode || tab?.id !== FILE_SHEET_SECTION_IDS.DISPLAY), !renderMode && buildFileStatusTab(statusItems)].filter(Boolean);
   return <FileSheet open={open} title="STEP" isDesktop={isDesktop} width={width}
     onOpenChange={onOpenChange} onStartResize={onStartResize} scrollBody={false}>
     <FileSheetTabbedSurface kind="step" sections={sections} openSectionIds={openSectionIds}

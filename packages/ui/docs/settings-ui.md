@@ -1,8 +1,7 @@
 # Settings UI Guidelines
 
-The contract for every settings surface rendered inside a file sheet tab or the
-theme editor panel: the Theme editor, the per-file Display tab, and the DXF,
-STEP, URDF/SDF, and mesh sheets. The tab strip, navbar, and
+The contract for every settings surface rendered inside a file sheet tab:
+Display, Studio, Materials, and the DXF, STEP, URDF/SDF, and mesh sheets. The tab strip, navbar, and
 sheet frame are out of scope — this document governs the *contents* of a tab.
 
 Every pattern here has a primitive in
@@ -24,7 +23,7 @@ Tab body                    px-0, vertical stack of sections
 - A tab body is a flat list of sections. Sections never nest.
 - **Every section carries a heading, and every row carries a label** — including
   a section that holds a single row, which shows both (`Material` / `Thickness`,
-  `Theme` / `Preset`, `Model` / `Mode`). A heading never stands in for a row's label: a labelless
+  `Model` / `Mode`). A heading never stands in for a row's label: a labelless
   row reads as an orphaned control, and a row whose only name is the heading
   above it cannot be scanned in a list. Name the group and the control
   differently; if the only honest name for both is the same word, the group is
@@ -193,8 +192,8 @@ glyphs (a DXF bend's `↑`/`↓`). Two words as long as `Orthographic` and
 
 **The stacked exception.** A select is stacked full-width only when it is a
 *primary* control: the first row of its group, whose value reframes everything
-under it. There are exactly four — Theme › `Preset`, Display › `Mode`,
-Joints › `Group state`, and Animation › `Clip`, which reframes the transport
+under it. These are Display › `Mode`, Joints › `Group state`, and Animation ›
+`Clip`, which reframes the transport
 and the time/speed rows beneath it. Pass `stacked` for those and for nothing
 else; a second stacked select in one group means one of them is not primary.
 

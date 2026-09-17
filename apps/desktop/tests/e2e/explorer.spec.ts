@@ -87,6 +87,7 @@ let reviewRepo: string;
  * is not something to do to the checkout the suite is running from.
  */
 let docsDir: string;
+let allFilesDir: string;
 
 let app: ElectronApplication;
 let page: Page;
@@ -98,6 +99,14 @@ test.beforeAll(async () => {
   for (const name of ["README.md", "AGENTS.md"]) {
     fs.copyFileSync(path.join(repoRoot, name), path.join(docsDir, name));
   }
+  allFilesDir = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-all-files-"));
+  fs.mkdirSync(path.join(allFilesDir, "STEP"));
+  fs.mkdirSync(path.join(allFilesDir, "node_modules"));
+  fs.writeFileSync(path.join(allFilesDir, "node_modules", "existing.txt"), "test-owned dependency");
+  fs.writeFileSync(path.join(allFilesDir, ".gitignore"), "/STEP/**\n!/STEP/**/\n*.unsupported\nnode_modules/\n");
+  fs.writeFileSync(path.join(allFilesDir, ".DS_Store"), "test-owned metadata");
+  fs.writeFileSync(path.join(allFilesDir, "output.unsupported"), Buffer.from([0, 1, 2]));
+  fs.copyFileSync(path.join(repoRoot, STEP), path.join(allFilesDir, "STEP", "tom.step"));
   userData = cadTestProfile("explorer");
   const { CAD_DESKTOP_PYTHON: _unset, ...inherited } = process.env;
   const env = { ...inherited, ...cadRegistryEnvironment(userData), NODE_ENV: "test", CADGEN_DAEMON: "0", CADGEN_CACHE_DIR: path.join(userData, "cad-cache"), CADGEN_DAEMON_STATE_DIR: path.join(userData, "cad-daemon") };
@@ -140,6 +149,7 @@ test.afterAll(async () => {
   fs.rmSync(userData, { recursive: true, force: true });
   fs.rmSync(reviewRepo, { recursive: true, force: true });
   fs.rmSync(docsDir, { recursive: true, force: true });
+  fs.rmSync(allFilesDir, { recursive: true, force: true });
 });
 
 test.describe.configure({ mode: "serial" });
@@ -637,180 +647,60 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await expect(page.getByRole("button", { name: "Finish measuring" })).toHaveCount(0);
   await expect(tree).toBeVisible();
 
-  /*
-    A CAD file's two panels (`@hardcore/ui/navigation`'s `panels.js`): the viewer's theme editor
-    and its Inspector, which `layout="desktop"` had left with no door in this
-    app because that layout hides the top bar their toggles live in. Both sit
-    left of the files toggle, which stays last and does not move for them, and
-    each is highlighted while its panel is up.
-
-    They and the file tree are ONE panel column with one design (the user's
-    rule): whichever is up, there is exactly one container in the tab, and
-    opening any of the three closes the other two.
-  */
+  // CAD declares the Inspector; the file tree shares its single panel column.
+  // The retired Theme editor must not leave a toggle or an empty panel behind.
   const filesToggle = page.getByTestId("tree-toggle");
-  const themePanel = page.locator("header [data-file-panel='cad-theme']");
   const sheetPanel = page.locator("header [data-file-panel='cad-file-sheet']");
-  await expect(themePanel).toHaveAttribute("aria-label", "Theme settings");
-  /*
-    "Inspector", not "File sheet": the panel is the file's tree, its
-    measurements and its parameters, and "sheet" named the mechanism. The id
-    behind it is still `cad-file-sheet` — the tab's stored `panel` field
-    holds it and the viewer's host contract calls it `fileSheetOpen` — so
-    what changed is only what a person reads.
-
-    And the glyph is the standalone viewer's own for this panel (its top bar
-    renders lucide's `SlidersHorizontal` beside the theme toggle), so a
-    person who knows one knows the other. It used to be a panel-layout icon,
-    which named the mechanism as well.
-  */
+  await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
+  await expect(page.locator("[data-file-panel='cad-theme'], [data-file-sheet='Theme']")).toHaveCount(0);
   await expect(sheetPanel).toHaveAttribute("aria-label", "Inspector");
   await expect(sheetPanel).toHaveAttribute("title", "Inspector");
   await expect(sheetPanel.locator("svg.lucide-sliders-horizontal")).toHaveCount(1);
   const parked = (await filesToggle.boundingBox())!;
-  for (const panel of [themePanel, sheetPanel]) {
-    const box = (await panel.boundingBox())!;
-    expect(box.x + box.width).toBeLessThanOrEqual(parked.x + 1);
-  }
-  // Declaration order: theme, then the Inspector, then the files toggle.
-  expect((await themePanel.boundingBox())!.x).toBeLessThan((await sheetPanel.boundingBox())!.x);
-
-  // The Inspector is open at this point (its Tree/Features tabs are on
-  // screen), so its toggle is the pressed one.
+  const sheetBox = (await sheetPanel.boundingBox())!;
+  expect(sheetBox.x + sheetBox.width).toBeLessThanOrEqual(parked.x + 1);
   await expect(sheetPanel).toHaveAttribute("aria-pressed", "true");
-  await expect(themePanel).toHaveAttribute("aria-pressed", "false");
 
-  // The theme toggle opens the theme panel — the one thing this app had no
-  // way to reach — and takes the highlight off the Inspector.
-  await themePanel.click();
-  await expect(themePanel).toHaveAttribute("aria-pressed", "true");
-  await expect(sheetPanel).toHaveAttribute("aria-pressed", "false");
-  await expect(tree).toBeHidden();
-  // The theme panel takes the Inspector's place in the SAME column: the viewer
-  // portals it into this app's panel container, so there is one of those and
-  // it names the panel that is in it.
-  await expect(panels(page)).toHaveCount(1);
-  await expect(panels(page)).toHaveAttribute("data-file-panel-container", "cad-theme");
-  // The viewer's own panel, inside this app's frame: the surface names what
-  // it portaled, and it drew no aside of its own to put it in.
-  await expect(page.locator("[data-file-sheet='Theme']")).toBeVisible();
-  await expect(page.locator("[data-cad-surface] aside")).toHaveCount(0);
-  await shoot("file-cad-theme.png", true);
-  expect(Math.abs((await filesToggle.boundingBox())!.x - parked.x)).toBeLessThan(1);
-
-  // The files toggle takes that column for the tree, which closes the theme
-  // panel — the tree is one of these panels now, not a column beside them.
   await filesToggle.click();
-  await expect(themePanel).toHaveAttribute("aria-pressed", "false");
+  await expect(sheetPanel).toHaveAttribute("aria-pressed", "false");
   await expect(filesToggle).toHaveAttribute("aria-pressed", "true");
+  await expect(tree).toBeHidden();
   await expect(panels(page)).toHaveCount(1);
   await expect(panels(page)).toHaveAttribute("data-file-panel-container", "tree");
   await expect(page.getByLabel("Filter files")).toBeVisible();
   await shoot("file-cad-files.png", true);
 
-  // ...and the theme toggle takes it straight back off the tree.
-  await themePanel.click();
-  await expect(filesToggle).toHaveAttribute("aria-pressed", "false");
-  await expect(page.getByLabel("Filter files")).toHaveCount(0);
-  await expect(panels(page)).toHaveAttribute("data-file-panel-container", "cad-theme");
-
-  // Opening the Inspector closes the theme panel and swaps the highlight
-  // back, and its sections are the STEP file's as before.
   await sheetPanel.click();
   await expect(sheetPanel).toHaveAttribute("aria-pressed", "true");
-  await expect(themePanel).toHaveAttribute("aria-pressed", "false");
+  await expect(filesToggle).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByLabel("Filter files")).toHaveCount(0);
   await expect(tree).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Source features" })).toHaveCount(0);
   await expect(panels(page)).toHaveCount(1);
   await expect(panels(page)).toHaveAttribute("data-file-panel-container", "cad-file-sheet");
+  await expect(page.locator("[data-cad-surface] aside")).toHaveCount(0);
   await expectInspectorBesideModel();
   expect(Math.abs((await filesToggle.boundingBox())!.x - parked.x)).toBeLessThan(1);
 
-  /*
-    The CAD theme paints the SCENE and nothing else (the user's rule), and the
-    app's colour scheme paints the chrome. So a dark studio inside a light
-    window is a legal picture — and used to be an impossible one: the theme's
-    background luminance wrote `.dark` on the document, so opening a STEP file
-    under a dark preset repainted every panel, tab strip and menu in the app.
-
-    Cinematic is the test case: a real dark stage — charcoal glossy floor,
-    warm key light, dark materials — picked from the theme panel this app
-    now draws in its own column.
-  */
-  await themePanel.click();
-  const preset = panels(page).getByRole("combobox").first();
-  await expect(preset).toContainText("System");
+  // Inspect uses one fixed scene recipe. Its canvas and guides follow the
+  // app appearance; opening a CAD file never owns the document's light/dark.
   const paint = () => panels(page).evaluate((node) => node.ownerDocument.defaultView!.getComputedStyle(node).backgroundColor);
-
-  /*
-    The System theme is the one that follows the app, and following it is
-    about the BACKGROUND as much as the light/dark: the scene sits on this
-    window's own `--background`, so a model under it is on the same ground as
-    the chrome instead of in a framed studio. Dark first, because that is
-    where this test is.
-  */
-  await expect(page.locator("html")).toHaveClass(/\bdark\b/);
-  await expect.poll(sceneBackdrop).toEqual({ scene: await appBackground(), followsApp: true });
-
-  // ...and it follows the app across a scheme change, both ways.
-  await page.evaluate(() => window.hardcore.settings.set({ theme: "light" }));
-  await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
-  await expect.poll(async () => (await sceneBackdrop()).followsApp).toBe(true);
-  await page.evaluate(() => window.hardcore.settings.set({ theme: "dark" }));
-  await expect(page.locator("html")).toHaveClass(/\bdark\b/);
-  await expect.poll(async () => (await sceneBackdrop()).followsApp).toBe(true);
-
-  /*
-    Cinematic is the test case for the other half of the rule: a real dark
-    stage — charcoal glossy floor, warm key light, dark materials — picked
-    from the theme panel this app draws in its own column, and it paints its
-    OWN background. This app used to hand its `--background` to the surface
-    for every theme, so the theme panel's eight presets were one colour here
-    and picking a preset never changed the picture behind the model.
-  */
-  await preset.click();
-  await page.getByRole("option", { name: "Cinematic" }).click();
-  await expect(preset).toContainText("Cinematic");
-  await expect.poll(async () => (await sceneBackdrop()).followsApp).toBe(false);
-  const stage = (await sceneBackdrop()).scene;
-
-  // The theme is dark and the chrome did NOT follow it: still the app's own
-  // dark, which is what it was before the preset changed.
-  const themeBefore = await activeCadTheme(page);
-  expect(themeBefore, "the preset is stored by the viewer").toContain("cinematic");
   const panelDark = await paint();
+  await expect(page.locator("html")).toHaveClass(/\bdark\b/);
+  await expect.poll(sceneBackdrop).toBe("51,51,51");
+  await expect(page.getByRole("button", { name: "Viewing mode: Inspect. Switch to Render", exact: true })).toBeVisible();
 
   await page.evaluate(() => window.hardcore.settings.set({ theme: "light" }));
   await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
-  // The panel's chrome went light with the app...
   await expect.poll(paint).not.toBe(panelDark);
-  // ...and the theme did not move: the same dark stage under light chrome,
-  // background included. A theme that is not System is DETACHED from the
-  // app's light/dark, which is the whole point of picking one.
-  expect(await activeCadTheme(page)).toEqual(themeBefore);
-  await expect(preset).toContainText("Cinematic");
-  expect(await sceneBackdrop()).toEqual({ scene: stage, followsApp: false });
-
-  /*
-    And the canvas fills the box it was given, with no band of the app's
-    background above the scene. Invisible while the backdrop WAS the app's
-    background; a one-pixel gap over a charcoal stage under light chrome is
-    the first thing a person sees.
-  */
+  await expect.poll(sceneBackdrop).toBe("240,244,249");
   await expectCanvasFillsItsBox();
   await shoot("file-cad-light-chrome.png", true);
 
-  // Back to the app's dark and the theme it came in with.
   await page.evaluate(() => window.hardcore.settings.set({ theme: "dark" }));
   await expect(page.locator("html")).toHaveClass(/\bdark\b/);
   await expect.poll(paint).toBe(panelDark);
-
-  // Switching back to System puts the scene back on the app's ground.
-  await preset.click();
-  await page.getByRole("option", { name: "System" }).click();
-  await expect(preset).toContainText("System");
-  await expect.poll(sceneBackdrop).toEqual({ scene: await appBackground(), followsApp: true });
-  await sheetPanel.click();
+  await expect.poll(sceneBackdrop).toBe("51,51,51");
+  expect(await page.evaluate(() => window.localStorage.getItem("cad-viewer:theme"))).toBeNull();
 
   await restoreLayout();
 });
@@ -864,7 +754,7 @@ test("renders the explorer in light as well as dark", async () => {
   await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
   // Every kind of tab, in light: the markdown preview, the image, the
   // terminal, the browser and — when a runtime is there — the CAD surface,
-  // whose light is the app's, not the CAD theme's.
+  // whose appearance follows the app.
   await page.getByRole("tab").first().click();
   await shoot("explorer-light.png");
   await page.getByRole("tab", { name: /icon\.png/ }).click();
@@ -880,8 +770,7 @@ test("renders the explorer in light as well as dark", async () => {
   if (cadReady) {
     await page.getByRole("tab", { name: /import-smoke\.step/ }).click();
     await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible({ timeout: 60_000 });
-    // The app stays light: the surface follows the app's theme rather than
-    // flipping the document to the CAD theme's own.
+    // The app stays light when the CAD surface remounts.
     await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
     await page.waitForTimeout(1000);
     await shoot("file-cad-light.png", true);
@@ -1048,6 +937,36 @@ test("reviews a repository's changes", async () => {
   await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
   await shoot("review-light.png");
   await page.evaluate(() => window.hardcore.settings.set({ theme: "dark" }));
+});
+
+test("lists every file, refreshes ignored folders and opens unknown types as Not supported", async () => {
+  await page.evaluate((directory) => window.hardcore.projects.addPath({ path: directory }), allFilesDir);
+  await page.getByRole("button", { name: `New chat in ${path.basename(allFilesDir)}` }).click();
+  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
+  await page.getByRole("button", { name: "Toggle explorer" }).click();
+  await newTab(page, "File");
+  const entry = (file: string) => page.locator(`[role="treeitem"][data-path="${file}"]`);
+  await expect(entry(".DS_Store")).toBeVisible();
+  await expect(entry("output.unsupported")).toBeVisible();
+  await entry("STEP").click();
+  await expect(entry("STEP/tom.step")).toBeVisible();
+
+  // Both recursive output watching and direct dependency-directory watching
+  // must refresh visible rows; no renderer needs to read these file contents.
+  fs.copyFileSync(path.join(repoRoot, STEP), path.join(allFilesDir, "STEP", "new.step"));
+  await expect(entry("STEP/new.step")).toBeVisible();
+  await entry("node_modules").click();
+  await expect(entry("node_modules/existing.txt")).toBeVisible();
+  fs.writeFileSync(path.join(allFilesDir, "node_modules", "new.unsupported"), Buffer.from([0, 3, 4]));
+  await expect(entry("node_modules/new.unsupported")).toBeVisible();
+  fs.unlinkSync(path.join(allFilesDir, "node_modules", "new.unsupported"));
+  await expect(entry("node_modules/new.unsupported")).toHaveCount(0);
+
+  await page.getByLabel("Filter files").fill("tom.step");
+  await expect(page.getByRole("option", { name: "STEP/tom.step", exact: false })).toBeVisible();
+  await page.getByLabel("Filter files").fill("output.unsupported");
+  await page.getByRole("option", { name: "output.unsupported", exact: false }).click();
+  await expect(page.getByText("Not supported", { exact: true })).toBeVisible();
 });
 
 /* -------------------------------------------------------------------------- */
@@ -1233,7 +1152,7 @@ async function expectInspectorBesideModel() {
  * canvas fills carries it: the viewer paints that box the scene's edge colour
  * for the frame between a resize and the renderer catching up.
  */
-async function sceneBackdrop(): Promise<{ scene: string; followsApp: boolean }> {
+async function sceneBackdrop(): Promise<string> {
   return page.locator("[data-cad-scene-backdrop]").evaluate((pane) => {
     const doc = pane.ownerDocument;
     const view = doc.defaultView!;
@@ -1245,21 +1164,7 @@ async function sceneBackdrop(): Promise<{ scene: string; followsApp: boolean }> 
       const [red, green, blue] = context.getImageData(0, 0, 1, 1).data;
       return `${red},${green},${blue}`;
     };
-    const scene = asRgb(view.getComputedStyle(pane).backgroundColor);
-    return { scene, followsApp: scene === asRgb(view.getComputedStyle(doc.body).backgroundColor) };
-  });
-}
-
-/** What the chrome paints itself: `--background`, through the same converter. */
-async function appBackground(): Promise<string> {
-  return page.locator("body").evaluate((body) => {
-    const doc = body.ownerDocument;
-    const context = doc.createElement("canvas").getContext("2d")!;
-    context.fillStyle = "#000000";
-    context.fillStyle = doc.defaultView!.getComputedStyle(body).backgroundColor;
-    context.fillRect(0, 0, 1, 1);
-    const [red, green, blue] = context.getImageData(0, 0, 1, 1).data;
-    return `${red},${green},${blue}`;
+    return asRgb(view.getComputedStyle(pane).backgroundColor);
   });
 }
 
@@ -1284,14 +1189,6 @@ async function expectCanvasFillsItsBox() {
         .every((delta) => delta <= 1);
     })
     .toBe(true);
-}
-
-/**
- * The CAD theme as the viewer stores it — the scene's settings, which the
- * app's light/dark must not touch.
- */
-async function activeCadTheme(target: Page): Promise<string | null> {
-  return target.evaluate(() => window.localStorage.getItem("cad-viewer:theme"));
 }
 
 /**

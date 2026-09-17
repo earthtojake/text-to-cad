@@ -85,7 +85,7 @@ function RootView({ client, server }: { client: CadClient; server: CadServerInfo
       onError={error => setCopyStatus(error.message)} presentation={{
         empty: <div className="relative h-full">{empty}</div>,
         loading: <div className="relative h-full"><ViewerLoadingOverlay viewerLoading /></div>,
-        error: () => <div className="relative h-full">{catalog.error ? empty : <EmptyCadBackdrop preferences={preferences} colorScheme={appearance.colorScheme}><MissingFileAlert missingFileRef={file} rootPath={server.rootPath} /></EmptyCadBackdrop>}</div>,
+        error: () => <div className="relative h-full">{catalog.error ? empty : <EmptyCadBackdrop colorScheme={appearance.colorScheme}><MissingFileAlert missingFileRef={file} rootPath={server.rootPath} /></EmptyCadBackdrop>}</div>,
         activity: activity => <FilenameLoadStatus activity={viewerReloading ? { loading: true, label: "Reloading", title: "The viewer is restarting after a code change." } : activity} />,
       }} />
   </div><StatusToast copyStatus={copyStatus} onClear={() => setCopyStatus('')} /></div>;

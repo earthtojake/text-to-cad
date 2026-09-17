@@ -12,27 +12,24 @@ function read(storage: Storage, key: string): JsonObject {
 }
 function write(storage: Storage, key: string, value: JsonObject) { try { storage.setItem(key, JSON.stringify(value)); } catch { /* Storage can be unavailable. */ } }
 
-/** Old global appearance/tips have a reliable meaning for every desktop root. */
+/** Global layout, motion and tutorial preferences apply to every desktop root. */
 export function migrateCadPreferences(storage: Storage): CadPreferences {
-  const theme = read(storage, "cad-viewer:theme");
   const tips = read(storage, "cad-viewer:tutorial-tips:v1");
   return {
     fileSheetTabs: readFileSheetTabLayoutStore(storage),
     poseTransition: readPoseTransition(storage),
-    ...(theme.version === 13 && typeof theme.themeId === "string" ? { theme: { themeId: theme.themeId, custom: theme.custom ?? null } } : {}),
     ...(tips.version === 1 && Array.isArray(tips.seen) ? { seenTips: tips.seen.filter((tip): tip is string => typeof tip === "string") } : {}),
   };
 }
 
 let sharedPreferences: CadPreferenceSource | undefined;
-/** CAD appearance is global to this desktop window, as the existing storage keys are. */
+/** CAD layout, motion and tips are shared by every root in this desktop window. */
 export function desktopCadPreferences(): CadPreferenceSource {
   if (!sharedPreferences) {
     let syncing = false;
-    const snapshot = () => ({ theme: undefined, seenTips: [], ...migrateCadPreferences(localStorage) });
+    const snapshot = () => ({ seenTips: [], ...migrateCadPreferences(localStorage) });
     const source = createCadPreferences({ initial: snapshot(), onChange: (preferences) => {
       if (syncing) return;
-      if (preferences.theme) write(localStorage, "cad-viewer:theme", { version: 13, ...preferences.theme });
       if (preferences.seenTips) write(localStorage, "cad-viewer:tutorial-tips:v1", { version: 1, seen: preferences.seenTips });
       if (preferences.fileSheetTabs) writeFileSheetTabLayoutStore(localStorage, preferences.fileSheetTabs);
       if (preferences.poseTransition) writePoseTransition(localStorage, preferences.poseTransition);
@@ -40,7 +37,7 @@ export function desktopCadPreferences(): CadPreferenceSource {
     // Browser storage events carry updates from another Hardcore window. This
     // host-owned store has the lifetime of the window, independent of its roots.
     window.addEventListener("storage", event => {
-      if (!([CAD_LEGACY_PREFERENCE_KEYS.theme, CAD_LEGACY_PREFERENCE_KEYS.tips, CAD_LEGACY_PREFERENCE_KEYS.fileSheetTabs, CAD_LEGACY_PREFERENCE_KEYS.poseTransition] as string[]).includes(event.key ?? "")) return;
+      if (!([CAD_LEGACY_PREFERENCE_KEYS.tips, CAD_LEGACY_PREFERENCE_KEYS.fileSheetTabs, CAD_LEGACY_PREFERENCE_KEYS.poseTransition] as string[]).includes(event.key ?? "")) return;
       syncing = true;
       try { source.update(snapshot()); } finally { syncing = false; }
     });
@@ -65,8 +62,8 @@ export function migrateCadFileStates(sourceId: string, rootPath: string, local: 
       result[JSON.stringify([path, "cad"])] = { version: 1, fileSession };
     }
     // The legacy directory-session value has no root identity. Its panel and
-    // tree fields never owned desktop chrome, and its theme cannot be assigned
-    // to this root safely. Preserve that record without copying it.
+    // tree fields never owned desktop chrome. Preserve that record without
+    // copying it; retired CAD theme overrides are never restored.
     const all = read(local, "hardcore.fileViewer.v1");
     const current = object(all[sourceId]) ? all[sourceId] : {};
     local.setItem("hardcore.fileViewer.v1", JSON.stringify({ ...all, [sourceId]: { ...result, ...current } }));

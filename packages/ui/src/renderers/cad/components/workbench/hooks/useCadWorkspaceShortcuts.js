@@ -12,7 +12,6 @@ export function useCadWorkspaceShortcuts({
   previewMode,
   inspectionEnabled = true,
   viewerAlertOpen,
-  themeSheetOpen,
   tabToolsOpen,
   isDesktop,
   filesPanelOpen,
@@ -26,7 +25,6 @@ export function useCadWorkspaceShortcuts({
   handleRedoDrawing,
   setPreviewMode,
   setViewerAlertOpen,
-  setThemeEditing,
   setTabToolsOpen,
   setFilesPanelOpen,
   setTabToolMode
@@ -43,7 +41,7 @@ export function useCadWorkspaceShortcuts({
   }, [copyStatus, screenshotStatus, setCopyStatus, setScreenshotStatus]);
 
   useEffect(() => {
-    if (!(selectionActive || previewMode || viewerAlertOpen || themeSheetOpen || tabToolsOpen || (!isDesktop && filesPanelOpen) || tabToolMode === TAB_TOOL_MODE.MEASURE)) {
+    if (!(selectionActive || previewMode || viewerAlertOpen || tabToolsOpen || (!isDesktop && filesPanelOpen) || tabToolMode === TAB_TOOL_MODE.MEASURE)) {
       return undefined;
     }
 
@@ -79,7 +77,6 @@ export function useCadWorkspaceShortcuts({
           setPreviewMode(false);
           if (previousUiState) {
             setViewerAlertOpen(previousUiState.viewerAlertOpen);
-            setThemeEditing(previousUiState.themeEditing);
             setFilesPanelOpen(previousUiState.filesPanelOpen);
             setTabToolsOpen(previousUiState.tabToolsOpen);
             setTabToolMode(previousUiState.tabToolMode);
@@ -129,7 +126,6 @@ export function useCadWorkspaceShortcuts({
     setTabToolMode,
     setTabToolsOpen,
     setViewerAlertOpen,
-  setThemeEditing,
     filesPanelOpen,
     measureDraftActive,
     onCancelMeasureDraft,

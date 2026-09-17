@@ -1,22 +1,7 @@
-// Every identifier the client READS must be bound somewhere: imported, declared, a
-// parameter, or a real browser global.
-//
-// This exists because nothing else in the toolchain asks that question. A bundler treats an
-// unbound identifier as a global reference and emits it without complaint, and a unit suite
-// only covers modules it imports — so `normalizeThemeSettings`, called twice in
-// ThemeSettingsPopover.js with no import, shipped through a clean `vite build` and a green
-// test run and threw a ReferenceError that crashed <CadWorkspace> the moment anyone changed
-// a theme colour. The same commit that removed the import removed the callers of the one
-// helper that used it, which is exactly how the survivor went unnoticed.
-//
-// It is a whole-tree check rather than a test of that one function on purpose: the failure
-// mode is "a deletion left a reference behind", and that can land in any file. A large merge
-// is when it happens most — the G-code and client-DXF removals left six such references
-// across two files.
-//
-// Scope is what makes this precise rather than a grep: Babel resolves each reference against
-// its enclosing scopes, so shadowing, hoisting, destructuring and JSX all behave correctly
-// and locals never look like globals.
+// Every identifier the client reads must be imported, declared or a browser
+// global. Bundlers can ship unbound references, so feature removals need this
+// whole-tree check even when their focused tests pass. Babel resolves lexical
+// scopes so shadowing, hoisting, destructuring and JSX stay valid.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";

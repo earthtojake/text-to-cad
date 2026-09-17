@@ -1,8 +1,6 @@
 import { lazy, Suspense, type ReactNode } from 'react';
-import type { CadPreferenceSource } from './preferences.js';
 
 export interface EmptyCadBackdropProps {
-  preferences?: CadPreferenceSource;
   colorScheme?: 'light' | 'dark';
   children?: ReactNode;
 }

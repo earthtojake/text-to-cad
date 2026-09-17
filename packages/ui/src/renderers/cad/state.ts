@@ -5,11 +5,6 @@ import * as sessions from './workbench/fileSessionState.js';
 import * as tabs from './workbench/fileSheetTabLayout.js';
 
 export type CadStateObject = { [key: string]: JsonValue };
-export interface CadThemeState {
-  themeId: string;
-  custom: CadStateObject | null;
-  settings: CadStateObject;
-}
 export interface CadFileSessionState {
   version: number;
   fileKey: string;
@@ -31,9 +26,6 @@ export { FILE_SHEET_TAB_LAYOUT_STORAGE_KEY } from './workbench/fileSheetTabLayou
 
 // These adapters publish the existing schemas without duplicating their rules.
 // Storage is always supplied by the host; importing this module reads nothing.
-export const createThemeState = state.createThemeState as unknown as (
-  themeId?: string, custom?: unknown, options?: { prefersDark?: boolean }
-) => CadThemeState;
 export const createTabSnapshot = state.createTabSnapshot as (overrides?: unknown) => CadStateObject;
 export const cloneTabSnapshot = state.cloneTabSnapshot as (snapshot?: unknown) => CadStateObject;
 export const tabSnapshotEqual = state.tabSnapshotEqual as (left: unknown, right: unknown) => boolean;
@@ -52,7 +44,7 @@ export const fileSessionIndexStorageKey = sessions.fileSessionIndexStorageKey as
 export const fileSessionSignaturesForEntry = sessions.fileSessionSignaturesForEntry as (entry: CadEntry) => CadFileSessionState['signatures'];
 export const cadWorkspaceDefaultFileSheetWidthForViewport = state.cadWorkspaceDefaultFileSheetWidthForViewport as (width: number) => number;
 export const fileSheetWidthPxForSessionState = state.fileSheetWidthPxForSessionState as (value: unknown, defaultWidth?: number) => number | null;
-export { THEME_STORAGE_VERSION, CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH, CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH } from './workbench/state.js';
+export { CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH, CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH } from './workbench/state.js';
 export { FILE_SESSION_STORAGE_VERSION } from './workbench/fileSessionState.js';
 
 export { POSE_TRANSITION_STORAGE_KEY, readPoseTransition, writePoseTransition, normalizePoseTransition } from "./workbench/poseTransition.js";

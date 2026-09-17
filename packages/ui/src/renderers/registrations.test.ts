@@ -43,6 +43,20 @@ describe("non-CAD renderer registrations", () => {
       .toMatchObject([{ id: "source", label: "View preview", content: "body" }]);
   });
 
+  it("prepares an unsupported file without reading or decoding its contents", async () => {
+    const readText = vi.fn();
+    const readAsset = vi.fn();
+    const prepared = await unsupportedRenderer.prepare({
+      file: file("archive.zip", "binary", "application/zip"),
+      source: source({ readText, readAsset }),
+      signal: new AbortController().signal,
+    });
+    expect(prepared.text).toBeUndefined();
+    expect(prepared.Component).toBeTypeOf("function");
+    expect(readText).not.toHaveBeenCalled();
+    expect(readAsset).not.toHaveBeenCalled();
+  });
+
   it("prepares editable text through the source without changing its metadata", async () => {
     const text: TextDocument = { content: "# Exact bytes\n", revision: "r1", truncated: true };
     const readText = vi.fn(async () => text);

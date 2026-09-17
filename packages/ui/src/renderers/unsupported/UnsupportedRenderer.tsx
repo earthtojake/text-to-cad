@@ -6,14 +6,7 @@ import { Button } from "../../primitives/button.jsx";
 
 import { formatBytes } from "../image/ImageRenderer.js";
 
-/**
- * The fallback: a file this app has no reading of.
- *
- * It says what it is and hands the file to the operating system, which does
- * have a reading of it. What it deliberately does not do is show a hex dump or
- * the bytes decoded as latin-1 — neither is something a person wants, and both
- * look like the app failing rather than declining.
- */
+/** A visible fallback for files without a renderer; no file contents are read. */
 export type UnsupportedRendererData = null;
 
 export default function UnsupportedRenderer({
@@ -38,9 +31,9 @@ export default function UnsupportedRenderer({
       }
       description={`${file.name} is ${formatBytes(file.size)}${
         file.extension ? ` of ${file.extension.toUpperCase()}` : ""
-      }. Hardcore has no preview for it, but your system probably does.`}
+      }. This file type does not have a preview.`}
       icon={FileQuestion}
-      title="No preview for this file"
+      title="Not supported"
     />
   );
 }

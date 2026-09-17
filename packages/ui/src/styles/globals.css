@@ -23,27 +23,6 @@
     backdrop-filter: blur(14px) saturate(1.12);
   }
 
-  .theme-preset-menu-item:not([data-action-hover="true"]) > .theme-preset-menu-row:hover,
-  .theme-preset-menu-item:not([data-action-hover="true"]) > .theme-preset-menu-row[data-highlighted] {
-    background: var(--accent);
-    color: var(--accent-foreground);
-  }
-
-  .theme-preset-menu-item[data-active="true"] > .theme-preset-menu-row {
-    background: var(--sidebar-accent);
-    color: var(--sidebar-accent-foreground);
-  }
-
-  .theme-preset-menu-item[data-action-hover="true"]:not([data-active="true"]) > .theme-preset-menu-row {
-    background: transparent !important;
-    color: var(--popover-foreground) !important;
-  }
-
-  .theme-preset-menu-item[data-active="true"] [data-theme-menu-default-badge] {
-    border-color: color-mix(in srgb, var(--sidebar-accent-foreground) 18%, transparent);
-    color: color-mix(in srgb, var(--sidebar-accent-foreground) 68%, transparent);
-  }
-
   [data-slot="sidebar-wrapper"][data-sidebar-resizing="true"] [data-slot="sidebar-gap"],
   [data-slot="sidebar-wrapper"][data-sidebar-resizing="true"] [data-slot="sidebar-container"] {
     transition: none !important;

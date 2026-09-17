@@ -1,6 +1,5 @@
 export const FILE_SHEET_SECTION_IDS = Object.freeze({
   FILE_STATUS: "status",
-  THEME_DISPLAY: "display",
   STEP_TREE: "tree",
   STEP_MODELING: "modeling",
   STEP_MEASUREMENTS: "measurements",

@@ -21,7 +21,7 @@ import {
   MIN_FILE_SHEET_SPLIT_RATIO
 } from "./fileSheetTabLayout.js";
 
-const STEP_SECTIONS = ["tree", "pose", "display", "theme", "metadata"];
+const STEP_SECTIONS = ["tree", "pose", "display", "reference", "metadata"];
 
 test("step, dxf and the robot kinds support the split; a plain mesh does not", () => {
   assert.equal(kindSupportsSplit("step"), true);
@@ -86,7 +86,7 @@ test("default step arrangement groups model and motion above legacy readouts", (
   const arrangement = defaultFileSheetTabArrangement("step", STEP_SECTIONS);
   assert.equal(arrangement.split, true);
   assert.deepEqual(arrangement.top, ["tree", "pose"]);
-  assert.deepEqual(arrangement.bottom, ["display", "theme", "metadata"]);
+  assert.deepEqual(arrangement.bottom, ["display", "reference", "metadata"]);
   assert.equal(arrangement.ratio, 0.5);
 });
 
@@ -151,7 +151,7 @@ test("normalize drops missing tabs and slots new ones into their default pane", 
   const normalized = normalizeFileSheetTabArrangement(stored, "step", STEP_SECTIONS);
   // Newly rendered pose joins the model; metadata stays with the readouts.
   assert.deepEqual(normalized.top, ["tree", "pose"]);
-  assert.deepEqual(normalized.bottom, ["display", "theme", "metadata"]);
+  assert.deepEqual(normalized.bottom, ["display", "reference", "metadata"]);
   assert.equal(normalized.ratio, 0.6);
 });
 
@@ -192,7 +192,7 @@ test("normalize re-derives the default split when a requested split has an empty
   const normalized = normalizeFileSheetTabArrangement(stored, "step", STEP_SECTIONS);
   assert.equal(normalized.split, true);
   assert.deepEqual(normalized.top, ["tree", "pose"]);
-  assert.deepEqual(normalized.bottom, ["display", "theme", "metadata"]);
+  assert.deepEqual(normalized.bottom, ["display", "reference", "metadata"]);
 });
 
 test("normalize forces a single strip for non-split kinds", () => {
@@ -207,7 +207,7 @@ test("moving a tab across panes updates assignment", () => {
   const arrangement = defaultFileSheetTabArrangement("step", STEP_SECTIONS);
   const next = moveFileSheetTab(arrangement, "step", "display", FILE_SHEET_TAB_PANES.TOP, 1);
   assert.deepEqual(next.top, ["tree", "display", "pose"]);
-  assert.deepEqual(next.bottom, ["theme", "metadata"]);
+  assert.deepEqual(next.bottom, ["reference", "metadata"]);
   assert.equal(next.split, true);
 });
 
@@ -228,7 +228,7 @@ test("toggling the split off merges panes, on restores the default split", () =>
   const reSplit = setFileSheetTabSplit(merged, "step", true, STEP_SECTIONS);
   assert.equal(reSplit.split, true);
   assert.deepEqual(reSplit.top, ["tree", "pose"]);
-  assert.deepEqual(reSplit.bottom, ["display", "theme", "metadata"]);
+  assert.deepEqual(reSplit.bottom, ["display", "reference", "metadata"]);
 });
 
 test("split ratio is clamped", () => {
@@ -370,4 +370,18 @@ test("v5 storage resets STEP placement while preserving other file layouts", () 
   writeFileSheetTabLayoutStore(storage, { dxf, step });
   assert.ok(data[FILE_SHEET_TAB_LAYOUT_STORAGE_KEY]);
   assert.deepEqual(readFileSheetTabLayoutStore(storage), { dxf, step });
+});
+
+
+test("a retired Theme tab leaves the current Inspect sections usable", () => {
+  const arrangement = normalizeFileSheetTabArrangement(
+    { split: true, top: ["tree"], bottom: ["theme"], ratio: 0.6 },
+    "step", ["tree", "pose"]
+  );
+  assert.equal(arrangement.split, true);
+  assert.equal(arrangement.ratio, 0.6);
+  assert.deepEqual(arrangement.top, ["tree"]);
+  assert.deepEqual(arrangement.bottom, ["pose"]);
+  const resolved = resolveFileSheetTabPanes(arrangement, "step", ["theme"]);
+  assert.deepEqual(resolved.panes.map((pane) => pane.activeId), ["tree", "pose"]);
 });

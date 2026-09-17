@@ -57,7 +57,9 @@ test('the shared CAD renderer restores camera persistence, panels, capture and m
   await page.waitForFunction(() => document.querySelector('[aria-label="Zoom level percent"]')?.value !== '100%');
   await first.getByRole('button', { name: 'Inspector', exact: true }).click();
   await first.locator('[data-file-sheet="STL"]').waitFor();
-  await first.getByRole('button', { name: 'Theme settings', exact: true }).click();
+  assert.equal(await first.getByRole('button', { name: 'Theme settings', exact: true }).count(), 0);
+  assert.equal(await first.locator('[data-file-sheet="Theme"]').count(), 0);
+  await first.getByRole('button', { name: 'Inspector', exact: true }).click();
   await page.evaluate(() => window.cadHarness.capture());
   await page.waitForFunction(() => window.cadHarness.captures.length === 1);
   const captured = await page.evaluate(() => window.cadHarness.captures[0]);
@@ -66,7 +68,6 @@ test('the shared CAD renderer restores camera persistence, panels, capture and m
   assert.ok(captured.size > 100);
   assert.deepEqual(captured.references, []);
   assert.equal(await first.locator('[data-file-sheet="STL"]').count(), 0);
-  await first.getByRole('button', { name: 'Theme settings', exact: true }).click();
   await page.evaluate(() => window.cadHarness.second(true));
   await page.getByTestId('two').getByRole('textbox', { name: 'Zoom level percent' }).waitFor();
   assert.equal(await page.getByTestId('two').getByRole('textbox', { name: 'Zoom level percent' }).inputValue(), '100%');
@@ -110,11 +111,13 @@ test('the shared CAD renderer restores camera persistence, panels, capture and m
     delete previousSlices.render.cadCamera; delete restoredSlices.render.cadCamera;
   }
   assert.deepEqual(restoredState, previousState);
-  // Render deliberately has no Inspect theme. The shared FileViewer must stay
+  // Inspect and Render have separate scene recipes. The shared FileViewer must stay
   // mounted while crossing that boundary, including with another viewer open.
   await first.getByRole('button', { name: 'Viewing mode: Inspect. Switch to Render', exact: true }).click();
   await first.getByRole('button', { name: 'Viewing mode: Render. Switch to Inspect', exact: true }).waitFor();
   assert.equal(await first.getByText('Could not display that file', { exact: true }).count(), 0);
+  assert.equal(await first.getByRole('button', { name: 'Theme settings', exact: true }).count(), 0);
+  assert.equal(await page.getByTestId('two').getByRole('button', { name: 'Viewing mode: Inspect. Switch to Render', exact: true }).count(), 1);
   await first.getByRole('button', { name: 'Viewing mode: Render. Switch to Inspect', exact: true }).click();
   await first.getByRole('button', { name: 'Viewing mode: Inspect. Switch to Render', exact: true }).waitFor();
   assert.deepEqual(errors, []);

@@ -19,7 +19,6 @@ import { CAD_PANEL, EmptyState } from "@hardcore/ui/navigation";
 import { cn } from "@hardcore/ui/utils";
 import CadRenderPane from "../components/workbench/CadRenderPane.js";
 import { useViewportLod } from "../render/useViewportLod.js";
-import { ThemeEditorPanel } from "../components/workbench/ThemeSettingsPopover.js";
 import { lodSceneMayMove } from "../render/lodCameraSample.js";
 import { registerLodDisplaySource } from "../render/lodSceneAdoption.js";
 import { buildDisplaySettingsTab } from "../components/workbench/DisplaySettingsTab.js";
@@ -80,14 +79,8 @@ import { useCadWorkspaceSelectors } from "../components/workbench/hooks/useCadWo
 import { useCadWorkspaceShortcuts } from "../components/workbench/hooks/useCadWorkspaceShortcuts.js";
 import { useSourceMaterialSession } from "../components/workbench/hooks/useSourceMaterialSession.js";
 import {
-  CUSTOM_THEME_ID,
-  getThemePresetIdForSettings,
-  normalizeThemeSettings
-} from "@hardcore/core/lib/themeSettings.js";
-import {
   displayModeForcesEdges,
   displayModeIsWireframe,
-  normalizeDisplayEdgeSettings,
   normalizeDisplaySettings
 } from "@hardcore/core/lib/displaySettings.js";
 import { RENDER_QUALITY, resolveSceneSettings } from "@hardcore/core/common/sceneSettings.js";
@@ -174,7 +167,7 @@ import {
   isLargeStepGlbEntry
 } from "@hardcore/core/lib/render/meshCost.js";
 import { cloneDrawingStrokes, cloneTabSnapshot, createTabRecord, drawingStrokesEqual,
-  tabSnapshotEqual, createThemeState } from "../workbench/state.js";
+  tabSnapshotEqual } from "../workbench/state.js";
 import { createFileSessionSnapshot, normalizeFileSessionState } from "../workbench/fileSessionState.js";
 import { shallowObjectValuesEqual, toFiniteNumber } from "../workbench/valueUtils.js";
 import {
@@ -324,7 +317,7 @@ import {
   statusOnlyFileSheetTitle
 } from "./fileViewState.js";
 import { sceneBackdropEdgeColor } from "./chromeBackdrop.js";
-import { resolveCadThemeSettings, useChromeBackdropColor } from "./cadTheme.js";
+import { useChromeBackdropColor } from "./cadTheme.js";
 import {
   addReferenceLookupKeys,
   buildStepTreeCopyReferenceMap,
@@ -375,7 +368,6 @@ function CadFileViewSurface({
   const hostSheetWidth = null;
   const hostPanelSlot = panelSlot;
   const drawsOwnPanelColumn = false;
-  const themeEditing = openPanel === CAD_PANEL.theme;
   const tabToolsOpen = openPanel === CAD_PANEL.fileSheet;
   const filesPanelOpen = openPanel === "tree";
   const panelRef = useRef({ openPanel, onPanelOpen });
@@ -385,11 +377,6 @@ function CadFileViewSurface({
     const next = typeof value === "function" ? value(current) : value;
     if (next !== current) panelRef.current.onPanelOpen?.(next ? "tree" : "");
   }, []);
-  const setThemeEditing = useCallback((value) => {
-    const current = panelRef.current.openPanel === CAD_PANEL.theme;
-    const next = typeof value === "function" ? value(current) : value;
-    if (next !== current) panelRef.current.onPanelOpen?.(next ? CAD_PANEL.theme : "");
-  }, []);
   const setTabToolsOpen = useCallback((value) => {
     const current = panelRef.current.openPanel === CAD_PANEL.fileSheet;
     const next = typeof value === "function" ? value(current) : value;
@@ -397,7 +384,6 @@ function CadFileViewSurface({
   }, []);
   const resolvedColorSchemeMode = colorScheme === "dark" ? "dark" : "light";
   const uiPrefersDark = resolvedColorSchemeMode === "dark";
-  const themeReadOptions = useMemo(() => ({ prefersDark: uiPrefersDark }), [uiPrefersDark]);
   const storeSnapshot = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot);
   const selectedKey = fileKey(entry);
   const liveEntry = storeSnapshot.entries.find((item) => fileKey(item) === selectedKey) || entry;
@@ -453,23 +439,6 @@ function CadFileViewSurface({
     viewerLayoutMode === CAD_WORKSPACE_LAYOUT_MODE.DESKTOP;
   const [viewerAlertOpen, setViewerAlertOpen] = useState(false);
   const [viewerRuntimeAlert, setViewerRuntimeAlert] = useState(null);
-  // One active theme id plus at most one custom settings blob. Presets are
-  // read-only; editing anything moves the active theme to "custom".
-  const [themeState, setThemeState] = useState(() => createThemeState(preferences.theme?.themeId, preferences.theme?.custom, themeReadOptions));
-  // A host that flips light/dark re-resolves the "system" preset; the
-  // standalone app's document never changes scheme under it.
-  const themeReadOptionsRef = useRef(themeReadOptions);
-  useEffect(() => {
-    if (themeReadOptionsRef.current === themeReadOptions) {
-      return;
-    }
-    themeReadOptionsRef.current = themeReadOptions;
-    setThemeState((current) => createThemeState(current.themeId, current.custom, themeReadOptions));
-  }, [themeReadOptions]);
-  const themeSettings = themeState.settings;
-  const themeId = themeState.themeId;
-  // What the "System" theme paints the scene on: the chrome's `--background`,
-  // or the written-out pair where there is no chrome (chromeBackdrop.js).
   const chromeBackdropColor = useChromeBackdropColor(uiPrefersDark);
   // Which way a drawing is being looked at. Session state on purpose: it is a way of looking
   // at the model open right now, not a preference worth outliving the tab.
@@ -499,16 +468,13 @@ function CadFileViewSurface({
   // re-mesh from these; the URL carries the package version, so a rebuild refetches.
   const drawingGeometryCacheRef = useRef(new Map());
   const [drawingGeometry, setDrawingGeometry] = useState(null);
-  const inspectThemeSettings = useMemo(() => resolveCadThemeSettings(themeSettings, themeId, { prefersDark: uiPrefersDark, chromeBackdropColor }), [themeSettings, themeId, uiPrefersDark, chromeBackdropColor]);
   const renderVisualKey = renderVisualSettingsKey(renderSession.payload);
   const resolvedVisualScene = useMemo(() => resolveSceneSettings({
     appearance: resolvedColorSchemeMode,
     prefersDark: uiPrefersDark,
-    theme: renderSession.enabled ? null : inspectThemeSettings,
     render: renderSession.enabled ? renderVisualPayload(renderSession.payload) : null,
     display: renderSession.enabled ? null : displaySettings
   }), [
-    inspectThemeSettings,
     resolvedColorSchemeMode,
     displaySettings,
     renderSession.enabled,
@@ -576,21 +542,7 @@ function CadFileViewSurface({
       : sceneBackdropEdgeColor(resolvedThemeSettings.background, chromeBackdropColor),
     [chromeBackdropColor, renderSession.enabled, resolvedScene.render.configuration, resolvedThemeSettings]
   );
-  const resolvedDisplayEdgeSettings = useMemo(() => {
-    // Edge theme — colour, opacity, thickness — is fixed, not a user
-    // setting. It comes from the @hardcore/core defaults, or from a theme that styles its
-    // own linework (e.g. Terminal's neon-green outline). Whether edges draw at
-    // all is still decided by the display MODE, not here.
-    //
-    // Persisted per-file edge settings written by an older build are ignored
-    // rather than merged: with the controls gone they could never be changed
-    // back, so a stale value would be stuck forever.
-    const themeEdges = resolvedThemeSettings?.edges;
-    if (themeEdges && themeEdges.enabled === true) {
-      return normalizeDisplayEdgeSettings(themeEdges);
-    }
-    return normalizeDisplayEdgeSettings();
-  }, [resolvedThemeSettings]);
+  const resolvedDisplayEdgeSettings = resolvedScene.display.edges;
   const updateDisplaySettings = useCallback((nextValue) => {
     const next = normalizeDisplaySettings(
       typeof nextValue === "function" ? nextValue(resolvedScene.display) : nextValue,
@@ -2150,43 +2102,6 @@ function CadFileViewSurface({
   const selectedFileSheetKeyRef = useRef("");
 
   const desktopRightPanelOpen = false;
-
-  // Selecting a preset (or System) is the only "reset": it swaps the active
-  // theme wholesale. The custom slot is kept so the user can flip back to it.
-  const selectTheme = useCallback((nextThemeId) => {
-    setThemeState((current) => createThemeState(nextThemeId, current.custom, themeReadOptions));
-  }, [themeReadOptions]);
-
-  // Any settings edit lands in the single custom slot and makes it active,
-  // unless it happens to reproduce a preset exactly.
-  const updateThemeSettings = useCallback((updater) => {
-    setThemeState((current) => {
-      const next = typeof updater === "function" ? updater(current.settings) : updater;
-      const settings = normalizeThemeSettings(next);
-      const matchingPresetId = getThemePresetIdForSettings(settings);
-      return {
-        themeId: matchingPresetId || CUSTOM_THEME_ID,
-        custom: matchingPresetId ? current.custom : settings,
-        settings
-      };
-    });
-  }, [handlePersistenceWriteError]);
-
-  // The theme sidebar and the file sheet are mutually exclusive. Opening one
-  // closes the other outright — rather than merely hiding it behind the new
-  // panel — so that closing the panel you opened leaves nothing open, and the
-  // other sidebar has to be reopened deliberately.
-  const closeThemeEditor = useCallback(() => {
-    setThemeEditing(false);
-  }, []);
-
-  useEffect(() => {
-    onPreferenceChange({ theme: { themeId: themeState.themeId, custom: themeState.custom } });
-  }, [themeState, onPreferenceChange]);
-  useEffect(() => {
-    setThemeState((current) => JSON.stringify({ themeId: current.themeId, custom: current.custom }) === JSON.stringify(preferences.theme)
-      ? current : createThemeState(preferences.theme?.themeId, preferences.theme?.custom, themeReadOptions));
-  }, [preferences.theme, themeReadOptions]);
 
   const drawingSettingsLoadedKeyRef = useRef(null);
   useEffect(() => {
@@ -6127,7 +6042,6 @@ function CadFileViewSurface({
     setDrawingUndoStack([]);
     setDrawingRedoStack([]);
     setViewerAlertOpen(false);
-    setThemeEditing(false);
     setFilesPanelOpen(false);
     setTabToolsOpen(false);
     setPreviewMode(true);
@@ -6138,7 +6052,6 @@ function CadFileViewSurface({
     selectedViewportContent,
     tabToolMode,
     tabToolsOpen,
-    themeEditing,
     viewerAlertOpen,
     viewerLoading
   ]);
@@ -6155,7 +6068,6 @@ function CadFileViewSurface({
     setPreviewMode(false);
     if (previousUiState) {
       setViewerAlertOpen(previousUiState.viewerAlertOpen);
-      setThemeEditing(previousUiState.themeEditing);
       setFilesPanelOpen(previousUiState.filesPanelOpen);
       setTabToolsOpen(previousUiState.tabToolsOpen);
       setTabToolMode(previousUiState.tabToolMode);
@@ -6207,7 +6119,7 @@ function CadFileViewSurface({
     activeReferenceTreeNodeId;
   const canUndoDrawing = drawingUndoStack.length > 0;
   const canRedoDrawing = drawingRedoStack.length > 0;
-  const fileSheetOpen = !!selectedFileSheetKind && selectedFileSheetHasSections && tabToolsOpen && !previewMode && !themeEditing;
+  const fileSheetOpen = !!selectedFileSheetKind && selectedFileSheetHasSections && tabToolsOpen && !previewMode;
   /**
    * Nothing open, and nothing on its way in: the shared empty state, drawn
    * over the render pane's box.
@@ -6627,7 +6539,6 @@ function CadFileViewSurface({
                 viewerServerInfo={viewerServerInfo}
                 suppressDynamicMetadataStatus={selectedArtifactGenerating}
                 statusItems={selectedFileStatusItems}
-                themeTabs={[]}
                 renderMode={renderSession.enabled}
                 settingsTabs={settingsTabs}
                 openSectionIds={effectiveFileSheetOpenSectionIds}
@@ -6748,27 +6659,12 @@ function CadFileViewSurface({
               />
             ) : null}
 
-            {themeEditing ? (
-              <ThemeEditorPanel
-                open
-                isDesktop={isDesktop}
-                width={activeSheetWidth || tabToolsWidth}
-                onClose={closeThemeEditor}
-                onStartResize={fileSheetResizeHandler}
-                themeSettings={themeSettings}
-                themeId={themeId}
-                resolvedColorSchemeMode={resolvedColorSchemeMode}
-                onSelectTheme={selectTheme}
-                updateThemeSettings={updateThemeSettings}
-              />
-            ) : null}
-
             {/*
               The host's panel column, at the right end of the body row and
               nowhere else. The host draws the frame — one border, one width,
               one resize handle (`@hardcore/ui/navigation`'s `FilePanelColumn`) — and
-              hands the box back as `panelSlot`, so the surface's own theme
-              editor and Inspector are portaled into the same column its file
+              hands the box back as `panelSlot`, so the surface's Inspector
+              is portaled into the same column its file
               tree uses. That is why there is no left sidebar to draw: the file
               list is a panel in here.
             */}

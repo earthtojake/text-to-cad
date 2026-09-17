@@ -70,16 +70,12 @@ async function openFile(file: string) {
   await expect(page.locator("[data-cad-surface] canvas").first()).toBeVisible({ timeout: 90_000 });
 }
 
-test("Render materials and studio settings survive mode switches while Inspect keeps its theme and display", async () => {
+test("Inspect and Render keep separate controls and preserve display, studio and material edits", async () => {
   test.setTimeout(150_000);
   await openFile("part.step");
   await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible({ timeout: 90_000 });
-  await page.locator("header [data-file-panel=cad-theme]").click();
-  const preset = page.locator("[data-file-sheet=Theme]").getByRole("combobox").first();
-  await preset.click();
-  await page.getByRole("option", { name: "Cinematic", exact: true }).click();
-  const theme = await page.evaluate(() => localStorage.getItem("cad-viewer:theme"));
-  await page.locator("header [data-file-panel=cad-file-sheet]").click();
+  await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
+  await expect(page.locator("[data-file-panel=cad-theme], [data-file-sheet=Theme]")).toHaveCount(0);
   const displayButton = page.getByRole("button", { name: "Display", exact: true });
   await displayButton.click();
   const display = page.getByRole("dialog", { name: "Display settings" });
@@ -89,6 +85,8 @@ test("Render materials and studio settings survive mode switches while Inspect k
   await expect(page.getByRole("tab", { name: "Materials", exact: true })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Viewing mode: Inspect. Switch to Render", exact: true }).click();
+  await expect(displayButton).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
   const studio = page.locator("[data-cad-render-settings-section]");
   await expect(studio).toBeVisible();
   const exposure = studio.getByLabel("Exposure value", { exact: true });
@@ -105,7 +103,8 @@ test("Render materials and studio settings survive mode switches while Inspect k
 
   await page.getByRole("button", { name: "Viewing mode: Render. Switch to Inspect", exact: true }).click();
   await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible();
-  expect(await page.evaluate(() => localStorage.getItem("cad-viewer:theme"))).toBe(theme);
+  await expect(page.getByRole("tab", { name: "Studio", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "Materials", exact: true })).toHaveCount(0);
   await displayButton.click();
   await expect(display.getByRole("combobox", { name: "Mode" })).toContainText("Wire");
   await page.keyboard.press("Escape");
@@ -117,6 +116,7 @@ test("Render materials and studio settings survive mode switches while Inspect k
   await materials.getByRole("button", { name: "Reset authored", exact: true }).click();
   await expect(materials.getByRole("button", { name: "Reset authored", exact: true })).toBeDisabled();
   await page.getByRole("button", { name: "Viewing mode: Render. Switch to Inspect", exact: true }).click();
+  expect(await page.evaluate(() => localStorage.getItem("cad-viewer:theme"))).toBeNull();
   expect(errors).toEqual([]);
 });
 

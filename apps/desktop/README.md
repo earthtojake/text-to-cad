@@ -17,7 +17,7 @@ Electron dependency resolution must be verified from this workspace's tree.
 The migration to `@hardcore/core` and `@hardcore/ui` is a **pure refactor**.
 All existing UI, UX and functionality are preserved: window/session layout,
 file renderers, controls, shortcuts, editing/saves/conflicts, CAD tools,
-reference chips, preferences, themes and native services. Desktop's local
+reference chips, preferences, app appearance and native services. Desktop's local
 controls keep their appearance; the shared file viewer keeps the viewer's.
 
 `features/explorer/FileTab.tsx` is a thin host of `@hardcore/ui/file-viewer`.
@@ -27,8 +27,9 @@ the shared CAD, Markdown, code, image, PDF and fallback renderers. The whole
 file-tab interface is shared with web. Projects, sessions, browser/terminal/
 review tabs, agent integrations and native services remain in this app.
 Neither shared package imports app source, and desktop imports no web source.
-The host keeps CAD themes, seen tutorial tips and file-sheet tab layouts in
-one window-wide preference store backed by their existing global storage keys.
+The host keeps seen tutorial tips, pose-transition preferences and file-sheet
+tab layouts in one window-wide preference store backed by their existing global
+storage keys.
 Active and newly opened roots share those preferences; document and panel
 state remain scoped to their root or tab.
 
@@ -174,12 +175,10 @@ neighbours, open),
 purpose), `file-cad` (the explorer at its widest: the sidebar hidden and the
 session at its floor), `file-cad-default` (the explorer at its default
 width, the Inspector as the tab's one panel) and both again at 1280×800,
-`file-cad-measure`, `file-cad-theme` (the theme panel in the tab's panel
-column, from the nav row's toggle), `file-cad-tree` and `file-cad-files`
-(the file tree in that same column, which is what closing the Inspector or
-the theme panel shows), `file-cad-light-chrome` (the app light over the
-Cinematic theme's dark stage, background included: the theme paints the
-scene and nothing else, and only the System theme follows the app),
+`file-cad-measure`, `file-cad-tree` and `file-cad-files` (the file tree in
+that same column), `file-cad-light-chrome` (Inspect and the app in light
+appearance), `render-materials` (Render's material editor and photographic
+scene), and `robot-kinematics` (a joint edited in the Inspector),
 `terminal`,
 `browser-empty`, `browser`, `review`, `strip`, `strip-overflow` (seven tabs in
 a pane at its floor, `+` pinned to the right edge), `panes-sidebar-collapsed`
@@ -563,10 +562,9 @@ A CAD file in the explorer is laid out by the desktop, not measured by the
 shared FileViewer frame: the surface is pinned to its desktop
 layout so nothing is ever a drawer over the model, its panels are drawn in
 the file tab's own panel column (so their width is that column's — see "The
-panels a file has"), and light/dark is the app's colour scheme rather than
-the CAD theme's. The scene's background is the theme's own; only the theme
-called **System** follows the app, and it reads this window's
-`--background` for itself.
+panels a file has"). The app owns light/dark appearance. Inspect uses its
+fixed light (`#f0f4f9`) or dark (`#333333`) canvas; Render starts from the
+matching photographic studio and keeps its model-local backdrop edits.
 
 A markdown file opens as a document you can type in — a ProseMirror editor
 over TipTap's schema, saved with `Cmd/Ctrl+S` like any other file, with
@@ -837,6 +835,16 @@ never part of it. The file tree's open folders and its listings live in the expl
 store, not in the file tab, because opening a file makes a tab and the pane
 mounts one tab at a time.
 
+Directory listings show every regular file and directory, including dotfiles,
+Git-ignored outputs, dependency folders and unsupported formats. Renderer
+support determines what opens in the file tab; it never hides a tree row.
+Unknown types open with **Not supported**. Listings are lazy and complete for
+each expanded directory. The bounded fuzzy index visits project content before
+dependency caches so cache files do not crowd generated CAD outputs out of the
+search budget. Background watching includes Git-ignored outputs; directories
+excluded from costly recursive watching receive direct watches when browsed,
+and all watches close when their root's last owner leaves.
+
 ### The file tab's nav
 
 One row: the breadcrumb, then one toggle per panel this file has — the
@@ -918,60 +926,54 @@ closes whatever was open. This is the standalone viewer's top bar, ported,
 with the app's own tree folded into it.
 
 Markdown declares one, the two readings of the same bytes (`View source` /
-`View preview`). A CAD file declares two, **Theme settings** and
-**Inspector** — the viewer's own panels, which `layout="desktop"` had left
-with no door at all in this app, because that layout hides the top bar those
-toggles live in. The Inspector is the file's tree, measurements and
-parameters; its toggle is the sliders glyph the standalone viewer's top bar
-uses for the same panel, so it is one control with one look in both. Its id
-stays `cad-file-sheet` — the tab's stored `panel` field holds it, and the
-viewer's host contract calls it `fileSheetOpen`. Code, images and PDFs
-declare none, and then the tree is the whole list.
+`View preview`). A CAD file declares **Inspector**. Its sections follow the
+viewing mode and the file's capabilities; its toggle uses the same sliders
+glyph in desktop and web. Its id stays `cad-file-sheet`, which is persisted
+on the file tab. Code, images and PDFs declare none, leaving the tree as the
+whole list.
 
-**Where each panel's content comes from** is the one thing a declaration
-says beyond its name: `tree` is the app's file tree, `slot` is a box handed
-to the file's renderer to draw into, and `body` is the panel that is not a
-column at all — markdown's source view replaces the content, because it is
-the same bytes read differently. The CAD pair is `slot`: the viewer's
-surface portals the open one into this column (`panelSlot`, in the file-view
-doc) and draws no column of its own, so the theme editor, the Inspector and
-the tree share one border, one width, one resize handle and one header
-treatment (each panel's own top row — the tree's filter, the Inspector's
-tabs, the theme editor's preset select). Before this they were two columns of two
-designs, and the pane was too narrow for both, which is why a CAD tab used
-to hide the tree.
+A declaration identifies where its content belongs: `tree` is the app's file
+tree, `slot` is a box the renderer draws into, and `body` replaces the file
+content, as markdown's source view does. The CAD Inspector uses `slot` and
+portals into the file tab's panel column. The Inspector and tree share one
+border, width, resize handle and header treatment.
 
-**The tab owns which panel is open**, as one id in one field of the row
-(`FileTabSchema.panel`), so it persists like any other tab state and two
-panels cannot be open however the writes interleave. `null` is "nobody has
-said" and resolves to the renderer's own default — the Inspector for a CAD
-file, the tree for everything else; `""` is nothing open, which a tab closed
-on purpose comes back to. The CAD pair is *controlled* in the viewer's
-surface (`openPanel` / `onPanelOpen`): at most one of the two is ever true, and the
-surface reports the changes it makes itself — a measurement landing opens
-the Inspector — so the highlight follows what is on screen. A CAD tab whose
-runtime did not start declares no panels: two toggles over the failure card
-would open nothing, and the column falls back to the tree.
+**The tab owns which panel is open**, as one id in `FileTabSchema.panel`.
+`null` restores the renderer's default — Inspector for CAD, tree for other
+files — while `""` preserves a deliberately closed panel. The controlled CAD
+renderer reports when it opens the Inspector, so the toggle follows the
+visible content. A CAD tab whose runtime failed declares no Inspector and
+falls back to the file tree. Saved `cad-theme` panel choices migrate to the
+default; other saved panel choices remain unchanged.
 
-**A CAD theme paints the scene, never the chrome.** The panel column, the
-toolbars and the tab strip are this app's tokens at this app's colour scheme
-(`colorScheme`); the theme owns the background, lights, materials, edges,
-grid and projection. So a light window over a dark studio renders, which it
-did not before: the theme's backdrop luminance used to write `.dark` on the
-document, and opening a STEP file repainted the whole window
-(`tests/e2e/explorer.spec.ts` asserts the two move independently).
+### Inspect and Render
 
-**And the background is the theme's too — except for one.** The theme called
-**System** means "follow the app", so it paints the scene on this window's
-own `--background`, which is why a model under it sits on the same ground as
-the chrome instead of in a framed studio. Every other preset, and a custom
-theme, paints what its own settings say: picking Cinematic in the theme panel
-turns the background charcoal here exactly as it does in the standalone
-viewer, and switching the app light or dark then leaves it alone. The app
-used to hand its background to the surface for every theme, which made eight
-presets one colour in this window; the surface reads the token itself now
-(the shared CAD renderer's `chromeBackdrop.js`), so there is nothing
-for this app to pass.
+The floating toolbar switches between **Inspect** and **Render**. CAD Theme
+settings and presets are retired. Old theme records are ignored and left
+untouched; they cannot override either mode's base. Settings › Appearance
+still owns the app's System, Light and Dark preference, including the panel
+column, toolbar and tab strip.
+
+**Inspect** uses one fixed lighting, material and dark-edge recipe in light
+and dark appearance; its canvas and guides adapt to the app. Display controls
+projection, shaded or wire presentation, edges, guides, clipping and exploded
+view. Model/Features, selection and contextual measurements remain inspection
+tools. The Inspector retains its saved section layout.
+
+**Render** uses a photographic studio, perspective camera and shaded authored
+colors, with inspection guides, clipping and selection effects off. Studio
+starts from the app's light or dark appearance and exposes lens, exposure,
+lighting, backdrop and Preview/Final quality controls. Materials retains its
+part selection, local assignments, undo and Reset authored controls. Studio
+and material edits belong to the model session and survive mode switches;
+returning to Inspect restores its Display settings. Supported Kinematics and
+Animation controls remain available in both modes.
+
+Neither a mode switch nor a Studio edit changes the app's appearance. The
+Electron `theme` suite samples the document through these interactions, and
+`cad-scenes` checks that Display, Studio and Materials retain their separate
+state. See the shared [Render modes](../../packages/ui/docs/render-mode.md)
+playbook for the mode bases and camera behavior.
 
 ## Quitting
 
@@ -1184,7 +1186,7 @@ src/main/                 the Electron main process: everything with a side effe
   ipc/{explorer,cad}.ts   P3's handler branches: files, terminals; cad.viewerOrigin + cad.warm + cad.reply (P5)
   ipc/git.ts              P7's: the review's reads in a session's directory, the
                           commit, the pull request, and the worktree list
-  explorer/               fs.ts (tree, ignores, read/write, chokidar watcher),
+  explorer/               fs.ts (complete listings, read/write, scoped watchers),
                           terminal.ts (node-pty sessions + scrollback)
   cad/                    runtime.ts (which Python: override, bundled, checkout), viewer.ts (one viewer per project root),
                           daemon.ts (the warm build daemon, started at project open),

@@ -18,10 +18,10 @@
  * `tests/unit/main/explorer-fs.test.ts` can run it.
  */
 import { createHash } from "node:crypto";
+import { watch as watchDirectory, type FSWatcher } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import ignore, { type Ignore } from "ignore";
 
 /* -------------------------------------------------------------------------- */
 /* What a tree row is                                                          */
@@ -57,93 +57,21 @@ export type FileStat = {
 };
 
 /* -------------------------------------------------------------------------- */
-/* Ignores                                                                     */
+/* Background watcher exclusions                                               */
 /* -------------------------------------------------------------------------- */
 
 /**
- * Directories no file tree should ever walk into, `.gitignore` or not.
- *
- * `.git` is the obvious one. The rest are the build and dependency trees that
- * are ignored in practice in every repository but not always in the file: a
- * tree that lists `node_modules` is a tree nobody scrolls.
+ * Avoid recursively watching dependency caches and repository internals. These
+ * names never filter directory listings or file search. An explicitly listed
+ * directory also gets a direct watcher, so browsing inside one stays live.
  */
-export const ALWAYS_IGNORED = [
-  ".git",
-  ".hg",
-  ".svn",
-  ".DS_Store",
-  "node_modules",
-  "__pycache__",
-  ".venv",
-  ".mypy_cache",
-  ".pytest_cache",
-  ".ruff_cache",
-  ".turbo",
-  ".next",
-  ".vite",
-  ".gradle",
-] as const;
+const WATCH_IGNORED_NAMES = new Set([
+  ".git", ".hg", ".svn", ".DS_Store", "node_modules", "__pycache__", ".venv",
+  ".mypy_cache", ".pytest_cache", ".ruff_cache", ".turbo", ".next", ".vite", ".gradle",
+]);
 
-const ALWAYS_IGNORED_SET: ReadonlySet<string> = new Set(ALWAYS_IGNORED);
-
-/**
- * The ignore rules that apply inside one root.
- *
- * Only the root's own `.gitignore` and `.git/info/exclude` are read — nested
- * `.gitignore` files are not, which is a deliberate simplification: honouring
- * them properly means re-reading a file per directory on every expansion, and
- * a repository whose nested rules hide something the tree still shows is a
- * cosmetic miss, not a correctness one.
- */
-export class IgnoreRules {
-  private constructor(private readonly matcher: Ignore | null) {}
-
-  /** Rules with nothing but the always-ignored list. */
-  static none(): IgnoreRules {
-    return new IgnoreRules(null);
-  }
-
-  /** Rules built from explicit patterns — the shape the tests use. */
-  static fromPatterns(patterns: readonly string[]): IgnoreRules {
-    const usable = patterns.filter((line) => line.trim() !== "" && !line.startsWith("#"));
-    return new IgnoreRules(usable.length > 0 ? ignore().add([...usable]) : null);
-  }
-
-  /** Rules read off disk. A root with no ignore file is not an error. */
-  static async read(root: string): Promise<IgnoreRules> {
-    const sources = [
-      path.join(root, ".gitignore"),
-      path.join(root, ".git", "info", "exclude"),
-    ];
-    const patterns: string[] = [];
-    for (const source of sources) {
-      const text = await fs.readFile(source, "utf8").catch(() => null);
-      if (text !== null) {
-        patterns.push(...text.split(/\r?\n/));
-      }
-    }
-    return IgnoreRules.fromPatterns(patterns);
-  }
-
-  /**
-   * Should this entry be hidden?
-   *
-   * `relative` is root-relative with POSIX separators. Directories are tested
-   * with a trailing slash as well, because `build/` in a `.gitignore` matches
-   * the directory and not a file of the same name.
-   */
-  ignores(relative: string, isDirectory: boolean): boolean {
-    if (relative === "" || relative === ".") {
-      return false;
-    }
-    if (relative.split("/").some((segment) => ALWAYS_IGNORED_SET.has(segment))) {
-      return true;
-    }
-    if (!this.matcher) {
-      return false;
-    }
-    return this.matcher.ignores(isDirectory ? `${relative}/` : relative);
-  }
+function backgroundWatchIgnores(relative: string): boolean {
+  return relative.split("/").some((segment) => WATCH_IGNORED_NAMES.has(segment));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -320,22 +248,14 @@ export function sortEntries(entries: DirEntry[]): DirEntry[] {
   });
 }
 
-export type ListOptions = {
-  /** Rules for the root; read from disk when omitted. */
-  rules?: IgnoreRules;
-  /** Show what the rules hide. The tree's "Show ignored" toggle. */
-  includeIgnored?: boolean;
-};
-
 /**
- * One directory's children. `directory` is root-relative; `""` is the root.
+ * Every directory child, independent of Git ignores or renderer support.
+ * `directory` is root-relative; `""` is the root.
  */
 export async function listDirectory(
   root: string,
   directory: string,
-  options: ListOptions = {},
 ): Promise<DirEntry[]> {
-  const rules = options.rules ?? (await IgnoreRules.read(root));
   const absolute = await resolveInRoot(root, directory);
   const realRoot = await fs.realpath(root).catch(() => path.resolve(root));
 
@@ -354,9 +274,6 @@ export async function listDirectory(
       continue;
     }
     const kind = stats.isDirectory() ? "directory" : "file";
-    if (!options.includeIgnored && rules.ignores(relative, kind === "directory")) {
-      continue;
-    }
     if (!stats.isDirectory() && !stats.isFile()) {
       continue;
     }
@@ -384,19 +301,21 @@ export async function listDirectory(
 export async function listPaths(
   root: string,
   directory = "",
-  options: ListOptions & { limit?: number } = {},
+  options: { limit?: number } = {},
 ): Promise<{ paths: string[]; truncated: boolean }> {
   const limit = options.limit ?? 20_000;
-  const rules = options.rules ?? (await IgnoreRules.read(root));
   const realRoot = await fs.realpath(root).catch(() => path.resolve(root));
   const start = await resolveInRoot(root, directory);
 
   const paths: string[] = [];
   const queue: string[] = [start];
+  const deferred: string[] = [];
   let truncated = false;
 
-  while (queue.length > 0 && !truncated) {
-    const current = queue.shift() as string;
+  while ((queue.length > 0 || deferred.length > 0) && !truncated) {
+    // Visit project content before dependency caches can consume the cap. Both
+    // queues are searched; no file is excluded because of Git or its renderer.
+    const current = (queue.length > 0 ? queue : deferred).shift() as string;
     const dirents = await fs.readdir(current, { withFileTypes: true }).catch(() => []);
     for (const dirent of dirents) {
       const child = path.join(current, dirent.name);
@@ -404,11 +323,8 @@ export async function listPaths(
       // Symlinked directories are not descended into: a link back up the tree
       // is an infinite walk, and the honest fix is not to follow any of them.
       const isDirectory = dirent.isDirectory();
-      if (rules.ignores(relative, isDirectory)) {
-        continue;
-      }
       if (isDirectory) {
-        queue.push(child);
+        (backgroundWatchIgnores(relative) ? deferred : queue).push(child);
       } else if (dirent.isFile()) {
         if (paths.length >= limit) {
           truncated = true;
@@ -714,6 +630,12 @@ type Watcher = {
   close: () => Promise<void>;
 };
 
+type WatchedRoot = {
+  watcher: Watcher | null;
+  direct: Map<string, FSWatcher>;
+  refs: number;
+};
+
 /**
  * One chokidar watcher per root, refcounted by the tabs that asked for it.
  *
@@ -724,7 +646,8 @@ type Watcher = {
 const BATCH_MS = 80;
 
 export class FileWatchers {
-  private readonly watchers = new Map<string, { watcher: Watcher; refs: number }>();
+  private readonly watchers = new Map<string, WatchedRoot>();
+  private readonly listedDirectories = new Map<string, Set<string>>();
   private readonly pending = new Map<string, Map<string, FileChange>>();
   private readonly timers = new Map<string, NodeJS.Timeout>();
 
@@ -736,24 +659,30 @@ export class FileWatchers {
       existing.refs += 1;
       return;
     }
+    // Register the owner before async setup: a directory listing or a second
+    // tab may arrive while chokidar is loading.
+    const owner: WatchedRoot = { watcher: null, direct: new Map(), refs: 1 };
+    this.watchers.set(root, owner);
     // Imported here rather than at module scope so this file stays loadable in
     // a plain Node test without pulling chokidar's fsevents binding in.
     const { watch } = await import("chokidar");
-    const rules = await IgnoreRules.read(root);
     const realRoot = await fs.realpath(root).catch(() => path.resolve(root));
+    if (this.watchers.get(root) !== owner) return;
 
     const watcher = watch(realRoot, {
       ignoreInitial: true,
       followSymlinks: false,
-      // A repository's own history churns constantly and is never shown.
+      // Git-ignored model outputs are ordinary visible files. Only costly
+      // infrastructure directories are excluded from this recursive watcher.
       ignored: (target: string) => {
         const relative = toRelative(realRoot, target);
-        return relative !== "" && rules.ignores(relative, false) && rules.ignores(relative, true);
+        return relative !== "" && backgroundWatchIgnores(relative);
       },
       awaitWriteFinish: { stabilityThreshold: 40, pollInterval: 20 },
     });
 
     const record = (kind: FileChange["kind"], directory: boolean) => (target: string) => {
+      if (this.watchers.get(root) !== owner) return;
       this.queue(root, {
         path: toRelative(realRoot, target),
         kind,
@@ -771,12 +700,51 @@ export class FileWatchers {
       // bug in the tree. Say so instead.
       .on("error", (error: unknown) => console.error(`[explorer] watch ${root}`, error));
 
-    this.watchers.set(root, { watcher, refs: 1 });
+    owner.watcher = watcher;
+    await Promise.all([...(this.listedDirectories.get(root) ?? [])].map((directory) =>
+      this.watchListedDirectory(root, directory),
+    ));
+  }
+
+  /** Keep every explicitly browsed directory live without walking its children. */
+  async watchListedDirectory(root: string, directory: string): Promise<void> {
+    const absolute = await resolveInRoot(root, directory);
+    const realRoot = await fs.realpath(root).catch(() => path.resolve(root));
+    const relative = toRelative(realRoot, absolute);
+    let listed = this.listedDirectories.get(root);
+    if (!listed) {
+      listed = new Set();
+      this.listedDirectories.set(root, listed);
+    }
+    listed.add(relative);
+    const owner = this.watchers.get(root);
+    if (!owner || owner.direct.has(relative)) return;
+
+    try {
+      const direct = watchDirectory(absolute, { recursive: false }, (_event, filename) => {
+        if (this.watchers.get(root) !== owner) return;
+        const child = filename ? path.join(absolute, filename.toString()) : absolute;
+        void fs.stat(child).catch(() => null).then((stats) => {
+          if (this.watchers.get(root) !== owner) return;
+          this.queue(root, {
+            path: toRelative(realRoot, child),
+            kind: stats ? "changed" : "removed",
+            directory: stats?.isDirectory() ?? false,
+          });
+        });
+      });
+      direct.on("error", (error: unknown) => console.error(`[explorer] watch ${absolute}`, error));
+      owner.direct.set(relative, direct);
+    } catch (error) {
+      // A failed watch must not make the directory disappear from browsing.
+      console.error(`[explorer] watch ${absolute}`, error);
+    }
   }
 
   async unwatch(root: string): Promise<void> {
     const existing = this.watchers.get(root);
     if (!existing) {
+      this.listedDirectories.delete(root);
       return;
     }
     existing.refs -= 1;
@@ -784,9 +752,11 @@ export class FileWatchers {
       return;
     }
     this.watchers.delete(root);
+    this.listedDirectories.delete(root);
     this.clearTimer(root);
     this.pending.delete(root);
-    await existing.watcher.close();
+    for (const direct of existing.direct.values()) direct.close();
+    await existing.watcher?.close();
   }
 
   async closeAll(): Promise<void> {
@@ -795,8 +765,10 @@ export class FileWatchers {
       const existing = this.watchers.get(root);
       this.watchers.delete(root);
       this.clearTimer(root);
-      await existing?.watcher.close();
+      for (const direct of existing?.direct.values() ?? []) direct.close();
+      await existing?.watcher?.close();
     }
+    this.listedDirectories.clear();
     this.pending.clear();
   }
 

@@ -15,6 +15,7 @@ import {
   displayModeIsWireframe,
   displayModeShowsThroughEdges,
   displayModeSurfaceOpacity,
+  normalizeDisplayEdgeSettings,
   displayModeUsesUnlitSurfaces,
   normalizeDisplayMode
 } from "./displaySettings.js";
@@ -2217,7 +2218,7 @@ function staticMutableStateKey(settings) {
 // a change rebuilds every record. Which parts are rendered is tracked apart
 // (renderPartsKey) and reconciled incrementally.
 function settingsSignature(meshData, theme, settings) {
-  const edgeSettings = resolveCadEdgeSettings(settings.edgeSettings, { themeEdges: theme?.edges });
+  const edgeSettings = normalizeDisplayEdgeSettings(settings.edgeSettings);
   return JSON.stringify({
     meshData: meshData ? "mesh" : "",
     displayMode: normalizeDisplayMode(settings.displayMode),
@@ -2240,8 +2241,7 @@ function normalizeSettings(settings = {}) {
   const sourceTheme = settings.theme || settings.themeSettings || settings.settings || undefined;
   const normalizedTheme = normalizeThemeSettings(sourceTheme);
   const displayEdgeSettings = resolveCadEdgeSettings(
-    settings.edgeSettings || settings.display?.edges,
-    { themeEdges: normalizedTheme.edges }
+    settings.edgeSettings || settings.display?.edges
   );
   const applyDisplayModeEdgePolicy = settings.applyDisplayModeEdgePolicy !== false;
   const edgeSettings = applyDisplayModeEdgePolicy

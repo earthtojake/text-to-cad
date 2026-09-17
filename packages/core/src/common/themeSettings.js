@@ -4,7 +4,6 @@ import {
   DISABLED_DISPLAY_EDGE_SETTINGS,
   normalizeCameraProjection
 } from "./displaySettings.js";
-import { normalizeThemeEdgeSettings } from "./cadInk.js";
 
 export {
   CAD_EDGE_CLASS_IDS,
@@ -329,36 +328,6 @@ const CLAY_FILL_COLORS = Object.freeze(["#b9856e"]);
 const TERMINAL_FILL_COLORS = Object.freeze(["#073a20"]);
 
 const TERMINAL_EDGE_COLOR = "#66ff99";
-const TERMINAL_EDGE_HIGHLIGHT_COLOR = "#b7ffc9";
-const TERMINAL_EDGE_CLASS_SETTINGS = Object.freeze({
-  feature: Object.freeze({
-    opacity: 1,
-    thickness: 1.6
-  }),
-  tangent: Object.freeze({
-    opacity: 0.9,
-    thickness: 1.15
-  }),
-  seam: Object.freeze({
-    opacity: 0.92,
-    thickness: 1
-  }),
-  degenerate: Object.freeze({
-    opacity: 0.72,
-    thickness: 0.8
-  })
-});
-
-const TERMINAL_THEME_EDGE_SETTINGS = Object.freeze({
-  ...CAD_THEME_EDGE_SETTINGS,
-  enabled: true,
-  color: TERMINAL_EDGE_COLOR,
-  classes: TERMINAL_EDGE_CLASS_SETTINGS,
-  highlightColor: TERMINAL_EDGE_HIGHLIGHT_COLOR,
-  highlightOpacity: 1,
-  highlightThickness: 3
-});
-
 const CHARCOAL_FILL_COLORS = Object.freeze([
   "#b6c4ce",
   "#8f9aa3",
@@ -985,9 +954,6 @@ const TERMINAL_THEME_SETTINGS = Object.freeze({
     envMapIntensity: 0.9,
     emissiveIntensity: 0.04
   },
-  edges: {
-    ...TERMINAL_THEME_EDGE_SETTINGS
-  },
   background: {
     type: "radial",
     solidColor: "#020403",
@@ -1592,8 +1558,7 @@ function createThemeSettingsSignature(value = {}) {
     background: value?.background || {},
     floor: value?.floor || {},
     environment: value?.environment || {},
-    lighting: value?.lighting || {},
-    edges: value?.edges || null
+    lighting: value?.lighting || {}
   });
 }
 
@@ -1817,13 +1782,6 @@ export function normalizeThemeSettings(value = {}) {
       }
     }
   };
-  // Edge styling normally lives in per-file display settings, so themes stay
-  // edge-agnostic by default. A theme MAY opt in to its own outline (e.g.
-  // Terminal's neon-green linework); when it does, the viewer/snapshot use it
-  // as the base edge appearance. Only carry it when explicitly declared.
-  if (source.edges && typeof source.edges === "object" && !Array.isArray(source.edges)) {
-    normalized.edges = normalizeThemeEdgeSettings(source.edges);
-  }
   normalized.modeColors = normalizeThemeModeColors(source.modeColors, normalized);
 
   return normalized;

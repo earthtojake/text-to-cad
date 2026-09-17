@@ -28,10 +28,10 @@ origin axes, part colors, clipping, and exploded view.
 
 - **Shaded with edges** shows shaded surfaces with CAD edges; **Shaded** shows
   those surfaces without edges.
-- Inspect retains host CAD theme presets and custom lighting, materials and
-  outlines, independently from app appearance.
-- Default edge weights follow edge type; explicit custom theme settings survive
-  per-file edge visibility changes.
+- Inspect uses an opinionated light or dark workbench basis, selected by app
+  appearance. There is no CAD Theme editor or custom scene-theme preference.
+- Edge styling is fixed, with weights following edge type. Display controls
+  edge visibility; legacy custom outline settings do not override it.
 - The grid is an on/off world reference; origin axes remain independently
   configurable.
 
