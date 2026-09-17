@@ -35,11 +35,12 @@ export function presentModelingAssembly(descriptor,results,stepRoot=null) {
     const result=results[o.component],tree=result?.tree;
     const bodies=tree ? presentModelingTree(tree) : [];
     const operations=tree?.flatMap(n=>n.children||[]).filter(n=>n.kind!=='remainder') || [];
-    const summary=!result?'Recognizing…':result.error?'Unavailable':!tree.length?'No faces':operations.length ? `${operations.length} ${operations.length===1?'feature':'features'}`:'Other geometry';
+    const summary=!result?'':result.error?'Unavailable':!tree.length?'No faces':operations.length ? `${operations.length} ${operations.length===1?'feature':'features'}`:'Other geometry';
     const node={id:`part:${o.id}`,kind:'part',label:o.name||'Part',occurrenceId:o.id,faces:tree?.flatMap(n=>n.faces)||[],edges:[],summary,
       note:result?.error || (!tree?.length && result ? 'This component has no faces to inspect.' : undefined),
-      children:(bodies.length===1 ? bodies[0].children?.length ? bodies[0].children : bodies : bodies).map(n=>scope(n,o.id)),featureCount:operations.length};
-    // A closed leaf still shows its status; it never asks for missing topology.
+      children:(bodies.length===1 ? bodies[0].children?.length ? bodies[0].children : bodies : bodies).map(n=>scope(n,o.id)),featureCount:operations.length,
+      recognitionPending:!result};
+    // Unknown geometry still has a disclosure; only opening it requests recognition.
     return node;
   };
   const visit=n=>{
@@ -61,7 +62,10 @@ export function presentModelingAssembly(descriptor,results,stepRoot=null) {
         children:recognized?.children || children,
       };
     };
-    return [fromStep(stepRoot)].filter(Boolean);
+    const root=fromStep(stepRoot);
+    // The document's assembly wrapper is already implicitly expanded by picking.
+    // Show its children directly, retaining their canonical identities and nesting.
+    return root?.kind === 'assembly' && root.children.length ? root.children : [root].filter(Boolean);
   }
   if(descriptor.occurrences.length===1){
     const o=descriptor.occurrences[0],result=results[o.component];

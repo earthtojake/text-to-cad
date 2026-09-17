@@ -105,36 +105,6 @@ export function selectableViewerNodeIdsForIsolation(root, isolatedNodeIds, rootI
   return assemblyIsolationLayerNodeIds(root, isolatedNodeIds, rootId);
 }
 
-export function selectedReferenceIdsOutsideFocusedAssemblyNodes(referenceIds, referenceMap, focusedNodeIds, {
-  referencePartId = null
-} = {}) {
-  const focused = new Set(
-    (Array.isArray(focusedNodeIds) ? focusedNodeIds : [focusedNodeIds])
-      .map((id) => String(id || "").trim())
-      .filter(Boolean)
-  );
-  if (!focused.size) {
-    return Array.isArray(referenceIds) ? referenceIds : [];
-  }
-  const readReferencePartId = typeof referencePartId === "function"
-    ? referencePartId
-    : (reference) => String(reference?.partId || "").trim();
-  return (Array.isArray(referenceIds) ? referenceIds : [])
-    .map((id) => String(id || "").trim())
-    .filter((id) => {
-      if (!id) {
-        return false;
-      }
-      const reference = referenceMap?.get?.(id) || null;
-      const selectorType = String(reference?.selectorType || "").trim();
-      if (selectorType !== "shape" && selectorType !== "occurrence") {
-        return true;
-      }
-      const partId = String(readReferencePartId(reference) || "").trim();
-      return !partId || !focused.has(partId);
-    });
-}
-
 export function selectableViewerNodeIdsForExpandedTree(root, expandedNodeIds, {
   rootId = "",
   isolatedNodeIds = []

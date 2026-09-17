@@ -6,8 +6,8 @@ import { completedPackages, completedPackageRevision } from '../render/completed
 import { completedModelingRecognition, modelingRecognitionKey } from './modelingRecognitionCache.js';
 const EMPTY_RESULTS = {};
 
-/** One worker at a time; completed components survive tab switches and repeated instances. */
-export function useModelingRecognition(meshUrl, enabled, { client, entry } = {}) {
+/** Expanded occurrences request recognition; repeated instances share completed component metadata. */
+export function useModelingRecognition(meshUrl, enabled, { client, entry, requestedOccurrenceIds = [] } = {}) {
   const resources=client?.resources;
   if (!resources) throw new TypeError("Modeling recognition requires CAD resources");
   const [document,setDocument]=useState(null),[results,setResults]=useState({}),[error,setError]=useState('');
@@ -18,6 +18,8 @@ export function useModelingRecognition(meshUrl, enabled, { client, entry } = {})
   const resourceScope=cadResourceCacheKey(resources, "");
   const documentKey=JSON.stringify([meshUrl,entryRevision,resourceScope]);
   const descriptor=document?.key===documentKey ? document.value : null;
+  // Stable across presentation renders; an empty frontier loads only the descriptor.
+  const requestedKey=JSON.stringify([...new Set(requestedOccurrenceIds)].sort());
   useEffect(()=>{
     cache.current.clear();setResults({});setDocument(null);setError('');
   },[documentKey]);
@@ -35,17 +37,19 @@ export function useModelingRecognition(meshUrl, enabled, { client, entry } = {})
   },[enabled,meshUrl,documentKey,descriptor,retry,resources]);
   useEffect(()=>{
     if(!enabled || !descriptor)return;
-    let cancelled=false,worker=null,timer;
+    let cancelled=false,worker=null,timer,settlePending=null;
     const controller = new AbortController();
     const stop=()=>{worker?.terminate();worker=null;clearTimeout(timer);};
     const resourceSignal=resources.signal;
-    const cancel=()=>{cancelled=true;controller.abort();stop();};
+    const cancel=()=>{cancelled=true;controller.abort();stop();settlePending?.(null);settlePending=null;};
     resourceSignal?.addEventListener('abort',cancel,{once:true});
     if(resourceSignal?.aborted)cancel();
     async function recognize() {
       // Component identity is shared; face references are scoped to occurrences in the UI.
+      const requested=new Set(JSON.parse(requestedKey));
+      const components=[...new Set(descriptor.occurrences.filter(o=>requested.has(o.id)).map(o=>o.component))];
+      if(!components.length)return;
       const accepted=completedPackages.peekComponentIdentities(client,entryRef.current,{descriptor});
-      const components=[...new Set(descriptor.occurrences.map(o=>o.component))];
       for(const id of components) {
         if(cancelled)return;
         if(cache.current.has(id))continue;
@@ -66,8 +70,9 @@ export function useModelingRecognition(meshUrl, enabled, { client, entry } = {})
         const completed=completedModelingRecognition.get(key);
         if(completed){cache.current.set(id,completed);setResults(current=>({...current,[id]:completed}));continue;}
         const result=await new Promise(resolve=>{
+          settlePending=resolve;
           let settled=false;
-          const finish=value=>{if(settled || cancelled)return;settled=true;stop();resolve(value);};
+          const finish=value=>{if(settled || cancelled)return;settled=true;settlePending=null;stop();resolve(value);};
           if(!surf){finish({error:'Exact geometry is unavailable for this part.'});return;}
           try {
             worker=new Worker(new URL('./modelingTree.worker.js',import.meta.url),{type:'module'});
@@ -87,7 +92,7 @@ export function useModelingRecognition(meshUrl, enabled, { client, entry } = {})
     }
     void recognize();
     return ()=>{resourceSignal?.removeEventListener("abort",cancel);cancel();};
-  },[enabled,descriptor,meshUrl,entryRevision,retry,client,resources]);
+  },[enabled,descriptor,meshUrl,entryRevision,retry,client,resources,requestedKey]);
   const retryFailed=()=>{
     for(const [id,result] of cache.current)if(result.error)cache.current.delete(id);
     setResults(Object.fromEntries(cache.current));setRetry(n=>n+1);

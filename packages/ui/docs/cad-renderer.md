@@ -274,13 +274,30 @@ Shift toggles the resulting group and Add to prompt uses its canonical edge refs
 
 ### STEP inspector layout
 
-The STEP inspector uses one Model tab. Parts retain their assembly hierarchy and
-existing visibility/context actions. Faces, Edges, and Bodies are presentation
-folders, initially collapsed. The Face list menu switches between individual
-faces and grouping by surface type inside each part; no entity IDs change.
-Selecting a face/edge group uses the existing multi-reference selection. External
-reference reveals expand the presentation ancestors so the selected row remains
-reachable. The standalone model keeps one root instead of a duplicate wrapper.
+The STEP inspector uses one Model tab. Its rows share the file tree's row
+primitive and 28px height, with the model tree's horizontal inset. The disclosure
+button expands children; the rest of the row selects its canonical references.
+Labels keep the row's width; summaries and measurements belong in the selected
+reference details. The small eye action changes visibility, while Isolate stays
+in the context menu. A fixed-height, borderless header shows the number of
+top-level presented features and conditional visibility/isolation reset actions.
+
+Parts retain their assembly hierarchy, except redundant document wrappers are
+flattened for presentation. Flattening never rewrites occurrence or reference
+IDs. Assembly and part expansion use the same controlled state as viewport
+picking and topology requests. A collapsed assembly is picked as a unit;
+expanding it exposes its children, and expanding a visible part requests that
+part's exact topology and inferred features. Collapsing an ancestor removes its
+descendants from the requested frontier even if their saved expansion remains.
+In All selection mode, visible feature groups own their face hits; exposed
+children take precedence over their parents. Explicit Faces and Edges modes
+retain exact entity selection inside expanded parts.
+
+Isolation restricts the selectable subtree without propagating an excluded
+ancestor's disabled state into the isolated descendants. Hidden geometry stays
+unselectable. Selection reveals expand the required ancestors and scroll once
+per selection or explicit reveal command. Later expansion, recognition updates
+and manual scrolling must not pull the view back to that row.
 
 Selection details are collapsible and resizable. Measured extents, area, and radii
 appear first, with the existing reference details behind a disclosure. Extent and
@@ -299,11 +316,14 @@ return when the viewport widens. Capture actions do not contain navigation tools
 
 ### Read-only STEP features
 
-The **Model → Features** view reads existing assembly/SURF assets automatically as the
-current file’s geometry becomes available. It recognizes one unique component at
-a time in a bounded, disposable worker and shares results across repeated
-instances. It never discovers Python files, writes models, or
-changes CADgen. The existing Model inspector remains the document-geometry view.
+The Model tree reads the lightweight assembly descriptor first. Expanding a
+visible part requests inference from its existing SURF geometry, one unique
+component at a time in a bounded, disposable worker. Closed parts require no
+recognition or exact-surface request just to show their structural rows. Repeated
+instances share component results while keeping their occurrence identities.
+Recognition never discovers Python files, writes models, or reconstructs source
+history. There is no global “Recognizing geometry” progress row: the stable
+header counts presented top-level features independently of this optional work.
 
 For constant-section solids, paired analytic cap contours, straight side surfaces,
 side area and solid volume support a possible base-extrude / cut-extrude sequence.
@@ -327,11 +347,12 @@ individual edges, operations and remaining geometry all use the native canonical
 reference selection and floating Add to prompt action, scoped to the occurrence.
 The STEP assembly hierarchy exposes every part directly, with recognition counts
 and expandable operations; a difficult first component cannot hide the rest of
-the assembly. The first recognized part expands automatically. Long lists group
+the assembly. Recognition does not auto-expand another part. Long lists group
 same-kind operations into inspection folders, never inferred patterns.
-Annotation-only components show a no-faces state. Recognition continues while
-the current file’s Geometry/Features views switch, and stops on disposal or when the
-viewer invalidates its geometry. Completed recognition metadata is retained across
+Annotation-only components show a no-faces state. Collapsing an occurrence or
+its ancestor cancels recognition that is no longer requested. Closing the
+inspector, disposal and geometry invalidation also stop pending work; late
+results cannot enter the next selection or cache. Completed recognition metadata is retained across
 file mounts under the exact surface input/object identity, or a provider-scoped
 immutable SURF URL for static packages. Its separate LRU holds at most 512 unique
 components and 8 MiB of serialized metadata. The count guard accommodates
@@ -346,6 +367,22 @@ or copying geometry. Completed metadata then needs no surface request or worker;
 a missing package identity or evicted recognition result follows the usual exact
 surface-resolution path. The existing cache byte limits remain unchanged.
 Every displayed operation and selection remains scoped to its assembly occurrence.
+
+The orchestration is in [useModelingRecognition](../src/renderers/cad/workbench/useModelingRecognition.js),
+the worker in [modelingTree.worker](../src/renderers/cad/workbench/modelingTree.worker.js),
+and the bounded cache in [modelingRecognitionCache](../src/renderers/cad/workbench/modelingRecognitionCache.js).
+The current cache is in memory: app restarts do not preserve it. The persistent
+cadgen surface/mesh store and this optional recognition cache are separate.
+
+The recommended next boundary is to move pure inference and its result schema
+from UI to core, with UI retaining expansion, requests and presentation. If
+recognition becomes useful to CLI tools or must survive restarts, cadgen should
+orchestrate the same algorithm as a demand-driven artifact derivation and cache
+its metadata by exact surface input/object, algorithm version and options.
+That is a future extraction, not a new backend in this change. Do not make
+recognition a prerequisite of STEP compilation, tessellation, structural tree
+display or picking a part. It must remain independently cancellable and
+recomputable, without a source dependency or another sidecar.
 
 Independent local OCP validation rebuilds the inferred complete plans and compares
 both directional Boolean differences. This is a development check; the client

@@ -30,6 +30,9 @@ layout remain shared; operating-system details and app workflows belong to the
 host. Follow [the feature-extension workflow](docs/viewer-host.md#adding-a-shared-feature)
 when introducing a new integration.
 
+File-tab chrome uses normal-weight type. Breadcrumbs, file and model rows, and
+filter matches use muted/primary text color for emphasis, never bold weight.
+
 React, ReactDOM, Three.js and Lucide are host-supplied peers. React 18 and 19
 are supported: web and desktop use React 19.3.0. Each
 host must resolve one copy of each peer in its browser bundle. Web uses Vite
@@ -167,8 +170,11 @@ The shared CAD renderer consumes the artifact, its schema-9 `.step.json`
 sidecar and immutable store views. Embedded animation, authored appearance and
 kinematics travel in the sidecar; an adjacent `.step.js` is a retired input.
 The scene uses progressive component loading and demand-driven exact surfaces.
-The geometry-based Model/Features inspector and contextual measurements remain
-in Inspect, with client-bound surface requests made only while its panel is open.
+The Model tree shares the file tree's row primitive. Its visible expansion
+controls viewport selection, exact topology and optional feature recognition;
+collapsed parts do not trigger whole-assembly analysis. Contextual measurements
+remain in Inspect. See [model tree and recognition](docs/cad-renderer.md#step-inspector-layout)
+for selection, isolation, demand and cache ownership.
 
 Inspect uses the fixed light or dark workbench basis selected by app appearance;
 legacy CAD theme preferences are not consumed. The floating toolbar switches to

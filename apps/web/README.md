@@ -19,6 +19,10 @@ continues to expose CAD artifacts only; this migration adds no file types or
 write endpoints to the web app.
 Follow the [shared host contract](../../packages/ui/docs/viewer-host.md) when
 adding viewer features; browser effects belong in this app's adapters.
+The [shared Model tree](../../packages/ui/docs/cad-renderer.md#step-inspector-layout)
+owns expansion-based picking, lazy topology/feature inspection and isolation.
+Web uses the same tree and file-row primitives as desktop; its HTTP adapter
+does not decide which model nodes are expanded or selectable.
 
 **May depend on:** compiled `@hardcore/ui` and `@hardcore/core` exports and app
 libraries. Never another application's source. Shared packages never import

@@ -101,7 +101,7 @@ export function Breadcrumbs({ crumbs, source, activePath, onOpen }) {
 
 function CrumbButton({ crumb, last, activePath, onOpen, source }) {
   const className = cn(
-    "flex min-w-0 items-center gap-1 truncate rounded-sm px-0.5 outline-none transition-colors",
+    "flex min-w-0 items-center gap-1 truncate rounded-sm px-0.5 font-normal outline-none transition-colors",
     last ? "max-w-[60vw] text-foreground" : "text-muted-foreground",
     "hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:text-foreground"
   );
@@ -195,7 +195,7 @@ function DirectoryMenuItems({ directory, activePath, onOpen, source }) {
         ) : (
           <DropdownMenuItem
             aria-current={entry.current ? "page" : undefined}
-            className={cn("min-w-0 text-[13px]", entry.current && "bg-accent/60 font-medium")}
+            className={cn("min-w-0 text-[13px] font-normal", entry.current && "bg-accent/60 text-foreground")}
             data-active={entry.current || undefined}
             data-entry={entry.path}
             key={entry.path}
@@ -225,7 +225,7 @@ function DirectorySubMenu({ directory, label, marked, activePath, onOpen, source
     <DropdownMenuSub onOpenChange={setOpen} open={open}>
       <DropdownMenuSubTrigger
         aria-current={marked ? "page" : undefined}
-        className={cn("min-w-0 text-[13px]", marked && "bg-accent/60 font-medium")}
+        className={cn("min-w-0 text-[13px] font-normal", marked && "bg-accent/60 text-foreground")}
         data-active={marked || undefined}
         data-entry={directory}
         title={directory}

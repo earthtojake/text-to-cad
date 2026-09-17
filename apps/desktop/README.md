@@ -1561,9 +1561,12 @@ complete Python runtime and native Node dependency closure.
 
 ### STEP inspection and replay experiment
 
-Model → Features infers read-only operations from the STEP's existing assembly
-and SURF geometry in a client worker. It does not consult Python source or run
-kernel reconstruction. Geometry remains the canonical assembly/face inspector.
+The shared Model tree infers read-only features from existing SURF geometry
+when a visible part is expanded. Expansion also controls viewport selection and
+exact topology loading; desktop supplies no separate tree or inference backend.
+It does not consult Python source or run kernel reconstruction. See the shared
+[model-tree contract](../../packages/ui/docs/cad-renderer.md#step-inspector-layout)
+for isolation, reveal, selection granularity and recognition cache lifetimes.
 
 Replay and GIF/video export live separately on
 [`amy/step-reconstruction-playback`](https://github.com/earthtojake/text-to-cad/tree/amy/step-reconstruction-playback).
