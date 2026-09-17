@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Box, Boxes, ChevronRight } from "lucide-react";
 import { cn } from "@/ui/utils";
-import RobotComponentReference from "./RobotComponentReference";
+import RobotComponentDetails from "./RobotComponentDetails";
 import { TREE_GLYPH_ICON_CLASSES, TreeDepthGuides, treeRowClassName, treeRowIndentPx } from "./treeRow";
 
 // A robot's components ARE a hierarchy — a link owns the named objects inside the
@@ -139,7 +139,7 @@ export default function RobotComponentsSection({ components, selectedIds, onSele
           );
         })}
       </div>
-      <RobotComponentReference components={components} selectedIds={selectedIds} />
+      <RobotComponentDetails components={components} selectedIds={selectedIds} />
     </div>
   );
 }

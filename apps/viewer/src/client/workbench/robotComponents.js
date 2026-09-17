@@ -84,6 +84,7 @@ function splitVisual(visual) {
       bounds: object.bounds,
       sourceMesh,
       sourceMeshKey: `${visual.sourceMeshKey}/object/${index}`,
+      color: String(object.color || ""),
       vertexCount: object.vertexCount,
       triangleCount: object.triangleCount
     });
@@ -96,20 +97,37 @@ export function buildRobotComponentGeometry(meshData) {
   return { ...meshData, parts: (meshData.parts || []).flatMap(splitVisual) };
 }
 
-export function robotComponentReference(file, component) {
-  // Explicit field names make the reference usable in prompts without STEP's topology grammar.
-  const fields = [
-    ["link", component.linkName],
-    ["visual", component.visualId],
-    ["object", component.meshObjectId],
-    ["index", component.meshObjectIndex],
-    ["name", component.componentName || component.name]
-  ];
-  const filePath = String(file).split("/").map(encodeURIComponent).join("/");
-  return `${filePath}#${fields.map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join("&")}`;
+// A link mesh is in the units and frame of its own FILE: the `<mesh scale>` and the
+// visual origin live in the visual's transform, and URDF itself is metres. So an
+// object's size on the robot is its mesh-space box scaled by that transform, reported
+// in millimetres because that is the size robot parts are quoted in.
+//
+// The basis norms are the scale whichever way the 16 numbers are laid out, which is
+// what makes this safe to read without knowing the producer's convention. A rotation
+// leaves lengths alone; a NON-uniform scale under a rotation would need the box
+// rebuilt rather than measured, and no URDF in the corpus writes one.
+function transformScale(transform) {
+  if (!Array.isArray(transform) || transform.length !== 16) {
+    return [1, 1, 1];
+  }
+  return [0, 4, 8].map((offset) => {
+    const length = Math.hypot(transform[offset], transform[offset + 1], transform[offset + 2]);
+    return Number.isFinite(length) && length > 0 ? length : 1;
+  });
 }
 
-export function robotComponents(meshData, file) {
+function componentSizeMillimetres(part) {
+  const min = part?.bounds?.min;
+  const max = part?.bounds?.max;
+  if (!Array.isArray(min) || !Array.isArray(max) || min.length < 3 || max.length < 3) {
+    return null;
+  }
+  const scale = transformScale(part.localTransform);
+  const extents = [0, 1, 2].map((axis) => Math.abs(Number(max[axis]) - Number(min[axis])) * scale[axis] * 1000);
+  return extents.every((extent) => Number.isFinite(extent)) ? extents : null;
+}
+
+export function robotComponents(meshData) {
   return (meshData?.parts || []).filter((part) => part.componentName).map((part) => ({
     id: part.id,
     name: part.componentName,
@@ -117,7 +135,9 @@ export function robotComponents(meshData, file) {
     visualId: part.visualId,
     meshObjectId: part.meshObjectId,
     meshObjectIndex: part.meshObjectIndex,
-    mesh: part.partFileRef || part.meshUrl,
-    reference: robotComponentReference(file, part)
+    color: part.color || "",
+    triangleCount: Number(part.triangleCount) || 0,
+    vertexCount: Number(part.vertexCount) || 0,
+    sizeMillimetres: componentSizeMillimetres(part)
   }));
 }

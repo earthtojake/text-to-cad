@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  buildRobotComponentGeometry,
-  robotComponentReference,
-  robotComponents
-} from "./robotComponents.js";
+import { buildRobotComponentGeometry, robotComponents } from "./robotComponents.js";
 
 // A visual whose loaded mesh carries `count` named objects laid out back to back, each a
 // single triangle. The shape mirrors what the mesh loaders hand the URDF geometry builder.
@@ -139,23 +135,30 @@ test("buildRobotComponentGeometry passes absent geometry straight through", () =
   assert.deepEqual(buildRobotComponentGeometry({ parts: [] }).parts, []);
 });
 
-test("a component reference names the file, link, visual and object", () => {
-  const meshData = buildRobotComponentGeometry({
-    parts: [visualWithObjects("arm:v1", "arm", [{ name: "bracket" }])]
-  });
-  const [component] = robotComponents(meshData, "models/robot arm.urdf");
-  assert.equal(component.name, "bracket");
-  assert.equal(component.linkName, "arm");
-  assert.equal(component.mesh, "arm.3mf");
-  assert.equal(
-    component.reference,
-    "models/robot%20arm.urdf#link=arm&visual=arm%3Av1&object=3mf%3A0&index=0&name=bracket"
-  );
-  // Path separators survive; everything else in a segment is percent-encoded.
-  assert.equal(
-    robotComponentReference("a/b/c.urdf", {
-      linkName: "l", visualId: "l:v1", meshObjectId: "0", meshObjectIndex: 0, componentName: "x&y"
-    }),
-    "a/b/c.urdf#link=l&visual=l%3Av1&object=0&index=0&name=x%26y"
-  );
+test("a component reports what it is: colour, counts and its size on the robot", () => {
+  // The link mesh is in its own file's units and the visual's transform carries the
+  // `<mesh scale>`, so a 30-unit box under a 0.001 scale is 30 mm of robot.
+  const visual = visualWithObjects("arm:v1", "arm", [{
+    name: "bracket",
+    // The counts stay the fixture's own: they are RANGES into the visual's mesh, and
+    // a count that does not describe a slice of it is what makes an object unsliceable.
+    overrides: { color: "#ff8800", bounds: { min: [0, 0, 0], max: [30, 10, 2] } }
+  }]);
+  visual.localTransform = [
+    0.001, 0, 0, 0,
+    0, 0.001, 0, 0,
+    0, 0, 0.001, 0,
+    0, 0, 0, 1
+  ];
+  const [component] = robotComponents(buildRobotComponentGeometry({ parts: [visual] }));
+  assert.equal(component.color, "#ff8800");
+  assert.equal(component.triangleCount, 1);
+  assert.equal(component.vertexCount, 3);
+  assert.deepEqual(component.sizeMillimetres, [30, 10, 2]);
+});
+
+test("a component with no bounds reports no size rather than a wrong one", () => {
+  const visual = visualWithObjects("arm:v1", "arm", [{ name: "bracket" }]);
+  const [component] = robotComponents(buildRobotComponentGeometry({ parts: [visual] }));
+  assert.equal(component.sizeMillimetres, null);
 });

@@ -311,17 +311,19 @@ them. A mesh object whose loader ranges do not describe a slice of its visual is
 reported once on the console and leaves that visual whole — it contributes no
 component rows, and the robot renders unchanged.
 
-A selected component's REFERENCE sits at the foot of the Components tab, not in
-a tab of its own: it is about the row just clicked, and a tab for it would stand
-empty whenever nothing was selected. It shows the link and the object, with a
-copy button. Robot references are prompt locators of the form
-`robot.urdf#link=arm&visual=arm%3Av1&object=3mf%3A0&index=0&name=bracket`.
-Nothing parses one yet: no CLI and no skill accepts this form, so it is a string
-a person pastes into a prompt for another person or an agent to read.
-The prefix identifies the robot file RELATIVE TO THE SERVED ROOT — the path the
-catalog and the sidebar show, not the absolute one the session keys its pose
-state under, because the locator's whole purpose is to be pasted somewhere else.
-Path segments and fragment values are percent-encoded.
+A selected component's FACTS sit at the foot of the Components tab, not in a tab
+of their own: they are about the row just clicked, and a tab for them would stand
+empty whenever nothing was selected. Colour, link, triangle and vertex counts,
+and the object's size on the robot in millimetres — its mesh-space box scaled by
+the visual's transform, since a link mesh keeps its own file's units and the
+`<mesh scale>` lives in that transform. Colour leads because a cadgen mesh export
+groups objects BY colour, so it is what tells two rows of one link apart.
+
+There is no reference string to copy. There was one, a locator of the form
+`robot.urdf#link=arm&visual=...&object=...`, and nothing anywhere parses it: no
+CLI and no skill accepts that grammar, so copying it led nowhere. If robot
+components ever need a locator, it should be the shape STEP already uses
+(`file#selector`) and it should ship with the door that reads it.
 `visual` is the parsed visual ID (`<link>:v<one-based visual ordinal>` for URDF);
 `object` is the mesh loader's object ID and `index` its zero-based position in the
 loaded mesh's parts list. `name` preserves the authored object name. Resolve the

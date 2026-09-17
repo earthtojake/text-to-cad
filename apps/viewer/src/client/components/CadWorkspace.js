@@ -1976,16 +1976,9 @@ export default function CadWorkspace({
       return selectedUrdfLinkMeshGeometryResult;
     }
   }, [renderSession.enabled, selectedUrdfLinkMeshGeometryResult]);
-  // The locator is meant to be pasted into a prompt, so it names the file the way the
-  // catalog and the sidebar do — relative to the served root. fileKey is the absolute
-  // path this session stores pose state under, and a copied `/tmp/.../arm.urdf#link=...`
-  // means nothing to anyone else.
-  const selectedUrdfComponentFileRef = selectedUrdfFileRef
-    ? (String(selectedEntry?.rootRelativeFile || "").trim() || selectedUrdfFileRef)
-    : "";
   const selectedUrdfComponents = useMemo(
-    () => robotComponents(selectedUrdfMeshGeometryResult.meshData, selectedUrdfComponentFileRef),
-    [selectedUrdfMeshGeometryResult.meshData, selectedUrdfComponentFileRef]
+    () => robotComponents(selectedUrdfMeshGeometryResult.meshData),
+    [selectedUrdfMeshGeometryResult.meshData]
   );
   const robotSelection = useRobotComponentSelection(
     selectedUrdfComponents, selectedUrdfMeshGeometryResult.meshData, selectedUrdfFileRef
