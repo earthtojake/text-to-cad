@@ -74,6 +74,9 @@ protocol relationship never imports Python or discovers an interpreter.
   meet only in the effect records. Flexible swept bodies use
   [tube deformation](docs/tube-deformation.md), deforming the original STEP
   tessellation through analytic centerlines in that same shared effects pass.
+  Browser imports use temporary Blob URLs, revoked after module evaluation;
+  hosts with a content security policy allow `blob:` in `script-src`. Node
+  imports use data URLs because its ESM loader does not support Blob URLs.
 - **Direct GLB animation stays native**: interactive direct-GLB loading retains
   the glTF scene graph and standard translation, rotation, scale, skin, and
   morph-weight tracks for a Three `AnimationMixer`. Static mesh normalization

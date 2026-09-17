@@ -972,6 +972,12 @@ and material edits belong to the model session and survive mode switches;
 returning to Inspect restores its Display settings. Supported Kinematics and
 Animation controls remain available in both modes.
 
+Embedded STEP animation modules load through temporary Blob URLs in the
+renderer. Its content security policy permits `blob:` scripts for this path,
+while retaining the restrictions on remote scripts, inline scripts and `eval`.
+The shared loader revokes each URL after module evaluation; no adjacent
+JavaScript file is discovered or written.
+
 Neither a mode switch nor a Studio edit changes the app's appearance. The
 Electron `theme` suite samples the document through these interactions, and
 `cad-scenes` checks that Display, Studio and Materials retain their separate

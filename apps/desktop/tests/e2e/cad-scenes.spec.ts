@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,7 +7,10 @@ import { _electron as electron, expect, test, type ElectronApplication, type Pag
 import type { HardcoreApi } from "../../src/shared/ipc";
 import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-runtime";
 
-declare const window: { hardcore: HardcoreApi };
+declare const window: {
+  hardcore: HardcoreApi;
+  __cadDisplayRecords?: () => { partId: string; matrix: number[] | null }[];
+};
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const repoRoot = path.resolve(appRoot, "../..");
 let app: ElectronApplication;
@@ -20,6 +24,18 @@ test.beforeAll(async () => {
   // This project owns its tiny fixtures and never reads the shared models corpus.
   project = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-cad-scenes-project-"));
   fs.copyFileSync(path.join(repoRoot, "tests/fixtures/cad/import-smoke.step"), path.join(project, "part.step"));
+  const animatedStep = fs.readFileSync(path.join(project, "part.step"));
+  fs.writeFileSync(path.join(project, "animated.step"), animatedStep);
+  fs.writeFileSync(path.join(project, "animated.step.json"), JSON.stringify({
+    schemaVersion: 9,
+    documentHash: createHash("sha256").update(animatedStep).digest("hex"),
+    animation: {
+      language: "javascript",
+      source: `export const clips = {
+        slide: { label: "Slide", duration: 4, update(t, m) { m.get("smoke").translate([t, 0, 0]); } }
+      };`,
+    },
+  }));
   fs.writeFileSync(path.join(project, "hinge.urdf"), `<?xml version="1.0"?>
 <robot name="hinge">
   <link name="base"><visual><geometry><box size="0.1 0.1 0.04"/></geometry></visual></link>
@@ -29,10 +45,9 @@ test.beforeAll(async () => {
   </joint>
 </robot>`);
   userData = cadTestProfile("cad-scenes");
-  const { CAD_DESKTOP_PYTHON: _override, ...inherited } = process.env;
   app = await electron.launch({
     args: [path.join(appRoot, "out/main/index.js"), `--user-data-dir=${userData}`],
-    env: { ...inherited, ...cadRegistryEnvironment(userData), NODE_ENV: "test", HARDCORE_FAKE_AGENT: path.join(appRoot, "tests/fake-agent/index.mjs"),
+    env: { ...process.env, ...cadRegistryEnvironment(userData), NODE_ENV: "test", HARDCORE_FAKE_AGENT: path.join(appRoot, "tests/fake-agent/index.mjs"),
       CADGEN_DAEMON: "0", CADGEN_CACHE_DIR: path.join(userData, "cad-cache"), CADGEN_DAEMON_STATE_DIR: path.join(userData, "cad-daemon") },
   });
   page = await app.firstWindow();
@@ -47,7 +62,10 @@ test.beforeAll(async () => {
         request: response.request().postData(), response: (await response.text().catch(String)).slice(0, 4000) })}`);
     }
   });
-  test.skip(!cadRuntimeReady(await page.evaluate(() => window.hardcore.runtime.status())), "CAD runtime required");
+  const runtime = await page.evaluate(() => window.hardcore.runtime.status());
+  console.info(`[CAD runtime] ${JSON.stringify({ python: runtime.python, source: runtime.source, cadgenVersion: runtime.cadgenVersion })}`);
+  test.skip(!cadRuntimeReady(runtime), "CAD runtime required");
+  if (process.env.CAD_DESKTOP_PYTHON) expect(runtime.python).toBe(process.env.CAD_DESKTOP_PYTHON);
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1600, 900));
   await page.evaluate(() => window.hardcore.settings.set({ theme: "dark", reduceMotion: true, defaultGitMode: "none", fetchBeforeCreate: false }));
   await page.evaluate(root => window.hardcore.projects.addPath({ path: root }), project);
@@ -137,5 +155,50 @@ test("robot Kinematics edits, preserves and resets a joint through the desktop I
   await page.getByRole("button", { name: "Reset", exact: true }).click();
   await expect(joint).toHaveValue("0°");
   await page.screenshot({ path: test.info().outputPath("robot-kinematics.png"), animations: "disabled" });
+  expect(errors).toEqual([]);
+});
+
+test("embedded STEP animation loads, plays and scrubs under the desktop CSP", async () => {
+  // Keep the ordinary UI budget separate from the existing cold CAD-load wait.
+  test.setTimeout(60_000 + 90_000);
+  await openFile("animated.step");
+  await page.getByRole("tab", { name: "Animation", exact: true }).click();
+  const animation = page.getByRole("tabpanel", { name: "Animation", exact: true });
+  const play = animation.getByRole("button", { name: "Play animation", exact: true });
+  // The data: module regression renders an error in this panel instead of controls.
+  await expect(play).toBeEnabled();
+  const time = animation.getByLabel("Animation time value", { exact: true });
+  await expect(time).toHaveValue("0.00s");
+
+  await expect.poll(async () => page.evaluate(() => window.__cadDisplayRecords?.().length || 0)).toBeGreaterThan(0);
+  const rest = await page.evaluate(() => window.__cadDisplayRecords?.()[0]);
+  expect(rest?.matrix).toHaveLength(16);
+  if (!rest?.matrix) throw new Error("Animated STEP did not publish a display transform");
+  const restX = rest.matrix[12]!;
+  const displayMatrix = () => page.evaluate(partId => (
+    window.__cadDisplayRecords?.().find(record => record.partId === partId)?.matrix || null
+  ), rest.partId);
+
+  await play.click();
+  await expect.poll(async () => Number.parseFloat(await time.inputValue())).toBeGreaterThan(0.05);
+  await expect.poll(async () => (await displayMatrix())?.[12] ?? restX).toBeGreaterThan(restX + 0.05);
+  await animation.getByRole("button", { name: "Pause animation", exact: true }).click();
+  await expect(play).toBeVisible();
+
+  await time.fill("1.25");
+  await time.press("Enter");
+  await expect(time).toHaveValue("1.25s");
+  // Read the existing diagnostic seam's live mesh matrix, not just transport state.
+  await expect.poll(async () => (await displayMatrix())?.[12] ?? restX).toBeCloseTo(restX + 1.25, 6);
+  await page.screenshot({ path: test.info().outputPath("embedded-step-animation.png"), animations: "disabled" });
+  await animation.getByRole("button", { name: "Restart animation", exact: true }).click();
+  await expect(time).toHaveValue("0.00s");
+  await expect.poll(displayMatrix).toEqual(rest.matrix);
+
+  const policy = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute("content");
+  const scriptSources = policy?.split(";").map(directive => directive.trim().split(/\s+/))
+    .find(([directive]) => directive === "script-src")?.slice(1);
+  // Permit the document's in-memory module without enabling data:, eval or remote scripts.
+  expect(scriptSources).toEqual(["'self'", "blob:"]);
   expect(errors).toEqual([]);
 });

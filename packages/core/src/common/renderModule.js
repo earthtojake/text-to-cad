@@ -20,12 +20,22 @@ function base64Utf8(text) {
 
 export async function importAnimationModule(moduleSource, { name = "embedded animation" } = {}) {
   const text = String(moduleSource || "");
-  const url = `data:text/javascript;base64,${base64Utf8(text)}`;
+  // Browser hosts permit these document-owned modules with script-src blob:;
+  // they need not allow arbitrary data: scripts or unsafe-eval. Node's ESM
+  // loader does not support blob: URLs, so retain data: for that environment.
+  const browserModule = typeof window !== "undefined";
+  const url = browserModule
+    ? URL.createObjectURL(new Blob([text], { type: "text/javascript" }))
+    : `data:text/javascript;base64,${base64Utf8(text)}`;
   try {
     return await import(/* webpackIgnore: true */ /* @vite-ignore */ url);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    throw new Error(`${name}: ${reason}`);
+    throw new Error(`${name}: ${reason.replaceAll(url, "embedded animation module")}`);
+  } finally {
+    // Import has evaluated the self-contained module; its namespace and clip
+    // functions remain usable without retaining the source's Blob storage.
+    if (browserModule) URL.revokeObjectURL(url);
   }
 }
 

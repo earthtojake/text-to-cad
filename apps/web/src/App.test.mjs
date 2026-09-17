@@ -12,7 +12,7 @@ const require = createRequire(import.meta.url);
 const temporary = await mkdtemp(join(tmpdir(), 'hardcore-web-app-'));
 const output = join(temporary, 'app.mjs');
 await build({
-  stdin: { contents: `export {default as App} from './App.tsx'; export {act,createElement} from 'react'; export {createRoot} from 'react-dom/client'; export {snapshot} from '@hardcore/ui/file-viewer'; export {autoReloadOptions} from '@hardcore/ui/renderers/cad/presentation';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
+  stdin: { contents: `export {default as App} from './App.tsx'; export {act,createElement} from 'react'; export {createRoot} from 'react-dom/client'; export {snapshot} from '@hardcore/ui/file-viewer'; export {topBarSnapshot} from './client/components/workbench/ViewerTopBar.jsx'; export {autoReloadOptions} from '@hardcore/ui/renderers/cad/presentation';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
   bundle: true, platform: 'node', format: 'esm', jsx: 'automatic', outfile: output,
   banner: { js: `import {createRequire} from 'node:module'; const require=createRequire(import.meta.url);` },
   plugins: [{ name: 'host-boundaries', setup(plugin) {
@@ -26,17 +26,19 @@ await build({
       if (args.path.endsWith('/cad')) return { contents: `export {createCadPreferences} from ${JSON.stringify(fileURLToPath(new URL('../../../packages/ui/src/renderers/cad/preferences.ts', import.meta.url)))}; export const createCadRenderer=()=>({id:'cad'});`, loader: 'js', resolveDir: fileURLToPath(new URL('.', import.meta.url)) };
       if (args.path.endsWith('/presentation')) return { contents: 'let reloadOptions;export const autoReloadOptions=()=>reloadOptions;export const useViewerAutoReload=(_server,options)=>{reloadOptions=options;return false;};export const MissingFileAlert=()=>null;export const ViewerLoadingOverlay=()=>null;export const StatusToast=()=>null;', loader: 'js' };
       if (args.path.endsWith('/empty')) return { contents: 'export const EmptyCadBackdrop=({children})=>children;', loader: 'js' };
-      return { contents: 'export default function ViewerTopBar(){return null}', loader: 'js' };
+      return { contents: 'let current; export default function ViewerTopBar(props){current=props; return null} export const topBarSnapshot=()=>current;', loader: 'js' };
     });
   } }],
 });
-const { App, act, createElement, createRoot, snapshot, autoReloadOptions } = await import(pathToFileURL(output).href);
+const { App, act, createElement, createRoot, snapshot, topBarSnapshot, autoReloadOptions } = await import(pathToFileURL(output).href);
 after(() => rm(temporary, { recursive: true, force: true }));
 
 test('web host preserves compact navigation, history, root state and focus refresh lifecycle', async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'http://cad.local/?file=one.step' });
   const { window } = dom;
-  const matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+  let systemDark = false;
+  const appearanceListeners = new Set();
+  const matchMedia = () => ({ get matches() { return systemDark; }, addEventListener(_name, listener) { appearanceListeners.add(listener); }, removeEventListener(_name, listener) { appearanceListeners.delete(listener); } });
   for (const [key, value] of Object.entries({ window, document: window.document, navigator: window.navigator, localStorage: window.localStorage, sessionStorage: window.sessionStorage, matchMedia, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   window.matchMedia = matchMedia;
   window.innerWidth = 480;
@@ -48,6 +50,16 @@ test('web host preserves compact navigation, history, root state and focus refre
   const root = createRoot(window.document.getElementById('root'));
   try {
     await act(() => root.render(createElement(App, { client, server: { rootId: 'a' } })));
+    assert.equal(topBarSnapshot().colorSchemePreference, 'system');
+    assert.equal(topBarSnapshot().resolvedColorSchemeMode, 'light');
+    await act(() => { systemDark = true; for (const listener of appearanceListeners) listener(); });
+    assert.equal(topBarSnapshot().colorSchemePreference, 'system');
+    assert.equal(topBarSnapshot().resolvedColorSchemeMode, 'dark');
+    await act(() => topBarSnapshot().onColorSchemePreferenceChange('light'));
+    assert.equal(topBarSnapshot().colorSchemePreference, 'light');
+    assert.equal(topBarSnapshot().resolvedColorSchemeMode, 'light');
+    await act(() => topBarSnapshot().onColorSchemePreferenceChange('system'));
+    assert.equal(topBarSnapshot().resolvedColorSchemeMode, 'dark');
     assert.equal(snapshot().file, 'one.step');
     assert.deepEqual(await autoReloadOptions().fetchServerInfo(), { ok: true, identityToken: 'restarted' });
     assert.deepEqual(serverCalls[0], { fresh: true });
@@ -95,6 +107,7 @@ test('web host preserves compact navigation, history, root state and focus refre
     window.dispatchEvent(new window.Event('focus'));
     assert.equal(calls.length, 2);
     assert.equal(listeners.size, 0);
+    assert.equal(appearanceListeners.size, 0);
     dom.window.close();
   }
 });
