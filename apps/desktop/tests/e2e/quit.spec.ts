@@ -103,7 +103,12 @@ test("the app quits in under two seconds with everything running, leaving no chi
 
   // The isolated test disables the shared warm daemon. Every child it starts
   // belongs to this app, including CAD workers and Chromium helpers.
-  await expect.poll(() => tree.filter((entry) => alive(entry.pid)).map((entry) => entry.command), { timeout: 5_000 }).toEqual([]);
+  await expect.poll(() => tree.filter((entry) => alive(entry.pid)).map((entry) => ({
+    ...entry,
+    // Capture current state, not just a pre-quit name: a live orphan, an
+    // exited zombie and a reused PID need different lifecycle diagnoses.
+    current: processState(entry.pid),
+  })), { timeout: 5_000 }).toEqual([]);
   console.info(`[quit] everything gone after ${Date.now() - started}ms`);
   expect(elapsed).toBeLessThan(QUIT_BUDGET_MS);
 
@@ -117,6 +122,14 @@ function alive(pid: number): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+function processState(pid: number): string {
+  try {
+    return execFileSync("ps", ["-o", "pid=,ppid=,pgid=,stat=,command=", "-p", String(pid)], { encoding: "utf8" }).trim().slice(0, 300);
+  } catch {
+    return "exited during inspection";
   }
 }
 
