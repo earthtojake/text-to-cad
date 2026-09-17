@@ -378,6 +378,10 @@ function statusOnlyFileSheetTitle(sourceFormat) {
 // file-list chip reads that way; the viewport card is a sentence and needs a capital.
 
 
+/** How long the held frame takes to fade once the other side of the document/model toggle has presented. */
+const VIEW_SWITCH_FADE_MS = 360;
+/** The longest a held frame stays up when the other side is slow to present. */
+const VIEW_SWITCH_HOLD_MAX_MS = 6000;
 const EMPTY_LIST = Object.freeze([]);
 const EMPTY_MATERIAL_OVERRIDES = Object.freeze({});
 const URDF_POSE_PICKER_DEFAULT_CENTER = Object.freeze([0, 0, 0]);
@@ -2785,11 +2789,49 @@ export default function CadWorkspace({
   );
   const currentPreviewVisible = Boolean(editingPreview.entry && selectedMeshMatches && !selectedMeshPartial &&
     !presentationPending && Number(editingPreview.state.preview?.revision) === Number(editingPreview.state.revision));
+  // The document/model toggle crossfades: the last frame of what was showing is held
+  // over the viewport while the other side loads, and fades once it has presented.
+  // `fromKey` is the entry the frame belongs to, so a fade never starts on that entry.
+  const [viewSwitchFrame, setViewSwitchFrame] = useState(null);
   const completedViewFile = useRef("");
   useEffect(() => {
     if (!effectiveViewerLoading && !selectedMeshPartial && !presentationPending &&
         (selectedMeshData || selectedEntryIsDrawingDocument)) completedViewFile.current = selectedKey;
   }, [effectiveViewerLoading, selectedMeshPartial, presentationPending, selectedMeshData, selectedEntryIsDrawingDocument, selectedKey]);
+  // The held frame fades once the other side is on screen. A frame with no presentation
+  // to wait for (the switch failed, or the user moved elsewhere) still clears after a beat.
+  // Fast path: the other side has presented, so let the held frame go on the next beat.
+  useEffect(() => {
+    if (!viewSwitchFrame || viewSwitchFrame.fading) {
+      return undefined;
+    }
+    const presented = selectedKey !== viewSwitchFrame.fromKey && !effectiveViewerLoading && !selectedMeshPartial && !presentationPending;
+    if (!presented) {
+      return undefined;
+    }
+    const timer = setTimeout(() => setViewSwitchFrame((current) => (current ? { ...current, fading: true } : current)), 60);
+    return () => clearTimeout(timer);
+  }, [viewSwitchFrame, selectedKey, effectiveViewerLoading, selectedMeshPartial, presentationPending]);
+  // Ceiling: a frame never outlives the load by much. Keyed on the frame alone so the
+  // loading state's churn cannot keep resetting it.
+  useEffect(() => {
+    if (!viewSwitchFrame || viewSwitchFrame.fading) {
+      return undefined;
+    }
+    const timer = setTimeout(() => setViewSwitchFrame((current) => (current ? { ...current, fading: true } : current)), VIEW_SWITCH_HOLD_MAX_MS);
+    return () => clearTimeout(timer);
+  }, [viewSwitchFrame]);
+  useEffect(() => {
+    if (!viewSwitchFrame?.fading) {
+      return undefined;
+    }
+    const reduced = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    const timer = setTimeout(() => {
+      URL.revokeObjectURL(viewSwitchFrame.url);
+      setViewSwitchFrame(null);
+    }, reduced ? 0 : VIEW_SWITCH_FADE_MS);
+    return () => clearTimeout(timer);
+  }, [viewSwitchFrame]);
   const selectedDrawingBendAxisCount = useMemo(() => {
     if (!drawingGeometry?.geometry) {
       return 0;
@@ -3199,14 +3241,30 @@ export default function CadWorkspace({
   // lookup and the entry opener exist.
   const openDrawingSourceRef = useRef(null);
   const openPartDrawingRef = useRef(null);
+  const beginViewSwitch = useCallback(async (open) => {
+    let url = "";
+    try {
+      const blob = await viewerRef.current?.captureFrameBlob?.();
+      if (blob) url = URL.createObjectURL(blob);
+    } catch {
+      url = "";
+    }
+    if (url) {
+      setViewSwitchFrame((current) => {
+        if (current?.url) URL.revokeObjectURL(current.url);
+        return { url, fromKey: selectedKey, fading: false };
+      });
+    }
+    open();
+  }, [selectedKey]);
   const handleDrawingViewModeChange = useCallback((mode) => {
     const next = mode === "2d" ? "2d" : "3d";
     if (next === "3d" && openDrawingSourceRef.current) {
-      openDrawingSourceRef.current();
+      void beginViewSwitch(openDrawingSourceRef.current);
       return;
     }
     if (next === "2d" && openPartDrawingRef.current) {
-      openPartDrawingRef.current();
+      void beginViewSwitch(openPartDrawingRef.current);
       return;
     }
     setDrawingViewMode(next);
@@ -3217,7 +3275,7 @@ export default function CadWorkspace({
       return;
     }
     viewerRef.current?.activateDefaultViewPlane?.();
-  }, []);
+  }, [beginViewSwitch]);
 
   // A dimensioned drawing is a sheet: it opens looking straight down at it. The 3D toggle
   // is still there for anyone who wants the tilt; the default is the drawing's own view.
@@ -7565,6 +7623,19 @@ export default function CadWorkspace({
         data-cad-scene-backdrop={sceneBackdrop}
         style={{ backgroundColor: sceneBackdrop }}
       >
+        {viewSwitchFrame ? (
+          <img
+            src={viewSwitchFrame.url}
+            alt=""
+            aria-hidden="true"
+            data-view-switch-frame={viewSwitchFrame.fading ? "fading" : "held"}
+            className="pointer-events-none absolute inset-0 z-10 h-full w-full select-none object-cover"
+            style={{
+              opacity: viewSwitchFrame.fading ? 0 : 1,
+              transition: `opacity ${VIEW_SWITCH_FADE_MS}ms ease-out`
+            }}
+          />
+        ) : null}
         <CadRenderPane
           viewerRef={viewerRef}
           renderFormat={effectiveRenderFormat}
