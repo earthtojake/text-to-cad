@@ -82,7 +82,7 @@ export interface RendererViewProps {
   onChromeVisibilityChange: (visible: boolean) => void;
   /** Renderer work that a host may present beside the filename. */
   onActivityChange: (activity: FileActivity | null) => void;
-  onOpenFile: (path: string, options?: { target: "current" | "new" }) => void;
+  onOpenFile: (path: string) => void;
   appearance: { colorScheme: "light" | "dark" };
   state: JsonValue | undefined;
   onStateChange: (state: JsonValue) => void;

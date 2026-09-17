@@ -65,7 +65,7 @@ export function FileViewer({ file, source, renderers, state, onStateChange, onOp
     body = <RenderBoundary key={key} onError={onError}><Renderer key={key} file={loaded.file} source={source} document={document}
       openPanel={openId} panelSlot={panelSlot} onPanelOpen={setPanel} onReady={onReady} onChromeVisibilityChange={onChromeVisibilityChange}
       onActivityChange={onActivityChange}
-      onOpenFile={(next, options) => onOpenFile(next, options ?? { target: "new" })} appearance={appearance}
+      onOpenFile={(next) => onOpenFile(next, { target: "new" })} appearance={appearance}
       state={state.renderers?.[rendererStateKey]} onStateChange={setRendererState} reload={reload} /></RenderBoundary>;
   }
   return <div className="hardcore-file-viewer flex h-full min-h-0 flex-col" ref={rootRef} data-source-id={source.id}>

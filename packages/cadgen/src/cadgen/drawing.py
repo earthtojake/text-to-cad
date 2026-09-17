@@ -105,14 +105,7 @@ def source_step(path: str | Path):
             f"source_step: {resolved} does not exist. Run the model that writes it first "
             "(python <model>.py); a drawing documents the artifact, it does not build it."
         )
-    shape = import_step(str(resolved))
-    # The sheet records which file it documents (the DXF's CADGEN_SOURCE custom
-    # property), so a viewer can go from the drawing back to the model.
-    try:
-        shape.__cadgen_source__ = resolved  # type: ignore[attr-defined]
-    except AttributeError:
-        pass
-    return shape
+    return import_step(str(resolved))
 
 
 def _resolve_relative(path: Path, *, depth: int) -> Path:
@@ -376,26 +369,13 @@ def _dimstyle(doc, text_height: float):
     return "Standard"
 
 
-#: DXF custom header property naming the model a drawing documents, relative to the DXF.
-SOURCE_MODEL_PROPERTY = "CADGEN_SOURCE"
-
-
-def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str, out_dir: Path | None = None):
+def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
     """Build the ezdxf document for one sheet. Returns the document."""
     import ezdxf
-    import os
     from ezdxf.enums import TextEntityAlignment
 
     doc = ezdxf.new("R2010", setup=True)
     doc.units = ezdxf.units.MM
-    sources = []
-    for view in sheet.views:
-        source = getattr(view.shape, "__cadgen_source__", None)
-        if source and source not in sources:
-            sources.append(Path(source))
-    if sources:
-        relative = os.path.relpath(sources[0], out_dir) if out_dir else str(sources[0])
-        doc.header.custom_vars.append(SOURCE_MODEL_PROPERTY, relative.replace(os.sep, "/"))
     msp = doc.modelspace()
     for name, (color, linetype, weight) in _LAYERS.items():
         aci = 7 if sheet.ink == "mono" and name != "HIDDEN" else color
@@ -596,7 +576,7 @@ def drawing(func: Callable[..., Any] | None = None, *, out: str | None = None, p
             with _pinned_ezdxf_metadata():
                 for index, sheet in enumerate(sheets, start=1):
                     label = fn.__name__
-                    doc = _render_sheet(sheet, index=index, count=len(sheets), label=label, out_dir=target.parent)
+                    doc = _render_sheet(sheet, index=index, count=len(sheets), label=label)
                     docs.append(doc)
                     path = target if index == 1 else target.with_name(f"{target.stem}-sheet{index}{target.suffix}")
                     write_dxf(_emit(doc, label=f"{label} sheet {index}"), path)
