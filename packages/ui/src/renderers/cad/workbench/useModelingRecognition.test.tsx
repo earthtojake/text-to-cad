@@ -2,15 +2,19 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createCadClient } from '@hardcore/core/client';
 import { useModelingRecognition as useRecognition } from './useModelingRecognition.js';
-import { useStepModeling } from './useStepModeling.js';
+import { useStepModeling as useStepModelingHook } from './useStepModeling.js';
 import { completedPackages } from '../render/completedPackageCache.js';
 import { entryMeshAssetSignature } from '@hardcore/core/lib/entryAssets.js';
 import { completedModelingRecognition, modelingRecognitionKey } from './modelingRecognitionCache.js';
 import { installRuntimePackageDescriptor } from '../components/workbench/hooks/packageDescriptorCache.js';
 
 let fixtureClient;
+let fixtureOccurrenceIds: string[] = [];
 function useModelingRecognition(url, enabled, options = {}) {
-  return useRecognition(url, enabled, { client: fixtureClient, ...options });
+  return useRecognition(url, enabled, { client: fixtureClient, requestedOccurrenceIds: fixtureOccurrenceIds, ...options });
+}
+function useStepModeling(entry, enabled, options = {}) {
+  return useStepModelingHook(entry, enabled, { requestedOccurrenceIds: fixtureOccurrenceIds, ...options });
 }
 class RecognitionWorker {
   static instances: RecognitionWorker[] = [];
@@ -23,6 +27,7 @@ class RecognitionWorker {
 const tree = [{ id: 'feature', label: 'Base extrude', faces: [1], edges: [] }];
 let fixture = 0;
 function setup() {
+  fixtureOccurrenceIds = ['o1', 'o2', 'o3'];
   const version = ++fixture;
   vi.stubGlobal('Worker', RecognitionWorker);
   const document = (name: string, object = 'exact', cid = 'c') => ({
@@ -64,6 +69,7 @@ function acceptedPackage(count = 1) {
   }
   const descriptor = { kind: 'assembly-package', tree: digest(2000), viewId: digest(2001),
     surfaceProducer: { kind: 'fixture' }, components, occurrences };
+  fixtureOccurrenceIds = occurrences.flatMap(row => [row.id, `b-${row.id}`]);
   fetch.mockImplementation(async () => new Response(JSON.stringify(descriptor)));
   const entry = { file: 'assembly.step', kind: 'assembly', sourceFormat: 'step', hash: `file-${fixture}`,
     documentHash: `document-${fixture}`, url: urls.a };
@@ -233,4 +239,45 @@ it('retires an issued recognition ticket immediately when its resource generatio
   const reopen=renderHook(()=>useModelingRecognition(urls.a,true));
   await waitFor(()=>expect(RecognitionWorker.instances).toHaveLength(2));
   expect(reopen.result.current.results).toEqual({});
+});
+
+it('loads only expanded occurrences, cancels collapsed work and reuses completed repeated components', async () => {
+  const { urls, fetch } = setup();
+  const descriptor = {
+    components: { a: { surf: 'a.surf' }, b: { surf: 'b.surf' } },
+    occurrences: [{ id: 'first', component: 'a' }, { id: 'repeat', component: 'a' }, { id: 'other', component: 'b' }],
+  };
+  fetch.mockImplementation(async () => new Response(JSON.stringify(descriptor)));
+  const view = renderHook(({ requestedOccurrenceIds }) => useRecognition(urls.a, true, {
+    client: fixtureClient, requestedOccurrenceIds,
+  }), { initialProps: { requestedOccurrenceIds: [] as string[] } });
+  await waitFor(() => expect(view.result.current.descriptor?.occurrences).toHaveLength(3));
+  expect(RecognitionWorker.instances).toHaveLength(0);
+  view.rerender({ requestedOccurrenceIds: ['first'] });
+  await waitFor(() => expect(RecognitionWorker.instances[0]?.postMessage).toHaveBeenCalled());
+  view.rerender({ requestedOccurrenceIds: [] });
+  expect(RecognitionWorker.instances[0].terminate).toHaveBeenCalledTimes(1);
+  await respond({ tree: [{ ...tree[0], label: 'Cancelled result' }] }, 0);
+  expect(view.result.current.results).toEqual({});
+  view.rerender({ requestedOccurrenceIds: ['first'] });
+  await respond({ tree }, 1);
+  expect(Object.keys(view.result.current.results)).toEqual(['a']);
+  view.rerender({ requestedOccurrenceIds: ['repeat'] });
+  expect(RecognitionWorker.instances).toHaveLength(2);
+  view.rerender({ requestedOccurrenceIds: ['other'] });
+  await waitFor(() => expect(RecognitionWorker.instances[2]?.postMessage).toHaveBeenCalled());
+  expect(RecognitionWorker.instances[2].postMessage.mock.calls[0][0].resource.url).toContain('b.surf');
+  await respond({ tree }, 2);
+  view.rerender({ requestedOccurrenceIds: [] });
+  view.rerender({ requestedOccurrenceIds: ['first', 'repeat', 'other'] });
+  expect(Object.keys(view.result.current.results)).toEqual(['a', 'b']);
+  expect(RecognitionWorker.instances).toHaveLength(3);
+});
+
+it('defaults to descriptor-only inspection until a consumer supplies an expansion frontier', async () => {
+  const { urls } = setup();
+  const view = renderHook(() => useRecognition(urls.a, true, { client: fixtureClient }));
+  await waitFor(() => expect(view.result.current.descriptor?.occurrences).toHaveLength(1));
+  expect(RecognitionWorker.instances).toHaveLength(0);
+  expect(view.result.current.results).toEqual({});
 });

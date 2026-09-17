@@ -83,5 +83,26 @@ test('assembly presentation preserves nesting and scopes reused component featur
  assert.equal(assembly.label,'Wheels');assert.deepEqual(assembly.children.map(n=>n.label),['Left','Right']);
  const [left,right]=assembly.children.map(n=>n.children[0]);
  assert.notEqual(left.id,right.id);assert.equal(right.occurrenceId,'o1.2');assert.deepEqual(right.faces,[1]);assert.equal(operations[0].id,'body:1');
- assert.equal(presentModelingAssembly(descriptor,{} )[0].children[0].summary,'Recognizing…');
+ assert.equal(presentModelingAssembly(descriptor,{} )[0].children[0].recognitionPending,true);
+});
+
+
+test('STEP document assembly wrapper is flattened without flattening nested assemblies or changing identities',()=>{
+ const part=(id,name)=>({id,nodeType:'part',name,leafPartIds:[id],children:[]});
+ const root={id:'o1',nodeType:'assembly',name:'tom',children:[{id:'o1.1',nodeType:'assembly',name:'Arm',children:[part('o1.1.1','Wrist')]},part('o1.2','Base')]};
+ const descriptor={components:{c:{}},occurrences:[{id:'o1.1.1',component:'c',name:'Wrist'},{id:'o1.2',component:'c',name:'Base'}]};
+ const presented=presentModelingAssembly(descriptor,{},root);
+ assert.deepEqual(presented.map(node=>[node.label,node.selectionId]),[['Arm','o1.1'],['Base','o1.2']]);
+ assert.equal(presented[0].children[0].selectionId,'o1.1.1');
+ assert.equal(presented[0].children[0].recognitionPending,true);
+ assert.equal(root.children[0].id,'o1.1');
+});
+
+test('single STEP part keeps its selectable root and unrecognized disclosure',()=>{
+ const root={id:'__step_model__',nodeType:'part',name:'Case',leafPartIds:['__model__'],children:[]};
+ const descriptor={components:{c:{}},occurrences:[{id:'o1',component:'c',name:'Case'}]};
+ const presented=presentModelingAssembly(descriptor,{},root);
+ assert.equal(presented.length,1);
+ assert.equal(presented[0].selectionId,'__step_model__');
+ assert.equal(presented[0].recognitionPending,true);
 });

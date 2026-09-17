@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { STEP_MODEL_ROOT_ID } from '@hardcore/core/lib/step/stepTree.js';
 import FileSheet from './FileSheet.js';
 import FileSheetTabbedSurface from './FileSheetTabbedSurface.js';
@@ -18,6 +18,7 @@ export default function StepFileSheet({
   geometryInspection = null, stepTreeRoot, isAssemblyView = false,
   selectedPartIds = EMPTY, selectedReferenceIds = EMPTY, selectedReferences = EMPTY,
   hiddenPartIds = EMPTY, focusedNodeIds = EMPTY, selectableNodeIds = null,
+  expandedTreeNodeIds = EMPTY, onToggleTreeNode, onVisibleFeatureTargetsChange,
   activeTreeNodeScrollKey = '', onSelectTreeNode, onSelectReferenceGroup, onClearSelection,
   onFocusTreeNode, onUnfocusTreeNode, onExitAllIsolate, onTogglePartVisibility,
   onCopyTreeNodeReference, onHoverTreeNode, showAllHiddenParts,
@@ -25,7 +26,14 @@ export default function StepFileSheet({
   stepModule = null, stepAnimation = null, statusItems = EMPTY,
   openSectionIds = EMPTY, onOpenSectionIdsChange, renderMode = false, settingsTabs = EMPTY,
 }) {
-  const modeling = useStepModeling(selectedEntry, open && !renderMode && !treeSelectionDisabled && !viewerLoading, { client });
+  const recognitionKey = `${selectedEntry?.file}:${geometryInspection?.revision}`;
+  const [recognitionRequest, setRecognitionRequest] = useState({ key: recognitionKey, ids: EMPTY });
+  const requestedOccurrenceIds = recognitionRequest.key === recognitionKey ? recognitionRequest.ids : EMPTY;
+  const onRequestRecognition = useCallback((ids) => setRecognitionRequest(current => (
+    current.key === recognitionKey && current.ids.length === ids.length && current.ids.every((id, index) => id === ids[index])
+      ? current : { key: recognitionKey, ids }
+  )), [recognitionKey]);
+  const modeling = useStepModeling(selectedEntry, open && !renderMode && !treeSelectionDisabled && !viewerLoading, { client, requestedOccurrenceIds });
   const [inspection, setInspection] = useState(null);
   const modelReferences = geometryInspection?.references || EMPTY;
   const modelParts = geometryInspection?.parts || EMPTY;
@@ -63,12 +71,13 @@ export default function StepFileSheet({
     titleAttr: treeSelectionDisabled ? treeSelectionDisabledReason : undefined,
     content: active => <ModelingTree key={`${selectedEntry.file}:${geometryInspection?.revision}`}
       modeling={modeling} stepRoot={stepTreeRoot} active={active && open}
+      onRequestRecognition={onRequestRecognition} onVisibleFeatureTargetsChange={onVisibleFeatureTargetsChange}
       disabled={treeSelectionDisabled || viewerLoading}
       references={modelReferences} selectedReferences={selectedReferences}
       selectedReferenceIds={selectedReferenceIds} selectedPartIds={selectedPartIds}
       selectionDetails={selectionDetails} activeTreeNodeScrollKey={activeTreeNodeScrollKey}
       onLoadTopology={geometryInspection?.onLoadTopology} onSelect={onSelectReferenceGroup} onClearSelection={onClearSelection}
-      partControls={{isAssemblyView, hiddenPartIds, focusedNodeIds, selectableNodeIds,
+      partControls={{isAssemblyView, hiddenPartIds, focusedNodeIds, selectableNodeIds, expandedTreeNodeIds, onToggleTreeNode,
         onSelectTreeNode, onFocusTreeNode, onUnfocusTreeNode, onExitAllIsolate,
         onTogglePartVisibility, showAllHiddenParts, onCopyTreeNodeReference, onHoverTreeNode}}
     />,

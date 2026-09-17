@@ -2,7 +2,7 @@
 // Lifted verbatim out of CadWorkspace when the file surface moved into
 // <CadFileView>; nothing here changed but its address.
 import { canonicalCadRefCopyText, uniqueStringList } from "../workbench/referenceSelection.js";
-import { buildCadRefToken, isNativeCadSelector } from "@hardcore/core/lib/cadRefs.js";
+import { buildCadRefToken, isNativeCadSelector, parseCadRefSelector } from "@hardcore/core/lib/cadRefs.js";
 import { descendantLeafPartIds, findAssemblyNode } from "@hardcore/core/lib/assembly/meshData.js";
 import {
   collectStepTreeAncestorIds,
@@ -110,6 +110,56 @@ export function collectStepTreeTopologyLoadableNodeIds(root) {
     }
   }
   return uniqueStringList(ids);
+}
+
+/** Expanded descendants behind a collapsed ancestor do not request topology.
+ * Isolation starts a new visible scope, independently of outside ancestors.
+ */
+export function expandedVisibleStepTreeTopologyNodeIds(root, expandedNodeIds, {
+  isolatedNodeIds = [], hiddenPartIds = [], isAssemblyView = true
+} = {}) {
+  const expanded = new Set(expandedNodeIds);
+  const hidden = new Set(hiddenPartIds);
+  const starts = isolatedNodeIds.length
+    ? isolatedNodeIds.map(id => findStepTreeNodeForWorkspace(root, id)).filter(Boolean)
+    : root ? [root] : [];
+  const result = [];
+  const visit = (node, elided = false) => {
+    const id = stepTreeNodeIdForWorkspace(node);
+    const children = stepTreeNodeChildren(node).filter(child => !String(child.nodeType || '').startsWith('topology-'));
+    if (!children.length) {
+      if (node.nodeType === 'part' && expanded.has(id) && !hidden.has(id)) result.push(id);
+      return;
+    }
+    if (elided || expanded.has(id)) children.forEach(child => visit(child));
+  };
+  starts.forEach(node => visit(node, !isolatedNodeIds.length && isAssemblyView));
+  return uniqueStringList(result);
+}
+
+/** Keep loaded sidecar/selection topology out of picking until its part is open. */
+export function referencesForExpandedStepTree(references, occurrenceIds, referencePartId) {
+  const allowed = new Set(occurrenceIds);
+  return references.filter(reference => allowed.has(referencePartId(reference)));
+}
+
+/** First visible descendant wins; a parent still covers its remaining faces. */
+export function referenceGroupForModelTreeHit(referenceId, targets, availableReferenceIds) {
+  const available = new Set(availableReferenceIds);
+  if (!available.has(referenceId)) return [];
+  const target = targets.find(item => item.referenceIds.includes(referenceId));
+  return target && target.referenceIds.every(id => available.has(id)) ? uniqueStringList(target.referenceIds) : [];
+}
+
+/** An external face/edge reference opens only the owner it actually addresses. */
+export function stepTreeTopologyOwnersForSelectors(root, selectors, { isAssemblyView = true } = {}) {
+  return uniqueStringList(selectors.flatMap(selector => {
+    const parsed = parseCadRefSelector(selector);
+    if (!parsed || !['face', 'edge', 'vertex', 'shape'].includes(parsed.selectorType)) return [];
+    if (!isAssemblyView) return [STEP_MODEL_ROOT_ID];
+    const owner = findStepTreeNodeForWorkspace(root, parsed.occurrenceId || parsed.label);
+    return owner ? [stepTreeNodeIdForWorkspace(owner)] : [];
+  }));
 }
 
 export function copyableStepTreeNodeForWorkspace({ assemblyPartMap, displayStepTreeRoot, stepTreeRoot, nodeId }) {
@@ -502,7 +552,7 @@ export function collectStepTreeRevealExpansionIds(root, nodeId, {
       const ancestor = findStepTreeNodeForWorkspace(root, id);
       return ancestor?.visualOnly !== true;
     });
-  if (expandSelf && node && stepTreeNodeChildren(node).length) {
+  if (expandSelf && node && (stepTreeNodeChildren(node).length || node.nodeType === 'part')) {
     expansionIds.push(normalizedNodeId, ...collectTopologyWrapperExpansionIds(node));
   }
   return [...new Set(expansionIds.filter(Boolean))];

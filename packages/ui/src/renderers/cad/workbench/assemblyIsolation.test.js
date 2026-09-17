@@ -3,7 +3,6 @@ import test from "node:test";
 
 import {
   minimalAssemblyIsolationNodeIds,
-  selectedReferenceIdsOutsideFocusedAssemblyNodes,
   selectableViewerNodeIdsForExpandedTree,
   selectableViewerNodeIdsForIsolation
 } from "./assemblyIsolation.js";
@@ -111,23 +110,5 @@ test("viewer selection scopes expanded tree frontier to isolation roots", () => 
       isolatedNodeIds: ["assembly_a"]
     }),
     ["part_a1", "part_a2_leaf"]
-  );
-});
-
-test("focused assembly nodes cannot keep whole-component references selected", () => {
-  const references = new Map([
-    ["shape-a", { id: "shape-a", selectorType: "shape", partId: "part_a1" }],
-    ["occurrence-a", { id: "occurrence-a", selectorType: "occurrence", partId: "part_a1" }],
-    ["face-a", { id: "face-a", selectorType: "face", partId: "part_a1" }],
-    ["shape-b", { id: "shape-b", selectorType: "shape", partId: "part_b" }]
-  ]);
-
-  assert.deepEqual(
-    selectedReferenceIdsOutsideFocusedAssemblyNodes(
-      ["shape-a", "occurrence-a", "face-a", "shape-b"],
-      references,
-      ["part_a1"]
-    ),
-    ["face-a", "shape-b"]
   );
 });

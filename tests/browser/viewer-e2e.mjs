@@ -564,9 +564,11 @@ async function pickingGate(tag, lod, { depth = "full" } = {}) {
   try {
     const canvas = await openFile(page, "smoke.step");
     console.log(`  ${tag}: STEP rendered; settling the initial viewport`);
-    // Main's new Select flow explicitly requests exact topology; merely opening
-    // a file retains the fast mesh-first path now shared by both hosts.
+    // All follows the model tree's expansion frontier. Exact entity tools open
+    // the relevant part; merely activating Select must keep closed parts cheap.
     await page.getByRole("button", { name: "Select", exact: true }).click();
+    await page.getByRole("button", { name: /^Selection filter:/ }).click();
+    await page.getByRole("menuitemradio", { name: depth === "smoke" ? /^Faces/ : /^Edges/ }).click();
     await page.getByRole("button", { name: "Select", exact: true }).waitFor({ timeout: 60_000 });
     const box = await canvas.boundingBox();
     const cx = box.x + box.width / 2;
@@ -693,6 +695,8 @@ async function pickingGate(tag, lod, { depth = "full" } = {}) {
     if (lod && !lodEvents.length) fail(`${tag}: no LOD swap fired`);
     if (!lod && lodEvents.length) fail(`${tag}: LOD-off page emitted swaps`);
 
+    await page.getByRole("button", { name: /^Selection filter:/ }).click();
+    await page.getByRole("menuitemradio", { name: /^Faces/ }).click();
     const { faceRef, ratio } = await facePickPhase(page, box, scene, tag);
     if (errors.length) fail(`${tag}: ${errors.join(" | ")}`);
     console.log(`  ${tag}: ${lodEvents.length} LOD swap(s), face ${faceRef} ${(ratio * 100).toFixed(1)}% contiguous, `

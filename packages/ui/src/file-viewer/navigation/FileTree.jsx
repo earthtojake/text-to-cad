@@ -1,8 +1,8 @@
-import { ChevronDown, ChevronRight, Search, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@hardcore/ui/primitives/context-menu";
-import { cn } from "@hardcore/ui/utils";
+import { TREE_ROW_HEIGHT, TreeRowSurface, TreeRowChevron, TreeRowLabel } from "@hardcore/ui/primitives/tree-row";
 
 import { EntryMenuItems, useEntryMenuFocusGuard } from "./EntryMenu.jsx";
 import { ALL_ENTRY_CAPABILITIES } from "./entry-menu.js";
@@ -76,7 +76,7 @@ import { InlineName } from "./InlineName.jsx";
  * @property {(entry: import("./entry-menu.js").MenuEntryTarget) => Promise<boolean>} [trash]
  */
 
-const ROW_HEIGHT = 28;
+const ROW_HEIGHT = TREE_ROW_HEIGHT;
 const INDENT = 12;
 
 /**
@@ -628,16 +628,7 @@ function TreeRow({ row, active, cursor, onSelect, onRename }) {
     ) : (
       <FileIcon className="size-3.5 shrink-0 text-muted-foreground" path={row.path} />
     );
-  const chevron =
-    row.kind === "directory" ? (
-      row.expanded ? (
-        <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
-      ) : (
-        <ChevronRight className="size-3 shrink-0 text-muted-foreground" />
-      )
-    ) : (
-      <span className="w-3 shrink-0" />
-    );
+  const chevron = <TreeRowChevron expanded={row.expanded} branch={row.kind === "directory"} />;
 
   if (onRename) {
     return (
@@ -661,16 +652,12 @@ function TreeRow({ row, active, cursor, onSelect, onRename }) {
   }
 
   return (
-    <button
+    <TreeRowSurface
+      as="button"
+      active={active}
+      cursor={cursor}
       aria-expanded={row.kind === "directory" ? row.expanded : undefined}
       aria-selected={active}
-      className={cn(
-        "flex w-full items-center gap-1.5 rounded-md pr-2 text-left text-[13px] transition-colors",
-        active
-          ? "bg-accent font-medium text-accent-foreground"
-          : "text-foreground/80 hover:bg-accent/50",
-        cursor && !active && "bg-accent/30"
-      )}
       data-kind={row.kind}
       data-path={row.path}
       onClick={onSelect}
@@ -681,8 +668,8 @@ function TreeRow({ row, active, cursor, onSelect, onRename }) {
     >
       {chevron}
       {icon}
-      <span className="truncate">{row.name}</span>
-    </button>
+      <TreeRowLabel>{row.name}</TreeRowLabel>
+    </TreeRowSurface>
   );
 }
 
@@ -690,15 +677,12 @@ function FilterRow({ path, indices, active, cursor, onOpen }) {
   const lastSlash = path.lastIndexOf("/");
   const directory = lastSlash < 0 ? "" : path.slice(0, lastSlash + 1);
   return (
-    <button
+    <TreeRowSurface
+      as="button"
+      active={active}
+      cursor={cursor}
       aria-selected={active}
-      className={cn(
-        "flex w-full items-center gap-1.5 rounded-md px-2 text-left text-[13px] transition-colors",
-        active
-          ? "bg-accent font-medium text-accent-foreground"
-          : "text-foreground/80 hover:bg-accent/50",
-        cursor && !active && "bg-accent/30"
-      )}
+      className="px-2"
       data-kind="file"
       data-path={path}
       onClick={onOpen}
@@ -708,22 +692,22 @@ function FilterRow({ path, indices, active, cursor, onOpen }) {
       type="button"
     >
       <FileIcon className="size-3.5 shrink-0 text-muted-foreground" path={path} />
-      <span className="truncate">
+      <TreeRowLabel>
         {directory ? <span className="text-muted-foreground">{directory}</span> : null}
         <Highlight from={directory.length} indices={indices} text={path.slice(directory.length)} />
-      </span>
-    </button>
+      </TreeRowLabel>
+    </TreeRowSurface>
   );
 }
 
-/** The matched characters, bolded. The reason `fuzzyMatch` returns indices. */
+/** Matched characters use the primary text color without changing weight. */
 function Highlight({ text, indices, from }) {
   const hits = new Set(indices.map((index) => index - from));
   return (
     <>
       {[...text].map((character, index) =>
         hits.has(index) ? (
-          <span className="font-semibold text-foreground" key={index}>
+          <span className="text-foreground" key={index}>
             {character}
           </span>
         ) : (

@@ -143,7 +143,6 @@ import {
   modelReferenceActivationDecision,
   orderedStringListEqual,
   parseAssemblyPartReferenceSelectionId,
-  pendingReferenceActivationMatches,
   topologyCompositionKeyMatches,
   uniqueStringList
 } from "../workbench/referenceSelection.js";
@@ -258,7 +257,6 @@ import {
 import {
   assemblyNodeContainsNode,
   minimalAssemblyIsolationNodeIds,
-  selectedReferenceIdsOutsideFocusedAssemblyNodes,
   selectableViewerNodeIdsForExpandedTree
 } from "../workbench/assemblyIsolation.js";
 import {
@@ -325,6 +323,10 @@ import {
   collectStepTreeRevealExpansionIds,
   collectStepTreeSubtreeIds,
   collectStepTreeTopologyLoadableNodeIds,
+  expandedVisibleStepTreeTopologyNodeIds,
+  referencesForExpandedStepTree,
+  referenceGroupForModelTreeHit,
+  stepTreeTopologyOwnersForSelectors,
   copyPayloadWithSelectedIdFallback,
   copyReferenceForAssemblyPartSelection,
   copyReferenceForRawSelectorSelection,
@@ -404,8 +406,6 @@ function CadFileViewSurface({
   const [largeFileState, setLargeFileState] = useState(() => normalizeLargeFileState(DEFAULT_LARGE_FILE_STATE));
   // Capability demand is scoped to the artifact the user acted on. The
   // default Select tool alone does not imply topology work during file open.
-  const [requestedTopologyFileRef, setRequestedTopologyFileRef] = useState("");
-  const pendingModelReferenceActivationRef = useRef(null);
   const [hoveredListReferenceId, setHoveredListReferenceId] = useState("");
   const [hoveredModelReferenceId, setHoveredModelReferenceId] = useState("");
   const [selectionFilter, setSelectionFilter] = useState("all");
@@ -729,7 +729,6 @@ function CadFileViewSurface({
     const previous = previousPreviewTree.current;
     const next = { file: selectedEntry?.file, hash: selectedEntry?.hash, preview: selectedEntry?.editingPreview };
     if (previewGeometryChanged(previous, next)) {
-      pendingModelReferenceActivationRef.current = null;
       setSelectedReferenceIds([]);
       setSelectedPartIds([]);
       setSelectedRenderPartIdByAssemblyPartId({});
@@ -1738,20 +1737,24 @@ function CadFileViewSurface({
     () => new Set(loadableStepTreeTopologyNodeIds),
     [loadableStepTreeTopologyNodeIds]
   );
+  const expandedStepTreeTopologyNodeIds = useMemo(() => expandedVisibleStepTreeTopologyNodeIds(
+    stepTreeRoot, expandedStepTreeNodeIds,
+    { isolatedNodeIds: focusedAssemblyNodeIds, hiddenPartIds, isAssemblyView }
+  ), [stepTreeRoot, expandedStepTreeNodeIds, focusedAssemblyNodeIds, hiddenPartIds, isAssemblyView]);
   const requestedStepTreeTopologyNodeIds = useMemo(() => {
     if (!supportsTopology || !isAssemblyView || !selectedEntryHasReferences) {
       return [];
     }
     return uniqueStringList(
       [
-        ...expandedStepTreeNodeIds,
+        ...expandedStepTreeTopologyNodeIds,
         ...stepModuleTopologyOccurrenceIds(selectedStepModuleDefinition)
       ]
         .map((id) => String(id || "").trim())
         .filter((id) => id && loadableStepTreeTopologyNodeIdSet.has(id))
     );
   }, [
-    expandedStepTreeNodeIds,
+    expandedStepTreeTopologyNodeIds,
     isAssemblyView,
     supportsTopology,
     loadableStepTreeTopologyNodeIdSet,
@@ -2758,30 +2761,6 @@ function CadFileViewSurface({
   }, [selectedPartIds]);
 
   useEffect(() => {
-    if (!focusedAssemblyNodeIds.length || !selectedPartIds.length) {
-      return;
-    }
-    const focusedNodeIdSet = new Set(focusedAssemblyNodeIds);
-    const nextSelectedPartIds = selectedPartIds.filter((id) => !focusedNodeIdSet.has(String(id || "").trim()));
-    if (nextSelectedPartIds.length === selectedPartIds.length) {
-      return;
-    }
-    selectedPartIdsRef.current = nextSelectedPartIds;
-    setSelectedPartIds(nextSelectedPartIds);
-    setSelectedRenderPartIdByAssemblyPartId((current) => {
-      const selectedNodeIdSet = new Set(nextSelectedPartIds);
-      const nextMap = {};
-      for (const [nodeId, renderPartId] of Object.entries(current || {})) {
-        if (selectedNodeIdSet.has(nodeId)) {
-          nextMap[nodeId] = renderPartId;
-        }
-      }
-      return nextMap;
-    });
-    setCopyStatus("");
-  }, [focusedAssemblyNodeIds, selectedPartIds]);
-
-  useEffect(() => {
     const nextFileSheetKey = selectedKey && selectedFileSheetKind
       ? `${selectedKey}:${selectedFileSheetKind}`
       : "";
@@ -2978,6 +2957,13 @@ function CadFileViewSurface({
     topologyCompositionKeyMatches(referenceState.loadedTopologyKey, requestedTopologyKey);
   const selectedSelectorRuntime = selectedReferencesMatch ? referenceState?.selectorRuntime || null : null;
   const artifactRevision = buildReferenceCacheKey(selectedEntry);
+  const featureTargetScope = `${selectedKey}:${artifactRevision}`;
+  const [featureTargetState, setFeatureTargetState] = useState({ scope: featureTargetScope, targets: EMPTY_LIST });
+  const visibleFeatureTargets = featureTargetState.scope === featureTargetScope ? featureTargetState.targets : EMPTY_LIST;
+  const handleVisibleFeatureTargetsChange = useCallback((targets) => {
+    setFeatureTargetState(current => current.scope === featureTargetScope &&
+      JSON.stringify(current.targets) === JSON.stringify(targets) ? current : { scope: featureTargetScope, targets });
+  }, [featureTargetScope]);
   useEffect(() => {
     setSelectionFilter("all");
     setSelectionFilterNotice("");
@@ -3014,14 +3000,12 @@ function CadFileViewSurface({
   const selectedDisplayEdgeRuntime = selectedDisplayEdgesMatch && !retainingPreviousStepMesh
     ? displayEdgeState?.displayEdgeRuntime || null
     : null;
-  const selectedStepPartRootActive = !isAssemblyView && selectedPartIds.includes(STEP_MODEL_ROOT_ID);
+  const selectedStepPartRootActive = !isAssemblyView && expandedStepTreeNodeIds.includes(STEP_MODEL_ROOT_ID);
   const plainStepReferencePickingEnabled =
     effectiveRenderFormat === RENDER_FORMAT.STEP &&
     selectedEntryHasReferences &&
     !isAssemblyView;
-  const topologyCapabilityRequested = Boolean(
-    selectedEntry && requestedTopologyFileRef === fileKey(selectedEntry)
-  );
+  const topologyCapabilityRequested = selectedStepPartRootActive;
   const plainStepReferencePickingRequested =
     plainStepReferencePickingEnabled &&
     (topologyCapabilityRequested || selectedStepModuleTopologyRequested);
@@ -3210,14 +3194,6 @@ function CadFileViewSurface({
     const validIds = new Set(validAssemblySelectionIds);
     setExpandedStepTreeNodeIds((current) => {
       const filtered = current.filter((id) => validIds.has(id));
-      if (
-        filtered.length === 1 &&
-        filtered[0] === rootId &&
-        !selectedPartIdsRef.current.length &&
-        !selectedReferenceIdsRef.current.length
-      ) {
-        return [];
-      }
       return orderedStringListEqual(filtered, current) ? current : filtered;
     });
   }, [selectedKey, stepTreeRoot, validAssemblySelectionIds]);
@@ -3380,30 +3356,6 @@ function CadFileViewSurface({
     return map;
   }, [activeReferenceMap, effectiveVisibleReferences]);
 
-  useEffect(() => {
-    if (!isAssemblyView || !focusedAssemblyNodeIds.length || !selectedReferenceIds.length) {
-      return;
-    }
-    const nextSelectedReferenceIds = selectedReferenceIdsOutsideFocusedAssemblyNodes(
-      selectedReferenceIds,
-      effectiveActiveReferenceMap,
-      focusedAssemblyNodeIds,
-      { referencePartId }
-    );
-    if (orderedStringListEqual(nextSelectedReferenceIds, selectedReferenceIds)) {
-      return;
-    }
-    selectedReferenceIdsRef.current = nextSelectedReferenceIds;
-    setSelectedReferenceIds(nextSelectedReferenceIds);
-    setCopyStatus("");
-  }, [
-    effectiveActiveReferenceMap,
-    focusedAssemblyNodeIds,
-    isAssemblyView,
-    referencePartId,
-    selectedReferenceIds
-  ]);
-
   const renderPartIdsForWholeTopologyReference = useCallback((referenceId) => {
     const normalizedReferenceId = String(referenceId || "").trim();
     if (!normalizedReferenceId) {
@@ -3433,12 +3385,16 @@ function CadFileViewSurface({
     if (stepInteractionBlocked || stepModuleTreeSelectionDisabled) {
       return [];
     }
-    // Viewport picking is independent of which inspector rows are expanded.
-    if (isAssemblyView) return assemblyStepTreeTopologyReferences;
-    return effectiveVisibleReferences;
+    if (isAssemblyView) return referencesForExpandedStepTree(
+      assemblyStepTreeTopologyReferences, expandedStepTreeTopologyNodeIds, referencePartId
+    );
+    return expandedStepTreeNodeIds.includes(STEP_MODEL_ROOT_ID) ? effectiveVisibleReferences : [];
   }, [
     assemblyStepTreeTopologyReferences,
     effectiveVisibleReferences,
+    expandedStepTreeTopologyNodeIds,
+    expandedStepTreeNodeIds,
+    referencePartId,
     isAssemblyView,
     stepInteractionBlocked,
     stepModuleTreeSelectionDisabled,
@@ -3630,16 +3586,15 @@ function CadFileViewSurface({
   ]);
   const viewerSelectedPartIds = useMemo(() => {
     if (!isAssemblyView) {
-      return selectedWholeTopologyReferencePartIds;
+      return uniqueStringList([
+        ...(selectedPartIds.includes(STEP_MODEL_ROOT_ID) ? [STEP_MODEL_RENDER_PART_ID] : []),
+        ...selectedWholeTopologyReferencePartIds,
+      ]);
     }
-    const focusedNodeIdSet = new Set(focusedAssemblyNodeIds);
     return uniqueStringList(
       [
         ...selectedPartIds.flatMap((id) => {
           const normalizedId = String(id || "").trim();
-          if (focusedNodeIdSet.has(normalizedId)) {
-            return [];
-          }
           return renderPartIdsForAssemblySelection(
             normalizedId,
             selectedRenderPartIdByAssemblyPartId[normalizedId]
@@ -4141,7 +4096,8 @@ function CadFileViewSurface({
     if (!idsToExpand.length) {
       return;
     }
-    setExpandedStepTreeNodeIds((current) => uniqueStringList([...current, ...idsToExpand]));
+    setExpandedStepTreeNodeIds(current => idsToExpand.every(id => current.includes(id))
+      ? current : uniqueStringList([...current, ...idsToExpand]));
   }, [displayStepTreeRoot, stepTreeRoot]);
 
   const revealStepTreeNode = useCallback((nodeId, {
@@ -4177,23 +4133,7 @@ function CadFileViewSurface({
     }
     const normalizedReferenceId = String(referenceId || "").trim();
     const selectedReference = effectiveActiveReferenceMap.get(normalizedReferenceId);
-    const selectedReferenceType = String(selectedReference?.selectorType || "").trim();
     const selectedReferencePartId = referencePartId(selectedReference);
-    if (
-      isAssemblyView &&
-      (selectedReferenceType === "shape" || selectedReferenceType === "occurrence") &&
-      selectedReferencePartId &&
-      focusedAssemblyNodeIds.includes(selectedReferencePartId)
-    ) {
-      const nextSelectedReferenceIds = selectedReferenceIdsRef.current
-        .filter((id) => String(id || "").trim() !== normalizedReferenceId);
-      if (nextSelectedReferenceIds.length !== selectedReferenceIdsRef.current.length) {
-        selectedReferenceIdsRef.current = nextSelectedReferenceIds;
-        setSelectedReferenceIds(nextSelectedReferenceIds);
-        setCopyStatus("");
-      }
-      return;
-    }
     const next = !multiSelect && selectedPartIdsRef.current.length
       ? (normalizedReferenceId ? [normalizedReferenceId] : [])
       : computeNextSelectionIds(selectedReferenceIdsRef.current, normalizedReferenceId, { multiSelect });
@@ -4263,33 +4203,22 @@ function CadFileViewSurface({
     const references = referencesForHost(text);
     if (references.length) return deliverPrompt(createCadPromptContext({ resource: promptResource, references }));
   }, [promptResource, deliverPrompt, promptAvailable, referencesForHost, stepInteractionBlocked]);
-  const loadFilterTopology = useCallback((target) => {
-    if (!target) return;
-    if (isAssemblyView) setExpandedStepTreeNodeIds(current => uniqueStringList([...current, target.id]));
-    else setLargeFileState(current => ({ ...current, selectableTopologyEnabled: true }));
-  }, [isAssemblyView]);
-  useEffect(() => {
-    if (!["faces", "edges", "tangent-faces", "edge-chain"].includes(selectionFilter)) {
-      setSelectionFilterNotice("");
-      return;
-    }
-    if (topologyTarget) {
-      loadFilterTopology(topologyTarget);
-      setSelectionFilterNotice("");
-    } else setSelectionFilterNotice("");
-  }, [selectionFilter, topologyTarget, loadFilterTopology]);
   const loadInspectionTopology = useCallback((partIds = []) => {
+    const ids = isAssemblyView ? partIds.filter(id => loadableStepTreeTopologyNodeIdSet.has(id)) : [STEP_MODEL_ROOT_ID];
+    for (const id of ids) expandStepTreeAroundNode(id, { expandSelf: true });
     if (!isAssemblyView) setLargeFileState(current => current.selectableTopologyEnabled ? current : ({ ...current, selectableTopologyEnabled: true }));
-    else if (partIds.length === 1 && loadableStepTreeTopologyNodeIdSet.has(partIds[0])) {
-      setExpandedStepTreeNodeIds(current => current.includes(partIds[0]) ? current : [...current, partIds[0]]);
-    }
-  }, [isAssemblyView, loadableStepTreeTopologyNodeIdSet]);
+  }, [isAssemblyView, loadableStepTreeTopologyNodeIdSet, expandStepTreeAroundNode]);
+  const loadFilterTopology = useCallback((target) => {
+    if (target) loadInspectionTopology([target.id]);
+  }, [loadInspectionTopology]);
+  const appliedFilterTopologyRequest = useRef('');
   useEffect(() => {
-    if (!isAssemblyView || selectionFilter === "parts" || !hoveredModelPartId || viewerLoading || stepUpdateInProgress || stepModuleTreeSelectionDisabled) return;
-    // Load only the part under a settled pointer, reusing the existing topology cache.
-    const timer = setTimeout(() => loadInspectionTopology([hoveredModelPartId]), 120);
-    return () => clearTimeout(timer);
-  }, [isAssemblyView, selectionFilter, hoveredModelPartId, viewerLoading, stepUpdateInProgress, stepModuleTreeSelectionDisabled, loadInspectionTopology]);
+    const requestKey = ["faces", "edges", "tangent-faces", "edge-chain"].includes(selectionFilter) && topologyTarget
+      ? `${selectedKey}:${artifactRevision}:${selectionFilter}:${topologyTarget.id}` : '';
+    if (requestKey && appliedFilterTopologyRequest.current !== requestKey) loadFilterTopology(topologyTarget);
+    appliedFilterTopologyRequest.current = requestKey;
+    setSelectionFilterNotice("");
+  }, [selectedKey, artifactRevision, selectionFilter, topologyTarget, loadFilterTopology]);
   const selectReferenceGroup = useCallback((referenceIds, { multiSelect = false } = {}) => {
     if (stepUpdateInProgress || !referenceIds.length || !referenceIds.every(id => ["face", "edge"].includes(effectiveActiveReferenceMap.get(id)?.selectorType))) return;
     const next = toggleReferenceGroupSelection(selectedReferenceIdsRef.current, referenceIds, multiSelect);
@@ -4433,45 +4362,11 @@ function CadFileViewSurface({
 
   const toggleStepTreeNode = useCallback((nodeId) => {
     const normalizedNodeId = String(nodeId || "").trim();
-    if (!normalizedNodeId) {
-      return;
-    }
-    const collapsing = expandedStepTreeNodeIds.includes(normalizedNodeId);
-    const collapseExitsIsolation = collapsing &&
-      isAssemblyView &&
-      assemblyRoot &&
-      focusedAssemblyNodeIds.some((focusedNodeId) => (
-        assemblyNodeContainsNode(assemblyRoot, normalizedNodeId, focusedNodeId)
-      ));
-    const collapsedSubtreeIds = collapseExitsIsolation
-      ? new Set(collectStepTreeSubtreeIds(displayStepTreeRoot || stepTreeRoot, normalizedNodeId))
-      : null;
-    setExpandedStepTreeNodeIds((current) => {
-      if (current.includes(normalizedNodeId)) {
-        return current.filter((id) => (
-          collapsedSubtreeIds
-            ? !collapsedSubtreeIds.has(id)
-            : id !== normalizedNodeId
-        ));
-      }
-      return uniqueStringList([...current, normalizedNodeId]);
-    });
-    if (collapseExitsIsolation) {
-      setIsolatedAssemblyNodeIds((current) => {
-        const next = current.filter((focusedNodeId) => (
-          !assemblyNodeContainsNode(assemblyRoot, normalizedNodeId, focusedNodeId)
-        ));
-        return next.length === current.length ? current : next;
-      });
-    }
-  }, [
-    assemblyRoot,
-    displayStepTreeRoot,
-    expandedStepTreeNodeIds,
-    focusedAssemblyNodeIds,
-    isAssemblyView,
-    stepTreeRoot
-  ]);
+    if (!normalizedNodeId) return;
+    setExpandedStepTreeNodeIds(current => current.includes(normalizedNodeId)
+      ? current.filter(id => id !== normalizedNodeId)
+      : [...current, normalizedNodeId]);
+  }, []);
 
   const removeSelectedAssemblyNode = useCallback((nodeId) => {
     const normalizedNodeId = String(nodeId || "").trim();
@@ -4500,9 +4395,6 @@ function CadFileViewSurface({
       setActiveTreeNodeScrollKey("");
     }
     const normalizedPartId = String(partId || "").trim();
-    if (isAssemblyView && focusedAssemblyNodeIds.includes(normalizedPartId)) {
-      return removeSelectedAssemblyNode(normalizedPartId);
-    }
     const alreadySelected = selectedPartIdsRef.current.includes(normalizedPartId);
     const scopedSelectableNodeIds = source === "viewer"
       ? viewerSelectableAssemblyNodeIdSet
@@ -4578,6 +4470,11 @@ function CadFileViewSurface({
       return;
     }
     const selectors = selector.split(",").map(value => value.trim()).filter(Boolean);
+    const owners = stepTreeTopologyOwnersForSelectors(stepTreeRoot, selectors, { isAssemblyView });
+    if (isolatedStepTreeSelectableNodeIds && owners.some(id => !isolatedStepTreeSelectableNodeIds.includes(id))) {
+      setIsolatedAssemblyNodeIds([]);
+    }
+    if (owners.some(id => !expandedStepTreeTopologyNodeIds.includes(id))) loadInspectionTopology(owners);
     if (selectors.length > 1) {
       const resolvedFaces = selectors.map(value => resolveSelectorSelection(value, {
         referenceMap: effectiveActiveReferenceMap,
@@ -4616,6 +4513,10 @@ function CadFileViewSurface({
     }
   }, [
     selectReference,
+    isAssemblyView,
+    isolatedStepTreeSelectableNodeIds,
+    expandedStepTreeTopologyNodeIds,
+    loadInspectionTopology,
     acknowledgeCommand,
     stepInteractionBlocked,
     viewerLoading,
@@ -5052,9 +4953,6 @@ function CadFileViewSurface({
     if (stepInteractionBlocked || stepModuleTreeSelectionDisabled) {
       return;
     }
-    // A newer gesture supersedes any click waiting for selector topology. If
-    // this gesture also needs topology, its exact file/tree/id replaces it below.
-    pendingModelReferenceActivationRef.current = null;
     const nextReferenceId = String(referenceId || "").trim();
     if (!nextReferenceId) {
       if (multiSelect) return;
@@ -5062,8 +4960,8 @@ function CadFileViewSurface({
       return;
     }
     if (selectionFilter === "parts") {
-      const partId = isAssemblyView ? nextReferenceId : STEP_MODEL_ROOT_ID;
-      togglePartSelection(partId, { multiSelect, renderPartId: nextReferenceId, source: "tree" });
+      const partId = isAssemblyView ? resolvePickedAssemblyPartId(nextReferenceId) : STEP_MODEL_ROOT_ID;
+      togglePartSelection(partId, { multiSelect, renderPartId: nextReferenceId, source: "viewer" });
       return;
     }
     const topologyReference = effectiveActiveReferenceMap.get(nextReferenceId) || null;
@@ -5078,6 +4976,14 @@ function CadFileViewSurface({
       return;
     }
     if (topologyReference && isViewerTopologyReference(topologyReference)) {
+      const group = selectionFilter === "all" ? referenceGroupForModelTreeHit(
+        nextReferenceId, visibleFeatureTargets, viewerPickableReferences.map(reference => reference.id)
+      ) : EMPTY_LIST;
+      if (group.length) {
+        selectReferenceGroup(group, { multiSelect });
+        revealStepTreeNode(referencePartId(topologyReference), { source: "viewer" });
+        return;
+      }
       toggleReferenceSelection(nextReferenceId, { multiSelect });
       return;
     }
@@ -5092,14 +4998,15 @@ function CadFileViewSurface({
       togglePartSelection(nextPartId, { multiSelect, renderPartId: pickedPartId });
       return;
     }
-    if (selectedEntry && selectedEntryHasReferences && effectiveRenderFormat === RENDER_FORMAT.STEP && !selectedReferencesMatch) {
-      pendingModelReferenceActivationRef.current = nextReferenceId
-        ? { fileRef: fileKey(selectedEntry), tree: selectedEntry.hash, referenceId: nextReferenceId, multiSelect }
-        : null;
-      setRequestedTopologyFileRef(fileKey(selectedEntry));
+    if (selectedEntry && effectiveRenderFormat === RENDER_FORMAT.STEP) {
+      togglePartSelection(STEP_MODEL_ROOT_ID, { multiSelect, renderPartId: nextReferenceId });
     }
   }, [
     clearAssemblySelection,
+    visibleFeatureTargets,
+    viewerPickableReferences,
+    revealStepTreeNode,
+    referencePartId,
     selectionFilter,
     tangentFaces,
     edgeChains,
@@ -5117,26 +5024,6 @@ function CadFileViewSurface({
     viewerInAssemblyMode,
     stepModuleTreeSelectionDisabled
   ]);
-
-  // A click that first demands topology is not discarded. Once the selector
-  // runtime for that exact artifact is ready, replay the same activation so
-  // the first click selects the intended face/edge/part.
-  useEffect(() => {
-    const pending = pendingModelReferenceActivationRef.current;
-    if (!pending) return;
-    if (!pendingReferenceActivationMatches(pending, {
-      fileRef: fileKey(selectedEntry),
-      tree: selectedEntry?.hash
-    })) {
-      pendingModelReferenceActivationRef.current = null;
-      return;
-    }
-    if (!selectedReferencesMatch) {
-      return;
-    }
-    pendingModelReferenceActivationRef.current = null;
-    handleModelReferenceActivate(pending.referenceId, { multiSelect: pending.multiSelect });
-  }, [handleModelReferenceActivate, selectedEntry, selectedReferencesMatch]);
 
   const handleModelReferenceDoubleActivate = useCallback((referenceId) => {
     if (stepInteractionBlocked || stepModuleTreeSelectionDisabled || !isAssemblyView) {
@@ -5374,7 +5261,7 @@ function CadFileViewSurface({
       actionNodeIds,
       actionCount: actionNodeIds.length || 1,
       copyText: lines[0] || "",
-      selectDisabled: focused || (!selected && hidden),
+      selectDisabled: !selected && hidden,
       showIsolate: true,
       isolateDisabled: false,
       showExitAllIsolate: focusedAssemblyNodeIds.length > 1,
@@ -5547,10 +5434,6 @@ function CadFileViewSurface({
     }
     const nodeId = String(menu?.nodeId || "").trim();
     if (!nodeId) {
-      return;
-    }
-    if (focusedAssemblyNodeIds.includes(nodeId)) {
-      removeSelectedAssemblyNode(nodeId);
       return;
     }
     const actionNodeIds = uniqueStringList(
@@ -5731,29 +5614,14 @@ function CadFileViewSurface({
     if (
       selectedEntry &&
       selectedEntryHasReferences &&
-      (normalizedMode === TAB_TOOL_MODE.REFERENCES || normalizedMode === TAB_TOOL_MODE.MEASURE)
+      normalizedMode === TAB_TOOL_MODE.MEASURE && topologyTarget
     ) {
-      setRequestedTopologyFileRef(fileKey(selectedEntry));
+      loadFilterTopology(topologyTarget);
     }
     if (normalizedMode === TAB_TOOL_MODE.DRAW && drawingTool === DRAWING_TOOL.SURFACE_LINE) {
       setDrawingTool(DRAWING_TOOL.FREEHAND);
     }
-  }, [drawingTool, selectedEntry, selectedEntryHasReferences]);
-
-  const handleEnableSelectableTopology = useCallback(() => {
-    if (!selectedEntry || !selectedEntryHasReferences) {
-      return;
-    }
-    setLargeFileState((current) => {
-      const next = normalizeLargeFileState(current);
-      return next.selectableTopologyEnabled
-        ? next
-        : { ...next, selectableTopologyEnabled: true };
-    });
-    setViewerAlertOpen(false);
-    setTabToolMode(TAB_TOOL_MODE.REFERENCES);
-    setRequestedTopologyFileRef(fileKey(selectedEntry));
-  }, [selectedEntry, selectedEntryHasReferences]);
+  }, [drawingTool, selectedEntry, selectedEntryHasReferences, topologyTarget, loadFilterTopology]);
 
   const handleDrawingStrokesChange = useCallback((nextStrokes) => {
     const normalized = cloneDrawingStrokes(nextStrokes);
@@ -6453,6 +6321,7 @@ function CadFileViewSurface({
                 isAssemblyView={isAssemblyView}
                 stepTreeRoot={displayStepTreeRoot}
                 expandedTreeNodeIds={expandedStepTreeNodeIds}
+                onVisibleFeatureTargetsChange={handleVisibleFeatureTargetsChange}
                 loadableTreeNodeIds={loadableStepTreeTopologyNodeIds}
                 selectedPartIds={selectedPartIds}
                 selectedReferenceIds={selectedReferenceIds}
