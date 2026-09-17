@@ -49,6 +49,7 @@ const latestReleaseApiUrl = "https://api.github.com/repos/earthtojake/text-to-ca
 const currentVersion = fs.readFileSync(path.join(REPO, "VERSION"), "utf8").trim();
 const failures = [];
 const results = [];
+const cameraReadiness = new WeakMap();
 let activeGate = "setup";
 
 function fail(message) {
@@ -147,6 +148,7 @@ async function newPage({ lod = true } = {}) {
       fs.mkdirSync(diagnosticDir, { recursive: true });
       const stem = path.join(diagnosticDir, `diagnostic-${activeGate}`);
       let timer;
+      let stateWritten = false;
       try {
         const state = await Promise.race([
           page.evaluate(() => ({
@@ -162,10 +164,17 @@ async function newPage({ lod = true } = {}) {
           })),
           new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('diagnostic state timed out')), 3000); }),
         ]);
-        fs.writeFileSync(`${stem}.json`, JSON.stringify({ ...state, errors: errors.slice(-15).map(error => error.slice(0, 2500)) }, null, 2));
+        fs.writeFileSync(`${stem}.json`, JSON.stringify({ ...state, cameraReadiness: cameraReadiness.get(page), errors: errors.slice(-15).map(error => error.slice(0, 2500)) }, null, 2));
+        stateWritten = true;
         if (args.out) await page.screenshot({ path: `${stem}.png`, timeout: 3000 });
       } catch (error) {
         console.error(`  diagnostic ${activeGate}: ${error.message}`);
+        if (!stateWritten) {
+          fs.writeFileSync(`${stem}.json`, JSON.stringify({
+            url: page.url(), diagnosticError: error.message, cameraReadiness: cameraReadiness.get(page),
+            errors: errors.slice(-15).map(error => error.slice(0, 2500)),
+          }, null, 2));
+        }
       } finally { clearTimeout(timer); }
     }
     return closeContext();
@@ -388,7 +397,9 @@ async function presentedFrame(page) {
     return { gpuMs, presentationMs: performance.now() - startedAt, width: canvas.width, height: canvas.height };
   }, null, { timeout: 60_000, polling: 100 });
   try {
-    return await ready.jsonValue();
+    const frame = await ready.jsonValue();
+    if (!frame || !Number.isFinite(frame.presentationMs)) fail('capture: CAD canvas was not presented');
+    return frame;
   } finally {
     await ready.dispose();
   }
@@ -1165,7 +1176,7 @@ async function cameraHeld(page, zeroPose, what) {
 
 async function resetView(page) {
   await page.getByRole("button", { name: /Reset view/i }).first().click();
-  await page.waitForTimeout(1_500);
+  await settledCameraFrame(page, { stage: "reset view" });
 }
 
 // --- the camera each mode opens at ----------------------------------------
@@ -1175,16 +1186,66 @@ async function resetView(page) {
 // a perspective distance read as an orthographic frame. A view the user framed
 // by hand still stands within its own mode; it simply does not follow them
 // across the switch, because switching IS the reset.
+async function settledCameraFrame(page, { projection = null, stage, timeout = 60_000 } = {}) {
+  const startedAt = Date.now();
+  cameraReadiness.set(page, { ...cameraReadiness.get(page), pending: { stage, projection } });
+  // Projection is published during scene reconciliation, before Render's
+  // environment and first frame are necessarily ready. The presentation host
+  // clears aria-busy only after drawing that destination scene. LOD and camera
+  // damping must also settle before a gesture or a framing assertion.
+  const ready = await page.waitForFunction((want) => {
+    const read = () => {
+      const canvas = document.querySelector("canvas");
+      const camera = window.__cadCamera?.();
+      const quality = window.__cadViewerQuality;
+      const lod = window.__cadViewportLod?.();
+      if (!canvas || !camera || (want && camera.projection !== want)
+        || canvas.closest("[aria-busy]")?.getAttribute("aria-busy") !== "false"
+        || getComputedStyle(canvas).visibility !== "visible"
+        || document.querySelector("[data-viewer-transition]")) return null;
+      const expectedQualities = camera.projection === "perspective" ? ["standard", "high"] : ["interactive"];
+      if (!quality?.standardQualityReady || !expectedQualities.includes(quality.quality)) return null;
+      if (lod?.componentCount > 0 && (lod.quality !== quality.quality || !lod.qualitySettled
+        || lod.busy || lod.pendingEvaluation || lod.collectionPending)) return null;
+      return { canvas, camera, quality: quality.quality, levelCounts: lod?.levelCounts };
+    };
+    const after = read();
+    if (!after) {
+      delete window.__viewerTestCameraFrame;
+      return false;
+    }
+    const coordinates = camera => [...camera.position, ...camera.target, ...camera.up, camera.zoom, camera.zoomPercent,
+      ...(camera.projection === "orthographic" ? [camera.halfHeight] : [])];
+    const before = window.__viewerTestCameraFrame;
+    const a = before ? coordinates(before.camera) : [], b = coordinates(after.camera);
+    const stable = before?.canvas === after.canvas && before.quality === after.quality
+      && a.every((value, index) => Math.abs(value - b[index]) <= 1e-9 * Math.max(1, Math.abs(value)));
+    const stableFrames = stable ? before.stableFrames + 1 : 0;
+    window.__viewerTestCameraFrame = { ...after, stableFrames };
+    if (stableFrames < 2) return false;
+    const gl = after.canvas.getContext("webgl2");
+    if (!gl || gl.isContextLost()) throw new Error('camera: presented canvas has no live WebGL2 context');
+    gl.finish();
+    delete window.__viewerTestCameraFrame;
+    return { camera: after.camera, quality: after.quality, levelCounts: after.levelCounts,
+      width: after.canvas.width, height: after.canvas.height };
+  }, projection, { timeout, polling: "raf" });
+  try {
+    const state = { stage, waitMs: Date.now() - startedAt, ...await ready.jsonValue() };
+    cameraReadiness.set(page, state);
+    console.log(`  camera ready: ${JSON.stringify(state)}`);
+  } finally {
+    await ready.dispose();
+  }
+}
+
 async function switchMode(page, current, next) {
+  const deadline = Date.now() + 60_000;
   await selectViewingMode(page, current, next);
   const projection = next === "Render" ? "perspective" : "orthographic";
-  await page.waitForFunction(
-    (want) => window.__cadCamera?.()?.projection === want,
-    projection,
-    { timeout: 60_000 },
-  );
-  // The fit lands in the scene sync that follows the new renderer.
-  await page.waitForTimeout(1_500);
+  const timeout = deadline - Date.now();
+  if (timeout <= 0) fail(`mode camera: ${next} transition exceeded 60s`);
+  await settledCameraFrame(page, { projection, stage: `${current} to ${next}`, timeout });
 }
 
 async function orbitAndZoom(page) {
@@ -1197,7 +1258,7 @@ async function orbitAndZoom(page) {
   await page.mouse.up();
   await page.mouse.move(x, y);
   await page.mouse.wheel(0, -420);
-  await page.waitForTimeout(1_500);
+  await settledCameraFrame(page, { stage: "orbit and zoom" });
 }
 
 async function cameraMoved(page, from, what) {
@@ -1213,6 +1274,7 @@ async function modeCameraGate() {
   const { context, page, errors } = await newPage();
   try {
     await openFile(page, "smoke.step");
+    await settledCameraFrame(page, { projection: "orthographic", stage: "initial Inspect frame" });
     const inspectFit = await cameraState(page);
     if (inspectFit?.projection !== "orthographic") {
       failures.push(`mode camera: Inspect did not open orthographic (${inspectFit?.projection})`);
@@ -1240,6 +1302,7 @@ async function modeCameraGate() {
     // A different model is framed against ITS zero pose, not the camera the
     // last one was left at. Reset view re-fits, so a fresh fit does not move.
     await openFile(page, "assembly.step");
+    await settledCameraFrame(page, { projection: "orthographic", stage: "new model Inspect frame" });
     const assemblyFit = await cameraState(page);
     if (cameraDrift(assemblyFit, inspectFit) <= 1e-3) {
       failures.push(`mode camera: a different model opened at the previous model's frame — ${describeCamera(assemblyFit)}`);
