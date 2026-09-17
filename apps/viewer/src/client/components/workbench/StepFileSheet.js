@@ -2,6 +2,13 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Box, Boxes, ChevronRight, Eye, EyeOff, X } from "lucide-react";
 import { cn } from "@/ui/utils";
 import {
+  TREE_GLYPH_ICON_CLASSES,
+  TREE_GUIDE_OFFSET_PX,
+  TREE_INDENT_PX,
+  TREE_MAX_INDENT_PX,
+  TreeDepthGuides
+} from "./treeRow";
+import {
   STEP_MODEL_ROOT_ID,
   flattenVisibleStepTreeRows,
   stepTreeNodeChildren
@@ -36,13 +43,14 @@ const treeChevronButtonClasses = "grid h-5 w-5 shrink-0 place-items-center round
 const treeRowActionButtonClasses = "h-5 w-5 rounded-sm px-0 text-current/60 shadow-none hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent/45 focus-visible:text-sidebar-accent-foreground";
 const treeRowContentClasses = "h-7 min-w-0 text-xs font-normal";
 const treeGroupLabelClasses = "px-2 pb-1 pt-2 text-[10px] font-medium text-sidebar-foreground/45";
-const treeGlyphIconClasses = "size-3.5 shrink-0 text-current/60";
+// The row look lives in ./treeRow, shared with the robot Components tree.
+const treeGlyphIconClasses = TREE_GLYPH_ICON_CLASSES;
 // One indent level equals the expand-chevron's footprint (w-5 button + gap-1.5),
 // so a leaf row's glyph (which has no chevron) lines up exactly under its
 // expandable parent's glyph instead of sitting a few pixels to the left.
-const treeDepthIndentPx = 26;
-const treeDepthGuideOffsetPx = 14;
-const treeDepthMaxPx = 156;
+const treeDepthIndentPx = TREE_INDENT_PX;
+const treeDepthGuideOffsetPx = TREE_GUIDE_OFFSET_PX;
+const treeDepthMaxPx = TREE_MAX_INDENT_PX;
 const treeSectionId = "tree";
 const measurementsSectionId = FILE_SHEET_SECTION_IDS.STEP_MEASUREMENTS;
 const EMPTY_MEASUREMENTS = [];
@@ -199,29 +207,6 @@ function stepTreeRowTooltip(row, {
     formatTreeTooltipLine("Info", detail),
     formatTreeTooltipLine("Status", disabledReason),
   ].filter(Boolean).join("\n");
-}
-
-function StepTreeDepthGuides({ depth }) {
-  const normalizedDepth = Math.min(
-    Math.max(Math.trunc(Number(depth) || 0), 0),
-    Math.floor(treeDepthMaxPx / treeDepthIndentPx)
-  );
-
-  if (normalizedDepth < 1) {
-    return null;
-  }
-
-  return (
-    <span className="pointer-events-none absolute inset-y-0 left-0" aria-hidden="true">
-      {Array.from({ length: normalizedDepth }).map((_, index) => (
-        <span
-          key={index}
-          className="absolute inset-y-0 border-l border-sidebar-border/65"
-          style={{ left: `${index * treeDepthIndentPx + treeDepthGuideOffsetPx}px` }}
-        />
-      ))}
-    </span>
-  );
 }
 
 function TopologySvg({ children }) {
@@ -958,7 +943,7 @@ export default function StepFileSheet({
                         }
                       }}
                     >
-                      <StepTreeDepthGuides depth={row.depth} />
+                      <TreeDepthGuides depth={row.depth} />
                       <div
                         className="relative flex h-7 min-w-0 max-w-full items-center"
                         style={rowDepthPx > 0 ? { marginLeft: `${rowDepthPx}px` } : undefined}
@@ -1208,8 +1193,6 @@ export default function StepFileSheet({
       runtime: stepModule,
       loadingLabel: "Loading kinematics...",
       noParametersLabel: "No pose controls.",
-      showEnableToggle: true,
-      enableAriaLabel: "Enable pose",
       resetTitle: "Reset pose"
     }),
     buildAnimationControlsTab({

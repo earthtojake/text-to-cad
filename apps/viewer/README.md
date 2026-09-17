@@ -286,3 +286,82 @@ grows; it is out only on cost.
 
 Both sizes print `[setup] Ns` and `[gate NAME] Ns`, so a run that got slower
 says where.
+
+## Kinematics
+
+Every model with poses gets the same tab, under the same name, whichever file it
+came from: a STEP model's mates and a robot's joints are one control to the
+person using them. A model that declares mates HAS them: there is no switch that
+turns its kinematics off. The tab is absent for a model with none, which is the
+only "off" that ever meant anything.
+
+It holds two subsections. POSITION leads with a PRESET
+dropdown — a STEP model's named poses, a robot's SRDF group states, one word for
+both — then one row per DOF, with Reset and Copy at its foot. A preset is a way of
+setting the position, so it sits among the DOFs rather than in a section of its own
+with one control in it. TRANSITION is how the model travels between presets. The
+preset row and Transition render only for a file that declares presets, so a plain
+URDF opens straight onto its position.
+
+The dropdown shows the preset the person PICKED until they move a DOF by hand, then
+whichever preset the values match, or "None". Both sheets read it that way. Re-
+deriving it from the values every frame instead made a preset read as unmatched for
+the whole of its own transition and become itself only on arrival.
+
+Applying a pose is a MOTION, not a write: the mechanism travels to it over
+`poseTransition.js`'s tween, because reading a mechanism means watching which DOF
+turns which way. Both sheets ease the same way — the curve is
+`easeUrdfJointAnimation`, taken from the robot module rather than restated, so
+one pose change cannot feel unlike another. Animate and Speed are a viewer
+preference rather than a per-file setting, since someone who wants the snap wants
+it in every file, and OFF writes the target values in the same frame rather than
+transitioning quickly. Speed is hidden while Animate is off, not greyed: a
+control that cannot apply is better gone than present and refusing.
+
+## Robot components
+
+URDF, SRDF, and SDF files with named objects in their linked meshes expose a
+Components tab beside Kinematics. A robot sheet opens on KINEMATICS — posing the
+robot is what the file is for — and selecting a component jumps to Components.
+
+Components is a tree with the STEP tree's look: a row per link, collapsed, with
+the count of objects it owns; expanding one lists its objects beneath it. Links
+start collapsed because a real robot's inventory is long (a corpus arm is 78
+objects across 8 links, 51 under one of them) and the first question is which
+links exist. Selecting a row highlights that mesh object in the viewport;
+picking it in the viewport selects it, expands its link and scrolls to its row.
+Ctrl/Cmd/Shift-click toggles additional components. Objects retain their visual
+transforms as joints move. Unnamed objects remain rendered but are omitted from
+the inventory; a file without named objects has no Components tab.
+
+**Components is an Inspect affordance.** The per-object split happens only while
+the Render session is off, so Render keeps the per-visual geometry a robot has
+always had: its photographic scene receives no component selection, and the
+Materials tab's targets stay the robot's visuals rather than the objects inside
+them. A mesh object whose loader ranges do not describe a slice of its visual is
+reported once on the console and leaves that visual whole — it contributes no
+component rows, and the robot renders unchanged.
+
+A selected component's FACTS sit at the foot of the Components tab, not in a tab
+of their own: they are about the row just clicked, and a tab for them would stand
+empty whenever nothing was selected. Colour, link, triangle and vertex counts,
+and the object's size on the robot in millimetres — its mesh-space box scaled by
+the visual's transform, since a link mesh keeps its own file's units and the
+`<mesh scale>` lives in that transform. Colour leads because a cadgen mesh export
+groups objects BY colour, so it is what tells two rows of one link apart.
+
+There is no reference string to copy. There was one, a locator of the form
+`robot.urdf#link=arm&visual=...&object=...`, and nothing anywhere parses it: no
+CLI and no skill accepts that grammar, so copying it led nowhere. If robot
+components ever need a locator, it should be the shape STEP already uses
+(`file#selector`) and it should ship with the door that reads it.
+`visual` is the parsed visual ID (`<link>:v<one-based visual ordinal>` for URDF);
+`object` is the mesh loader's object ID and `index` its zero-based position in the
+loaded mesh's parts list. `name` preserves the authored object name. Resolve the
+link and visual in the robot description to find the mesh file, then identify
+that mesh object using its name and index. Repeated mesh instances have distinct
+references because they belong to different visuals. SRDF locators name the SRDF
+file and resolve visuals through its paired URDF. SDF uses its parsed visual IDs.
+These locators describe mesh objects for prompts; they are not STEP face selectors
+and are not accepted by the STEP selector CLI. They remain stable across pose
+changes, but reordering visuals or re-exporting a mesh can change the identifiers.

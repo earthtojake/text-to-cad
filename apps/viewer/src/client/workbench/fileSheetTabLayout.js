@@ -3,9 +3,9 @@ import { FILE_SHEET_SECTION_IDS } from "./fileSheetSections.js";
 // Layout model for the tabbed file sheet sidebar.
 //
 // The file sheet renders each section as a tab (Chrome-inspector style). For
-// STEP files the strip can be split into a top and bottom pane, with tabs that
-// can be dragged between panes and a resizable divider between them. Other file
-// kinds render a single tab strip.
+// STEP, drawing, and robot files the strip can be split into a top and bottom
+// pane, with tabs that can be dragged between panes and a resizable divider
+// between them. Other file kinds render a single tab strip.
 //
 // The CAD arrangement (which pane each tab lives in, tab order, split ratio,
 // and whether the split is active) is a global per-kind preference persisted
@@ -14,9 +14,8 @@ import { FILE_SHEET_SECTION_IDS } from "./fileSheetSections.js";
 // from the mode's per-file `openSectionIds` list (see resolveFileSheetTabPanes).
 
 // Bumped to reset saved arrangements when the default pane assignment changes.
-// v6: Display took ownership of inspection presentation. Older stored Render
-// ids are harmlessly dropped when CAD arrangements normalize.
-export const FILE_SHEET_TAB_LAYOUT_STORAGE_KEY = "cad-viewer:file-sheet-tab-layout:v6";
+// v7: robots open on Joints as one strip; Components no longer claims the top pane.
+export const FILE_SHEET_TAB_LAYOUT_STORAGE_KEY = "cad-viewer:file-sheet-tab-layout:v7";
 
 export const DEFAULT_FILE_SHEET_SPLIT_RATIO = 0.5;
 export const MIN_FILE_SHEET_SPLIT_RATIO = 0.2;
@@ -24,7 +23,7 @@ export const MAX_FILE_SHEET_SPLIT_RATIO = 0.8;
 
 export const FILE_SHEET_TAB_PANES = Object.freeze({ TOP: "top", BOTTOM: "bottom" });
 
-const SPLITTABLE_KINDS = Object.freeze(new Set(["step", "dxf"]));
+const SPLITTABLE_KINDS = Object.freeze(new Set(["step", "dxf", "urdf", "srdf", "sdf"]));
 
 function normalizeString(value) {
   return String(value == null ? "" : value).trim();
@@ -53,6 +52,11 @@ export function clampSplitRatio(ratio) {
 // the bottom pane, in render order. STEP: the Tree on top, Reference/Pose/
 // Animation/Measure/Display below. DXF: Material on top (it always
 // renders), the conditional Bends/Layers tabs below.
+//
+// Robots name none: a robot sheet opens as ONE strip on Joints, with Components
+// beside it. A split needs both panes occupied (resolveFileSheetTabPanes), so an
+// empty top pane is how a kind opts out of splitting by default while the user
+// can still drag a tab up to make one.
 const TOP_PANE_SECTION_IDS = Object.freeze(new Set([
   FILE_SHEET_SECTION_IDS.STEP_TREE,
   FILE_SHEET_SECTION_IDS.DXF_MATERIAL
@@ -92,14 +96,13 @@ export function defaultFileSheetTabArrangement(kind, sectionIds) {
   if (!kindSupportsSplit(kind)) {
     return { split: false, top: ids, bottom: [], ratio: DEFAULT_FILE_SHEET_SPLIT_RATIO };
   }
-  let top = ids.filter((id) => defaultPaneForSection(kind, id) === FILE_SHEET_TAB_PANES.TOP);
-  let bottom = ids.filter((id) => !top.includes(id));
-  // Guarantee both panes carry at least one tab when possible so the split is
-  // meaningful; otherwise fall back to a single strip.
-  if (!top.length && bottom.length) {
-    top = [bottom[0]];
-    bottom = bottom.slice(1);
-  }
+  const top = ids.filter((id) => defaultPaneForSection(kind, id) === FILE_SHEET_TAB_PANES.TOP);
+  const bottom = ids.filter((id) => !top.includes(id));
+  // A split is only the DEFAULT when a designated top-pane tab actually renders.
+  // STEP's Tree and DXF's Material always do; a robot's Components does not, so a
+  // robot whose meshes name no objects opens as one strip rather than promoting
+  // whatever happens to render first (Joints, or SDF) above the rest. An explicit
+  // split request still gets one — see `promoteToSplit` at the normalize site.
   const split = top.length > 0 && bottom.length > 0;
   return {
     split,
@@ -186,11 +189,23 @@ export function normalizeFileSheetTabArrangement(arrangement, kind, sectionIds) 
     return { split: true, top, bottom, ratio };
   }
   if (wantsSplit) {
-    // Split requested but a pane is empty — re-derive the default split.
-    return { ...defaultFileSheetTabArrangement(kind, rendered), ratio };
+    // Split requested but a pane is empty — re-derive the default split, and when
+    // the kind has no top-pane tab rendering, honour the request anyway by
+    // promoting the leading tab so the toggle is never a no-op.
+    return { ...promoteToSplit(defaultFileSheetTabArrangement(kind, rendered)), ratio };
   }
   // Collapsed: single strip backed by `top`.
   return { split: false, top: [...top, ...bottom], bottom: [], ratio };
+}
+
+// Honour an EXPLICIT split request for an arrangement the default layout left as a
+// single strip: the leading tab becomes the top pane and the rest the bottom one.
+// A one-tab strip has nothing to split and is returned unchanged.
+function promoteToSplit(arrangement) {
+  if (arrangement.split || arrangement.top.length < 2) {
+    return arrangement;
+  }
+  return { ...arrangement, split: true, top: arrangement.top.slice(0, 1), bottom: arrangement.top.slice(1) };
 }
 
 function arrangementPaneList(arrangement, pane) {

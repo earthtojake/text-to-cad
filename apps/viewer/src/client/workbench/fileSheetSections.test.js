@@ -88,6 +88,40 @@ test("rendered file sheet sections include closed-by-default sections", () => {
   }), ["animation", "display"]);
 });
 
+test("named robot objects add Components after Joints, and no Reference tab", () => {
+  // Joints MOVES the robot and is what a URDF is opened for, so it leads and the
+  // sheet lands on it. Components is the inventory of named objects inside the
+  // linked meshes, and it carries the reference for whatever is selected at its
+  // own foot — a Reference tab would stand empty until something was picked.
+  assert.deepEqual(
+    renderedFileSheetSectionIds("urdf", { hasRobotComponents: true }),
+    ["joints", "components", "display"]
+  );
+  assert.deepEqual(
+    renderedFileSheetSectionIds("srdf", { hasRobotComponents: true, motionEnabled: true }),
+    ["motion", "joints", "components", "display"]
+  );
+  assert.deepEqual(
+    renderedFileSheetSectionIds("sdf", { hasRobotComponents: true }),
+    ["sdf", "joints", "components", "display"]
+  );
+
+  // Without named objects — an STL-only robot, or meshes whose objects are all
+  // unnamed — neither tab is advertised, and the strip is exactly what main shows.
+  assert.deepEqual(renderedFileSheetSectionIds("urdf", { hasRobotComponents: false }), ["joints", "display"]);
+  assert.deepEqual(renderedFileSheetSectionIds("srdf"), ["joints", "display"]);
+  assert.deepEqual(renderedFileSheetSectionIds("sdf"), ["sdf", "joints", "display"]);
+
+  // Components is an Inspect-only inventory: Render mode still opens Studio alone.
+  assert.deepEqual(
+    renderedFileSheetSectionIds("urdf", { renderMode: true, hasRobotComponents: true }),
+    ["render"]
+  );
+  // The default open set is unchanged — the tab layout activates Components as the
+  // top pane's leftmost tab, so it is not listed here.
+  assert.deepEqual(defaultOpenFileSheetSectionIds("urdf", { hasRobotComponents: true }), ["joints"]);
+});
+
 test("Render mode orders Studio, Materials, Kinematics and Animation when authored", () => {
   assert.deepEqual(renderedFileSheetSectionIds("step", {
     renderMode: true,

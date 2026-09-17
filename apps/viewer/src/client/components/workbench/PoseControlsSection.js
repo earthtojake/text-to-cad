@@ -1,4 +1,3 @@
-import { RotateCcw } from "lucide-react";
 import { cn } from "@/ui/utils";
 import { resolveParameterNumberControlStep } from "@/workbench/parameterControls";
 import {
@@ -10,6 +9,12 @@ import {
 import { Button } from "../ui/button";
 import { Slider } from "../ui/slider";
 import {
+  NO_PRESET_VALUE,
+  KinematicsPoseRow,
+  KinematicsTransitionSubsection,
+  KinematicsValueActions
+} from "./KinematicsControls";
+import {
   FILE_SHEET_COMPACT_BUTTON_CLASSES,
   FILE_SHEET_PRECISION_SLIDER_CLASSES,
   FileSheetButtonRow,
@@ -19,7 +24,6 @@ import {
   FileSheetSliderField,
   FileSheetStatusText,
   FileSheetSubsection,
-  FileSheetBooleanToggle,
   FileSheetToggleRow,
   FileSheetValueInput,
   parseFileSheetNumberInput
@@ -59,6 +63,26 @@ function poseNamesFromDefinition(definition) {
   return Object.keys(poses).filter((name) => String(name || "").trim());
 }
 
+// Which named pose the model is IN, or "" when a DOF has been moved since. Same
+// question the robot sheet asks of its group states, so the dropdown reads the same
+// way in both: the preset that is on, or "None".
+export function activePoseName(definition, values) {
+  for (const poseName of poseNamesFromDefinition(definition)) {
+    const preset = poseValuesForPreset(definition, poseName);
+    const matches = Object.entries(preset).every(([dof, value]) => {
+      const current = values?.[dof];
+      if (typeof value === "number" && typeof current === "number") {
+        return Math.abs(current - value) <= 1e-6;
+      }
+      return current === value || (current == null && value == null);
+    });
+    if (matches) {
+      return poseName;
+    }
+  }
+  return "";
+}
+
 export function poseValuesForPreset(definition, poseName) {
   const preset = definition?.manifest?.poses?.[poseName];
   const values = { ...(definition?.defaultParameterValues || {}) };
@@ -73,23 +97,27 @@ export function poseValuesForPreset(definition, poseName) {
 }
 
 export default function PoseControlsSection({
-  title = "Kinematics",
   runtime = null,
   loadingLabel = "Loading pose...",
   noParametersLabel = "No pose controls.",
   hideWhenEmpty = false,
-  showEnableToggle = false,
-  enableLabel = "Enable",
-  enableAriaLabel = "",
-  resetTitle = "Reset pose"
+  resetTitle = "Reset every value to the model as authored"
 }) {
   const definition = runtime?.definition || null;
   const parameters = Array.isArray(definition?.parameters) ? definition.parameters : [];
   const status = String(runtime?.status || "").trim();
   const error = String(runtime?.error || "").trim();
   const values = runtime?.parameterValues || {};
-  const enabled = runtime?.enabled !== false;
+  // The pose-transition preference rides the runtime like every other pose concern.
+  const transition = runtime?.transition || null;
   const poseNames = poseNamesFromDefinition(definition);
+  // Which pose is on: the one the person picked, until they move a DOF by hand; then
+  // whichever preset the values match, or "None". The robot's group state reads the
+  // same way, so the two dropdowns cannot disagree about what "the current pose" means.
+  const pickedPose = String(runtime?.activePose || "");
+  const activePose = pickedPose && poseNames.includes(pickedPose)
+    ? pickedPose
+    : (activePoseName(definition, values) || NO_PRESET_VALUE);
   // Back-drive routing: which members a coupling drives, and what every DOF's
   // effective value is. Both are pure functions of the definition and the
   // current values, so a driven slider needs no state of its own.
@@ -113,18 +141,15 @@ export default function PoseControlsSection({
       ) : null}
 
       {definition ? (
-        <FileSheetSubsection
-          title={title}
-          // The mate gate rides this heading on the shared right-edge control axis rather
-          // than owning a "Module" section for one switch.
-          trailing={showEnableToggle ? (
-            <FileSheetBooleanToggle
-              checked={enabled}
-              onCheckedChange={(checked) => runtime?.onEnabledChange?.(checked)}
-              ariaLabel={enableAriaLabel || enableLabel}
+        <FileSheetSubsection title="Position">
+          {/* A pose is a way of SETTING the values, so it leads them. */}
+          {poseNames.length ? (
+            <KinematicsPoseRow
+              poses={poseNames.map((poseName) => ({ value: poseName, label: poseName }))}
+              activeValue={activePose}
+              onSelect={(poseName) => runtime?.onApplyPose?.(poseName)}
             />
           ) : null}
-        >
           {!parameters.length ? (
             <FileSheetStatusText>{noParametersLabel}</FileSheetStatusText>
           ) : null}
@@ -144,8 +169,7 @@ export default function PoseControlsSection({
                   label={parameter.label}
                   checked={currentValue === true}
                   onCheckedChange={(checked) => runtime?.onParameterChange?.(parameter.id, checked)}
-                  disabled={!enabled}
-                  ariaLabel={parameter.label}
+                          ariaLabel={parameter.label}
                 />
               );
             }
@@ -156,8 +180,7 @@ export default function PoseControlsSection({
                   label={parameter.label}
                   value={String(currentValue ?? "")}
                   onValueChange={(nextValue) => runtime?.onParameterChange?.(parameter.id, nextValue)}
-                  disabled={!enabled}
-                  ariaLabel={parameter.label}
+                          ariaLabel={parameter.label}
                   options={parameter.options}
                 />
               );
@@ -171,8 +194,7 @@ export default function PoseControlsSection({
                     <FileSheetColorPicker
                       value={String(currentValue || "#ffffff")}
                       onChange={(nextValue) => runtime?.onParameterChange?.(parameter.id, nextValue)}
-                      disabled={!enabled}
-                      aria-label={parameter.label}
+                                  aria-label={parameter.label}
                     />
                   )}
                 />
@@ -187,8 +209,7 @@ export default function PoseControlsSection({
                     size="sm"
                     className={cn(compactButtonClasses, "justify-center")}
                     onClick={() => runtime?.onParameterChange?.(parameter.id, Number(currentValue || 0) + 1)}
-                    disabled={!enabled}
-                  >
+                            >
                     {parameter.label}
                   </Button>
                 </FileSheetButtonRow>
@@ -203,8 +224,7 @@ export default function PoseControlsSection({
                     <FileSheetValueInput
                       value={String(currentValue ?? "")}
                       onValueCommit={(nextValue) => runtime?.onParameterChange?.(parameter.id, nextValue)}
-                      disabled={!enabled}
-                      inputMode="text"
+                                  inputMode="text"
                       ariaLabel={`${parameter.label} value`}
                       className="w-40 max-w-[min(12rem,55vw)] text-left font-medium tabular-nums"
                     />
@@ -232,7 +252,6 @@ export default function PoseControlsSection({
                   }));
                 }}
                 valueInputProps={{
-                  disabled: !enabled,
                   ariaLabel: `${parameter.label} slider value`
                 }}
               >
@@ -243,51 +262,22 @@ export default function PoseControlsSection({
                   max={parameter.max}
                   step={controlStep}
                   onValueChange={(nextValue) => changeParameter(parameter.id, nextValue?.[0] ?? currentValue)}
-                  disabled={!enabled}
-                  aria-label={parameter.label}
+                          aria-label={parameter.label}
                 />
               </FileSheetSliderField>
             );
           })}
-          {runtime?.onResetParameters ? (
-            <FileSheetButtonRow>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className={cn(compactButtonClasses, "justify-center")}
-                onClick={() => runtime.onResetParameters()}
-                title={resetTitle}
-              >
-                <RotateCcw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-                <span>Reset</span>
-              </Button>
-            </FileSheetButtonRow>
-          ) : null}
+          <KinematicsValueActions
+            onReset={runtime?.onResetParameters ? () => runtime.onResetParameters() : null}
+            onCopy={runtime?.onCopyParams ? () => runtime.onCopyParams() : null}
+            resetTitle={resetTitle}
+            copyTitle="Copy the current parameter values"
+          />
         </FileSheetSubsection>
       ) : null}
 
-      {/* Presets follow the sliders they drive: each one is a named configuration
-          the model itself declares, so it belongs to this tab and not to a menu. */}
       {definition && poseNames.length ? (
-        <FileSheetSubsection title="Presets">
-          <FileSheetButtonRow columns={poseNames.length > 1 ? 2 : 1}>
-            {poseNames.map((poseName) => (
-              <Button
-                key={poseName}
-                type="button"
-                variant="outline"
-                size="sm"
-                className={cn(compactButtonClasses, "justify-center")}
-                onClick={() => runtime?.onApplyPose?.(poseName)}
-                disabled={!enabled}
-                title={`Apply the ${poseName} pose`}
-              >
-                <span className="truncate">{poseName}</span>
-              </Button>
-            ))}
-          </FileSheetButtonRow>
-        </FileSheetSubsection>
+        <KinematicsTransitionSubsection transition={transition} />
       ) : null}
     </div>
   );

@@ -1,7 +1,5 @@
 import { memo, useEffect, useRef, useState } from "react";
-import { Copy, RotateCcw } from "lucide-react";
 import { cn } from "@/ui/utils";
-import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import {
   Select,
@@ -12,15 +10,12 @@ import {
 } from "../ui/select";
 import { Slider } from "../ui/slider";
 import FileSheet, {
-  FILE_SHEET_COMPACT_BUTTON_CLASSES,
   FILE_SHEET_COMPACT_NUMERIC_INPUT_CLASSES,
   FILE_SHEET_FIELD_LABEL_CLASSES,
   FILE_SHEET_PRECISION_SLIDER_CLASSES,
   FILE_SHEET_SELECT_TRIGGER_CLASSES,
-  FileSheetButtonRow,
   FileSheetField,
   FileSheetFieldGrid,
-  FileSheetSelectRow,
   FileSheetSliderField,
   FileSheetStatusText,
   FileSheetSubsection,
@@ -29,9 +24,15 @@ import FileSheet, {
 } from "./FileSheet";
 import FileSheetTabbedSurface from "./FileSheetTabbedSurface";
 import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections";
+import RobotComponentsSection from "./RobotComponentsSection";
+import {
+  NO_PRESET_VALUE,
+  KinematicsPoseRow,
+  KinematicsTransitionSubsection,
+  KinematicsValueActions
+} from "./KinematicsControls";
 
 const compactNumericInputClasses = FILE_SHEET_COMPACT_NUMERIC_INPUT_CLASSES;
-const compactButtonClasses = FILE_SHEET_COMPACT_BUTTON_CLASSES;
 const JOINT_CONTROL_SYNC_EPSILON = 0.001;
 const JOINT_CONTROL_LOCAL_OVERRIDE_MS = 3500;
 
@@ -259,11 +260,14 @@ export default function UrdfFileSheet({
   onOpenChange,
   onStartResize,
   joints,
+  components = [],
+  componentSelection,
   groupStates,
   activeGroupStateId,
   jointValues,
   onJointValueChange,
   onGroupStateSelect,
+  poseTransition = null,
   onCopyJointAngles,
   onResetPose,
   sdf = null,
@@ -298,9 +302,7 @@ export default function UrdfFileSheet({
   );
   const activeGroupStateValue = groupStatePresets.some((state) => String(state?.id || "").trim() === activeGroupStateId)
     ? activeGroupStateId
-    : "__custom__";
-  const activeGroupState = groupStatePresets.find((state) => String(state?.id || "").trim() === activeGroupStateValue);
-  const activeGroupStateLabel = activeGroupStateValue === "__custom__" ? "custom" : String(activeGroupState?.label || activeGroupState?.name || activeGroupStateValue);
+    : NO_PRESET_VALUE;
 
   const allSections = [
     isSdf ? {
@@ -350,64 +352,33 @@ export default function UrdfFileSheet({
     } : null,
     showJoints ? {
       id: "joints",
-      title: "Joints",
+      // Named for the system it drives, as the STEP sheet's is: one control, one word,
+      // whichever file the person opened.
+      title: "Kinematics",
       content: (
             movableJoints.length ? (
-              <>
-                <FileSheetSubsection title="Pose">
-                  {groupStatePresets.length ? (
-                    // The tab's primary control: a named state rewrites every
-                    // joint value below it.
-                    <FileSheetSelectRow
-                      stacked
-                      label="Group state"
-                      value={activeGroupStateValue}
-                      onValueChange={(value) => {
-                        if (value === "__custom__") {
-                          return;
-                        }
-                        const groupState = groupStatePresets.find((candidate) => String(candidate?.id || "").trim() === value);
-                        if (groupState) {
-                          onGroupStateSelect?.(groupState);
-                        }
-                      }}
-                      ariaLabel="Group state"
-                      triggerContent={<span className="truncate">{activeGroupStateLabel}</span>}
-                      options={groupStatePresets.map((groupState) => {
-                        const groupStateId = String(groupState?.id || "").trim();
-                        return {
-                          value: groupStateId,
-                          label: String(groupState?.label || groupState?.name || "").trim() || "State"
-                        };
-                      })}
-                    />
-                  ) : null}
-                  <FileSheetButtonRow>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className={cn(compactButtonClasses, "justify-center")}
-                      onClick={onResetPose}
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-                      <span>Reset pose</span>
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className={cn(compactButtonClasses, "justify-center")}
-                      onClick={() => {
-                        void onCopyJointAngles?.();
-                      }}
-                    >
-                      <Copy className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-                      <span>{isSdf ? "Copy values" : "Copy angles"}</span>
-                    </Button>
-                  </FileSheetButtonRow>
-                </FileSheetSubsection>
-                <FileSheetSubsection title="Values">
+              // py-2, as the STEP Kinematics panel wraps its own: without it the first
+              // heading sat 8px under the tab strip while Transition got the full gap.
+              <div className="py-2">
+                <FileSheetSubsection title="Position">
+                {/* A named state is a way of SETTING the joints, so it leads them. A
+                    plain URDF declares none and opens straight onto its values. */}
+                <KinematicsPoseRow
+                  poses={groupStatePresets.map((groupState) => {
+                    const groupStateId = String(groupState?.id || "").trim();
+                    return {
+                      value: groupStateId,
+                      label: String(groupState?.label || groupState?.name || "").trim() || "State"
+                    };
+                  })}
+                  activeValue={activeGroupStateValue}
+                  onSelect={(value) => {
+                    const groupState = groupStatePresets.find((candidate) => String(candidate?.id || "").trim() === value);
+                    if (groupState) {
+                      onGroupStateSelect?.(groupState);
+                    }
+                  }}
+                />
                 {movableJoints.map((joint) => (
                   <UrdfJointRow
                     key={joint.name}
@@ -416,11 +387,33 @@ export default function UrdfFileSheet({
                     onValueChange={onJointValueChange}
                   />
                 ))}
+                <KinematicsValueActions
+                  onReset={onResetPose}
+                  onCopy={onCopyJointAngles}
+                  resetTitle="Reset every joint to the robot as authored"
+                  copyTitle={isSdf ? "Copy the current values" : "Copy the current joint angles"}
+                />
                 </FileSheetSubsection>
-              </>
+                {groupStatePresets.length ? (
+                  <KinematicsTransitionSubsection transition={poseTransition} />
+                ) : null}
+              </div>
             ) : (
               <FileSheetStatusText className="py-2">No movable joints.</FileSheetStatusText>
             )
+      )
+    } : null,
+    components.length ? {
+      id: "components",
+      title: "Components",
+      titleAttr: "Named exported mesh components, by link",
+      content: (
+        <RobotComponentsSection
+          components={components}
+          selectedIds={componentSelection.selectedIds}
+          onSelect={componentSelection.select}
+          onHover={componentSelection.hover}
+        />
       )
     } : null,
     ...settingsTabs

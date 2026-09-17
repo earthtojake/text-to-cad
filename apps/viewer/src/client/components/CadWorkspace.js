@@ -1,5 +1,8 @@
 "use client";
 
+import { buildRobotComponentGeometry, robotComponents } from "@/workbench/robotComponents";
+import { useRobotComponentSelection } from "@/workbench/useRobotComponentSelection";
+
 import * as THREE from "three";
 import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeftRight, ArrowRight, Circle, Eraser, Minus, PaintBucket, PenTool, Square } from "lucide-react";
@@ -43,6 +46,7 @@ import {
 import { buildDxfLayersTab } from "./workbench/DxfLayersSection";
 import StepFileSheet from "./workbench/StepFileSheet";
 import { poseValuesForPreset } from "./workbench/PoseControlsSection";
+import { usePoseTransition, usePoseValueAnimation } from "../workbench/poseTransition.js";
 import StatusToast from "./workbench/StatusToast";
 import UrdfFileSheet from "./workbench/UrdfFileSheet";
 import ViewerAlertDialog from "./workbench/ViewerAlertDialog";
@@ -284,7 +288,6 @@ import {
   advanceUrdfJointValues,
   interpolateUrdfJointValues,
   jointValueMapsClose,
-  URDF_JOINT_ANIMATION_DURATION_MS,
   URDF_JOINT_ANIMATION_EPSILON,
   URDF_JOINT_ANIMATION_FOLLOW_MS
 } from "cadgen-js/lib/urdf/jointAnimation";
@@ -1322,7 +1325,6 @@ export default function CadWorkspace({
     definition: null
   });
   const [stepModuleParameterValues, setStepModuleParameterValues] = useState({});
-  const [stepModuleEnabled, setStepModuleEnabled] = useState(true);
   // The ANIMATION system, loaded and held entirely apart from the kinematics
   // state above: kinematics and choreography are independent declarations in
   // the embedded source sidecar, and a model may ship either,
@@ -1792,7 +1794,6 @@ export default function CadWorkspace({
         definition: null
       });
       setStepModuleParameterValues({});
-      setStepModuleEnabled(true);
       return () => {
         cancelled = true;
       };
@@ -1805,7 +1806,6 @@ export default function CadWorkspace({
       definition: null
     });
     setStepModuleParameterValues({});
-    setStepModuleEnabled(true);
 
     const modulePromise = selectedEntry?.editingPreview
       ? Promise.resolve().then(() => previewKinematicsModuleDefinition(selectedEntry.previewKinematics, {
@@ -1843,7 +1843,7 @@ export default function CadWorkspace({
       setStepModuleLoadState(resolved.loadState);
       stepModuleParameterValuesRef.current = resolved.parameterValues;
       setStepModuleParameterValues(resolved.parameterValues);
-      setStepModuleEnabled(resolved.enabled);
+      setAppliedStepPoseName("");
     }).catch((error) => {
       if (cancelled) {
         return;
@@ -1855,7 +1855,6 @@ export default function CadWorkspace({
         definition: null
       });
       setStepModuleParameterValues({});
-      setStepModuleEnabled(true);
     });
 
     return () => {
@@ -1934,7 +1933,7 @@ export default function CadWorkspace({
     };
   }, [fileSessionNamespace, selectedAnimationSourceKey, selectedEntry, selectedSourceAnimation]);
 
-  const selectedUrdfMeshGeometryResult = useMemo(() => {
+  const selectedUrdfLinkMeshGeometryResult = useMemo(() => {
     if (!selectedUrdfData || !selectedUrdfMeshes) {
       return {
         meshData: null,
@@ -1953,6 +1952,39 @@ export default function CadWorkspace({
       };
     }
   }, [selectedUrdfData, selectedUrdfMeshes]);
+  // Splitting a visual into its named objects is an INSPECT affordance. Render owns an
+  // isolated photographic scene, and the parts it is handed are the Materials targets —
+  // so a robot in Render keeps the per-visual geometry it has always had, and the split
+  // never reaches the Materials picker. Keeping the split in its own memo also means a
+  // mode switch never rebuilds the link geometry underneath it.
+  const selectedUrdfMeshGeometryResult = useMemo(() => {
+    if (renderSession.enabled || !selectedUrdfLinkMeshGeometryResult.meshData) {
+      return selectedUrdfLinkMeshGeometryResult;
+    }
+    try {
+      return {
+        meshData: buildRobotComponentGeometry(selectedUrdfLinkMeshGeometryResult.meshData),
+        error: ""
+      };
+    } catch (error) {
+      // The split is an enhancement: a failure in it costs the components, never the robot.
+      console.warn("Failed to split robot mesh objects into components", error);
+      return selectedUrdfLinkMeshGeometryResult;
+    }
+  }, [renderSession.enabled, selectedUrdfLinkMeshGeometryResult]);
+  const selectedUrdfComponents = useMemo(
+    () => robotComponents(selectedUrdfMeshGeometryResult.meshData),
+    [selectedUrdfMeshGeometryResult.meshData]
+  );
+  const robotSelection = useRobotComponentSelection(
+    selectedUrdfComponents, selectedUrdfMeshGeometryResult.meshData, selectedUrdfFileRef
+  );
+  // Inspect only, and stated twice on purpose: the geometry above is unsplit in Render,
+  // and this keeps the viewport's picking, hover and activate wiring on main's path even
+  // if that ever changes.
+  const robotComponentsActive = !renderSession.enabled &&
+    selectedEntryContentKind === VIEWPORT_CONTENT.ROBOT &&
+    selectedUrdfComponents.length > 0;
   const movableUrdfJoints = useMemo(
     () => (
       Array.isArray(selectedUrdfData?.joints)
@@ -2037,7 +2069,7 @@ export default function CadWorkspace({
   const selectedMeshPartial = selectedMeshMatches && !meshStateIsComplete(meshState);
   const selectedStepModuleTopologyRequired = stepModuleRequiresTopology(selectedStepModuleDefinition);
   const selectedStepModuleTopologyRequested =
-    !renderSession.enabled && stepModuleEnabled && selectedStepModuleTopologyRequired;
+    !renderSession.enabled && selectedStepModuleTopologyRequired;
   // What the viewport needs to draw one animated frame: the compiled clip and a
   // time. The render pane swaps in the live clock while playing; everything else
   // about playback stays out of the render path.
@@ -2073,12 +2105,20 @@ export default function CadWorkspace({
     animationStateRef.current = animationState;
   }, [animationState]);
 
+  // The pose the person PICKED, which the dropdown shows until they move a DOF. Without
+  // it the name is re-derived from the values every frame, so a pose read as "None"
+  // for the whole of its own transition and only became itself once it arrived.
+  const [appliedStepPoseName, setAppliedStepPoseName] = useState("");
+
   const handleStepModuleParameterChange = useCallback((parameterId, value) => {
     const id = String(parameterId || "").trim();
     const parameter = selectedStepModuleDefinition?.parameterMap?.[id];
     if (!parameter) {
       return;
     }
+    // Moving a DOF by hand leaves the named pose behind, so the dropdown stops claiming
+    // it and goes back to reading the values (the robot's group state does the same).
+    setAppliedStepPoseName("");
     setStepModuleParameterValues((current) => ({
       ...current,
       [id]: normalizeParameterValue(parameter, value)
@@ -2107,6 +2147,14 @@ export default function CadWorkspace({
   // A named pose is a full configuration, not a patch: every DOF the preset
   // does not mention returns to 0 (the artifact as written), so two presets in
   // a row can never leave a joint behind from the first.
+  // One preference for every sheet that has poses; see workbench/poseTransition.js.
+  const poseTransition = usePoseTransition();
+  const stepPoseAnimation = usePoseValueAnimation();
+  // Read at call time, not closed over: the robot tween is a useCallback with the joint
+  // state in its dependencies, and changing the speed must not rebuild it mid-drag.
+  const poseTransitionDurationMsRef = useRef(poseTransition.durationMs);
+  poseTransitionDurationMsRef.current = poseTransition.durationMs;
+
   const handleApplyPose = useCallback((poseName) => {
     if (!selectedStepModuleDefinition) {
       return;
@@ -2115,15 +2163,20 @@ export default function CadWorkspace({
       selectedStepModuleDefinition,
       poseValuesForPreset(selectedStepModuleDefinition, poseName)
     );
-    stepModuleParameterValuesRef.current = nextParameterValues;
-    setStepModuleParameterValues(nextParameterValues);
-  }, [selectedStepModuleDefinition]);
-
-  // Turning the mate graph off leaves the model at rest — and leaves any playing
-  // clip alone. Animation is not downstream of pose and never stops with it.
-  const handleStepModuleEnabledChange = useCallback((enabled) => {
-    setStepModuleEnabled(enabled !== false);
-  }, []);
+    setAppliedStepPoseName(String(poseName || ""));
+    // A pose is a place the mechanism GOES, so it travels there: the same tween the
+    // robot sheet has always used, at the duration this viewer is set to. With
+    // animation off the duration is 0 and the values are written in this frame.
+    stepPoseAnimation.run({
+      start: stepModuleParameterValuesRef.current || {},
+      target: nextParameterValues,
+      durationMs: poseTransition.durationMs,
+      onFrame: (frameValues) => {
+        stepModuleParameterValuesRef.current = frameValues;
+        setStepModuleParameterValues(frameValues);
+      }
+    });
+  }, [poseTransition.durationMs, selectedStepModuleDefinition, stepPoseAnimation]);
 
   // --- Animation transport -------------------------------------------------
   //
@@ -2530,7 +2583,7 @@ export default function CadWorkspace({
     return uniqueStringList(
       [
         ...expandedStepTreeNodeIds,
-        ...(stepModuleEnabled ? stepModuleTopologyOccurrenceIds(selectedStepModuleDefinition) : [])
+        ...stepModuleTopologyOccurrenceIds(selectedStepModuleDefinition)
       ]
         .map((id) => String(id || "").trim())
         .filter((id) => id && loadableStepTreeTopologyNodeIdSet.has(id))
@@ -2542,7 +2595,6 @@ export default function CadWorkspace({
     loadableStepTreeTopologyNodeIdSet,
     selectedStepModuleDefinition,
     selectedEntryHasReferences,
-    stepModuleEnabled,
   ]);
   const viewerSelectableAssemblyNodeIds = useMemo(
     () => (isAssemblyView
@@ -3315,6 +3367,7 @@ export default function CadWorkspace({
     hasDxfLayersPanel: selectedFileSheetKind === "dxf" && drawingLayers.length > 1,
     renderMode: renderSession.enabled,
     isSdf: selectedFileSheetKind === "sdf",
+    hasRobotComponents: selectedUrdfComponents.length > 0,
     showJoints: selectedFileSheetKind === "urdf" || selectedFileSheetKind === "srdf" || selectedFileSheetKind === "sdf"
   }), [
     selectedAnimationClipList,
@@ -3328,6 +3381,7 @@ export default function CadWorkspace({
     selectedStepModuleError,
     selectedStepModuleStatus,
     selectedStepModuleUrl,
+    selectedUrdfComponents,
     drawingBends,
     drawingLayers,
     renderSession.enabled
@@ -3414,6 +3468,19 @@ export default function CadWorkspace({
     setFileSheetOpenSectionIds(normalizedSectionIds);
   }, [fileSheetOpenSectionIds, renderedCadFileSheetSectionIds]);
 
+  const selectRobotComponent = useCallback((id, options) => {
+    robotSelection.select(id, options);
+    if (selectedUrdfComponents.some((component) => component.id === id)) {
+      if (isDesktop) setTabToolsOpen(true);
+      // Components carries the reference at its foot, so revealing it is the whole jump.
+      const revealIds = [FILE_SHEET_SECTION_IDS.ROBOT_COMPONENTS];
+      setFileSheetOpenSectionIds((current) => [
+        ...(current || []).filter((sectionId) => !revealIds.includes(sectionId)),
+        ...revealIds
+      ]);
+    }
+  }, [robotSelection.select, selectedUrdfComponents, isDesktop]);
+
   const buildActiveTabSnapshot = useCallback(() => {
     return cloneTabSnapshot({
       referenceQuery,
@@ -3495,7 +3562,6 @@ export default function CadWorkspace({
         render: snapshotRenderSession,
         tab: buildActiveTabSnapshot(),
         stepModule: {
-          enabled: stepModuleEnabled,
           parameterValues: stepModuleParameterValues
         },
         animation: {
@@ -3524,7 +3590,6 @@ export default function CadWorkspace({
     renderSession,
     resolvedScene.camera.projection,
     selectedEntry,
-    stepModuleEnabled,
     stepModuleParameterValues,
   ]);
 
@@ -3605,7 +3670,6 @@ export default function CadWorkspace({
 
     const stepModuleSlice = sessionState?.slices?.stepModule || null;
     if (stepModuleSlice) {
-      setStepModuleEnabled(stepModuleSlice.enabled !== false);
       setStepModuleParameterValues(stepModuleSlice.parameterValues || {});
     }
 
@@ -4284,7 +4348,6 @@ export default function CadWorkspace({
   const selectedStepParameterRuntime = useMemo(() => {
     if (
       !selectedStepModuleDefinition ||
-      !stepModuleEnabled ||
       (selectedStepModuleTopologyRequested && !selectedSelectorRuntime)
     ) {
       return null;
@@ -4302,7 +4365,6 @@ export default function CadWorkspace({
     selectedStepModuleDefinition,
     selectedStepModuleTopologyRequested,
     selectedStepModuleUrl,
-    stepModuleEnabled,
     stepModuleParameterValues
   ]);
   const selectedDisplayEdgesMatch =
@@ -5061,8 +5123,10 @@ export default function CadWorkspace({
     const startValues = cloneJointValueMap(startJointValues);
     const finalValues = cloneJointValueMap(targetJointValues);
     cancelUrdfTrajectoryPlayback();
+    // Animation off writes the target in this frame, exactly as an unchanged pose does.
     if (
       typeof requestAnimationFrame !== "function" ||
+      toFiniteNumber(options?.durationMs, poseTransitionDurationMsRef.current) <= 0 ||
       jointValueMapsClose(startValues, finalValues)
     ) {
       setJointValuesByFileRef((current) => ({
@@ -5075,7 +5139,7 @@ export default function CadWorkspace({
     const token = playback.token + 1;
     playback.token = token;
     const startedAtMs = animationNowMs();
-    const durationMs = Math.max(toFiniteNumber(options?.durationMs, URDF_JOINT_ANIMATION_DURATION_MS), 1);
+    const durationMs = Math.max(toFiniteNumber(options?.durationMs, poseTransitionDurationMsRef.current), 1);
     const step = (timestamp) => {
       if (urdfJointAnimationRef.current.token !== token) {
         return;
@@ -7472,12 +7536,13 @@ export default function CadWorkspace({
           referenceSelectionUnavailable={referenceSelectionUnavailable}
           referenceSelectionDeferred={selectedTopologyDeferredByCost}
           viewPlaneOffsetRight={viewportFrameInsets.right + 16}
-          viewerMode={viewerMode}
-          assemblyPickingActive={viewerInAssemblyMode}
-          assemblyParts={viewerAssemblyRenderParts}
+          viewerMode={robotComponentsActive ? "assembly" : viewerMode}
+          robotComponentPicking={robotComponentsActive}
+          assemblyPickingActive={robotComponentsActive || viewerInAssemblyMode}
+          assemblyParts={robotComponentsActive ? (selectedUrdfPreview.meshData?.parts || EMPTY_LIST) : viewerAssemblyRenderParts}
           hiddenPartIds={viewerHiddenPartIds}
-          selectedPartIds={viewerSelectedPartIds}
-          hoveredPartId={viewerHoveredPartIds}
+          selectedPartIds={robotComponentsActive ? robotSelection.selectedIds : viewerSelectedPartIds}
+          hoveredPartId={robotComponentsActive ? robotSelection.hoveredId : viewerHoveredPartIds}
           hoveredReferenceId={effectiveHoveredReferenceId}
           selectedReferenceIds={selectedReferenceIds}
           selectorRuntime={effectiveSelectorRuntime}
@@ -7493,10 +7558,10 @@ export default function CadWorkspace({
           drawingStrokes={drawingStrokes}
           handleDrawingStrokesChange={handleDrawingStrokesChange}
           handlePerspectiveChange={handlePerspectiveChange}
-          handleModelHoverChange={handleModelHoverChange}
-          handleModelReferenceActivate={handleModelReferenceActivate}
-          handleModelReferenceDoubleActivate={handleModelReferenceDoubleActivate}
-          handleModelReferenceContext={handleModelReferenceContext}
+          handleModelHoverChange={robotComponentsActive ? robotSelection.hover : handleModelHoverChange}
+          handleModelReferenceActivate={robotComponentsActive ? selectRobotComponent : handleModelReferenceActivate}
+          handleModelReferenceDoubleActivate={robotComponentsActive ? undefined : handleModelReferenceDoubleActivate}
+          handleModelReferenceContext={robotComponentsActive ? undefined : handleModelReferenceContext}
           onMeasurePick={handleMeasurePick}
           onMeasureHoverPoint={handleMeasureHoverPoint}
           activeMeasurementId={activeMeasureId}
@@ -7707,12 +7772,14 @@ export default function CadWorkspace({
                   status: selectedStepModuleStatus,
                   error: selectedStepModuleError,
                   definition: selectedStepModuleDefinition,
-                  enabled: stepModuleEnabled,
+
                   parameterValues: stepModuleParameterValues,
                   onParameterChange: handleStepModuleParameterChange,
                   onResetParameters: handleResetParameters,
                   onApplyPose: handleApplyPose,
-                  onEnabledChange: handleStepModuleEnabledChange,
+                  activePose: appliedStepPoseName,
+                  transition: poseTransition,
+
                   onCopyParams: handleCopyParameters,
                   onPasteParams: handlePasteParameters
                 }}
@@ -7757,11 +7824,14 @@ export default function CadWorkspace({
                 onOpenChange={setTabToolsOpen}
                 onStartResize={handleStartFileSheetResize}
                 joints={movableUrdfJoints}
+                components={selectedUrdfComponents}
+                componentSelection={{ ...robotSelection, select: selectRobotComponent }}
                 groupStates={selectedUrdfGroupStates}
                 activeGroupStateId={activeSelectedUrdfGroupStateId}
                 jointValues={selectedUrdfJointValues}
                 onJointValueChange={handleUrdfJointValueChange}
                 onGroupStateSelect={handleSelectUrdfGroupState}
+                poseTransition={poseTransition}
                 onCopyJointAngles={handleCopyUrdfJointAngles}
                 onResetPose={handleResetUrdfPose}
                 sdf={selectedFileSheetKind === "sdf" ? {
