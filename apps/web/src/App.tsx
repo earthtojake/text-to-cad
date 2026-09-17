@@ -79,7 +79,7 @@ function RootView({ client, server }: { client: CadClient; server: CadServerInfo
     if (window.innerWidth < 520) setState(previous => previous.panel === 'tree' || previous.panel === null ? { ...previous, panel: '' } : previous);
   }, [client]);
   const empty = <div className="pointer-events-auto absolute inset-0 z-10 bg-background"><EmptyState icon={FileText} title="No file open" description="Pick one from the tree on the right, or filter by name." /></div>;
-  return <div className="flex h-svh flex-col overflow-hidden"><ViewerTopBar colorSchemePreference={colorSchemePreference} onColorSchemePreferenceChange={changeColorScheme} /><div className="min-h-0 flex-1">
+  return <div className="flex h-svh flex-col overflow-hidden"><ViewerTopBar colorSchemePreference={colorSchemePreference} resolvedColorSchemeMode={appearance.colorScheme} onColorSchemePreferenceChange={changeColorScheme} /><div className="min-h-0 flex-1">
     <FileViewer file={file || null} source={source} renderers={renderers} state={state} onStateChange={setState} onOpenFile={open} appearance={appearance} narrowCrumbs={false}
       navigationPath={selectedEntry ? normalizeCadFileQueryParam(cadFileParamForEntry(selectedEntry)) : null}
       onError={error => setCopyStatus(error.message)} presentation={{

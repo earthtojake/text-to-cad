@@ -17,7 +17,8 @@ follows the live OS preference. Desktop injects its existing app appearance.
   on the same origin and is the fallback when cookies are blocked
   ([web storage](../../../apps/web/docs/storage.md)).
 - A synchronous startup script applies the preference before the app mounts.
-- The web top bar shows the selected appearance with Sun, Moon or Monitor.
+- The web top bar shows the effective appearance with Sun or Moon, including
+  when System follows the OS. The menu retains System, Light and Dark choices.
 - Neutral light and charcoal panel tokens stay independent of the model's
   lighting and materials.
 

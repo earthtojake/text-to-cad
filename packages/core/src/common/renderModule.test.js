@@ -62,6 +62,13 @@ test("syntax errors carry the embedded animation name", async () => {
   );
 });
 
+test("loader errors identify the document without exposing the module URL", async () => {
+  await assert.rejects(
+    () => importAnimationModule('throw new Error("Cannot load " + import.meta.url)', { name: "arm animation" }),
+    { message: "arm animation: Cannot load embedded animation module" }
+  );
+});
+
 test("clips are validated against the tree at load", async () => {
   const { clips } = await compileAnimationSource(GOOD);
   assert.deepEqual(validateAnimationClips(THREE, MESH_DATA, clips), []);

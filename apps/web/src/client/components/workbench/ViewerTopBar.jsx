@@ -13,14 +13,14 @@
 import faviconUrl from "../../assets/favicon.ico";
 
 import ViewerLinks from "./ViewerLinks";
-import { Monitor, Moon, Sun } from "lucide-react";
+import { Moon, Sun } from "lucide-react";
 import { Button } from "@hardcore/ui/primitives/button";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@hardcore/ui/primitives/dropdown-menu";
 import { COLOR_SCHEMES } from "../../ui/colorScheme.js";
 
-/** @param {{ colorSchemePreference?: string, onColorSchemePreferenceChange?: (value: string) => void }} props */
-export default function ViewerTopBar({ colorSchemePreference = "system", onColorSchemePreferenceChange = undefined }) {
-  const AppearanceIcon = colorSchemePreference === "light" ? Sun : colorSchemePreference === "dark" ? Moon : Monitor;
+/** @param {{ colorSchemePreference?: string, resolvedColorSchemeMode?: 'light' | 'dark', onColorSchemePreferenceChange?: (value: string) => void }} props */
+export default function ViewerTopBar({ colorSchemePreference = "system", resolvedColorSchemeMode = "light", onColorSchemePreferenceChange = undefined }) {
+  const AppearanceIcon = resolvedColorSchemeMode === "dark" ? Moon : Sun;
   const label = `Appearance: ${COLOR_SCHEMES.find(option => option.id === colorSchemePreference)?.label || "System"}`;
   return (
     <header className="flex h-9 shrink-0 items-center gap-2 border-b border-border bg-background px-2 text-foreground">
