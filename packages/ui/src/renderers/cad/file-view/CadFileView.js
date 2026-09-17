@@ -5867,11 +5867,12 @@ function CadFileViewSurface({
       if (segment === "..") { parts.pop(); continue; }
       parts.push(segment);
     }
-    const wanted = parts.join("/").toLowerCase();
-    return catalogEntries.find((entry) => cadFileParamForEntry(entry).replace(/\\/g, "/").toLowerCase() === wanted) || null;
-  }, [drawingGeometry, selectedEntryIsDrawingDocument, selectedEntry, catalogEntries]);
-  openDrawingSourceRef.current = drawingSourceEntry
-    ? () => handleSelectEntry(fileKey(drawingSourceEntry))
+    // The host owns the file tree here (the shared viewer sees one live entry), so the
+    // resolved root-relative path is handed to the host's opener, like any other file.
+    return parts.join("/");
+  }, [drawingGeometry, selectedEntryIsDrawingDocument, selectedEntry]);
+  openDrawingSourceRef.current = drawingSourceEntry && onOpenFile
+    ? () => onOpenFile(drawingSourceEntry)
     : null;
 
   const handleSelectTabToolMode = useCallback((mode) => {
