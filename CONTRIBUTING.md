@@ -255,6 +255,11 @@ CLI suite. Windows runs the Python package suite because paths, locks,
 subprocesses, file URLs and daemon behavior are platform-sensitive; Electron's
 native integration is covered separately on macOS.
 
+Viewer browser failures upload bounded renderer-state JSON for three days.
+CI sets `VIEWER_TEST_DIAGNOSTICS_DIR` for this evidence; it does not enable the
+optional review screenshots produced by `--out`. Capture timing stays in the
+job log, so a stalled screenshot still leaves useful state diagnostics.
+
 **The packaged runtime is built per job**, not built once and passed between
 them: `ensure_packaged_runtime` takes ~13 s, and an artifact would serialise
 every test job behind a bundle job for longer than that.
