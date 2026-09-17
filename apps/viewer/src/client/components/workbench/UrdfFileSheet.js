@@ -26,7 +26,7 @@ import FileSheetTabbedSurface from "./FileSheetTabbedSurface";
 import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections";
 import RobotComponentsSection from "./RobotComponentsSection";
 import {
-  KinematicsPoseSubsection,
+  KinematicsPoseRow,
   KinematicsTransitionSubsection,
   KinematicsValueActions
 } from "./KinematicsControls";
@@ -357,9 +357,10 @@ export default function UrdfFileSheet({
       content: (
             movableJoints.length ? (
               <>
-                {/* Pose exists when the file declares named configurations. A plain URDF
-                    declares none, so it opens straight onto its Values. */}
-                <KinematicsPoseSubsection
+                <FileSheetSubsection title="Values">
+                {/* A named state is a way of SETTING the joints, so it leads them. A
+                    plain URDF declares none and opens straight onto its values. */}
+                <KinematicsPoseRow
                   label="Group state"
                   ariaLabel="Group state"
                   poses={groupStatePresets.map((groupState) => {
@@ -377,7 +378,6 @@ export default function UrdfFileSheet({
                     }
                   }}
                 />
-                <FileSheetSubsection title="Values">
                 {movableJoints.map((joint) => (
                   <UrdfJointRow
                     key={joint.name}

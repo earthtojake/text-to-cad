@@ -295,11 +295,12 @@ person using them. A model that declares mates HAS them: there is no switch that
 turns its kinematics off. The tab is absent for a model with none, which is the
 only "off" that ever meant anything.
 
-It holds three subsections, top to bottom. POSE is the
-model's named configurations as a dropdown. VALUES is one row per DOF, with Reset
-and Copy at its foot. TRANSITION is how the model travels between poses. Pose and
-Transition render only for a file that declares poses, so a plain URDF opens
-straight onto its values.
+It holds two subsections. VALUES leads with the model's
+named poses as a dropdown — a pose is a way of SETTING the values, so it sits
+among them rather than in a section of its own with one control in it — then one
+row per DOF, with Reset and Copy at its foot. TRANSITION is how the model travels
+between poses. The pose row and Transition render only for a file that declares
+poses, so a plain URDF opens straight onto its values.
 
 Applying a pose is a MOTION, not a write: the mechanism travels to it over
 `poseTransition.js`'s tween, because reading a mechanism means watching which DOF

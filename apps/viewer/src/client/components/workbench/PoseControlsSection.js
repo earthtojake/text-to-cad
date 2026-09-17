@@ -10,7 +10,7 @@ import { Button } from "../ui/button";
 import { Slider } from "../ui/slider";
 import {
   CUSTOM_POSE_VALUE,
-  KinematicsPoseSubsection,
+  KinematicsPoseRow,
   KinematicsTransitionSubsection,
   KinematicsValueActions
 } from "./KinematicsControls";
@@ -133,16 +133,16 @@ export default function PoseControlsSection({
         <FileSheetStatusText tone="error" className="py-2">{error}</FileSheetStatusText>
       ) : null}
 
-      {definition && poseNames.length ? (
-        <KinematicsPoseSubsection
-          poses={poseNames.map((poseName) => ({ value: poseName, label: poseName }))}
-          activeValue={activePoseName(definition, values) || CUSTOM_POSE_VALUE}
-          onSelect={(poseName) => runtime?.onApplyPose?.(poseName)}
-        />
-      ) : null}
-
       {definition ? (
         <FileSheetSubsection title="Values">
+          {/* A pose is a way of SETTING the values, so it leads them. */}
+          {poseNames.length ? (
+            <KinematicsPoseRow
+              poses={poseNames.map((poseName) => ({ value: poseName, label: poseName }))}
+              activeValue={activePoseName(definition, values) || CUSTOM_POSE_VALUE}
+              onSelect={(poseName) => runtime?.onApplyPose?.(poseName)}
+            />
+          ) : null}
           {!parameters.length ? (
             <FileSheetStatusText>{noParametersLabel}</FileSheetStatusText>
           ) : null}

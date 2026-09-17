@@ -25,9 +25,10 @@ import {
 // naming: the person moved a DOF and left the named configuration behind.
 export const CUSTOM_POSE_VALUE = "__custom__";
 
-// The named configurations, at the top of the tab: the fastest way to put the model
-// somewhere, above the values it rewrites.
-export function KinematicsPoseSubsection({
+// The named configurations, as the FIRST row of Values: a pose is a way of setting the
+// values, so it belongs among them rather than in a section of its own with one control
+// in it.
+export function KinematicsPoseRow({
   poses,
   activeValue,
   onSelect,
@@ -43,23 +44,21 @@ export function KinematicsPoseSubsection({
     ? "custom"
     : String(poses.find((pose) => pose.value === active)?.label || active);
   return (
-    <FileSheetSubsection title="Pose">
-      <FileSheetSelectRow
-        stacked
-        label={label}
-        value={active}
-        onValueChange={(value) => {
-          if (value === CUSTOM_POSE_VALUE) {
-            return;
-          }
-          onSelect?.(value);
-        }}
-        ariaLabel={ariaLabel}
-        disabled={disabled}
-        triggerContent={<span className="truncate">{activeLabel}</span>}
-        options={poses.map((pose) => ({ value: pose.value, label: pose.label }))}
-      />
-    </FileSheetSubsection>
+    <FileSheetSelectRow
+      stacked
+      label={label}
+      value={active}
+      onValueChange={(value) => {
+        if (value === CUSTOM_POSE_VALUE) {
+          return;
+        }
+        onSelect?.(value);
+      }}
+      ariaLabel={ariaLabel}
+      disabled={disabled}
+      triggerContent={<span className="truncate">{activeLabel}</span>}
+      options={poses.map((pose) => ({ value: pose.value, label: pose.label }))}
+    />
   );
 }
 
