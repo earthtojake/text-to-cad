@@ -54,6 +54,13 @@ import {
   normalizeDxfUnits
 } from "../components/workbench/DxfSettingsSection.js";
 import { buildDxfLayersTab } from "../components/workbench/DxfLayersSection.js";
+import {
+  DXF_DEFAULT_LINE_WEIGHT,
+  buildDxfSheetTab,
+  dxfLineWeightScale,
+  normalizeDxfLineWeight
+} from "../components/workbench/DxfSheetSection.js";
+import { drawingSheetFacts } from "../workbench/drawingSheetFacts.js";
 import StepFileSheet from "../components/workbench/StepFileSheet.js";
 import { FileSheetPortalContext, HostPanelSlotContext } from "../components/workbench/FileSheet.js";
 import { poseValuesForPreset } from "../components/workbench/PoseControlsSection.js";
@@ -495,6 +502,8 @@ function CadFileViewSurface({
   const [drawingOrientation, setDrawingOrientation] = useState(DXF_DEFAULT_ORIENTATION);
   // Sheet material preset: theme tint + density for the weight fact.
   const [drawingMaterial, setDrawingMaterial] = useState(DXF_DEFAULT_MATERIAL);
+  // A drawing DOCUMENT's stroke scale (Fine/Normal/Bold), applied by the SVG route.
+  const [drawingLineWeight, setDrawingLineWeight] = useState(DXF_DEFAULT_LINE_WEIGHT);
   // The package's parsed contours, fetched once per entry and kept by URL. Curved bends
   // re-mesh from these; the URL carries the package version, so a rebuild refetches.
   const drawingGeometryCacheRef = useRef(new Map());
@@ -2194,10 +2203,10 @@ function CadFileViewSurface({
     emitState({ drawing: { thicknessMm: drawingThicknessMm, bends: drawingBends,
       bendStyle: drawingBendStyle, bendRadiusMm: drawingBendRadiusMm, kFactor: drawingKFactor,
       hiddenLayers: drawingHiddenLayers, units: drawingUnits, orientation: drawingOrientation,
-      material: drawingMaterial, viewMode: drawingViewMode } });
+      material: drawingMaterial, viewMode: drawingViewMode, lineWeight: drawingLineWeight } });
   }, [selectedKey, selectedEntryIsDrawing, drawingThicknessMm, drawingBends, drawingBendStyle,
     drawingBendRadiusMm, drawingKFactor, drawingHiddenLayers, drawingUnits, drawingOrientation,
-    drawingMaterial, drawingViewMode, emitState]);
+    drawingMaterial, drawingViewMode, drawingLineWeight, emitState]);
   useLayoutEffect(() => {
     const stored = restoreStateRef.current.drawing;
     drawingSettingsLoadedKeyRef.current = selectedKey;
@@ -2209,6 +2218,7 @@ function CadFileViewSurface({
     setDrawingUnits(normalizeDxfUnits(stored?.units, DXF_DEFAULT_UNITS));
     setDrawingOrientation(normalizeDxfOrientation(stored?.orientation));
     setDrawingMaterial(normalizeDxfMaterial(stored?.material, DXF_DEFAULT_MATERIAL));
+    setDrawingLineWeight(normalizeDxfLineWeight(stored?.lineWeight, DXF_DEFAULT_LINE_WEIGHT));
     setDrawingViewMode(stored?.viewMode === "2d" ? "2d" : "3d");
     setDrawingBends(Array.from({ length: selectedDrawingBendAxisCount }, (_, index) => ({
       angleDeg: normalizeDxfBendAngleDeg(stored?.bends?.[index]?.angleDeg, DXF_DEFAULT_BEND_ANGLE_DEG),
@@ -2248,8 +2258,12 @@ function CadFileViewSurface({
     if (hidden.length) {
       params.set("hide", hidden.join(","));
     }
+    const lineWeightScale = dxfLineWeightScale(drawingLineWeight);
+    if (lineWeightScale !== 1) {
+      params.set("lw", String(lineWeightScale));
+    }
     return `${origin}/__cad/drawing?${params.toString()}`;
-  }, [drawingGeometryUrl, selectedEntryIsDrawingDocument, drawingHiddenLayers]);
+  }, [drawingGeometryUrl, selectedEntryIsDrawingDocument, drawingHiddenLayers, drawingLineWeight]);
   useEffect(() => {
     if (!drawingGeometryUrl) {
       setDrawingGeometry(null);
@@ -2292,6 +2306,12 @@ function CadFileViewSurface({
     setDrawingThicknessMm(DXF_DEFAULT_THICKNESS_MM);
     setDrawingUnits(DXF_DEFAULT_UNITS);
     setDrawingMaterial(DXF_DEFAULT_MATERIAL);
+  }, []);
+
+  // The Sheet tab's Reset: the document's own look, every layer shown.
+  const handleDrawingSheetReset = useCallback(() => {
+    setDrawingLineWeight(DXF_DEFAULT_LINE_WEIGHT);
+    setDrawingHiddenLayers([]);
   }, []);
 
   const handleDrawingBendsReset = useCallback(() => {
@@ -2342,6 +2362,12 @@ function CadFileViewSurface({
   const drawingLayers = useMemo(
     () => (Array.isArray(drawingGeometry?.layers) ? drawingGeometry.layers : []),
     [drawingGeometry]
+  );
+  // What the sheet says about itself (paper, scale, projection, revision): read from
+  // its frame and title block, so the Sheet tab states only what the drawing states.
+  const drawingSheetFactsValue = useMemo(
+    () => (selectedEntryIsDrawingDocument ? drawingSheetFacts(drawingGeometry) : null),
+    [selectedEntryIsDrawingDocument, drawingGeometry]
   );
 
 
@@ -2469,6 +2495,7 @@ function CadFileViewSurface({
     measurementAvailable: effectiveSupportsMeasure,
     hasDxfBendsPanel: selectedFileSheetKind === "dxf" && drawingBends.length > 0,
     hasDxfLayersPanel: selectedFileSheetKind === "dxf" && drawingLayers.length > 1,
+    isDrawingDocument: selectedFileSheetKind === "dxf" && selectedEntryIsDrawingDocument,
     renderMode: renderSession.enabled,
     isSdf: selectedFileSheetKind === "sdf",
     hasRobotComponents: selectedUrdfComponents.length > 0,
@@ -2488,6 +2515,7 @@ function CadFileViewSurface({
     selectedUrdfComponents,
     drawingBends,
     drawingLayers,
+    selectedEntryIsDrawingDocument,
     renderSession.enabled
   ]);
 
@@ -6729,7 +6757,24 @@ function CadFileViewSurface({
                 viewerServerInfo={viewerServerInfo}
                 suppressDynamicMetadataStatus={selectedArtifactGenerating}
                 renderMode={renderSession.enabled}
-                settingsTabs={renderSession.enabled ? settingsTabs : [
+                settingsTabs={renderSession.enabled ? settingsTabs : selectedEntryIsDrawingDocument ? [
+                  buildDxfSheetTab({
+                    facts: drawingSheetFactsValue,
+                    lineWeight: drawingLineWeight,
+                    onLineWeightChange: setDrawingLineWeight,
+                    layers: drawingLayers,
+                    hiddenLayers: drawingHiddenLayers,
+                    onLayerVisibilityChange: handleDrawingLayerVisibilityChange,
+                    onReset: handleDrawingSheetReset
+                  }),
+                  ...(drawingLayers.length > 1 ? [buildDxfLayersTab({
+                    layers: drawingLayers,
+                    hiddenLayers: drawingHiddenLayers,
+                    onLayerVisibilityChange: handleDrawingLayerVisibilityChange,
+                    document: true
+                  })] : []),
+                  ...settingsTabs
+                ] : [
                   buildDxfMaterialTab({
                     thicknessMm: drawingThicknessMm,
                     onThicknessChange: setDrawingThicknessMm,

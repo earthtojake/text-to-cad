@@ -25,8 +25,20 @@ function layerEntityCount(layer) {
     + (Number(layer?.textCount) || 0);
 }
 
-function layerFactsLabel(layer) {
-  const kind = LAYER_KIND_LABELS[String(layer?.kind || "").toLowerCase()] || "Cut";
+/** On a drawing SHEET the layers mean line work, not cut/bend/engrave operations. */
+const DRAWING_LAYER_ROLES = Object.freeze({
+  VISIBLE: "Visible edges",
+  HIDDEN: "Hidden lines",
+  CENTER: "Centre lines",
+  DIM: "Dimensions",
+  NOTES: "Notes",
+  TITLE: "Title block",
+  SHEET: "Frame"
+});
+
+function layerFactsLabel(layer, document) {
+  const role = document ? DRAWING_LAYER_ROLES[String(layer?.name || "").toUpperCase()] : null;
+  const kind = role || LAYER_KIND_LABELS[String(layer?.kind || "").toLowerCase()] || (document ? "Line work" : "Cut");
   const count = layerEntityCount(layer);
   return count > 0 ? `${kind} · ${count}` : kind;
 }
@@ -34,7 +46,8 @@ function layerFactsLabel(layer) {
 export function DxfLayersSection({
   layers = [],
   hiddenLayers = [],
-  onLayerVisibilityChange
+  onLayerVisibilityChange,
+  document = false
 }) {
   const hiddenLayerSet = new Set(Array.isArray(hiddenLayers) ? hiddenLayers : []);
   if (!layers.length) {
@@ -52,16 +65,16 @@ export function DxfLayersSection({
           <div
             key={layer.name}
             className={cn(
-              "group/layer-row flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-tiny",
+              "group/layer-row flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-[11px]",
               "hover:bg-sidebar-accent/60",
               hidden && "opacity-60"
             )}
           >
-            <span className="min-w-0 flex-1 truncate text-sidebar-foreground">
+            <span className="min-w-0 flex-1 truncate font-medium text-sidebar-foreground">
               {layer.name}
             </span>
             <span className="shrink-0 tabular-nums text-muted-foreground">
-              {layerFactsLabel(layer)}
+              {layerFactsLabel(layer, document)}
             </span>
             <Button
               type="button"

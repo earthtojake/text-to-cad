@@ -46,6 +46,21 @@ class DrawingSvgTests(unittest.TestCase):
             without = render_drawing_svg(path, hidden_layers=("HIDDEN",))
         self.assertLess(len(without), len(full), "hiding a layer removes its strokes")
 
+    def test_line_weight_scales_every_stroke(self) -> None:
+        import re
+
+        with temporary_directory(prefix="tmp-cad-drawing-svg-") as td:
+            path = Path(td) / "sheet.dxf"
+            _drawing(path)
+            normal = render_drawing_svg(path)
+            bold = render_drawing_svg(path, lineweight_scale=2.0)
+
+        def widths(svg: str) -> list[float]:
+            return sorted(float(w) for w in re.findall(r"stroke-width: ([0-9.]+)", svg))
+
+        self.assertTrue(widths(normal))
+        self.assertGreater(max(widths(bold)), max(widths(normal)), "Bold draws wider strokes")
+
 
 if __name__ == "__main__":
     unittest.main()

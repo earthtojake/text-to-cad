@@ -616,7 +616,8 @@ class CadApp:
 
         Same file resolution and guards as ``/__cad/asset``; ``hide`` is a
         comma-separated list of layer names to leave out, so the viewer's layer
-        switches apply to the printed look as well.
+        switches apply to the printed look as well, and ``lw`` scales every
+        stroke (the Sheet tab's line weight; 1 is the file's own).
         """
         candidate = self.backend.asset_path_for_file_ref(query.get("file") or "")
         if not candidate or not os.path.isfile(candidate) or not str(candidate).lower().endswith(".dxf"):
@@ -625,7 +626,11 @@ class CadApp:
         from .drawing_svg import render_drawing_svg
 
         hidden = tuple(name for name in str(query.get("hide") or "").split(",") if name)
-        svg = render_drawing_svg(candidate, hidden_layers=hidden)
+        try:
+            lineweight_scale = float(query.get("lw") or 1.0)
+        except (TypeError, ValueError):
+            lineweight_scale = 1.0
+        svg = render_drawing_svg(candidate, hidden_layers=hidden, lineweight_scale=lineweight_scale)
         response.send_bytes(200, svg.encode("utf-8"), "image/svg+xml; charset=utf-8")
 
     def _handle_tess_get(self, request, response):

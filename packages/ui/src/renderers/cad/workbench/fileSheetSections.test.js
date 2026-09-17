@@ -45,6 +45,11 @@ test("rendered file sheet sections include closed-by-default sections", () => {
     renderedFileSheetSectionIds("dxf", { hasDxfBendsPanel: true, hasDxfLayersPanel: true }),
     ["material", "bends", "dxfLayers"]
   );
+  // A dimensioned drawing is a document: Sheet replaces Material, and bends never apply.
+  assert.deepEqual(
+    renderedFileSheetSectionIds("dxf", { isDrawingDocument: true, hasDxfBendsPanel: true, hasDxfLayersPanel: true }),
+    ["sheet", "dxfLayers"]
+  );
   assert.deepEqual(renderedFileSheetSectionIds("step", {
     hasStepPosePanel: true,
     hasStepAnimationPanel: true
