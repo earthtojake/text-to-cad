@@ -602,8 +602,8 @@ export function isTessellationCacheProbeMissError(error) {
   return error?.code === "TESS_CACHE_PROBE_MISS";
 }
 
-// Each render session owns its provider, request cancellation, and write queue.
-// A provider is never installed into module state: concurrent roots stay independent.
+// A root connection or standalone job owns its provider and bounded write queue.
+// Views borrow cancellable sessions; no provider is installed into module state.
 export function createTessellationCache({ provider = null, writeBack = {} } = {}) {
   let disposed = false;
   let cacheProvider = provider
@@ -803,8 +803,47 @@ export function createTessellationCache({ provider = null, writeBack = {} } = {}
     }));
   }
 
+  function createSession({ signal } = {}) {
+    if (disposed) throw new Error("This tessellation cache has been disposed.");
+    const sessionLifetime = new AbortController();
+    const sessionSignal = AbortSignal.any([
+      lifetime.signal,
+      sessionLifetime.signal,
+      ...(signal ? [signal] : []),
+    ]);
+    const active = () => !sessionSignal.aborted;
+    const read = async (method, args, request = {}) => {
+      sessionSignal.throwIfAborted();
+      return cache[method](...args, {
+        ...request,
+        signal: request.signal ? AbortSignal.any([sessionSignal, request.signal]) : sessionSignal,
+      });
+    };
+    const write = (method, args) => active() ? cache[method](...args) : Promise.resolve(null);
+    return {
+      ...cache,
+      tessellationCacheProviderRegistered: () => active() && cache.tessellationCacheProviderRegistered(),
+      probeCachedTessellationEntries: (inputs, options, request) => read("probeCachedTessellationEntries", [inputs, options], request),
+      getCachedEntryBytes: (input, options, request) => read("getCachedEntryBytes", [input, options], request),
+      getCachedEntryBytesMany: (probes, request) => read("getCachedEntryBytesMany", [probes], request),
+      getCachedComponentEntry: (input, options, request) => read("getCachedComponentEntry", [input, options], request),
+      configureTessellationCacheWriteBack: (options) => {
+        if (active()) cache.configureTessellationCacheWriteBack(options);
+      },
+      flushTessellationCacheWriteBacks: () => active() ? cache.flushTessellationCacheWriteBacks() : Promise.resolve(),
+      writeBackEntryBytes: (...args) => write("writeBackEntryBytes", args),
+      writeBackComponentEntry: (...args) => write("writeBackComponentEntry", args),
+      createSession: ({ signal: childSignal } = {}) => createSession({
+        signal: childSignal ? AbortSignal.any([sessionSignal, childSignal]) : sessionSignal,
+      }),
+      // Writes admitted while this view was active belong to the root queue.
+      // Its cancellation must neither discard those bytes nor abort another view.
+      dispose: () => sessionLifetime.abort(),
+    };
+  }
+
   configureTessellationCacheWriteBack(writeBack);
-  return {
+  const cache = {
     tessellationCacheProviderRegistered,
     probeCachedTessellationEntries: (inputs, options, request) => probeCachedTessellationEntries(inputs, options, requestOptions(request)),
     getCachedEntryBytes: (input, options, request) => getCachedEntryBytes(input, options, requestOptions(request)),
@@ -814,6 +853,7 @@ export function createTessellationCache({ provider = null, writeBack = {} } = {}
     flushTessellationCacheWriteBacks,
     writeBackEntryBytes,
     writeBackComponentEntry,
+    createSession,
     memoryStats: () => ({ pendingWriteBackBytes, activeWriteBackBytes, writeBackBytes: pendingWriteBackBytes + activeWriteBackBytes }),
     dispose() {
       if (disposed) return;
@@ -826,6 +866,7 @@ export function createTessellationCache({ provider = null, writeBack = {} } = {}
       pendingWriteBackBytes = 0;
     },
   };
+  return cache;
 }
 export const TESS_PROBE_MAX_KEYS = 256;
 export const TESS_BATCH_MAX_BYTES = 32 * 1024 * 1024;

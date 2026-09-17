@@ -57,7 +57,7 @@ export interface CadClient {
   requestSurfaces(body: Record<string, unknown>, options?: CadRequestOptions): Promise<Record<string, unknown>>;
   cancelSurfaceRequest(body: { job: string }, options?: CadRequestOptions): Promise<Record<string, unknown>>;
   editingPreview(file: string, options?: CadRequestOptions & { after?: string }): Promise<Record<string, unknown>>;
-  createRenderSession(): CadRenderSession;
+  createRenderSession(options?: { file?: string }): CadRenderSession;
   dispose(): void;
 }
 export interface CadClientOptions {

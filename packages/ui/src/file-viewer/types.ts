@@ -67,7 +67,13 @@ export interface DocumentSession {
   reload: () => void;
   keepMine: () => void;
 }
-export interface PrepareContext { file: FileMetadata; source: FileSource; signal: AbortSignal }
+export interface PrepareContext {
+  file: FileMetadata;
+  source: FileSource;
+  signal: AbortSignal;
+  /** This same file was explicitly reloaded or invalidated by its source. */
+  refresh?: boolean;
+}
 export interface PreparedDocument<T> { data: T; text?: TextDocument; dispose?: () => void }
 export interface FileActivity { loading: boolean; label?: string; title?: string; tone?: "neutral" | "info" | "warning" | "error"; onActivate?: () => void }
 export interface RendererViewProps {

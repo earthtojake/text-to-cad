@@ -1,5 +1,5 @@
 import { PanelsTopLeft, Plus } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 
 import { Button } from "@renderer/components/ui/button";
 import { isMac } from "@renderer/lib/platform";
@@ -14,6 +14,7 @@ import { FileTab } from "./FileTab";
 import { ReviewTab } from "./ReviewTab";
 import { TabStrip } from "./TabStrip";
 import { TerminalTab } from "./TerminalTab";
+import { createDesktopCadConnections } from "./adapters/cadRuntime";
 
 /**
  * The explorer: one tab strip and whatever the selected tab renders.
@@ -31,6 +32,12 @@ export function ExplorerPane() {
   const ready = useExplorer((state) => state.ready);
   const open = useExplorer((state) => state.open);
   const active = useActiveTab();
+  const projectId = project?.id;
+  const cadConnections = useMemo(() => projectId ? createDesktopCadConnections(projectId) : null, [projectId]);
+  useEffect(() => () => cadConnections?.dispose(), [cadConnections]);
+  useEffect(() => {
+    cadConnections?.retainRoots(tabs.filter((tab) => tab.kind === "file").map((tab) => tab.root));
+  }, [cadConnections, tabs]);
 
   useExplorerShortcuts();
 
@@ -47,7 +54,7 @@ export function ExplorerPane() {
       <TabStrip />
       <div className="min-h-0 flex-1">
         {active ? (
-          <TabBody key={active.id} project={project} tab={active} />
+          <TabBody key={active.id} project={project} tab={active} cadConnections={cadConnections!} />
         ) : (
           <EmptyState
             action={
@@ -74,7 +81,9 @@ function Frame({ children }: { children: React.ReactNode }) {
   return <div className="flex h-full min-h-0 flex-col border-l">{children}</div>;
 }
 
-function TabBody({ tab, project }: { tab: ExplorerTab; project: Project }) {
+function TabBody({ tab, project, cadConnections }: {
+  tab: ExplorerTab; project: Project; cadConnections: ReturnType<typeof createDesktopCadConnections>;
+}) {
   switch (tab.kind) {
     case "file":
       return (
@@ -84,6 +93,7 @@ function TabBody({ tab, project }: { tab: ExplorerTab; project: Project }) {
           project={project}
           root={tab.root}
           tabId={tab.id}
+          cadConnection={cadConnections.forRoot(tab.root)}
         />
       );
     case "review":

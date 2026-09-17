@@ -157,9 +157,13 @@ releases that reservation and probes another cached tier or resolves the exact
 surface under fresh cold-work admission. **Cache loss never silently turns a
 cheap decoded-mesh request into unbudgeted surface tessellation.**
 
-Each client render session creates its own `createTessellationCache({provider})`.
-The instance exposes the probe, read and write operations; no module-global
-provider can be swapped by another root. Its disposal aborts reads, discards
-queued writes and prevents late results from being adopted. Viewer write-backs
-drain after a quiet interval with bounded concurrency, while snapshot jobs
-flush and dispose their own cache after their complete source is loaded.
+A client lazily owns one `createTessellationCache({provider})`, whose
+`createSession({signal})` method lends cancellable views to render sessions.
+No module-global provider can be swapped by another root. Closing a view aborts
+its reads and prevents late results from enqueueing writes; writes already
+admitted to the root's byte-bounded queue survive file switches. Closing the
+client disposes the owner, aborts every view and discards remaining queued
+writes. Viewer write-backs drain after a quiet interval with bounded concurrency,
+while snapshot jobs flush and dispose their own cache after their complete
+source is loaded. Decoded component meshes retain their existing page-wide
+content-addressed LRU; a cache view does not retain an additional geometry copy.

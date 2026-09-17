@@ -1485,6 +1485,12 @@ registrations load shared implementations lazily. The package supplies compiled
 ESM, declarations, CSS and workers; consumer source aliases, copied tokens,
 JSX loaders and handwritten viewer declarations are removed.
 
+The explorer owns one lazy CAD connection per root with open file tabs. Tab
+switches borrow that connection, preserving catalog and bounded cache work while
+the inactive viewport is unmounted. Closing the root's last file tab or leaving
+the project disposes the connection and cancels its pending work. Each acquisition
+checks main's current viewer origin; a restarted backend replaces the old client.
+
 Root workspace installation keeps React, ReactDOM, Three.js and Radix identities
 consistent. `viewer-peers.test.ts` verifies the installed package graph; real
 Electron tests verify the rendered integration. Packaging still bundles the

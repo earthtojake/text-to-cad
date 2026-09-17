@@ -26,6 +26,9 @@ function workspace(id: string) {
   return { client, source, renderers, capture };
 }
 const a = workspace('one'), b = workspace('two');
+// Directory navigation hydrates before a renderer mounts. Large workspaces
+// return path-only placeholders until the selected file is requested.
+await Promise.all([a.client.refresh(), b.client.refresh()]);
 function App() {
   const [state, setState] = useState<FileViewerState>({ panel: '', panelWidth: 300 });
   const [otherState, setOtherState] = useState<FileViewerState>({ panel: '', panelWidth: 300 });

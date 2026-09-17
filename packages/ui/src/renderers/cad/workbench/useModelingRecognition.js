@@ -1,6 +1,8 @@
 import { resolveSurfaceComponents } from "./surfaceResolution.js";
 import { useEffect, useRef, useState } from 'react';
 import { resolvePackageAssetUrl } from '@hardcore/core/client';
+import { loadPackageDescriptor } from '../components/workbench/hooks/packageDescriptorCache.js';
+import { completedModelingRecognition, modelingRecognitionKey } from './modelingRecognitionCache.js';
 const EMPTY_RESULTS = {};
 
 /** One worker at a time; completed components survive tab switches and repeated instances. */
@@ -15,10 +17,10 @@ export function useModelingRecognition(meshUrl, enabled, { client } = {}) {
   useEffect(()=>{
     if(!enabled || !meshUrl || descriptor)return;
     const controller=new AbortController();setError('');
-    fetch(resolvePackageAssetUrl(meshUrl,'assembly.json'),{signal:controller.signal})
-      .then(r=>{if(!r.ok)throw new Error('Geometry is unavailable.');return r.json();})
+    loadPackageDescriptor(meshUrl,{signal:controller.signal})
       .then(value=>{
         if(controller.signal.aborted)return;
+        if(!value)throw new Error('Geometry is unavailable.');
         if(!value.components || !value.occurrences?.length)throw new Error('This file has no supported STEP geometry.');
         setDocument({url:meshUrl,value});
       }).catch(e=>{if(!controller.signal.aborted)setError(e.message);});
@@ -36,11 +38,21 @@ export function useModelingRecognition(meshUrl, enabled, { client } = {}) {
         if(cancelled)return;
         if(cache.current.has(id))continue;
         const component=descriptor.components[id];
+        let identity=component;
         let surf=component?.surf ? resolvePackageAssetUrl(meshUrl, component.surf) : "";
+        const known=completedModelingRecognition.get(modelingRecognitionKey(identity,surf));
+        if(known){cache.current.set(id,known);setResults(current=>({...current,[id]:known}));continue;}
         if (!surf && component?.surfaceInput && client) {
-          try { surf=(await resolveSurfaceComponents(descriptor, [{ cid:id, surfaceInput:component.surfaceInput, surfaceObject:component.surfaceObject }], { client, signal:controller.signal })).get(id)?.surfUrl || ""; }
+          try {
+            identity=(await resolveSurfaceComponents(descriptor, [{ cid:id, surfaceInput:component.surfaceInput, surfaceObject:component.surfaceObject }], { client, signal:controller.signal })).get(id);
+            surf=identity?.surfUrl || "";
+          }
           catch (error) { if (cancelled) return; cache.current.set(id,{error:error.message}); setResults(current=>({...current,[id]:{error:error.message}})); continue; }
         }
+        if(cancelled)return;
+        const key=modelingRecognitionKey(identity,surf);
+        const completed=completedModelingRecognition.get(key);
+        if(completed){cache.current.set(id,completed);setResults(current=>({...current,[id]:completed}));continue;}
         const result=await new Promise(resolve=>{
           let settled=false;
           const finish=value=>{if(settled || cancelled)return;settled=true;stop();resolve(value);};
@@ -54,6 +66,7 @@ export function useModelingRecognition(meshUrl, enabled, { client } = {}) {
           }catch{finish({error:'Could not start recognition.'});}
         });
         if(cancelled)return;
+        completedModelingRecognition.set(key,result);
         cache.current.set(id,result);
         setResults(current=>({...current,[id]:result}));
       }

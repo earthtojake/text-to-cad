@@ -156,14 +156,23 @@ Where the mechanism is written:
 Use `@hardcore/core/client`, `/common/*`, `/lib/*` and `/glb/*` exports.
 Construct `createCadClient({ origin, workspaceId })` in a host. Construction is
 inert; subscriptions start catalog polling. `dispose()` stops polling, aborts
-requests and disposes render sessions. Each session owns its cache provider,
-abort signal and worker leases. Root identity comes from the server's stable
+requests and disposes render sessions. The client lazily owns its cache provider
+and bounded write-back queue; each render session borrows a cancellable cache
+view and owns its abort signal and worker leases. Switching views preserves
+admitted cache writes, while disposing the client releases them. Root identity
+comes from the server's stable
 `rootId`, not its port. Multiple roots render concurrently without replacing
 one another's provider. Request failures retain operation, URL, method, kind
 and HTTP status for host-owned error presentation.
 `serverInfo()` caches stable metadata; `serverInfo({ fresh: true })` performs
 a new request so development restart polling observes identity changes and
 connection failures.
+
+`resolveEntry(file)` hydrates path-only catalog placeholders before returning.
+Pass the displayed file to `createRenderSession({ file })` so polling refreshes
+its metadata. Partial replies preserve other resolved entries; newer complete
+entries and directory removals still invalidate them. A cancelled or older
+request cannot overwrite a newer file revision.
 
 `requestSurfaces`, `cancelSurfaceRequest` and `editingPreview` are explicit,
 origin-bound HTTP methods. They consume immutable runtime views and preview

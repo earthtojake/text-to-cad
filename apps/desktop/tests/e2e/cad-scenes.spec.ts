@@ -3,13 +3,15 @@ import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
+import { _electron as electron, expect, test, type ElectronApplication, type Page, type Request } from "@playwright/test";
 import type { HardcoreApi } from "../../src/shared/ipc";
 import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-runtime";
 
 declare const window: {
   hardcore: HardcoreApi;
   __cadDisplayRecords?: () => { partId: string; matrix: number[] | null }[];
+  __cadModelPlacement?: { modelKey?: string };
+  __cadViewerQuality?: { modelKey?: string; standardQualityReady?: boolean };
 };
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const repoRoot = path.resolve(appRoot, "../..");
@@ -86,6 +88,55 @@ async function openFile(file: string) {
   await page.getByLabel("Filter files").fill(file);
   await page.getByRole("option", { name: file, exact: false }).first().click();
   await expect(page.locator("[data-cad-surface] canvas").first()).toBeVisible({ timeout: 90_000 });
+}
+
+async function selectOrOpenFile(file: string) {
+  const tab = page.getByRole("tab", { name: new RegExp(file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) });
+  if (await tab.count()) {
+    await tab.click();
+    await expect(page.locator("[data-cad-surface] canvas").first()).toBeVisible({ timeout: 90_000 });
+    return;
+  }
+  await openFile(file);
+}
+
+async function setDisplayMode(mode: string) {
+  await page.getByRole("button", { name: "Display", exact: true }).click();
+  const display = page.getByRole("dialog", { name: "Display settings" });
+  const value = display.getByRole("combobox", { name: "Mode" });
+  await value.click();
+  await page.getByRole("option", { name: mode, exact: true }).click();
+  await expect(value).toContainText(mode);
+  await page.keyboard.press("Escape");
+  // The file-session writer batches ordinary UI changes for 180ms.
+  await page.waitForTimeout(250);
+}
+
+async function expectDisplayMode(mode: string) {
+  await page.getByRole("button", { name: "Display", exact: true }).click();
+  const value = page.getByRole("dialog", { name: "Display settings" })
+    .getByRole("combobox", { name: "Mode" });
+  await expect(value).toContainText(mode);
+  await page.keyboard.press("Escape");
+}
+
+async function expectCadReady(file: string) {
+  await expect.poll(async () => page.evaluate((expectedFile) => {
+    const placement = window.__cadModelPlacement?.modelKey || "";
+    const quality = window.__cadViewerQuality;
+    return placement.includes(expectedFile)
+      && String(quality?.modelKey || "").includes(expectedFile)
+      && quality?.standardQualityReady === true
+      && (window.__cadDisplayRecords?.().length || 0) > 0;
+  }, file), {
+    timeout: 90_000,
+  }).toBe(true);
+  await expect(page.locator("[data-file-status] .animate-spin")).toHaveCount(0);
+  await expect(page.getByRole("status").filter({
+    hasText: /Recognizing geometry|Loading model geometry/,
+  })).toHaveCount(0);
+  await expect(page.getByRole("list", { name: "Model", exact: true })
+    .getByText("1 feature", { exact: true })).toBeVisible({ timeout: 15_000 });
 }
 
 test("Inspect and Render keep separate controls and preserve display, studio and material edits", async () => {
@@ -201,4 +252,81 @@ test("embedded STEP animation loads, plays and scrubs under the desktop CSP", as
   // Permit the document's in-memory module without enabling data:, eval or remote scripts.
   expect(scriptSources).toEqual(["'self'", "blob:"]);
   expect(errors).toEqual([]);
+});
+
+test("reopening exact STEP geometry reuses its backend and prepared bodies", async () => {
+  test.setTimeout(150_000);
+  const requests: {
+    method: string; origin: string; pathname: string; file: string; surfaceInput: string; object: string;
+  }[] = [];
+  const recordRequest = (request: Request) => {
+    const url = new URL(request.url());
+    if (!url.pathname.startsWith("/__cad/") && !url.pathname.startsWith("/__tess_cache/")) return;
+    requests.push({
+      method: request.method(),
+      origin: url.origin,
+      pathname: url.pathname,
+      file: url.searchParams.get("file") || "",
+      surfaceInput: url.searchParams.get("surfaceInput") || "",
+      object: url.searchParams.get("object") || "",
+    });
+  };
+  page.on("request", recordRequest);
+  try {
+    // These documents have the same STEP bytes but distinct per-file state.
+    // Warm both before measuring the A -> B -> A reopen path.
+    await selectOrOpenFile("part.step");
+    await expectCadReady("part.step");
+    await setDisplayMode("Wire");
+    await expectCadReady("part.step");
+    await selectOrOpenFile("animated.step");
+    await expectCadReady("animated.step");
+    await setDisplayMode("Flat");
+    await expectCadReady("animated.step");
+    await selectOrOpenFile("part.step");
+    await expectCadReady("part.step");
+    await expectDisplayMode("Wire");
+    await expect(page.locator("[data-cad-surface]")).toHaveCount(1);
+    await expect(page.locator("[data-cad-surface] canvas").first()).toBeVisible();
+
+    // The shared cache defers its best-effort first write for 1.5s. Drain that
+    // cold-load write before measuring so a later POST means new tessellation.
+    await page.waitForTimeout(1_700);
+
+    const measuredAt = requests.length;
+    const transitionStartedAt = Date.now();
+    await selectOrOpenFile("animated.step");
+    await expectCadReady("animated.step");
+    await expectDisplayMode("Flat");
+    await expect(page.locator("[data-cad-surface]")).toHaveCount(1);
+    await expect(page.locator("[data-cad-surface] canvas").first()).toBeVisible();
+    await selectOrOpenFile("part.step");
+    await expectCadReady("part.step");
+    await expectDisplayMode("Wire");
+    await expect(page.locator("[data-cad-surface]")).toHaveCount(1);
+    await expect(page.locator("[data-cad-surface] canvas").first()).toBeVisible();
+
+    // Admit the same deferred-write interval after the warm transition too.
+    await page.waitForTimeout(1_700);
+    const origins = [...new Set(requests.map(request => request.origin))];
+    expect(origins).toHaveLength(1);
+
+    const transition = requests.slice(measuredAt);
+    const bodyRequests = transition.filter(request => {
+      if (request.pathname === "/__cad/asset" && /\.step(?:\.json)?$/i.test(request.file)) return true;
+      if (request.pathname === "/__cad/store" && request.surfaceInput) return true;
+      if (request.pathname.startsWith("/__tess_cache/")
+        && request.pathname !== "/__tess_cache/probe") return true;
+      return false;
+    });
+    const counts = Object.fromEntries([...new Set(transition.map(request => request.pathname))]
+      .map(pathname => [pathname, transition.filter(request => request.pathname === pathname).length]));
+    console.info(`[CAD tab reopen] ${JSON.stringify({ elapsedMs: Date.now() - transitionStartedAt,
+      origins, counts, transition, bodyRequests })}`);
+    expect(bodyRequests).toEqual([]);
+    expect(await page.evaluate(() => window.__cadDisplayRecords?.().length || 0)).toBeGreaterThan(0);
+    expect(errors).toEqual([]);
+  } finally {
+    page.off("request", recordRequest);
+  }
 });
