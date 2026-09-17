@@ -88,6 +88,17 @@ vocabulary — adding a fifth is a change to that type:
 Aptabase adds the app version, the OS and a per-install random id. Nothing here
 carries a path, a file name, a project name, a prompt, or an agent's output.
 
+## UI typography
+
+The app and its shared FileViewer use the same 13px default from
+[`@hardcore/ui` tokens](../../packages/ui/src/styles/tokens.css).
+`src/renderer/styles/globals.css` applies `text-ui` to the body; shadcn's
+`text-sm` and `text-base` controls use the same token, including menus rendered
+in portals. Use this size for ordinary interface text, with smaller sizes for
+secondary metadata and content-specific styles for document headings/code.
+The root remains 16px at the default appearance scale, so control spacing is
+unchanged; `use-appearance.ts` still scales rem-based text and layout together.
+
 ## Loading feedback
 
 The silver Hardcore star appears while the CAD runtime/viewer starts and while

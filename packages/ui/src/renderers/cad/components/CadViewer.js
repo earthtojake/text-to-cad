@@ -105,8 +105,6 @@ import {
   updateOriginAxis as updateStageOriginAxis
 } from "@hardcore/core/lib/viewer/stageGrid.js";
 import {
-  autoZoomFrameForBounds,
-  DEFAULT_AUTO_ZOOM_PADDING,
   displayRecordsBounds,
   mergeBoundsList
 } from "@hardcore/core/lib/viewer/autoZoom.js";
@@ -181,6 +179,7 @@ import {
   THEME_FLOOR_MODES
 } from "@hardcore/core/lib/themeSettings.js";
 import ViewPlaneControl from "./viewer/ViewPlaneControl.js";
+import { interactiveCameraFrameForBounds, interactiveViewportFitScale } from "./viewer/viewportCameraFit.js";
 import { useViewerDrawingOverlay } from "./viewer/hooks/useViewerDrawingOverlay.js";
 import { useViewerMeasureOverlay } from "./viewer/hooks/useViewerMeasureOverlay.js";
 import { useViewerPicking } from "./viewer/hooks/useViewerPicking.js";
@@ -270,7 +269,6 @@ const CAMERA_TRANSITION_EASING = Object.freeze({
   EASE_IN_OUT_CUBIC: "ease-in-out-cubic",
   EASE_IN_OUT_SINE: "ease-in-out-sine"
 });
-const AUTO_ZOOM_PADDING = DEFAULT_AUTO_ZOOM_PADDING;
 const CAD_COORDINATE_SYSTEM = "cad-z-up-v1";
 const ROBOT_COORDINATE_SYSTEM = "cad-z-up-robot-framing-v2";
 const DISPLAY_TOOLBAR_CLASSES = "bg-background pointer-events-auto absolute z-30 inline-flex h-8 w-fit items-center gap-0.5 rounded-md border border-border p-1 text-foreground shadow-sm";
@@ -712,14 +710,6 @@ function getViewportMetrics(runtime) {
   return { width, height, aspect: width / height };
 }
 
-function getFitDistanceForBoundingSphere(camera, radius, sceneScaleMode, frameAspect = camera.aspect) {
-  const safeRadius = Math.max(radius * AUTO_ZOOM_PADDING, getSceneScaleSettings(sceneScaleMode).minModelRadius);
-  const verticalHalfFov = (camera.fov * Math.PI) / 360;
-  const horizontalHalfFov = Math.atan(Math.tan(verticalHalfFov) * Math.max(frameAspect, 1e-3));
-  const limitingHalfFov = Math.max(Math.min(verticalHalfFov, horizontalHalfFov), 1e-3);
-  return safeRadius / Math.sin(limitingHalfFov);
-}
-
 function runtimeCameraProjection(runtime) {
   return normalizeCameraProjection(
     runtime?.projection || (runtime?.camera?.isOrthographicCamera ? CAMERA_PROJECTION.ORTHOGRAPHIC : CAMERA_PROJECTION.PERSPECTIVE)
@@ -732,12 +722,6 @@ function syncRuntimeCameraClipPlanes(runtime, near, far) {
     camera.far = far;
     camera.updateProjectionMatrix?.();
   }
-}
-
-function getOrthographicHalfHeightForBoundingSphere(radius, sceneScaleMode, frameMetrics = {}, padding = AUTO_ZOOM_PADDING) {
-  const safeRadius = Math.max(radius * padding, getSceneScaleSettings(sceneScaleMode).minModelRadius);
-  const frameAspect = Math.max(Number(frameMetrics.aspect) || 1, 1e-3);
-  return safeRadius / Math.min(frameAspect, 1);
 }
 
 function setOrthographicCameraHalfHeight(runtime, halfHeight, frameMetrics = null) {
@@ -763,32 +747,13 @@ function setOrthographicCameraHalfHeight(runtime, halfHeight, frameMetrics = nul
   );
 }
 
-function syncOrthographicCameraFrame(runtime, radius, sceneScaleMode, frameMetrics = null) {
-  const metrics = frameMetrics || getViewportMetrics(runtime);
-  return setOrthographicCameraHalfHeight(
-    runtime,
-    getOrthographicHalfHeightForBoundingSphere(radius, sceneScaleMode, metrics),
-    metrics
-  );
-}
-
-function frameRuntimeCameraForBoundingSphere(runtime, radius, sceneScaleMode, frameMetrics) {
-  const activeCamera = runtime?.camera;
-  const fitCamera = activeCamera?.isPerspectiveCamera
-    ? activeCamera
-    : runtime?.perspectiveCamera || activeCamera;
-  const fitDistance = getFitDistanceForBoundingSphere(fitCamera, radius, sceneScaleMode, frameMetrics.aspect);
-  if (activeCamera?.isOrthographicCamera) {
-    syncOrthographicCameraFrame(runtime, radius, sceneScaleMode, frameMetrics);
-  } else {
-    activeCamera?.updateProjectionMatrix?.();
-  }
-  return fitDistance;
-}
-
 function runtimeViewportFitScale(runtime, frameMetrics) {
   const camera = runtime?.camera;
   const fitCamera = camera?.isPerspectiveCamera ? camera : runtime?.perspectiveCamera || camera;
+  const projected = interactiveViewportFitScale(runtime.THREE, {
+    camera, framing: runtime.interactiveFraming, aspect: frameMetrics?.aspect,
+  });
+  if (Number.isFinite(projected) && projected > 0) return projected;
   return viewportFitScale({
     orthographic: camera?.isOrthographicCamera === true,
     fov: Number(fitCamera?.fov) || 48,
@@ -1227,7 +1192,9 @@ function displayRecordBoundsForPartIds(runtime, partIds = []) {
 function zoomRuntimeToBounds(runtime, bounds, sceneScaleMode, {
   animate = true,
   modelOffset = null,
-  resetZoomBaseline = false
+  resetZoomBaseline = false,
+  viewDirection = null,
+  viewUp = null
 } = {}) {
   if (!runtime?.THREE || !runtime?.camera || !runtime?.controls) {
     return false;
@@ -1237,20 +1204,30 @@ function zoomRuntimeToBounds(runtime, bounds, sceneScaleMode, {
     return false;
   }
   const frameMetrics = getViewportMetrics(runtime);
-  const frame = autoZoomFrameForBounds(runtime.THREE, {
+  // Render adjusts its clipping range to the current pose every frame. A fit
+  // must use the model's base range, or resetting after zooming out would fit
+  // behind the old distant near plane instead of returning to the default view.
+  const fitNearClip = Math.max(boundsModelRadius(runtime.THREE, normalizedBounds, sceneScaleMode) / 1200, 0.01);
+  const frame = interactiveCameraFrameForBounds(runtime.THREE, {
     camera: runtime.camera,
     controls: runtime.controls,
     bounds: normalizedBounds,
     modelOffset,
     frameAspect: frameMetrics.aspect,
     minRadius: getSceneScaleSettings(sceneScaleMode).minModelRadius,
-    padding: DEFAULT_AUTO_ZOOM_PADDING,
-    defaultDirection: DEFAULT_VIEW_DIRECTION,
-    viewUp: runtime.camera.up?.toArray?.() || WORLD_UP
+    nearClip: fitNearClip,
+    viewDirection,
+    viewUp: viewUp || runtime.camera.up?.toArray?.() || WORLD_UP
   });
   if (!frame) {
     return false;
   }
+  runtime.interactiveFraming = {
+    bounds: normalizedBounds, direction: frame.direction.toArray(), up: frame.up.toArray(),
+    minRadius: getSceneScaleSettings(sceneScaleMode).minModelRadius,
+    nearClip: fitNearClip,
+  };
+  captureRuntimeViewportFitScale(runtime, frameMetrics);
   if (resetZoomBaseline) {
     runtime.zoomFitModelRadius = boundsModelRadius(runtime.THREE, normalizedBounds, sceneScaleMode);
   }
@@ -1261,14 +1238,7 @@ function zoomRuntimeToBounds(runtime, bounds, sceneScaleMode, {
     zoom: 1,
     projection: runtimeCameraProjection(runtime)
   };
-  const orthographicHalfHeight = runtime.camera.isOrthographicCamera
-    ? getOrthographicHalfHeightForBoundingSphere(
-        frame.radius,
-        sceneScaleMode,
-        frameMetrics,
-        DEFAULT_AUTO_ZOOM_PADDING
-      )
-    : null;
+  const orthographicHalfHeight = runtime.camera.isOrthographicCamera ? frame.halfHeight : null;
 
   if (animate) {
     return transitionCameraToPerspectiveSnapshot(runtime, snapshot, {
@@ -3270,10 +3240,17 @@ const CadViewer = forwardRef(function CadViewer({
       return applyZoomPercent(nextZoomPercent);
     },
     resetView() {
-      // Refit instantly (establishes target and distance), then animate the orientation —
-      // both drive the same cameraTransition, so animating both would fight.
-      resetZoomAndPan({ animate: false });
-      activateDefaultViewPlane();
+      const reset = zoomRuntimeToBounds(runtimeRef.current, runtimeFramingBounds(runtimeRef.current, meshData?.bounds), sceneScaleModeRef.current, {
+        animate: true, modelOffset: modelTransformRef.current.offset, resetZoomBaseline: true,
+        viewDirection: DEFAULT_VIEW_DIRECTION, viewUp: WORLD_UP,
+      });
+      if (reset) {
+        activeViewPlaneFaceRef.current = "";
+        setActiveViewPlaneFace("");
+        defaultPerspectiveResettingRef.current = true;
+        setDefaultPerspectiveDetached(false);
+      }
+      return reset;
     },
     activateDefaultViewPlane() {
       return activateDefaultViewPlane();
@@ -4406,22 +4383,23 @@ const CadViewer = forwardRef(function CadViewer({
         const restored = reframe === "model"
           && nextPerspectiveMatchesScene
           && applyPerspectiveSnapshot(runtime, nextPerspective, { scheduleIdle: false });
+        if (restored) {
+          runtime.interactiveFraming = { bounds: zeroPoseBounds,
+            minRadius: getSceneScaleSettings(normalizedSceneScaleMode).minModelRadius,
+            nearClip: Math.max(zeroPoseRadius / 1200, 0.01),
+            direction: runtime.camera.position.clone().sub(controls.target).normalize().toArray(),
+            up: runtime.camera.up.toArray() };
+        }
         if (!restored) {
           cancelCameraTransition(runtime);
-          const frameMetrics = getViewportMetrics(runtime);
-          const camera = runtime.camera;
-          const fitDistance = frameRuntimeCameraForBoundingSphere(runtime, zeroPoseRadius, normalizedSceneScaleMode, frameMetrics);
-          const viewDirection = new THREE.Vector3(...DEFAULT_VIEW_DIRECTION).normalize();
-          camera.zoom = 1;
-          camera.up.set(...WORLD_UP);
-          frameRuntimeCameraForBoundingSphere(runtime, zeroPoseRadius, normalizedSceneScaleMode, frameMetrics);
-          // The model is at its authored coordinates, so the camera frames the
-          // model's WORLD bounds centre — the model is never moved to the camera.
-          const worldCenter = center.clone().add(modelOffset);
-          camera.position.copy(worldCenter).addScaledVector(viewDirection, fitDistance);
-          controls.target.copy(worldCenter);
-          camera.lookAt(controls.target);
-          controls.update();
+          // Fit with the destination lens. Scaling a completed projected-box
+          // fit after changing FOV also scales its depth allowance, so the first
+          // Render entry would frame differently from later mode switches.
+          const fitFocalLength = explicitViewerFocalLength(focalLength);
+          if (fitFocalLength != null) setRuntimePerspectiveFocalLength(runtime, fitFocalLength);
+          zoomRuntimeToBounds(runtime, zeroPoseBounds, normalizedSceneScaleMode, {
+            animate: false, modelOffset, viewDirection: DEFAULT_VIEW_DIRECTION, viewUp: WORLD_UP,
+          });
           runtime.requestRender();
         }
       });

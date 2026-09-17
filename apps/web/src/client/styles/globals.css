@@ -3,5 +3,5 @@
 @import "@hardcore/ui/styles.css";
 @layer base {
   html, body, #root { min-height: 100%; }
-  body { @apply bg-background text-foreground; font-family: var(--font-sans); font-weight: 400; }
+  body { @apply bg-background text-foreground text-ui; font-family: var(--font-sans); font-weight: 400; }
 }

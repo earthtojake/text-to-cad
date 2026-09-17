@@ -1,9 +1,15 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  /* shadcn's derived radius ladder around one --radius. Fonts, text sizes and
-   * shadows are Tailwind's stock values. text-micro/text-tiny exist only
-   * because the settings sheets consume them. */
+  /* A 13px default at the normal 16px root. Rems preserve the desktop's UI
+   * scale without shrinking the spacing/radius system. Stock shadcn controls
+   * use text-sm/text-base, so both resolve to this shared UI size. */
+  --text-ui: 0.8125rem;
+  --text-ui--line-height: 1.5;
+  --text-sm: var(--text-ui);
+  --text-sm--line-height: 1.5;
+  --text-base: var(--text-ui);
+  --text-base--line-height: 1.5;
   --text-micro: 10px;
   --text-micro--line-height: 1.2;
   --text-tiny: 11px;

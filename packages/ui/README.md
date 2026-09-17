@@ -30,8 +30,21 @@ layout remain shared; operating-system details and app workflows belong to the
 host. Follow [the feature-extension workflow](docs/viewer-host.md#adding-a-shared-feature)
 when introducing a new integration.
 
+The design system's default UI size is 13px (`text-ui` in
+[src/styles/tokens.css](src/styles/tokens.css)); `text-sm` and `text-base`
+resolve to that same size for shared and host controls. Hosts apply `text-ui`
+to their body; FileViewer also sets it at its own boundary. Use this default
+for ordinary interface text, navigation and tabs. Settings sheets retain their
+explicit compact scale: 12px section headings, 11px labels and control values,
+and 10px metadata (see [settings UI](docs/settings-ui.md)). Document headings
+and code retain their content styles.
+The token uses rems so desktop UI scaling still works without changing the
+normal 16px root or shrinking layout spacing.
+
 File-tab chrome uses normal-weight type. Breadcrumbs, file and model rows, and
 filter matches use muted/primary text color for emphasis, never bold weight.
+Both tree lists inset row backgrounds 4px from their horizontal edges, including
+selected, hovered and filtered rows; nesting adds indentation inside that gutter.
 
 React, ReactDOM, Three.js and Lucide are host-supplied peers. React 18 and 19
 are supported: web and desktop use React 19.3.0. Each

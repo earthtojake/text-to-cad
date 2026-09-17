@@ -31,13 +31,13 @@ export default function InspectorSplit({ children, details, title, titleTooltip,
         style={collapsed ? undefined : { flexBasis: `${ratio * 100}%` }}>
         <div className="flex min-w-0 shrink-0 items-center pr-2">
         <button type="button" aria-label={collapsed ? 'Show selection details' : 'Hide selection details'} aria-expanded={!collapsed}
-          onClick={() => setCollapsed(value => !value)} className="flex h-9 min-w-0 flex-1 items-center gap-1.5 px-2 text-left text-xs hover:bg-sidebar-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+          onClick={() => setCollapsed(value => !value)} className="flex h-8 min-w-0 flex-1 items-center gap-1.5 px-2 text-left text-sm font-normal hover:bg-sidebar-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
           <ChevronRight className={cn('size-3.5 shrink-0 text-muted-foreground', !collapsed && 'rotate-90')} aria-hidden="true" />
           <span className="min-w-0 flex-1 truncate" title={titleTooltip ?? (typeof title === 'string' ? title : undefined)}>{title}</span>
         </button>
         {actions}
         </div>
-        <div hidden={collapsed} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-2 pb-2">{details}</div>
+        <div hidden={collapsed} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-2">{details}</div>
       </section>
     </>}
   </div>;

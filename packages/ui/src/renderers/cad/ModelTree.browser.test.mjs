@@ -9,7 +9,7 @@ import { chromium } from 'playwright';
 // Render the real shared tree surfaces with a tiny in-memory assembly. Geometry
 // inference and viewport picking have separate contract tests; this exercises
 // browser layout and scrolling, which jsdom cannot measure.
-test('file and model trees share row sizing while model disclosure, isolation and one-shot reveal remain independent', async t => {
+test('file and model trees share row sizing and insets while model disclosure, isolation and one-shot reveal remain independent', async t => {
   const { outputFiles } = await build({ stdin: {
     resolveDir: fileURLToPath(new URL('.', import.meta.url)), loader: 'jsx', contents: `
 import React, { useState } from 'react';
@@ -28,7 +28,7 @@ function App(){
  const choose=id=>{events.selected.push(id);setSelected([id]);};
  window.treeTest={events,refresh:()=>setTick(n=>n+1),select:id=>{setSelected([id]);setReveal(n=>n+1);},isolate:()=>{setExpanded(['group']);setFocused(['o0']);}};
  return <div style={{display:'flex',gap:20,padding:16}}>
-  <section data-testid="files" style={{height:360,width:280}}><FileTree source={{...baseSource,expanded:files,setExpanded:setFiles}} activePath={null} onOpen={()=>{}}/></section>
+  <section data-testid="files" style={{height:360,width:280}}><FileTree source={{...baseSource,expanded:files,setExpanded:setFiles}} activePath="part.step" onOpen={()=>{}}/></section>
   <section data-testid="model" style={{height:360,width:320}}><ModelingTree active disabled={false}
     modeling={{descriptor,results:{},error:'',retryFailed(){}}} stepRoot={root} selectedPartIds={selected}
     activeTreeNodeScrollKey={reveal} onRequestRecognition={ids=>{events.requested=ids;}}
@@ -63,6 +63,24 @@ createRoot(document.getElementById('root')).render(<App/>);
   const fileHeight = await page.getByTestId('files').locator('[data-path="part.step"]').evaluate(node => node.getBoundingClientRect().height);
   assert.equal(modelHeight, 28);
   assert.equal(modelHeight, fileHeight);
+  const modelInsets = await part.evaluate(node => {
+    const row = node.parentElement.getBoundingClientRect();
+    const list = node.closest('[aria-label="Model"]').parentElement;
+    const bounds = list.getBoundingClientRect();
+    return {left:row.left-bounds.left,right:bounds.left+list.clientWidth-row.right};
+  });
+  const fileInsets = () => page.getByTestId('files').locator('[data-path="part.step"]').evaluate(node => {
+    const row = node.getBoundingClientRect();
+    const list = node.closest('[role="tree"]');
+    const bounds = list.getBoundingClientRect();
+    return {left:row.left-bounds.left,right:bounds.left+list.clientWidth-row.right};
+  });
+  assert.deepEqual(modelInsets, {left:4,right:4});
+  assert.deepEqual(await fileInsets(), modelInsets, 'selected file rows must share the model tree horizontal inset');
+  await page.getByTestId('files').getByRole('textbox', {name:'Filter files'}).fill('part');
+  await page.getByTestId('files').getByRole('option').waitFor();
+  assert.deepEqual(await fileInsets(), modelInsets, 'filtered rows retain the same horizontal inset');
+  await page.getByTestId('files').getByRole('button', {name:'Clear filter'}).click();
   const beforeHide = await part.boundingBox();
   await model.getByRole('button', { name: 'Hide Part 2', exact: true }).click();
   await model.getByRole('button', { name: 'Show all', exact: true }).waitFor();

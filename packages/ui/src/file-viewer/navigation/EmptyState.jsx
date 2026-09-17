@@ -38,7 +38,7 @@ export function EmptyState({ icon: Icon, title, description, action, className, 
         <Icon className="size-5" strokeWidth={1.5} />
       </div>
       <div className="space-y-1">
-        <p className="text-[13px] text-foreground">{title}</p>
+        <p className="text-sm text-foreground">{title}</p>
         {description ? (
           <p className="max-w-[320px] text-xs leading-relaxed text-muted-foreground">
             {description}

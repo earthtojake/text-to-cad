@@ -87,9 +87,16 @@ test('the shared CAD renderer resolves deferred files, reuses warm assets and re
   // A second pane changes the first viewport's dimensions. Let its resize
   // observer and camera event publish before taking the saved snapshot.
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  const before = await page.evaluate(() => window.cadHarness.state);
   await page.evaluate(() => window.cadHarness.mounted(false));
   await first.locator('[data-slot="cad-file-view"]').waitFor({ state: 'detached' });
+  // Camera persistence is debounced during interaction and synchronously
+  // flushed on unmount. Compare the outgoing flush, not an earlier snapshot
+  // that can still contain null cameras while the rendered zoom is already 110%.
+  const before = await page.evaluate(() => window.cadHarness.state);
+  for (const saved of Object.values(before.renderers)) {
+    assert.ok(saved.fileSession.slices.tab.camera, 'unmount flushes the outgoing tab camera');
+    assert.ok(saved.fileSession.slices.render.cadCamera, 'unmount flushes the outgoing CAD camera');
+  }
   await page.evaluate(() => window.cadHarness.mounted(true));
   await first.getByRole('textbox', { name: 'Zoom level percent' }).waitFor();
   // The toolbar mounts with its default 100% before the viewport adopts the mesh

@@ -129,7 +129,7 @@ export function EntryMenuItems({
           {index > 0 ? <Separator /> : null}
           {section.map((item) => (
             <Item
-              className="text-[13px]"
+              className="text-sm"
               data-action={item.action}
               key={item.action}
               onSelect={() => onAction(item.action, entry)}

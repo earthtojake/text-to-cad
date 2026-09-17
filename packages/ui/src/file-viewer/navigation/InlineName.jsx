@@ -78,7 +78,7 @@ export function InlineName({
     <input
       aria-label={label}
       className={cn(
-        "h-5 min-w-0 flex-1 rounded-sm border border-ring bg-background px-1 text-[13px] text-foreground outline-none",
+        "h-5 min-w-0 flex-1 rounded-sm border border-ring bg-background px-1 text-sm text-foreground outline-none",
         busy && "opacity-60",
         className
       )}

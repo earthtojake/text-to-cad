@@ -118,27 +118,27 @@ function CopyButton({ text, className }) {
   );
 }
 
-function DetailHeader({ typeLabel, subtitle, selector, copyText }) {
+function DetailHeader({ typeLabel, subtitle, selector, copyText, navigation }) {
   return (
-    <>
-      <div className="flex items-center gap-2 px-2 pb-1.5 pt-1">
-        {subtitle ? (
-          <span className="min-w-0 truncate text-tiny text-sidebar-foreground">{subtitle}</span>
-        ) : null}
-        <span className="shrink-0 rounded-sm bg-muted px-1 py-0.5 font-mono text-micro text-muted-foreground">
-          {typeLabel}
+    <header className="min-w-0 space-y-1 border-b border-sidebar-border/60 px-2 py-2" aria-label="Selected reference">
+      <div className="flex min-h-5 min-w-0 items-center gap-2">
+        <span className="min-w-0 flex-1 truncate text-sm font-normal text-sidebar-foreground" title={subtitle || typeLabel}>
+          {subtitle || typeLabel}
         </span>
-        <span className="ml-auto inline-flex shrink-0 items-center gap-1">
+        {navigation}
+      </div>
+      <div className="flex min-w-0 items-start gap-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-1 text-micro text-muted-foreground">
+          <span className="shrink-0">{typeLabel}</span>
           {selector ? (
-            <code className="max-w-[8rem] truncate rounded-sm bg-muted px-1 py-0.5 font-mono text-micro text-muted-foreground">
+            <code className="min-w-0 break-all font-mono">
               {selector}
             </code>
           ) : null}
-          <CopyButton text={copyText} />
-        </span>
+        </div>
+        <CopyButton text={copyText} />
       </div>
-      <div className="mx-2 h-px bg-sidebar-border/60" />
-    </>
+    </header>
   );
 }
 
@@ -148,7 +148,7 @@ function InfoRow({ label, children, title }) {
   return (
     <div className="flex items-baseline gap-3 px-2 py-1" title={title}>
       <span className="w-[6.25rem] shrink-0 text-tiny text-muted-foreground">{label}</span>
-      <div className="min-w-0 flex-1 text-tiny text-sidebar-foreground">{children}</div>
+      <div className="min-w-0 flex-1 text-tiny text-sidebar-foreground [overflow-wrap:anywhere]">{children}</div>
     </div>
   );
 }
@@ -163,7 +163,7 @@ function CoordValue({ vector, digits = 2 }) {
     <span className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 font-mono tabular-nums">
       {AXES.map((axis, index) => (
         <span key={axis.key} className="inline-flex items-baseline gap-1">
-          <span className={cn("text-[9px]", axis.className)}>{axis.key}</span>
+          <span className={cn("text-micro", axis.className)}>{axis.key}</span>
           <span>{formatNumber(values[index], digits)}</span>
         </span>
       ))}
@@ -184,7 +184,7 @@ function MeasurementRows({rows}) {
   return rows.map(([label,value,unit])=><InfoRow key={label} label={label} title={MEASUREMENT_HINTS[label]}><MonoValue>{`${formatNumber(value)} ${unit}`}</MonoValue></InfoRow>);
 }
 
-function TopologyDetail({ reference }) {
+function TopologyDetail({ reference, navigation }) {
   const pick = reference.pickData || {};
   const type = reference.selectorType;
   const quantities = referenceMeasurements(reference);
@@ -207,6 +207,7 @@ function TopologyDetail({ reference }) {
         subtitle={subtype}
         selector={String(reference.displaySelector || reference.normalizedSelector || "").trim()}
         copyText={reference.copyText}
+        navigation={navigation}
       />
       <div className="flex flex-col py-0.5">
         <MeasurementRows rows={quantities.rows} />
@@ -215,18 +216,15 @@ function TopologyDetail({ reference }) {
             <MonoValue>{`${formatNumber(box.dims[0])} × ${formatNumber(box.dims[1])} × ${formatNumber(box.dims[2])} mm`}</MonoValue>
           </InfoRow>
         ) : null}
-        <details className="mt-1" key={reference.id}>
-          <summary className="cursor-pointer px-2 py-1 text-tiny text-muted-foreground">Details</summary>
-          {Array.isArray(center) && <InfoRow label="Center"><CoordValue vector={center}/></InfoRow>}
-          {Array.isArray(pick.normal) && <InfoRow label="Normal"><CoordValue vector={pick.normal} digits={3}/></InfoRow>}
-          {component && <InfoRow label="Component">{component}</InfoRow>}
-        </details>
+        {Array.isArray(center) && <InfoRow label="Center"><CoordValue vector={center}/></InfoRow>}
+        {Array.isArray(pick.normal) && <InfoRow label="Normal"><CoordValue vector={pick.normal} digits={3}/></InfoRow>}
+        {component && <InfoRow label="Component">{component}</InfoRow>}
       </div>
     </div>
   );
 }
 
-function PartDetail({ node }) {
+function PartDetail({ node, navigation }) {
   const isAssembly =
     String(node.nodeType || "").trim() === "assembly" ||
     (Array.isArray(node.children) && node.children.length > 0);
@@ -246,6 +244,7 @@ function PartDetail({ node }) {
         subtitle={name}
         selector={selector}
         copyText={node.copyText || selector}
+        navigation={navigation}
       />
       <div className="flex flex-col py-0.5">
         {isAssembly && partCount > 0 ? (
@@ -256,21 +255,17 @@ function PartDetail({ node }) {
             <MonoValue>{`${formatNumber(box.dims[0])} × ${formatNumber(box.dims[1])} × ${formatNumber(box.dims[2])} mm`}</MonoValue>
           </InfoRow>
         ) : null}
-        <details className="mt-1" key={node.id}>
-          <summary className="cursor-pointer px-2 py-1 text-tiny text-muted-foreground">Details</summary>
-          {box && <InfoRow label="Center"><CoordValue vector={box.center}/></InfoRow>}
-          {selector && <InfoRow label="Path">{selector}</InfoRow>}
-        </details>
+        {box && <InfoRow label="Center"><CoordValue vector={box.center}/></InfoRow>}
       </div>
     </div>
   );
 }
 
-function ElementDetail({ item }) {
+function ElementDetail({ item, navigation }) {
   if (!item) {
     return null;
   }
-  return isPartNode(item) ? <PartDetail node={item} /> : <TopologyDetail reference={item} />;
+  return isPartNode(item) ? <PartDetail node={item} navigation={navigation} /> : <TopologyDetail reference={item} navigation={navigation} />;
 }
 
 function itemKey(item) {
@@ -292,7 +287,7 @@ export function StepReferenceSection({ references = [] }) {
     return (
       <div className="flex min-h-[4.5rem] flex-col items-center justify-center gap-1.5 px-4 py-5 text-center">
         <SquareMousePointer className="size-4 text-muted-foreground/45" strokeWidth={1.5} aria-hidden="true" />
-        <p className="text-tiny text-muted-foreground">Select geometry to inspect</p>
+        <p className="text-sm text-muted-foreground">Select geometry to inspect</p>
       </div>
     );
   }
@@ -300,41 +295,40 @@ export function StepReferenceSection({ references = [] }) {
   const safeIndex = Math.min(Math.max(index, 0), count - 1);
   const totals = count > 1 ? selectionMeasurements(items) : [];
 
+  const navigation = count > 1 ? (
+    <div className="inline-flex shrink-0 items-center gap-0.5" role="group" aria-label="Selected element navigation">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        className="size-5 text-muted-foreground hover:text-foreground"
+        aria-label="Previous element"
+        title="Previous element"
+        onClick={() => setIndex((current) => (current - 1 + count) % count)}
+      >
+        <ChevronLeft className="size-3.5" strokeWidth={2} aria-hidden="true" />
+      </Button>
+      <span className="min-w-[2.75rem] text-center text-sm tabular-nums text-muted-foreground" aria-live="polite">
+        {safeIndex + 1} / {count}
+      </span>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        className="size-5 text-muted-foreground hover:text-foreground"
+        aria-label="Next element"
+        title="Next element"
+        onClick={() => setIndex((current) => (current + 1) % count)}
+      >
+        <ChevronRight className="size-3.5" strokeWidth={2} aria-hidden="true" />
+      </Button>
+    </div>
+  ) : null;
+
   return (
-    <div className="flex min-w-0 flex-col pb-2">
-      {count > 1 ? (
-        <div className="flex items-center justify-end gap-2 border-b border-sidebar-border/60 px-2 py-1">
-          <div className="inline-flex items-center gap-0.5">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              className="size-5 text-muted-foreground hover:text-foreground"
-              aria-label="Previous element"
-              title="Previous element"
-              onClick={() => setIndex((current) => (current - 1 + count) % count)}
-            >
-              <ChevronLeft className="size-3.5" strokeWidth={2} aria-hidden="true" />
-            </Button>
-            <span className="min-w-[2.75rem] text-center font-mono text-tiny tabular-nums text-sidebar-foreground">
-              {safeIndex + 1} / {count}
-            </span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              className="size-5 text-muted-foreground hover:text-foreground"
-              aria-label="Next element"
-              title="Next element"
-              onClick={() => setIndex((current) => (current + 1) % count)}
-            >
-              <ChevronRight className="size-3.5" strokeWidth={2} aria-hidden="true" />
-            </Button>
-          </div>
-        </div>
-      ) : null}
+    <div className="flex min-w-0 flex-col pb-2 text-sm font-normal">
       {totals.length > 0 && <div className="border-b border-sidebar-border/60 py-1" aria-label="Selection measurements"><MeasurementRows rows={totals}/></div>}
-      <ElementDetail item={items[safeIndex]} />
+      <ElementDetail item={items[safeIndex]} navigation={navigation} />
     </div>
   );
 }

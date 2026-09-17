@@ -76,7 +76,7 @@ export function FileViewer({ file, host, renderers, state, onStateChange, leadin
       onOpenFile={(next, options) => onOpenFile(next, options ?? { target: "new" })} appearance={appearance}
       state={state.renderers?.[rendererStateKey]} onStateChange={setRendererState} reload={reload} /></RenderBoundary>;
   }
-  return <ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={viewerElement}><div className="hardcore-file-viewer flex h-full min-h-0 flex-col" ref={bindElement} tabIndex={-1} data-source-id={source.id}>
+  return <ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={viewerElement}><div className="hardcore-file-viewer text-ui font-normal flex h-full min-h-0 flex-col" ref={bindElement} tabIndex={-1} data-source-id={source.id}>
     {chromeVisible ? <FileNavRow activePath={selectedPath} crumbs={crumbs} leading={leading} onOpen={(next) => onOpenFile(next, { target: "current" })} source={navigation.crumbs}
       status={<>{document?.dirty ? <span aria-label="Unsaved changes" title="Unsaved changes" className="ml-1 size-1.5 shrink-0 rounded-full bg-foreground/60" /> : null}{presentation?.activity ? presentation.activity(activity?.key === key ? activity.value : null) : <FileActivityStatus activity={activity?.key === key ? activity.value : null} />}</>}
       trailing={panels.map((panel) => <PanelToggle key={panel.id} id={panel.id} active={panel.id === openId} icon={panel.icon} label={panel.label} onClick={() => setPanel(nextOpenPanel(openId, panel.id))} testId={panel.id === FILE_PANEL_TREE ? "tree-toggle" : undefined} />)} /> : null}

@@ -134,6 +134,14 @@ async function newPage({ lod = true } = {}) {
     if (!lodOn) window.__CAD_VIEWER_LOD__ = false;
     window.__viewerTestLodEvents = [];
     window.addEventListener("cad:lod-level", (event) => window.__viewerTestLodEvents.push(event.detail));
+    window.__viewerTestCameraLodTrace = [];
+    window.addEventListener("cad:lod-status", (event) => {
+      const status = event.detail;
+      const trace = window.__viewerTestCameraLodTrace;
+      trace.push({ at: performance.now(), camera: window.__cadCamera?.(), pending: status?.pendingEvaluation,
+        occupied: status?.occupied, settled: status?.qualitySettled });
+      if (trace.length > 8) trace.shift();
+    });
   }, { lodOn: lod });
   // Keep one bounded diagnostic snapshot per gate. It is written before the
   // owned context closes, so a thrown assertion still leaves its actual UI and
@@ -158,6 +166,7 @@ async function newPage({ lod = true } = {}) {
             placement: window.__cadModelPlacement,
             canvases: [...document.querySelectorAll('canvas')].map(canvas => canvas.getBoundingClientRect().toJSON()),
             camera: window.__cadCamera?.(),
+            cameraLodTrace: window.__viewerTestCameraLodTrace,
             lod: window.__cadViewportLod?.(),
             quality: window.__cadViewerQuality,
             badge: document.querySelector('[data-file-status]')?.dataset.fileStatus,

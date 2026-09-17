@@ -100,7 +100,7 @@ export function FileNavRow({
       */}
       <nav
         aria-label="Breadcrumb"
-        className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden text-[13px]"
+        className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden text-sm"
       >
         {leading}
         <Breadcrumbs activePath={activePath} crumbs={crumbs} onOpen={onOpen} source={source} />

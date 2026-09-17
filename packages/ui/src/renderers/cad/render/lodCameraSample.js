@@ -1,6 +1,19 @@
 // Camera-only LOD exclusion. This never changes display visibility or ownership.
 // Dynamic scenes deliberately keep the conservative all-occurrence policy until
 // pose changes have their own scheduler resampling boundary.
+import { lodSampleNumberEqual } from "./lodSamplePrecision.js";
+
+const cameraIntents = new WeakMap();
+
+function stableCameraKey(camera, values) {
+  const previous = cameraIntents.get(camera);
+  if (previous?.values.length === values.length
+    && values.every((value, index) => lodSampleNumberEqual(value, previous.values[index]))) return previous.key;
+  const key = JSON.stringify(values);
+  cameraIntents.set(camera, { values, key });
+  return key;
+}
+
 export function lodSceneMayMove({ robot = false, drawing = false, kinematics = null,
   kinematicsLoading = false, animation = null, exploded = false } = {}) {
   return Boolean(robot || drawing || kinematics || kinematicsLoading || animation || exploded);
@@ -153,7 +166,7 @@ export function sampleLodCamera(THREE, runtime, { components = new Map(), dynami
     // Clip near/far come from mesh bounds. Use projection intent fields rather
     // than matrix coefficients: rebuilding a perspective matrix with another
     // near distance can even round its x/y coefficients differently.
-    cameraKey: JSON.stringify([...camera.matrixWorld.elements, ...projectionIntent, ...viewIntent,
+    cameraKey: stableCameraKey(camera, [...camera.matrixWorld.elements, ...projectionIntent, ...viewIntent,
       viewportWidthPx, viewportHeightPx]),
     camera: camera.isOrthographicCamera
       ? { kind: "orthographic", visibleWorldHeight: (camera.top - camera.bottom) * verticalViewScale(camera) / (camera.zoom || 1) }
