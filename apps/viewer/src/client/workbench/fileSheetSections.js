@@ -13,6 +13,9 @@ export const FILE_SHEET_SECTION_IDS = Object.freeze({
   ROBOT_JOINTS: "joints",
   DXF_MATERIAL: "material",
   DXF_BENDS: "bends",
+  // A dimensioned drawing (frame, views, dimensions) is a DOCUMENT, not a flat pattern:
+  // it gets Sheet (paper, scale, line work) where a pattern gets Material and Bends.
+  DXF_SHEET: "sheet",
   DXF_LAYERS: "dxfLayers",
   DISPLAY: "display",
   RENDER: "render",
@@ -59,6 +62,12 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
       // One tab per concern: Material (units + stock), Bends (only when the drawing has
       // bend lines), and Layers — the drawing's own STRUCTURE, the DXF analogue of STEP's
       // Tree — whenever the file actually uses layers.
+      if (options.isDrawingDocument === true) {
+        return [
+          FILE_SHEET_SECTION_IDS.DXF_SHEET,
+          ...(options.hasDxfLayersPanel ? [FILE_SHEET_SECTION_IDS.DXF_LAYERS] : [])
+        ];
+      }
       return [
         FILE_SHEET_SECTION_IDS.DXF_MATERIAL,
         ...(options.hasDxfBendsPanel ? [FILE_SHEET_SECTION_IDS.DXF_BENDS] : []),

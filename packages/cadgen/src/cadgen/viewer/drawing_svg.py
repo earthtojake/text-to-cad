@@ -15,7 +15,15 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def render_drawing_svg(dxf_path: str | Path, *, hidden_layers: tuple[str, ...] = (), background: str = "white") -> str:
+def render_drawing_svg(
+    dxf_path: str | Path,
+    *,
+    hidden_layers: tuple[str, ...] = (),
+    background: str = "white",
+    lineweight_scale: float = 1.0,
+) -> str:
+    """``lineweight_scale`` multiplies every stroke (the viewer's Fine/Normal/Bold);
+    the DXF's own lineweights stay the reference at 1.0."""
     import ezdxf
     from ezdxf.addons.drawing import Frontend, RenderContext, config, layout
     from ezdxf.addons.drawing.svg import SVGBackend
@@ -32,6 +40,7 @@ def render_drawing_svg(dxf_path: str | Path, *, hidden_layers: tuple[str, ...] =
     Frontend(context, backend, config=config.Configuration(
         background_policy=policy,
         lineweight_policy=config.LineweightPolicy.ABSOLUTE,
+        lineweight_scaling=max(0.25, min(4.0, float(lineweight_scale) or 1.0)),
         min_lineweight=0.15,
     )).draw_layout(document.modelspace(), finalize=True)
     page = layout.Page(0, 0, layout.Units.mm, margins=layout.Margins.all(0))
