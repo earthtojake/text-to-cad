@@ -55,9 +55,12 @@ import {
 } from "../components/workbench/DxfSettingsSection.js";
 import { buildDxfLayersTab } from "../components/workbench/DxfLayersSection.js";
 import {
+  DXF_DEFAULT_DIMENSION_DISPLAY,
   DXF_DEFAULT_LINE_WEIGHT,
   buildDxfSheetTab,
+  dxfDimensionDisplayParams,
   dxfLineWeightScale,
+  normalizeDxfDimensionDisplay,
   normalizeDxfLineWeight
 } from "../components/workbench/DxfSheetSection.js";
 import { drawingSheetFacts } from "../workbench/drawingSheetFacts.js";
@@ -504,6 +507,8 @@ function CadFileViewSurface({
   const [drawingMaterial, setDrawingMaterial] = useState(DXF_DEFAULT_MATERIAL);
   // A drawing DOCUMENT's stroke scale (Fine/Normal/Bold), applied by the SVG route.
   const [drawingLineWeight, setDrawingLineWeight] = useState(DXF_DEFAULT_LINE_WEIGHT);
+  // How a document's dimensions read (units, places, text size): re-rendered server-side.
+  const [drawingDimensionDisplay, setDrawingDimensionDisplay] = useState(DXF_DEFAULT_DIMENSION_DISPLAY);
   // The package's parsed contours, fetched once per entry and kept by URL. Curved bends
   // re-mesh from these; the URL carries the package version, so a rebuild refetches.
   const drawingGeometryCacheRef = useRef(new Map());
@@ -2203,10 +2208,11 @@ function CadFileViewSurface({
     emitState({ drawing: { thicknessMm: drawingThicknessMm, bends: drawingBends,
       bendStyle: drawingBendStyle, bendRadiusMm: drawingBendRadiusMm, kFactor: drawingKFactor,
       hiddenLayers: drawingHiddenLayers, units: drawingUnits, orientation: drawingOrientation,
-      material: drawingMaterial, viewMode: drawingViewMode, lineWeight: drawingLineWeight } });
+      material: drawingMaterial, viewMode: drawingViewMode, lineWeight: drawingLineWeight,
+      dimensionDisplay: drawingDimensionDisplay } });
   }, [selectedKey, selectedEntryIsDrawing, drawingThicknessMm, drawingBends, drawingBendStyle,
     drawingBendRadiusMm, drawingKFactor, drawingHiddenLayers, drawingUnits, drawingOrientation,
-    drawingMaterial, drawingViewMode, drawingLineWeight, emitState]);
+    drawingMaterial, drawingViewMode, drawingLineWeight, drawingDimensionDisplay, emitState]);
   useLayoutEffect(() => {
     const stored = restoreStateRef.current.drawing;
     drawingSettingsLoadedKeyRef.current = selectedKey;
@@ -2219,6 +2225,7 @@ function CadFileViewSurface({
     setDrawingOrientation(normalizeDxfOrientation(stored?.orientation));
     setDrawingMaterial(normalizeDxfMaterial(stored?.material, DXF_DEFAULT_MATERIAL));
     setDrawingLineWeight(normalizeDxfLineWeight(stored?.lineWeight, DXF_DEFAULT_LINE_WEIGHT));
+    setDrawingDimensionDisplay(normalizeDxfDimensionDisplay(stored?.dimensionDisplay));
     setDrawingViewMode(stored?.viewMode === "2d" ? "2d" : "3d");
     setDrawingBends(Array.from({ length: selectedDrawingBendAxisCount }, (_, index) => ({
       angleDeg: normalizeDxfBendAngleDeg(stored?.bends?.[index]?.angleDeg, DXF_DEFAULT_BEND_ANGLE_DEG),
@@ -2262,8 +2269,11 @@ function CadFileViewSurface({
     if (lineWeightScale !== 1) {
       params.set("lw", String(lineWeightScale));
     }
+    for (const [key, value] of Object.entries(dxfDimensionDisplayParams(drawingDimensionDisplay))) {
+      params.set(key, value);
+    }
     return `${origin}/__cad/drawing?${params.toString()}`;
-  }, [drawingGeometryUrl, selectedEntryIsDrawingDocument, drawingHiddenLayers, drawingLineWeight]);
+  }, [drawingGeometryUrl, selectedEntryIsDrawingDocument, drawingHiddenLayers, drawingLineWeight, drawingDimensionDisplay]);
   useEffect(() => {
     if (!drawingGeometryUrl) {
       setDrawingGeometry(null);
@@ -2311,6 +2321,7 @@ function CadFileViewSurface({
   // The Sheet tab's Reset: the document's own look, every layer shown.
   const handleDrawingSheetReset = useCallback(() => {
     setDrawingLineWeight(DXF_DEFAULT_LINE_WEIGHT);
+    setDrawingDimensionDisplay(DXF_DEFAULT_DIMENSION_DISPLAY);
     setDrawingHiddenLayers([]);
   }, []);
 
@@ -6762,6 +6773,9 @@ function CadFileViewSurface({
                     facts: drawingSheetFactsValue,
                     lineWeight: drawingLineWeight,
                     onLineWeightChange: setDrawingLineWeight,
+                    dimensionDisplay: drawingDimensionDisplay,
+                    onDimensionDisplayChange: setDrawingDimensionDisplay,
+                    dimensionCount: Number(drawingGeometry?.apparatus?.dimensions) || 0,
                     layers: drawingLayers,
                     hiddenLayers: drawingHiddenLayers,
                     onLayerVisibilityChange: handleDrawingLayerVisibilityChange,

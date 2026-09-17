@@ -61,6 +61,43 @@ class DrawingSvgTests(unittest.TestCase):
         self.assertTrue(widths(normal))
         self.assertGreater(max(widths(bold)), max(widths(normal)), "Bold draws wider strokes")
 
+    def test_dimensions_can_be_restated_in_precision_units_and_size(self) -> None:
+        from cadgen.viewer.drawing_svg import restyle_dimensions
+
+        def dimension_texts(document):
+            texts = []
+            for dimension in document.modelspace().query("DIMENSION"):
+                block = document.blocks.get(dimension.dxf.geometry)
+                texts += [e.text if e.dxftype() == "MTEXT" else e.dxf.text for e in block if e.dxftype() in ("TEXT", "MTEXT")]
+            return texts
+
+        with temporary_directory(prefix="tmp-cad-drawing-svg-") as td:
+            path = Path(td) / "sheet.dxf"
+            _drawing(path)
+            untouched = ezdxf.readfile(path)
+            self.assertEqual(restyle_dimensions(untouched), 0, "nothing asked, nothing re-rendered")
+            self.assertEqual(dimension_texts(untouched), ["100"])
+
+            precise = ezdxf.readfile(path)
+            self.assertEqual(restyle_dimensions(precise, decimals=2), 1)
+            self.assertEqual(dimension_texts(precise), ["100.00"])
+
+            inches = ezdxf.readfile(path)
+            restyle_dimensions(inches, units="in")
+            self.assertEqual(dimension_texts(inches), ['3.937"'])
+
+            larger = ezdxf.readfile(path)
+            restyle_dimensions(larger, text_scale=2.0)
+            heights = [e.dxf.char_height for d in larger.modelspace().query("DIMENSION")
+                       for e in larger.blocks.get(d.dxf.geometry) if e.dxftype() == "MTEXT"]
+            self.assertTrue(heights and all(h > 1.5 for h in heights), heights)
+
+            with self.assertRaises(ValueError):
+                restyle_dimensions(ezdxf.readfile(path), units="furlongs")
+
+            svg = render_drawing_svg(path, dimension_units="in", dimension_decimals=1)
+            self.assertIn("<svg", svg)
+
 
 if __name__ == "__main__":
     unittest.main()
