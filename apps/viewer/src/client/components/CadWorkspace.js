@@ -1626,6 +1626,10 @@ export default function CadWorkspace({
   // A dimensioned drawing renders its own 2D geometry: there is no mesh to wait
   // for. Decided from the PARSED data (dimension/leader/paper-space evidence) —
   // the client twin of cadgen's drawing_checks predicate.
+  // A part: a model entry that is neither a drawing nor a robot. It has no 2D/3D of its
+  // own, but a part with drawings gets the pill so 2D can open its sheet.
+  const selectedEntryIsPart = Boolean(selectedEntry) && selectedEntrySourceFormat !== RENDER_FORMAT.DXF
+    && selectedEntryContentKind !== VIEWPORT_CONTENT.ROBOT;
   const selectedEntryIsDrawingDocument =
     assetKindForRenderFormat(selectedEntrySourceFormat) === ASSET_KIND.DRAWING
     && dxfDataIsDocument(drawingGeometry);
@@ -3194,10 +3198,15 @@ export default function CadWorkspace({
   // what the button means for a document. Set during render, below, once the catalog
   // lookup and the entry opener exist.
   const openDrawingSourceRef = useRef(null);
+  const openPartDrawingRef = useRef(null);
   const handleDrawingViewModeChange = useCallback((mode) => {
     const next = mode === "2d" ? "2d" : "3d";
     if (next === "3d" && openDrawingSourceRef.current) {
       openDrawingSourceRef.current();
+      return;
+    }
+    if (next === "2d" && openPartDrawingRef.current) {
+      openPartDrawingRef.current();
       return;
     }
     setDrawingViewMode(next);
@@ -6975,6 +6984,38 @@ export default function CadWorkspace({
   openDrawingSourceRef.current = drawingSourceEntry
     ? () => handleSelectEntry(fileKey(drawingSourceEntry))
     : null;
+  // The other direction: the sheets that document the selected part, found by the
+  // server from their headers (/__cad/drawings-of). Empty for anything but a part.
+  const [partDrawings, setPartDrawings] = useState([]);
+  const partDrawingsFileRef = selectedEntryIsPart ? fileKey(selectedEntry) : "";
+  useEffect(() => {
+    if (!partDrawingsFileRef) {
+      setPartDrawings([]);
+      return undefined;
+    }
+    let cancelled = false;
+    fetch(`/__cad/drawings-of?file=${encodeURIComponent(partDrawingsFileRef)}`)
+      .then((res) => (res.ok ? res.json() : { drawings: [] }))
+      .then((payload) => {
+        if (!cancelled) {
+          setPartDrawings(Array.isArray(payload?.drawings) ? payload.drawings : []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPartDrawings([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [partDrawingsFileRef]);
+  const partDrawingEntry = useMemo(() => {
+    const wanted = String(partDrawings[0] || "").replace(/\\/g, "/").toLowerCase();
+    if (!wanted) return null;
+    return catalogEntries.find((entry) => cadFileParamForEntry(entry).replace(/\\/g, "/").toLowerCase() === wanted) || null;
+  }, [partDrawings, catalogEntries]);
+  openPartDrawingRef.current = partDrawingEntry
+    ? () => handleSelectEntry(fileKey(partDrawingEntry))
+    : null;
 
   const handleRevealEntryInExplorerView = useCallback((entry) => {
     const targetKey = fileKey(entry);
@@ -7731,8 +7772,8 @@ export default function CadWorkspace({
                 selectedEntry={selectedEntry}
                 renderFormat={effectiveRenderFormat}
                 floatingCadToolbarPosition={floatingCadToolbarPosition}
-                drawingViewToggle={selectedEntryIsDrawing}
-                drawingViewMode={drawingViewMode}
+                drawingViewToggle={selectedEntryIsDrawing || partDrawings.length > 0}
+                drawingViewMode={selectedEntryIsDrawing ? drawingViewMode : "3d"}
                 onDrawingViewModeChange={handleDrawingViewModeChange}
                 zoomControlsVisible={!!selectedViewportContent}
                 zoomPercent={viewerZoomPercent}
