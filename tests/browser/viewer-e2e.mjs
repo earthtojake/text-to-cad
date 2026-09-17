@@ -399,16 +399,62 @@ async function restingShot(page) {
   await page.mouse.move(viewport.width - 4, viewport.height - 4);
   const frame = await presentedFrame(page);
   const startedAt = Date.now();
+  const stages = {};
+  let session;
+  let finished = false;
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('capture: 10000ms deadline exceeded')), 10_000);
+  });
+  const capture = async () => {
+    const acquired = await page.context().newCDPSession(page);
+    if (finished) {
+      await acquired.detach();
+      throw new Error('capture ended before its CDP session was ready');
+    }
+    session = acquired;
+    stages.sessionMs = Date.now() - startedAt;
+    let stageStartedAt = Date.now();
+    const fonts = await session.send('Runtime.evaluate', {
+      expression: 'document.fonts.ready.then(() => true)', awaitPromise: true, returnByValue: true,
+    });
+    if (fonts.exceptionDetails) throw new Error(`capture fonts: ${fonts.exceptionDetails.text}`);
+    stages.fontsMs = Date.now() - stageStartedAt;
+    stageStartedAt = Date.now();
+    const { visualViewport } = await session.send('Page.getLayoutMetrics');
+    stages.metricsMs = Date.now() - stageStartedAt;
+    // Keep Playwright's viewport and surface semantics while using fast lossless
+    // PNG encoding, which trades a larger payload for less CPU work.
+    const clip = {
+      x: visualViewport.pageX, y: visualViewport.pageY,
+      width: Math.floor(viewport.width / visualViewport.scale + 1e-3),
+      height: Math.floor(viewport.height / visualViewport.scale + 1e-3), scale: visualViewport.scale,
+    };
+    stageStartedAt = Date.now();
+    const { data } = await session.send('Page.captureScreenshot', {
+      format: 'png', clip, fromSurface: true, captureBeyondViewport: false, optimizeForSpeed: true,
+    });
+    stages.copyAndEncodeMs = Date.now() - stageStartedAt;
+    const png = PNG.sync.read(Buffer.from(data, 'base64'));
+    if (png.width !== viewport.width || png.height !== viewport.height) {
+      throw new Error(`capture: expected ${viewport.width}x${viewport.height}, got ${png.width}x${png.height}`);
+    }
+    return png;
+  };
   try {
-    const png = PNG.sync.read(await page.screenshot());
+    const png = await Promise.race([capture(), deadline]);
     const captureMs = Date.now() - startedAt;
     if (frame.presentationMs > 1000 || captureMs > 1000) {
-      console.log(`  capture: ${JSON.stringify({ ...frame, captureMs })}`);
+      console.log(`  capture: ${JSON.stringify({ ...frame, ...stages, captureMs })}`);
     }
     return png;
   } catch (error) {
-    console.error(`  capture failed after presentation: ${JSON.stringify({ ...frame, captureMs: Date.now() - startedAt })}`);
+    console.error(`  capture failed after presentation: ${JSON.stringify({ ...frame, ...stages, captureMs: Date.now() - startedAt })}`);
     throw error;
+  } finally {
+    finished = true;
+    clearTimeout(timer);
+    await session?.detach().catch(() => {});
   }
 }
 
@@ -997,6 +1043,7 @@ async function qualityGate() {
       if (cycle === 0) {
         await saveReview(page, "render-studio");
         await page.getByRole("tab", { name: "Materials", exact: true }).click();
+        await page.getByRole("button", { name: "Select all parts", exact: true }).waitFor();
         await saveReview(page, "render-materials");
         await page.getByRole("tab", { name: "Studio", exact: true }).click();
       }
