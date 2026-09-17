@@ -2028,6 +2028,10 @@ const CadViewer = forwardRef(function CadViewer({
   const [defaultPerspectiveDetached, setDefaultPerspectiveDetached] = useState(false);
   const [error, setError] = useState("");
   const [viewerReadyTick, setViewerReadyTick] = useState(0);
+  // The drawing document's sheet on screen (container, bounds, image mesh), for the
+  // image effect to swap textures onto; bumped when the container is rebuilt.
+  const drawingSheetSlotRef = useRef(null);
+  const [drawingSheetSlotTick, setDrawingSheetSlotTick] = useState(0);
   const [runtimeResetToken, setRuntimeResetToken] = useState(0);
   const presentationEpoch = useMemo(() => ({}), [renderMode, runtimeResetToken]);
   const [presentedEpoch, setPresentedEpoch] = useState(null);
@@ -3024,44 +3028,11 @@ const CadViewer = forwardRef(function CadViewer({
       runtime.dxfDrawingLines = container;
       runtime.hasDrawingDocument = true;
     }
-    // The printed look, when the server can render it: the sheet's SVG laid over the
-    // drawing's extent. The line work above is the immediate render and the fallback;
-    // once the image lands it is hidden, not disposed, so a failed fetch costs nothing.
-    const svgState = { cancelled: false };
-    if (drawingSvgUrl && sheetBounds) {
-      fetch(drawingSvgUrl)
-        .then((res) => (res.ok ? res.text() : Promise.reject(new Error(`drawing svg ${res.status}`))))
-        .then((svgText) => rasterizeSvgToTexture(THREE, svgText))
-        .then(({ texture }) => {
-          if (svgState.cancelled || container.parent !== group) {
-            texture.dispose();
-            return;
-          }
-          // The page is the drawing's extent with no margin, so it spans the parsed
-          // bounds exactly: the same rectangle the line work occupies.
-          const width = sheetBounds.max[0] - sheetBounds.min[0];
-          const height = sheetBounds.max[2] - sheetBounds.min[2];
-          const sheet = new THREE.Mesh(
-            new THREE.PlaneGeometry(width, height),
-            new THREE.MeshBasicMaterial({ map: texture, depthWrite: false, toneMapped: false })
-          );
-          sheet.position.set((sheetBounds.min[0] + sheetBounds.max[0]) / 2, (sheetBounds.min[2] + sheetBounds.max[2]) / 2, 0.01);
-          sheet.renderOrder = 6;
-          sheet.userData.dxfDrawingSheet = true;
-          for (const child of container.children) {
-            if (!child.userData?.dxfDrawingPaper) {
-              child.visible = false;
-            }
-          }
-          container.add(sheet);
-          runtime.requestRender?.();
-        })
-        .catch((error) => {
-          // The line work stays. A server without ezdxf's add-on, or an older server,
-          // still shows the drawing; say why in the console so a broken route is visible.
-          console.warn("[cad-viewer] drawing sheet image unavailable, showing line work:", error?.message || error);
-        });
-    }
+    // The printed look (the sheet's SVG) is fetched by its own effect below, so a new
+    // image swaps onto the existing sheet instead of rebuilding this container: the
+    // line work here is the first render and the fallback, and it stays put.
+    drawingSheetSlotRef.current = { container, group, sheetBounds, sheet: null };
+    setDrawingSheetSlotTick((tick) => tick + 1);
     // A document has no mesh for the shared fit to measure, so its own extent stands in.
     // Publishing runtime.modelBounds is how it gets the shared zoom baseline, reset and fit
     // with no format-specific branch.
@@ -3115,9 +3086,70 @@ const CadViewer = forwardRef(function CadViewer({
     markPresentationReady(runtime);
     runtime?.requestRender?.();
     return () => {
-      svgState.cancelled = true;
+      if (drawingSheetSlotRef.current?.container === container) {
+        drawingSheetSlotRef.current = null;
+      }
     };
-  }, [applyActivePhotographicStudio, drawingIsDocument, drawingGeometry, drawingHiddenLayers, drawingSvgUrl, markPresentationReady, planMode, viewerReadyTick]);
+  }, [applyActivePhotographicStudio, drawingIsDocument, drawingGeometry, drawingHiddenLayers, markPresentationReady, planMode, viewerReadyTick]);
+
+  // The sheet image: fetched whenever its URL changes (a layer switched, a line weight,
+  // a previewed edit) and swapped onto the sheet already on screen once it has arrived.
+  // The previous image stays visible until then, so re-rendering never flashes the line
+  // work or bare paper. The first image also hides the line work it replaces.
+  useEffect(() => {
+    const slot = drawingSheetSlotRef.current;
+    const runtime = runtimeRef.current;
+    const THREE = runtime?.THREE;
+    if (!slot || !drawingSvgUrl || !slot.sheetBounds || !THREE) {
+      return undefined;
+    }
+    const state = { cancelled: false };
+    fetch(drawingSvgUrl)
+      .then((res) => (res.ok ? res.text() : Promise.reject(new Error(`drawing svg ${res.status}`))))
+      .then((svgText) => rasterizeSvgToTexture(THREE, svgText))
+      .then(({ texture }) => {
+        if (state.cancelled || slot.container.parent !== slot.group) {
+          texture.dispose();
+          return;
+        }
+        if (slot.sheet) {
+          const previous = slot.sheet.material.map;
+          slot.sheet.material.map = texture;
+          slot.sheet.material.needsUpdate = true;
+          previous?.dispose?.();
+          runtime.requestRender?.();
+          return;
+        }
+        // The page is the drawing's extent with no margin, so it spans the parsed
+        // bounds exactly: the same rectangle the line work occupies.
+        const { sheetBounds, container } = slot;
+        const width = sheetBounds.max[0] - sheetBounds.min[0];
+        const height = sheetBounds.max[2] - sheetBounds.min[2];
+        const sheet = new THREE.Mesh(
+          new THREE.PlaneGeometry(width, height),
+          new THREE.MeshBasicMaterial({ map: texture, depthWrite: false, toneMapped: false })
+        );
+        sheet.position.set((sheetBounds.min[0] + sheetBounds.max[0]) / 2, (sheetBounds.min[2] + sheetBounds.max[2]) / 2, 0.01);
+        sheet.renderOrder = 6;
+        sheet.userData.dxfDrawingSheet = true;
+        for (const child of container.children) {
+          if (!child.userData?.dxfDrawingPaper) {
+            child.visible = false;
+          }
+        }
+        container.add(sheet);
+        slot.sheet = sheet;
+        runtime.requestRender?.();
+      })
+      .catch((error) => {
+        // The line work stays. A server without ezdxf's add-on, or an older server,
+        // still shows the drawing; say why in the console so a broken route is visible.
+        console.warn("[cad-viewer] drawing sheet image unavailable, showing line work:", error?.message || error);
+      });
+    return () => {
+      state.cancelled = true;
+    };
+  }, [drawingSvgUrl, drawingSheetSlotTick]);
 
   // Applied SYNCHRONOUSLY when the meshes already exist. The previous version restored flat
   // positions in its cleanup and re-folded on the next animation frame — so every slider

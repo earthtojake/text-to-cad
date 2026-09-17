@@ -62,11 +62,10 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
       // One tab per concern: Material (units + stock), Bends (only when the drawing has
       // bend lines), and Layers — the drawing's own STRUCTURE, the DXF analogue of STEP's
       // Tree — whenever the file actually uses layers.
+      // A document's line work is switched from the Sheet tab; a Layers inventory
+      // beside it would be the same switches twice.
       if (options.isDrawingDocument === true) {
-        return [
-          FILE_SHEET_SECTION_IDS.DXF_SHEET,
-          ...(options.hasDxfLayersPanel ? [FILE_SHEET_SECTION_IDS.DXF_LAYERS] : [])
-        ];
+        return [FILE_SHEET_SECTION_IDS.DXF_SHEET];
       }
       return [
         FILE_SHEET_SECTION_IDS.DXF_MATERIAL,

@@ -25,20 +25,8 @@ function layerEntityCount(layer) {
     + (Number(layer?.textCount) || 0);
 }
 
-/** On a drawing SHEET the layers mean line work, not cut/bend/engrave operations. */
-const DRAWING_LAYER_ROLES = Object.freeze({
-  VISIBLE: "Visible edges",
-  HIDDEN: "Hidden lines",
-  CENTER: "Centre lines",
-  DIM: "Dimensions",
-  NOTES: "Notes",
-  TITLE: "Title block",
-  SHEET: "Frame"
-});
-
-function layerFactsLabel(layer, document) {
-  const role = document ? DRAWING_LAYER_ROLES[String(layer?.name || "").toUpperCase()] : null;
-  const kind = role || LAYER_KIND_LABELS[String(layer?.kind || "").toLowerCase()] || (document ? "Line work" : "Cut");
+function layerFactsLabel(layer) {
+  const kind = LAYER_KIND_LABELS[String(layer?.kind || "").toLowerCase()] || "Cut";
   const count = layerEntityCount(layer);
   return count > 0 ? `${kind} · ${count}` : kind;
 }
@@ -46,8 +34,7 @@ function layerFactsLabel(layer, document) {
 export function DxfLayersSection({
   layers = [],
   hiddenLayers = [],
-  onLayerVisibilityChange,
-  document = false
+  onLayerVisibilityChange
 }) {
   const hiddenLayerSet = new Set(Array.isArray(hiddenLayers) ? hiddenLayers : []);
   if (!layers.length) {
@@ -74,7 +61,7 @@ export function DxfLayersSection({
               {layer.name}
             </span>
             <span className="shrink-0 tabular-nums text-muted-foreground">
-              {layerFactsLabel(layer, document)}
+              {layerFactsLabel(layer)}
             </span>
             <Button
               type="button"
