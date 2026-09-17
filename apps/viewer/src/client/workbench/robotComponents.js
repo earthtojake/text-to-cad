@@ -1,8 +1,22 @@
 // Keep each source mesh object independently pickable through the shared mesh renderer.
 // Split before posing so every object retains its visual's link and local transform.
+// A loader that finds no name for an object names it anyway: `glb:3`, `3mf:0`, or the
+// CAD occurrence id the node carries (`o1.2`). Those are identity, not something a
+// person wrote, and an inventory of them is noise -- so they are what this rejects.
+//
+// It is NOT "the name equals the id". cadgen's own GLB writer stamps each node's
+// cadOccurrenceId extra with the node's authored name, so every part of every GLB this
+// repo writes arrives with name === id === occurrenceId (`elbow_pitch_link:color0`).
+// Reading that as "unnamed" left a robot built from cadgen meshes with no components at
+// all, which is every robot in the corpus.
+const SYNTHETIC_OBJECT_NAME = /^(?:[a-z0-9]+:\d+|o\d+(?:\.\d+)*)$/i;
+
 function componentName(part) {
   const name = typeof part?.name === "string" ? part.name.trim() : "";
-  return name && name !== part.id && !/^unnamed(?: component)?$/i.test(name) ? name : "";
+  if (!name || /^unnamed(?: component)?$/i.test(name) || SYNTHETIC_OBJECT_NAME.test(name)) {
+    return "";
+  }
+  return name;
 }
 
 // A loader that hands back a part whose ranges do not describe a slice of the mesh it

@@ -57,6 +57,34 @@ test("named mesh objects become one pickable part each", () => {
   assert.equal(split.parts[1].visualId, "arm:v1");
 });
 
+// Every GLB cadgen writes arrives this way: the writer stamps each node's authored name
+// as its cadOccurrenceId extra, and the reader takes that extra for BOTH the part's id and
+// its name. Reading "name equals id" as unnamed cost a cadgen-built robot every component.
+test("objects named by their own occurrence id are still named", () => {
+  const objects = ["elbow_pitch_link:color0", "elbow_pitch_link:color1"].map((name) => ({
+    name, id: name, overrides: { occurrenceId: name }
+  }));
+  const meshData = {
+    parts: [visualWithObjects("elbow:v1", "elbow_pitch_link", objects)]
+  };
+  const components = robotComponents(buildRobotComponentGeometry(meshData), "arm.urdf");
+  assert.deepEqual(
+    components.map((component) => component.name),
+    ["elbow_pitch_link:color0", "elbow_pitch_link:color1"]
+  );
+});
+
+test("objects a loader named for want of a name are not components", () => {
+  // `glb:0` / `3mf:1` are the readers' fallbacks; `o1.2` is a CAD occurrence id.
+  for (const name of ["glb:0", "3mf:1", "o1.2", "o3"]) {
+    const visual = visualWithObjects("base:v1", "base", [{ name, id: name }, { name, id: name }]);
+    const meshData = { parts: [visual] };
+    const split = buildRobotComponentGeometry(meshData);
+    assert.deepEqual(split.parts, [visual], `${name} must not become a component`);
+    assert.deepEqual(robotComponents(split, "arm.urdf"), []);
+  }
+});
+
 test("a visual with no named objects is left whole", () => {
   const visual = visualWithObjects("base:v1", "base", [{ name: "" }, { name: "Unnamed component" }]);
   const split = buildRobotComponentGeometry({ parts: [visual] });
