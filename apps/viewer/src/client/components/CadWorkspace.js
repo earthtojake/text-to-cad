@@ -378,10 +378,6 @@ function statusOnlyFileSheetTitle(sourceFormat) {
 // file-list chip reads that way; the viewport card is a sentence and needs a capital.
 
 
-/** How long the held frame takes to fade once the other side of the document/model toggle has presented. */
-const VIEW_SWITCH_FADE_MS = 360;
-/** The longest a held frame stays up when the other side is slow to present. */
-const VIEW_SWITCH_HOLD_MAX_MS = 6000;
 const EMPTY_LIST = Object.freeze([]);
 const EMPTY_MATERIAL_OVERRIDES = Object.freeze({});
 const URDF_POSE_PICKER_DEFAULT_CENTER = Object.freeze([0, 0, 0]);
@@ -1630,10 +1626,6 @@ export default function CadWorkspace({
   // A dimensioned drawing renders its own 2D geometry: there is no mesh to wait
   // for. Decided from the PARSED data (dimension/leader/paper-space evidence) —
   // the client twin of cadgen's drawing_checks predicate.
-  // A part: a model entry that is neither a drawing nor a robot. It has no 2D/3D of its
-  // own, but a part with drawings gets the pill so 2D can open its sheet.
-  const selectedEntryIsPart = Boolean(selectedEntry) && selectedEntrySourceFormat !== RENDER_FORMAT.DXF
-    && selectedEntryContentKind !== VIEWPORT_CONTENT.ROBOT;
   const selectedEntryIsDrawingDocument =
     assetKindForRenderFormat(selectedEntrySourceFormat) === ASSET_KIND.DRAWING
     && dxfDataIsDocument(drawingGeometry);
@@ -2789,49 +2781,11 @@ export default function CadWorkspace({
   );
   const currentPreviewVisible = Boolean(editingPreview.entry && selectedMeshMatches && !selectedMeshPartial &&
     !presentationPending && Number(editingPreview.state.preview?.revision) === Number(editingPreview.state.revision));
-  // The document/model toggle crossfades: the last frame of what was showing is held
-  // over the viewport while the other side loads, and fades once it has presented.
-  // `fromKey` is the entry the frame belongs to, so a fade never starts on that entry.
-  const [viewSwitchFrame, setViewSwitchFrame] = useState(null);
   const completedViewFile = useRef("");
   useEffect(() => {
     if (!effectiveViewerLoading && !selectedMeshPartial && !presentationPending &&
         (selectedMeshData || selectedEntryIsDrawingDocument)) completedViewFile.current = selectedKey;
   }, [effectiveViewerLoading, selectedMeshPartial, presentationPending, selectedMeshData, selectedEntryIsDrawingDocument, selectedKey]);
-  // The held frame fades once the other side is on screen. A frame with no presentation
-  // to wait for (the switch failed, or the user moved elsewhere) still clears after a beat.
-  // Fast path: the other side has presented, so let the held frame go on the next beat.
-  useEffect(() => {
-    if (!viewSwitchFrame || viewSwitchFrame.fading) {
-      return undefined;
-    }
-    const presented = selectedKey !== viewSwitchFrame.fromKey && !effectiveViewerLoading && !selectedMeshPartial && !presentationPending;
-    if (!presented) {
-      return undefined;
-    }
-    const timer = setTimeout(() => setViewSwitchFrame((current) => (current ? { ...current, fading: true } : current)), 60);
-    return () => clearTimeout(timer);
-  }, [viewSwitchFrame, selectedKey, effectiveViewerLoading, selectedMeshPartial, presentationPending]);
-  // Ceiling: a frame never outlives the load by much. Keyed on the frame alone so the
-  // loading state's churn cannot keep resetting it.
-  useEffect(() => {
-    if (!viewSwitchFrame || viewSwitchFrame.fading) {
-      return undefined;
-    }
-    const timer = setTimeout(() => setViewSwitchFrame((current) => (current ? { ...current, fading: true } : current)), VIEW_SWITCH_HOLD_MAX_MS);
-    return () => clearTimeout(timer);
-  }, [viewSwitchFrame]);
-  useEffect(() => {
-    if (!viewSwitchFrame?.fading) {
-      return undefined;
-    }
-    const reduced = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
-    const timer = setTimeout(() => {
-      URL.revokeObjectURL(viewSwitchFrame.url);
-      setViewSwitchFrame(null);
-    }, reduced ? 0 : VIEW_SWITCH_FADE_MS);
-    return () => clearTimeout(timer);
-  }, [viewSwitchFrame]);
   const selectedDrawingBendAxisCount = useMemo(() => {
     if (!drawingGeometry?.geometry) {
       return 0;
@@ -3235,38 +3189,8 @@ export default function CadWorkspace({
     [drawingBends]
   );
 
-  // A drawing that names the model it documents (CADGEN_SOURCE in its header, written
-  // by cadgen's @drawing) links to it: "3D" on such a sheet opens that model, which is
-  // what the button means for a document. Set during render, below, once the catalog
-  // lookup and the entry opener exist.
-  const openDrawingSourceRef = useRef(null);
-  const openPartDrawingRef = useRef(null);
-  const beginViewSwitch = useCallback(async (open) => {
-    let url = "";
-    try {
-      const blob = await viewerRef.current?.captureFrameBlob?.();
-      if (blob) url = URL.createObjectURL(blob);
-    } catch {
-      url = "";
-    }
-    if (url) {
-      setViewSwitchFrame((current) => {
-        if (current?.url) URL.revokeObjectURL(current.url);
-        return { url, fromKey: selectedKey, fading: false };
-      });
-    }
-    open();
-  }, [selectedKey]);
   const handleDrawingViewModeChange = useCallback((mode) => {
     const next = mode === "2d" ? "2d" : "3d";
-    if (next === "3d" && openDrawingSourceRef.current) {
-      void beginViewSwitch(openDrawingSourceRef.current);
-      return;
-    }
-    if (next === "2d" && openPartDrawingRef.current) {
-      void beginViewSwitch(openPartDrawingRef.current);
-      return;
-    }
     setDrawingViewMode(next);
     if (next === "2d") {
       // "z" is the top face in VIEW_PLANE_FACES — looking straight down at a flat pattern
@@ -3275,7 +3199,7 @@ export default function CadWorkspace({
       return;
     }
     viewerRef.current?.activateDefaultViewPlane?.();
-  }, [beginViewSwitch]);
+  }, []);
 
   // A dimensioned drawing is a sheet: it opens looking straight down at it. The 3D toggle
   // is still there for anyone who wants the tilt; the default is the drawing's own view.
@@ -7022,59 +6946,6 @@ export default function CadWorkspace({
     }
   }, [activateEntryTab, entryMap, isDesktop, writeCadParam]);
 
-  // The model a drawing documents, resolved against the drawing's own folder.
-  const drawingSourceEntry = useMemo(() => {
-    const relative = String(drawingGeometry?.sourceModel || "").trim();
-    if (!selectedEntryIsDrawingDocument || !relative || !selectedEntry) {
-      return null;
-    }
-    const drawingPath = cadFileParamForEntry(selectedEntry).replace(/\\/g, "/");
-    const base = drawingPath.includes("/") ? drawingPath.slice(0, drawingPath.lastIndexOf("/") + 1) : "";
-    const parts = [];
-    for (const segment of `${base}${relative}`.replace(/\\/g, "/").split("/")) {
-      if (!segment || segment === ".") continue;
-      if (segment === "..") { parts.pop(); continue; }
-      parts.push(segment);
-    }
-    const wanted = parts.join("/").toLowerCase();
-    return catalogEntries.find((entry) => cadFileParamForEntry(entry).replace(/\\/g, "/").toLowerCase() === wanted) || null;
-  }, [drawingGeometry, selectedEntryIsDrawingDocument, selectedEntry, catalogEntries]);
-  openDrawingSourceRef.current = drawingSourceEntry
-    ? () => handleSelectEntry(fileKey(drawingSourceEntry))
-    : null;
-  // The other direction: the sheets that document the selected part, found by the
-  // server from their headers (/__cad/drawings-of). Empty for anything but a part.
-  const [partDrawings, setPartDrawings] = useState([]);
-  const partDrawingsFileRef = selectedEntryIsPart ? fileKey(selectedEntry) : "";
-  useEffect(() => {
-    if (!partDrawingsFileRef) {
-      setPartDrawings([]);
-      return undefined;
-    }
-    let cancelled = false;
-    fetch(`/__cad/drawings-of?file=${encodeURIComponent(partDrawingsFileRef)}`)
-      .then((res) => (res.ok ? res.json() : { drawings: [] }))
-      .then((payload) => {
-        if (!cancelled) {
-          setPartDrawings(Array.isArray(payload?.drawings) ? payload.drawings : []);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setPartDrawings([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [partDrawingsFileRef]);
-  const partDrawingEntry = useMemo(() => {
-    const wanted = String(partDrawings[0] || "").replace(/\\/g, "/").toLowerCase();
-    if (!wanted) return null;
-    return catalogEntries.find((entry) => cadFileParamForEntry(entry).replace(/\\/g, "/").toLowerCase() === wanted) || null;
-  }, [partDrawings, catalogEntries]);
-  openPartDrawingRef.current = partDrawingEntry
-    ? () => handleSelectEntry(fileKey(partDrawingEntry))
-    : null;
-
   const handleRevealEntryInExplorerView = useCallback((entry) => {
     const targetKey = fileKey(entry);
     if (!targetKey || !entryMap.has(targetKey)) {
@@ -7623,19 +7494,6 @@ export default function CadWorkspace({
         data-cad-scene-backdrop={sceneBackdrop}
         style={{ backgroundColor: sceneBackdrop }}
       >
-        {viewSwitchFrame ? (
-          <img
-            src={viewSwitchFrame.url}
-            alt=""
-            aria-hidden="true"
-            data-view-switch-frame={viewSwitchFrame.fading ? "fading" : "held"}
-            className="pointer-events-none absolute inset-0 z-10 h-full w-full select-none object-cover"
-            style={{
-              opacity: viewSwitchFrame.fading ? 0 : 1,
-              transition: `opacity ${VIEW_SWITCH_FADE_MS}ms ease-out`
-            }}
-          />
-        ) : null}
         <CadRenderPane
           viewerRef={viewerRef}
           renderFormat={effectiveRenderFormat}
@@ -7843,8 +7701,8 @@ export default function CadWorkspace({
                 selectedEntry={selectedEntry}
                 renderFormat={effectiveRenderFormat}
                 floatingCadToolbarPosition={floatingCadToolbarPosition}
-                drawingViewToggle={selectedEntryIsDrawing || partDrawings.length > 0}
-                drawingViewMode={selectedEntryIsDrawing ? drawingViewMode : "3d"}
+                drawingViewToggle={selectedEntryIsDrawing}
+                drawingViewMode={drawingViewMode}
                 onDrawingViewModeChange={handleDrawingViewModeChange}
                 zoomControlsVisible={!!selectedViewportContent}
                 zoomPercent={viewerZoomPercent}

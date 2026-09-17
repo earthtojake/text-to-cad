@@ -188,11 +188,9 @@ function DesktopFloatingToolBar({
     </ToolbarButton>
   );
 
-  // The document/model pill, in its own group at the RIGHT end of the row: 2D and 3D are a
-  // property of what is being viewed, not a tool that acts on it, so grouping them with
-  // select/pan/draw would read as a fourth mode of the same kind. It sits last so it keeps
-  // the same spot on a sheet and on a part, whose tool strips differ in length: flipping
-  // between the two reads as one control that stays put.
+  // A drawing's own toolbar, in its own pill to the LEFT of the shared one: 2D and 3D are a
+  // property of the drawing being viewed, not a tool that acts on it, so grouping them with
+  // select/pan/draw would read as a fourth mode of the same kind.
   const drawingViewToolbar = !renderMode && drawingViewToggle ? (
     <div
       className={`${toolbarHidden ? "pointer-events-none" : "pointer-events-auto"} inline-flex h-8 w-fit items-center gap-0.5 rounded-md p-1 ${FLOATING_TOOL_BAR_SURFACE_CLASS}`}
@@ -240,6 +238,7 @@ function DesktopFloatingToolBar({
       <TooltipProvider delayDuration={250}>
         <div className="flex w-fit items-center gap-1 self-end">
         {zoomToolbar}
+        {drawingViewToolbar}
         <div
           className={`${toolbarHidden ? "pointer-events-none" : "pointer-events-auto"} inline-flex h-8 w-fit items-center gap-0.5 self-end rounded-md p-1 ${FLOATING_TOOL_BAR_SURFACE_CLASS}`}
           onPointerEnter={onToolbarEnter}
@@ -328,7 +327,6 @@ function DesktopFloatingToolBar({
             </>
           )}
         </div>
-        {drawingViewToolbar}
         </div>
       </TooltipProvider>
 

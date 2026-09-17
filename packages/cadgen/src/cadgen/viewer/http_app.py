@@ -430,8 +430,6 @@ class CadApp:
                     self._handle_asset(request, response, query)
                 elif pathname == "/__cad/drawing":
                     self._handle_drawing_svg(request, response, query)
-                elif pathname == "/__cad/drawings-of":
-                    self._handle_drawings_of(request, response, query)
                 else:
                     # An unrecognised /__cad/* path is a bad API call, not a
                     # page. Falling through to the SPA answered typo'd and
@@ -616,17 +614,6 @@ class CadApp:
         hidden = tuple(name for name in str(query.get("hide") or "").split(",") if name)
         svg = render_drawing_svg(candidate, hidden_layers=hidden)
         response.send_bytes(200, svg.encode("utf-8"), "image/svg+xml; charset=utf-8")
-
-    def _handle_drawings_of(self, request, response, query):
-        """The drawings under the root that document this model, as root-relative
-        paths: the link a part has back to its sheets."""
-        candidate = self.backend.asset_path_for_file_ref(query.get("file") or "")
-        if not candidate or not os.path.isfile(candidate):
-            response.send_json(404, {"error": "Not found"})
-            return
-        from .drawing_links import drawings_of
-
-        response.send_json(200, {"drawings": drawings_of(candidate, self.backend.root_path)})
 
     def _handle_tess_get(self, request, response):
         """403 refused name, 404 miss, 200 hit.

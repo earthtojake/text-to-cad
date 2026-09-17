@@ -428,26 +428,3 @@ test("the LAYER table's linetype and lineweight reach the layer summary", () => 
   assert.equal(byName.get("CUT").linetype, "CONTINUOUS");
   assert.equal(byName.get("CUT").lineweightMm, null);
 });
-
-test("the drawing names the model it documents through a custom header property", () => {
-  const parsed = parseDxf(dxfText([
-    "0", "SECTION", "2", "HEADER",
-    "9", "$INSUNITS", "70", "4",
-    "9", "$CUSTOMPROPERTYTAG", "1", "CADGEN_SOURCE",
-    "9", "$CUSTOMPROPERTY", "1", "../STEP/bracket.step",
-    "9", "$CUSTOMPROPERTYTAG", "1", "OTHER",
-    "9", "$CUSTOMPROPERTY", "1", "x",
-    "0", "ENDSEC",
-    "0", "SECTION", "2", "ENTITIES",
-    "0", "LINE", "8", "CUT", "10", "0", "20", "0", "11", "1", "21", "1",
-    "0", "ENDSEC", "0", "EOF"
-  ]));
-  assert.equal(parsed.sourceModel, "../STEP/bracket.step");
-  assert.deepEqual(parsed.customProperties, { CADGEN_SOURCE: "../STEP/bracket.step", OTHER: "x" });
-  const plain = parseDxf(dxfText([
-    "0", "SECTION", "2", "ENTITIES",
-    "0", "LINE", "8", "CUT", "10", "0", "20", "0", "11", "1", "21", "1",
-    "0", "ENDSEC", "0", "EOF"
-  ]));
-  assert.equal(plain.sourceModel, "");
-});
