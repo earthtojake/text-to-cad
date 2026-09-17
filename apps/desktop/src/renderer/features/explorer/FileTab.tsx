@@ -8,16 +8,18 @@ import { useExplorer } from "@renderer/state/explorer";
 import { useProjects } from "@renderer/state/projects";
 import type { ExplorerRoot, Project } from "@shared/types";
 import { createDesktopFileSource } from "./adapters/fileSource";
+import type { DesktopCadConnection } from "./adapters/cadRuntime";
 import { useDesktopViewState } from "./adapters/persistence";
 import { createDesktopRenderers } from "./renderers";
 
 /** The desktop supplies a root, native services and tab navigation to the shared viewer. */
-export function FileTab({ tabId, project, root, path, panel }: {
+export function FileTab({ tabId, project, root, path, panel, cadConnection }: {
   tabId: string; project: Project; root: ExplorerRoot; path: string | null; panel: string | null;
+  cadConnection?: DesktopCadConnection;
 }) {
   const source = useMemo(() => createDesktopFileSource({ projectId: project.id,
     projectName: () => useProjects.getState().projects.find(entry => entry.id === project.id)?.name ?? "Project", root }), [project.id, root]);
-  const composition = useMemo(() => createDesktopRenderers(project.id, root, tabId), [project.id, root, tabId]);
+  const composition = useMemo(() => createDesktopRenderers(project.id, root, tabId, cadConnection), [project.id, root, tabId, cadConnection]);
   useEffect(() => () => composition.dispose(), [composition]);
   const { state, onStateChange } = useDesktopViewState(source.id, tabId, root, panel, root ?? project.path);
   const reveal = useExplorer((state) => state.reveal);

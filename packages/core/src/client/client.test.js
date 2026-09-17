@@ -96,6 +96,130 @@ test('file-specific requests use independent AbortSignals and late replies canno
   client.dispose();
 });
 
+test('concurrent views resolving one file both receive the newest accepted catalog entry', async () => {
+  const pending = [];
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: () => {
+    const response = deferred(); pending.push(response); return response.promise;
+  } });
+  try {
+    const earlier = client.resolveEntry('part.step', { signal: new AbortController().signal });
+    const later = client.resolveEntry('part.step', { signal: new AbortController().signal });
+    assert.equal(pending.length, 2, 'each view owns its request cancellation');
+    pending[1].resolve(json({ entries: [{ file: 'part.step', hash: 'new', url: '/new-geometry' }] }));
+    const current = await later;
+    assert.equal(current.hash, 'new');
+    pending[0].resolve(json({ entries: [{ file: 'part.step', hash: 'old', url: '/old-geometry' }] }));
+    assert.equal(await earlier, current, 'a rejected stale response cannot escape to its waiting viewer');
+    assert.equal(client.getSnapshot().entries[0], current);
+    assert.equal(current.url, 'http://one.test/new-geometry');
+  } finally {
+    client.dispose();
+  }
+});
+
+test('resolving a deferred catalog entry hydrates that file instead of accepting its placeholder', async (t) => {
+  const calls = [];
+  const pending = { file: '/models/nested/part.step', rootRelativeFile: 'nested/part.step', catalogPending: true };
+  const ready = { ...pending, catalogPending: false, hash: 'ready', tree: '/tree.json' };
+  const client = createCadClient({ pollIntervalMs: 0, fetch: async (url) => {
+    const file = new URL(url, 'http://test').searchParams.get('file');
+    calls.push(file);
+    return json({ entries: [file ? ready : pending] });
+  } });
+  t.after(() => client.dispose());
+  await client.refresh();
+  assert.equal(client.getSnapshot().entries[0].catalogPending, true);
+  const entry = await client.resolveEntry('nested/part.step');
+  assert.equal(entry.hash, 'ready');
+  assert.deepEqual(calls, [null, 'nested/part.step']);
+  assert.equal(await client.resolveEntry('/models/nested/part.step'), entry, 'a warm lookup does not fetch again');
+});
+
+test('partial catalogs retain resolved metadata, selected-file changes replace it, and removed files disappear', async (t) => {
+  let entries = [{ file: 'one.step', hash: 'one-v1' }, { file: 'two.step', catalogPending: true }];
+  const client = createCadClient({ pollIntervalMs: 0, fetch: async () => json({ entries }) });
+  t.after(() => client.dispose());
+  await client.refresh({ file: 'one.step' });
+  const original = client.getSnapshot().entries[0];
+  entries = [{ file: 'one.step', catalogPending: true }, { file: 'two.step', hash: 'two-v1' }];
+  await client.refresh({ file: 'two.step' });
+  assert.equal(client.getSnapshot().entries[0], original, 'an unrelated hydration does not invalidate the displayed file');
+  assert.equal(client.getSnapshot().entries[1].hash, 'two-v1');
+  entries = [{ file: 'one.step', hash: 'one-v2' }, { file: 'two.step', catalogPending: true }];
+  await client.refresh({ file: 'one.step' });
+  assert.deepEqual(client.getSnapshot().entries.map(({ hash }) => hash), ['one-v2', 'two-v1']);
+  entries = [{ file: 'two.step', catalogPending: true }];
+  await client.refresh({ file: 'two.step' });
+  assert.deepEqual(client.getSnapshot().entries.map(({ file }) => file), ['two.step']);
+});
+
+test('concurrent file hydrations merge without allowing stale metadata or listings to overwrite newer replies', async (t) => {
+  const pending = [];
+  const client = createCadClient({ pollIntervalMs: 0, fetch: () => {
+    const response = deferred(); pending.push(response); return response.promise;
+  } });
+  t.after(() => client.dispose());
+  const one = client.resolveEntry('one.step');
+  const two = client.resolveEntry('two.step');
+  pending[1].resolve(json({ entries: [{ file: 'one.step', catalogPending: true }, { file: 'two.step', hash: 'two-v1' }] }));
+  await two;
+  pending[0].resolve(json({ entries: [{ file: 'one.step', hash: 'one-v1' }, { file: 'two.step', catalogPending: true }, { file: 'removed.step' }] }));
+  await one;
+  assert.deepEqual(client.getSnapshot().entries.map(({ hash }) => hash), ['one-v1', 'two-v1']);
+  const old = client.refresh({ file: 'one.step', signal: new AbortController().signal });
+  const fresh = client.refresh({ file: 'one.step', signal: new AbortController().signal });
+  pending[3].resolve(json({ entries: [{ file: 'one.step', hash: 'one-v3' }, { file: 'two.step', catalogPending: true }] }));
+  await fresh;
+  pending[2].resolve(json({ entries: [{ file: 'one.step', hash: 'one-v2' }, { file: 'two.step', catalogPending: true }] }));
+  await old;
+  assert.equal(client.getSnapshot().entries[0].hash, 'one-v3');
+  const removed = client.refresh({ file: 'one.step', signal: new AbortController().signal });
+  const listing = client.refresh({ file: '' });
+  pending[5].resolve(json({ entries: [{ file: 'two.step', catalogPending: true }] }));
+  await listing;
+  pending[4].resolve(json({ entries: [{ file: 'one.step', hash: 'one-v4' }, { file: 'two.step', catalogPending: true }] }));
+  await removed;
+  assert.deepEqual(client.getSnapshot().entries.map(({ file }) => file), ['two.step']);
+});
+
+test('unresolved metadata fails explicitly instead of mounting an indefinitely pending viewer', async (t) => {
+  const client = createCadClient({ pollIntervalMs: 0, fetch: async () => json({ entries: [{ file: 'part.step', catalogPending: true }] }) });
+  t.after(() => client.dispose());
+  await assert.rejects(client.resolveEntry('part.step'), /CAD file metadata is unavailable: part.step/);
+});
+
+test('polling targets active render sessions and continues observing selected-file metadata changes', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const calls = [];
+  let version = 1;
+  const client = createCadClient({ fetch: async (url) => {
+    const selected = new URL(url, 'http://test').searchParams.get('file');
+    calls.push(selected);
+    return json({ entries: ['one.step', 'two.step'].map((file) => file === selected
+      ? { file, hash: `${file}-${version}` } : { file, catalogPending: true }) });
+  } });
+  t.after(() => client.dispose());
+  const settle = () => new Promise((resolve) => setImmediate(resolve));
+  const release = client.subscribe(() => {});
+  await settle();
+  await client.resolveEntry('one.step');
+  const one = client.createRenderSession({ file: 'one.step' });
+  const two = client.createRenderSession({ file: 'two.step' });
+  calls.length = 0;
+  version = 2;
+  t.mock.timers.tick(2000);
+  await settle();
+  assert.deepEqual(calls, ['one.step', 'two.step']);
+  assert.deepEqual(client.getSnapshot().entries.map(({ hash }) => hash), ['one.step-2', 'two.step-2']);
+  two.dispose();
+  calls.length = 0;
+  t.mock.timers.tick(2000);
+  await settle();
+  assert.deepEqual(calls, ['one.step']);
+  one.dispose();
+  release();
+});
+
 test('artifact compile sends the guard header and publishes only into its own client', async () => {
   const calls = [];
   const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options) => {

@@ -256,6 +256,7 @@ function createAssemblyPreviewMeshData(meshData, topologyManifest = null) {
 }
 
 export function useCadAssets({
+  initialEntry = null,
   client,
   tessellationCache,
   entryHasMesh,
@@ -263,7 +264,103 @@ export function useCadAssets({
   entryHasDisplayEdges = () => false,
   buildNormalizedReferenceState,
 }) {
-  const [meshEnvelope, setMeshEnvelope] = useState({ value: null, reference: null, receipt: null });
+  const getAssemblyMeshHash = useCallback((entry) => {
+    return entryMeshAssetSignature(entry);
+  }, []);
+
+  const buildAssemblyPreviewMeshState = useCallback((entry, meshData, topologyManifest = null) => {
+    const previewMeshData = createAssemblyPreviewMeshData(meshData, topologyManifest);
+    return {
+      file: entry.file,
+      kind: entry.kind,
+      meshHash: getAssemblyMeshHash(entry),
+      meshData: previewMeshData,
+      assemblyStructureReady: !!previewMeshData.assemblyRoot,
+      assemblyInteractionReady: false,
+      assemblyBackgroundError: "",
+      assemblyBackgroundErrorMeshHash: ""
+    };
+  }, [getAssemblyMeshHash]);
+
+  const getCachedMeshState = useCallback((entry) => {
+    if (!entryHasMesh(entry)) {
+      return null;
+    }
+    // Every STEP entry — single-component part OR multi-occurrence assembly — is a
+    // component-GLB package (a directory of content-addressed component GLBs + an
+    // assembly.json descriptor), composed asynchronously in the browser. The synchronous
+    // cache only yields the lightweight preview; the full mesh is built in loadMeshForEntry.
+    if (entrySourceFormat(entry) === RENDER_FORMAT.STEP) {
+      const glbUrl = entryAssetUrl(entry, "glb");
+      const topologyUrl = entryTopologyAssetUrl(entry);
+      const previewMeshData = peekRenderGlb(glbUrl);
+      if (!previewMeshData) {
+        return null;
+      }
+      const topologyManifest = peekRenderTopologyIndex(topologyUrl);
+      if (!topologyManifest) {
+        return buildAssemblyPreviewMeshState(entry, previewMeshData);
+      }
+      return null;
+    }
+    // A direct GLB may own a mutable native scene and mixer, so it is never
+    // restored from the shared flattened-mesh cache.
+    if (entrySourceFormat(entry) === RENDER_FORMAT.GLB) {
+      return null;
+    }
+    const meshData = peekRenderMeshForEntry(entry);
+    if (!meshData) {
+      return null;
+    }
+    return {
+      file: entry.file,
+      kind: entry.kind,
+      meshHash: entryMeshAssetHash(entry),
+      meshData
+    };
+  }, [buildAssemblyPreviewMeshState, entryHasMesh]);
+
+  const getCachedUrdfState = useCallback((entry) => {
+    const kind = String(entry?.kind || "").trim().toLowerCase();
+    if (!["urdf", "srdf", "sdf"].includes(kind)) {
+      return null;
+    }
+    const primaryAssetKey = kind === "sdf" ? "sdf" : "urdf";
+    if (!entryAssetUrl(entry, primaryAssetKey)) {
+      return null;
+    }
+    const srdfPayload = kind === "srdf"
+      ? peekRenderSrdf(entryAssetUrl(entry, "srdf"), { urdfUrl: entryAssetUrl(entry, "urdf") })
+      : null;
+    const urdfData = kind === "srdf"
+      ? srdfPayload?.urdfData
+      : kind === "sdf"
+        ? peekRenderSdf(entryAssetUrl(entry, "sdf"))
+        : peekRenderUrdf(entryAssetUrl(entry, "urdf"));
+    if (!urdfData) {
+      return null;
+    }
+    const meshUrls = urdfMeshUrls(urdfData);
+    const meshes = meshUrls.map((meshUrl) => peekRenderMeshByUrl(meshUrl, { fallback: RENDER_FORMAT.STL })).filter(Boolean);
+    if (meshes.length !== meshUrls.length) {
+      return null;
+    }
+    const meshesByUrl = new Map(meshUrls.map((meshUrl, index) => [meshUrl, meshes[index]]));
+    return {
+      file: entry.file,
+      kind: entry.kind,
+      urdfHash: entryUrdfAssetHash(entry),
+      urdfData,
+      meshesByUrl
+    };
+  }, []);
+
+  // FileViewer remounts file-owned controls. Restore immutable warm assets on
+  // the first render, as main's in-place tab activation did, without retaining
+  // inactive scenes or duplicating the bounded core caches.
+  const [meshEnvelope, setMeshEnvelope] = useState(() => ({
+    value: getCachedMeshState(initialEntry), reference: null, receipt: null,
+  }));
   const meshState = meshEnvelope.value;
   const setMeshState = useCallback(update => {
     setMeshEnvelope(previous => updateLodMeshState(previous, update));
@@ -276,8 +373,8 @@ export function useCadAssets({
   const [meshLoadProgress, setMeshLoadProgress] = useState(null);
   const [status, setStatus] = useState(ASSET_STATUS.READY);
   const [error, setError] = useState("");
-  const [urdfState, setUrdfState] = useState(null);
-  const [urdfStatus, setUrdfStatus] = useState(ASSET_STATUS.PENDING);
+  const [urdfState, setUrdfState] = useState(() => getCachedUrdfState(initialEntry));
+  const [urdfStatus, setUrdfStatus] = useState(urdfState ? ASSET_STATUS.READY : ASSET_STATUS.PENDING);
   const [urdfError, setUrdfError] = useState("");
   const [urdfLoadStage, setUrdfLoadStage] = useState("");
   // The same stage, as data rather than a sentence. The loader has always COUNTED the
@@ -307,10 +404,6 @@ export function useCadAssets({
   const urdfAbortControllerRef = useRef(null);
   const referenceAbortControllerRef = useRef(null);
   const displayEdgeAbortControllerRef = useRef(null);
-
-  const getAssemblyMeshHash = useCallback((entry) => {
-    return entryMeshAssetSignature(entry);
-  }, []);
 
   // --- viewport LOD (design/unified-tessellation.md Phase 5) -----------------
   // The composed package's ingredients, kept so a level swap can re-compose ONE
@@ -627,58 +720,6 @@ export function useCadAssets({
   const buildComposedPackageMeshStateRef = useRef(buildComposedPackageMeshState);
   buildComposedPackageMeshStateRef.current = buildComposedPackageMeshState;
 
-  const buildAssemblyPreviewMeshState = useCallback((entry, meshData, topologyManifest = null) => {
-    const previewMeshData = createAssemblyPreviewMeshData(meshData, topologyManifest);
-    return {
-      file: entry.file,
-      kind: entry.kind,
-      meshHash: getAssemblyMeshHash(entry),
-      meshData: previewMeshData,
-      assemblyStructureReady: !!previewMeshData.assemblyRoot,
-      assemblyInteractionReady: false,
-      assemblyBackgroundError: "",
-      assemblyBackgroundErrorMeshHash: ""
-    };
-  }, [getAssemblyMeshHash]);
-
-  const getCachedMeshState = useCallback((entry) => {
-    if (!entryHasMesh(entry)) {
-      return null;
-    }
-    // Every STEP entry — single-component part OR multi-occurrence assembly — is a
-    // component-GLB package (a directory of content-addressed component GLBs + an
-    // assembly.json descriptor), composed asynchronously in the browser. The synchronous
-    // cache only yields the lightweight preview; the full mesh is built in loadMeshForEntry.
-    if (entrySourceFormat(entry) === RENDER_FORMAT.STEP) {
-      const glbUrl = entryAssetUrl(entry, "glb");
-      const topologyUrl = entryTopologyAssetUrl(entry);
-      const previewMeshData = peekRenderGlb(glbUrl);
-      if (!previewMeshData) {
-        return null;
-      }
-      const topologyManifest = peekRenderTopologyIndex(topologyUrl);
-      if (!topologyManifest) {
-        return buildAssemblyPreviewMeshState(entry, previewMeshData);
-      }
-      return null;
-    }
-    // A direct GLB may own a mutable native scene and mixer, so it is never
-    // restored from the shared flattened-mesh cache.
-    if (entrySourceFormat(entry) === RENDER_FORMAT.GLB) {
-      return null;
-    }
-    const meshData = peekRenderMeshForEntry(entry);
-    if (!meshData) {
-      return null;
-    }
-    return {
-      file: entry.file,
-      kind: entry.kind,
-      meshHash: entryMeshAssetHash(entry),
-      meshData
-    };
-  }, [buildAssemblyPreviewMeshState, entryHasMesh]);
-
   const getCachedReferenceState = useCallback((entry) => {
     if (!entryHasReferences(entry)) {
       return null;
@@ -704,41 +745,6 @@ export function useCadAssets({
     const bundle = peekRenderDisplayEdgeBundle(entryDisplayEdgeTopologyAssetUrl(entry));
     return bundle ? buildDisplayEdgeState(entry, bundle) : null;
   }, [buildDisplayEdgeState, entryHasDisplayEdges]);
-
-  const getCachedUrdfState = useCallback((entry) => {
-    const kind = String(entry?.kind || "").trim().toLowerCase();
-    if (!["urdf", "srdf", "sdf"].includes(kind)) {
-      return null;
-    }
-    const primaryAssetKey = kind === "sdf" ? "sdf" : "urdf";
-    if (!entryAssetUrl(entry, primaryAssetKey)) {
-      return null;
-    }
-    const srdfPayload = kind === "srdf"
-      ? peekRenderSrdf(entryAssetUrl(entry, "srdf"), { urdfUrl: entryAssetUrl(entry, "urdf") })
-      : null;
-    const urdfData = kind === "srdf"
-      ? srdfPayload?.urdfData
-      : kind === "sdf"
-        ? peekRenderSdf(entryAssetUrl(entry, "sdf"))
-        : peekRenderUrdf(entryAssetUrl(entry, "urdf"));
-    if (!urdfData) {
-      return null;
-    }
-    const meshUrls = urdfMeshUrls(urdfData);
-    const meshes = meshUrls.map((meshUrl) => peekRenderMeshByUrl(meshUrl, { fallback: RENDER_FORMAT.STL })).filter(Boolean);
-    if (meshes.length !== meshUrls.length) {
-      return null;
-    }
-    const meshesByUrl = new Map(meshUrls.map((meshUrl, index) => [meshUrl, meshes[index]]));
-    return {
-      file: entry.file,
-      kind: entry.kind,
-      urdfHash: entryUrdfAssetHash(entry),
-      urdfData,
-      meshesByUrl
-    };
-  }, []);
 
   const cancelMeshLoad = useCallback(() => {
     lodSceneAdoptionRef.current.cancel();

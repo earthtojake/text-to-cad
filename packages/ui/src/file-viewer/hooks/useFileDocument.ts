@@ -19,8 +19,13 @@ export function useFileDocument(file: string | FileMetadata | null, source: File
   current.current = { key, edit, source };
   const writes = useRef(new Set<AbortController>());
   const reload = useCallback(() => setGeneration((value) => value + 1), []);
+  const previousLoad = useRef<{ key: string; source: FileSource; path: string | null; generation: number; refresh: boolean } | null>(null);
 
   useEffect(() => {
+    const previous = previousLoad.current;
+    const refresh = previous?.key === key && previous.source === source ? previous.refresh
+      : previous?.source === source && previous.path === path && previous.generation !== generation;
+    previousLoad.current = { key, source, path, generation, refresh };
     if (path === null) return;
     const controller = new AbortController();
     const { signal } = controller;
@@ -30,7 +35,7 @@ export function useFileDocument(file: string | FileMetadata | null, source: File
         const metadata = typeof file === "object" && file !== null ? file : await source.stat(path, { signal });
         signal.throwIfAborted();
         const renderer = selectRenderer(renderers, metadata);
-        const prepared = await renderer.prepare({ file: metadata, source, signal });
+        const prepared = await renderer.prepare({ file: metadata, source, signal, refresh });
         if (signal.aborted) { prepared.dispose?.(); return; }
         owned = prepared;
         setResult({ key, document: { status: "ready", file: metadata, renderer, prepared } });

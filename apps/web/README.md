@@ -123,6 +123,13 @@ the build — detection only; it keeps serving.
 - **Verify a link by loading the page**, never by curling `/__cad/asset` —
   that route serves raw files; generated entries render through a
   different route, so probing it 404s whether or not anything is wrong.
+- **Large catalogs are partial.** Path-only `catalogPending` entries support
+  navigation but are not renderable metadata. The shared client resolves the
+  selected file explicitly and polls active files. Other files' placeholders
+  must not erase resolved metadata; a newer complete entry still invalidates
+  that file's view. The app retains one root client across navigation, so its
+  bounded mesh-cache write queue survives file switches. Decoded geometry uses
+  the shared content-addressed LRU, including when a renderer remounts.
 - **Vite's transform cache can outlive HMR and hard reloads.** If a source
   edit does not show up, restart the dev server and delete
   `node_modules/.vite`.

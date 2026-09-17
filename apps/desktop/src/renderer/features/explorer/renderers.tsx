@@ -10,11 +10,13 @@ import { addToDraft } from "@renderer/state/cad-draft";
 import { useExplorer } from "@renderer/state/explorer";
 import type { ExplorerRoot } from "@shared/types";
 import { CadRuntimeError, createDesktopCadConnection, DesktopCadFailure } from "./adapters/cadRuntime";
+import type { DesktopCadConnection } from "./adapters/cadRuntime";
 import { desktopCadPreferences } from "./adapters/cadPersistence";
 
 /** Application composition: only registered CAD code receives composer/native services. */
-export function createDesktopRenderers(projectId: string, root: ExplorerRoot, tabId: string) {
-  const connection = createDesktopCadConnection(projectId, root);
+export function createDesktopRenderers(projectId: string, root: ExplorerRoot, tabId: string, borrowedConnection?: DesktopCadConnection) {
+  const ownedConnection = borrowedConnection ? null : createDesktopCadConnection(projectId, root);
+  const connection = borrowedConnection ?? ownedConnection!;
   let previousSelection: ReturnType<typeof useExplorer.getState>["cadSelection"];
   let previousCapture: ReturnType<typeof useExplorer.getState>["cadCapture"];
   let snapshot: CadCommands = {};
@@ -54,5 +56,5 @@ export function createDesktopRenderers(projectId: string, root: ExplorerRoot, ta
       }
     },
   };
-  return { renderers: [markdownRenderer, codeRenderer, desktopCad, imageRenderer, pdfRenderer, unsupportedRenderer], dispose: () => connection.dispose() };
+  return { renderers: [markdownRenderer, codeRenderer, desktopCad, imageRenderer, pdfRenderer, unsupportedRenderer], dispose: () => ownedConnection?.dispose() };
 }

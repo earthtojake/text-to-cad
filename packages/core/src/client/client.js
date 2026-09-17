@@ -25,6 +25,10 @@ function abortError() {
   return new DOMException('The operation was aborted.', 'AbortError');
 }
 
+const normalizedFile = (file) => String(file || '').replace(/\\/g, '/').replace(/^\/+/, '');
+const entryKey = (entry) => normalizedFile(entry.rootRelativeFile || entry.file);
+const matchesFile = (entry, file) => [entry.rootRelativeFile, entry.file].some((value) => normalizedFile(value) === normalizedFile(file));
+
 /**
  * An explicit connection to one served root. Construction never starts requests.
  * @param {import("./types.js").CadClientOptions} options
@@ -39,7 +43,12 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
   const sessions = new Set();
   let pollTimer = null;
   let refreshSequence = 0;
-  let pendingRefresh = null;
+  let publishedCatalogSequence = 0;
+  const entrySequences = new Map();
+  const activeFiles = new Map();
+  let preferredFile = '';
+  const pendingRefreshes = new Map();
+  let tessellationCache = null;
   let server = null;
 
   function publish(patch) {
@@ -72,24 +81,45 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
     }
   }
 
-  function publishCatalog(catalog) {
-    const entries = applyViewerOriginToEntries(catalog?.entries, origin);
+  function publishCatalog(catalog, { sequence = ++refreshSequence, file = '' } = {}) {
+    let incoming = applyViewerOriginToEntries(catalog?.entries, origin);
+    if (sequence < publishedCatalogSequence) {
+      // Two views can hydrate different files concurrently. A late response
+      // cannot replace the newer directory listing, but its requested entry
+      // is still useful if no newer response hydrated that same file.
+      const selected = file && incoming.find((entry) => matchesFile(entry, file));
+      if (!selected || selected.catalogPending || !snapshot.entries.some((entry) => entryKey(entry) === entryKey(selected))
+        || sequence < (entrySequences.get(entryKey(selected)) || 0)) return;
+      incoming = snapshot.entries.map((entry) => entryKey(entry) === entryKey(selected) ? selected : entry);
+    } else publishedCatalogSequence = sequence;
+    const previous = new Map(snapshot.entries.map((entry) => [entryKey(entry), entry]));
+    const entries = incoming.map((entry) => {
+      const key = entryKey(entry);
+      const before = previous.get(key);
+      // Partial catalogs intentionally carry path-only placeholders for other
+      // files. They must not erase a view another request already resolved.
+      if (entry.catalogPending && before && !before.catalogPending) return before;
+      if (!entry.catalogPending) entrySequences.set(key, Math.max(sequence, entrySequences.get(key) || 0));
+      return before && JSON.stringify(before) === JSON.stringify(entry) ? before : entry;
+    });
+    const presentKeys = new Set(entries.map(entryKey));
+    for (const key of entrySequences.keys()) if (!presentKeys.has(key)) entrySequences.delete(key);
     const rootId = workspaceId || catalog?.rootId || snapshot.rootId;
-    const changed = JSON.stringify(entries) !== JSON.stringify(snapshot.entries);
+    const changed = entries.length !== snapshot.entries.length || entries.some((entry, index) => entry !== snapshot.entries[index]);
     if (changed || !snapshot.hydrated || snapshot.refreshing || snapshot.error || rootId !== snapshot.rootId) {
       publish({ entries: changed ? entries : snapshot.entries, rootId, hydrated: true, refreshing: false, error: '' });
     }
   }
 
-  async function refresh({ file = '', signal, markRefreshing = !snapshot.hydrated } = {}) {
+  async function refresh({ file = preferredFile, signal, markRefreshing = !snapshot.hydrated } = {}) {
     // A file-specific refresh must not inherit a different view's request or cancellation.
-    if (!file && !signal && pendingRefresh) return pendingRefresh;
+    if (!signal && pendingRefreshes.has(file)) return pendingRefreshes.get(file);
     const sequence = ++refreshSequence;
     if (markRefreshing) publish({ refreshing: true, error: '' });
     const work = (async () => {
       try {
         const catalog = await request('/__cad/catalog', { file, signal, timeoutMs: 10_000, operation: 'catalog' });
-        if (sequence === refreshSequence) publishCatalog(catalog);
+        publishCatalog(catalog, { sequence, file });
         return catalog;
       } catch (error) {
         if (!disposed && !signal?.aborted && error?.name !== 'AbortError' && sequence === refreshSequence) {
@@ -98,9 +128,9 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
         throw error;
       }
     })();
-    if (!file && !signal) {
-      pendingRefresh = work;
-      void work.finally(() => { if (pendingRefresh === work) pendingRefresh = null; }).catch(() => {});
+    if (!signal) {
+      pendingRefreshes.set(file, work);
+      void work.finally(() => { if (pendingRefreshes.get(file) === work) pendingRefreshes.delete(file); }).catch(() => {});
     }
     return work;
   }
@@ -116,7 +146,13 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
       // Keep the original interval cadence; a slow request is shared by refresh.
       schedulePoll();
       if (!shouldPoll()) return;
-      try { await refresh({ markRefreshing: false }); } catch { /* snapshot reports connection failures */ }
+      // Hydrate the files currently displayed, as main's URL-aware poll did.
+      // A directory-only poll can otherwise keep returning placeholders forever.
+      const files = activeFiles.size ? [...activeFiles.keys()] : [preferredFile];
+      for (const file of files) {
+        if (disposed || !listeners.size) break;
+        try { await refresh({ file, markRefreshing: false }); } catch { /* snapshot reports connection failures */ }
+      }
     }, pollIntervalMs);
   }
 
@@ -135,15 +171,16 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
     },
     refresh,
     async resolveEntry(path, { signal } = {}) {
-      const normalized = String(path || '').replace(/\\/g, '/').replace(/^\/+/, '');
-      const match = (entries) => entries.find((entry) => [entry.rootRelativeFile, entry.file].some((value) => String(value || '').replace(/\\/g, '/').replace(/^\/+/, '') === normalized));
+      preferredFile = path;
+      const match = (entries) => entries.find((entry) => matchesFile(entry, path));
       let entry = match(snapshot.entries);
-      if (!entry) {
-        const catalog = await refresh({ file: path, signal });
-        entry = match(applyViewerOriginToEntries(catalog.entries, origin));
+      if (!entry || entry.catalogPending) {
+        await refresh({ file: path, signal });
+        entry = match(snapshot.entries);
       }
       if (signal?.aborted || disposed) throw abortError();
       if (!entry) throw new Error(`CAD file was not found in this workspace: ${path}`);
+      if (entry.catalogPending) throw new Error(`CAD file metadata is unavailable: ${path}`);
       return entry;
     },
     async serverInfo({ signal, fresh = false } = {}) {
@@ -178,18 +215,24 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
     editingPreview(file, { after = '', signal } = {}) {
       return request('/__cad/preview', { file, signal, params: { after }, operation: 'preview' });
     },
-    createRenderSession() {
+    createRenderSession({ file = '' } = {}) {
       if (disposed) throw new Error('This CAD client has been disposed.');
+      if (file) activeFiles.set(file, (activeFiles.get(file) || 0) + 1);
       const controller = new AbortController();
       const releases = [retainSurfWorkerPool(), retainGlbMeshWorker(), retainStlMeshWorker()];
-      const cache = createTessellationCache({
-        provider: createHttpTessellationCacheProvider({ origin, headers: { 'x-cadgen-viewer': '1' }, fetch: fetchImpl, signal: controller.signal }),
+      tessellationCache ??= createTessellationCache({
+        provider: createHttpTessellationCacheProvider({ origin, headers: { 'x-cadgen-viewer': '1' }, fetch: fetchImpl }),
         writeBack: { deferMs: 1500, concurrency: 2 }
       });
+      const cache = tessellationCache.createSession({ signal: controller.signal });
       let sessionDisposed = false;
       const session = { tessellationCache: cache, signal: controller.signal, dispose() {
         if (sessionDisposed) return;
         sessionDisposed = true;
+        if (file) {
+          const remaining = (activeFiles.get(file) || 0) - 1;
+          if (remaining > 0) activeFiles.set(file, remaining); else activeFiles.delete(file);
+        }
         controller.abort(); cache.dispose();
         for (const release of releases) release();
         sessions.delete(session);
@@ -205,6 +248,8 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
       for (const request of requests) request.abort();
       requests.clear();
       for (const session of [...sessions]) session.dispose();
+      tessellationCache?.dispose();
+      pendingRefreshes.clear();
       listeners.clear();
     }
   };

@@ -20,7 +20,9 @@ class WorkerStub {
 }
 const entry={file:'case.step',kind:'part',url:'http://localhost/__cad/asset?file=/cache/case&v=one'};
 const descriptor={components:{c:{surf:'components/c.surf'}},occurrences:[{id:'o1',component:'c',name:'Case'}]};
+let fixtureVersion=0;
 function setup(value=descriptor){
+ entry.url=`http://localhost/__cad/asset?file=/cache/case&v=fixture-${++fixtureVersion}`;
  vi.stubGlobal('Worker',WorkerStub);
  const fetch=vi.fn().mockResolvedValue({ok:true,json:async()=>value});vi.stubGlobal('fetch',fetch);return fetch;
 }

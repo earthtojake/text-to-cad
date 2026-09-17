@@ -13,25 +13,31 @@ export class CadRuntimeError extends Error {
   constructor(readonly answer: ViewerOrigin) { super(answer.message ?? "The CAD runtime did not start."); }
 }
 
-/** The tab owns its connection; the Python process lifecycle remains in main. */
+/** A root owns its connection; the Python process lifecycle remains in main. */
 export function createDesktopCadConnection(projectId: string, root: ExplorerRoot) {
   let connection: CadClient | undefined;
+  let connectionOrigin = "";
   let pending: Promise<CadClient> | undefined;
   let generation = 0;
   return {
     async acquire(context: PrepareContext): Promise<CadClient> {
       context.signal.throwIfAborted();
-      if (connection) return connection;
       if (!pending) {
         const requestedAt = generation;
         pending = (async () => {
           let answer: ViewerOrigin;
           try { answer = await window.hardcore.cad.viewerOrigin({ projectId, ...(root ? { root } : {}) }); }
           catch (error) { throw new CadRuntimeError({ origin: null, reason: "viewer-failed", message: error instanceof Error ? error.message : String(error) }); }
+          if (generation !== requestedAt) throw new DOMException("The operation was aborted.", "AbortError");
           if (!answer.origin) throw new CadRuntimeError(answer);
+          // Main answers immediately for its live viewer, and can return a new
+          // origin after a crash/restart. Keep warm state only for that origin.
+          if (connection && connectionOrigin === answer.origin) return connection;
+          connection?.dispose();
+          connection = undefined;
           const client = createCadClient({ origin: answer.origin, workspaceId: context.source.id });
-          if (generation !== requestedAt) { client.dispose(); throw new DOMException("The operation was aborted.", "AbortError"); }
           connection = client;
+          connectionOrigin = answer.origin;
           return client;
         })();
       }
@@ -39,7 +45,51 @@ export function createDesktopCadConnection(projectId: string, root: ExplorerRoot
       try { const client = await request; context.signal.throwIfAborted(); return client; }
       finally { if (pending === request) pending = undefined; }
     },
-    dispose() { generation += 1; connection?.dispose(); connection = undefined; pending = undefined; },
+    dispose() { generation += 1; connection?.dispose(); connection = undefined; connectionOrigin = ""; pending = undefined; },
+  };
+}
+
+export type DesktopCadConnection = Pick<ReturnType<typeof createDesktopCadConnection>, "acquire">;
+
+/** Open file tabs share a root connection without keeping their viewports mounted. */
+export function createDesktopCadConnections(projectId: string) {
+  const connections = new Map<ExplorerRoot, ReturnType<typeof createDesktopCadConnection>>();
+  const borrowers = new Map<ExplorerRoot, DesktopCadConnection>();
+  return {
+    forRoot(root: ExplorerRoot): DesktopCadConnection {
+      let borrower = borrowers.get(root);
+      if (!borrower) {
+        borrower = {
+          acquire(context) {
+            context.signal.throwIfAborted();
+            let connection = connections.get(root);
+            if (!connection) {
+              connection = createDesktopCadConnection(projectId, root);
+              connections.set(root, connection);
+            }
+            return connection.acquire(context);
+          },
+        };
+        borrowers.set(root, borrower);
+      }
+      return borrower;
+    },
+    retainRoots(roots: Iterable<ExplorerRoot>) {
+      const retained = new Set(roots);
+      for (const [root, connection] of connections) {
+        if (retained.has(root)) continue;
+        connection.dispose();
+        connections.delete(root);
+      }
+      for (const root of borrowers.keys()) {
+        if (!retained.has(root)) borrowers.delete(root);
+      }
+    },
+    dispose() {
+      for (const connection of connections.values()) connection.dispose();
+      connections.clear();
+      borrowers.clear();
+    },
   };
 }
 

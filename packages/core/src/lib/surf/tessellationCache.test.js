@@ -468,3 +468,83 @@ test("deferred cache warming stays byte-bounded and flushes at configured concur
     cache.dispose();
   }
 });
+
+test("root-owned write-backs survive view disposal within one shared byte budget", async () => {
+  const firstBytes = encodedEntry();
+  const secondBytes = encodedEntry({ surfaceInput: D2 });
+  const written = [];
+  const owner = createTessellationCache({
+    provider: {
+      probeMany: async () => [], getProbed: async () => null,
+      put: async (key) => written.push(key),
+    },
+    writeBack: { deferMs: 10_000, concurrency: 1, maxPendingBytes: firstBytes.byteLength },
+  });
+  try {
+    const previous = owner.createSession();
+    await previous.writeBackEntryBytes(D, Q, firstBytes);
+    previous.dispose();
+    previous.dispose();
+    assert.equal(previous.tessellationCacheProviderRegistered(), false);
+    assert.equal(owner.memoryStats().pendingWriteBackBytes, firstBytes.byteLength,
+      "closing a view leaves its already-admitted write owned by the root");
+
+    const current = owner.createSession();
+    await current.writeBackEntryBytes(D2, Q, secondBytes);
+    assert.equal(owner.memoryStats().pendingWriteBackBytes, firstBytes.byteLength,
+      "new views share the root queue's byte ceiling");
+    await current.flushTessellationCacheWriteBacks();
+    assert.deepEqual(written, [tessellationCacheKey(D, Q)]);
+    await previous.writeBackEntryBytes(D2, Q, secondBytes);
+    assert.equal(owner.memoryStats().writeBackBytes, 0, "late results from a disposed view cannot enqueue writes");
+
+    await current.writeBackEntryBytes(D2, Q, secondBytes);
+    assert.equal(owner.memoryStats().pendingWriteBackBytes, secondBytes.byteLength);
+    owner.dispose();
+    assert.equal(current.tessellationCacheProviderRegistered(), false);
+    assert.equal(owner.memoryStats().writeBackBytes, 0, "closing the root still releases pending cache memory");
+    await current.flushTessellationCacheWriteBacks();
+    assert.deepEqual(written, [tessellationCacheKey(D, Q)]);
+    assert.throws(() => owner.createSession(), /disposed/);
+  } finally {
+    owner.dispose();
+  }
+});
+
+test("borrowed view cancellation is independent while owner disposal aborts every read", async () => {
+  const bytes = encodedEntry();
+  const row = validateTessellationProbeRow({ schemaVersion: 1,
+    object: createHash("sha256").update(bytes).digest("hex"), ...tessellationPayloadFacts(bytes) });
+  const pending = [];
+  const owner = createTessellationCache({ provider: {
+    probeMany: async () => [row],
+    // Ignore AbortSignal in the provider to prove late adoption is checked too.
+    getProbed: (_row, { signal }) => new Promise(resolve => pending.push({ signal, resolve })),
+  } });
+  try {
+    const lifetime = new AbortController();
+    const previous = owner.createSession({ signal: lifetime.signal });
+    const current = owner.createSession();
+    const oldRead = previous.getCachedEntryBytes(D, Q, { probe: row });
+    const rejectedOld = assert.rejects(oldRead, { name: "AbortError" });
+    const currentRead = current.getCachedEntryBytes(D, Q, { probe: row });
+    lifetime.abort();
+    assert.equal(pending[0].signal.aborted, true);
+    assert.equal(pending[1].signal.aborted, false, "another view retains its own read lifetime");
+    pending[0].resolve(bytes);
+    pending[1].resolve(bytes);
+    await rejectedOld;
+    assert.deepEqual(await currentRead, bytes);
+    await assert.rejects(previous.getCachedEntryBytes(D, Q, { probe: row }), { name: "AbortError" });
+    assert.equal(pending.length, 2, "an already-cancelled view never asks the provider again");
+
+    const lastRead = current.getCachedEntryBytes(D, Q, { probe: row });
+    const rejectedLast = assert.rejects(lastRead, { name: "AbortError" });
+    owner.dispose();
+    assert.equal(pending[2].signal.aborted, true);
+    pending[2].resolve(bytes);
+    await rejectedLast;
+  } finally {
+    owner.dispose();
+  }
+});

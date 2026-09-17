@@ -654,6 +654,7 @@ function CadFileViewSurface({
     loadReferencesForEntry,
     loadDisplayEdgesForEntry
   } = useCadAssets({
+    initialEntry: liveEntry,
     client,
     tessellationCache: cadRenderSession.tessellationCache,
     entryHasMesh,

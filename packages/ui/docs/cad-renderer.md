@@ -148,12 +148,19 @@ and connects window focus and visible `visibilitychange` events to
 without a DOM dependency in core. Catalog requests retain the ten-second
 timeout and the same error text.
 
-Each prepared CAD document owns a render session with its own tessellation
-provider, primed bytes and deferred write queue. Its provider is bound to that
-client's origin and abort signal. A late worker result can write only to that
-session; disposing it discards queued writes and aborts its provider requests.
-There is no page-wide mutable cache provider. HTTP storage still uses the
-shared Python cache and its original component-key codec.
+Each prepared CAD document owns a render session with a cancellable view of its
+client's tessellation cache. The client owns the origin-bound provider and bounded
+deferred write queue. Disposing a session aborts its reads and
+rejects late worker writes; already admitted writes remain with the client
+through file switches. Disposing the client clears that queue and its provider
+requests. There is no page-wide mutable cache provider. HTTP storage still uses
+the shared Python cache and its original component-key codec.
+
+On mount, immutable mesh and complete robot state are read synchronously from
+the existing bounded decoded caches. Reopening a warm file can therefore show
+those assets on its first render while file-owned controls restore their own
+camera and pose. STEP packages still compose their exact cached components;
+mutable native GLB scenes and animation mixers remain separately owned.
 
 Worker infrastructure is reference-counted across live render sessions. The
 last session releases workers and pending work. Playback clocks are separate
@@ -167,7 +174,7 @@ client while another pane still needs it.
 CAD helper suites retain format, state, geometry, reference, selection,
 settings and loading behavior. Core tests cover independent client origins,
 cancelled and late responses, polling ownership, cache/worker lifetime, and
-session-local writes. The browser integration harness exercises actual WebGL
+session cancellation and client-owned writes. The browser integration harness exercises actual WebGL
 rendering with two roots, panel switching, PNG captures, host title ownership
 and state round trips through unmount/remount.
 
@@ -180,7 +187,7 @@ without losing their separate stored snapshots.
 See [settings controls](settings-ui.md), [render capabilities](render-types.md)
 and [renderer contracts](renderers.md) for changes inside the shared package.
 
-The optional `@hardcore/ui/renderers/cad/empty` entry exports `EmptyCadBackdrop` for the web host’s missing-file presentation. It lazily mounts the same empty CAD viewport with the host’s `preferences` and `colorScheme`, and overlays its `children`. It owns no file access, catalog subscription, or persisted state. This preserves the original grid and camera behind `MissingFileAlert` without loading CAD into the master viewer.
+The optional `@hardcore/ui/renderers/cad/empty` entry exports `EmptyCadBackdrop` for the web host’s missing-file presentation. It lazily mounts the same empty CAD viewport with the host’s `colorScheme`, and overlays its `children`. It owns no file access, catalog subscription, or persisted state. This preserves the original grid and camera behind `MissingFileAlert` without loading CAD into the master viewer.
 
 ## STEP and source separation
 
@@ -298,9 +305,13 @@ the assembly. The first recognized part expands automatically. Long lists group
 same-kind operations into inspection folders, never inferred patterns.
 Annotation-only components show a no-faces state. Recognition continues while
 the current file’s Geometry/Features views switch, and stops on disposal or when the
-viewer invalidates its geometry. Completed results stay in memory for that file
-revision. Retry processes only failed components. Every displayed operation and
-selection remains scoped to its assembly occurrence.
+viewer invalidates its geometry. Completed recognition metadata is retained across
+file mounts under the exact surface input/object identity, or an origin-qualified
+immutable SURF URL for static packages. Its separate LRU holds at most 256 unique
+components and 8 MiB of serialized metadata; it retains no SURF bytes, workers,
+pending work or failures. The descriptor uses the existing package cache. A new
+surface identity reruns recognition, and retry processes only failed components.
+Every displayed operation and selection remains scoped to its assembly occurrence.
 
 Independent local OCP validation rebuilds the inferred complete plans and compares
 both directional Boolean differences. This is a development check; the client

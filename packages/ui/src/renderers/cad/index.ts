@@ -45,12 +45,14 @@ export function createCadRenderer({ client, ...services }: CadRendererOptions) {
     async prepare(context) {
       const connection = typeof client === 'function' ? await client(context) : client;
       context.signal.throwIfAborted();
+      if (context.refresh) await connection.refresh({ file: context.file.path, signal: context.signal, markRefreshing: false });
+      context.signal.throwIfAborted();
       const [entry, serverInfo] = await Promise.all([
         connection.resolveEntry(context.file.path, { signal: context.signal }),
         connection.serverInfo({ signal: context.signal })
       ]);
       context.signal.throwIfAborted();
-      const renderSession = connection.createRenderSession();
+      const renderSession = connection.createRenderSession({ file: context.file.path });
       return { data: { entry, serverInfo, client: connection, renderSession, services }, dispose: () => renderSession.dispose() };
     },
     load: () => import('./CadRenderer.js')

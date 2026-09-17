@@ -11,7 +11,7 @@ import { chromium } from 'playwright';
 // Inline fixture bytes are served in memory with a private temporary harness.
 const mesh = 'solid triangle\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 20 0 0\nvertex 0 20 0\nendloop\nendfacet\nendsolid triangle\n';
 
-test('the shared CAD renderer restores camera persistence, panels, capture and multiple-view isolation', async (t) => {
+test('the shared CAD renderer resolves deferred files, reuses warm assets and restores isolated view state', async (t) => {
   const temporary = await mkdtemp(join(tmpdir(), 'hardcore-cad-browser-'));
   let server, browser;
   t.after(async () => { await browser?.close(); if (server) await new Promise((resolve) => server.close(resolve)); await rm(temporary, { recursive: true, force: true }); });
@@ -19,6 +19,7 @@ test('the shared CAD renderer restores camera persistence, panels, capture and m
   const bundle = await readFile(join(temporary, 'harness.js'));
   const compiledCss = await readFile(new URL('../../../dist/styles.css', import.meta.url));
   const requests = [];
+  const catalogFiles = [];
   server = createServer((request, response) => {
     const url = new URL(request.url, 'http://test');
     requests.push(url.pathname);
@@ -27,7 +28,11 @@ test('the shared CAD renderer restores camera persistence, panels, capture and m
     else if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(compiledCss); }
     else if (url.pathname.endsWith('/__cad/catalog')) {
       response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify({ rootId: root, entries: [{ kind: 'stl', file: 'part.stl', rootRelativeFile: 'part.stl', url: '/mesh.stl', hash: root, bytes: mesh.length }] }));
+      catalogFiles.push({ root, file: url.searchParams.get('file') });
+      const entry = url.searchParams.get('file') === 'part.stl'
+        ? { kind: 'stl', file: 'part.stl', rootRelativeFile: 'part.stl', url: '/mesh.stl', hash: root, bytes: mesh.length }
+        : { file: 'part.stl', rootRelativeFile: 'part.stl', catalogPending: true };
+      response.end(JSON.stringify({ rootId: root, entries: [entry] }));
     } else if (url.pathname.endsWith('/__cad/server')) {
       response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ rootId: root, rootPath: '/models', backend: 'cadgen' }));
     } else if (url.pathname.endsWith('/mesh.stl')) { response.end(mesh); }
@@ -73,6 +78,8 @@ test('the shared CAD renderer restores camera persistence, panels, capture and m
   assert.equal(await page.getByTestId('two').getByRole('textbox', { name: 'Zoom level percent' }).inputValue(), '100%');
   assert.ok(requests.includes('/one/mesh.stl'));
   assert.ok(requests.includes('/two/mesh.stl'));
+  assert.ok(catalogFiles.some(({ root, file }) => root === 'one' && file === 'part.stl'));
+  assert.ok(catalogFiles.some(({ root, file }) => root === 'two' && file === 'part.stl'));
   assert.equal(await first.getByRole('textbox', { name: 'Zoom level percent' }).inputValue(), '110%');
   // A second pane changes the first viewport's dimensions. Let its resize
   // observer and camera event publish before taking the saved snapshot.
@@ -111,6 +118,7 @@ test('the shared CAD renderer restores camera persistence, panels, capture and m
     delete previousSlices.render.cadCamera; delete restoredSlices.render.cadCamera;
   }
   assert.deepEqual(restoredState, previousState);
+  assert.equal(requests.filter((path) => path === '/one/mesh.stl').length, 1, 'reopening a file reuses its decoded mesh without another asset request');
   // Inspect and Render have separate scene recipes. The shared FileViewer must stay
   // mounted while crossing that boundary, including with another viewer open.
   await first.getByRole('button', { name: 'Viewing mode: Inspect. Switch to Render', exact: true }).click();

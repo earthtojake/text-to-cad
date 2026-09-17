@@ -54,6 +54,8 @@ export interface TessellationCacheProvider {
   put?(key: string, bytes: Uint8Array, options?: { signal?: AbortSignal }): Promise<unknown>;
 }
 export interface TessellationCache {
+  /** Borrow a cancellable view; admitted write-backs remain owned by the parent cache. */
+  createSession(options?: { signal?: AbortSignal }): TessellationCache;
   tessellationCacheProviderRegistered(): boolean;
   probeCachedTessellationEntries(surfaceInputs: string[], options?: TessellationOptions, request?: TessellationReadOptions): Promise<Map<string, TessellationProbe>>;
   getCachedComponentEntry(surfaceInput: string, options?: TessellationOptions, request?: TessellationReadOptions): Promise<TessellationCacheEntry | null>;
