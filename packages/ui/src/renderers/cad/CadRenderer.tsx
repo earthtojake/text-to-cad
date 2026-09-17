@@ -15,7 +15,7 @@ interface CadSurfaceProps {
   entry: CadEntry;
   serverInfo: CadServerInfo;
   renderSession: CadRenderSession;
-  onOpenFile(path: string): void;
+  onOpenFile(path: string, options?: { target: "current" | "new" }): void;
   panelSlot: HTMLElement | null;
   colorScheme: 'light' | 'dark';
   openPanel: string;

@@ -263,9 +263,11 @@ function DesktopFloatingToolBar({
     </ToolbarButton>
   ) : null;
 
-  // A drawing's own toolbar, in its own pill to the LEFT of the shared one: 2D and 3D are a
-  // property of the drawing being viewed, not a tool that acts on it, so grouping them with
-  // select/pan/draw would read as a fourth mode of the same kind.
+  // The document/model pill, in its own group at the RIGHT end of the row: 2D and 3D are a
+  // property of what is being viewed, not a tool that acts on it, so grouping them with
+  // select/pan/draw would read as a fourth mode of the same kind. It sits last so it keeps
+  // the same spot on a sheet and on a part, whose tool strips differ in length: flipping
+  // between the two reads as one control that stays put.
   const drawingViewToolbar = !renderMode && drawingViewToggle ? (
     <div
       className={`${toolbarHidden ? "pointer-events-none" : "pointer-events-auto"} inline-flex h-8 w-fit items-center gap-0.5 rounded-md p-1 ${FLOATING_TOOL_BAR_SURFACE_CLASS}`}
@@ -320,7 +322,6 @@ function DesktopFloatingToolBar({
             tools, the pill drops under them rather than off the left edge. */}
         <div className="flex w-fit max-w-full flex-wrap items-center justify-end gap-1 self-end">
         {zoomToolbar}
-        {drawingViewToolbar}
         {!renderMode && !previewMode && showToolCluster && <div role="group" aria-label="Inspect" className={groupClasses} onPointerEnter={onToolbarEnter} onPointerLeave={onToolbarLeave}>
           <ToolbarButton label={selectLabel} active={referenceSelectionDeferred ? false : selectionToolActive}
             onClick={() => handleSelectTabToolMode("references")} disabled={selectDisabled}
@@ -353,6 +354,7 @@ function DesktopFloatingToolBar({
             <X className="size-3" aria-hidden="true" />
           </ToolbarButton>}
         </div>
+        {drawingViewToolbar}
         </div>
       </TooltipProvider>
       {!previewMode && selectionToolActive && selectionFilter !== null && selectionFilter !== "all" && (

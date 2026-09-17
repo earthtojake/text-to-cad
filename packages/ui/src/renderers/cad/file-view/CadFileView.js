@@ -5881,8 +5881,9 @@ function CadFileViewSurface({
     // resolved root-relative path is handed to the host's opener, like any other file.
     return parts.join("/");
   }, [drawingGeometry, selectedEntryIsDrawingDocument, selectedEntry]);
+  // The toggle swaps what THIS tab shows: document for model and back.
   openDrawingSourceRef.current = drawingSourceEntry && onOpenFile
-    ? () => onOpenFile(drawingSourceEntry)
+    ? () => onOpenFile(drawingSourceEntry, { target: "current" })
     : null;
   // The other direction: the sheets that document the selected part, found by the
   // server from their headers. The host opens the first one in this tab.
@@ -5908,7 +5909,7 @@ function CadFileViewSurface({
     };
   }, [partDrawingsFileRef, client]);
   openPartDrawingRef.current = partDrawings[0] && onOpenFile
-    ? () => onOpenFile(partDrawings[0])
+    ? () => onOpenFile(partDrawings[0], { target: "current" })
     : null;
 
   const handleSelectTabToolMode = useCallback((mode) => {
