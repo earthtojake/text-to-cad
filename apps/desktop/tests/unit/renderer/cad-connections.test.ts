@@ -12,6 +12,11 @@ vi.mock("@hardcore/core/client", async (importOriginal) => ({
   createCadClient: vi.fn(),
 }));
 
+// Exercise the real registration/prepare/dispose path without transforming
+// Three.js and the viewport in this connection-ownership unit test. Actual CAD
+// rendering and tab reopens are covered by the Electron integration suite.
+vi.mock("../../../../../packages/ui/dist/renderers/cad/CadRenderer.js", () => ({ default: () => null }));
+
 function context(path = "part.stl", root = "project", signal = new AbortController().signal): PrepareContext {
   const file = { path, name: path, kind: "file" as const, extension: "stl", mediaType: "cad", size: 12 };
   return { file, source: { id: root, rootName: root, stat: async () => file }, signal };

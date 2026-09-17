@@ -8,7 +8,8 @@
 // debugging: `window.__CAD_VIEWER_LOD__ = false` before loading a model.
 import { useCallback, useEffect, useRef } from "react";
 
-import { loadRenderSurfPayloadAtLevel, reclaimIdleSurfWorkers, releaseSurfWorkers, releaseRenderSurfLevel, renderAssetCacheStats } from "@hardcore/core/lib/renderAssetClient.js";
+import { loadRenderSurfPayloadAtLevel, reclaimIdleSurfWorkers, releaseSurfWorkers, releaseRenderSurfLevel } from "@hardcore/core/lib/renderAssetClient.js";
+import { completedPackages, renderAssetCacheStatsWithPackages } from "./completedPackageCache.js";
 import { estimateMeshRenderCost } from "@hardcore/core/lib/render/meshCost.js";
 import { LOD_DEFAULT_LEVEL, lodTessellationForLevel } from "@hardcore/core/lib/surf/lodPolicy.js";
 import { normalizeSceneQuality, resolveSceneQuality, SCENE_QUALITY } from "@hardcore/core/common/sceneSettings.js";
@@ -113,10 +114,10 @@ export function useViewportLod({ viewerRef, lodPackage, modelKey = "", applyComp
       if (payloads.length === stagedPayloads.length && payloads.every((payload, i) => payload === stagedPayloads[i])) return;
       stagedPayloads = payloads;
       setLodStaging(stagingOwner, entries);
-      const caches = renderAssetCacheStats({ excludeBuffers: lodStagingBuffers(displayBuffersRef.current) });
+      const caches = renderAssetCacheStatsWithPackages({ excludeBuffers: lodStagingBuffers(displayBuffersRef.current) });
       syncSelectorCacheAccounting(viewerMemoryPolicy, Number(caches.selector?.typedBytes) || 0);
       viewerMemoryPolicy.setRetained("assetCaches", Object.entries(caches).reduce((sum, [name, stats]) =>
-        name === "surfLeash" || name === "selector" ? sum : sum + (Number(stats?.typedBytes) || 0), 0));
+        name === "surfLeash" || name === "selector" ? sum : sum + (Number(stats?.typedBytes) || 0) + (Number(stats?.metadataBytes) || 0), 0));
     };
     let scheduler = null;
     const snapshot = () => ({ file: lodPackageFileRef.current, modelKey: lodPackageModelKeyRef.current,
@@ -170,6 +171,11 @@ export function useViewportLod({ viewerRef, lodPackage, modelKey = "", applyComp
         };
         const reservation = viewerMemoryPolicy.reserve({ ...request, recordLimitation: false });
         if (reservation.ok) return reservation;
+        if (completedPackages.clear()) {
+          const caches = renderAssetCacheStatsWithPackages({ excludeBuffers: lodStagingBuffers(displayBuffersRef.current) });
+          viewerMemoryPolicy.setRetained("assetCaches", Object.entries(caches).reduce((sum, [name, stats]) =>
+            name === "surfLeash" || name === "selector" ? sum : sum + (Number(stats?.typedBytes) || 0) + (Number(stats?.metadataBytes) || 0), 0));
+        }
         reclaimIdleSurfWorkers();
         syncSurfWorkerMemory();
         return viewerMemoryPolicy.reserve({ ...request, recordLimitation: false });

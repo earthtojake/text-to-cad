@@ -5,6 +5,11 @@ import { resolvePackageAssetUrl } from "@hardcore/core/client";
 const PACKAGE_DESCRIPTOR_CACHE = new Map();
 const PACKAGE_DESCRIPTOR_CACHE_LIMIT = 32;
 
+export function peekPackageDescriptor(packageAssetUrl) {
+  if (!packageAssetUrl) return null;
+  return PACKAGE_DESCRIPTOR_CACHE.get(resolvePackageAssetUrl(packageAssetUrl, "assembly.json")) || null;
+}
+
 // Cache only completed descriptors. An in-flight request belongs to the mesh or
 // reference consumer that supplied its AbortSignal; sharing that promise lets
 // cancelling either consumer abort the other's read. The descriptor is small,

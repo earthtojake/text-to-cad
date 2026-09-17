@@ -1491,6 +1491,13 @@ the inactive viewport is unmounted. Closing the root's last file tab or leaving
 the project disposes the connection and cancels its pending work. Each acquisition
 checks main's current viewer origin; a restarted backend replaces the old client.
 
+The shared CAD renderer separately retains completed STEP CPU geometry in a
+bounded cache, including assemblies larger than the component LRU. Returning
+to a warm file restores that geometry without reloading its components; the
+file's camera, display settings and motion state remain separate. Reuse requires
+the same root, backend origin and revision. Eviction or an edited file takes
+the normal load path. No inactive WebGL scene is retained.
+
 Root workspace installation keeps React, ReactDOM, Three.js and Radix identities
 consistent. `viewer-peers.test.ts` verifies the installed package graph; real
 Electron tests verify the rendered integration. Packaging still bundles the

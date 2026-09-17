@@ -87,6 +87,12 @@ A renderer owns its viewport and resources; the host owns its CAD client. Last
 render-session disposal releases shared worker leases. One viewer cannot replace
 another viewer's cache provider or camera state.
 
+Completed STEP CPU working sets can outlive a viewport in the shared renderer's
+bounded cache. They retain exact decoded component buffers and copy structural
+metadata for each mount; scene objects, controls and pending work are not cached.
+Reuse is scoped to root, origin and file revision. See
+[CAD resource lifetime](docs/cad-renderer.md) for cache bounds and invalidation.
+
 The host owns stored state. The web adapter retains browser URL/history and
 session preferences; desktop retains its explorer/project preferences and IPC
 watchers. CAD's state entry point supplies existing schema validation for safe

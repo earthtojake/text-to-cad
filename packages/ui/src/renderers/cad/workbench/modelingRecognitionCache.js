@@ -1,4 +1,6 @@
-const MAX_ENTRIES = 256;
+// Hundreds of small unique parts can fit well below the byte budget. Keep a
+// whole ordinary assembly warm instead of evicting its tail on every reopen.
+const MAX_ENTRIES = 512;
 const MAX_BYTES = 8 * 1024 * 1024;
 
 /** Recognition is component-local; occurrence placement and selection remain file-owned. */

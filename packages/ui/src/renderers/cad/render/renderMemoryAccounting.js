@@ -3,7 +3,7 @@
 // GPU-side array is counted once (occurrences share component geometry), split
 // into surface geometry, CAD edge lines and raycast BVHs, beside the render
 // asset caches' own accounting. It also refreshes the shared admission ledger.
-import { renderAssetCacheStats } from "@hardcore/core/lib/renderAssetClient.js";
+import { renderAssetCacheStatsWithPackages } from "./completedPackageCache.js";
 import { cadEdgeInstanceSets } from "@hardcore/core/common/cadEdgeInstances.js";
 import { builtGeometryBvhBytes } from "@hardcore/core/lib/viewer/raycastBvh.js";
 import { MESH_DATA_ARRAY_FIELDS } from "@hardcore/core/lib/render/meshTransfer.js";
@@ -272,11 +272,11 @@ export function renderMemoryAccounting(runtime) {
   totals.buffers = seenBuffers.size;
   totals.materials = seenMaterials.size;
   const gpuEstimatedBytes = totals.surfaceBytes + totals.edgeBytes + totals.pickBytes;
-  const assetCaches = renderAssetCacheStats();
+  const assetCaches = renderAssetCacheStatsWithPackages();
   // The full backing of each excluded view has already been charged above.
   // GPU mirrors contain the uploaded views; CPU references retain the entire
   // allocation, even when some packed sections never reach a GPU attribute.
-  const additionalAssetCaches = renderAssetCacheStats({ excludeBuffers: lodStagingBuffers(seenArrayBuffers) });
+  const additionalAssetCaches = renderAssetCacheStatsWithPackages({ excludeBuffers: lodStagingBuffers(seenArrayBuffers) });
   viewerMemoryPolicy.setRetained("displayCpu", displayCpuBytes);
   viewerMemoryPolicy.setRetained("gpuEstimated", gpuEstimatedBytes);
   viewerMemoryPolicy.setRetained("bvh", totals.bvhBytes);
@@ -285,7 +285,7 @@ export function renderMemoryAccounting(runtime) {
   viewerMemoryPolicy.setRetained("assetCaches", Object.entries(additionalAssetCaches).reduce(
     (sum, [name, stats]) => name === "surfLeash" || name === "selector"
       ? sum
-      : sum + (Number(stats?.typedBytes) || 0),
+      : sum + (Number(stats?.typedBytes) || 0) + (Number(stats?.metadataBytes) || 0),
     0
   ));
   return {
