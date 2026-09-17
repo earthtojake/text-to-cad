@@ -13,10 +13,11 @@ updates:
   # is where all of CI gets its Python and Node, so it is the last place that
   # should rot unwatched. The second entry names it directly.
   #
-  # UNVERIFIED: GitHub documents `/` for this ecosystem and does not document the
-  # nested-composite case. If no PR ever arrives for setup-deps, this entry is
-  # inert and the pins there need bumping by hand -- check it against the
-  # workflow pins when a setup-node/setup-python major lands.
+  # Verified live: Dependabot runs a dedicated update job for this directory
+  # ("github_actions in /.github/actions/setup-deps"), so the entry is processed
+  # even though GitHub's reference only documents `/` for this ecosystem. Do not
+  # read silence as inertness -- both pins are current, so there is simply
+  # nothing to propose until the next setup-node/setup-python release.
   - package-ecosystem: github-actions
     directory: /
     schedule:
