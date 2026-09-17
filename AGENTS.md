@@ -153,6 +153,9 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
   app and shared packages never import apps. Root npm workspaces consume compiled
   package exports; do not add source aliases or nested lockfiles. Preserve app
   UI/UX and functionality during restructuring; changes are pure refactors.
+- Shared UI must stay platform-agnostic. Apps implement environmental effects;
+  shared features use injected capabilities and named extension slots. Before
+  extending these interfaces, read [the viewer host contract](packages/ui/docs/viewer-host.md).
 - `packages/cadgen` is the whole distribution, not just the Python: artifact
   generation, the CLI parsers behind every skill command (`cadgen/cli`), the warm
   build daemon (`cadgen/daemon`), and

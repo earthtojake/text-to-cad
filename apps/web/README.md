@@ -17,6 +17,8 @@ file-source adapter, browser persistence, and this app's top bar/release links.
 `src/App.tsx` composes an explicit `ViewerHost` and the shared CAD renderer. The catalog
 continues to expose CAD artifacts only; this migration adds no file types or
 write endpoints to the web app.
+Follow the [shared host contract](../../packages/ui/docs/viewer-host.md) when
+adding viewer features; browser effects belong in this app's adapters.
 
 **May depend on:** compiled `@hardcore/ui` and `@hardcore/core` exports and app
 libraries. Never another application's source. Shared packages never import
