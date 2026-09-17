@@ -7,6 +7,16 @@
 # trees CI installs (.github/actions/setup-deps).
 version: 2
 updates:
+  # `/` covers .github/workflows plus a root action.yml -- it does NOT reach a
+  # composite action nested under .github/actions, which is why setup-deps sat on
+  # setup-node@v4 and setup-python@v5 while every workflow moved to v7. That file
+  # is where all of CI gets its Python and Node, so it is the last place that
+  # should rot unwatched. The second entry names it directly.
+  #
+  # UNVERIFIED: GitHub documents `/` for this ecosystem and does not document the
+  # nested-composite case. If no PR ever arrives for setup-deps, this entry is
+  # inert and the pins there need bumping by hand -- check it against the
+  # workflow pins when a setup-node/setup-python major lands.
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -15,6 +25,20 @@ updates:
       - dependencies
     groups:
       actions:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /.github/actions/setup-deps
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+    groups:
+      setup-deps-actions:
         patterns:
           - "*"
         update-types:
