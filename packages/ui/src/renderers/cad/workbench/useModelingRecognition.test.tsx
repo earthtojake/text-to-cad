@@ -1,12 +1,17 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { useModelingRecognition } from './useModelingRecognition.js';
+import { createCadClient } from '@hardcore/core/client';
+import { useModelingRecognition as useRecognition } from './useModelingRecognition.js';
 import { useStepModeling } from './useStepModeling.js';
 import { completedPackages } from '../render/completedPackageCache.js';
 import { entryMeshAssetSignature } from '@hardcore/core/lib/entryAssets.js';
 import { completedModelingRecognition, modelingRecognitionKey } from './modelingRecognitionCache.js';
 import { installRuntimePackageDescriptor } from '../components/workbench/hooks/packageDescriptorCache.js';
 
+let fixtureClient;
+function useModelingRecognition(url, enabled, options = {}) {
+  return useRecognition(url, enabled, { client: fixtureClient, ...options });
+}
 class RecognitionWorker {
   static instances: RecognitionWorker[] = [];
   terminate = vi.fn();
@@ -32,6 +37,7 @@ function setup() {
       { headers: { 'content-type': 'application/json' } });
   });
   vi.stubGlobal('fetch', fetch);
+  fixtureClient = createCadClient();
   return { urls, fetch };
 }
 async function respond(data: unknown, index: number) {
@@ -54,7 +60,7 @@ function acceptedPackage(count = 1) {
       bounds: { min: [0, 0, 0], max: [1, 1, 0] }, lodLevel: 1,
       parts: [{ id: 'part', triangleOffset: 0, triangleCount: 1 }] };
     occurrences.push({ id: `o${i}`, component: cid });
-    expect(completedModelingRecognition.set(modelingRecognitionKey(identities[cid]), { tree })).toBe(true);
+    expect(completedModelingRecognition.set(modelingRecognitionKey(identities[cid], "", {resources:fixtureClient.resources}), { tree })).toBe(true);
   }
   const descriptor = { kind: 'assembly-package', tree: digest(2000), viewId: digest(2001),
     surfaceProducer: { kind: 'fixture' }, components, occurrences };
@@ -64,13 +70,13 @@ function acceptedPackage(count = 1) {
   const context = { descriptor, runtimeDescriptor: descriptor, componentMeshDataByCid: meshes,
     componentIdentityByCid: identities, componentLodLevelByCid: levels,
     meshHash: entryMeshAssetSignature(entry), complete: true };
-  const client = { workspaceId: `root-${fixture}`, origin: 'http://viewer.test', requestSurfaces: vi.fn(async request => ({
+  const client = Object.assign(fixtureClient, { requestSurfaces: vi.fn(async request => ({
     viewId: request.viewId, components: Object.fromEntries(request.components.map(({ cid, surfaceInput }) => {
       const surfaceObject = identities[cid].surfaceObject;
       return [cid, { state: 'ready', surfaceInput, surfaceObject, byteLength: 64,
         url: `/__cad/store?tree=${request.tree}&surfaceInput=${surfaceInput}&object=${surfaceObject}` }];
     })),
-  })) };
+  })) });
   expect(completedPackages.set(client, entry, context)).toBe(true);
   return { client, entry, context, descriptor, identities, urls, fetch, digest };
 }
@@ -111,7 +117,7 @@ it('resolves identities again after a same-URL entry revision or runtime view ch
   view.unmount();
   expect(completedPackages.set(client, entry, context)).toBe(true);
   const replacement = { ...descriptor, viewId: digest(2002) };
-  installRuntimePackageDescriptor(entry.url, replacement);
+  installRuntimePackageDescriptor(entry.url, replacement, { resources: client.resources });
   const reopened = renderHook(() => useStepModeling(entry, true, { client }));
   await waitFor(() => expect(reopened.result.current.results.c0?.tree).toEqual(tree));
   expect(client.requestSurfaces).toHaveBeenCalledTimes(2);
@@ -122,12 +128,12 @@ it('resolves identities again after a same-URL entry revision or runtime view ch
 it('resolves and recognizes again when a result exceeds the unchanged metadata budget', async () => {
   const { client, entry, identities } = acceptedPackage();
   const oversized = { tree: [{ ...tree[0], label: 'x'.repeat(4 * 1024 * 1024) }] };
-  expect(completedModelingRecognition.set(modelingRecognitionKey(identities.c0), oversized)).toBe(false);
+  expect(completedModelingRecognition.set(modelingRecognitionKey(identities.c0, "", {resources:client.resources}), oversized)).toBe(false);
   const first = renderHook(() => useStepModeling(entry, true, { client }));
   await respond({ tree }, 0);
   expect(first.result.current.results.c0.tree).toEqual(tree);
   expect(client.requestSurfaces).toHaveBeenCalledTimes(1);
-  expect(RecognitionWorker.instances[0].postMessage.mock.calls[0][0].url).toContain(`object=${identities.c0.surfaceObject}`);
+  expect(RecognitionWorker.instances[0].postMessage.mock.calls[0][0].resource.url).toContain(`object=${identities.c0.surfaceObject}`);
   first.unmount();
   const reopen = renderHook(() => useStepModeling(entry, true, { client }));
   await waitFor(() => expect(reopen.result.current.results.c0?.tree).toEqual(tree));
@@ -190,11 +196,11 @@ it('resolves an unknown exact object before reuse and misses when that object ch
     occurrences: [{ id: 'o1', component: 'c' }] };
   fetch.mockImplementation(async () => new Response(JSON.stringify(descriptor)));
   let object = digest(104);
-  const client = { origin: 'http://viewer.test', requestSurfaces: vi.fn(async () => ({
+  const client = Object.assign(createCadClient({ origin: 'http://viewer.test' }), { requestSurfaces: vi.fn(async () => ({
     viewId: descriptor.viewId, components: { c: { state: 'ready', surfaceInput: digest(103),
       surfaceObject: object, byteLength: 64,
       url: `/__cad/store?tree=${descriptor.tree}&surfaceInput=${digest(103)}&object=${object}` } },
-  })) };
+  })) });
   const first = renderHook(() => useModelingRecognition(urls.a, true, { client }));
   await respond({ tree }, 0);
   first.unmount();
@@ -209,4 +215,22 @@ it('resolves an unknown exact object before reuse and misses when that object ch
   expect(changed.result.current.results.c.tree[0].label).toBe('New exact object');
   expect(client.requestSurfaces).toHaveBeenCalledTimes(3);
   expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+it('retires an issued recognition ticket immediately when its resource generation is cancelled', async () => {
+  const {urls}=setup();
+  const generation=new AbortController();
+  Object.defineProperty(fixtureClient.resources,'signal',{value:generation.signal,configurable:true});
+  const view=renderHook(()=>useModelingRecognition(urls.a,true));
+  await waitFor(()=>expect(RecognitionWorker.instances[0]?.postMessage).toHaveBeenCalled());
+  const worker=RecognitionWorker.instances[0];
+  await act(async()=>{generation.abort();});
+  expect(worker.terminate).toHaveBeenCalled();
+  await act(async()=>{worker.onmessage?.({data:{tree}});});
+  expect(view.result.current.results).toEqual({});
+  view.unmount();
+  Object.defineProperty(fixtureClient.resources,'signal',{value:new AbortController().signal,configurable:true});
+  const reopen=renderHook(()=>useModelingRecognition(urls.a,true));
+  await waitFor(()=>expect(RecognitionWorker.instances).toHaveLength(2));
+  expect(reopen.result.current.results).toEqual({});
 });

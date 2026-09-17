@@ -12,7 +12,7 @@ await build({
   stdin: { contents: `export * from './persistence/fileViewer.ts'; export * from './persistence/cadPreferences.ts'; export * from './adapters/fileSource.ts';`, resolveDir: fileURLToPath(new URL('../', import.meta.url)) },
   bundle: true, platform: 'node', format: 'esm', outfile: output, loader: { '.webp': 'dataurl' },
 });
-const { readViewState, writeViewState, createWebCadPreferences, createWebFileSource } = await import(pathToFileURL(output).href);
+const { readViewState, writeViewState, createWebCadPreferences, createWebFileSource, createWebFileActions } = await import(pathToFileURL(output).href);
 after(() => rm(temporary, { recursive: true, force: true }));
 function storage() {
   const entries = new Map();
@@ -52,6 +52,16 @@ test('closing the legacy inspector without an explicit tree decision restores th
   assert.equal(readViewState('root', session).panel, 'tree');
 });
 
+test('a stale web view merges its renderer changes without reverting another view', () => {
+  viewport(1280);
+  const session = storage();
+  const baseline = { panel: null, panelWidth: 300, expandedDirectories: [], renderers: { a: { camera: 'old-a' }, b: { camera: 'old-b' } } };
+  writeViewState('root', baseline, session);
+  writeViewState('root', { ...baseline, panel: 'tree', panelWidth: 420, expandedDirectories: ['parts'], renderers: { ...baseline.renderers, b: { camera: 'new-b' } } }, session, baseline);
+  writeViewState('root', { ...baseline, renderers: { ...baseline.renderers, a: { camera: 'new-a' } } }, session, baseline);
+  assert.deepEqual(readViewState('root', session), { panel: 'tree', panelWidth: 420, expandedDirectories: ['parts'], renderers: { a: { camera: 'new-a' }, b: { camera: 'new-b' } } });
+});
+
 test('a retired theme panel restores the renderer default without resetting file state', () => {
   viewport(1280);
   const session = storage();
@@ -60,7 +70,7 @@ test('a retired theme panel restores the renderer default without resetting file
   assert.deepEqual(readViewState('root', session), { panel: null, panelWidth: 340, expandedDirectories: ['parts'], renderers });
 });
 
-test('web CAD preferences ignore legacy custom themes and keep tutorial persistence', () => {
+test('web CAD preferences ignore legacy custom themes and retired tutorial state', () => {
   const previousWindow = globalThis.window;
   const previousStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
   const local = storage();
@@ -76,8 +86,7 @@ test('web CAD preferences ignore legacy custom themes and keep tutorial persiste
     assert.equal('theme' in snapshot, false);
     listeners.get('storage')({ key: 'cad-viewer:theme' });
     assert.equal(preferences.getSnapshot(), snapshot);
-    preferences.update({ seenTips: ['inspect-mode'] });
-    assert.deepEqual(JSON.parse(local.getItem('cad-viewer:tutorial-tips:v1')).seen, ['inspect-mode']);
+    assert.equal('seenTips' in snapshot, false);
     assert.equal(local.getItem('cad-viewer:theme'), legacy);
     disconnect();
     assert.equal(listeners.size, 0);
@@ -88,6 +97,24 @@ test('web CAD preferences ignore legacy custom themes and keep tutorial persiste
   }
 });
 
+test('two browser preference views merge changed layout kinds and do not rewrite stale motion', () => {
+  const previousStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  const local = storage();
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: local });
+  try {
+    const a = createWebCadPreferences();
+    const b = createWebCadPreferences();
+    const step = { split: false, top: ['tree'], bottom: [], ratio: 0.5 };
+    const robot = { split: false, top: ['kinematics'], bottom: [], ratio: 0.5 };
+    b.update({ fileSheetTabs: { robot }, poseTransition: { animate: false, speed: 2 } });
+    a.update({ fileSheetTabs: { step } });
+    assert.deepEqual(JSON.parse(local.getItem('cad-viewer:file-sheet-tab-layout:v6')), { robot, step });
+    assert.deepEqual(JSON.parse(local.getItem('cad-viewer:pose-transition:v1')), { animate: false, speed: 2 });
+  } finally {
+    if (previousStorage) Object.defineProperty(globalThis, 'localStorage', previousStorage); else delete globalThis.localStorage;
+  }
+});
+
 test('web source keeps only catalog files, native path capabilities and original copy feedback', async () => {
   const copied = [];
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { userAgent: 'Macintosh', clipboard: { writeText: async value => copied.push(value) } } });
@@ -95,21 +122,35 @@ test('web source keeps only catalog files, native path capabilities and original
   const listeners = new Set();
   const client = { getSnapshot: () => snapshot, resolveEntry: async path => snapshot.entries.find(entry => (entry.rootRelativeFile || entry.file) === path), subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); } };
   const statuses = [];
-  const source = createWebFileSource(client, { rootId: 'a', rootPath: '/models', backend: 'local-fs' }, { onCopyStatus: value => statuses.push(value) });
+  const server = { rootId: 'a', rootPath: '/models', backend: 'local-fs' };
+  const delivered = [];
+  const ports = { clipboard: { writeText: async value => copied.push(value) }, promptContext: { deliver: async context => { delivered.push(context); return {status: 'copied', partIds: ['reference']}; } }, onCopyStatus: value => statuses.push(value) };
+  const source = createWebFileSource(client, server);
+  const actions = createWebFileActions(client, server, ports);
   const options = { signal: new AbortController().signal };
   assert.deepEqual(await source.list('', options), [{ path: 'parts', name: 'parts', kind: 'directory' }, { path: 'flat.stl', name: 'flat.stl', kind: 'file' }]);
   assert.equal((await source.stat('parts/probe.step', options)).size, 128);
   assert.equal(source.rootName, 'This directory');
-  await source.actions.perform['copy-relative-path']({ path: 'parts/probe.step' });
-  await source.actions.perform['copy-path']({ path: 'parts/probe.step' });
+  await actions.perform['copy-relative-path']({ path: 'parts/probe.step' });
+  await actions.perform['copy-path']({ path: 'parts/probe.step' });
   assert.deepEqual(copied, ['parts/probe.step', '/models/parts/probe.step']);
   assert.equal(statuses.at(-1), 'Copied path for probe.step');
-  assert.equal(createWebFileSource(client, { rootId: 'a', rootPath: '/models', backend: 'remote' }).actions.perform['copy-path'], undefined);
+  assert.equal(createWebFileActions(client, { rootId: 'a', rootPath: '/models', backend: 'remote' }, ports).perform['copy-path'], undefined);
+  await actions.perform['copy-reference']({ path: 'parts/probe.step' });
+  assert.deepEqual(delivered[0].parts[0].reference, { resource: { kind: 'workspace-file', workspaceId: 'a', path: 'parts/probe.step' }, target: { kind: 'whole-resource' } });
+  assert.equal(copied.length, 2, 'reference delivery does not also do an ordinary clipboard write');
+  for (const unsupported of ['readText', 'readAsset', 'writeText', 'rename', 'create', 'duplicate', 'trash', 'actions']) assert.equal(source[unsupported], undefined);
   const changes = [];
   const unsubscribe = source.subscribe(change => changes.push(change));
   snapshot = { ...snapshot, entries: [snapshot.entries[1]] };
   for (const listener of listeners) listener();
-  assert.deepEqual(changes, [{ sourceId: 'a', paths: ['parts/probe.step'] }]);
+  assert.deepEqual(changes, [{ sourceId: 'a', changes: [{ kind: 'deleted', path: 'parts/probe.step', entryKind: 'file' }] }]);
+  snapshot = { ...snapshot, entries: [{ ...snapshot.entries[0], compileProgress: 0.5 }] };
+  for (const listener of listeners) listener();
+  assert.equal(changes.at(-1).changes[0].kind, 'metadata');
+  snapshot = { ...snapshot, entries: [{ ...snapshot.entries[0], hash: 'new-content' }] };
+  for (const listener of listeners) listener();
+  assert.equal(changes.at(-1).changes[0].kind, 'content');
   unsubscribe();
   assert.equal(listeners.size, 0);
   const aborted = new AbortController(); aborted.abort();

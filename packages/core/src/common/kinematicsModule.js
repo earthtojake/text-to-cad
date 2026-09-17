@@ -173,9 +173,9 @@ export function previewKinematicsModuleDefinition(block, { cadPath = "" } = {}) 
  * kinematics resolve to null (nothing to pose). */
 export async function loadKinematicsModuleDefinition(
   sidecarUrl,
-  { cadPath = "", documentHash = "", signal } = {}
+  { cadPath = "", documentHash = "", signal, resources } = {}
 ) {
-  const sidecar = await loadSourceSidecar(sidecarUrl, { documentHash, signal });
+  const sidecar = await loadSourceSidecar(sidecarUrl, { documentHash, signal, resources });
   if (!sidecar) {
     return null;
   }

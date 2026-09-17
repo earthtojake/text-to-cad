@@ -5,10 +5,13 @@ import { createRoot } from 'react-dom/client';
 import { FileViewer, type FileSource } from '@hardcore/ui/file-viewer';
 import { ViewerLoadingOverlay } from '@hardcore/ui/renderers/cad/presentation';
 import { createCadClient } from '@hardcore/core/client';
+import { unavailablePromptContext } from '@hardcore/core/prompt';
+import type { ViewerHost } from '@hardcore/ui/host';
+import { browserClipboard } from './host/clipboard';
+import { browserLifecycle } from './host/lifecycle';
 import App from './App';
 import ViewerTopBar from './client/components/workbench/ViewerTopBar.jsx';
 import { readCadParam, readDefaultCadParam } from './client/workbench/sidebar.js';
-import { applyTutorialTipResetQueryParam } from './client/workbench/persistence.js';
 import { readColorSchemePreference, resolveColorSchemeMode } from './client/ui/colorScheme.js';
 import { readViewState } from './persistence/fileViewer';
 import faviconUrl from './client/assets/favicon.ico';
@@ -27,9 +30,13 @@ function StartingView({ error }: { error?: Error }) {
     return { id: 'starting', rootName: 'This directory', stat: (_path, {signal}) => pending(signal), list: (_path, {signal}) => pending(signal) };
   }, [error]);
   const dark = resolveColorSchemeMode(readColorSchemePreference(), { prefersDark: matchMedia('(prefers-color-scheme: dark)').matches }) === 'dark';
+  const host = useMemo<ViewerHost>(() => ({
+    files: source, clipboard: browserClipboard, promptContext: unavailablePromptContext,
+    navigation: { openFile: () => {} }, environment: { colorScheme: dark ? 'dark' : 'light' }, lifecycle: browserLifecycle,
+  }), [source, dark]);
   return <div className="flex h-svh flex-col overflow-hidden"><ViewerTopBar /><div className="min-h-0 flex-1">
-    <FileViewer file={file} source={source} renderers={[]} state={state} onStateChange={setState} onOpenFile={() => {}} navigationPath={null} narrowCrumbs={false}
-      appearance={{colorScheme:dark ? 'dark' : 'light'}} presentation={{loading:<div className="relative h-full"><ViewerLoadingOverlay viewerLoading /></div>, error:() => <div className="relative h-full"><EmptyState icon={FileText} title="No file open" description="Pick one from the tree on the right, or filter by name." /></div>}} />
+    <FileViewer file={file} host={host} renderers={[]} state={state} onStateChange={setState} navigationPath={null} narrowCrumbs={false}
+      presentation={{loading:<div className="relative h-full"><ViewerLoadingOverlay viewerLoading /></div>, error:() => <div className="relative h-full"><EmptyState icon={FileText} title="No file open" description="Pick one from the tree on the right, or filter by name." /></div>}} />
   </div></div>;
 }
 
@@ -40,7 +47,6 @@ const client = createCadClient({ origin: '', shouldPoll: () => document.visibili
 let icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
 if (!icon) { icon = document.createElement('link'); icon.rel = 'icon'; document.head.append(icon); }
 icon.type = 'image/x-icon'; icon.href = `${faviconUrl}?v=star-tile`;
-applyTutorialTipResetQueryParam();
 document.title = 'text-to-cad';
 const controller = new AbortController();
 function dispose() { controller.abort(); root.unmount(); client.dispose(); window.removeEventListener('pagehide', onPageHide); }

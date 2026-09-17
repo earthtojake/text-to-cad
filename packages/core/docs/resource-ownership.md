@@ -2,7 +2,8 @@
 
 How the shared render code owns, shares, reuses and releases the expensive
 things: component geometry, GPU buffers, BVH accelerators, tessellation
-workers and cache reservations.
+workers and cache reservations. Workspace resource reads and their cache
+generations are specified in [workspace services](workspace-resources.md).
 
 The one-sentence laws are in [the package README](../README.md#the-laws-that-live-here);
 this file is the mechanism each of them constrains. Nothing here may be traded

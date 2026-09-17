@@ -1,5 +1,5 @@
 // The host's half of references (docs/file-view.md, "References and
-// captures"): what `onReference` is handed for a copied line, and how a
+// captures"): the canonical references built for a copied line, and how a
 // selector a host names (`selectReference`) maps onto the surface's own
 // selection ids.
 import assert from "node:assert/strict";

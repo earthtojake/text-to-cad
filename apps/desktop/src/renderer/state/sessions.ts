@@ -47,7 +47,7 @@ type SessionsState = {
     gitMode?: GitMode;
     cwd?: string;
     name?: string;
-  }) => Promise<Session>;
+  }, options?: { select?: boolean }) => Promise<Session>;
 };
 
 export const useSessions = create<SessionsState>((set, get) => ({
@@ -115,7 +115,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
           : null,
     })),
 
-  start: async (input) => {
+  start: async (input, options) => {
     const agentId = input.agentId ?? defaultAgentId();
     if (!agentId) {
       throw new Error("no agent is installed; add one from Settings › Agents");
@@ -127,7 +127,10 @@ export const useSessions = create<SessionsState>((set, get) => ({
       ...(input.cwd ? { cwd: input.cwd } : {}),
       ...(input.name ? { name: input.name } : {}),
     });
-    set({ activeId: session.id });
+    set(state => ({
+      sessions: state.sessions.some(item => item.id === session.id) ? state.sessions : [...state.sessions, session],
+      ...(options?.select === false ? {} : { activeId: session.id }),
+    }));
     return session;
   },
 }));

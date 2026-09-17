@@ -1,4 +1,5 @@
 import { FileViewer } from "@hardcore/ui/file-viewer";
+import type { ViewerHost } from "@hardcore/ui/host";
 import { worktreeMark } from "@hardcore/ui/navigation";
 import { GitBranch } from "lucide-react";
 import { useCallback, useEffect, useMemo } from "react";
@@ -7,7 +8,9 @@ import { useResolvedTheme } from "@renderer/hooks/use-theme";
 import { useExplorer } from "@renderer/state/explorer";
 import { useProjects } from "@renderer/state/projects";
 import type { ExplorerRoot, Project } from "@shared/types";
-import { createDesktopFileSource } from "./adapters/fileSource";
+import { createDesktopFileSource, createDesktopFileActions } from "./adapters/fileSource";
+import { desktopClipboard } from "./host/clipboard";
+import { createDesktopPromptContext } from "./host/promptContext";
 import type { DesktopCadConnection } from "./adapters/cadRuntime";
 import { useDesktopViewState } from "./adapters/persistence";
 import { createDesktopRenderers } from "./renderers";
@@ -24,6 +27,8 @@ export function FileTab({ tabId, project, root, path, panel, cadConnection }: {
   const { state, onStateChange } = useDesktopViewState(source.id, tabId, root, panel, root ?? project.path);
   const reveal = useExplorer((state) => state.reveal);
   const colorScheme = useResolvedTheme();
+  const promptContext = useMemo(() => createDesktopPromptContext(project.id, root, source.id), [project.id, root, source.id]);
+  const fileActions = useMemo(() => createDesktopFileActions({ projectId: project.id, root, sourceId: source.id, promptContext, clipboard: desktopClipboard }), [project.id, root, source.id, promptContext]);
   const worktree = useMemo(() => worktreeMark(root), [root]);
   const onOpenFile = useCallback((next: string, options?: { target: "current" | "new" }) => {
     const explorer = useExplorer.getState();
@@ -32,8 +37,16 @@ export function FileTab({ tabId, project, root, path, panel, cadConnection }: {
     if (existing) { if (existing.id !== tabId) explorer.setActive(existing.id); return; }
     explorer.update(tabId, { path: next, panel: null });
   }, [tabId, root]);
-  return <FileViewer file={path} source={source} renderers={composition.renderers} state={state} onStateChange={onStateChange}
-    onOpenFile={onOpenFile} appearance={{ colorScheme }} reveal={reveal?.root === root ? reveal : null}
+  const host = useMemo<ViewerHost>(() => ({
+    files: source, fileActions, clipboard: desktopClipboard, promptContext,
+    navigation: { openFile: onOpenFile }, environment: { colorScheme, platform: fileActions.platform },
+    lifecycle: { subscribeFlush(listener) {
+      window.addEventListener("beforeunload", listener);
+      return () => window.removeEventListener("beforeunload", listener);
+    } },
+  }), [source, fileActions, promptContext, onOpenFile, colorScheme]);
+  return <FileViewer file={path} host={host} renderers={composition.renderers} state={state} onStateChange={onStateChange}
+    reveal={reveal?.root === root ? reveal : null}
     onError={(error) => toast.error(error.message)}
     leading={worktree ? <>
       <span className="flex shrink items-center gap-1 truncate rounded-sm px-0.5 text-muted-foreground" data-crumb="worktree" title={worktree.title}>

@@ -18,7 +18,6 @@ import {
 import { buildDxfPreviewMeshData, extractDxfScorePolylines } from "@hardcore/core/lib/dxf/buildPreviewMesh.js";
 import { buildDxfDrawingLineGroups, drawingLineBounds } from "@hardcore/core/lib/dxf/buildDrawingLines.js";
 import { STEP_TREE_TOPOLOGY_NODE_PREFIX } from "@hardcore/core/lib/step/stepTree.js";
-import { copyImageBlobToClipboard } from "@hardcore/ui/clipboard";
 import {
   annotatePerspectiveSnapshot,
   CAMERA_PROJECTION,
@@ -3237,13 +3236,7 @@ const CadViewer = forwardRef(function CadViewer({
   }, [bendAxisX, drawingBendLines, bendAnglesRad, drawingBends, drawingBendStyle, drawingBendRadiusMm, drawingKFactor, drawingHiddenLayers, drawingOrientation, drawingMaterialColor, drawingGeometry, drawingThicknessMm, drawingThicknessScale, meshData, viewerReadyTick]);
 
   useImperativeHandle(ref, () => ({
-    // Clipboard-only: the viewer never downloads artifact or screenshot bytes
-    // through a URL — copy actions hand out paths and images instead.
-    async captureScreenshot() {
-      return await copyImageBlobToClipboard(this.captureScreenshotBlob());
-    },
-    // The same composite the clipboard gets, as a PNG Blob for a host that
-    // wants the bytes rather than the clipboard (a chat attachment).
+    // The viewport produces pixels. Its host owns clipboard/draft delivery.
     async captureScreenshotBlob() {
       const runtime = runtimeRef.current;
       if (!runtime?.renderer || !runtime?.scene || !runtime?.camera) {

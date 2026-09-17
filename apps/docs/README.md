@@ -16,7 +16,10 @@ or consumer-owned declarations are required.
 The package migration is a pure refactor: the site's UI, UX, functionality, content and static
 CAD showcases remain unchanged. Normal development, checks and deployment use
 existing static assets and do not start Python. Asset regeneration is still an
-explicit operation.
+explicit operation. The hero composes an explicit static HTTP resource provider
+from core for descriptors, surfaces and sidecars. It needs no FileViewer host,
+Electron services or Python backend; the resource-provider migration keeps its
+existing static asset URLs and rendering behavior.
 
 Install from the repository root with `npm ci` (or the docs-only workspace
 filter), then `npm run build:docs`. `apps/docs/vercel.json` runs the root

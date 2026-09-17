@@ -16,9 +16,6 @@ Use query params only for shareable state that should survive copying a URL:
 
 - `file`: active catalog entry, relative to the root served by this instance.
   The page is the bare origin with `?file=`; there is no `dir` page parameter.
-- `resetTips`: debug-only. Clears the record of seen one-shot tutorial tips so
-  they fire again. It applies once during bootstrap and is then stripped from
-  the address bar, so it is a reset action rather than a persistent mode.
 
 Do not put dense viewer state, panel state, drawing state, or per-file controls
 in the URL.
@@ -32,16 +29,12 @@ Current intended use:
 
 - `cad-viewer:color-scheme`: the app's System/Light/Dark appearance preference,
   used when its cross-port appearance cookie is unavailable.
-- `cad-viewer:tutorial-tips:v1`: ids of the one-shot tutorial tips the user has
-  dismissed. A tip is recorded only when its close button is pressed — clicking
-  away, Escape, and reloads all leave it unrecorded, so it comes back on the next
-  chance until it is actually acknowledged. Cleared by `?resetTips=1`.
 - `cad-viewer:file-sheet-tab-layout:v6`: the Inspector's per-kind tab order,
   pane assignment, split state and split ratio. The active tab remains per-file
   state.
 
 The host adapter is [cadPreferences.ts](../src/persistence/cadPreferences.ts).
-It injects layout, motion and tutorial preferences into the shared renderer.
+It injects layout and motion preferences into the shared renderer.
 Inspect and Render own their scene bases. The retired `cad-viewer:theme` key is
 left untouched and is neither read nor written; saved custom themes cannot
 override either mode.
@@ -128,8 +121,11 @@ panel/width, expanded directories and renderer state keyed by file and renderer.
 its port. The host restores legacy directory and validated per-file session
 records without deleting them or replacing newer renderer state. A saved
 `cad-theme` panel restores the renderer's default Inspector; explicit closed,
-tree and Inspector choices remain unchanged. Tutorial-tip and Inspector-layout
-keys keep their existing names and meanings.
+tree and Inspector choices remain unchanged. Inspector-layout keys retain their
+existing meaning. The retired reference tooltip and its reset query are no longer
+consumed; their old storage record is ignored.
+Writes merge changed chrome fields and renderer keys into the latest record,
+so independent views cannot overwrite another document's state with a stale snapshot.
 The URL remains the selected-file authority;
 opening the root without a file does not silently select a different artifact.
 

@@ -7,13 +7,12 @@ import { stepGeometryContextText, stepGeometryPromptText } from "../workbench/st
 import { filterSelectionReferences, toggleReferenceGroupSelection, connectedReferenceIds, MEASURE_SELECTION_FILTERS } from "../workbench/selectionFilter.js";
 import { buildTangentFaceGraph } from "../workbench/tangentFaceSelection.js";
 
-import { TutorialTipsContext } from "../workbench/tutorialTips.js";
 import { FileSheetTabPreferencesContext } from "../workbench/fileSheetTabPreferences.js";
 import { buildRobotComponentGeometry, robotComponents } from "../workbench/robotComponents.js";
 import { useRobotComponentSelection } from "../workbench/useRobotComponentSelection.js";
 
 import * as THREE from "three";
-import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { startTransition, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ArrowLeftRight, ArrowRight, Circle, Eraser, FileText, Minus, PaintBucket, PenTool, Square } from "lucide-react";
 import { CAD_PANEL, EmptyState } from "@hardcore/ui/navigation";
 import { cn } from "@hardcore/ui/utils";
@@ -72,7 +71,6 @@ import { useViewportQualityStatus } from "../components/workbench/hooks/useViewp
 import { previewGeometryChanged } from "../workbench/editingPreview.js";
 import { buildArtifactWarningAlert } from "../workbench/artifactWarnings.js";
 import { resolveFileStatus } from "../workbench/fileStatus.js";
-import { useViewerAutoReload } from "../workbench/useViewerAutoReload.js";
 import { viewerLoadingState } from "../workbench/viewerLoading.js";
 import { useCadWorkspaceSelection } from "../components/workbench/hooks/useCadWorkspaceSelection.js";
 import { useCadWorkspaceSelectors } from "../components/workbench/hooks/useCadWorkspaceSelectors.js";
@@ -290,7 +288,8 @@ import {
   normalizeParameterValue,
   normalizeParameterValues
 } from "@hardcore/core/common/parameters.js";
-import { copyTextToClipboard, readTextFromClipboard } from "@hardcore/ui/clipboard";
+import { ViewerElementContext, useViewerHost, usePromptDestination } from "../../../host/context.js";
+import { createCadPromptContext, promptDeliveryMessage } from "./promptContext.js";
 import { HostReferenceContext, referenceLabel, referencesFromCopyText, resolveSelectorSelection } from "./hostReference.js";
 import { applySourceMaterialOverlayToMeshData, sourceAppearanceHasMaterials, sourceMaterialGeometry } from "../workbench/sourceMaterialSession.js";
 const EMPTY_MATERIAL_OVERRIDES = Object.freeze({});
@@ -345,9 +344,14 @@ export default function CadFileView(props) {
 
 function CadFileViewSurface({
   client, entry, serverInfo, renderSession: cadRenderSession, preferences, onPreferenceChange, onOpenFile, className = "",
-  panelSlot, colorScheme = "light", selectReference, onReference, onPromptContext, onCapture, captureRequest,
+  panelSlot, colorScheme = "light", selectReference, captureRequest, acknowledgeCommand, documentResource, slots,
   openPanel = "", onPanelOpen, onChromeVisibilityChange, onActivityChange, onReload, state, onStateChange
 }) {
+  const host = useViewerHost();
+  const viewerElement = useContext(ViewerElementContext);
+  const destination = usePromptDestination();
+  const promptAvailable = destination.available;
+  const composerDestination = destination.kind === "composer";
   const animationClock = useAnimationClockStore();
   const { getAnimationClock, resetAnimationClock, setAnimationClock } = animationClock;
   const restoreStateRef = useRef(state || {});
@@ -360,10 +364,6 @@ function CadFileViewSurface({
     stateRef.current = next;
     onStateChangeRef.current?.(next);
   }, []);
-  const tips = {
-    seen: Array.isArray(preferences.seenTips) ? preferences.seenTips : [],
-    dismiss: (id) => onPreferenceChange({ seenTips: [...new Set([...(preferences.seenTips || []), id])] })
-  };
   const hostLayoutMode = CAD_WORKSPACE_LAYOUT_MODE.DESKTOP;
   const hostSheetWidth = null;
   const hostPanelSlot = panelSlot;
@@ -435,7 +435,7 @@ function CadFileViewSurface({
   const [persistenceStatus, setPersistenceStatus] = useState("");
   const [viewerLayoutMode, setViewerLayoutMode] = useState(readViewerLayoutMode);
   const [layoutViewportWidth, setLayoutViewportWidth] = useState(readViewerViewportWidth);
-  const isDesktop = hostLayoutMode === CAD_WORKSPACE_LAYOUT_MODE.DESKTOP ||
+  const isWideLayout = hostLayoutMode === CAD_WORKSPACE_LAYOUT_MODE.DESKTOP ||
     viewerLayoutMode === CAD_WORKSPACE_LAYOUT_MODE.DESKTOP;
   const [viewerAlertOpen, setViewerAlertOpen] = useState(false);
   const [viewerRuntimeAlert, setViewerRuntimeAlert] = useState(null);
@@ -982,7 +982,7 @@ function CadFileViewSurface({
             { cadPath: selectedStepModuleCadPath, url: selectedStepModuleUrl }
           ))
       : loadKinematicsModuleDefinition(selectedStepModuleUrl, {
-          signal: controller.signal, cadPath: selectedStepModuleCadPath, documentHash: selectedEntry?.documentHash,
+          signal: controller.signal, resources: client.resources, cadPath: selectedStepModuleCadPath, documentHash: selectedEntry?.documentHash,
         });
     modulePromise.then((definition) => {
       if (cancelled) {
@@ -1610,7 +1610,7 @@ function CadFileViewSurface({
       return;
     }
     try {
-      await copyTextToClipboard(buildParameterValuesCopyText(runtime.definition, runtime.values));
+      await host.clipboard.writeText(buildParameterValuesCopyText(runtime.definition, runtime.values));
       setCopyStatus(`Copied ${runtime.label} parameters`);
     } catch (error) {
       setCopyStatus(error instanceof Error ? error.message : "Clipboard write failed");
@@ -1625,7 +1625,7 @@ function CadFileViewSurface({
       return;
     }
     try {
-      const clipboardText = await readTextFromClipboard();
+      const clipboardText = await host.clipboard.readText();
       const { values, count } = parseParameterValuesPasteText(runtime.definition, clipboardText, {
         label: `${runtime.label} parameter`,
         unknownLabel: `${runtime.label} parameter`
@@ -2071,6 +2071,7 @@ function CadFileViewSurface({
   // Viewport LOD (design/unified-tessellation.md Phase 5): camera-settle
   // driven re-tessellation of the components that project the worst error.
   const { onCameraMoved: onLodCameraMoved } = useViewportLod({
+    resources: client.resources,
     viewerRef,
     modelKey: viewportQualityModelKey,
     quality: resolvedScene.quality,
@@ -2149,7 +2150,7 @@ function CadFileViewSurface({
       return undefined;
     }
     let cancelled = false;
-    loadRenderDxf(drawingGeometryUrl)
+    loadRenderDxf(drawingGeometryUrl, { resources: client.resources })
       .then((payload) => {
         if (cancelled) {
           return;
@@ -2448,7 +2449,7 @@ function CadFileViewSurface({
   const selectRobotComponent = useCallback((id, options) => {
     robotSelection.select(id, options);
     if (selectedUrdfComponents.some((component) => component.id === id)) {
-      if (isDesktop) setTabToolsOpen(true);
+      if (isWideLayout) setTabToolsOpen(true);
       // Components carries the reference at its foot, so revealing it is the whole jump.
       const revealIds = [FILE_SHEET_SECTION_IDS.ROBOT_COMPONENTS];
       setFileSheetOpenSectionIds((current) => [
@@ -2456,7 +2457,7 @@ function CadFileViewSurface({
         ...revealIds
       ]);
     }
-  }, [robotSelection.select, selectedUrdfComponents, isDesktop]);
+  }, [robotSelection.select, selectedUrdfComponents, isWideLayout]);
 
   const buildActiveTabSnapshot = useCallback(() => {
     return cloneTabSnapshot({
@@ -2746,18 +2747,7 @@ function CadFileViewSurface({
     scheduleActiveFileSessionSave
   ]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return undefined;
-    }
-    const handlePageHide = () => {
-      flushActiveFileSession();
-    };
-    window.addEventListener("pagehide", handlePageHide);
-    return () => {
-      window.removeEventListener("pagehide", handlePageHide);
-    };
-  }, [flushActiveFileSession]);
+  useEffect(() => host.lifecycle?.subscribeFlush(flushActiveFileSession), [host.lifecycle, flushActiveFileSession]);
 
   useEffect(() => {
     selectedReferenceIdsRef.current = selectedReferenceIds;
@@ -4051,7 +4041,7 @@ function CadFileViewSurface({
       return;
     }
     try {
-      await copyTextToClipboard(buildUrdfJointAnglesCopyText(movableUrdfJoints, selectedUrdfJointValues));
+      await host.clipboard.writeText(buildUrdfJointAnglesCopyText(movableUrdfJoints, selectedUrdfJointValues));
       setCopyStatus(selectedEntrySourceFormat === RENDER_FORMAT.SDF ? "Copied joint values" : "Copied joint angles");
     } catch (error) {
       setCopyStatus(error instanceof Error ? error.message : "Clipboard write failed");
@@ -4135,7 +4125,6 @@ function CadFileViewSurface({
   // The tip teaches reference syntax, so it fires on the first pick that yields
   // a reference to copy — a component, a subassembly, or a face/edge. Gating it
   // on topology alone would hide it from anyone who only ever clicks parts.
-  const copyReferenceTipActive = canonicalCopySelectionLines.length > 0;
   const expandStepTreeAroundNode = useCallback((nodeId, {
     expandSelf = false,
     includeVisualOnlyAncestors = true
@@ -4166,7 +4155,7 @@ function CadFileViewSurface({
     }
     setActiveTreeNodeScrollKey(source === "viewer" || source === "reference" ? `${source}:${Date.now()}:${normalizedNodeId}` : "");
     openFileSheetSection(FILE_SHEET_SECTION_IDS.STEP_TREE, {
-      openSheet: shouldOpenFileSheetForSelectionReveal({ isDesktop, source }),
+      openSheet: shouldOpenFileSheetForSelectionReveal({ isDesktop: isWideLayout, source }),
       activate: source === "reference"
     });
     if (expandAncestors || expandSelf || source === "reference") {
@@ -4174,7 +4163,7 @@ function CadFileViewSurface({
     }
   }, [
     expandStepTreeAroundNode,
-    isDesktop,
+    isWideLayout,
     openFileSheetSection,
     selectedFileSheetKind
   ]);
@@ -4208,7 +4197,7 @@ function CadFileViewSurface({
     const next = !multiSelect && selectedPartIdsRef.current.length
       ? (normalizedReferenceId ? [normalizedReferenceId] : [])
       : computeNextSelectionIds(selectedReferenceIdsRef.current, normalizedReferenceId, { multiSelect });
-    if (next.length && !isDesktop) {
+    if (next.length && !isWideLayout) {
       setFilesPanelOpen(false);
     }
     setSelectedWholeEntryCadRefToken("");
@@ -4227,7 +4216,7 @@ function CadFileViewSurface({
     displayStepTreeRoot,
     effectiveActiveReferenceMap,
     focusedAssemblyNodeIds,
-    isDesktop,
+    isWideLayout,
     isAssemblyView,
     referencePartId,
     revealStepTreeNode,
@@ -4251,17 +4240,29 @@ function CadFileViewSurface({
     setCopyStatus("");
   }, []);
 
+  const promptResource = useMemo(() => ({ ...documentResource,
+    revision: String(selectedEntry?.documentHash || selectedEntry?.hash || documentResource.revision || '')
+  }), [documentResource, selectedEntry?.documentHash, selectedEntry?.hash]);
   // Copy is clipboard-only. Adding context is an explicit host action.
-  const deliverReferenceText = useCallback((text) => copyTextToClipboard(text), []);
+  const deliverReferenceText = useCallback((text) => host.clipboard.writeText(text), [host.clipboard]);
+  const showPromptResult = useCallback((result) => setCopyStatus(promptDeliveryMessage(result)), []);
+  const deliverPrompt = useCallback((context) => {
+    let pending;
+    try { pending = host.promptContext.deliver(context); }
+    catch (error) { pending = Promise.reject(error); }
+    return Promise.resolve(pending).catch(error => ({ status: 'failed', message: error instanceof Error ? error.message : String(error) }))
+      .then(result => { showPromptResult(result); return result; });
+  }, [host.promptContext, showPromptResult]);
   const referencesForHost = useCallback((text) =>
     referencesFromCopyText(text, cadFileParamForEntry(selectedEntry)).map((reference) => {
       const label = referenceLabel(reference.selector, displayStepTreeRoot || stepTreeRoot);
       return { ...reference, ...(label ? { label } : {}) };
     }), [selectedEntry, displayStepTreeRoot, stepTreeRoot]);
   const addReferenceText = useCallback((text) => {
-    if (stepUpdateInProgress) return;
-    for (const reference of referencesForHost(text)) onReference?.(reference);
-  }, [onReference, referencesForHost, stepUpdateInProgress]);
+    if (stepInteractionBlocked || !promptAvailable) return;
+    const references = referencesForHost(text);
+    if (references.length) return deliverPrompt(createCadPromptContext({ resource: promptResource, references }));
+  }, [promptResource, deliverPrompt, promptAvailable, referencesForHost, stepInteractionBlocked]);
   const loadFilterTopology = useCallback((target) => {
     if (!target) return;
     if (isAssemblyView) setExpandedStepTreeNodeIds(current => uniqueStringList([...current, target.id]));
@@ -4302,34 +4303,32 @@ function CadFileViewSurface({
     setCopyStatus("");
   }, [stepUpdateInProgress, effectiveActiveReferenceMap]);
   const hostReference = useMemo(
-    () => (typeof onReference === "function" ? { deliverReference: deliverReferenceText, addReference: addReferenceText } : null),
-    [onReference, deliverReferenceText, addReferenceText]
+    () => ({ deliverReference: deliverReferenceText, addReference: addReferenceText, canAddToPrompt: composerDestination && promptAvailable }),
+    [composerDestination, promptAvailable, deliverReferenceText, addReferenceText]
   );
-  const handleAddSelection = useCallback(() => {
-    addReferenceText(canonicalCopySelectionLines.join("\n"));
-  }, [addReferenceText, canonicalCopySelectionLines]);
-  const handleAddInspectedGeometry = useCallback((selection, label) => {
-    if (viewerLoading || stepUpdateInProgress) return;
-    const text = stepGeometryPromptText(selection, {
+  const selectionKey = JSON.stringify([promptResource, canonicalCopySelectionLines, inspectionHighlight?.label, inspectionHighlight?.context]);
+  const liveSelectionKey = useRef(selectionKey);
+  liveSelectionKey.current = selectionKey;
+  useLayoutEffect(() => { liveSelectionKey.current = selectionKey; return () => { liveSelectionKey.current = null; }; }, [selectionKey]);
+  const createSelectionPromptContext = useCallback(({ text: instruction = '', capture: includeCapture = false } = {}) => {
+    if (liveSelectionKey.current !== selectionKey) throw new Error('This selection has changed. Open the action again.');
+    if (viewerLoading || stepInteractionBlocked) throw new Error('Wait for the model before using this selection.');
+    const copied = inspectionHighlight ? stepGeometryPromptText(inspectionHighlight, {
       referenceMap: effectiveActiveReferenceMap,
       parts: selectedMeshData?.parts || EMPTY_LIST,
       entry: selectedEntry,
-    });
-    const references = referencesForHost(text).map(reference => ({ ...reference, label }));
-    if (!references.length) return;
-    if (typeof onPromptContext === "function" && selection.context?.file === selectedEntry?.file) {
-      const context = { ...selection.context, file: cadFileParamForEntry(selectedEntry) };
-      onPromptContext({ text: stepGeometryContextText(context, { includeModel: !references.length }), references });
-    } else for (const reference of references) onReference?.(reference);
-  }, [viewerLoading, stepUpdateInProgress, onReference, onPromptContext, effectiveActiveReferenceMap, selectedMeshData, selectedEntry, referencesForHost]);
-
-  const handleAddCurrentSelection = useCallback(() => {
-    if (inspectionHighlight) {
-      if (inspectionHighlight.label) handleAddInspectedGeometry(inspectionHighlight, inspectionHighlight.label);
-      return;
+    }) : canonicalCopySelectionLines.join("\n");
+    const references = referencesForHost(copied).map(reference => inspectionHighlight?.label ? { ...reference, label: inspectionHighlight.label } : reference);
+    const inspected = inspectionHighlight?.context?.file === selectedEntry?.file
+      ? stepGeometryContextText({ ...inspectionHighlight.context, file: promptResource.path }, { includeModel: !references.length }) : '';
+    let capture;
+    if (includeCapture) {
+      if (!viewerRef.current?.captureScreenshotBlob) throw new Error('CAD Viewer not ready');
+      capture = viewerRef.current.captureScreenshotBlob();
+      void capture.catch(() => {});
     }
-    handleAddSelection();
-  }, [inspectionHighlight, handleAddInspectedGeometry, handleAddSelection]);
+    return createCadPromptContext({ resource: promptResource, references, text: [inspected, instruction].filter(Boolean).join('\n\n'), capture });
+  }, [selectionKey, promptResource, viewerLoading, stepInteractionBlocked, inspectionHighlight, effectiveActiveReferenceMap, selectedMeshData, selectedEntry, canonicalCopySelectionLines, referencesForHost]);
 
   const handleCopySelection = useCallback(async () => {
     setScreenshotStatus("");
@@ -4514,7 +4513,7 @@ function CadFileViewSurface({
     const next = !multiSelect && selectedReferenceIdsRef.current.length
       ? (normalizedPartId ? [normalizedPartId] : [])
       : computeNextSelectionIds(selectedPartIdsRef.current, partId, { multiSelect });
-    if (next.length && !isDesktop) {
+    if (next.length && !isWideLayout) {
       setFilesPanelOpen(false);
     }
     setSelectedWholeEntryCadRefToken("");
@@ -4545,7 +4544,7 @@ function CadFileViewSurface({
     });
     return next;
   }, [
-    isDesktop,
+    isWideLayout,
     isAssemblyView,
     focusedAssemblyNodeIds,
     removeSelectedAssemblyNode,
@@ -4575,7 +4574,7 @@ function CadFileViewSurface({
   const appliedSelectReferenceKeyRef = useRef(null);
   useEffect(() => {
     const selector = String(selectReference?.selector || "").trim();
-    if (!selector || appliedSelectReferenceKeyRef.current === selectReference.key || viewerLoading) {
+    if (!selector || appliedSelectReferenceKeyRef.current === selectReference.key || viewerLoading || stepInteractionBlocked) {
       return;
     }
     const selectors = selector.split(",").map(value => value.trim()).filter(Boolean);
@@ -4591,6 +4590,7 @@ function CadFileViewSurface({
         const lastFace = resolvedFaces[resolvedFaces.length - 1].id;
         revealStepTreeNode(findStepTreeTopologyNodeIdForReference(displayStepTreeRoot, lastFace) || referencePartId(effectiveActiveReferenceMap.get(lastFace)), { source: "reference" });
         appliedSelectReferenceKeyRef.current = selectReference.key;
+        if (selectReference.key !== undefined) acknowledgeCommand?.('selectReference', selectReference.key);
         return;
       }
     }
@@ -4602,6 +4602,7 @@ function CadFileViewSurface({
       return;
     }
     appliedSelectReferenceKeyRef.current = selectReference.key;
+        if (selectReference.key !== undefined) acknowledgeCommand?.('selectReference', selectReference.key);
     if (resolved.kind === "reference") {
       if (selectedReferenceIdsRef.current.includes(resolved.id)) {
         revealStepTreeNode(findStepTreeTopologyNodeIdForReference(displayStepTreeRoot, resolved.id) || referencePartId(effectiveActiveReferenceMap.get(resolved.id)) || resolved.id, { source: "reference" });
@@ -4615,6 +4616,8 @@ function CadFileViewSurface({
     }
   }, [
     selectReference,
+    acknowledgeCommand,
+    stepInteractionBlocked,
     viewerLoading,
     stepUpdateInProgress,
     selectReferenceGroup,
@@ -5942,6 +5945,7 @@ function CadFileViewSurface({
   }, [renderSession]);
 
   useCadWorkspaceShortcuts({
+    viewerElement,
     selectionActive: selectedPartIds.length > 0 || selectedReferenceIds.length > 0,
     onClearSelection: clearAssemblySelection,
     copyStatus,
@@ -5952,7 +5956,7 @@ function CadFileViewSurface({
     inspectionEnabled: !renderSession.enabled,
     viewerAlertOpen,
     tabToolsOpen,
-    isDesktop,
+    isDesktop: isWideLayout,
     filesPanelOpen,
     previewUiStateRef,
     tabToolMode,
@@ -5969,62 +5973,36 @@ function CadFileViewSurface({
     setTabToolMode
   });
 
-  // The viewport as a PNG, to the host (`onCapture`): the desktop app
-  // attaches it to the composer. The toolbar shows the button only when the
-  // host is listening.
-  const handleCapture = useCallback(async () => {
-    if (!selectedEntry || typeof onCapture !== "function") {
-      return;
-    }
+  // Freeze references now; the host binds its destination before waiting for the PNG.
+  const handleCapture = useCallback(() => {
+    if (!selectedEntry || !promptAvailable || viewerLoading || stepInteractionBlocked) return;
     try {
-      if (!viewerRef.current?.captureScreenshotBlob) {
-        throw new Error("CAD Viewer not ready");
-      }
-      // Freeze selection before waiting for the image; deliver both as one bundle.
+      if (!viewerRef.current?.captureScreenshotBlob) throw new Error("CAD Viewer not ready");
       const references = referencesForHost(canonicalCopySelectionLines.join("\n"));
-      const blob = await viewerRef.current.captureScreenshotBlob();
-      onCapture({ blob, file: cadFileParamForEntry(selectedEntry), references });
-      setCopyStatus("");
-      setScreenshotStatus("View captured");
-    } catch (captureError) {
-      setCopyStatus("");
-      setScreenshotStatus(captureError instanceof Error ? captureError.message : "Capture failed");
-    }
-  }, [onCapture, selectedEntry, referencesForHost, canonicalCopySelectionLines]);
+      const capture = viewerRef.current.captureScreenshotBlob();
+      void capture.catch(() => {});
+      void deliverPrompt(createCadPromptContext({ resource: promptResource, references, capture }));
+    } catch (error) { setScreenshotStatus(error instanceof Error ? error.message : "Capture failed"); }
+  }, [promptAvailable, promptResource, viewerLoading, stepInteractionBlocked, deliverPrompt, selectedEntry, referencesForHost, canonicalCopySelectionLines]);
 
-  // A host asking for the same picture from outside the viewport — the
-  // desktop's composer has a `Ask about this view` item beside its attach
-  // ones. `key` is a nonce, so two requests are two captures; the picture
-  // goes to `onCapture` either way, and there is one capture path.
   const captureKey = captureRequest?.key ?? null;
+  const appliedCaptureKeyRef = useRef(null);
   useEffect(() => {
-    if (captureKey === null) {
-      return;
-    }
-    void handleCapture();
-    // Deliberately keyed on the nonce alone: re-running when `handleCapture`
-    // is rebuilt (a new selection, a new host callback) would take a second
-    // picture nobody asked for.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [captureKey]);
+    if (captureKey === null || appliedCaptureKeyRef.current === captureKey || viewerLoading || stepInteractionBlocked || !promptAvailable) return;
+    appliedCaptureKeyRef.current = captureKey;
+    acknowledgeCommand?.('captureRequest', captureKey);
+    handleCapture();
+  }, [captureKey, viewerLoading, stepInteractionBlocked, promptAvailable, acknowledgeCommand, handleCapture]);
 
   const handleScreenshotCopy = useCallback(async () => {
-    if (!selectedEntry) {
-      return;
-    }
-
+    if (!selectedEntry) return;
     try {
-      if (!viewerRef.current?.captureScreenshot) {
-        throw new Error("CAD Viewer not ready");
-      }
-      await viewerRef.current.captureScreenshot();
+      if (!viewerRef.current?.captureScreenshotBlob) throw new Error("CAD Viewer not ready");
+      await host.clipboard.writeImage(viewerRef.current.captureScreenshotBlob());
       setCopyStatus("");
       setScreenshotStatus("Copied screenshot to clipboard");
-    } catch (captureError) {
-      setCopyStatus("");
-      setScreenshotStatus(captureError instanceof Error ? captureError.message : "Clipboard copy failed");
-    }
-  }, [selectedEntry]);
+    } catch (error) { setScreenshotStatus(error instanceof Error ? error.message : "Clipboard copy failed"); }
+  }, [selectedEntry, host.clipboard]);
 
   const handleEnterPreviewMode = useCallback(() => {
     const viewportContent = selectedViewportContent;
@@ -6084,14 +6062,14 @@ function CadFileViewSurface({
   const selectionToolActive = hasCapability(effectiveRenderFormat, "topology") &&
     tabToolMode === TAB_TOOL_MODE.REFERENCES;
   const drawToolActive = drawModeActive;
-  const canAddInspectionContext = typeof onPromptContext === "function" &&
+  const canAddInspectionContext = promptAvailable &&
     inspectionHighlight?.context?.file === selectedEntry?.file;
   let selectionCount = selectionCountBase;
   if (inspectionHighlight) {
     selectionCount = 0;
     if (inspectionHighlight.label && !viewerLoading && !stepUpdateInProgress) {
       if (canAddInspectionContext) selectionCount = inspectionHighlight.faceIds.length + inspectionHighlight.partIds.length;
-      else if (typeof onReference === "function") selectionCount = inspectionHighlight.faceIds.length + inspectionHighlight.partIds.length;
+      else if (promptAvailable) selectionCount = inspectionHighlight.faceIds.length + inspectionHighlight.partIds.length;
     }
   }
   const activeReferenceId = String(selectedReferenceIds[selectedReferenceIds.length - 1] || "").trim();
@@ -6192,7 +6170,6 @@ function CadFileViewSurface({
 
   return (
     <FileSheetTabPreferencesContext.Provider value={{ store: preferences.fileSheetTabs || {}, update: (fileSheetTabs) => onPreferenceChange({ fileSheetTabs }) }}>
-    <TutorialTipsContext.Provider value={tips}>
     <HostPanelSlotContext.Provider value={hostPanelSlot}>
     <FileSheetPortalContext.Provider value={hostElement}>
     <HostReferenceContext.Provider value={hostReference}>
@@ -6359,12 +6336,19 @@ function CadFileViewSurface({
                 selectionCount={selectionCount}
                 copyButtonLabel={copyButtonLabel}
                 copyButtonCountLabel={copyButtonCountLabel}
-                copyReferenceTipActive={copyReferenceTipActive}
                 panToolActive={panToolActive}
                 handleCopySelection={handleCopySelection}
                 handleScreenshotCopy={handleScreenshotCopy}
                 selectionFilter={selectionFilter}
-                handleAddSelection={typeof onReference === "function" || typeof onPromptContext === "function" ? handleAddCurrentSelection : null}
+                createPromptContext={createSelectionPromptContext}
+                onPromptResult={showPromptResult}
+                composerDestination={composerDestination}
+                selectionExtras={slots?.selectionExtras && selectionCount > 0 && !viewerLoading && !stepInteractionBlocked ? <slots.selectionExtras
+                  selection={Object.freeze(createSelectionPromptContext().parts.filter(part => part.kind === 'reference').map(part => part.reference))}
+                  selectionKey={selectionKey}
+                  disabled={viewerLoading || stepInteractionBlocked || !promptAvailable}
+                  createContext={createSelectionPromptContext}
+                /> : null}
               />
               </div>
 
@@ -6426,7 +6410,7 @@ function CadFileViewSurface({
                 handleEnterPreviewMode={handleEnterPreviewMode}
                 handleExitPreviewMode={handleExitPreviewMode}
                 handleScreenshotCopy={handleScreenshotCopy}
-                handleCapture={typeof onCapture === "function" ? handleCapture : null}
+                handleCapture={composerDestination && promptAvailable ? handleCapture : null}
               />
 
               {/*
@@ -6460,7 +6444,7 @@ function CadFileViewSurface({
                 key={`step:${selectedKey}`}
                 geometryInspection={{ file: selectedEntry?.file, revision: artifactRevision, references: !viewerLoading && !stepUpdateInProgress ? isAssemblyView ? assemblyStepTreeTopologyReferences : selectedSelectorRuntime?.references || EMPTY_LIST : EMPTY_LIST, parts: !viewerLoading && !stepUpdateInProgress ? selectedMeshData?.parts || EMPTY_LIST : EMPTY_LIST, onHighlight: handleInspectionHighlight, onLoadTopology: loadInspectionTopology }}
                 open={fileSheetOpen}
-                isDesktop={isDesktop}
+                isDesktop={isWideLayout}
                 width={activeSheetWidth || tabToolsWidth}
                 onOpenChange={setTabToolsOpen}
                 onStartResize={fileSheetResizeHandler}
@@ -6555,7 +6539,7 @@ function CadFileViewSurface({
                 sourceFormat={selectedFileSheetKind}
                 showJoints={selectedFileSheetKind === "urdf" || selectedFileSheetKind === "srdf" || selectedFileSheetKind === "sdf"}
                 showMotion={selectedFileSheetKind === "srdf"}
-                isDesktop={isDesktop}
+                isDesktop={isWideLayout}
                 width={activeSheetWidth || tabToolsWidth}
                 selectedEntry={selectedEntry}
                 onOpenChange={setTabToolsOpen}
@@ -6589,7 +6573,7 @@ function CadFileViewSurface({
                 open={fileSheetOpen}
                 kind="dxf"
                 title="DXF"
-                isDesktop={isDesktop}
+                isDesktop={isWideLayout}
                 width={activeSheetWidth || tabToolsWidth}
                 selectedEntry={selectedEntry}
                 onOpenChange={setTabToolsOpen}
@@ -6638,7 +6622,7 @@ function CadFileViewSurface({
                 key={`mesh:${selectedKey}`}
                 open={fileSheetOpen}
                 title={statusOnlyFileSheetTitle(selectedEntrySourceFormat)}
-                isDesktop={isDesktop}
+                isDesktop={isWideLayout}
                 width={activeSheetWidth || tabToolsWidth}
                 selectedEntry={selectedEntry}
                 onOpenChange={setTabToolsOpen}
@@ -6697,7 +6681,6 @@ function CadFileViewSurface({
     </HostReferenceContext.Provider>
     </FileSheetPortalContext.Provider>
     </HostPanelSlotContext.Provider>
-    </TutorialTipsContext.Provider>
     </FileSheetTabPreferencesContext.Provider>
   );
 }

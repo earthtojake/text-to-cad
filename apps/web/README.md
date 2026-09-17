@@ -14,7 +14,7 @@ selection/measurements/tools, inspector layout and responsive behavior.
 
 **Owns:** URL selection, browser history, document title/appearance, catalog
 file-source adapter, browser persistence, and this app's top bar/release links.
-`src/App.tsx` composes FileViewer with the shared CAD renderer. The catalog
+`src/App.tsx` composes an explicit `ViewerHost` and the shared CAD renderer. The catalog
 continues to expose CAD artifacts only; this migration adds no file types or
 write endpoints to the web app.
 
@@ -27,6 +27,7 @@ src/
   App.tsx               FileViewer browser host and renderer registration
   main.tsx              host/client bootstrap and cleanup
   adapters/             read-only catalog file source and capabilities
+  host/                 browser clipboard, prompt delivery and page lifecycle
   persistence/          root-scoped view state and legacy preference migration
   client/               app top bar, browser navigation and styling
   shared/               app build/runtime configuration helpers
@@ -212,3 +213,26 @@ polls its identity and reloads when the same endpoint is ready. Installed wheels
 report `autoReload: false` and never enter that loop. Vite 8 handles client HMR,
 uses compiled workspace exports and honors an explicit `PORT` while retaining
 strict port binding. React 19 is deduplicated with the shared packages.
+
+Prompt actions prepare clipboard content for an external composer. References
+use the complete served-root path and canonical selector grammar, rather than a
+display filename suffix. Image writes begin during the user gesture with a
+pending PNG Blob. A mixed text/image copy reports separate representations and
+warns that some receivers paste only one; unsupported combinations fail without
+silently copying a subset. No receipt claims that another app pasted or sent the
+content. Bundles accept at most 128 parts and one PNG up to 20 MiB; image support
+is advertised only when the browser exposes image clipboard writes. Failed
+operations can be retried, while recent successful operation IDs prevent repeated
+writes. Clipboard operations, page exit publication and development reload live
+under `src/host`; shared UI receives their explicit ports. The browser file source
+continues to expose no general write operations.
+
+### File storage and host actions
+
+The web `FileSource` is a read-only CAD catalog. It exposes stat, directory
+listing and path search without text writes or native filesystem mutations.
+Catalog content/revision changes are distinct from transient metadata progress,
+so progress updates do not restart a prepared document. Native path copying and
+Copy reference live in the separate host actions adapter. Reference delivery
+uses the injected prompt port with the served workspace identity; ordinary path
+copying uses the clipboard port and retains the existing feedback labels.

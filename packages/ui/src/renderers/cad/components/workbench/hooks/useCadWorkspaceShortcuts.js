@@ -1,8 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { isEditableTarget } from "../../../ui/dom.js";
 import { TAB_TOOL_MODE } from "../../../workbench/constants.js";
 
 export function useCadWorkspaceShortcuts({
+  viewerElement,
   selectionActive = false,
   onClearSelection = null,
   copyStatus,
@@ -29,6 +30,12 @@ export function useCadWorkspaceShortcuts({
   setFilesPanelOpen,
   setTabToolMode
 }) {
+  const pointerInside = useRef(false);
+  useEffect(() => {
+    const onPointerDown = event => { pointerInside.current = Boolean(viewerElement?.current?.contains(event.target)); };
+    window.addEventListener('pointerdown', onPointerDown, true);
+    return () => window.removeEventListener('pointerdown', onPointerDown, true);
+  }, [viewerElement]);
   useEffect(() => {
     if (!(copyStatus || screenshotStatus)) {
       return undefined;
@@ -46,6 +53,13 @@ export function useCadWorkspaceShortcuts({
     }
 
     const handleKeyDown = (event) => {
+      const element = viewerElement?.current;
+      if (!element) return;
+      const target = event.target;
+      const inViewer = target instanceof Node && element.contains(target);
+      const background = target === document.body || target === document || target === window;
+      const focus = document.activeElement;
+      if (!inViewer && !(background && pointerInside.current && (focus === document.body || (focus && element.contains(focus))))) return;
       if (
         !event.defaultPrevented &&
         !isEditableTarget(event.target) &&
@@ -111,6 +125,7 @@ export function useCadWorkspaceShortcuts({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [
+    viewerElement,
     selectionActive,
     onClearSelection,
     drawingRedoStackRef,

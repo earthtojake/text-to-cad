@@ -4,6 +4,7 @@ import { FileViewer } from '@hardcore/ui/file-viewer';
 import type { FileSource, FileViewerState } from '@hardcore/ui/file-viewer';
 import { createCadClient } from '@hardcore/core/client';
 import { createCadPreferences, createCadRenderer } from '@hardcore/ui/renderers/cad';
+import type { ViewerHost } from '@hardcore/ui/host';
 import type { CadCommands } from '@hardcore/ui/renderers/cad';
 
 const captures: { file: string; size: number; type: string; references: unknown }[] = [];
@@ -13,6 +14,11 @@ function workspace(id: string) {
   const listeners = new Set<() => void>();
   const commands = {
     getSnapshot: () => snapshot,
+    acknowledge(kind: keyof CadCommands, key: string | number) {
+      if (snapshot[kind]?.key !== key) return;
+      snapshot = { ...snapshot, [kind]: null };
+      for (const listener of listeners) listener();
+    },
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
   };
   const capture = () => { snapshot = { captureRequest: { key: Date.now() } }; for (const listener of listeners) listener(); };
@@ -22,8 +28,17 @@ function workspace(id: string) {
     stat: async (path) => ({ path, name: path, kind: 'file', size: 400, extension: 'stl' }),
     list: async () => [{ path: 'part.stl', name: 'part.stl', kind: 'file' }]
   };
-  const renderers = [createCadRenderer({ client, preferences, commands, onCapture: ({ blob, file, references }) => captures.push({ file, size: blob.size, type: blob.type, references }) })];
-  return { client, source, renderers, capture };
+  const destination = { kind: 'composer' as const, available: true };
+  const host: ViewerHost = { files: source, navigation: { openFile() {} }, environment: { colorScheme: 'dark' },
+    clipboard: { writeText: async () => {}, readText: async () => '', writeImage: async () => {} },
+    promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver: async context => {
+      const attachment = context.parts.find(part => part.kind === 'attachment');
+      if (attachment?.kind === 'attachment') { const blob = await attachment.content; captures.push({ file: 'part.stl', size: blob.size, type: blob.type, references: context.parts.filter(part => part.kind === 'reference').map(part => part.reference) }); }
+      return { status: 'added', partIds: context.parts.map(part => part.id) };
+    } }
+  };
+  const renderers = [createCadRenderer({ client, preferences, commands })];
+  return { client, source, host, renderers, capture };
 }
 const a = workspace('one'), b = workspace('two');
 // Directory navigation hydrates before a renderer mounts. Large workspaces
@@ -37,10 +52,10 @@ function App() {
   Object.assign(window, { cadHarness: { state, otherState, preferences, captures, capture: a.capture, second: setSecond, mounted: setMounted } });
   return <div style={{ display: 'flex', width: '1200px', height: '720px' }}>
     <section data-testid="one" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-      {mounted && <FileViewer file="part.stl" source={a.source} renderers={a.renderers} state={state} onStateChange={setState} onOpenFile={() => {}} />}
+      {mounted && <FileViewer file="part.stl" host={a.host} renderers={a.renderers} state={state} onStateChange={setState} />}
     </section>
     {second && <section data-testid="two" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-      <FileViewer file="part.stl" source={b.source} renderers={b.renderers} state={otherState} onStateChange={setOtherState} onOpenFile={() => {}} />
+      <FileViewer file="part.stl" host={b.host} renderers={b.renderers} state={otherState} onStateChange={setOtherState} />
     </section>}
   </div>;
 }

@@ -2,7 +2,7 @@
 // Rollup's tree-shaking and drags the whole renderer (~730 kB) into every
 // bundle that reaches this module -- which includes the GLB and surf WORKERS,
 // where nothing else needs three at all. Three classes are all this file uses.
-import { AnimationMixer, Box3, Group, LoopOnce, Matrix3, Matrix4, Vector3 } from "three";
+import { AnimationMixer, LoadingManager, Box3, Group, LoopOnce, Matrix3, Matrix4, Vector3 } from "three";
 
 const GLB_CAD_UNIT_SCALE = 1000;
 const GENERATED_STEP_DEFAULT_BASE_COLOR = Object.freeze([0.72, 0.72, 0.72, 1]);
@@ -494,8 +494,38 @@ function buildMeshDataFromGltf(gltf) {
   };
 }
 
-function parseGlb(GLTFLoader, decoder, buffer) {
-  const loader = new GLTFLoader();
+async function parseGlb(GLTFLoader, decoder, buffer, { resources, sourceUrl = "", signal } = {}) {
+  const manager = new LoadingManager();
+  const urls = new Map();
+  if (resources) {
+    const view = new DataView(buffer);
+    const binary = buffer.byteLength >= 20 && view.getUint32(0, true) === 0x46546c67;
+    const jsonBytes = binary ? new Uint8Array(buffer, 20, view.getUint32(12, true)) : new Uint8Array(buffer);
+    const document = JSON.parse(new TextDecoder().decode(jsonBytes));
+    const references = [...new Set([...(document.buffers || []), ...(document.images || [])]
+      .map(item => item.uri).filter(uri => typeof uri === "string" && !uri.startsWith("data:")))];
+    let next = 0;
+    try {
+      const transfers = await Promise.allSettled(Array.from({ length: Math.min(6, references.length) }, async () => {
+        while (next < references.length) {
+          const reference = references[next++];
+          const url = resources.resolveDependency(sourceUrl, reference);
+          const bytes = await resources.readBytes(url, { signal, maxBytes: 64 * 1024 * 1024 });
+          signal?.throwIfAborted();
+          urls.set(reference, URL.createObjectURL(new Blob([bytes])));
+        }
+      }));
+      const failed = transfers.find(result => result.status === "rejected");
+      if (failed) throw failed.reason;
+    } catch (error) { for (const url of urls.values()) URL.revokeObjectURL(url); throw error; }
+    manager.setURLModifier(url => {
+      if (urls.has(url)) return urls.get(url);
+      if (url.startsWith("data:") || url.startsWith("blob:")) return url;
+      throw new Error(`Unresolved glTF dependency: ${url}`);
+    });
+    if (!binary) buffer = new TextDecoder().decode(buffer);
+  }
+  const loader = new GLTFLoader(manager);
   // Render-artifact packages are written with EXT_meshopt_compression, which is what makes a
   // 66 MB mesh ship at a few MB. It is a REQUIRED extension, so without the decoder
   // registered GLTFLoader rejects the file outright -- registering it here rather than at each
@@ -504,9 +534,8 @@ function parseGlb(GLTFLoader, decoder, buffer) {
   if (decoder) {
     loader.setMeshoptDecoder(decoder);
   }
-  return new Promise((resolve, reject) => {
-    loader.parse(buffer, "", resolve, reject);
-  });
+  try { return await new Promise((resolve, reject) => { loader.parse(buffer, "", resolve, reject); }); }
+  finally { for (const url of urls.values()) URL.revokeObjectURL(url); }
 }
 
 /** meshoptimizer's decoder, ready to hand to GLTFLoader. Loaded once per realm. */
@@ -529,12 +558,12 @@ function loadMeshoptDecoder() {
   return meshoptDecoderPromise;
 }
 
-export async function buildMeshDataFromGlbBuffer(buffer) {
+export async function buildMeshDataFromGlbBuffer(buffer, options) {
   const [{ GLTFLoader }, decoder] = await Promise.all([
     import("three/examples/jsm/loaders/GLTFLoader.js"),
     loadMeshoptDecoder(),
   ]);
-  const gltf = await parseGlb(GLTFLoader, decoder, buffer);
+  const gltf = await parseGlb(GLTFLoader, decoder, buffer, options);
   return buildMeshDataFromGltf(gltf);
 }
 
@@ -624,12 +653,12 @@ function sampledAnimatedBounds(scene, clips, cadRootMatrix) {
  * path for picking and matte CAD presentation; the native hierarchy remains
  * document-owned so Render can retain its textures and PBR materials.
  */
-export async function buildGlbDocumentFromBuffer(buffer) {
+export async function buildGlbDocumentFromBuffer(buffer, options) {
   const [{ GLTFLoader }, decoder] = await Promise.all([
     import("three/examples/jsm/loaders/GLTFLoader.js"),
     loadMeshoptDecoder(),
   ]);
-  const gltf = await parseGlb(GLTFLoader, decoder, buffer);
+  const gltf = await parseGlb(GLTFLoader, decoder, buffer, options);
   try {
     const clips = playableGlbAnimationClips(gltf);
     const cadRootMatrix = nativeCadRootMatrix(gltf);

@@ -72,3 +72,9 @@ test("cached metadata is private on read and failures never become reusable resu
   assert.equal(cache.get("failure"), null);
   assert.equal(cache.get("pending"), null);
 });
+
+test('resource service generations isolate completed recognition', () => {
+  const identity = {surfaceInput:'same',surfaceObject:'same'};
+  const a = {cacheKey: () => 'root:a:generation:1'}, b = {cacheKey: () => 'root:a:generation:2'};
+  assert.notEqual(modelingRecognitionKey(identity, '', {resources:a}), modelingRecognitionKey(identity, '', {resources:b}));
+});

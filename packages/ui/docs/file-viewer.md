@@ -8,15 +8,14 @@ from the separate `@hardcore/ui/renderers/*` entry points.
 ```tsx
 <FileViewer
   file={selectedPath}
-  source={fileSource}
+  host={viewerHost}
   renderers={registeredRenderers}
   state={viewState}
   onStateChange={persistViewState}
-  onOpenFile={(path, options) => navigate(path, options?.target)}
-  appearance={{ colorScheme }}
 />
 ```
 
+See [ViewerHost](viewer-host.md) for required host services and prompt delivery.
 Create sources and registration arrays at their owning workspace or tab
 lifetime. Changing their object identity cancels outstanding document work.
 `source.id` is a stable root identity, independent of a server's temporary port.
@@ -26,13 +25,15 @@ per source identity. Its `renderers` section uses encoded file-path/renderer-ID
 pairs, while `panel`, `panelWidth`, and `expandedDirectories` describe chrome.
 
 The source provides metadata and optional directory, text, asset, and write
-operations. Optional action callbacks determine which entry-menu items appear.
+operations. Storage methods and separate native `host.fileActions` capabilities determine
+which entry-menu items appear.
 Rename and create fields, menu focus, and panel switching remain in FileViewer;
 the host performs the operation and can update other tabs affected by it.
 The `leading` slot can label a host-specific root, such as a worktree.
 
-Sources receive an `AbortSignal` for each read and write. Noncancellable host
-transports must still check that signal before returning an answer. Each
+Sources receive an `AbortSignal` for each read and write. Noncancellable reads
+still check the signal before returning. Writes and mutations report committed
+receipts even if the caller cancels after dispatch; cancellation is not rollback. Each
 successful `readAsset` returns a URL and its `release()` lease. A renderer must
 return that release function as its prepared document's `dispose`; FileViewer
 releases it on navigation, reload, cancellation, and unmount.

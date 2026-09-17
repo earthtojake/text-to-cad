@@ -3,6 +3,7 @@ import type { FileViewerState, JsonValue } from '@hardcore/ui/file-viewer';
 import type { CadEntry } from '@hardcore/core/client';
 import { readFileSessionState } from '@hardcore/ui/renderers/cad/state';
 import { cadWorkspaceDefaultFileSheetWidthForViewport, readCadDirectorySessionState } from '../client/workbench/persistence.js';
+import { mergeChangedRecords } from './statePatch';
 
 const keyFor = (rootId: string) => `hardcore:file-viewer:v1:${encodeURIComponent(rootId)}`;
 export function readViewState(rootId: string, storage: Storage = sessionStorage): FileViewerState {
@@ -26,8 +27,17 @@ export function readViewState(rootId: string, storage: Storage = sessionStorage)
     };
   } catch { return defaults; }
 }
-export function writeViewState(rootId: string, viewer: FileViewerState, storage: Storage = sessionStorage): void {
-  try { storage.setItem(keyFor(rootId), JSON.stringify(viewer)); } catch { /* Storage failure does not prevent viewing. */ }
+export function writeViewState(rootId: string, viewer: FileViewerState, storage: Storage = sessionStorage, baseline?: FileViewerState): void {
+  try {
+    if (!baseline) { storage.setItem(keyFor(rootId), JSON.stringify(viewer)); return; }
+    const latest = readViewState(rootId, storage);
+    const next = { ...latest };
+    if (viewer.panel !== baseline.panel) next.panel = viewer.panel;
+    if (viewer.panelWidth !== baseline.panelWidth) next.panelWidth = viewer.panelWidth;
+    if (JSON.stringify(viewer.expandedDirectories) !== JSON.stringify(baseline.expandedDirectories)) next.expandedDirectories = viewer.expandedDirectories;
+    next.renderers = mergeChangedRecords(latest.renderers ?? {}, baseline.renderers ?? {}, viewer.renderers ?? {});
+    storage.setItem(keyFor(rootId), JSON.stringify(next));
+  } catch { /* Storage failure does not prevent viewing. */ }
 }
 /** Old web sessions used this origin's sessionStorage, with the default namespace. */
 export function restoreCadFileStates(state: FileViewerState, entries: CadEntry[], storage: Storage = sessionStorage): FileViewerState {

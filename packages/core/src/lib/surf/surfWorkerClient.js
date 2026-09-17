@@ -10,6 +10,8 @@
 import {
   TessellationCacheProbeMissError,
   tessellationOptionsCacheable,
+  decodeComponentTessellation,
+  surfIndexFromCacheEntry,
 } from "./tessellationCache.js";
 
 import { PERF_MEASURE_NAMES, perfMeasure, perfStart } from "../viewer/perfMarks.js";
@@ -136,11 +138,22 @@ function dispatchQueuedRequests() {
         slot.requestId = id;
         request.slot = slot;
         nextWorkerIndex = (index + 1) % currentPool.length;
-        try {
-          slot.worker.postMessage(request.message, request.transfer);
-        } catch (error) {
-          handleWorkerError(slot, error);
-        }
+        const post = resource => {
+          if (pendingRequests.get(id) !== request || request.slot !== slot) return;
+          if (resource) {
+            request.message.resource = resource;
+            if (resource.kind === "bytes") request.transfer.push(resource.bytes);
+          }
+          try { slot.worker.postMessage(request.message, request.transfer); }
+          catch (error) { handleWorkerError(slot, error); }
+        };
+        // A custom provider may produce bytes. Acquire them only after a worker
+        // slot is reserved, never for every queued component at once.
+        if (request.prepareResource) {
+          Promise.resolve().then(request.prepareResource).then(post, error => {
+            if (pendingRequests.get(id) === request && request.slot === slot) handleWorkerError(slot, error);
+          });
+        } else post();
       }
       // Sequential refinement needs one isolate. Grow only for ready work
       // that existing slots cannot start, never merely for a cache waiter.
@@ -366,12 +379,15 @@ export function releaseSurfWorkerPoolWhenIdle() {
 
 export function loadSurfComponentInWorker(url, {
   signal,
+  resources,
   tessellation,
   identity,
   capabilities: rawCapabilities,
   memoryEstimateBytes,
   tessellationCache,
 } = {}) {
+  const resourceSignal = resources?.signal;
+  signal = signal && resourceSignal ? AbortSignal.any([signal, resourceSignal]) : signal || resourceSignal;
   const capabilities = normalizeCapabilities(rawCapabilities);
   const workers = ensurePool();
   if (!workers) {
@@ -431,16 +447,24 @@ export function loadSurfComponentInWorker(url, {
         : null,
     });
     signal?.addEventListener?.("abort", abort, { once: true });
-    const post = (cachedEntry) => {
+    const fail = error => {
+      const request = pendingRequests.get(id);
+      if (!request) return;
+      pendingRequests.delete(id); request.cleanup(); request.reject(error);
+      dispatchQueuedRequests(); releaseDeferredPoolIfIdle(request.poolGeneration);
+    };
+    const post = (cachedEntry, resource, prepareResource = null) => {
       const request = pendingRequests.get(id);
       if (!request) {
         return; // aborted while the cache lookup was in flight
       }
+      request.prepareResource = prepareResource;
       request.cacheHit = Boolean(cachedEntry);
       request.message = {
         type: "loadSurf",
         id,
         url,
+        ...(resource ? { resource } : {}),
         capabilities,
         ...(tessellation ? { tessellation } : {}),
         ...(cacheable ? { cacheIdentity: { surfaceInput, surfaceObject } } : {}),
@@ -450,32 +474,30 @@ export function loadSurfComponentInWorker(url, {
       request.transfer = cachedEntry && cachedEntry.buffer.byteLength === cachedEntry.byteLength
         ? [cachedEntry.buffer]
         : [];
+      if (resource?.kind === "bytes") request.transfer.push(resource.bytes);
       request.ready = true;
       dispatchQueuedRequests();
+    };
+    const ready = cachedEntry => {
+      if (!resources) { post(cachedEntry, { kind: "url", url }); return; }
+      // Validate the display header before omitting an exact-resource ticket.
+      // Warm render-only cache hits retain their zero-surface-read path.
+      const completeDisplay = cachedEntry && !capabilities.selectors && surfIndexFromCacheEntry(decodeComponentTessellation(cachedEntry, {
+        surfaceInput, surfaceObject, tessellation: tessellation || {},
+      }));
+      if (completeDisplay) { post(cachedEntry); return; }
+      post(cachedEntry, null, () => resources.workerTicket(url, { signal }));
     };
     if (cacheable) {
       tessellationCache.getCachedEntryBytes(surfaceInput, tessellation || {}, {
         signal,
         probe: identity?.tessellationProbe || null,
         strictProbe,
-      }).then(post, (error) => {
-        const request = pendingRequests.get(id);
-        if (!request) return;
-        pendingRequests.delete(id);
-        request.cleanup();
-        request.reject(error);
-        dispatchQueuedRequests();
-        releaseDeferredPoolIfIdle(request.poolGeneration);
-      });
+      }).then(ready, fail);
     } else if (strictProbe) {
-      const request = pendingRequests.get(id);
-      pendingRequests.delete(id);
-      request?.cleanup();
-      request?.reject(new TessellationCacheProbeMissError(identity.tessellationProbe));
-      dispatchQueuedRequests();
-      releaseDeferredPoolIfIdle(request?.poolGeneration);
+      fail(new TessellationCacheProbeMissError(identity.tessellationProbe));
     } else {
-      post(null);
+      ready(null);
     }
   });
 }

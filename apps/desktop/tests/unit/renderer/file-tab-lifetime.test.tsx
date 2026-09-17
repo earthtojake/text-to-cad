@@ -30,7 +30,7 @@ beforeEach(() => {
   useExplorer.setState({ projectId: project.id, root: null, tabs: [], activeId: null, ready: true, trees: {}, panelWidth: 248 });
   stub("stat", async () => ({ path: "notes.txt", name: "notes.txt", kind: "file", fileKind: "text", extension: "txt", size: 8 }));
   stub("readText", async () => ({ content: "original", revision: "r1" }));
-  stub("writeText", async ({ content }: { content: string }) => ({ content, revision: "r2" }));
+  stub("writeText", async ({ content }: { content: string }) => ({ status: "saved", document: { content, revision: "r2" } }));
   stub("list", async () => []);
   stub("watch", async () => ({}));
   stub("unwatch", async () => ({}));

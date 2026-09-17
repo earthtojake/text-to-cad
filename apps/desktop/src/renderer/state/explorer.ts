@@ -1,7 +1,9 @@
 import { FILE_PANEL_TREE, PANEL_DEFAULT_WIDTH, clampPanelWidth } from "@hardcore/ui/navigation";
 import { create } from "zustand";
 
-import type { DirEntry } from "@shared/ipc/explorer";
+import { reconcileFileTree, movedFilePath } from "@hardcore/ui/file-viewer";
+import { viewerFileChange } from "@renderer/features/explorer/file-changes";
+import type { DirEntry, FileChange } from "@shared/ipc/explorer";
 import { PANE_LIMITS } from "@shared/types";
 import type {
   BrowserTab,
@@ -185,6 +187,7 @@ type ExplorerState = {
   fsRevision: number;
   /** Paths touched by the last batch, and the root they are under, so an open editor knows it is stale. */
   changedPaths: string[];
+  changedEntries: FileChange[];
   changedRoot: ExplorerRoot;
   /**
    * A path an agent asked to have revealed (`reveal` through the Hardcore MCP
@@ -198,14 +201,14 @@ type ExplorerState = {
    * link twice a second selection. Consumed by `CadRenderer`, which hands it
    * to the viewer's `selectReference` prop.
    */
-  cadSelection: { tabId: string; selector: string; nonce: number } | null;
+  cadSelection: { projectId: string; tabId: string; path: string; root: ExplorerRoot; selector: string; nonce: number } | null;
   /**
    * A request for a CAD tab to send its viewport to the composer — the
    * composer's `+` menu asking for the same picture the viewer's own camera
    * button takes. Nonce-keyed like `cadSelection`, so asking twice is two
    * captures, and consumed by `CadRenderer` as the viewer's `captureRequest`.
    */
-  cadCapture: { tabId: string; nonce: number } | null;
+  cadCapture: { projectId: string; tabId: string; path: string; root: ExplorerRoot; nonce: number } | null;
 
   bindProject: (projectId: string | null, root?: ExplorerRoot) => Promise<void>;
   /**
@@ -240,7 +243,7 @@ type ExplorerState = {
   setTreeOpen: (root: ExplorerRoot, next: (current: ReadonlySet<string>) => ReadonlySet<string>) => void;
   /** File one directory's listing in a root's tree. */
   setTreeListing: (root: ExplorerRoot, directory: string, entries: DirEntry[]) => void;
-  receiveChanges: (projectId: string, root: ExplorerRoot, paths: string[]) => void;
+  receiveChanges: (projectId: string, root: ExplorerRoot, changes: FileChange[]) => void;
   setReveal: (reveal: { path: string; directory: boolean; root: ExplorerRoot } | null) => void;
   /**
    * Expand the tree to `path` and select it without opening it — an agent's
@@ -251,8 +254,12 @@ type ExplorerState = {
   selectCadReference: (tabId: string, selector: string) => void;
   /** Ask a CAD tab for a capture of what it is showing. */
   captureCad: (tabId: string) => void;
+  acknowledgeCadCommand: (kind: "selectReference" | "captureRequest", nonce: string | number) => void;
 };
 
+// A committed mutation is broadcast and also returned to its caller. Bound
+// receipt deduplication so a delayed reply cannot apply the same rename twice.
+const appliedMutations = new Set<string>();
 let sequence = 0;
 const nextId = () => `tab-${Date.now().toString(36)}-${++sequence}`;
 
@@ -283,6 +290,29 @@ function blankTab(
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingSave: { projectId: string; tabs: ExplorerTab[] } | null = null;
+const savingProjects = new Map<string, Promise<void>>();
+let bindingSequence = 0;
+let cadCommandSequence = 0;
+
+/** Flush the outgoing snapshot; another project's loading never waits for it. */
+function flushTabSave(): void {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = null;
+  const snapshot = pendingSave;
+  pendingSave = null;
+  if (!snapshot) return;
+  const write = async () => { await window.hardcore.explorer.saveTabs(snapshot); };
+  const previous = savingProjects.get(snapshot.projectId);
+  const saving = (previous ? previous.then(write) : write()).catch(() => {
+    // Persistence is a convenience; a failed write must not take the strip
+    // down or prevent the next save/load for this project.
+  });
+  savingProjects.set(snapshot.projectId, saving);
+  void saving.then(() => {
+    if (savingProjects.get(snapshot.projectId) === saving) savingProjects.delete(snapshot.projectId);
+  });
+}
 
 /**
  * One tab per file per root. Whatever produced the list — an open, a
@@ -322,20 +352,21 @@ function commit(
 ) {
   const unique = dedupeFileTabs(tabs, activeId);
   const ordered = unique.tabs.map((tab, order) => ({ ...tab, order }) as ExplorerTab);
-  set({ tabs: ordered, activeId: unique.activeId });
+  const current = useExplorer.getState();
+  const stillTargets = (command: ExplorerState["cadCapture"]) => command && command.projectId === projectId
+    && command.tabId === unique.activeId && ordered.some(tab => tab.kind === "file"
+      && tab.id === command.tabId && tab.path === command.path && tab.root === command.root);
+  set({ tabs: ordered, activeId: unique.activeId,
+    cadSelection: stillTargets(current.cadSelection) ? current.cadSelection : null,
+    cadCapture: stillTargets(current.cadCapture) ? current.cadCapture : null });
   if (!projectId) {
     return;
   }
   if (saveTimer) {
     clearTimeout(saveTimer);
   }
-  saveTimer = setTimeout(() => {
-    saveTimer = null;
-    void window.hardcore.explorer.saveTabs({ projectId, tabs: ordered }).catch(() => {
-      // Persistence is a convenience; a failed write must not take the strip
-      // the person is looking at down with it.
-    });
-  }, SAVE_DEBOUNCE_MS);
+  pendingSave = { projectId, tabs: ordered };
+  saveTimer = setTimeout(flushTabSave, SAVE_DEBOUNCE_MS);
 }
 
 /** The watcher for one root, started and stopped with the binding. */
@@ -359,6 +390,7 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
   trees: {},
   fsRevision: 0,
   changedPaths: [],
+  changedEntries: [],
   changedRoot: null,
   reveal: null,
   cadSelection: null,
@@ -371,11 +403,9 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
       }
       return;
     }
-    // A pending save belongs to the project being left, not the one arriving.
-    if (saveTimer) {
-      clearTimeout(saveTimer);
-      saveTimer = null;
-    }
+    // Keep the departing project's edits even when its debounce has not fired.
+    flushTabSave();
+    const binding = ++bindingSequence;
     const previous = get().projectId;
     if (previous && previous !== projectId) {
       unwatch(previous, get().root);
@@ -387,9 +417,11 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
       activeId: null,
       ready: false,
       changedPaths: [],
+      changedEntries: [],
       changedRoot: null,
       reveal: null,
       cadSelection: null,
+      cadCapture: null,
       // Each project keeps its own answer to "is the pane worth the width".
       // Without a project there is no pane at all (`Shell`), and closed is
       // the state it comes back to when one arrives.
@@ -406,13 +438,19 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     // root, the build daemon — so the first CAD file finds them up
     // (src/main/cad/index.ts, `warmCad`). Nothing waits on it.
     void window.hardcore.cad.warm({ projectId, ...(root ? { root } : {}) }).catch(() => {});
+    const loadTabs = async () => {
+      const saving = savingProjects.get(projectId);
+      if (saving) await saving;
+      if (binding !== bindingSequence) return [] as ExplorerTab[];
+      return window.hardcore.explorer.loadTabs({ projectId }).catch(() => [] as ExplorerTab[]);
+    };
     const [tabs] = await Promise.all([
-      window.hardcore.explorer.loadTabs({ projectId }).catch(() => [] as ExplorerTab[]),
+      loadTabs(),
       watch(projectId, root),
     ]);
     // A slower load for a project the user has already navigated away from
     // must not overwrite the one they are looking at.
-    if (get().projectId !== projectId) {
+    if (binding !== bindingSequence || get().projectId !== projectId) {
       return;
     }
     // A strip written by an older build may hold two tabs for one file.
@@ -517,12 +555,14 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     }
   },
 
-  setActive: (activeId) => set({ activeId }),
+  setActive: (activeId) => set(state => ({ activeId,
+    cadSelection: state.cadSelection?.tabId === activeId ? state.cadSelection : null,
+    cadCapture: state.cadCapture?.tabId === activeId ? state.cadCapture : null })),
 
   selectIndex: (index) => {
     const tab = get().tabs[index - 1];
     if (tab) {
-      set({ activeId: tab.id });
+      get().setActive(tab.id);
     }
   },
 
@@ -623,17 +663,49 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     set({ reveal: { path, directory, root } });
   },
 
-  selectCadReference: (tabId, selector) =>
-    set((state) => ({ cadSelection: { tabId, selector, nonce: (state.cadSelection?.nonce ?? 0) + 1 } })),
+  selectCadReference: (tabId, selector) => set(state => {
+    const tab = state.tabs.find(tab => tab.id === tabId);
+    if (!state.projectId || state.activeId !== tabId || tab?.kind !== "file" || !tab.path) return state;
+    return { cadSelection: { projectId: state.projectId, tabId, path: tab.path, root: tab.root, selector, nonce: ++cadCommandSequence } };
+  }),
 
-  captureCad: (tabId) =>
-    set((state) => ({ cadCapture: { tabId, nonce: (state.cadCapture?.nonce ?? 0) + 1 } })),
+  captureCad: (tabId) => set(state => {
+    const tab = state.tabs.find(tab => tab.id === tabId);
+    if (!state.projectId || state.activeId !== tabId || tab?.kind !== "file" || !tab.path) return state;
+    return { cadCapture: { projectId: state.projectId, tabId, path: tab.path, root: tab.root, nonce: ++cadCommandSequence } };
+  }),
 
-  receiveChanges: (projectId, root, paths) => {
-    if (get().projectId !== projectId) {
-      return;
+  acknowledgeCadCommand: (kind, nonce) => set(state => {
+    if (kind === "selectReference") return state.cadSelection?.nonce === nonce ? { cadSelection: null } : state;
+    return state.cadCapture?.nonce === nonce ? { cadCapture: null } : state;
+  }),
+
+  receiveChanges: (projectId, root, changes) => {
+    if (get().projectId !== projectId) return;
+    changes = changes.filter(change => {
+      if (!change.mutationId) return true;
+      const key = JSON.stringify([projectId, root, change.mutationId]);
+      if (appliedMutations.has(key)) return false;
+      appliedMutations.add(key);
+      while (appliedMutations.size > 256) appliedMutations.delete(appliedMutations.values().next().value!);
+      return true;
+    });
+    if (!changes.length) return;
+    const paths = [...new Set(changes.flatMap(change => change.kind === "moved" ? [change.previousPath, change.path] : [change.path]))];
+    // Publish identity changes before updating tab paths, so mounted documents
+    // can carry an unsaved draft to the new name. Keep all cached descendants.
+    set((state) => {
+      const key = treeKey(root), tree = state.trees[key] ?? EMPTY_TREE;
+      const next = reconcileFileTree(tree.listings, [...tree.open], changes.map(viewerFileChange));
+      return { fsRevision: state.fsRevision + 1, changedPaths: paths, changedEntries: changes, changedRoot: root,
+        trees: { ...state.trees, [key]: { open: new Set(next.expanded), listings: Object.fromEntries(Object.entries(next.listings).map(([directory, entries]) => [directory, [...entries]])) } } };
+    });
+    for (const change of changes) if (change.kind === "moved") {
+      for (const tab of get().tabs) if (tab.kind === "file" && tab.root === root && tab.path !== null) {
+        const moved = movedFilePath(tab.path, change.previousPath, change.path);
+        if (moved !== tab.path) get().update(tab.id, { path: moved });
+      }
     }
-    set((state) => ({ fsRevision: state.fsRevision + 1, changedPaths: paths, changedRoot: root }));
   },
 }));
 

@@ -1,6 +1,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
+import { createHttpCadResourceProvider } from '@hardcore/core/client';
 import { entryHasDisplayEdges, entryHasMesh, entryHasReferences } from '@hardcore/core/lib/entryAssets.js';
 import { renderAssetCacheStats } from '@hardcore/core/lib/renderAssetClient.js';
 import { createTessellationCache, encodeComponentTessellation, tessellationPayloadFacts,
@@ -24,7 +25,9 @@ function entry(name: string, kind = 'stl') {
   return { file: `${name}.${kind}`, kind, hash: name, url: `https://cad-assets.test/${name}.${kind}` };
 }
 
-function assets(initialEntry: ReturnType<typeof entry>, client = {}, tessellationCache = {}) {
+let defaultClient = {};
+function assets(initialEntry: ReturnType<typeof entry>, client = defaultClient, tessellationCache = {}) {
+  client.resources ||= createHttpCadResourceProvider();
   return useCadAssets({ initialEntry, client, tessellationCache,
     entryHasMesh, entryHasReferences, entryHasDisplayEdges,
     buildNormalizedReferenceState: () => null });
@@ -32,6 +35,7 @@ function assets(initialEntry: ReturnType<typeof entry>, client = {}, tessellatio
 
 afterEach(() => {
   cleanup();
+  defaultClient = {};
   completedPackages.clear();
   viewerMemoryPolicy.reset();
   vi.unstubAllGlobals();

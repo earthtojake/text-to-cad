@@ -409,3 +409,75 @@ test("reopening a many-component STEP reuses its backend and every prepared body
     page.off("requestfailed", finishRequest);
   }
 });
+
+test("prompt actions preserve the draft, native clipboard and captured selection without sending", async () => {
+  test.setTimeout(150_000);
+  const previousClipboard = await app.evaluate(({ clipboard }) => ({
+    text: clipboard.readText(), html: clipboard.readHTML(), rtf: clipboard.readRTF(),
+    image: clipboard.readImage().toDataURL(),
+  }));
+  try {
+    const added = await page.evaluate(root => window.hardcore.projects.addPath({ path: root }), project);
+    const session = await page.evaluate(projectId => window.hardcore.sessions.create({
+      projectId, agentId: "claude-code", gitMode: "none",
+    }), added.id);
+    await page.locator(`[data-session-row="${session.id}"]`).getByRole("button").first().click();
+    const draft = page.getByPlaceholder("Do anything");
+    await draft.fill("Keep this draft intact.");
+    await selectOrOpenFile("part.step");
+    await expectCadReady("part.step");
+    const model = page.getByRole("list", { name: "Model", exact: true });
+    // This single-component import exposes its model root as a whole-resource
+    // selection. Exercise that identity explicitly rather than assuming o1.
+    const row = model.getByRole("button", { name: "Select part.step", exact: true });
+    await row.click();
+    await expect(page.locator("[data-reference-tip]")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(row).toHaveAttribute("aria-pressed", "false");
+    await row.click();
+    await expect(row).toHaveAttribute("aria-pressed", "true");
+
+    await row.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Copy Reference", exact: true }).click();
+    const copiedReference = await app.evaluate(({ clipboard }) => clipboard.readText());
+    // Core's ordinary CAD copy grammar uses a trailing # for the whole file;
+    // the prompt serializer renders the same whole-resource identity as a file.
+    expect(copiedReference).toBe("part.step#");
+    const chips = page.locator("[data-composer] [data-reference-chip]");
+    await expect(chips).toHaveCount(0);
+    await expect(draft).toHaveText("Keep this draft intact.");
+
+    await page.getByRole("button", { name: "Add to prompt", exact: true }).click();
+    await expect(chips).toHaveCount(1);
+    await expect(chips).toHaveAttribute("data-file", "part.step");
+    const selector = await chips.getAttribute("data-selector");
+    expect(selector).toBe("");
+    expect(copiedReference).toBe(`part.step#${selector}`);
+    await expect(draft).toContainText("Keep this draft intact.");
+    await expect(draft).toBeFocused();
+    expect(await app.evaluate(({ clipboard }) => clipboard.readText())).toBe(copiedReference);
+
+    await page.getByRole("button", { name: "Capture", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Copy screenshot", exact: true }).click();
+    await expect.poll(() => app.evaluate(({ clipboard }) => {
+      const image = clipboard.readImage();
+      return !image.isEmpty() && image.getSize().width > 0 && image.getSize().height > 0;
+    })).toBe(true);
+    await page.getByRole("button", { name: "Capture", exact: true }).click();
+    await page.getByTestId("capture-to-chat").click();
+    await expect(page.locator("[data-composer]").getByText("part-view.png", { exact: true })).toHaveCount(1);
+    await expect(chips).toHaveCount(1);
+    await expect(chips).toHaveAttribute("data-selector", selector!);
+    await expect(draft).toContainText("Keep this draft intact.");
+    await expect(draft).toBeFocused();
+    const unsent = await page.evaluate(id => window.hardcore.sessions.state({ id }), session.id);
+    expect(unsent?.state.turns).toHaveLength(0);
+    expect(errors).toEqual([]);
+  } finally {
+    await app.evaluate(({ clipboard, nativeImage }, previous) => {
+      const image = nativeImage.createFromDataURL(previous.image);
+      clipboard.write({ text: previous.text, html: previous.html, rtf: previous.rtf,
+        ...(!image.isEmpty() ? { image } : {}) });
+    }, previousClipboard);
+  }
+});

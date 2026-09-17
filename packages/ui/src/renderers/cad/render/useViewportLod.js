@@ -84,7 +84,7 @@ export function viewportLodSampleForQuality(sample, quality = SCENE_QUALITY.INTE
 
 export function useViewportLod({ viewerRef, lodPackage, modelKey = "", applyComponentLodBatch,
   prepareComponentLodPayload, componentLodNeedsSelectors, dynamicScene = false,
-  quality = SCENE_QUALITY.INTERACTIVE, tessellationCache }) {
+  quality = SCENE_QUALITY.INTERACTIVE, tessellationCache, resources }) {
   const qualityId = normalizeSceneQuality(quality?.id || quality, { fallback: SCENE_QUALITY.INTERACTIVE });
   const sampledQualityRef = useRef(null);
   const componentsRef = useRef(new Map());
@@ -208,7 +208,7 @@ export function useViewportLod({ viewerRef, lodPackage, modelKey = "", applyComp
         const load = () => {
           const request = lodPayloadRequest(component, level);
           return loadRenderSurfPayloadAtLevel(component.surfUrl, {
-            signal, tessellationCache,
+            signal, tessellationCache, resources,
             tessellation: lodTessellationForLevel(level),
             identity: component.identity,
             selectors: selectorsRef.current?.(cid) === true,
@@ -251,7 +251,7 @@ export function useViewportLod({ viewerRef, lodPackage, modelKey = "", applyComp
       schedulerRef.current = null;
       if (typeof window !== "undefined" && window.__cadViewportLod === snapshot) delete window.__cadViewportLod;
     };
-  }, [tessellationCache]);
+  }, [tessellationCache, resources]);
 
   // The package summary is republished per progressive-load batch (useCadAssets),
   // so the same file arriving again means the model GREW: keep the levels

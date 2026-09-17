@@ -61,7 +61,9 @@ function ensureStlWorker() {
   return stlWorker;
 }
 
-export function loadStlMeshDataInWorker(url, { signal } = {}) {
+export function loadStlMeshDataInWorker(url, { signal, resources } = {}) {
+  const resourceSignal = resources?.signal;
+  signal = signal && resourceSignal ? AbortSignal.any([signal, resourceSignal]) : signal || resourceSignal;
   const worker = ensureStlWorker();
   if (!worker) {
     return null;
@@ -89,7 +91,16 @@ export function loadStlMeshDataInWorker(url, { signal } = {}) {
       cleanup
     });
     signal?.addEventListener?.("abort", abort, { once: true });
-    worker.postMessage({ type: "loadStl", id, url });
+    const post = resource => {
+      if (!pendingRequests.has(id)) return;
+      try { worker.postMessage({ type: "loadStl", id, url, resource }, resource?.kind === "bytes" ? [resource.bytes] : []); }
+      catch (error) { pendingRequests.delete(id); cleanup(); reject(error); }
+    };
+    if (resources) resources.workerTicket(url, { signal }).then(post, error => {
+      if (!pendingRequests.delete(id)) return;
+      cleanup(); reject(error);
+    });
+    else post({ kind: "url", url });
   });
 }
 

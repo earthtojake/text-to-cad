@@ -214,10 +214,15 @@ export function validateSourceSidecar(sidecar, { url = "", documentHash = "" } =
   };
 }
 
-export async function loadSourceSidecar(sidecarUrl, { documentHash = "", signal, fetch: fetchImpl = globalThis.fetch } = {}) {
+export async function loadSourceSidecar(sidecarUrl, { documentHash = "", signal, resources, fetch: fetchImpl = globalThis.fetch } = {}) {
   signal?.throwIfAborted();
   const url = String(sidecarUrl || "").trim();
   if (!url) return null;
+  if (resources) {
+    const sidecar = await resources.readJson(url, { signal });
+    signal?.throwIfAborted();
+    return validateSourceSidecar(sidecar, { url, documentHash });
+  }
   const response = await fetchImpl(url, { cache: "no-store", signal });
   signal?.throwIfAborted();
   if (!response.ok) {

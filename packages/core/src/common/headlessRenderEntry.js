@@ -1,3 +1,4 @@
+import { createHttpCadResourceProvider } from "../client/resources.js";
 import * as THREE from "three";
 import {
   buildModel
@@ -88,7 +89,7 @@ async function prepareRenderJob(job) {
   const tessellationCache = createTessellationCache({ provider: createHttpTessellationCacheProvider({ origin: assetOrigin }) });
   let source;
   try {
-    source = await loadSource(job, { stageTimings, tessellationCache });
+    source = await loadSource(job, { stageTimings, tessellationCache, resources: createHttpCadResourceProvider({ origin: assetOrigin, cache: "no-store" }) });
   } finally {
     await tessellationCache.flushTessellationCacheWriteBacks();
     tessellationCache.dispose();

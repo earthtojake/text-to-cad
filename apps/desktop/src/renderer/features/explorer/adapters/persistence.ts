@@ -3,6 +3,8 @@ import { useCallback, useMemo, useState } from "react";
 import { useExplorer, useTree } from "@renderer/state/explorer";
 import type { ExplorerRoot } from "@shared/types";
 import { migrateCadFileStates } from "./cadPersistence";
+import { mergeChangedRecords } from "./statePatch";
+export { mergeChangedRecords as mergeRendererState } from "./statePatch";
 
 const KEY = "hardcore.fileViewer.v1";
 type RendererStates = NonNullable<FileViewerState["renderers"]>;
@@ -34,13 +36,16 @@ export function useDesktopViewState(sourceId: string, tabId: string, root: Explo
     const explorer = useExplorer.getState();
     const tab = explorer.tabs.find((candidate) => candidate.id === tabId);
     if (tab?.kind !== "file" || tab.root !== root) return;
-    if (tab.panel !== next.panel) explorer.update(tabId, { panel: next.panel });
-    if (explorer.panelWidth !== next.panelWidth) explorer.setPanelWidth(next.panelWidth);
-    if (next.expandedDirectories) explorer.setTreeOpen(root, (previous) => {
+    if (state.panel !== next.panel) explorer.update(tabId, { panel: next.panel });
+    if (state.panelWidth !== next.panelWidth) explorer.setPanelWidth(next.panelWidth);
+    if (next.expandedDirectories && JSON.stringify(state.expandedDirectories) !== JSON.stringify(next.expandedDirectories)) explorer.setTreeOpen(root, (previous) => {
       const expanded = new Set(next.expandedDirectories);
       return previous.size === expanded.size && [...previous].every((directory) => expanded.has(directory)) ? previous : expanded;
     });
-    if (next.renderers !== renderers) { const value = next.renderers ?? {}; setStored({ id: sourceId, renderers: value }); write(sourceId, value); }
-  }, [sourceId, root, tabId, renderers]);
+    if (next.renderers !== renderers) {
+      const value = mergeChangedRecords(read(sourceId, rootPath), renderers, next.renderers ?? {});
+      setStored({ id: sourceId, renderers: value }); write(sourceId, value);
+    }
+  }, [sourceId, rootPath, root, tabId, renderers, state]);
   return { state, onStateChange };
 }

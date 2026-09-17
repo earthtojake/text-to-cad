@@ -1,6 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { dedupeFileTabs, tabTitle, useExplorer } from "@renderer/state/explorer";
+import { ExplorerTabSchema } from "@shared/types";
+import type { ExplorerTab } from "@shared/types";
 
 /**
  * The strip's behaviour, without React.
@@ -12,6 +14,13 @@ import { dedupeFileTabs, tabTitle, useExplorer } from "@renderer/state/explorer"
  * rendering of it.
  */
 const PROJECT = "project-1";
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail; });
+  return { promise, resolve, reject };
+}
 
 function reset() {
   window.localStorage.clear();
@@ -30,7 +39,16 @@ function reset() {
 describe("the explorer strip", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.clearAllMocks();
+    vi.mocked(window.hardcore.explorer.saveTabs).mockReset().mockResolvedValue(undefined);
+    vi.mocked(window.hardcore.explorer.loadTabs).mockReset().mockResolvedValue([]);
     reset();
+  });
+
+  afterEach(async () => {
+    await useExplorer.getState().bindProject(null);
+    await vi.runOnlyPendingTimersAsync();
+    vi.useRealTimers();
   });
 
   it("opens each of the four kinds into one strip", () => {
@@ -193,14 +211,90 @@ describe("the explorer strip", () => {
     });
   });
 
+  it("flushes the outgoing debounce and waits for that save on a rapid project return", async () => {
+    const blank = useExplorer.getState().open("file")!;
+    const stored = new Map<string, ExplorerTab[]>([[PROJECT, [blank]]]);
+    const saved = deferred<void>();
+    vi.mocked(window.hardcore.explorer.saveTabs).mockImplementation(async ({ projectId, tabs }) => {
+      if (projectId === PROJECT) await saved.promise;
+      stored.set(projectId, tabs.map(tab => ExplorerTabSchema.parse(tab)));
+    });
+    vi.mocked(window.hardcore.explorer.loadTabs).mockImplementation(async ({ projectId }) => stored.get(projectId) ?? []);
+
+    useExplorer.getState().openFile("icon.png");
+    expect(window.hardcore.explorer.saveTabs).not.toHaveBeenCalled();
+    const leaving = useExplorer.getState().bindProject("project-2");
+    expect(useExplorer.getState()).toMatchObject({ projectId: "project-2", ready: false });
+    expect(window.hardcore.explorer.saveTabs).toHaveBeenCalledExactlyOnceWith({
+      projectId: PROJECT, tabs: [expect.objectContaining({ id: blank.id, path: "icon.png" })],
+    });
+    // Loading B does not wait for A's delayed IPC write.
+    await leaving;
+    expect(useExplorer.getState()).toMatchObject({ projectId: "project-2", ready: true });
+    const returning = useExplorer.getState().bindProject(PROJECT);
+    expect(useExplorer.getState()).toMatchObject({ projectId: PROJECT, ready: false });
+    expect(window.hardcore.explorer.loadTabs).not.toHaveBeenCalledWith({ projectId: PROJECT });
+    saved.resolve();
+    await returning;
+    expect(window.hardcore.explorer.loadTabs).toHaveBeenCalledWith({ projectId: PROJECT });
+    expect(useExplorer.getState()).toMatchObject({ ready: true, activeId: blank.id });
+    expect(useExplorer.getState().tabs).toMatchObject([{ id: blank.id, path: "icon.png" }]);
+  });
+
+  it.each(["resolved", "rejected"])("serializes a flushed update behind a %s earlier save before restoring", async outcome => {
+    const earlier = deferred<void>();
+    const stored = new Map<string, ExplorerTab[]>();
+    const saveTabs = vi.mocked(window.hardcore.explorer.saveTabs);
+    saveTabs.mockImplementationOnce(async ({ projectId, tabs }) => {
+      await earlier.promise;
+      stored.set(projectId, tabs.map(tab => ExplorerTabSchema.parse(tab)));
+    }).mockImplementation(async ({ projectId, tabs }) => { stored.set(projectId, tabs.map(tab => ExplorerTabSchema.parse(tab))); });
+    vi.mocked(window.hardcore.explorer.loadTabs).mockImplementation(async ({ projectId }) => stored.get(projectId) ?? []);
+
+    const tab = useExplorer.getState().open("file")!;
+    vi.advanceTimersByTime(400);
+    expect(saveTabs).toHaveBeenCalledTimes(1);
+    useExplorer.getState().openFile("icon.png");
+    await useExplorer.getState().bindProject("project-2");
+    const returning = useExplorer.getState().bindProject(PROJECT);
+    expect(saveTabs).toHaveBeenCalledTimes(1);
+    expect(window.hardcore.explorer.loadTabs).not.toHaveBeenCalledWith({ projectId: PROJECT });
+    if (outcome === "rejected") earlier.reject(new Error("Temporary persistence failure"));
+    else earlier.resolve();
+    await returning;
+    expect(saveTabs).toHaveBeenCalledTimes(2);
+    expect(saveTabs.mock.calls[1]?.[0]).toMatchObject({ projectId: PROJECT, tabs: [{ id: tab.id, path: "icon.png" }] });
+    expect(useExplorer.getState()).toMatchObject({ projectId: PROJECT, ready: true });
+    expect(useExplorer.getState().tabs).toMatchObject([{ id: tab.id, path: "icon.png" }]);
+  });
+
+  it("ignores an earlier visit's late load after returning to the same project", async () => {
+    const earlier = deferred<ExplorerTab[]>();
+    const base = { kind: "file", projectId: PROJECT, order: 0, root: null, panel: null } as const;
+    const current: ExplorerTab[] = [{ ...base, id: "current", path: "icon.png" }];
+    vi.mocked(window.hardcore.explorer.loadTabs)
+      .mockImplementationOnce(() => earlier.promise)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(current);
+    useExplorer.setState({ projectId: null });
+    const firstVisit = useExplorer.getState().bindProject(PROJECT);
+    await useExplorer.getState().bindProject("project-2");
+    await useExplorer.getState().bindProject(PROJECT);
+    expect(useExplorer.getState().tabs).toEqual(current);
+    earlier.resolve([{ ...base, id: "old", path: null }]);
+    await firstVisit;
+    expect(useExplorer.getState().tabs).toEqual(current);
+    expect(useExplorer.getState().activeId).toBe("current");
+  });
+
   it("ignores a change batch for another project", () => {
-    useExplorer.getState().receiveChanges("some-other-project", null, ["a.txt"]);
+    useExplorer.getState().receiveChanges("some-other-project", null, [{ kind: "changed", path: "a.txt", directory: false }]);
     expect(useExplorer.getState().fsRevision).toBe(0);
-    useExplorer.getState().receiveChanges(PROJECT, null, ["a.txt"]);
+    useExplorer.getState().receiveChanges(PROJECT, null, [{ kind: "changed", path: "a.txt", directory: false }]);
     expect(useExplorer.getState().fsRevision).toBe(1);
     expect(useExplorer.getState().changedPaths).toEqual(["a.txt"]);
     expect(useExplorer.getState().changedRoot).toBeNull();
-    useExplorer.getState().receiveChanges(PROJECT, "/wt/slug", ["b.txt"]);
+    useExplorer.getState().receiveChanges(PROJECT, "/wt/slug", [{ kind: "changed", path: "b.txt", directory: false }]);
     expect(useExplorer.getState().changedRoot).toBe("/wt/slug");
   });
 

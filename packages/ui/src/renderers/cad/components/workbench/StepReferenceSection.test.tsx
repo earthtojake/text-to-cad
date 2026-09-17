@@ -1,7 +1,11 @@
 import React from 'react';
-import {cleanup,fireEvent,render,screen} from '@testing-library/react';
+import {cleanup,fireEvent,render as renderComponent,screen} from '@testing-library/react';
 import {afterEach,expect,it} from 'vitest';
 import {StepReferenceSection} from '../../../../../dist/renderers/cad/components/workbench/StepReferenceSection.js';
+import { ViewerHostContext } from '../../../../../dist/host/context.js';
+import { testHost } from '../../../../host/testing/host.js';
+const host = testHost();
+const render = (element: React.ReactNode) => renderComponent(element, { wrapper: ({children}) => <ViewerHostContext.Provider value={host}>{children}</ViewerHostContext.Provider> });
 Object.assign(globalThis,{React});
 afterEach(cleanup);
 const arc={id:'o1.e1',normalizedSelector:'o1.e1',selectorType:'edge',pickData:{curveType:'circle',length:7.8,params:{radius:5,sweepRadians:Math.PI/2,center:[0,0,0]},center:[3,3,0]}};

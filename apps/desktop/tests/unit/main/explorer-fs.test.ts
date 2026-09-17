@@ -2,10 +2,11 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   FsError,
+  FsConflictError,
   assertEntryName,
   createDirectory,
   createFile,
@@ -221,6 +222,61 @@ describe("reading and writing", () => {
     await expect(
       writeTextFile(root, "src/index.ts", "clobbered\n", "not-the-revision"),
     ).rejects.toBeInstanceOf(FsError);
+  });
+});
+
+describe("atomic text saves", () => {
+  it("serializes concurrent saves from the same revision and reports the winner's revision", async () => {
+    const file = "concurrent.txt";
+    await fs.writeFile(path.join(root, file), "base");
+    const before = await readTextFile(root, file);
+    const results = await Promise.allSettled([writeTextFile(root, file, "first", before.revision), writeTextFile(root, file, "second", before.revision)]);
+    const fulfilled = results.filter(result => result.status === "fulfilled");
+    const rejected = results.filter(result => result.status === "rejected");
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    const saved = fulfilled[0]!.value;
+    expect(rejected[0]!.reason).toBeInstanceOf(FsConflictError);
+    expect(rejected[0]!.reason).toMatchObject({ code: "conflict", actualRevision: saved.revision });
+    expect(await fs.readFile(path.join(root, file), "utf8")).toBe(saved.content);
+    expect((await fs.readdir(root)).filter(name => name.includes(".hardcore-"))).toEqual([]);
+  });
+
+  it("refuses to recreate an externally deleted file from a stale editor", async () => {
+    await expect(writeTextFile(root, "already-deleted.txt", "draft", "old-revision")).rejects.toBeInstanceOf(FsConflictError);
+    await expect(fs.stat(path.join(root, "already-deleted.txt"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("reports committed bytes even if later path metadata becomes unreadable", async () => {
+    const target = path.join(root, "receipt.txt");
+    await fs.writeFile(target, "before");
+    const before = await readTextFile(root, "receipt.txt");
+    const stat = fs.stat, realpath = fs.realpath, rename = fs.rename;
+    let committed = false;
+    const renameSpy = vi.spyOn(fs, "rename").mockImplementation(async (...args) => { await rename(...args); committed = true; });
+    const statSpy = vi.spyOn(fs, "stat").mockImplementation((...args: Parameters<typeof fs.stat>) => {
+      if (committed) return Promise.reject(Object.assign(new Error("gone after commit"), { code: "ENOENT" }));
+      return stat(...args);
+    });
+    const realpathSpy = vi.spyOn(fs, "realpath").mockImplementation((...args: Parameters<typeof fs.realpath>) => {
+      if (committed) return Promise.reject(Object.assign(new Error("root moved after commit"), { code: "ENOENT" }));
+      return realpath(...args);
+    });
+    try {
+      expect(await writeTextFile(root, "receipt.txt", "committed", before.revision)).toMatchObject({ content: "committed", path: "receipt.txt" });
+      expect(await fs.readFile(target, "utf8")).toBe("committed");
+    } finally { renameSpy.mockRestore(); statSpy.mockRestore(); realpathSpy.mockRestore(); }
+  });
+
+  it("preserves permissions and writes complete replacement content", async () => {
+    await fs.writeFile(path.join(root, "executable.txt"), "old");
+    await fs.chmod(path.join(root, "executable.txt"), 0o664);
+    const before = await readTextFile(root, "executable.txt");
+    const text = "complete replacement\n".repeat(3000);
+    const saved = await writeTextFile(root, "executable.txt", text, before.revision);
+    expect(await fs.readFile(path.join(root, "executable.txt"), "utf8")).toBe(text);
+    expect(saved).toMatchObject({ content: text, size: Buffer.byteLength(text), truncated: false });
+    if (process.platform !== "win32") expect((await fs.stat(path.join(root, "executable.txt"))).mode & 0o777).toBe(0o664);
   });
 });
 

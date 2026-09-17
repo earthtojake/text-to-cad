@@ -1,15 +1,22 @@
 import { createCadPreferences, type CadPreferenceSource } from "./preferences.js";
 export { createCadPreferences, CAD_LEGACY_PREFERENCE_KEYS } from "./preferences.js";
 export type { CadPreferences, CadPreferenceSource } from "./preferences.js";
-import type { CadClient, CadEntry, CadRenderSession, CadServerInfo } from '@hardcore/core/client';
+import type { CadWorkspaceService, CadEntry, CadRenderSession, CadServerInfo } from '@hardcore/core/client';
+import type { PromptContext, PromptReference } from '@hardcore/core/prompt';
+import type { ComponentType } from 'react';
 import { isCadFile } from '@hardcore/core/lib/fileFormats.js';
 import { defineFileRenderer } from '../../file-viewer/registry.js';
 import type { PrepareContext } from '../../file-viewer/types.js';
 import { cadPanels } from '../../file-viewer/navigation/panels.js';
 
-export interface CadReference { file: string; selector: string; label?: string; text?: string }
-export interface CadCapture { blob: Blob; file: string; references?: CadReference[] }
-export interface CadPromptContext { text: string; references: CadReference[] }
+export interface CadSelectionSlotProps {
+  selection: readonly PromptReference[];
+  selectionKey: string;
+  disabled: boolean;
+  /** Capture belongs to this source/selection. Host delivery still binds its own destination. */
+  createContext(options?: { text?: string; capture?: boolean }): PromptContext;
+}
+export interface CadRendererSlots { selectionExtras?: ComponentType<CadSelectionSlotProps> }
 export interface CadCommands {
   selectReference?: { selector: string; key?: string | number } | null;
   captureRequest?: { key: string | number } | null;
@@ -17,18 +24,18 @@ export interface CadCommands {
 export interface CadCommandSource {
   subscribe(listener: () => void): () => void;
   getSnapshot(): CadCommands;
+  /** Remove only this admitted command; a later nonce must survive an old acknowledgement. */
+  acknowledge?(kind: keyof CadCommands, key: string | number): void;
 }
 export interface CadRendererOptions {
-  client: CadClient | ((context: PrepareContext) => Promise<CadClient>);
-  onReference?: (reference: CadReference) => void;
-  onPromptContext?: (context: CadPromptContext) => void;
-  onCapture?: (capture: CadCapture) => void;
+  client: CadWorkspaceService | ((context: PrepareContext) => Promise<CadWorkspaceService>);
+  slots?: CadRendererSlots;
   commands?: CadCommandSource;
   preferences?: CadPreferenceSource;
 }
 export interface PreparedCadDocument {
   entry: CadEntry;
-  client: CadClient;
+  client: CadWorkspaceService;
   serverInfo: CadServerInfo;
   renderSession: CadRenderSession;
   services: Omit<CadRendererOptions, 'client'>;

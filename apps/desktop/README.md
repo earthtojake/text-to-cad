@@ -250,8 +250,12 @@ The CAD tests run against whatever runtime the app resolves on its own (see
 CAD runtime, below): the bundled one once `npm run bundle:runtime` has run,
 else the checkout's `.venv`. The explorer suite first breaks the runtime on
 purpose — an override pointing nowhere — to see the failure card with the
-interpreter's words in it, then clears the override and renders the STEP;
-that render is skipped only in local runs without a runtime and without
+interpreter's words in it, then clears the override and renders the STEP.
+CAD failure, recovery, render and appearance cases use a fresh temporary
+project containing the tiny STEP fixture at its original relative path. Tree,
+watcher, terminal and strip checks retain the checkout project, so generated
+app bundles cannot turn CAD catalog reads into repository-wide scans. The
+render is skipped only in local runs without a runtime and without
 `HARDCORE_E2E_REQUIRE_CAD=1`. The first render compiles the STEP in cadgen's build
 pool and is the slow assertion of the suite.
 
@@ -611,7 +615,7 @@ A CAD reference typed into it — `models/bracket.step#o1.2`, `#label.f45`,
 `bracket.step` — becomes a chip the moment the space after it lands, a
 pasted prompt's references become chips at once, and the viewer's Add to
 prompt action places a chip in the box and focuses it
-(the CAD renderer's `onReference` callback). The chip is an inline atom in a
+(the host's prompt-context service). The chip is an inline atom in a
 one-paragraph ProseMirror document: Backspace removes it whole, the arrow
 keys step over it and select it as a unit, and it prints back to its plain
 token on send, so what the agent reads is exactly the text. The draft in
@@ -632,8 +636,8 @@ to go for it: a `min-h` of three lines, and send in a footer under the box,
 which made the smallest possible composer a line to type in plus a line
 holding one button. The row of chips is still under the box, outside it.
 The viewer's camera button ("Ask about this
-view", shown only inside the desktop) renders the viewport to a PNG and
-queues it together with selected references on the composer store (`addContext`), which the composer's
+view") renders the viewport to a PNG and
+accepts it together with selected references on the composer store (`acceptContext`), which the composer's
 attachments pick up and send as an ACP image block.
 
 Click a composer reference chip, or focus its button with Tab and press
@@ -655,11 +659,31 @@ reference hint stays inside its surface and dismisses with Close or Escape.
 
 Image attachments show a contained thumbnail beside the filename, with an always-visible remove control. Click the thumbnail (or focus it and press Enter) to inspect the full image. Escape, Close or the backdrop dismisses the preview and returns focus to the thumbnail; the draft is unchanged. Explorer tabs use a bordered active state and visible keyboard focus on selection and close controls.
 
-Copy Reference and Copy Link remain clipboard-only. Ask about this view adds
-the image and selected part references together, without duplicating existing
+Explicit Copy and Copy Link remain clipboard-only. The primary Add to prompt
+action adds selected references and inspection facts. **Ask about this view**
+adds the image and selected references together, without duplicating existing
 chips. A workspace mismatch offers **Start chat here**, which creates a chat
 in the context's workspace, carries the pending context over and preserves the
 old draft. Nothing is sent until the user submits.
+
+FileViewer receives an explicit `ViewerHost`: workspace files/actions, native
+clipboard, prompt delivery, navigation, appearance and shutdown publication.
+Prompt delivery binds the current compatible chat or project draft before PNG
+encoding, validates the entire bundle before one acceptance, and preserves its
+text/reference/attachment order. Changing chats during encoding does not redirect
+the result or steal composer focus. Deleted destinations cancel the delivery.
+Recent operation receipts are bounded to 256 entries; pending captures are
+bounded to 16 and deferred workspace offers to eight. Bundles accept at most
+128 parts. Attachments must be supported images or UTF-8 text, at most
+20 MiB each and 40 MiB together. Ordinary clipboard effects use the validated
+`clipboard` IPC branch for plain text and PNGs up to 16 MiB; the renderer never accesses
+Electron's native clipboard directly.
+
+Incoming CAD selection and capture requests bind the project, tab, path and root
+at request time. Only that active document receives them; replacing or closing
+the target clears them. Nonce-specific acknowledgement prevents consumed requests
+from replaying when the viewer remounts, while a repeated reference click creates
+a fresh request.
 
 Each changed file in Review has **Request revision**. It appends the file and
 review scope to the draft, plus selected original or modified code and its line
@@ -835,6 +859,11 @@ never part of it. The file tree's open folders and its listings live in the expl
 store, not in the file tab, because opening a file makes a tab and the pane
 mounts one tab at a time.
 
+Tab edits are saved after a 400 ms debounce. Leaving a project flushes its
+pending snapshot immediately; returning waits for that project's in-flight
+saves before restoring its tabs. Other projects load independently, and a late
+response from an earlier visit cannot overwrite the current strip.
+
 Directory listings show every regular file and directory, including dotfiles,
 Git-ignored outputs, dependency folders and unsupported formats. Renderer
 support determines what opens in the file tab; it never hides a tree row.
@@ -863,6 +892,16 @@ each other. This app supplies the ends (the branch label, the unsaved dot, its
 panel toggles) and, through a source adapter, the two things only it has:
 where a directory listing comes from and the entry menus on a crumb
 (`features/explorer/adapters/fileSource.ts`).
+
+The desktop `FileSource` exposes validated IPC storage operations separately
+from native/copy `FileActions`. Writes return structured revision conflicts,
+never parsed error text. Main serializes same-path writes, checks the expected
+content revision immediately before a same-directory atomic replacement, and
+preserves file permissions. Cancellation cannot reverse a dispatched commit.
+Committed move events remap every matching tab and cached/expanded subtree;
+delete events prune descendant listings. A bounded mutation-receipt history
+prevents the broadcast and initiating caller's receipt from applying a move
+twice. External edits preserve dirty drafts and refresh clean documents.
 
 **Every crumb is a menu of its neighbours** (`@hardcore/ui/navigation`'s
 `Breadcrumbs.jsx`, the model in its `crumbs.js`), the way the CAD Viewer's
@@ -897,8 +936,9 @@ the whole list aimed at the row that was clicked, and the empty space under
 the rows is the root). A file: Open (tree rows only — a crumb is the open
 file, and a file is one tab: opening it again by any door focuses that
 tab) · Open with default app · Open with… · Reveal in Finder (Show in Explorer / Show in file manager)
-· Copy path · Copy relative path · Copy reference (CAD files: the
-`path` token the composer reads, which also lands a chip in the box) ·
+· Copy path · Copy relative path · Copy reference (CAD files: copy the path
+through the native clipboard port and deliver the typed workspace reference
+through the injected prompt destination) ·
 Rename · Duplicate · Move to Trash. A folder: New file · New folder · Open
 in terminal · Reveal · Copy path · Copy relative path · Rename · Move to
 Trash; the root has no Rename and no Trash. The one destructive item is

@@ -45,17 +45,11 @@ test("viewer context and revision requests stay with the right draft and workspa
     await expect(wheel).toBeVisible({ timeout: 90_000 });
     await wheel.click();
     const tip = page.locator("[data-reference-tip]");
-    await expect(tip).toBeVisible();
-    // The popover portals to body, but its collision boundary is the CAD surface.
-    await expect.poll(async () => {
-      const hint = await tip.boundingBox();
-      const surface = await page.locator("[data-cad-surface]").boundingBox();
-      return !!hint && !!surface && hint.x >= surface.x && hint.x + hint.width <= surface.x + surface.width;
-    }).toBe(true);
-    await page.screenshot({ path: test.info().outputPath("contained-reference-tip.png"), animations: "disabled" });
+    await expect(tip).toHaveCount(0);
     await page.keyboard.press("Escape");
     await expect(tip).toHaveCount(0);
-    await expect(wheel).toHaveAttribute("aria-selected", "true");
+    await expect(wheel).toHaveAttribute("aria-selected", "false");
+    await wheel.click();
 
     const draft = page.getByPlaceholder("Do anything");
     await draft.fill("Make this wheel wider: ");

@@ -37,7 +37,6 @@ import {
 import {
   isTessellationCacheProbeMissError,
 } from "@hardcore/core/lib/surf/tessellationCache.js";
-import { resolvePackageAssetUrl } from "@hardcore/core/client";
 import {
   installRuntimePackageDescriptor,
   loadPackageDescriptor,
@@ -177,34 +176,27 @@ function packageComponentLoadConcurrency() {
   return Math.max(4, Math.min(PACKAGE_COMPONENT_LOAD_CONCURRENCY, Math.floor(hardwareConcurrency)));
 }
 
-async function surfContentLength(url, signal) {
-  if (typeof fetch !== "function") {
+async function surfContentLength(url, signal, resources) {
+  try { return await resources.byteLength(url, { signal }); }
+  catch (error) {
+    if (isAbortError(error) || signal?.aborted) throw error;
     return null;
   }
-  try {
-    const response = await fetch(url, { method: "HEAD", signal, cache: "no-store" });
-    if (!response.ok) {
-      return null;
-    }
-    const length = Number(response.headers.get("content-length"));
-    return Number.isFinite(length) && length > 0 ? length : null;
-  } catch (error) {
-    if (isAbortError(error) || signal?.aborted) {
-      throw error;
-    }
-    return null;
-  }
+}
+
+function resolvePackageAssetUrl(source, reference, resources) {
+  return resources.resolveDependency(source, reference, { kind: "package" });
 }
 
 function runtimeComponentIdentity(context, cid) {
   return context?.componentIdentityByCid?.[cid] || context?.descriptor?.components?.[cid] || null;
 }
 
-function runtimeComponentSurfUrl(context, cid) {
+function runtimeComponentSurfUrl(context, cid, resources) {
   const identity = runtimeComponentIdentity(context, cid);
   const component = context?.descriptor?.components?.[cid];
   return identity?.surfUrl
-    || (component?.surf ? resolvePackageAssetUrl(entryAssetUrl(context.entry, "glb"), component.surf) : "");
+    || (component?.surf ? resolvePackageAssetUrl(entryAssetUrl(context.entry, "glb"), component.surf, resources) : "");
 }
 
 function urdfMeshUrls(urdfData) {
@@ -216,7 +208,7 @@ function urdfMeshUrls(urdfData) {
   )];
 }
 
-async function loadRenderRobotMeshes(meshUrls, { signal, onProgress } = {}) {
+async function loadRenderRobotMeshes(meshUrls, { signal, resources, onProgress } = {}) {
   const total = meshUrls.length;
   let completed = 0;
   onProgress?.(completed, total);
@@ -224,15 +216,16 @@ async function loadRenderRobotMeshes(meshUrls, { signal, onProgress } = {}) {
     if (signal?.aborted) {
       throw abortError();
     }
-    const mesh = await loadRenderMeshByUrl(meshUrl, { signal, fallback: RENDER_FORMAT.STL });
+    const mesh = await loadRenderMeshByUrl(meshUrl, { signal, resources, fallback: RENDER_FORMAT.STL });
     completed += 1;
     onProgress?.(completed, total);
     return mesh;
   });
 }
 
-function peekRenderMeshForEntry(entry) {
+function peekRenderMeshForEntry(entry, resources) {
   return peekRenderMeshByUrl(entryMeshAssetUrl(entry), {
+    resources,
     fallback: meshAssetKeyForEntry(entry)
   });
 }
@@ -273,9 +266,11 @@ export function useCadAssets({
   entryHasDisplayEdges = () => false,
   buildNormalizedReferenceState,
 }) {
+  const resources = client?.resources;
+  if (!resources) throw new TypeError("CAD rendering requires CAD resources");
   const getAssemblyMeshHash = useCallback((entry) => {
     return entryMeshAssetSignature(entry);
-  }, []);
+  }, [resources]);
 
   const buildAssemblyPreviewMeshState = useCallback((entry, meshData, topologyManifest = null) => {
     const previewMeshData = createAssemblyPreviewMeshData(meshData, topologyManifest);
@@ -289,10 +284,10 @@ export function useCadAssets({
       assemblyBackgroundError: "",
       assemblyBackgroundErrorMeshHash: ""
     };
-  }, [getAssemblyMeshHash]);
+  }, [getAssemblyMeshHash, resources]);
 
   const restoreCompletedPackage = useCallback(entry => entryHasMesh(entry)
-    ? completedPackages.get(client, entry, { descriptor: peekPackageDescriptor(entryAssetUrl(entry, "glb")) })
+    ? completedPackages.get(client, entry, { descriptor: peekPackageDescriptor(entryAssetUrl(entry, "glb"), { resources }) })
     : null, [client, entryHasMesh]);
 
   const getCachedMeshState = useCallback((entry) => {
@@ -306,11 +301,11 @@ export function useCadAssets({
       if (completed) return completedPackageMeshState(entry, completed.meshData);
       const glbUrl = entryAssetUrl(entry, "glb");
       const topologyUrl = entryTopologyAssetUrl(entry);
-      const previewMeshData = peekRenderGlb(glbUrl);
+      const previewMeshData = peekRenderGlb(glbUrl, { resources });
       if (!previewMeshData) {
         return null;
       }
-      const topologyManifest = peekRenderTopologyIndex(topologyUrl);
+      const topologyManifest = peekRenderTopologyIndex(topologyUrl, { resources });
       if (!topologyManifest) {
         return buildAssemblyPreviewMeshState(entry, previewMeshData);
       }
@@ -321,7 +316,7 @@ export function useCadAssets({
     if (entrySourceFormat(entry) === RENDER_FORMAT.GLB) {
       return null;
     }
-    const meshData = peekRenderMeshForEntry(entry);
+    const meshData = peekRenderMeshForEntry(entry, resources);
     if (!meshData) {
       return null;
     }
@@ -331,7 +326,7 @@ export function useCadAssets({
       meshHash: entryMeshAssetHash(entry),
       meshData
     };
-  }, [buildAssemblyPreviewMeshState, entryHasMesh, restoreCompletedPackage]);
+  }, [buildAssemblyPreviewMeshState, entryHasMesh, restoreCompletedPackage, resources]);
 
   const getCachedUrdfState = useCallback((entry) => {
     const kind = String(entry?.kind || "").trim().toLowerCase();
@@ -343,18 +338,18 @@ export function useCadAssets({
       return null;
     }
     const srdfPayload = kind === "srdf"
-      ? peekRenderSrdf(entryAssetUrl(entry, "srdf"), { urdfUrl: entryAssetUrl(entry, "urdf") })
+      ? peekRenderSrdf(entryAssetUrl(entry, "srdf"), { resources, urdfUrl: entryAssetUrl(entry, "urdf") })
       : null;
     const urdfData = kind === "srdf"
       ? srdfPayload?.urdfData
       : kind === "sdf"
-        ? peekRenderSdf(entryAssetUrl(entry, "sdf"))
-        : peekRenderUrdf(entryAssetUrl(entry, "urdf"));
+        ? peekRenderSdf(entryAssetUrl(entry, "sdf"), { resources })
+        : peekRenderUrdf(entryAssetUrl(entry, "urdf"), { resources });
     if (!urdfData) {
       return null;
     }
     const meshUrls = urdfMeshUrls(urdfData);
-    const meshes = meshUrls.map((meshUrl) => peekRenderMeshByUrl(meshUrl, { fallback: RENDER_FORMAT.STL })).filter(Boolean);
+    const meshes = meshUrls.map((meshUrl) => peekRenderMeshByUrl(meshUrl, { resources, fallback: RENDER_FORMAT.STL })).filter(Boolean);
     if (meshes.length !== meshUrls.length) {
       return null;
     }
@@ -366,7 +361,7 @@ export function useCadAssets({
       urdfData,
       meshesByUrl
     };
-  }, []);
+  }, [resources]);
 
   // FileViewer remounts file-owned controls. Restore immutable warm assets on
   // the first render, as main's in-place tab activation did, without retaining
@@ -381,7 +376,7 @@ export function useCadAssets({
   const meshState = meshEnvelope.value;
   const setMeshState = useCallback(update => {
     setMeshEnvelope(previous => updateLodMeshState(previous, update));
-  }, []);
+  }, [resources]);
   const meshStateRef = useRef(meshState);
   meshStateRef.current = meshState;
   const [meshLoadInProgress, setMeshLoadInProgress] = useState(false);
@@ -402,7 +397,7 @@ export function useCadAssets({
   const referenceState = meshEnvelope.reference;
   const setReferenceState = useCallback(update => {
     setMeshEnvelope(previous => updateLodReferenceState(previous, update));
-  }, []);
+  }, [resources]);
   const referenceStateRef = useRef(referenceState);
   referenceStateRef.current = referenceState;
   const [referenceStatus, setReferenceStatus] = useState(REFERENCE_STATUS.IDLE);
@@ -435,7 +430,7 @@ export function useCadAssets({
   }
   useLayoutEffect(() => {
     lodSceneAdoptionRef.current.committed(meshEnvelope.receipt);
-  }, [meshEnvelope.receipt]);
+  }, [meshEnvelope.receipt, resources]);
   const onMeshSourceAdoption = useCallback((source, ok, detail) => {
     if (detail?.disposed) {
       lodSceneAdoptionRef.current.disposed(source, { recover: detail.recover === true,
@@ -445,7 +440,7 @@ export function useCadAssets({
     if (ok) return lodSceneAdoptionRef.current.adopted(source);
     if (detail?.cleanupFailed) setError("Scene cleanup failed. Detail work has stopped; reload the viewer.");
     return lodSceneAdoptionRef.current.failed(source, detail);
-  }, []);
+  }, [resources]);
   // Unlike lodPackageRef (the active staging/scheduler context), this ref owns
   // only the complete package whose meshState is actually displayed. Keeping
   // it separate lets A survive a failed/cancelled B and seed C without letting
@@ -455,7 +450,7 @@ export function useCadAssets({
   useEffect(() => {
     lodSceneAdoptionRef.current.checkContext();
     if (!meshState || meshState.file !== lodPackageRef.current?.file) lodSceneAdoptionRef.current.cancel();
-  }, [lodPackage, meshState?.file]);
+  }, [lodPackage, meshState?.file, resources]);
   useEffect(() => {
     const snapshot = () => lodSceneAdoptionRef.current.snapshot();
     if (typeof window !== "undefined") window.__cadLodSceneAdoption = snapshot;
@@ -463,7 +458,7 @@ export function useCadAssets({
       lodSceneAdoptionRef.current.cancel();
       if (typeof window !== "undefined" && window.__cadLodSceneAdoption === snapshot) delete window.__cadLodSceneAdoption;
     };
-  }, []);
+  }, [resources]);
   // The composed reference state's ingredients: the lazily-loaded occurrence
   // subset and the selector bundle each component's topology was built from.
   // Kept so an LOD level swap can re-compose PICKING from the same
@@ -480,7 +475,7 @@ export function useCadAssets({
     const ctx = lodPackageRef.current;
     const composition = ctx?.lodPending?.referenceComposition || referenceCompositionRef.current;
     return Boolean(ctx && composition?.file === ctx.file && compositionUsesComponent(composition, cid));
-  }, []);
+  }, [resources]);
 
   const buildLodPackageSummary = useCallback((entry, meshUrl, descriptor, componentMeshDataByCid, componentIdentityByCid = {}) => {
     const transformPoint = (m, p) => (Array.isArray(m) && m.length >= 12
@@ -525,7 +520,7 @@ export function useCadAssets({
           file: entry.file,
           diagonal,
           centers,
-          surfUrl: identity.surfUrl || (component.surf ? resolvePackageAssetUrl(meshUrl, component.surf) : ""),
+          surfUrl: identity.surfUrl || (component.surf ? resolvePackageAssetUrl(meshUrl, component.surf, resources) : ""),
           identity,
           resolveSurface: async (signal) => {
             let resolved;
@@ -557,7 +552,7 @@ export function useCadAssets({
     return { file: entry.file,
       modelKey: `${entry.file}:${entryMeshAssetSignature(entry) || entry.hash || ""}`,
       components };
-  }, [client]);
+  }, [client, resources]);
 
   useLayoutEffect(() => {
     if (!initialPackage) return;
@@ -567,7 +562,7 @@ export function useCadAssets({
     const count = Object.keys(initialPackage.componentMeshDataByCid).length;
     publishMeshCostAccounting({ ...initialPackage, loaded: count, total: count, final: true, meshRevision: initialPackage.meshHash });
     syncDisplayedMemory(initialPackage.componentMeshDataByCid);
-  }, [initialPackage, buildLodPackageSummary]);
+  }, [initialPackage, buildLodPackageSummary, resources]);
 
   // This preparation is called by the scheduler's sole loader lane. Batch
   // publication itself performs no asynchronous geometry/selector work.
@@ -575,16 +570,16 @@ export function useCadAssets({
     const ctx = lodPackageRef.current;
     if (!ctx || signal?.aborted || !payload?.meshData) throw abortError();
     const component = runtimeComponentIdentity(ctx, cid);
-    const surfUrl = runtimeComponentSurfUrl(ctx, cid);
+    const surfUrl = runtimeComponentSurfUrl(ctx, cid, resources);
     if (!matchesLodPayloadRequest(payload.lodRequest, ctx, cid, level, surfUrl)) throw abortError();
     if (payload.bundle || !componentLodNeedsSelectors(cid)) return payload;
-    return loadRenderSurfSelectorBundle(surfUrl, { tessellationCache,
+    return loadRenderSurfSelectorBundle(surfUrl, { resources, tessellationCache,
       signal, tessellation: lodTessellationForLevel(level), identity: component,
     }).then(bundle => {
       if (lodPackageRef.current !== ctx || signal?.aborted) throw abortError();
       return { ...payload, bundle };
     }).finally(() => { releaseSurfWorkers().then(syncSurfWorkerMemory, syncSurfWorkerMemory); });
-  }, [componentLodNeedsSelectors]);
+  }, [componentLodNeedsSelectors, resources]);
 
   const applyComponentLodBatch = useCallback(async (entries, { signal } = {}) => {
     const ctx = lodPackageRef.current;
@@ -594,7 +589,7 @@ export function useCadAssets({
     for (const { cid, level, payload } of entries) {
       const normalizedLevel = normalizeLodLevel(level);
       const component = runtimeComponentIdentity(ctx, cid);
-      const surfUrl = runtimeComponentSurfUrl(ctx, cid);
+      const surfUrl = runtimeComponentSurfUrl(ctx, cid, resources);
       if (!payload?.meshData || !matchesLodPayloadRequest(payload.lodRequest, ctx, cid, normalizedLevel, surfUrl)) return false;
       if (!payload.bundle && componentLodNeedsSelectors(cid)) return { status: "not-ready" };
       items.push({ cid, normalizedLevel, previousLevel: normalizeLodLevel(ctx.componentLodLevelByCid?.[cid]),
@@ -705,7 +700,7 @@ export function useCadAssets({
     if (pending.adopted) return { status: outcome.status === "adopted" && !signal?.aborted ? "adopted" : "retained",
       components: items.map(item => ({ cid: item.cid, level: item.normalizedLevel, meshData: item.nextMesh })) };
     return false;
-  }, [componentLodNeedsSelectors, client]);
+  }, [componentLodNeedsSelectors, client, resources]);
 
   // Rebuild the composed selector runtime with one component's bundle swapped
   // to the level the display mesh just moved to. Scoped to the composition's
@@ -730,13 +725,13 @@ export function useCadAssets({
       loadedTopologyKey: nextComposition.loadedTopologyKey
     });
     return { composition: nextComposition, state: nextReferenceState };
-  }, [buildNormalizedReferenceState]);
+  }, [buildNormalizedReferenceState, resources]);
   const prepareReferenceStateForLodRef = useRef(prepareReferenceStateForLod);
   prepareReferenceStateForLodRef.current = prepareReferenceStateForLod;
 
   const buildComposedPackageMeshState = useCallback((entry, descriptor, meshData) => {
     return completedPackageMeshState(entry, meshData);
-  }, []);
+  }, [resources]);
   // Defined after applyComponentLodPayload, consumed by it through a ref.
   const buildComposedPackageMeshStateRef = useRef(buildComposedPackageMeshState);
   buildComposedPackageMeshStateRef.current = buildComposedPackageMeshState;
@@ -745,9 +740,9 @@ export function useCadAssets({
     if (!entryHasReferences(entry)) {
       return null;
     }
-    const bundle = peekRenderSelectorBundle(entrySelectorTopologyAssetUrl(entry));
+    const bundle = peekRenderSelectorBundle(entrySelectorTopologyAssetUrl(entry), { resources });
     return bundle ? buildNormalizedReferenceState(entry, bundle) : null;
-  }, [buildNormalizedReferenceState, entryHasReferences]);
+  }, [buildNormalizedReferenceState, entryHasReferences, resources]);
 
   const buildDisplayEdgeState = useCallback((entry, bundle) => {
     return {
@@ -757,15 +752,15 @@ export function useCadAssets({
       displayEdgeHash: entryAssetHash(entry, "displayEdgeTopology"),
       displayEdgeRuntime: buildDisplayEdgeRuntime(bundle)
     };
-  }, []);
+  }, [resources]);
 
   const getCachedDisplayEdgeState = useCallback((entry) => {
     if (!entryHasDisplayEdges(entry)) {
       return null;
     }
-    const bundle = peekRenderDisplayEdgeBundle(entryDisplayEdgeTopologyAssetUrl(entry));
+    const bundle = peekRenderDisplayEdgeBundle(entryDisplayEdgeTopologyAssetUrl(entry), { resources });
     return bundle ? buildDisplayEdgeState(entry, bundle) : null;
-  }, [buildDisplayEdgeState, entryHasDisplayEdges]);
+  }, [buildDisplayEdgeState, entryHasDisplayEdges, resources]);
 
   const cancelMeshLoad = useCallback(() => {
     lodSceneAdoptionRef.current.cancel();
@@ -808,26 +803,26 @@ export function useCadAssets({
     setMeshLoadTargetFile("");
     setMeshLoadTargetHash("");
     setMeshLoadProgress(null);
-  }, [buildLodPackageSummary]);
+  }, [buildLodPackageSummary, resources]);
 
   const cancelUrdfLoad = useCallback(() => {
     urdfRequestIdRef.current += 1;
     abortLoad(urdfAbortControllerRef);
     setUrdfLoadStage("");
     setUrdfLoadProgress(null);
-  }, []);
+  }, [resources]);
 
   const cancelReferenceLoad = useCallback(() => {
     referenceRequestIdRef.current += 1;
     abortLoad(referenceAbortControllerRef);
     setReferenceLoadStage("");
-  }, []);
+  }, [resources]);
 
   const cancelDisplayEdgeLoad = useCallback(() => {
     displayEdgeRequestIdRef.current += 1;
     abortLoad(displayEdgeAbortControllerRef);
     setDisplayEdgeLoadStage("");
-  }, []);
+  }, [resources]);
 
   const loadMeshForEntry = useCallback(async (entry) => {
     const previousDisplayed = displayedLodPackageRef.current;
@@ -941,7 +936,7 @@ export function useCadAssets({
               documentHash: entry?.documentHash,
             })
           : null;
-        const storedPackageDescriptor = await loadPackageDescriptor(meshUrl, { signal: controller.signal });
+        const storedPackageDescriptor = await loadPackageDescriptor(meshUrl, { resources, signal: controller.signal });
         if (controller.signal.aborted) {
           throw abortError();
         }
@@ -1014,8 +1009,8 @@ export function useCadAssets({
               }
               const meshData = await loadRenderSurf(
                 identity.surfUrl || "",
-                { tessellationCache,
-                  signal: controller.signal,
+                { resources, tessellationCache,
+                        signal: controller.signal,
                   tessellation: lodTessellationForLevel(componentPlan.level),
                   identity: { ...identity, tessellationProbe: cacheProbe || null },
                   memoryEstimateBytes: cacheProbe
@@ -1035,7 +1030,7 @@ export function useCadAssets({
               skipCacheProbes = false,
             } = {}) => {
               const surfaceInput = String(component?.surfaceInput || "");
-              const cached = !skipCacheProbes && await probeInitialDisplayLod({ tessellationCache,
+              const cached = !skipCacheProbes && await probeInitialDisplayLod({ resources, tessellationCache,
                 surfaceInput,
                 surfaceObject: component.surfaceObject,
                 maxInFlightBytes: PROGRESSIVE_LOAD_MAX_INFLIGHT_BYTES,
@@ -1047,13 +1042,13 @@ export function useCadAssets({
                 componentIdentityByCid.set(cid, Object.freeze({
                   ...component,
                   surfaceObject: cached.cacheProbe.surfaceObject,
-                  surfUrl: component.surf ? resolvePackageAssetUrl(meshUrl, component.surf) : "",
+                  surfUrl: component.surf ? resolvePackageAssetUrl(meshUrl, component.surf, resources) : "",
                 }));
                 return { sourceBytes: null, cacheProbe: cached.cacheProbe };
               }
 
               let ticket;
-              const staticUrl = component.surf ? resolvePackageAssetUrl(meshUrl, component.surf) : "";
+              const staticUrl = component.surf ? resolvePackageAssetUrl(meshUrl, component.surf, resources) : "";
               if (component.surfaceObject && staticUrl) {
                 ticket = {
                   surfaceInput,
@@ -1067,7 +1062,7 @@ export function useCadAssets({
                 }], { client, signal: controller.signal });
                 ticket = resolved.get(cid);
               }
-              const hint = ticket.byteLength || await surfContentLength(ticket.surfUrl, controller.signal);
+              const hint = ticket.byteLength || await surfContentLength(ticket.surfUrl, controller.signal, resources);
               const plan = initialDisplayLodPlan({
                 componentCount: componentEntries.length,
                 surfBytes: hint,
@@ -1077,7 +1072,7 @@ export function useCadAssets({
               componentIdentityByCid.set(cid, Object.freeze({ ...component, ...ticket }));
               // A tier revised by the exact SURF size may already be warm.
               const revised = skipCacheProbes ? null : (await tessellationCache.probeCachedTessellationEntries(
-                  [surfaceInput], lodTessellationForLevel(plan.level), { signal: controller.signal },
+                  [surfaceInput], lodTessellationForLevel(plan.level), { resources, signal: controller.signal },
                 )).get(surfaceInput) || null;
               if (revised && revised.surfaceObject === ticket.surfaceObject
                   && !rejectedCacheObjects.has(revised.object)) {
@@ -1292,7 +1287,7 @@ export function useCadAssets({
         throw new Error(`${assetLabel} entry is missing ${assetLabel} asset: ${entry.file || "(unknown)"}`);
       }
       setMeshLoadProgress(progressiveLoadProgress(0, 1));
-      const loadedMesh = await loadRenderMeshForEntry(entry, { signal: controller.signal });
+      const loadedMesh = await loadRenderMeshForEntry(entry, { resources, signal: controller.signal });
       const meshData = loadedMesh?.meshData || loadedMesh;
       const meshHash = entryMeshAssetHash(entry);
       if (requestId !== requestIdRef.current || controller.signal.aborted) {
@@ -1388,7 +1383,7 @@ export function useCadAssets({
   surfaceViewReplacementRef.current = (entry, meshUrl, replacementView) => {
     if (!replacementView?.viewId) return Promise.resolve();
     completedPackages.delete(client, entry);
-    installRuntimePackageDescriptor(meshUrl, replacementView);
+    installRuntimePackageDescriptor(meshUrl, replacementView, { resources });
     if (lodPackageRef.current?.descriptor?.viewId === replacementView.viewId) {
       return Promise.resolve();
     }
@@ -1446,7 +1441,7 @@ export function useCadAssets({
       // by occurrence id) so nested faces/edges become pickable.
       const glbUrl = entryAssetUrl(entry, "glb");
       const packageDescriptor = glbUrl
-        ? await loadPackageDescriptor(glbUrl, { signal: controller.signal })
+        ? await loadPackageDescriptor(glbUrl, { resources, signal: controller.signal })
         : null;
       if (packageDescriptor && packageDescriptor.kind === "assembly-package") {
         // Lazy topology: an assembly loads selector topology only for the occurrences the user has
@@ -1472,7 +1467,7 @@ export function useCadAssets({
           if (componentIdentityByCid[cid]?.surfaceObject
               && componentIdentityByCid[cid]?.surfUrl) continue;
           const component = packageDescriptor.components?.[cid];
-          const staticUrl = component?.surf ? resolvePackageAssetUrl(glbUrl, component.surf) : "";
+          const staticUrl = component?.surf ? resolvePackageAssetUrl(glbUrl, component.surf, resources) : "";
           if (component?.surfaceObject && staticUrl) {
             componentIdentityByCid[cid] = Object.freeze({ ...component, surfUrl: staticUrl });
           } else if (component) {
@@ -1482,6 +1477,7 @@ export function useCadAssets({
         }
         if (unresolved.length) {
           const resolved = await resolveSurfaceComponents(packageDescriptor, unresolved, { client,
+            resources,
             signal: controller.signal,
           });
           for (const { cid } of unresolved) {
@@ -1526,8 +1522,8 @@ export function useCadAssets({
             // selector bundle is synthesized client-side from the .surf.
             componentBundleByCid[cid] = await loadRenderSurfSelectorBundle(
               surfUrl,
-              { tessellationCache,
-                signal: controller.signal,
+              { resources, tessellationCache,
+                      signal: controller.signal,
                 // A missing optional bundle after a mesh-only LOD publish is
                 // recoverable. Rebuild selectors against the concrete level
                 // now on screen so triangle ranges remain exact.
@@ -1552,8 +1548,8 @@ export function useCadAssets({
               const identity = componentIdentityByCid[cid];
               const level = item.previousLevel;
               const url = componentSurfUrlByCid[cid];
-              const bundle = await loadRenderSurfSelectorBundle(url, { tessellationCache,
-                signal: controller.signal, tessellation: tessellationForLevel(level), identity,
+              const bundle = await loadRenderSurfSelectorBundle(url, { resources, tessellationCache,
+                      signal: controller.signal, tessellation: tessellationForLevel(level), identity,
               });
               if (lodPackageRef.current?.lodPending === pending) item.baseBundle = bundle;
               else releaseRenderSurfLevel(url, { tessellation: tessellationForLevel(level), identity });
@@ -1596,8 +1592,8 @@ export function useCadAssets({
           ),
           loadForLevel: (cid, level) => loadRenderSurfSelectorBundle(
             componentSurfUrlByCid[cid],
-            { tessellationCache,
-              signal: controller.signal,
+            { resources, tessellationCache,
+                    signal: controller.signal,
               tessellation: tessellationForLevel(level),
               identity: componentIdentityByCid[cid]
             }
@@ -1655,7 +1651,7 @@ export function useCadAssets({
 
       const bundle = await loadRenderSelectorBundle(
         entrySelectorTopologyAssetUrl(entry),
-        { signal: controller.signal }
+        { resources, signal: controller.signal }
       );
       if (requestId !== referenceRequestIdRef.current) {
         return;
@@ -1689,7 +1685,7 @@ export function useCadAssets({
         setReferenceLoadStage("");
       }
     }
-  }, [buildNormalizedReferenceState, cancelReferenceLoad, entryHasReferences, getAssemblyMeshHash, getCachedReferenceState]);
+  }, [buildNormalizedReferenceState, cancelReferenceLoad, entryHasReferences, getAssemblyMeshHash, getCachedReferenceState, resources]);
 
   const loadDisplayEdgesForEntry = useCallback(async (entry) => {
     cancelDisplayEdgeLoad();
@@ -1730,7 +1726,7 @@ export function useCadAssets({
     try {
       const bundle = await loadRenderDisplayEdgeBundle(
         entryDisplayEdgeTopologyAssetUrl(entry),
-        { signal: controller.signal }
+        { resources, signal: controller.signal }
       );
       if (requestId !== displayEdgeRequestIdRef.current) {
         return;
@@ -1753,7 +1749,7 @@ export function useCadAssets({
         setDisplayEdgeLoadStage("");
       }
     }
-  }, [buildDisplayEdgeState, cancelDisplayEdgeLoad, entryHasDisplayEdges, getCachedDisplayEdgeState]);
+  }, [buildDisplayEdgeState, cancelDisplayEdgeLoad, entryHasDisplayEdges, getCachedDisplayEdgeState, resources]);
 
   const loadUrdfForEntry = useCallback(async (entry) => {
     cancelUrdfLoad();
@@ -1793,12 +1789,13 @@ export function useCadAssets({
     try {
       const payload = kind === "srdf"
         ? await loadRenderSrdf(entryAssetUrl(entry, "srdf"), {
+            resources,
             signal: controller.signal,
             urdfUrl: entryAssetUrl(entry, "urdf")
           })
         : kind === "sdf"
-          ? { urdfData: await loadRenderSdf(entryAssetUrl(entry, "sdf"), { signal: controller.signal }) }
-          : { urdfData: await loadRenderUrdf(entryAssetUrl(entry, "urdf"), { signal: controller.signal }) };
+          ? { urdfData: await loadRenderSdf(entryAssetUrl(entry, "sdf"), { resources, signal: controller.signal }) }
+          : { urdfData: await loadRenderUrdf(entryAssetUrl(entry, "urdf"), { resources, signal: controller.signal }) };
       const urdfData = payload.urdfData;
       const meshUrls = urdfMeshUrls(urdfData);
       setUrdfLoadStage(meshUrls.length ? "loading meshes" : "building robot");
@@ -1814,6 +1811,7 @@ export function useCadAssets({
       // sign whether more is coming, so it reads as a broken model rather than a loading
       // one. The counted stage below is the progress signal instead.
       const meshes = await loadRenderRobotMeshes(meshUrls, {
+        resources,
         signal: controller.signal,
         onProgress: (completed, total) => {
           if (requestId === urdfRequestIdRef.current && total > 0) {
@@ -1858,7 +1856,7 @@ export function useCadAssets({
         setUrdfLoadProgress(null);
       }
     }
-  }, [cancelUrdfLoad, getCachedUrdfState]);
+  }, [cancelUrdfLoad, getCachedUrdfState, resources]);
 
   useEffect(() => () => {
     abortLoad(meshAbortControllerRef);
@@ -1868,7 +1866,7 @@ export function useCadAssets({
     const displayed = displayedLodPackageRef.current;
     if (displayed) completedPackages.set(client, displayed.entry, displayed);
     syncAssetCacheMemory();
-  }, [client]);
+  }, [client, resources]);
 
   return {
     meshState,

@@ -1,22 +1,35 @@
+import { readCadWorkerTicket } from "../../client/resources.js";
 import { buildMeshDataFromGlbBuffer } from "./glbMeshData.js";
 import { meshDataTransferList } from "./meshTransfer.js";
 
 const activeControllers = new Map();
-
-function fetchError(url, response) {
-  return new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
-}
-
-async function loadArrayBuffer(url, signal) {
-  const response = await fetch(url, { signal });
-  if (!response.ok) {
-    throw fetchError(url, response);
-  }
-  return response.arrayBuffer();
+const resourceRequests = new Map();
+let nextResourceId = 1;
+function nestedResources(id, signal) {
+  return {
+    resolveDependency: (_source, reference) => reference,
+    readBytes(reference) {
+      return new Promise((resolve, reject) => {
+        const resourceId = nextResourceId++;
+        const abort = () => { resourceRequests.delete(resourceId); reject(signal.reason); };
+        signal.addEventListener("abort", abort, { once: true });
+        resourceRequests.set(resourceId, { resolve, reject, cleanup: () => signal.removeEventListener("abort", abort) });
+        self.postMessage({ type: "resource", id, resourceId, reference });
+      });
+    },
+  };
 }
 
 self.addEventListener("message", async (event) => {
   const message = event.data || {};
+  if (message.type === "resource") {
+    const pending = resourceRequests.get(message.resourceId);
+    if (pending) {
+      resourceRequests.delete(message.resourceId); pending.cleanup();
+      if (message.error) pending.reject(new Error(message.error)); else pending.resolve(message.bytes);
+    }
+    return;
+  }
   const id = message.id;
   if (!id) {
     return;
@@ -35,8 +48,8 @@ self.addEventListener("message", async (event) => {
   const controller = new AbortController();
   activeControllers.set(id, controller);
   try {
-    const buffer = await loadArrayBuffer(message.url, controller.signal);
-    const meshData = await buildMeshDataFromGlbBuffer(buffer);
+    const buffer = await readCadWorkerTicket(message.resource, { signal: controller.signal });
+    const meshData = await buildMeshDataFromGlbBuffer(buffer, { resources: nestedResources(id, controller.signal), signal: controller.signal });
     if (controller.signal.aborted) {
       return;
     }

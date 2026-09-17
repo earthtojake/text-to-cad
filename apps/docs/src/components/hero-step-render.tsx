@@ -1,5 +1,6 @@
 "use client";
 
+import { createHttpCadResourceProvider } from "@hardcore/core/client";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { Line2 } from "three/examples/jsm/lines/Line2.js";
@@ -249,20 +250,14 @@ export function HeroStepRender() {
     const load = async () => {
       try {
         setStatus("loading step");
-        const descriptor = await fetch(`${HERO_PACKAGE_BASE_URL}/assembly.json`, {
-          cache: "no-store",
-        }).then((response) => {
-          if (!response.ok) {
-            throw new Error(`hero assembly.json: HTTP ${response.status}`);
-          }
-          return response.json();
-        });
+        const resources = createHttpCadResourceProvider({ cache: "no-store" });
+        const descriptor = await resources.readJson(`${HERO_PACKAGE_BASE_URL}/assembly.json`);
         const source = await loadSource({
           ...packageSourceFromBaseUrl(HERO_PACKAGE_BASE_URL, descriptor),
           stepParameterUrl: HERO_SIDECAR_URL,
           documentHash: HERO_DOCUMENT_HASH,
           cadPath: HERO_STEP_CAD_PATH,
-        });
+        }, { resources });
         const animation = await loadSourceAnimation(source.sourceSidecar, { name: "hero animation" });
         const clips = (animation?.clips ?? {}) as Parameters<typeof findAnimationClip>[0];
         if (disposed) {

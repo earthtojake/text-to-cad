@@ -77,5 +77,5 @@ export function resolveCadAssetMeshUrl(reference, sourceUrl) {
       resolved.searchParams.set(key, value);
     }
   }
-  return `${resolved.pathname}${resolved.search}`;
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(String(sourceUrl)) ? resolved.href : `${resolved.pathname}${resolved.search}`;
 }

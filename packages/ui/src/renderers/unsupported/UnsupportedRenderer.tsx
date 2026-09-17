@@ -3,6 +3,7 @@ import { ExternalLink, FileQuestion } from "lucide-react";
 import type { FileRendererProps } from "../../file-viewer/types.js";
 import { EmptyState } from "../../file-viewer/navigation/index.js";
 import { Button } from "../../primitives/button.jsx";
+import { useViewerHost } from '../../host/context.js';
 
 import { formatBytes } from "../image/ImageRenderer.js";
 
@@ -11,9 +12,8 @@ export type UnsupportedRendererData = null;
 
 export default function UnsupportedRenderer({
   file,
-  source,
 }: FileRendererProps<UnsupportedRendererData>) {
-  const openDefault = source.actions?.perform?.["open-default"];
+  const openDefault = useViewerHost().fileActions?.perform?.["open-default"];
   return (
     <EmptyState
       action={

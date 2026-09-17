@@ -76,6 +76,10 @@ describe("the contract", () => {
       "window.state",
       "shell.openExternal",
       "shell.showItemInFolder",
+      "clipboard.writeText",
+      "clipboard.readText",
+      "clipboard.writeImage",
+      "clipboard.writeContent",
       // P3 — src/shared/ipc/explorer.ts
       "explorer.list",
       "explorer.paths",
