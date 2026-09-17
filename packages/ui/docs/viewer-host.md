@@ -11,12 +11,60 @@ The host contains `files`, optional native `fileActions`, `clipboard`,
 lifecycle flush subscription. CAD is a separate registration supplied with a
 `CadWorkspaceService`; the generic FileViewer does not import CAD. The HTTP CAD
 adapter can serve both apps, while desktop owns native runtime startup/recovery.
-See core's `docs/workspace-resources.md` for resource tickets and cache identity.
+See [workspace resources](../../core/docs/workspace-resources.md) for resource
+tickets and cache identity.
 
 Apps create services for the workspace lifetime. File tabs borrow them, while
 mounted renderers own scenes, document controllers and temporary resource leases.
 Unmounting one view releases its work without disposing another view's services
 or admitted cache writes. Hosts dispose a service when its workspace closes.
+
+## Interface map and implementations
+
+The linked TypeScript definitions are the authoritative signatures. Import
+their compiled public package exports in application code; these source links
+are for reading and maintaining the contracts.
+
+| Contract | Definition | Public entry point |
+| --- | --- | --- |
+| `ViewerHost`, `ClipboardPort`, `ViewerCommandTarget` | [Host types](../src/host/types.ts) | `@hardcore/ui/host` |
+| `FileSource`, `FileActions`, mutation receipts, `FileViewerState` | [File viewer types](../src/file-viewer/types.ts) | `@hardcore/ui/file-viewer` |
+| `PromptContextPort`, bundles, references and delivery receipts | [Prompt types](../../core/src/prompt/types.ts) | `@hardcore/core/prompt` |
+| `CadWorkspaceService`, `CadResourceProvider`, worker tickets | [CAD service types](../../core/src/client/types.ts) | `@hardcore/core/client` |
+| `CadRendererSlots`, selection props, `CadCommandSource` | [CAD registration](../src/renderers/cad/index.ts) | `@hardcore/ui/renderers/cad` |
+| `CadPreferenceSource` | [CAD preferences](../src/renderers/cad/preferences.ts) | `@hardcore/ui/renderers/cad` |
+| CAD snapshot validation and versioning | [CAD state](../src/renderers/cad/state.ts) | `@hardcore/ui/renderers/cad/state` |
+
+Start with the actual composition in [web App](../../../apps/web/src/App.tsx)
+or [desktop FileTab](../../../apps/desktop/src/renderer/features/explorer/FileTab.tsx).
+Their imports lead to the app-owned `host/`, `adapters/` and persistence
+implementations. [Web storage](../../../apps/web/docs/storage.md) documents
+browser lifetimes; [desktop README](../../../apps/desktop/README.md) documents
+native IPC, draft delivery and project persistence. Shared component tests can
+use the [explicit fake host](../src/host/testing/host.ts).
+
+## Adding a shared feature
+
+1. Implement reusable interaction and presentation in UI, with non-React domain
+   behavior in core. Keep project, session and operating-system workflows in apps.
+2. Reuse an existing injected contract. If a new environmental effect is needed,
+   extend its narrow consumer-owned interface and implement it in each app, or
+   explicitly advertise that the host cannot perform it. Shared UI must not
+   fall back to browser globals or branch on `isWeb`/`isDesktop`.
+3. Use subscribed capability/destination state for availability and labels.
+   Use a named additive slot for an extra app-enabled interface such as Quick
+   Edit; the shared renderer never imports the app's component or stores.
+4. Define identity, lifetime, cancellation and result semantics with the
+   contract. Publish serializable view state through the controlled binding;
+   the app chooses its storage. Keep workspace services stable across tab mounts.
+5. Update this contract or its linked domain guide, add focused shared/adapter
+   coverage and verify affected host integrations. Exercise root changes and
+   late results for asynchronous effects, and warm reuse for resource changes.
+   Run `npm run check:boundaries` and rebuild compiled packages before app checks.
+
+Platform-agnostic UI can use DOM, canvas, React and renderer-owned workers.
+Filesystem access, transport selection, credentials, clipboard, persistent
+storage, page navigation and native process lifecycle remain host responsibilities.
 
 ## Prompt handoff
 

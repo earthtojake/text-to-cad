@@ -23,6 +23,13 @@ or `window.hardcore`. Hosts inject file access, capabilities, navigation,
 persistence, appearance and CAD services. Importing a package starts no polling,
 workers or host storage writes and changes neither document title nor theme.
 
+Shared UI is platform-agnostic: components must not detect web versus desktop
+to choose their behavior. Express environmental differences through injected
+capabilities and app-supplied named slots. React, DOM, canvas and responsive
+layout remain shared; operating-system details and app workflows belong to the
+host. Follow [the feature-extension workflow](docs/viewer-host.md#adding-a-shared-feature)
+when introducing a new integration.
+
 React, ReactDOM, Three.js and Lucide are host-supplied peers. React 18 and 19
 are supported: web and desktop use React 19.3.0. Each
 host must resolve one copy of each peer in its browser bundle. Web uses Vite

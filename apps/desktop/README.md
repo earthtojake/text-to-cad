@@ -654,8 +654,8 @@ not change a reference's filename. Long names truncate within the chip; the
 full label is available on hover. The
 full file/selector remains in the tooltip and is still the text sent to the
 agent. Names are optional display metadata scoped to the draft; typed or
-unresolved references keep their file/selector fallback. The viewer’s compact
-reference hint stays inside its surface and dismisses with Close or Escape.
+unresolved references keep their file/selector fallback. The viewer's reference
+coaching tooltip is removed; composer reference-chip tooltips remain.
 
 Image attachments show a contained thumbnail beside the filename, with an always-visible remove control. Click the thumbnail (or focus it and press Enter) to inspect the full image. Escape, Close or the backdrop dismisses the preview and returns focus to the thumbnail; the draft is unchanged. Explorer tabs use a bordered active state and visible keyboard focus on selection and close controls.
 
@@ -668,6 +668,8 @@ old draft. Nothing is sent until the user submits.
 
 FileViewer receives an explicit `ViewerHost`: workspace files/actions, native
 clipboard, prompt delivery, navigation, appearance and shutdown publication.
+Follow the [shared host contract](../../packages/ui/docs/viewer-host.md) when
+adding integrations; native effects and session workflows belong in this app.
 Prompt delivery binds the current compatible chat or project draft before PNG
 encoding, validates the entire bundle before one acceptance, and preserves its
 text/reference/attachment order. Changing chats during encoding does not redirect
@@ -692,7 +694,7 @@ numbers when present, and focuses the composer for the requested change.
 `reference-ux.spec.ts` checks this with the toy car STEP: set
 `HARDCORE_E2E_CAD_MODEL` and `CAD_DESKTOP_PYTHON`. It uses the fake agent to
 verify the exact outgoing token, plus the real viewer to check the label,
-reopening, hint bounds and remembered dismissal.
+reopening, absence of the retired tooltip and Escape selection behavior.
 
 The composer's paperclip opens one picker for files and photos. The viewer's
 camera button adds the current view and selected references to the draft.
