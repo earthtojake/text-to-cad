@@ -841,9 +841,12 @@ support determines what opens in the file tab; it never hides a tree row.
 Unknown types open with **Not supported**. Listings are lazy and complete for
 each expanded directory. The bounded fuzzy index visits project content before
 dependency caches so cache files do not crowd generated CAD outputs out of the
-search budget. Background watching includes Git-ignored outputs; directories
-excluded from costly recursive watching receive direct watches when browsed,
-and all watches close when their root's last owner leaves.
+search budget. Background recursive watching respects the root's Git ignore
+rules and excludes dependency caches so packaged runtimes do not create tens
+of thousands of watchers. Every browsed directory and every opened file's
+parent receives a direct watch, including Git-ignored outputs. Those files stay
+live without expanding their folders, and all watches close when their root's
+last owner leaves.
 
 ### The file tab's nav
 

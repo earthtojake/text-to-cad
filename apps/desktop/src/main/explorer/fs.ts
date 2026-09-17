@@ -18,10 +18,10 @@
  * `tests/unit/main/explorer-fs.test.ts` can run it.
  */
 import { createHash } from "node:crypto";
-import { watch as watchDirectory, type FSWatcher } from "node:fs";
+import { watch as watchDirectory, type FSWatcher, type Stats } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-
+import ignore from "ignore";
 
 /* -------------------------------------------------------------------------- */
 /* What a tree row is                                                          */
@@ -72,6 +72,23 @@ const WATCH_IGNORED_NAMES = new Set([
 
 function backgroundWatchIgnores(relative: string): boolean {
   return relative.split("/").some((segment) => WATCH_IGNORED_NAMES.has(segment));
+}
+
+/** Git exclusions bound background work only; browse and search never use them. */
+async function readBackgroundWatchExclusions(root: string) {
+  const sources = await Promise.all([
+    fs.readFile(path.join(root, ".gitignore"), "utf8").catch(() => ""),
+    fs.readFile(path.join(root, ".git", "info", "exclude"), "utf8").catch(() => ""),
+  ]);
+  const matcher = ignore().add(sources.flatMap((source) => source.split(/\r?\n/)));
+  return (relative: string, stats?: Stats): boolean => {
+    if (relative === "" || relative === ".") return false;
+    if (backgroundWatchIgnores(relative)) return true;
+    if (stats) return matcher.ignores(stats.isDirectory() ? `${relative}/` : relative);
+    // Chokidar first probes without a stat. Directory-only rules must wait
+    // for its typed probe, so a same-named ordinary file remains watchable.
+    return matcher.ignores(relative) && matcher.ignores(`${relative}/`);
+  };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -667,16 +684,17 @@ export class FileWatchers {
     // a plain Node test without pulling chokidar's fsevents binding in.
     const { watch } = await import("chokidar");
     const realRoot = await fs.realpath(root).catch(() => path.resolve(root));
+    const ignoredInBackground = await readBackgroundWatchExclusions(realRoot);
     if (this.watchers.get(root) !== owner) return;
 
     const watcher = watch(realRoot, {
       ignoreInitial: true,
       followSymlinks: false,
-      // Git-ignored model outputs are ordinary visible files. Only costly
-      // infrastructure directories are excluded from this recursive watcher.
-      ignored: (target: string) => {
+      // Runtime bundles and generated trees can contain hundreds of thousands
+      // of files. Visible/opened directories get separate direct watches below.
+      ignored: (target: string, stats?: Stats) => {
         const relative = toRelative(realRoot, target);
-        return relative !== "" && backgroundWatchIgnores(relative);
+        return ignoredInBackground(relative, stats);
       },
       awaitWriteFinish: { stabilityThreshold: 40, pollInterval: 20 },
     });
@@ -704,6 +722,11 @@ export class FileWatchers {
     await Promise.all([...(this.listedDirectories.get(root) ?? [])].map((directory) =>
       this.watchListedDirectory(root, directory),
     ));
+  }
+
+  /** An opened file stays live even when its parent has never been expanded. */
+  async watchEntry(root: string, entry: Pick<FileStat, "path" | "kind">): Promise<void> {
+    await this.watchListedDirectory(root, entry.kind === "directory" ? entry.path : path.posix.dirname(entry.path));
   }
 
   /** Keep every explicitly browsed directory live without walking its children. */
