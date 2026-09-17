@@ -290,13 +290,18 @@ says where.
 ## Robot components
 
 URDF, SRDF, and SDF files with named objects in their linked meshes expose a
-Components tab. Its single-line rows are grouped by link. Selecting a row
-highlights that mesh object in the viewport; picking it in the viewport selects
-and reveals its row. Ctrl/Cmd/Shift-click toggles additional components. Objects
-retain their visual transforms as joints move. Unnamed objects remain rendered
-but are omitted from the inventory; files without named objects have neither
-Components nor the component Reference tab, and their sheet is the single tab
-strip it has always been.
+Components tab beside Joints. A robot sheet opens on JOINTS — posing the robot
+is what the file is for — and selecting a component jumps to Components.
+
+Components is a tree with the STEP tree's look: a row per link, collapsed, with
+the count of objects it owns; expanding one lists its objects beneath it. Links
+start collapsed because a real robot's inventory is long (a corpus arm is 78
+objects across 8 links, 51 under one of them) and the first question is which
+links exist. Selecting a row highlights that mesh object in the viewport;
+picking it in the viewport selects it, expands its link and scrolls to its row.
+Ctrl/Cmd/Shift-click toggles additional components. Objects retain their visual
+transforms as joints move. Unnamed objects remain rendered but are omitted from
+the inventory; a file without named objects has no Components tab.
 
 **Components is an Inspect affordance.** The per-object split happens only while
 the Render session is off, so Render keeps the per-visual geometry a robot has
@@ -306,9 +311,13 @@ them. A mesh object whose loader ranges do not describe a slice of its visual is
 reported once on the console and leaves that visual whole — it contributes no
 component rows, and the robot renders unchanged.
 
-Reference shows the selected objects' link, visual, mesh, and object identifiers,
-with a copy button for each. Robot references are prompt locators of the form
+A selected component's REFERENCE sits at the foot of the Components tab, not in
+a tab of its own: it is about the row just clicked, and a tab for it would stand
+empty whenever nothing was selected. It shows the link and the object, with a
+copy button. Robot references are prompt locators of the form
 `robot.urdf#link=arm&visual=arm%3Av1&object=3mf%3A0&index=0&name=bracket`.
+Nothing parses one yet: no CLI and no skill accepts this form, so it is a string
+a person pastes into a prompt for another person or an agent to read.
 The prefix identifies the robot file RELATIVE TO THE SERVED ROOT — the path the
 catalog and the sidebar show, not the absolute one the session keys its pose
 state under, because the locator's whole purpose is to be pasted somewhere else.

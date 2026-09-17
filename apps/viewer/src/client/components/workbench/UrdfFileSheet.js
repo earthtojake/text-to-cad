@@ -30,7 +30,6 @@ import FileSheet, {
 import FileSheetTabbedSurface from "./FileSheetTabbedSurface";
 import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections";
 import RobotComponentsSection from "./RobotComponentsSection";
-import RobotComponentReferenceSection from "./RobotComponentReferenceSection";
 
 const compactNumericInputClasses = FILE_SHEET_COMPACT_NUMERIC_INPUT_CLASSES;
 const compactButtonClasses = FILE_SHEET_COMPACT_BUTTON_CLASSES;
@@ -352,24 +351,6 @@ export default function UrdfFileSheet({
               </div>
       )
     } : null,
-    components.length ? {
-      id: "components",
-      title: "Components",
-      titleAttr: "Named exported mesh components",
-      content: (
-        <RobotComponentsSection
-          components={components}
-          selectedIds={componentSelection.selectedIds}
-          onSelect={componentSelection.select}
-          onHover={componentSelection.hover}
-        />
-      )
-    } : null,
-    components.length ? {
-      id: "reference",
-      title: "Reference",
-      content: <RobotComponentReferenceSection components={components} selectedIds={componentSelection.selectedIds} />
-    } : null,
     showJoints ? {
       id: "joints",
       title: "Joints",
@@ -443,6 +424,19 @@ export default function UrdfFileSheet({
             ) : (
               <FileSheetStatusText className="py-2">No movable joints.</FileSheetStatusText>
             )
+      )
+    } : null,
+    components.length ? {
+      id: "components",
+      title: "Components",
+      titleAttr: "Named exported mesh components, by link",
+      content: (
+        <RobotComponentsSection
+          components={components}
+          selectedIds={componentSelection.selectedIds}
+          onSelect={componentSelection.select}
+          onHover={componentSelection.hover}
+        />
       )
     } : null,
     ...settingsTabs

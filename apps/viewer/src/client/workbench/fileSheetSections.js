@@ -94,8 +94,12 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
       return [
         ...(isSdf ? [FILE_SHEET_SECTION_IDS.ROBOT_SDF] : []),
         ...(options.motionEnabled ? [FILE_SHEET_SECTION_IDS.ROBOT_MOTION] : []),
-        ...(showRobotComponents ? [FILE_SHEET_SECTION_IDS.ROBOT_COMPONENTS, FILE_SHEET_SECTION_IDS.STEP_REFERENCE] : []),
+        // Joints first: posing the robot is what a URDF is opened for, and it is the
+        // tab the sheet lands on. Components is the inspection affordance next to it,
+        // and it carries its own Reference at its foot rather than owning a tab that
+        // stands empty until something is selected.
         ...(showJoints ? [FILE_SHEET_SECTION_IDS.ROBOT_JOINTS] : []),
+        ...(showRobotComponents ? [FILE_SHEET_SECTION_IDS.ROBOT_COMPONENTS] : []),
         FILE_SHEET_SECTION_IDS.DISPLAY
       ];
     case "mesh":

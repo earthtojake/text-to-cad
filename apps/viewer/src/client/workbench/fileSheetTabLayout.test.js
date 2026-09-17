@@ -34,36 +34,28 @@ test("step, dxf and the robot kinds support the split; a plain mesh does not", (
   assert.equal(kindSupportsSplit("mesh"), false);
 });
 
-test("a robot with named components puts Components on top, the readouts below", () => {
+test("a robot opens as one strip on Joints, Components beside it", () => {
+  // No robot tab claims the top pane, so the default is one strip and the first
+  // tab wins: Joints, the reason the file was opened. Components is one click
+  // away, and selecting a component jumps to it (CadWorkspace.selectRobotComponent).
   for (const kind of ["urdf", "srdf", "sdf"]) {
-    const arrangement = defaultFileSheetTabArrangement(
-      kind,
-      ["components", "reference", "joints", "display"]
-    );
-    assert.equal(arrangement.split, true, `${kind} should split`);
-    assert.deepEqual(arrangement.top, ["components"], `${kind} top pane`);
-    assert.deepEqual(
-      arrangement.bottom,
-      ["reference", "joints", "display"],
-      `${kind} bottom pane`
-    );
+    const arrangement = defaultFileSheetTabArrangement(kind, ["joints", "components", "display"]);
+    assert.equal(arrangement.split, false, `${kind} should not split by default`);
     const resolved = resolveFileSheetTabPanes(arrangement, kind, []);
-    assert.equal(resolved.panes[0].activeId, "components");
-    assert.equal(resolved.panes[1].activeId, "reference");
+    assert.equal(resolved.split, false, `${kind} should resolve to one pane`);
+    assert.deepEqual(resolved.panes[0].tabs, ["joints", "components", "display"], `${kind} tabs`);
+    assert.equal(resolved.panes[0].activeId, "joints", `${kind} lands on Joints`);
   }
 });
 
-test("Components slots into the top pane of a stored robot split when it first appears", () => {
+test("Components joins a stored robot split at its render-order position", () => {
   // The user dragged Joints up on a robot with no named objects; the next robot has
-  // some, and Components joins the pane it belongs to rather than being appended.
+  // some. Components belongs to no pane by default, so it lands in the bottom one —
+  // before Display, which renders after it, rather than appended past it.
   const stored = { split: true, top: ["joints"], bottom: ["display"] };
-  const normalized = normalizeFileSheetTabArrangement(
-    stored,
-    "urdf",
-    ["components", "reference", "joints", "display"]
-  );
-  assert.deepEqual(normalized.top, ["components", "joints"]);
-  assert.deepEqual(normalized.bottom, ["reference", "display"]);
+  const normalized = normalizeFileSheetTabArrangement(stored, "urdf", ["joints", "components", "display"]);
+  assert.deepEqual(normalized.top, ["joints"]);
+  assert.deepEqual(normalized.bottom, ["components", "display"]);
   assert.equal(normalized.split, true);
 });
 

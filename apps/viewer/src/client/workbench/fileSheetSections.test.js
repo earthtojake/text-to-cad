@@ -88,21 +88,22 @@ test("rendered file sheet sections include closed-by-default sections", () => {
   }), ["animation", "display"]);
 });
 
-test("named robot objects add Components and Reference between Motion and Joints", () => {
-  // Components is the inventory of named objects inside the linked meshes and
-  // Reference is the readout for whatever is selected, so the pair sits together
-  // ahead of Joints — the tab that MOVES the robot — and ahead of Display.
+test("named robot objects add Components after Joints, and no Reference tab", () => {
+  // Joints MOVES the robot and is what a URDF is opened for, so it leads and the
+  // sheet lands on it. Components is the inventory of named objects inside the
+  // linked meshes, and it carries the reference for whatever is selected at its
+  // own foot — a Reference tab would stand empty until something was picked.
   assert.deepEqual(
     renderedFileSheetSectionIds("urdf", { hasRobotComponents: true }),
-    ["components", "reference", "joints", "display"]
+    ["joints", "components", "display"]
   );
   assert.deepEqual(
     renderedFileSheetSectionIds("srdf", { hasRobotComponents: true, motionEnabled: true }),
-    ["motion", "components", "reference", "joints", "display"]
+    ["motion", "joints", "components", "display"]
   );
   assert.deepEqual(
     renderedFileSheetSectionIds("sdf", { hasRobotComponents: true }),
-    ["sdf", "components", "reference", "joints", "display"]
+    ["sdf", "joints", "components", "display"]
   );
 
   // Without named objects — an STL-only robot, or meshes whose objects are all

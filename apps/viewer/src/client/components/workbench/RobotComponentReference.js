@@ -4,6 +4,15 @@ import { copyTextToClipboard } from "@/ui/clipboard";
 import { Button } from "../ui/button";
 import { FileSheetButtonRow, FileSheetStatusText, FileSheetSubsection, FileSheetValueField } from "./FileSheet";
 
+// The locator for one selected component, shown at the FOOT of the Components tab —
+// not as a tab of its own. A reference is about the row the user just clicked, so it
+// belongs under that row, and a tab that says "select something" the whole time it is
+// not being used is a tab that should not exist.
+//
+// What it carries is what identifies the object to someone who is not looking at the
+// screen: the link and the object's own name, and the reference string to paste. The
+// visual id and the mesh URL were internal spellings (`base_link:v1`, a
+// `/__cad/asset?file=...` URL) that identify nothing outside this process.
 function ComponentReference({ component }) {
   const [status, setStatus] = useState("");
   const copy = async () => {
@@ -17,8 +26,6 @@ function ComponentReference({ component }) {
   return (
     <FileSheetSubsection title={component.name}>
       <FileSheetValueField label="Link" value={component.linkName} />
-      <FileSheetValueField label="Visual" value={component.visualId} />
-      <FileSheetValueField label="Mesh" value={component.mesh} />
       <FileSheetValueField label="Object" value={component.meshObjectId} />
       <FileSheetButtonRow>
         <Button type="button" variant="outline" className="h-7" onClick={copy}>
@@ -31,8 +38,8 @@ function ComponentReference({ component }) {
   );
 }
 
-export default function RobotComponentReferenceSection({ components, selectedIds }) {
+export default function RobotComponentReference({ components, selectedIds }) {
   const selected = components.filter((component) => selectedIds.includes(component.id));
-  if (!selected.length) return <FileSheetStatusText>Select a component in the list or viewport to inspect its reference.</FileSheetStatusText>;
+  if (!selected.length) return null;
   return selected.map((component) => <ComponentReference key={component.reference} component={component} />);
 }

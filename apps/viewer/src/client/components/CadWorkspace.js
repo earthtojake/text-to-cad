@@ -3463,7 +3463,8 @@ export default function CadWorkspace({
     robotSelection.select(id, options);
     if (selectedUrdfComponents.some((component) => component.id === id)) {
       if (isDesktop) setTabToolsOpen(true);
-      const revealIds = [FILE_SHEET_SECTION_IDS.STEP_REFERENCE, FILE_SHEET_SECTION_IDS.ROBOT_COMPONENTS];
+      // Components carries the reference at its foot, so revealing it is the whole jump.
+      const revealIds = [FILE_SHEET_SECTION_IDS.ROBOT_COMPONENTS];
       setFileSheetOpenSectionIds((current) => [
         ...(current || []).filter((sectionId) => !revealIds.includes(sectionId)),
         ...revealIds
