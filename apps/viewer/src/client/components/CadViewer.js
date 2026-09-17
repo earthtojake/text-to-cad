@@ -2855,6 +2855,26 @@ const CadViewer = forwardRef(function CadViewer({
     const sheetSpan = sheetBounds
       ? Math.max(sheetBounds.max[0] - sheetBounds.min[0], sheetBounds.max[2] - sheetBounds.min[2], 1)
       : 100;
+    // A drawing that declares its sheet (a SHEET layer holding the frame) gets paper
+    // behind it: the frame's extent, in a tone a shade off the viewport so the sheet
+    // reads as a page on the desk rather than lines floating in space.
+    const sheetLayer = layers.find((layer) => layer.name.toUpperCase() === "SHEET" && layer.positions.length);
+    if (sheetLayer) {
+      const frame = drawingLineBounds({ layers: [sheetLayer] });
+      if (frame) {
+        const paper = ink === 0x172638 ? 0xffffff : 0x2f343b;
+        const width = frame.max[0] - frame.min[0];
+        const height = frame.max[2] - frame.min[2];
+        const plane = new THREE.Mesh(
+          new THREE.PlaneGeometry(width + 6, height + 6),
+          new THREE.MeshBasicMaterial({ color: paper, depthWrite: false })
+        );
+        plane.position.set((frame.min[0] + frame.max[0]) / 2, (frame.min[2] + frame.max[2]) / 2, -0.05);
+        plane.renderOrder = 0;
+        plane.userData.dxfDrawingPaper = true;
+        container.add(plane);
+      }
+    }
     for (const layer of layers) {
       if (hiddenLayers.has(layer.name)) {
         continue;
