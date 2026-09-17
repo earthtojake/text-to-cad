@@ -3060,6 +3060,29 @@ export default function CadWorkspace({
   const drawingGeometryUrl = selectedEntryIsDrawing
     ? String(entryAssetUrl(selectedEntry, "dxf") || "")
     : "";
+  // A dimensioned DOCUMENT is shown as ezdxf renders it (the same renderer that prints
+  // the PDF): the server answers /__cad/drawing with SVG for the same file ref the asset
+  // URL carries, minus whichever layers are switched off.
+  const drawingSvgUrl = useMemo(() => {
+    if (!drawingGeometryUrl || !selectedEntryIsDrawingDocument) {
+      return "";
+    }
+    let fileRef = "";
+    try {
+      fileRef = new URL(drawingGeometryUrl, "http://cad.local").searchParams.get("file") || "";
+    } catch {
+      fileRef = "";
+    }
+    if (!fileRef) {
+      return "";
+    }
+    const params = new URLSearchParams({ file: fileRef });
+    const hidden = (Array.isArray(drawingHiddenLayers) ? drawingHiddenLayers : []).filter(Boolean);
+    if (hidden.length) {
+      params.set("hide", hidden.join(","));
+    }
+    return `/__cad/drawing?${params.toString()}`;
+  }, [drawingGeometryUrl, selectedEntryIsDrawingDocument, drawingHiddenLayers]);
   useEffect(() => {
     if (!drawingGeometryUrl) {
       setDrawingGeometry(null);
@@ -7506,6 +7529,7 @@ export default function CadWorkspace({
             : null}
           drawingGeometry={selectedEntryIsDrawing ? drawingGeometry : null}
           drawingIsDocument={selectedEntryIsDrawingDocument}
+          drawingSvgUrl={drawingSvgUrl}
           drawingThicknessMm={selectedEntryIsDrawing && !renderSession.enabled
             ? drawingThicknessMm
             : DXF_DEFAULT_THICKNESS_MM}

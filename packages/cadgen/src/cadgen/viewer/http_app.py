@@ -428,6 +428,8 @@ class CadApp:
                     self._handle_store_asset(request, response, query)
                 elif pathname == "/__cad/asset":
                     self._handle_asset(request, response, query)
+                elif pathname == "/__cad/drawing":
+                    self._handle_drawing_svg(request, response, query)
                 else:
                     # An unrecognised /__cad/* path is a bad API call, not a
                     # page. Falling through to the SPA answered typo'd and
@@ -595,6 +597,23 @@ class CadApp:
             return
         content_type = self.backend.content_type_for_path(candidate) or "application/octet-stream"
         response.stream_file(candidate, stat_result, content_type)
+
+    def _handle_drawing_svg(self, request, response, query):
+        """A dimensioned DXF as SVG, rendered by ezdxf's drawing add-on.
+
+        Same file resolution and guards as ``/__cad/asset``; ``hide`` is a
+        comma-separated list of layer names to leave out, so the viewer's layer
+        switches apply to the printed look as well.
+        """
+        candidate = self.backend.asset_path_for_file_ref(query.get("file") or "")
+        if not candidate or not os.path.isfile(candidate) or not str(candidate).lower().endswith(".dxf"):
+            response.send_json(404, {"error": "Not found"})
+            return
+        from .drawing_svg import render_drawing_svg
+
+        hidden = tuple(name for name in str(query.get("hide") or "").split(",") if name)
+        svg = render_drawing_svg(candidate, hidden_layers=hidden)
+        response.send_bytes(200, svg.encode("utf-8"), "image/svg+xml; charset=utf-8")
 
     def _handle_tess_get(self, request, response):
         """403 refused name, 404 miss, 200 hit.

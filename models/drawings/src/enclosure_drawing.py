@@ -22,9 +22,7 @@ def enclosure_drawing():
         revision="A", author="text-to-cad",
         notes=["BREAK SHARP EDGES.", "NO TOLERANCES SPECIFIED ON THIS SHEET."],
     )
-    top = sheet.view(part, "top", at=(120, 200))
-    front = sheet.view(part, "front", at=(120, 100))
-    right = sheet.view(part, "right", at=(280, 100))
+    top, front, right = sheet.three_views(part)
     top.overall()
     top.dim((STANDOFFS[0][0], W / 2, 0), (STANDOFFS[2][0], W / 2, 0), offset=24)
     top.dim((L / 2, STANDOFFS[2][1], 0), (L / 2, STANDOFFS[3][1], 0), offset=12)
@@ -32,7 +30,7 @@ def enclosure_drawing():
     top.diameter((STANDOFFS[1][0], STANDOFFS[1][1], H / 2), STANDOFF_D / 2, angle=135, text=f"%%c{STANDOFF_D:g} BOSS")
     front.dim((L / 2, -W / 2, 0), (L / 2, -W / 2, H), offset=12)
     right.dim((L / 2, -W / 2, 0), (L / 2, -W / 2 + WALL, 0), offset=-12, text=f"{WALL:g} WALL")
-    right.dim((L / 2, W / 2, 0), (L / 2, W / 2, FLOOR), offset=12, text=f"{FLOOR:g} FLOOR")
+    front.dim((-L / 2, -W / 2, 0), (-L / 2, -W / 2, FLOOR), offset=-12, text=f"{FLOOR:g} FLOOR")
     return sheet
 
 

@@ -1630,6 +1630,51 @@ function buildNativeGlbCadScene(THREE, document, source, receiveShadows) {
 
 /** Drawing ink that reads against the viewport background: near-black on paper, near-white
  *  on a dark sheet. A drawing is line work, and line work that matches the sheet is gone. */
+/** Rasterise a sheet's SVG into a texture. The SVG is the printed drawing (ezdxf's own
+ *  renderer), so the on-screen sheet and the PDF are one look. `maxPixels` bounds the
+ *  canvas: an A3 sheet at ~12 px/mm reads 3.5 mm text crisply at 100% and stays sharp to
+ *  about 3x zoom, which is where a drawing gets read. */
+function rasterizeSvgToTexture(THREE, svgText, { maxPixels = 5000 * 3600 } = {}) {
+  return new Promise((resolve, reject) => {
+    if (typeof document === "undefined" || typeof Image === "undefined") {
+      reject(new Error("no DOM"));
+      return;
+    }
+    const match = /viewBox="([^"]+)"/u.exec(svgText);
+    const viewBox = match ? match[1].trim().split(/[\s,]+/u).map(Number) : null;
+    const widthMm = viewBox && viewBox.length === 4 ? viewBox[2] : 420;
+    const heightMm = viewBox && viewBox.length === 4 ? viewBox[3] : 297;
+    const scale = Math.sqrt(maxPixels / Math.max(widthMm * heightMm, 1));
+    const width = Math.max(64, Math.round(widthMm * scale));
+    const height = Math.max(64, Math.round(heightMm * scale));
+    const blob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const image = new Image();
+    image.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext("2d");
+        context.drawImage(image, 0, 0, width, height);
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.anisotropy = 8;
+        resolve({ texture, widthMm, heightMm });
+      } catch (error) {
+        reject(error);
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("svg decode failed"));
+    };
+    image.src = url;
+  });
+}
+
 function drawingInkForBackground(backgroundCss) {
   const match = /^#?([0-9a-f]{6})$/iu.exec(String(backgroundCss || "").trim());
   if (!match) {
@@ -1807,6 +1852,7 @@ const CadViewer = forwardRef(function CadViewer({
   drawingMaterialColor = null,
   drawingGeometry = null,
   drawingIsDocument = false,
+  drawingSvgUrl = "",
   drawingThicknessMm = 0,
   onCameraZoomPercentChange = null,
   perspective = null,
@@ -2968,6 +3014,44 @@ const CadViewer = forwardRef(function CadViewer({
       runtime.dxfDrawingLines = container;
       runtime.hasDrawingDocument = true;
     }
+    // The printed look, when the server can render it: the sheet's SVG laid over the
+    // drawing's extent. The line work above is the immediate render and the fallback;
+    // once the image lands it is hidden, not disposed, so a failed fetch costs nothing.
+    const svgState = { cancelled: false };
+    if (drawingSvgUrl && sheetBounds) {
+      fetch(drawingSvgUrl)
+        .then((res) => (res.ok ? res.text() : Promise.reject(new Error(`drawing svg ${res.status}`))))
+        .then((svgText) => rasterizeSvgToTexture(THREE, svgText))
+        .then(({ texture }) => {
+          if (svgState.cancelled || container.parent !== group) {
+            texture.dispose();
+            return;
+          }
+          // The page is the drawing's extent with no margin, so it spans the parsed
+          // bounds exactly: the same rectangle the line work occupies.
+          const width = sheetBounds.max[0] - sheetBounds.min[0];
+          const height = sheetBounds.max[2] - sheetBounds.min[2];
+          const sheet = new THREE.Mesh(
+            new THREE.PlaneGeometry(width, height),
+            new THREE.MeshBasicMaterial({ map: texture, depthWrite: false, toneMapped: false })
+          );
+          sheet.position.set((sheetBounds.min[0] + sheetBounds.max[0]) / 2, (sheetBounds.min[2] + sheetBounds.max[2]) / 2, 0.01);
+          sheet.renderOrder = 6;
+          sheet.userData.dxfDrawingSheet = true;
+          for (const child of container.children) {
+            if (!child.userData?.dxfDrawingPaper) {
+              child.visible = false;
+            }
+          }
+          container.add(sheet);
+          runtime.requestRender?.();
+        })
+        .catch((error) => {
+          // The line work stays. A server without ezdxf's add-on, or an older server,
+          // still shows the drawing; say why in the console so a broken route is visible.
+          console.warn("[cad-viewer] drawing sheet image unavailable, showing line work:", error?.message || error);
+        });
+    }
     // A document has no mesh for the shared fit to measure, so its own extent stands in.
     // Publishing runtime.modelBounds is how it gets the shared zoom baseline, reset and fit
     // with no format-specific branch.
@@ -3020,8 +3104,10 @@ const CadViewer = forwardRef(function CadViewer({
     }
     markPresentationReady(runtime);
     runtime?.requestRender?.();
-    return undefined;
-  }, [applyActivePhotographicStudio, drawingIsDocument, drawingGeometry, drawingHiddenLayers, markPresentationReady, planMode, viewerReadyTick]);
+    return () => {
+      svgState.cancelled = true;
+    };
+  }, [applyActivePhotographicStudio, drawingIsDocument, drawingGeometry, drawingHiddenLayers, drawingSvgUrl, markPresentationReady, planMode, viewerReadyTick]);
 
   // Applied SYNCHRONOUSLY when the meshes already exist. The previous version restored flat
   // positions in its cleanup and re-folded on the next animation frame — so every slider

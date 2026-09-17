@@ -19,9 +19,7 @@ def enclosure_drawing():
     part = source_step("../STEP/enclosure.step")
     sheet = Sheet("A3", title="ENCLOSURE", part_number="ENC-001", material="ABS",
                   revision="A", notes=["BREAK SHARP EDGES."])
-    top = sheet.view(part, "top", at=(120, 200))
-    front = sheet.view(part, "front", at=(120, 100))
-    right = sheet.view(part, "right", at=(280, 100))
+    top, front, right = sheet.three_views(part)      # third-angle, placed from the part's size
     top.overall()
     top.dim((HOLES[0][0], W / 2, 0), (HOLES[2][0], W / 2, 0), offset=24)
     top.diameter((HOLES[3][0], HOLES[3][1], H / 2), 1.5, text="%%c3 x 8 DEEP, 4 PLACES")
@@ -49,7 +47,11 @@ Reads the STEP the drawing documents, relative to the script. Missing file →
 
 - `size`: `A4`, `A3`, `A2`, `A1`, `A0`, landscape. `width`/`height` in mm.
 - `scale`: drawing scale, 1 = 1:1, 0.5 = 1:2. Dimension values stay true size.
-- `ink`: `"color"` keeps per-layer colours; `"mono"` is ink-only for print.
+- `ink`: `"mono"` (default) is black ink with grey hidden lines, the printed look;
+  `"color"` keeps per-layer colours (red dimensions, green notes) for review.
+- `sheet.three_views(shape, gap=30)` → `(top, front, right)` placed in
+  third-angle arrangement from the part's extents. Use `view()` with `at=` when
+  you need other views or a custom layout.
 - `sheet.view(shape, name, at=(x, y), label=None, hidden=True, centre_marks=True)`
   → `View`. `name` is one of `top`, `bottom`, `front`, `back`, `left`,
   `right`, `iso`. The projected geometry is centred on `at`.

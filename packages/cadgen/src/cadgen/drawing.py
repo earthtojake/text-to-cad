@@ -177,6 +177,11 @@ class View:
         return self
 
 
+def _fmt(value: float) -> str:
+    text = f"{value:.2f}".rstrip("0").rstrip(".")
+    return text or "0"
+
+
 def _p3(p) -> tuple[float, float, float]:
     values = tuple(float(v) for v in p)
     if len(values) == 2:
@@ -204,7 +209,7 @@ class Sheet:
     units: str = "mm"
     projection: str = "THIRD ANGLE"
     notes: Sequence[str] = ()
-    ink: str = "color"
+    ink: str = "mono"
     text_height: float = 3.5
     views: list[View] = field(default_factory=list)
 
@@ -221,6 +226,30 @@ class Sheet:
     @property
     def height(self) -> float:
         return SHEET_SIZES[self.size][1]
+
+    def three_views(self, shape, *, gap: float = 30.0, hidden: bool = True, centre_marks: bool = True) -> tuple[View, View, View]:
+        """Top, front and right views in third-angle arrangement, placed from the
+        part's own extents: front centred low on the sheet, top above it, right
+        beside it, with `gap` millimetres between them, leaving room for
+        dimensions. Returns ``(top, front, right)``."""
+        size = shape.bounding_box().size
+        s = self.scale
+        L, W, H = size.X * s, size.Y * s, size.Z * s
+        m = _MARGIN
+        usable_w = self.width - 2 * m - 20
+        usable_h = self.height - 2 * m - _TITLE_H - 20
+        block_w = L + gap + W
+        block_h = H + gap + W
+        left = m + 20 + max(0.0, (usable_w - block_w) / 2)
+        bottom = m + _TITLE_H + 24 + max(0.0, (usable_h - block_h) / 2)
+        front_at = (left + L / 2, bottom + H / 2)
+        top_at = (front_at[0], bottom + H + gap + W / 2)
+        right_at = (left + L + gap + W / 2, front_at[1])
+        return (
+            self.view(shape, "top", at=top_at, hidden=hidden, centre_marks=centre_marks),
+            self.view(shape, "front", at=front_at, hidden=hidden, centre_marks=centre_marks),
+            self.view(shape, "right", at=right_at, hidden=hidden, centre_marks=centre_marks),
+        )
 
     def view(self, shape, name: str, *, at, label: str | None = None, hidden: bool = True, centre_marks: bool = True) -> View:
         if name not in VIEW_DIRECTIONS:
@@ -416,15 +445,25 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
         vx0, vx1, vy0, vy1 = min(xs), max(xs), min(ys), max(ys)
         text((view.label or view.name).upper(), view.at[0], vy0 - 6, 3.5, TextEntityAlignment.TOP_CENTER, "NOTES")
 
+        # How far annotation already reaches past each side of the view, so a later
+        # callout lands outside the dimensions that came before it.
+        reach = {"left": 0.0, "right": 0.0, "top": 0.0, "bottom": 0.0}
+
         def linear(a, b, offset, override, orientation):
             dx, dy = abs(b[0] - a[0]), abs(b[1] - a[1])
             horizontal = (orientation or ("h" if dx >= dy else "v")) == "h"
             if horizontal:
                 base = (a[0], (max(a[1], b[1]) if offset >= 0 else min(a[1], b[1])) + offset)
                 d = msp.add_linear_dim(base=base, p1=a, p2=b, angle=0, dimstyle=dimstyle, text=override or "<>", dxfattribs={"layer": "DIM"})
+                side = "top" if offset >= 0 else "bottom"
+                edge = vy1 if offset >= 0 else vy0
+                reach[side] = max(reach[side], abs(base[1] - edge) + sheet.text_height * 1.5)
             else:
                 base = ((max(a[0], b[0]) if offset >= 0 else min(a[0], b[0])) + offset, a[1])
                 d = msp.add_linear_dim(base=base, p1=a, p2=b, angle=90, dimstyle=dimstyle, text=override or "<>", dxfattribs={"layer": "DIM"})
+                side = "right" if offset >= 0 else "left"
+                edge = vx1 if offset >= 0 else vx0
+                reach[side] = max(reach[side], abs(base[0] - edge) + sheet.text_height * 1.5)
             d.render()
 
         if view._overall:
@@ -434,10 +473,29 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
             if dim.kind == "linear":
                 linear(model_to_sheet(dim.p1), model_to_sheet(dim.p2), dim.offset, dim.text, dim.orientation)
             elif dim.kind in ("diameter", "radius"):
+                # A hole callout: a leader from the circle's edge to a horizontal landing
+                # outside the view, past whatever dimensions already stand on that side,
+                # with the text reading along the landing. Nothing is drawn across the
+                # part, and stacked callouts on one side land at their own hole's height.
                 centre = model_to_sheet(dim.p1)
-                adder = msp.add_diameter_dim if dim.kind == "diameter" else msp.add_radius_dim
-                d = adder(center=centre, radius=dim.radius * s, angle=dim.angle, dimstyle=dimstyle, text=dim.text or "<>", dxfattribs={"layer": "DIM"})
-                d.render()
+                r = dim.radius * s
+                go_right = (vx1 - centre[0]) <= (centre[0] - vx0)
+                side = "right" if go_right else "left"
+                clear = reach[side] + 10.0
+                knee_x = (vx1 + clear) if go_right else (vx0 - clear)
+                # Leave the circle at 45 degrees toward the exit so the arrow reads as a
+                # pointer, then run level to the landing.
+                sign = 1.0 if go_right else -1.0
+                start = (centre[0] + sign * r * math.cos(math.radians(45)), centre[1] + r * math.sin(math.radians(45)))
+                knee = (knee_x, start[1] + abs(knee_x - start[0]) * 0.0 + 6.0)
+                landing = (knee[0] + sign * 6.0, knee[1])
+                msp.add_leader([start, knee, landing], dxfattribs={"layer": "DIM"},
+                               override={"dimasz": sheet.text_height * 0.85, "dimldrblk": "_CLOSEDFILLED"})
+                prefix = "%%c" if dim.kind == "diameter" else "R"
+                value = dim.text if dim.text else f"{prefix}{_fmt(2 * dim.radius if dim.kind == 'diameter' else dim.radius)}"
+                align = TextEntityAlignment.MIDDLE_LEFT if go_right else TextEntityAlignment.MIDDLE_RIGHT
+                text(value, landing[0] + sign * 2.0, landing[1], sheet.text_height, align, "DIM")
+                reach[side] = clear + 8.0 + len(value) * sheet.text_height * 0.7
             elif dim.kind == "note":
                 p = model_to_sheet(dim.p1)
                 q = (p[0] + dim.radius, p[1] + dim.angle)
