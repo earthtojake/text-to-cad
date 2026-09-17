@@ -51,7 +51,7 @@ dependencies = [
   # cadgen imports OCP directly for STEP/XCAF, topology and BREP work.  Match
   # build123d's non-VTK provider: cadgen does not import VTK or cadquery, and
   # this keeps the optional visualization stack out of every CAD install.
-  "cadquery-ocp-novtk>=7.9,<8",
+  "cadquery-ocp-novtk>=7.9,<9",
   "ezdxf",
   "shapely",
 ]
