@@ -66,7 +66,12 @@ pick_interpreter() {
   if [ -n "${VIEWER_PYTHON:-}" ]; then
     candidates=("$VIEWER_PYTHON")
   else
-    candidates=("$REPO_ROOT/.venv/bin/python" python3 python)
+    candidates=(
+      "$REPO_ROOT/.venv/bin/python"
+      "$REPO_ROOT/.venv/Scripts/python.exe"
+      python3
+      python
+    )
   fi
 
   local candidate resolved
@@ -88,7 +93,7 @@ if ! pick_interpreter; then
   if [ -n "${VIEWER_PYTHON:-}" ]; then
     echo "FAIL: VIEWER_PYTHON=$VIEWER_PYTHON cannot run, or cannot import cadgen." >&2
   elif [ -z "$FOUND_INTERPRETER" ]; then
-    echo "FAIL: no Python interpreter found (tried $REPO_ROOT/.venv/bin/python, python3, python)." >&2
+    echo "FAIL: no Python interpreter found (tried the repo venv, python3, and python)." >&2
     echo "      Set VIEWER_PYTHON to the one that installed requirements-dev.txt." >&2
     exit 1
   else
