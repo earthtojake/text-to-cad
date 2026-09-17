@@ -22,6 +22,7 @@ function uint32Buffer(values) {
 
 function makeOccurrenceGlb({
   cadExtras = true,
+  nodeName = "leaf",
   upAxis = null,
   stepTopology = false,
   materialBaseColor = null,
@@ -64,7 +65,7 @@ function makeOccurrenceGlb({
     ],
     nodes: [
       {
-        name: "leaf",
+        name: nodeName,
         mesh: 0,
         ...(cadExtras || upAxis
           ? {
@@ -461,6 +462,19 @@ test("GLB mesh data preserves cadOccurrenceId node extras", async () => {
   // once read as "already CAD space", which skipped the correction for every GLB cadgen
   // wrote (both presets stamp the id) and rendered them on their side.
   assert.deepEqual(cadVertices(meshData), CONVERTED_TO_CAD);
+});
+
+test("authored GLB names remain separate from stable occurrence identity", async () => {
+  const named = await buildMeshDataFromGlbBuffer(makeOccurrenceGlb({ nodeName: "left cylinder" }));
+  assert.equal(named.parts[0].id, "o1.2");
+  assert.equal(named.parts[0].occurrenceId, "o1.2");
+  assert.equal(named.parts[0].name, "left cylinder");
+  assert.equal(named.parts[0].label, "left cylinder");
+  assert.equal(named.parts[0].vertexCount, 3);
+  assert.equal(named.parts[0].triangleCount, 1);
+
+  const unnamed = await buildMeshDataFromGlbBuffer(makeOccurrenceGlb({ nodeName: "" }));
+  assert.equal(unnamed.parts[0].name, "o1.2", "a generated Three mesh name must not become an authored component");
 });
 
 test("native GLB mesh data converts Y-up meters to CAD Z-up millimeters", async () => {

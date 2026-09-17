@@ -43,15 +43,14 @@ and assets, so the app does not scan another package's source.
 - **One boundary**: the app imports shared packages through public exports.
   The root dependency checker prevents app-to-app and package-to-app imports.
   The backend is not here: its code, its tests and its laws live with cadgen.
-- **Document-boundary law**: everything renders from the artifact file, its
-  optional kinematics sidecar (`<name>.step.json`), its optional authored render
-  module (`<name>.step.js`), and the cache. The viewer never reads model source
-  code and never rebuilds on source changes — generated outputs are detached,
-  and a stale artifact stays stale until someone runs its script.
-- **Kinematics/animation independence**: the Kinematics tab drives the sidecar's
-  mate data through the shared FK runtime; the Animation tab evaluates clips
-  from the render module beside the document. They compose in the effect records
-  and nowhere else.
+- **Document boundary**: everything renders from the artifact, its optional
+  schema-9 `.step.json` sidecar and immutable cache views. The sidecar embeds
+  appearance, JavaScript animation and kinematics. The viewer never reads model
+  source and never triggers a source build. An already-running build can publish
+  complete immutable preview revisions before saving its STEP output.
+- **Independent motion**: kinematics and animation compose in effect records.
+  Annotation revisions reload without rebuilding geometry. A mismatched STEP
+  digest leaves geometry viewable and reports unavailable annotations.
 - **Loud failure**: a missing entry, an unresolvable ref, or a failed
   compile surfaces as an alert — never a silently wrong scene.
 
@@ -109,8 +108,8 @@ did not start. Dev lives on Vite's port (5173, strict) and never enters the
 instance registry.
 
 Reuse keys on realpath(served directory) × an identity token — the cadgen
-version salted with the newest mtime across the server's `.py` files and the
-built client — so an instance serving a different directory, the same directory
+version plus content digests of the server runtime and the selected built
+client — so an instance serving a different directory, the same directory
 from another install, or code that has since been edited, pulled, or rebuilt is
 never handed back by mistake. In a checkout, a server that finds `src/` beside
 the `dist/` it serves also warns once on stderr when any source is newer than
@@ -152,6 +151,13 @@ Headless CAD checks use Playwright with Metal on macOS and SwiftShader on
 Linux/Windows. Use the same graphics backend for baseline/refactor image
 comparisons.
 
+From the repository root, `scripts/test/test-viewer-browser.sh --ci` exercises
+the bundled client's format, picking, robot Components/Kinematics and camera
+contracts with fresh temporary fixtures and a private server/cache. Omit `--ci`
+to include full cold/warm/disabled-LOD picking, scene placement and Render quality
+checks. `--out /tmp/viewer-review` retains screenshots and bounded failure
+diagnostics; the runner cleans up its project and processes on exit.
+
 ### Branded loading indicator
 
 `@hardcore/ui/loading-icon` exports the decorative `LoadingIcon` independently of
@@ -170,3 +176,25 @@ More tools. Widening the scene restores the original full toolbar. Zoom and
 2D/3D controls remain separate and wrap within the available width. In Orbit,
 Exit and playback remain direct controls. The overflow menu uses the same
 handlers, availability and disabled states as the full toolbar.
+
+## Current viewer behavior
+
+The floating toolbar switches Inspect and Render. Inspect retains CAD themes,
+geometry-based Features, prompt selections, contextual measurements and Display.
+Render owns an independent camera, photographic studio, Preview/Final quality
+and material overlays. Robot files use unified Kinematics. In Inspect, linked
+meshes with authored object names also expose a Components tree grouped by link;
+primitive-only robots have no object inventory.
+These controls live in `@hardcore/ui`; the web host keeps URL/history, appearance
+and root-scoped persistence. See the UI package's Render and LOD playbooks.
+
+Large assemblies load progressively and refine visible components within memory
+budgets. Warm tessellations can render before exact surface derivation. The
+filename reports opening/updating stages, limited detail and actionable errors;
+its diagnostic preserves complete compiler output and offers a file-only retry.
+
+A source-checkout backend can restart on Python code changes. This browser host
+polls its identity and reloads when the same endpoint is ready. Installed wheels
+report `autoReload: false` and never enter that loop. Vite 8 handles client HMR,
+uses compiled workspace exports and honors an explicit `PORT` while retaining
+strict port binding. React 19 is deduplicated with the shared packages.

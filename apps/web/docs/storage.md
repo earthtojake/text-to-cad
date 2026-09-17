@@ -38,7 +38,7 @@ Current intended use:
   dismissed. A tip is recorded only when its close button is pressed — clicking
   away, Escape, and reloads all leave it unrecorded, so it comes back on the next
   chance until it is actually acknowledged. Cleared by `?resetTips=1`.
-- `cad-viewer:file-sheet-tab-layout:v5`: the Inspector's per-kind tab order,
+- `cad-viewer:file-sheet-tab-layout:v6`: the Inspector's per-kind tab order,
   pane assignment, split state and split ratio. The active tab remains per-file
   state.
 
@@ -111,7 +111,10 @@ Existing slice intent:
 - `tab`: file sheet section expansion, reference selection, part visibility,
   camera, tools, and drawing history.
 - `dxf`: DXF preview thickness and bend settings.
-- `stepModule`: STEP module enablement, parameter values, and animation state.
+- `stepModule`: kinematic parameter values.
+- `animation`: embedded clip, playback and elapsed-time state.
+- `render`: independent photographic mode, settings, camera and quality.
+- `materials`: per-file material overlays, invalidated by authored revisions.
 - `urdf`: joint values and motion-planning controls.
 - `largeFile`: large-file decisions such as selectable topology opt-in.
 
@@ -134,3 +137,14 @@ opening the root without a file does not silently select a different artifact.
 CAD state normalizers are supplied by `@hardcore/ui/renderers/cad/state`.
 Storage access is explicit in the host; constructing or importing a renderer
 never chooses a browser storage backend.
+
+Render tab rearrangements last for the current Render visit and never change the
+global Inspect layout. Material undo and Materials-panel selection remain with
+the active file when its panel is switched. Appearance uses a host cookie across
+viewer ports, with `cad-viewer:color-scheme` as its localStorage fallback; neither
+changes the per-file Render recipe or the host's CAD theme preference.
+
+Pose transition animation and speed use the existing
+`cad-viewer:pose-transition:v1` preference. The web adapter reads, writes and
+synchronizes that key through `CadPreferences`; the shared renderer discovers no
+browser storage.

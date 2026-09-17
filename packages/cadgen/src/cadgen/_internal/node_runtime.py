@@ -18,10 +18,9 @@ Two invariants this module exists to hold:
    child in a ``finally``. An orphaned Node process still writing into an output after
    its run has reported done is the single failure mode the whole "a thin Python process
    owns the child" design was chosen to prevent.
-2. **Bare specifiers resolve through the exports map.** The published skill runtime ships
-   ``packages/core`` as SOURCE with no ``node_modules`` beside the entry, so the
-   child is spawned with ``NODE_PATH=<packages dir>``: a ``NODE_PATH`` entry is treated as a
-   ``node_modules`` directory, which makes ``packages/core`` resolve as the package
+2. **Bare specifiers resolve through the exports map.** A source checkout runs compiled
+   ``packages/core`` builders whose package lives in the root workspace, so the
+   child is spawned with ``NODE_PATH=<root node_modules>``. That resolves
    ``@hardcore/core`` *through its exports map*. A directory ``--alias`` cannot do this -- it
    bypasses the exports map entirely. Same mechanism the bundler uses
    (``scripts/bundle/lib/node_builders.sh``).
@@ -52,7 +51,7 @@ from collections import deque
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
-from cadgen.assets import node_builders_dir, runtime_build_hint
+from cadgen.assets import dev_node_modules_missing, node_builders_dir, runtime_build_hint
 
 __all__ = [
     "NODE_ENV_VARS",
@@ -126,13 +125,16 @@ def node_package_root() -> Path:
 
     Only the DEV path needs this: a source checkout runs the live ``packages/core/bin``
     sources, whose bare ``@hardcore/core/...`` specifiers resolve through the resolve hook
-    against a ``packages`` directory. A packaged builder is esbuilt self-contained and
+    against the root ``node_modules`` workspace links. A packaged builder is self-contained and
     imports nothing bare, so the value is inert there.
 
     Derived from :func:`cadgen.assets.node_builders_dir` so there is ONE resolution order
     (assets.py) rather than two that can disagree.
     """
-    return node_builders_dir().parent.parent
+    builders = node_builders_dir()
+    if builders.parent.name == "core" and builders.parent.parent.name == "packages":
+        return builders.parents[2] / "node_modules"
+    return builders.parent.parent
 
 
 def node_builder_script(name: str) -> Path:
@@ -145,6 +147,14 @@ def node_builder_script(name: str) -> Path:
     a build that silently writes no preview.
     """
     builders = node_builders_dir()
+    missing = dev_node_modules_missing(builders)
+    if missing is not None:
+        raise NodeBuilderError(
+            f"cadgen is running from a source checkout ({builders.parent}) whose root "
+            f"node_modules is missing: {missing}. The compiled core builders resolve "
+            "their workspace package and dependencies there; run `npm ci` at the "
+            "repository root before using them."
+        )
     path = builders / str(name)
     if not path.is_file():
         # Two causes, one symptom, and :func:`cadgen.assets.runtime_build_hint` is what

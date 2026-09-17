@@ -1,45 +1,12 @@
-# The repo's test workflow: one job per thing that has to work, each conditional on
-# the changes that can break it. No gates, no shards. A job skipped by its own
-# condition satisfies its required check, so a prose-only pull request runs Version
-# Check and nothing else.
+# One job per concern, selected by the dependency graph. Shared core feeds
+# cadgen's runtime, UI, web, docs and desktop; UI feeds web and desktop. Apps
+# never feed another app. Policy checks run for changed shared contracts without
+# also running every skill suite. Runtime outputs are built only where needed.
 #
-# WHAT CAN BREAK WHAT (the dependency graph the conditions encode)
-#   packages/cadgen     the Python engine, CLI doors, daemon and the CAD Viewer BACKEND.
-#                       Everything downstream runs it: the skills (thin entrypoints over
-#                       its CLIs), the viewer (served by cadgen.viewer), the docs site
-#                       (documents its commands), the wheel.
-#   packages/core  bundled into the runtime cadgen executes (mesh exports,
-#                       snapshots), imported by the viewer client, and by the docs hero.
-#   apps/web         the client. Platform-agnostic JS; served by the backend.
-#   skills/             SKILL.md + scripts. Their suites run the cadgen CLIs; the docs
-#                       site mirrors their frontmatter.
-#   apps/docs           the docs site.
-#   scripts/, .github/, version metadata ("infra"): can break any job.
-#   Root *.md, notes/, models/, LICENSE ("prose"): read by no test. Markdown under
-#   skills/ and packages/cadgen/ is NOT prose -- test_documented_commands,
-#   test_skill_requirements and test_package_boundaries read it.
-#
-# WHAT RUNS WHERE
-#   Version Check     ubuntu   always: VERSION, derived metadata, skill pins
-#   cadgen (Linux)    ubuntu   the cadgen package suite, viewer backend included
-#   cadgen (Windows)  windows  the SAME suite. This is the one thing that must be
-#                              proven on Windows: paths, locks, subprocesses, file
-#                              URLs, the daemon, the viewer backend. Nothing else
-#                              runs there -- bundling, packaging, policy and the JS
-#                              suites are properties of the tree or of a browser,
-#                              not of an operating system.
-#   cadgen-js         ubuntu   cadgen-js unit tests (+ the viewer-memory bench helpers)
-#   viewer            ubuntu   the client's unit tests, then the bundled client
-#                              launched through the real backend
-#   skills            ubuntu   the policy gates (tests/python/global) + every skill suite
-#   docs              ubuntu   the docs site check
-#   packaging         ubuntu   bundle from clean, published-tree contract, wheel
-#                              package data, the CLIs pip-installed outside the repo
-#
-# Each job parallelises internally (unittest_files.py --jobs, node --test concurrency).
-# The packaged runtime is gitignored and built by whichever job needs it
-# (scripts/test/common.sh ensure_packaged_runtime, ~13 s).
-#
+# The check name "cadgen-js" is retained because main requires it; that job now
+# tests @hardcore/core. All eight existing required check names remain stable.
+# Desktop (macOS) also runs for desktop/shared/runtime changes. Prose-only root
+# changes run Version Check only; skill/package Markdown remains test input.
 name: Test
 
 on:
@@ -63,12 +30,14 @@ jobs:
     name: Changed paths
     runs-on: ubuntu-latest
     outputs:
-      cadgen: ${{ steps.filter.outputs.cadgen }}
-      cadgenjs: ${{ steps.filter.outputs.cadgenjs }}
-      viewer: ${{ steps.filter.outputs.viewer }}
-      skills: ${{ steps.filter.outputs.skills }}
-      docs: ${{ steps.filter.outputs.docs }}
-      infra: ${{ steps.filter.outputs.infra }}
+      cadgen: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.cadgen == 'true' }}
+      core: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.core == 'true' }}
+      ui: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.ui == 'true' }}
+      viewer: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.viewer == 'true' }}
+      desktop: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.desktop == 'true' }}
+      skills: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.skills == 'true' }}
+      docs: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.docs == 'true' }}
+      infra: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.infra == 'true' }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -82,8 +51,12 @@ jobs:
               - 'tests/python/packages/**'
               - 'tests/python/support/**'
               - 'requirements*.txt'
-            cadgenjs:
+            core:
               - 'packages/core/**'
+            ui:
+              - 'packages/ui/**'
+            desktop:
+              - 'apps/desktop/**'
             viewer:
               - 'apps/web/**'
               - 'tests/browser/**'
@@ -112,7 +85,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
         with:
-          # The VERSION guard needs the current target branch's history.
+          # The VERSION guard below diffs against the PR base.
           fetch-depth: 0
 
       - name: Set up Node.js
@@ -136,12 +109,12 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: bash scripts/release/check-pr-version.sh "$BASE_REF" "$HEAD_REF" "$HEAD_SHA"
 
-  # The cadgen package suite, CAD Viewer backend included, on both platforms. cadgen-js
+  # The cadgen package suite, CAD Viewer backend included, on both platforms. Core
   # is in the condition because it is bundled into the runtime these tests execute.
   cadgen-linux:
     name: cadgen (Linux)
     needs: changes
-    if: needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.cadgenjs == 'true' || needs.changes.outputs.infra == 'true'
+    if: needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
     env:
       # Test files at a time: each is a kernel-loading interpreter (~450 MB).
@@ -166,7 +139,7 @@ jobs:
   cadgen-windows:
     name: cadgen (Windows)
     needs: changes
-    if: needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.cadgenjs == 'true' || needs.changes.outputs.infra == 'true'
+    if: needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true'
     runs-on: windows-latest
     env:
       # Four, the core count. Six was measured: every file slowed by ~40% and the
@@ -191,7 +164,7 @@ jobs:
   cadgen-js:
     name: cadgen-js
     needs: changes
-    if: needs.changes.outputs.cadgenjs == 'true' || needs.changes.outputs.infra == 'true'
+    if: needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -205,11 +178,9 @@ jobs:
           playwright: "false"
           npm: packages/core
 
-      - name: Run cadgen-js tests
-        run: npm --prefix packages/core test
+      - name: Run shared core tests
+        run: scripts/test/test-js.sh --select core
 
-      - name: Run the viewer-memory bench helper tests
-        run: node --test scripts/bench/viewer-memory/*.test.mjs
 
   # The client is platform-agnostic JS, so Linux only. It runs on a cadgen change too:
   # the launch step serves the bundled client through the real backend and draws it in
@@ -217,7 +188,7 @@ jobs:
   viewer:
     name: viewer
     needs: changes
-    if: needs.changes.outputs.viewer == 'true' || needs.changes.outputs.cadgenjs == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.infra == 'true'
+    if: needs.changes.outputs.viewer == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -227,10 +198,16 @@ jobs:
       - name: Set up dependencies
         uses: ./.github/actions/setup-deps
         with:
-          npm: packages/core apps/web
+          npm: packages/core packages/ui apps/web
+          ui-browser: "true"
+
+      - name: Run shared UI tests
+        if: needs.changes.outputs.ui == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true'
+        run: scripts/test/test-js.sh --select ui
 
       - name: Run the CAD Viewer client tests
-        run: npm --prefix apps/web run test
+        if: needs.changes.outputs.viewer == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true'
+        run: scripts/test/test-js.sh --select web
 
       - name: Bundle production outputs
         run: scripts/bundle/bundle.sh
@@ -238,12 +215,15 @@ jobs:
       - name: Launch the bundled CAD Viewer through the backend
         run: scripts/test/test-viewer-launch.sh
 
+      - name: Exercise the bundled viewer in Chromium
+        run: scripts/test/test-viewer-browser.sh --ci
+
   # The policy gates read the repo's markdown and manifests; the skill suites run the
   # cadgen CLIs. Repository properties, so Linux only.
   skills:
     name: skills
     needs: changes
-    if: needs.changes.outputs.skills == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.cadgenjs == 'true' || needs.changes.outputs.infra == 'true'
+    if: needs.changes.outputs.skills == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.viewer == 'true' || needs.changes.outputs.desktop == 'true'
     runs-on: ubuntu-latest
     env:
       CADGEN_TEST_JOBS: "4"
@@ -261,14 +241,15 @@ jobs:
         run: scripts/test/test-global.sh
 
       - name: Run every skill suite
+        if: needs.changes.outputs.skills == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true'
         run: scripts/test/test-python.sh --select skills --print-weights
 
-  # The docs site mirrors the skills' frontmatter, renders through cadgen-js and
+  # The docs site mirrors the skills' frontmatter, renders through core and
   # documents cadgen's commands, so it runs on any of those changing.
   docs:
     name: docs
     needs: changes
-    if: needs.changes.outputs.docs == 'true' || needs.changes.outputs.skills == 'true' || needs.changes.outputs.cadgenjs == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.infra == 'true'
+    if: needs.changes.outputs.docs == 'true' || needs.changes.outputs.skills == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -280,7 +261,7 @@ jobs:
         with:
           python: "false"
           playwright: "false"
-          npm: apps/docs
+          npm: packages/core apps/docs
 
       - name: Run documentation checks
         run: scripts/test/test-docs.sh
@@ -291,7 +272,7 @@ jobs:
   packaging:
     name: packaging
     needs: changes
-    if: needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.cadgenjs == 'true' || needs.changes.outputs.viewer == 'true' || needs.changes.outputs.infra == 'true'
+    if: needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.viewer == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -301,7 +282,7 @@ jobs:
       - name: Set up dependencies
         uses: ./.github/actions/setup-deps
         with:
-          npm: packages/core apps/web
+          npm: packages/core packages/ui apps/web
 
       - name: Bundle production outputs from clean
         run: scripts/bundle/bundle.sh --clean
@@ -313,6 +294,9 @@ jobs:
       # matching produces a wheel that imports fine and fails on a user's machine, so the
       # wheel is built and inspected here rather than trusted.
       - name: Check cadgen wheel contents
+        env:
+          CADGEN_KEEP_WHEEL: "1"
+          CADGEN_WHEEL_OUT_DIR: ${{ runner.temp }}/cadgen-wheel-check
         run: |
           python -m pip install build
           scripts/release/check-wheel-contents.sh
@@ -320,32 +304,39 @@ jobs:
       # The CLIs the way a user gets them -- pip-installed, from a directory that is not
       # this repo -- which is the only place a missing package-data glob or an accidental
       # repo-relative path shows up.
-      - name: Run installed-mode checks
-        run: scripts/test/test-installed.sh
+      - name: Run installed-mode checks against the verified wheel
+        run: |
+          shopt -s nullglob
+          wheels=("$RUNNER_TEMP/cadgen-wheel-check/"*.whl)
+          [ "${#wheels[@]}" -eq 1 ] || { echo "Expected one verified wheel" >&2; exit 1; }
+          scripts/test/test-installed.sh --wheel "${wheels[0]}"
 
+  # Electron/native integration follows only its actual dependencies.
   desktop:
     name: Desktop (macOS)
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.infra == 'true'
     runs-on: macos-latest
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
+      - name: Set up desktop and CAD dependencies
+        uses: ./.github/actions/setup-deps
         with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: package-lock.json
+          npm: packages/core packages/ui apps/desktop
+          playwright: "false"
 
-      # The explicit native:rebuild step runs electron-builder install-app-deps for
-      # better-sqlite3 and node-pty for Electron. A plain `npm ci --ignore-scripts`
-      # would install them for Node's ABI and every database test would fail to load.
-      - name: Install desktop dependencies
+      # The app's renderer supplies the UI. CAD tests need only the source
+      # Python service and Node/browser assets, not a packaged SPA or downloaded
+      # multiarchitecture runtime. CadRuntime discovers this private checkout venv.
+      - name: Prepare the checkout CAD runtime and native modules
         run: |
-          npm ci
+          python -m venv --system-site-packages .venv
+          .venv/bin/python -m pip install --no-deps --ignore-installed -e ./packages/cadgen
+          scripts/bundle/cadgen-runtime.sh --node --browser
           npm run native:rebuild -w hardcore
-          npm run build:packages
 
       - name: Typecheck
         run: npm --prefix apps/desktop run typecheck
@@ -359,7 +350,9 @@ jobs:
       - name: Build
         run: npm --prefix apps/desktop run build
 
-      - name: Run the Electron smoke test
+      - name: Run the Electron integration suite
+        env:
+          HARDCORE_E2E_REQUIRE_CAD: "1"
         run: npm --prefix apps/desktop run e2e
 
       # The screenshots the e2e writes are the cheapest review of whether the app

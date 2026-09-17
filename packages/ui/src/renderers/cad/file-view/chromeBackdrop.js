@@ -1,17 +1,12 @@
 // The scene's backdrop when the active CAD theme is "System".
 //
-// A theme paints the scene, and every preset but one — and the custom theme —
+// The resolved studio paints the scene; the app background remains the fallback
 // paints the backdrop its own settings ask for: Cinematic's radial charcoal is
 // Cinematic. "System" is the one that means *follow the app*, so it paints the
-// chrome's own ground: the `--background` token on the document, which the
-// standalone viewer's globals and a host's (the desktop app's) both define as
-// the same shadcn neutral pair.
-//
-// A page with no such token is not an error, it is a headless render: the
-// snapshot bundle draws into an offscreen canvas with no stylesheet and no
-// chrome to match. That falls back to the literal values of that pair, which
-// are what `oklch(1 0 0)` and `oklch(0.145 0 0)` resolve to, so the colour is
-// the same with a stylesheet or without one.
+// chrome's own ground: the `--background` token on the document.
+// A missing or unreadable token falls back to the viewer's neutral light and
+// charcoal dark palette. This is app UI resolution; the standalone snapshot
+// renderer consumes its own supplied theme settings without app preferences.
 //
 // Plain functions, no `@/` imports and no React, so `node --test` loads this
 // file directly; `document` arrives as an argument for the same reason.
@@ -19,10 +14,10 @@
 /** The `--background` pair, written out: what the tokens resolve to. */
 export const CHROME_BACKDROP_FALLBACK = Object.freeze({
   light: "#ffffff",
-  dark: "#0a0a0a"
+  dark: "#292929"
 });
 
-/** The custom property both apps define the chrome's ground in. */
+/** The custom property defining the app's background. */
 export const CHROME_BACKGROUND_TOKEN = "--background";
 
 function clamp01(value) {
@@ -212,6 +207,8 @@ export function resolveChromeBackdropColor({ token = "", prefersDark = false } =
  */
 export function sceneBackdropEdgeColor(background = null, fallback = CHROME_BACKDROP_FALLBACK.light) {
   const type = String(background?.type || "").trim().toLowerCase();
+  // A transparent canvas reveals the app behind it, not a dormant solid color.
+  if (type === "transparent") return fallback;
   const edge = type === "linear"
     ? background?.linearEnd
     : type === "radial"

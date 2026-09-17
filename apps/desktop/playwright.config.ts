@@ -26,6 +26,11 @@ import { defineConfig } from "@playwright/test";
  */
 process.env.HARDCORE_E2E_HIDDEN ??= "1";
 
+// A test must never attach to an inherited interactive build broker.
+for (const key of ["CADGEN_BROKER", "CADGEN_BROKER_KEY", "CADGEN_BROKER_STATS", "CADGEN_DAEMON_CHILD", "CADGEN_ROOT_ID"]) {
+  delete process.env[key];
+}
+
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: false,
@@ -35,7 +40,7 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   reporter: process.env.CI ? "list" : [["list"]],
   forbidOnly: Boolean(process.env.CI),
-  retries: process.env.CI ? 1 : 0,
+  retries: 0,
   use: {
     trace: "retain-on-failure",
   },

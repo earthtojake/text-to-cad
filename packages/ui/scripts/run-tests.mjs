@@ -37,6 +37,8 @@ if (!tests.length) {
 
 const result = spawnSync(process.execPath, [
   "--test",
+  "--test-concurrency=4",
+  "--import", path.join(packageRoot, "scripts/registerJsxLoader.mjs"),
   ...tests,
 ], {
   cwd: packageRoot,

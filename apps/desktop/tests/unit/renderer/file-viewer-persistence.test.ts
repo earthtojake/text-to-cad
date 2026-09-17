@@ -6,7 +6,7 @@ describe("FileViewer persisted CAD state migration", () => {
   it("keeps the old theme and tutorial seen state without reinterpreting versioned records", () => {
     localStorage.setItem("cad-viewer:theme", JSON.stringify({ version: 13, themeId: "cinematic", custom: { exposure: 1.2 } }));
     localStorage.setItem("cad-viewer:tutorial-tips:v1", JSON.stringify({ version: 1, seen: ["copyReference", 5] }));
-    expect(migrateCadPreferences(localStorage)).toEqual({ theme: { themeId: "cinematic", custom: { exposure: 1.2 } }, seenTips: ["copyReference"], fileSheetTabs: {} });
+    expect(migrateCadPreferences(localStorage)).toEqual({ theme: { themeId: "cinematic", custom: { exposure: 1.2 } }, seenTips: ["copyReference"], poseTransition: { animate: true, speed: 1 }, fileSheetTabs: {} });
     localStorage.setItem("cad-viewer:theme", JSON.stringify({ version: 12, themeId: "cinematic" }));
     expect(migrateCadPreferences(localStorage).theme).toBeUndefined();
   });
@@ -40,5 +40,21 @@ describe("FileViewer persisted CAD state migration", () => {
     localStorage.setItem("cad-viewer:theme", JSON.stringify({ version: 13, themeId: "system", custom: null }));
     window.dispatchEvent(new StorageEvent("storage", { key: "cad-viewer:theme" }));
     expect(firstRoot.getSnapshot().theme?.themeId).toBe("system");
+  });
+  it("preserves pose transition preferences across roots and synchronizes another window without rewriting it", () => {
+    const key = "cad-viewer:pose-transition:v1";
+    localStorage.setItem(key, JSON.stringify({ animate: false, speed: 2 }));
+    expect(migrateCadPreferences(localStorage).poseTransition).toEqual({ animate: false, speed: 2 });
+    const firstRoot = desktopCadPreferences();
+    window.dispatchEvent(new StorageEvent("storage", { key }));
+    expect(firstRoot.getSnapshot().poseTransition).toEqual({ animate: false, speed: 2 });
+    firstRoot.update({ poseTransition: { animate: true, speed: 4 } });
+    expect(JSON.parse(localStorage.getItem(key)!)).toEqual({ animate: true, speed: 4 });
+    expect(desktopCadPreferences().getSnapshot().poseTransition).toEqual({ animate: true, speed: 4 });
+
+    localStorage.setItem(key, JSON.stringify({ animate: false, speed: 0.001 }));
+    window.dispatchEvent(new StorageEvent("storage", { key }));
+    expect(firstRoot.getSnapshot().poseTransition).toEqual({ animate: false, speed: 1 });
+    expect(JSON.parse(localStorage.getItem(key)!)).toEqual({ animate: false, speed: 0.001 });
   });
 });

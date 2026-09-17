@@ -44,7 +44,7 @@ function createRecord(partId, {
     mesh: { visible: true, renderOrder: 2 },
     edges: { visible: true, renderOrder: 3 },
     material,
-    edgeMaterial,
+    edgeMaterials: [edgeMaterial],
     baseOpacity,
     baseColor: new THREE.Color("#aaaaaa"),
     baseEmissiveColor: new THREE.Color("#111111"),
@@ -86,9 +86,9 @@ test("part visual state matches focused assembly ids against descendant records"
   });
 
   assertNear(focusedChild.material.opacity, 0.8, "focused descendant opacity");
-  assertNear(focusedChild.edgeMaterial.opacity, 0.5, "focused descendant edge opacity");
+  assertNear(focusedChild.edgeMaterials[0].opacity, 0.5, "focused descendant edge opacity");
   assertNear(dimmedSibling.material.opacity, 0.035, "unfocused sibling opacity");
-  assertNear(dimmedSibling.edgeMaterial.opacity, 0.035, "unfocused sibling edge opacity");
+  assertNear(dimmedSibling.edgeMaterials[0].opacity, 0.035, "unfocused sibling edge opacity");
 });
 
 test("part visual state applies hover and selected styling without changing visibility", () => {
@@ -135,9 +135,9 @@ test("part visual state applies hover and selected styling without changing visi
   );
   assert.equal(hoverRecord.material.emissive.getHexString(), colors.hoveredSurfaceColor.getHexString());
   assertNear(hoverRecord.material.emissiveIntensity, PART_HOVER_EMISSIVE_INTENSITY, "hover emissive");
-  assert.equal(hoverRecord.edgeMaterial.color.getHexString(), colors.hoveredEdgeColor.getHexString());
+  assert.equal(hoverRecord.edgeMaterials[0].color.getHexString(), colors.hoveredEdgeColor.getHexString());
   // Hover keeps a lighter outline than selection.
-  assertNear(hoverRecord.edgeMaterial.opacity, 0.9 * PART_HOVER_EDGE_EMPHASIS, "hover edge opacity");
+  assertNear(hoverRecord.edgeMaterials[0].opacity, 0.9 * PART_HOVER_EDGE_EMPHASIS, "hover edge opacity");
   assert.equal(hoverRecord.ghostMesh, undefined, "hover never builds an occlusion ghost");
 
   assertNear(selectedRecord.material.opacity, 0.9, "selected opacity");
@@ -159,8 +159,8 @@ test("part visual state applies hover and selected styling without changing visi
   assert.notEqual(selectedRecord.material.color.getHexString(), "aaaaaa");
   assert.equal(selectedRecord.material.emissive.getHexString(), colors.selectedSurfaceColor.getHexString());
   assertNear(selectedRecord.material.emissiveIntensity, PART_SELECTED_EMISSIVE_INTENSITY, "selected emissive");
-  assert.equal(selectedRecord.edgeMaterial.color.getHexString(), colors.selectedEdgeColor.getHexString());
-  assertNear(selectedRecord.edgeMaterial.opacity, 0.9, "selected edge opacity");
+  assert.equal(selectedRecord.edgeMaterials[0].color.getHexString(), colors.selectedEdgeColor.getHexString());
+  assertNear(selectedRecord.edgeMaterials[0].opacity, 0.9, "selected edge opacity");
 
   // Selection must read stronger than hover on every axis, or "about to pick"
   // and "already picked" are indistinguishable.
@@ -169,7 +169,7 @@ test("part visual state applies hover and selected styling without changing visi
     "selection should glow more than hover"
   );
   assert.ok(
-    selectedRecord.edgeMaterial.opacity > hoverRecord.edgeMaterial.opacity,
+    selectedRecord.edgeMaterials[0].opacity > hoverRecord.edgeMaterials[0].opacity,
     "selection should outline harder than hover"
   );
 });
@@ -208,7 +208,7 @@ test("hovering an already-selected part keeps the selected treatment", () => {
   const colors = getPartHighlightColors(THREE, { edgeSettings: { highlightColor: "#4f9dff" } });
   assert.equal(record.material.emissive.getHexString(), colors.selectedSurfaceColor.getHexString());
   assertNear(record.material.emissiveIntensity, PART_SELECTED_EMISSIVE_INTENSITY, "selected emissive wins");
-  assertNear(record.edgeMaterial.opacity, 0.9, "selected edge opacity wins");
+  assertNear(record.edgeMaterials[0].opacity, 0.9, "selected edge opacity wins");
   assert.ok(record.ghostMesh?.visible, "a hovered selection still ghosts");
 });
 
@@ -277,76 +277,39 @@ test("occlusion ghost is built lazily and only while the part is selected", () =
   assert.equal(children.length, 1);
 });
 
-test("part visual state highlights shader-rendered surface edges", () => {
+test("part visual state overrides the vertex-coloured CAD edge line on highlight and restores the classes", () => {
   const record = createRecord("part", {
     baseOpacity: 1
   });
-  record.material.userData.cadSurfaceEdges = true;
-  record.material.userData.cadSurfaceEdgeBaseColor = new THREE.Color("#111111");
-  record.material.userData.cadSurfaceEdgeColor = new THREE.Color("#111111");
-  record.material.userData.cadSurfaceEdgeBaseClassSettings = {
-    feature: { color: "#111111", opacity: 0.25 },
-    tangent: { color: "#224466", opacity: 0.15 },
-    seam: { color: "#335577", opacity: 0.2 },
-    degenerate: { color: "#446688", opacity: 0.1 }
-  };
-  record.material.userData.cadSurfaceEdgeShader = {
-    uniforms: {
-      cadSurfaceEdgeColor: { value: new THREE.Color("#111111") },
-      cadSurfaceFeatureColor: { value: new THREE.Color("#111111") },
-      cadSurfaceTangentColor: { value: new THREE.Color("#224466") },
-      cadSurfaceSeamColor: { value: new THREE.Color("#335577") },
-      cadSurfaceDegenerateColor: { value: new THREE.Color("#446688") },
-      cadSurfaceFeatureOpacity: { value: 0.25 },
-      cadSurfaceTangentOpacity: { value: 0.15 },
-      cadSurfaceSeamOpacity: { value: 0.2 },
-      cadSurfaceDegenerateOpacity: { value: 0.1 }
-    }
-  };
-
-  applyPartVisualState(THREE, [record], {
-    viewerTheme: {
-      edge: "#111111",
-      edgeOpacity: 0.4
-    },
-    edgeSettings: {
-      highlightColor: "#8dc5ff",
-      highlightOpacity: 0.9
-    },
+  const classed = new THREE.LineBasicMaterial({ color: "#ffffff", vertexColors: true, transparent: true, opacity: 1 });
+  classed.userData.cadEdgeVertexColors = true;
+  record.edgeMaterials = [classed];
+  const state = (selectedPartIds) => ({
+    viewerTheme: { edge: "#111111", edgeOpacity: 0.4 },
+    edgeSettings: { highlightColor: "#8dc5ff", highlightOpacity: 0.9 },
     hiddenPartIds: [],
     hoveredPartId: "",
     focusedPartId: [],
-    selectedPartIds: ["part"],
+    selectedPartIds,
     showEdges: true
   });
 
-  assert.equal(record.material.userData.cadSurfaceEdgeShader.uniforms.cadSurfaceEdgeColor.value.getHexString(), "8dc5ff");
-  assert.equal(record.material.userData.cadSurfaceEdgeShader.uniforms.cadSurfaceFeatureColor.value.getHexString(), "8dc5ff");
-  assert.equal(record.material.userData.cadSurfaceEdgeShader.uniforms.cadSurfaceTangentColor.value.getHexString(), "8dc5ff");
-  assertNear(record.material.userData.cadSurfaceEdgeShader.uniforms.cadSurfaceFeatureOpacity.value, 0.9, "selected feature edge opacity");
-  assertNear(record.material.userData.cadSurfaceEdgeShader.uniforms.cadSurfaceTangentOpacity.value, 0.9, "selected tangent edge opacity");
+  applyPartVisualState(THREE, [record], state(["part"]));
+  assert.equal(classed.vertexColors, false, "the highlight colour replaces the class colours");
+  assert.equal(classed.color.getHexString(), "8dc5ff");
+  assertNear(classed.opacity, 0.9, "selected edge opacity");
 
-  applyPartVisualState(THREE, [record], {
-    viewerTheme: {
-      edge: "#111111",
-      edgeOpacity: 0.4
-    },
-    edgeSettings: {
-      highlightColor: "#8dc5ff",
-      highlightOpacity: 0.9
-    },
-    hiddenPartIds: [],
-    hoveredPartId: "",
-    focusedPartId: [],
-    selectedPartIds: [],
-    showEdges: true
-  });
+  applyPartVisualState(THREE, [record], state([]));
+  assert.equal(classed.vertexColors, true, "the class colours come back");
+  assert.equal(classed.color.getHexString(), "ffffff");
+  assertNear(classed.opacity, 1, "class opacities unscaled");
 
-  assert.equal(record.material.userData.cadSurfaceEdgeShader.uniforms.cadSurfaceEdgeColor.value.getHexString(), "111111");
-  assert.equal(record.material.userData.cadSurfaceEdgeShader.uniforms.cadSurfaceFeatureColor.value.getHexString(), "111111");
-  assert.equal(record.material.userData.cadSurfaceEdgeShader.uniforms.cadSurfaceTangentColor.value.getHexString(), "224466");
-  assertNear(record.material.userData.cadSurfaceEdgeShader.uniforms.cadSurfaceFeatureOpacity.value, 0.25, "restored feature edge opacity");
-  assertNear(record.material.userData.cadSurfaceEdgeShader.uniforms.cadSurfaceTangentOpacity.value, 0.15, "restored tangent edge opacity");
+  // An effect edge colour recolours every class; the effect edge opacity scales them.
+  record.effectStyle = { edgeColor: "#ff0000", edgeOpacity: 0.5 };
+  applyPartVisualState(THREE, [record], state([]));
+  assert.equal(classed.vertexColors, false);
+  assert.equal(classed.color.getHexString(), "ff0000");
+  assertNear(classed.opacity, 0.5, "effect-scaled edge opacity");
 });
 
 test("part visual state hides hidden records and ghosts dimmed records", () => {
@@ -379,7 +342,7 @@ test("part visual state hides hidden records and ghosts dimmed records", () => {
   assert.equal(hiddenRecord.mesh.renderOrder, 2);
   assert.equal(hiddenRecord.edges.renderOrder, 3);
   assertNear(hiddenRecord.material.opacity, 0, "hidden opacity");
-  assertNear(hiddenRecord.edgeMaterial.opacity, 0, "hidden edge opacity");
+  assertNear(hiddenRecord.edgeMaterials[0].opacity, 0, "hidden edge opacity");
   assert.equal(dimmedRecord.mesh.visible, true);
   assert.equal(dimmedRecord.edges.visible, true);
   assert.equal(dimmedRecord.material.transparent, true);
@@ -387,7 +350,7 @@ test("part visual state hides hidden records and ghosts dimmed records", () => {
   assert.equal(dimmedRecord.mesh.renderOrder, 2);
   assert.equal(dimmedRecord.edges.renderOrder, 3);
   assertNear(dimmedRecord.material.opacity, 0.035, "dimmed opacity");
-  assertNear(dimmedRecord.edgeMaterial.opacity, 0.035, "dimmed edge opacity");
+  assertNear(dimmedRecord.edgeMaterials[0].opacity, 0.035, "dimmed edge opacity");
 });
 
 test("part visual state restores depth and render order after highlight", () => {

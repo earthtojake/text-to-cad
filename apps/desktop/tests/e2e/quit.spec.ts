@@ -1,10 +1,10 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { _electron as electron, expect, test, type Page } from "@playwright/test";
+import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-runtime";
 
 /**
  * Quitting has a budget: two seconds from `app.quit()` to the process being
@@ -26,6 +26,7 @@ declare const window: {
   hardcore: {
     projects: { addPath(request: { path: string }): Promise<{ id: string }> };
     settings: { set(patch: Record<string, unknown>): Promise<unknown> };
+    runtime: { status(): Promise<{ state: string; cadgenVersion: string | null }> };
     sessions: {
       create(request: { projectId: string; agentId: string; gitMode: string }): Promise<{ id: string }>;
       prompt(request: { id: string; content: { type: "text"; text: string }[] }): Promise<{ stopReason: string }>;
@@ -36,24 +37,17 @@ declare const window: {
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const repoRoot = path.resolve(appRoot, "..", "..");
 const fakeAgent = path.join(appRoot, "tests", "fake-agent", "index.mjs");
-const STEP = "models/examples/imported/import-smoke.step";
-
-const CAD_PYTHON =
-  process.env.CAD_DESKTOP_PYTHON ??
-  [path.join(repoRoot, ".venv", "bin", "python"), path.resolve(repoRoot, "..", "..", "..", ".venv", "bin", "python")].find((candidate) =>
-    fs.existsSync(candidate),
-  ) ??
-  null;
+const STEP = "tests/fixtures/cad/import-smoke.step";
 
 /** The whole budget, from `app.quit()` to the process being gone. */
 const QUIT_BUDGET_MS = 2_000;
 
 test("the app quits in under two seconds with everything running, leaving no child behind", async () => {
   test.setTimeout(240_000);
-  const userData = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-quit-e2e-"));
+  const userData = cadTestProfile("quit");
   const app = await electron.launch({
     args: [path.join(appRoot, "out", "main", "index.js"), `--user-data-dir=${userData}`],
-    env: { ...process.env, NODE_ENV: "test", HARDCORE_FAKE_AGENT: fakeAgent },
+    env: { ...process.env, ...cadRegistryEnvironment(userData), NODE_ENV: "test", CADGEN_DAEMON: "0", CADGEN_CACHE_DIR: path.join(userData, "cad-cache"), CADGEN_DAEMON_STATE_DIR: path.join(userData, "cad-daemon"), HARDCORE_FAKE_AGENT: fakeAgent },
   });
   // Main's own log: how long its teardown took.
   app.process().stdout?.on("data", (chunk: Buffer) => {
@@ -85,8 +79,7 @@ test("the app quits in under two seconds with everything running, leaving no chi
   void page.evaluate((id) => window.hardcore.sessions.prompt({ id, content: [{ type: "text", text: "slow" }] }), session.id).catch(() => {});
 
   // The CAD viewer child and a WebGL context, when an interpreter is available.
-  if (CAD_PYTHON) {
-    await page.evaluate((python) => window.hardcore.settings.set({ cadPythonOverride: python }), CAD_PYTHON);
+  if (cadRuntimeReady(await page.evaluate(() => window.hardcore.runtime.status()))) {
     await newTab(page, "File");
     const filter = page.getByLabel("Filter files");
     await filter.fill(STEP);
@@ -108,14 +101,9 @@ test("the app quits in under two seconds with everything running, leaving no chi
   const elapsed = Date.now() - started;
   console.info(`[quit] process gone after ${elapsed}ms`);
 
-  // Nothing outlives the app: not the viewer, the adapter, the shell or the
-  // MCP server, and not Chromium's helpers either (the deadline kills those
-  // too — a utility process left to notice on its own took over thirty
-  // seconds). The one descendant meant to survive is cadgen's build daemon,
-  // the viewer's grandchild, which outlives it by design with an idle
-  // timeout of its own.
-  const ours = (entry: { command: string }) => !entry.command.includes("cadgen.daemon");
-  await expect.poll(() => tree.filter((entry) => ours(entry) && alive(entry.pid)).map((entry) => entry.command), { timeout: 5_000 }).toEqual([]);
+  // The isolated test disables the shared warm daemon. Every child it starts
+  // belongs to this app, including CAD workers and Chromium helpers.
+  await expect.poll(() => tree.filter((entry) => alive(entry.pid)).map((entry) => entry.command), { timeout: 5_000 }).toEqual([]);
   console.info(`[quit] everything gone after ${Date.now() - started}ms`);
   expect(elapsed).toBeLessThan(QUIT_BUDGET_MS);
 

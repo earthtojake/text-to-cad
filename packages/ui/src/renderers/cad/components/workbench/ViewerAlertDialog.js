@@ -1,3 +1,5 @@
+import ViewerAlertBody from "./ViewerAlertBody.js";
+
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -8,10 +10,9 @@ import {
   AlertDialogTitle
 } from "@hardcore/ui/primitives/alert-dialog";
 
-// A title and a description. The severity colours the title; nothing else is
-// rendered — no badge, no resolution paragraph, no command block.
 export default function ViewerAlertDialog({
   viewerAlertOpen,
+  onReload,
   viewerAlert,
   previewMode,
   setViewerAlertOpen
@@ -32,8 +33,8 @@ export default function ViewerAlertDialog({
           <AlertDialogTitle className={isWarning ? "text-warning-foreground" : "text-destructive"}>
             {viewerAlert.title}
           </AlertDialogTitle>
-          <AlertDialogDescription className="leading-6 whitespace-pre-line break-words">
-            {viewerAlert.message}
+          <AlertDialogDescription asChild>
+            <div><ViewerAlertBody alert={viewerAlert} onReload={onReload} /></div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

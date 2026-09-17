@@ -249,6 +249,19 @@ const PROBE = [
   "print(json.dumps({'version': cadgen.__version__}))",
 ].join("; ");
 
+export const CADGEN_RUNTIME_FILES = [
+  "_runtime/node/dxf-mesh.mjs",
+  "_runtime/node/mesh-export.mjs",
+  "_runtime/browser/render.html",
+  "_runtime/browser/snapshot-render.js",
+  "_runtime/viewer/index.html",
+];
+
+function missingCadgenRuntimeFiles(layout) {
+  const cadgen = path.join(layout.sitePackages, "cadgen");
+  return CADGEN_RUNTIME_FILES.filter((name) => !fs.existsSync(path.join(cadgen, name)));
+}
+
 function directorySize(dir) {
   let total = 0;
   const walk = (current) => {
@@ -341,6 +354,10 @@ export async function bundleRuntime({ target, out, cache, wheels, version, pytho
   }
 
   // 4. check, then the marker
+  const missingRuntime = missingCadgenRuntimeFiles(layout);
+  if (missingRuntime.length > 0) {
+    throw new Error(`the bundled cadgen wheel is missing package runtime assets: ${missingRuntime.join(", ")}`);
+  }
   if (native) {
     const probe = run(layout.python, ["-I", "-c", PROBE], {
       quiet: true,
@@ -379,7 +396,7 @@ export async function bundleRuntime({ target, out, cache, wheels, version, pytho
 /** The marker a complete bundle carries, or null. `scripts/package.mjs` refuses to package without one. */
 export function bundledRuntime(out, target, version) {
   const layout = runtimeLayout(path.join(out, target), target);
-  if (!fs.existsSync(layout.marker) || !fs.existsSync(layout.python)) {
+  if (!fs.existsSync(layout.marker) || !fs.existsSync(layout.python) || missingCadgenRuntimeFiles(layout).length > 0) {
     return null;
   }
   try {

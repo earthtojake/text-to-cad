@@ -1,3 +1,4 @@
+import FileActivityStatus from "./FileActivityStatus.js";
 import { FileText, RotateCw } from "lucide-react";
 import { Component, useCallback, useMemo, useRef, useState } from "react";
 import type { ErrorInfo, ReactNode } from "react";
@@ -69,7 +70,7 @@ export function FileViewer({ file, source, renderers, state, onStateChange, onOp
   }
   return <div className="hardcore-file-viewer flex h-full min-h-0 flex-col" ref={rootRef} data-source-id={source.id}>
     {chromeVisible ? <FileNavRow activePath={selectedPath} crumbs={crumbs} leading={leading} onOpen={(next) => onOpenFile(next, { target: "current" })} source={navigation.crumbs}
-      status={<>{document?.dirty ? <span aria-label="Unsaved changes" title="Unsaved changes" className="ml-1 size-1.5 shrink-0 rounded-full bg-foreground/60" /> : null}{presentation?.activity?.(activity?.key === key ? activity.value : null)}</>}
+      status={<>{document?.dirty ? <span aria-label="Unsaved changes" title="Unsaved changes" className="ml-1 size-1.5 shrink-0 rounded-full bg-foreground/60" /> : null}{presentation?.activity ? presentation.activity(activity?.key === key ? activity.value : null) : <FileActivityStatus activity={activity?.key === key ? activity.value : null} />}</>}
       trailing={panels.map((panel) => <PanelToggle key={panel.id} id={panel.id} active={panel.id === openId} icon={panel.icon} label={panel.label} onClick={() => setPanel(nextOpenPanel(openId, panel.id))} testId={panel.id === FILE_PANEL_TREE ? "tree-toggle" : undefined} />)} /> : null}
     {document?.stale ? <div className="flex shrink-0 items-center gap-2 border-b bg-amber-500/10 px-3 py-1.5 text-[12px] text-amber-700 dark:text-amber-400" role="status">
       <RotateCw className="size-3.5 shrink-0" /><span className="flex-1">This file changed on disk since you opened it.</span>

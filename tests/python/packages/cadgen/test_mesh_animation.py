@@ -3,7 +3,7 @@
 What Python owns of an animated export is the REQUEST — its closed key set, its
 bounds, the clip name checked against the module in the document's sidecar, and
 the freshness variant that makes an edited animation a miss. The sampling itself is
-JavaScript and is tested there (packages/cadgen-js/src/lib/export).
+JavaScript and is tested there (packages/core/src/lib/export).
 
 Every test below is a file that would otherwise have been written: a clip
 dropped into an STL, a bad fps discovered after a tessellation, a typo'd clip

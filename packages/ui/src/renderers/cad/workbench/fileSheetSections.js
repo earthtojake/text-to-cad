@@ -1,22 +1,25 @@
 export const FILE_SHEET_SECTION_IDS = Object.freeze({
   FILE_STATUS: "status",
+  THEME_DISPLAY: "display",
   STEP_TREE: "tree",
   STEP_MODELING: "modeling",
   STEP_MEASUREMENTS: "measurements",
   STEP_REFERENCE: "reference",
   // Two tabs, two independent systems: Pose drives the sidecar's mate graph
-  // (sliders per DOF + named presets), Animation plays the clips of the render
-  // module beside the document (<name>.step.js).
+  // (sliders per DOF + named presets), Animation plays the sidecar's clips.
   // A model may ship either, both, or neither, so they are gated separately.
   STEP_POSE: "pose",
   STEP_ANIMATION: "animation",
   ROBOT_SDF: "sdf",
   ROBOT_MOTION: "motion",
+  ROBOT_COMPONENTS: "components",
   ROBOT_JOINTS: "joints",
   DXF_MATERIAL: "material",
   DXF_BENDS: "bends",
   DXF_LAYERS: "dxfLayers",
-  THEME_DISPLAY: "display",
+  DISPLAY: "display",
+  RENDER: "render",
+  MATERIALS: "materials",
   FILE_METADATA: "metadata"
 });
 
@@ -33,20 +36,33 @@ function normalizeSectionIds(value) {
 
 export function renderedFileSheetSectionIds(kind, options = {}) {
   const normalizedKind = normalizeString(kind);
+  if (options.renderMode === true) {
+    return [
+      FILE_SHEET_SECTION_IDS.RENDER,
+      ...(options.hasMaterialsPanel ? [FILE_SHEET_SECTION_IDS.MATERIALS] : []),
+      ...(normalizedKind === "step" && options.hasStepPosePanel
+        ? [FILE_SHEET_SECTION_IDS.STEP_POSE]
+        : []),
+      ...(normalizedKind === "step" && options.hasStepAnimationPanel
+        ? [FILE_SHEET_SECTION_IDS.STEP_ANIMATION]
+        : []),
+      ...(normalizedKind === "mesh" && options.hasEmbeddedGlbAnimationPanel
+        ? [FILE_SHEET_SECTION_IDS.STEP_ANIMATION]
+        : [])
+    ];
+  }
   const isSdf = options.isSdf === true || normalizedKind === "sdf";
   const showJoints = options.showJoints !== false;
-  const status = options.hasFileStatus ? [FILE_SHEET_SECTION_IDS.FILE_STATUS] : [];
+  const showRobotComponents = options.hasRobotComponents === true;
   switch (normalizedKind) {
-    // A drawing HAS controls of its own now. Thickness (and, where the drawing declares
+    // A drawing HAS controls of its own. Thickness (and, where the drawing declares
     // them, bends) are render-time parameters applied to the cached prism rather than bake
-    // settings, so they steer the viewport without touching the package. This used to be
-    // status-only on the grounds that the producer owned every setting; it no longer does.
+    // settings, so they steer the viewport without touching the package.
     case "dxf":
       // One tab per concern: Material (units + stock), Bends (only when the drawing has
       // bend lines), and Layers — the drawing's own STRUCTURE, the DXF analogue of STEP's
       // Tree — whenever the file actually uses layers.
       return [
-        ...status,
         FILE_SHEET_SECTION_IDS.DXF_MATERIAL,
         ...(options.hasDxfBendsPanel ? [FILE_SHEET_SECTION_IDS.DXF_BENDS] : []),
         ...(options.hasDxfLayersPanel ? [FILE_SHEET_SECTION_IDS.DXF_LAYERS] : [])
@@ -54,7 +70,6 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
     case "step":
       // STEP geometry inspection lives here; Display is a toolbar popover.
       return [
-        ...status,
         FILE_SHEET_SECTION_IDS.STEP_TREE,
         // Pose sits directly after Reference when the model declares mates: it is the
         // one tab here that MOVES the geometry, so it earns the position nearest the
@@ -70,17 +85,28 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
       // selectable in the viewport. The Tree panel is 556 lines inside StepFileSheet
       // reading 20 props and 33 derived locals; sharing it means extracting it, and a
       // second tree implementation for robots is exactly the parallel stack this effort
-      // exists to remove.
+      // exists to remove. Components is NOT that tree: it is the flat inventory of
+      // named objects inside the linked meshes, and it shares the viewport picker and
+      // the Reference inspector rather than the link hierarchy.
       return [
-        ...status,
         ...(isSdf ? [FILE_SHEET_SECTION_IDS.ROBOT_SDF] : []),
         ...(options.motionEnabled ? [FILE_SHEET_SECTION_IDS.ROBOT_MOTION] : []),
-        ...(showJoints ? [FILE_SHEET_SECTION_IDS.ROBOT_JOINTS] : [])
+        // Joints first: posing the robot is what a URDF is opened for, and it is the
+        // tab the sheet lands on. Components is the inspection affordance next to it,
+        // and it carries its own Reference at its foot rather than owning a tab that
+        // stands empty until something is selected.
+        ...(showJoints ? [FILE_SHEET_SECTION_IDS.ROBOT_JOINTS] : []),
+        ...(showRobotComponents ? [FILE_SHEET_SECTION_IDS.ROBOT_COMPONENTS] : []),
+        FILE_SHEET_SECTION_IDS.DISPLAY
       ];
     case "mesh":
-      // Measure is the one mesh-specific control: vertex-to-vertex distance on
-      // the displayed triangles. Status still only appears when there is an issue.
-      return [...status, FILE_SHEET_SECTION_IDS.STEP_MEASUREMENTS];
+      // Direct GLB may add embedded animation. Measurement stays the static
+      // triangle tool and is omitted while a native animated hierarchy is live.
+      return [
+        ...(options.hasEmbeddedGlbAnimationPanel ? [FILE_SHEET_SECTION_IDS.STEP_ANIMATION] : []),
+        ...(options.measurementAvailable === false ? [] : [FILE_SHEET_SECTION_IDS.STEP_MEASUREMENTS]),
+        FILE_SHEET_SECTION_IDS.DISPLAY
+      ];
     default:
       return [];
   }
@@ -88,13 +114,14 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
 
 export function defaultOpenFileSheetSectionIds(kind, options = {}) {
   const normalizedKind = normalizeString(kind);
+  if (options.renderMode === true) {
+    return [FILE_SHEET_SECTION_IDS.RENDER];
+  }
   const isSdf = options.isSdf === true || normalizedKind === "sdf";
   const showJoints = options.showJoints !== false;
   switch (normalizedKind) {
     case "dxf":
-      return [
-        ...(options.hasFileStatus ? [FILE_SHEET_SECTION_IDS.FILE_STATUS] : [])
-      ];
+      return [];
     case "step":
       // Open the geometry tree by default.
       return [
@@ -105,16 +132,14 @@ export function defaultOpenFileSheetSectionIds(kind, options = {}) {
     case "srdf":
     case "sdf":
       return [
-        ...(options.hasFileStatus ? [FILE_SHEET_SECTION_IDS.FILE_STATUS] : []),
         ...(isSdf ? [FILE_SHEET_SECTION_IDS.ROBOT_SDF] : []),
         ...(options.motionEnabled ? [FILE_SHEET_SECTION_IDS.ROBOT_MOTION] : []),
         ...(showJoints ? [FILE_SHEET_SECTION_IDS.ROBOT_JOINTS] : [])
       ];
     case "mesh":
-      return [
-        ...(options.hasFileStatus ? [FILE_SHEET_SECTION_IDS.FILE_STATUS] : []),
-        FILE_SHEET_SECTION_IDS.STEP_MEASUREMENTS
-      ];
+      return options.hasEmbeddedGlbAnimationPanel
+        ? [FILE_SHEET_SECTION_IDS.STEP_ANIMATION]
+        : options.measurementAvailable === false ? [] : [FILE_SHEET_SECTION_IDS.STEP_MEASUREMENTS];
     default:
       return [];
   }
@@ -127,18 +152,6 @@ export function normalizeFileSheetOpenSectionIds(sectionIds, renderedSectionIds)
   }
   return [...new Set(normalizeSectionIds(sectionIds)
     .filter((sectionId) => rendered.has(sectionId)))];
-}
-
-export function fileSheetSectionIdsWithOpenSection(sectionIds, renderedSectionIds, sectionId) {
-  const normalizedSectionId = normalizeString(sectionId);
-  const normalizedSectionIds = normalizeFileSheetOpenSectionIds(sectionIds, renderedSectionIds);
-  if (!normalizedSectionId || !normalizeSectionIds(renderedSectionIds).includes(normalizedSectionId)) {
-    return normalizedSectionIds;
-  }
-  if (normalizedSectionIds.includes(normalizedSectionId)) {
-    return normalizedSectionIds;
-  }
-  return [...normalizedSectionIds, normalizedSectionId];
 }
 
 export function shouldOpenFileSheetForSelectionReveal({ isDesktop = true, source = "viewer" } = {}) {

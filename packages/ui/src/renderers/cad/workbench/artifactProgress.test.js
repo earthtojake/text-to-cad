@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { formatArtifactProgress, normalizeArtifactProgress } from "./artifactProgress.js";
+import {
+  artifactProgressConnectionLost,
+  artifactStatusFailure,
+  formatArtifactProgress,
+  normalizeArtifactProgress,
+  refreshArtifactProgress
+} from "./artifactProgress.js";
 
 function countingPayload(overrides = {}) {
   return {
@@ -62,6 +68,39 @@ test("normalizeArtifactProgress degrades non-numeric fields instead of producing
   assert.equal(progress.done, 0);
   assert.equal(progress.index, 0);
   assert.equal(progress.updatedAt, 0);
+});
+
+test("status reads stamp freshness and a later miss retains useful work with connection context", () => {
+  const refreshed = refreshArtifactProgress(normalizeArtifactProgress(countingPayload()), 6_000);
+  const missed = artifactProgressConnectionLost(
+    refreshed,
+    { kind: "timeout", detail: "The server did not respond within 10 seconds." },
+    1,
+    7_000
+  );
+  assert.equal(missed.label, "Meshing components");
+  assert.equal(missed.detail, "a1b2c3");
+  assert.equal(missed.updatedAt, 5_000);
+  assert.equal(missed.refreshedAt, 6_000);
+  assert.deepEqual(missed.connectionLost, {
+    failures: 1, since: 7_000, detail: "The server did not respond within 10 seconds."
+  });
+  assert.equal(refreshArtifactProgress(missed, 8_000).connectionLost, null);
+});
+
+test("a first missed status read is still renderable and repeated misses become a status failure", () => {
+  const waiting = artifactProgressConnectionLost(null, { detail: "Failed to fetch" }, 1, 9_000);
+  assert.equal(waiting.phase, "waiting");
+  assert.equal(waiting.label, "Waiting for build status");
+  assert.equal(waiting.determinate, false);
+  assert.equal(waiting.connectionLost.since, 9_000);
+  const failure = artifactStatusFailure({
+    failure: { kind: "network", operation: "checking display assets", detail: "Failed to fetch" }
+  }, 3);
+  assert.equal(failure.kind, "status");
+  assert.equal(failure.attempts, 3);
+  assert.equal(failure.operation, "checking display assets");
+  assert.match(failure.detail, /3 attempts.*Failed to fetch/);
 });
 
 test("a phase that can count reports its real fraction and count", () => {

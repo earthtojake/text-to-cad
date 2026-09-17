@@ -48,6 +48,19 @@ test("viewer render-state normalization keeps viewer-side defaults local", () =>
 
   assert.deepEqual(state.themeSettings, normalizeThemeSettings({}));
   assert.deepEqual(state.displaySettings, normalizeDisplaySettings(null));
-  assert.equal(state.displayMode, "solid");
+  assert.equal(state.displayMode, "shaded_edges");
   assert.deepEqual(state.clipSettings, normalizeStepClipSettings(null));
+});
+
+
+test("Inspect keeps authored outline styling with per-file edge visibility", () => {
+  const state = normalizeViewerRenderState({
+    themeSettings: { edges: { color: "#28e2a3", thickness: 2.7, opacity: 0.6 } },
+    displaySettings: { edges: { enabled: false, silhouette: true } },
+  });
+  assert.equal(state.edgeSettings.color, "#28e2a3");
+  assert.equal(state.edgeSettings.thickness, 2.7);
+  assert.equal(state.edgeSettings.opacity, 0.6);
+  assert.equal(state.edgeSettings.enabled, false);
+  assert.equal(state.edgeSettings.silhouette, true);
 });

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { VIEWER_PICK_MODE } from "@hardcore/core/lib/viewer/constants.js";
 
 import { screenLimitedPickThreshold, worldUnitsPerPixelAtDistance } from "@hardcore/core/lib/viewer/pickingThresholds.js";
 import {
@@ -15,10 +16,53 @@ import {
   measureModelOffsetFromRuntime,
   measureModelPointToWorld,
   measurePickForPosition,
+  resolveViewerReferencePick,
   measureWorldPointToModel,
   worldTriangleVerticesFromMeshIntersection
 } from "./useViewerPicking.js";
 import { partIdFromIntersection, shouldRaycastRecordForPick } from "./partPicking.js";
+
+test("disabled picking never prepares surface intersections or resolves references", () => {
+  const unexpected = () => assert.fail("disabled picking must not raycast or resolve a reference");
+  for (const pickMode of Object.values(VIEWER_PICK_MODE)) {
+    for (const preferTopology of [false, true]) {
+      assert.equal(resolveViewerReferencePick({
+        pickMode, preferTopology, suppressTopologyPicking: true,
+        intersectModel: unexpected, pickTopology: unexpected, pickPart: unexpected
+      }), null);
+    }
+  }
+  // NONE also disables the picker without a separate Render/playback flag,
+  // including pointer-down, hover, and touch requests that prefer topology.
+  for (const preferTopology of [false, true]) {
+    assert.equal(resolveViewerReferencePick({
+      pickMode: VIEWER_PICK_MODE.NONE, preferTopology,
+      intersectModel: unexpected, pickTopology: unexpected, pickPart: unexpected
+    }), null);
+  }
+});
+
+test("Inspect resolves parts, topology, and Measure from one surface intersection pass", () => {
+  const intersections = [{ distance: 4, faceIndex: 3 }];
+  for (const [pickMode, topologyReference, expected, expectedCalls] of [
+    [VIEWER_PICK_MODE.PARTS, "face:3", "part:1", ["surface", "part"]],
+    [VIEWER_PICK_MODE.ASSEMBLY, "face:3", "part:1", ["surface", "part"]],
+    [VIEWER_PICK_MODE.AUTO, "face:3", "face:3", ["surface", "topology"]],
+    [VIEWER_PICK_MODE.AUTO, null, "part:1", ["surface", "topology", "part"]],
+    [VIEWER_PICK_MODE.MEASURE, "face:3", "face:3", ["surface", "topology"]],
+    [VIEWER_PICK_MODE.MEASURE, null, null, ["surface", "topology"]]
+  ]) {
+    const calls = [];
+    const result = resolveViewerReferencePick({
+      pickMode,
+      intersectModel: () => { calls.push("surface"); return intersections; },
+      pickTopology: (hits) => { assert.equal(hits, intersections); calls.push("topology"); return topologyReference; },
+      pickPart: (hits) => { assert.equal(hits, intersections); calls.push("part"); return "part:1"; }
+    });
+    assert.equal(result, expected);
+    assert.deepEqual(calls, expectedCalls);
+  }
+});
 
 test("worldUnitsPerPixelAtDistance converts perspective depth to screen scale", () => {
   const camera = {
@@ -307,6 +351,11 @@ test("partIdFromIntersection returns the mesh's userData.partId, else null", () 
   assert.equal(partIdFromIntersection({ object: { userData: { partId: "o1.2" } } }), "o1.2");
   assert.equal(partIdFromIntersection({ object: { userData: {} } }), null);
   assert.equal(partIdFromIntersection({}), null);
+});
+
+test("partIdFromIntersection resolves a stable occurrence id from an instanced hit", () => {
+  const hit = { instanceId: 1, object: { userData: { partIds: ["o1.2", "o1.5"] } } };
+  assert.equal(partIdFromIntersection(hit), "o1.5");
 });
 
 test("shouldRaycastRecordForPick applies bucket-level focus/hidden to per-mesh records", () => {

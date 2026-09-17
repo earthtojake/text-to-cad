@@ -2,7 +2,7 @@
 
 This shipped. A group-key sentinel in the GLB writer was written as the raw byte
 ``0x00`` instead of the escape ``\\0``, which turned
-``packages/cadgen-js/src/lib/glb/writeGlb.js`` from UTF-8 text into a binary
+``packages/core/src/lib/glb/writeGlb.js`` from UTF-8 text into a binary
 file. The consequences are all silence:
 
 * ``rg`` skips binary files, so every later search of the module that writes

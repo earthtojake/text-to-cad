@@ -191,7 +191,7 @@ class RenderTessellationLimitsTest(unittest.TestCase):
         validate_render_tessellation(None)
 
     def test_the_floors_match_the_page_that_tessellates(self):
-        source = repo_path("packages/cadgen-js/src/common/source.js").read_text(encoding="utf-8")
+        source = repo_path("packages/core/src/common/source.js").read_text(encoding="utf-8")
         block = re.search(r"RENDER_TESSELLATION_FLOORS = Object\.freeze\(\{(.*?)\}\)", source, re.S)
         self.assertIsNotNone(block, "source.js no longer declares RENDER_TESSELLATION_FLOORS")
         declared = {

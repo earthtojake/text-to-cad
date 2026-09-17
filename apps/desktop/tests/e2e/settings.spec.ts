@@ -5,7 +5,7 @@
  * can go wrong on these pages is not assertable: a card that lost its border in
  * light mode, a control that overflows its row, a dot whose colour means
  * nothing against the background it landed on. The assertions here are the
- * behaviours; the screenshots in `__screenshots__/settings-*.png` are the
+ * behaviours; the screenshots in each test's Playwright output directory are the
  * review.
  *
  * The agent drawer is shot for two agents on purpose: one installed and one
@@ -36,7 +36,6 @@ declare const document: { documentElement: object };
 declare function getComputedStyle(element: object): { getPropertyValue(name: string): string };
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const screenshots = path.join(appRoot, "tests", "e2e", "__screenshots__");
 
 /** Nav label per page, in the order the nav lists them. */
 const PAGES: [slug: string, label: string][] = [
@@ -216,5 +215,5 @@ async function setTheme(theme: "dark" | "light") {
 
 /** Screenshot with transitions finished (see the note in shell.spec.ts). */
 async function shoot(name: string) {
-  await page.screenshot({ path: path.join(screenshots, name), animations: "disabled" });
+  await page.screenshot({ path: test.info().outputPath(name), animations: "disabled" });
 }

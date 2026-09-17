@@ -103,7 +103,7 @@ def _read_json(file_path):
 #
 # Every warning is the viewer's actionable triple -- a heading, an explanation,
 # and the recovery step -- because that is the shape its alerts render (see the
-# "Actionable errors" law in ``apps/viewer/README.md``). Sending one prose blob
+# "Actionable errors" law in ``apps/web/README.md``). Sending one prose blob
 # instead would leave the client splitting sentences to find the recovery step,
 # so the split is made HERE, where the sentences are written. The client renders
 # the three fields it is handed and knows nothing about render modules: a new

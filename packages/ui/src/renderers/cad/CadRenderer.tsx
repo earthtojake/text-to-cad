@@ -22,6 +22,7 @@ interface CadSurfaceProps {
   onPanelOpen(id: string): void;
   onChromeVisibilityChange(visible: boolean): void;
   onActivityChange(activity: FileActivity | null): void;
+  onReload(): void;
   state: JsonValue | undefined;
   onStateChange(state: JsonValue): void;
   selectReference?: CadCommands['selectReference'];
@@ -55,6 +56,7 @@ export default function CadRenderer(props: FileRendererProps<PreparedCadDocument
     onPanelOpen={props.onPanelOpen}
     onChromeVisibilityChange={props.onChromeVisibilityChange}
     onActivityChange={props.onActivityChange}
+    onReload={props.reload}
     state={props.state}
     onStateChange={props.onStateChange}
     onReference={data.services.onReference}

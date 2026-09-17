@@ -22,6 +22,7 @@ build — is worse than three empty directories.
 ## The runtime
 
 ```sh
+scripts/bundle/bundle.sh --clean               # build cadgen's ignored package runtime
 npm run cad:resources                       # the wheel + constraints, from the checkout's .venv
 npm run bundle:runtime                      # this machine's target (mac-arm64 here)
 npm run bundle:runtime -- --target mac-x64  # a foreign target, from this machine

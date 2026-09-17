@@ -12,7 +12,7 @@ import {
 } from "./artifactResolution.js";
 
 test("a ready artifact needs no work", () => {
-  assert.equal(artifactActionFor({ state: "rendered" }), ARTIFACT_ACTION_READY);
+  assert.equal(artifactActionFor({ state: "compiled" }), ARTIFACT_ACTION_READY);
 });
 
 test("an absent state is treated as ready, so a fresh model never flashes", () => {
@@ -77,12 +77,12 @@ test("a server that reports no runId leaves the shown run alone", () => {
 });
 
 test("advisory flag: busy only (the stale advisory died with content keying)", () => {
-  assert.equal(artifactAdvisoryFor({ state: "rendered" }), null);
+  assert.equal(artifactAdvisoryFor({ state: "compiled" }), null);
   assert.equal(artifactAdvisoryFor(undefined), null);
   assert.deepEqual(
-    artifactAdvisoryFor({ state: "rendered", busy: true, runId: "run-9" }),
+    artifactAdvisoryFor({ state: "compiled", busy: true, runId: "run-9" }),
     { busy: true, runId: "run-9" }
   );
   // Truthy non-boolean values do not count: the flag is written as a boolean.
-  assert.equal(artifactAdvisoryFor({ state: "rendered", busy: "yes" }), null);
+  assert.equal(artifactAdvisoryFor({ state: "compiled", busy: "yes" }), null);
 });

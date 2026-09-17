@@ -113,3 +113,76 @@ for (const fixture of ["sun_gear", "mixed"]) {
     checkComponent(t, fixture);
   });
 }
+
+// 4. NON-DEGENERACY. Boundary snapping deliberately moves two of a face's
+// vertices onto ONE model point; the weld that follows is what turns them back
+// into one vertex and drops the triangle that collapsed. When that weld misses,
+// the collapsed triangle survives with zero area, and because it still carries
+// its edges the mesh stops being manifold — the shape reported in issue #371,
+// where a plate with a single cylindrical cut exported edges shared by 4, 5 and
+// 7 faces and no computable volume.
+//
+// The miss used to depend on MESH DENSITY: the weld asked "are these two uv
+// points near each other?" against an epsilon scaled off the uv span, so it
+// stopped recognizing duplicates as soon as the spacing around a small bore's
+// rim outgrew it. That is why these cases run at COARSE chord tolerances — they
+// are the ones that reproduce, and a density-dependent weld would fail them
+// again. Fine tolerances are covered by the fixtures' default-tolerance runs.
+function meshDefects(name, options) {
+  const { index, floats } = loadFixture(name);
+  const component = tessellateComponent(index, floats, { ...options, collectBoundaryDebug: true });
+  const twiceArea = (p, q, r) => {
+    const ux = q[0] - p[0], uy = q[1] - p[1], uz = q[2] - p[2];
+    const vx = r[0] - p[0], vy = r[1] - p[1], vz = r[2] - p[2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    return Math.sqrt(nx * nx + ny * ny + nz * nz);
+  };
+  // Keyed by exact position, which is how a mesh consumer welds an exported
+  // STL: it is the model's own triangle set that must be sound, not any one
+  // face's index space.
+  const at = (p) => `${p[0]},${p[1]},${p[2]}`;
+  let degenerate = 0;
+  let triangles = 0;
+  const byCorners = new Map();
+  const byEdge = new Map();
+  for (const dbg of component.boundaryDebug) {
+    for (let t = 0; t < dbg.triangles.length; t += 3) {
+      const corners = [
+        dbg.xyz[dbg.triangles[t]],
+        dbg.xyz[dbg.triangles[t + 1]],
+        dbg.xyz[dbg.triangles[t + 2]],
+      ];
+      triangles += 1;
+      if (twiceArea(corners[0], corners[1], corners[2]) === 0) degenerate += 1;
+      const keys = corners.map(at);
+      const face = [...keys].sort().join("|");
+      byCorners.set(face, (byCorners.get(face) || 0) + 1);
+      for (const [a, b] of [[keys[0], keys[1]], [keys[1], keys[2]], [keys[2], keys[0]]]) {
+        const edge = a < b ? `${a}|${b}` : `${b}|${a}`;
+        byEdge.set(edge, (byEdge.get(edge) || 0) + 1);
+      }
+    }
+  }
+  return {
+    triangles,
+    degenerate,
+    duplicated: [...byCorners.values()].filter((used) => used > 1).length,
+    unshared: [...byEdge.values()].filter((used) => used !== 2).length,
+  };
+}
+
+for (const [fixture, chordTolerance] of [
+  ["sun_gear", undefined],
+  ["sun_gear", 2e-2],
+  ["mixed", 5e-3],
+  ["cam_follower_roller", 2e-2],
+]) {
+  const label = chordTolerance === undefined ? "default tolerance" : `chord ${chordTolerance}`;
+  test(`${fixture} @ ${label}: no degenerate or duplicated triangles, every edge shared by two`, () => {
+    const defects = meshDefects(fixture, chordTolerance === undefined ? {} : { chordTolerance });
+    assert.ok(defects.triangles > 0, "the fixture tessellates to something");
+    assert.equal(defects.degenerate, 0, "a zero-area triangle carries no surface and must not be emitted");
+    assert.equal(defects.duplicated, 0, "no triangle may be emitted more than once");
+    assert.equal(defects.unshared, 0, "a closed solid's every mesh edge is used by exactly two triangles");
+  });
+}

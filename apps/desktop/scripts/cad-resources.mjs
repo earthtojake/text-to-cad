@@ -5,8 +5,8 @@
  *
  *   node scripts/cad-resources.mjs [--python <interpreter>] [--out <dir>]
  *
- * 1. The wheel. Built the way `release-publish.yml` builds the one it
- *    publishes — `python -m build packages/cadgen` — and copied in. The
+ * 1. The wheel. Built from the runtime produced by `scripts/bundle/bundle.sh`,
+ *    the same prerequisite and build command as `release-publish.yml`, then copied in. The
  *    runtime bundling passes this exact wheel path to pip, so an index or pip
  *    cache can supply dependencies but cannot substitute another cadgen build.
  *    In CI this step does not run: the `desktop` job downloads the wheel the
@@ -50,6 +50,25 @@ function parseArgs(argv) {
 
 function run(file, args, options = {}) {
   return execFileSync(file, args, { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"], ...options });
+}
+
+const REQUIRED_CADGEN_RUNTIME = [
+  "node/dxf-mesh.mjs",
+  "node/mesh-export.mjs",
+  "browser/render.html",
+  "browser/snapshot-render.js",
+  "viewer/index.html",
+];
+
+function requireBundledCadgenRuntime() {
+  const runtime = path.join(repoRoot, "packages", "cadgen", "src", "cadgen", "_runtime");
+  const missing = REQUIRED_CADGEN_RUNTIME.filter((name) => !fs.existsSync(path.join(runtime, name)));
+  if (missing.length > 0) {
+    throw new Error(
+      `cadgen's package runtime is not bundled (${missing.join(", ")}); ` +
+        "run `scripts/bundle/bundle.sh --clean` before `npm run cad:resources`",
+    );
+  }
 }
 
 /** Distribution names `pip show` reaches from `root`, transitively — the closure. */
@@ -97,7 +116,11 @@ export function writeCadResources({ python, out, version, noWheel = false }) {
   const env = { ...process.env, PYTHONPATH: path.join(repoRoot, "packages", "cadgen", "src") };
 
   if (!noWheel) {
+    requireBundledCadgenRuntime();
     const dist = path.join(repoRoot, "packages", "cadgen", "dist");
+    // setuptools' build/lib is incremental. Old hashed Viewer chunks otherwise survive
+    // a fresh source bundle and are copied into the next wheel alongside current chunks.
+    fs.rmSync(path.join(repoRoot, "packages", "cadgen", "build"), { recursive: true, force: true });
     fs.rmSync(dist, { recursive: true, force: true });
     run(python, ["-m", "build", "--wheel", "--outdir", dist, path.join(repoRoot, "packages", "cadgen")], { env, stdio: "inherit" });
     const wheel = fs.readdirSync(dist).find((name) => name.endsWith(".whl"));

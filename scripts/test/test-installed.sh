@@ -13,7 +13,7 @@
 # reinstalling half a gigabyte -- but the wheel's own cadgen must WIN over the repo's
 # editable one, or this would silently test the source tree again. See _link_repo_deps.
 #
-# Usage: scripts/test/test-installed.sh
+# Usage: scripts/test/test-installed.sh [--wheel PATH]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -22,6 +22,27 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # hardcoding one here fails there and only there.
 # shellcheck source=scripts/test/common.sh
 source "$SCRIPT_DIR/common.sh"
+
+WHEEL=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --wheel)
+      [ "$#" -ge 2 ] || { echo "--wheel requires a path" >&2; exit 2; }
+      [ -f "$2" ] || { echo "wheel not found: $2" >&2; exit 2; }
+      WHEEL="$(cd "$(dirname "$2")" && pwd -P)/$(basename "$2")"
+      shift 2
+      ;;
+    -h|--help)
+      echo "Usage: scripts/test/test-installed.sh [--wheel PATH]"
+      exit 0
+      ;;
+    *)
+      echo "unknown argument: $1" >&2
+      echo "Usage: scripts/test/test-installed.sh [--wheel PATH]" >&2
+      exit 2
+      ;;
+  esac
+done
 
 if ! command -v "$PYTHON_BIN" >/dev/null 2>&1 && [ ! -x "$PYTHON_BIN" ]; then
   echo "No usable Python ($PYTHON_BIN). Set PYTHON_BIN to an interpreter with the CAD deps." >&2
@@ -43,17 +64,27 @@ trap cleanup EXIT
 VENV="$WORK/venv"
 EMPTY="$WORK/empty"
 DIST="$WORK/dist"
-mkdir -p "$EMPTY" "$DIST"
+CACHE="$WORK/cache"
+DAEMON_STATE="$WORK/daemon"
+mkdir -p "$EMPTY" "$DIST" "$CACHE" "$DAEMON_STATE"
+export CADGEN_CACHE_DIR="$CACHE"
+export CADGEN_DAEMON=0
+export CADGEN_DAEMON_STATE_DIR="$DAEMON_STATE"
+unset CADGEN_BROKER CADGEN_BROKER_KEY CADGEN_BROKER_STATS CADGEN_DAEMON_CHILD CADGEN_ROOT_ID
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 step() { printf '\n== %s\n' "$*"; }
 
-step "Build the wheel"
-"$REPO_ROOT/scripts/bundle/bundle.sh" >/dev/null
-"$PYTHON_BIN" -m build --wheel --outdir "$DIST" "$REPO_ROOT/packages/cadgen" >"$WORK/build.log" 2>&1 \
-  || { cat "$WORK/build.log" >&2; fail "wheel build"; }
-WHEEL="$(find "$DIST" -name '*.whl' -type f | head -n 1)"
-[ -n "$WHEEL" ] || fail "no wheel produced"
+if [ -z "$WHEEL" ]; then
+  step "Build the wheel"
+  "$REPO_ROOT/scripts/bundle/bundle.sh" >/dev/null
+  "$PYTHON_BIN" -m build --wheel --outdir "$DIST" "$REPO_ROOT/packages/cadgen" >"$WORK/build.log" 2>&1 \
+    || { cat "$WORK/build.log" >&2; fail "wheel build"; }
+  WHEEL="$(find "$DIST" -name '*.whl' -type f | head -n 1)"
+  [ -n "$WHEEL" ] || fail "no wheel produced"
+else
+  step "Use the supplied wheel"
+fi
 echo "   $(basename "$WHEEL")"
 
 step "Install it into a scratch venv"

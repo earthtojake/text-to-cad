@@ -184,6 +184,17 @@ build_viewer_client() {
   rsync -a --delete --exclude "*.map" "$VIEWER_APP_DIR/dist/" "$target/"
 }
 
+build_stage_packages() {
+  # Node and browser runtime stages consume only @hardcore/core and must remain
+  # runnable in Python/core CI jobs that install that workspace alone. The
+  # Viewer is the only stage that also needs @hardcore/ui.
+  if [ "$STAGE_VIEWER" -eq 1 ] && [ "$MODE" != "check" ]; then
+    npm --prefix "$REPO_ROOT" run build:packages
+  elif [ "$STAGE_NODE" -eq 1 ] || [ "$STAGE_BROWSER" -eq 1 ]; then
+    npm --prefix "$REPO_ROOT" run build -w @hardcore/core
+  fi
+}
+
 # --- third-party notices --------------------------------------------------------------
 # The builders and the browser bundle inline three and meshoptimizer. Shipping
 # them inside a wheel is redistribution, and all three are MIT: the licence text has to
@@ -244,6 +255,7 @@ build_all() {
 }
 
 mkdir -p "$RUNTIME_DIR"
+build_stage_packages
 build_all "$RUNTIME_DIR"
 
 if [ "$MODE" = "check" ]; then

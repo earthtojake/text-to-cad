@@ -1,28 +1,19 @@
 name: Set up dependencies
-description: >-
-  Set up Python and Node.js with dependency caching, then install as much of the
-  repo's Python and Node dependencies as the calling job actually uses.
+description: Install the selected root npm workspaces and optional Python/browser dependencies.
 
-# Every input defaults to the full install, so a job that asks for nothing gets
-# what this action always did. Jobs that need less say so: the test matrix runs
-# six ways, and three minutes of `npm ci` for an app a job never touches is three
-# minutes on the critical path of every one of them.
 inputs:
   python:
-    description: Install the Python dependencies (requirements-dev.txt).
+    description: Install requirements-dev.txt.
     default: "true"
   playwright:
-    description: >-
-      Install Playwright's Chromium. Only the snapshot suites render in it; skip
-      it in jobs that run no snapshot.
+    description: Install Python Playwright's snapshot browser (requires python).
     default: "true"
+  ui-browser:
+    description: Install the npm Playwright Chromium used by shared UI and web browser tests.
+    default: "false"
   npm:
-    description: >-
-      Space-separated npm project prefixes to `npm ci`, or "none". Building
-      cadgen's packaged runtime needs `packages/core`; the Viewer's client
-      build and its own suite need `apps/web`; only the docs check needs
-      `apps/docs`.
-    default: "packages/core apps/web apps/docs"
+    description: Space-separated root workspace paths, or "none". Include shared dependencies used by the job.
+    default: "packages/core packages/ui apps/web apps/docs"
 
 runs:
   using: composite
@@ -36,7 +27,7 @@ runs:
         cache-dependency-path: requirements-dev.txt
 
     - name: Set up Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v7
       with:
         node-version: "22"
         cache: npm
@@ -49,11 +40,8 @@ runs:
         python -m pip install --upgrade pip
         python -m pip install -r requirements-dev.txt
 
-    # `cadgen snapshot` renders in Playwright's own Chromium build. The Linux image
-    # happens to carry one; Windows does not, and a missing browser fails the
-    # snapshot suites with "Executable doesn't exist". Install it on every OS.
     - name: Install the snapshot browser
-      if: inputs.playwright == 'true'
+      if: inputs.python == 'true' && inputs.playwright == 'true'
       shell: bash
       run: |
         if [ "$RUNNER_OS" = "Linux" ]; then
@@ -62,12 +50,31 @@ runs:
           python -m playwright install chromium
         fi
 
-    - name: Install Node dependencies
+    - name: Install selected root workspaces
       if: inputs.npm != 'none'
       shell: bash
       env:
-        NPM_PREFIXES: ${{ inputs.npm }}
+        NPM_WORKSPACES: ${{ inputs.npm }}
       run: |
-        for prefix in $NPM_PREFIXES; do
-          npm ci --prefix "$prefix"
+        args=()
+        for workspace in $NPM_WORKSPACES; do
+          args+=(--workspace "$workspace")
         done
+        npm ci "${args[@]}"
+        case " $NPM_WORKSPACES " in
+          *" packages/core "*) npm run build --workspace @hardcore/core ;;
+        esac
+        case " $NPM_WORKSPACES " in
+          *" packages/ui "*) npm run build --workspace @hardcore/ui ;;
+        esac
+
+    # npm and Python Playwright can require different Chromium revisions.
+    - name: Install shared UI and web test browser
+      if: inputs.ui-browser == 'true'
+      shell: bash
+      run: |
+        if [ "$RUNNER_OS" = "Linux" ]; then
+          npx --no-install playwright install --with-deps chromium
+        else
+          npx --no-install playwright install chromium
+        fi

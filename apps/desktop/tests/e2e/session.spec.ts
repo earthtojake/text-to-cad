@@ -9,7 +9,7 @@ import { _electron as electron, expect, test, type ElectronApplication, type Pag
  * The session UI against the fake agent (plan §12): new session → prompt →
  * streaming rows → permission answered → completed, then the other states
  * — cancelled, errored, resumed, signed out — each screenshotted into
- * `__screenshots__/session-*.png`. Look at them.
+ * the current test's Playwright output directory.
  *
  * `HARDCORE_FAKE_AGENT` makes main launch `tests/fake-agent` in place of
  * every adapter; the `showcase` prompt is the fake's Codex-shaped turn.
@@ -39,7 +39,6 @@ declare const window: {
 };
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const screenshots = path.join(appRoot, "tests", "e2e", "__screenshots__");
 const fakeAgent = path.join(appRoot, "tests", "fake-agent", "index.mjs");
 
 let app: ElectronApplication;
@@ -716,7 +715,7 @@ test("a signed-out agent asks to sign in", async () => {
 });
 
 async function shoot(name: string) {
-  await page.screenshot({ path: path.join(screenshots, name), animations: "disabled" });
+  await page.screenshot({ path: test.info().outputPath(name), animations: "disabled" });
 }
 
 /**

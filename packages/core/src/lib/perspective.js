@@ -1,28 +1,16 @@
 import {
+  CAMERA_PROJECTION,
   cloneCameraVector,
-  normalizeCameraZoom
+  normalizeCameraProjection,
+  normalizeCameraZoom,
+  normalizeCameraFocalLength,
+  normalizeOrthographicHalfHeight
 } from "../common/camera.js";
+
+export { CAMERA_PROJECTION, normalizeCameraProjection };
 
 function normalizePerspectiveMetadataValue(value) {
   return String(value || "").trim();
-}
-
-export const CAMERA_PROJECTION = Object.freeze({
-  PERSPECTIVE: "perspective",
-  ORTHOGRAPHIC: "orthographic"
-});
-
-export function normalizeCameraProjection(value, fallback = CAMERA_PROJECTION.PERSPECTIVE) {
-  const normalizedValue = String(value || "").trim().toLowerCase();
-  if (normalizedValue === CAMERA_PROJECTION.ORTHOGRAPHIC) {
-    return CAMERA_PROJECTION.ORTHOGRAPHIC;
-  }
-  if (normalizedValue === CAMERA_PROJECTION.PERSPECTIVE) {
-    return CAMERA_PROJECTION.PERSPECTIVE;
-  }
-  return fallback === CAMERA_PROJECTION.ORTHOGRAPHIC
-    ? CAMERA_PROJECTION.ORTHOGRAPHIC
-    : CAMERA_PROJECTION.PERSPECTIVE;
 }
 
 export function clonePerspectiveVector(vector) {
@@ -49,6 +37,16 @@ export function clonePerspectiveSnapshot(snapshot) {
   }
   if (Object.prototype.hasOwnProperty.call(snapshot, "projection")) {
     clonedSnapshot.projection = normalizeCameraProjection(snapshot.projection);
+  }
+  if (Object.prototype.hasOwnProperty.call(snapshot, "focalLength")) {
+    const focalLength = normalizeCameraFocalLength(snapshot.focalLength);
+    if (focalLength != null) clonedSnapshot.focalLength = focalLength;
+  }
+  if (Object.prototype.hasOwnProperty.call(snapshot, "orthographicHalfHeight")) {
+    const orthographicHalfHeight = normalizeOrthographicHalfHeight(snapshot.orthographicHalfHeight);
+    if (orthographicHalfHeight != null) {
+      clonedSnapshot.orthographicHalfHeight = orthographicHalfHeight;
+    }
   }
   const modelKey = normalizePerspectiveMetadataValue(snapshot.modelKey);
   const sceneScaleMode = normalizePerspectiveMetadataValue(snapshot.sceneScaleMode);
@@ -114,12 +112,24 @@ export function perspectiveSnapshotEqual(a, b, epsilon = 1e-4) {
   if (!a || !b) {
     return !a && !b;
   }
+  const aOrthographicHalfHeight = normalizeOrthographicHalfHeight(a.orthographicHalfHeight);
+  const bOrthographicHalfHeight = normalizeOrthographicHalfHeight(b.orthographicHalfHeight);
+  const orthographicHalfHeightEqual = aOrthographicHalfHeight == null || bOrthographicHalfHeight == null
+    ? aOrthographicHalfHeight == null && bOrthographicHalfHeight == null
+    : Math.abs(aOrthographicHalfHeight - bOrthographicHalfHeight) <= epsilon;
+  const aFocalLength = normalizeCameraFocalLength(a.focalLength);
+  const bFocalLength = normalizeCameraFocalLength(b.focalLength);
+  const focalLengthEqual = aFocalLength == null || bFocalLength == null
+    ? aFocalLength == null && bFocalLength == null
+    : Math.abs(aFocalLength - bFocalLength) <= epsilon;
   return (
     perspectiveVectorEqual(a.position, b.position, epsilon) &&
     perspectiveVectorEqual(a.target, b.target, epsilon) &&
     perspectiveVectorEqual(a.up, b.up, epsilon) &&
     Math.abs(normalizeCameraZoom(a.zoom, 1) - normalizeCameraZoom(b.zoom, 1)) <= epsilon &&
     normalizeCameraProjection(a.projection) === normalizeCameraProjection(b.projection) &&
+    orthographicHalfHeightEqual &&
+    focalLengthEqual &&
     normalizePerspectiveMetadataValue(a.modelKey) === normalizePerspectiveMetadataValue(b.modelKey) &&
     normalizePerspectiveMetadataValue(a.sceneScaleMode) === normalizePerspectiveMetadataValue(b.sceneScaleMode) &&
     normalizePerspectiveMetadataValue(a.coordinateSystem) === normalizePerspectiveMetadataValue(b.coordinateSystem)

@@ -12,7 +12,7 @@ const require = createRequire(import.meta.url);
 const temporary = await mkdtemp(join(tmpdir(), 'hardcore-web-app-'));
 const output = join(temporary, 'app.mjs');
 await build({
-  stdin: { contents: `export {default as App} from './App.tsx'; export {act,createElement} from 'react'; export {createRoot} from 'react-dom/client'; export {snapshot} from '@hardcore/ui/file-viewer';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
+  stdin: { contents: `export {default as App} from './App.tsx'; export {act,createElement} from 'react'; export {createRoot} from 'react-dom/client'; export {snapshot} from '@hardcore/ui/file-viewer'; export {autoReloadOptions} from '@hardcore/ui/renderers/cad/presentation';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
   bundle: true, platform: 'node', format: 'esm', jsx: 'automatic', outfile: output,
   banner: { js: `import {createRequire} from 'node:module'; const require=createRequire(import.meta.url);` },
   plugins: [{ name: 'host-boundaries', setup(plugin) {
@@ -24,13 +24,13 @@ await build({
     plugin.onLoad({ filter: /.*/, namespace: 'host-test' }, args => {
       if (args.path.endsWith('/file-viewer')) return { contents: `let current; export function FileViewer(props){current=props; return null;} export const snapshot=()=>current;`, loader: 'js' };
       if (args.path.endsWith('/cad')) return { contents: `export {createCadPreferences} from ${JSON.stringify(fileURLToPath(new URL('../../../packages/ui/src/renderers/cad/preferences.ts', import.meta.url)))}; export const createCadRenderer=()=>({id:'cad'});`, loader: 'js', resolveDir: fileURLToPath(new URL('.', import.meta.url)) };
-      if (args.path.endsWith('/presentation')) return { contents: 'export const MissingFileAlert=()=>null;export const ViewerLoadingOverlay=()=>null;export const StatusToast=()=>null;', loader: 'js' };
+      if (args.path.endsWith('/presentation')) return { contents: 'let reloadOptions;export const autoReloadOptions=()=>reloadOptions;export const useViewerAutoReload=(_server,options)=>{reloadOptions=options;return false;};export const MissingFileAlert=()=>null;export const ViewerLoadingOverlay=()=>null;export const StatusToast=()=>null;', loader: 'js' };
       if (args.path.endsWith('/empty')) return { contents: 'export const EmptyCadBackdrop=({children})=>children;', loader: 'js' };
       return { contents: 'export default function ViewerTopBar(){return null}', loader: 'js' };
     });
   } }],
 });
-const { App, act, createElement, createRoot, snapshot } = await import(pathToFileURL(output).href);
+const { App, act, createElement, createRoot, snapshot, autoReloadOptions } = await import(pathToFileURL(output).href);
 after(() => rm(temporary, { recursive: true, force: true }));
 
 test('web host preserves compact navigation, history, root state and focus refresh lifecycle', async () => {
@@ -41,13 +41,16 @@ test('web host preserves compact navigation, history, root state and focus refre
   window.matchMedia = matchMedia;
   window.innerWidth = 480;
   const calls = [];
+  const serverCalls = [];
   const listeners = new Set();
   let catalog = { entries: [], hydrated: false, refreshing: true, error: '', revision: 0, rootId: 'a' };
-  const client = { getSnapshot: () => catalog, subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); }, refresh: async options => { calls.push(options); return { entries: catalog.entries }; } };
+  const client = { serverInfo: async options => { serverCalls.push(options); return { identityToken: "restarted" }; }, getSnapshot: () => catalog, subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); }, refresh: async options => { calls.push(options); return { entries: catalog.entries }; } };
   const root = createRoot(window.document.getElementById('root'));
   try {
     await act(() => root.render(createElement(App, { client, server: { rootId: 'a' } })));
     assert.equal(snapshot().file, 'one.step');
+    assert.deepEqual(await autoReloadOptions().fetchServerInfo(), { ok: true, identityToken: 'restarted' });
+    assert.deepEqual(serverCalls[0], { fresh: true });
     assert.equal(snapshot().navigationPath, null);
     await act(() => {
       catalog = { ...catalog, entries: [{ file: 'one.step' }, { file: 'folder/two.step' }], hydrated: true, refreshing: false, revision: 1 };

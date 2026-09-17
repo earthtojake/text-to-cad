@@ -1,7 +1,7 @@
-import { createCadPreferences } from "@hardcore/ui/renderers/cad";
+import { CAD_LEGACY_PREFERENCE_KEYS, createCadPreferences } from "@hardcore/ui/renderers/cad";
 import type { CadPreferences, CadPreferenceSource } from "@hardcore/ui/renderers/cad";
 import type { FileViewerState, JsonValue } from "@hardcore/ui/file-viewer";
-import { readFileSheetTabLayoutStore, writeFileSheetTabLayoutStore } from "@hardcore/ui/renderers/cad/state";
+import { readFileSheetTabLayoutStore, readPoseTransition, writeFileSheetTabLayoutStore, writePoseTransition } from "@hardcore/ui/renderers/cad/state";
 
 const MIGRATION_KEY = "hardcore.cadMigration.v1";
 type JsonObject = { [key: string]: JsonValue };
@@ -18,6 +18,7 @@ export function migrateCadPreferences(storage: Storage): CadPreferences {
   const tips = read(storage, "cad-viewer:tutorial-tips:v1");
   return {
     fileSheetTabs: readFileSheetTabLayoutStore(storage),
+    poseTransition: readPoseTransition(storage),
     ...(theme.version === 13 && typeof theme.themeId === "string" ? { theme: { themeId: theme.themeId, custom: theme.custom ?? null } } : {}),
     ...(tips.version === 1 && Array.isArray(tips.seen) ? { seenTips: tips.seen.filter((tip): tip is string => typeof tip === "string") } : {}),
   };
@@ -34,11 +35,12 @@ export function desktopCadPreferences(): CadPreferenceSource {
       if (preferences.theme) write(localStorage, "cad-viewer:theme", { version: 13, ...preferences.theme });
       if (preferences.seenTips) write(localStorage, "cad-viewer:tutorial-tips:v1", { version: 1, seen: preferences.seenTips });
       if (preferences.fileSheetTabs) writeFileSheetTabLayoutStore(localStorage, preferences.fileSheetTabs);
+      if (preferences.poseTransition) writePoseTransition(localStorage, preferences.poseTransition);
     } });
     // Browser storage events carry updates from another Hardcore window. This
     // host-owned store has the lifetime of the window, independent of its roots.
     window.addEventListener("storage", event => {
-      if (!["cad-viewer:theme", "cad-viewer:tutorial-tips:v1", "cad-viewer:file-sheet-tab-layout:v5"].includes(event.key ?? "")) return;
+      if (!([CAD_LEGACY_PREFERENCE_KEYS.theme, CAD_LEGACY_PREFERENCE_KEYS.tips, CAD_LEGACY_PREFERENCE_KEYS.fileSheetTabs, CAD_LEGACY_PREFERENCE_KEYS.poseTransition] as string[]).includes(event.key ?? "")) return;
       syncing = true;
       try { source.update(snapshot()); } finally { syncing = false; }
     });

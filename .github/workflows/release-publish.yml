@@ -31,6 +31,7 @@ on:
         type: boolean
 
 permissions:
+  actions: read
   contents: write
 
 concurrency:
@@ -161,7 +162,7 @@ jobs:
           (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cadgen" --help >/dev/null)
           (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cadgen" viewer --help >/dev/null)
           "$RUNNER_TEMP/install-test/bin/cadgen" doctor skills/cad-viewer
-          scripts/test/test-installed.sh
+          scripts/test/test-installed.sh --wheel "$wheel"
 
       # The distribution is kept whether or not it ships: a rehearsal's artifact is
       # what you inspect instead of a PyPI upload, and a main run's is the record of
@@ -462,9 +463,38 @@ jobs:
           name: cadgen-${{ needs.publish.outputs.version }}
           path: packages/cadgen/dist
 
+      # Distinguish the allowed case (every desktop leg failed, so there is no
+      # installer artifact) from an artifact-service/download failure, which
+      # must fail this job instead of silently publishing fewer files.
+      - name: Discover desktop installer artifacts
+        id: desktop-assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          count="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100" \
+            --jq '[.artifacts[] | select(.expired == false and (.name | startswith("hardcore-")))] | length')"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          if [ "$count" -eq 0 ]; then
+            echo "No desktop installer artifacts were produced; the release will keep the Python distributions only."
+          else
+            echo "Found $count desktop installer artifact(s)."
+          fi
+
+      # Whatever the successful desktop legs produced, flattened into one
+      # directory. Download failures remain fatal. The exact installers,
+      # blockmaps and latest*.yml files join the Python distributions in the
+      # single release operation below.
+      - name: Download the desktop installers
+        if: steps.desktop-assets.outputs.count != '0'
+        uses: actions/download-artifact@v7
+        with:
+          pattern: hardcore-*
+          merge-multiple: true
+          path: desktop-artifacts
+
       # A push-triggered run has no `publish` input: it publishes. Only a manual
-      # dispatch can ask for a draft. The wheel and sdist are attached to the
-      # release; a resumed run attaches them to the release that already exists.
+      # dispatch can ask for a draft. Every asset is attached by the same
+      # create/resume/clobber path, so a resumed run repairs the release in one pass.
       - name: Create release tag and GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -474,37 +504,11 @@ jobs:
           if [ "${INPUT_PUBLISH:-true}" = "true" ]; then
             args+=(--publish)
           fi
-          ls -l packages/cadgen/dist
+          shopt -s nullglob
           for file in packages/cadgen/dist/*.whl packages/cadgen/dist/*.tar.gz; do
+            args+=(--asset "$file")
+          done
+          for file in desktop-artifacts/*; do
             [ -f "$file" ] && args+=(--asset "$file")
           done
           scripts/release/publish-github-release.sh "${args[@]}"
-
-      # Whatever the desktop matrix produced, flattened into one directory. Nothing
-      # is required: a platform that failed simply has no artifact, and the release
-      # still gets the ones that succeeded.
-      - name: Download the desktop installers
-        uses: actions/download-artifact@v7
-        with:
-          pattern: hardcore-*
-          merge-multiple: true
-          path: desktop-artifacts
-
-      # Attached to the Release the step above created -- draft or published, the API
-      # is the same. `--clobber` so a resumed run replaces an asset instead of
-      # failing on it; the tag name comes from release-tags.sh, the one place that
-      # knows both spellings.
-      - name: Attach the desktop installers to the GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.publish.outputs.version }}
-        run: |
-          shopt -s nullglob
-          assets=(desktop-artifacts/*)
-          if [ "${#assets[@]}" -eq 0 ]; then
-            echo "No desktop installers were produced; the release keeps the wheel only." >&2
-            exit 0
-          fi
-          tag_name="$(source scripts/release/release-tags.sh && release_tag_name "$VERSION")"
-          gh release upload "$tag_name" "${assets[@]}" --clobber
-          echo "Attached ${#assets[@]} desktop artifacts to $tag_name."

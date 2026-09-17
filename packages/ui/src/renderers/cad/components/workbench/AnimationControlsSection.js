@@ -5,6 +5,7 @@ import {
   ANIMATION_SPEED_MIN
 } from "@hardcore/core/common/animationClock.js";
 import { useAnimationClock } from "../../workbench/animationClockStore.js";
+import { useEmbeddedGlbAnimationClock } from "../../workbench/embeddedGlbAnimationClockStore.js";
 import { animationClipOptions } from "../../workbench/animationClipOptions.js";
 import { Button } from "@hardcore/ui/primitives/button";
 import { Slider } from "@hardcore/ui/primitives/slider";
@@ -23,10 +24,8 @@ import {
 
 // The ANIMATION tab: pick a clip, play it, scrub it.
 //
-// The other half of the pose/animation split. Clips are choreography compiled
-// from the sidecar's copied .anim.js text and are pure functions of t, which is
-// why scrub and pause need nothing but a number. This section never reads a
-// DOF, a mate or a preset.
+// STEP render-module clips and embedded glTF clips share this transport UI.
+// Their evaluators remain separate; this section only edits clip and clock state.
 
 const compactButtonClasses = FILE_SHEET_COMPACT_BUTTON_CLASSES;
 
@@ -43,8 +42,10 @@ function formatSpeed(value) {
 // The time slider tracks the LIVE clock while playing: the elapsed time on the
 // runtime snapshot only moves when playback stops, because a playing clip
 // publishes through the clock store instead of React state.
-function AnimationTimeControl({ playing, elapsedSec, duration, enabled, onScrub }) {
-  const liveElapsedSec = useAnimationClock();
+function AnimationTimeControl({ playing, elapsedSec, duration, enabled, onScrub, clockKind = "step" }) {
+  const stepElapsedSec = useAnimationClock();
+  const embeddedElapsedSec = useEmbeddedGlbAnimationClock();
+  const liveElapsedSec = clockKind === "embedded-glb" ? embeddedElapsedSec : stepElapsedSec;
   const rawElapsedSec = playing ? liveElapsedSec : elapsedSec;
   const value = Math.min(Math.max(Number(rawElapsedSec) || 0, 0), duration);
   return (
@@ -109,7 +110,7 @@ export default function AnimationControlsSection({ runtime = null }) {
           title="Animation"
           // The transport gate rides this heading on the shared right-edge control
           // axis, exactly as the Kinematics tab's mate gate does.
-          trailing={(
+          trailing={runtime?.showEnableToggle === false ? null : (
             <FileSheetBooleanToggle
               checked={enabled}
               onCheckedChange={(checked) => runtime?.onEnabledChange?.(checked)}
@@ -125,7 +126,7 @@ export default function AnimationControlsSection({ runtime = null }) {
               DOFs and presets it owns. A gate turns its whole feature off; one
               live row under an off switch reads as a control that still does
               something, and this one silently rewinds the clock. */}
-          <FileSheetSelectRow
+          {clips.length > 1 ? <FileSheetSelectRow
             stacked
             label="Clip"
             value={activeClip?.id || ""}
@@ -133,7 +134,7 @@ export default function AnimationControlsSection({ runtime = null }) {
             disabled={!enabled}
             ariaLabel="Animation clip"
             options={animationClipOptions(clips)}
-          />
+          /> : null}
           {/* "Restart" is deliberately not called "Reset": it returns playback to
               zero, where the Pose tab's Reset returns the DOFs to their defaults.
               Play is the ONE control the gate does not disable, here and on the
@@ -141,7 +142,7 @@ export default function AnimationControlsSection({ runtime = null }) {
               The toolbar's copy sits outside this tab and has no way to say that
               animation is switched off, and a Play that did nothing would be the
               worse failure -- so both buttons behave the same way. */}
-          <FileSheetButtonRow columns={2}>
+          <FileSheetButtonRow columns={runtime?.showRestart === false ? 1 : 2}>
             <Button
               type="button"
               variant="outline"
@@ -158,7 +159,7 @@ export default function AnimationControlsSection({ runtime = null }) {
               )}
               <span>{runtime?.playing ? "Pause" : "Play"}</span>
             </Button>
-            <Button
+            {runtime?.showRestart === false ? null : <Button
               type="button"
               variant="outline"
               size="sm"
@@ -170,7 +171,7 @@ export default function AnimationControlsSection({ runtime = null }) {
             >
               <RotateCcw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
               <span>Restart</span>
-            </Button>
+            </Button>}
           </FileSheetButtonRow>
           <FileSheetToggleRow
             label="Loop"
@@ -185,6 +186,7 @@ export default function AnimationControlsSection({ runtime = null }) {
             duration={duration}
             enabled={enabled}
             onScrub={runtime?.onScrub}
+            clockKind={runtime?.clockKind}
           />
           <FileSheetSliderField
             label="Speed"

@@ -1,9 +1,9 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
+import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-runtime";
 
 /**
  * References, both ways (the CAD review's items 2 and 4).
@@ -27,7 +27,7 @@ declare const window: {
   hardcore: {
     projects: { addPath(request: { path: string }): Promise<{ id: string; name: string }> };
     settings: { set(patch: Record<string, unknown>): Promise<unknown> };
-    runtime: { status(): Promise<{ state: string }> };
+    runtime: { status(): Promise<{ state: string; cadgenVersion: string | null }> };
     sessions: {
       create(request: { projectId: string; agentId: string; gitMode: string; cwd: string }): Promise<{ id: string }>;
       prompt(request: { id: string; content: { type: "text"; text: string }[] }): Promise<{ stopReason: string }>;
@@ -39,9 +39,8 @@ declare const window: {
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const repoRoot = path.resolve(appRoot, "..", "..");
 const projectName = path.basename(repoRoot);
-const screenshots = path.join(appRoot, "tests", "e2e", "__screenshots__");
 const fakeAgent = path.join(appRoot, "tests", "fake-agent", "index.mjs");
-const STEP = "models/examples/imported/import-smoke.step";
+const STEP = "tests/fixtures/cad/import-smoke.step";
 
 let app: ElectronApplication;
 let page: Page;
@@ -49,12 +48,12 @@ let userData: string;
 let sessionId: string;
 
 test.beforeAll(async () => {
-  userData = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-references-e2e-"));
+  userData = cadTestProfile("references");
   // The CAD runtime the app resolves on its own, as explorer.spec.ts does.
   const { CAD_DESKTOP_PYTHON: _unset, ...inherited } = process.env;
   app = await electron.launch({
     args: [path.join(appRoot, "out", "main", "index.js"), `--user-data-dir=${userData}`],
-    env: { ...inherited, NODE_ENV: "test", HARDCORE_FAKE_AGENT: fakeAgent },
+    env: { ...inherited, ...cadRegistryEnvironment(userData), NODE_ENV: "test", CADGEN_DAEMON: "0", CADGEN_CACHE_DIR: path.join(userData, "cad-cache"), CADGEN_DAEMON_STATE_DIR: path.join(userData, "cad-daemon"), HARDCORE_FAKE_AGENT: fakeAgent },
   });
   page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
@@ -112,7 +111,7 @@ test("paths an agent writes are links when they exist, and open in the explorer"
   await expect(page.getByRole("tab", { name: /README\.md/ })).toBeVisible();
   await expect(page.locator("[data-transcript]")).toBeVisible();
   await page.waitForTimeout(500);
-  await page.screenshot({ path: path.join(screenshots, "transcript-links.png"), animations: "disabled" });
+  await page.screenshot({ path: test.info().outputPath("transcript-links.png"), animations: "disabled" });
 });
 
 test("a typed reference is a chip, and is sent as its text", async () => {
@@ -127,7 +126,7 @@ test("a typed reference is a chip, and is sent as its text", async () => {
   await expect(chips.nth(0).locator("[data-selector-badge]")).toHaveText("o1.2");
   await expect(chips.nth(1)).toHaveAttribute("data-file", "");
   await expect(chips.nth(1)).toHaveAttribute("data-selector", "f3");
-  await page.screenshot({ path: path.join(screenshots, "composer-chips.png"), animations: "disabled" });
+  await page.screenshot({ path: test.info().outputPath("composer-chips.png"), animations: "disabled" });
 
   // Backspace after the last chip takes the chip whole, not a character.
   await page.keyboard.press("Backspace");
@@ -146,7 +145,7 @@ test("a typed reference is a chip, and is sent as its text", async () => {
 
 test("the viewer's Add to prompt lands a chip, and the camera an image", async () => {
   const status = await page.evaluate(() => window.hardcore.runtime.status());
-  test.skip(status.state !== "ready", "no CAD runtime on this machine");
+  test.skip(!cadRuntimeReady(status), "no CAD runtime on this machine");
   test.setTimeout(240_000);
 
   // Open the STEP through the tree's filter, the way explorer.spec.ts does
@@ -156,12 +155,11 @@ test("the viewer's Add to prompt lands a chip, and the camera an image", async (
   await filter.fill(STEP);
   await page.getByRole("option", { name: STEP, exact: false }).first().click();
   await expect(page.locator("canvas").first()).toBeVisible({ timeout: 60_000 });
-  const tree = page.getByRole("tab", { name: "Model", exact: true });
+  const tree = page.getByRole("list", { name: "Model", exact: true });
   await expect(tree).toBeVisible({ timeout: 90_000 });
-  await tree.click();
 
   // Add to prompt from the tree's context menu names the file by its full path.
-  const row = page.getByRole("treeitem").first();
+  const row = tree.getByRole("button", { name: /^Select / }).first();
   await expect(row).toBeVisible({ timeout: 30_000 });
   await row.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Add to prompt" }).click();
@@ -176,7 +174,7 @@ test("the viewer's Add to prompt lands a chip, and the camera an image", async (
   const captures = page.locator("[data-composer]").getByText(/import-smoke-.*\.png/);
   await expect(captures).toHaveCount(1, { timeout: 15_000 });
   await page.waitForTimeout(500);
-  await page.screenshot({ path: path.join(screenshots, "composer-capture.png"), animations: "disabled" });
+  await page.screenshot({ path: test.info().outputPath("composer-capture.png"), animations: "disabled" });
 
   // Sent: the text carries the token, the image goes as an image block.
   // A click in the middle of the box lands on the chip and selects it (a

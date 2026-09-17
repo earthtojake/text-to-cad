@@ -23,22 +23,46 @@ export interface TessellationCacheEntry {
   partColor: number[] | null;
   edgeClasses: [number, string][] | null;
 }
+export interface TessellationProbe {
+  schemaVersion: number;
+  object: string;
+  byteLength: number;
+  decodedBytes: number;
+  surfaceInput: string;
+  surfaceObject: string;
+  tessellationInput: string;
+  renderIdentity: string;
+  quality: TessellationOptions;
+  tessellatorVersion: number;
+  payloadVersion: number;
+  headerBytes: number;
+  arrayBytes: number;
+  faceRangeCount: number;
+  edgeCount: number;
+  edgeClassCount: number;
+  edgeSegmentCount: number;
+}
+export interface TessellationReadOptions {
+  signal?: AbortSignal;
+  probe?: TessellationProbe | null;
+  strictProbe?: boolean;
+}
 export interface TessellationCacheProvider {
-  get(key: string): Promise<Uint8Array | null>;
-  put?(key: string, bytes: Uint8Array): Promise<void>;
-  getMany?(keys: string[]): Promise<(Uint8Array | null)[] | null>;
+  probeMany(keys: string[], options?: { signal?: AbortSignal }): Promise<(TessellationProbe | null)[] | null>;
+  getProbed(probe: TessellationProbe, options?: { signal?: AbortSignal; maxBytes?: number }): Promise<Uint8Array | null>;
+  getManyProbed?(probes: TessellationProbe[], options?: { signal?: AbortSignal; maxBytes?: number }): Promise<(Uint8Array | null)[] | null>;
+  put?(key: string, bytes: Uint8Array, options?: { signal?: AbortSignal }): Promise<unknown>;
 }
 export interface TessellationCache {
   tessellationCacheProviderRegistered(): boolean;
-  getCachedComponentEntry(cid: string, options?: TessellationOptions): Promise<TessellationCacheEntry | null>;
-  getCachedComponentEntries(cids: string[], options?: TessellationOptions): Promise<Map<string, TessellationCacheEntry>>;
-  primeCachedEntryBytes(cids: string[], options?: TessellationOptions): Promise<number>;
-  clearPrimedEntries(): void;
-  getCachedEntryBytes(cid: string, options?: TessellationOptions): Promise<Uint8Array | null>;
-  configureTessellationCacheWriteBack(options?: { deferMs?: number; concurrency?: number }): void;
+  probeCachedTessellationEntries(surfaceInputs: string[], options?: TessellationOptions, request?: TessellationReadOptions): Promise<Map<string, TessellationProbe>>;
+  getCachedComponentEntry(surfaceInput: string, options?: TessellationOptions, request?: TessellationReadOptions): Promise<TessellationCacheEntry | null>;
+  getCachedEntryBytes(surfaceInput: string, options?: TessellationOptions, request?: TessellationReadOptions): Promise<Uint8Array | null>;
+  getCachedEntryBytesMany(probes: TessellationProbe[], request?: { signal?: AbortSignal; maxBytes?: number }): Promise<(Uint8Array | null)[] | null>;
+  configureTessellationCacheWriteBack(options?: { deferMs?: number; concurrency?: number; maxPendingBytes?: number }): void;
   flushTessellationCacheWriteBacks(): Promise<void>;
-  writeBackEntryBytes(cid: string, options: TessellationOptions, bytes: Uint8Array): Promise<void>;
-  writeBackComponentEntry(cid: string, options: TessellationOptions, component: TessellatedComponent, index: unknown): Promise<void>;
-  tessellateComponentCached(index: unknown, floats: ArrayLike<number>, request?: { cid?: string; options?: TessellationOptions }): Promise<TessellatedComponent>;
+  writeBackEntryBytes(surfaceInput: string, options: TessellationOptions, bytes: Uint8Array): Promise<unknown>;
+  writeBackComponentEntry(surfaceInput: string, surfaceObject: string, options: TessellationOptions, component: TessellatedComponent, index: unknown): Promise<unknown>;
+  memoryStats(): { pendingWriteBackBytes: number; activeWriteBackBytes: number; writeBackBytes: number };
   dispose(): void;
 }

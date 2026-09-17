@@ -124,7 +124,7 @@ class CacheRootSyncTest(unittest.TestCase):
         from cadgen._internal.node_runtime import cad_node_executable
         from cadgen.store.meshes import tessellation_key
 
-        module = ROOT / "packages/cadgen-js/src/lib/surf/tessellationCache.js"
+        module = ROOT / "packages/core/src/lib/surf/tessellationCache.js"
         cases = [("a" * 64, 0.0015, 0.005), ("b" * 64, 0.00001, 0.013),
                  ("a" * 64, 0.0015000000000000002, 0.005)]
         script = f'''

@@ -60,8 +60,10 @@ tree. `onReady(false)` suppresses panels whose surface could not start.
 `onChromeVisibilityChange(false)` supports an immersive preview and resets on
 the next document. Host-specific empty, loading, and error artwork can be
 supplied through `presentation`, without duplicating the tab's placement.
-`onActivityChange` publishes work on the current file to `presentation.activity`;
-hosts can preserve their existing filename indicator. `narrowCrumbs` optionally
+`onActivityChange` publishes work on the current file. FileViewer displays its
+loading flag, label, title and optional tone beside the filename; an optional
+`onActivate` callback makes that status actionable. `presentation.activity` can
+replace the default indicator. `narrowCrumbs` optionally
 overrides automatic breadcrumb folding. Per-file renderer state is also accepted
 during a departing renderer's cleanup, while it still belongs to the same root.
 `navigationPath` can keep navigation unselected while a requested file is still

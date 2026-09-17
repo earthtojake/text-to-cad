@@ -256,6 +256,18 @@ export function FileSheetSectionBody({
   );
 }
 
+// The one loading body a tab shows while its panel chunk arrives: the States
+// rule's muted 11px line in the row gutter, inside a normal section body so the
+// tab does not resize when the panel replaces it. Nothing animates — a panel
+// that usually arrives in a frame must not flash a spinner.
+export function FileSheetLoadingBody({ children }) {
+  return (
+    <FileSheetSectionBody>
+      <FileSheetStatusText>{children}</FileSheetStatusText>
+    </FileSheetSectionBody>
+  );
+}
+
 export function FileSheetControlRow({
   label,
   value,
@@ -407,6 +419,7 @@ export function FileSheetValueInput({
           event.currentTarget.blur();
         }
         if (event.key === "Escape") {
+          event.preventDefault();
           skipCommitRef.current = true;
           setDraftValue(displayValue);
           event.currentTarget.blur();
@@ -682,7 +695,7 @@ export function FileSheetSegmentedControl({ value, onChange, options, ariaLabel,
 // The standard select: an inline row, trigger on the control axis. `stacked`
 // gives the block-row treatment — label above, full width — and is reserved for
 // a surface's primary control, the first row that reframes everything under it
-// (Theme > Preset, Display > Mode, Joints > Group state). Nothing else.
+// (Render > Studio, Display > Mode, Kinematics > Preset). Nothing else.
 // Pass triggerContent to replace the plain SelectValue (e.g. a swatch + label).
 export function FileSheetSelectRow({
   label,

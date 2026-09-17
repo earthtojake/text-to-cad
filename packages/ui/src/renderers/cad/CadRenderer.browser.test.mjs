@@ -8,10 +8,10 @@ import { createServer } from 'node:http';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 
-// Inline fixture bytes are served in memory; no CAD artifact is written outside models/.
+// Inline fixture bytes are served in memory with a private temporary harness.
 const mesh = 'solid triangle\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 20 0 0\nvertex 0 20 0\nendloop\nendfacet\nendsolid triangle\n';
 
-test('the shared CAD renderer preserves baseline camera persistence, panels, capture and multiple-view isolation', async (t) => {
+test('the shared CAD renderer restores camera persistence, panels, capture and multiple-view isolation', async (t) => {
   const temporary = await mkdtemp(join(tmpdir(), 'hardcore-cad-browser-'));
   let server, browser;
   t.after(async () => { await browser?.close(); if (server) await new Promise((resolve) => server.close(resolve)); await rm(temporary, { recursive: true, force: true }); });
@@ -33,7 +33,7 @@ test('the shared CAD renderer preserves baseline camera persistence, panels, cap
     } else if (url.pathname.endsWith('/mesh.stl')) { response.end(mesh); }
     else { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css"></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>'); }
   });
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   browser = await chromium.launch({ headless: true, args: process.platform === 'darwin'
     ? ['--use-angle=metal']
     : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
@@ -49,7 +49,7 @@ test('the shared CAD renderer preserves baseline camera persistence, panels, cap
   });
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
   const first = page.getByTestId('one');
-  await first.getByRole('textbox', { name: 'Zoom level percent' }).waitFor().catch((error) => { throw new Error(`${error.message}; page errors: ${errors.join('; ')}`); });
+  await first.getByRole('textbox', { name: 'Zoom level percent' }).waitFor().catch(async (error) => { throw new Error(`${error.message}; page errors: ${errors.join('; ')}; body: ${await page.locator("body").innerText()}; requests: ${requests.join(", ")}`); });
   await page.waitForFunction(() => Object.keys(window.cadHarness.state.renderers || {}).length > 0);
   assert.deepEqual(errors, []);
   assert.equal(await page.title(), 'Host title');
@@ -73,15 +73,49 @@ test('the shared CAD renderer preserves baseline camera persistence, panels, cap
   assert.ok(requests.includes('/one/mesh.stl'));
   assert.ok(requests.includes('/two/mesh.stl'));
   assert.equal(await first.getByRole('textbox', { name: 'Zoom level percent' }).inputValue(), '110%');
+  // A second pane changes the first viewport's dimensions. Let its resize
+  // observer and camera event publish before taking the saved snapshot.
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   const before = await page.evaluate(() => window.cadHarness.state);
   await page.evaluate(() => window.cadHarness.mounted(false));
   await first.locator('[data-slot="cad-file-view"]').waitFor({ state: 'detached' });
   await page.evaluate(() => window.cadHarness.mounted(true));
   await first.getByRole('textbox', { name: 'Zoom level percent' }).waitFor();
-  // Baseline intentionally serializes camera vectors/zoom without viewport scope.
-  // CadViewer requires that scope on restoration, so reopening retains the saved
-  // record while initially reporting 100%. This refactor preserves that behavior.
-  assert.equal(await first.getByRole('textbox', { name: 'Zoom level percent' }).inputValue(), '100%');
-  assert.deepEqual((await page.evaluate(() => window.cadHarness.state)).renderers, before.renderers);
+  // Serialized camera state restores in its file session; a sibling renderer
+  // still opens at its own default zoom. Runtime-only scope is not persisted.
+  assert.equal(await first.getByRole('textbox', { name: 'Zoom level percent' }).inputValue(), '110%');
+  const after = await page.evaluate(() => window.cadHarness.state);
+  const previousState = structuredClone(before.renderers);
+  const restoredState = structuredClone(after.renderers);
+  for (const key of Object.keys(previousState)) {
+    const previousSlices = previousState[key].fileSession.slices;
+    const restoredSlices = restoredState[key].fileSession.slices;
+    for (const [previousCamera, restoredCamera] of [
+      [previousSlices.tab.camera, restoredSlices.tab.camera],
+      [previousSlices.render.cadCamera, restoredSlices.render.cadCamera],
+    ]) {
+      for (const field of ['position', 'target', 'up']) {
+        assert.equal(restoredCamera[field].length, previousCamera[field].length);
+        restoredCamera[field].forEach((value, index) => assert.ok(Math.abs(value - previousCamera[field][index]) < 1e-9, `${field}[${index}] was restored`));
+      }
+      assert.equal(restoredCamera.zoom, previousCamera.zoom);
+      assert.equal(restoredCamera.projection, previousCamera.projection);
+    }
+    // Focal/frustum measurements are regenerated by the mounted viewport.
+    // Pose, projection and user zoom are the durable camera contract; every
+    // non-camera slice must remain byte-for-byte equivalent.
+    assert.ok(restoredSlices.render.cadCamera.focalLength > 0);
+    assert.ok(restoredSlices.render.cadCamera.orthographicHalfHeight > 0);
+    delete previousSlices.tab.camera; delete restoredSlices.tab.camera;
+    delete previousSlices.render.cadCamera; delete restoredSlices.render.cadCamera;
+  }
+  assert.deepEqual(restoredState, previousState);
+  // Render deliberately has no Inspect theme. The shared FileViewer must stay
+  // mounted while crossing that boundary, including with another viewer open.
+  await first.getByRole('button', { name: 'Viewing mode: Inspect. Switch to Render', exact: true }).click();
+  await first.getByRole('button', { name: 'Viewing mode: Render. Switch to Inspect', exact: true }).waitFor();
+  assert.equal(await first.getByText('Could not display that file', { exact: true }).count(), 0);
+  await first.getByRole('button', { name: 'Viewing mode: Render. Switch to Inspect', exact: true }).click();
+  await first.getByRole('button', { name: 'Viewing mode: Inspect. Switch to Render', exact: true }).waitFor();
   assert.deepEqual(errors, []);
 });
