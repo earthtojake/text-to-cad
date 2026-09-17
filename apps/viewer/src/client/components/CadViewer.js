@@ -17,6 +17,7 @@ import {
 } from "cadgen-js/lib/dxf/foldPreview";
 import { buildDxfPreviewMeshData, extractDxfScorePolylines } from "cadgen-js/lib/dxf/buildPreviewMesh";
 import { buildDxfDrawingLineGroups, drawingLineBounds } from "cadgen-js/lib/dxf/buildDrawingLines";
+import { textMarkingCenter } from "cadgen-js/lib/dxf/textMarkingLayout";
 import { STEP_TREE_TOPOLOGY_NODE_PREFIX } from "cadgen-js/lib/step/stepTree";
 import { copyImageBlobToClipboard } from "@/ui/clipboard";
 import {
@@ -3318,12 +3319,20 @@ const CadViewer = forwardRef(function CadViewer({
           texture.colorSpace = THREE.SRGBColorSpace;
           const planeWidth = heightMm * (canvas.width / fontPx);
           const planeHeight = heightMm * (canvas.height / fontPx);
-          // The DXF anchor is baseline-left; the plane's centre sits half a width along the
-          // text direction and a bit above the baseline. All in FLAT coords, then folded.
-          const centerFlat = [
-            anchor[0] + ex[0] * (planeWidth / 2) + ey[0] * (planeHeight * 0.22),
-            anchor[1] + ex[1] * (planeWidth / 2) + ey[1] * (planeHeight * 0.22)
-          ];
+          // The anchor is wherever the file said: baseline-left for a plain label, middle
+          // centre for a dimension value, right-top for a justified note. The canvas paints
+          // the baseline at fontPx of canvas.height, so the box centre follows from that.
+          // All in FLAT coords, then folded.
+          const centerFlat = textMarkingCenter({
+            anchor,
+            hAlign: text.hAlign,
+            vAlign: text.vAlign,
+            heightMm,
+            planeWidth,
+            planeHeight,
+            rotationDeg: Number(text.rotationDeg) || 0,
+            baselineFraction: 1 - fontPx / canvas.height
+          });
           const origin3 = orientPoint(foldDxfPoint(centerFlat[0], centerFlat[1], zTop, resolvedFold));
           const step = 0.5;
           const alongX = orientPoint(foldDxfPoint(centerFlat[0] + ex[0] * step, centerFlat[1] + ex[1] * step, zTop, resolvedFold));

@@ -655,14 +655,57 @@ function parseHatchEntity(records) {
   return { lines, arcs: [] };
 }
 
+/** SOLID / TRACE: a filled triangle or quad, which is what an AutoCAD arrowhead is
+ *  (`_CLOSEDFILLED` and friends are one SOLID each). Rendered as its outline. Corners are
+ *  codes 10/20, 11/21, 12/22, 13/23; the format stores a quad as a bow-tie (1, 2, 4, 3),
+ *  so the last two are swapped to walk the perimeter. A triangle repeats its third corner. */
+function parseSolidEntity(records) {
+  const layer = normalizeLayerName(records.find((record) => record.code === 8)?.value);
+  const corner = (xCode, yCode) => {
+    const x = records.find((record) => record.code === xCode);
+    const y = records.find((record) => record.code === yCode);
+    if (!x || !y) {
+      return null;
+    }
+    return [toFiniteNumber(x.value), toFiniteNumber(y.value)];
+  };
+  const raw = [corner(10, 20), corner(11, 21), corner(13, 23), corner(12, 22)].filter(Boolean);
+  const points = raw.filter((point, index) => {
+    const previous = raw[index - 1];
+    return !previous || previous[0] !== point[0] || previous[1] !== point[1];
+  });
+  if (points.length < 3) {
+    return { lines: [], arcs: [] };
+  }
+  return { lines: samplePolylinePoints(layer, points, { closed: true }), arcs: [] };
+}
+
+/** LEADER: a polyline from the note to the feature, vertices as repeated 10/20 pairs. Its
+ *  arrowhead is drawn by the file as a SOLID or an INSERT, not by the LEADER itself. */
+function parseLeaderEntity(records) {
+  const layer = normalizeLayerName(records.find((record) => record.code === 8)?.value);
+  const points = [];
+  for (const record of records) {
+    if (record.code === 10) {
+      points.push([toFiniteNumber(record.value), Number.NaN]);
+    } else if (record.code === 20 && points.length) {
+      points[points.length - 1][1] = toFiniteNumber(record.value);
+    }
+  }
+  const usable = points.filter((point) => Number.isFinite(point[1]));
+  return { lines: usable.length >= 2 ? samplePolylinePoints(layer, usable) : [], arcs: [] };
+}
+
 /** Entities that carry no cut geometry. Skipped rather than rejected: a drawing is not
  *  unrenderable because it is annotated, and refusing one over a dimension line is how a
  *  perfectly good profile ends up showing an error card. (TEXT/MTEXT/DIMENSION are no longer
- *  here — they parse into flat text markings the viewer engraves onto the sheet.) */
+ *  here — they parse into flat text markings the viewer engraves onto the sheet; SOLID, TRACE
+ *  and LEADER are outlines, because arrowheads and leader lines are what a dimensioned
+ *  drawing is made of.) */
 const NON_GEOMETRIC_ENTITY_TYPES = new Set([
-  "ATTRIB", "ATTDEF", "LEADER", "MLEADER", "MULTILEADER",
+  "ATTRIB", "ATTDEF", "MLEADER", "MULTILEADER",
   "POINT", "VIEWPORT", "SEQEND", "TOLERANCE", "OLE2FRAME", "WIPEOUT", "IMAGE", "RAY", "XLINE",
-  "ACAD_PROXY_ENTITY", "ACAD_TABLE", "BODY", "REGION", "SHAPE", "SOLID", "TRACE", "3DFACE",
+  "ACAD_PROXY_ENTITY", "ACAD_TABLE", "BODY", "REGION", "SHAPE", "3DFACE",
   "HELIX", "MESH", "SPLINE_PROXY",
 ]);
 
@@ -694,20 +737,39 @@ export function stripMtextFormatting(raw) {
   return text.trim();
 }
 
+/** Where a marking's anchor sits on its text box. DXF stores the anchor point and an
+ *  alignment code; the viewer, which is the only thing that knows the rendered width, turns
+ *  the two into a placement. Default is the format's own: baseline, left. */
+const TEXT_H_ALIGN = { 0: "left", 1: "center", 2: "right", 3: "left", 4: "center", 5: "left" };
+const TEXT_V_ALIGN = { 0: "baseline", 1: "bottom", 2: "middle", 3: "top" };
+const MTEXT_ATTACHMENT = {
+  1: ["left", "top"], 2: ["center", "top"], 3: ["right", "top"],
+  4: ["left", "middle"], 5: ["center", "middle"], 6: ["right", "middle"],
+  7: ["left", "bottom"], 8: ["center", "bottom"], 9: ["right", "bottom"],
+};
+
 function parseTextEntity(records) {
   const layer = normalizeLayerName(records.find((record) => record.code === 8)?.value);
   const value = String(records.find((record) => record.code === 1)?.value ?? "").trim();
   if (!value) {
     return null;
   }
+  const hCode = Math.trunc(toFiniteNumber(records.find((record) => record.code === 72)?.value, 0));
+  const vCode = Math.trunc(toFiniteNumber(records.find((record) => record.code === 73)?.value, 0));
+  // With any alignment other than baseline-left the anchor is the SECOND alignment point
+  // (11/21); the first is where the text would start if it were left-justified.
+  const aligned = hCode !== 0 || vCode !== 0;
+  const pointCodes = aligned && records.some((record) => record.code === 11) ? [11, 21] : [10, 20];
   return {
     layer,
     position: [
-      toFiniteNumber(records.find((record) => record.code === 10)?.value),
-      toFiniteNumber(records.find((record) => record.code === 20)?.value)
+      toFiniteNumber(records.find((record) => record.code === pointCodes[0])?.value),
+      toFiniteNumber(records.find((record) => record.code === pointCodes[1])?.value)
     ],
     heightMm: Math.max(toFiniteNumber(records.find((record) => record.code === 40)?.value, 2.5), 0.01),
     rotationDeg: toFiniteNumber(records.find((record) => record.code === 50)?.value, 0),
+    hAlign: TEXT_H_ALIGN[hCode] || "left",
+    vAlign: TEXT_V_ALIGN[vCode] || "baseline",
     value
   };
 }
@@ -729,18 +791,40 @@ function parseMtextEntity(records) {
     ],
     heightMm: Math.max(toFiniteNumber(records.find((record) => record.code === 40)?.value, 2.5), 0.01),
     rotationDeg: toFiniteNumber(records.find((record) => record.code === 50)?.value, 0),
+    hAlign: (MTEXT_ATTACHMENT[Math.trunc(toFiniteNumber(records.find((record) => record.code === 71)?.value, 1))] || ["left", "top"])[0],
+    vAlign: (MTEXT_ATTACHMENT[Math.trunc(toFiniteNumber(records.find((record) => record.code === 71)?.value, 1))] || ["left", "top"])[1],
     value
   };
 }
 
-/** DIMENSION: the graphics live in an anonymous block we do not expand (witness lines are
- *  not part geometry); what matters on a part preview is the measurement text. Code 1 is
- *  the override ("<>" means "the measured value", which the file does not store), code 11/21
- *  the text midpoint. */
+/** DIMENSION: the graphics -- witness lines, the dimension line, arrowheads and the value
+ *  as MTEXT -- live in an anonymous block (code 2, `*D12`) that every CAD package writes when
+ *  it renders the dimension. The block is drawn in model coordinates, so it expands like an
+ *  INSERT at the origin. A file without the block (some exporters write the entity alone)
+ *  falls back to a marking of the value: the override (code 1) when there is one, else the
+ *  measurement the file stored (code 42). "<>" means "the measured value" and is not text. */
+function dimensionBlockName(records) {
+  return String(records.find((record) => record.code === 2)?.value || "").trim();
+}
+
+function formatMeasurement(value) {
+  if (!Number.isFinite(value)) {
+    return "";
+  }
+  // Two decimals, then trailing zeros dropped: 100 reads "100", 4.5 reads "4.5". The file's
+  // own dimension style would know its precision; without the block that style rendered
+  // into, this is the readable default, not a tolerance statement.
+  return String(Number(value.toFixed(2)));
+}
+
 function parseDimensionEntity(records) {
   const layer = normalizeLayerName(records.find((record) => record.code === 8)?.value);
   const override = String(records.find((record) => record.code === 1)?.value ?? "").trim();
-  if (!override || override === "<>") {
+  const measured = formatMeasurement(toFiniteNumber(records.find((record) => record.code === 42)?.value, Number.NaN));
+  const value = override && override !== "<>"
+    ? stripMtextFormatting(override.replace(/<>/g, measured))
+    : measured;
+  if (!value) {
     return null;
   }
   return {
@@ -751,7 +835,9 @@ function parseDimensionEntity(records) {
     ],
     heightMm: 2.5,
     rotationDeg: toFiniteNumber(records.find((record) => record.code === 53)?.value, 0),
-    value: stripMtextFormatting(override)
+    hAlign: "center",
+    vAlign: "middle",
+    value
   };
 }
 
@@ -937,8 +1023,26 @@ function parseEntities(records, { blocks = new Map(), transform = null, depth = 
       pushText(parseMtextEntity(entityRecords));
       continue;
     }
-    if (entityType === "DIMENSION") {
-      pushText(parseDimensionEntity(entityRecords));
+    if (entityType === "DIMENSION" || entityType === "ARC_DIMENSION") {
+      const blockRecords = blocks.get(dimensionBlockName(entityRecords).toUpperCase());
+      if (blockRecords && depth < MAX_BLOCK_NESTING) {
+        // The rendered dimension, exactly as the authoring package drew it.
+        const nested = parseEntities(blockRecords, { blocks, transform, depth: depth + 1 });
+        lines.push(...nested.lines);
+        arcs.push(...nested.arcs);
+        circles.push(...nested.circles);
+        texts.push(...nested.texts);
+      } else {
+        pushText(parseDimensionEntity(entityRecords));
+      }
+      continue;
+    }
+    if (entityType === "SOLID" || entityType === "TRACE") {
+      push(parseSolidEntity(entityRecords));
+      continue;
+    }
+    if (entityType === "LEADER") {
+      push(parseLeaderEntity(entityRecords));
       continue;
     }
     if (entityType === "POLYLINE") {
@@ -1296,6 +1400,8 @@ export function parseDxf(dxfText, { fileRef = "", sourceUrl = "" } = {}) {
         position: [formatNumber(text.position[0]), formatNumber(text.position[1])],
         heightMm: formatNumber(text.heightMm),
         rotationDeg: formatNumber(text.rotationDeg),
+        hAlign: text.hAlign || "left",
+        vAlign: text.vAlign || "baseline",
         value: text.value
       }))
     },

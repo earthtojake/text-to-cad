@@ -317,3 +317,89 @@ test("other MTEXT inline property runs are unaffected", () => {
   assert.equal(stripMtextFormatting(`${BS}C1;RED`), "RED");
   assert.equal(stripMtextFormatting("plain"), "plain");
 });
+
+test("a DIMENSION expands its rendered block: lines, arrowhead SOLIDs and the value", () => {
+  // What AutoCAD (and ezdxf's Standard style) writes: witness lines and the dimension line as
+  // LINEs, each arrowhead an INSERT of a one-SOLID block, the value as a middle-centred MTEXT.
+  const parsed = parseDxf(dxfText([
+    "0", "SECTION", "2", "BLOCKS",
+    "0", "BLOCK", "2", "_CLOSEDFILLED",
+    "0", "SOLID", "8", "0",
+    "10", "-1", "20", "0.1667", "11", "0", "21", "0", "12", "-1", "22", "-0.1667", "13", "-1", "23", "-0.1667",
+    "0", "ENDBLK",
+    "0", "BLOCK", "2", "*D1",
+    "0", "LINE", "8", "DIM", "10", "0", "20", "-15", "11", "100", "21", "-15",
+    "0", "LINE", "8", "DIM", "10", "0", "20", "-2", "11", "0", "21", "-17",
+    "0", "LINE", "8", "DIM", "10", "100", "20", "-2", "11", "100", "21", "-17",
+    "0", "INSERT", "8", "DIM", "2", "_CLOSEDFILLED", "10", "0", "20", "-15", "41", "2.5", "42", "2.5", "43", "1", "50", "180",
+    "0", "INSERT", "8", "DIM", "2", "_CLOSEDFILLED", "10", "100", "20", "-15", "41", "2.5", "42", "2.5", "43", "1",
+    "0", "MTEXT", "8", "DIM", "10", "50", "20", "-15", "40", "2.5", "71", "5", "1", "100",
+    "0", "POINT", "8", "DIM", "10", "0", "20", "0",
+    "0", "ENDBLK",
+    "0", "ENDSEC",
+    "0", "SECTION", "2", "ENTITIES",
+    "0", "LINE", "8", "CUT", "10", "0", "20", "0", "11", "100", "21", "0",
+    "0", "DIMENSION", "8", "DIM", "2", "*D1", "10", "0", "20", "-15", "11", "50", "21", "-15", "1", "<>", "42", "100",
+    "0", "ENDSEC", "0", "EOF"
+  ]), { fileRef: "dim.dxf" });
+
+  // One part line, three dimension lines, two arrowheads of three edges each.
+  assert.equal(parsed.geometry.lines.length, 1 + 3 + 2 * 3);
+  const arrowTip = parsed.geometry.lines.find((line) => line.layer === "0" && line.start[0] === 100 && line.start[1] === -15);
+  assert.ok(arrowTip, "the right arrowhead's tip sits on the dimension line's end");
+  assert.equal(parsed.geometry.texts.length, 1, "the value comes from the block's MTEXT, not from the entity again");
+  assert.deepEqual(parsed.geometry.texts[0], {
+    layer: "DIM", position: [50, -15], heightMm: 2.5, rotationDeg: 0,
+    hAlign: "center", vAlign: "middle", value: "100", kind: "reference"
+  });
+  assert.equal(parsed.apparatus.dimensions, 1, "still counts as drawing apparatus");
+  assert.equal(parsed.bounds.height, 17, "the dimension's extent is part of the sheet");
+});
+
+test("a DIMENSION without its block falls back to a marking of the stored measurement", () => {
+  const parsed = parseDxf(dxfText([
+    "0", "SECTION", "2", "ENTITIES",
+    "0", "LINE", "8", "CUT", "10", "0", "20", "0", "11", "100", "21", "0",
+    "0", "DIMENSION", "8", "DIM", "2", "*D9", "11", "50", "21", "-15", "1", "<>", "42", "100.004",
+    "0", "DIMENSION", "8", "DIM", "11", "50", "21", "-30", "1", "<> %%p0.1", "42", "4.5",
+    "0", "DIMENSION", "8", "DIM", "11", "50", "21", "-45",
+    "0", "ENDSEC", "0", "EOF"
+  ]));
+  assert.equal(parsed.geometry.lines.length, 1, "nothing to draw without the block");
+  assert.deepEqual(parsed.geometry.texts.map((text) => text.value), ["100", "4.5 ±0.1"]);
+  assert.equal(parsed.geometry.texts[0].hAlign, "center");
+  assert.equal(parsed.apparatus.dimensions, 3);
+});
+
+test("SOLID and LEADER are outlines; a SOLID quad walks its bow-tie corners in order", () => {
+  const parsed = parseDxf(dxfText([
+    "0", "SECTION", "2", "ENTITIES",
+    "0", "SOLID", "8", "ARROWS", "10", "0", "20", "0", "11", "10", "21", "0", "12", "0", "22", "10", "13", "10", "23", "10",
+    "0", "LEADER", "8", "NOTES", "10", "0", "20", "20", "10", "10", "20", "30", "10", "30", "20", "30",
+    "0", "ENDSEC", "0", "EOF"
+  ]));
+  const solid = parsed.geometry.lines.filter((line) => line.layer === "ARROWS");
+  assert.equal(solid.length, 4);
+  // Corners 1, 2, 4, 3: (0,0) -> (10,0) -> (10,10) -> (0,10) -> back, never the diagonal.
+  assert.deepEqual(solid.map((line) => [line.start, line.end]), [
+    [[0, 0], [10, 0]], [[10, 0], [10, 10]], [[10, 10], [0, 10]], [[0, 10], [0, 0]]
+  ]);
+  const leader = parsed.geometry.lines.filter((line) => line.layer === "NOTES");
+  assert.deepEqual(leader.map((line) => [line.start, line.end]), [[[0, 20], [10, 30]], [[10, 30], [30, 30]]]);
+});
+
+test("TEXT alignment and MTEXT attachment reach the marking", () => {
+  const parsed = parseDxf(dxfText([
+    "0", "SECTION", "2", "ENTITIES",
+    "0", "LINE", "8", "CUT", "10", "0", "20", "0", "11", "1", "21", "1",
+    "0", "TEXT", "8", "T", "10", "0", "20", "0", "11", "40", "21", "8", "40", "3", "72", "2", "73", "3", "1", "right-top",
+    "0", "TEXT", "8", "T", "10", "5", "20", "5", "40", "3", "1", "plain",
+    "0", "MTEXT", "8", "T", "10", "20", "20", "20", "40", "3", "71", "9", "1", "bottom-right",
+    "0", "ENDSEC", "0", "EOF"
+  ]));
+  const [aligned, plain, mtext] = parsed.geometry.texts;
+  assert.deepEqual([aligned.position, aligned.hAlign, aligned.vAlign], [[40, 8], "right", "top"],
+    "an aligned TEXT anchors at its second alignment point");
+  assert.deepEqual([plain.position, plain.hAlign, plain.vAlign], [[5, 5], "left", "baseline"]);
+  assert.deepEqual([mtext.hAlign, mtext.vAlign], ["right", "bottom"]);
+});
