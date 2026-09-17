@@ -18,7 +18,8 @@ follows the live OS preference. Desktop injects its existing app appearance.
   ([web storage](../../../apps/web/docs/storage.md)).
 - A synchronous startup script applies the preference before the app mounts.
 - The web top bar shows the effective appearance with Sun or Moon, including
-  when System follows the OS. The menu retains System, Light and Dark choices.
+  when System follows the OS. The menu pairs System, Light and Dark with
+  Monitor, Sun and Moon icons respectively.
 - Neutral light and charcoal panel tokens stay independent of the model's
   lighting and materials.
 
