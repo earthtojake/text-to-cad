@@ -98,10 +98,14 @@ export type ViewerManagerDeps = {
 
 function defaultSpawn(python: string, args: string[], options: { cwd: string; env: Record<string, string> }): ViewerChild {
   // A service: `stop` sends it SIGTERM and it unregisters itself on the way
-  // out; quitting must not wait for that.
+  // out; quitting must not wait for that. The POSIX group belongs only to
+  // this launcher and its transient compile workers. A reused viewer lives
+  // in another group; the shared warm daemon starts a separate session.
+  const ownedProcessGroup = process.platform !== "win32";
   return trackChild(
-    nodeSpawn(python, args, { cwd: options.cwd, env: options.env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true }),
+    nodeSpawn(python, args, { cwd: options.cwd, env: options.env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true, detached: ownedProcessGroup }),
     "service",
+    { ownedProcessGroup },
   );
 }
 

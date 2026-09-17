@@ -373,8 +373,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: desktop-screenshots
-          path: apps/desktop/tests/e2e/__screenshots__/*.png
+          path: apps/desktop/test-results/**/*.png
           if-no-files-found: ignore
+          retention-days: 3
 
       - name: Upload failed Electron traces
         if: failure()
@@ -383,3 +384,4 @@ jobs:
           name: desktop-test-results
           path: apps/desktop/test-results/
           if-no-files-found: ignore
+          retention-days: 3

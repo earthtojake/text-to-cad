@@ -347,25 +347,22 @@ test("text in an agent's message can be selected with the mouse", async () => {
  * and this is the only place the coloured segments are drawn.
  */
 test("the context panel breaks the window down when the agent sends categories", async () => {
-  const composer = page.getByPlaceholder("Do anything");
-  await composer.fill("context");
-  await composer.press("Enter");
-  await expect(page.locator("[data-session-view]")).toHaveAttribute("data-session-status", "idle", { timeout: 20_000 });
+  await completeContextTurn("context");
 
   const ring = page.locator("[data-context-trigger]");
   await ring.click();
   const popover = page.locator("[data-context-popover]");
   await expect(popover).toBeVisible();
-  // Folded, the way the last test left it. The bar at the top is segmented
-  // by the categories; naming them is the breakdown.
+  // Initially folded. The bar at the top is segmented by the categories;
+  // naming them is the breakdown.
   await expect(popover.locator("[data-context-detail]")).toHaveCount(0);
   await popover.locator("[data-context-detail-toggle]").click();
   const categories = popover.locator("[data-context-categories]");
   await expect(categories.locator("[data-context-category=system_prompt]")).toContainText("System prompt");
   await expect(categories.locator("[data-context-category=messages]")).toContainText("Messages");
   await expect(categories.locator("[data-context-category=mcp_tools]")).toContainText("MCP tools");
-  // Two turns now: the session column adds them up, the last-turn column is
-  // the small one just finished.
+  // The session column includes any preceding turns; the last-turn column
+  // is the small one just finished, including its cache writes.
   await expect(popover.locator("[data-context-token-row=cache-write]")).toContainText("Cache writes");
   // Closing and opening it again finds it where it was left.
   await page.keyboard.press("Escape");
@@ -389,10 +386,7 @@ test("the context panel breaks the window down when the agent sends categories",
  * reducer's normalisation as well as the rows.
  */
 test("the context panel lists the account's plan limits", async () => {
-  const composer = page.getByPlaceholder("Do anything");
-  await composer.fill("limits");
-  await composer.press("Enter");
-  await expect(page.locator("[data-session-view]")).toHaveAttribute("data-session-status", "idle", { timeout: 20_000 });
+  await completeContextTurn("limits");
 
   await page.locator("[data-context-trigger]").click();
   const popover = page.locator("[data-context-popover]");
@@ -713,6 +707,25 @@ test("a signed-out agent asks to sign in", async () => {
   await expect(page.locator("[data-session-row]")).toHaveCount(0);
   await shoot("session-auth.png");
 });
+
+/** Observe this prompt's completed reply, rather than the preceding turn's idle state. */
+async function completeContextTurn(prompt: "context" | "limits") {
+  if (await page.locator("[data-new-session]").count()) {
+    // These cases also run alone against beforeAll's empty project. Enter
+    // cannot submit until the detector has supplied a model to launch.
+    await expect(page.locator("[data-new-session] [data-chip=model]")).toContainText("Fast", { timeout: 30_000 });
+  }
+  const turns = page.locator("[data-session-view] [data-turn][data-role=agent]");
+  const previousTurns = await turns.count();
+  const composer = page.getByPlaceholder("Do anything");
+  await composer.fill(prompt);
+  await composer.press("Enter");
+  await expect(turns).toHaveCount(previousTurns + 1);
+  const reply = turns.nth(previousTurns);
+  await expect(reply.locator("[data-part=text]")).toHaveText("ok");
+  await expect(reply).toHaveAttribute("data-stop-reason", "end_turn", { timeout: 20_000 });
+  await expect(page.locator("[data-session-view]")).toHaveAttribute("data-session-status", "idle", { timeout: 20_000 });
+}
 
 async function shoot(name: string) {
   await page.screenshot({ path: test.info().outputPath(name), animations: "disabled" });

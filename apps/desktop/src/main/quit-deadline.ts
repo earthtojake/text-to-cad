@@ -22,7 +22,7 @@
  */
 import { spawn } from "node:child_process";
 
-/** How long Chromium gets to finish on its own. Under the two-second budget with room for the launch. */
+/** The quit deadline, including teardown and watchdog startup, within the two-second budget. */
 export const QUIT_DEADLINE_MS = 1_200;
 
 /**
@@ -31,25 +31,30 @@ export const QUIT_DEADLINE_MS = 1_200;
  * killed before the parent. Our own children are already gone by then; what
  * `pgrep -P` finds is Chromium's helpers.
  */
-export function watchdogScript(pid: number, deadlineMs: number, platform: NodeJS.Platform = process.platform): string {
+export function watchdogScript(pid: number, deadlineMs: number, platform: NodeJS.Platform = process.platform, startedAt = Date.now()): string {
   const kill =
     platform === "win32"
       ? `require("node:child_process").spawnSync("taskkill", ["/PID", "${pid}", "/T", "/F"], { stdio: "ignore" });`
       : `const cp = require("node:child_process");
 let children = [];
 try { children = cp.execFileSync("pgrep", ["-P", "${pid}"], { encoding: "utf8" }).trim().split(/\\s+/).filter(Boolean); } catch {}
-for (const child of children) { try { process.kill(Number(child), "SIGKILL"); } catch {} }
+for (const child of children) {
+  if (Number(child) === process.pid) continue;
+  try { process.kill(Number(child), "SIGKILL"); } catch {}
+}
 try { process.kill(${pid}, "SIGKILL"); } catch {}`;
   return `setTimeout(() => {
 let alive = true;
 try { process.kill(${pid}, 0); } catch { alive = false; }
 if (alive) { ${kill} }
-}, ${deadlineMs});`;
+}, Math.max(0, ${startedAt + deadlineMs} - Date.now()));`;
 }
 
-export function armQuitDeadline(pid: number = process.pid, deadlineMs: number = QUIT_DEADLINE_MS): void {
+export function armQuitDeadline(startedAt = Date.now(), pid: number = process.pid, deadlineMs: number = QUIT_DEADLINE_MS): void {
   try {
-    spawn(process.execPath, ["-e", watchdogScript(pid, deadlineMs)], {
+    // Arm only after will-quit, once state is saved. If teardown or launching
+    // Electron-as-Node used the budget, the watchdog fires immediately.
+    spawn(process.execPath, ["-e", watchdogScript(pid, deadlineMs, process.platform, startedAt)], {
       detached: true,
       stdio: "ignore",
       windowsHide: true,

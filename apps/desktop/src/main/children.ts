@@ -18,7 +18,9 @@
  *               owner (SIGTERM, so the viewer unregisters itself) and left to
  *               go. Its pipes are dropped and it is unref'd here, so nothing
  *               waits on it; a service that ignores SIGTERM is its owner's
- *               problem and gets a SIGKILL from `will-quit`.
+ *               problem and gets a SIGKILL from `will-quit`. An explicitly
+ *               owned POSIX process group also ends every worker it started,
+ *               even if the service leader exits before its workers.
  *
  * Two shapes of child are registered: Node's `ChildProcess` (an emitter with
  * `exit`), and execa's subprocess, which is a promise with `pid` and `kill`
@@ -44,17 +46,36 @@ export type Trackable = {
   then?: (onFulfilled: () => void, onRejected: () => void) => unknown;
 };
 
-const live = new Map<Trackable, ChildKind>();
+type Tracked = { kind: ChildKind; processGroup: number | undefined };
+
+const live = new Map<Trackable, Tracked>();
+
+type TrackOptions = {
+  /** Only for a child this app spawned with `detached: true` on POSIX. */
+  ownedProcessGroup?: boolean;
+};
 
 /** Register a child until it exits. Returns it, so a spawn can be wrapped inline. */
-export function trackChild<T extends Trackable>(child: T, kind: ChildKind): T {
-  live.set(child, kind);
+export function trackChild<T extends Trackable>(child: T, kind: ChildKind, options: TrackOptions = {}): T {
+  const record: Tracked = {
+    kind,
+    processGroup: options.ownedProcessGroup && process.platform !== "win32" && child.pid && child.pid > 0 ? child.pid : undefined,
+  };
+  live.set(child, record);
   const forget = () => {
+    // The leader can exit on SIGTERM while a compiler still imports OCP.
+    // Reap its owned group before forgetting it; waiting for will-quit loses
+    // the handle after reparenting. A shared daemon starts its own session.
+    killGroup(record);
     live.delete(child);
   };
   if (typeof child.once === "function") {
     child.once("exit", forget);
-    child.once("error", forget);
+    child.once("error", () => {
+      if (!child.pid) {
+        forget();
+      }
+    });
   } else if (typeof child.then === "function") {
     child.then(forget, forget);
   }
@@ -63,7 +84,7 @@ export function trackChild<T extends Trackable>(child: T, kind: ChildKind): T {
 
 /** What is still running, for tests and for the log. */
 export function trackedChildren(): Array<{ pid: number | undefined; kind: ChildKind; file: string | undefined }> {
-  return [...live.entries()].map(([child, kind]) => ({ pid: child.pid, kind, file: child.spawnfile }));
+  return [...live.entries()].map(([child, { kind }]) => ({ pid: child.pid, kind, file: child.spawnfile }));
 }
 
 /**
@@ -72,9 +93,10 @@ export function trackedChildren(): Array<{ pid: number | undefined; kind: ChildK
  * signal lands; that owner has already sent it by the time this is called.
  */
 export function endTrackedChildren(): void {
-  for (const [child, kind] of live) {
+  for (const [child, record] of live) {
+    const { kind } = record;
     if (kind === "probe") {
-      kill(child, "SIGKILL");
+      kill(child, record);
     }
     detach(child);
   }
@@ -82,17 +104,33 @@ export function endTrackedChildren(): void {
 
 /** `will-quit`: whatever is left is not going to stop on its own. */
 export function killTrackedChildren(): void {
-  for (const child of live.keys()) {
-    kill(child, "SIGKILL");
+  for (const [child, record] of live) {
+    kill(child, record);
     detach(child);
   }
   live.clear();
 }
 
-function kill(child: Trackable, signal: NodeJS.Signals): void {
+function killGroup(record: Tracked): void {
+  const pid = record.processGroup;
+  if (pid === undefined) {
+    return;
+  }
+  // One final signal while this group's ownership is known. Do not retain
+  // its numeric id after cleanup, when the OS can eventually reuse it.
+  record.processGroup = undefined;
+  try {
+    process.kill(-pid, "SIGKILL");
+  } catch {
+    // No remaining members. Never fall back to another process group.
+  }
+}
+
+function kill(child: Trackable, record: Tracked): void {
+  killGroup(record);
   try {
     if ((child.exitCode ?? null) === null && (child.signalCode ?? null) === null) {
-      child.kill(signal);
+      child.kill("SIGKILL");
     }
   } catch {
     // Gone between the check and the signal; that is the outcome wanted.

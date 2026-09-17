@@ -160,7 +160,9 @@ still shows the window, without taking focus.
 
 `npm run e2e` writes screenshots beneath each test's Playwright output directory
 (`test-results/` by default, or `--output`); it never rewrites the committed
-design evidence in `tests/e2e/__screenshots__/`. Captures include the shell in both themes,
+design evidence in `tests/e2e/__screenshots__/`. CI uploads that run's PNGs and,
+on failure, its traces and error context; both artifacts are kept for three days.
+Captures include the shell in both themes,
 Settings, the traffic lights' corner in the two states that own it
 (`titlebar-sidebar`, `titlebar-session`, `titlebar-settings` — the reserved
 rectangle drawn over it), one per explorer surface — `file-markdown-preview`,
@@ -985,14 +987,21 @@ importing OCP held the exit for sixty seconds, and chokidar's `close()` over
 this repository blocked for most of a second, so the watchers are not closed
 at all — an fsevents handle dies with the process.
 
+On POSIX, an app-owned viewer runs in its own process group. Its transient CAD
+workers are stopped when the viewer exits or the app quits, including workers
+that outlive the viewer process. Reused external viewers and the shared warm
+daemon belong to separate groups and are left running.
+
 What is left after `will-quit` is Chromium's own shutdown, which on this
 macOS takes twelve seconds to minutes once a window has held a WebGL context
 (the GPU and utility helpers hang, then the browser process retries a
 CoreAnalytics XPC send; `app.exit()` is slower still, and no timer of ours
 runs once the event loop has stopped). `src/main/quit-deadline.ts` keeps a
 deadline from outside: a detached copy of this binary run as Node that
-kills the app and its helpers 1.2 seconds after `will-quit` if they are
-still there. A quit that finishes on its own — half a second without WebGL —
+kills the app and its helpers at an absolute deadline, 1.2 seconds from
+`before-quit`. It is armed after `will-quit`, once state is saved, and counts
+teardown and watchdog startup toward the same budget. A quit that finishes
+on its own — half a second without WebGL —
 gives it nothing to do.
 
 ## CAD runtime
