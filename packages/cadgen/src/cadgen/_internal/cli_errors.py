@@ -108,6 +108,13 @@ def report_cli_error(
             innermost = raised[-1]
             line(f"  raised in {_display(innermost.filename)}:{innermost.lineno}")
 
+    # A kernel the OS refused to load is not a model error and no frame explains it:
+    # on Windows 11 that is Smart App Control, and the reader needs to be told so.
+    from cadgen._internal.kernel_load_hint import kernel_load_hint
+
+    for hint in kernel_load_hint(exc) or ():
+        line(hint)
+
     if verbose_hint:
         line("re-run with --verbose for the full traceback")
     return 1

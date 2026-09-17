@@ -52,7 +52,7 @@ from collections import deque
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
-from cadgen.assets import dev_node_modules_missing, node_builders_dir
+from cadgen.assets import dev_node_modules_missing, node_builders_dir, runtime_build_hint
 
 __all__ = [
     "NODE_ENV_VARS",
@@ -157,10 +157,13 @@ def node_builder_script(name: str) -> Path:
         )
     path = builders / str(name)
     if not path.is_file():
+        # Two causes, one symptom, and :func:`cadgen.assets.runtime_build_hint` is what
+        # tells them apart: an unbundled checkout (build it) versus a wheel that lost its
+        # package data (reinstall it). The dev-node_modules branch above is the third and
+        # is answered separately, because there the builder file IS there.
         raise NodeBuilderError(
-            f"Node builder is missing: {path}. This cadgen installation is incomplete; "
-            "reinstall it, or set CADGEN_NODE_BUILDERS_DIR to a directory holding the "
-            "esbuilt builders."
+            f"Node builder is missing: {path}. {runtime_build_hint(path)} "
+            "CADGEN_NODE_BUILDERS_DIR overrides the lookup with a directory of your own."
         )
     return path
 

@@ -14,6 +14,9 @@ which `-m unittest` would run silently.
 
     python scripts/test/unittest_files.py --top <repo root> [--jobs N] <test file>...
 
+``--print-weights`` prints this run's measured per-file costs, the first thing to read
+when a run is slow.
+
 With ``--jobs N`` greater than one, each FILE runs in its own interpreter, N at a time,
 with its own fresh store and private daemon endpoint/auth state. Its daemon is retired
 before the temporary directories are removed, so modules cannot see one another's
@@ -137,7 +140,8 @@ def _counts(output: str) -> dict[str, int]:
     return counts
 
 
-def _run_one_file(path: str, top: str, verbose: bool) -> tuple[str, int, str]:
+def _run_one_file(path: str, top: str, verbose: bool) -> tuple[str, int, str, float]:
+    started = time.perf_counter()
     store = tempfile.mkdtemp(prefix="cadgen-test-store.")
     # Stores alone do not isolate lazy artifact jobs: a sibling test can stop
     # the shared daemon while this module is reading its package. Keep auth,
@@ -172,19 +176,21 @@ def _run_one_file(path: str, top: str, verbose: bool) -> tuple[str, int, str]:
         finally:
             shutil.rmtree(store, ignore_errors=True)
             shutil.rmtree(state, ignore_errors=True)
-    return path, completed.returncode, (completed.stdout or "") + (completed.stderr or "")
+    return path, completed.returncode, (completed.stdout or "") + (completed.stderr or ""), time.perf_counter() - started
 
 
-def run_in_parallel(files: list[str], top: str, jobs: int, verbose: bool) -> int:
+def run_in_parallel(files: list[str], top: str, jobs: int, verbose: bool, print_weights: bool = False) -> int:
     top = os.path.realpath(top)
     started = time.perf_counter()
     totals = {"tests": 0, "failures": 0, "errors": 0, "skipped": 0, "expected failures": 0, "unexpected successes": 0}
+    durations: list[tuple[str, float]] = []
     failed_modules: list[str] = []
     unparsed: list[str] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
         futures = [pool.submit(_run_one_file, path, top, verbose) for path in files]
         for future in concurrent.futures.as_completed(futures):
-            path, code, output = future.result()
+            path, code, output, seconds = future.result()
+            durations.append((path, seconds))
             counts = _counts(output)
             if not _RAN.search(output):
                 # The interpreter died before unittest could summarise (a crash, a
@@ -201,6 +207,13 @@ def run_in_parallel(files: list[str], top: str, jobs: int, verbose: bool) -> int
             if body:
                 sys.stderr.write(body + "\n")
     elapsed = time.perf_counter() - started
+    if print_weights:
+        # stdout is free here: every line of a run goes to stderr. One `WEIGHT` line per
+        # slow file, longest first.
+        for name, seconds in sorted(durations, key=lambda entry: (-entry[1], entry[0])):
+            if seconds >= 5.0:
+                sys.stdout.write(f"WEIGHT\t{os.path.relpath(os.path.abspath(name), top)}\t{seconds:.0f}\n")
+        sys.stdout.flush()
     sys.stderr.write(f"\n{'-' * 70}\nRan {totals['tests']} tests in {elapsed:.3f}s\n\n")
     verdict_parts = []
     for key in ("failures", "errors", "skipped", "expected failures", "unexpected successes"):
@@ -227,12 +240,19 @@ def main(argv: list[str] | None = None) -> int:
         default=1,
         help="run each test file in its own interpreter, this many at a time (default 1: one process)",
     )
+    parser.add_argument(
+        "--print-weights",
+        action="store_true",
+        help="print one `WEIGHT<TAB>path<TAB>seconds` line per slow file on stdout",
+    )
     parser.add_argument("files", nargs="+", metavar="TEST_FILE")
     args = parser.parse_args(argv)
 
-    if args.jobs > 1 and len(args.files) > 1:
-        return run_in_parallel(args.files, args.top, args.jobs, args.verbose)
-    return run_in_process(args.files, args.top, args.verbose)
+    files = args.files
+
+    if args.jobs > 1 and len(files) > 1:
+        return run_in_parallel(files, args.top, args.jobs, args.verbose, args.print_weights)
+    return run_in_process(files, args.top, args.verbose)
 
 
 if __name__ == "__main__":

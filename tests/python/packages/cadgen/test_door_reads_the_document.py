@@ -105,15 +105,10 @@ class DoorReadsTheDocumentTests(unittest.TestCase):
             side_effect=AssertionError("a door must not run the model's script"),
         )
 
-    def test_a_current_document_is_validated_without_running_python(self):
-        with self._never_runs_the_script():
-            report, err = self._validate()
-        self.assertTrue(report["ok"], report)
-        self.assertNotIn("rebuilding", err)
-
     def test_a_stale_document_is_read_as_written_no_rebuild_no_notice(self):
         # The document's bytes still have their tree in the store (the model wrote
-        # them), so the door reads it. The new WIDTH is the model's to build.
+        # them), so the door reads it. The new WIDTH is the model's to build. (A door
+        # never consults freshness at all, so this covers the current document too.)
         self._make_stale()
         with self._never_runs_the_script():
             report, err = self._validate()

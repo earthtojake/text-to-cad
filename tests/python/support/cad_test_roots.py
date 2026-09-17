@@ -53,3 +53,29 @@ class IsolatedCadRoots:
 
     def temporary_cad_directory(self, *, prefix: str) -> tempfile.TemporaryDirectory[str]:
         return tempfile.TemporaryDirectory(prefix=prefix, dir=self.cad_root)
+
+
+class ClassCadRoots:
+    """:class:`IsolatedCadRoots` for a ``setUpClass``: one build, every test reads it.
+
+    A fixture that every test only READS is built once here, under the same cwd and
+    store isolation a test gets, with the cleanups held until ``tearDownClass``
+    (``IsolatedCadRoots`` registers them on a TestCase, so a bare one stands in).
+    Each test then gets its own :class:`IsolatedCadRoots` as before and
+    :meth:`copy_store_into` it: the store is content-addressed, so a document
+    copied beside it is served from the copied store exactly as from the one
+    that built it, and whatever a test then writes lands in its own copy.
+    """
+
+    def __init__(self, *, prefix: str) -> None:
+        self._case = unittest.TestCase()
+        self.roots = IsolatedCadRoots(self._case, prefix=prefix)
+        self.cad_root = self.roots.cad_root
+
+    def copy_store_into(self, roots: IsolatedCadRoots) -> None:
+        import shutil
+
+        shutil.copytree(self.roots.cache_dir, roots.cache_dir, dirs_exist_ok=True)
+
+    def cleanup(self) -> None:
+        self._case.doCleanups()

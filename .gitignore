@@ -74,10 +74,12 @@ models/**/*.mkv
 # `python -m build` scratch space (scripts/release/check-wheel-contents.sh).
 packages/cadgen/build/
 
-# The CAD Viewer client's place in the cadgen wheel. Written by
-# `scripts/bundle/bundle.sh` (the --viewer stage) right before `python -m build`;
-# never committed, because a checkout serves apps/viewer/dist directly.
-packages/cadgen/src/cadgen/_runtime/viewer/
+# cadgen's packaged runtime: the esbuilt Node builders (node/), the headless
+# snapshot bundle (browser/) and the CAD Viewer's built client (viewer/). All
+# three are BUILT by `scripts/bundle/bundle.sh` and shipped only inside the
+# wheel; none of them is committed. A fresh checkout has no _runtime until the
+# bundler runs, and cadgen says so by name when it needs one that is absent.
+packages/cadgen/src/cadgen/_runtime/
 
 # Design notes are local working files, never committed (user policy 2026-08-29).
 design/

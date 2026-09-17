@@ -30,19 +30,26 @@ fi
 
 out_dir=""
 only_gate=""
+ci_subset=""
 while [ "$#" -ne 0 ]; do
   case "$1" in
     --out) out_dir="${2:-}"; shift 2 || true ;;
-    # One gate while working on it: picking, format, scene, quality, kinematics, camera.
+    # One gate while working on it: picking, pick, format, scene, quality,
+    # kinematics, camera.
     --only) only_gate="${2:-}"; shift 2 || true ;;
-    *) echo "usage: $0 [--out SCREENSHOT_DIR] [--only GATE]" >&2; exit 2 ;;
+    # The CI-sized subset (format, pick, kinematics, camera). Without it this is
+    # the full manual gate; tests/browser/viewer-e2e.mjs says what each covers and
+    # why the rest stays manual.
+    --ci) ci_subset=1; shift ;;
+    *) echo "usage: $0 [--out SCREENSHOT_DIR] [--only GATE] [--ci]" >&2; exit 2 ;;
   esac
 done
 if { [ -n "$out_dir" ] && [ "$out_dir" = "--only" ]; } || [ "$only_gate" = "--out" ]; then
-  echo "usage: $0 [--out SCREENSHOT_DIR] [--only GATE]" >&2
+  echo "usage: $0 [--out SCREENSHOT_DIR] [--only GATE] [--ci]" >&2
   exit 2
 fi
 
+started_at="$(date +%s)"
 project="$(mktemp -d)"
 log="$(mktemp)"
 viewer_pidfile="$project/viewer.pid"
@@ -299,4 +306,6 @@ fi
 e2e_args=(--dir "$project" --url "http://$HOST:$port")
 [ -n "$out_dir" ] && e2e_args+=(--out "$out_dir")
 [ -n "$only_gate" ] && e2e_args+=(--only "$only_gate")
+[ -n "$ci_subset" ] && e2e_args+=(--ci)
+echo "  [setup] $(( $(date +%s) - started_at ))s to fixtures, viewer and port"
 node "$REPO_ROOT/tests/browser/viewer-e2e.mjs" "${e2e_args[@]}"

@@ -11,8 +11,30 @@ if [ -z "${PYTHON_BIN:-}" ]; then
   fi
 fi
 
+# The packaged runtime (packages/cadgen/src/cadgen/_runtime) is BUILT, never committed,
+# so a fresh checkout has none of it -- and the snapshot suites drive the browser bundle
+# while the policy suite reads the emitted Node builders. Building it is idempotent and
+# fast once the pinned esbuild toolchain is in tmp/, but it is not free, so this only runs
+# when an output is actually missing.
+#
+# The two stages are asked for by name rather than going through bundle.sh: the tests read
+# exactly these, and the viewer stage is a vite build of apps/viewer that needs that app's
+# node_modules -- which a Python-only checkout has no reason to install.
+ensure_packaged_runtime() {
+  local runtime="$REPO_ROOT/packages/cadgen/src/cadgen/_runtime"
+  local name
+  for name in node/dxf-mesh.mjs node/mesh-export.mjs browser/snapshot-render.js browser/render.html; do
+    if [ ! -f "$runtime/$name" ]; then
+      section "Building cadgen's packaged runtime (missing $name)"
+      "$REPO_ROOT/scripts/bundle/cadgen-runtime.sh" --node --browser
+      return
+    fi
+  done
+}
+
 section() {
-  printf '\n==> %s\n' "$1"
+  # A log line, not a result: --print-weights writes the per-file costs to stdout.
+  printf '\n==> %s\n' "$1" >&2
 }
 
 run_python_unittest() {
@@ -50,9 +72,16 @@ run_python_unittest() {
   # Each test FILE runs in its own interpreter with its own fresh store, CADGEN_TEST_JOBS
   # at a time (default: the machine's cores). Modules cannot see one another's builds,
   # and a module that spawns workers or a daemon does not hold the rest of the suite.
+  # PYTHON_TEST_PRINT_WEIGHTS is how --print-weights reaches the runner without every
+  # caller growing a flag.
+  local extra=()
+  if [ -n "${PYTHON_TEST_PRINT_WEIGHTS:-}" ]; then
+    extra+=(--print-weights)
+  fi
+
   PYTHONPATH="$python_path${PYTHONPATH:+:$PYTHONPATH}" \
     "$PYTHON_BIN" "$SCRIPT_DIR/unittest_files.py" --top "$REPO_ROOT" \
-      --jobs "${CADGEN_TEST_JOBS:-$(test_jobs)}" "${test_files[@]}"
+      --jobs "${CADGEN_TEST_JOBS:-$(test_jobs)}" ${extra[@]+"${extra[@]}"} "${test_files[@]}"
 }
 
 test_jobs() {
