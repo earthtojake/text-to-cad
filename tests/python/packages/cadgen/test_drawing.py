@@ -44,7 +44,8 @@ class DrawingSheetTests(unittest.TestCase):
         kinds = {}
         for entity in msp:
             kinds[entity.dxftype()] = kinds.get(entity.dxftype(), 0) + 1
-        self.assertEqual(kinds.get("DIMENSION"), 4, "overall width + height, the diameter, the front height")
+        self.assertEqual(kinds.get("DIMENSION"), 3, "overall width + height, the front height")
+        self.assertEqual(kinds.get("LEADER"), 1, "the hole callout is a leader to text outside the view")
         self.assertGreaterEqual(kinds.get("TEXT", 0), 6, "title block, notes and two view labels")
         layers = {layer.dxf.name: layer for layer in doc.layers}
         self.assertEqual(layers["HIDDEN"].dxf.linetype, "HIDDEN")
@@ -64,7 +65,12 @@ class DrawingSheetTests(unittest.TestCase):
         self.assertIn("40", texts)
         self.assertIn("30", texts)
         self.assertIn("10", texts)
-        self.assertIn("%%c6 THRU", texts)
+        callouts = [e.dxf.text for e in msp.query("TEXT") if e.dxf.layer == "DIM"]
+        self.assertEqual(callouts, ["%%c6 THRU"])
+        # The callout text sits outside the view's extent, not across the part.
+        callout = next(e for e in msp.query("TEXT") if e.dxf.layer == "DIM")
+        outline_x = [p[0] for e in msp.query("LWPOLYLINE LINE") if e.dxf.layer == "VISIBLE" for p in _points(e)]
+        self.assertTrue(callout.dxf.insert.x > max(outline_x) or callout.dxf.insert.x < min(outline_x))
         # A4 landscape frame at the margin.
         frame = [e for e in msp if e.dxftype() == "LWPOLYLINE" and e.dxf.layer == "SHEET"]
         self.assertEqual(len(frame), 1)
