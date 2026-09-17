@@ -78,10 +78,11 @@ type TreeProps = { activePath?: string | null; onOpenFile?: (path: string) => vo
 function Tree({ activePath = null, onOpenFile = () => {} }: TreeProps) {
   const source = useMemo(() => createDesktopFileSource({ projectId: "p1", root: null, projectName: "text-to-cad" }), []);
   const { open } = useTree(null);
-  return <FileViewer file={activePath} source={source} renderers={testRenderers}
+  return <FileViewer file={activePath} host={{ files: source, navigation: { openFile: onOpenFile }, environment: { colorScheme: "light" },
+      clipboard: { writeText: async () => {}, readText: async () => "", writeImage: async () => {} },
+      promptContext: { getSnapshot: () => ({ kind: "unavailable", available: false }), subscribe: () => () => {}, deliver: async () => ({ status: "cancelled" }) } }} renderers={testRenderers}
     state={{ panel: "tree", panelWidth: 300, expandedDirectories: [...open] }}
-    onStateChange={(next) => useExplorer.getState().setTreeOpen(null, () => new Set(next.expandedDirectories))}
-    onOpenFile={onOpenFile} />;
+    onStateChange={(next) => useExplorer.getState().setTreeOpen(null, () => new Set(next.expandedDirectories))} />;
 }
 
 function mount(props: TreeProps = {}) {

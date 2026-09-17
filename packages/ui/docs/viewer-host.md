@@ -1,0 +1,119 @@
+# Viewer host contract
+
+`FileViewer` requires one explicit `ViewerHost` from `@hardcore/ui/host`.
+Shared UI implements rendering and document interaction; apps supply environmental
+effects. No shared feature discovers Electron, browser clipboard, a backend URL,
+persistent storage or page navigation. DOM, canvas, workers and layout remain
+shared. Missing optional methods mean an operation is unsupported.
+
+The host contains `files`, optional native `fileActions`, `clipboard`,
+`promptContext`, `navigation`, resolved `environment.colorScheme`, and optional
+lifecycle flush subscription. CAD is a separate registration supplied with a
+`CadWorkspaceService`; the generic FileViewer does not import CAD. The HTTP CAD
+adapter can serve both apps, while desktop owns native runtime startup/recovery.
+See core's `docs/workspace-resources.md` for resource tickets and cache identity.
+
+Apps create services for the workspace lifetime. File tabs borrow them, while
+mounted renderers own scenes, document controllers and temporary resource leases.
+Unmounting one view releases its work without disposing another view's services
+or admitted cache writes. Hosts dispose a service when its workspace closes.
+
+## Prompt handoff
+
+All primary context actions use `PromptContextPort.deliver(context)`. Desktop
+inserts into a compatible draft; web prepares clipboard representations. Ordinary
+explicit copy/paste controls use the separate `ClipboardPort`. Delivery never
+submits a prompt. The reference coaching tooltip and its retired preference/reset
+plumbing are removed; accessible labels remain.
+
+The portable types and validators live at `@hardcore/core/prompt`. One versioned
+bundle contains ordered text, reference and attachment parts with unique IDs.
+An attachment has a MIME type, name and Blob or Promise of Blob. Its optional
+`about` array names reference-part IDs, so a screenshot and several selections
+can travel together. Producers freeze resource and selection identity before
+asynchronous capture. Blob URLs are delivery leases, never portable identity.
+
+A reference contains a workspace-file identity or HTTP(S) URL plus a tagged
+selection: `whole-resource`, `text-range`, or `cad-selector`. Text positions are
+zero-based UTF-16 with an exclusive end. CAD selectors use core's validated
+cadgen grammar, not STEP entity numbers. Preserve a revision when available;
+references do not promise to survive edits. Shared serialization handles quoting.
+The web adapter maps workspace files to full served-root paths for external chats.
+
+`PromptContextAction` reads the subscribed destination and labels the shared
+action Add to prompt or Copy for prompt/reference. It calls delivery during the
+user gesture, before awaiting capture: browser activation and desktop destination
+binding depend on this. Availability and advertised attachment/combination limits
+belong to the host. Every result is acknowledged: added, copied, partial,
+deferred, cancelled or failed. `partIds` describes accepted/written parts, not a
+claim that a different application pasted them.
+
+Desktop captures the compatible draft destination before awaiting attachments,
+validates the complete bundle and rechecks that destination before atomic draft
+acceptance. Switching chats cannot redirect an in-flight capture. Existing text
+and attachments survive; operation IDs prevent duplicate acceptance. Workspace
+mismatch uses the app's explicit Start chat here recovery. Invalid attachments
+leave the draft unchanged. Direct capture failure never shows success.
+
+Web supports text/reference serialization and one PNG. A combined clipboard
+write reports that text and PNG are separate representations; some receivers
+paste only one. Unsupported attachment types or combinations fail explicitly.
+Hosts must resolve/validate accepted attachments and consume failed encoders;
+they do not transfer Promise or Blob values across native IPC.
+
+## App-specific interfaces
+
+CAD's `slots.selectionExtras` mounts an optional React component beside shared
+selection actions. It receives immutable typed selection, `selectionKey`,
+disabled state and `createContext({text, capture})`. It receives no scene, stores,
+IPC or arbitrary internal setters. Shared actions remain visible. Apps may supply
+a future Quick Edit interface through this seam; this refactor introduces no new
+Quick Edit workflow.
+
+The renderer owns placement and visibility. A contributed popover owns its focus,
+Escape handling and cleanup, stops events it consumes, and closes or invalidates
+its draft when `selectionKey` changes. Freeze the context when starting the
+interaction; a changed document/revision must not silently retarget it. Submission
+uses the same host prompt port. Session-specific controls stay in apps.
+
+## Files, state and shutdown
+
+`FileSource` contains storage operations; `FileActions` contains native/menu
+operations. Typed mutation receipts report committed changes independently of
+caller cancellation. An abort after commit is not rollback. Content, metadata,
+add, delete and move notifications have distinct meanings. Desktop reconciles
+all affected tabs; web remains its existing read-only CAD catalog. This migration
+does not grant web arbitrary filesystem access or enable editing there.
+
+State remains controlled through FileViewer props. Apps merge changed chrome
+fields and document/renderer slices into the current root state; a stale view
+must not overwrite another view's independent fields. Existing versioned camera,
+pose, material and layout state restores through the same schemas. Global
+preferences belong to the app/window, document snapshots to workspace/path,
+and live selection/scene ownership to the mounted view.
+
+Lifecycle flush publishes the current view state; it does not save document
+content or promise an asynchronous operation will finish during page exit.
+Web owns pagehide, focus, visibility, history and development reload. Desktop
+owns window/runtime lifecycle and IPC. Existing dirty-editor behavior remains.
+
+The dependency checker enforces host boundaries, including worker source. The
+browser harness mounts real renderers with explicit fake hosts; app tests cover
+native/clipboard delivery and multiple-view state merges. Warm-cache regression
+tests remain required for resource changes.
+
+## Scoped commands
+
+An optional `host.commands.bind(target)` registers this mounted viewer's
+save/reload/focus methods and returns an unbind function. A target includes
+source identity, path and document generation. Captured commands fail with
+`stale` after navigation, reload, source replacement or unmount. Saves acknowledge
+conflicts and failures; a stale completion can report that the old document's
+write committed without updating its replacement. Each app owns dispatch to its
+intended view; there is no global command bus or new menu action.
+
+Monaco retains its editor-local save binding. CAD keyboard shortcuts consume
+only events from their viewer or its last pointer-owned background, so another
+viewer or the composer does not receive Escape/undo on its behalf. Existing
+reverse CAD selection/capture commands remain tab-scoped domain commands;
+ordinary native window Reload retains its existing app behavior.

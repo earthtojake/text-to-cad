@@ -45,6 +45,31 @@ function sourceImports(code, file) {
   }
   visit(ast); return imports;
 }
+// Browser rendering remains shared; environmental effects belong to app adapters.
+function hostEffects(code, file) {
+  const ast = ts.createSourceFile(file, code, ts.ScriptTarget.Latest, true);
+  const effects = new Set();
+  function chain(node) {
+    if (ts.isIdentifier(node)) return node.text;
+    if (ts.isPropertyAccessExpression(node)) return `${chain(node.expression)}.${node.name.text}`;
+    if (ts.isElementAccessExpression(node) && node.argumentExpression && ts.isStringLiteral(node.argumentExpression)) return `${chain(node.expression)}.${node.argumentExpression.text}`;
+    return '';
+  }
+  function visit(node) {
+    const name = chain(node).replace(/^(?:window|globalThis|self)\./, '');
+    if (/^(?:localStorage|sessionStorage)(?:\.|$)/.test(name)) effects.add('host storage');
+    if (/^navigator\.clipboard(?:\.|$)/.test(name) || name === 'ClipboardItem') effects.add('browser clipboard');
+    if (/^(?:history\.(?:pushState|replaceState|go|back|forward)|location\.(?:href|origin|pathname|search|hash|reload|assign|replace))(?:\.|$)/.test(name) && (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node))) effects.add('page navigation');
+    if (ts.isCallExpression(node)) {
+      const called = chain(node.expression).replace(/^(?:window|globalThis|self)\./, '');
+      if (called === 'fetch' || called === 'XMLHttpRequest' || called === 'EventSource') effects.add('raw service transport');
+      if (called === 'document.execCommand' && node.arguments[0] && ts.isStringLiteral(node.arguments[0]) && ['copy','paste','cut'].includes(node.arguments[0].text)) effects.add('browser clipboard');
+    }
+    if (ts.isNewExpression(node) && ['XMLHttpRequest','EventSource','WebSocket'].includes(chain(node.expression))) effects.add('raw service transport');
+    ts.forEachChild(node, visit);
+  }
+  visit(ast); return [...effects];
+}
 const files = [];
 function walk(dir) {
   if (!fs.existsSync(dir)) return;
@@ -61,9 +86,17 @@ const edges = new Map();
 const nodeModules = new Set();
 for (const file of files) {
   const from = owner(file); const code = fs.readFileSync(file, 'utf8'); const imports = sourceImports(code, file);
+  if (from === 'packages/ui') for (const effect of hostEffects(code, file)) errors.push(`${path.relative(repo, file)} uses ${effect}; inject a host service`);
   if (from === 'packages/ui' && /\b(?:window|globalThis)\.hardcore\b/.test(code)) errors.push(`${path.relative(repo, file)} uses a desktop global`);
   for (const item of imports) {
     if (isBuiltin(item.name)) nodeModules.add(file);
+    if (from === 'packages/ui' && item.name === '@hardcore/core/client' && !item.typesOnly) {
+      const ast = ts.createSourceFile(file, code, ts.ScriptTarget.Latest, true);
+      for (const node of ast.statements) if (ts.isImportDeclaration(node) && node.moduleSpecifier.text === item.name) {
+        const bindings = node.importClause?.namedBindings;
+        if (node.importClause?.name || !bindings || !ts.isNamedImports(bindings) || bindings.elements.some(element => !element.isTypeOnly && /^create(?:CadClient|Http|Scoped|Static)/.test((element.propertyName || element.name).text))) errors.push(`${path.relative(repo, file)} imports a concrete CAD transport`);
+      }
+    }
     const resolved = resolveImport(item.name, file);
     const to = resolved && owner(resolved);
     const label = `${path.relative(repo, file)} -> ${item.name}`;

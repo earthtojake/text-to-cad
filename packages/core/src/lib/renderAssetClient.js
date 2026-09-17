@@ -1,3 +1,4 @@
+import { cadResourceCacheKey } from "../client/resources.js";
 import { parseDxf } from "./dxf/parseDxf.js";
 import {
   STEP_EDGE_BARYCENTRIC_ATTRIBUTE,
@@ -52,7 +53,8 @@ const sdfCache = new Map();
 const GIT_LFS_POINTER_PREFIX = "version https://git-lfs.github.com/spec/v1";
 const GIT_LFS_POINTER_SCAN_BYTES = 512;
 
-async function fetchJson(url, { signal } = {}) {
+async function fetchJson(url, { signal, resources } = {}) {
+  if (resources) return resources.readJson(url, { signal });
   const response = await fetch(url, { signal });
   if (!response.ok) {
     throw fetchError(url, response);
@@ -60,7 +62,8 @@ async function fetchJson(url, { signal } = {}) {
   return response.json();
 }
 
-async function fetchText(url, { signal } = {}) {
+async function fetchText(url, { signal, resources } = {}) {
+  if (resources) return resources.readText(url, { signal });
   const response = await fetch(url, { signal });
   if (!response.ok) {
     throw fetchError(url, response);
@@ -68,7 +71,8 @@ async function fetchText(url, { signal } = {}) {
   return response.text();
 }
 
-async function fetchArrayBuffer(url, { signal } = {}) {
+async function fetchArrayBuffer(url, { signal, resources } = {}) {
+  if (resources) return resources.readBytes(url, { signal });
   const response = await fetch(url, { signal });
   if (!response.ok) {
     throw fetchError(url, response);
@@ -207,25 +211,28 @@ function withConsumerAbort(promise, signal) {
   });
 }
 
-export async function loadRenderJson(url, { signal } = {}) {
-  const payload = await loadCached(jsonCache, url, () => fetchJson(url, { signal }), { cachePending: !signal });
-  return finalizeCached(jsonCache, url, payload);
+export async function loadRenderJson(url, { signal, resources } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, url);
+  const payload = await loadCached(jsonCache, cacheKey, () => fetchJson(url, { signal, resources }), { cachePending: !signal });
+  return finalizeCached(jsonCache, cacheKey, payload);
 }
 
-export function peekRenderJson(url) {
-  return peekCached(jsonCache, url);
+export function peekRenderJson(url, { resources } = {}) {
+  return peekCached(jsonCache, cadResourceCacheKey(resources, url));
 }
 
-export async function loadRenderText(url, { signal } = {}) {
-  const payload = await loadCached(textCache, url, () => fetchText(url, { signal }), { cachePending: !signal });
-  return finalizeCached(textCache, url, payload);
+export async function loadRenderText(url, { signal, resources } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, url);
+  const payload = await loadCached(textCache, cacheKey, () => fetchText(url, { signal, resources }), { cachePending: !signal });
+  return finalizeCached(textCache, cacheKey, payload);
 }
 
-export function peekRenderText(url) {
-  return peekCached(textCache, url);
+export function peekRenderText(url, { resources } = {}) {
+  return peekCached(textCache, cadResourceCacheKey(resources, url));
 }
 
-export async function loadRenderArrayBuffer(url, { signal } = {}) {
+export async function loadRenderArrayBuffer(url, { signal, resources } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, url);
   if (!url) {
     throw new Error("Missing asset cache key");
   }
@@ -233,39 +240,40 @@ export async function loadRenderArrayBuffer(url, { signal } = {}) {
     throw makeAbortError();
   }
   // After the abort check: a consumer that fetches nothing must not claim the URL for its source.
-  assertAssetSourceScope(arrayBufferCache, url, {
-    occupied: arrayBufferCache.has(url) || arrayBufferPendingCache.has(url)
+  assertAssetSourceScope(arrayBufferCache, cacheKey, {
+    occupied: arrayBufferCache.has(cacheKey) || arrayBufferPendingCache.has(cacheKey)
   });
-  const cached = peekCached(arrayBufferCache, url);
+  const cached = peekCached(arrayBufferCache, cacheKey);
   if (cached) {
     return cached;
   }
-  let pending = arrayBufferPendingCache.get(url);
+  let pending = arrayBufferPendingCache.get(cacheKey);
   if (!pending) {
-    pending = fetchArrayBuffer(url)
-      .then((payload) => finalizeCached(arrayBufferCache, url, payload))
+    pending = fetchArrayBuffer(url, { resources })
+      .then((payload) => finalizeCached(arrayBufferCache, cacheKey, payload))
       .catch((error) => {
-        releaseAssetSourceScope(arrayBufferCache, url);
+        releaseAssetSourceScope(arrayBufferCache, cacheKey);
         throw error;
       })
       .finally(() => {
-        if (arrayBufferPendingCache.get(url) === pending) {
-          arrayBufferPendingCache.delete(url);
+        if (arrayBufferPendingCache.get(cacheKey) === pending) {
+          arrayBufferPendingCache.delete(cacheKey);
         }
       });
-    arrayBufferPendingCache.set(url, pending);
+    arrayBufferPendingCache.set(cacheKey, pending);
   }
   return withConsumerAbort(pending, signal);
 }
 
-export function peekRenderArrayBuffer(url) {
-  return peekCached(arrayBufferCache, url);
+export function peekRenderArrayBuffer(url, { resources } = {}) {
+  return peekCached(arrayBufferCache, cadResourceCacheKey(resources, url));
 }
 
-export async function loadRenderGlb(url, { signal, preferWorker = false } = {}) {
-  const meshData = await loadCached(glbCache, url, async () => {
+export async function loadRenderGlb(url, { signal, resources, preferWorker = false } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, url);
+  const meshData = await loadCached(glbCache, cacheKey, async () => {
     if (preferWorker) {
-      const workerMeshData = loadGlbMeshDataInWorker(url, { signal });
+      const workerMeshData = loadGlbMeshDataInWorker(url, { signal, resources });
       if (workerMeshData) {
         try {
           return await workerMeshData;
@@ -276,27 +284,28 @@ export async function loadRenderGlb(url, { signal, preferWorker = false } = {}) 
         }
       }
     }
-    const buffer = await loadRenderArrayBuffer(url, { signal });
+    const buffer = await loadRenderArrayBuffer(url, { signal, resources });
     assertNotGitLfsPointer(buffer, url, "GLB render asset");
-    return buildMeshDataFromGlbBuffer(buffer);
+    return buildMeshDataFromGlbBuffer(buffer, { resources, sourceUrl: url, signal });
   }, { cachePending: !signal });
-  return finalizeCached(glbCache, url, meshData);
+  return finalizeCached(glbCache, cacheKey, meshData);
 }
 
-export function peekRenderGlb(url) {
-  return peekCached(glbCache, url);
+export function peekRenderGlb(url, { resources } = {}) {
+  return peekCached(glbCache, cadResourceCacheKey(resources, url));
 }
 
 // Interactive GLB documents are intentionally uncached: their scene graph is
 // mutable animation state and has one viewer owner with an explicit lifetime.
-export async function loadRenderGlbDocument(url, { signal } = {}) {
-  const buffer = await loadRenderArrayBuffer(url, { signal });
+export async function loadRenderGlbDocument(url, { signal, resources } = {}) {
+  const buffer = await loadRenderArrayBuffer(url, { signal, resources });
   assertNotGitLfsPointer(buffer, url, "GLB render asset");
-  return buildGlbDocumentFromBuffer(buffer);
+  return buildGlbDocumentFromBuffer(buffer, { resources, sourceUrl: url, signal });
 }
 
 export async function loadRenderSurf(url, {
   signal,
+  resources,
   tessellation,
   identity,
   memoryEstimateBytes,
@@ -310,6 +319,7 @@ export async function loadRenderSurf(url, {
   const meshData = await loadCached(glbCache, cacheKey, async () => {
     return (await loadSurfPayload(url, {
       signal,
+      resources,
       tessellation,
       identity,
       memoryEstimateBytes,
@@ -340,9 +350,10 @@ export function surfWorkerMemoryStats() {
   return surfWorkerMemoryStatsFromPool();
 }
 
-export async function loadRenderStl(url, { signal } = {}) {
-  const meshData = await loadCached(stlCache, url, async () => {
-    const workerMeshData = loadStlMeshDataInWorker(url, { signal });
+export async function loadRenderStl(url, { signal, resources } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, url);
+  const meshData = await loadCached(stlCache, cacheKey, async () => {
+    const workerMeshData = loadStlMeshDataInWorker(url, { signal, resources });
     if (workerMeshData) {
       try {
         return await workerMeshData;
@@ -352,28 +363,29 @@ export async function loadRenderStl(url, { signal } = {}) {
         }
       }
     }
-    const buffer = await loadRenderArrayBuffer(url, { signal });
+    const buffer = await loadRenderArrayBuffer(url, { signal, resources });
     assertNotGitLfsPointer(buffer, url, "STL render asset");
     return buildMeshDataFromStlBuffer(buffer);
   }, { cachePending: !signal });
-  return finalizeCached(stlCache, url, meshData);
+  return finalizeCached(stlCache, cacheKey, meshData);
 }
 
-export function peekRenderStl(url) {
-  return peekCached(stlCache, url);
+export function peekRenderStl(url, { resources } = {}) {
+  return peekCached(stlCache, cadResourceCacheKey(resources, url));
 }
 
-export async function loadRender3Mf(url, { signal } = {}) {
-  const meshData = await loadCached(threeMfCache, url, async () => {
-    const buffer = await loadRenderArrayBuffer(url, { signal });
+export async function loadRender3Mf(url, { signal, resources } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, url);
+  const meshData = await loadCached(threeMfCache, cacheKey, async () => {
+    const buffer = await loadRenderArrayBuffer(url, { signal, resources });
     assertNotGitLfsPointer(buffer, url, "3MF render asset");
     return buildMeshDataFrom3MfBuffer(buffer);
   }, { cachePending: !signal });
-  return finalizeCached(threeMfCache, url, meshData);
+  return finalizeCached(threeMfCache, cacheKey, meshData);
 }
 
-export function peekRender3Mf(url) {
-  return peekCached(threeMfCache, url);
+export function peekRender3Mf(url, { resources } = {}) {
+  return peekCached(threeMfCache, cadResourceCacheKey(resources, url));
 }
 
 function parseGlbContainer(arrayBuffer) {
@@ -562,45 +574,46 @@ function displayEdgeBundleFromGlbBuffer(arrayBuffer) {
   };
 }
 
-export async function loadRenderTopologyIndex(glbUrl, { signal } = {}) {
-  const manifest = await loadCached(topologyIndexCache, glbUrl, async () => {
-    const arrayBuffer = await loadRenderArrayBuffer(glbUrl, { signal });
+export async function loadRenderTopologyIndex(glbUrl, { signal, resources } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, glbUrl);
+  const manifest = await loadCached(topologyIndexCache, cacheKey, async () => {
+    const arrayBuffer = await loadRenderArrayBuffer(glbUrl, { signal, resources });
     assertNotGitLfsPointer(arrayBuffer, glbUrl, "GLB topology asset");
     return topologyIndexFromGlbBuffer(arrayBuffer);
   }, { cachePending: !signal });
-  return finalizeCached(topologyIndexCache, glbUrl, manifest);
+  return finalizeCached(topologyIndexCache, cacheKey, manifest);
 }
 
-export function peekRenderTopologyIndex(glbUrl) {
-  return peekCached(topologyIndexCache, glbUrl);
+export function peekRenderTopologyIndex(glbUrl, { resources } = {}) {
+  return peekCached(topologyIndexCache, cadResourceCacheKey(resources, glbUrl));
 }
 
-export async function loadRenderSelectorBundle(glbUrl, { signal } = {}) {
-  const cacheKey = glbUrl;
+export async function loadRenderSelectorBundle(glbUrl, { signal, resources } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, glbUrl);
   const bundle = await loadCached(selectorCache, cacheKey, async () => {
-    const arrayBuffer = await loadRenderArrayBuffer(glbUrl, { signal });
+    const arrayBuffer = await loadRenderArrayBuffer(glbUrl, { signal, resources });
     assertNotGitLfsPointer(arrayBuffer, glbUrl, "GLB selector topology asset");
     return selectorBundleFromGlbBuffer(arrayBuffer);
   }, { cachePending: !signal });
   return finalizeCached(selectorCache, cacheKey, bundle);
 }
 
-export function peekRenderSelectorBundle(glbUrl) {
-  return peekCached(selectorCache, glbUrl);
+export function peekRenderSelectorBundle(glbUrl, { resources } = {}) {
+  return peekCached(selectorCache, cadResourceCacheKey(resources, glbUrl));
 }
 
-export async function loadRenderDisplayEdgeBundle(glbUrl, { signal } = {}) {
-  const cacheKey = glbUrl;
+export async function loadRenderDisplayEdgeBundle(glbUrl, { signal, resources } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, glbUrl);
   const bundle = await loadCached(displayEdgeCache, cacheKey, async () => {
-    const arrayBuffer = await loadRenderArrayBuffer(glbUrl, { signal });
+    const arrayBuffer = await loadRenderArrayBuffer(glbUrl, { signal, resources });
     assertNotGitLfsPointer(arrayBuffer, glbUrl, "GLB display edge topology asset");
     return displayEdgeBundleFromGlbBuffer(arrayBuffer);
   }, { cachePending: !signal });
   return finalizeCached(displayEdgeCache, cacheKey, bundle);
 }
 
-export function peekRenderDisplayEdgeBundle(glbUrl) {
-  return peekCached(displayEdgeCache, glbUrl);
+export function peekRenderDisplayEdgeBundle(glbUrl, { resources } = {}) {
+  return peekCached(displayEdgeCache, cadResourceCacheKey(resources, glbUrl));
 }
 
 // --- Exact-surface topology (design/surface-rendering.md R3) ---------------
@@ -803,7 +816,7 @@ function capabilityCacheKey(capabilities) {
   return `${capabilities.render ? "r" : ""}${capabilities.selectors ? "s" : ""}`;
 }
 
-async function loadSurfPayloadInline(url, { signal, tessellation, identity, capabilities, tessellationCache } = {}) {
+async function loadSurfPayloadInline(url, { signal, resources, tessellation, identity, capabilities, tessellationCache } = {}) {
   const [
     { parseSurf },
     {
@@ -836,7 +849,7 @@ async function loadSurfPayloadInline(url, { signal, tessellation, identity, capa
     };
   }
   if (!url) throw new Error("Exact SURF bytes are not ready for this component");
-  const buffer = await loadRenderArrayBuffer(url, { signal });
+  const buffer = await loadRenderArrayBuffer(url, { signal, resources });
   assertNotGitLfsPointer(buffer, url, "SURF render asset");
   const { index, floats } = parseSurf(buffer);
   // Same shared-cache behavior as the worker path: a registered provider
@@ -854,6 +867,7 @@ async function loadSurfPayloadInline(url, { signal, tessellation, identity, capa
 
 async function loadSurfPayload(url, {
   signal,
+  resources,
   tessellation,
   identity,
   memoryEstimateBytes,
@@ -865,6 +879,7 @@ async function loadSurfPayload(url, {
     const { loadSurfComponentInWorker } = await import("./surf/surfWorkerClient.js");
     const workerPayload = loadSurfComponentInWorker(url, {
       signal,
+      resources,
       tessellation,
       identity,
       capabilities,
@@ -877,7 +892,7 @@ async function loadSurfPayload(url, {
       // the compatibility path for environments where Workers never started.
       return workerPayload;
     }
-    return loadSurfPayloadInline(url, { signal, tessellation, identity, capabilities, tessellationCache });
+    return loadSurfPayloadInline(url, { signal, resources, tessellation, identity, capabilities, tessellationCache });
   }, { cachePending: !signal });
   finalizeCached(surfPayloadCache, cacheKey, payload);
   retainSurfEntry(surfPayloadCache, cacheKey);
@@ -891,6 +906,7 @@ async function loadSurfPayload(url, {
  */
 export async function loadRenderSurfPayloadAtLevel(url, {
   signal,
+  resources,
   tessellation,
   identity,
   memoryEstimateBytes,
@@ -899,6 +915,7 @@ export async function loadRenderSurfPayloadAtLevel(url, {
 } = {}) {
   return loadSurfPayload(url, {
     signal,
+    resources,
     tessellation,
     identity,
     memoryEstimateBytes,
@@ -909,6 +926,7 @@ export async function loadRenderSurfPayloadAtLevel(url, {
 
 export async function loadRenderSurfSelectorBundle(surfUrl, {
   signal,
+  resources,
   tessellation,
   identity,
   memoryEstimateBytes,
@@ -918,6 +936,7 @@ export async function loadRenderSurfSelectorBundle(surfUrl, {
   const bundle = await loadCached(selectorCache, cacheKey, async () => {
     return (await loadSurfPayload(surfUrl, {
       signal,
+      resources,
       tessellation,
       identity,
       memoryEstimateBytes,
@@ -932,6 +951,7 @@ export async function loadRenderSurfSelectorBundle(surfUrl, {
 
 export async function loadRenderSurfDisplayEdgeBundle(surfUrl, {
   signal,
+  resources,
   tessellation,
   identity,
   memoryEstimateBytes,
@@ -944,6 +964,7 @@ export async function loadRenderSurfDisplayEdgeBundle(surfUrl, {
   const bundle = await loadCached(displayEdgeCache, cacheKey, async () => {
     const selector = await loadRenderSurfSelectorBundle(surfUrl, {
       signal,
+      resources,
       tessellation,
       identity,
       memoryEstimateBytes,
@@ -970,10 +991,11 @@ const dxfMeshCache = new Map();
 // (design/standalone-viewer.md Phase A): parse -> flat-pattern mesh at the
 // reference thickness -> STL-shaped meshData. A dimensioned drawing has no cut
 // geometry and yields an EMPTY mesh — the 2D line-work path renders it instead.
-export async function loadRenderDxfMesh(url, { signal } = {}) {
-  const meshData = await loadCached(dxfMeshCache, url, async () => {
+export async function loadRenderDxfMesh(url, { signal, resources } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, url);
+  const meshData = await loadCached(dxfMeshCache, cacheKey, async () => {
     const [dxfData, three, utils, { buildDxfPreviewMeshData }, { dxfPreviewPositionsMm }, { buildMeshDataFromStlGeometry }] = await Promise.all([
-      loadRenderDxf(url, { signal }),
+      loadRenderDxf(url, { signal, resources }),
       import("three"),
       import("three/examples/jsm/utils/BufferGeometryUtils.js"),
       import("./dxf/buildPreviewMesh.js"),
@@ -1021,57 +1043,58 @@ export async function loadRenderDxfMesh(url, { signal } = {}) {
       geometry.dispose?.();
     }
   }, { cachePending: !signal });
-  return finalizeCached(dxfMeshCache, url, meshData);
+  return finalizeCached(dxfMeshCache, cacheKey, meshData);
 }
 
 
-export function peekRenderDxfMesh(url) {
-  return peekCached(dxfMeshCache, url);
+export function peekRenderDxfMesh(url, { resources } = {}) {
+  return peekCached(dxfMeshCache, cadResourceCacheKey(resources, url));
 }
 
 
-export async function loadRenderDxf(url, { signal } = {}) {
-  const payload = await loadCached(dxfCache, url, async () => {
-    const dxfText = await loadRenderText(url, { signal });
+export async function loadRenderDxf(url, { signal, resources } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, url);
+  const payload = await loadCached(dxfCache, cacheKey, async () => {
+    const dxfText = await loadRenderText(url, { signal, resources });
     return parseDxf(dxfText, { fileRef: "", sourceUrl: url });
   }, { cachePending: !signal });
-  return finalizeCached(dxfCache, url, payload);
+  return finalizeCached(dxfCache, cacheKey, payload);
 }
 
-export function peekRenderDxf(url) {
-  return peekCached(dxfCache, url);
+export function peekRenderDxf(url, { resources } = {}) {
+  return peekCached(dxfCache, cadResourceCacheKey(resources, url));
 }
 
 function urdfCacheKey(url) {
   return String(url || "");
 }
 
-export async function loadRenderUrdf(url, { signal } = {}) {
-  const cacheKey = urdfCacheKey(url);
+export async function loadRenderUrdf(url, { signal, resources } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, urdfCacheKey(url));
   const payload = await loadCached(urdfCache, cacheKey, async () => {
     const [xmlText, { parseUrdf }] = await Promise.all([
-      loadRenderText(url, { signal }),
+      loadRenderText(url, { signal, resources }),
       import("./urdf/parseUrdf.js"),
     ]);
-    return parseUrdf(xmlText, { sourceUrl: url });
+    return parseUrdf(xmlText, { sourceUrl: url, resolveResource: resources ? (reference) => resources.resolveDependency(url, reference, { kind: "robot" }) : undefined });
   }, { cachePending: !signal });
   return finalizeCached(urdfCache, cacheKey, payload);
 }
 
-export function peekRenderUrdf(url) {
-  return peekCached(urdfCache, urdfCacheKey(url));
+export function peekRenderUrdf(url, { resources } = {}) {
+  return peekCached(urdfCache, cadResourceCacheKey(resources, urdfCacheKey(url)));
 }
 
 function srdfCacheKey(srdfUrl, urdfUrl = "") {
   return [srdfUrl, urdfUrl].filter(Boolean).join("::");
 }
 
-export async function loadRenderSrdf(srdfUrl, { signal, urdfUrl = "" } = {}) {
-  const cacheKey = srdfCacheKey(srdfUrl, urdfUrl);
+export async function loadRenderSrdf(srdfUrl, { signal, resources, urdfUrl = "" } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, srdfCacheKey(srdfUrl, urdfUrl));
   const payload = await loadCached(srdfCache, cacheKey, async () => {
     const [srdfText, urdfData, { parseSrdf, motionFromSrdf }] = await Promise.all([
-      loadRenderText(srdfUrl, { signal }),
-      loadRenderUrdf(urdfUrl, { signal }),
+      loadRenderText(srdfUrl, { signal, resources }),
+      loadRenderUrdf(urdfUrl, { signal, resources }),
       import("./urdf/parseSrdf.js"),
     ]);
     const srdfData = parseSrdf(srdfText, { sourceUrl: srdfUrl, urdfData });
@@ -1087,26 +1110,26 @@ export async function loadRenderSrdf(srdfUrl, { signal, urdfUrl = "" } = {}) {
   return finalizeCached(srdfCache, cacheKey, payload);
 }
 
-export function peekRenderSrdf(srdfUrl, { urdfUrl = "" } = {}) {
-  return peekCached(srdfCache, srdfCacheKey(srdfUrl, urdfUrl));
+export function peekRenderSrdf(srdfUrl, { resources, urdfUrl = "" } = {}) {
+  return peekCached(srdfCache, cadResourceCacheKey(resources, srdfCacheKey(srdfUrl, urdfUrl)));
 }
 
 function sdfCacheKey(url) {
   return String(url || "");
 }
 
-export async function loadRenderSdf(url, { signal } = {}) {
-  const cacheKey = sdfCacheKey(url);
+export async function loadRenderSdf(url, { signal, resources } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, sdfCacheKey(url));
   const payload = await loadCached(sdfCache, cacheKey, async () => {
     const [xmlText, { parseSdf }] = await Promise.all([
-      loadRenderText(url, { signal }),
+      loadRenderText(url, { signal, resources }),
       import("./urdf/parseSdf.js"),
     ]);
-    return parseSdf(xmlText, { sourceUrl: url });
+    return parseSdf(xmlText, { sourceUrl: url, resolveResource: resources ? (reference) => resources.resolveDependency(url, reference, { kind: "robot" }) : undefined });
   }, { cachePending: !signal });
   return finalizeCached(sdfCache, cacheKey, payload);
 }
 
-export function peekRenderSdf(url) {
-  return peekCached(sdfCache, sdfCacheKey(url));
+export function peekRenderSdf(url, { resources } = {}) {
+  return peekCached(sdfCache, cadResourceCacheKey(resources, sdfCacheKey(url)));
 }

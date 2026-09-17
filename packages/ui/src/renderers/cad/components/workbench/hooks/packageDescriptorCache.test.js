@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createHttpCadResourceProvider } from "@hardcore/core/client";
 
 import {
   installRuntimePackageDescriptor,
@@ -21,10 +22,11 @@ test("overlapping descriptor consumers own independent cancellation", async (t) 
   });
   t.after(() => { globalThis.fetch = originalFetch; });
 
+  const resources = createHttpCadResourceProvider();
   const firstController = new AbortController();
   const secondController = new AbortController();
-  const first = loadPackageDescriptor(packageUrl, { signal: firstController.signal });
-  const second = loadPackageDescriptor(packageUrl, { signal: secondController.signal });
+  const first = loadPackageDescriptor(packageUrl, { resources, signal: firstController.signal });
+  const second = loadPackageDescriptor(packageUrl, { resources, signal: secondController.signal });
   assert.equal(requests.length, 2, "signal-owned descriptor reads are not shared");
 
   firstController.abort();
@@ -45,13 +47,14 @@ test("an installed runtime replacement fences an older descriptor response", asy
   globalThis.fetch = () => new Promise((resolve) => { resolveRequest = resolve; });
   t.after(() => { globalThis.fetch = originalFetch; });
 
-  const pending = loadPackageDescriptor(packageUrl);
+  const resources = createHttpCadResourceProvider();
+  const pending = loadPackageDescriptor(packageUrl, { resources });
   const replacement = { kind: "assembly-package", tree: "same", viewId: "new-view" };
-  installRuntimePackageDescriptor(packageUrl, replacement);
+  installRuntimePackageDescriptor(packageUrl, replacement, { resources });
   resolveRequest(new Response(JSON.stringify({
     kind: "assembly-package", tree: "same", viewId: "old-view",
   }), { status: 200, headers: { "content-type": "application/json" } }));
 
   assert.equal(await pending, replacement, "the late saved-view response cannot escape after replacement");
-  assert.equal(await loadPackageDescriptor(packageUrl), replacement);
+  assert.equal(await loadPackageDescriptor(packageUrl, { resources }), replacement);
 });

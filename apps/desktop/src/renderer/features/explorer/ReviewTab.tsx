@@ -9,6 +9,8 @@ import {
   RotateCw,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPromptContext, textPart } from "@hardcore/core/prompt";
+import { toast } from "sonner";
 
 import { Button } from "@renderer/components/ui/button";
 import {
@@ -29,7 +31,7 @@ import { Textarea } from "@renderer/components/ui/textarea";
 import { useResolvedTheme } from "@renderer/hooks/use-theme";
 import { useProjectGitInfo } from "@renderer/lib/git-mode";
 import { cn } from "@renderer/lib/utils";
-import { addToDraft } from "@renderer/state/cad-draft";
+import { createDesktopPromptContext } from "./host/promptContext";
 import { useExplorer } from "@renderer/state/explorer";
 import { useSessions } from "@renderer/state/sessions";
 import { useSettings } from "@renderer/state/settings";
@@ -435,11 +437,14 @@ function FileSection({
   const [diff, setDiff] = useState<FileDiff | null>(null);
   const selection = useRef<{ side: string; start: number; end: number; text: string } | null>(null);
   const listeners = useRef<IDisposable[]>([]);
+  const promptContext = useMemo(() => createDesktopPromptContext(request.projectId, root, JSON.stringify(["desktop", request.projectId, root])), [request.projectId, root]);
   useEffect(() => () => { listeners.current.forEach((listener) => listener.dispose()); }, []);
   const requestRevision = () => {
     const selected = selection.current;
     const excerpt = selected ? `\nSelected ${selected.side} lines ${selected.start}–${selected.end}:\n\`\`\`\n${selected.text}\n\`\`\`\n` : "";
-    addToDraft(request.projectId, root, { text: `Please revise ${file.path} (${REVIEW_SCOPE_LABELS[scope]}).\n${excerpt}Requested change: ` });
+    void promptContext.deliver(createPromptContext([textPart(`Please revise ${file.path} (${REVIEW_SCOPE_LABELS[scope]}).\n${excerpt}Requested change: `)])).then(result => {
+      if (result.status === "failed" || result.status === "cancelled") toast.error(result.message ?? "Context could not be added to the draft.");
+    });
   };
   const theme = useResolvedTheme();
   setupMonaco();

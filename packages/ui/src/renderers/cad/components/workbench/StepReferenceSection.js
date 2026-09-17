@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, Copy, SquareMousePointer } from "lucide-react";
 import { cn } from "@hardcore/ui/utils";
-import { copyTextToClipboard } from "@hardcore/ui/clipboard";
+import { useViewerHost } from '../../../../host/context.js';
 import { useHostReference } from "../../file-view/hostReference.js";
 import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections.js";
 import { referenceMeasurements, selectionMeasurements } from "../../workbench/referenceMeasurements.js";
@@ -75,9 +75,10 @@ function isPartNode(item) {
 }
 
 function CopyButton({ text, className }) {
+  const { clipboard } = useViewerHost();
   const [copied, setCopied] = useState(false);
   const timerRef = useRef(null);
-  // Embedded, the host hears the copy as well (hostReference.js).
+  // Explicit copy uses the host clipboard; the primary prompt action is separate.
   const host = useHostReference();
   useEffect(() => () => {
     if (timerRef.current) {
@@ -99,7 +100,7 @@ function CopyButton({ text, className }) {
         if (host) {
           void host.deliverReference(text);
         } else {
-          copyTextToClipboard(text);
+          void clipboard.writeText(text);
         }
         setCopied(true);
         if (timerRef.current) {

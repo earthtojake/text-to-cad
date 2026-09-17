@@ -1,3 +1,4 @@
+import { createHttpCadResourceProvider } from "../client/resources.js";
 import {
   buildComposedPackageMeshData
 } from "../lib/assembly/meshData.js";
@@ -118,18 +119,18 @@ function assertStepOnlyOption(kind, value, label) {
   }
 }
 
-async function loadStepMeshFromGlb(glbUrl) {
+async function loadStepMeshFromGlb(glbUrl, options) {
   // A plain (non-package) GLB URL is a single mesh blob — assemblies are component-GLB
   // packages loaded via loadPackageMeshData, not self-contained monolith GLBs.
-  return loadRenderGlb(glbUrl);
+  return loadRenderGlb(glbUrl, options);
 }
 
-async function loadSelectorRuntime(glbUrl, { cadPath = "" } = {}) {
+async function loadSelectorRuntime(glbUrl, { cadPath = "", resources, signal } = {}) {
   if (!glbUrl) {
     return null;
   }
   try {
-    const selectorBundle = await loadRenderSelectorBundle(glbUrl);
+    const selectorBundle = await loadRenderSelectorBundle(glbUrl, { resources, signal });
     return buildSelectorRuntime(selectorBundle, {
       copyCadPath: cadPath
     });
@@ -144,12 +145,12 @@ async function loadSelectorRuntime(glbUrl, { cadPath = "" } = {}) {
   }
 }
 
-async function loadDisplayEdgeRuntime(glbUrl) {
+async function loadDisplayEdgeRuntime(glbUrl, options) {
   if (!glbUrl) {
     return null;
   }
   try {
-    return buildDisplayEdgeRuntime(await loadRenderDisplayEdgeBundle(glbUrl));
+    return buildDisplayEdgeRuntime(await loadRenderDisplayEdgeBundle(glbUrl, options));
   } catch (error) {
     if (isRenderAssetSourceScopeError(error)) {
       throw error;
@@ -172,21 +173,17 @@ async function loadDisplayEdgeRuntime(glbUrl) {
 const COMPONENT_FETCH_ATTEMPTS = 3;
 const COMPONENT_FETCH_BACKOFF_MS = [120, 320];
 
-async function fetchComponentGlbBuffer(url, cid) {
+async function fetchComponentGlbBuffer(url, cid, options) {
   let lastStatus = 0;
   for (let attempt = 0; attempt < COMPONENT_FETCH_ATTEMPTS; attempt += 1) {
-    const response = await fetch(url, { cache: "no-store" });
-    if (response.ok) {
-      return response.arrayBuffer();
+    try { return await options.resources.readBytes(url, { signal: options.signal }); }
+    catch (error) {
+      if (!error.status) throw error;
+      lastStatus = error.status;
+      if (error.status !== 404 || attempt === COMPONENT_FETCH_ATTEMPTS - 1) break;
+      await new Promise(resolve => setTimeout(resolve, COMPONENT_FETCH_BACKOFF_MS[attempt] || 320));
+      options.signal?.throwIfAborted();
     }
-    lastStatus = response.status;
-    // Only a missing asset is worth retrying. A 4xx that is not 404, or any
-    // 5xx, is a real error and retrying just delays the report.
-    if (response.status !== 404 || attempt === COMPONENT_FETCH_ATTEMPTS - 1) {
-      break;
-    }
-    const delay = COMPONENT_FETCH_BACKOFF_MS[attempt] || 320;
-    await new Promise((resolve) => { setTimeout(resolve, delay); });
   }
   const hint = lastStatus === 404
     ? " — the component is missing after retries, which means either a rebuild "
@@ -250,7 +247,7 @@ export function tessellationForSnapshotQuality(input = {}) {
     : {};
 }
 
-async function loadPackageMeshData(packageInfo, tessellation = {}, appearance = null, diagnostics = null, tessellationCache = null) {
+async function loadPackageMeshData(packageInfo, tessellation = {}, appearance = null, diagnostics = null, tessellationCache = null, options = {}) {
   const measure = (name, started) => {
     if (diagnostics) diagnostics[name] = (diagnostics[name] || 0) + performance.now() - started;
   };
@@ -362,7 +359,7 @@ async function loadPackageMeshData(packageInfo, tessellation = {}, appearance = 
     // points at the component GLB; its .surf sibling shares the stem.
     const surfUrl = url.replace(/\.glb(?=$|[?#])/, ".surf");
     const readStarted = performance.now();
-    const { index, floats } = parseSurf(await fetchComponentGlbBuffer(surfUrl, cid));
+    const { index, floats } = parseSurf(await fetchComponentGlbBuffer(surfUrl, cid, options));
     measure("surfaceReadMs", readStarted);
     const tessellateStarted = performance.now();
     const component = tessellateComponent(index, floats, tessellation);
@@ -391,32 +388,12 @@ async function loadPackageMeshData(packageInfo, tessellation = {}, appearance = 
   return meshData;
 }
 
-async function loadMeshDataFromUrl(url, kind) {
-  if (sourceIsStep(kind)) {
-    return loadStepMeshFromGlb(url);
-  }
-  if (kind === SOURCE_KIND.GLB) {
-    const response = await fetch(url, { cache: "no-store" });
-    if (!response.ok) {
-      throw new Error(`Failed to load GLB source: HTTP ${response.status}`);
-    }
-    return buildMeshDataFromGlbBuffer(await response.arrayBuffer());
-  }
-  if (kind === SOURCE_KIND.STL) {
-    const response = await fetch(url, { cache: "no-store" });
-    if (!response.ok) {
-      throw new Error(`Failed to load STL source: HTTP ${response.status}`);
-    }
-    return buildMeshDataFromStlBuffer(await response.arrayBuffer());
-  }
-  if (kind === SOURCE_KIND.THREE_MF) {
-    const response = await fetch(url, { cache: "no-store" });
-    if (!response.ok) {
-      throw new Error(`Failed to load 3MF source: HTTP ${response.status}`);
-    }
-    return buildMeshDataFrom3MfBuffer(await response.arrayBuffer());
-  }
-  throw new Error(`Unsupported render source kind: ${kind || SOURCE_KIND.UNKNOWN}`);
+async function loadMeshDataFromUrl(url, kind, options) {
+  if (sourceIsStep(kind)) return loadStepMeshFromGlb(url, options);
+  const builders = { glb: buildMeshDataFromGlbBuffer, stl: buildMeshDataFromStlBuffer, "3mf": buildMeshDataFrom3MfBuffer };
+  if (!builders[kind]) throw new Error(`Unsupported render source kind: ${kind || SOURCE_KIND.UNKNOWN}`);
+  try { return await builders[kind](await options.resources.readBytes(url, { signal: options.signal }), { resources: options.resources, sourceUrl: url, signal: options.signal }); }
+  catch (error) { if (error.status) throw new Error(`Failed to load ${kind.toUpperCase()} source: HTTP ${error.status}`, { cause: error }); throw error; }
 }
 
 // A pose PRESET name in place of a values object. `--kinematics` takes either
@@ -447,7 +424,8 @@ async function loadStepParameters({
   documentHash,
   cadPath,
   selectorRuntime,
-  sourceSidecar = null
+  sourceSidecar = null,
+  resources, signal
 }) {
   assertStepOnlyOption(kind, kinematics, "kinematics");
   assertStepOnlyOption(kind, stepParameterUrl, "stepParameterUrl");
@@ -463,7 +441,7 @@ async function loadStepParameters({
   // kinematics section is the one articulation mechanism.
   const definition = sourceSidecar
     ? kinematicsModuleDefinitionFromSidecar(sourceSidecar, { cadPath, url: stepParameterUrl })
-    : await loadKinematicsModuleDefinition(stepParameterUrl, { cadPath, documentHash });
+    : await loadKinematicsModuleDefinition(stepParameterUrl, { cadPath, documentHash, resources, signal });
   if (!definition) {
     if (explicit) {
       throw new Error("model declares no kinematics, so the kinematics values have nothing to drive");
@@ -525,6 +503,9 @@ export function packageSourceFromBaseUrl(baseUrl, descriptor) {
 }
 
 export async function loadSource(input, options = {}) {
+  // Standalone static/snapshot composition; viewer callers supply their scoped provider.
+  const resources = options.resources || createHttpCadResourceProvider({ cache: "no-store" });
+  options = { ...options, resources };
   const inputObject = isObject(input) ? input : {};
   validateSnapshotRenderJob(inputObject);
   const photographicRender = inputObject.render != null;
@@ -556,7 +537,7 @@ export async function loadSource(input, options = {}) {
 
   const sourceSidecar = inlineSourceSidecar
     ? validateSourceSidecar(inlineSourceSidecar, { url: stepParameterUrl || cadPath, documentHash })
-    : (stepParameterUrl ? await loadSourceSidecar(stepParameterUrl, { documentHash, signal: options.signal }) : null);
+    : (stepParameterUrl ? await loadSourceSidecar(stepParameterUrl, { documentHash, signal: options.signal, resources }) : null);
 
   let meshData = explicitMeshData;
   // Component-GLB package: the canonical assembly artifact is a directory, so there is
@@ -568,7 +549,7 @@ export async function loadSource(input, options = {}) {
   );
   if (!meshData && packageInfo) {
     const diagnostics = options.stageTimings ? {} : null;
-    meshData = await loadPackageMeshData(packageInfo, tessellation, sourceSidecar?.appearance, diagnostics, options.tessellationCache);
+    meshData = await loadPackageMeshData(packageInfo, tessellation, sourceSidecar?.appearance, diagnostics, options.tessellationCache, options);
     if (diagnostics) options.stageTimings.sourceLoad = diagnostics;
     const packageSelectorRuntime = photographicRender ? null : inputObject.selectorRuntime || options.selectorRuntime || null;
     return {
@@ -586,7 +567,7 @@ export async function loadSource(input, options = {}) {
         documentHash,
         cadPath,
         selectorRuntime: packageSelectorRuntime,
-        sourceSidecar
+        sourceSidecar, resources, signal: options.signal
       }),
       sourceSidecar,
       resolved,
@@ -606,7 +587,7 @@ export async function loadSource(input, options = {}) {
   // render a robot without knowing it is one.
   if (!meshData && (isRobotSourceKind(kind) || robotSourceKindFromUrl(url))) {
     const robot = await loadRobotMeshData(url, {
-      kind,
+      resources, signal: options.signal, kind,
       jointValues: inputObject.jointValues || resolved.jointValues || options.jointValues || null,
       urdfUrl: String(resolved.urdfUrl || inputObject.urdfUrl || "").trim()
     });
@@ -638,7 +619,7 @@ export async function loadSource(input, options = {}) {
       if (!url) {
         throw new Error("loadSource requires meshData, a source URL, or resolved.glbUrl");
       }
-      meshData = await loadMeshDataFromUrl(sourceIsStep(kind) ? glbUrl || url : url, kind);
+      meshData = await loadMeshDataFromUrl(sourceIsStep(kind) ? glbUrl || url : url, kind, options);
     }
 
     // Selector/display-edge runtimes ride in STEP topology GLB extras. Direct mesh
@@ -647,10 +628,10 @@ export async function loadSource(input, options = {}) {
     // intent, not a swallowed error (matches the CLI's mesh-input validation).
     const stepSidecarsEnabled = sourceIsStep(kind) && !photographicRender;
     const selectorRuntime = photographicRender ? null : inputObject.selectorRuntime || options.selectorRuntime || (
-      stepSidecarsEnabled ? await loadSelectorRuntime(glbUrl || url, { cadPath }) : null
+      stepSidecarsEnabled ? await loadSelectorRuntime(glbUrl || url, { cadPath, resources, signal: options.signal }) : null
     );
     const displayEdgeRuntime = photographicRender ? null : inputObject.displayEdgeRuntime || options.displayEdgeRuntime || (
-      stepSidecarsEnabled ? await loadDisplayEdgeRuntime(glbUrl || url) : null
+      stepSidecarsEnabled ? await loadDisplayEdgeRuntime(glbUrl || url, options) : null
     );
     const stepParameterSource = await loadStepParameters({
       kind,
@@ -659,7 +640,7 @@ export async function loadSource(input, options = {}) {
       documentHash,
       cadPath,
       selectorRuntime,
-      sourceSidecar
+      sourceSidecar, resources, signal: options.signal
     });
 
     return {

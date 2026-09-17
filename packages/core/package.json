@@ -16,7 +16,11 @@
     "./common/*": "./dist/common/*",
     "./glb/*": "./dist/lib/glb/*",
     "./lib/*": "./dist/lib/*",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./prompt": {
+      "types": "./dist/prompt/index.d.ts",
+      "import": "./dist/prompt/index.js"
+    }
   },
   "scripts": {
     "test": "node scripts/run-tests.mjs",

@@ -6,10 +6,12 @@ error states, and common edit/save/reload lifecycle. Both `apps/web` and
 `apps/desktop` consume this component through the package's compiled exports.
 The desktop's project/session/window layout remains application code.
 
-This extraction is a **pure refactor**. Preserve the existing UI, UX and
+The package extraction and host-boundary migration preserve behavior. Preserve the existing UI, UX and
 functionality of docs, web and desktop: styling, labels, defaults, shortcuts,
 file actions, editing and conflict behavior, CAD interactions, persistence,
-and narrow layouts. New features or visual changes require a separate change.
+and narrow layouts. The approved exceptions are the shared primary prompt action
+(Add to prompt in desktop, clipboard delivery in web) and removal of the
+reference coaching tooltip. Other features or visual changes require separate review.
 The viewer's shared controls keep their original appearance. Desktop's
 surrounding app controls remain local where their existing appearance differs.
 
@@ -29,6 +31,7 @@ these peers are not bundled into UI.
 
 ```text
 src/
+  host/              explicit host ports, prompt actions and React binding
   file-viewer/       FileViewer, typed source/renderer contracts, lifecycle hooks
     navigation/     breadcrumbs, file tree, entry menus and panel frame
   renderers/
@@ -64,21 +67,45 @@ import '@hardcore/ui/tokens.css';
 import '@hardcore/ui/styles.css';
 
 const renderers = [createCadRenderer({ client, preferences })];
-// The host supplies source, selectedFile, state and the corresponding callbacks.
-<FileViewer file={selectedFile} source={source} renderers={renderers}
-  state={state} onStateChange={setState} onOpenFile={openFile}
-  appearance={{ colorScheme: 'light' }} />;
+// The host supplies storage, actions, navigation and environmental ports.
+<FileViewer file={selectedFile} host={host} renderers={renderers}
+  state={state} onStateChange={setState} />;
 ```
 
-Public entry points include `/file-viewer`, `/navigation`, `/renderers/cad`,
+Public entry points include `/host`, `/file-viewer`, `/navigation`, `/renderers/cad`,
 `/renderers/cad/state`, `/renderers/cad/presentation`, `/renderers/cad/empty`,
 `/renderers/markdown`, `/renderers/code`, `/renderers/code/editor`,
 `/renderers/image`, `/renderers/pdf`, `/renderers/unsupported`, `/loading-icon`,
-`/clipboard`, `/utils`, `/primitives/*`, `/tokens.css`, and `/styles.css`.
+`/utils`, `/primitives/*`, `/tokens.css`, and `/styles.css`.
 Declarations are owned here; apps need no ambient shims or aliases into this
 source tree.
 
+The required host contract, typed prompt bundles, delivery receipts and named
+renderer slots are documented in [viewer host](docs/viewer-host.md). Clipboard
+and page reload implementations now live in the apps. Shared UI performs no
+raw transport, clipboard discovery, host storage or page-navigation effects.
+
 ## Lifetimes and state
+
+`FileSource` describes storage only: stat/list/search, optional reads and optional
+write/create/rename/duplicate/trash operations. Menus derive storage capabilities
+from these methods and native/copy capabilities from the separate `FileActions`
+port. Missing methods remain unavailable. A web catalog source stays read-only;
+listing never filters entries by renderer support.
+
+Writes return saved, conflict, cancelled or error outcomes; mutations return
+committed receipts, cancellation or typed failures. The desktop validates the
+expected content revision, serializes writes to the same path and atomically
+replaces its contents. Aborting a caller after dispatch does not undo a committed
+operation. Hosts reconcile committed receipts even after that caller unmounts;
+shared document/navigation hooks discard its late UI response.
+
+Source subscriptions distinguish content and metadata changes from added,
+deleted and moved entries. Content changes reload a clean document or mark its
+draft stale; metadata changes do not discard a draft. Renames carry drafts to
+the new path and remap every expanded/cached descendant. Hosts reconcile other
+open tabs too. Deletes prune descendant listings while dirty editors retain
+an explicit stale draft. Successful saves preserve typing made during the write.
 
 A source has a stable root identity independent of a server's ephemeral port.
 File state is scoped by root, path and renderer. Changing source or file aborts
@@ -90,7 +117,7 @@ another viewer's cache provider or camera state.
 Completed STEP CPU working sets can outlive a viewport in the shared renderer's
 bounded cache. They retain exact decoded component buffers and copy structural
 metadata for each mount; scene objects, controls and pending work are not cached.
-Reuse is scoped to root, origin and file revision. See
+Reuse is scoped to root, resource-provider generation and file revision. See
 [CAD resource lifetime](docs/cad-renderer.md) for cache bounds and invalidation.
 The Model inspector can reuse those accepted component identities for completed
 recognition metadata after the runtime descriptor also matches, avoiding surface

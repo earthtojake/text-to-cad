@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { copyImageBlobToClipboard, copyTextToClipboard, readTextFromClipboard } from "./clipboard.js";
+import { copyImageBlobToClipboard, copyTextToClipboard, readTextFromClipboard } from "./browserClipboard.js";
 
 function replaceGlobal(name, value) {
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
@@ -294,5 +294,21 @@ test("copyImageBlobToClipboard reports unsupported image clipboard", async () =>
   } finally {
     restoreNavigator();
     restoreClipboardItem();
+  }
+});
+
+test("unsupported image clipboard still consumes a pending encoder rejection", async () => {
+  const restoreNavigator = replaceGlobal("navigator", {});
+  const restoreItem = replaceGlobal("ClipboardItem", undefined);
+  let reject;
+  const image = new Promise((_resolve, failed) => { reject = failed; });
+  try {
+    await assert.rejects(copyImageBlobToClipboard(image), /not supported/);
+    reject(new Error("Encoder failed after support check"));
+    // An unowned normalized-image promise would fail node:test on this turn.
+    await new Promise(resolve => setImmediate(resolve));
+  } finally {
+    restoreNavigator();
+    restoreItem();
   }
 });

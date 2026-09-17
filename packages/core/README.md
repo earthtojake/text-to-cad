@@ -116,7 +116,8 @@ protocol relationship never imports Python or discovers an interpreter.
 
 ```
 src/
-  client/          # explicit HTTP client, catalog and render-session lifetimes
+  client/          # CAD service/resource contracts, HTTP adapter and worker tickets
+  prompt/          # typed context bundles, identity/targets and pure serialization
   common/          # rendering + runtime entries shared by every consumer:
                    #   cadScene (scene build), renderMeshScene/renderModel/
                    #   renderOptions (stills), headlessRenderEntry (the
@@ -174,9 +175,12 @@ its metadata. Partial replies preserve other resolved entries; newer complete
 entries and directory removals still invalidate them. A cancelled or older
 request cannot overwrite a newer file revision.
 
-`requestSurfaces`, `cancelSurfaceRequest` and `editingPreview` are explicit,
-origin-bound HTTP methods. They consume immutable runtime views and preview
-announcements; no client reads model source or starts a source build.
+`CadWorkspaceService` exposes typed surface resolution, preview observation and
+a scoped `resources` provider. Its HTTP adapter owns the protocol; renderers
+consume domain results and resource tickets. See [workspace services and resource
+transport](docs/workspace-resources.md) for worker transfer, nested dependencies,
+cache generations and the standalone static-HTTP default. No client reads model
+source or starts a source build.
 
 Inspect and Render each resolve their fixed scene base. Legacy host theme input
 cannot replace either base.
@@ -196,3 +200,14 @@ Changes consumed by the bundlers require `scripts/bundle/bundle.sh`, followed
 by `scripts/bundle/bundle.sh --check`. Generated runtimes are wheel build
 outputs; the source here remains the reviewable implementation. Do not change
 canonical release versions during normal development.
+
+## Portable prompt context
+
+`@hardcore/core/prompt` exports lightweight non-React bundle/reference types,
+runtime validation and canonical text serialization. Text, typed resource
+references and attachments travel in one ordered, immutable snapshot with an
+operation ID; attachment relationships name reference parts. Text ranges use
+zero-based UTF-16 coordinates with an exclusive end. CAD targets retain the
+existing selector grammar and document revision, without interpreting a code
+range as a CAD fragment. Apps own clipboard/draft delivery, MIME/size limits and
+acknowledged outcomes; this package never submits a prompt or knows a session.

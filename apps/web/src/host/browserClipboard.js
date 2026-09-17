@@ -138,6 +138,8 @@ export async function copyImageBlobToClipboard(blobOrPromise, { type = "image/pn
   const ClipboardItemCtor = globalThis.ClipboardItem;
   const normalizedType = String(type || "image/png").trim() || "image/png";
   const blobPromise = Promise.resolve(blobOrPromise).then((blob) => normalizeClipboardImageBlob(blob, normalizedType));
+  // Own the encoder even when support checks or ClipboardItem construction fail.
+  void blobPromise.catch(() => {});
 
   if (!clipboard?.write || typeof ClipboardItemCtor !== "function") {
     throw new Error("Clipboard image copy is not supported in this browser");

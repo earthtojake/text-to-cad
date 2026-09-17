@@ -1,3 +1,4 @@
+import { createHttpCadResourceProvider } from "../../client/resources.js";
 let glbWorker = null;
 let nextRequestId = 1;
 const pendingRequests = new Map();
@@ -42,6 +43,17 @@ function ensureGlbWorker() {
     if (!request) {
       return;
     }
+    if (message.type === "resource") {
+      const provider = request.resources || createHttpCadResourceProvider();
+      Promise.resolve().then(() => provider.readBytes(provider.resolveDependency(request.url, message.reference), {
+        signal: request.signal, maxBytes: 64 * 1024 * 1024,
+      })).then(bytes => {
+        if (pendingRequests.has(message.id)) glbWorker?.postMessage({ type: "resource", resourceId: message.resourceId, bytes }, [bytes]);
+      }, error => {
+        if (pendingRequests.has(message.id)) glbWorker?.postMessage({ type: "resource", resourceId: message.resourceId, error: error.message });
+      });
+      return;
+    }
     pendingRequests.delete(message.id);
     request.cleanup();
     if (message.ok) {
@@ -61,7 +73,9 @@ function ensureGlbWorker() {
   return glbWorker;
 }
 
-export function loadGlbMeshDataInWorker(url, { signal } = {}) {
+export function loadGlbMeshDataInWorker(url, { signal, resources } = {}) {
+  const resourceSignal = resources?.signal;
+  signal = signal && resourceSignal ? AbortSignal.any([signal, resourceSignal]) : signal || resourceSignal;
   const worker = ensureGlbWorker();
   if (!worker) {
     return null;
@@ -86,10 +100,20 @@ export function loadGlbMeshDataInWorker(url, { signal } = {}) {
     pendingRequests.set(id, {
       resolve,
       reject,
+      resources, url, signal,
       cleanup
     });
     signal?.addEventListener?.("abort", abort, { once: true });
-    worker.postMessage({ type: "loadGlb", id, url });
+    const post = resource => {
+      if (!pendingRequests.has(id)) return;
+      try { worker.postMessage({ type: "loadGlb", id, url, resource }, resource?.kind === "bytes" ? [resource.bytes] : []); }
+      catch (error) { pendingRequests.delete(id); cleanup(); reject(error); }
+    };
+    if (resources) resources.workerTicket(url, { signal }).then(post, error => {
+      if (!pendingRequests.delete(id)) return;
+      cleanup(); reject(error);
+    });
+    else post({ kind: "url", url });
   });
 }
 

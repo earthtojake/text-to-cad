@@ -1,7 +1,8 @@
 import { useSyncExternalStore, type ComponentType } from 'react';
 import type { FileActivity, FileRendererProps, JsonValue } from '../../file-viewer/types.js';
-import type { CadClient, CadEntry, CadRenderSession, CadServerInfo } from '@hardcore/core/client';
-import type { CadCapture, CadCommands, CadPromptContext, CadReference, PreparedCadDocument } from './index.js';
+import type { CadWorkspaceService, CadEntry, CadRenderSession, CadServerInfo } from '@hardcore/core/client';
+import type { CadCommands, CadCommandSource, CadRendererSlots, PreparedCadDocument } from './index.js';
+import type { ResourceRef } from '@hardcore/core/prompt';
 import type { CadPreferences } from './preferences.js';
 import CadFileView from './file-view/CadFileView.js';
 
@@ -11,7 +12,7 @@ const getEmptyCommands = () => emptyCommands;
 interface CadSurfaceProps {
   preferences: CadPreferences;
   onPreferenceChange(patch: Partial<CadPreferences>): void;
-  client: CadClient;
+  client: CadWorkspaceService;
   entry: CadEntry;
   serverInfo: CadServerInfo;
   renderSession: CadRenderSession;
@@ -27,9 +28,9 @@ interface CadSurfaceProps {
   onStateChange(state: JsonValue): void;
   selectReference?: CadCommands['selectReference'];
   captureRequest?: CadCommands['captureRequest'];
-  onReference?: (reference: CadReference) => void;
-  onPromptContext?: (context: CadPromptContext) => void;
-  onCapture?: (capture: CadCapture) => void;
+  acknowledgeCommand?: CadCommandSource['acknowledge'];
+  documentResource: ResourceRef;
+  slots?: CadRendererSlots;
 }
 const Surface = CadFileView as ComponentType<CadSurfaceProps>;
 
@@ -59,10 +60,10 @@ export default function CadRenderer(props: FileRendererProps<PreparedCadDocument
     onReload={props.reload}
     state={props.state}
     onStateChange={props.onStateChange}
-    onReference={data.services.onReference}
-    onPromptContext={data.services.onPromptContext}
-    onCapture={data.services.onCapture}
+    documentResource={{ kind: 'workspace-file', workspaceId: props.source.id, path: props.file.path, revision: String(data.entry.hash || props.file.revision || '') }}
+    slots={data.services.slots}
     selectReference={commands.selectReference}
     captureRequest={commands.captureRequest}
+    acknowledgeCommand={data.services.commands?.acknowledge}
   />;
 }

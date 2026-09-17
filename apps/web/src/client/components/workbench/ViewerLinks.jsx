@@ -36,7 +36,7 @@ import {
   TooltipTrigger
 } from "@hardcore/ui/primitives/tooltip";
 import { cn } from "@hardcore/ui/utils";
-import { copyTextToClipboard } from "@hardcore/ui/clipboard";
+import { copyTextToClipboard } from "../../../host/browserClipboard.js";
 import viewerPackage from "../../../../package.json";
 
 function GitHubMark(props) {

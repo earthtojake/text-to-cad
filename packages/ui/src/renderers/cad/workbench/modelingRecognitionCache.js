@@ -1,16 +1,18 @@
+import { cadResourceCacheKey } from "@hardcore/core/client";
 // Hundreds of small unique parts can fit well below the byte budget. Keep a
 // whole ordinary assembly warm instead of evicting its tail on every reopen.
 const MAX_ENTRIES = 512;
 const MAX_BYTES = 8 * 1024 * 1024;
 
 /** Recognition is component-local; occurrence placement and selection remain file-owned. */
-export function modelingRecognitionKey(identity, surfUrl) {
+export function modelingRecognitionKey(identity, surfUrl, { resources } = {}) {
+  const scope = resources ? cadResourceCacheKey(resources, "") : "static";
   if (identity?.surfaceInput && identity?.surfaceObject) {
-    return JSON.stringify(["surface", identity.surfaceInput, identity.surfaceObject]);
+    return JSON.stringify([scope, "surface", identity.surfaceInput, identity.surfaceObject]);
   }
   if (!surfUrl) return "";
   // Older static packages carry an immutable component URL instead of D/O.
-  return JSON.stringify(["url", new URL(surfUrl, globalThis.location?.href || "http://localhost/").href]);
+  return JSON.stringify([scope, "url", String(surfUrl)]);
 }
 
 /** Store JSON metadata only: no SURF arrays, mutable scene, worker or pending promise. */

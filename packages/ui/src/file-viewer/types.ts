@@ -1,5 +1,7 @@
+import type { ResourceRef } from "@hardcore/core/prompt";
 import type { ComponentType, ReactNode } from "react";
-import type { EntryAction, FilePanel, MenuEntryTarget, Platform } from "./navigation/index.js";
+import type { EntryAction, FilePanel, Platform } from "./navigation/index.js";
+import type { ViewerHost } from "../host/types.js";
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 export interface FileEntry { path: string; name: string; kind: "file" | "directory" }
@@ -19,18 +21,26 @@ export interface TextDocument {
   readOnly?: boolean;
 }
 /** A source owns the URL; each successful read supplies a distinct release lease. */
-export interface ManagedFileAsset { url: string; mime?: string; release: () => void }
+export interface ManagedFileAsset { url: string; mime?: string; resource?: ResourceRef; byteLength?: number; release: () => void }
+export type FileFailureCode = "denied" | "not-found" | "already-exists" | "unsupported" | "conflict" | "error";
+export type FileChange =
+  | { kind: "content" | "metadata"; path: string; revision?: string }
+  | { kind: "added" | "deleted"; path: string; entryKind: FileEntry["kind"] }
+  | { kind: "moved"; from: string; to: string; entryKind: FileEntry["kind"] };
+export interface FileChanges { sourceId: string; changes: readonly FileChange[] }
+export type FileMutationResult =
+  | { status: "committed"; path: string; change: FileChange }
+  | { status: "cancelled" }
+  | { status: "failed"; code: FileFailureCode; message: string };
 export type WriteResult =
   | { status: "saved"; document: TextDocument }
-  | { status: "conflict"; message?: string }
-  | { status: "error"; message: string };
-export type ExternalEntryAction = Exclude<EntryAction, "open" | "rename" | "new-file" | "new-folder" | "trash">;
+  | { status: "conflict"; message?: string; actualRevision?: string }
+  | { status: "cancelled" }
+  | { status: "error"; code?: FileFailureCode; message: string };
+export type ExternalEntryAction = Exclude<EntryAction, "open" | "rename" | "new-file" | "new-folder" | "trash" | "duplicate">;
 export interface FileActions {
   platform?: Platform;
-  perform?: Partial<Record<ExternalEntryAction, (entry: MenuEntryTarget) => void | Promise<void>>>;
-  rename?: (entry: MenuEntryTarget, name: string) => Promise<string | null>;
-  create?: (directory: string, kind: "file" | "directory", name: string) => Promise<string | null>;
-  trash?: (entry: MenuEntryTarget) => Promise<boolean>;
+  perform?: Partial<Record<ExternalEntryAction, (entry: Pick<FileEntry, "path" | "kind">) => void | Promise<void>>>;
 }
 export interface FileSource {
   /** Stable workspace/root identity. Connection ports must never be used here. */
@@ -41,10 +51,15 @@ export interface FileSource {
   paths?: (options: { signal: AbortSignal }) => Promise<readonly string[]>;
   readText?: (path: string, options: { signal: AbortSignal }) => Promise<TextDocument>;
   readAsset?: (path: string, options: { signal: AbortSignal }) => Promise<ManagedFileAsset>;
+  /** Revision validation precedes an atomic replacement. Cancellation after dispatch cannot undo a commit. */
   writeText?: (path: string, options: { content: string; expectedRevision?: string; signal: AbortSignal }) => Promise<WriteResult>;
-  subscribe?: (listener: (change: { sourceId: string; paths: readonly string[] }) => void) => () => void;
-  actions?: FileActions;
+  rename?: (path: string, options: { name: string; signal: AbortSignal }) => Promise<FileMutationResult>;
+  create?: (directory: string, options: { kind: FileEntry["kind"]; name: string; signal: AbortSignal }) => Promise<FileMutationResult>;
+  duplicate?: (path: string, options: { signal: AbortSignal }) => Promise<FileMutationResult>;
+  trash?: (path: string, options: { signal: AbortSignal }) => Promise<FileMutationResult>;
+  subscribe?: (listener: (change: FileChanges) => void) => () => void;
 }
+export type DocumentSaveResult = WriteResult | { status: "unavailable" } | { status: "stale"; committed?: boolean };
 export interface FileViewerState {
   panel: string | null;
   panelWidth: number;
@@ -63,7 +78,7 @@ export interface DocumentSession {
   stale: boolean;
   error: string | null;
   setValue: (value: string) => void;
-  save: () => Promise<void>;
+  save: () => Promise<DocumentSaveResult>;
   reload: () => void;
   keepMine: () => void;
 }
@@ -88,7 +103,7 @@ export interface RendererViewProps {
   onChromeVisibilityChange: (visible: boolean) => void;
   /** Renderer work that a host may present beside the filename. */
   onActivityChange: (activity: FileActivity | null) => void;
-  onOpenFile: (path: string) => void;
+  onOpenFile: (path: string, options?: { target: "current" | "new" }) => void;
   appearance: { colorScheme: "light" | "dark" };
   state: JsonValue | undefined;
   onStateChange: (state: JsonValue) => void;
@@ -120,12 +135,10 @@ export interface RendererRegistration {
 }
 export interface FileViewerProps {
   file: string | FileMetadata | null;
-  source: FileSource;
+  host: ViewerHost;
   renderers: readonly RendererRegistration[];
   state: FileViewerState;
   onStateChange: (next: FileViewerState) => void;
-  onOpenFile: (path: string, options?: { target: "current" | "new" }) => void;
-  appearance?: { colorScheme: "light" | "dark" };
   leading?: ReactNode;
   /** Override the selected path shown by breadcrumbs and tree, e.g. before a catalog resolves. */
   navigationPath?: string | null;

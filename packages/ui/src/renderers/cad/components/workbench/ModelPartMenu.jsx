@@ -15,7 +15,7 @@ export default function ModelPartMenu({node, controls, disabled, selectDisabled,
         selectDisabled={selectDisabled || hidden} showIsolate={controls.isAssemblyView} isolateDisabled={disabled}
         showHideOther={false} showVisibility={!focused} visibilityDisabled={disabled}
         showExitAllIsolate={controls.focusedNodeIds?.length > 0} exitAllIsolateDisabled={disabled}
-        onAddToPrompt={hostReference ? ()=>controls.onCopyTreeNodeReference?.(id,{toPrompt:true}) : undefined}
+        onAddToPrompt={hostReference?.canAddToPrompt ? ()=>controls.onCopyTreeNodeReference?.(id,{toPrompt:true}) : undefined}
         onCopyReference={()=>controls.onCopyTreeNodeReference?.(id)} onSelect={onSelect}
         onIsolate={()=>focused ? controls.onUnfocusTreeNode?.(id) : controls.onFocusTreeNode?.(id)}
         onToggleVisibility={()=>controls.onTogglePartVisibility?.(id)} onExitAllIsolate={controls.onExitAllIsolate}/>

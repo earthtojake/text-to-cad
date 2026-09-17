@@ -3,7 +3,8 @@
 The CAD renderer is the existing viewport, floating toolbar, file sheets,
 reference interactions, measurement and drawing tools, animation,
 loading artwork and alerts, extracted into `@hardcore/ui`. This migration is a
-pure refactor: every app must retain the same UI, UX and functionality. Changing
+behavior-preserving refactor apart from the approved prompt-action mapping and
+reference-tooltip removal described in [ViewerHost](viewer-host.md). Changing
 a default, control, layout, saved preference or interaction requires separate
 work and its own review.
 
@@ -33,12 +34,10 @@ const renderers = [createCadRenderer({ client, preferences })];
 // Keep client, preferences and registrations stable for this host root.
 <FileViewer
   file={path}
-  source={source}
+  host={host}
   renderers={renderers}
   state={viewerState}
   onStateChange={setViewerState}
-  onOpenFile={openFile}
-  appearance={{ colorScheme }}
 />
 ```
 
@@ -73,8 +72,8 @@ assets, which remain inside `@hardcore/core`.
 `CadPreferenceSource` exposes `getSnapshot`, `subscribe` and `update`.
 `createCadPreferences` provides an in-memory implementation and an optional
 host persistence callback. A host can share one source across its CAD panes.
-It contains the shared pose transition preference, the already-seen tutorial
-tips and each file kind's sheet-tab order/split arrangement. It never reads
+It contains the shared pose transition preference and each file kind's
+sheet-tab order/split arrangement. It never reads
 browser storage on import or construction.
 
 App light/dark appearance selects Inspect's fixed workbench basis, including
@@ -96,9 +95,7 @@ Hosts preserve these existing preference keys and precedence when migrating:
 | --- | --- |
 | Directory layout | `cad-viewer:directory-session:v1` (legacy theme fields ignored) |
 | Pose transition preference | `cad-viewer:pose-transition:v1` |
-| Seen tutorial tips | `cad-viewer:tutorial-tips:v1` |
 | Sheet tab order and split arrangement | `cad-viewer:file-sheet-tab-layout:v6` |
-| Tip reset URL | `?resetTips` remains a web-host action |
 | Per-file CAD session | `cad-viewer:file-session:v1:<namespace>:<file>` |
 
 `@hardcore/ui/renderers/cad/state` exports the existing tab/file
@@ -107,22 +104,22 @@ an explicit `{ storage }` supplied by the host. The sheet layout helpers
 `readFileSheetTabLayoutStore(storage)` and
 `writeFileSheetTabLayoutStore(storage, preferences.fileSheetTabs)` likewise use
 only supplied storage. `CAD_LEGACY_PREFERENCE_KEYS`
-exports the directory, pose-transition, tip and sheet-layout key names. Origins are transport locations,
+exports the directory, pose-transition and sheet-layout key names. Origins are transport locations,
 not persistence namespaces for new state.
 
-## Reference and capture callbacks
+## Prompt references, captures and extensions
 
-`onReference` receives `{ file, selector, label?, text? }`. `file` is the complete
-served-root-relative path; `selector` excludes the `#`, and is empty for the
-whole file. Clipboard references keep the original shortest unique suffix.
-Copy actions stay clipboard actions; Add to prompt invokes the host callback.
-Reference text JSON-quotes filenames containing spaces or delimiters, for example
-`"Hex Drive Screw (2).STEP"#o1`. The callback's `file` remains the literal path;
-quoting only protects the text form through clipboard and prompt round trips.
+References, inspection text and PNG captures produce one `PromptContext` through
+`host.promptContext`. The old `onReference`, `onPromptContext` and `onCapture`
+callbacks are removed. Workspace/path/revision identity and typed targets are
+preserved; a capture names the references it depicts. Ordinary explicit copy
+controls use `host.clipboard`. `CadViewer` only produces screenshot pixels.
+The port and app adapters own delivery and return an acknowledged outcome.
 
-`onCapture` receives `{ blob, file, references? }`: the original PNG composite
-and its selected canonical references, captured together before the async
-image operation. The host decides how to attach it to its composer.
+`slots.selectionExtras` is the optional app-contributed selection interface.
+Its typed context builder shares the same capture/reference pipeline; it does
+not expose the CAD scene. See [ViewerHost](viewer-host.md) for lifetime, focus,
+selection invalidation, supported content and clipboard representation limits.
 
 An optional `CadCommandSource` has the same subscription shape and publishes
 `selectReference: { selector, key? }` or `captureRequest: { key }`. A fresh key
@@ -132,6 +129,11 @@ matching row's ancestors, and scrolls it into view. Repeating the request
 reveals the existing selection again without toggling it off; a face-group
 reference keeps the group highlighted and reveals its active face.
 Both toolbar capture and host capture commands use the same implementation.
+Hosts can provide `acknowledge(kind, key)` to consume an admitted command. Desktop
+binds commands to the active project/tab/path/root and removes only the matching
+nonce, so an old acknowledgement cannot clear a newer request or replay after a
+remount. A capture waits for ready geometry; a selected reference waits until it
+can resolve against the current model.
 
 `@hardcore/ui/renderers/cad/presentation` exports the lightweight
 `ViewerLoadingOverlay`, `MissingFileAlert` and `StatusToast` for host bootstrap and generic
@@ -140,7 +142,7 @@ CAD artwork. They mount inside a relative container and require no CAD client.
 
 ## Lifetimes
 
-The explicit `CadClient` owns its catalog and request controllers. The first
+The injected `CadWorkspaceService` owns its catalog and request controllers. The first
 subscriber starts the catalog and its two-second poll; further subscribers
 share them. The last unsubscribe stops polling. The host supplies `shouldPoll`
 and connects window focus and visible `visibilitychange` events to
@@ -177,13 +179,13 @@ workers, pending work, cameras, selections and pose state are never retained.
 Refinement drops the old snapshot when its replacement commits; closing the
 renderer captures the latest complete working set.
 
-Reuse requires the same transport origin, stable root, file, entry/document and
+Reuse requires the same resource-provider generation, stable root, file, entry/document and
 appearance revision, package URL and runtime descriptor view. Anonymous clients
 remain object-isolated. Each component retains its exact surface-input/object
 binding and concrete tessellation key and level. Editing previews, changed
-revisions and runtime replacement views invalidate the snapshot. A fresh client
-for the same origin and root can therefore reopen a closed tab while the
-bounded entry survives. Mutable native GLB scenes and animation mixers remain
+revisions and runtime replacement views invalidate the snapshot. Tabs borrowing the same workspace service can reopen while the bounded entry
+survives. A replacement service or changed backend identity starts a new resource
+generation, preventing URL cache reuse across changed credentials or origins. Mutable native GLB scenes and animation mixers remain
 separately owned.
 
 Worker infrastructure is reference-counted across live render sessions. The
@@ -229,7 +231,7 @@ for the selected leaf part; selecting another part in Tree changes that target.
 Opening a STEP starts with render geometry; activating Select or Measure requests
 exact inspection topology when it is needed.
 Shift-click adds/removes entities. Escape clears the
-selection after any open menu or first-use tip has been dismissed. Input fields
+selection after any open menu has been dismissed. Input fields
 keep their own Escape behaviour.
 
 Measure has a temporary panel below its toolbar button, with Any geometry,
@@ -330,7 +332,7 @@ same-kind operations into inspection folders, never inferred patterns.
 Annotation-only components show a no-faces state. Recognition continues while
 the current file’s Geometry/Features views switch, and stops on disposal or when the
 viewer invalidates its geometry. Completed recognition metadata is retained across
-file mounts under the exact surface input/object identity, or an origin-qualified
+file mounts under the exact surface input/object identity, or a provider-scoped
 immutable SURF URL for static packages. Its separate LRU holds at most 512 unique
 components and 8 MiB of serialized metadata. The count guard accommodates
 assemblies with hundreds of small parts; the byte limit still evicts large
@@ -338,7 +340,7 @@ metadata results. It retains no SURF bytes, workers,
 pending work or failures. The descriptor uses the existing package cache. A new
 surface identity reruns recognition, and retry processes only failed components.
 On a warm reopen, recognition reads the accepted component identities from the
-completed package only after the root, origin, entry revision and runtime
+completed package only after the root, provider generation, entry revision and runtime
 descriptor all match. This copies small identity records once, without composing
 or copying geometry. Completed metadata then needs no surface request or worker;
 a missing package identity or evicted recognition result follows the usual exact
@@ -409,7 +411,7 @@ Inspect arrangement. Material overlays and undo are per-file session state.
 
 The host-supplied render session owns its tessellation cache and worker leases.
 Photographic scene state is a separate value. Surface derivation and preview
-requests use that file's client origin and abort when the consumer leaves.
+requests use that file's injected service and abort when the consumer leaves.
 The Features inspector resolves exact surfaces on demand through the same client.
 
 File status reports Opening, Updating, Limited detail and actionable failures.

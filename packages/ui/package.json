@@ -39,10 +39,6 @@
     "./styles.css": "./dist/styles.css",
     "./tokens.css": "./dist/styles/tokens.css",
     "./package.json": "./package.json",
-    "./clipboard": {
-      "types": "./dist/lib/clipboard.d.ts",
-      "import": "./dist/lib/clipboard.js"
-    },
     "./renderers/code/editor": {
       "types": "./dist/renderers/code/editor/index.d.ts",
       "import": "./dist/renderers/code/editor/index.js"
@@ -58,6 +54,10 @@
     "./renderers/cad/empty": {
       "types": "./dist/renderers/cad/empty.d.ts",
       "import": "./dist/renderers/cad/empty.js"
+    },
+    "./host": {
+      "types": "./dist/host/index.d.ts",
+      "import": "./dist/host/index.js"
     }
   },
   "scripts": {

@@ -48,6 +48,7 @@ import { skillsContract } from "./skills";
 import { cadEvents, cadIpc } from "./cad";
 import { explorerEvents, explorerIpc } from "./explorer";
 import { gitIpc } from "./git";
+import { clipboardContract } from "./clipboard";
 
 export * from "./define";
 export * from "./agent-options";
@@ -128,6 +129,8 @@ export const ipcContract = defineIpc({
     /** Reveals a path in Finder/Explorer. */
     showItemInFolder: invoke(z.object({ path: z.string().min(1) }), z.void()),
   },
+
+  ...clipboardContract,
 
   // The branches a phase owns are declared in their own file and spread in
   // here, so this map stays a map. `explorer.*` and `terminal.*` come from

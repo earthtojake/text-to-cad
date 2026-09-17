@@ -18,6 +18,7 @@ import { agentOptionsHandlers } from "./agent-options";
 import { agentsHandlers } from "./agents";
 import { appHandlers } from "./app";
 import { cadHandlers } from "./cad";
+import { clipboardHandlers } from "./clipboard";
 import { dialogsHandlers } from "./dialogs";
 import { explorerHandlers, initExplorerServices } from "./explorer";
 import { gitHandlers } from "./git";
@@ -151,6 +152,7 @@ const handlers = {
   ...explorerHandlers,
   ...gitHandlers,
   ...cadHandlers,
+  ...clipboardHandlers,
 } satisfies Parameters<typeof registerIpc<IpcContract>>[1];
 
 // The words on the native chooser are the words on the control that opened

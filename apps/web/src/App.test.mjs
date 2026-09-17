@@ -12,7 +12,7 @@ const require = createRequire(import.meta.url);
 const temporary = await mkdtemp(join(tmpdir(), 'hardcore-web-app-'));
 const output = join(temporary, 'app.mjs');
 await build({
-  stdin: { contents: `export {default as App} from './App.tsx'; export {act,createElement} from 'react'; export {createRoot} from 'react-dom/client'; export {snapshot} from '@hardcore/ui/file-viewer'; export {topBarSnapshot} from './client/components/workbench/ViewerTopBar.jsx'; export {autoReloadOptions} from '@hardcore/ui/renderers/cad/presentation';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
+  stdin: { contents: `export {default as App} from './App.tsx'; export {act,createElement} from 'react'; export {createRoot} from 'react-dom/client'; export {snapshot} from '@hardcore/ui/file-viewer'; export {topBarSnapshot} from './client/components/workbench/ViewerTopBar.jsx'; export {autoReloadOptions} from './host/useViewerAutoReload.js';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
   bundle: true, platform: 'node', format: 'esm', jsx: 'automatic', outfile: output,
   banner: { js: `import {createRequire} from 'node:module'; const require=createRequire(import.meta.url);` },
   plugins: [{ name: 'host-boundaries', setup(plugin) {
@@ -20,11 +20,12 @@ await build({
       path: args.kind.startsWith('require') ? require.resolve(args.path) : pathToFileURL(require.resolve(args.path)).href,
       external: true,
     }));
-    plugin.onResolve({ filter: /^@hardcore\/ui\/file-viewer$|^@hardcore\/ui\/renderers\/cad$|^@hardcore\/ui\/renderers\/cad\/(presentation|empty)$|ViewerTopBar\.jsx$/ }, args => ({ path: args.path, namespace: 'host-test' }));
+    plugin.onResolve({ filter: /^@hardcore\/ui\/file-viewer$|^@hardcore\/ui\/renderers\/cad$|^@hardcore\/ui\/renderers\/cad\/(presentation|empty)$|ViewerTopBar\.jsx$|useViewerAutoReload\.js$/ }, args => ({ path: args.path, namespace: 'host-test' }));
     plugin.onLoad({ filter: /.*/, namespace: 'host-test' }, args => {
       if (args.path.endsWith('/file-viewer')) return { contents: `let current; export function FileViewer(props){current=props; return null;} export const snapshot=()=>current;`, loader: 'js' };
-      if (args.path.endsWith('/cad')) return { contents: `export {createCadPreferences} from ${JSON.stringify(fileURLToPath(new URL('../../../packages/ui/src/renderers/cad/preferences.ts', import.meta.url)))}; export const createCadRenderer=()=>({id:'cad'});`, loader: 'js', resolveDir: fileURLToPath(new URL('.', import.meta.url)) };
-      if (args.path.endsWith('/presentation')) return { contents: 'let reloadOptions;export const autoReloadOptions=()=>reloadOptions;export const useViewerAutoReload=(_server,options)=>{reloadOptions=options;return false;};export const MissingFileAlert=()=>null;export const ViewerLoadingOverlay=()=>null;export const StatusToast=()=>null;', loader: 'js' };
+      if (args.path.endsWith('/cad')) return { contents: `export {createCadPreferences,CAD_LEGACY_PREFERENCE_KEYS} from ${JSON.stringify(fileURLToPath(new URL('../../../packages/ui/src/renderers/cad/preferences.ts', import.meta.url)))}; export const createCadRenderer=()=>({id:'cad'});`, loader: 'js', resolveDir: fileURLToPath(new URL('.', import.meta.url)) };
+      if (args.path.endsWith('useViewerAutoReload.js')) return { contents: 'let reloadOptions;export const autoReloadOptions=()=>reloadOptions;export const useViewerAutoReload=(_server,options)=>{reloadOptions=options;return false;};', loader: 'js' };
+      if (args.path.endsWith('/presentation')) return { contents: 'export const MissingFileAlert=()=>null;export const ViewerLoadingOverlay=()=>null;export const StatusToast=()=>null;', loader: 'js' };
       if (args.path.endsWith('/empty')) return { contents: 'export const EmptyCadBackdrop=({children})=>children;', loader: 'js' };
       return { contents: 'let current; export default function ViewerTopBar(props){current=props; return null} export const topBarSnapshot=()=>current;', loader: 'js' };
     });
@@ -73,10 +74,10 @@ test('web host preserves compact navigation, history, root state and focus refre
     assert.equal(snapshot().narrowCrumbs, false);
     assert.equal(window.document.title, 'text-to-cad | one.step');
     const historyLength = window.history.length;
-    await act(() => snapshot().onOpenFile('missing.step'));
+    await act(() => snapshot().host.navigation.openFile('missing.step'));
     assert.equal(window.history.length, historyLength);
     assert.equal(snapshot().file, 'one.step');
-    await act(() => snapshot().onOpenFile('folder\\two.step'));
+    await act(() => snapshot().host.navigation.openFile('folder\\two.step'));
     assert.equal(snapshot().file, 'folder/two.step');
     assert.equal(snapshot().state.panel, '');
     assert.equal(window.history.length, historyLength + 1);
@@ -97,7 +98,7 @@ test('web host preserves compact navigation, history, root state and focus refre
     await act(() => window.document.dispatchEvent(new window.Event('visibilitychange')));
     assert.equal(calls.length, 2);
     await act(() => root.render(createElement(App, { client, server: { rootId: 'b' } })));
-    assert.equal(snapshot().source.id, 'b');
+    assert.equal(snapshot().host.files.id, 'b');
     assert.equal(snapshot().state.panel, 'tree');
     assert.equal(JSON.parse(window.sessionStorage.getItem('hardcore:file-viewer:v1:a')).panel, '');
     assert.equal(JSON.parse(window.sessionStorage.getItem('hardcore:file-viewer:v1:b')).panel, 'tree');

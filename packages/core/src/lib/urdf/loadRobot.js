@@ -44,20 +44,20 @@ export function urdfMeshUrls(urdfData) {
   )];
 }
 
-async function loadRobotDescription(url, kind, { signal, urdfUrl = "" } = {}) {
+async function loadRobotDescription(url, kind, { signal, resources, urdfUrl = "" } = {}) {
   const normalizedKind = String(kind || "").trim().toLowerCase() || robotSourceKindFromUrl(url);
   if (normalizedKind === "srdf") {
     // An SRDF describes semantics for a URDF; the geometry still comes from the pair.
-    const payload = await loadRenderSrdf(url, { signal, urdfUrl });
+    const payload = await loadRenderSrdf(url, { signal, resources, urdfUrl });
     return payload?.urdfData || null;
   }
   if (normalizedKind === "sdf") {
-    return loadRenderSdf(url, { signal });
+    return loadRenderSdf(url, { signal, resources });
   }
-  return loadRenderUrdf(url, { signal });
+  return loadRenderUrdf(url, { signal, resources });
 }
 
-async function loadMeshesByUrl(meshUrls, { signal, concurrency = 6 } = {}) {
+async function loadMeshesByUrl(meshUrls, { signal, resources, concurrency = 6 } = {}) {
   const meshesByUrl = new Map();
   const queue = [...meshUrls];
   const workers = Array.from({ length: Math.max(1, Math.min(concurrency, queue.length)) }, async () => {
@@ -69,7 +69,7 @@ async function loadMeshesByUrl(meshUrls, { signal, concurrency = 6 } = {}) {
       // A link whose mesh will not load is skipped rather than fatal: a robot missing one
       // visual should still render, the same way the viewer draws what it has.
       try {
-        const mesh = await loadRenderMeshByUrl(meshUrl, { signal, fallback: "stl" });
+        const mesh = await loadRenderMeshByUrl(meshUrl, { signal, resources, fallback: "stl" });
         if (mesh) {
           meshesByUrl.set(meshUrl, mesh);
         }
@@ -89,18 +89,19 @@ export async function loadRobotMeshData(url, {
   jointValues = null,
   urdfUrl = "",
   signal = null,
+  resources,
   concurrency = 6
 } = {}) {
   const sourceUrl = String(url || "").trim();
   if (!sourceUrl) {
     throw new Error("loadRobotMeshData requires a robot description URL");
   }
-  const urdfData = await loadRobotDescription(sourceUrl, kind, { signal, urdfUrl });
+  const urdfData = await loadRobotDescription(sourceUrl, kind, { signal, resources, urdfUrl });
   if (!urdfData) {
     throw new Error(`Robot description did not parse: ${sourceUrl}`);
   }
   const meshUrls = urdfMeshUrls(urdfData);
-  const meshesByUrl = await loadMeshesByUrl(meshUrls, { signal, concurrency });
+  const meshesByUrl = await loadMeshesByUrl(meshUrls, { signal, resources, concurrency });
   if (!meshesByUrl.size && meshUrls.length) {
     throw new Error(`No link mesh loaded for robot: ${sourceUrl}`);
   }

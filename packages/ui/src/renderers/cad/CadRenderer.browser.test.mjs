@@ -71,7 +71,10 @@ test('the shared CAD renderer resolves deferred files, reuses warm assets and re
   assert.equal(captured.file, 'part.stl');
   assert.equal(captured.type, 'image/png');
   assert.ok(captured.size > 100);
-  assert.deepEqual(captured.references, []);
+  assert.equal(captured.references.length, 1);
+  assert.deepEqual(captured.references[0].target, { kind: 'whole-resource' });
+  assert.equal(captured.references[0].resource.workspaceId, 'one');
+  assert.equal(captured.references[0].resource.path, 'part.stl');
   assert.equal(await first.locator('[data-file-sheet="STL"]').count(), 0);
   await page.evaluate(() => window.cadHarness.second(true));
   await page.getByTestId('two').getByRole('textbox', { name: 'Zoom level percent' }).waitFor();
@@ -89,6 +92,23 @@ test('the shared CAD renderer resolves deferred files, reuses warm assets and re
   await first.locator('[data-slot="cad-file-view"]').waitFor({ state: 'detached' });
   await page.evaluate(() => window.cadHarness.mounted(true));
   await first.getByRole('textbox', { name: 'Zoom level percent' }).waitFor();
+  // The toolbar mounts with its default 100% before the viewport adopts the mesh
+  // and publishes its restored camera. Wait for the actual presented frame,
+  // not for the expected zoom value or an arbitrary settling delay.
+  const restoreDiagnostic = await page.evaluate(() => {
+    const pane = document.querySelector('[data-testid="one"]');
+    const state = Object.values(window.cadHarness.state.renderers || {})[0];
+    return { zoom: pane.querySelector('[aria-label="Zoom level percent"]')?.value,
+      busy: pane.querySelector('[aria-busy]')?.getAttribute('aria-busy'),
+      savedCamera: state?.fileSession?.slices?.render?.cadCamera };
+  });
+  await page.waitForFunction(() => {
+    const pane = document.querySelector('[data-testid="one"]');
+    return pane?.querySelector('[aria-busy="false"] canvas') &&
+      !pane.querySelector('[data-viewer-transition], [data-file-status] .animate-spin');
+  });
+  t.diagnostic(`Remount camera readiness: ${JSON.stringify({ ...restoreDiagnostic,
+    presentedZoom: await first.getByRole('textbox', { name: 'Zoom level percent' }).inputValue() })}`);
   // Serialized camera state restores in its file session; a sibling renderer
   // still opens at its own default zoom. Runtime-only scope is not persisted.
   assert.equal(await first.getByRole('textbox', { name: 'Zoom level percent' }).inputValue(), '110%');
@@ -128,5 +148,6 @@ test('the shared CAD renderer resolves deferred files, reuses warm assets and re
   assert.equal(await page.getByTestId('two').getByRole('button', { name: 'Viewing mode: Inspect. Switch to Render', exact: true }).count(), 1);
   await first.getByRole('button', { name: 'Viewing mode: Render. Switch to Inspect', exact: true }).click();
   await first.getByRole('button', { name: 'Viewing mode: Inspect. Switch to Render', exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => window.cadHarness.captures.length), 1, 'an acknowledged capture does not replay after remount');
   assert.deepEqual(errors, []);
 });

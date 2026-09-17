@@ -67,8 +67,8 @@ export function subscribeToMain(): () => void {
       useRuntime.getState().receive(status);
     }),
     window.hardcore.on("files.changed", ({ projectId, root, changes }) => {
-      const paths = changes.map((change) => change.path);
-      useExplorer.getState().receiveChanges(projectId, root, paths);
+      const paths = changes.flatMap(change => change.kind === "moved" ? [change.previousPath, change.path] : [change.path]);
+      useExplorer.getState().receiveChanges(projectId, root, changes);
       // A path the transcript showed as text may exist now, or one it linked
       // may be gone: the next render asks again.
       usePathLinks.getState().invalidate({ projectId, root }, paths);

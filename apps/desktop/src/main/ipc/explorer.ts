@@ -9,6 +9,7 @@
  * project is gone, which is the honest answer to "read this file in a project
  * I removed" and stops a stale tab from reading an arbitrary path.
  */
+import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -19,6 +20,7 @@ import { explorerTabs, projects, settings } from "../db/repositories";
 import {
   FileWatchers,
   FsError,
+  FsConflictError,
   createDirectory,
   createFile,
   duplicateEntry,
@@ -36,6 +38,7 @@ import { Terminals } from "../explorer/terminal";
 import * as git from "../projects/git";
 import { projectWorktreeDir, resolveProjectRoot } from "../projects/workspace";
 import type { ExplorerTab, IpcEventChannel, IpcEventPayload } from "../../shared";
+import type { FileChange, FileMutationResult } from "../../shared/ipc/explorer";
 import { IpcError, type IpcContext } from "./register";
 
 /* -------------------------------------------------------------------------- */
@@ -45,6 +48,7 @@ import { IpcError, type IpcContext } from "./register";
 /** `broadcast` from `./index`, taken as an argument rather than imported. */
 type Broadcast = <C extends IpcEventChannel>(channel: C, payload: IpcEventPayload<C>) => void;
 
+let publish: Broadcast | null = null;
 let watchers: FileWatchers | null = null;
 let terminals: Terminals | null = null;
 
@@ -56,6 +60,7 @@ let terminals: Terminals | null = null;
  * the broadcaster — the cycle this argument avoids.
  */
 export function initExplorerServices(broadcast: Broadcast) {
+  publish = broadcast;
   watchers ??= new FileWatchers((root, changes) => {
     // A watched root is a project directory or one of a project's worktrees;
     // the event names both, because a tab knows its root and a strip knows
@@ -169,6 +174,29 @@ function isErrno(error: unknown, code: string): boolean {
     error !== null &&
     (error as NodeJS.ErrnoException).code === code
   );
+}
+
+/** Structured failures survive Electron's error serialization without parsing prose. */
+function fileFailure(error: unknown): { code: "denied" | "not-found" | "already-exists" | "unsupported" | "conflict" | "error"; message: string } {
+  if (error instanceof FsError) return { code: error.code, message: error.message };
+  if (isErrno(error, "ENOENT")) return { code: "not-found", message: "that file is gone" };
+  if (isErrno(error, "EEXIST")) return { code: "already-exists", message: "something with that name is already there" };
+  if (isErrno(error, "EACCES") || isErrno(error, "EPERM")) return { code: "denied", message: "no permission to change that file" };
+  if (error instanceof IpcError) return { code: "denied", message: error.message };
+  return { code: "error", message: "could not change that file" };
+}
+
+function publishChange(at: { projectId: string; root?: string }, change: FileChange) {
+  try { publish?.("files.changed", { projectId: at.projectId, root: at.root ?? null, changes: [change] }); }
+  catch { /* A failed notification cannot turn an already committed mutation into a failed receipt. */ }
+}
+
+async function mutateFile(at: AtPath, operation: (base: string) => Promise<FileChange>): Promise<FileMutationResult> {
+  try {
+    const change = { ...await operation(rootOf(at.projectId, at.root)), mutationId: randomUUID() };
+    publishChange(at, change);
+    return { status: "committed", path: change.path, change };
+  } catch (error) { return { status: "failed", ...fileFailure(error) }; }
 }
 
 /**
@@ -317,7 +345,16 @@ export const explorerHandlers = {
     }: AtPath & {
       content: string;
       expectedRevision?: string;
-    }) => fsCall(() => writeTextFile(rootOf(projectId, root), target, content, expectedRevision)),
+    }) => (async () => {
+      try {
+        const document = await writeTextFile(rootOf(projectId, root), target, content, expectedRevision);
+        publishChange({ projectId, root }, { kind: "changed", path: document.path, directory: false, revision: document.revision });
+        return { status: "saved" as const, document };
+      } catch (error) {
+        if (error instanceof FsConflictError) return { status: "conflict" as const, message: error.message, actualRevision: error.actualRevision };
+        return { status: "error" as const, ...fileFailure(error) };
+      }
+    })(),
 
     readBinary: ({ projectId, root, path: target }: AtPath) =>
       fsCall(() => readBinaryFile(rootOf(projectId, root), target)),
@@ -351,29 +388,37 @@ export const explorerHandlers = {
         shell.showItemInFolder(await resolveInRoot(rootOf(projectId, root), target));
       }),
 
-    createFile: ({ projectId, root, path: directory, name }: AtPath & { name: string }) =>
-      fsCall(() => createFile(rootOf(projectId, root), directory, name)),
+    createFile: (at: AtPath & { name: string }) => mutateFile(at, async base => {
+      const result = await createFile(base, at.path, at.name);
+      return { kind: "added", path: result.path, directory: false };
+    }),
 
-    createDirectory: ({ projectId, root, path: directory, name }: AtPath & { name: string }) =>
-      fsCall(() => createDirectory(rootOf(projectId, root), directory, name)),
+    createDirectory: (at: AtPath & { name: string }) => mutateFile(at, async base => {
+      const result = await createDirectory(base, at.path, at.name);
+      return { kind: "added", path: result.path, directory: true };
+    }),
 
-    rename: ({ projectId, root, path: target, name }: AtPath & { name: string }) =>
-      fsCall(() => renameEntry(rootOf(projectId, root), target, name)),
+    rename: (at: AtPath & { name: string }) => mutateFile(at, async base => {
+      const before = await statFile(base, at.path);
+      const result = await renameEntry(base, at.path, at.name);
+      return { kind: "moved", previousPath: before.path, path: result.path, directory: before.kind === "directory" };
+    }),
 
-    duplicate: ({ projectId, root, path: target }: AtPath) =>
-      fsCall(() => duplicateEntry(rootOf(projectId, root), target)),
+    duplicate: (at: AtPath) => mutateFile(at, async base => {
+      const before = await statFile(base, at.path);
+      const result = await duplicateEntry(base, at.path);
+      return { kind: "added", path: result.path, directory: before.kind === "directory" };
+    }),
 
-    trash: ({ projectId, root, path: target }: AtPath) =>
-      fsCall(async () => {
-        const base = rootOf(projectId, root);
-        const absolute = await resolveInRoot(base, target);
-        // The root is the project: trashing it from its own tree is never
-        // what a click on a menu item meant.
-        if (absolute === (await fs.realpath(base).catch(() => path.resolve(base)))) {
-          throw new IpcError("the project itself cannot be trashed here");
-        }
-        await shell.trashItem(absolute);
-      }),
+    trash: (at: AtPath) => mutateFile(at, async base => {
+      const before = await statFile(base, at.path);
+      const absolute = await resolveInRoot(base, at.path);
+      if (absolute === (await fs.realpath(base).catch(() => path.resolve(base)))) {
+        throw new FsError("the project itself cannot be trashed here", "denied");
+      }
+      await shell.trashItem(absolute);
+      return { kind: "removed", path: before.path, directory: before.kind === "directory" };
+    }),
 
     watch: ({ projectId, root }: { projectId: string; root?: string }) =>
       fsCall(() => services().watchers.watch(rootOf(projectId, root))),

@@ -6,6 +6,8 @@ import type { DocumentSession, FileRendererProps, FileSource } from "../file-vie
 import CodeRenderer from "./code/CodeRenderer.js";
 import ImageRenderer from "./image/ImageRenderer.js";
 import PdfRenderer from "./pdf/PdfRenderer.js";
+import { ViewerHostContext } from "../host/context.js";
+import { testHost } from "../host/testing/host.js";
 import UnsupportedRenderer from "./unsupported/UnsupportedRenderer.js";
 
 // The package build uses automatic JSX. This focused no-config Vitest command
@@ -139,10 +141,10 @@ describe("asset and fallback renderers", () => {
 
   it("offers the existing OS fallback only when the host provides it", () => {
     const openDefault = vi.fn();
-    render(<UnsupportedRenderer {...common(null, {
+    render(<ViewerHostContext.Provider value={testHost({ fileActions: { perform: { "open-default": openDefault } } })}><UnsupportedRenderer {...common(null, {
       file: { path: "archive.zip", name: "archive.zip", kind: "file", size: 2048, extension: "zip", mediaType: "binary" },
-      source: source({ actions: { perform: { "open-default": openDefault } } }),
-    })} />);
+
+    })} /></ViewerHostContext.Provider>);
     fireEvent.click(screen.getByRole("button", { name: "Open externally" }));
     expect(openDefault).toHaveBeenCalledWith({ path: "archive.zip", kind: "file" });
     expect(screen.getByText("Not supported")).toBeTruthy();
@@ -150,9 +152,9 @@ describe("asset and fallback renderers", () => {
   });
 
   it("shows unsupported files without requiring an external-open capability", () => {
-    render(<UnsupportedRenderer {...common(null, {
+    render(<ViewerHostContext.Provider value={testHost()}><UnsupportedRenderer {...common(null, {
       file: { path: "capture.bin", name: "capture.bin", kind: "file", size: 64, extension: "bin", mediaType: "binary" },
-    })} />);
+    })} /></ViewerHostContext.Provider>);
     expect(screen.getByText("Not supported")).toBeTruthy();
     expect(screen.getByText(/capture.bin/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Open externally" })).toBeNull();

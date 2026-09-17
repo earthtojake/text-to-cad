@@ -1,12 +1,15 @@
-import type { FileSource, ManagedFileAsset } from "@hardcore/ui/file-viewer";
+import type { FileActions, FileSource, FileMutationResult, ManagedFileAsset } from "@hardcore/ui/file-viewer";
 import type { ExternalEntryAction } from "@hardcore/ui/file-viewer";
 import { useExplorer } from "@renderer/state/explorer";
+import type { FileMutationResult as NativeMutationResult } from "@shared/ipc/explorer";
 import type { ExplorerRoot } from "@shared/types";
-import { createEntry, currentPlatform, messageOf, performEntryAction, renameEntry, requestAt, trashEntry } from "../entry-actions";
+import { currentPlatform, messageOf, performEntryAction, requestAt } from "../entry-actions";
+import type { EntryActionContext } from "../entry-actions";
+import { viewerFileChange } from "../file-changes";
 
 /** Every operation is bound to a validated project/root pair before entering UI. */
 export function createDesktopFileSource({ projectId, projectName, root }: { projectId: string; projectName: string | (() => string); root: ExplorerRoot }): FileSource {
-  const context = { projectId, root, platform: currentPlatform(), beginRename: () => {}, beginCreate: () => {} };
+  const context = { projectId, root };
   const at = requestAt(context);
   const id = JSON.stringify(["desktop", projectId, root]);
   const listeners = new Set<Parameters<NonNullable<FileSource["subscribe"]>>[0]>();
@@ -17,7 +20,24 @@ export function createDesktopFileSource({ projectId, projectName, root }: { proj
     signal.throwIfAborted();
     return result;
   };
-  const actions: ExternalEntryAction[] = ["open-default", "open-with", "reveal", "copy-path", "copy-relative-path", "copy-reference", "open-terminal", "duplicate"];
+  const mutate = async (signal: AbortSignal, operation: () => Promise<NativeMutationResult>, effect?: "trash" | "reveal"): Promise<FileMutationResult> => {
+    if (signal.aborted) return { status: "cancelled" };
+    // IPC cannot undo a dispatched write. Always reconcile a committed receipt,
+    // even when the initiating tab was closed while main finished the operation.
+    try {
+      const result = await operation();
+      if (result.status !== "committed") return result;
+      const explorer = useExplorer.getState();
+      if (explorer.projectId === projectId) {
+        explorer.receiveChanges(projectId, root, [result.change]);
+        if (effect === "trash") for (const tab of useExplorer.getState().tabs) {
+          if (tab.kind === "file" && tab.root === root && tab.path !== null && (tab.path === result.path || tab.path.startsWith(`${result.path}/`))) explorer.close(tab.id);
+        }
+        if (effect === "reveal") explorer.setReveal({ path: result.path, directory: result.change.directory, root });
+      }
+      return { ...result, change: viewerFileChange(result.change) };
+    } catch (error) { return { status: "failed", code: "error", message: messageOf(error) }; }
+  };
   return {
     id,
     get rootName() { return typeof projectName === "function" ? projectName() : projectName; },
@@ -37,28 +57,29 @@ export function createDesktopFileSource({ projectId, projectName, root }: { proj
       const blob = new Blob([bytes], { type: binary.mime });
       signal.throwIfAborted();
       const url = URL.createObjectURL(blob);
-      return { url, mime: binary.mime, release: () => URL.revokeObjectURL(url) };
+      return { url, mime: binary.mime, byteLength: binary.size, resource: { kind: "workspace-file", workspaceId: id, path: binary.path }, release: () => URL.revokeObjectURL(url) };
     },
     async writeText(path, { content, expectedRevision, signal }) {
+      if (signal.aborted) return { status: "cancelled" };
       try {
-        const document = await checked(signal, () => window.hardcore.explorer.writeText({ ...at, path, content, expectedRevision }));
-        return { status: "saved", document };
-      } catch (error) {
-        signal.throwIfAborted();
-        const message = messageOf(error);
-        // This is the explicit optimistic-lock failure from main's fs contract.
-        return message === "the file changed on disk since it was opened"
-          ? { status: "conflict", message }
-          : { status: "error", message };
-      }
+        const result = await window.hardcore.explorer.writeText({ ...at, path, content, expectedRevision });
+        if (result.status === "saved") useExplorer.getState().receiveChanges(projectId, root, [{ kind: "changed", path, directory: false, revision: result.document.revision }]);
+        return result;
+      } catch (error) { return { status: "error", code: "error", message: messageOf(error) }; }
     },
+    rename: (path, { name, signal }) => mutate(signal, () => window.hardcore.explorer.rename({ ...at, path, name })),
+    create: (directory, { kind, name, signal }) => mutate(signal, () => kind === "file"
+      ? window.hardcore.explorer.createFile({ ...at, path: directory, name })
+      : window.hardcore.explorer.createDirectory({ ...at, path: directory, name }), kind === "directory" ? "reveal" : undefined),
+    duplicate: (path, { signal }) => mutate(signal, () => window.hardcore.explorer.duplicate({ ...at, path }), "reveal"),
+    trash: (path, { signal }) => mutate(signal, () => window.hardcore.explorer.trash({ ...at, path }), "trash"),
     subscribe(listener) {
       listeners.add(listener);
       if (!unsubscribe) {
         void window.hardcore.explorer.watch(at).catch(() => {});
         unsubscribe = useExplorer.subscribe((next, previous) => {
           if (next.projectId === projectId && next.fsRevision !== previous.fsRevision && next.changedRoot === root) {
-            const change = { sourceId: id, paths: next.changedPaths };
+            const change = { sourceId: id, changes: next.changedEntries.map(viewerFileChange) };
             for (const subscriber of listeners) subscriber(change);
           }
         });
@@ -71,12 +92,11 @@ export function createDesktopFileSource({ projectId, projectName, root }: { proj
         }
       };
     },
-    actions: {
-      platform: context.platform,
-      perform: Object.fromEntries(actions.map((action) => [action, (entry: Parameters<typeof performEntryAction>[1]) => performEntryAction(action, entry, context)])),
-      rename: (entry, name) => renameEntry(entry, name, context),
-      create: (directory, kind, name) => createEntry(directory, kind, name, context),
-      trash: (entry) => trashEntry(entry, context),
-    },
   };
+}
+
+export function createDesktopFileActions(context: EntryActionContext): FileActions {
+  const actions: ExternalEntryAction[] = ["open-default", "open-with", "reveal", "copy-path", "copy-relative-path", "copy-reference", "open-terminal"];
+  return { platform: currentPlatform(), perform: Object.fromEntries(actions.map(action => [action,
+    (entry: Parameters<typeof performEntryAction>[1]) => performEntryAction(action, entry, context)])) };
 }

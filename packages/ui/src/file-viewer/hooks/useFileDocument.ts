@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { selectRenderer } from "../registry.js";
-import type { DocumentSession, FileMetadata, FileSource, PreparedRenderer, RendererRegistration, TextDocument } from "../types.js";
+import type { DocumentSaveResult, DocumentSession, FileMetadata, FileSource, PreparedRenderer, RendererRegistration, TextDocument } from "../types.js";
+import { isSameOrUnder, movedFilePath } from "../fileChanges.js";
 
 type ReadyDocument = { status: "ready"; file: FileMetadata; renderer: RendererRegistration; prepared: PreparedRenderer };
 export type LoadedDocument = ReadyDocument | { status: "empty" } | { status: "loading" } | { status: "error"; message: string };
@@ -18,6 +19,7 @@ export function useFileDocument(file: string | FileMetadata | null, source: File
   const current = useRef({ key, edit, source });
   current.current = { key, edit, source };
   const writes = useRef(new Set<AbortController>());
+  const relocation = useRef<{ source: FileSource; path: string; edit: EditState | null } | null>(null);
   const reload = useCallback(() => setGeneration((value) => value + 1), []);
   const previousLoad = useRef<{ key: string; source: FileSource; path: string | null; generation: number; refresh: boolean } | null>(null);
 
@@ -32,14 +34,20 @@ export function useFileDocument(file: string | FileMetadata | null, source: File
     let owned: PreparedRenderer | undefined;
     void (async () => {
       try {
-        const metadata = typeof file === "object" && file !== null ? file : await source.stat(path, { signal });
+        const metadata = typeof file === "object" && file !== null && !refresh ? file : await source.stat(path, { signal });
         signal.throwIfAborted();
         const renderer = selectRenderer(renderers, metadata);
         const prepared = await renderer.prepare({ file: metadata, source, signal, refresh });
         if (signal.aborted) { prepared.dispose?.(); return; }
         owned = prepared;
         setResult({ key, document: { status: "ready", file: metadata, renderer, prepared } });
-        if (prepared.text) setEdit({ key, base: prepared.text, value: prepared.text.content, saving: false, stale: false, error: null });
+        if (prepared.text) {
+          const moved = relocation.current?.source === source && relocation.current.path === path ? relocation.current.edit : null;
+          relocation.current = null;
+          setEdit(moved && moved.value !== moved.base.content
+            ? { ...moved, key, saving: false, stale: moved.stale || prepared.text.revision !== moved.base.revision }
+            : { key, base: prepared.text, value: prepared.text.content, saving: false, stale: false, error: null });
+        }
       } catch (error) {
         if (!signal.aborted) setResult({ key, document: { status: "error", message: errorMessage(error) } });
       }
@@ -56,10 +64,18 @@ export function useFileDocument(file: string | FileMetadata | null, source: File
   useEffect(() => {
     if (!path || !source.subscribe) return;
     return source.subscribe((change) => {
-      if (change.sourceId !== source.id || !change.paths.includes(path)) return;
+      if (change.sourceId !== source.id) return;
       const state = current.current;
       if (state.key !== key || state.source !== source) return;
       const document = state.edit?.key === key ? state.edit : null;
+      const moved = change.changes.find(item => item.kind === "moved" && isSameOrUnder(path, item.from));
+      if (moved?.kind === "moved") {
+        relocation.current = { source, path: movedFilePath(path, moved.from, moved.to), edit: document };
+        return;
+      }
+      if (!change.changes.some(item => (item.kind === "content" && item.path === path && (!item.revision || item.revision !== document?.base.revision))
+        || (item.kind === "added" && item.path === path)
+        || (item.kind === "deleted" && isSameOrUnder(path, item.path)))) return;
       if (document && document.value !== document.base.content) {
         setEdit((previous) => previous?.key === key ? { ...previous, stale: true } : previous);
       } else reload();
@@ -71,17 +87,18 @@ export function useFileDocument(file: string | FileMetadata | null, source: File
       ? { ...previous, value, error: null } : previous);
   }, [key, source]);
   const keepMine = useCallback(() => setEdit((previous) => previous?.key === key ? { ...previous, stale: false } : previous), [key]);
-  const save = useCallback(async () => {
+  const save = useCallback(async (): Promise<DocumentSaveResult> => {
     const state = current.current;
     const document = state.edit;
-    if (!path || state.key !== key || state.source !== source || document?.key !== key || document.saving || [...writes.current].some((write) => !write.signal.aborted)
-      || document.base.readOnly || document.base.truncated || !source.writeText) return;
+    if (state.key !== key || state.source !== source) return { status: "stale" };
+    if (!path || document?.key !== key || document.saving || [...writes.current].some(write => !write.signal.aborted)
+      || document.base.readOnly || document.base.truncated || !source.writeText) return { status: "unavailable" };
     const controller = new AbortController();
     writes.current.add(controller);
     setEdit((previous) => previous?.key === key ? { ...previous, saving: true, error: null } : previous);
     try {
       const written = await source.writeText(path, { content: document.value, expectedRevision: document.base.revision, signal: controller.signal });
-      if (controller.signal.aborted || current.current.key !== key || current.current.source !== source) return;
+      if (controller.signal.aborted || current.current.key !== key || current.current.source !== source) return { status: "stale", committed: written.status === "saved" };
       setEdit((previous) => {
         if (previous?.key !== key) return previous;
         if (written.status === "saved") return {
@@ -96,10 +113,13 @@ export function useFileDocument(file: string | FileMetadata | null, source: File
         return { ...previous, saving: false, stale: written.status === "conflict" || previous.stale,
           error: written.status === "error" ? written.message : null };
       });
+      return written;
     } catch (error) {
       if (!controller.signal.aborted && current.current.key === key && current.current.source === source) {
         setEdit((previous) => previous?.key === key ? { ...previous, saving: false, error: errorMessage(error) } : previous);
+        return { status: "error", message: errorMessage(error) };
       }
+      return { status: "stale" };
     } finally { writes.current.delete(controller); }
   }, [key, path, source]);
 

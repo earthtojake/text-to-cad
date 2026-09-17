@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Check, Copy } from "lucide-react";
 import { Badge } from "@hardcore/ui/primitives/badge";
 import { Button } from "@hardcore/ui/primitives/button";
-import { copyTextToClipboard } from "@hardcore/ui/clipboard";
+import { useViewerHost } from '../../../../host/context.js';
 import { cn } from "@hardcore/ui/utils";
 import {
   FILE_STATUS_LEVELS,
@@ -37,6 +37,7 @@ function renderMetaForLevel(level) {
 }
 
 function FileStatusTabContent({ items = [] }) {
+  const { clipboard } = useViewerHost();
   const [expandedItemIds, setExpandedItemIds] = useState(() => new Set());
   const [copiedItemId, setCopiedItemId] = useState("");
   // Warnings/errors first, then INFO advisories (stale/busy badges) as quiet
@@ -93,7 +94,7 @@ function FileStatusTabContent({ items = [] }) {
     event.preventDefault();
     event.stopPropagation();
     try {
-      await copyTextToClipboard(formatFileStatusItemForAgent(item));
+      await clipboard.writeText(formatFileStatusItemForAgent(item));
       setCopiedItemId(item.id);
     } catch {
       setCopiedItemId("");

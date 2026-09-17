@@ -166,6 +166,13 @@ function resolvedMeshUrlString(resolvedUrl, { sourceUrl }) {
   return `${resolvedUrl.pathname}${resolvedUrl.search}`;
 }
 
+function validateMeshUri(uri) {
+  if (!String(uri).startsWith("package://") && /^[a-z][a-z0-9+.-]*:\/\//i.test(uri)) {
+    throw new Error(`Unsupported SDF mesh URI scheme: ${uri}`);
+  }
+  return uri;
+}
+
 function resolveMeshUrl(uri, sourceUrl) {
   const rawUri = String(uri || "").trim();
   if (!rawUri) {
@@ -331,7 +338,7 @@ function unrenderableSdfGeometryMessage(linkName, labelKind, index, geometryKind
     + "Replace it with one of those, or reference a mesh file.";
 }
 
-function parseMeshInstance(containerElement, { linkName, kind, index, sourceUrl }) {
+function parseMeshInstance(containerElement, { linkName, kind, index, sourceUrl, resolveResource }) {
   const labelKind = kind === "collision" ? "collision" : "visual";
   const instanceId = String(containerElement?.getAttribute("name") || "").trim();
   const pose = parsePose(containerElement, `SDF link ${linkName} ${labelKind} ${index}`);
@@ -405,7 +412,7 @@ function parseMeshInstance(containerElement, { linkName, kind, index, sourceUrl 
     label: labelForMeshUri(uri),
     instanceId,
     occurrenceId: occurrenceIdFromSdfName(instanceId) || occurrenceIdFromSdfName(linkName),
-    meshUrl: resolveMeshUrl(uri, sourceUrl || "/"),
+    meshUrl: resolveResource ? resolveResource(validateMeshUri(uri)) : resolveMeshUrl(uri, sourceUrl || "/"),
     color: materialColorFromElement(
       childElementsByTag(containerElement, "material")[0] || null,
       `SDF link ${linkName} ${labelKind} ${index}`
@@ -416,16 +423,16 @@ function parseMeshInstance(containerElement, { linkName, kind, index, sourceUrl 
   };
 }
 
-function parseLink(linkElement, sourceUrl) {
+function parseLink(linkElement, sourceUrl, resolveResource) {
   const name = String(linkElement.getAttribute("name") || "").trim();
   if (!name) {
     throw new Error("SDF link name is required");
   }
   const visuals = childElementsByTag(linkElement, "visual").map((visualElement, index) => (
-    parseMeshInstance(visualElement, { linkName: name, kind: "visual", index: index + 1, sourceUrl })
+    parseMeshInstance(visualElement, { linkName: name, kind: "visual", index: index + 1, sourceUrl, resolveResource })
   ));
   const collisions = childElementsByTag(linkElement, "collision").map((collisionElement, index) => (
-    parseMeshInstance(collisionElement, { linkName: name, kind: "collision", index: index + 1, sourceUrl })
+    parseMeshInstance(collisionElement, { linkName: name, kind: "collision", index: index + 1, sourceUrl, resolveResource })
   ));
   return {
     name,
@@ -923,7 +930,7 @@ function selectSdfRenderModel(sdfRoot) {
   };
 }
 
-export function parseSdf(xmlText, { sourceUrl } = {}) {
+export function parseSdf(xmlText, { sourceUrl, resolveResource } = {}) {
   if (typeof DOMParser === "undefined") {
     throw new Error("DOMParser is unavailable in this environment");
   }
@@ -953,7 +960,7 @@ export function parseSdf(xmlText, { sourceUrl } = {}) {
   }
   const modelWorldTransform = modelPose.transform;
 
-  const links = childElementsByTag(model, "link").map((linkElement) => parseLink(linkElement, sourceUrl));
+  const links = childElementsByTag(model, "link").map((linkElement) => parseLink(linkElement, sourceUrl, resolveResource));
   if (!links.length) {
     throw new Error("SDF model must define at least one link");
   }

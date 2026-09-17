@@ -36,3 +36,10 @@ test('rejects desktop renderer imports of main-process modules',()=>fixture({
   'apps/desktop/src/renderer/view.ts':"import '../main/private';",
   'apps/desktop/src/main/private.ts':'export const secret = 1;',
 },result=>assert.ok(result.errors.some(error=>error.includes('renderer imports main')))));
+
+test('requires explicit host effects, including in workers',()=>fixture({
+  'packages/ui/src/renderers/model.worker.js': 'fetch(url); globalThis["fetch"](url); navigator.clipboard.writeText(value); window.localStorage.setItem(key,value); window.location.reload();',
+},result=>{for(const effect of ['raw service transport','browser clipboard','host storage','page navigation']) assert.ok(result.errors.some(error=>error.includes(effect)),effect);}));
+test('permits browser rendering and hardware sizing without permitting clipboard discovery',()=>fixture({
+  'packages/ui/src/renderers/view.js': 'const n = navigator.hardwareConcurrency; const canvas = document.createElement("canvas"); window.addEventListener("resize", update);',
+},result=>assert.deepEqual(result.errors,[])));

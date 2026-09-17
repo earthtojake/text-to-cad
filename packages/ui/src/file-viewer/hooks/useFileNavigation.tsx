@@ -3,7 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "../../primitives/dropdown-menu.jsx";
 import { EntryContextMenu, EntryMenuItems, InlineName, parentOf, useEntryMenuFocusGuard } from "../navigation/index.js";
 import type { CrumbSource, EntryAction, FileTreeSource, MenuEntryTarget, TreeEdit, TreeEditRequest } from "../navigation/index.js";
-import type { FileEntry, FileSource, FileViewerProps, FileViewerState } from "../types.js";
+import type { FileActions, FileChange, FileEntry, FileMutationResult, FileSource, FileViewerProps, FileViewerState, RendererViewProps } from "../types.js";
+import { movedFilePath, reconcileFileTree } from "../fileChanges.js";
 import { errorMessage } from "./useFileDocument.js";
 
 type MenuAction = (action: EntryAction, entry: MenuEntryTarget) => void;
@@ -23,9 +24,9 @@ function CrumbActions({ entry, capabilities, platform, onAction }: {
 }
 
 /** One shared cache feeds breadcrumb menus and tree rows for this mounted root. */
-export function useFileNavigation({ source, state, onStateChange, onOpenFile, path, onError }: {
-  source: FileSource; state: FileViewerState; onStateChange: FileViewerProps["onStateChange"];
-  onOpenFile: FileViewerProps["onOpenFile"]; path: string | null; onError?: FileViewerProps["onError"];
+export function useFileNavigation({ source, actions, state, onStateChange, onOpenFile, path, onError }: {
+  source: FileSource; actions?: FileActions; state: FileViewerState; onStateChange: FileViewerProps["onStateChange"];
+  onOpenFile: RendererViewProps["onOpenFile"]; path: string | null; onError?: FileViewerProps["onError"];
 }) {
   const [cache, setCache] = useState<{ id: string; listings: Record<string, readonly FileEntry[]>; revision: number }>({ id: source.id, listings: {}, revision: 0 });
   const listings = cache.id === source.id ? cache.listings : {};
@@ -34,8 +35,9 @@ export function useFileNavigation({ source, state, onStateChange, onOpenFile, pa
   const [editing, setEditing] = useState<{ sourceId: string; edit: TreeEdit } | null>(null);
   const requests = useRef(new Map<string, AbortController>());
   const searches = useRef(new Set<AbortController>());
-  const current = useRef({ state, onStateChange, source, onError, listings });
-  current.current = { state, onStateChange, source, onError, listings };
+  const mutations = useRef(new Set<AbortController>());
+  const current = useRef({ state, onStateChange, source, onError, listings, path, onOpenFile });
+  current.current = { state, onStateChange, source, onError, listings, path, onOpenFile };
   const report = useCallback((error: unknown) => current.current.onError?.(new Error(errorMessage(error))), []);
   const load = useCallback((directory: string) => {
     if (!source.list || requests.current.has(directory)) return;
@@ -54,26 +56,39 @@ export function useFileNavigation({ source, state, onStateChange, onOpenFile, pa
     requests.current.clear();
     for (const controller of searches.current) controller.abort();
     searches.current.clear();
+    for (const controller of mutations.current) controller.abort();
+    mutations.current.clear();
   }, [source]);
   useEffect(() => {
     // Expanded folders outlive a mounted tab through the host's view state.
     // Restore their listings even when the active file has no such ancestors.
     for (const directory of current.current.state.expandedDirectories ?? []) load(directory);
   }, [source, load]);
-  useEffect(() => source.subscribe?.((change) => {
-    if (change.sourceId !== source.id) return;
+  const reconcile = useCallback((changes: readonly FileChange[]) => {
+    if (current.current.source !== source) return;
     // The first catalog may arrive while the first root listing is awaiting
     // it. Keep pending directories too, or that abort leaves "Reading…" forever.
-    const directories = new Set([...Object.keys(current.current.listings), ...requests.current.keys()]);
+    const before = current.current;
+    const next = reconcileFileTree(before.listings, before.state.expandedDirectories ?? [], changes);
+    const directories = new Set([...Object.keys(next.listings), ...next.expanded, ...requests.current.keys()]);
     for (const controller of requests.current.values()) controller.abort();
     requests.current.clear();
     for (const controller of searches.current) controller.abort();
     searches.current.clear();
     // Keep the visible tree until fresh listings arrive. Clearing it first
     // erases the tree's knowledge of which open directories need reloading.
-    for (const directory of directories) load(directory);
-    setCache((previous) => ({ id: source.id, listings: previous.id === source.id ? previous.listings : {}, revision: (previous.id === source.id ? previous.revision : 0) + 1 }));
-  }), [source, load]);
+    for (const directory of directories) {
+      if (!changes.some(change => change.kind === "deleted" && (directory === change.path || directory.startsWith(`${change.path}/`)))
+        && !changes.some(change => change.kind === "moved" && (directory === change.from || directory.startsWith(`${change.from}/`)))) load(directory);
+    }
+    setCache((previous) => ({ id: source.id, listings: reconcileFileTree(previous.id === source.id ? previous.listings : {}, [], changes).listings,
+      revision: (previous.id === source.id ? previous.revision : 0) + 1 }));
+    if (JSON.stringify(next.expanded) !== JSON.stringify(before.state.expandedDirectories ?? [])) before.onStateChange({ ...before.state, expandedDirectories: next.expanded });
+    let moved = before.path;
+    for (const change of changes) if (moved !== null && change.kind === "moved") moved = movedFilePath(moved, change.from, change.to);
+    if (moved !== before.path && moved !== null) before.onOpenFile(moved, { target: "current" });
+  }, [source, load]);
+  useEffect(() => source.subscribe?.(change => { if (change.sourceId === source.id) reconcile(change.changes); }), [source, reconcile]);
 
   const expanded = useMemo(() => new Set(state.expandedDirectories ?? []), [state.expandedDirectories]);
   const setExpanded = useCallback((update: (previous: ReadonlySet<string>) => ReadonlySet<string>) => {
@@ -85,44 +100,43 @@ export function useFileNavigation({ source, state, onStateChange, onOpenFile, pa
   }, []);
   const capabilities = useMemo(() => {
     const available = new Set<EntryAction>(["open"]);
-    for (const action of Object.keys(source.actions?.perform ?? {})) available.add(action as EntryAction);
-    if (source.actions?.rename) available.add("rename");
-    if (source.actions?.create) { available.add("new-file"); available.add("new-folder"); }
-    if (source.actions?.trash) available.add("trash");
+    for (const action of Object.keys(actions?.perform ?? {})) available.add(action as EntryAction);
+    if (source.rename) available.add("rename");
+    if (source.create) { available.add("new-file"); available.add("new-folder"); }
+    if (source.trash) available.add("trash");
+    if (source.duplicate) available.add("duplicate");
     return available;
-  }, [source]);
+  }, [source, actions]);
   const askTree = useCallback((request: TreeEditRequest) => {
     const { state: previous, onStateChange: change } = current.current;
     change({ ...previous, panel: "tree" });
     setEditing((previous) => ({ sourceId: current.current.source.id, edit: { ...request, nonce: (previous?.edit.nonce ?? 0) + 1 } }));
   }, []);
-  const rename = useCallback(async (entry: MenuEntryTarget, name: string) => {
+  const mutate = useCallback(async (operation: (signal: AbortSignal) => Promise<FileMutationResult>) => {
+    const controller = new AbortController();
+    mutations.current.add(controller);
     try {
-      const renamed = await source.actions?.rename?.(entry, name) ?? null;
-      if (renamed !== null && current.current.source === source) {
-        const moved = (path: string) => path === entry.path || path.startsWith(`${entry.path}/`) ? renamed + path.slice(entry.path.length) : path;
-        setCache((previous) => previous.id !== source.id ? previous : {
-          ...previous,
-          listings: Object.fromEntries(Object.entries(previous.listings).map(([directory, entries]) => [moved(directory), entries.map((child) => ({ ...child, path: moved(child.path), name: child.path === entry.path ? name : child.name }))])),
-        });
-        load(parentOf(entry.path));
-        setExpanded((previous) => new Set([...previous].map((directory) => directory === entry.path || directory.startsWith(`${entry.path}/`) ? renamed + directory.slice(entry.path.length) : directory)));
-        if (path === entry.path || path?.startsWith(`${entry.path}/`)) onOpenFile(renamed + path.slice(entry.path.length), { target: "current" });
-      }
-      return renamed;
-    } catch (error) { report(error); return null; }
-  }, [source, load, setExpanded, path, onOpenFile, report]);
+      const result = await operation(controller.signal);
+      if (controller.signal.aborted || current.current.source !== source) return null;
+      if (result.status === "failed") { report(new Error(result.message)); return null; }
+      if (result.status !== "committed") return null;
+      reconcile([result.change]);
+      return result.path;
+    } catch (error) { if (!controller.signal.aborted && current.current.source === source) report(error); return null; }
+    finally { mutations.current.delete(controller); }
+  }, [source, reconcile, report]);
+  const rename = useCallback((entry: MenuEntryTarget, name: string) => mutate(signal => source.rename!(entry.path, { name, signal })), [source, mutate]);
   const create = useCallback(async (directory: string, kind: "file" | "directory", name: string) => {
     try {
-      const created = await source.actions?.create?.(directory, kind, name) ?? null;
+      const created = await mutate(signal => source.create!(directory, { kind, name, signal }));
       if (created !== null && current.current.source === source) { load(directory); if (kind === "file") onOpenFile(created, { target: "new" }); }
       return created;
     } catch (error) { report(error); return null; }
-  }, [source, load, onOpenFile, report]);
+  }, [source, load, onOpenFile, report, mutate]);
   const trash = useCallback(async (entry: MenuEntryTarget) => {
-    try { const trashed = await source.actions?.trash?.(entry) ?? false; if (trashed && current.current.source === source) load(parentOf(entry.path)); return trashed; }
+    try { const trashed = await mutate(signal => source.trash!(entry.path, { signal })); if (trashed !== null && current.current.source === source) load(parentOf(entry.path)); return trashed !== null; }
     catch (error) { if (current.current.source === source) report(error); return false; }
-  }, [source, load, report]);
+  }, [source, load, report, mutate]);
   const onAction = useCallback<MenuAction>((action, entry) => {
     if (action === "open") onOpenFile(entry.path, { target: "new" });
     else if (action === "rename") {
@@ -130,18 +144,19 @@ export function useFileNavigation({ source, state, onStateChange, onOpenFile, pa
       else askTree({ mode: "rename", entry });
     } else if (action === "new-file" || action === "new-folder") askTree({ mode: "create", directory: entry.path, kind: action === "new-file" ? "file" : "directory" });
     else if (action === "trash") void trash(entry);
-    else void Promise.resolve(source.actions?.perform?.[action]?.(entry)).catch(report);
-  }, [source, path, onOpenFile, askTree, trash, report]);
-  const platform = source.actions?.platform ?? "linux";
+    else if (action === "duplicate") void mutate(signal => source.duplicate!(entry.path, { signal }));
+    else void Promise.resolve(actions?.perform?.[action]?.(entry)).catch(report);
+  }, [source, actions, path, onOpenFile, askTree, trash, report, mutate]);
+  const platform = actions?.platform ?? "linux";
   const paths = useCallback(async () => {
     const controller = new AbortController();
     searches.current.add(controller);
-    try { return await source.paths?.({ signal: controller.signal }) ?? []; }
+    try { const paths = await source.paths?.({ signal: controller.signal }) ?? []; return !controller.signal.aborted && current.current.source === source ? paths : []; }
     catch (error) { if (!controller.signal.aborted) report(error); return []; }
     finally { searches.current.delete(controller); }
   }, [source, report]);
   const tree: FileTreeSource = { rootName: source.rootName, expanded, setExpanded, listings, load, revision, paths, platform, capabilities, onAction,
-    rename: source.actions?.rename ? rename : undefined, create: source.actions?.create ? create : undefined, trash: source.actions?.trash ? trash : undefined };
+    rename: source.rename ? rename : undefined, create: source.create ? create : undefined, trash: source.trash ? trash : undefined };
   const crumbs: CrumbSource = {
     useListing(directory) {
       const listed = listings[directory];

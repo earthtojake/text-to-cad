@@ -64,12 +64,25 @@ export const BinaryFileSchema = z.object({
   dataUrl: z.string(),
 });
 
-export const FileChangeSchema = z.object({
+export const FileChangeSchema = z.discriminatedUnion("kind", [z.object({
+  mutationId: z.string().optional(),
   path: z.string(),
   kind: z.enum(["added", "changed", "removed"]),
   directory: z.boolean(),
-});
+  revision: z.string().optional(),
+}), z.object({ mutationId: z.string().optional(), kind: z.literal("moved"), path: z.string(), previousPath: z.string(), directory: z.boolean() })]);
 export type FileChange = z.infer<typeof FileChangeSchema>;
+const FileFailureSchema = z.object({ code: z.enum(["denied", "not-found", "already-exists", "unsupported", "conflict", "error"]), message: z.string() });
+export const FileMutationResultSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("committed"), path: z.string(), change: FileChangeSchema }),
+  FileFailureSchema.extend({ status: z.literal("failed") }),
+]);
+export type FileMutationResult = z.infer<typeof FileMutationResultSchema>;
+export const TextWriteResultSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("saved"), document: TextFileSchema }),
+  z.object({ status: z.literal("conflict"), message: z.string(), actualRevision: z.string().optional() }),
+  FileFailureSchema.extend({ status: z.literal("error") }),
+]);
 
 export const TerminalInfoSchema = z.object({
   id: z.string(),
@@ -129,7 +142,7 @@ export const explorerIpc = {
         /** The revision the editor loaded; a mismatch is refused. */
         expectedRevision: z.string().optional(),
       }),
-      TextFileSchema,
+      TextWriteResultSchema,
     ),
     /** Images and PDFs, as a `data:` URL the renderer can put in a `src`. */
     readBinary: invoke(AtPath, BinaryFileSchema),
@@ -151,12 +164,12 @@ export const explorerIpc = {
      * one segment, so the entry stays where it is. Each answers with the
      * root-relative path of what it made, which the tree selects.
      */
-    createFile: invoke(AtPath.extend({ name: z.string().min(1) }), z.object({ path: z.string() })),
-    createDirectory: invoke(AtPath.extend({ name: z.string().min(1) }), z.object({ path: z.string() })),
-    rename: invoke(AtPath.extend({ name: z.string().min(1) }), z.object({ path: z.string() })),
-    duplicate: invoke(AtPath, z.object({ path: z.string() })),
+    createFile: invoke(AtPath.extend({ name: z.string().min(1) }), FileMutationResultSchema),
+    createDirectory: invoke(AtPath.extend({ name: z.string().min(1) }), FileMutationResultSchema),
+    rename: invoke(AtPath.extend({ name: z.string().min(1) }), FileMutationResultSchema),
+    duplicate: invoke(AtPath, FileMutationResultSchema),
     /** The OS trash, never `rm`: the one destructive item is the reversible one. */
-    trash: invoke(AtPath, z.void()),
+    trash: invoke(AtPath, FileMutationResultSchema),
 
     /** Start (or join) the root's watcher. Refcounted in main. */
     watch: invoke(InRoot, z.void()),

@@ -25,7 +25,6 @@ export interface ViewerLoadingOverlayProps {
 export function ViewerLoadingOverlay({ viewerLoading, previewMode, progress }: ViewerLoadingOverlayProps) {
   return createElement(Overlay, { loading: { opening: viewerLoading, headline: "Opening model", progress }, previewMode, operationKey: "preparing-document" });
 }
-export { useViewerAutoReload } from './workbench/useViewerAutoReload.js';
 
 export interface StatusToastProps {
   copyStatus?: string;

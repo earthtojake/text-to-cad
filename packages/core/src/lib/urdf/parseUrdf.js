@@ -366,7 +366,7 @@ function validateTree(links, joints) {
   return rootLink;
 }
 
-export function parseUrdf(xmlText, { sourceUrl } = {}) {
+export function parseUrdf(xmlText, { sourceUrl, resolveResource } = {}) {
   if (typeof DOMParser === "undefined") {
     throw new Error("DOMParser is unavailable in this environment");
   }
@@ -408,7 +408,7 @@ export function parseUrdf(xmlText, { sourceUrl } = {}) {
         return {
           ...visualBase,
           label: labelForMeshFilename(filename),
-          meshUrl: resolveMeshUrl(filename, sourceUrl || "/"),
+          meshUrl: resolveResource ? resolveResource(filename) : resolveMeshUrl(filename, sourceUrl || "/"),
           localTransform: multiplyTransforms(
             parseOriginTransform(childElementsByTag(visualElement, "origin")[0]),
             parseScaleTransform(meshElement)

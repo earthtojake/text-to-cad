@@ -1,15 +1,17 @@
 import React from 'react';
+import { createCadClient } from '@hardcore/core/client';
+let client: ReturnType<typeof createCadClient>;
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import ModelingTreeView from '../../../../../dist/renderers/cad/components/workbench/ModelingTree.js';
 
 import { useStepModeling } from '../../../../../dist/renderers/cad/workbench/useStepModeling.js';
 function ModelingTree(props:any) {
- const modeling=useStepModeling(props.entry,!props.disabled);
+ const modeling=useStepModeling(props.entry,!props.disabled,{client});
  return <ModelingTreeView {...props} modeling={modeling}/>;
 }
 Object.assign(globalThis,{React});
-afterEach(()=>{cleanup();vi.unstubAllGlobals();WorkerStub.instances=[];});
+afterEach(()=>{cleanup();client?.dispose();vi.unstubAllGlobals();WorkerStub.instances=[];});
 const feature={id:'cut:1-2',kind:'cut',label:'Cut extrude 1',faces:[1,2],edges:[],measurements:[['Depth',2,'mm']],children:[]};
 const tree=[{id:'body:1',kind:'body',label:'Body 1',faces:[1,2],edges:[],complete:true,children:[feature]}];
 const refs=(o='o1')=>[1,2].map(n=>({id:`${o}.f${n}`,selectorType:'face',occurrenceId:o,normalizedSelector:`${o}.f${n}`}));
@@ -24,7 +26,7 @@ let fixtureVersion=0;
 function setup(value=descriptor){
  entry.url=`http://localhost/__cad/asset?file=/cache/case&v=fixture-${++fixtureVersion}`;
  vi.stubGlobal('Worker',WorkerStub);
- const fetch=vi.fn().mockResolvedValue({ok:true,json:async()=>value});vi.stubGlobal('fetch',fetch);return fetch;
+ const fetch=vi.fn().mockResolvedValue({ok:true,json:async()=>value});vi.stubGlobal('fetch',fetch);client=createCadClient();return fetch;
 }
 async function respond(data:any,index=0){
  await waitFor(()=>expect(WorkerStub.instances.length).toBeGreaterThan(index));
@@ -85,7 +87,7 @@ it('retries failed components without rerunning successful ones',async()=>{
  await respond({tree});await respond({error:'Unavailable'},1);
  fireEvent.click(await screen.findByRole('button',{name:'Retry'}));
  await waitFor(()=>expect(WorkerStub.instances).toHaveLength(3));
- expect(WorkerStub.instances[2].postMessage).toHaveBeenCalledWith({url:expect.stringContaining('d.surf')});
+ expect(WorkerStub.instances[2].postMessage).toHaveBeenCalledWith({resource:{kind:'url',url:expect.stringContaining('d.surf'),maxBytes:16*1024*1024}},[]);
  await respond({tree},2);expect(screen.queryByRole('alert')).toBeNull();
 });
 it('shows annotation-only data as empty instead of waiting for impossible selection',async()=>{

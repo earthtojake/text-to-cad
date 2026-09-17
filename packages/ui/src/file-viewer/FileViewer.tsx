@@ -8,6 +8,8 @@ import { buildCrumbs, clampPanelWidth, EmptyState, FILE_PANEL_TREE, FileNavRow, 
 import { useFileDocument } from "./hooks/useFileDocument.js";
 import { useFileNavigation } from "./hooks/useFileNavigation.js";
 import type { FileActivity, FileViewerProps, JsonValue, FileViewerState } from "./types.js";
+import { ViewerElementContext, ViewerHostContext } from '../host/context.js';
+import { useViewerCommands } from '../host/useViewerCommands.js';
 
 class RenderBoundary extends Component<{ children: ReactNode; onError?: (error: Error) => void }, { error: Error | null }> {
   state = { error: null as Error | null };
@@ -17,7 +19,10 @@ class RenderBoundary extends Component<{ children: ReactNode; onError?: (error: 
 }
 
 /** The complete file tab. Its only knowledge of formats comes from registrations. */
-export function FileViewer({ file, source, renderers, state, onStateChange, onOpenFile, appearance = { colorScheme: "light" }, leading, navigationPath, narrowCrumbs, reveal, onError, presentation }: FileViewerProps) {
+export function FileViewer({ file, host, renderers, state, onStateChange, leading, navigationPath, narrowCrumbs, reveal, onError, presentation }: FileViewerProps) {
+  const source = host.files;
+  const onOpenFile = host.navigation.openFile;
+  const appearance = host.environment;
   const session = useFileDocument(file, source, renderers);
   const { loaded, document, key, path, reload } = session;
   const selectedPath = navigationPath === undefined ? path : navigationPath;
@@ -32,8 +37,11 @@ export function FileViewer({ file, source, renderers, state, onStateChange, onOp
     current.onStateChange(next);
   }, []);
   const setPanel = useCallback((panel: string) => { if (currentKey.current === key) changeState((previous) => ({ ...previous, panel })); }, [changeState, key]);
-  const navigation = useFileNavigation({ source, state, onStateChange, onOpenFile, path: selectedPath, onError });
+  const navigation = useFileNavigation({ source, actions: host.fileActions, state, onStateChange, onOpenFile, path: selectedPath, onError });
   const [rootRef, paneWidth] = useElementWidth();
+  const viewerElement = useRef<HTMLDivElement | null>(null);
+  const bindElement = useCallback((element: HTMLDivElement | null) => { viewerElement.current = element; rootRef(element); }, [rootRef]);
+  useViewerCommands({ host, generation: key, path, document, reload, element: viewerElement });
   const [panelSlot, setPanelSlot] = useState<HTMLDivElement | null>(null);
   const [readiness, setReadiness] = useState<{ key: string; ready: boolean } | null>(null);
   const [chrome, setChrome] = useState<{ key: string; visible: boolean } | null>(null);
@@ -65,10 +73,10 @@ export function FileViewer({ file, source, renderers, state, onStateChange, onOp
     body = <RenderBoundary key={key} onError={onError}><Renderer key={key} file={loaded.file} source={source} document={document}
       openPanel={openId} panelSlot={panelSlot} onPanelOpen={setPanel} onReady={onReady} onChromeVisibilityChange={onChromeVisibilityChange}
       onActivityChange={onActivityChange}
-      onOpenFile={(next) => onOpenFile(next, { target: "new" })} appearance={appearance}
+      onOpenFile={(next, options) => onOpenFile(next, options ?? { target: "new" })} appearance={appearance}
       state={state.renderers?.[rendererStateKey]} onStateChange={setRendererState} reload={reload} /></RenderBoundary>;
   }
-  return <div className="hardcore-file-viewer flex h-full min-h-0 flex-col" ref={rootRef} data-source-id={source.id}>
+  return <ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={viewerElement}><div className="hardcore-file-viewer flex h-full min-h-0 flex-col" ref={bindElement} tabIndex={-1} data-source-id={source.id}>
     {chromeVisible ? <FileNavRow activePath={selectedPath} crumbs={crumbs} leading={leading} onOpen={(next) => onOpenFile(next, { target: "current" })} source={navigation.crumbs}
       status={<>{document?.dirty ? <span aria-label="Unsaved changes" title="Unsaved changes" className="ml-1 size-1.5 shrink-0 rounded-full bg-foreground/60" /> : null}{presentation?.activity ? presentation.activity(activity?.key === key ? activity.value : null) : <FileActivityStatus activity={activity?.key === key ? activity.value : null} />}</>}
       trailing={panels.map((panel) => <PanelToggle key={panel.id} id={panel.id} active={panel.id === openId} icon={panel.icon} label={panel.label} onClick={() => setPanel(nextOpenPanel(openId, panel.id))} testId={panel.id === FILE_PANEL_TREE ? "tree-toggle" : undefined} />)} /> : null}
@@ -86,5 +94,5 @@ export function FileViewer({ file, source, renderers, state, onStateChange, onOp
         {openPanel.content === "tree" ? <FileTree key={source.id} source={navigation.tree} activePath={selectedPath} edit={navigation.edit} reveal={reveal} onOpen={(next) => onOpenFile(next, { target: "new" })} /> : <div className="h-full min-h-0" ref={setPanelSlot} />}
       </FilePanelColumn> : null}
     </div>
-  </div>;
+  </div></ViewerElementContext.Provider></ViewerHostContext.Provider>;
 }

@@ -842,3 +842,27 @@ test("synchronous post failures drain a queued batch without recursive dispatch"
     globalThis.Worker = savedWorker;
   }
 });
+
+test('custom resource transfers begin only when a worker slot is reserved', async t => {
+  const previous = globalThis.Worker;
+  const workers = [], tickets = [];
+  globalThis.Worker = class {
+    listeners = {};
+    constructor() { workers.push(this); }
+    addEventListener(type, callback) { this.listeners[type] = callback; }
+    postMessage(message) { queueMicrotask(() => this.listeners.message({data:{id:message.id,ok:true,meshData:{}}})); }
+    terminate() {}
+  };
+  t.after(() => { reclaimIdleSurfWorkers(); globalThis.Worker=previous; });
+  const resources = {workerTicket: () => new Promise(resolve => tickets.push(resolve))};
+  const pending = Array.from({length:20}, (_,index) => loadSurfComponentInWorker(`private:${index}`, {resources}));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(tickets.length, workers.length);
+  assert.ok(tickets.length < pending.length, 'queued components do not eagerly retain transferred bytes');
+  let resolved = 0;
+  while (resolved < pending.length) {
+    for (const finish of tickets.splice(0)) { resolved++; finish({kind:'bytes',bytes:new ArrayBuffer(4)}); }
+    await new Promise(resolve => setImmediate(resolve));
+  }
+  await Promise.all(pending);
+});

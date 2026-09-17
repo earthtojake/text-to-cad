@@ -5,6 +5,7 @@ import { useAcp } from "./acp";
 import { parseSegments } from "../features/session/composer/references";
 import type { PromptBlock } from "@shared/acp/types";
 import { referenceText, type CadReference } from "@shared/cad-refs";
+import type { PromptReference } from "@hardcore/core/prompt";
 
 /**
  * What the composer holds that is not yet a turn: the queue of prompts
@@ -36,10 +37,22 @@ export const NEW_SESSION_KEY = "__new__";
 export const newSessionKey = (projectId: string) => `${NEW_SESSION_KEY}:${projectId}`;
 
 export type DraftContext = { text?: string; references?: CadReference[]; files?: File[]; deduplicateText?: boolean };
+export type DraftPart =
+  | { id: string; kind: "text"; text: string }
+  | { id: string; kind: "reference"; text: string; label?: string; reference?: PromptReference }
+  | { id: string; kind: "attachment"; file: File; about?: readonly string[] };
+export type AcceptedContext = {
+  key: string; partIds: string[];
+  /** Snapshot identities and ordering remain available without retaining binary content. */
+  parts: { id: string; kind: DraftPart["kind"]; reference?: PromptReference; about?: readonly string[] }[];
+};
 
 type ComposerState = {
   focusRequest: { key: string; nonce: number } | null;
   addContext: (key: string, context: DraftContext) => void;
+  /** A complete validated bundle is accepted in one store transaction, never submitted. */
+  acceptContext: (key: string, operationId: string, parts: readonly DraftPart[], options: { root: string; focus: boolean }) => AcceptedContext;
+  acceptedContexts: Record<string, AcceptedContext>;
   queues: Record<string, QueuedPrompt[]>;
   drafts: Record<string, string>;
   /** Display metadata belongs to the draft, not to another project's identical token. */
@@ -70,6 +83,43 @@ let sequence = 0;
 
 export const useComposer = create<ComposerState>((set, get) => ({
   focusRequest: null,
+  acceptedContexts: {},
+  acceptContext: (key, operationId, parts, options) => {
+    const receipts = get().acceptedContexts;
+    const previous = Object.hasOwn(receipts, operationId) ? receipts[operationId] : undefined;
+    if (previous) return previous;
+    const accepted = { key, partIds: parts.map(part => part.id), parts: parts.map(part => ({
+      id: part.id, kind: part.kind,
+      ...(part.kind === "reference" && part.reference ? { reference: structuredClone(part.reference) } : {}),
+      ...(part.kind === "attachment" && part.about ? { about: [...part.about] } : {}),
+    })) };
+    set(state => {
+      let text = state.drafts[key] ?? "";
+      const labels = { ...state.referenceLabels[key] };
+      const files = [...(state.pendingFiles[key] ?? [])];
+      for (const part of parts) {
+        if (part.kind === "attachment") { files.push(part.file); continue; }
+        if (part.kind === "reference") {
+          if (!parseSegments(text).some(segment => segment.type === "reference" && referenceText(segment.reference) === part.text)) {
+            text += `${text && !/\s$/.test(text) ? " " : ""}${part.text} `;
+          }
+          if (part.label?.trim()) labels[part.text] = part.label.trim();
+        } else if (part.text) {
+          text += `${text.trim() ? "\n\n" : ""}${part.text}`;
+        }
+      }
+      return {
+        drafts: { ...state.drafts, [key]: text },
+        referenceLabels: { ...state.referenceLabels, [key]: labels },
+        pendingFiles: { ...state.pendingFiles, [key]: files },
+        draftRoots: { ...state.draftRoots, [key]: options.root },
+        // Receipts contain no attachment bytes and retain only recent operations.
+        acceptedContexts: Object.fromEntries([...Object.entries(state.acceptedContexts), [operationId, accepted]].slice(-256)),
+        ...(options.focus ? { focusRequest: { key, nonce: ++sequence } } : {}),
+      };
+    });
+    return accepted;
+  },
   addContext: (key, context) => set((state) => {
     let text = state.drafts[key] ?? "";
     const labels = { ...state.referenceLabels[key] };

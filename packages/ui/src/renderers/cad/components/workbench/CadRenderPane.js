@@ -13,11 +13,10 @@ import {
   DropdownMenuTrigger
 } from "@hardcore/ui/primitives/dropdown-menu";
 import AssemblyContextMenuItems from "./AssemblyContextMenuItems.js";
-import TutorialTip from "./TutorialTip.jsx";
+import { PromptContextAction } from "../../../../host/PromptContextAction.js";
 import ViewerAlertBody from "./ViewerAlertBody.js";
 import { cn } from "@hardcore/ui/utils";
 import { RENDER_FORMAT } from "../../workbench/constants.js";
-import { TUTORIAL_TIP_IDS } from "../../workbench/tutorialTips.js";
 import {
   PARAMETER_SOURCE,
   VIEWPORT_CONTENT,
@@ -188,7 +187,7 @@ function ViewerContextMenu({
             isolated={focused}
             hidden={hidden}
             actionCount={menu.actionCount}
-            onAddToPrompt={hostReference ? () => handleAction((item) => hostReference.addReference(item.copyText)) : undefined}
+            onAddToPrompt={hostReference?.canAddToPrompt ? () => handleAction((item) => hostReference.addReference(item.copyText)) : undefined}
             copyReferenceDisabled={!String(menu.copyText || "").trim()}
             selectDisabled={menu.selectDisabled === true}
             showIsolate={menu.showIsolate !== false}
@@ -341,11 +340,13 @@ export default function CadRenderPane({
   selectionCount,
   copyButtonLabel,
   copyButtonCountLabel = "",
-  copyReferenceTipActive = false,
   selectionFilter = "all",
   panToolActive = false,
   handleCopySelection,
-  handleAddSelection = null,
+  createPromptContext,
+  onPromptResult,
+  composerDestination = false,
+  selectionExtras = null,
   handleScreenshotCopy,
 }) {
   // The clock is the ONE thing that changes per frame during playback, and this
@@ -407,8 +408,8 @@ export default function CadRenderPane({
   // the ref back in, and so on.
   const ctaFullLabelRef = useRef(null);
   const [ctaLabelFits, setCtaLabelFits] = useState(true);
-  const ctaMetricsClass = handleAddSelection ? "h-9 w-fit min-w-0 max-w-full shrink overflow-hidden px-4 text-xs" : CTA_METRICS_CLASS;
-  const ctaRefLabel = ctaMode === "screenshot" ? "Copy Screenshot" : handleAddSelection ? "Add to prompt" : copyButtonLabel;
+  const ctaMetricsClass = composerDestination ? "h-9 w-fit min-w-0 max-w-full shrink overflow-hidden px-4 text-xs" : CTA_METRICS_CLASS;
+  const ctaRefLabel = ctaMode === "screenshot" ? "Copy Screenshot" : composerDestination ? "Add to prompt" : copyButtonLabel;
   useLayoutEffect(() => {
     const ruler = ctaFullLabelRef.current;
     if (!ruler) {
@@ -430,7 +431,7 @@ export default function CadRenderPane({
       observer?.disconnect();
     };
   }, [ctaRefLabel]);
-  const ctaLabel = handleAddSelection || ctaLabelFits || !copyButtonCountLabel || ctaMode === "screenshot"
+  const ctaLabel = composerDestination || ctaLabelFits || !copyButtonCountLabel || ctaMode === "screenshot"
     ? ctaRefLabel
     : copyButtonCountLabel;
   // The title always carries the full ref, so the truncated case is still discoverable.
@@ -595,7 +596,7 @@ export default function CadRenderPane({
         </div>
       ) : null}
       {!previewMode && ctaMode && !stepUpdateInProgress && !topologySelectionPending && !topologySelectionUnavailable && !topologySelectionDeferred ? (
-        <div className={cn("pointer-events-none absolute inset-x-4 z-20 flex min-w-0 justify-center", handleAddSelection ? "bottom-36" : "bottom-4")}>
+        <div className={cn("pointer-events-none absolute inset-x-4 z-20 flex min-w-0 justify-center", composerDestination ? "bottom-36" : "bottom-4")}>
           {/* A hidden ruler carrying the FULL ref label under the same width constraints as
               the button. Measured to decide whether the button can show the ref at all.
               Deliberately independent of what the button currently displays: measuring the
@@ -605,34 +606,16 @@ export default function CadRenderPane({
           <span aria-hidden="true" className={cn("pointer-events-none invisible absolute left-0 top-0", ctaMetricsClass)}>
             <span ref={ctaFullLabelRef} className="block min-w-0 max-w-full truncate">{ctaRefLabel}</span>
           </span>
-          <TutorialTip
-            tipId={TUTORIAL_TIP_IDS.COPY_REFERENCE}
-            active={ctaMode !== "screenshot" && copyReferenceTipActive}
-            side="top"
-            align="center"
-          >
-            <Button
-              type="button"
-              variant="default"
-              size="sm"
-              className={cn(
-                "pointer-events-auto border border-primary/20 bg-primary/85 text-primary-foreground shadow-lg shadow-black/20 hover:bg-primary/75 focus-visible:ring-primary/35",
-                ctaMetricsClass
-              )}
-              disabled={ctaDisabled}
-              onClick={() => {
-                if (ctaMode === "screenshot") {
-                  void handleScreenshotCopy?.();
-                  return;
-                }
-                if (handleAddSelection) handleAddSelection();
-                else void handleCopySelection();
-              }}
-              title={ctaTitle}
-            >
-              <span className="block min-w-0 max-w-full truncate">{ctaLabel}</span>
-            </Button>
-          </TutorialTip>
+          {ctaMode === "screenshot" ? <Button
+            type="button" variant="default" size="sm"
+            className={cn("pointer-events-auto border border-primary/20 bg-primary/85 text-primary-foreground shadow-lg shadow-black/20 hover:bg-primary/75 focus-visible:ring-primary/35", ctaMetricsClass)}
+            disabled={ctaDisabled} onClick={() => void handleScreenshotCopy?.()} title={ctaTitle}
+          ><span className="block min-w-0 max-w-full truncate">{ctaLabel}</span></Button> : <PromptContextAction
+            type="button" variant="default" size="sm"
+            className={cn("pointer-events-auto border border-primary/20 bg-primary/85 text-primary-foreground shadow-lg shadow-black/20 hover:bg-primary/75 focus-visible:ring-primary/35", ctaMetricsClass)}
+            disabled={ctaDisabled} createContext={createPromptContext} onResult={onPromptResult} title={ctaTitle}
+          ><span className="block min-w-0 max-w-full truncate">{ctaLabel}</span></PromptContextAction>}
+          {selectionExtras ? <div className="pointer-events-auto ml-2">{selectionExtras}</div> : null}
         </div>
       ) : null}
     </div>

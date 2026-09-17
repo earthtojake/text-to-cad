@@ -1,3 +1,4 @@
+import { readCadWorkerTicket } from "../../client/resources.js";
 // Surf component worker (design/surface-rendering.md R2).
 //
 // One request = one component URL and an explicit capability set. Ordinary
@@ -20,14 +21,6 @@ import {
 } from "./tessellationCache.js";
 
 const activeControllers = new Map();
-
-async function loadArrayBuffer(url, signal) {
-  const response = await fetch(url, { signal });
-  if (!response.ok) {
-    throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
-  }
-  return response.arrayBuffer();
-}
 
 function bundleTransferList(bundle) {
   return Object.values(bundle?.buffers || {})
@@ -84,7 +77,7 @@ self.addEventListener("message", async (event) => {
     let index = cachedIndex;
     let floats = null;
     if (capabilities.selectors || !cached || (capabilities.render && !cachedIndex)) {
-      const buffer = await loadArrayBuffer(message.url, controller.signal);
+      const buffer = await readCadWorkerTicket(message.resource, { signal: controller.signal });
       ({ index, floats } = parseSurf(buffer));
     }
     // Optional tolerance override (viewport LOD re-tessellates a component at

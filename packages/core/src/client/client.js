@@ -5,6 +5,9 @@ import { retainStlMeshWorker } from '../lib/render/stlMeshWorkerClient.js';
 import { applyViewerOriginToEntries, normalizeViewerOrigin, viewerOriginUrl } from './origin.js';
 import { createHttpTessellationCacheProvider, createTessellationCache } from '../lib/surf/tessellationCache.js';
 
+import { resolveSurfaceComponents } from './surfaceResolution.js';
+import { observeEditingPreview } from './editingPreviewFeed.js';
+import { createHttpCadResourceProvider, scopeCadResources } from './resources.js';
 export * from './origin.js';
 
 /**
@@ -34,9 +37,11 @@ const matchesFile = (entry, file) => [entry.rootRelativeFile, entry.file].some((
  * @param {import("./types.js").CadClientOptions} options
  * @returns {import("./types.js").CadClient}
  */
-export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImpl = globalThis.fetch, pollIntervalMs = 2000, shouldPoll = () => true } = {}) {
+export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImpl = globalThis.fetch, pollIntervalMs = 2000, shouldPoll = () => true, resources: resourceProvider } = {}) {
   origin = normalizeViewerOrigin(origin);
   let disposed = false;
+  const resourceLifetime = new AbortController();
+  const resources = scopeCadResources(resourceProvider || createHttpCadResourceProvider({ origin, fetch: fetchImpl }), resourceLifetime.signal);
   let snapshot = { entries: [], revision: 0, hydrated: false, refreshing: false, error: '', rootId: workspaceId };
   const listeners = new Set();
   const requests = new Set();
@@ -158,6 +163,7 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
 
   const client = {
     origin,
+    resources,
     get workspaceId() { return workspaceId || snapshot.rootId; },
     getSnapshot: () => snapshot,
     subscribe(listener) {
@@ -184,7 +190,14 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
       return entry;
     },
     async serverInfo({ signal, fresh = false } = {}) {
-      if (!server || fresh) server = await request('/__cad/server', { signal, operation: 'server' });
+      if (!server || fresh) {
+        const next = await request('/__cad/server', { signal, operation: 'server' });
+        if (server && (server.identityToken !== next.identityToken || server.rootId !== next.rootId)) {
+          resources.invalidate();
+          publish({});
+        }
+        server = next;
+      }
       if (!snapshot.rootId && server?.rootId) publish({ rootId: server.rootId });
       return server;
     },
@@ -215,6 +228,12 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
     editingPreview(file, { after = '', signal } = {}) {
       return request('/__cad/preview', { file, signal, params: { after }, operation: 'preview' });
     },
+    resolveSurfaceComponents(descriptor, requested, options) {
+      return resolveSurfaceComponents(descriptor, requested, { ...options, client });
+    },
+    observeEditingPreview(file, onUpdate, onError, options) {
+      return observeEditingPreview(file, onUpdate, onError, { ...options, client });
+    },
     createRenderSession({ file = '' } = {}) {
       if (disposed) throw new Error('This CAD client has been disposed.');
       if (file) activeFiles.set(file, (activeFiles.get(file) || 0) + 1);
@@ -226,7 +245,7 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
       });
       const cache = tessellationCache.createSession({ signal: controller.signal });
       let sessionDisposed = false;
-      const session = { tessellationCache: cache, signal: controller.signal, dispose() {
+      const session = { resources, tessellationCache: cache, signal: controller.signal, dispose() {
         if (sessionDisposed) return;
         sessionDisposed = true;
         if (file) {
@@ -243,6 +262,7 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
     dispose() {
       if (disposed) return;
       disposed = true;
+      resourceLifetime.abort();
       refreshSequence += 1;
       stopPolling();
       for (const request of requests) request.abort();

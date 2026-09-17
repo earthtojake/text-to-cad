@@ -15,13 +15,14 @@ import {
 import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-runtime";
 
 /**
- * The explorer, against this repository.
+ * The explorer against this repository, with an isolated CAD project.
  *
  * The project is the checkout the suite is running from — a real tree with a
  * `.gitignore`, `node_modules`, LFS pointers and a hundred thousand files —
  * because that is where the interesting failures are. A fixture directory of
  * six files would pass while the tree ignored nothing and the watcher took ten
- * seconds to start.
+ * seconds to start. CAD cases use a fresh project containing the same tiny STEP
+ * fixture, so catalog reads never traverse local app bundles or model artifacts.
  *
  * Every tab kind is opened and screenshotted. The screenshots are the point:
  * they are the only check on whether the pane *looks* like an app, and the
@@ -88,6 +89,7 @@ let reviewRepo: string;
  */
 let docsDir: string;
 let allFilesDir: string;
+let cadDir: string;
 
 let app: ElectronApplication;
 let page: Page;
@@ -95,6 +97,9 @@ let userData: string;
 
 test.beforeAll(async () => {
   reviewRepo = makeReviewRepo();
+  cadDir = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-explorer-cad-"));
+  fs.mkdirSync(path.dirname(path.join(cadDir, STEP)), { recursive: true });
+  fs.copyFileSync(path.join(repoRoot, STEP), path.join(cadDir, STEP));
   docsDir = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-docs-"));
   for (const name of ["README.md", "AGENTS.md"]) {
     fs.copyFileSync(path.join(repoRoot, name), path.join(docsDir, name));
@@ -150,6 +155,7 @@ test.afterAll(async () => {
   fs.rmSync(reviewRepo, { recursive: true, force: true });
   fs.rmSync(docsDir, { recursive: true, force: true });
   fs.rmSync(allFilesDir, { recursive: true, force: true });
+  fs.rmSync(cadDir, { recursive: true, force: true });
 });
 
 test.describe.configure({ mode: "serial" });
@@ -471,11 +477,13 @@ test("retries the same STEP tab after restoring the CAD runtime", async () => {
   // Closed either way: the render test opens it again from a clean tab.
   await tab.hover();
   await tab.getByRole("button", { name: "Close import-smoke.step" }).click();
+  await switchProject(repoRoot);
 });
 
 /** An invalid override gives every machine the same genuine runtime error. */
 async function openStepWithUnavailableRuntime() {
   await page.evaluate(() => window.hardcore.settings.set({ cadPythonOverride: "/nowhere/python" }));
+  await switchProject(cadDir);
   const broken = await page.evaluate(() => window.hardcore.runtime.status());
   expect(broken.state).toBe("error");
   await newTab(page, "File");
@@ -550,8 +558,12 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   expect(status.state, JSON.stringify(status)).toBe("ready");
   expect(["bundled", "checkout"]).toContain(status.source);
 
+  await switchProject(cadDir);
   await newTab(page, "File");
   await openFromTree(STEP);
+  // The recovery test closed its tab before switching projects. That close
+  // must persist, so reopening leaves one file tab and no blank duplicate.
+  await expect(page.locator("[data-tab-strip] [data-tab]")).toHaveCount(1);
 
   // The viewer's surface: a WebGL canvas and the STEP model list. The
   // first open compiles the document in cadgen's build pool, so this is the
@@ -706,18 +718,17 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
 });
 
 test("keeps every tab in one strip, with + at its end", async () => {
+  await switchProject(repoRoot);
   // A file tab under the strip, not whichever tab happened to be last: this
   // shot is about the strip and the layout, and a review of *this* repository
-  // in the background would make it change on every run. First, too, because
-  // the STEP tab is the one open and the viewer's own Tree/Measure tabs
-  // inside it are tabs as well.
+  // in the background would make it change on every run.
   await page.getByRole("tab").first().click();
-  // Two file tabs, a terminal and a browser — and the STEP when the runtime
-  // could open it on this machine.
-  await expect(page.getByRole("tab")).toHaveCount(cadReady ? 5 : 4);
+  // This project owns two file tabs, a terminal and a browser; CAD tabs belong
+  // to the fixture project and must not leak into this strip.
+  await expect(page.getByRole("tab")).toHaveCount(4);
 
   // `+` trails the tabs inside their scrolling row rather than sitting in a
-  // corner of its own, and it is at the strip's right edge with five tabs of
+  // corner of its own, and it is at the strip's right edge with four tabs of
   // real names in a pane this wide. `tests/e2e/shell.spec.ts` is where the
   // row is driven properly into overflow.
   const strip = page.locator("[data-tab-strip]");
@@ -768,12 +779,14 @@ test("renders the explorer in light as well as dark", async () => {
   await expect(page.getByLabel("Address")).toHaveValue(/example\.com/);
   await shoot("browser-light.png");
   if (cadReady) {
+    await switchProject(cadDir);
     await page.getByRole("tab", { name: /import-smoke\.step/ }).click();
     await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible({ timeout: 60_000 });
     // The app stays light when the CAD surface remounts.
     await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
     await page.waitForTimeout(1000);
     await shoot("file-cad-light.png", true);
+    await switchProject(repoRoot);
   }
   await page.getByRole("tab").first().click();
   await page.evaluate(() => window.hardcore.settings.set({ theme: "dark" }));
@@ -972,6 +985,17 @@ test("lists every file, refreshes ignored folders and opens unknown types as Not
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                     */
 /* -------------------------------------------------------------------------- */
+
+/** Bind a project's own strip and open its persisted explorer pane. */
+async function switchProject(directory: string) {
+  await page.evaluate((root) => window.hardcore.projects.addPath({ path: root }), directory);
+  await page.getByRole("button", { name: `New chat in ${path.basename(directory)}` }).click();
+  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
+  if (!(await page.getByTestId("explorer").isVisible())) {
+    await page.getByRole("button", { name: "Toggle explorer" }).click();
+  }
+  await expect(page.getByTestId("explorer")).toBeVisible();
+}
 
 /** Open a path through the tree's filter — the way a person would. */
 async function openFromTree(target: string) {

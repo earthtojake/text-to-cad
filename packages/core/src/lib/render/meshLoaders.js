@@ -63,15 +63,15 @@ export function resolveMeshFormatFromUrl(url, { fallback = RENDER_FORMAT.GLB } =
 export function peekRenderMeshByUrl(url, options = {}) {
   const format = resolveMeshFormatFromUrl(url, options);
   if (format === RENDER_FORMAT.DXF) {
-    return peekRenderDxfMesh(url);
+    return peekRenderDxfMesh(url, options);
   }
   if (format === RENDER_FORMAT.STL) {
-    return peekRenderStl(url);
+    return peekRenderStl(url, options);
   }
   if (format === RENDER_FORMAT.THREE_MF) {
-    return peekRender3Mf(url);
+    return peekRender3Mf(url, options);
   }
-  return peekRenderGlb(url);
+  return peekRenderGlb(url, options);
 }
 
 export async function loadRenderMeshByUrl(url, options = {}) {

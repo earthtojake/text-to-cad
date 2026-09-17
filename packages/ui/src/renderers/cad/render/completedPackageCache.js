@@ -1,3 +1,4 @@
+import { cadResourceCacheKey } from "@hardcore/core/client";
 import { buildComposedPackageMeshData } from "@hardcore/core/lib/assembly/meshData.js";
 import { entryAssetUrl, entryMeshAssetSignature } from "@hardcore/core/lib/entryAssets.js";
 import { entrySourceFormat } from "@hardcore/core/lib/fileFormats.js";
@@ -65,10 +66,9 @@ export function createCompletedPackageCache({ maxEntries = MAX_PACKAGES, maxByte
   let nextScope = 1;
   const scope = client => {
     if (!client || typeof client !== "object") return "";
-    // A root may get a new client after its last tab closes. Both its stable
-    // root and exact transport origin must agree before completed data crosses
-    // that boundary. Anonymous/test clients remain object-isolated.
-    if (client.workspaceId && client.origin) return JSON.stringify([client.origin, client.workspaceId]);
+    // Stable across mounts of one workspace service, never across resource
+    // generations, authentication scopes or replacement services.
+    if (client.resources) return JSON.stringify([client.workspaceId, cadResourceCacheKey(client.resources, "")]);
     if (!anonymousScopes.has(client)) anonymousScopes.set(client, nextScope++);
     return `client:${anonymousScopes.get(client)}`;
   };

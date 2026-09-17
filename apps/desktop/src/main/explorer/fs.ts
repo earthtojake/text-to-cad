@@ -17,7 +17,7 @@
  * Electron is deliberately not imported: this module is plain Node, so
  * `tests/unit/main/explorer-fs.test.ts` can run it.
  */
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { watch as watchDirectory, type FSWatcher, type Stats } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -96,7 +96,12 @@ async function readBackgroundWatchExclusions(root: string) {
 /* -------------------------------------------------------------------------- */
 
 export class FsError extends Error {
-  override readonly name = "FsError";
+  override readonly name: string = "FsError";
+  constructor(message: string, readonly code: "denied" | "not-found" | "already-exists" | "unsupported" | "conflict" | "error" = "error") { super(message); }
+}
+export class FsConflictError extends FsError {
+  override readonly name = "FsConflictError";
+  constructor(readonly actualRevision?: string) { super("the file changed on disk since it was opened", "conflict"); }
 }
 
 /** POSIX-separated, root-relative form of an absolute path. */
@@ -128,7 +133,7 @@ export async function resolveInRoot(root: string, target: string): Promise<strin
   const real = await fs.realpath(absolute).catch(() => null);
   const resolved = real ?? path.resolve(absolute);
   if (!isInside(realRoot, resolved)) {
-    throw new FsError("path is outside the project");
+    throw new FsError("path is outside the project", "denied");
   }
   return resolved;
 }
@@ -429,7 +434,7 @@ export async function readTextFile(root: string, target: string): Promise<TextFi
   const truncated = buffer.byteLength > MAX_TEXT_BYTES;
   const slice = truncated ? buffer.subarray(0, MAX_TEXT_BYTES) : buffer;
   if (looksBinary(slice)) {
-    throw new FsError("that file is not text");
+    throw new FsError("that file is not text", "unsupported");
   }
   const content = slice.toString("utf8");
   return {
@@ -450,6 +455,7 @@ export async function readTextFile(root: string, target: string): Promise<TextFi
  * silently overwriting whatever changed the file — an agent's edit, most
  * likely, since agents write into the same tree the user is editing.
  */
+const textWrites = new Map<string, Promise<TextFile>>();
 export async function writeTextFile(
   root: string,
   target: string,
@@ -457,14 +463,50 @@ export async function writeTextFile(
   expectedRevision?: string,
 ): Promise<TextFile> {
   const absolute = await resolveInRoot(root, target);
-  if (expectedRevision) {
-    const current = await fs.readFile(absolute).catch(() => null);
-    if (current && revisionOf(current) !== expectedRevision) {
-      throw new FsError("the file changed on disk since it was opened");
-    }
-  }
-  await fs.writeFile(absolute, content, "utf8");
-  return readTextFile(root, target);
+  // Serialize this process's writers so two editors cannot both accept the same
+  // revision. External writes are checked immediately before the atomic rename.
+  const work = (textWrites.get(absolute)?.catch(() => undefined) ?? Promise.resolve()).then(async () => {
+    const temporary = path.join(path.dirname(absolute), `.${path.basename(absolute)}.hardcore-${randomUUID()}.tmp`);
+    const buffer = Buffer.from(content, "utf8");
+    let created = false;
+    const checkRevision = async () => {
+      if (expectedRevision === undefined) return;
+      const current = await fs.readFile(absolute).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      });
+      const actual = current === null ? undefined : revisionOf(current);
+      if (actual !== expectedRevision) throw new FsConflictError(actual);
+    };
+    try {
+      await checkRevision();
+      const mode = await fs.stat(absolute).then(stat => stat.mode & 0o777).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      });
+      const handle = await fs.open(temporary, "wx", mode ?? 0o666);
+      created = true;
+      let modifiedAt: number;
+      try {
+        // open's mode is filtered by umask; an existing file keeps its exact
+        // permissions, while a new file still uses normal process defaults.
+        if (mode !== null) await handle.chmod(mode);
+        await handle.writeFile(buffer);
+        await handle.sync();
+        modifiedAt = Math.round((await handle.stat()).mtimeMs);
+      } finally { await handle.close(); }
+      const relative = toRelative(await fs.realpath(root), absolute);
+      if (await resolveInRoot(root, target) !== absolute) throw new FsError("the file's location changed while saving");
+      await checkRevision();
+      await fs.rename(temporary, absolute);
+      created = false;
+      // Nothing fallible follows the commit: an external delete/rename must
+      // not turn successfully written bytes into a reported failed save.
+      return { path: relative, content, revision: revisionOf(buffer), modifiedAt, size: buffer.byteLength, truncated: false };
+    } finally { if (created) await fs.unlink(temporary).catch(() => {}); }
+  });
+  textWrites.set(absolute, work);
+  try { return await work; } finally { if (textWrites.get(absolute) === work) textWrites.delete(absolute); }
 }
 
 export type BinaryFile = {
@@ -565,7 +607,7 @@ export async function createFile(root: string, directory: string, name: string):
     await fs.writeFile(absolute, "", { flag: "wx" });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "EEXIST") {
-      throw new FsError("something with that name is already there");
+      throw new FsError("something with that name is already there", "already-exists");
     }
     throw error;
   }
@@ -577,7 +619,7 @@ export async function createDirectory(root: string, directory: string, name: str
   const parent = await resolveInRoot(root, directory);
   const absolute = path.join(parent, name);
   if (await fs.lstat(absolute).catch(() => null)) {
-    throw new FsError("something with that name is already there");
+    throw new FsError("something with that name is already there", "already-exists");
   }
   await fs.mkdir(absolute);
   return { path: childPath(toRelative(await fs.realpath(root).catch(() => root), parent), name) };
@@ -604,7 +646,7 @@ export async function renameEntry(root: string, target: string, name: string): P
   // it is the one legitimate rename onto an existing name.
   const caseOnly = destination.toLowerCase() === absolute.toLowerCase();
   if (!caseOnly && (await fs.lstat(destination).catch(() => null))) {
-    throw new FsError("something with that name is already there");
+    throw new FsError("something with that name is already there", "already-exists");
   }
   await fs.rename(absolute, destination);
   return { path: toRelative(realRoot, destination) };

@@ -1,9 +1,10 @@
 import { createRoot } from "react-dom/client";
 import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
+import { unavailablePromptContext } from "@hardcore/core/prompt";
 import { FileText } from "lucide-react";
 import { FileViewer, defineFileRenderer } from "../index.js";
-import type { FileSource, FileMetadata, FileRendererProps, FileViewerState, JsonValue, TextDocument } from "../types.js";
+import type { FileSource, FileActions, FileMetadata, FileRendererProps, FileViewerState, JsonValue, TextDocument } from "../types.js";
 
 const events: string[] = [];
 const rendererCallbacks = new Map<string, FileRendererProps<string>>();
@@ -47,19 +48,17 @@ function memorySource(id: string) {
       return { status: "saved", document };
     },
     subscribe(listener) { listeners.add(listener); events.push(`${id}:subscribe`); return () => { listeners.delete(listener); events.push(`${id}:unsubscribe`); }; },
-    actions: {
-      rename: async (entry, name) => { const contents = files.get(entry.path)!; files.delete(entry.path); files.set(name, contents); return name; },
-      create: async (_directory, _kind, name) => { files.set(name, { content: "created", revision: "1" }); return name; },
-      trash: async () => { await new Promise<void>(resolve => waitingTrash.push(resolve)); return true; },
-      perform: { "copy-relative-path": async (entry) => { events.push(`copy:${entry.path}`); } },
-    },
+    rename: async (path, { name }) => { const contents = files.get(path)!; files.delete(path); files.set(name, contents); return { status: "committed", path: name, change: { kind: "moved", from: path, to: name, entryKind: "file" } }; },
+    create: async (_directory, { kind, name }) => { files.set(name, { content: "created", revision: "1" }); return { status: "committed", path: name, change: { kind: "added", path: name, entryKind: kind } }; },
+    trash: async (path) => { await new Promise<void>(resolve => waitingTrash.push(resolve)); files.delete(path); return { status: "committed", path, change: { kind: "deleted", path, entryKind: "file" } }; },
   };
-  return { source, files, change(path: string, content: string, notify = true) {
+  const actions: FileActions = { perform: { "copy-relative-path": async (entry) => { events.push(`copy:${entry.path}`); } } };
+  return { source, actions, files, change(path: string, content: string, notify = true) {
     const previous = files.get(path)!; files.set(path, { content, revision: String(Number(previous.revision) + 1) });
-    if (notify) for (const listener of listeners) listener({ sourceId: id, paths: [path] });
+    if (notify) for (const listener of listeners) listener({ sourceId: id, changes: [{ kind: "content", path }] });
   }, fail(value: boolean) { failWrite = value; }, hold(value: boolean) { holdWrites = value; }, releaseWrites() { holdWrites = false; for (const release of waitingWrites.splice(0)) release(); }, releaseTrash() { for (const release of waitingTrash.splice(0)) release(); }, add(path: string) {
     files.set(path, { content: "added", revision: "1" });
-    for (const listener of listeners) listener({ sourceId: id, paths: [path] });
+    for (const listener of listeners) listener({ sourceId: id, changes: [{ kind: "content", path }] });
   } };
 }
 const a = memorySource("root-a"), b = memorySource("root-b");
@@ -86,6 +85,8 @@ const renderer = defineFileRenderer({
   prepare: async ({ file, source, signal }) => ({ data: `${source.id}:${file.path}`, text: await source.readText!(file.path, { signal }), dispose: () => { events.push(`${source.id}:${file.path}:disposed`); } }),
 });
 const renderers = [renderer];
+const clipboard = { writeText: async () => {}, readText: async () => "", writeImage: async () => {} };
+function host(root: ReturnType<typeof memorySource>, openFile: (path: string) => void) { return { files: root.source, fileActions: root.actions, clipboard, promptContext: unavailablePromptContext, environment: { colorScheme: "light" as const }, navigation: { openFile } }; }
 function App() {
   const [file, setFile] = useState("notes.txt");
   const [root, setRoot] = useState(a);
@@ -97,11 +98,10 @@ function App() {
   Object.assign(window, { harness: { a, b, events, rendererCallbacks, cleanupWrites, state, open: setFile, narrowCrumbs: setNarrowCrumbs, navigationPath: setNavigationPath, setRoot: (id: string) => { setRoot(id === "root-b" ? b : a); }, second: setSecond, width: (panelWidth: number) => setState((previous) => ({ ...previous, panelWidth })) } });
   return <div style={{ width: "1000px", height: "650px" }}>
     <section data-testid="primary" style={{ height: "400px", display: "flex", flexDirection: "column" }}>
-      <FileViewer file={file} source={root.source} renderers={renderers} state={state} onStateChange={setState} narrowCrumbs={narrowCrumbs} navigationPath={navigationPath}
-        presentation={{ activity: value => value?.loading ? <span data-testid="activity">{value.title || value.label}</span> : null }}
-        onOpenFile={(path) => { setFile(path); setState((previous) => ({ ...previous, panel: null })); }} />
+      <FileViewer file={file} host={host(root, (path) => { setFile(path); setState((previous) => ({ ...previous, panel: null })); })} renderers={renderers} state={state} onStateChange={setState} narrowCrumbs={narrowCrumbs} navigationPath={navigationPath}
+        presentation={{ activity: value => value?.loading ? <span data-testid="activity">{value.title || value.label}</span> : null }} />
     </section>
-    {second ? <section data-testid="secondary" style={{ height: "240px" }}><FileViewer file="notes.txt" source={b.source} renderers={renderers} state={otherState} onStateChange={setOtherState} onOpenFile={() => {}} /></section> : null}
+    {second ? <section data-testid="secondary" style={{ height: "240px" }}><FileViewer file="notes.txt" host={host(b, () => {})} renderers={renderers} state={otherState} onStateChange={setOtherState} /></section> : null}
   </div>;
 }
 createRoot(document.getElementById("root")!).render(<App />);

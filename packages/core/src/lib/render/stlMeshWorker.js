@@ -1,19 +1,8 @@
+import { readCadWorkerTicket } from "../../client/resources.js";
 import { buildMeshDataFromStlBuffer } from "./stlMeshData.js";
 import { meshDataTransferList } from "./meshTransfer.js";
 
 const activeControllers = new Map();
-
-function fetchError(url, response) {
-  return new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
-}
-
-async function loadArrayBuffer(url, signal) {
-  const response = await fetch(url, { signal });
-  if (!response.ok) {
-    throw fetchError(url, response);
-  }
-  return response.arrayBuffer();
-}
 
 self.addEventListener("message", async (event) => {
   const message = event.data || {};
@@ -35,7 +24,7 @@ self.addEventListener("message", async (event) => {
   const controller = new AbortController();
   activeControllers.set(id, controller);
   try {
-    const buffer = await loadArrayBuffer(message.url, controller.signal);
+    const buffer = await readCadWorkerTicket(message.resource, { signal: controller.signal });
     const meshData = await buildMeshDataFromStlBuffer(buffer);
     if (controller.signal.aborted) {
       return;
