@@ -36,7 +36,7 @@ Push the branch to `origin` and open the pull request against
 
 Choose the setup for the environment where the tools and tests will run. Every
 environment needs Git LFS and Python 3.11 or newer. Install Node.js 22 for the
-packaged runtime, Viewer, `cadgen-js`, or documentation site; Python-only work
+packaged runtime, Viewer, `@hardcore/core`, or documentation site; Python-only work
 can defer Node until a selected test needs a generated runtime stage.
 
 ### Linux, macOS, and WSL

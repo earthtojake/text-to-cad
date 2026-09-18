@@ -1572,6 +1572,13 @@ complete Python runtime and native Node dependency closure.
 
 ### STEP inspection and replay experiment
 
+Scripted inspection uses the bundled cadgen Python API: `read_step` for native
+geometry, `read_scene` for revision-scoped selections, and `cadgen.geometry`
+for exact queries. Copied viewer references resolve through `scene.resolve()`;
+the retired inspect CLI is not part of the desktop agent workflow. The app's
+handoff skill defers validation policy to the bundled `cad` skill. These queries
+require no viewer, tessellation or inferred feature tree.
+
 The shared Model tree infers read-only features from existing SURF geometry
 when a visible part is expanded. Expansion also controls viewport selection and
 exact topology loading; desktop supplies no separate tree or inference backend.
