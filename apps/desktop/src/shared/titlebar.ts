@@ -23,7 +23,7 @@
  */
 
 /** The strip's height in CSS px. `--titlebar-height` in globals.css. */
-export const TITLEBAR_HEIGHT = 36;
+export const TITLEBAR_HEIGHT = 48;
 
 /** The distance from the window's left edge to the close button. */
 export const TRAFFIC_LIGHT_X = 12;

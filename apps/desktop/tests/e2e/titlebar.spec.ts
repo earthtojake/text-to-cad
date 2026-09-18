@@ -281,7 +281,7 @@ async function expectClear(label: string) {
         }
         // In the strip, not merely passing through it: a pane divider runs the
         // whole height of the window and is grabbed anywhere along it, so the
-        // 36 pixels the lights cover are not its only handle. What counts is a
+        // strip the lights cover is not its only handle. What counts is a
         // control that lives in this row.
         if (rect.top + rect.height / 2 > height) {
           continue;
