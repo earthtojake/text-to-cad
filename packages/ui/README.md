@@ -189,6 +189,12 @@ collapsed parts do not trigger whole-assembly analysis. Contextual measurements
 remain in Inspect. See [model tree and recognition](docs/cad-renderer.md#step-inspector-layout)
 for selection, isolation, demand and cache ownership.
 
+Feature detection stays client-side in this renderer, separate from cadgen
+compilation, Python inspection and reference syntax. Both apps reuse its worker
+and versioned, bounded memory cache; it adds no persistent store. Read
+[feature detection](docs/feature-detection.md) before changing inference rules,
+cache identity, cancellation or recognition limits.
+
 Inspect uses the fixed light or dark workbench basis selected by app appearance;
 legacy CAD theme preferences are not consumed. The floating toolbar switches to
 Render, whose studio, materials, camera and quality have independent per-file

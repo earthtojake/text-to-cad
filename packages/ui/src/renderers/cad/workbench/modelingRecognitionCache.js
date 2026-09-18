@@ -1,18 +1,20 @@
 import { cadResourceCacheKey } from "@hardcore/core/client";
+// Bump when inference rules, tolerances or serialized recognition results change.
+export const MODELING_RECOGNITION_VERSION = 1;
 // Hundreds of small unique parts can fit well below the byte budget. Keep a
 // whole ordinary assembly warm instead of evicting its tail on every reopen.
 const MAX_ENTRIES = 512;
 const MAX_BYTES = 8 * 1024 * 1024;
 
 /** Recognition is component-local; occurrence placement and selection remain file-owned. */
-export function modelingRecognitionKey(identity, surfUrl, { resources } = {}) {
+export function modelingRecognitionKey(identity, surfUrl, { resources, recognizerVersion = MODELING_RECOGNITION_VERSION } = {}) {
   const scope = resources ? cadResourceCacheKey(resources, "") : "static";
   if (identity?.surfaceInput && identity?.surfaceObject) {
-    return JSON.stringify([scope, "surface", identity.surfaceInput, identity.surfaceObject]);
+    return JSON.stringify([scope, recognizerVersion, "surface", identity.surfaceInput, identity.surfaceObject]);
   }
   if (!surfUrl) return "";
   // Older static packages carry an immutable component URL instead of D/O.
-  return JSON.stringify([scope, "url", String(surfUrl)]);
+  return JSON.stringify([scope, recognizerVersion, "url", String(surfUrl)]);
 }
 
 /** Store JSON metadata only: no SURF arrays, mutable scene, worker or pending promise. */

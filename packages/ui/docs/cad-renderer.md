@@ -324,83 +324,19 @@ return when the viewport widens. Capture actions do not contain navigation tools
 
 ### Read-only STEP features
 
-The Model tree reads the lightweight assembly descriptor first. Expanding a
-visible part requests inference from its existing SURF geometry, one unique
-component at a time in a bounded, disposable worker. Closed parts require no
-recognition or exact-surface request just to show their structural rows. Repeated
-instances share component results while keeping their occurrence identities.
-Recognition never discovers Python files, writes models, or reconstructs source
-history. There is no global “Recognizing geometry” progress row: the stable
-header counts presented top-level features independently of this optional work.
+Feature detection is an optional client-side capability of the shared renderer.
+Expanding a visible part requests its geometry analysis in a disposable worker;
+repeated instances and warm file reopening reuse completed metadata. Expansion
+changes preserve a pending component while at least one of its occurrences is
+still requested. The cache is versioned and bounded, and lasts only for the
+running page or app renderer.
 
-For constant-section solids, paired analytic cap contours, straight side surfaces,
-side area and solid volume support a possible base-extrude / cut-extrude sequence.
-The recovered sketch profiles reference actual STEP boundary edges. Full coaxial
-cylinder/cone solids can instead yield a closed axial profile and 360-degree
-revolution, checked against the solid volume. These are inferred modeling choices,
-not original history or editable source constraints. Line/circle contours support these paths. Analytic recognition also
-proposes ruled lofts and rounded-box fillets; shell and pattern
-operations are not invented.
-
-Other solids remain **Imported body**. Local planar caps, translated rims and
-straight walls can identify a pocket or boss inside a more complex body. Adjacent
-coaxial cylindrical patches are merged across export seams into bore candidates;
-annular shoulders and full conical transitions can join their stages. Boundary
-samples and enclosed face bounds reject evident material inside a proposed bore.
-These are conservative analytic tests, not a general proof of an empty volume.
-Other children include partial cut candidates, connected constant-radius
-cylindrical/toroidal fillet candidates and all remaining faces. Candidate ordering is not a reconstructed timeline. Single curved corners
-are deliberately not promoted into separate fillet operations. Profiles and their
-individual edges, operations and remaining geometry all use the native canonical
-reference selection and floating Add to prompt action, scoped to the occurrence.
-The STEP assembly hierarchy exposes every part directly, with recognition counts
-and expandable operations; a difficult first component cannot hide the rest of
-the assembly. Recognition does not auto-expand another part. Long lists group
-same-kind operations into inspection folders, never inferred patterns.
-Annotation-only components show a no-faces state. Collapsing an occurrence or
-its ancestor cancels recognition that is no longer requested. Closing the
-inspector, disposal and geometry invalidation also stop pending work; late
-results cannot enter the next selection or cache. Completed recognition metadata is retained across
-file mounts under the exact surface input/object identity, or a provider-scoped
-immutable SURF URL for static packages. Its separate LRU holds at most 512 unique
-components and 8 MiB of serialized metadata. The count guard accommodates
-assemblies with hundreds of small parts; the byte limit still evicts large
-metadata results. It retains no SURF bytes, workers,
-pending work or failures. The descriptor uses the existing package cache. A new
-surface identity reruns recognition, and retry processes only failed components.
-On a warm reopen, recognition reads the accepted component identities from the
-completed package only after the root, provider generation, entry revision and runtime
-descriptor all match. This copies small identity records once, without composing
-or copying geometry. Completed metadata then needs no surface request or worker;
-a missing package identity or evicted recognition result follows the usual exact
-surface-resolution path. The existing cache byte limits remain unchanged.
-Every displayed operation and selection remains scoped to its assembly occurrence.
-
-The orchestration is in [useModelingRecognition](../src/renderers/cad/workbench/useModelingRecognition.js),
-the worker in [modelingTree.worker](../src/renderers/cad/workbench/modelingTree.worker.js),
-and the bounded cache in [modelingRecognitionCache](../src/renderers/cad/workbench/modelingRecognitionCache.js).
-The current cache is in memory: app restarts do not preserve it. The persistent
-cadgen surface/mesh store and this optional recognition cache are separate.
-
-The recommended next boundary is to move pure inference and its result schema
-from UI to core, with UI retaining expansion, requests and presentation. If
-recognition becomes useful to CLI tools or must survive restarts, cadgen should
-orchestrate the same algorithm as a demand-driven artifact derivation and cache
-its metadata by exact surface input/object, algorithm version and options.
-That is a future extraction, not a new backend in this change. Do not make
-recognition a prerequisite of STEP compilation, tessellation, structural tree
-display or picking a part. It must remain independently cancellable and
-recomputable, without a source dependency or another sidecar.
-
-Independent local OCP validation rebuilds the inferred complete plans and compares
-both directional Boolean differences. This is a development check; the client
-runs analytic checks only, not an in-browser CAD kernel.
-
-External regression fixtures come from pinned FreeCAD/pythonOCC STEP samples;
-provenance is recorded alongside the fixtures. Development checks distinguish
-local tool occupancy from a successful remove/restore Boolean round trip. A
-partial feature match does not establish a rebuildable history for the whole
-part, particularly when the independent Boolean reconstruction fails.
+The [feature detection guide](feature-detection.md) owns the algorithm's scope,
+cache identity, cancellation, limits, code map and regression policy. Keep this
+work in UI, separate from cadgen compilation, Python inspection and reference
+syntax. Recognized groups select existing canonical faces and edges. They do
+not establish original source history, and failed recognition does not prevent
+structural tree display or ordinary part selection.
 
 ### Replay experiment scope
 

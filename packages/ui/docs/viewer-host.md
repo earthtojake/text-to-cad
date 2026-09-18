@@ -45,8 +45,10 @@ use the [explicit fake host](../src/host/testing/host.ts).
 
 ## Adding a shared feature
 
-1. Implement reusable interaction and presentation in UI, with non-React domain
-   behavior in core. Keep project, session and operating-system workflows in apps.
+1. Implement reusable interaction and presentation in UI, with cross-consumer
+   non-React domain behavior in core. Renderer-private helpers such as
+   [feature detection](feature-detection.md) stay with their renderer in UI.
+   Keep project, session and operating-system workflows in apps.
 2. Reuse an existing injected contract. If a new environmental effect is needed,
    extend its narrow consumer-owned interface and implement it in each app, or
    explicitly advertise that the host cannot perform it. Shared UI must not

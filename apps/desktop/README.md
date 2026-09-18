@@ -1584,7 +1584,12 @@ when a visible part is expanded. Expansion also controls viewport selection and
 exact topology loading; desktop supplies no separate tree or inference backend.
 It does not consult Python source or run kernel reconstruction. See the shared
 [model-tree contract](../../packages/ui/docs/cad-renderer.md#step-inspector-layout)
-for isolation, reveal, selection granularity and recognition cache lifetimes.
+for isolation, reveal and selection granularity. The client-side
+[feature detection guide](../../packages/ui/docs/feature-detection.md) covers
+rules, cancellation and the versioned memory cache shared by the UI in both apps.
+Completed results survive file switches within the renderer, but not app
+restarts. Recognition is separate from cadgen compilation and Python inspection;
+desktop adds no recognition service or persistent store.
 
 Replay and GIF/video export live separately on
 [`amy/step-reconstruction-playback`](https://github.com/earthtojake/text-to-cad/tree/amy/step-reconstruction-playback).

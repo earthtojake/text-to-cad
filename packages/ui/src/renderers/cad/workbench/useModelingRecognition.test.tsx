@@ -281,3 +281,106 @@ it('defaults to descriptor-only inspection until a consumer supplies an expansio
   expect(RecognitionWorker.instances).toHaveLength(0);
   expect(view.result.current.results).toEqual({});
 });
+
+function pendingAssembly() {
+  const { urls, fetch } = setup();
+  const descriptor = {
+    components: { a: { surf: 'a.surf' }, b: { surf: 'b.surf' } },
+    occurrences: [{ id: 'first', component: 'a' }, { id: 'repeat', component: 'a' }, { id: 'other', component: 'b' }],
+  };
+  fetch.mockImplementation(async () => new Response(JSON.stringify(descriptor)));
+  const view = renderHook(({ requestedOccurrenceIds }) => useRecognition(urls.a, true, {
+    client: fixtureClient, requestedOccurrenceIds,
+  }), { initialProps: { requestedOccurrenceIds: ['first'] } });
+  return view;
+}
+
+it('keeps the active component running when another part is expanded, then processes the new part', async () => {
+  const view = pendingAssembly();
+  await waitFor(() => expect(RecognitionWorker.instances[0]?.postMessage).toHaveBeenCalled());
+  const first = RecognitionWorker.instances[0];
+  view.rerender({ requestedOccurrenceIds: ['first', 'other'] });
+  expect(first.terminate).not.toHaveBeenCalled();
+  expect(RecognitionWorker.instances).toHaveLength(1);
+  await respond({ tree }, 0);
+  await waitFor(() => expect(RecognitionWorker.instances[1]?.postMessage).toHaveBeenCalled());
+  expect(view.result.current.results.a.tree).toEqual(tree);
+  expect(RecognitionWorker.instances[1].postMessage.mock.calls[0][0].resource.url).toContain('b.surf');
+  await respond({ tree }, 1);
+  expect(Object.keys(view.result.current.results).sort()).toEqual(['a', 'b']);
+  expect(first.postMessage).toHaveBeenCalledTimes(1);
+});
+
+it('keeps pending recognition for a repeated instance and removes collapsed parts from the queue', async () => {
+  const view = pendingAssembly();
+  await waitFor(() => expect(RecognitionWorker.instances[0]?.postMessage).toHaveBeenCalled());
+  const first = RecognitionWorker.instances[0];
+  view.rerender({ requestedOccurrenceIds: ['first', 'other'] });
+  view.rerender({ requestedOccurrenceIds: ['repeat'] });
+  expect(first.terminate).not.toHaveBeenCalled();
+  await respond({ tree }, 0);
+  expect(view.result.current.results.a.tree).toEqual(tree);
+  expect(view.result.current.results.b).toBeUndefined();
+  expect(RecognitionWorker.instances).toHaveLength(1);
+});
+
+it('preserves a pending surface request through expansion changes', async () => {
+  const { urls, fetch } = setup();
+  const descriptor = {
+    components: { a: { surfaceInput: 'input-a' }, b: { surf: 'b.surf' } },
+    occurrences: [{ id: 'first', component: 'a' }, { id: 'repeat', component: 'a' }, { id: 'other', component: 'b' }],
+  };
+  fetch.mockImplementation(async () => new Response(JSON.stringify(descriptor)));
+  let complete;
+  const resolve = vi.spyOn(fixtureClient, 'resolveSurfaceComponents').mockImplementation(() => new Promise(done => { complete=done; }));
+  const view = renderHook(({ requestedOccurrenceIds }) => useRecognition(urls.a, true, {
+    client: fixtureClient, requestedOccurrenceIds,
+  }), { initialProps: { requestedOccurrenceIds: ['first'] } });
+  await waitFor(() => expect(resolve).toHaveBeenCalledTimes(1));
+  const signal = resolve.mock.calls[0][2].signal;
+  view.rerender({ requestedOccurrenceIds: ['first', 'other'] });
+  view.rerender({ requestedOccurrenceIds: ['repeat'] });
+  expect(resolve).toHaveBeenCalledTimes(1);
+  expect(signal.aborted).toBe(false);
+  await act(async () => complete(new Map([['a', {
+    surfaceInput: 'input-a', surfaceObject: 'object-a', surfUrl: 'https://recognition.test/a.surf',
+  }]])));
+  await respond({ tree }, 0);
+  expect(view.result.current.results.a.tree).toEqual(tree);
+  expect(RecognitionWorker.instances).toHaveLength(1);
+});
+
+it('retries a failed component without restarting another component that is still running', async () => {
+  const view = pendingAssembly();
+  view.rerender({ requestedOccurrenceIds: ['first', 'other'] });
+  await respond({ error: 'Unavailable' }, 0);
+  await waitFor(() => expect(RecognitionWorker.instances[1]?.postMessage).toHaveBeenCalled());
+  const other = RecognitionWorker.instances[1];
+  act(() => view.result.current.retryFailed());
+  expect(other.terminate).not.toHaveBeenCalled();
+  expect(RecognitionWorker.instances).toHaveLength(2);
+  await respond({ tree }, 1);
+  await waitFor(() => expect(RecognitionWorker.instances[2]?.postMessage).toHaveBeenCalled());
+  expect(RecognitionWorker.instances[2].postMessage.mock.calls[0][0].resource.url).toContain('a.surf');
+  await respond({ tree }, 2);
+  expect(view.result.current.results.a.tree).toEqual(tree);
+  expect(view.result.current.results.b.tree).toEqual(tree);
+});
+
+it('cancels only the unwanted active part and ignores its late result while processing the remaining part', async () => {
+  const view = pendingAssembly();
+  await waitFor(() => expect(RecognitionWorker.instances[0]?.postMessage).toHaveBeenCalled());
+  const first = RecognitionWorker.instances[0];
+  view.rerender({ requestedOccurrenceIds: ['first', 'other'] });
+  view.rerender({ requestedOccurrenceIds: ['other'] });
+  expect(first.terminate).toHaveBeenCalledTimes(1);
+  await waitFor(() => expect(RecognitionWorker.instances[1]?.postMessage).toHaveBeenCalled());
+  await respond({ tree: [{ ...tree[0], label: 'Late' }] }, 0);
+  expect(view.result.current.results.a).toBeUndefined();
+  await respond({ tree }, 1);
+  expect(Object.keys(view.result.current.results)).toEqual(['b']);
+  view.rerender({ requestedOccurrenceIds: ['first', 'other'] });
+  await waitFor(() => expect(RecognitionWorker.instances[2]?.postMessage).toHaveBeenCalled());
+  await respond({ tree }, 2);
+  expect(view.result.current.results.a.tree).toEqual(tree);
+});
