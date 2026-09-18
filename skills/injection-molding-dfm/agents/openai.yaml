@@ -1,0 +1,4 @@
+interface:
+  display_name: "Injection Molding DFM"
+  short_description: "Review molding draft, walls, ribs, and undercuts"
+  default_prompt: "Use $injection-molding-dfm to review this part and report measured issues, assumptions, and suggested fixes."

@@ -1,0 +1,9 @@
+trimesh
+numpy
+# Ray casting for wall thickness and undercut occlusion.
+rtree
+# trimesh treats these as optional extras, but mesh.split (per-body thickness)
+# needs scipy, and loading the .3mf that SKILL.md advertises needs the rest.
+scipy
+networkx
+lxml

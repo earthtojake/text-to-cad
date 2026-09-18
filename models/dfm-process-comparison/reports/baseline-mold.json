@@ -1,0 +1,435 @@
+{
+  "file": "models/dfm-process-comparison/STL/baseline.stl",
+  "mesh": {
+    "bbox_mm": [
+      80.0,
+      60.0,
+      25.0
+    ],
+    "triangle_count": 1196,
+    "watertight": true,
+    "body_count": 1,
+    "surface_area_mm2": 15833.0,
+    "volume_mm3": 16322.4
+  },
+  "scale": {
+    "bbox_diagonal_mm": 103.0776,
+    "units_suspect": false,
+    "note": "bbox consistent with millimetre units"
+  },
+  "draft": {
+    "pull_axis": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "wall_limit_deg": 45.0,
+    "zero_tol_deg": 0.05,
+    "wall_area_mm2": 6360.0,
+    "wall_area_pct_of_surface": 40.2,
+    "non_wall_area_mm2": 9472.95,
+    "wall_draft_histogram_mm2": {
+      "0-0.25deg": 6253.99,
+      "0.25-0.5deg": 26.5,
+      "0.5-1deg": 26.5,
+      "1-2deg": 50.89,
+      "2-3deg": 2.12
+    },
+    "zero_draft_wall_area_mm2": 6232.8,
+    "zero_draft_face_count": 180,
+    "drafted_wall_area_mm2": 127.21,
+    "drafted_wall_mean_draft_deg": 0.857,
+    "largest_zero_draft_faces": [
+      {
+        "normal": [
+          -1.0,
+          -0.0,
+          -0.0
+        ],
+        "area_mm2": 2820.0,
+        "centroid_xyz": [
+          -2.93,
+          0.0,
+          13.2
+        ],
+        "extent_along_pull_mm": 25.0,
+        "triangle_count": 4
+      },
+      {
+        "normal": [
+          1.0,
+          0.0,
+          -0.0
+        ],
+        "area_mm2": 2820.0,
+        "centroid_xyz": [
+          2.93,
+          0.0,
+          13.2
+        ],
+        "extent_along_pull_mm": 25.0,
+        "triangle_count": 4
+      },
+      {
+        "normal": [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        "area_mm2": 275.2,
+        "centroid_xyz": [
+          0.0,
+          -30.0,
+          3.1
+        ],
+        "extent_along_pull_mm": 25.0,
+        "triangle_count": 6
+      },
+      {
+        "normal": [
+          -0.0,
+          1.0,
+          0.0
+        ],
+        "area_mm2": 275.2,
+        "centroid_xyz": [
+          0.0,
+          30.0,
+          3.1
+        ],
+        "extent_along_pull_mm": 25.0,
+        "triangle_count": 6
+      },
+      {
+        "normal": [
+          -0.252,
+          -0.968,
+          0.0
+        ],
+        "area_mm2": 1.59,
+        "centroid_xyz": [
+          0.61,
+          2.16,
+          2.0
+        ],
+        "extent_along_pull_mm": 3.0,
+        "triangle_count": 4
+      },
+      {
+        "normal": [
+          0.252,
+          0.968,
+          -0.0
+        ],
+        "area_mm2": 1.59,
+        "centroid_xyz": [
+          -0.61,
+          -2.16,
+          2.0
+        ],
+        "extent_along_pull_mm": 3.0,
+        "triangle_count": 4
+      },
+      {
+        "normal": [
+          0.968,
+          -0.252,
+          0.0
+        ],
+        "area_mm2": 1.59,
+        "centroid_xyz": [
+          -2.16,
+          0.61,
+          2.0
+        ],
+        "extent_along_pull_mm": 3.0,
+        "triangle_count": 4
+      },
+      {
+        "normal": [
+          -0.968,
+          0.252,
+          0.0
+        ],
+        "area_mm2": 1.59,
+        "centroid_xyz": [
+          2.16,
+          -0.61,
+          2.0
+        ],
+        "extent_along_pull_mm": 3.0,
+        "triangle_count": 4
+      }
+    ],
+    "method": "per-triangle angle to the pull axis; curved faces read per facet; faces at or above wall_limit_deg from the pull are not walls",
+    "min_wall_draft": {
+      "draft_deg": 0.0,
+      "location_xyz": [
+        -40.0,
+        -10.0,
+        8.33
+      ],
+      "opens_toward": "none"
+    },
+    "lowest_draft_wall_faces": [
+      {
+        "draft_deg": 0.0,
+        "area_mm2": 750.0,
+        "location_xyz": [
+          -40.0,
+          -10.0,
+          8.33
+        ],
+        "opens_toward": "none"
+      },
+      {
+        "draft_deg": 0.0,
+        "area_mm2": 0.4,
+        "location_xyz": [
+          -25.61,
+          15.84,
+          2.0
+        ],
+        "opens_toward": "none"
+      },
+      {
+        "draft_deg": 0.0,
+        "area_mm2": 0.4,
+        "location_xyz": [
+          -22.84,
+          -18.61,
+          2.0
+        ],
+        "opens_toward": "none"
+      },
+      {
+        "draft_deg": 0.0,
+        "area_mm2": 0.27,
+        "location_xyz": [
+          -25.75,
+          15.88,
+          1.0
+        ],
+        "opens_toward": "none"
+      },
+      {
+        "draft_deg": 0.0,
+        "area_mm2": 0.13,
+        "location_xyz": [
+          -26.3,
+          16.16,
+          2.0
+        ],
+        "opens_toward": "none"
+      },
+      {
+        "draft_deg": 0.0,
+        "area_mm2": 0.33,
+        "location_xyz": [
+          27.25,
+          -17.93,
+          2.0
+        ],
+        "opens_toward": "none"
+      },
+      {
+        "draft_deg": 0.0,
+        "area_mm2": 0.2,
+        "location_xyz": [
+          -26.36,
+          16.21,
+          1.0
+        ],
+        "opens_toward": "none"
+      },
+      {
+        "draft_deg": 0.0,
+        "area_mm2": 0.2,
+        "location_xyz": [
+          -26.79,
+          16.64,
+          2.0
+        ],
+        "opens_toward": "none"
+      }
+    ]
+  },
+  "wall_thickness": {
+    "method": "shortest hit of a 9-ray cone (normal + 8 at 25 deg) cast inward from area-weighted sampled faces; per body",
+    "body_count": 1,
+    "samples_valid": 1196,
+    "min_mm": 0.631,
+    "p05_mm": 0.8,
+    "median_mm": 3.0,
+    "p95_mm": 3.0,
+    "max_mm": 3.0,
+    "p95_to_median_ratio": 1.0,
+    "max_to_median_ratio": 1.0,
+    "per_body": [
+      {
+        "body": 0,
+        "samples_valid": 1196,
+        "min_mm": 0.631,
+        "median_mm": 3.0,
+        "max_mm": 3.0
+      }
+    ],
+    "thinnest_samples": [
+      {
+        "location_xyz": [
+          39.47,
+          30.0,
+          9.33
+        ],
+        "thickness_mm": 0.631
+      },
+      {
+        "location_xyz": [
+          39.47,
+          -10.0,
+          25.0
+        ],
+        "thickness_mm": 0.631
+      },
+      {
+        "location_xyz": [
+          39.73,
+          10.0,
+          25.0
+        ],
+        "thickness_mm": 0.631
+      },
+      {
+        "location_xyz": [
+          39.73,
+          10.0,
+          25.0
+        ],
+        "thickness_mm": 0.631
+      },
+      {
+        "location_xyz": [
+          39.73,
+          30.0,
+          16.67
+        ],
+        "thickness_mm": 0.631
+      },
+      {
+        "location_xyz": [
+          39.73,
+          -30.0,
+          9.33
+        ],
+        "thickness_mm": 0.631
+      },
+      {
+        "location_xyz": [
+          -39.73,
+          -30.0,
+          16.67
+        ],
+        "thickness_mm": 0.631
+      },
+      {
+        "location_xyz": [
+          -39.73,
+          -10.0,
+          25.0
+        ],
+        "thickness_mm": 0.631
+      }
+    ],
+    "thickest_samples": [
+      {
+        "location_xyz": [
+          35.2,
+          6.15,
+          3.0
+        ],
+        "thickness_mm": 3.0
+      },
+      {
+        "location_xyz": [
+          -7.92,
+          -26.62,
+          0.0
+        ],
+        "thickness_mm": 3.0
+      },
+      {
+        "location_xyz": [
+          13.54,
+          -23.33,
+          3.0
+        ],
+        "thickness_mm": 3.0
+      },
+      {
+        "location_xyz": [
+          8.75,
+          -5.12,
+          0.0
+        ],
+        "thickness_mm": 3.0
+      },
+      {
+        "location_xyz": [
+          8.75,
+          -5.12,
+          3.0
+        ],
+        "thickness_mm": 3.0
+      },
+      {
+        "location_xyz": [
+          -31.23,
+          22.07,
+          3.0
+        ],
+        "thickness_mm": 3.0
+      },
+      {
+        "location_xyz": [
+          -8.22,
+          5.34,
+          0.0
+        ],
+        "thickness_mm": 3.0
+      },
+      {
+        "location_xyz": [
+          13.81,
+          -23.33,
+          0.0
+        ],
+        "thickness_mm": 3.0
+      }
+    ]
+  },
+  "undercuts": {
+    "pull_axis": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "method": "straight two-half pull; ray from each face along its withdrawal direction; zero-draft walls need both directions blocked",
+    "candidate_area_mm2": 0.0,
+    "candidate_area_pct_of_surface": 0.0,
+    "candidate_face_count": 0,
+    "leaning_blocked_area_mm2": 0.0,
+    "trapped_zero_draft_area_mm2": 0.0,
+    "largest_candidate_faces": []
+  },
+  "projection": {
+    "pull_axis": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "projected_area_mm2": 4736.0,
+    "raster_resolution_mm": 0.25,
+    "depth_along_pull_mm": 25.0,
+    "volume_mm3": 16322.4
+  }
+}
