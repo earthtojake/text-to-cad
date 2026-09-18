@@ -68,7 +68,7 @@ made it. Open the file the person asked about, not every file you touched.
 ## What the person can do that you cannot
 
 In the viewer they can orbit, zoom, section, measure between faces, isolate a
-component, toggle layers of a DXF, pose joints, play a `.step.js` animation,
+component, toggle layers of a DXF, pose joints, play an embedded STEP animation,
 and edit the model script beside it and rebuild. So:
 
 - Do not narrate what a snapshot already shows; describe what to check.
@@ -79,9 +79,11 @@ and edit the model script beside it and rebuild. So:
 
 ## Finishing a CAD turn
 
-1. Validate as the `cad` skill requires: `cadgen step inspect refs … --facts
-   --planes --positioning`, the spec-driven `measure`/`align` checks, and
-   `cadgen step inspect validate …`. Report only checks that ran.
+1. Validate as the `cad` skill's inspection-and-validation reference requires:
+   use a Python script with `cadgen.read_step`, `cadgen.read_scene` and
+   `cadgen.geometry` against the saved artifact. Resolve copied viewer refs
+   with `scene.resolve()`; choose measurements and acceptance criteria for the
+   design. Report selected geometry, units, thresholds and only checks that ran.
 2. Snapshot the primary artifact with `cadgen step snapshot` (or the mesh
    door), then `attach_snapshot` the PNG. Read it yourself first.
 3. `open_file` the primary artifact so it is on screen when you stop.
@@ -89,5 +91,5 @@ and edit the model script beside it and rebuild. So:
 5. Guide the eye: two or three sentences on what to look at, what to measure,
    and what you are unsure of. Assumptions and caveats go here, not in a preamble.
 
-If a tool call fails, say so in one line and continue with the CLI validation
+If a tool call fails, say so in one line and continue with the Python checks
 and the snapshot; do not fall back to starting a viewer.

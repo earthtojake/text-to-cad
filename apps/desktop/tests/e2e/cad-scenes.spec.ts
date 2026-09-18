@@ -182,7 +182,8 @@ async function expectCadReady(file: string, componentCount = 1) {
   const model = page.getByRole("list", { name: "Model", exact: true });
   await expect(model).toBeVisible({ timeout: 15_000 });
   if (componentCount === 1) {
-    await expect(model.getByText("1 feature", { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("region", { name: "Model", exact: true })
+      .getByText("1 feature", { exact: true })).toBeVisible({ timeout: 15_000 });
   }
 }
 
