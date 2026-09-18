@@ -128,6 +128,8 @@ class DrawingPreviewEditTests(unittest.TestCase):
         from cadgen.viewer.drawing_svg import parse_draft_dimensions, parse_tolerances
         self.assertEqual(parse_draft_dimensions("1,2,3,4,5;6,7,8,9,10,v;bad"), [(1.0, 2.0, 3.0, 4.0, 5.0, None), (6.0, 7.0, 8.0, 9.0, 10.0, "v")])
         self.assertEqual(parse_tolerances("front:0=±0.1;top:1=H7;junk"), [("front:0", "±0.1"), ("top:1", "H7")])
+        from cadgen.viewer.drawing_svg import parse_draft_diameters
+        self.assertEqual(parse_draft_diameters("110,50,3;bad;1,2,0"), [(110.0, 50.0, 3.0)])
 
     def test_moving_a_view_shifts_only_that_view(self) -> None:
         from cadgen.viewer.drawing_svg import _entity_tags, preview_edits
@@ -159,9 +161,10 @@ class DrawingPreviewEditTests(unittest.TestCase):
             doc = ezdxf.readfile(path)
             before = len(doc.modelspace().query("DIMENSION"))
             preview_edits(doc, draft_dimension=(80, 40, 120, 40, 15, None), highlight="front:0",
-                          tolerance=("front:0", "±0.1"))
+                          tolerance=("front:0", "±0.1"), draft_diameter=[(100, 60, 3)])
             dims = doc.modelspace().query("DIMENSION")
-            self.assertEqual(len(dims), before + 1)
+            self.assertEqual(len(dims), before + 2)
+            self.assertTrue(any(d.dimtype == 3 for d in dims), "a diameter dimension was drafted")
             texts = [e.text for d in dims for e in doc.blocks.get(d.dxf.geometry) if e.dxftype() == "MTEXT"]
             self.assertTrue(any("±0.1" in t for t in texts), texts)
             self.assertTrue(any(d.dxf.color == 1 for d in dims))

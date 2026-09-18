@@ -134,6 +134,19 @@ def parse_draft_dimensions(spec: str) -> list[tuple]:
     return drafts
 
 
+def parse_draft_diameters(spec: str) -> list[tuple[float, float, float]]:
+    """``"cx,cy,r;..."`` -> [(cx, cy, r), ...]; bad parts skipped."""
+    out = []
+    for part in str(spec or "").split(";"):
+        try:
+            cx, cy, r = (float(v) for v in part.split(","))
+        except ValueError:
+            continue
+        if r > 0:
+            out.append((cx, cy, r))
+    return out
+
+
 def parse_tolerances(spec: str) -> list[tuple[str, str]]:
     """``"view:index=SPEC;..."`` -> [("view:index", "SPEC"), ...]."""
     out = []
@@ -145,7 +158,7 @@ def parse_tolerances(spec: str) -> list[tuple[str, str]]:
 
 
 def preview_edits(document, *, moves: dict | None = None, draft_dimension=None,
-                  highlight: str = "", tolerance=None) -> None:
+                  highlight: str = "", tolerance=None, draft_diameter=None) -> None:
     """Apply the viewer's PREVIEW edits to an in-memory document. Nothing is saved:
     these show what a script change would look like before the agent makes it.
 
@@ -208,6 +221,12 @@ def preview_edits(document, *, moves: dict | None = None, draft_dimension=None,
         dim.render()
         for part in document.blocks.get(dim.dimension.dxf.geometry):
             part.dxf.color = 1
+    for cx, cy, r in (draft_diameter or []):
+        dim = msp.add_diameter_dim(center=(cx, cy), radius=r, angle=45, dimstyle="Standard",
+                                   override={"dimdsep": ord("."), "dimtoh": 1}, dxfattribs={"layer": "DIM", "color": 1})
+        dim.render()
+        for part in document.blocks.get(dim.dimension.dxf.geometry):
+            part.dxf.color = 1
 
 
 def render_drawing_svg(
@@ -223,6 +242,7 @@ def render_drawing_svg(
     draft_dimension: tuple | None = None,
     highlight: str = "",
     tolerance: tuple[str, str] | None = None,
+    draft_diameter=None,
 ) -> str:
     """``lineweight_scale`` multiplies every stroke (the viewer's Fine/Normal/Bold);
     the DXF's own lineweights stay the reference at 1.0. The ``dimension_*`` options
@@ -233,8 +253,9 @@ def render_drawing_svg(
 
     document = ezdxf.readfile(str(dxf_path))
     restyle_dimensions(document, units=dimension_units, decimals=dimension_decimals, text_scale=dimension_text_scale)
-    if moves or draft_dimension or highlight or tolerance:
-        preview_edits(document, moves=moves, draft_dimension=draft_dimension, highlight=highlight, tolerance=tolerance)
+    if moves or draft_dimension or highlight or tolerance or draft_diameter:
+        preview_edits(document, moves=moves, draft_dimension=draft_dimension, highlight=highlight, tolerance=tolerance,
+                      draft_diameter=draft_diameter)
     hidden = {name.strip().upper() for name in hidden_layers if name.strip()}
     if hidden:
         for layer in document.layers:

@@ -986,6 +986,13 @@ function sheetTagsFromRecords(entityRecords) {
   return tags;
 }
 
+function sheetTagFields(item) {
+  if (!item?.view) {
+    return {};
+  }
+  return item.dim === undefined ? { view: item.view } : { view: item.view, dim: item.dim };
+}
+
 function stampSheetTags(items, tags) {
   if (!tags.view) {
     return items;
@@ -1545,15 +1552,18 @@ export function parseDxf(dxfText, { fileRef = "", sourceUrl = "" } = {}) {
       };
     }),
     geometry: {
+      // A sheet's tags ride along (view=, dim=) so the viewer can attach to a view's line work.
       lines: entities.lines.map((line) => ({
         layer: line.layer,
         kind: semanticKindForLayer(line.layer),
         start: [formatNumber(line.start[0]), formatNumber(line.start[1])],
-        end: [formatNumber(line.end[0]), formatNumber(line.end[1])]
+        end: [formatNumber(line.end[0]), formatNumber(line.end[1])],
+        ...sheetTagFields(line)
       })),
       arcs: entities.arcs.map((arc) => ({
         layer: arc.layer,
         kind: semanticKindForLayer(arc.layer),
+        ...sheetTagFields(arc),
         center: [formatNumber(arc.center[0]), formatNumber(arc.center[1])],
         radius: formatNumber(arc.radius),
         startAngleDeg: formatNumber(arc.startAngleDeg),
@@ -1563,7 +1573,8 @@ export function parseDxf(dxfText, { fileRef = "", sourceUrl = "" } = {}) {
         layer: circle.layer,
         kind: semanticKindForLayer(circle.layer),
         center: [formatNumber(circle.center[0]), formatNumber(circle.center[1])],
-        radius: formatNumber(circle.radius)
+        radius: formatNumber(circle.radius),
+        ...sheetTagFields(circle)
       })),
       texts: entities.texts.map((text) => ({
         layer: text.layer,

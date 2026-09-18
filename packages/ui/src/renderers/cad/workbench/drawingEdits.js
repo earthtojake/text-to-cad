@@ -102,6 +102,84 @@ export function draftDimensionFromPicks(view, a, b) {
   return { x1: a[0], y1: a[1], x2: b[0], y2: b[1], offset: round(offset), orientation };
 }
 
+// --- snapping: the sheet's own line work is what a dimension attaches to -----------
+
+function distancePointToSegment(p, a, b) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const lengthSq = dx * dx + dy * dy;
+  const t = lengthSq > 0 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / lengthSq)) : 0;
+  const q = [a[0] + t * dx, a[1] + t * dy];
+  return { distance: Math.hypot(p[0] - q[0], p[1] - q[1]), point: q, t };
+}
+
+/** Line work a dimension can attach to: a view's edges and holes, never its annotation. */
+export function sheetSnapTargets(geometry) {
+  const lines = (Array.isArray(geometry?.lines) ? geometry.lines : [])
+    .filter((line) => line.view && line.dim === undefined && !/^(SHEET|TITLE|NOTES|DIM|CENTER)$/i.test(String(line.layer || "")));
+  const circles = (Array.isArray(geometry?.circles) ? geometry.circles : [])
+    .filter((circle) => circle.view && circle.dim === undefined);
+  const arcs = (Array.isArray(geometry?.arcs) ? geometry.arcs : [])
+    .filter((arc) => arc.view && arc.dim === undefined && Math.abs(Number(arc.sweepAngleDeg)) >= 359);
+  return {
+    lines,
+    circles: [...circles, ...arcs.map((arc) => ({ layer: arc.layer, view: arc.view, center: arc.center, radius: arc.radius }))]
+  };
+}
+
+/**
+ * What the pointer is over, within `tolerance` sheet mm: a corner (line end), a
+ * hole (circle, by its centre or its rim), or an edge (line). Corners win over
+ * edges so a click near an end reads as the end. Null when nothing is close.
+ */
+export function snapSheetPoint(targets, point, tolerance = 2) {
+  if (!targets || !Array.isArray(point)) {
+    return null;
+  }
+  let best = null;
+  const consider = (candidate) => {
+    if (candidate.distance <= tolerance && (!best || candidate.rank < best.rank || (candidate.rank === best.rank && candidate.distance < best.distance))) {
+      best = candidate;
+    }
+  };
+  for (const circle of targets.circles || []) {
+    const toCentre = Math.hypot(point[0] - circle.center[0], point[1] - circle.center[1]);
+    const toRim = Math.abs(toCentre - circle.radius);
+    consider({ kind: "circle", rank: 0, distance: Math.min(toCentre, toRim), point: circle.center, view: circle.view, circle });
+  }
+  for (const line of targets.lines || []) {
+    for (const end of [line.start, line.end]) {
+      consider({ kind: "vertex", rank: 1, distance: Math.hypot(point[0] - end[0], point[1] - end[1]), point: end, view: line.view, line });
+    }
+    const along = distancePointToSegment(point, line.start, line.end);
+    consider({ kind: "edge", rank: 2, distance: along.distance, point: along.point, view: line.view, line });
+  }
+  return best;
+}
+
+/**
+ * The dimension a smart pick means. One edge: its length along the axis it mostly
+ * runs on. One hole: its diameter. Two corners (or a corner and an edge): the
+ * distance between the two points. Returns an edit body (without id) or null when
+ * more picks are needed.
+ */
+export function smartDimensionFromSnaps(view, snaps) {
+  if (!Array.isArray(snaps) || !snaps.length) {
+    return null;
+  }
+  const [first, second] = snaps;
+  if (snaps.length === 1) {
+    if (first.kind === "circle") {
+      return { kind: "dia", view: first.view, cx: first.circle.center[0], cy: first.circle.center[1], r: first.circle.radius };
+    }
+    if (first.kind === "edge") {
+      return { kind: "dim", view: first.view, ...draftDimensionFromPicks(view, first.line.start, first.line.end) };
+    }
+    return null;
+  }
+  return { kind: "dim", view: first.view, ...draftDimensionFromPicks(view, first.point, second.point) };
+}
+
 /** Net move per view, in sheet mm, from the staged edits. */
 export function netViewMoves(edits) {
   const moves = new Map();
@@ -126,6 +204,13 @@ export function drawingEditParams(edits, { highlight = "" } = {}) {
       const shift = moves.find(([view]) => view === edit.view)?.[1] || [0, 0];
       return [edit.x1 + shift[0], edit.y1 + shift[1], edit.x2 + shift[0], edit.y2 + shift[1], edit.offset].map(fmt)
         .concat(edit.orientation || "").join(",");
+    }).join(";");
+  }
+  const diameters = (edits || []).filter((edit) => edit.kind === "dia");
+  if (diameters.length) {
+    params.dia = diameters.map((edit) => {
+      const shift = moves.find(([view]) => view === edit.view)?.[1] || [0, 0];
+      return [edit.cx + shift[0], edit.cy + shift[1], edit.r].map(fmt).join(",");
     }).join(";");
   }
   const tolerances = (edits || []).filter((edit) => edit.kind === "tol" && edit.spec);
@@ -163,6 +248,13 @@ export function drawingEditSnippet(edit, { views = [], dimensions = [] } = {}) {
       return `${edit.view}.dim(${tuple(p1)}, ${tuple(p2)}, offset=${fmt(edit.offset)}${orientation})  # model mm; the coordinate along the view's line of sight is 0`;
     }
     return `${edit.view}: add a linear dimension between sheet points (${fmt(edit.x1)}, ${fmt(edit.y1)}) and (${fmt(edit.x2)}, ${fmt(edit.y2)}), offset=${fmt(edit.offset)}${orientation}.`;
+  }
+  if (edit.kind === "dia") {
+    const centre = sheetToModel(view, [edit.cx, edit.cy]);
+    if (centre) {
+      return `${edit.view}.hole((${fmt(centre[0])}, ${fmt(centre[1])}, ${fmt(centre[2])}), ${fmt(2 * edit.r)}, thru=True)  # model mm; say depth=... instead of thru if it is blind`;
+    }
+    return `${edit.view}: add a diameter callout on the hole at sheet (${fmt(edit.cx)}, ${fmt(edit.cy)}), Ø${fmt(2 * edit.r)}.`;
   }
   if (edit.kind === "tol") {
     const dimension = dimensions.find((candidate) => candidate.view === edit.view && String(candidate.index) === String(edit.index)) || null;

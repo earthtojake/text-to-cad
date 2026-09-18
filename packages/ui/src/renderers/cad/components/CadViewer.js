@@ -1745,6 +1745,7 @@ const CadViewer = forwardRef(function CadViewer({
   // picked so far; and the reports back to the workspace.
   sheetEditTool = "",
   sheetEditViews = null,
+  sheetEditSnapTargets = null,
   sheetEditPickedPoints = null,
   onSheetEditPick = null,
   onSheetEditViewMove = null,
@@ -5891,6 +5892,7 @@ const CadViewer = forwardRef(function CadViewer({
     enabled: Boolean(drawingIsDocument && !previewMode),
     tool: sheetEditTool,
     views: Array.isArray(sheetEditViews) ? sheetEditViews : EMPTY_SHEET_EDIT_LIST,
+    snapTargets: sheetEditSnapTargets,
     pickedPoints: Array.isArray(sheetEditPickedPoints) ? sheetEditPickedPoints : EMPTY_SHEET_EDIT_LIST,
     onPick: onSheetEditPick,
     onViewMove: onSheetEditViewMove,

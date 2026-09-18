@@ -64,10 +64,11 @@ import {
 import { drawingSheetFacts } from "../workbench/drawingSheetFacts.js";
 import {
   createDrawingEditId,
-  draftDimensionFromPicks,
   drawingEditParams,
   drawingEditsPromptText,
   nearestView,
+  sheetSnapTargets,
+  smartDimensionFromSnaps,
   viewAtSheetPoint
 } from "../workbench/drawingEdits.js";
 import StepFileSheet from "../components/workbench/StepFileSheet.js";
@@ -2275,21 +2276,25 @@ function CadFileViewSurface({
   const handleDrawingEditToolChange = useCallback((tool) => {
     setDrawingEditTool(tool);
     setDrawingPickedPoints([]);
+    drawingPickedSnapsRef.current = [];
   }, []);
-  const handleDrawingSheetPick = useCallback((point) => {
-    setDrawingPickedPoints((current) => {
-      if (!current.length) {
-        return [point];
-      }
-      const [first] = current;
-      const view = viewAtSheetPoint(drawingViews, first) || viewAtSheetPoint(drawingViews, point)
-        || nearestView(drawingViews, first);
-      if (view) {
-        const draft = draftDimensionFromPicks(view, first, point);
-        setDrawingEdits((edits) => [...edits, { id: createDrawingEditId(), kind: "dim", view: view.name, ...draft }]);
-      }
-      return [];
-    });
+  // Smart dimension: an edge or a hole dimensions itself on one click; a corner waits
+  // for a second pick and the two give a distance. Picks carry the snap they landed on.
+  const drawingSnapTargets = useMemo(() => sheetSnapTargets(drawingGeometry?.geometry), [drawingGeometry]);
+  const drawingPickedSnapsRef = useRef([]);
+  const handleDrawingSheetPick = useCallback((snap) => {
+    const snaps = [...drawingPickedSnapsRef.current, snap];
+    const view = drawingViews.find((candidate) => candidate.name === snap.view)
+      || viewAtSheetPoint(drawingViews, snap.point) || nearestView(drawingViews, snap.point);
+    const edit = smartDimensionFromSnaps(view, snaps);
+    if (edit) {
+      setDrawingEdits((edits) => [...edits, { id: createDrawingEditId(), ...edit, view: edit.view || view?.name }]);
+      drawingPickedSnapsRef.current = [];
+      setDrawingPickedPoints([]);
+      return;
+    }
+    drawingPickedSnapsRef.current = snaps;
+    setDrawingPickedPoints(snaps.map((item) => item.point));
   }, [drawingViews]);
   const handleDrawingViewMove = useCallback((view, dx, dy) => {
     setDrawingEdits((edits) => [...edits, { id: createDrawingEditId(), kind: "move", view, dx, dy }]);
@@ -6300,6 +6305,7 @@ function CadFileViewSurface({
                 drawingSvgUrl={drawingSvgUrl}
           sheetEditTool={selectedEntryIsDrawingDocument ? drawingEditTool : ""}
           sheetEditViews={drawingViews}
+          sheetEditSnapTargets={drawingSnapTargets}
           sheetEditPickedPoints={drawingPickedPoints}
           onSheetEditPick={handleDrawingSheetPick}
           onSheetEditViewMove={handleDrawingViewMove}

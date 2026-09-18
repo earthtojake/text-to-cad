@@ -281,6 +281,7 @@ export default function CadRenderPane({
   drawingSvgUrl = "",
   sheetEditTool = "",
   sheetEditViews = null,
+  sheetEditSnapTargets = null,
   sheetEditPickedPoints = null,
   onSheetEditPick = null,
   onSheetEditViewMove = null,
@@ -485,6 +486,7 @@ export default function CadRenderPane({
       drawingSvgUrl={drawingSvgUrl}
       sheetEditTool={sheetEditTool}
       sheetEditViews={sheetEditViews}
+      sheetEditSnapTargets={sheetEditSnapTargets}
       sheetEditPickedPoints={sheetEditPickedPoints}
       onSheetEditPick={onSheetEditPick}
       onSheetEditViewMove={onSheetEditViewMove}
