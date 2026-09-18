@@ -6896,12 +6896,6 @@ function CadFileViewSurface({
                     onLayerVisibilityChange: handleDrawingLayerVisibilityChange,
                     onReset: handleDrawingSheetReset
                   }),
-                  ...(drawingLayers.length > 1 ? [buildDxfLayersTab({
-                    layers: drawingLayers,
-                    hiddenLayers: drawingHiddenLayers,
-                    onLayerVisibilityChange: handleDrawingLayerVisibilityChange,
-                    document: true
-                  })] : []),
                   ...settingsTabs
                 ] : [
                   buildDxfMaterialTab({
