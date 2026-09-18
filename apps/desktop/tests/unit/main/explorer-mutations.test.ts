@@ -5,7 +5,14 @@ import { afterAll, beforeAll, expect, test, vi } from "vitest";
 
 const fixture = vi.hoisted(() => ({ root: "" }));
 vi.mock("electron", () => ({ BrowserWindow: {}, dialog: {}, ipcMain: {}, shell: {} }));
-vi.mock("@main/db/repositories", () => ({ projects: { list: () => [{ id: "project", path: fixture.root }] }, settings: { get: () => ({}) }, explorerTabs: {} }));
+vi.mock("@main/db/repositories", () => ({
+  projects: {
+    get: (id: string) => id === "project" ? { id, path: fixture.root } : null,
+    list: () => [{ id: "project", path: fixture.root }],
+  },
+  sessions: { list: () => [{ id: "session", projectId: "project", cwd: fixture.root }] },
+  settings: { get: () => ({}) }, explorerTabs: {},
+}));
 vi.mock("@main/projects/workspace", () => ({ resolveProjectRoot: () => fixture.root, projectWorktreeDir: () => fixture.root }));
 import { explorerHandlers, initExplorerServices, disposeExplorerServices } from "@main/ipc/explorer";
 import { FileMutationResultSchema, TextWriteResultSchema } from "@shared/ipc/explorer";

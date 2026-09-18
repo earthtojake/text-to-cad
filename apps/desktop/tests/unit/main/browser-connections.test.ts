@@ -27,11 +27,11 @@ it("binds native tabs and artifact output to the authenticated workspace", async
   const connection = await connections.connect(session);
   expect(connection.root).toBe(directory);
   expect(connection.outputDir.startsWith(path.join(directory, "artifacts"))).toBe(true);
-  expect(endpoints[0]!.scope).toEqual({ projectId: "project", root: directory });
+  expect(endpoints[0]!.scope).toEqual({ sessionId: "session", projectId: "project", root: directory });
   const signal = new AbortController().signal;
   await expect(endpoints[0]!.tabs.open("https://example.com", signal)).resolves.toBe("new-tab");
   expect(commands.request).toHaveBeenCalledWith(expect.objectContaining({ kind: "open-url", rootDirectory: directory, projectId: "project", root: null }), signal);
-  expect(service.open).toHaveBeenCalledWith({ projectId: "project", root: directory }, { tabId: "new-tab", url: "https://example.com" });
+  expect(service.open).toHaveBeenCalledWith({ sessionId: "session", projectId: "project", root: directory }, { tabId: "new-tab", url: "https://example.com" });
   await connections.connect(session); expect(endpoints).toHaveLength(1);
   connections.revoke(session.sessionId);
   await vi.waitFor(() => expect(endpoints[0]!.dispose).toHaveBeenCalled());

@@ -148,8 +148,8 @@ describe("RendererCommands", () => {
     const sent: IntegrationCommand[] = [];
     let id = 0;
     const commands = new RendererCommands({ sessionRoot: () => ({ directory: "/proj", root: null }), send: (command) => sent.push(command), newId: () => `r${++id}` });
-    const pending = commands.request({ kind: "open-file", projectId: "p1", path: "a.step" });
-    expect(sent).toEqual([{ kind: "open-file", projectId: "p1", path: "a.step", requestId: "r1" }]);
+    const pending = commands.request({ sessionId: "s1", kind: "open-file", projectId: "p1", path: "a.step" });
+    expect(sent).toEqual([{ sessionId: "s1", kind: "open-file", projectId: "p1", path: "a.step", requestId: "r1" }]);
     commands.reply({ requestId: "other", ok: true, result: 1 });
     commands.reply({ requestId: "r1", ok: true, result: { opened: "a.step" } });
     expect(await pending).toEqual({ opened: "a.step" });
@@ -157,10 +157,10 @@ describe("RendererCommands", () => {
 
   it("rejects on a refusal and on a timeout", async () => {
     const commands = new RendererCommands({ sessionRoot: () => ({ directory: "/proj", root: null }), send: () => {}, newId: () => "r1", timeoutMs: 20 });
-    const refused = commands.request({ kind: "reveal", projectId: "p1", path: "x" });
+    const refused = commands.request({ sessionId: "s1", kind: "reveal", projectId: "p1", path: "x" });
     commands.reply({ requestId: "r1", ok: false, error: "no such tab" });
     await expect(refused).rejects.toThrow("no such tab");
-    await expect(commands.request({ kind: "list-tabs", projectId: "p1" })).rejects.toThrow("did not answer");
+    await expect(commands.request({ sessionId: "s1", kind: "list-tabs", projectId: "p1" })).rejects.toThrow("did not answer");
   });
 });
 

@@ -11,12 +11,12 @@ const document = (color: string) => JSON.stringify({ ...emptyDrawingDocument(), 
 beforeEach(() => {
   vi.useFakeTimers();
   deleteDrawingScene(tabId);
-  useExplorer.setState({ projectId: "scene-project", tabs: [], activeId: null, ready: true, root: null });
+  useExplorer.setState({ sessionId: "scene-project", projectId: "scene-project", tabs: [], activeId: null, ready: true, root: null });
 });
 afterEach(async () => {
   deleteDrawingScene(tabId);
-  useExplorer.getState().discardProjectResources("scene-project");
-  await useExplorer.getState().bindProject(null);
+  useExplorer.getState().discardSessionResources("scene-project");
+  await useExplorer.getState().bindSession(null, null);
   await vi.runOnlyPendingTimersAsync();
   vi.useRealTimers();
 });
@@ -68,9 +68,9 @@ it("removing an inactive project disposes its drawings without reviving them on 
   useProjects.setState({ projects: [{ id: "scene-project", path: "/scene" }, { id: "other", path: "/other" }] as Project[], activeId: "scene-project" });
   const drawing = useExplorer.getState().open("drawing")!;
   const leave = retainDrawingScene(drawing.id, () => document("#abcdef"));
-  await useExplorer.getState().bindProject("other");
+  await useExplorer.getState().bindSession("other", "other");
   expect(getDrawingScene(drawing.id)).not.toBeNull();
-  useProjects.getState().receive([{ id: "other", path: "/other" }] as Project[]);
+  useExplorer.getState().discardSessionResources("scene-project");
   leave();
   expect(getDrawingScene(drawing.id)).toBeNull();
 });

@@ -175,14 +175,15 @@ export const explorerIpc = {
     watch: invoke(InRoot, z.void()),
     unwatch: invoke(InRoot, z.void()),
 
-    /** The persisted tab strip for a project (the `explorer_tabs` table). */
-    loadTabs: invoke(InProject, z.array(PersistedExplorerTabSchema)),
-    saveTabs: invoke(InProject.extend({ tabs: z.array(PersistedExplorerTabSchema) }), z.void()),
+    /** The persisted tab strip for a session (the `explorer_tabs` table). */
+    loadTabs: invoke(z.object({ sessionId: z.string().min(1) }), z.array(PersistedExplorerTabSchema)),
+    saveTabs: invoke(z.object({ sessionId: z.string().min(1), tabs: z.array(PersistedExplorerTabSchema) }), z.void()),
   },
 
   terminal: {
     create: invoke(
       InProject.extend({
+        sessionId: z.string().min(1),
         /**
          * Defaults to the project root; a tab opened while a worktree
          * session is active passes that worktree, and `Open in terminal` on

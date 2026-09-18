@@ -6,8 +6,9 @@ import type { PrepareContext, RendererViewProps } from "@hardcore/ui/file-viewer
 import { EmptyState } from "@hardcore/ui/navigation";
 import { Button } from "@renderer/components/ui/button";
 import { useUi } from "@renderer/state/ui";
+import { subscribeSessionTabs } from "@renderer/state/explorer";
 import type { ViewerOrigin } from "@shared/ipc/cad";
-import type { ExplorerRoot } from "@shared/types";
+import type { ExplorerRoot, ExplorerTab, FileTab } from "@shared/types";
 
 export class CadRuntimeError extends Error {
   constructor(readonly answer: ViewerOrigin) { super(answer.message ?? "The CAD runtime did not start."); }
@@ -91,6 +92,79 @@ export function createDesktopCadConnections(projectId: string) {
       borrowers.clear();
     },
   };
+}
+
+type CadTabOwner = Pick<FileTab, "id" | "sessionId" | "projectId" | "root">;
+type SubscribeTabs = (listener: (tabs: readonly ExplorerTab[]) => void) => () => void;
+
+/**
+ * Open tabs own warm root clients independently of the visible pane. Switching
+ * sessions or collapsing the explorer releases the viewport, never the root's
+ * bounded geometry caches. The final tab owner releases its client.
+ */
+export function createDesktopCadConnectionRegistry(subscribeTabs: SubscribeTabs = subscribeSessionTabs) {
+  const projects = new Map<string, ReturnType<typeof createDesktopCadConnections>>();
+  const borrowers = new Map<string, DesktopCadConnection>();
+  let owners = new Map<string, CadTabOwner>();
+  let disposed = false;
+  const ownerKey = (tab: CadTabOwner) => JSON.stringify([tab.sessionId, tab.id, tab.projectId, tab.root]);
+  const unsubscribe = subscribeTabs(tabs => {
+    owners = new Map(tabs.filter((tab): tab is FileTab => tab.kind === "file").map(tab => [ownerKey(tab), tab]));
+    const rootsByProject = new Map<string, Set<ExplorerRoot>>();
+    for (const owner of owners.values()) {
+      const roots = rootsByProject.get(owner.projectId) ?? new Set<ExplorerRoot>();
+      roots.add(owner.root);
+      rootsByProject.set(owner.projectId, roots);
+    }
+    for (const [projectId, connections] of projects) {
+      const roots = rootsByProject.get(projectId);
+      connections.retainRoots(roots ?? []);
+      if (!roots) projects.delete(projectId);
+    }
+    for (const key of borrowers.keys()) {
+      if (!owners.has(key)) borrowers.delete(key);
+    }
+  });
+  return {
+    forTab(tab: CadTabOwner): DesktopCadConnection {
+      const key = ownerKey(tab);
+      let borrower = borrowers.get(key);
+      if (!borrower) {
+        borrower = {
+          acquire(context) {
+            context.signal.throwIfAborted();
+            if (disposed || !owners.has(key)) throw new DOMException("This file tab is closed.", "AbortError");
+            let connections = projects.get(tab.projectId);
+            if (!connections) {
+              connections = createDesktopCadConnections(tab.projectId);
+              projects.set(tab.projectId, connections);
+            }
+            return connections.forRoot(tab.root).acquire(context);
+          },
+        };
+        borrowers.set(key, borrower);
+      }
+      return borrower;
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      unsubscribe();
+      for (const connections of projects.values()) connections.dispose();
+      projects.clear(); borrowers.clear(); owners.clear();
+    },
+  };
+}
+
+let desktopConnections: ReturnType<typeof createDesktopCadConnectionRegistry> | undefined;
+
+/** One registry for the renderer window; constructing it starts no CAD work. */
+export function desktopCadConnectionForTab(tab: CadTabOwner): DesktopCadConnection {
+  if (!desktopConnections) {
+    desktopConnections = createDesktopCadConnectionRegistry();
+    window.addEventListener("beforeunload", () => { desktopConnections?.dispose(); desktopConnections = undefined; }, { once: true });
+  }
+  return desktopConnections.forTab(tab);
 }
 
 const TITLES: Record<NonNullable<ViewerOrigin["reason"]>, string> = {

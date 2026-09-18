@@ -5,6 +5,11 @@ explorer on the right that renders code, browsers, terminals, reviews and every
 file type the CAD Viewer understands. cadgen and the CAD skills ship inside the
 app, pinned to its own version, and every session runs with them.
 
+Sessions own their explorer tabs and agent tools. Project headings are derived
+directory groups, with no separate project lifecycle. See
+[session workspaces and persistence](docs/session-workspaces.md) for ownership,
+title updates, profile locations and the database migration/backup contract.
+
 Electron 40 · electron-vite · React 19 · TypeScript · Tailwind v4 ·
 shadcn/ui (stock neutral) · Vercel AI Elements · `@agentclientprotocol/sdk` ·
 Monaco (code) · TipTap over remark (markdown).
@@ -276,7 +281,8 @@ tab and that the session recorded the tool call. It is skipped unless a
 signed-in `codex` is on the machine (`codex login status`), so a runner
 without one stays green. It is the only test that talks to a model.
 
-`tests/e2e/draft-workspace.spec.ts` checks new-project draft isolation and the
+`tests/e2e/draft-workspace.spec.ts` checks transient folder drafts, confirms
+folder choices create no sidebar groups or explorer tabs, and exercises the
 new-worktree choice through the form. `live-car-handoff.spec.ts` is opt-in:
 set `HARDCORE_E2E_LIVE_CAD=1`, `HARDCORE_E2E_CAD_SOURCE` to the small car
 recipe (with `BODY_LENGTH = 160.0`), and `CAD_DESKTOP_PYTHON` to the developer
@@ -463,7 +469,7 @@ The session's title bar and the explorer's tab strip carry a rule beneath
 them; the projects panel does not.
 
 **One source of truth per side pane**, `{ collapsed, width }`: the sidebar's in
-`settings.layout` (sqlite), the explorer's per project in `state/explorer.ts`
+`settings.layout` (sqlite), the explorer's per session in `state/explorer.ts`
 (localStorage). Everything on screen is derived from those two pairs — which
 panes are rendered, where each toggle is drawn, which pane reserves the
 corner. **A collapsed pane is not rendered at all**, so a toggle is in the
@@ -546,8 +552,14 @@ a thread in *that* project — and nothing else. A search glyph and a copy of
 the sliders used to appear on it on hover; neither was ever about one project
 (the palette searches every thread and the filter settings are global), and a
 control that only exists under the pointer is a control nobody finds.
-Everything else a project can do — rename, copy path, reveal, remove — is a
-right-click on the header. A session row is its **state** as a leading glyph (a hollow
+The header's right-click menu starts a session, copies the directory path,
+or reveals it in the OS. There are no project rename or delete actions: these
+are directory groups derived from sessions, not saved project records. A
+directory with no matching sessions has no sidebar header. Archiving or
+deleting its last active session removes its active group; archived sessions
+remain available in Settings and the Archived filter. Worktree sessions group
+under their original checkout directory. Selecting a new folder opens an
+in-memory composer draft; its group appears only when a session is created. A session row is its **state** as a leading glyph (a hollow
 circle idle, a pulsing dot while a turn streams, an amber triangle waiting on
 a permission, a red one after a failure, a spinner ring connecting —
 `lib/sidebar.ts`), the title, git's own glyph when the thread runs in a
@@ -558,19 +570,20 @@ and a pinned thread lives **only** there — never twice.
 The filter menu is global, and it is opened from the panel's own header:
 `Status` (Active / Archived / All), `Environment` (All / Local / Worktree —
 our git modes), `Group by` (Project, or None for one flat list), `Sort by`
-(Last activity / Created / Name) and two toggles, `Show empty groups` and
-`Show branch`. It is stored in `settings.sidebar` and applied by one pure
+(Last activity / Created / Name) and `Show branch`. It is stored in `settings.sidebar` and applied by one pure
 function over the index (`sidebarSections` in `lib/sidebar.ts`), which is also
 where the rules live that a screenshot cannot check: a pinned thread is
-excluded from its project's section, projects keep the project list's order,
-and every section is sorted the same way.
+excluded from its directory section, empty sections never appear (including
+pinned-only directories), and every section is sorted the same way. Directory
+labels and their order are derived from the session index; there is no durable
+project list to synchronize.
 
 **The explorer is closed until something opens it**, and the session then
 fills the window. Opening a file, a review, a browser or a terminal shows it —
 from the tree, the tab strip, the command palette or an agent's
 `open_file` — because every one of those goes through `state/explorer.ts`'s
 `open`/`openFile`. That state is the explorer store's rather than
-`settings.layout`'s and is remembered **per project** (localStorage) along with
+`settings.layout`'s and is remembered **per session** (localStorage) along with
 the pane's width, and only a person's own toggle or drag writes it: an agent
 opening a file shows the pane without deciding anything for next time.
 
@@ -673,20 +686,20 @@ Image attachments show a contained thumbnail beside the filename, with an always
 Explicit Copy and Copy Link remain clipboard-only. The primary Add to prompt
 action adds selected references and inspection facts. **Ask about this view**
 adds the image and selected references together, without duplicating existing
-chips. A workspace mismatch offers **Start chat here**, which creates a chat
-in the context's workspace, carries the pending context over and preserves the
-old draft. Nothing is sent until the user submits.
+chips. Each tab delivers only to the session that owns it. A workspace
+mismatch is rejected, and switching to another chat never redirects context.
+Nothing is sent until the user submits.
 
 FileViewer receives an explicit `ViewerHost`: workspace files/actions, native
 clipboard, prompt delivery, navigation, appearance and shutdown publication.
 Follow the [shared host contract](../../packages/ui/docs/viewer-host.md) when
 adding integrations; native effects and session workflows belong in this app.
-Prompt delivery binds the current compatible chat or project draft before PNG
-encoding, validates the entire bundle before one acceptance, and preserves its
-text/reference/attachment order. Changing chats during encoding does not redirect
-the result or steal composer focus. Deleted destinations cancel the delivery.
-Recent operation receipts are bounded to 256 entries; pending captures are
-bounded to 16 and deferred workspace offers to eight. Bundles accept at most
+Prompt delivery binds the tab's immutable owner session when the host is
+created, validates the entire bundle before one acceptance, and preserves its
+text/reference/attachment order. Changing chats before or during encoding does
+not redirect the result or steal composer focus. Deleted or archived
+destinations cancel delivery. Recent operation receipts are bounded to 256
+entries; pending captures are bounded to 16. Bundles accept at most
 128 parts. Attachments must be supported images or UTF-8 text, at most
 20 MiB each and 40 MiB together. Ordinary clipboard effects use the validated
 `clipboard` IPC branch for plain text and PNGs up to 16 MiB; the renderer never accesses
@@ -872,12 +885,25 @@ never part of it. The file tree's open folders and its listings live in the expl
 store, not in the file tab, because opening a file makes a tab and the pane
 mounts one tab at a time.
 
-Ordinary tab edits are saved after a 400 ms debounce. Drawing tabs and scenes
-are excluded from both the IPC persistence schema and database writes.
-Leaving a project flushes its
-pending snapshot immediately; returning waits for that project's in-flight
-saves before restoring its tabs. Other projects load independently, and a late
-response from an earlier visit cannot overwrite the current strip.
+Every session owns its own explorer tabs, active tab, expanded folders and pane
+width/collapse state. A new session starts empty, including another session in
+the same directory. A new-chat draft has no explorer until a session exists.
+Tab `sessionId` is immutable; `projectId` is only the directory identity used by
+filesystem services. Reviews always use their owning session's revisions.
+
+Ordinary tab edits are saved after a 400 ms debounce, keyed by session ID.
+Drawing tabs/scenes are excluded from IPC persistence and database writes.
+Switching sessions flushes the departing snapshot, retains its in-memory strip
+and restores the destination's own strip. Writes serialize per session; unrelated
+sessions load independently. Background agent commands open/show/close only
+that agent's tabs and never navigate the user's selected session. Browser pages
+and PTYs enforce the same session ownership, even for identical directories.
+Unsaved text drafts and renderer view settings belong to their tab; shared
+immutable CAD geometry caches can still be reused. Archiving/deleting a session
+releases live browser/terminal/drawing/CAD resources. Archive keeps unsaved
+text drafts in window memory for restoration (quitting still discards drafts), flushes and
+retains ordinary tab metadata for restoration; deleting the session removes it.
+Failed tab restoration displays a retry action without replacing stored tabs.
 
 ### Drawings
 
@@ -886,13 +912,13 @@ sketchpad. Edit the name in the drawing header; agents can supply a name on open
 or rename an existing sketch. Names remain in memory alongside the scene. Pan
 and drawing tools share the top toolbar, with menu/style/undo controls directly
 below in narrow panes; the lock control is hidden. Freehand, shapes, arrows and text become visual prompt context with
-**Add to prompt**. This appends a PNG and sketch description to the current
-draft, preserving existing text and never submitting it. The destination is
-bound before image encoding, so switching chats cannot redirect the result.
-Workspace mismatches use the same “Start chat here” flow as CAD references.
+**Add to prompt**. This appends a PNG and sketch description to the owning
+session's draft, preserving existing text and never submitting it. The
+destination is part of the tab's identity; even a late callback after changing
+chats cannot redirect the result. Deleted or archived sessions cancel delivery.
 
-Drawings live only in renderer memory. Switching tabs or projects keeps them;
-closing the tab, removing the project, reloading or exiting discards them.
+Drawings live only in renderer memory. Switching tabs or sessions keeps them;
+closing the tab, archiving/deleting its session, reloading or exiting discards them.
 An image already added to a draft or transcript is a separate copy. This
 scratch surface has no file import/export, autosave, Mermaid insertion, image
 embedding or scene-editing MCP tool. The `drawings` integration provides
@@ -910,7 +936,7 @@ for limits, asset licensing and the reuse boundary for future CAD overlays.
 A file tab keeps its `file` kind and chooses a renderer: CAD, PDF, Markdown,
 code, image or unsupported. The `documents` integration reads the live text
 buffer, including unsaved typing, and requires its revision before replacing
-or saving it. Tab/project switches retain drafts and inactive read snapshots;
+or saving it. Tab/session switches retain drafts and inactive read snapshots;
 reactivate a text file before editing or saving. Dirty tabs refuse ordinary
 and agent-driven close; the UI provides explicit discard. These drafts last
 for the app window, not across quitting. PDF tools operate on the same PDF.js
@@ -1508,8 +1534,8 @@ worktrees.
 
 - The explorer store has an active root, derived from the active session
   (`state/bridge.ts`, `explorerRootFor`): a worktree thread's worktree,
-  otherwise the project. Selecting another thread switches it; the
-  new-session state reads the project. Switching starts the new root's
+  otherwise the project. Selecting another thread restores that session's
+  strip and root; a new-session draft has no explorer. Switching starts the new root's
   watcher and keeps each root's tree state (open folders, listings) apart,
   because the checkout and a worktree are different trees with the same
   names in them.
@@ -1517,12 +1543,12 @@ worktrees.
   keeps it after the person switches threads; the nav row shows the
   worktree's name with a branch glyph, before the crumbs and without a menu
   of its own. A terminal opened while a worktree
-  thread is active starts there (`TerminalTab.cwd`). An unpinned review's
-  `All changes` follows a worktree thread into its directory. The CAD tab
+  thread is active starts there (`TerminalTab.cwd`). A review's
+  `All changes` uses its owning session's directory. The CAD tab
   asks `cad.viewerOrigin` for its root, and main runs one `cadgen viewer`
   per root — a worktree gets its own, stopped when its last session is
   deleted.
-- Every `explorer.*` request names `{ projectId, root? }`, and main's
+- Every filesystem `explorer.*` request names `{ projectId, root? }`, and main's
   `rootOf` (`src/main/ipc/explorer.ts`) resolves the pair with
   `resolveProjectRoot` (`src/main/projects/workspace.ts`): the project
   directory, or a directory under the project's worktree folder, and a
@@ -1535,16 +1561,20 @@ worktrees.
 `tests/e2e/worktree.spec.ts` runs the whole path with the fake agent: a
 worktree session writes a file, calls `open_file` through the MCP server,
 and the tab, the breadcrumb, the tree and a new terminal all root at the
-worktree; the new-session state roots the explorer at the project again.
+worktree; starting a new session opens an independent, empty explorer.
 
-### CAD references and new drafts
+### CAD references and session drafts
 
-New-chat text drafts are separate per project. A viewer reference or capture
-can enter an existing chat only when the tab and chat share a workspace.
-For a new chat, the draft keeps the model’s root and shows it beside the
-composer; main still validates that root when creating the session. Clearing
-the text releases that root. An ordinary new chat sends only its Git mode,
-so choosing **New worktree** creates one instead of using the project folder.
+Viewer references and captures always enter the draft of the session that owns
+that viewer tab. The host carries the owner ID before any asynchronous work,
+and checks that the session still exists, is unarchived, and shares the file's
+workspace before accepting context. It never chooses a different destination
+from the currently selected chat. The same rule applies to files, CAD, PDFs,
+drawings, browsers, terminals and review selections.
+
+New-chat text drafts remain separate per directory. They have no explorer until
+a session is created. An ordinary new chat sends only its Git mode; main
+chooses and validates its working directory.
 
 ## How a change moves through the app
 

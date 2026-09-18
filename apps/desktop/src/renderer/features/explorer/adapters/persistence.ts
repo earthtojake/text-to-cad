@@ -27,10 +27,12 @@ function write(sourceId: string, renderers: RendererStates) {
 
 /** Keep existing panel/width/tree preferences; add one versioned root-scoped renderer record. */
 export function useDesktopViewState(sourceId: string, tabId: string, root: ExplorerRoot, panel: string | null, rootPath: string) {
+  // View choices belong to this persisted tab; immutable geometry caches still share resources.
+  const stateKey = JSON.stringify([sourceId, tabId]);
   const panelWidth = useExplorer((state) => state.panelWidth);
   const { open } = useTree(root);
-  const [stored, setStored] = useState(() => ({ id: sourceId, renderers: read(sourceId, rootPath) }));
-  const renderers = useMemo(() => stored.id === sourceId ? stored.renderers : read(sourceId, rootPath), [sourceId, rootPath, stored]);
+  const [stored, setStored] = useState(() => ({ id: stateKey, renderers: read(stateKey, rootPath) }));
+  const renderers = useMemo(() => stored.id === stateKey ? stored.renderers : read(stateKey, rootPath), [stateKey, rootPath, stored]);
   const state = useMemo<FileViewerState>(() => ({ panel, panelWidth, expandedDirectories: [...open], renderers }), [panel, panelWidth, open, renderers]);
   const onStateChange = useCallback((next: FileViewerState) => {
     const explorer = useExplorer.getState();
@@ -43,9 +45,9 @@ export function useDesktopViewState(sourceId: string, tabId: string, root: Explo
       return previous.size === expanded.size && [...previous].every((directory) => expanded.has(directory)) ? previous : expanded;
     });
     if (next.renderers !== renderers) {
-      const value = mergeChangedRecords(read(sourceId, rootPath), renderers, next.renderers ?? {});
-      setStored({ id: sourceId, renderers: value }); write(sourceId, value);
+      const value = mergeChangedRecords(read(stateKey, rootPath), renderers, next.renderers ?? {});
+      setStored({ id: stateKey, renderers: value }); write(stateKey, value);
     }
-  }, [sourceId, rootPath, root, tabId, renderers, state]);
+  }, [stateKey, rootPath, root, tabId, renderers, state]);
   return { state, onStateChange };
 }

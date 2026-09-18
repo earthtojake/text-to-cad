@@ -13,7 +13,9 @@ export type IntegrationCommandKind = z.infer<typeof IntegrationCommandKindSchema
 export const IntegrationCommandSchema = z.object({
   requestId: z.string().min(1),
   kind: IntegrationCommandKindSchema,
-  /** The project the command is about; opening focuses it, scene reads do not. */
+  /** Immutable authenticated owner; commands never change the selected session. */
+  sessionId: z.string().min(1),
+  /** Directory identity used for filesystem access. */
   projectId: z.string().min(1),
   /**
    * The root `path` is relative to: null for the project directory, else the

@@ -154,7 +154,7 @@ export function createActions(deps: ActionDeps, commands: RendererCommands): Bri
   const relay = async (kind: IntegrationCommandKind, session: BridgeSession, params: Record<string, unknown>, signal?: AbortSignal, extra: Partial<IntegrationCommand> = {}) => {
     const workspace = deps.sessionRoot(session);
     if (!workspace) throw new Error("this session's project is no longer open in Hardcore");
-    return commands.request({ kind, projectId: session.projectId, root: workspace.root,
+    return commands.request({ kind, sessionId: session.sessionId, projectId: session.projectId, root: workspace.root,
       rootDirectory: await fsp.realpath(workspace.directory), params,
       ...(typeof params.tabId === "string" ? { tabId: params.tabId } : {}),
       ...(typeof params.title === "string" ? { title: params.title } : {}), ...extra }, signal);

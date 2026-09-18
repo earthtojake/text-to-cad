@@ -17,7 +17,8 @@ import type { PersistedExplorerTab } from "@shared/types";
  * selects its neighbour" a fact about the app rather than a fact about one
  * rendering of it.
  */
-const PROJECT = "project-1";
+let PROJECT = "project-1";
+let testSequence = 0;
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -27,10 +28,12 @@ function deferred<T>() {
 }
 
 function reset() {
-  useExplorer.getState().discardProjectResources(PROJECT);
-  useExplorer.getState().discardProjectResources("project-2");
+  useExplorer.getState().discardSessionResources(PROJECT);
+  useExplorer.getState().discardSessionResources("project-2");
+  PROJECT = `project-${++testSequence + 10}`;
   window.localStorage.clear();
   useExplorer.setState({
+    sessionId: PROJECT,
     projectId: PROJECT,
     root: null,
     tabs: [],
@@ -52,7 +55,7 @@ describe("the explorer strip", () => {
   });
 
   afterEach(async () => {
-    await useExplorer.getState().bindProject(null);
+    await useExplorer.getState().bindSession(null, null);
     await vi.runOnlyPendingTimersAsync();
     vi.useRealTimers();
   });
@@ -73,21 +76,21 @@ describe("the explorer strip", () => {
 
   it("retains drawings and their mixed order across project switches without saving them", async () => {
     const saved = new Map<string, PersistedExplorerTab[]>();
-    vi.mocked(window.hardcore.explorer.saveTabs).mockImplementation(async ({ projectId, tabs }) => {
+    vi.mocked(window.hardcore.explorer.saveTabs).mockImplementation(async ({ sessionId: projectId, tabs }) => {
       saved.set(projectId, tabs.map((tab, order) => ({ ...tab, order }) as PersistedExplorerTab));
     });
-    vi.mocked(window.hardcore.explorer.loadTabs).mockImplementation(async ({ projectId }) => saved.get(projectId) ?? []);
+    vi.mocked(window.hardcore.explorer.loadTabs).mockImplementation(async ({ sessionId: projectId }) => saved.get(projectId) ?? []);
     const file = useExplorer.getState().open("file")!;
     const drawing = useExplorer.getState().open("drawing", { root: "/worktree", title: "Bracket sketch" })!;
     const review = useExplorer.getState().open("review")!;
     const secondDrawing = useExplorer.getState().open("drawing")!;
     useExplorer.getState().move(secondDrawing.id, 0);
     useExplorer.getState().setActive(drawing.id);
-    await useExplorer.getState().bindProject("project-2");
+    await useExplorer.getState().bindSession("project-2", "project-2");
     expect(getDrawingTab(drawing.id, PROJECT)).toMatchObject({ root: "/worktree", title: "Bracket sketch" });
     expect(saved.get(PROJECT)?.map(tab => tab.kind)).toEqual(["file", "review"]);
     expect(JSON.stringify(vi.mocked(window.hardcore.explorer.saveTabs).mock.calls)).not.toContain("Bracket sketch");
-    await useExplorer.getState().bindProject(PROJECT);
+    await useExplorer.getState().bindSession(PROJECT, PROJECT);
     expect(useExplorer.getState().tabs.map(tab => tab.id)).toEqual([secondDrawing.id, file.id, drawing.id, review.id]);
     expect(useExplorer.getState().activeId).toBe(drawing.id);
     expect(useExplorer.getState().tabs.map(tab => tab.order)).toEqual([0, 1, 2, 3]);
@@ -97,29 +100,29 @@ describe("the explorer strip", () => {
 
   it("retains both projects' drawings when navigating away from an unfinished restore", async () => {
     const stored = new Map<string, PersistedExplorerTab[]>();
-    vi.mocked(window.hardcore.explorer.saveTabs).mockImplementation(async ({ projectId, tabs }) => {
+    vi.mocked(window.hardcore.explorer.saveTabs).mockImplementation(async ({ sessionId: projectId, tabs }) => {
       stored.set(projectId, tabs.map(tab => PersistedExplorerTabSchema.parse(tab)));
     });
-    vi.mocked(window.hardcore.explorer.loadTabs).mockImplementation(async ({ projectId }) => stored.get(projectId) ?? []);
+    vi.mocked(window.hardcore.explorer.loadTabs).mockImplementation(async ({ sessionId: projectId }) => stored.get(projectId) ?? []);
     const drawingA = useExplorer.getState().open("drawing", { title: "Drawing A" })!;
-    await useExplorer.getState().bindProject("project-2");
+    await useExplorer.getState().bindSession("project-2", "project-2");
     const fileB = useExplorer.getState().open("file")!;
     const drawingB = useExplorer.getState().open("drawing", { title: "Drawing B" })!;
-    await useExplorer.getState().bindProject(PROJECT);
+    await useExplorer.getState().bindSession(PROJECT, PROJECT);
     expect(useExplorer.getState().activeId).toBe(drawingA.id);
 
     const lateRestore = deferred<PersistedExplorerTab[]>();
     vi.mocked(window.hardcore.explorer.loadTabs).mockImplementationOnce(() => lateRestore.promise);
-    const unfinishedVisit = useExplorer.getState().bindProject("project-2");
+    const unfinishedVisit = useExplorer.getState().bindSession("project-2", "project-2");
     expect(useExplorer.getState()).toMatchObject({ projectId: "project-2", ready: false, tabs: [] });
     expect(getDrawingTab(drawingB.id, "project-2")).toMatchObject({ title: "Drawing B" });
-    await useExplorer.getState().bindProject(PROJECT);
+    await useExplorer.getState().bindSession(PROJECT, PROJECT);
     expect(useExplorer.getState().activeId).toBe(drawingA.id);
     lateRestore.resolve([]);
     await unfinishedVisit;
     expect(useExplorer.getState().activeId).toBe(drawingA.id);
 
-    await useExplorer.getState().bindProject("project-2");
+    await useExplorer.getState().bindSession("project-2", "project-2");
     expect(useExplorer.getState().tabs.map(tab => tab.id)).toEqual([fileB.id, drawingB.id]);
     expect(useExplorer.getState().activeId).toBe(drawingB.id);
     expect(getDrawingTab(drawingA.id, PROJECT)).toMatchObject({ title: "Drawing A" });
@@ -129,16 +132,16 @@ describe("the explorer strip", () => {
 
   it("ignores open requests during restoration without replacing retained drawings", async () => {
     const stored = new Map<string, PersistedExplorerTab[]>();
-    vi.mocked(window.hardcore.explorer.saveTabs).mockImplementation(async ({ projectId, tabs }) => {
+    vi.mocked(window.hardcore.explorer.saveTabs).mockImplementation(async ({ sessionId: projectId, tabs }) => {
       stored.set(projectId, tabs.map(tab => PersistedExplorerTabSchema.parse(tab)));
     });
-    vi.mocked(window.hardcore.explorer.loadTabs).mockImplementation(async ({ projectId }) => stored.get(projectId) ?? []);
+    vi.mocked(window.hardcore.explorer.loadTabs).mockImplementation(async ({ sessionId: projectId }) => stored.get(projectId) ?? []);
     const file = useExplorer.getState().open("file")!;
     const drawing = useExplorer.getState().open("drawing", { title: "Keep this sketch" })!;
-    await useExplorer.getState().bindProject("project-2");
+    await useExplorer.getState().bindSession("project-2", "project-2");
     const loading = deferred<PersistedExplorerTab[]>();
     vi.mocked(window.hardcore.explorer.loadTabs).mockImplementationOnce(() => loading.promise);
-    const restoring = useExplorer.getState().bindProject(PROJECT);
+    const restoring = useExplorer.getState().bindSession(PROJECT, PROJECT);
     expect(useExplorer.getState().ready).toBe(false);
     vi.mocked(window.hardcore.explorer.saveTabs).mockClear();
     for (const kind of ["file", "review", "browser", "terminal", "drawing"] as const) {
@@ -158,10 +161,10 @@ describe("the explorer strip", () => {
 
   it("ignores late updates from a departed tab while another strip is restoring", async () => {
     const drawing = useExplorer.getState().open("drawing")!;
-    await useExplorer.getState().bindProject("project-2");
+    await useExplorer.getState().bindSession("project-2", "project-2");
     const loading = deferred<PersistedExplorerTab[]>();
     vi.mocked(window.hardcore.explorer.loadTabs).mockImplementationOnce(() => loading.promise);
-    const restoring = useExplorer.getState().bindProject(PROJECT);
+    const restoring = useExplorer.getState().bindSession(PROJECT, PROJECT);
     vi.mocked(window.hardcore.explorer.saveTabs).mockClear();
     useExplorer.getState().update("departed-terminal", { ptyId: "late-pty" });
     expect(getDrawingTab(drawing.id, PROJECT)).not.toBeNull();
@@ -177,20 +180,20 @@ describe("the explorer strip", () => {
     useExplorer.getState().close(drawing.id);
     expect(deleteDrawingScene).toHaveBeenCalledWith(drawing.id);
     expect(getDrawingTab(drawing.id, PROJECT)).toBeNull();
-    await useExplorer.getState().bindProject("project-2");
+    await useExplorer.getState().bindSession("project-2", "project-2");
     // Simulate a response written by an older or compromised persistence path.
     vi.mocked(window.hardcore.explorer.loadTabs).mockResolvedValue([drawing as never]);
-    await useExplorer.getState().bindProject(PROJECT);
+    await useExplorer.getState().bindSession(PROJECT, PROJECT);
     expect(useExplorer.getState().tabs).toEqual([]);
   });
 
   it("disposes drawings of a removed background project", async () => {
     const drawing = useExplorer.getState().open("drawing")!;
-    await useExplorer.getState().bindProject("project-2");
-    useExplorer.getState().discardProjectResources(PROJECT);
+    await useExplorer.getState().bindSession("project-2", "project-2");
+    useExplorer.getState().discardSessionResources(PROJECT);
     expect(deleteDrawingScene).toHaveBeenCalledWith(drawing.id);
     expect(getDrawingTab(drawing.id, PROJECT)).toBeNull();
-    await useExplorer.getState().bindProject(PROJECT);
+    await useExplorer.getState().bindSession(PROJECT, PROJECT);
     expect(useExplorer.getState().tabs).toEqual([]);
   });
 
@@ -200,7 +203,7 @@ describe("the explorer strip", () => {
   });
 
   it("refuses to open a tab with no project", () => {
-    useExplorer.setState({ projectId: null });
+    useExplorer.setState({ sessionId: null, projectId: null });
     expect(useExplorer.getState().open("file")).toBeNull();
     expect(useExplorer.getState().tabs).toHaveLength(0);
   });
@@ -212,16 +215,16 @@ describe("the explorer strip", () => {
    * placeholder key that a real project would then never see.
    */
   it("has no explorer to toggle without a project", () => {
-    useExplorer.setState({ projectId: null, collapsed: true });
+    useExplorer.setState({ sessionId: null, projectId: null, collapsed: true });
     useExplorer.getState().toggleCollapsed();
     expect(useExplorer.getState().collapsed).toBe(true);
-    expect(window.localStorage.getItem("hardcore.explorer.collapsed")).toBeNull();
+    expect(window.localStorage.getItem("hardcore.explorer.session.collapsed")).toBeNull();
   });
 
   it("remembers the toggle for the project it was made in", () => {
     useExplorer.getState().toggleCollapsed();
     expect(useExplorer.getState().collapsed).toBe(false);
-    expect(JSON.parse(window.localStorage.getItem("hardcore.explorer.collapsed") ?? "{}")).toEqual({
+    expect(JSON.parse(window.localStorage.getItem("hardcore.explorer.session.collapsed") ?? "{}")).toEqual({
       [PROJECT]: false,
     });
   });
@@ -327,17 +330,17 @@ describe("the explorer strip", () => {
     expect(useExplorer.getState().activeId).toBe(last!.id);
   });
 
-  it("persists the strip once, after the burst of changes", () => {
+  it("persists the strip once, after the burst of changes", async () => {
     const { open } = useExplorer.getState();
     open("file");
     open("review");
     open("terminal");
 
     expect(window.hardcore.explorer.saveTabs).not.toHaveBeenCalled();
-    vi.runAllTimers();
+    await vi.runAllTimersAsync();
     expect(window.hardcore.explorer.saveTabs).toHaveBeenCalledTimes(1);
     expect(vi.mocked(window.hardcore.explorer.saveTabs).mock.calls[0]?.[0]).toMatchObject({
-      projectId: PROJECT,
+      sessionId: PROJECT,
     });
   });
 
@@ -345,28 +348,29 @@ describe("the explorer strip", () => {
     const blank = useExplorer.getState().open("file")!;
     const stored = new Map<string, PersistedExplorerTab[]>([[PROJECT, [PersistedExplorerTabSchema.parse(blank)]]]);
     const saved = deferred<void>();
-    vi.mocked(window.hardcore.explorer.saveTabs).mockImplementation(async ({ projectId, tabs }) => {
+    vi.mocked(window.hardcore.explorer.saveTabs).mockImplementation(async ({ sessionId: projectId, tabs }) => {
       if (projectId === PROJECT) await saved.promise;
       stored.set(projectId, tabs.map(tab => PersistedExplorerTabSchema.parse(tab)));
     });
-    vi.mocked(window.hardcore.explorer.loadTabs).mockImplementation(async ({ projectId }) => stored.get(projectId) ?? []);
+    vi.mocked(window.hardcore.explorer.loadTabs).mockImplementation(async ({ sessionId: projectId }) => stored.get(projectId) ?? []);
 
     useExplorer.getState().openFile("icon.png");
     expect(window.hardcore.explorer.saveTabs).not.toHaveBeenCalled();
-    const leaving = useExplorer.getState().bindProject("project-2");
+    const leaving = useExplorer.getState().bindSession("project-2", "project-2");
     expect(useExplorer.getState()).toMatchObject({ projectId: "project-2", ready: false });
+    await Promise.resolve();
     expect(window.hardcore.explorer.saveTabs).toHaveBeenCalledExactlyOnceWith({
-      projectId: PROJECT, tabs: [expect.objectContaining({ id: blank.id, path: "icon.png" })],
+      sessionId: PROJECT, tabs: [expect.objectContaining({ id: blank.id, path: "icon.png" })],
     });
     // Loading B does not wait for A's delayed IPC write.
     await leaving;
     expect(useExplorer.getState()).toMatchObject({ projectId: "project-2", ready: true });
-    const returning = useExplorer.getState().bindProject(PROJECT);
+    const returning = useExplorer.getState().bindSession(PROJECT, PROJECT);
     expect(useExplorer.getState()).toMatchObject({ projectId: PROJECT, ready: false });
-    expect(window.hardcore.explorer.loadTabs).not.toHaveBeenCalledWith({ projectId: PROJECT });
+    expect(window.hardcore.explorer.loadTabs).not.toHaveBeenCalledWith({ sessionId: PROJECT });
     saved.resolve();
     await returning;
-    expect(window.hardcore.explorer.loadTabs).toHaveBeenCalledWith({ projectId: PROJECT });
+    expect(window.hardcore.explorer.loadTabs).not.toHaveBeenCalledWith({ sessionId: PROJECT });
     expect(useExplorer.getState()).toMatchObject({ ready: true, activeId: blank.id });
     expect(useExplorer.getState().tabs).toMatchObject([{ id: blank.id, path: "icon.png" }]);
   });
@@ -375,46 +379,42 @@ describe("the explorer strip", () => {
     const earlier = deferred<void>();
     const stored = new Map<string, PersistedExplorerTab[]>();
     const saveTabs = vi.mocked(window.hardcore.explorer.saveTabs);
-    saveTabs.mockImplementationOnce(async ({ projectId, tabs }) => {
+    saveTabs.mockImplementationOnce(async ({ sessionId: projectId, tabs }) => {
       await earlier.promise;
       stored.set(projectId, tabs.map(tab => PersistedExplorerTabSchema.parse(tab)));
-    }).mockImplementation(async ({ projectId, tabs }) => { stored.set(projectId, tabs.map(tab => PersistedExplorerTabSchema.parse(tab))); });
-    vi.mocked(window.hardcore.explorer.loadTabs).mockImplementation(async ({ projectId }) => stored.get(projectId) ?? []);
+    }).mockImplementation(async ({ sessionId: projectId, tabs }) => { stored.set(projectId, tabs.map(tab => PersistedExplorerTabSchema.parse(tab))); });
+    vi.mocked(window.hardcore.explorer.loadTabs).mockImplementation(async ({ sessionId: projectId }) => stored.get(projectId) ?? []);
 
     const tab = useExplorer.getState().open("file")!;
-    vi.advanceTimersByTime(400);
+    await vi.advanceTimersByTimeAsync(400);
     expect(saveTabs).toHaveBeenCalledTimes(1);
     useExplorer.getState().openFile("icon.png");
-    await useExplorer.getState().bindProject("project-2");
-    const returning = useExplorer.getState().bindProject(PROJECT);
+    await useExplorer.getState().bindSession("project-2", "project-2");
+    const returning = useExplorer.getState().bindSession(PROJECT, PROJECT);
     expect(saveTabs).toHaveBeenCalledTimes(1);
-    expect(window.hardcore.explorer.loadTabs).not.toHaveBeenCalledWith({ projectId: PROJECT });
+    expect(window.hardcore.explorer.loadTabs).not.toHaveBeenCalledWith({ sessionId: PROJECT });
     if (outcome === "rejected") earlier.reject(new Error("Temporary persistence failure"));
     else earlier.resolve();
     await returning;
-    expect(saveTabs).toHaveBeenCalledTimes(2);
-    expect(saveTabs.mock.calls[1]?.[0]).toMatchObject({ projectId: PROJECT, tabs: [{ id: tab.id, path: "icon.png" }] });
+    await vi.waitFor(() => expect(saveTabs).toHaveBeenCalledTimes(2));
+    expect(saveTabs.mock.calls[1]?.[0]).toMatchObject({ sessionId: PROJECT, tabs: [{ id: tab.id, path: "icon.png" }] });
     expect(useExplorer.getState()).toMatchObject({ projectId: PROJECT, ready: true });
     expect(useExplorer.getState().tabs).toMatchObject([{ id: tab.id, path: "icon.png" }]);
   });
 
-  it("ignores an earlier visit's late load after returning to the same project", async () => {
+  it("shares an in-flight session restore without applying it to a different session", async () => {
     const earlier = deferred<PersistedExplorerTab[]>();
-    const base = { kind: "file", projectId: PROJECT, order: 0, root: null, panel: null } as const;
-    const current: PersistedExplorerTab[] = [{ ...base, id: "current", path: "icon.png" }];
-    vi.mocked(window.hardcore.explorer.loadTabs)
-      .mockImplementationOnce(() => earlier.promise)
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce(current);
-    useExplorer.setState({ projectId: null });
-    const firstVisit = useExplorer.getState().bindProject(PROJECT);
-    await useExplorer.getState().bindProject("project-2");
-    await useExplorer.getState().bindProject(PROJECT);
-    expect(useExplorer.getState().tabs).toEqual(current);
-    earlier.resolve([{ ...base, id: "old", path: null }]);
-    await firstVisit;
-    expect(useExplorer.getState().tabs).toEqual(current);
-    expect(useExplorer.getState().activeId).toBe("current");
+    const fresh = `unloaded-${PROJECT}`;
+    const base = { kind: "file", sessionId: fresh, projectId: PROJECT, order: 0, root: null, panel: null } as const;
+    vi.mocked(window.hardcore.explorer.loadTabs).mockImplementationOnce(() => earlier.promise);
+    const firstVisit = useExplorer.getState().bindSession(fresh, PROJECT);
+    await Promise.resolve();
+    await useExplorer.getState().bindSession(PROJECT, PROJECT);
+    const returning = useExplorer.getState().bindSession(fresh, PROJECT);
+    earlier.resolve([{ ...base, id: "restored", path: "icon.png" }]);
+    await Promise.all([firstVisit, returning]);
+    expect(useExplorer.getState().tabs).toMatchObject([{ id: "restored", sessionId: fresh }]);
+    expect(window.hardcore.explorer.loadTabs).toHaveBeenCalledTimes(1);
   });
 
   it("ignores a change batch for another project", () => {
@@ -502,20 +502,20 @@ describe("the explorer strip", () => {
     useExplorer.getState().openFile("src/wrist.step");
     expect(useExplorer.getState().collapsed).toBe(false);
     // The person never said anything, so nothing was remembered for them.
-    expect(window.localStorage.getItem("hardcore.explorer.collapsed")).toBeNull();
+    expect(window.localStorage.getItem("hardcore.explorer.session.collapsed")).toBeNull();
   });
 
   it("remembers the pane's state for the project it was chosen in", () => {
     useExplorer.getState().setCollapsed(false);
-    void useExplorer.getState().bindProject("project-2");
+    void useExplorer.getState().bindSession("project-2", "project-2");
     // A project nobody has opened the pane in starts closed.
     expect(useExplorer.getState().collapsed).toBe(true);
-    void useExplorer.getState().bindProject(PROJECT);
+    void useExplorer.getState().bindSession(PROJECT, PROJECT);
     expect(useExplorer.getState().collapsed).toBe(false);
   });
 
   it("titles a tab by what a person would call it", () => {
-    const base = { id: "t", projectId: PROJECT, order: 0 } as const;
+    const base = { id: "t", sessionId: PROJECT, projectId: PROJECT, order: 0 } as const;
     expect(tabTitle({ ...base, kind: "file", path: "src/wrist.step", root: null, panel: null })).toBe(
       "wrist.step",
     );
@@ -524,6 +524,6 @@ describe("the explorer strip", () => {
       "example.com",
     );
     expect(tabTitle({ ...base, kind: "browser", root: null, url: null })).toBe("New tab");
-    expect(tabTitle({ ...base, kind: "review", scope: "all", sessionId: null })).toBe("Review");
+    expect(tabTitle({ ...base, kind: "review", scope: "all" })).toBe("Review");
   });
 });

@@ -13,6 +13,7 @@ import {
 } from "@playwright/test";
 
 import { PANE_LIMITS } from "../../src/shared/types";
+import { selectFixtureSession } from "./session-fixture";
 
 /**
  * The panes, and the top level's back and forward.
@@ -73,13 +74,10 @@ test.beforeAll(async () => {
   });
   await page.waitForLoadState("domcontentloaded");
   await page.evaluate(() => window.hardcore.settings.set({ theme: "dark" }));
-  const added = await page.evaluate(
-    (directory) => window.hardcore.projects.addPath({ path: directory }),
-    project,
-  );
-  projectId = added.id;
+  const session = await selectFixtureSession(page, project);
+  projectId = session.projectId;
   await expect(page.getByText(projectName).first()).toBeVisible();
-  // The explorer's strip binds to the project asynchronously.
+  // The explorer's strip is available only for the selected session.
   await expect(page.getByRole("button", { name: "Toggle explorer" })).toBeVisible();
 });
 
@@ -253,9 +251,11 @@ test("back and forward walk the sessions and the new-session screen", async () =
   ]);
   expect(backBox!.x).toBeGreaterThan(toggleBox!.x);
   expect(forwardBox!.x).toBeGreaterThan(backBox!.x);
-  // Nowhere to go yet: muted, and still there.
+  // Return from the geometry fixture's session to the first directory draft.
+  await back.click();
+  await expect(page.getByRole("heading", { name: new RegExp(`What should we build in ${projectName}`) })).toBeVisible();
   await expect(back).toBeDisabled();
-  await expect(forward).toBeDisabled();
+  await expect(forward).toBeEnabled();
 
   // Two threads, made through IPC: this test is about navigation, and a
   // prompt each would be two minutes of streaming to prove nothing extra.

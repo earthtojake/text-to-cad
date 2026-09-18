@@ -6,7 +6,7 @@
  * disk the user can edit, and a row written by a newer build is exactly the
  * case where a silent `as Project` would hand a half-formed object to the UI.
  */
-import { randomUUID } from "node:crypto";
+import { realpathSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { z } from "zod";
@@ -38,67 +38,41 @@ import { db } from "./index";
 /* Projects                                                                    */
 /* -------------------------------------------------------------------------- */
 
-type ProjectRow = { id: string; name: string; path: string; created_at: number };
-
-const toProject = (row: ProjectRow): Project =>
-  ProjectSchema.parse({
-    id: row.id,
-    name: row.name,
-    path: row.path,
-    createdAt: row.created_at,
-  });
+/** Projects are a projection of session directories, never stored entities. */
+function directoryDescriptor(directory: string, createdAt = 0): Project {
+  return ProjectSchema.parse({ id: directory, name: path.basename(directory) || directory, path: directory, createdAt });
+}
 
 export const projects = {
   list(): Project[] {
-    const rows = db()
-      .prepare("SELECT id, name, path, created_at FROM projects ORDER BY created_at ASC")
-      .all() as ProjectRow[];
-    return rows.map(toProject);
+    const rows = db().prepare(
+      "SELECT project_id AS directory, MIN(created_at) AS created_at FROM sessions GROUP BY project_id ORDER BY created_at, project_id",
+    ).all() as { directory: string; created_at: number }[];
+    // No stat here: a temporarily unmounted directory must not hide sessions.
+    return rows.map(row => directoryDescriptor(row.directory, row.created_at));
   },
 
-  byPath(directory: string): Project | null {
-    const row = db()
-      .prepare("SELECT id, name, path, created_at FROM projects WHERE path = ?")
-      .get(directory) as ProjectRow | undefined;
-    return row ? toProject(row) : null;
+  /** Resolve a directory chosen for a new session, without creating anything. */
+  add(directory: string): Project {
+    if (!path.isAbsolute(directory)) throw new Error("Choose an absolute directory path");
+    const canonical = realpathSync(directory);
+    if (!statSync(canonical).isDirectory()) throw new Error("Choose a directory");
+    // Older builds stored the chosen spelling (e.g. /tmp vs /private/tmp).
+    // Reuse its session-derived identity instead of splitting that group.
+    const existing = projects.list().find(project => {
+      try { return realpathSync(project.path) === canonical; } catch { return false; }
+    });
+    if (existing) return existing;
+    return directoryDescriptor(canonical);
   },
 
-  /**
-   * Add a directory. Adding one that is already a project is not an error —
-   * it answers with the existing project, because "add this folder" and "I
-   * already have that folder" want the same outcome.
-   */
-  add(directory: string, name?: string): Project {
-    const existing = projects.byPath(directory);
-    if (existing) {
-      return existing;
-    }
-    const project: Project = {
-      id: randomUUID(),
-      name: name ?? path.basename(directory) ?? directory,
-      path: directory,
-      createdAt: Date.now(),
-    };
-    db()
-      .prepare("INSERT INTO projects (id, name, path, created_at) VALUES (?, ?, ?, ?)")
-      .run(project.id, project.name, project.path, project.createdAt);
-    return project;
-  },
-
-  rename(id: string, name: string): Project {
-    db().prepare("UPDATE projects SET name = ? WHERE id = ?").run(name, id);
-    const row = db()
-      .prepare("SELECT id, name, path, created_at FROM projects WHERE id = ?")
-      .get(id) as ProjectRow | undefined;
-    if (!row) {
-      throw new Error(`no such project: ${id}`);
-    }
-    return toProject(row);
-  },
-
-  /** Forgets the project and its sessions. The directory is never touched. */
-  remove(id: string): void {
-    db().prepare("DELETE FROM projects WHERE id = ?").run(id);
+  /** Resolve a stable directory identity, including before the first session. */
+  get(id: string): Project | null {
+    // A checkout may be unmounted while its session's worktree still exists.
+    // Recorded identities must remain readable, without rewriting their ids.
+    const recorded = projects.list().find(project => project.id === id);
+    if (recorded) return recorded;
+    try { return projects.add(id); } catch { return null; }
   },
 };
 
@@ -114,6 +88,7 @@ type SessionRow = {
   git_mode: string;
   branch: string | null;
   title: string;
+  title_source: "prompt" | "agent" | "user";
   created_at: number;
   updated_at: number;
   status: string;
@@ -132,7 +107,7 @@ type SessionRow = {
 const SESSION_COLUMNS =
   "id, project_id, agent_id, cwd, git_mode, branch, title, created_at, updated_at, status, " +
   "acp_session_id, changed_files, insertions, deletions, archived, pinned, " +
-  "worktree_path, session_head, turn_head, turn_started_at";
+  "worktree_path, session_head, turn_head, turn_started_at, title_source";
 
 const toSession = (row: SessionRow): Session =>
   SessionSchema.parse({
@@ -144,6 +119,7 @@ const toSession = (row: SessionRow): Session =>
     branch: row.branch ?? undefined,
     worktreePath: row.worktree_path ?? undefined,
     title: row.title,
+    titleSource: row.title_source,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     status: row.status,
@@ -187,13 +163,14 @@ export const sessions = {
         `INSERT INTO sessions (${SESSION_COLUMNS})
          VALUES (@id, @projectId, @agentId, @cwd, @gitMode, @branch, @title, @createdAt, @updatedAt, @status,
                  @acpSessionId, @changedFiles, @insertions, @deletions, @archived, @pinned,
-                 @worktreePath, @sessionHead, @turnHead, @turnStartedAt)
+                 @worktreePath, @sessionHead, @turnHead, @turnStartedAt, @titleSource)
          ON CONFLICT(id) DO UPDATE SET
            agent_id = excluded.agent_id,
            cwd = excluded.cwd,
            git_mode = excluded.git_mode,
            branch = excluded.branch,
            title = excluded.title,
+           title_source = excluded.title_source,
            updated_at = excluded.updated_at,
            status = excluded.status,
            acp_session_id = excluded.acp_session_id,
@@ -418,42 +395,41 @@ function readJsonColumn<T>(
 /* Explorer tabs                                                               */
 /* -------------------------------------------------------------------------- */
 
-type ExplorerTabRow = { id: string; project_id: string; payload: string };
+type ExplorerTabRow = { id: string; session_id: string; payload: string };
 
 export const explorerTabs = {
-  /**
-   * A project's strip, in order.
-   *
-   * A row that no longer parses is dropped rather than thrown on: the payload
-   * is a JSON blob written by whichever build was running, and one stale tab
-   * must not cost the person the other five.
-   */
-  list(projectId: string): PersistedExplorerTab[] {
-    const rows = db()
-      .prepare(
-        "SELECT id, project_id, payload FROM explorer_tabs WHERE project_id = ? ORDER BY position",
-      )
-      .all(projectId) as ExplorerTabRow[];
-    return rows.flatMap((row) => {
+  /** One session's persisted strip. A stale payload cannot hide its siblings. */
+  list(sessionId: string): PersistedExplorerTab[] {
+    const session = sessions.get(sessionId);
+    if (!session) throw new Error("No such session");
+    const rows = db().prepare(
+      "SELECT id, session_id, payload FROM explorer_tabs WHERE session_id = ? ORDER BY position",
+    ).all(sessionId) as ExplorerTabRow[];
+    return rows.flatMap(row => {
       const parsed = PersistedExplorerTabSchema.safeParse(safeJson(row.payload));
-      return parsed.success ? [parsed.data] : [];
+      return parsed.success && parsed.data.sessionId === sessionId && parsed.data.projectId === session.projectId
+        ? [parsed.data] : [];
     });
   },
 
-  /** Replaces a project's whole strip — the only write the UI ever needs. */
-  replace(projectId: string, tabs: ExplorerTab[]): PersistedExplorerTab[] {
-    const parsed = tabs.filter((tab) => tab.kind !== "drawing").map((tab) => PersistedExplorerTabSchema.parse(tab));
+  /** Writes only the named session. Validate ownership before deleting anything. */
+  replace(sessionId: string, tabs: ExplorerTab[]): PersistedExplorerTab[] {
+    const session = sessions.get(sessionId);
+    if (!session) throw new Error("No such session");
+    if (tabs.some(tab => tab.sessionId !== sessionId || tab.projectId !== session.projectId)) {
+      throw new Error("Explorer tabs belong to a different session");
+    }
+    const parsed = tabs.filter(tab => tab.kind !== "drawing").map(tab => PersistedExplorerTabSchema.parse(tab));
     const connection = db();
-    const write = connection.transaction(() => {
-      connection.prepare("DELETE FROM explorer_tabs WHERE project_id = ?").run(projectId);
+    connection.transaction(() => {
+      connection.prepare("DELETE FROM explorer_tabs WHERE session_id = ?").run(sessionId);
       const insert = connection.prepare(
-        "INSERT INTO explorer_tabs (id, project_id, kind, position, payload) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO explorer_tabs (id, session_id, kind, position, payload) VALUES (?, ?, ?, ?, ?)",
       );
       parsed.forEach((tab, index) => {
-        insert.run(tab.id, projectId, tab.kind, index, JSON.stringify({ ...tab, order: index }));
+        insert.run(tab.id, sessionId, tab.kind, index, JSON.stringify({ ...tab, order: index }));
       });
-    });
-    write();
+    })();
     return parsed;
   },
 };

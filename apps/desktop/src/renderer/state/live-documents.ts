@@ -9,22 +9,15 @@ const inactivePdf = new Map<string, Binding<LivePdfSnapshot>>();
 // Drafts have app-window lifetime. Project/tab switches do not evict unsaved work.
 const retained = new Map<string, TextDraft>();
 const draftOwners = new Map<string, Set<string>>();
-const drafts: DocumentDrafts = {
-  get: (sourceId, path) => retained.get(JSON.stringify([sourceId, path])),
-  put(sourceId, path, value) {
-    const key = JSON.stringify([sourceId, path]);
-    if (value) retained.set(key, value); else retained.delete(key);
-  },
-};
 function bind<T extends { sourceId: string; path: string }>(map: Map<string, Binding<T>>, tabId: string, scope: LiveDocumentScope, target: T) {
   const value = { ...scope, sourceId: target.sourceId, path: target.path, target }; map.set(tabId, value);
   return () => { if (map.get(tabId) === value) map.delete(tabId); };
 }
 export function desktopLiveDocuments(tabId: string, scope: LiveDocumentScope): Pick<ViewerHost, 'documents' | 'pdf'> {
-  const ownedDrafts: DocumentDrafts = { get: drafts.get, put(sourceId, path, value) {
-    const key = JSON.stringify([sourceId, path]);
+  const ownedDrafts: DocumentDrafts = { get: (sourceId, path) => retained.get(JSON.stringify([tabId, sourceId, path])), put(sourceId, path, value) {
+    const key = JSON.stringify([tabId, sourceId, path]);
     if (value) { const owned = draftOwners.get(tabId) ?? new Set<string>(); owned.add(key); draftOwners.set(tabId, owned); }
-    drafts.put(sourceId, path, value);
+    if (value) retained.set(key, value); else retained.delete(key);
   } };
   return { documents: { drafts: ownedDrafts, bind: target => {
     inactiveText.delete(tabId);

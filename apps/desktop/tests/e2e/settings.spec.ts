@@ -194,7 +194,7 @@ test("the agent drawer shows an installed agent and a signed-out one", async () 
 
 test("Escape leaves Settings once nothing is on top of it", async () => {
   await page.keyboard.press("Escape");
-  await expect(page.getByText("Add a project to get started")).toBeVisible();
+  await expect(page.getByText("Choose a folder to get started")).toBeVisible();
 
   // And the shortcut brings it back.
   await page.keyboard.press(process.platform === "darwin" ? "Meta+," : "Control+,");

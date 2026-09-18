@@ -172,7 +172,7 @@ export type SessionManagerDeps = {
   keepAlive?: number;
 };
 
-/** Codex's convention: the first line of the first prompt, trimmed to fit a sidebar row. */
+/** A provisional title until the agent supplies one, trimmed to fit a sidebar row. */
 export function titleFromPrompt(content: PromptBlock[], max = 60): string {
   const text = content.find((block) => block.type === "text");
   const line = (text?.type === "text" ? text.text : "")
@@ -208,6 +208,8 @@ export class SessionManager {
   private readonly tallies = new Map<string, ChangeTally>();
   /** The `load` in flight per session, so two callers wait on one spawn. */
   private readonly loads = new Map<string, Promise<SessionState>>();
+  /** An agent may announce its title before session/new tells us its session id. */
+  private readonly pendingTitles = new Map<string, Map<string, string>>();
   private readonly snapshots: SessionSnapshotWriter | null;
   private readonly warm: WarmAdapterPool<SessionConnection>;
 
@@ -306,6 +308,7 @@ export class SessionManager {
       branch: workspace.branch ?? input.branch,
       ...(workspace.worktreePath ? { worktreePath: workspace.worktreePath } : {}),
       title: "New session",
+      titleSource: "prompt",
       createdAt: now,
       updatedAt: now,
       status: "connecting",
@@ -346,6 +349,7 @@ export class SessionManager {
       // A row with no agent session id can never be loaded; the renderer
       // shows the failure (sign in, install) and the user creates again.
       this.live.delete(session.id)?.close();
+      this.pendingTitles.delete(session.id);
       this.deps.repo.remove(session.id);
       this.broadcastIndex();
       throw error;
@@ -618,8 +622,11 @@ export class SessionManager {
     // The session being prompted is the one in use: it goes to the front of
     // the keep-alive queue and is never what an eviction closes.
     this.live.touch(id);
-    if (session.title === "New session") {
-      this.update(id, { title: titleFromPrompt(content) });
+    // Re-read after reconnect: session/load may have supplied the agent's
+    // title while ensureLive was in flight.
+    const current = this.require(id);
+    if (current.titleSource === "prompt" && current.title === "New session") {
+      this.update(id, { title: titleFromPrompt(content), titleSource: "prompt" });
     }
     // The turn's starting point, read before the agent can move it. This is
     // what the review's `Last turn` scope diffs against; taking it afterwards
@@ -696,7 +703,7 @@ export class SessionManager {
 
   rename(id: string, title: string): Session {
     this.require(id);
-    return this.update(id, { title: title.trim() });
+    return this.update(id, { title: title.trim(), titleSource: "user" });
   }
 
   /** Hide the row from the sidebar. The adapter is closed; `load` still resumes it later. */
@@ -723,6 +730,7 @@ export class SessionManager {
 
   close(id: string): void {
     this.live.delete(id)?.close();
+    this.pendingTitles.delete(id);
     // The transcript as it stood, written now rather than in a second: the
     // adapter is gone and the next click has only the snapshot to paint.
     this.snapshots?.flush(id);
@@ -744,6 +752,7 @@ export class SessionManager {
   async delete(id: string): Promise<void> {
     const session = this.deps.repo.get(id);
     this.live.delete(id)?.close();
+    this.pendingTitles.delete(id);
     this.tallies.delete(id);
     // The snapshot row goes with the session's own (ON DELETE CASCADE); this
     // cancels the pending write that would otherwise put it back.
@@ -1054,7 +1063,27 @@ export class SessionManager {
       }
     }
     switch (event.type) {
+      case "session/connected": {
+        const pending = this.pendingTitles.get(id)?.get(event.acpSessionId);
+        this.pendingTitles.delete(id);
+        if (pending) {
+          this.setAgentTitle(id, pending);
+        }
+        break;
+      }
       case "session/update":
+        if (event.update.sessionUpdate === "session_info_update") {
+          const title = typeof event.update.title === "string" ? event.update.title.trim() : "";
+          if (title) {
+            if (current?.acpSessionId === event.acpSessionId) {
+              this.setAgentTitle(id, title);
+            } else if (current && !current.acpSessionId && this.deps.repo.get(id)) {
+              const pending = this.pendingTitles.get(id) ?? new Map<string, string>();
+              pending.set(event.acpSessionId, title);
+              this.pendingTitles.set(id, pending);
+            }
+          }
+        }
         this.tallyUpdate(id, event.update as Record<string, unknown>);
         break;
       case "permission/request":
@@ -1083,6 +1112,16 @@ export class SessionManager {
       default:
         break;
     }
+  }
+
+  private setAgentTitle(id: string, title: string): void {
+    const session = this.deps.repo.get(id);
+    if (!session || session.titleSource === "user" || (session.title === title && session.titleSource === "agent")) {
+      return;
+    }
+    // Updating the persisted index also broadcasts sessions.changed, so the
+    // sidebar and session header follow the same title across restarts.
+    this.update(id, { title, titleSource: "agent" });
   }
 
   private tally(id: string): ChangeTally {

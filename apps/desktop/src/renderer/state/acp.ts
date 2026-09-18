@@ -1,5 +1,7 @@
 import { create } from "zustand";
 
+import { useSessions } from "./sessions";
+
 import { reduce } from "@shared/acp/reduce";
 import { errorMessage } from "@shared/ipc/errors";
 import type {
@@ -125,6 +127,8 @@ export const useAcp = create<AcpState>((set, get) => ({
 
   create: async (input) => {
     const session = await window.hardcore.sessions.create(input);
+    const index = useSessions.getState();
+    if (!index.sessions.some(row => row.id === session.id)) index.receive([...index.sessions, session]);
     return session.id;
   },
 

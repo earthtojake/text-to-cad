@@ -51,6 +51,8 @@ let page: Page;
 let base: string;
 let alpha: { id: string; name: string };
 let beta: { id: string; name: string };
+let aspenId: string;
+let willowId: string;
 
 test.describe.configure({ mode: "serial" });
 
@@ -77,6 +79,10 @@ test.beforeAll(async () => {
 
   alpha = await page.evaluate((dir) => window.hardcore.projects.addPath({ path: dir }), alphaDir);
   beta = await page.evaluate((dir) => window.hardcore.projects.addPath({ path: dir }), betaDir);
+  // Choosing folders does not create durable projects or empty sidebar groups.
+  await expect(sidebar().locator("[data-sidebar-section]")).toHaveCount(0);
+  aspenId = await createSession(alpha.id, "Aspen");
+  willowId = await createSession(beta.id, "Willow");
   await expect(sidebar().getByRole("button", { name: `Collapse ${alpha.name}` })).toBeVisible();
 
   // Dark, for comparability with the other suites' screenshots — and written
@@ -136,7 +142,7 @@ test("a project's header has + and nothing else", async () => {
  * that: the stores are rebuilt from main either way.
  */
 test("a project's section collapses and expands, and survives a reload", async () => {
-  const session = await createSession(alpha.id, "Aspen");
+  const session = aspenId;
   const row = page.locator(`[data-session-row="${session}"]`);
   await expect(row).toBeVisible();
 
@@ -178,9 +184,9 @@ test("pinning lifts a row into Pinned, and unpinning puts it back", async () => 
 
   await expect(sidebar().getByText("Pinned", { exact: true })).toBeVisible();
   await expect(page.locator("[data-session-row][data-pinned]")).toHaveCount(1);
-  // Once, not twice, and the section it left is empty.
+  // Once, not twice, with no empty directory header left behind.
   await expect(page.locator("[data-session-row]").filter({ hasText: "Aspen" })).toHaveCount(1);
-  await expect(sectionOf(alpha.id).locator("[data-session-row]")).toHaveCount(0);
+  await expect(sectionOf(alpha.id)).toHaveCount(0);
   // The row names the project it came from, since its header no longer does.
   await expect(row.locator("[data-session-project]")).toContainText(alpha.name);
   await shoot("sidebar-pinned.png");
@@ -204,12 +210,12 @@ test("the filter menu reorders the list and shows the archived threads", async (
 
   // Active is the default, so the archived one is not here and the rest are
   // newest first.
-  await expect.poll(titles).toEqual(["Birch", "Aspen"]);
+  await expect.poll(titles).toEqual(["Birch", "Aspen", "Willow"]);
 
   await openFilters();
   await shoot("sidebar-filters.png");
   await choose("Sort by", "Name");
-  await expect.poll(titles).toEqual(["Aspen", "Birch"]);
+  await expect.poll(titles).toEqual(["Aspen", "Birch", "Willow"]);
 
   await openFilters();
   await choose("Status", "Archived");
@@ -217,14 +223,14 @@ test("the filter menu reorders the list and shows the archived threads", async (
 
   await openFilters();
   await choose("Status", "All");
-  await expect.poll(titles).toEqual(["Aspen", "Birch", "Cedar"]);
+  await expect.poll(titles).toEqual(["Aspen", "Birch", "Cedar", "Willow"]);
 
   // And back, so the glyph test below reads a list it recognises.
   await openFilters();
   await choose("Status", "Active");
   await openFilters();
   await choose("Sort by", "Last activity");
-  await expect.poll(titles).toEqual(["Birch", "Aspen"]);
+  await expect.poll(titles).toEqual(["Birch", "Aspen", "Willow"]);
 });
 
 /**
@@ -233,7 +239,7 @@ test("the filter menu reorders the list and shows the archived threads", async (
  * they were last worked in, a check on the one this screen is for, then
  * `Open folder…`.
  *
- * Two projects is the whole point. `alpha` has threads and `beta` has none,
+ * Two directories is the whole point. `alpha` has newer activity than `beta`,
  * so `alpha` is first — while the check is on `beta`, whose new-session
  * screen this is. A menu that sorted by "the active one first", or a check
  * drawn on the first row, would pass with one project and lie with two.
@@ -249,7 +255,7 @@ test("the project chip lists the recent folders, and ends in `Open folder…`", 
   const menu = page.getByRole("menu");
   await expect(menu).toBeVisible();
   await expect(menu.getByText("Recent", { exact: true })).toBeVisible();
-  // In order, and `Open folder…` last. `alpha` has the sessions, so it leads.
+  // In order, and `Open folder…` last. `alpha` has newer activity, so it leads.
   await expect(menu.getByRole("menuitem")).toHaveText([alpha.name, beta.name, "Open folder…"]);
   // No `No folder` row: a session always belongs to one.
   await expect(menu.getByRole("menuitem", { name: "No folder" })).toHaveCount(0);
@@ -297,6 +303,13 @@ test("the state glyph follows a turn that runs and then asks", async () => {
     .getByRole("button", { name: "Yes", exact: true })
     .click();
   await expect(row.locator("[data-session-glyph=idle]")).toBeVisible({ timeout: 20_000 });
+});
+
+test("archiving the last session hides its directory and restoring it brings the group back", async () => {
+  await page.evaluate((id) => window.hardcore.sessions.archive({ id, archived: true }), willowId);
+  await expect(sectionOf(beta.id)).toHaveCount(0);
+  await page.evaluate((id) => window.hardcore.sessions.archive({ id, archived: false }), willowId);
+  await expect(sectionOf(beta.id).locator(`[data-session-row="${willowId}"]`)).toBeVisible();
 });
 
 /* -------------------------------------------------------------------------- */

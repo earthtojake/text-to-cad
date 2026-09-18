@@ -20,9 +20,9 @@ export class BrowserConnections {
     let pending = this.entries.get(session.sessionId);
     if (!pending) {
       pending = (async () => {
-        const scope = { projectId: session.projectId, root };
+        const scope = { sessionId: session.sessionId, projectId: session.projectId, root };
         const command = (kind: "open-url" | "show-tab" | "close-tab", extra: { tabId?: string; url?: string }, signal: AbortSignal) => this.commands.request({
-          kind, projectId: session.projectId, root: workspace.root, rootDirectory: root, ...extra,
+          kind, sessionId: session.sessionId, projectId: session.projectId, root: workspace.root, rootDirectory: root, ...extra,
         }, signal);
         const endpoint = new ScopedBrowserCdp(this.service, scope, {
           open: async (url, signal) => {

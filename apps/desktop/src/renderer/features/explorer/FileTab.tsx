@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { useResolvedTheme } from "@renderer/hooks/use-theme";
 import { desktopLiveDocuments } from "@renderer/state/live-documents";
-import { useExplorer } from "@renderer/state/explorer";
+import { openSessionTab, readSessionStrip, selectSessionTab, updateSessionTab, useExplorer } from "@renderer/state/explorer";
 import { useProjects } from "@renderer/state/projects";
 import type { ExplorerRoot, Project } from "@shared/types";
 import { createDesktopFileSource, createDesktopFileActions } from "./adapters/fileSource";
@@ -17,27 +17,29 @@ import { useDesktopViewState } from "./adapters/persistence";
 import { createDesktopRenderers } from "./renderers";
 
 /** The desktop supplies a root, native services and tab navigation to the shared viewer. */
-export function FileTab({ tabId, project, root, path, panel, cadConnection }: {
-  tabId: string; project: Project; root: ExplorerRoot; path: string | null; panel: string | null;
+export function FileTab({ sessionId, tabId, project, root, path, panel, cadConnection }: {
+  sessionId: string; tabId: string; project: Project; root: ExplorerRoot; path: string | null; panel: string | null;
   cadConnection?: DesktopCadConnection;
 }) {
-  const source = useMemo(() => createDesktopFileSource({ projectId: project.id,
-    projectName: () => useProjects.getState().projects.find(entry => entry.id === project.id)?.name ?? "Project", root }), [project.id, root]);
+  const source = useMemo(() => createDesktopFileSource({ sessionId, projectId: project.id,
+    projectName: () => useProjects.getState().projects.find(entry => entry.id === project.id)?.name ?? "Project", root }), [sessionId, project.id, root]);
   const composition = useMemo(() => createDesktopRenderers(project.id, root, tabId, cadConnection), [project.id, root, tabId, cadConnection]);
   useEffect(() => () => composition.dispose(), [composition]);
   const { state, onStateChange } = useDesktopViewState(source.id, tabId, root, panel, root ?? project.path);
   const reveal = useExplorer((state) => state.reveal);
   const colorScheme = useResolvedTheme();
-  const promptContext = useMemo(() => createDesktopPromptContext(project.id, root, source.id), [project.id, root, source.id]);
-  const fileActions = useMemo(() => createDesktopFileActions({ projectId: project.id, root, sourceId: source.id, promptContext, clipboard: desktopClipboard }), [project.id, root, source.id, promptContext]);
+  const promptContext = useMemo(() => createDesktopPromptContext(project.id, root, source.id, sessionId), [sessionId, project.id, root, source.id]);
+  const fileActions = useMemo(() => createDesktopFileActions({ sessionId, projectId: project.id, root, sourceId: source.id, promptContext, clipboard: desktopClipboard }), [sessionId, project.id, root, source.id, promptContext]);
   const worktree = useMemo(() => worktreeMark(root), [root]);
   const onOpenFile = useCallback((next: string, options?: { target: "current" | "new" }) => {
-    const explorer = useExplorer.getState();
-    if (options?.target === "new") { explorer.openFile(next, root); return; }
-    const existing = explorer.tabs.find((tab) => tab.kind === "file" && tab.path === next && tab.root === root);
-    if (existing) { if (existing.id !== tabId) explorer.setActive(existing.id); return; }
-    explorer.update(tabId, { path: next, panel: null });
-  }, [tabId, root]);
+    void (async () => {
+      if (options?.target === "new") { await openSessionTab(sessionId, project.id, root, "file", { path: next }); return; }
+      const strip = await readSessionStrip(sessionId);
+      const existing = strip.tabs.find(tab => tab.kind === "file" && tab.path === next && tab.root === root);
+      if (existing) { await selectSessionTab(sessionId, existing.id); return; }
+      await updateSessionTab(sessionId, tabId, { path: next, panel: null });
+    })().catch(error => toast.error(error instanceof Error ? error.message : String(error)));
+  }, [sessionId, project.id, tabId, root]);
   const liveDocuments = useMemo(() => desktopLiveDocuments(tabId, { projectId: project.id, root }), [tabId, project.id, root]);
   const host = useMemo<ViewerHost>(() => ({
     ...liveDocuments, files: source, fileActions, clipboard: desktopClipboard, promptContext,

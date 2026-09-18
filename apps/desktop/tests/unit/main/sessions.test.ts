@@ -181,6 +181,55 @@ describe("SessionManager", () => {
     expect(manager.get(session.id)?.status).toBe("idle");
   });
 
+  it("persists and broadcasts agent titles, including notifications before session/new answers", async () => {
+    const { repo, broadcasts, manager, cwd } = await setup({
+      launchOverride: () => ({ ...fakeProvider.launch, args: [FAKE_AGENT, "--new-title", "Initial agent title"] }),
+    });
+    const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
+    expect(session).toMatchObject({ title: "Initial agent title", titleSource: "agent" });
+
+    broadcasts.length = 0;
+    await manager.prompt(session.id, [{ type: "text", text: 'session-title {"title":"  Design a gripper  "}' }]);
+    expect(repo.get(session.id)).toMatchObject({ title: "Design a gripper", titleSource: "agent" });
+    expect(broadcasts).toContainEqual({
+      channel: "sessions.changed",
+      payload: expect.arrayContaining([expect.objectContaining({ id: session.id, title: "Design a gripper" })]),
+    });
+
+    for (const info of [{ title: null }, { title: "   " }, { title: "Child agent title", sessionId: "child-session" }]) {
+      await manager.prompt(session.id, [{ type: "text", text: `session-title ${JSON.stringify(info)}` }]);
+      expect(repo.get(session.id)?.title).toBe("Design a gripper");
+    }
+  });
+
+  it("uses the agent title from replay even when a prompt initiated the reconnect", async () => {
+    const { manager, repo, cwd } = await setup({
+      launchOverride: () => ({ ...fakeProvider.launch, args: [FAKE_AGENT, "--load-title", "Resumed agent title"] }),
+    });
+    const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
+    manager.close(session.id);
+    await manager.prompt(session.id, [{ type: "text", text: "Continue this work" }]);
+    expect(repo.get(session.id)).toMatchObject({ title: "Resumed agent title", titleSource: "agent" });
+  });
+
+  it("preserves a user's explicit title through later agent updates and a manager restart", async () => {
+    const first = await setup({
+      launchOverride: () => ({ ...fakeProvider.launch, args: [FAKE_AGENT, "--load-title", "Agent replay title"] }),
+    });
+    const session = await first.manager.create({ projectId: "p1", agentId: "claude-code", cwd: first.cwd, gitMode: "none" });
+    first.manager.rename(session.id, " My chosen title ");
+    await first.manager.prompt(session.id, [{ type: "text", text: 'session-title {"title":"Agent replacement"}' }]);
+    expect(first.repo.get(session.id)).toMatchObject({ title: "My chosen title", titleSource: "user" });
+    first.manager.closeAll();
+
+    const second = await setup({
+      repo: first.repo,
+      launchOverride: () => ({ ...fakeProvider.launch, args: [FAKE_AGENT, "--load-title", "Agent replay title"] }),
+    });
+    await second.manager.load(session.id);
+    expect(second.manager.get(session.id)).toMatchObject({ title: "My chosen title", titleSource: "user" });
+  });
+
   it("close keeps the row, load reconnects through session/load, delete forgets it", async () => {
     const { repo, manager, cwd } = await setup();
     const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });

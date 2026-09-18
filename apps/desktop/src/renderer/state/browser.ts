@@ -2,7 +2,7 @@ import { create } from "zustand";
 import type { BrowserTarget } from "@shared/browser";
 import { useExplorer } from "./explorer";
 
-type BrowserBinding = { projectId: string; root: string | null; tabId: string };
+type BrowserBinding = { sessionId: string; projectId: string; root: string | null; tabId: string };
 type BrowserState = {
   targets: Record<string, BrowserTarget>;
   errors: Record<string, string | undefined>;
@@ -18,7 +18,7 @@ export const useBrowser = create<BrowserState>((set, get) => {
     set(state => ({ targets: { ...state.targets, [target.tabId]: target }, errors: { ...state.errors, [target.tabId]: undefined } }));
     const explorer = useExplorer.getState();
     const tab = explorer.tabs.find(tab => tab.id === target.tabId);
-    if (explorer.projectId === target.projectId && tab?.kind === "browser" && target.url && target.url !== "about:blank" && tab.url !== target.url) {
+    if (explorer.sessionId === target.sessionId && explorer.projectId === target.projectId && tab?.kind === "browser" && target.url && target.url !== "about:blank" && tab.url !== target.url) {
       explorer.update(tab.id, { url: target.url });
     }
   };
@@ -77,7 +77,7 @@ export const useBrowser = create<BrowserState>((set, get) => {
     },
     clearConsole: tabId => set(state => {
       const target = state.targets[tabId];
-      if (target) void window.hardcore.browser.clearConsole({ projectId: target.projectId, root: target.root, tabId }).catch(() => {});
+      if (target) void window.hardcore.browser.clearConsole({ sessionId: target.sessionId, projectId: target.projectId, root: target.root, tabId }).catch(() => {});
       return target ? { targets: { ...state.targets, [tabId]: { ...target, logs: [] } } } : {};
     }),
   };

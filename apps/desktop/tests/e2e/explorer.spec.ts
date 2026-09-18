@@ -13,6 +13,7 @@ import {
   type Page,
 } from "@playwright/test";
 import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-runtime";
+import { selectFixtureSession } from "./session-fixture";
 
 /**
  * The explorer against this repository, with an isolated CAD project.
@@ -35,7 +36,7 @@ declare const window: {
   hardcore: {
     projects: { addPath(request: { path: string }): Promise<{ id: string; name: string }> };
     settings: { set(patch: { theme?: string; cadPythonOverride?: string | null }): Promise<unknown> };
-    explorer: { loadTabs(request: { projectId: string }): Promise<unknown[]> };
+    explorer: { loadTabs(request: { sessionId: string }): Promise<unknown[]> };
     runtime: { status(): Promise<{ state: string; python: string | null; source: string | null; cadgenVersion: string | null }> };
   };
 };
@@ -114,7 +115,7 @@ test.beforeAll(async () => {
   fs.copyFileSync(path.join(repoRoot, STEP), path.join(allFilesDir, "STEP", "tom.step"));
   userData = cadTestProfile("explorer");
   const { CAD_DESKTOP_PYTHON: _unset, ...inherited } = process.env;
-  const env = { ...inherited, ...cadRegistryEnvironment(userData), NODE_ENV: "test", CADGEN_DAEMON: "0", CADGEN_CACHE_DIR: path.join(userData, "cad-cache"), CADGEN_DAEMON_STATE_DIR: path.join(userData, "cad-daemon") };
+  const env = { ...inherited, ...cadRegistryEnvironment(userData), NODE_ENV: "test", HARDCORE_FAKE_AGENT: path.join(appRoot, "tests/fake-agent/index.mjs"), CADGEN_DAEMON: "0", CADGEN_CACHE_DIR: path.join(userData, "cad-cache"), CADGEN_DAEMON_STATE_DIR: path.join(userData, "cad-daemon") };
   app = await electron.launch({
     args: [path.join(appRoot, "out", "main", "index.js"), `--user-data-dir=${userData}`],
     env,
@@ -134,9 +135,9 @@ test.beforeAll(async () => {
 
   // The project is added through IPC rather than through the folder chooser:
   // a native dialog cannot be driven from Playwright.
-  await page.evaluate((root) => window.hardcore.projects.addPath({ path: root }), repoRoot);
+  await selectFixtureSession(page, repoRoot);
   await expect(page.getByText(projectName).first()).toBeVisible();
-  // The strip binds to the project asynchronously (it loads `explorer_tabs`
+  // The strip binds to the selected session asynchronously (it loads `explorer_tabs`
   // and starts the watcher); `+` does nothing until it has.
   await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
   // The explorer pane starts closed and opens when something opens in it
@@ -723,8 +724,8 @@ test("keeps every tab in one strip, with + at its end", async () => {
   // shot is about the strip and the layout, and a review of *this* repository
   // in the background would make it change on every run.
   await page.getByRole("tab").first().click();
-  // This project owns two file tabs, a terminal and a browser; CAD tabs belong
-  // to the fixture project and must not leak into this strip.
+  // This session owns two file tabs, a terminal and a browser; CAD tabs belong
+  // to the fixture session and must not leak into this strip.
   await expect(page.getByRole("tab")).toHaveCount(4);
 
   // `+` trails the tabs inside their scrolling row rather than sitting in a
@@ -757,6 +758,9 @@ test("persists the strip across a reload", async () => {
   const before = await page.getByRole("tab").count();
   await page.reload();
   await page.waitForLoadState("domcontentloaded");
+  // Reload starts on the new-session screen. Restore the owning session,
+  // rather than treating its directory as an explorer owner.
+  await switchProject(repoRoot);
   await expect(page.getByRole("tab")).toHaveCount(before, { timeout: 20_000 });
 });
 
@@ -798,11 +802,8 @@ test("renders the explorer in light as well as dark", async () => {
  * test at the end rather than in the middle of the strip's own tests.
  */
 test("edits a markdown file in place and saves the lines it changed", async () => {
-  await page.evaluate((directory) => window.hardcore.projects.addPath({ path: directory }), docsDir);
-  // A project's section header collapses it; what *binds* the project is the
-  // `+` on that header, which is the sidebar's `new chat in this project`.
-  await page.getByRole("button", { name: `New chat in ${path.basename(docsDir)}` }).click();
-  // A new project starts with the pane closed, like every other one.
+  await selectFixtureSession(page, docsDir);
+  // Each new session starts with its own empty, closed explorer.
   await page.getByRole("button", { name: "Toggle explorer" }).click();
   await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
 
@@ -913,17 +914,12 @@ test("makes a folder from the tree's menu, renames it, and moves it to the trash
 });
 
 /**
- * Last, because it switches projects: the strip belongs to the project, so
- * this leaves a different one selected than every test above it expects.
+ * Last, because it switches sessions and leaves a different explorer selected.
  */
 test("reviews a repository's changes", async () => {
-  await page.evaluate(
-    (directory) => window.hardcore.projects.addPath({ path: directory }),
-    reviewRepo,
-  );
-  await page.getByRole("button", { name: `New chat in ${path.basename(reviewRepo)}` }).click();
+  await selectFixtureSession(page, reviewRepo);
   await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
-  // The pane's state is per project, so a project nobody has opened it in
+  // The pane's state is per session, so a session nobody has opened it in
   // starts closed however wide the last one was.
   await page.getByRole("button", { name: "Toggle explorer" }).click();
   await expect(page.getByTestId("explorer")).toBeVisible();
@@ -953,8 +949,7 @@ test("reviews a repository's changes", async () => {
 });
 
 test("lists every file, refreshes ignored folders and opens unknown types as Not supported", async () => {
-  await page.evaluate((directory) => window.hardcore.projects.addPath({ path: directory }), allFilesDir);
-  await page.getByRole("button", { name: `New chat in ${path.basename(allFilesDir)}` }).click();
+  await selectFixtureSession(page, allFilesDir);
   await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
   await page.getByRole("button", { name: "Toggle explorer" }).click();
   await newTab(page, "File");
@@ -986,10 +981,9 @@ test("lists every file, refreshes ignored folders and opens unknown types as Not
 /* Helpers                                                                     */
 /* -------------------------------------------------------------------------- */
 
-/** Bind a project's own strip and open its persisted explorer pane. */
+/** Select the fixture's existing session and open its explorer pane. */
 async function switchProject(directory: string) {
-  await page.evaluate((root) => window.hardcore.projects.addPath({ path: root }), directory);
-  await page.getByRole("button", { name: `New chat in ${path.basename(directory)}` }).click();
+  await selectFixtureSession(page, directory);
   await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
   if (!(await page.getByTestId("explorer").isVisible())) {
     await page.getByRole("button", { name: "Toggle explorer" }).click();

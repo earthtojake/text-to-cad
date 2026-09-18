@@ -234,6 +234,90 @@ export const MIGRATIONS: readonly Migration[] = [
       );
     `,
   },
+  {
+    version: 11,
+    name: "sessions-own-workspace",
+    // All session rows and snapshots survive. Independent projects disappear:
+    // project_id now holds the original directory, not a foreign key. A legacy
+    // shared tab is assigned ONCE to the most recent session for its root,
+    // preferring unarchived sessions. Fresh sessions always start empty.
+    // db/index.ts takes a consistent database backup before any upgrade;
+    // tabs in a directory with no sessions remain recoverable in that backup.
+    up: `
+      CREATE TABLE sessions_next (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        agent_id TEXT NOT NULL,
+        cwd TEXT NOT NULL,
+        git_mode TEXT NOT NULL,
+        branch TEXT,
+        title TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        acp_session_id TEXT,
+        changed_files INTEGER NOT NULL DEFAULT 0,
+        insertions INTEGER NOT NULL DEFAULT 0,
+        deletions INTEGER NOT NULL DEFAULT 0,
+        archived INTEGER NOT NULL DEFAULT 0,
+        worktree_path TEXT,
+        session_head TEXT,
+        turn_head TEXT,
+        turn_started_at INTEGER,
+        pinned INTEGER NOT NULL DEFAULT 0,
+        title_source TEXT NOT NULL DEFAULT 'prompt'
+      );
+      INSERT INTO sessions_next
+        SELECT s.id, COALESCE(p.path, s.cwd), s.agent_id, s.cwd, s.git_mode, s.branch, s.title,
+               s.created_at, s.updated_at, s.status, s.acp_session_id,
+               s.changed_files, s.insertions, s.deletions, s.archived,
+               s.worktree_path, s.session_head, s.turn_head, s.turn_started_at,
+               s.pinned, 'prompt'
+        FROM sessions s LEFT JOIN projects p ON p.id = s.project_id;
+
+      CREATE TABLE session_state_next (
+        session_id TEXT PRIMARY KEY REFERENCES sessions_next(id) ON DELETE CASCADE,
+        state TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      INSERT INTO session_state_next SELECT * FROM session_state;
+
+      CREATE TABLE explorer_tabs_next (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions_next(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        payload TEXT NOT NULL
+      );
+      INSERT INTO explorer_tabs_next
+        SELECT id, owner, kind, position,
+               json_set(payload, '$.sessionId', owner, '$.projectId', directory)
+        FROM (
+          SELECT t.id, t.kind, t.position,
+                 CASE WHEN json_valid(t.payload) THEN t.payload ELSE '{}' END AS payload,
+                 p.path AS directory, s.id AS owner,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY t.id
+                   ORDER BY CASE WHEN s.cwd = COALESCE(
+                     json_extract(CASE WHEN json_valid(t.payload) THEN t.payload ELSE '{}' END, '$.root'), p.path
+                   ) THEN 0 ELSE 1 END, s.archived, s.updated_at DESC, s.id
+                 ) AS ownership_rank
+          FROM explorer_tabs t
+          JOIN projects p ON p.id = t.project_id
+          JOIN sessions s ON s.project_id = t.project_id
+        ) WHERE ownership_rank = 1 AND kind != 'drawing';
+
+      DROP TABLE explorer_tabs;
+      DROP TABLE session_state;
+      DROP TABLE sessions;
+      DROP TABLE projects;
+      ALTER TABLE sessions_next RENAME TO sessions;
+      ALTER TABLE session_state_next RENAME TO session_state;
+      ALTER TABLE explorer_tabs_next RENAME TO explorer_tabs;
+      CREATE INDEX sessions_by_project ON sessions(project_id, updated_at DESC);
+      CREATE INDEX explorer_tabs_by_session ON explorer_tabs(session_id, position);
+    `,
+  },
 ];
 
 /**
@@ -248,6 +332,10 @@ export function runMigrations(db: MigrationDb, migrations: readonly Migration[] 
   assertContiguous(migrations);
 
   const current = Number(db.pragma("user_version", { simple: true }) ?? 0);
+  const latest = migrations.at(-1)?.version ?? 0;
+  if (current > latest) {
+    throw new Error(`database schema ${current} is newer than this app supports (${latest}); use a newer app build`);
+  }
   const pending = migrations.filter((migration) => migration.version > current);
 
   for (const migration of pending) {

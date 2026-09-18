@@ -1,6 +1,6 @@
 import type { FileActions, FileSource, FileMutationResult, ManagedFileAsset } from "@hardcore/ui/file-viewer";
 import type { ExternalEntryAction } from "@hardcore/ui/file-viewer";
-import { useExplorer } from "@renderer/state/explorer";
+import { closeSessionTab, readSessionStrip, revealSessionPath, useExplorer } from "@renderer/state/explorer";
 import type { FileMutationResult as NativeMutationResult } from "@shared/ipc/explorer";
 import type { ExplorerRoot } from "@shared/types";
 import { currentPlatform, messageOf, performEntryAction, requestAt } from "../entry-actions";
@@ -8,7 +8,7 @@ import type { EntryActionContext } from "../entry-actions";
 import { viewerFileChange } from "../file-changes";
 
 /** Every operation is bound to a validated project/root pair before entering UI. */
-export function createDesktopFileSource({ projectId, projectName, root }: { projectId: string; projectName: string | (() => string); root: ExplorerRoot }): FileSource {
+export function createDesktopFileSource({ sessionId, projectId, projectName, root }: { sessionId: string; projectId: string; projectName: string | (() => string); root: ExplorerRoot }): FileSource {
   const context = { projectId, root };
   const at = requestAt(context);
   const id = JSON.stringify(["desktop", projectId, root]);
@@ -27,14 +27,18 @@ export function createDesktopFileSource({ projectId, projectName, root }: { proj
     try {
       const result = await operation();
       if (result.status !== "committed") return result;
-      const explorer = useExplorer.getState();
-      if (explorer.projectId === projectId) {
-        explorer.receiveChanges(projectId, root, [result.change]);
-        if (effect === "trash") for (const tab of useExplorer.getState().tabs) {
-          if (tab.kind === "file" && tab.root === root && tab.path !== null && (tab.path === result.path || tab.path.startsWith(`${result.path}/`))) explorer.close(tab.id);
+      useExplorer.getState().receiveChanges(projectId, root, [result.change]);
+      // The filesystem receipt is shared, but UI effects belong only to the
+      // originating session, including when the user has switched away.
+      try {
+        if (effect === "trash") {
+          const strip = await readSessionStrip(sessionId);
+          for (const tab of strip.tabs) {
+            if (tab.kind === "file" && tab.root === root && tab.path !== null && (tab.path === result.path || tab.path.startsWith(`${result.path}/`))) await closeSessionTab(sessionId, tab.id);
+          }
         }
-        if (effect === "reveal") explorer.setReveal({ path: result.path, directory: result.change.directory, root });
-      }
+        if (effect === "reveal") await revealSessionPath(sessionId, projectId, root, result.path, result.change.directory);
+      } catch { /* A closed/archived session cannot revoke a committed file operation. */ }
       return { ...result, change: viewerFileChange(result.change) };
     } catch (error) { return { status: "failed", code: "error", message: messageOf(error) }; }
   };

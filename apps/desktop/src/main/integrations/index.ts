@@ -7,8 +7,7 @@ import type { McpServer } from "@agentclientprotocol/sdk";
 import type { IntegrationCommand } from "../../shared/ipc/integrations";
 import type { Session } from "../../shared/types";
 import { appVersion, appRoot, resourcesDir } from "../app-paths";
-import { projects, settings } from "../db/repositories";
-import { rootBelongsToProject } from "../projects/workspace";
+import { projects, sessions } from "../db/repositories";
 import * as git from "../projects/git";
 import { createActions, RendererCommands } from "./actions";
 import { integrationServers } from "./manager";
@@ -114,19 +113,12 @@ function materialiseSkills(userData: string): SkillsRoot {
 
 /** Resolve only the session's recorded workspace; a missing worktree never grants checkout access. */
 function sessionRoot(session: BridgeSession): { directory: string; root: string | null } | null {
-  const project = projects.list().find((candidate) => candidate.id === session.projectId);
-  if (!project || !fs.existsSync(project.path)) {
-    return null;
-  }
-  const cwd = path.resolve(session.cwd);
-  if (
-    !git.samePath(cwd, project.path) &&
-    rootBelongsToProject(settings.get(), project, cwd) &&
-    fs.existsSync(cwd)
-  ) {
-    return { directory: cwd, root: cwd };
-  }
-  return git.samePath(cwd, project.path) ? { directory: project.path, root: null } : null;
+  const owner = sessions.get(session.sessionId);
+  if (!owner || owner.archived || owner.projectId !== session.projectId || owner.cwd !== session.cwd) return null;
+  const project = projects.get(session.projectId);
+  const cwd = path.resolve(owner.cwd);
+  if (!project || !fs.existsSync(cwd)) return null;
+  return { directory: cwd, root: git.samePath(cwd, project.path) ? null : cwd };
 }
 
 /** The MCP servers every session gets: Hardcore's own. */
@@ -138,5 +130,4 @@ export function mcpServersFor(session: Pick<Session, "id" | "projectId" | "cwd">
 }
 
 export function forgetSession(sessionId: string): void { bridgeInstance?.revoke(sessionId); }
-export function forgetProject(projectId: string): void { bridgeInstance?.revokeProject(projectId); }
 export async function shutdownIntegrations(): Promise<void> { commandsInstance?.dispose(); await bridgeInstance?.stop(); }

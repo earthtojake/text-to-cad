@@ -54,7 +54,7 @@ it('guards against new output, completed user input and unfinished user input in
   expect(f.terminals.read(id)).toMatchObject({ inputRevision: latest.inputRevision + 1, inputPending: false });
 });
 it('stops a PTY while retaining output, then removes its identity only when the tab closes', async () => {
-  const f = fixture(); const { id } = await f.terminals.create({ cwd: '/project', projectId: 'owner' });
+  const f = fixture(); const { id } = await f.terminals.create({ cwd: '/project', projectId: 'shared-directory', sessionId: 'owner' });
   f.data('result');
   expect(f.terminals.owns(id, 'owner')).toBe(true); expect(f.terminals.owns(id, 'other')).toBe(false);
   f.terminals.stop(id); expect(f.process.kill).toHaveBeenCalledOnce(); f.exit(143);

@@ -16,7 +16,7 @@ import { createDesktopPromptContext } from "./host/promptContext";
 
 /** Chrome for a main-owned native page. Its document survives this component. */
 type ConsoleLine = { level: "log" | "warn" | "error"; message: string };
-export function BrowserTab({ projectId, root, tabId, url }: { projectId: string; root: string | null; tabId: string; url: string | null }) {
+export function BrowserTab({ sessionId, projectId, root, tabId, url }: { sessionId: string; projectId: string; root: string | null; tabId: string; url: string | null }) {
   const viewRef = useRef<HTMLDivElement | null>(null);
   const target = useBrowser(state => state.targets[tabId]);
   const failure = useBrowser(state => state.errors[tabId]);
@@ -24,7 +24,7 @@ export function BrowserTab({ projectId, root, tabId, url }: { projectId: string;
   const navigatePage = useBrowser(state => state.navigate);
   const clearConsole = useBrowser(state => state.clearConsole);
   const contextAttachment = useBrowser(state => state.contextAttachment);
-  const prompt = useMemo(() => createDesktopPromptContext(projectId, root, JSON.stringify(["desktop", projectId, root])), [projectId, root]);
+  const prompt = useMemo(() => createDesktopPromptContext(projectId, root, JSON.stringify(["desktop", projectId, root]), sessionId), [sessionId, projectId, root]);
   const [adding, setAdding] = useState(false);
   const [promptStatus, setPromptStatus] = useState<string | null>(null);
   const [draft, setDraft] = useState<{ value: string; source: string | null } | null>(null);
@@ -36,17 +36,17 @@ export function BrowserTab({ projectId, root, tabId, url }: { projectId: string;
   const logs = target?.logs ?? [];
   const initialURL = useRef(url);
   useEffect(() => {
-    if (viewRef.current) return mount({ projectId, root, tabId }, initialURL.current, viewRef.current);
-  }, [mount, projectId, root, tabId]);
+    if (viewRef.current) return mount({ sessionId, projectId, root, tabId }, initialURL.current, viewRef.current);
+  }, [mount, sessionId, projectId, root, tabId]);
   const address = draft?.source === current ? draft.value : current ?? "";
   const setAddress = (value: string) => setDraft({ value, source: current });
   const navigate = useCallback((raw: string) => {
     const resolved = resolveAddress(raw);
     if (!resolved) return;
     setDraft({ value: resolved, source: current });
-    void navigatePage({ projectId, root, tabId }, { url: resolved });
-  }, [navigatePage, projectId, root, tabId, current]);
-  const move = (direction: "back" | "forward" | "reload" | "stop") => void navigatePage({ projectId, root, tabId }, { direction });
+    void navigatePage({ sessionId, projectId, root, tabId }, { url: resolved });
+  }, [navigatePage, sessionId, projectId, root, tabId, current]);
+  const move = (direction: "back" | "forward" | "reload" | "stop") => void navigatePage({ sessionId, projectId, root, tabId }, { direction });
 
   const addContext = (kind: "selection" | "screenshot") => {
     if (!target || !current || adding) return;
@@ -55,7 +55,7 @@ export function BrowserTab({ projectId, root, tabId, url }: { projectId: string;
     // Deliver immediately: the draft destination binds before native capture finishes.
     const context = createPromptContext([
       { id: referenceId, kind: "reference", reference: { resource: { kind: "url", url: target.url, revision: String(target.generation) }, target: { kind: "whole-resource" }, label: target.title || target.url } },
-      { id: crypto.randomUUID(), kind: "attachment", name: kind === "screenshot" ? "browser-page.png" : "browser-selection.txt", mimeType: kind === "screenshot" ? "image/png" : "text/plain", about: [referenceId], content: contextAttachment({ projectId, root, tabId }, target, kind) },
+      { id: crypto.randomUUID(), kind: "attachment", name: kind === "screenshot" ? "browser-page.png" : "browser-selection.txt", mimeType: kind === "screenshot" ? "image/png" : "text/plain", about: [referenceId], content: contextAttachment({ sessionId, projectId, root, tabId }, target, kind) },
     ]);
     void prompt.deliver(context).then(result => {
       setPromptStatus(result.status === "added" ? "Added to prompt" : ("message" in result ? result.message : undefined) ?? "Could not add browser context.");

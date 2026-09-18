@@ -11,7 +11,7 @@ import type { DrawingTabProps } from '../DrawingTab';
 import { createDesktopPromptContext } from '../host/promptContext';
 
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
-export default function DrawingSurface({ tabId, project, root, title }: DrawingTabProps) {
+export default function DrawingSurface({ sessionId, tabId, project, root, title }: DrawingTabProps) {
   const [initialScene] = useState(() => getDrawingScene(tabId));
   const controller = useRef<DrawingController | null>(null);
   const release = useRef<(() => void) | null>(null);
@@ -19,7 +19,7 @@ export default function DrawingSurface({ tabId, project, root, title }: DrawingT
   const [adding, setAdding] = useState(false);
   const [nameEdit, setNameEdit] = useState({ source: title, value: title });
   const draftName = nameEdit.source === title ? nameEdit.value : title;
-  const prompt = useMemo(() => createDesktopPromptContext(project.id, root, JSON.stringify(['desktop', project.id, root])), [project.id, root]);
+  const prompt = useMemo(() => createDesktopPromptContext(project.id, root, JSON.stringify(['desktop', project.id, root]), sessionId), [sessionId, project.id, root]);
   const ready = useCallback((next: DrawingController | null) => {
     release.current?.();
     release.current = null;
@@ -53,7 +53,7 @@ export default function DrawingSurface({ tabId, project, root, title }: DrawingT
         onBlur={() => {
           const name = draftName.trim() || title;
           setNameEdit({ source: name, value: name });
-          try { renameDrawingTab(tabId, project.id, name); }
+          try { renameDrawingTab(tabId, sessionId, name); }
           catch (error) { toast.error(errorMessage(error)); }
         }} onKeyDown={event => {
           if (event.key === 'Enter') event.currentTarget.blur();

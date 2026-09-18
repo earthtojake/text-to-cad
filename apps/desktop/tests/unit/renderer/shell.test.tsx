@@ -14,8 +14,8 @@ import { useUi } from "@renderer/state/ui";
 const wrap = (ui: React.ReactNode) => render(<TooltipProvider>{ui}</TooltipProvider>);
 
 beforeEach(() => {
-  useExplorer.setState({ projectId: null, tabs: [], activeId: null, ready: true });
-  useProjects.setState({ projects: [], ready: true, activeId: null });
+  useExplorer.setState({ sessionId: null, projectId: null, tabs: [], activeId: null, ready: true });
+  useProjects.setState({ projects: [], ready: true, activeId: null, draft: null });
   useUi.setState({ route: "app", settingsSection: "general", commandPaletteOpen: false });
 });
 
@@ -24,15 +24,14 @@ beforeEach(() => {
 describe("Explorer", () => {
   const PROJECT = { id: "p1", name: "text-to-cad", path: "/repo", createdAt: 0 };
 
-  // The strip belongs to a project (plan §3): there is nowhere to open a tab
-  // without one, and no pane either.
-  const withProject = () => {
+  // The strip belongs to the selected session, grouped under its directory.
+  const withSession = () => {
     useProjects.setState({
       projects: [PROJECT],
       ready: true,
       activeId: PROJECT.id,
     });
-    useExplorer.setState({ projectId: PROJECT.id, tabs: [], activeId: null, ready: true });
+    useExplorer.setState({ sessionId: "s1", projectId: PROJECT.id, tabs: [], activeId: null, ready: true });
   };
 
   // The shell does not mount the pane without a project; the pane draws
@@ -47,14 +46,14 @@ describe("Explorer", () => {
     wrap(<ExplorerToggle />);
     expect(screen.queryByRole("button", { name: "Toggle explorer" })).toBeNull();
     cleanup();
-    withProject();
+    withSession();
     wrap(<ExplorerToggle />);
     expect(screen.getByRole("button", { name: "Toggle explorer" })).toBeInTheDocument();
   });
 
   it("opens a tab of each kind from the one `+` menu", async () => {
     const user = userEvent.setup();
-    withProject();
+    withSession();
     wrap(<ExplorerPane />);
     expect(screen.getByText("Nothing open")).toBeInTheDocument();
 
@@ -79,7 +78,7 @@ describe("Explorer", () => {
   });
 
   it("opens a file tab on Mod+T without the menu", async () => {
-    withProject();
+    withSession();
     wrap(<ExplorerPane />);
     fireEvent.keyDown(window, { key: "t", metaKey: true, ctrlKey: true });
     expect(useExplorer.getState().tabs).toHaveLength(1);
@@ -88,7 +87,7 @@ describe("Explorer", () => {
 
   it("closes a tab from its close button", async () => {
     const user = userEvent.setup();
-    withProject();
+    withSession();
     wrap(<ExplorerPane />);
     await user.click(screen.getByRole("button", { name: "New tab" }));
     await user.click(screen.getByRole("menuitem", { name: /^File/ }));
@@ -99,7 +98,7 @@ describe("Explorer", () => {
   // The fullscreen explorer is gone: it was the one control in the app that
   // could take the session pane away, and the session is the app.
   it("offers no way to take the window from the session", () => {
-    withProject();
+    withSession();
     wrap(<ExplorerPane />);
     expect(screen.queryByRole("button", { name: "Expand explorer" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Restore layout" })).toBeNull();
@@ -110,7 +109,7 @@ describe("Explorer", () => {
   // keeps it on screen once the row is longer than the pane.
   it("puts + after the last tab, pinned to the strip's right edge", async () => {
     const user = userEvent.setup();
-    withProject();
+    withSession();
     wrap(<ExplorerPane />);
     for (let i = 0; i < 3; i += 1) {
       await user.click(screen.getByRole("button", { name: "New tab" }));

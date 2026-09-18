@@ -126,7 +126,7 @@ not.
   new full-window route reserves the room itself, the way Settings does.
 
 - **A side pane is `{ collapsed, width }` and nothing else** — the sidebar's in
-  `settings.layout`, the explorer's per project in `state/explorer.ts`. What is
+  `settings.layout`, the explorer's per session in `state/explorer.ts`. What is
   rendered, where each toggle is drawn and which pane reserves the traffic
   lights' corner are all derived from those two pairs, and **a collapsed pane is
   not rendered at all**, so a toggle exists in the document exactly once. Do not
@@ -138,12 +138,15 @@ not.
   minimum is the collapse (`PANE_LIMITS.overshoot`).
 - **No bottom panel.** The terminal is a fourth explorer tab kind. Everything
   secondary lives in the one strip.
-- **The explorer strip belongs to the project, not to a session.** A person
-  with a file, a terminal and a review open is looking at a directory; closing
-  a thread must not take those away. `explorer_tabs` is keyed by `project_id`
-  (migration 2). What *does* follow the session is the strip's **root** (README,
-  "The explorer's root"): a worktree thread makes new tabs open in, and the
-  tree list, its worktree; every tab keeps the root it was opened in.
+- **Each session owns its explorer and tools.** New sessions start with no
+  tabs. Every tab, retained strip, terminal and browser target is scoped to
+  the session id; sharing a directory grants no access to another session's
+  tabs. Background tools never change the selected session. Read
+  [session workspaces](docs/session-workspaces.md) before changing ownership.
+- **Projects are derived directory groups, not saved entities.** The session
+  index owns the directory identity. A folder choice before the first prompt
+  is a transient draft; archiving the last session hides its group without
+  deleting session data. Never reintroduce a project-delete cascade.
 - **The renderer never picks a session's working directory.** It sends a git
   mode; main resolves it (`src/main/projects/workspace.ts`), creates the
   worktree, and writes `cwd`, `branch` and `worktreePath` onto the row. The one

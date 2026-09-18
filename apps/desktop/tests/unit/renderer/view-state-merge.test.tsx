@@ -5,7 +5,7 @@ import { useExplorer } from "@renderer/state/explorer";
 
 beforeEach(() => {
   localStorage.clear(); sessionStorage.clear();
-  useExplorer.setState({ projectId: "merge-project", root: null, tabs: [], activeId: null, ready: true, trees: {}, panelWidth: 248 });
+  useExplorer.setState({ sessionId: "session", projectId: "merge-project", root: null, tabs: [], activeId: null, ready: true, trees: {}, panelWidth: 248 });
 });
 
 it("merges only renderer keys changed by a view, including deletion", () => {
@@ -22,7 +22,10 @@ it("a stale view cannot overwrite another tab's renderer state or newer root chr
   const oldB = b.result.current;
   act(() => oldB.onStateChange({ ...oldB.state, panelWidth: 360, expandedDirectories: ["parts"], renderers: { '["b.step","cad"]': { camera: "new-b" } } }));
   act(() => oldA.onStateChange({ ...oldA.state, renderers: { '["a.step","cad"]': { camera: "new-a" } } }));
-  expect(JSON.parse(localStorage.getItem("hardcore.fileViewer.v1")!)["shared-root"]).toEqual({ '["a.step","cad"]': { camera: "new-a" }, '["b.step","cad"]': { camera: "new-b" } });
+  expect(JSON.parse(localStorage.getItem("hardcore.fileViewer.v1")!)).toEqual({
+    [JSON.stringify(["shared-root", tabA.id])]: { '["a.step","cad"]': { camera: "new-a" } },
+    [JSON.stringify(["shared-root", tabB.id])]: { '["b.step","cad"]': { camera: "new-b" } },
+  });
   expect(useExplorer.getState().panelWidth).toBe(360);
   expect(a.result.current.state.expandedDirectories).toEqual(["parts"]);
   a.unmount(); b.unmount();

@@ -24,9 +24,11 @@ import {
   sessionStates,
   settings,
 } from "../db/repositories";
-import { head } from "../projects/git";
+import { head, isUnder, samePath } from "../projects/git";
 import { releaseWorkspace, resolveWorkspace } from "../projects/workspace";
 import { pruneProjectWorktrees } from "./git";
+import { browserService } from "../browser/service";
+import { explorerTerminals } from "./explorer";
 
 /**
  * `HARDCORE_FAKE_AGENT=<path to tests/fake-agent/index.mjs>` makes every
@@ -52,7 +54,7 @@ export const agentOptions: AgentOptionStore = new AgentOptionStore({
   writeEffort: (agentId, model, effort) => agentOptionsRepo.setEffort(agentId, model, effort),
   probe: async (agentId, projectId): Promise<AgentSnapshot> => {
     const project = projectId
-      ? (projects.list().find((candidate) => candidate.id === projectId) ?? null)
+      ? (projects.get(projectId) ?? null)
       : (projects.list()[0] ?? null);
     if (!project) {
       throw new Error("no project to probe in");
@@ -104,7 +106,7 @@ export const sessionManager: SessionManager = new SessionManager({
 
   /** P7: the git mode as a directory, and a worktree when the mode asks (plan §9). */
   workspace: async ({ projectId, gitMode, name, cwd }) => {
-    const project = projects.list().find((candidate) => candidate.id === projectId);
+    const project = projects.get(projectId);
     if (!project) {
       throw new Error("that project is no longer open");
     }
@@ -114,6 +116,7 @@ export const sessionManager: SessionManager = new SessionManager({
       settings: settings.get(),
       name,
       cwd,
+      knownWorktrees: sessions.list(project.id).flatMap(session => session.worktreePath ? [session.worktreePath] : []),
     });
     if (workspace.worktreePath) {
       // One more worktree exists, so this is the moment the keep limit can be
@@ -127,6 +130,9 @@ export const sessionManager: SessionManager = new SessionManager({
   head: (cwd) => head(cwd),
 
   releaseWorkspace: async (session) => {
+    const worktree = session.worktreePath;
+    if (worktree && sessions.list().some(other => other.id !== session.id &&
+        [other.cwd, other.worktreePath].some(root => root && (samePath(root, worktree) || isUnder(worktree, root))))) return;
     await releaseWorkspace(session, settings.get());
   },
 });
@@ -165,7 +171,14 @@ export const acpHandlers = {
     respondPermission: ({ id, requestId, optionId }) =>
       surfacing(() => sessionManager.respondPermission(id, requestId, optionId)),
     rename: ({ id, title }) => surfacing(() => sessionManager.rename(id, title)),
-    archive: ({ id, archived }) => surfacing(() => sessionManager.archive(id, archived)),
+    archive: ({ id, archived }) => surfacing(() => {
+      if (archived) {
+        forgetSession(id);
+        browserService.disposeSession(id);
+        explorerTerminals().disposeSession(id);
+      }
+      return sessionManager.archive(id, archived);
+    }),
     setPinned: ({ id, pinned }) => surfacing(() => sessionManager.setPinned(id, pinned)),
     close: ({ id }) => surfacing(async () => { forgetSession(id); await sessionManager.close(id); }),
     delete: ({ id }) =>
@@ -173,6 +186,8 @@ export const acpHandlers = {
         const row = sessions.get(id);
         await sessionManager.delete(id);
         forgetSession(id);
+        browserService.disposeSession(id);
+        explorerTerminals().disposeSession(id);
         forgetCadSession(id, row?.worktreePath ?? null);
       }),
   },

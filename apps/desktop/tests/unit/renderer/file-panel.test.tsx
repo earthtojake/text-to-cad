@@ -37,6 +37,7 @@ function stub(name: keyof typeof window.hardcore.explorer, implementation: unkno
 beforeEach(() => {
   window.localStorage.clear();
   useExplorer.setState({
+    sessionId: "session",
     projectId: PROJECT.id,
     root: null,
     tabs: [],
@@ -71,7 +72,7 @@ function Host({ tabId }: { tabId: string }) {
   if (!tab || tab.kind !== "file") {
     return null;
   }
-  return <FileTab panel={tab.panel} path={tab.path} project={PROJECT} root={tab.root} tabId={tab.id} />;
+  return <FileTab sessionId={tab.sessionId} panel={tab.panel} path={tab.path} project={PROJECT} root={tab.root} tabId={tab.id} />;
 }
 
 /** A file tab on `AGENTS.md`, with the store's row behind it as the app has. */

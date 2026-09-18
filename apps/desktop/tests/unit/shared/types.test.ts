@@ -107,7 +107,6 @@ describe("Settings", () => {
       environment: "all",
       groupBy: "project",
       sortBy: "activity",
-      showEmptyGroups: true,
       showBranch: false,
       collapsedProjects: [],
     });
@@ -122,7 +121,7 @@ describe("Settings", () => {
 describe("Session", () => {
   const base = {
     id: "s1",
-    projectId: "p1",
+    sessionId: "s1", projectId: "p1",
     agentId: "claude-code",
     cwd: "/tmp/project",
     gitMode: "worktree",
@@ -144,12 +143,12 @@ describe("Session", () => {
 
 describe("ExplorerTab", () => {
   it("recognizes scratch drawing metadata but refuses it in the persisted contract", () => {
-    const drawing = { id: "scratch", projectId: "p1", order: 1, kind: "drawing" };
+    const drawing = { id: "scratch", sessionId: "s1", projectId: "p1", order: 1, kind: "drawing" };
     expect(ExplorerTabSchema.parse(drawing)).toMatchObject({ title: "Drawing", root: null });
     expect(PersistedExplorerTabSchema.safeParse(drawing).success).toBe(false);
   });
   it("restores retired CAD Theme panels to the renderer default without changing other choices", () => {
-    const row = { id: "t1", projectId: "p1", order: 0, kind: "file", path: "part.step" };
+    const row = { id: "t1", sessionId: "s1", projectId: "p1", order: 0, kind: "file", path: "part.step" };
     for (const [saved, expected] of [["cad-theme", null], [null, null], ["", ""], ["tree", "tree"], ["cad-file-sheet", "cad-file-sheet"], ["source", "source"]]) {
       const restored = ExplorerTabSchema.parse({ ...row, panel: saved });
       expect(restored.kind).toBe("file");
@@ -160,7 +159,7 @@ describe("ExplorerTab", () => {
   it("discriminates the four kinds", () => {
     const file = ExplorerTabSchema.parse({
       id: "t1",
-      projectId: "p1",
+      sessionId: "s1", projectId: "p1",
       order: 0,
       kind: "file",
       path: "/tmp/a.step",
@@ -172,7 +171,7 @@ describe("ExplorerTab", () => {
 
     const terminal = ExplorerTabSchema.parse({
       id: "t2",
-      projectId: "p1",
+      sessionId: "s1", projectId: "p1",
       order: 1,
       kind: "terminal",
       ptyId: null,
@@ -182,7 +181,7 @@ describe("ExplorerTab", () => {
 
   it("has no kind for a bottom panel, because there is not one", () => {
     expect(
-      ExplorerTabSchema.safeParse({ id: "t3", projectId: "p1", order: 0, kind: "panel" }).success,
+      ExplorerTabSchema.safeParse({ id: "t3", sessionId: "s1", projectId: "p1", order: 0, kind: "panel" }).success,
     ).toBe(false);
   });
 });

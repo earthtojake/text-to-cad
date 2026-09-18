@@ -16,7 +16,7 @@ import path from "node:path";
 
 import { BrowserWindow, dialog, shell } from "electron";
 
-import { explorerTabs, projects, settings } from "../db/repositories";
+import { explorerTabs, projects, sessions, settings } from "../db/repositories";
 import {
   FileWatchers,
   FsError,
@@ -107,11 +107,15 @@ function services() {
  * is refused here, before a path is resolved against it.
  */
 export function rootOf(projectId: string, root?: string | null): string {
-  const project = projects.list().find((candidate) => candidate.id === projectId);
+  const project = projects.get(projectId);
   if (!project) {
     throw new IpcError("that project is no longer open");
   }
   try {
+    // Persisted worktrees retain access even if an old project label changed.
+    const recorded = root && sessions.list().find(session => session.projectId === projectId
+      && (git.samePath(session.cwd, root) || (session.worktreePath && git.samePath(session.worktreePath, root))));
+    if (recorded && root) return root;
     return resolveProjectRoot(settings.get(), project, root);
   } catch (error) {
     throw new IpcError(error instanceof Error ? error.message : String(error));
@@ -130,6 +134,12 @@ function projectOfRoot(root: string): { project: { id: string }; root: string | 
   for (const project of projects.list()) {
     if (git.samePath(project.path, root)) {
       return { project, root: null };
+    }
+  }
+  for (const session of sessions.list()) {
+    if (git.samePath(session.cwd, root) || (session.worktreePath && git.samePath(session.worktreePath, root))) {
+      const project = projects.get(session.projectId);
+      if (project) return { project, root: git.samePath(project.path, root) ? null : root };
     }
   }
   for (const project of projects.list()) {
@@ -216,7 +226,7 @@ async function terminalDirectory(projectId: string, cwd: string | undefined): Pr
   try {
     return rootOf(projectId, absolute);
   } catch (error) {
-    const project = projects.list().find((candidate) => candidate.id === projectId);
+    const project = projects.get(projectId);
     if (!project) {
       throw error;
     }
@@ -426,15 +436,16 @@ export const explorerHandlers = {
     unwatch: ({ projectId, root }: { projectId: string; root?: string }) =>
       fsCall(() => services().watchers.unwatch(rootOf(projectId, root))),
 
-    loadTabs: ({ projectId }: { projectId: string }) => explorerTabs.list(projectId),
+    loadTabs: ({ sessionId }: { sessionId: string }) => explorerTabs.list(sessionId),
 
-    saveTabs: ({ projectId, tabs }: { projectId: string; tabs: ExplorerTab[] }) => {
-      explorerTabs.replace(projectId, tabs);
+    saveTabs: ({ sessionId, tabs }: { sessionId: string; tabs: ExplorerTab[] }) => {
+      explorerTabs.replace(sessionId, tabs);
     },
   },
 
   terminal: {
     create: ({
+      sessionId,
       projectId,
       cwd,
       cols,
@@ -442,6 +453,7 @@ export const explorerHandlers = {
       shell: shellPath,
       args,
     }: {
+      sessionId: string;
       projectId: string;
       cwd?: string;
       cols?: number;
@@ -454,8 +466,13 @@ export const explorerHandlers = {
         // this is not `resolveInRoot` alone; it is the root check first, which
         // admits the project and its own worktrees, and then a directory under
         // whichever of those it is (`Open in terminal` on a folder).
-        const directory = await terminalDirectory(projectId, cwd);
-        return services().terminals.create({
+        const session = sessions.get(sessionId);
+        if (!session || session.projectId !== projectId || session.archived) throw new IpcError("This session is no longer active.");
+        const directory = await terminalDirectory(projectId, cwd ?? session.cwd);
+        await resolveInRoot(session.cwd, directory);
+        const service = services().terminals;
+        const info = await service.create({
+          sessionId,
           projectId,
           cwd: directory,
           ...(cols === undefined ? {} : { cols }),
@@ -463,6 +480,12 @@ export const explorerHandlers = {
           ...(shellPath === undefined ? {} : { shell: shellPath }),
           ...(args === undefined ? {} : { args }),
         });
+        const current = sessions.get(sessionId);
+        if (!current || current.archived || current.cwd !== session.cwd || current.projectId !== projectId) {
+          service.kill(info.id);
+          throw new IpcError("This session changed before the terminal was ready.");
+        }
+        return info;
       }),
 
     write: ({ id, data }: { id: string; data: string }) => {

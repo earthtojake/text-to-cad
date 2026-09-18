@@ -33,16 +33,20 @@ for (const scenario of ["project drafts", "new worktree"]) {
       const added = await page.evaluate((root) => window.hardcore.projects.addPath({ path: root }), project);
       const draft = page.getByPlaceholder("Do anything");
       await expect(draft).toBeVisible();
+      await expect(page.getByTestId("explorer")).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Toggle explorer" })).toHaveCount(0);
+      expect(await page.evaluate(() => window.hardcore.projects.list())).toEqual([]);
       if (scenario === "project drafts") {
         await draft.fill("Round the car body");
         await page.evaluate((root) => window.hardcore.projects.addPath({ path: root }), other);
-        await page.locator('[data-context-strip] [data-chip="project"]').click();
-        await page.getByRole("menuitem", { name: "Other project", exact: true }).click();
         await expect(page.getByRole("heading", { name: "What should we build in Other project?" })).toBeVisible();
         await expect(draft).toHaveText("");
-        await page.locator('[data-context-strip] [data-chip="project"]').click();
-        await page.getByRole("menuitem", { name: "Car project", exact: true }).click();
+        // Re-choosing a folder restores its in-memory draft without a saved project.
+        await page.evaluate((root) => window.hardcore.projects.addPath({ path: root }), project);
         await expect(draft).toHaveText("Round the car body");
+        expect(await page.evaluate(() => window.hardcore.projects.list())).toEqual([]);
+        await expect(page.locator("[data-session-row]")).toHaveCount(0);
+        await expect(page.getByTestId("sidebar").locator("[data-sidebar-section]")).toHaveCount(0);
       } else {
         await page.locator("[data-context-strip]").getByRole("button", { name: "Local", exact: true }).click();
         await page.getByRole("menuitemradio", { name: /New worktree/ }).click();
@@ -51,6 +55,7 @@ for (const scenario of ["project drafts", "new worktree"]) {
         await draft.press("Enter");
         await expect(page.locator("[data-session-view]")).toBeVisible({ timeout: 30_000 });
         const sessions = await page.evaluate((projectId) => window.hardcore.sessions.list({ projectId }), added.id);
+        expect(sessions[0]?.projectId).toBe(added.id);
         expect(sessions[0]?.cwd).not.toBe(project);
         expect(sessions[0]?.worktreePath).toBe(sessions[0]?.cwd);
       }

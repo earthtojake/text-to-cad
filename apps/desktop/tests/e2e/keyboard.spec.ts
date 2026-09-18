@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
+import { selectFixtureSession } from "./session-fixture";
 
 /**
  * Every shortcut the Shortcuts page lists, pressed in the built app.
@@ -45,7 +46,7 @@ test.beforeAll(async () => {
   await page.waitForLoadState("domcontentloaded");
   await page.evaluate(() => window.hardcore.settings.set({ theme: "dark" }));
   await page.evaluate((dir) => window.hardcore.projects.addPath({ path: dir }), project);
-  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
+  await expect(page.locator("[data-new-session]")).toBeVisible();
 });
 
 test.afterAll(async () => {
@@ -71,6 +72,7 @@ test("Cmd+K opens the palette and Escape closes it", async () => {
 });
 
 test("Cmd+1..9 switch tabs and Cmd+W closes the active one", async () => {
+  await selectFixtureSession(page, project);
   // The explorer starts closed (plan §3); the shortcut for that is its own
   // test below, so this one just opens it.
   await page.getByRole("button", { name: "Toggle explorer" }).click();
@@ -97,6 +99,8 @@ test("Cmd+1..9 switch tabs and Cmd+W closes the active one", async () => {
 });
 
 test("Shift+Enter is a newline, Enter sends, Escape stops the turn", async () => {
+  await page.keyboard.press(`${mod}+N`);
+  await expect(page.getByTestId("explorer")).toHaveCount(0);
   // Sending needs an agent, and the chip fills in once the detector has probed.
   await expect(page.locator("[data-new-session] [data-composer-row] [data-chip=model]")).toBeVisible();
   const composer = page.getByPlaceholder("Do anything");
@@ -130,7 +134,11 @@ test("Cmd+N starts a new chat", async () => {
   await expect(page.locator("[data-session-view]")).toHaveCount(0);
 });
 
-test("Cmd+B and Cmd+Alt+B toggle the side panes", async () => {
+test("Cmd+B and Cmd+Alt+B toggle the side panes only when a session owns the explorer", async () => {
+  await page.keyboard.press(`${mod}+Alt+B`);
+  await expect(page.getByTestId("explorer")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Toggle explorer" })).toHaveCount(0);
+  await selectFixtureSession(page, project);
   // A hidden pane is not in the document at all, so its count is the state
   // (`Shell`): there is no zero-width panel left behind.
   const sidebar = page.getByTestId("sidebar");

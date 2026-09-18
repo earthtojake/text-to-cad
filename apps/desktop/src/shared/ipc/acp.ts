@@ -89,7 +89,7 @@ export const acpContract = {
       }),
       z.void(),
     ),
-    /** The sidebar title. Set by the first prompt (Codex's convention) until the user renames. */
+    /** Override the agent's title with a user-supplied name that later notifications preserve. */
     rename: invoke(Id.extend({ title: z.string().min(1).max(200) }), SessionSchema),
     /** Hide from (or restore to) the sidebar. Archiving closes the adapter. */
     archive: invoke(Id.extend({ archived: z.boolean() }), SessionSchema),

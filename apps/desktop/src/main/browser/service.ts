@@ -4,13 +4,13 @@ import { type BrowserWindow, WebContentsView } from "electron";
 import { browserMethodSchemas, type BrowserInput, type BrowserMethod, type BrowserTarget } from "../../shared/browser";
 import { browserHarness } from "./harness";
 
-export type BrowserScope = { projectId: string; root: string };
+export type BrowserScope = { sessionId: string; projectId: string; root: string };
 type Target = {
   scope: BrowserScope; id: string; view: WebContentsView; harness: ReturnType<typeof browserHarness>;
   owner?: BrowserWindow; lease?: string; generation: number; visible: boolean; ready: Promise<void>; logs: BrowserTarget["logs"];
 };
 export type BrowserBounds = { x: number; y: number; width: number; height: number };
-export function browserScopeKey(scope: BrowserScope) { return JSON.stringify([scope.projectId, scope.root]); }
+export function browserScopeKey(scope: BrowserScope) { return JSON.stringify([scope.sessionId, scope.projectId, scope.root]); }
 export function browserURL(value: string) {
   const url = new URL(value);
   if (url.protocol !== "http:" && url.protocol !== "https:" && value !== "about:blank") {
@@ -120,8 +120,8 @@ export class BrowserService {
     if (target.owner && !target.owner.isDestroyed()) target.owner.contentView.removeChildView(target.view);
     target.view.webContents.close({ waitForBeforeUnload: false });
   }
-  disposeProject(projectId: string) {
-    for (const target of [...this.targets.values()]) if (target.scope.projectId === projectId) this.close(target.scope, target.id);
+  disposeSession(sessionId: string) {
+    for (const target of [...this.targets.values()]) if (target.scope.sessionId === sessionId) this.close(target.scope, target.id);
   }
   dispose() { for (const target of [...this.targets.values()]) this.close(target.scope, target.id); }
   async invoke(method: BrowserMethod, scope: BrowserScope, raw: unknown): Promise<unknown> {

@@ -81,12 +81,6 @@ export function SidebarFilterMenu() {
         />
         <DropdownMenuSeparator />
         <DropdownMenuCheckboxItem
-          checked={filters.showEmptyGroups}
-          onCheckedChange={(showEmptyGroups) => void setSidebar({ showEmptyGroups })}
-        >
-          Show empty groups
-        </DropdownMenuCheckboxItem>
-        <DropdownMenuCheckboxItem
           checked={filters.showBranch}
           onCheckedChange={(showBranch) => void setSidebar({ showBranch })}
         >

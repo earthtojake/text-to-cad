@@ -13,7 +13,7 @@ import "@xterm/xterm/css/xterm.css";
 import { Button } from "@renderer/components/ui/button";
 import { useResolvedTheme } from "@renderer/hooks/use-theme";
 import { terminalPromptRoot } from "@renderer/lib/terminal-workspace";
-import { useExplorer } from "@renderer/state/explorer";
+import { useExplorer, updateSessionTab } from "@renderer/state/explorer";
 import type { Project } from "@shared/types";
 
 import { EmptyState } from "@hardcore/ui/navigation";
@@ -86,12 +86,14 @@ function themeFor(mode: "light" | "dark") {
 
 export function TerminalTab({
   tabId,
+  sessionId,
   project,
   ptyId,
   cwd,
   readOnly,
 }: {
   tabId: string;
+  sessionId: string;
   project: Project;
   ptyId: string | null;
   cwd: string | null;
@@ -106,8 +108,8 @@ export function TerminalTab({
   const [exited, setExited] = useState<number | null>(null);
 
   const sessions = useSessions(state => state.sessions);
-  const promptRoot = useMemo(() => terminalPromptRoot(project, cwd, sessions), [cwd, project, sessions]);
-  const prompt = useMemo(() => createDesktopPromptContext(project.id, promptRoot, JSON.stringify(['desktop', project.id, promptRoot])), [project.id, promptRoot]);
+  const promptRoot = useMemo(() => terminalPromptRoot(project, cwd, sessions.filter(session => session.id === sessionId)), [sessionId, cwd, project, sessions]);
+  const prompt = useMemo(() => createDesktopPromptContext(project.id, promptRoot, JSON.stringify(['desktop', project.id, promptRoot]), sessionId), [sessionId, project.id, promptRoot]);
   const addSelection = () => {
     if (!selection) return;
     void prompt.deliver(createPromptContext([{ id: 'terminal-selection', kind: 'text',
@@ -127,15 +129,19 @@ export function TerminalTab({
     }
     starting.current = true;
     void window.hardcore.terminal
-      .create({ projectId: project.id, ...(cwd ? { cwd } : {}) })
-      .then((info) => update(tabId, { ptyId: info.id, cwd: info.cwd }))
+      .create({ sessionId, projectId: project.id, ...(cwd ? { cwd } : {}) })
+      .then((info) => {
+        // A shell can finish spawning after the person changes sessions.
+        void updateSessionTab(sessionId, tabId, { ptyId: info.id, cwd: info.cwd })
+          .catch(() => window.hardcore.terminal.kill({ id: info.id }));
+      })
       .catch((caught: unknown) => {
         setError(caught instanceof Error ? caught.message : String(caught));
       })
       .finally(() => {
         starting.current = false;
       });
-  }, [ptyId, project.id, cwd, tabId, update]);
+  }, [ptyId, sessionId, project.id, cwd, tabId, update]);
 
   useEffect(() => {
     const host = hostRef.current;

@@ -29,6 +29,7 @@ const project = (id: string, name = id): Project => ({
 
 const session = (overrides: Partial<Session> & { id: string; title: string }): Session => ({
   projectId: "p1",
+  titleSource: "prompt",
   agentId: "codex",
   cwd: "/repo",
   gitMode: "none",
@@ -163,19 +164,16 @@ describe("sidebarSections", () => {
     expect(order("name", "pinned")).toEqual(["d", "c"]);
   });
 
-  it("keeps or drops a project with nothing in it, as the toggle says", () => {
+  it("never shows a group without matching unpinned sessions, including old settings", () => {
     const sessions = [session({ id: "a", title: "Alpha" })];
-    expect(
-      sidebarSections({ projects, filters: filters({ showEmptyGroups: true }), sessions }).map(
-        (section) => section.id,
-      ),
-    ).toEqual(["p1", "p2"]);
-    expect(
-      sidebarSections({ projects, filters: filters({ showEmptyGroups: false }), sessions }).map(
-        (section) => section.id,
-      ),
-    ).toEqual(["p1"]);
+    expect(sidebarSections({ projects, filters: SidebarSettingsSchema.parse({ showEmptyGroups: true }), sessions })
+      .map(section => section.id)).toEqual(["p1"]);
+    expect(sidebarSections({ projects, filters: filters(), sessions: [{ ...sessions[0]!, pinned: true }] })
+      .map(section => section.id)).toEqual(["pinned"]);
+    expect(sidebarSections({ projects, filters: filters(), sessions: [{ ...sessions[0]!, archived: true }] }))
+      .toEqual([]);
   });
+
 });
 
 /* -------------------------------------------------------------------------- */
@@ -211,7 +209,7 @@ describe("sessionGlyphFor", () => {
 
 describe("Sidebar", () => {
   beforeEach(() => {
-    useProjects.setState({ projects: [], ready: true, activeId: null });
+    useProjects.setState({ projects: [], ready: true, activeId: null, draft: null });
     useSessions.setState({ sessions: [], ready: true, activeId: null });
     useSettings.setState({ settings: defaultSettings(), ready: true });
     useUi.setState({
@@ -237,7 +235,7 @@ describe("Sidebar", () => {
    */
   it("offers a way in when there are no projects, and no Add project row otherwise", () => {
     wrap(<Sidebar />);
-    expect(screen.getByText("No projects yet.")).toBeInTheDocument();
+    expect(screen.getByText("No sessions to show.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open folder…" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Add project" })).not.toBeInTheDocument();
 
@@ -252,11 +250,11 @@ describe("Sidebar", () => {
     expect(screen.queryByRole("button", { name: "New chat" })).not.toBeInTheDocument();
   });
 
-  it("gives a project a section header with an empty state under it", () => {
+  it("does not show an empty directory group", () => {
     withProject();
     wrap(<Sidebar />);
-    expect(screen.getByRole("button", { name: "Collapse text-to-cad" })).toBeInTheDocument();
-    expect(screen.getByText("No sessions yet")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Collapse text-to-cad" })).not.toBeInTheDocument();
+    expect(screen.queryByText("No sessions yet")).not.toBeInTheDocument();
   });
 
   it("lists a project's threads flat, newest first, and hides archived ones", () => {
@@ -347,7 +345,7 @@ describe("Sidebar", () => {
     );
     expect(screen.getByText("Pinned")).toBeInTheDocument();
     expect(screen.getAllByText("Keeper")).toHaveLength(1);
-    expect(screen.getByText("No sessions yet")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Collapse text-to-cad" })).not.toBeInTheDocument();
   });
 
   /**
@@ -391,7 +389,7 @@ describe("Sidebar", () => {
       activeId: "p1",
     });
     useSessions.setState({
-      sessions: [session({ id: "s1", title: "Keeper" })],
+      sessions: [session({ id: "s1", title: "Keeper" }), session({ id: "s2", title: "Other", projectId: "p2" })],
       ready: true,
       activeId: "s1",
     });

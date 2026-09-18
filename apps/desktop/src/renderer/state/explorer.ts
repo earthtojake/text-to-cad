@@ -22,30 +22,10 @@ import type {
 } from "@shared/types";
 
 /**
- * The explorer's one tab strip. No bottom panel — the terminal is
- * a tab like every other secondary surface (plan §3).
- *
- * The strip belongs to the **project**, not to a thread: a person with a file,
- * a terminal and a review open is looking at a directory, and closing a thread
- * should not take those away. It is loaded from `explorer_tabs` when the
- * active project changes and written back, debounced, on every mutation.
- * Scratch drawings stay in renderer memory across project switches and are
- * excluded from every persistence snapshot.
- *
- * Every mutation therefore goes through `commit`, which is the only place that
- * renumbers `order` and schedules the save. A setter that wrote `tabs`
- * directly would produce a strip whose order in the database disagreed with
- * the order on screen after the next reload.
- *
- * The strip has a **root** as well as a project (plan §9, `ExplorerRoot` in
- * `@shared/types`): the directory new tabs open in and the tree lists. It is
- * the project directory until the active session runs in a worktree, and
- * then it is that worktree — `state/bridge.ts` derives it from the session
- * selection and calls `setRoot`. A tab keeps the root it was opened in, so
- * switching threads changes where the *next* file opens and which tree the
- * pane shows, not what an open tab is looking at. The tree's state is kept
- * per root, because a worktree and the checkout are different trees with
- * the same names in them.
+ * Every session owns its own strip and pane state. Directory/root identity is
+ * only for filesystem access, never for deciding which agent owns a tab.
+ * Inactive strips remain in memory (including ephemeral drawings and drafts).
+ * Agent commands mutate their owner's strip without selecting another session.
  */
 
 /** How long a burst of changes is collected before it reaches sqlite. */
@@ -58,10 +38,10 @@ const SAVE_DEBOUNCE_MS = 400;
  * open is per tab (`FileTabSchema.panel`).
  */
 const PANEL_WIDTH_KEY = "hardcore.explorer.panelWidth";
-/** Whether the pane itself is closed, per project id (see `collapsed`). */
-const PANE_COLLAPSED_KEY = "hardcore.explorer.collapsed";
-/** How wide it is when it is open, per project id (see `width`). */
-const PANE_WIDTH_KEY = "hardcore.explorer.width";
+/** Whether the pane itself is closed, per session id (see `collapsed`). */
+const PANE_COLLAPSED_KEY = "hardcore.explorer.session.collapsed";
+/** How wide it is when it is open, per session id (see `width`). */
+const PANE_WIDTH_KEY = "hardcore.explorer.session.width";
 /**
  * The column's range and its default are the shared shell's
  * (`FilePanelColumn.jsx`), which is the component that draws it — so the
@@ -88,8 +68,8 @@ function writeLocal(key: string, value: string) {
   }
 }
 
-/** One of the per-project maps in localStorage, parsed defensively. */
-function byProject<T>(key: string): Record<string, T> {
+/** One of the per-session maps in localStorage, parsed defensively. */
+function bySession<T>(key: string): Record<string, T> {
   return readLocal<Record<string, T>>(key, {}, (raw) => {
     try {
       const parsed: unknown = JSON.parse(raw);
@@ -102,28 +82,28 @@ function byProject<T>(key: string): Record<string, T> {
 
 /**
  * The pane is closed until something opens it, and a person's own choice is
- * remembered for the project they made it in.
+ * remembered for the session they made it in.
  *
- * Per project rather than per app, because whether the right-hand pane earns
+ * Per session rather than per app, because whether the right-hand pane earns
  * its width is a fact about the work: a CAD project is looked at, a scratch
  * folder is talked to. Opening a file, a review, a browser or a terminal
  * shows the pane without writing anything — the preference is what the person
  * chose, not what an agent's tool call did.
  *
- * There is no entry for "no project": without one the explorer is not drawn
+ * There is no entry for "no session": without one the explorer is not drawn
  * at all, so there is no choice to remember and nothing to remember it for.
  */
-function collapsedFor(projectId: string): boolean {
-  return byProject<boolean>(PANE_COLLAPSED_KEY)[projectId] ?? true;
+function collapsedFor(sessionId: string): boolean {
+  return bySession<boolean>(PANE_COLLAPSED_KEY)[sessionId] ?? true;
 }
 
 /**
- * The pane's width for a project, in pixels. Its pair with `collapsed` is the
+ * The pane's width for a session, in pixels. Its pair with `collapsed` is the
  * explorer's whole state: a collapse keeps the width, so the toggle brings
  * the pane back the size it was rather than at its floor.
  */
-function widthFor(projectId: string): number {
-  const stored = byProject<number>(PANE_WIDTH_KEY)[projectId];
+function widthFor(sessionId: string): number {
+  const stored = bySession<number>(PANE_WIDTH_KEY)[sessionId];
   return typeof stored === "number" && stored > 0 ? stored : PANE_LIMITS.explorer.default;
 }
 
@@ -144,35 +124,37 @@ const EMPTY_TREE: TreeState = { open: new Set([""]), listings: {} };
 /** Initial state for a new tab of each kind. */
 type TabInit = {
   file: Partial<Pick<FileTab, "path" | "root" | "panel">>;
-  review: Partial<Pick<ReviewTab, "scope" | "sessionId">>;
+  review: Partial<Pick<ReviewTab, "scope">>;
   browser: Partial<Pick<BrowserTab, "url" | "root">>;
-  terminal: Partial<Pick<TerminalTab, "cwd" | "readOnly">>;
+  terminal: Partial<Pick<TerminalTab, "cwd" | "readOnly" | "ptyId">>;
   drawing: Partial<Pick<DrawingTab, "root" | "title">>;
 };
 
 type ExplorerState = {
-  /** The project the strip belongs to; null before one is chosen. */
+  sessionId: string | null;
+  /** The session’s directory identity for filesystem operations. */
   projectId: string | null;
   /**
-   * Where new tabs open and what the tree lists: null for the project
+   * Where new tabs open and what the tree lists: null for the session
    * directory, else the active session's worktree (see the note above).
    */
   root: ExplorerRoot;
   tabs: ExplorerTab[];
   activeId: string | null;
-  /** True once the strip has been loaded for `projectId`. */
+  /** True once the strip has been loaded for `sessionId`. */
   ready: boolean;
+  loadError: string | null;
   /**
    * The pane's own state: closed until something opens it, and remembered for
-   * the project once the person says otherwise. The session column fills the
-   * window while it is closed, and with no project bound the pane is not
+   * the session once the person says otherwise. The session column fills the
+   * window while it is closed, and with no session bound the pane is not
    * rendered at all (`Shell`).
    */
   collapsed: boolean;
   /**
    * How wide the pane is when it is open, in pixels — the other half of the
    * pair. A drag writes it, a collapse keeps it, and the toggle brings the
-   * pane back at it. Per project, like `collapsed`.
+   * pane back at it. Per session, like `collapsed`.
    */
   width: number;
   /** How wide the file tab's panel column is, whichever panel is in it. */
@@ -201,7 +183,7 @@ type ExplorerState = {
   /**
    * A path an agent asked to have revealed (`reveal` through the Hardcore MCP
    * server): the tree expands to it and selects it without opening it.
-   * Transient — cleared when a file is opened or the project changes.
+   * Transient — cleared when a file is opened or the session changes.
    */
   reveal: { path: string; directory: boolean; root: ExplorerRoot } | null;
   /**
@@ -219,14 +201,14 @@ type ExplorerState = {
    */
   cadCapture: { projectId: string; tabId: string; path: string; root: ExplorerRoot; nonce: number } | null;
 
-  bindProject: (projectId: string | null, root?: ExplorerRoot) => Promise<void>;
+  bindSession: (sessionId: string | null, projectId: string | null, root?: ExplorerRoot) => Promise<void>;
   /**
    * Change the root new tabs open in. The tree state of the root being
    * left is kept, so coming back to a thread finds its folders still open.
    */
   setRoot: (root: ExplorerRoot) => void;
-  /** Dispose scratch drawings when their project is removed. */
-  discardProjectResources: (projectId: string) => void;
+  /** Release retained resources when their session is archived or deleted. */
+  discardSessionResources: (sessionId: string, options?: { preserveTabs?: boolean }) => void;
   open: <K extends ExplorerTabKind>(kind: K, init?: TabInit[K]) => ExplorerTab | null;
   /**
    * Open a file, reusing a tab already showing it. `root` defaults to the
@@ -241,10 +223,10 @@ type ExplorerState = {
   /** Drag reorder: move the tab with `id` to `toIndex`. */
   move: (id: string, toIndex: number) => void;
   update: (id: string, patch: Partial<ExplorerTab>) => void;
-  /** A person's choice, remembered for the project they made it in. */
+  /** A person's choice, remembered for the session they made it in. */
   setCollapsed: (collapsed: boolean) => void;
   toggleCollapsed: () => void;
-  /** A drag's result, remembered for the project it was made in. */
+  /** A drag's result, remembered for the session it was made in. */
   setWidth: (width: number) => void;
   /** Something opened: show the pane, leaving the stored preference alone. */
   show: () => void;
@@ -277,15 +259,16 @@ const nextId = () => `tab-${Date.now().toString(36)}-${++sequence}`;
 function blankTab(
   kind: ExplorerTabKind,
   projectId: string,
+  sessionId: string,
   order: number,
   init: Record<string, unknown> = {},
 ): ExplorerTab {
-  const base = { id: nextId(), projectId, order };
+  const base = { id: nextId(), projectId, sessionId, order };
   switch (kind) {
     case "file":
       return { ...base, kind: "file", path: null, root: null, panel: null, ...init } as FileTab;
     case "review":
-      return { ...base, kind: "review", scope: "all" as const, sessionId: null, ...init };
+      return { ...base, kind: "review", scope: "all" as const, ...init };
     case "browser":
       return { ...base, kind: "browser", url: null, root: null, ...init } as BrowserTab;
     case "drawing":
@@ -302,47 +285,50 @@ function blankTab(
   }
 }
 
-let saveTimer: ReturnType<typeof setTimeout> | null = null;
-let pendingSave: { projectId: string; tabs: PersistedExplorerTab[] } | null = null;
-// Only scratch metadata is retained here; ordinary tabs still load from main.
-const projectDrawings = new Map<string, { tabs: DrawingTab[]; activeId: string | null }>();
-function rememberDrawings(projectId: string | null, tabs: ExplorerTab[], activeId: string | null): void {
-  if (!projectId) return;
-  const drawings = tabs.filter((tab): tab is DrawingTab => tab.kind === "drawing");
-  if (drawings.length) projectDrawings.set(projectId, { tabs: drawings, activeId });
-  else projectDrawings.delete(projectId);
+type Strip = { collapsed?: boolean; width?: number; tabs: ExplorerTab[]; activeId: string | null; trees?: ExplorerState["trees"]; reveal?: ExplorerState["reveal"] };
+const retainedStrips = new Map<string, Strip>();
+const archivedDocumentTabs = new Map<string, ExplorerTab[]>();
+const tabSubscribers = new Set<(tabs: readonly ExplorerTab[]) => void>();
+function notifySessionTabs(): void {
+  const tabs = [...new Map([...retainedStrips.values()].flatMap(strip => strip.tabs).map(tab => [tab.id, tab])).values()];
+  for (const listener of tabSubscribers) listener(tabs);
 }
-function restoreDrawings(projectId: string, persisted: ExplorerTab[]): { tabs: ExplorerTab[]; activeId: string | null } {
-  const snapshot = projectDrawings.get(projectId);
-  // Even an old or compromised response must not resurrect a scratch tab.
-  const tabs: ExplorerTab[] = persisted.filter(tab => tab.kind !== "drawing");
-  for (const drawing of snapshot?.tabs ?? []) tabs.splice(Math.min(drawing.order, tabs.length), 0, drawing);
-  return {
-    tabs: tabs.map((tab, order) => ({ ...tab, order })),
-    activeId: snapshot?.activeId && tabs.some(tab => tab.id === snapshot.activeId) ? snapshot.activeId : tabs[0]?.id ?? null,
-  };
+/** Resource caches follow every retained session, independent of the selected pane. */
+export function subscribeSessionTabs(listener: (tabs: readonly ExplorerTab[]) => void): () => void {
+  tabSubscribers.add(listener); notifySessionTabs();
+  return () => { tabSubscribers.delete(listener); };
 }
-const savingProjects = new Map<string, Promise<void>>();
+const loadingStrips = new Map<string, Promise<Strip>>();
+const discardedSessions = new Set<string>();
+const sessionGenerations = new Map<string, number>();
+const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const pendingSaves = new Map<string, PersistedExplorerTab[]>();
+const savingSessions = new Map<string, Promise<void>>();
 let bindingSequence = 0;
 let cadCommandSequence = 0;
 
-/** Flush the outgoing snapshot; another project's loading never waits for it. */
-function flushTabSave(): void {
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = null;
-  const snapshot = pendingSave;
-  pendingSave = null;
-  if (!snapshot) return;
-  const write = async () => { await window.hardcore.explorer.saveTabs(snapshot); };
-  const previous = savingProjects.get(snapshot.projectId);
-  const saving = (previous ? previous.then(write) : write()).catch(() => {
-    // Persistence is a convenience; a failed write must not take the strip
-    // down or prevent the next save/load for this project.
-  });
-  savingProjects.set(snapshot.projectId, saving);
-  void saving.then(() => {
-    if (savingProjects.get(snapshot.projectId) === saving) savingProjects.delete(snapshot.projectId);
-  });
+/** Serialize writes for each session; another session never blocks on them. */
+function flushTabSave(sessionId: string): void {
+  clearTimeout(saveTimers.get(sessionId));
+  saveTimers.delete(sessionId);
+  const tabs = pendingSaves.get(sessionId);
+  pendingSaves.delete(sessionId);
+  if (!tabs || discardedSessions.has(sessionId)) return;
+  const write = async () => {
+    if (!discardedSessions.has(sessionId)) await window.hardcore.explorer.saveTabs({ sessionId, tabs });
+  };
+  const saving = (savingSessions.get(sessionId) ?? Promise.resolve()).then(write).catch(() => {});
+  savingSessions.set(sessionId, saving);
+  void saving.then(() => { if (savingSessions.get(sessionId) === saving) savingSessions.delete(sessionId); });
+}
+
+function saveStrip(sessionId: string, strip: Strip): void {
+  retainedStrips.set(sessionId, strip);
+  notifySessionTabs();
+  pendingSaves.set(sessionId, strip.tabs.filter((tab): tab is PersistedExplorerTab => tab.kind !== "drawing")
+    .map((tab, order) => ({ ...tab, order })));
+  clearTimeout(saveTimers.get(sessionId));
+  saveTimers.set(sessionId, setTimeout(() => flushTabSave(sessionId), SAVE_DEBOUNCE_MS));
 }
 
 /**
@@ -377,29 +363,21 @@ export function dedupeFileTabs(
 /** Renumber, publish, and schedule the write. The one mutation path. */
 function commit(
   set: (partial: Partial<ExplorerState>) => void,
-  projectId: string | null,
+  sessionId: string | null,
   tabs: ExplorerTab[],
   activeId: string | null,
 ) {
   const unique = dedupeFileTabs(tabs, activeId);
   const ordered = unique.tabs.map((tab, order) => ({ ...tab, order }) as ExplorerTab);
   const current = useExplorer.getState();
-  const stillTargets = (command: ExplorerState["cadCapture"]) => command && command.projectId === projectId
+  const stillTargets = (command: ExplorerState["cadCapture"]) => command && command.projectId === current.projectId
     && command.tabId === unique.activeId && ordered.some(tab => tab.kind === "file"
       && tab.id === command.tabId && tab.path === command.path && tab.root === command.root);
   set({ tabs: ordered, activeId: unique.activeId,
     cadSelection: stillTargets(current.cadSelection) ? current.cadSelection : null,
     cadCapture: stillTargets(current.cadCapture) ? current.cadCapture : null });
-  if (!projectId) {
-    return;
-  }
-  if (saveTimer) {
-    clearTimeout(saveTimer);
-  }
-  rememberDrawings(projectId, ordered, unique.activeId);
-  pendingSave = { projectId, tabs: ordered.filter((tab): tab is PersistedExplorerTab => tab.kind !== "drawing")
-    .map((tab, order) => ({ ...tab, order })) };
-  saveTimer = setTimeout(flushTabSave, SAVE_DEBOUNCE_MS);
+  if (sessionId) saveStrip(sessionId, { tabs: ordered, activeId: unique.activeId,
+    trees: current.trees, reveal: current.reveal, collapsed: current.collapsed, width: current.width });
 }
 
 /** The watcher for one root, started and stopped with the binding. */
@@ -412,11 +390,13 @@ function unwatch(projectId: string, root: ExplorerRoot): void {
 }
 
 export const useExplorer = create<ExplorerState>((set, get) => ({
+  sessionId: null,
   projectId: null,
   root: null,
   tabs: [],
   activeId: null,
   ready: false,
+  loadError: null,
   collapsed: true,
   width: PANE_LIMITS.explorer.default,
   panelWidth: readLocal(PANEL_WIDTH_KEY, PANEL_DEFAULT_WIDTH, (raw) => Number(raw) || PANEL_DEFAULT_WIDTH),
@@ -429,85 +409,55 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
   cadSelection: null,
   cadCapture: null,
 
-  bindProject: async (projectId, root = null) => {
-    if (get().projectId === projectId && get().ready) {
-      if (get().root !== root) {
-        get().setRoot(root);
-      }
+  bindSession: async (sessionId, projectId, root = null) => {
+    if (get().sessionId === sessionId && get().ready) {
+      if (get().root !== root) get().setRoot(root);
       return;
     }
-    // Keep the departing project's edits even when its debounce has not fired.
-    if (get().ready) rememberDrawings(get().projectId, get().tabs, get().activeId);
-    flushTabSave();
+    const previous = get();
+    if (previous.sessionId && previous.ready) {
+      retainedStrips.set(previous.sessionId, { tabs: previous.tabs, activeId: previous.activeId,
+        trees: previous.trees, reveal: previous.reveal, collapsed: previous.collapsed, width: previous.width });
+      flushTabSave(previous.sessionId);
+    }
     const binding = ++bindingSequence;
-    const previous = get().projectId;
-    if (previous && previous !== projectId) {
-      unwatch(previous, get().root);
-    }
-    set({
-      projectId,
-      root,
-      tabs: [],
-      activeId: null,
-      ready: false,
-      changedPaths: [],
-      changedEntries: [],
-      changedRoot: null,
-      reveal: null,
-      cadSelection: null,
-      cadCapture: null,
-      // Each project keeps its own answer to "is the pane worth the width".
-      // Without a project there is no pane at all (`Shell`), and closed is
-      // the state it comes back to when one arrives.
-      collapsed: projectId ? collapsedFor(projectId) : true,
-      width: projectId ? widthFor(projectId) : PANE_LIMITS.explorer.default,
-      // A different project is a different set of trees, with nothing to carry over.
-      trees: {},
-    });
-    if (!projectId) {
-      set({ ready: true });
-      return;
-    }
-    // The project's CAD runtime starts now — the probe, the viewer for this
-    // root, the build daemon — so the first CAD file finds them up
-    // (src/main/cad/index.ts, `warmCad`). Nothing waits on it.
+    if (previous.projectId) unwatch(previous.projectId, previous.root);
+    set({ sessionId, projectId: sessionId ? projectId : null, root, tabs: [], activeId: null, ready: false, loadError: null,
+      changedPaths: [], changedEntries: [], changedRoot: null, reveal: null, cadSelection: null, cadCapture: null,
+      collapsed: sessionId ? collapsedFor(sessionId) : true,
+      width: sessionId ? widthFor(sessionId) : PANE_LIMITS.explorer.default, trees: {} });
+    if (!sessionId || !projectId) { set({ ready: true }); return; }
+    discardedSessions.delete(sessionId);
     void window.hardcore.cad.warm({ projectId, ...(root ? { root } : {}) }).catch(() => {});
-    const loadTabs = async () => {
-      const saving = savingProjects.get(projectId);
-      if (saving) await saving;
-      if (binding !== bindingSequence) return [] as ExplorerTab[];
-      return window.hardcore.explorer.loadTabs({ projectId }).catch(() => [] as ExplorerTab[]);
-    };
-    const [tabs] = await Promise.all([
-      loadTabs(),
-      watch(projectId, root),
-    ]);
-    // A slower load for a project the user has already navigated away from
-    // must not overwrite the one they are looking at.
-    if (binding !== bindingSequence || get().projectId !== projectId) {
-      return;
+    try {
+      const [strip] = await Promise.all([readSessionStrip(sessionId), watch(projectId, root)]);
+      if (binding !== bindingSequence || get().sessionId !== sessionId) return;
+      // A background command can update the retained strip while watch startup
+      // is pending. Publish its latest state, never the earlier read snapshot.
+      const latest = currentStrip(sessionId) ?? strip;
+      const restored = dedupeFileTabs(latest.tabs, latest.activeId);
+      set({ ...restored, trees: latest.trees ?? {}, reveal: latest.reveal ?? null,
+        collapsed: latest.collapsed ?? collapsedFor(sessionId), width: latest.width ?? widthFor(sessionId), ready: true });
+    } catch (error) {
+      if (binding !== bindingSequence || get().sessionId !== sessionId) return;
+      // Failed reads must never masquerade as an empty strip and overwrite saved tabs.
+      set({ loadError: error instanceof Error ? error.message : String(error), ready: false, collapsed: false });
     }
-    // A strip written by an older build may hold two tabs for one file.
-    const merged = restoreDrawings(projectId, tabs);
-    const restored = dedupeFileTabs(merged.tabs, merged.activeId);
-    set({ tabs: restored.tabs, activeId: restored.activeId, ready: true });
   },
 
-  discardProjectResources: (projectId) => {
-    const active = get().projectId === projectId;
-    const tabs = new Map([...(retainedStrips.get(projectId)?.tabs ?? []), ...(projectDrawings.get(projectId)?.tabs ?? []), ...(active ? get().tabs : [])].map(tab => [tab.id, tab]));
-    for (const tab of tabs.values()) {
-      if (tab.kind === "drawing") deleteDrawingScene(tab.id);
-      discardDocumentTab(tab.id); releaseCadTab(tab.id);
-    }
-    projectDrawings.delete(projectId);
-    if (pendingSave?.projectId === projectId) {
-      pendingSave = null;
-      if (saveTimer) clearTimeout(saveTimer);
-      saveTimer = null;
-    }
-    if (active) set({ tabs: [], activeId: null });
-    retainedStrips.delete(projectId);
+  discardSessionResources: (sessionId, options) => {
+    if (options?.preserveTabs) void flushSessionTabs(sessionId).catch(error => console.error("[explorer] final save failed", error));
+    discardedSessions.add(sessionId);
+    sessionGenerations.set(sessionId, (sessionGenerations.get(sessionId) ?? 0) + 1);
+    const active = get().sessionId === sessionId;
+    const tabs = new Map([...(archivedDocumentTabs.get(sessionId) ?? []), ...(retainedStrips.get(sessionId)?.tabs ?? []), ...(active ? get().tabs : [])].map(tab => [tab.id, tab]));
+    if (options?.preserveTabs) archivedDocumentTabs.set(sessionId, [...tabs.values()].filter(tab => tab.kind === "file"));
+    else archivedDocumentTabs.delete(sessionId);
+    for (const tab of tabs.values()) disposeTab(tab, true, options?.preserveTabs);
+    pendingSaves.delete(sessionId);
+    clearTimeout(saveTimers.get(sessionId)); saveTimers.delete(sessionId);
+    retainedStrips.delete(sessionId); loadingStrips.delete(sessionId); notifySessionTabs();
+    if (active) { if (get().projectId) unwatch(get().projectId!, get().root); ++bindingSequence; set({ sessionId: null, projectId: null, tabs: [], activeId: null, ready: true }); }
   },
 
   setRoot: (root) => {
@@ -524,10 +474,10 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
   },
 
   open: (kind, init) => {
-    const { projectId, root, tabs } = get();
+    const { projectId, sessionId, root, tabs } = get();
     // A partial strip cannot replace the pending persisted/temporary snapshot.
     // The tab menu is disabled until restore completes; shortcuts share this guard.
-    if (!projectId || !get().ready) {
+    if (!projectId || !sessionId || !get().ready) {
       return null;
     }
     // A tab nobody can see is not an open tab: every kind reveals the pane.
@@ -550,8 +500,8 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
         return existing;
       }
     }
-    const tab = blankTab(kind, projectId, tabs.length, rooted);
-    commit(set, projectId, [...tabs, tab], tab.id);
+    const tab = blankTab(kind, projectId, sessionId, tabs.length, rooted);
+    commit(set, get().sessionId, [...tabs, tab], tab.id);
     return tab;
   },
 
@@ -579,14 +529,14 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
       const next = tabs.map((tab) =>
         tab.id === blank.id ? ({ ...tab, path: filePath, root: target } as ExplorerTab) : tab,
       );
-      commit(set, projectId, next, blank.id);
+      commit(set, get().sessionId, next, blank.id);
       return next.find((tab) => tab.id === blank.id) ?? null;
     }
     return get().open("file", { path: filePath, root: target });
   },
 
   close: (id) => {
-    const { projectId, tabs, activeId } = get();
+    const { sessionId, tabs, activeId } = get();
     const index = tabs.findIndex((tab) => tab.id === id);
     if (index < 0) {
       return;
@@ -595,26 +545,17 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     if (hasDirtyDocument(id)) {
       toast.error("This file has unsaved changes.", { description: "Save it before closing, or discard your edits.",
         action: { label: "Discard and close", onClick: () => {
-          // A toast can outlive a project switch. Do not close a different strip.
-          if (get().projectId !== projectId) return;
+          // A toast can outlive a session switch. Do not close a different strip.
+          if (get().sessionId !== sessionId) return;
           discardDocumentTab(id); get().close(id);
         } } });
       return;
     }
-    releaseDocumentTab(id);
-    releaseCadTab(id);
-    if (closing?.kind === "terminal" && closing.ptyId) {
-      // The pty belongs to the tab. Closing the tab is closing the shell.
-      void window.hardcore.terminal.kill({ id: closing.ptyId }).catch(() => {});
-    }
-    if (closing?.kind === "drawing") deleteDrawingScene(closing.id);
-    if (closing?.kind === "browser" && projectId) {
-      void window.hardcore.browser.close({ projectId, root: closing.root, tabId: closing.id }).catch(() => {});
-    }
+    if (closing) disposeTab(closing);
     const remaining = tabs.filter((tab) => tab.id !== id);
     const nextActive =
       activeId === id ? (remaining[Math.min(index, remaining.length - 1)]?.id ?? null) : activeId;
-    commit(set, projectId, remaining, nextActive);
+    commit(set, get().sessionId, remaining, nextActive);
   },
 
   closeActive: () => {
@@ -636,7 +577,7 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
   },
 
   move: (id, toIndex) => {
-    const { projectId, tabs, activeId } = get();
+    const { tabs, activeId } = get();
     const from = tabs.findIndex((tab) => tab.id === id);
     const to = Math.max(0, Math.min(toIndex, tabs.length - 1));
     if (from < 0 || from === to) {
@@ -647,36 +588,36 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     if (moved) {
       next.splice(to, 0, moved);
     }
-    commit(set, projectId, next, activeId);
+    commit(set, get().sessionId, next, activeId);
   },
 
   update: (id, patch) => {
-    const { projectId, tabs, activeId, ready } = get();
+    const { tabs, activeId, ready } = get();
     // Delayed tab callbacks cannot mutate a different or partially restored strip.
     if (!ready || !tabs.some(tab => tab.id === id)) return;
-    const next = tabs.map((tab) => (tab.id === id ? ({ ...tab, ...patch } as ExplorerTab) : tab));
-    commit(set, projectId, next, activeId);
+    const next = tabs.map((tab) => (tab.id === id ? ({ ...tab, ...patch, id: tab.id, sessionId: tab.sessionId, projectId: tab.projectId, kind: tab.kind } as ExplorerTab) : tab));
+    commit(set, get().sessionId, next, activeId);
   },
 
   setCollapsed: (collapsed) => {
-    const { projectId } = get();
-    // No project, no explorer: there is nothing for a preference to be about.
-    if (!projectId) {
+    const { sessionId } = get();
+    // No session, no explorer: there is nothing for a preference to be about.
+    if (!sessionId) {
       return;
     }
-    writeLocal(PANE_COLLAPSED_KEY, JSON.stringify({ ...byProject<boolean>(PANE_COLLAPSED_KEY), [projectId]: collapsed }));
+    writeLocal(PANE_COLLAPSED_KEY, JSON.stringify({ ...bySession<boolean>(PANE_COLLAPSED_KEY), [sessionId]: collapsed }));
     set({ collapsed });
   },
 
   toggleCollapsed: () => get().setCollapsed(!get().collapsed),
 
   setWidth: (width) => {
-    const { projectId } = get();
+    const { sessionId } = get();
     const rounded = Math.round(width);
-    if (!projectId || rounded <= 0) {
+    if (!sessionId || rounded <= 0) {
       return;
     }
-    writeLocal(PANE_WIDTH_KEY, JSON.stringify({ ...byProject<number>(PANE_WIDTH_KEY), [projectId]: rounded }));
+    writeLocal(PANE_WIDTH_KEY, JSON.stringify({ ...bySession<number>(PANE_WIDTH_KEY), [sessionId]: rounded }));
     set({ width: rounded });
   },
 
@@ -752,7 +693,6 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
   }),
 
   receiveChanges: (projectId, root, changes) => {
-    if (get().projectId !== projectId) return;
     changes = changes.filter(change => {
       if (!change.mutationId) return true;
       const key = JSON.stringify([projectId, root, change.mutationId]);
@@ -762,6 +702,20 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
       return true;
     });
     if (!changes.length) return;
+    for (const [sessionId, strip] of retainedStrips) {
+      if (sessionId === get().sessionId || !strip.tabs.some(tab => tab.projectId === projectId)) continue;
+      let changed = false;
+      const tabs = strip.tabs.map(tab => {
+        if (tab.kind !== "file" || tab.root !== root || !tab.path) return tab;
+        let path = tab.path;
+        for (const change of changes) if (change.kind === "moved") path = movedFilePath(path, change.previousPath, change.path);
+        changed ||= path !== tab.path;
+        return path === tab.path ? tab : { ...tab, path };
+      });
+      const next = { ...strip, tabs, trees: {} };
+      if (changed) saveStrip(sessionId, next); else retainedStrips.set(sessionId, next);
+    }
+    if (get().projectId !== projectId) return;
     const paths = [...new Set(changes.flatMap(change => change.kind === "moved" ? [change.previousPath, change.path] : [change.path]))];
     // Publish identity changes before updating tab paths, so mounted documents
     // can carry an unsaved draft to the new name. Keep all cached descendants.
@@ -780,27 +734,19 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
   },
 }));
 
-/** Inspect a scratch tab without selecting it or switching the active project. */
-export function getDrawingTab(tabId: string, projectId: string): DrawingTab | null {
-  const state = useExplorer.getState();
-  const tab = (state.projectId === projectId ? state.tabs.find(tab => tab.id === tabId && tab.kind === "drawing") : null)
-    ?? projectDrawings.get(projectId)?.tabs.find(tab => tab.id === tabId);
+/** Read only the specified session's scratch tab. */
+export function getDrawingTab(tabId: string, sessionId: string): DrawingTab | null {
+  const tab = currentStrip(sessionId)?.tabs.find(tab => tab.id === tabId && tab.kind === "drawing");
   return tab?.kind === "drawing" ? tab : null;
 }
 
-/** Rename an in-memory drawing, including one retained in another project. */
-export function renameDrawingTab(tabId: string, projectId: string, title: string): void {
+/** Rename only within the owning session, including an inactive sketch. */
+export function renameDrawingTab(tabId: string, sessionId: string, title: string): void {
   const name = title.trim();
   if (!name || name.length > 200) throw new Error("Use a drawing name between 1 and 200 characters.");
-  if (!getDrawingTab(tabId, projectId)) throw new Error("This drawing is closed.");
-  const state = useExplorer.getState();
-  if (state.projectId === projectId) state.update(tabId, { title: name });
-  else {
-    const retained = projectDrawings.get(projectId)!;
-    projectDrawings.set(projectId, { ...retained, tabs: retained.tabs.map(tab => tab.id === tabId ? { ...tab, title: name } : tab) });
-    const strip = retainedStrips.get(projectId);
-    if (strip) retainedStrips.set(projectId, { ...strip, tabs: strip.tabs.map(tab => tab.id === tabId ? { ...tab, title: name } : tab) });
-  }
+  const strip = currentStrip(sessionId);
+  if (!strip?.tabs.some(tab => tab.id === tabId && tab.kind === "drawing")) throw new Error("This drawing is closed.");
+  updateSessionStrip(sessionId, { ...strip, tabs: strip.tabs.map(tab => tab.id === tabId ? { ...tab, title: name } : tab) });
 }
 
 /** One root's tree: its open folders and listings, or the empty tree. */
@@ -839,16 +785,133 @@ export function hostOf(url: string): string {
 }
 
 
-/** Read other projects without changing the user's current project or tab. */
-const retainedStrips = new Map<string, { tabs: ExplorerTab[]; activeId: string | null }>();
+/** Retained state belongs to sessions, not their directory grouping. */
 useExplorer.subscribe(state => {
-  if (state.projectId && state.ready) retainedStrips.set(state.projectId, { tabs: state.tabs, activeId: state.activeId });
+  if (state.sessionId && state.ready) retainedStrips.set(state.sessionId, {
+    tabs: state.tabs, activeId: state.activeId, trees: state.trees, reveal: state.reveal, collapsed: state.collapsed, width: state.width,
+  });
+  notifySessionTabs();
 });
-export async function readProjectStrip(projectId: string): Promise<{ tabs: ExplorerTab[]; activeId: string | null }> {
-  const current = useExplorer.getState();
-  if (current.projectId === projectId && current.ready) return { tabs: current.tabs, activeId: current.activeId };
-  const retained = retainedStrips.get(projectId);
+function currentStrip(sessionId: string): Strip | undefined {
+  const state = useExplorer.getState();
+  return state.sessionId === sessionId && state.ready ? state : retainedStrips.get(sessionId);
+}
+export async function readSessionStrip(sessionId: string): Promise<Strip> {
+  const retained = currentStrip(sessionId);
   if (retained) return retained;
-  const tabs = await window.hardcore.explorer.loadTabs({ projectId });
-  return { tabs, activeId: null };
+  if (discardedSessions.has(sessionId)) throw new Error("This session is no longer active.");
+  let pending = loadingStrips.get(sessionId);
+  if (!pending) {
+    const generation = sessionGenerations.get(sessionId) ?? 0;
+    pending = (async () => {
+      await savingSessions.get(sessionId);
+      const persisted = await window.hardcore.explorer.loadTabs({ sessionId });
+      if (discardedSessions.has(sessionId) || (sessionGenerations.get(sessionId) ?? 0) !== generation) throw new Error("This session is no longer active.");
+      const tabs = (persisted as ExplorerTab[]).filter(tab => tab.sessionId === sessionId && tab.kind !== "drawing");
+      const strip = currentStrip(sessionId) ?? { tabs, activeId: tabs[0]?.id ?? null };
+      retainedStrips.set(sessionId, strip);
+      notifySessionTabs();
+      return strip;
+    })();
+    loadingStrips.set(sessionId, pending);
+    void pending.finally(() => { if (loadingStrips.get(sessionId) === pending) loadingStrips.delete(sessionId); }).catch(() => {});
+  }
+  return pending;
+}
+
+function updateSessionStrip(sessionId: string, strip: Strip): void {
+  if (discardedSessions.has(sessionId)) throw new Error("This session is no longer active.");
+  const unique = dedupeFileTabs(strip.tabs, strip.activeId);
+  const next = { ...strip, tabs: unique.tabs.map((tab, order) => ({ ...tab, order })), activeId: unique.activeId };
+  const active = useExplorer.getState().sessionId === sessionId && useExplorer.getState().ready;
+  if (active) useExplorer.setState({ ...next, cadSelection: null, cadCapture: null });
+  saveStrip(sessionId, next);
+}
+
+function disposeTab(tab: ExplorerTab, discard = false, preserveDocuments = false): void {
+  if (!preserveDocuments) {
+    if (discard) discardDocumentTab(tab.id); else releaseDocumentTab(tab.id);
+  }
+  releaseCadTab(tab.id);
+  if (tab.kind === "drawing") deleteDrawingScene(tab.id);
+  if (tab.kind === "terminal" && tab.ptyId) void window.hardcore.terminal.kill({ id: tab.ptyId }).catch(() => {});
+  if (tab.kind === "browser") void window.hardcore.browser.close({ sessionId: tab.sessionId, projectId: tab.projectId, root: tab.root, tabId: tab.id }).catch(() => {});
+}
+
+export async function openSessionTab<K extends ExplorerTabKind>(sessionId: string, projectId: string, root: ExplorerRoot, kind: K, init?: TabInit[K], signal?: AbortSignal): Promise<ExplorerTab> {
+  await readSessionStrip(sessionId);
+  signal?.throwIfAborted();
+  const strip = currentStrip(sessionId)!;
+  const rooted = { ...((kind === "file" || kind === "drawing" || kind === "browser") ? { root } : kind === "terminal" ? { cwd: root } : {}), ...init };
+  const path = kind === "file" ? (init as TabInit["file"])?.path : null;
+  const existing = path ? strip.tabs.find(tab => tab.kind === "file" && tab.path === path && tab.root === root) : null;
+  const blank = path ? strip.tabs.find(tab => tab.kind === "file" && !tab.path) : null;
+  const tab = existing ?? (blank ? { ...blank, path, root } as FileTab : blankTab(kind, projectId, sessionId, strip.tabs.length, rooted));
+  const tabs = existing ? strip.tabs : blank ? strip.tabs.map(item => item.id === blank.id ? tab : item) : [...strip.tabs, tab];
+  updateSessionStrip(sessionId, { ...strip, tabs, activeId: tab.id, reveal: null, collapsed: false });
+  return tab;
+}
+
+function assertSameTabResource(tab: ExplorerTab, expected?: ExplorerTab): void {
+  if (!expected) return;
+  if (tab.sessionId !== expected.sessionId || tab.kind !== expected.kind
+    || ("root" in tab && "root" in expected && tab.root !== expected.root)
+    || (tab.kind === "file" && expected.kind === "file" && tab.path !== expected.path)
+    || (tab.kind === "terminal" && expected.kind === "terminal" && tab.ptyId !== expected.ptyId)) {
+    throw new Error("This tab closed or changed before the command was applied.");
+  }
+}
+
+export async function selectSessionTab(sessionId: string, tabId: string, signal?: AbortSignal, expected?: ExplorerTab): Promise<void> {
+  await readSessionStrip(sessionId);
+  signal?.throwIfAborted();
+  const strip = currentStrip(sessionId)!;
+  const tab = strip.tabs.find(tab => tab.id === tabId);
+  if (!tab) throw new Error("This tab is closed.");
+  assertSameTabResource(tab, expected);
+  updateSessionStrip(sessionId, { ...strip, activeId: tabId, collapsed: false });
+}
+export async function closeSessionTab(sessionId: string, tabId: string, signal?: AbortSignal, expected?: ExplorerTab): Promise<void> {
+  await readSessionStrip(sessionId);
+  signal?.throwIfAborted();
+  const strip = currentStrip(sessionId)!;
+  const tab = strip.tabs.find(tab => tab.id === tabId);
+  if (!tab) throw new Error("This tab is closed.");
+  assertSameTabResource(tab, expected);
+  if (hasDirtyDocument(tabId)) throw new Error("Save or explicitly discard the document before closing its tab.");
+  disposeTab(tab);
+  const tabs = strip.tabs.filter(tab => tab.id !== tabId);
+  updateSessionStrip(sessionId, { ...strip, tabs, activeId: strip.activeId === tabId ? tabs[0]?.id ?? null : strip.activeId });
+}
+export async function revealSessionPath(sessionId: string, projectId: string, root: ExplorerRoot, path: string, directory: boolean, signal?: AbortSignal): Promise<void> {
+  await readSessionStrip(sessionId);
+  signal?.throwIfAborted();
+  const existing = currentStrip(sessionId)!.tabs.find(tab => tab.kind === "file" && tab.root === root);
+  const tab = existing ?? await openSessionTab(sessionId, projectId, root, "file", { panel: FILE_PANEL_TREE }, signal);
+  const strip = currentStrip(sessionId)!;
+  updateSessionStrip(sessionId, { ...strip, tabs: strip.tabs.map(item => item.id === tab.id ? { ...item, panel: FILE_PANEL_TREE } as FileTab : item), activeId: tab.id, collapsed: false, reveal: { root, path, directory } });
+}
+
+/** A delayed native callback updates only the tab that requested it. */
+export async function updateSessionTab(sessionId: string, tabId: string, patch: Partial<ExplorerTab>, signal?: AbortSignal): Promise<void> {
+  await readSessionStrip(sessionId);
+  signal?.throwIfAborted();
+  const strip = currentStrip(sessionId)!;
+  if (!strip.tabs.some(tab => tab.id === tabId)) throw new Error("This tab is closed.");
+  updateSessionStrip(sessionId, { ...strip, tabs: strip.tabs.map(tab => tab.id === tabId
+    ? { ...tab, ...patch, id: tab.id, sessionId: tab.sessionId, projectId: tab.projectId, kind: tab.kind } as ExplorerTab : tab) });
+}
+
+/** Archive waits for the latest ordinary tab metadata before releasing live resources. */
+export function flushSessionTabs(sessionId: string): Promise<void> {
+  const strip = currentStrip(sessionId);
+  const tabs = strip?.tabs.filter((tab): tab is PersistedExplorerTab => tab.kind !== "drawing").map((tab, order) => ({ ...tab, order }))
+    ?? pendingSaves.get(sessionId);
+  clearTimeout(saveTimers.get(sessionId)); saveTimers.delete(sessionId); pendingSaves.delete(sessionId);
+  if (!tabs) return savingSessions.get(sessionId) ?? Promise.resolve();
+  const saving = (savingSessions.get(sessionId) ?? Promise.resolve()).then(() => window.hardcore.explorer.saveTabs({ sessionId, tabs }));
+  const settled = saving.catch(() => {});
+  savingSessions.set(sessionId, settled);
+  void settled.then(() => { if (savingSessions.get(sessionId) === settled) savingSessions.delete(sessionId); });
+  return saving;
 }

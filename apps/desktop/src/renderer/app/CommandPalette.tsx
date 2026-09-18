@@ -54,11 +54,12 @@ export function CommandPalette() {
   const setQuery = useUi((state) => state.setCommandPaletteQuery);
   const openSettings = useUi((state) => state.openSettings);
   const projects = useProjects((state) => state.projects);
-  const activeProjectId = useProjects((state) => state.activeId);
   const setActiveProject = useProjects((state) => state.setActive);
   const openFolder = useOpenFolder();
   const sessions = useSessions((state) => state.sessions);
   const selectSession = useSessions((state) => state.select);
+  const setActiveSession = useSessions((state) => state.setActive);
+  const activeSessionId = useSessions((state) => state.activeId);
   const layout = useSettings((state) => state.settings?.layout);
   const setLayout = useSettings((state) => state.setLayout);
   const reach = useHistoryReach();
@@ -98,7 +99,7 @@ export function CommandPalette() {
             project's search glyph seeds it with the project's, which every
             one of these rows carries. */}
         <CommandGroup heading="Sessions">
-          {sessions.map((session) => {
+          {sessions.filter(session => !session.archived).map((session) => {
             const project = projects.find((candidate) => candidate.id === session.projectId);
             return (
               <CommandItem
@@ -121,10 +122,10 @@ export function CommandPalette() {
         <CommandSeparator />
 
         <CommandGroup heading="Projects">
-          {projects.map((project) => (
+          {projects.filter(project => sessions.some(session => session.projectId === project.id && !session.archived)).map((project) => (
             <CommandItem
               key={project.id}
-              onSelect={run(() => setActiveProject(project.id))}
+              onSelect={run(() => { setActiveProject(project.id); setActiveSession(null); })}
               value={`${project.name} ${project.path}`}
             >
               <Folder className="size-4" />
@@ -153,8 +154,8 @@ export function CommandPalette() {
             <PanelLeft className="size-4" />
             Toggle sidebar
           </CommandItem>
-          {/* No project, no explorer to toggle (`Shell`). */}
-          {activeProjectId ? (
+          {/* No session, no explorer to toggle (`Shell`). */}
+          {activeSessionId ? (
             <CommandItem
               onSelect={run(() => useExplorer.getState().toggleCollapsed())}
               value="toggle explorer"
@@ -163,13 +164,13 @@ export function CommandPalette() {
               Toggle explorer
             </CommandItem>
           ) : null}
-          {activeProjectId ? (
+          {activeSessionId ? (
             <CommandItem onSelect={run(() => { useExplorer.getState().open("drawing"); })} value="new drawing sketch canvas">
               <PencilRuler className="size-4" />
               New drawing
             </CommandItem>
           ) : null}
-          <CommandItem onSelect={run(() => undefined)} value="new session chat">
+          <CommandItem onSelect={run(() => setActiveSession(null))} value="new session chat">
             <MessageSquarePlus className="size-4" />
             New session
           </CommandItem>

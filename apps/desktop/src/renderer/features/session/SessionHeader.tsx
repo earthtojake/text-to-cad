@@ -18,8 +18,8 @@ import { useSettings } from "@renderer/state/settings";
 import type { Session } from "@shared/types";
 
 /**
- * The session's title bar (plan §2): folder icon, the title (from the
- * first prompt; click to edit), a `…` menu; the explorer's toggle on the
+ * The session's title bar (plan §2): folder icon, the agent's title (the
+ * first prompt until one arrives; click to edit), a `…` menu; the explorer's toggle on the
  * right. The strip is the window's drag region, so the controls opt out of it.
  *
  * The controls of the title row keep their places on screen whatever the
@@ -160,7 +160,7 @@ export function SessionHeader({
       <div className="flex-1" />
       {/* The window's right edge while the explorer is shut; open, the
           explorer's own strip holds the toggle at that same edge. */}
-      {explorerCollapsed ? (
+      {session && explorerCollapsed ? (
         <div className="app-no-drag flex items-center gap-0.5">
           <ExplorerToggle />
         </div>

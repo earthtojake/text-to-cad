@@ -9,7 +9,6 @@ import type { SidePane } from "@renderer/lib/panes";
 import { isMac } from "@renderer/lib/platform";
 import { runUiCommand } from "@renderer/state/bridge";
 import { useExplorer } from "@renderer/state/explorer";
-import { useActiveProject } from "@renderer/state/projects";
 import { useSettings } from "@renderer/state/settings";
 import { PANE_LIMITS } from "@shared/types";
 
@@ -24,7 +23,7 @@ import { PANE_LIMITS } from "@shared/types";
  * no toggle anywhere to bring it back.
  *
  * **One source of truth per side pane**, `{ collapsed, width }` — the
- * sidebar's in `settings.layout`, the explorer's per project in
+ * sidebar's in `settings.layout`, the explorer's per session in
  * `state/explorer.ts`. Everything here is derived from those two pairs: which
  * panes are rendered, where each toggle is drawn (a collapsed pane is not in
  * the document, so its toggle can only be the other one), and which pane
@@ -41,8 +40,7 @@ import { PANE_LIMITS } from "@shared/types";
  * way first and the sidebar second, by collapsing — so the person is left
  * with two toggles rather than a session pushed off the window.
  *
- * **No project, no explorer.** The pane is a view of a directory, and with
- * none bound there is no directory: neither the pane nor its separator is
+ * **No session, no explorer.** An unsubmitted draft owns no tabs: neither the pane nor its separator is
  * rendered, the session has the window, and the toggle in `SessionHeader`,
  * the palette's command and `Mod+Alt+B` all have nothing to act on.
  */
@@ -53,9 +51,9 @@ export function Shell() {
 
   useShellShortcuts();
 
-  // The explorer belongs to a project, and is closed until something opens
-  // it (`state/explorer.ts`). Its width is per project as well.
-  const hasProject = useActiveProject() !== null;
+  // The explorer belongs to a session, and is closed until something opens
+  // it (`state/explorer.ts`). Its width is per session as well.
+  const hasSession = useExplorer(state => state.sessionId !== null);
   const explorerCollapsed = useExplorer((state) => state.collapsed);
   const explorerWidth = useExplorer((state) => state.width);
   const setExplorerWidth = useExplorer((state) => state.setWidth);
@@ -94,7 +92,7 @@ export function Shell() {
   const resolved = resolvePanes({
     width: rowWidth,
     sidebar: { collapsed: sidebarCollapsed, width: sidebarWidth },
-    explorer: hasProject ? { collapsed: explorerCollapsed, width: paneWidth } : null,
+    explorer: hasSession ? { collapsed: explorerCollapsed, width: paneWidth } : null,
   });
 
   // A window too narrow for the three minimums closes a pane rather than
@@ -203,7 +201,7 @@ export function Shell() {
  * the history — bound here as well as in the app menu, because the menu's
  * accelerator is the one that works with focus in a webview and this one
  * works when the menu is hidden. Both ends at the same commands.
- * `toggle-explorer` is inert without a project: the store refuses a
+ * `toggle-explorer` is inert without a session: the store refuses a
  * preference it has nowhere to file.
  */
 function useShellShortcuts(): void {

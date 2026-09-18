@@ -62,8 +62,6 @@ export * from "./git";
 /* Requests                                                                    */
 /* -------------------------------------------------------------------------- */
 
-const Id = z.object({ id: z.string().min(1) });
-
 export const ipcContract = defineIpc({
   app: {
     /** Version, platform and dev flag — everything About needs. */
@@ -75,16 +73,13 @@ export const ipcContract = defineIpc({
   projects: {
     list: invoke(z.void(), z.array(ProjectSchema)),
     /**
-     * Opens the native folder chooser and adds what comes back. Resolves to
+     * Opens the native folder chooser and validates a transient session directory. Resolves to
      * null when the dialog is cancelled — a cancelled dialog is an ordinary
      * outcome, not an error.
      */
     add: invoke(z.void(), ProjectSchema.nullable()),
-    /** Adds a directory by path, for tests and for `--open <dir>`. */
+    /** Validates a directory for a session draft; does not save a project. */
     addPath: invoke(z.object({ path: z.string().min(1) }), ProjectSchema),
-    /** Forgets the project. Never touches the directory on disk. */
-    remove: invoke(Id, z.void()),
-    rename: invoke(Id.extend({ name: z.string().min(1) }), ProjectSchema),
   },
 
   /** P1: `sessions.*` lives in ./ipc/acp.ts. */
@@ -156,8 +151,8 @@ export type IpcContract = typeof ipcContract;
  * there is nothing to nest.
  */
 export const ipcEvents = {
-  /** The project list changed (added, removed, renamed). */
-  "projects.changed": z.array(ProjectSchema),
+  /** Explicit folder choice for a new session draft; never saved as a project. */
+  "ui.directorySelected": ProjectSchema,
   /** The session index changed. */
   "sessions.changed": z.array(SessionSchema),
   /** Settings changed anywhere — including from the app menu. */

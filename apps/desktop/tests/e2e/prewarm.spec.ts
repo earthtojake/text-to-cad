@@ -4,9 +4,10 @@ import { fileURLToPath } from "node:url";
 
 import { _electron as electron, expect, test } from "@playwright/test";
 import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-runtime";
+import { selectFixtureSession } from "./session-fixture";
 
 /**
- * Opening a project starts its CAD runtime before any file asks for it
+ * Selecting a session starts its CAD runtime before any file asks for it
  * (src/main/cad/index.ts, `warmCad`): the viewer for the project root and
  * the warm build daemon come up on their own, off the critical path of the
  * first CAD file. Main narrates both on stdout — `[viewer] started …` and
@@ -19,7 +20,6 @@ import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-r
 
 declare const window: {
   hardcore: {
-    projects: { addPath(request: { path: string }): Promise<{ id: string; name: string }> };
     runtime: { status(): Promise<{ state: string; cadgenVersion: string | null }> };
   };
 };
@@ -27,7 +27,7 @@ declare const window: {
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const repoRoot = path.resolve(appRoot, "..", "..");
 
-test("opening a project starts the viewer and the daemon before any file is opened", async () => {
+test("selecting a session starts the viewer and the daemon before any file is opened", async () => {
   test.setTimeout(120_000);
   const userData = cadTestProfile("prewarm");
   const socketDir = fs.mkdtempSync("/tmp/hc-pw-");
@@ -38,6 +38,7 @@ test("opening a project starts the viewer and the daemon before any file is open
     ...inherited,
     ...cadRegistryEnvironment(userData),
     NODE_ENV: "test",
+    HARDCORE_FAKE_AGENT: path.join(appRoot, "tests/fake-agent/index.mjs"),
     CADGEN_DAEMON: "1",
     CADGEN_CACHE_DIR: path.join(userData, "cad-cache"),
     CADGEN_DAEMON_STATE_DIR: path.join(userData, "cad-daemon"),
@@ -58,9 +59,8 @@ test("opening a project starts the viewer and the daemon before any file is open
     const runtime = await page.evaluate(() => window.hardcore.runtime.status());
     test.skip(!cadRuntimeReady(runtime), `no CAD runtime on this machine (${runtime.state})`);
 
-    await page.evaluate((root) => window.hardcore.projects.addPath({ path: root }), repoRoot);
-    // The strip binds to the project on its own; binding is what warms.
-    await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
+    // Selecting the session binds its strip and warms its directory.
+    await selectFixtureSession(page, repoRoot);
 
     await expect.poll(() => lines.some((line) => /\[viewer\] (started|reused) http:\/\/127\.0\.0\.1:\d+ for /.test(line)), { timeout: 90_000 }).toBe(true);
     await expect.poll(() => lines.some((line) => /\[daemon\] warming /.test(line)), { timeout: 30_000 }).toBe(true);

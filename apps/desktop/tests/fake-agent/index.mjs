@@ -9,6 +9,8 @@
  *                                                          config option
  *   node tests/fake-agent/index.mjs --load-delay 1200       hold session/load
  *                                                          for that long
+ *   node tests/fake-agent/index.mjs --new-title <title>    title before session/new answers
+ *   node tests/fake-agent/index.mjs --load-title <title>   title while replaying session/load
  *
  * `--mode-option` is the second shape ACP allows for the same thing: the
  * session answers with **no** `modes` and a `mode`-category select config
@@ -31,6 +33,7 @@
  *                 after "open " — the server `session/new` carried in
  *                 `mcpServers`, spawned the way an adapter spawns it
  *   "drawing-tool <JSON>"  call a drawing MCP tool with explicit name/args
+ *   "session-title <JSON>" send a session_info_update ({title, sessionId?})
  *   "mention"     reply with prose naming files — real and missing paths,
  *                 a CAD reference, one in backticks — for the transcript's
  *                 links
@@ -269,6 +272,12 @@ new AgentSideConnection((conn) => ({
     mcpServers = Array.isArray(params?.mcpServers) ? params.mcpServers : [];
     currentModeId = "default";
     applied.length = 0;
+    if (args.includes("--new-title")) {
+      await conn.sessionUpdate({
+        sessionId: SESSION_ID,
+        update: { sessionUpdate: "session_info_update", title: args[args.indexOf("--new-title") + 1] },
+      });
+    }
     return {
       sessionId: SESSION_ID,
       ...(modeAsOption ? {} : { modes: { currentModeId, availableModes: modeList() } }),
@@ -285,6 +294,12 @@ new AgentSideConnection((conn) => ({
     if (fixture?.load) {
       await replay(conn, fixture.load.frames, params.sessionId);
       return fixture.load.response ?? {};
+    }
+    if (args.includes("--load-title")) {
+      await conn.sessionUpdate({
+        sessionId: params.sessionId,
+        update: { sessionUpdate: "session_info_update", title: args[args.indexOf("--load-title") + 1] },
+      });
     }
     await conn.sessionUpdate({
       sessionId: params.sessionId,
@@ -370,6 +385,15 @@ async function script(conn, params) {
   const words = text.split(/\s+/);
   const after = (word) => words[words.indexOf(word) + 1];
   const send = (update) => conn.sessionUpdate({ sessionId, update });
+
+  if (text.startsWith("session-title ")) {
+    const info = JSON.parse(text.slice("session-title ".length));
+    await conn.sessionUpdate({
+      sessionId: info.sessionId ?? sessionId,
+      update: { sessionUpdate: "session_info_update", title: info.title },
+    });
+    return { stopReason: "end_turn" };
+  }
 
   if (process.env.FAKE_AGENT_INTEGRATION_PROOF === "1" && text.startsWith("integration-proof ")) {
     const request = JSON.parse(text.slice("integration-proof ".length));

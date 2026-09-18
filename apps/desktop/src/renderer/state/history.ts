@@ -96,8 +96,9 @@ function locationNow(): Location | null {
 }
 
 function liveNow(): Live {
+  const { projects, draft } = useProjects.getState();
   return {
-    projectIds: useProjects.getState().projects.map((project) => project.id),
+    projectIds: [...projects.map((project) => project.id), ...(draft ? [draft.id] : [])],
     sessionIds: useSessions.getState().sessions.map((session) => session.id),
   };
 }
@@ -187,8 +188,9 @@ export function useHistoryReach(): { back: boolean; forward: boolean } {
   // button has to mute itself when that was the last one.
   const projects = useProjects((state) => state.projects);
   const sessions = useSessions((state) => state.sessions);
+  const draft = useProjects((state) => state.draft);
   const live: Live = {
-    projectIds: projects.map((project) => project.id),
+    projectIds: [...projects.map((project) => project.id), ...(draft ? [draft.id] : [])],
     sessionIds: sessions.map((session) => session.id),
   };
   return {

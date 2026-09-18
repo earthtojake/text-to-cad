@@ -1,5 +1,5 @@
 import { PanelsTopLeft, Plus } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 
 import { Button } from "@renderer/components/ui/button";
 import { isMac } from "@renderer/lib/platform";
@@ -15,7 +15,7 @@ import { FileTab } from "./FileTab";
 import { ReviewTab } from "./ReviewTab";
 import { TabStrip } from "./TabStrip";
 import { TerminalTab } from "./TerminalTab";
-import { createDesktopCadConnections } from "./adapters/cadRuntime";
+import { desktopCadConnectionForTab } from "./adapters/cadRuntime";
 
 /**
  * The explorer: one tab strip and whatever the selected tab renders.
@@ -30,21 +30,16 @@ import { createDesktopCadConnections } from "./adapters/cadRuntime";
 export function ExplorerPane() {
   const project = useActiveProject();
   const tabs = useExplorer((state) => state.tabs);
+  const loadError = useExplorer(state => state.loadError);
   const ready = useExplorer((state) => state.ready);
   const open = useExplorer((state) => state.open);
   const active = useActiveTab();
-  const projectId = project?.id;
-  const cadConnections = useMemo(() => projectId ? createDesktopCadConnections(projectId) : null, [projectId]);
-  useEffect(() => () => cadConnections?.dispose(), [cadConnections]);
-  useEffect(() => {
-    cadConnections?.retainRoots(tabs.filter((tab) => tab.kind === "file").map((tab) => tab.root));
-  }, [cadConnections, tabs]);
 
   useExplorerShortcuts();
 
-  // `Shell` does not mount this pane without a project — the strip belongs to
-  // a directory and there is none — so this is the type's guard rather than a
-  // state a person can reach. There is deliberately no "No project" view: an
+  // `Shell` does not mount this pane without a session — the strip belongs to
+  // a session and there is none — so this is the type's guard rather than a
+  // state a person can reach. There is deliberately no "No session" view: an
   // explorer with nothing to explore is a pane worth its width to nobody.
   if (!project) {
     return null;
@@ -54,8 +49,9 @@ export function ExplorerPane() {
     <Frame>
       <TabStrip />
       <div className="min-h-0 flex-1">
-        {active ? (
-          <TabBody key={active.id} project={project} tab={active} cadConnections={cadConnections!} />
+        {loadError ? <EmptyState title="Could not restore tabs" description={loadError} icon={PanelsTopLeft}
+          action={<Button onClick={() => { const state = useExplorer.getState(); void state.bindSession(state.sessionId, state.projectId, state.root); }}>Try again</Button>} /> : active ? (
+          <TabBody key={active.id} project={project} tab={active} />
         ) : (
           <EmptyState
             action={
@@ -82,19 +78,20 @@ function Frame({ children }: { children: React.ReactNode }) {
   return <div className="flex h-full min-h-0 flex-col border-l">{children}</div>;
 }
 
-function TabBody({ tab, project, cadConnections }: {
-  tab: ExplorerTab; project: Project; cadConnections: ReturnType<typeof createDesktopCadConnections>;
+function TabBody({ tab, project }: {
+  tab: ExplorerTab; project: Project;
 }) {
   switch (tab.kind) {
     case "file":
       return (
         <FileTab
+          sessionId={tab.sessionId}
           panel={tab.panel}
           path={tab.path}
           project={project}
           root={tab.root}
           tabId={tab.id}
-          cadConnection={cadConnections.forRoot(tab.root)}
+          cadConnection={desktopCadConnectionForTab(tab)}
         />
       );
     case "review":
@@ -107,12 +104,13 @@ function TabBody({ tab, project, cadConnections }: {
         />
       );
     case "drawing":
-      return <DrawingTab project={project} root={tab.root} tabId={tab.id} title={tab.title} />;
+      return <DrawingTab sessionId={tab.sessionId} project={project} root={tab.root} tabId={tab.id} title={tab.title} />;
     case "browser":
-      return <BrowserTab projectId={project.id} root={tab.root} tabId={tab.id} url={tab.url} />;
+      return <BrowserTab sessionId={tab.sessionId} projectId={project.id} root={tab.root} tabId={tab.id} url={tab.url} />;
     case "terminal":
       return (
         <TerminalTab
+          sessionId={tab.sessionId}
           cwd={tab.cwd}
           project={project}
           ptyId={tab.ptyId}

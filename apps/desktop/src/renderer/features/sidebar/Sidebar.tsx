@@ -8,7 +8,6 @@ import { SessionSection } from "@renderer/features/sidebar/SessionSection";
 import { SidebarFilterMenu } from "@renderer/features/sidebar/SidebarFilterMenu";
 import { Wordmark } from "@renderer/features/sidebar/Wordmark";
 import { useOpenFolder } from "@renderer/hooks/use-open-folder";
-import { useProjects } from "@renderer/state/projects";
 import { useSessions, useSidebarSections } from "@renderer/state/sessions";
 import { useUi } from "@renderer/state/ui";
 
@@ -34,8 +33,7 @@ import { useUi } from "@renderer/state/ui";
  * `settings.sidebar`, global. One list, one place to narrow it.
  */
 export function Sidebar() {
-  const projects = useProjects((state) => state.projects);
-  const ready = useProjects((state) => state.ready);
+  const ready = useSessions((state) => state.ready);
   const openFolder = useOpenFolder();
   const setActiveSession = useSessions((state) => state.setActive);
   const openSettings = useUi((state) => state.openSettings);
@@ -98,7 +96,7 @@ export function Sidebar() {
           {sections.map((section) => (
             <SessionSection key={section.id} section={section} />
           ))}
-          {ready && projects.length === 0 ? <NoProjects onOpen={() => void openFolder()} /> : null}
+          {ready && sections.every(section => section.sessions.length === 0) ? <NoProjects onOpen={() => void openFolder()} /> : null}
         </div>
       </ScrollArea>
 
@@ -149,7 +147,7 @@ function SidebarLink({
 function NoProjects({ onOpen }: { onOpen: () => void }) {
   return (
     <div className="mt-2 rounded-lg border border-dashed border-sidebar-border px-3 py-4 text-center">
-      <p className="text-xs text-muted-foreground">No projects yet.</p>
+      <p className="text-xs text-muted-foreground">No sessions to show.</p>
       <Button className="mt-2 h-7 text-xs" onClick={onOpen} size="sm" variant="secondary">
         Open folder…
       </Button>
