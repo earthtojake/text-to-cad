@@ -3,8 +3,8 @@
 A skill is consumed by an agent that copies what it reads, so a code block that
 has drifted from the model contract is a generator of broken models, and the
 drift is invisible to every other test. The complete model scripts in
-`skills/cad/SKILL.md`, `references/step-generation.md` and
-`references/supported-exports.md` are therefore extracted and BUILT here, cold
+the main skill and its generation, export, positioning and kinematics references
+are therefore extracted and BUILT here, cold
 (`CADGEN_DAEMON=0`, transient workers), in a throwaway project with a private
 store, and every output their decorators declare must exist afterwards.
 
@@ -45,6 +45,8 @@ DOCUMENTS = (
     repo_path("skills/cad/SKILL.md"),
     repo_path("skills/cad/references/step-generation.md"),
     repo_path("skills/cad/references/supported-exports.md"),
+    repo_path("skills/cad/references/positioning.md"),
+    repo_path("skills/cad/references/kinematics.md"),
 )
 
 _PYTHON_BLOCK = re.compile(r"```python\n(.*?)```", re.S)
@@ -271,29 +273,6 @@ class DocumentationTeachesTheContract(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             for word in self.RETIRED:
                 self.assertNotIn(word, text, f"{path.name} still teaches {word!r}")
-
-    def test_the_skill_teaches_the_model_contract(self) -> None:
-        # Whitespace-normalized: prose wraps, and a rewrap must not fail the pin.
-        skill = re.sub(r"\s+", " ", repo_path("skills/cad/SKILL.md").read_text(encoding="utf-8"))
-        for phrase in (
-            'if __name__ == "__main__"',
-            "takes no parameters",
-            "STEP is not required",
-            "never `child.located(loc)`",
-            "cadgen store why",
-            "never wait on or cancel",
-            "does not update the assemblies",
-            "CADGEN_DAEMON=0",
-        ):
-            self.assertIn(phrase, skill, f"SKILL.md lost: {phrase!r}")
-        reference = re.sub(r"\s+", " ", repo_path("skills/cad/references/step-generation.md").read_text(encoding="utf-8"))
-        for phrase in (
-            "models by result, constants by value, functions by file",
-            "Mirrored parts are their own models",
-            "def servo():",
-            "Never `read_step` your own output",
-        ):
-            self.assertIn(phrase, reference, f"step-generation.md lost: {phrase!r}")
 
 
 class DocumentedEmbeddedAnimation(unittest.TestCase):

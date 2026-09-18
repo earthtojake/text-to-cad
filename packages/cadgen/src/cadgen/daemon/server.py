@@ -3,7 +3,7 @@
 The supervisor owns a socket and a pool of warm workers (``cadgen.daemon.pool``),
 each a subprocess that imported cadgen / OCP / build123d once. It services
 directly-run @step/@dxf model scripts ("run") plus ``cadgen step build`` /
-``cadgen stl|3mf|glb build`` / ``cadgen step inspect`` / ``cadgen snapshot``
+``cadgen stl|3mf|glb build`` / ``cadgen snapshot``
 invocations over a per-install unix socket (named pipe on Windows), so every
 call skips the multi-second interpreter+OCP startup. The supervisor itself never
 imports OCP: no amount of model badness can take it down.
@@ -73,7 +73,6 @@ _TOOL_IMPORTS = {
     "stl-build": "cadgen.cli.stl_build",
     "3mf-build": "cadgen.cli.threemf_build",
     "glb-build": "cadgen.cli.glb_build",
-    "inspect": "cadgen.cli.step_inspect.cli",
 }
 
 from cadgen.daemon import broker as broker_mod  # noqa: E402
@@ -692,7 +691,7 @@ cadgen-daemon takes no arguments.
 It is the warm-process server, started for you by cadgen.daemon.client when
 CADGEN_DAEMON=1 -- not a command to run by hand. It sits in scripts/ beside the
 CLIs you probably meant: python <model>.py, cadgen step build, cadgen stl build,
-cadgen step inspect, cadgen snapshot. Each of those takes --help.\
+cadgen step snapshot, cadgen snapshot. Each of those takes --help.\
 """
 
 

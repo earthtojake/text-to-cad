@@ -42,11 +42,11 @@ __all__ = [
     "MateTarget",
     "compound_from_instances",
     "read_step",
-    "load_step_scene",
+    "read_scene",
+    "StepScene",
+    "Occurrence",
+    "Selection",
     "declare_input",
-    "located_shape",
-    "occurrence_selector_id",
-    "scene_occurrence_shape",
     "ensure_step_topology_artifact",
     "label_text",
     "label_shape",
@@ -96,7 +96,8 @@ def __getattr__(name: str):
             "label_shape": label_shape,
             "target": target,
         }[name]
-    if name in {"read_step", "load_step_scene", "located_shape", "occurrence_selector_id", "scene_occurrence_shape"}:
+    if name in {"read_step", "read_scene", "StepScene", "Occurrence", "Selection",
+                "load_step_scene", "located_shape", "occurrence_selector_id", "scene_occurrence_shape"}:
         from cadgen import step_scene
 
         return getattr(step_scene, name)
@@ -145,10 +146,10 @@ if TYPE_CHECKING:
     from cadgen.progress import report, track
     from cadgen.step_scene import (
         read_step,
-        load_step_scene,
-        located_shape,
-        occurrence_selector_id,
-        scene_occurrence_shape,
+        read_scene,
+        StepScene,
+        Occurrence,
+        Selection,
     )
     from cadgen.step_topology_artifact import ensure_step_topology_artifact
 

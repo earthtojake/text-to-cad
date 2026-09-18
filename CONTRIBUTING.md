@@ -56,7 +56,7 @@ environment's interpreter for direct CLI calls:
 
 ```bash
 scripts/bundle/bundle.sh
-./.venv/bin/python -m cadgen.cli step inspect --help
+./.venv/bin/python -m cadgen.cli step snapshot --help
 ./.venv/bin/python -m cadgen.cli urdf validate --help
 ```
 
@@ -86,7 +86,7 @@ $gitBash = 'C:\Program Files\Git\bin\bash.exe'
 Use the Windows virtual-environment path for direct CLI or focused test calls:
 
 ```powershell
-.\.venv\Scripts\python.exe -m cadgen.cli step inspect --help
+.\.venv\Scripts\python.exe -m cadgen.cli step snapshot --help
 .\.venv\Scripts\python.exe -m unittest tests/python/skills/urdf/test_cli.py
 ```
 

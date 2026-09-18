@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
+import warnings
 
 
 @dataclass(frozen=True)
@@ -46,14 +47,20 @@ def target(part: Any, frame: str) -> MateTarget:
 
 
 class AssemblyHelper:
-    """Small semantic wrapper around native build123d joints and compounds.
+    """Deprecated convenience wrapper around native build123d assemblies.
 
-    Generated CAD scripts should express named part-local frames and source
-    relationships here; this helper realizes those relationships with native
-    build123d Joint objects and returns a labeled Compound assembly.
+    Existing models remain supported. New code should use native shape labels,
+    Compound children, and Location transforms or joints directly.
     """
 
     def __init__(self, name: str) -> None:
+        warnings.warn(
+            "AssemblyHelper is deprecated; migrate to native build123d "
+            "Compound(children=..., label=...), shape.label/color, and "
+            "Location transforms or joints. Existing models still build.",
+            FutureWarning,
+            stacklevel=2,
+        )
         self.label = label_text(name)
         self.children: list[Any] = []
 

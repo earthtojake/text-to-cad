@@ -1,7 +1,7 @@
 """The public ``stl`` format namespace: the ``@stl`` decorator and its verbs.
 
-``@stl`` DECLARES a serialization of a ``@step`` model; ``stl.build(...)``
-PRODUCES one. They are the same object — this module is callable (see
+``@stl`` declares a mesh output on a model, with or without ``@step``;
+``stl.build(...)`` exports a saved STEP/STP document. They are the same object — this module is callable (see
 :mod:`cadgen._internal.format_namespace`) — so a format stays one table row:
 decorator, verbs, and generated CLI together (design/format-doors.md).
 
@@ -39,15 +39,15 @@ def build(
     force: bool = False,
     verbose: bool = False,
 ) -> MeshExportResult:
-    """Produce STL output(s) for TARGET through the shared mesh engine.
+    """Produce one STL output for TARGET through the shared mesh engine.
 
     target: the STEP/STP document to export.
-    out: destination .stl path. Omitted, the document's declared @stl variants
-        are produced instead — every one of them.
+    out: destination .stl path. Omitted, writes one sibling .stl beside
+        TARGET. Model output declarations are not read.
     mesh_tolerance: chord deflection RELATIVE to each component's bounding
-        diagonal, overriding what the document declares.
+        diagonal (default 1.5e-3), for this export only.
     mesh_angular_tolerance: max normal spread across a triangle edge in
-        radians, overriding what the document declares.
+        radians (default 0.35), for this export only.
     force: re-export even where the ledger says the output is current. Never
         rebuilds the model itself — run `python <script>` for that.
     verbose: show detailed progress and timing on stderr.

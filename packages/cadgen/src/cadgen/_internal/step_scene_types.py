@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from dataclasses import field
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from cadgen._internal.glb_topology import STEP_EDGE_DEFAULT_RENDER_VISIBILITY_CLASSES
 
@@ -33,7 +33,7 @@ class SelectorOptions:
 class LoadedStepScene:
     step_path: Path
     roots: list["OccurrenceNode"]
-    prototype_shapes: dict[int, Any]
+    prototype_shapes: Mapping[int, Any]
     prototype_names: dict[int, str | None] = field(default_factory=dict)
     prototype_colors: dict[int, ColorRGBA] = field(default_factory=dict)
     prototype_face_colors: dict[int, dict[int, ColorRGBA]] = field(default_factory=dict)

@@ -397,8 +397,8 @@ def _validate_structure(tree: Any, *, native: bool = False) -> None:
         ) or transform[12:] != [0, 0, 0, 1]:
             raise ValueError("invalid geometry transform")
         if native:
-            from cadgen.store.materialize import _location_from_matrix
-            _location_from_matrix(transform)
+            from cadgen.store.materialize import _native_location_from_matrix
+            _native_location_from_matrix(transform)
     for row in tree["occurrences"]:
         if row.get("component") not in tree["components"]:
             raise ValueError("unknown occurrence component")

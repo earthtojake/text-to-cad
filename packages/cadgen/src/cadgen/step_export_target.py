@@ -598,13 +598,12 @@ def export_cad_target(
                 f"{fmt} carries no animation: only `cadgen glb build --animation` writes a "
                 "clip into a file — the other mesh formats have nowhere to put one"
             )
-    # Same reason, for the other half of the request: a None output resolves to
-    # the model's DECLARED artifact below, and an animated file written there
-    # silently replaces the model's static output at a committed path.
+    # Omitted output is reserved for the static export; a clip needs an explicit
+    # destination because it changes the artifact's structure and initial pose.
     if animation is not None and any(raw is None for _, raw in outputs):
         raise ValueError(
-            "an animated export is ad hoc: name an output path. A None output is the model's "
-            "DECLARED artifact, which is its static one"
+            "an animated export is ad hoc: name an output path. Omitting the output writes "
+            "a static sibling .glb beside the document; choose a destination for the animated file"
         )
     repo_root = Path(repo_root).expanduser().resolve() if repo_root else Path.cwd()
     target_path = Path(target).expanduser().resolve()

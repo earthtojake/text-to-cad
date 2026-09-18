@@ -796,17 +796,11 @@ def extract_surface_component(
             if edge_ord is not None:
                 shape_by_edge.setdefault(edge_ord, ordinal)
 
-    solid_explorer = TopExp_Explorer(shape, TopAbs_SOLID)
-    while solid_explorer.More():
-        _record_shape(solid_explorer.Current(), "solid")
-        solid_explorer.Next()
-    if not shapes_meta:
-        shell_explorer = TopExp_Explorer(shape, TopAbs_SHELL)
-        while shell_explorer.More():
-            _record_shape(shell_explorer.Current(), "shell")
-            shell_explorer.Next()
-    if not shapes_meta:
-        shapes_meta.append({"ord": 1, "kind": "shape", "volume": None})
+    from cadgen._internal.entity_ordinals import shape_entities
+
+    for sub in shape_entities(shape):
+        kind = {TopAbs_SOLID: "solid", TopAbs_SHELL: "shell"}.get(sub.ShapeType(), "shape")
+        _record_shape(sub, kind)
 
     faces: list[dict[str, Any]] = []
     for ordinal in range(1, face_map.Extent() + 1):

@@ -1,6 +1,6 @@
 """A door reads the document as written; it never rebuilds a model.
 
-``inspect validate`` and ``inspect interfere`` need the model's in-memory scene.
+Python geometry checks need the saved document scene.
 They load the document on disk — current or not — and run no Python: a door asks
 one question (does the store have a tree for these bytes?) and a source that has
 moved on since the document was written is the model's business, not the door's
@@ -76,21 +76,14 @@ class DoorReadsTheDocumentTests(unittest.TestCase):
         self.assertTrue(self.document.is_file())
 
     def _validate(self) -> tuple[dict, str]:
-        from cadgen.validity import inspect_validity
-
-        err = io.StringIO()
-        with mock.patch.dict(os.environ, {"CADGEN_VALIDATE_WORKERS": "1"}), \
-                redirect_stdout(io.StringIO()), redirect_stderr(err):
-            report = inspect_validity("part.step")
-        return report, err.getvalue()
-
-    def _interfere(self) -> str:
-        from cadgen.interference import inspect_interference
-
+        from cadgen import read_scene
+        from cadgen.geometry import topology_errors
         err = io.StringIO()
         with redirect_stdout(io.StringIO()), redirect_stderr(err):
-            inspect_interference("part.step")
-        return err.getvalue()
+            scene = read_scene("part.step")
+            body = scene.roots[0].shape()
+            report = {"issues": topology_errors(body), "volume": body.volume}
+        return report, err.getvalue()
 
     def _make_stale(self) -> None:
         # A SEMANTIC change to an imported helper, written after the document.
@@ -112,7 +105,7 @@ class DoorReadsTheDocumentTests(unittest.TestCase):
         self._make_stale()
         with self._never_runs_the_script():
             report, err = self._validate()
-            interfere_err = self._interfere()
-        self.assertTrue(report["ok"], report)
-        self.assertNotIn("is stale", err + interfere_err)
-        self.assertNotIn("rebuilding", err + interfere_err)
+        self.assertEqual(report["issues"], ())
+        self.assertAlmostEqual(report["volume"], 10 * 8 * 4)
+        self.assertNotIn("is stale", err)
+        self.assertNotIn("rebuilding", err)

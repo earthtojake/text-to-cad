@@ -35,9 +35,9 @@ def mesh_build(
 ) -> MeshExportResult:
     """One format door's ``build``, typed.
 
-    ``out`` None means the DOCUMENT's declarations — every declared variant of
-    this format, read from its sidecar. An explicit ``out`` is one ad-hoc
-    export at that path. Either way the shared ledger gates the write.
+    ``out`` None writes one sibling file beside the document with this format's
+    extension. An explicit ``out`` selects its destination. Neither reads model
+    output declarations; the shared ledger gates the write.
 
     ``animation`` is GLB's alone. It is a parameter of the SHARED body rather
     than of one door because that is where a clip could otherwise be dropped
@@ -54,15 +54,11 @@ def mesh_build(
             "as .glb, or render it with `cadgen step snapshot --animation --video`"
         )
     if animation is not None and out is None:
-        # No OUT means the model's DECLARED @glb, which is its static output at a
-        # path the repo commits. An animated file there is structurally a
-        # different artifact — one node per occurrence, opening at the clip's
-        # first frame rather than the authored placement — so it would sit dirty
-        # in the tree until the next `python <script>` healed it.
+        # Omitted OUT is reserved for the static sibling export. A clip changes
+        # the artifact's structure and initial pose, so require a chosen path.
         raise ValueError(
-            "an animated export is ad hoc: name an OUT path. With no OUT this door writes the "
-            "document's DECLARED @glb, which is the model's static output — an animated file "
-            "does not belong at that path"
+            "an animated export is ad hoc: name an OUT path. Omitting OUT writes a static "
+            "sibling .glb beside the document; choose a destination for the animated file"
         )
     from cadgen._internal.doors import document_target
     from cadgen.cli_logging import CliLogger

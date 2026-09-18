@@ -1,7 +1,7 @@
 """Declaring a data file a model reads as a freshness input.
 
 :mod:`cadgen.step_scene` covers the files cadgen itself knows how to read: a
-STEP goes through ``read_step`` or ``load_step_scene``, and those record what
+STEP goes through ``read_step`` or ``read_scene``, and those record what
 they read without being asked. Everything else a model reads is the model's own
 business -- a JSON routing atlas, a CSV of tap sizes, a solved-offsets table --
 and cadgen has no reader for it, so there is nothing for it to record.

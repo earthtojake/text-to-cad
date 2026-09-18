@@ -1,10 +1,18 @@
 # Snapshot review
 
-Read this file when choosing saved CAD `cadgen step snapshot` outputs for primary STEP/STP artifacts.
+Read this file when choosing visual checks for saved STEP/STP or mesh outputs.
+Use `cadgen step snapshot` for STEP, or the corresponding `stl`, `3mf` or `glb`
+snapshot command for meshes (see [mesh exports](supported-exports.md)). The
+CAD topology, selection, section and motion controls below apply to STEP.
 
 ## Policy
 
-Snapshot validation is mandatory. Every created or visibly updated primary STEP/STP part or assembly gets at least one reviewed PNG snapshot; deterministic checks passing is not a reason to skip. Use CAD `cadgen step snapshot` rather than opening the viewer manually or using Playwright; snapshots are faster, lighter, more precise, and more agent-friendly. Review evidence is a PNG still. For still evidence of a pose or of one moment in a clip, pass `--kinematics` and/or `--animation CLIP --time SECONDS` (see `kinematics.md`, "Reviewing motion"). A clip that a still cannot show renders as a video with `--animation CLIP --video '{...}'` into an `.mp4`/`.gif` OUT — that is for motion, not a substitute for the reviewed still.
+Every created or visibly updated part or assembly gets at least one reviewed
+PNG snapshot of its STEP, or its mesh when no STEP is declared. Passing geometry
+checks does not waive this visual review. Use the format's snapshot command.
+For a STEP pose or clip frame, pass `--kinematics` and/or
+`--animation CLIP --time SECONDS`. A motion review may additionally need video;
+see [kinematics](kinematics.md#reviewing-motion).
 
 Skip saved snapshots only when no visible geometry was created or updated, or no valid artifact exists:
 
@@ -19,19 +27,14 @@ Do not loop on snapshots. Rerender only when a source repair changed visible geo
 
 ## Packet sizing
 
-One PNG is enough for a simple static part. Use the small multi-view packet when semantic errors are plausible from shape complexity or prompt intent:
-
-- assemblies or more than one body/part
-- holes on multiple faces or multiple axes
-- shells, internal cavities, bores, passages, open enclosures, or section-critical features
-- ribs, gussets, bosses, standoffs, slots, cutouts, lightening holes, fins, blades, or repeated patterns
-- source repairs after a geometry, boolean, selector, or feature failure
-- prompts where "looks like the requested object" is part of the task
-- deterministic checks pass but visible semantics are still uncertain
+Choose views that expose the features being checked. One may be enough;
+add an opposing view for hidden exterior features, an orthographic view for
+a pattern or silhouette, or a section for internal geometry. No fixed set of
+views proves every face or feature is correct.
 
 ## Small packet
 
-Prefer a single `view` JSON job with these outputs:
+For example, a four-view comparison can use one JSON job:
 
 ```json
 {
@@ -47,7 +50,8 @@ Prefer a single `view` JSON job with these outputs:
 }
 ```
 
-The two opposed isometric views guarantee every face appears in at least one image — rear, left, and bottom features are covered by default, not by suspicion. The top ortho is the primary pattern/symmetry check and the front ortho the profile check.
+Use only the views relevant to the design. Opposed isometric views reveal more
+exterior faces, but neither they nor orthographic views reveal all occluded geometry.
 
 Set `input` to the primary STEP/STP artifact using a relative or absolute path (documents only — a `.py` model script is refused: run it first, then snapshot the STEP it wrote). The snapshot CLI derives its internal render root from that input path. With no `render` key it uses deterministic light CAD lighting, an orthographic isometric camera and normal shaded-with-edges display, with grid and axis guides disabled for still evidence. Labeled/section views default to 1600x1200 when dimensions are omitted. Use `output.sizeProfile: "assembly"` or `"assembly-large"` for complex assemblies that need 1800x1200 or 1920x1440. For CAD review packets, use still-image render modes `view` and `section`; set `display.mode` to `shaded_edges`, `transparent`, `hidden_edges`, `hidden_lines_removed`, or `wireframe` when the visual check benefits from explicit CAD linework. For shaded surfaces with no CAD linework set `display.mode: "shaded"` (or `"unshaded"`). `display.edges` carries the viewer's edge styling settings for modes that draw linework.
 
@@ -124,11 +128,12 @@ cadgen step snapshot STEP/bracket.step tmp/review.png
 # then Read tmp/review.png
 ```
 
-OUT (and an output's `path` in a JSON packet) is written exactly as given, with a relative path resolved against the current working directory. The target is deleted before the render starts and the finished image is written atomically, so the file at that path is always the render you just ran.
-
-1. **Tight iteration: reuse one name.** Render, Read, edit the source, render again to the same `tmp/review.png`. Every read is provably the latest render, because a failed one leaves nothing to read.
-2. **Comparisons: name the iterations.** Use `tmp/before.png` and `tmp/after.png` when both images are genuinely needed.
-3. **Check the exit before reading the file.** Invalid request combinations fail before touching the path. After a request is accepted, the target is cleared before input resolution, so any later nonzero exit leaves no older image to mistake for this run's output.
+OUT (and an output's `path` in a JSON packet) is written exactly as given,
+relative to the working directory. Check the command's exit before reading:
+invalid request combinations leave an existing file untouched; after request
+validation, the target is cleared and successful output is written atomically.
+Reuse `tmp/review.png` during iteration, or name before/after images when both
+are needed for comparison.
 
 Pass a directory (`tmp/` as OUT, or an output `path` that is one) only when the name does not matter: a timestamped name is generated inside it, and that is the one case where you read the path from the `saved snapshot:` line.
 

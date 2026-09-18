@@ -30,13 +30,13 @@ if sys.argv[2] == "forbid-text":
         raise AssertionError("a canonical cache hit attempted a text STEP parse")
     package._load_step_scene_text = forbidden
 
-from cadgen import load_step_scene
+from cadgen._internal.step_scene_package import load_step_scene_cached
 from cadgen.store import closure
 
 document = Path(sys.argv[1]).resolve()
 consumed = {}
 closure.note_consumed_file_hash = lambda path, digest: consumed.setdefault(str(Path(path).resolve()), digest)
-scene = load_step_scene(document)
+scene = load_step_scene_cached(document)
 
 def node(value):
     return {

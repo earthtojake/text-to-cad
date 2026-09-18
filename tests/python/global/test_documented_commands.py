@@ -42,7 +42,7 @@ ELISION = "..."
 def _command_forms(text: str) -> list[tuple[list[str], bool]]:
     """The `cadgen` argv forms inside this document's fenced code blocks.
 
-    Each carries whether an elision cut it short: `cadgen step inspect ...` names
+    Each carries whether an elision cut it short: `cadgen step snapshot ...` names
     a command but is not a complete invocation, so it is checked for existence
     and not put through the parser.
     """

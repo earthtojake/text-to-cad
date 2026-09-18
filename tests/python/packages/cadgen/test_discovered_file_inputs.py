@@ -377,7 +377,7 @@ class ReaderSurfaceTests(unittest.TestCase):
 
 
 class ScenePathRecordingTests(unittest.TestCase):
-    """`load_step_scene` records too.
+    """`read_scene` records too.
 
     It is the other public STEP reader, and a model that walks a vendor STEP's
     occurrence tree depends on that file's bytes exactly as much as one that
@@ -394,8 +394,11 @@ class ScenePathRecordingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="scene-recording-") as tmp:
             path = Path(tmp) / "part.step"
             build123d.export_step(build123d.Box(4, 3, 2), path)
-            with record_discovered_inputs() as recorded:
-                step_scene.load_step_scene(path)
+            with mock.patch.dict(os.environ, {
+                "CADGEN_CACHE_DIR": str(Path(tmp) / "store"),
+                "CADGEN_DAEMON": "0",
+            }), record_discovered_inputs() as recorded:
+                step_scene.read_scene(path)
             self.assertEqual(recorded, {path.resolve()})
 
     def test_the_engines_own_loads_do_not_record(self) -> None:
@@ -416,8 +419,8 @@ class ScenePathRecordingTests(unittest.TestCase):
         from cadgen import step_scene
 
         with self.assertRaises(FileNotFoundError) as caught:
-            step_scene.load_step_scene(Path("/nonexistent/part.step"))
-        self.assertIn("load_step_scene", str(caught.exception))
+            step_scene.read_scene(Path("/nonexistent/part.step"))
+        self.assertIn("read_scene", str(caught.exception))
 
 
 class DiscoveredInputRecordingTests(unittest.TestCase):

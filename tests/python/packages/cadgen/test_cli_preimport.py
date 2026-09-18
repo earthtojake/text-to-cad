@@ -91,7 +91,6 @@ assert not any(name.split(".")[0] in {"build123d", "OCP", "cadquery"} for name i
             {
                 "step build",
                 "step compile",
-                "step inspect",
                 "stl build",
                 "3mf build",
                 "glb build",

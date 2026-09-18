@@ -1,17 +1,7 @@
-"""A door's FIRST look at a new document compiles it and answers -- in one call.
+"""The first Python read compiles missing document bytes and answers in one call.
 
-The tom-cad migration found that `cadgen step inspect refs X.step` on a document
-whose bytes had no tree failed once ("Build finished but no tree exists", with a
-"regenerate" instruction) and succeeded on the second call. The door resolved
-the tree's view path BEFORE compiling -- from a lookup that answered "no tree" --
-and then checked that placeholder after the compile. It also told the user to
-run something, which a door never does (STORE.md §9: doors never refuse).
-
-Real CLIs, real transient builds, a temp store: the only way to see the first
-call as the user does. The same fixture pins the run result's shape: `kind` is
-read off the tree (a linked assembly says so even when its return was inferred
-as a part) and no source grammar (`sourceRef`, `cadPath`) rides beside
-`document` and `tree`.
+Use real subprocess scripts and an isolated cache, including a linked
+assembly and a malformed document. No source discovery or rendering is needed.
 """
 
 from __future__ import annotations
@@ -90,115 +80,78 @@ class DoorFirstCall(unittest.TestCase):
     def tearDownClass(cls) -> None:
         cls._tmp.cleanup()
 
-    def test_the_first_inspect_of_a_new_document_compiles_it_and_answers(self) -> None:
-        # New BYTES (a header edit), so the store has no tree for this file yet.
+    def _read(self, path: str, *refs: str):
+        code = """
+import json, sys
+from cadgen import read_scene
+scene = read_scene(sys.argv[1])
+leaves = list(scene.leaves())
+print(json.dumps({
+    "hash": scene.document_hash,
+    "leaves": len(leaves),
+    "leaf_refs": [o.ref for o in leaves],
+    "faces": sum(len(list(o.entities("face"))) for o in leaves),
+    "refs": [scene.resolve(ref).ref for ref in sys.argv[2:]],
+}))
+"""
+        return _run("-c", code, path, *refs, cwd=self.root, cache=self.cache)
+
+    def test_the_first_read_of_new_document_bytes_compiles_and_answers(self) -> None:
         original = (self.root / "src" / "pin.step").read_text(encoding="utf-8")
         copy = self.root / "src" / "pin_copy.step"
-        copy.write_text(original.replace("Open CASCADE Model", "Open CASCADE Model X", 1), encoding="utf-8")
-
-        # A RELATIVE path, from the project root (on macOS a temp dir sits under the
-        # /tmp -> /private/tmp symlink): the path is resolved once at the door.
-        result = _run(
-            "-m", "cadgen.cli", "step", "inspect", "refs", "src/pin_copy.step", "--facts",
-            cwd=self.root, cache=self.cache,
-        )
+        replaced = original.replace("HEADER;", "HEADER;\n/* fresh document bytes */", 1)
+        self.assertNotEqual(original, replaced)
+        copy.write_text(replaced, encoding="utf-8")
+        result = self._read("src/pin_copy.step", "#f1")
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
         payload = json.loads(result.stdout.strip())
-        self.assertTrue(payload["ok"], payload)
-        token = payload["tokens"][0]
-        self.assertEqual("src/pin_copy.step", token["document"])
-        self.assertEqual("part", token["summary"]["kind"])
-        self.assertEqual(1, token["summary"]["occurrenceCount"])
-        self.assertEqual([], payload.get("errors", []))
-        self.assertNotIn("regenerateCommand", json.dumps(payload))
-        self.assertNotIn("Regenerate", json.dumps(payload))
+        self.assertEqual(payload["leaves"], 1)
+        self.assertEqual(payload["faces"], 3)
+        self.assertEqual(payload["refs"], [payload["leaf_refs"][0] + ".f1"])
+        import hashlib
+        self.assertEqual(payload["hash"], hashlib.sha256(copy.read_bytes()).hexdigest())
 
-    def test_the_run_result_reads_kind_off_the_tree_and_carries_no_source_grammar(self) -> None:
+    def test_the_run_result_reads_kind_off_tree_without_source_grammar(self) -> None:
         pin, arm = self.runs["pin"], self.runs["arm"]
         self.assertEqual("part", pin["kind"])
-        # arm's return is a Compound the static inference cannot see through; the
-        # tree has two links, so the run says assembly -- the same answer inspect gives.
         self.assertEqual("assembly", arm["kind"])
         for payload in (pin, arm):
             self.assertEqual({"ok", "kind", "outcome", "document", "tree"}, set(payload))
 
-    def test_inspect_and_the_run_agree_on_kind(self) -> None:
-        result = _run(
-            "-m", "cadgen.cli", "step", "inspect", "refs", "src/arm.step", "--facts",
-            cwd=self.root, cache=self.cache,
-        )
+    def test_linked_assembly_round_trips_its_occurrences(self) -> None:
+        result = self._read("src/arm.step")
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
         payload = json.loads(result.stdout.strip())
-        self.assertEqual(self.runs["arm"]["kind"], payload["tokens"][0]["summary"]["kind"])
+        self.assertEqual(payload["leaves"], 3)
+        self.assertEqual(payload["faces"], 12)
 
-    def test_a_document_is_read_without_opening_the_scripts_beside_it(self) -> None:
-        # A door is a reader. It used to scan every .py beside the document to learn
-        # which script wrote it, so one unrelated script with a non-literal out= --
-        # a real authoring mistake -- failed the inspection of a finished document.
+    def test_document_is_read_without_discovering_adjacent_scripts(self) -> None:
         broken = self.root / "src" / "broken.py"
-        broken.write_text(
-            textwrap.dedent(
-                """
-                from cadgen import step
-                from cadgen import build123d as bd
-                NAME = "broken"
-
-
-                @step(out=NAME + ".step")
-                def broken():
-                    return bd.Box(1, 1, 1)
-
-
-                if __name__ == "__main__":
-                    broken()
-                """
-            ).lstrip(),
-            encoding="utf-8",
-        )
+        broken.write_text("raise AssertionError('must never execute')\n", encoding="utf-8")
         try:
-            result = _run(
-                "-m", "cadgen.cli", "step", "inspect", "refs", "src/pin.step", "--facts",
-                cwd=self.root, cache=self.cache,
-            )
+            result = self._read("src/pin.step")
         finally:
             broken.unlink()
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
         self.assertNotIn("broken.py", result.stderr)
-        self.assertTrue(json.loads(result.stdout.strip())["ok"])
+        self.assertEqual(json.loads(result.stdout)["leaves"], 1)
 
-    def test_a_part_resolves_bare_face_and_edge_refs_and_counts_its_faces(self) -> None:
-        # A part's selector tables live in its one component like any tree's; the
-        # composition step used to skip parts, leaving `#f1` unresolvable and the
-        # facts counting zero faces on a cylinder.
-        facts = _run(
-            "-m", "cadgen.cli", "step", "inspect", "refs", "src/pin.step", "--facts",
-            cwd=self.root, cache=self.cache,
-        )
-        self.assertEqual(0, facts.returncode, facts.stdout + facts.stderr)
-        summary = json.loads(facts.stdout.strip())["tokens"][0]["summary"]
-        self.assertEqual(3, summary["faceCount"], summary)
-        self.assertEqual(1, summary["leafOccurrenceCount"], summary)
-        for ref in ("src/pin.step#f1", "src/pin.step#e1", "src/pin.step#o1"):
-            result = _run("-m", "cadgen.cli", "step", "inspect", "refs", ref, cwd=self.root, cache=self.cache)
-            payload = json.loads(result.stdout.strip())
-            self.assertEqual("resolved", payload["tokens"][0]["selections"][0]["status"], (ref, payload))
+    def test_part_resolves_bare_and_file_prefixed_entity_refs(self) -> None:
+        result = self._read("src/pin.step", "#f1", "src/pin.step#e1", "pin.step#o1")
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        payload = json.loads(result.stdout)
+        leaf = payload["leaf_refs"][0]
+        self.assertEqual(payload["refs"], [leaf + ".f1", leaf + ".e1", "#o1"])
 
-    def test_the_kernels_diagnostics_never_land_on_stdout(self) -> None:
-        # OCCT's readers print `**** ERR StepFile ...` to the C-level stdout. A CLI's
-        # stdout is its result; a malformed document must not corrupt it.
+    def test_kernel_diagnostics_do_not_corrupt_script_stdout(self) -> None:
         bad = self.root / "src" / "bad.step"
         bad.write_text("ISO-10303-21;\nHEADER;\nENDSEC;\nDATA;\nENDSEC;\nEND-ISO-10303-21;\n", encoding="utf-8")
         try:
-            result = _run(
-                "-m", "cadgen.cli", "step", "inspect", "refs", "src/bad.step", "--facts",
-                cwd=self.root, cache=self.cache,
-            )
+            result = self._read("src/bad.step")
         finally:
             bad.unlink()
-        self.assertNotIn("ERR StepFile", result.stdout, result.stdout)
-        for line in result.stdout.splitlines():
-            if line.strip():
-                self.assertTrue(line.startswith("{"), result.stdout)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "")
 
 
 if __name__ == "__main__":

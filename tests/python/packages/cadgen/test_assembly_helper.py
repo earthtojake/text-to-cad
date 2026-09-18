@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+import json
+import os
+from pathlib import Path
+import subprocess
 import sys
+import tempfile
+import textwrap
 import types
 import unittest
+import warnings
 from contextlib import contextmanager
 
 from cadgen.assembly import AssemblyHelper, MateTarget, label_shape, label_text, target
@@ -64,6 +71,26 @@ def fake_build123d():
 
 
 class AssemblyHelperTests(unittest.TestCase):
+    def setUp(self) -> None:
+        context = warnings.catch_warnings()
+        context.__enter__()
+        self.addCleanup(context.__exit__, None, None, None)
+        warnings.filterwarnings("ignore", message="AssemblyHelper is deprecated", category=FutureWarning)
+
+    def test_construction_warns_at_the_call_site_without_changing_behavior(self) -> None:
+        with warnings.catch_warnings(record=True) as caught, fake_build123d():
+            warnings.simplefilter("always", FutureWarning)
+            assembly = AssemblyHelper("legacy")
+            body = assembly.add(FakePart(), "body")
+            result = assembly.build()
+
+        self.assertEqual(result.children, (body,))
+        self.assertEqual(len(caught), 1)
+        self.assertIs(caught[0].category, FutureWarning)
+        self.assertEqual(Path(caught[0].filename).resolve(), Path(__file__).resolve())
+        self.assertIn("Compound(children=..., label=...)", str(caught[0].message))
+        self.assertIn("Location transforms or joints", str(caught[0].message))
+
     def test_label_text_normalizes_tokens(self) -> None:
         self.assertEqual(
             "base_plate:left_side",
@@ -185,6 +212,58 @@ class AssemblyHelperTests(unittest.TestCase):
         part = object()
 
         self.assertEqual(MateTarget(part, "axis"), target(part, "axis"))
+
+
+class AssemblyHelperBuildWarningTests(unittest.TestCase):
+    def test_legacy_model_warns_on_execution_and_stays_cached(self) -> None:
+        from tests.python.support.paths import repo_path
+
+        with tempfile.TemporaryDirectory(prefix="cadgen-legacy-assembly-") as directory:
+            root = Path(directory)
+            script = root / "legacy.py"
+            script.write_text(textwrap.dedent('''\
+                from cadgen import build123d as bd, step
+                from cadgen.assembly import AssemblyHelper
+
+                @step
+                def legacy():
+                    assembly = AssemblyHelper("legacy")
+                    assembly.add(bd.Box(4, 5, 6), "body")
+                    return assembly.build()
+
+                if __name__ == "__main__":
+                    legacy()
+                '''), encoding="utf-8")
+            environment = {
+                **os.environ,
+                "PYTHONPATH": str(repo_path("packages/cadgen/src")),
+                "CADGEN_DAEMON": "0",
+                "CADGEN_CACHE_DIR": str(root / "store"),
+            }
+
+            def run(*arguments: str) -> subprocess.CompletedProcess:
+                result = subprocess.run(
+                    [sys.executable, *arguments], cwd=root, env=environment,
+                    capture_output=True, text=True, timeout=120,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                return result
+
+            imported = run("-c", "from cadgen.assembly import AssemblyHelper")
+            self.assertEqual(imported.stderr, "")
+            first = run(str(script), "--json")
+            self.assertEqual(json.loads(first.stdout)["outcome"], "built")
+            self.assertIn("FutureWarning: AssemblyHelper is deprecated", first.stderr)
+            original = script.with_suffix(".step").read_bytes()
+
+            current = run(str(script), "--json")
+            self.assertEqual(json.loads(current.stdout)["outcome"], "current")
+            self.assertNotIn("AssemblyHelper is deprecated", current.stderr)
+
+            forced = run(str(script), "--force", "--json")
+            self.assertEqual(json.loads(forced.stdout)["outcome"], "built")
+            self.assertIn("FutureWarning: AssemblyHelper is deprecated", forced.stderr)
+            self.assertEqual(script.with_suffix(".step").read_bytes(), original)
 
 
 if __name__ == "__main__":

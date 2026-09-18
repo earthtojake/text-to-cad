@@ -146,6 +146,18 @@ it is the space (`{mates, couplings, poses, at}`); on CONSUMING surfaces
 (snapshot, mesh `build`) it is a point in that space (a preset name or
 `{dof: value}`). One name, one validator, no synonyms.
 
+Geometry queries are a Python library surface, separate from document-format
+verbs. `read_step(path)` returns build123d geometry; `read_scene(path)` returns
+revision-scoped occurrence/selector views with caller-owned world geometry.
+`cadgen.geometry` provides `closest_points`, `overlap_volume`,
+`topology_errors`, `boundary_edges`, `self_intersections` and `mass_properties`.
+These operations accept native geometry and return facts; selection, units,
+thresholds, exclusions and verdicts belong to the caller's script. The inspect
+CLI and `step.inspect` are removed, with an immediate migration error.
+The contracts live in [`step_scene.py`](src/cadgen/step_scene.py) and
+[`geometry.py`](src/cadgen/geometry.py). They import no kernel at namespace
+load and require no display artifacts.
+
 ### 7. Documents-only CLIs; scripts are programs
 
 `python model.py` is the one source door: it gates, builds, writes every
@@ -167,6 +179,12 @@ care, only the project's imports may.
 
 Hard cutovers only. Every retired surface fails loudly with a teaching
 error naming its replacement — never an alias, never a shim.
+
+The explicit exception is `cadgen.assembly.AssemblyHelper`: it is softly
+deprecated and still works. Construction emits a visible `FutureWarning`
+pointing to native build123d compounds, labels, transforms and joints.
+Importing it is quiet; a current model that skips its body emits no warning.
+This does not change geometry, model freshness or child sharing.
 
 ### 9. Closed vocabularies
 
@@ -279,7 +297,7 @@ src/cadgen/
   inputs.py              # declare_input: a data file the model reads and
                          #   cadgen has no reader for (a JSON atlas, a CSV
                          #   table) is a freshness input once it says so
-  assembly.py            # AssemblyHelper — positioning through native joints, labels
+  assembly.py            # label utilities and softly deprecated AssemblyHelper
   results.py             # the typed Results every verb returns (stdlib-only)
   store/                 # the store (STORE.md): objects, index, records, trees,
                          #   closure, gate, materialize, publish, lazy, gc, view
@@ -303,7 +321,7 @@ src/cadgen/
                          #   wheel is packaged, never committed, never edited
 ```
 
-Verbs by format: `step` compile · build · snapshot · inspect;
+Verbs by format: `step` compile · build · snapshot;
 `stl`/`3mf`/`glb` build · snapshot; `dxf` snapshot; `urdf`/`sdf`
 validate · snapshot; `srdf` validate. `cadgen snapshot` routes any suffix.
 `cadgen store|daemon|doctor` are status commands, and `cadgen viewer

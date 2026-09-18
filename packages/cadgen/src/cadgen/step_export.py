@@ -241,6 +241,8 @@ def _create_bin_xcaf_doc(to_export: Any) -> Any:
         except Exception:  # noqa: BLE001 - OCP Located() can raise on unusual shapes; keep the unlocated shape
             return wrapped
 
+    root_location = shape_location(to_export)
+
     def shape_definition_for_tree(shape: object) -> object:
         key = id(shape)
         cached = shape_definitions.get(key)
@@ -255,10 +257,16 @@ def _create_bin_xcaf_doc(to_export: Any) -> Any:
             set_label_color(definition_label, getattr(shape, "color", None))
             for child in children:
                 child_definition = shape_definition_for_tree(child)
+                child_location = shape_location(child)
+                if shape is to_export and not root_location.IsIdentity():
+                    # A free assembly definition has no instance placement.
+                    # Carry its frame into the immediate child instances;
+                    # adding a placed root reference would add a STEP group.
+                    child_location = root_location.Multiplied(child_location)
                 child_component = shape_tool.AddComponent(
                     definition_label,
                     child_definition,
-                    shape_location(child),
+                    child_location,
                 )
                 set_label_name(child_component, getattr(child, "label", None))
                 set_label_color(child_component, getattr(child, "color", None))
@@ -579,13 +587,19 @@ def _style_tail_scan(model: Any) -> _StyleTailScan | None:
     return scan
 
 
-def _style_tail_order(scan: _StyleTailScan, targets: dict[int, list[int]]) -> list[int] | None:
+def _style_tail_order(
+    scan: _StyleTailScan,
+    targets: dict[int, list[int]],
+    contexts: dict[int, int] | None = None,
+) -> list[int] | None:
     """The canonical order of the tail, as OLD entity numbers: ``result[i]`` is
     the entity that must end up numbered ``tail_start + i``.
 
     MDGPR blocks sort by the styled targets they reference (``targets[m]``: the
     head-entity numbers the block's styled items point at, which ARE stable),
-    ties broken by the MDGPR's own number; each closure is laid out in
+    ties broken by the stable presentation-context number. Definition and
+    occurrence styles can target the same geometry in different contexts;
+    their original tail numbers depend on heap order. Each closure is laid out in
     field-order DFS, the order AddWithRefs traverses, so a closure's internal
     layout is reproduced exactly. Entities shared between closures (deduplicated
     colours) land with the first canonical owner. None when the closures do not
@@ -603,7 +617,11 @@ def _style_tail_order(scan: _StyleTailScan, targets: dict[int, list[int]]) -> li
         for child in children[number]:
             visit(child)
 
-    for mdgpr_num in sorted(scan.mdgpr_nums, key=lambda m: (tuple(sorted(targets[m])), m)):
+    # The scan's coverage-only probe needs no ordering keys; both real
+    # appliers supply contexts verified to refer to the stable model head.
+    for mdgpr_num in sorted(scan.mdgpr_nums, key=lambda m: (
+        tuple(sorted(targets[m])), contexts[m] if contexts is not None else 0, m,
+    )):
         visit(mdgpr_num)
     if len(desired) != scan.size:
         return None
@@ -627,14 +645,19 @@ def _style_tail_plan(model: Any) -> tuple[int, int, list[int]] | None:
     entities = [None] + [model.Entity(index) for index in range(1, scan.total + 1)]
     number_of = {id(ent): index for index, ent in enumerate(entities[1:], start=1)}
     targets: dict[int, list[int]] = {}
+    contexts: dict[int, int] = {}
     for mdgpr_num, items in scan.styled_items.items():
+        context_num = number_of.get(id(entities[mdgpr_num].ContextOfItems()))
+        if context_num is None or not 0 < context_num < scan.tail_start:
+            return None
+        contexts[mdgpr_num] = context_num
         block: list[int] = []
         for _tail_number, item in items:
             target_num = number_of.get(id(item.Item()))
             if target_num is not None and target_num < scan.tail_start:
                 block.append(target_num)
         targets[mdgpr_num] = block
-    old_numbers = _style_tail_order(scan, targets)
+    old_numbers = _style_tail_order(scan, targets, contexts)
     if old_numbers is None:
         return None
     return scan.tail_start, scan.total, old_numbers
@@ -862,7 +885,13 @@ def _canonicalize_style_tail_in_file(path: Path, scan: _StyleTailScan) -> bool:
     bounds = [m.start() for m in headers] + [end_marker + 1]
     records = {int(headers[i].group(1)): suffix[bounds[i]:bounds[i + 1]] for i in range(size)}
     targets: dict[int, list[int]] = {}
+    contexts: dict[int, int] = {}
     for mdgpr_num, items in scan.styled_items.items():
+        fields = _step_record_fields(records[mdgpr_num])
+        context_ref = re.fullmatch(rb"#(\d+)", fields[2]) if len(fields) == 3 else None
+        if context_ref is None or not 0 < int(context_ref.group(1)) < tail_start:
+            return False
+        contexts[mdgpr_num] = int(context_ref.group(1))
         block: list[int] = []
         for tail_number, _item in items:
             target_num = _styled_item_target(records[tail_number])
@@ -871,7 +900,7 @@ def _canonicalize_style_tail_in_file(path: Path, scan: _StyleTailScan) -> bool:
             if target_num is not None and 0 < target_num < tail_start:
                 block.append(target_num)
         targets[mdgpr_num] = block
-    old_numbers = _style_tail_order(scan, targets)
+    old_numbers = _style_tail_order(scan, targets, contexts)
     if old_numbers is None:
         return False
     canonical = _apply_style_tail_plan_in_text(suffix, tail_start, old_numbers)

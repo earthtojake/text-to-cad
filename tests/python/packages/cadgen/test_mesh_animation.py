@@ -313,10 +313,8 @@ class WhatCannotCarryAClip(unittest.TestCase):
         self.assertIn("stl carries no animation", str(caught.exception))
 
     def test_an_animated_export_requires_an_out_path(self):
-        # With no OUT a mesh door writes the model's DECLARED @glb, which is its
-        # static output at a committed path. An animated file there is a
-        # different artifact -- one node per occurrence, opening at the clip's
-        # first frame -- sitting dirty in the tree until the next script run.
+        # No OUT is reserved for the static sibling export. A clip changes the
+        # artifact's structure and initial pose, so it needs an explicit path.
         with self.assertRaises(ValueError) as caught:
             mesh_build(
                 "glb", self.document, None,
@@ -325,7 +323,7 @@ class WhatCannotCarryAClip(unittest.TestCase):
             )
         self.assertIn("an animated export is ad hoc: name an OUT path", str(caught.exception))
 
-    def test_the_engine_refuses_an_animated_declaration_too(self):
+    def test_the_engine_requires_an_explicit_animated_output_too(self):
         from cadgen.step_export_target import export_cad_target
 
         with self.assertRaises(ValueError) as caught:

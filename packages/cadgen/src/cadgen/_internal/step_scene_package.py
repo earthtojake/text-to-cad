@@ -19,6 +19,7 @@ import json
 import os
 import sys
 import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -36,6 +37,28 @@ _IDENTITY_TRANSFORM = (
     0.0, 0.0, 1.0, 0.0,
     0.0, 0.0, 0.0, 1.0,
 )
+
+
+class _LazyShapes(Mapping):
+    """Scene-owned prototypes decoded on demand from a captured byte closure."""
+
+    def __init__(self, entries):
+        self._entries = entries
+        self._decoded = {}
+
+    def __iter__(self):
+        return iter(self._entries)
+
+    def __len__(self):
+        return len(self._entries)
+
+    def __getitem__(self, key):
+        if key not in self._decoded:
+            from cadgen._internal.component_package import decode_geometry_component
+
+            entry, payload = self._entries[key]
+            self._decoded[key] = decode_geometry_component(entry, payload).wrapped
+        return self._decoded[key]
 
 
 def _face_colors_from_recipe(recipe: dict, shape: Any) -> dict[int, ColorRGBA]:
@@ -112,7 +135,7 @@ class _DocumentReadback:
         return self.tree_hash
 
 
-def _lookup_document_readback(step_path: Path, *, step_hash: str) -> tuple[_DocumentReadback | None, bool]:
+def _lookup_document_readback(step_path: Path, *, step_hash: str, lazy: bool = False) -> tuple[_DocumentReadback | None, bool]:
     """Return a private canonical scene and whether an indexed closure failed.
 
     Only the current document-byte index participates. A missing index is an
@@ -128,7 +151,7 @@ def _lookup_document_readback(step_path: Path, *, step_hash: str) -> tuple[_Docu
     if not tree:
         return None, False
     try:
-        readback = _readback_from_document_tree(step_path, step_hash=step_hash, tree_hash=tree)
+        readback = _readback_from_document_tree(step_path, step_hash=step_hash, tree_hash=tree, lazy=lazy)
     except NativeUnavailable:
         # A valid eager-only component promises display, not a native codec.
         # Saved-document readers still have its exact bytes and may parse them.
@@ -142,9 +165,9 @@ def _lookup_document_readback(step_path: Path, *, step_hash: str) -> tuple[_Docu
     return readback, readback is None
 
 
-def lookup_document_scene(step_path: Path, *, step_hash: str) -> tuple[LoadedStepScene | None, bool]:
+def lookup_document_scene(step_path: Path, *, step_hash: str, lazy: bool = False) -> tuple[LoadedStepScene | None, bool]:
     """Return private geometry alone; a public scene carries no reuse authority."""
-    readback, damaged = _lookup_document_readback(step_path, step_hash=step_hash)
+    readback, damaged = _lookup_document_readback(step_path, step_hash=step_hash, lazy=lazy)
     return (readback.scene if readback is not None else None), damaged
 
 
@@ -158,7 +181,7 @@ def _scene_from_document_tree(step_path: Path, *, step_hash: str, tree_hash: str
     return readback.scene if readback is not None else None
 
 
-def _readback_from_document_tree(step_path: Path, *, step_hash: str, tree_hash: str) -> _DocumentReadback | None:
+def _readback_from_document_tree(step_path: Path, *, step_hash: str, tree_hash: str, lazy: bool = False) -> _DocumentReadback | None:
     from cadgen._internal.component_package import decode_geometry_component
     from cadgen.store.trees import TREE_KIND, capture_tree, _validate_structure
 
@@ -193,21 +216,31 @@ def _readback_from_document_tree(step_path: Path, *, step_hash: str, tree_hash: 
     prototype_colors: dict[int, ColorRGBA] = {}
     prototype_face_colors: dict[int, dict[int, ColorRGBA]] = {}
     key_by_cid: dict[str, int] = {}
+    lazy_entries = {}
     for cid, entry in components.items():
         if not isinstance(entry, dict):
             return None
         # Each CID gets fresh topology, even when color variants share one
         # immutable BREP object. Nothing native survives this invocation.
-        shape = decode_geometry_component(entry, captured[entry["brep"]]).wrapped
-        key = _shape_hash(shape)
+        if lazy:
+            from cadgen._internal.component_package import NativeUnavailable
+
+            if entry["kind"] == "eager-only":
+                raise NativeUnavailable("eager-only component requires a native STEP parse")
+            key = len(key_by_cid) + 1
+            lazy_entries[key] = (entry, captured[entry["brep"]])
+        else:
+            shape = decode_geometry_component(entry, captured[entry["brep"]]).wrapped
+            key = _shape_hash(shape)
+            prototype_shapes[key] = shape
         key_by_cid[str(cid)] = key
-        prototype_shapes[key] = shape
         color = entry.get("color")
         if isinstance(color, list) and len(color) == 4:
             prototype_colors[key] = tuple(float(c) for c in color)
-        face_colors = _face_colors_from_recipe(entry["faceColors"], shape)
-        if face_colors:
-            prototype_face_colors[key] = face_colors
+        if not lazy:
+            face_colors = _face_colors_from_recipe(entry["faceColors"], shape)
+            if face_colors:
+                prototype_face_colors[key] = face_colors
 
     occurrence_by_id: dict[str, dict[str, Any]] = {
         str(occ.get("id")): occ for occ in occurrences if isinstance(occ, dict)
@@ -274,7 +307,7 @@ def _readback_from_document_tree(step_path: Path, *, step_hash: str, tree_hash: 
     scene = LoadedStepScene(
         step_path=step_path,
         roots=roots,
-        prototype_shapes=prototype_shapes,
+        prototype_shapes=_LazyShapes(lazy_entries) if lazy else prototype_shapes,
         prototype_names=prototype_names,
         prototype_colors=prototype_colors,
         prototype_face_colors=prototype_face_colors,
@@ -329,10 +362,11 @@ def _record_consumed_hash(step_path: Path, step_hash: str) -> None:
     note_consumed_file_hash(step_path, step_hash)
 
 
-def load_step_scene_cached(step_path: Path) -> LoadedStepScene:
+def load_step_scene_cached(step_path: Path, *, lazy: bool = False) -> LoadedStepScene:
     """Load a STEP scene through its document-addressed canonical tree.
 
-    A hit reconstructs binary BREP objects.  A miss submits the ordinary
+    A hit reconstructs binary BREP objects (on demand when ``lazy=True``).
+    The lazy scene retains its verified immutable byte closure. A miss submits the ordinary
     document compile job, yields any parent build slot while waiting, and then
     reconstructs that same representation.  The caller never returns the
     mutable scene used to publish the tree.
@@ -347,7 +381,7 @@ def load_step_scene_cached(step_path: Path) -> LoadedStepScene:
     while True:
         payload = resolved_step_path.read_bytes()
         step_hash = hashlib.sha256(payload).hexdigest()
-        from_package, damaged_document = lookup_document_scene(resolved_step_path, step_hash=step_hash)
+        from_package, damaged_document = lookup_document_scene(resolved_step_path, step_hash=step_hash, lazy=lazy)
         if from_package is not None:
             _record_consumed_hash(resolved_step_path, step_hash)
             return from_package
@@ -374,7 +408,7 @@ def load_step_scene_cached(step_path: Path) -> LoadedStepScene:
             reason, _error_type = failure_message(detail)
             suffix = f": {reason}" if reason else ""
             raise RuntimeError(f"Could not compile STEP cache for {resolved_step_path}{suffix}")
-        from_package = scene_from_render_package(resolved_step_path, step_hash=step_hash)
+        from_package, _ = lookup_document_scene(resolved_step_path, step_hash=step_hash, lazy=lazy)
         if from_package is not None:
             _record_consumed_hash(resolved_step_path, step_hash)
             return from_package

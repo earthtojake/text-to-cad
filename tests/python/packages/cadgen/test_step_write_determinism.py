@@ -82,6 +82,47 @@ def _build_assembly(*, transparent_part: bool = False):
 
 
 class StepWriteDeterminismTest(unittest.TestCase):
+    def test_presentation_context_breaks_equal_geometry_target_ties(self) -> None:
+        from cadgen.step_export import _StyleTailScan, _style_tail_order
+
+        scan = _StyleTailScan(400, 401, {400: [], 401: []}, [400, 401], {})
+        targets = {400: [60, 60], 401: [60, 60]}
+        self.assertEqual(_style_tail_order(scan, targets, {400: 41, 401: 390}), [400, 401])
+        # The same two blocks registered in the opposite heap order.
+        self.assertEqual(_style_tail_order(scan, targets, {400: 390, 401: 41}), [401, 400])
+
+    def test_colored_root_with_shared_geometry_is_deterministic_in_both_appliers(self) -> None:
+        import build123d as bd
+        from cadgen._internal.step_scene_loader import load_step_scene
+        from cadgen._internal.step_scene_mesh import scene_leaf_occurrences
+        from cadgen.step_export import export_build123d_step_file
+
+        with tempfile.TemporaryDirectory(prefix="step-context-ties-") as tmp:
+            digests = set()
+            for applier in ("text", "model"):
+                with mock.patch.dict(os.environ, {"CADGEN_STEP_STYLE_REORDER": applier}):
+                    for run in range(4):
+                        leaf = bd.Solid.make_box(2, 3, 4)
+                        leaf.label, leaf.color = "leaf", bd.Color("red")
+                        sibling = bd.Pos(0, 8, 0) * leaf
+                        sibling.label, sibling.color = "sibling", bd.Color("blue")
+                        group = bd.Pos(7, 11, 13) * bd.Rot(0, 90, 0) * bd.Compound(
+                            children=[leaf, sibling], label="nested",
+                        )
+                        root = bd.Pos(40, 50, 60) * bd.Rot(17, 29, 83) * bd.Compound(
+                            children=[group], label="root",
+                        )
+                        root.color = bd.Color("green")
+                        path = Path(tmp) / f"{applier}-{run}.step"
+                        export_build123d_step_file(root, path)
+                        digests.add(hashlib.sha256(path.read_bytes()).hexdigest())
+                        scene = load_step_scene(path, record_read=False)
+                        self.assertEqual(
+                            [(node.name, node.color) for node in scene_leaf_occurrences(scene)],
+                            [("leaf", (1.0, 0.0, 0.0, 1.0)), ("sibling", (0.0, 0.0, 1.0, 1.0))],
+                        )
+            self.assertEqual(len(digests), 1)
+
     def test_repeated_fresh_builds_write_identical_bytes(self) -> None:
         from cadgen.step_export import export_build123d_step_file
 
@@ -203,8 +244,8 @@ class StepWriteDeterminismTest(unittest.TestCase):
             orders: list = []
             original = step_export._style_tail_order
 
-            def capture(scan, targets):
-                order = original(scan, targets)
+            def capture(scan, targets, contexts=None):
+                order = original(scan, targets, contexts)
                 orders.append((scan, targets, order))
                 return order
 
