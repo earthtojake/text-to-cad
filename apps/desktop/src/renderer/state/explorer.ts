@@ -788,6 +788,21 @@ export function getDrawingTab(tabId: string, projectId: string): DrawingTab | nu
   return tab?.kind === "drawing" ? tab : null;
 }
 
+/** Rename an in-memory drawing, including one retained in another project. */
+export function renameDrawingTab(tabId: string, projectId: string, title: string): void {
+  const name = title.trim();
+  if (!name || name.length > 200) throw new Error("Use a drawing name between 1 and 200 characters.");
+  if (!getDrawingTab(tabId, projectId)) throw new Error("This drawing is closed.");
+  const state = useExplorer.getState();
+  if (state.projectId === projectId) state.update(tabId, { title: name });
+  else {
+    const retained = projectDrawings.get(projectId)!;
+    projectDrawings.set(projectId, { ...retained, tabs: retained.tabs.map(tab => tab.id === tabId ? { ...tab, title: name } : tab) });
+    const strip = retainedStrips.get(projectId);
+    if (strip) retainedStrips.set(projectId, { ...strip, tabs: strip.tabs.map(tab => tab.id === tabId ? { ...tab, title: name } : tab) });
+  }
+}
+
 /** One root's tree: its open folders and listings, or the empty tree. */
 export function useTree(root: ExplorerRoot): TreeState {
   return useExplorer((state) => state.trees[treeKey(root)] ?? EMPTY_TREE);

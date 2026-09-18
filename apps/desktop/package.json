@@ -39,6 +39,7 @@
     "execa": "10.0.1",
     "ignore": "5.3.2",
     "node-pty": "1.1.0",
+    "ws": "8.18.3",
     "zod": "4.5.4"
   },
   "devDependencies": {
@@ -114,6 +115,8 @@
     "vite": "7.3.6",
     "vitest": "5.0.0",
     "zustand": "5.0.15",
-    "@hardcore/ui": "*"
+    "@hardcore/ui": "*",
+    "@types/ws": "8.18.1",
+    "@playwright/mcp": "0.0.81"
   }
 }

@@ -5,7 +5,7 @@ import { selectRenderer } from "@hardcore/ui/file-viewer";
 import { createDesktopRenderers } from "@renderer/features/explorer/renderers";
 import type { IntegrationCommand } from "@shared/ipc/integrations";
 import type { ExplorerTab } from "@shared/types";
-import { readProjectStrip, tabTitle, useExplorer } from "./explorer";
+import { readProjectStrip, renameDrawingTab, tabTitle, useExplorer } from "./explorer";
 import { getDrawingScene } from "./drawings";
 import { useProjects } from "./projects";
 import { useSessions } from "./sessions";
@@ -135,6 +135,13 @@ export async function performIntegrationCommand(command: IntegrationCommand, sig
       const tab = useExplorer.getState().open("drawing", { root: scope.root, title: command.title ?? "Drawing" });
       if (!tab) throw new Error("the explorer could not open a drawing tab");
       return { tabId: tab.id, title: tabTitle(tab), root: scope.root, ephemeral: true };
+    }
+    case "drawing-rename": {
+      const tab = await scopedTab(command, signal);
+      signal?.throwIfAborted();
+      if (tab.kind !== "drawing") throw new Error("this is not a drawing tab");
+      renameDrawingTab(tab.id, tab.projectId, command.title ?? "");
+      return { tabId: tab.id, title: command.title!.trim(), root: tab.root };
     }
     case "drawing-state":
     case "drawing-capture": {

@@ -30,6 +30,12 @@ available; pasted elements pass bounded scene validation.
 
 Controls use the host's system font and 13px UI token, neutral colors, compact
 28px buttons and 12px canvas-edge padding. Drawn text keeps its selected font.
+Persistent controls stay at the top in desktop and narrow layouts. Pan joins the
+drawing tools; lock is hidden. Narrow layouts place menu/style/undo controls in a
+compact second row, with selected-shape properties opening beneath it. These
+styles depend on Excalidraw's pinned DOM; verify both layouts when upgrading.
+Drawing names belong to the host, which updates the editor name and prompt
+attachment title without recreating the scene or persisting it.
 
 ```tsx
 import { DrawingEditor } from '@hardcore/ui/drawing';

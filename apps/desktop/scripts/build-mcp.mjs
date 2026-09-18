@@ -6,8 +6,9 @@
  * `apps/desktop/node_modules`. The agent that spawns the server in a packaged
  * app runs it by absolute path from beside the asar (electron-builder.yml
  * unpacks `out/hardcore-mcp/**`), where there is no `node_modules` to resolve
- * anything from — so this writes one self-contained ESM file to
- * `out/hardcore-mcp/server.mjs`, plus a `VERSION` the server reports to the
+ * anything from — so this writes an app bridge ESM bundle to
+ * `out/hardcore-mcp/server.mjs`, upstream Playwright packages beside it,
+ * plus a `VERSION` the server reports to the
  * agent. `src/main/cad/index.ts` points at the source in a checkout and at
  * the bundle when packaged.
  *
@@ -18,6 +19,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 
 import { build } from "esbuild";
 
@@ -34,6 +36,7 @@ export async function buildMcpServer({ out = path.join(appRoot, "out", "hardcore
     platform: "node",
     format: "esm",
     target: "node22",
+    external: ["@playwright/mcp"],
     // `import.meta.url` is how the server finds its VERSION and decides it is
     // the entry point; both hold for the bundle too.
     banner: {
@@ -41,6 +44,15 @@ export async function buildMcpServer({ out = path.join(appRoot, "out", "hardcore
     },
     logLevel: "warning",
   });
+  // Upstream Playwright ships runtime assets and dynamic imports. Preserve its
+  // package layout alongside the stdio entry instead of bundling its internals.
+  const require = createRequire(import.meta.url);
+  for (const name of ["@playwright/mcp", "playwright", "playwright-core"]) {
+    const manifest = require.resolve(`${name}/package.json`, { paths: [path.dirname(require.resolve("@playwright/mcp"))] });
+    const destination = path.join(out, "node_modules", name);
+    fs.rmSync(destination, { recursive: true, force: true });
+    fs.cpSync(path.dirname(manifest), destination, { recursive: true, dereference: true, filter: source => source === path.dirname(manifest) || !path.relative(path.dirname(manifest), source).split(path.sep).includes("node_modules") });
+  }
   fs.writeFileSync(path.join(out, "VERSION"), `${version}\n`);
   return { out, version };
 }

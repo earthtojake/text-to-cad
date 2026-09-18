@@ -8,7 +8,7 @@ import terminals from "./terminals/module.mjs";
 import drawings from "./drawings/module.mjs";
 
 /**
- * @typedef {{ id: string, description: string, skills: string[], tools: Array<{name: string, description: string, inputSchema: import('zod').ZodType<Record<string, unknown>>, output: string}>, rendererCommands?: Record<string, string> }} Integration
+ * @typedef {{ id: string, description: string, skills: string[], tools: Array<{name: string, description: string, inputSchema: import('zod').ZodType<Record<string, unknown>>, output: string}>, hostTools?: Array<{name: string, description: string, inputSchema: import('zod').ZodType<Record<string, unknown>>, output: string}>, runtime?: string, rendererCommands?: Record<string, string> }} Integration
  */
 /** @param {Integration[]} entries */
 export function defineIntegrations(entries) {
@@ -16,7 +16,7 @@ export function defineIntegrations(entries) {
   for (const entry of entries) {
     if (!/^[a-z][a-z-]*$/.test(entry.id) || ids.has(entry.id)) throw new Error(`Duplicate or invalid integration: ${entry.id}`);
     ids.add(entry.id);
-    for (const tool of entry.tools) {
+    for (const tool of [...entry.tools, ...(entry.hostTools ?? [])]) {
       if (methods.has(tool.name)) throw new Error(`Duplicate integration method: ${tool.name}`);
       if (!tool.inputSchema?.safeParse || !tool.description) throw new Error(`Invalid tool contract: ${tool.name}`);
       methods.add(tool.name);
@@ -32,7 +32,7 @@ export function integrationById(id) {
 }
 export function toolByName(name) {
   for (const integration of integrations) {
-    const tool = integration.tools.find(tool => tool.name === name);
+    const tool = [...integration.tools, ...(integration.hostTools ?? [])].find(tool => tool.name === name);
     if (tool) return { integration, tool };
   }
   return null;

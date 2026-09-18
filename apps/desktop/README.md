@@ -878,10 +878,13 @@ pending snapshot immediately; returning waits for that project's in-flight
 saves before restoring its tabs. Other projects load independently, and a late
 response from an earlier visit cannot overwrite the current strip.
 
-### Temporary drawings
+### Drawings
 
 Choose **Drawing** from `+` (or ⇧⌘D / Ctrl+Shift+D) for a light Excalidraw
-sketchpad. Freehand, shapes, arrows and text become visual prompt context with
+sketchpad. Edit the name in the drawing header; agents can supply a name on open
+or rename an existing sketch. Names remain in memory alongside the scene. Pan
+and drawing tools share the top toolbar, with menu/style/undo controls directly
+below in narrow panes; the lock control is hidden. Freehand, shapes, arrows and text become visual prompt context with
 **Add to prompt**. This appends a PNG and sketch description to the current
 draft, preserving existing text and never submitting it. The destination is
 bound before image encoding, so switching chats cannot redirect the result.
@@ -892,7 +895,7 @@ closing the tab, removing the project, reloading or exiting discards them.
 An image already added to a draft or transcript is a separate copy. This
 scratch surface has no file import/export, autosave, Mermaid insertion, image
 embedding or scene-editing MCP tool. The `drawings` integration provides
-`open_drawing({title?})`, `drawing_state({tabId})` and
+`open_drawing({title?})`, `rename_drawing({tabId,title})`, `drawing_state({tabId})` and
 `capture_drawing({tabId})`. Opening a saved `.excalidraw` as a regular file
 continues to show its source text.
 
@@ -1208,7 +1211,9 @@ These are discovery options, not a requirement to load every skill on a turn.
 `hardcore-terminals` and `hardcore-drawings` entries. Each runs the shared
 `resources/hardcore-mcp/server.mjs` executable with its domain selected in the
 environment, using this app's Electron binary as Node. Packaging bundles it
-in `out/hardcore-mcp/`. Each session/domain gets a different token, restricted
+in `out/hardcore-mcp/`, including Playwright's upstream packages/runtime assets.
+The browser entry bootstraps a scoped native connection and runs Playwright MCP;
+other domains register their app-owned tools from the registry. Each session/domain gets a different token, restricted
 to that integration's registered methods; a domain's tool does not acquire
 another domain's capabilities. The stdio entries omit `type`, because the ACP
 adapters otherwise interpret them as HTTP/SSE.
@@ -1564,8 +1569,10 @@ lands in the same place a click would.
 
 Browser tabs borrow persistent native pages owned by the browser domain. UI and
 agent tools share the same Chromium target, partitioned by project and root.
-The [browser guide](docs/browser.md) documents lifecycle, the pinned MIT Browser
-Use control runtime, supported operations, packaging and validation.
+The [browser guide](docs/browser.md) documents the pinned Playwright MCP runtime,
+scoped native CDP adapter, compact responses, supported operations, packaging and
+validation. The upstream package owns browser tools; Hardcore owns native pages
+and their tabs. No second browser is installed.
 
 ## Shared package integration
 

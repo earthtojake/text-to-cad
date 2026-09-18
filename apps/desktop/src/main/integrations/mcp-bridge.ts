@@ -25,7 +25,7 @@ export type BridgeSession = { sessionId: string; projectId: string; cwd: string 
 export type BridgeActions = Record<string, (session: BridgeSession, params: Record<string, unknown>, signal?: AbortSignal) => Promise<unknown>>;
 export type BridgeMethod = string;
 import { integrations, integrationById, toolByName } from "./registry.mjs";
-export const BRIDGE_METHODS: readonly string[] = integrations.flatMap(entry => entry.tools.map(tool => tool.name));
+export const BRIDGE_METHODS: readonly string[] = integrations.flatMap(entry => [...entry.tools, ...(entry.hostTools ?? [])].map(tool => tool.name));
 
 /** The environment the MCP server reads. One place, shared with server.mjs by name. */
 export const BRIDGE_ENV = {
@@ -47,6 +47,7 @@ export class McpBridge {
   constructor(
     private readonly actions: BridgeActions,
     private readonly serverScript: () => { command: string; args: string[]; env: Record<string, string> },
+    private readonly resources?: { revoke(sessionId: string): void; dispose(): Promise<void> },
   ) {}
 
   /** Listen. Idempotent. */
@@ -79,6 +80,7 @@ export class McpBridge {
     for (const controller of this.inFlight.keys()) controller.abort(new Error("Hardcore is shutting down"));
     this.tokens.clear();
     this.byToken.clear();
+    await this.resources?.dispose();
     if (server) {
       await new Promise<void>((resolve) => { server.close(() => resolve()); server.closeAllConnections(); });
     }
@@ -92,6 +94,7 @@ export class McpBridge {
     if (existing) {
       // The cwd or project can change across a resume; the token does not.
       if (existing.session.cwd !== session.cwd || existing.session.projectId !== session.projectId) {
+        this.resources?.revoke(session.sessionId);
         for (const [controller, active] of this.inFlight) if (active.sessionId === session.sessionId) controller.abort(new Error("Session workspace changed"));
       }
       existing.session = session;
@@ -109,6 +112,7 @@ export class McpBridge {
   }
 
   revoke(sessionId: string): void {
+    this.resources?.revoke(sessionId);
     for (const [controller, session] of this.inFlight) if (session.sessionId === sessionId) controller.abort(new Error("Session authorization revoked"));
     for (const [key, entry] of this.tokens) {
       if (entry.session.sessionId === sessionId) { this.tokens.delete(key); this.byToken.delete(entry.token); }
