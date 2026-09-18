@@ -1,6 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createModelingRecognitionCache, modelingRecognitionKey } from "./modelingRecognitionCache.js";
+import { createModelingRecognitionCache, modelingRecognitionKey, MODELING_RECOGNITION_VERSION } from "./modelingRecognitionCache.js";
+
+test("a recognizer revision misses completed metadata for both exact and static components", () => {
+  const cache = createModelingRecognitionCache();
+  const result = { tree: [{ label: "Feature" }] };
+  for (const identity of [{ surfaceInput: "input", surfaceObject: "object" }, {}]) {
+    const url = "https://one.test/component.surf";
+    const current = modelingRecognitionKey(identity, url);
+    cache.set(current, result);
+    assert.deepEqual(cache.get(modelingRecognitionKey(identity, url, {
+      recognizerVersion: MODELING_RECOGNITION_VERSION,
+    })), result);
+    assert.equal(cache.get(modelingRecognitionKey(identity, url, {
+      recognizerVersion: MODELING_RECOGNITION_VERSION + 1,
+    })), null);
+  }
+});
 
 test("recognition keys bind exact components without carrying occurrence identity", () => {
   const identity = { surfaceInput: "input-a", surfaceObject: "object-a" };

@@ -411,6 +411,38 @@ test("reopening a many-component STEP reuses its backend and every prepared body
   }
 });
 
+test("STEP feature expansion runs the packaged worker once and reuses recognition after switching files", async () => {
+  let recognitionWorkers = 0;
+  const countWorker = (worker: { url(): string }) => {
+    if (worker.url().includes("modelingTree.worker")) recognitionWorkers += 1;
+  };
+  page.on("worker", countWorker);
+  try {
+    await selectOrOpenFile("part.step");
+    await expectCadReady("part.step");
+    const model = page.getByRole("list", { name: "Model", exact: true });
+    const expand = model.getByRole("button", { name: "Expand part.step", exact: true });
+    await expand.click();
+    const feature = model.getByRole("button", { name: /^Select Base (extrude|revolve)$/ }).first();
+    await expect(feature).toBeVisible();
+    expect(recognitionWorkers).toBe(1);
+
+    await selectOrOpenFile("hinge.urdf");
+    await selectOrOpenFile("part.step");
+    await expectCadReady("part.step");
+    if (await expand.isVisible()) await expand.click();
+    await expect(feature).toBeVisible();
+    await feature.click();
+    await expect(feature).toHaveAttribute("aria-pressed", "true");
+    expect(recognitionWorkers).toBe(1);
+    expect(errors).toEqual([]);
+    await page.keyboard.press("Escape");
+    await model.getByRole("button", { name: "Collapse part.step", exact: true }).click();
+  } finally {
+    page.off("worker", countWorker);
+  }
+});
+
 test("prompt actions preserve the draft, native clipboard and captured selection without sending", async () => {
   test.setTimeout(150_000);
   const previousClipboard = await app.evaluate(({ clipboard }) => ({

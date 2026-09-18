@@ -23,6 +23,11 @@ The [shared Model tree](../../packages/ui/docs/cad-renderer.md#step-inspector-la
 owns expansion-based picking, lazy topology/feature inspection and isolation.
 Web uses the same tree and file-row primitives as desktop; its HTTP adapter
 does not decide which model nodes are expanded or selectable.
+Feature detection runs client-side in shared UI when parts are expanded, with
+a versioned memory cache reused across file switches. A page refresh loses that
+cache; recognition is separate from cadgen compilation and Python inspection.
+See [feature detection](../../packages/ui/docs/feature-detection.md) for rules,
+limits and cancellation. This app supplies resources, not recognition logic.
 
 **May depend on:** compiled `@hardcore/ui` and `@hardcore/core` exports and app
 libraries. Never another application's source. Shared packages never import
