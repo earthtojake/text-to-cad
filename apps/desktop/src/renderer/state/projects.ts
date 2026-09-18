@@ -1,5 +1,7 @@
 import { create } from "zustand";
 
+import { useExplorer } from "@renderer/state/explorer";
+
 import type { Project } from "@shared/types";
 
 /**
@@ -46,6 +48,7 @@ export const useProjects = create<ProjectsState>((set, get) => ({
 
   remove: async (id) => {
     await window.hardcore.projects.remove({ id });
+    useExplorer.getState().discardProjectDrawings(id);
     if (get().activeId === id) {
       set({ activeId: null });
     }
@@ -57,7 +60,10 @@ export const useProjects = create<ProjectsState>((set, get) => ({
 
   setActive: (activeId) => set({ activeId }),
 
-  receive: (projects) =>
+  receive: (projects) => {
+    for (const previous of get().projects) {
+      if (!projects.some(project => project.id === previous.id)) useExplorer.getState().discardProjectDrawings(previous.id);
+    }
     set((state) => ({
       projects,
       ready: true,
@@ -67,7 +73,8 @@ export const useProjects = create<ProjectsState>((set, get) => ({
         state.activeId && projects.some((project) => project.id === state.activeId)
           ? state.activeId
           : (projects[0]?.id ?? null),
-    })),
+    }));
+  },
 }));
 
 /** The active project object, or null. */

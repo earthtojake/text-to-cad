@@ -15,6 +15,12 @@ Browser entry points never import Node-only code. Node builders remain in `bin/`
 `@hardcore/core/client` communicates with `cadgen.viewer` over HTTP; this
 protocol relationship never imports Python or discovers an interpreter.
 
+`@hardcore/core/drawing` validates portable Excalidraw v2 documents for the
+desktop's temporary sketch tabs. It imports no editor, React, filesystem or
+storage service. Document limits and shared editor/host ownership are described
+in [the drawing contract](../ui/docs/drawing.md); the mechanism is
+[`src/drawing/index.js`](src/drawing/index.js).
+
 ## The laws that live here
 
 - **Viewer three-input law**: a client renders from the file, its optional

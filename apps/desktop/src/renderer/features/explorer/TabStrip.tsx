@@ -1,4 +1,4 @@
-import { FileText, GitCompare, Globe, Plus, SquareTerminal, X } from "lucide-react";
+import { PencilRuler, FileText, GitCompare, Globe, Plus, SquareTerminal, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createElement, useEffect, useRef, useState } from "react";
 
@@ -20,10 +20,10 @@ import type { ExplorerTab, ExplorerTabKind } from "@shared/types";
 import { FileIcon } from "@hardcore/ui/navigation";
 
 /**
- * The one strip. Four kinds, no bottom panel (plan §3).
+ * The one strip. No bottom panel (plan §3).
  *
- * `+` opens the menu of the four kinds. It used to open a file tab, with a
- * chevron beside it for the other three, on the argument that a menu costs a
+ * `+` opens the menu of tab kinds. It used to open a file tab, with a
+ * chevron beside it for the other kinds, on the argument that a menu costs a
  * click on the common case — but two adjacent controls a quarter of an inch
  * wide, one of them a 4px chevron, cost aim on every case, and a person who
  * wants a file tab has the shortcut. One button, one menu, and the binding
@@ -55,6 +55,7 @@ const KIND_ICONS: Record<ExplorerTabKind, LucideIcon> = {
   review: GitCompare,
   browser: Globe,
   terminal: SquareTerminal,
+  drawing: PencilRuler,
 };
 
 /** The menu's rows, in the order a person reaches for them. */
@@ -63,6 +64,7 @@ const KINDS: readonly { kind: ExplorerTabKind; label: string; shortcut: string }
   { kind: "review", label: "Review", shortcut: "new-review-tab" },
   { kind: "browser", label: "Browser", shortcut: "new-browser-tab" },
   { kind: "terminal", label: "Terminal", shortcut: "new-terminal-tab" },
+  { kind: "drawing", label: "Drawing", shortcut: "new-drawing-tab" },
 ];
 
 /** The binding as the shortcut table has it — one declaration, two readers. */
@@ -91,6 +93,7 @@ function KindIcon({ kind, className }: { kind: ExplorerTabKind; className?: stri
 }
 
 export function TabStrip() {
+  const ready = useExplorer((state) => state.ready);
   const tabs = useExplorer((state) => state.tabs);
   const activeId = useExplorer((state) => state.activeId);
   const open = useExplorer((state) => state.open);
@@ -187,6 +190,7 @@ export function TabStrip() {
             <DropdownMenuTrigger asChild>
               <Button
                 aria-label="New tab"
+                disabled={!ready}
                 className="size-6 text-muted-foreground"
                 size="icon-xs"
                 variant="ghost"

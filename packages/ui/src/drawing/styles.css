@@ -1,0 +1,29 @@
+.hardcore-drawing-editor {
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  isolation: isolate;
+}
+.hardcore-drawing-editor .excalidraw {
+  --color-primary: #6b6b6b;
+  --color-primary-darker: #4d4d4d;
+  --color-primary-darkest: #333;
+  --color-primary-light: #eee;
+  --color-surface-primary-container: #e5e5e5;
+  --color-on-primary-container: #222;
+  --default-font: inherit;
+}
+.hardcore-drawing-editor .excalidraw.theme--dark {
+  --color-primary: #bbb;
+  --color-primary-darker: #ccc;
+  --color-primary-darkest: #eee;
+  --color-primary-light: #444;
+  --color-surface-primary-container: #444;
+  --color-on-primary-container: #eee;
+}
+/* The SDK has no props to remove library/diagram generation or live embeds.
+   Keep this scratchpad to ink, shapes, text and images (no hosted workflows). */
+.hardcore-drawing-editor .sidebar-trigger__label-element:has(.default-sidebar-trigger),
+.hardcore-drawing-editor .App-toolbar__extra-tools-trigger,
+.hardcore-drawing-editor .default-sidebar { display: none; }
+.hardcore-drawing-editor[data-drawing-mode="overlay"] .excalidraw { background: transparent; }

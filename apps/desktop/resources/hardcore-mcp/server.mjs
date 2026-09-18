@@ -221,12 +221,47 @@ export function createServer(bridge, options = {}) {
   );
 
   server.registerTool(
+    "open_drawing",
+    {
+      title: "Open a drawing canvas",
+      description:
+        "Open a temporary drawing tab in Hardcore. Omit path for a blank canvas, or explicitly load an existing .excalidraw JSON file " +
+        "inside this session's project or worktree. The person can sketch and edit it. Drawing tabs disappear when closed or after restart; " +
+        "call save_drawing only when the person asks to keep the scene as a file. Loading a file creates a separate temporary canvas.",
+      inputSchema: {
+        path: pathField.optional(),
+        title: z.string().min(1).max(200).optional().describe("An optional short title for the temporary drawing tab."),
+      },
+    },
+    (params) => call("open_drawing", params),
+  );
+
+  server.registerTool(
+    "save_drawing",
+    {
+      title: "Save a drawing scene explicitly",
+      description:
+        "Save the current scene of a temporary drawing tab to a .excalidraw JSON file inside this session's project or worktree. " +
+        "Get tabId from open_drawing or list_open_tabs. The tab must belong to this session's project and root. " +
+        "Saving works for a background tab without changing the person's active project or tab. Existing files are refused unless " +
+        "overwrite is explicitly true. Saving leaves the tab temporary; use open_drawing({path}) to reload the saved scene later.",
+      inputSchema: {
+        tabId: z.string().min(1).describe("The drawing tab's id."),
+        path: pathField,
+        overwrite: z.boolean().optional().describe("Explicitly allow replacing an existing file; defaults to false."),
+      },
+    },
+    (params) => call("save_drawing", params),
+  );
+
+  server.registerTool(
     "list_open_tabs",
     {
       title: "List the explorer's open tabs",
       description:
         "What the person has open in the explorer: file tabs with their paths, browser tabs with their URLs, terminal and review tabs, " +
-        "and which one is active. Call it before opening more files, or to find out what 'this file' refers to.",
+        "temporary drawing tabs with their titles, roots and ephemeral status, and which one is active. " +
+        "Call it before opening more files, or to find out what 'this file' refers to.",
       inputSchema: {},
     },
     () => call("list_open_tabs", {}),

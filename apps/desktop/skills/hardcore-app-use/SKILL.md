@@ -49,10 +49,22 @@ fix with an install.
 | `list_open_tabs()` | You need to know what the person is already looking at before opening more. |
 | `viewer_state()` | You want the file currently in the viewer before acting on "this part" or "that face". |
 | `open_url(url)` | A datasheet, a docs page or a step.parts listing belongs beside the work. |
+| `open_drawing({path?, title?})` | You want a blank sketch canvas, or to explicitly load a saved `.excalidraw` scene inside this session's project or worktree. Returns its tab ID. |
+| `save_drawing({tabId, path, overwrite?})` | The person asked to keep a drawing as a `.excalidraw` file. Saves the current scene; existing files require explicit `overwrite:true`. |
 | `list_skills()` / `read_skill(name, path?)` | You need the skills Hardcore ships and cannot see them in your own skill list. They are files on disk here; read `cad` before CAD work. |
 
 Call `open_file` on the artifact (`STEP/bracket.step`), not on the script that
 made it. Open the file the person asked about, not every file you touched.
+
+Drawing tabs are temporary: closing a tab or restarting Hardcore discards its
+scene. They never write a file by themselves. Use `list_open_tabs` to find a
+drawing's ID, title and root. `save_drawing` works with a background drawing
+without changing the person's current tab or project, but the drawing must
+belong to this session's project and root. Saved scenes remain ordinary files;
+call `open_drawing` with that path to load a separate canvas later. Do not save
+a drawing unless the person has asked to keep it.
+Opening a saved `.excalidraw` file with `open_file` shows its JSON source;
+use `open_drawing` or the drawing canvas's file picker to edit the scene.
 
 ## Publish geometry at milestones
 

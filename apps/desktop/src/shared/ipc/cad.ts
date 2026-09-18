@@ -59,6 +59,10 @@ export const CadCommandKindSchema = z.enum([
   "reveal",
   /** Open a browser tab on `url`. */
   "open-url",
+  /** Open an ephemeral drawing, optionally with an explicitly loaded scene. */
+  "open-drawing",
+  /** Read a drawing scene without focusing or rebinding its project. */
+  "drawing-scene",
   /** Answer with the strip: every tab and which is active. */
   "list-tabs",
   /** Answer with the active tab's file and what the viewer exposes about it. */
@@ -69,7 +73,7 @@ export type CadCommandKind = z.infer<typeof CadCommandKindSchema>;
 export const CadCommandSchema = z.object({
   requestId: z.string().min(1),
   kind: CadCommandKindSchema,
-  /** The project the command is about; the renderer switches to it. */
+  /** The project the command is about; opening focuses it, scene reads do not. */
   projectId: z.string().min(1),
   /**
    * The root `path` is relative to: null for the project directory, else the
@@ -82,6 +86,10 @@ export const CadCommandSchema = z.object({
   /** For `reveal`: whether `path` is a folder (opened, not just shown). */
   directory: z.boolean().optional(),
   url: z.string().optional(),
+  tabId: z.string().min(1).optional(),
+  title: z.string().min(1).max(200).optional(),
+  /** Drawing JSON; never loaded through the agent HTTP request body. */
+  scene: z.string().max(20 * 1024 * 1024).optional(),
 });
 export type CadCommand = z.infer<typeof CadCommandSchema>;
 

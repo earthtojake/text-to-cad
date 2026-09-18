@@ -10,6 +10,7 @@ import type { Project } from "@shared/types";
 
 import { BrowserTab } from "./BrowserTab";
 import { EmptyState } from "@hardcore/ui/navigation";
+import { DrawingTab } from "./DrawingTab";
 import { FileTab } from "./FileTab";
 import { ReviewTab } from "./ReviewTab";
 import { TabStrip } from "./TabStrip";
@@ -58,14 +59,14 @@ export function ExplorerPane() {
         ) : (
           <EmptyState
             action={
-              <Button className="h-7 gap-1.5 text-xs" onClick={() => open("file")} size="sm" variant="secondary">
+              <Button className="h-7 gap-1.5 text-xs" disabled={!ready} onClick={() => open("file")} size="sm" variant="secondary">
                 <Plus className="size-3.5" />
                 Open a file
               </Button>
             }
             description={
               ready && tabs.length === 0
-                ? "Files, reviews, browsers and terminals all open here, in one strip."
+                ? "Files, reviews, browsers, terminals and drawings all open here, in one strip."
                 : "Restoring…"
             }
             icon={PanelsTopLeft}
@@ -105,6 +106,8 @@ function TabBody({ tab, project, cadConnections }: {
           tabId={tab.id}
         />
       );
+    case "drawing":
+      return <DrawingTab project={project} root={tab.root} tabId={tab.id} title={tab.title} />;
     case "browser":
       return <BrowserTab tabId={tab.id} url={tab.url} />;
     case "terminal":
@@ -129,7 +132,7 @@ function TabBody({ tab, project, cadConnections }: {
  * default close-window accelerator: with tabs open it means "close this tab",
  * and only an empty strip lets it close the window.
  *
- * The four "new tab" chords are here too, and they are the same four the `+`
+ * The "new tab" chords are here too, and they are the same ones the `+`
  * menu prints beside its rows (`src/renderer/lib/shortcuts.ts` is the table
  * both read).
  */
@@ -154,10 +157,10 @@ function useExplorerShortcuts() {
 
       const key = event.key.toLowerCase();
       if (event.shiftKey) {
-        // The two kinds that are not the common one. `Mod+B` is the sidebar,
+        // Secondary tab kinds. `Mod+B` is the sidebar,
         // so `Mod+Shift+B` had to stay clear of it — Shell's handler drops
         // anything with Shift held for exactly this reason.
-        const kind = key === "r" ? "review" : key === "b" ? "browser" : null;
+        const kind = key === "r" ? "review" : key === "b" ? "browser" : key === "d" ? "drawing" : null;
         if (kind) {
           event.preventDefault();
           open(kind);

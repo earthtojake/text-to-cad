@@ -1,9 +1,10 @@
 /**
  * What the MCP bridge's methods do in the app (plan §8).
  *
- * Two kinds. `attach_snapshot` is answered here in main: it reads a file
- * under the project root and returns its bytes. Everything else is an
- * explorer action — open a tab, reveal a path, list what is open — and the
+ * `attach_snapshot` reads a file here in main and returns its bytes.
+ * Drawing loads and explicit saves also use main's guarded filesystem access.
+ * Other calls are explorer actions — open a tab, reveal a path, list what is
+ * open — and the
  * explorer's state lives in the renderer's stores, so those are relayed:
  * main pushes a `cad.command` carrying a request id, the renderer's bridge
  * (`src/renderer/state/bridge.ts`) performs it against the stores and answers
@@ -18,9 +19,12 @@
  */
 import fsp from "node:fs/promises";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
+
+import { MAX_DRAWING_BYTES, parseDrawingScene } from "@hardcore/core/drawing";
 
 import type { CadCommand, CadCommandKind, CadReply } from "../../shared/ipc/cad";
-import { resolveInRoot, toRelative } from "../explorer/fs";
+import { resolveInRoot, revisionOf, toRelative, writeTextFile } from "../explorer/fs";
 import type { BridgeActions, BridgeSession } from "./mcp-bridge";
 
 const REPLY_TIMEOUT_MS = 10_000;
@@ -106,6 +110,7 @@ export async function resolveForSession(
   deps: Pick<ActionDeps, "sessionRoot">,
   session: BridgeSession,
   target: string,
+  requireExists = true,
 ): Promise<{ directory: string; root: string | null; absolute: string; relative: string }> {
   const resolved = deps.sessionRoot(session);
   if (!resolved) {
@@ -123,13 +128,52 @@ export async function resolveForSession(
     const where = root ? "this session's worktree" : "the project";
     throw new Error(`${target} is outside ${where} (${directory}); only files inside it can be shown`);
   }
-  try {
-    await fsp.access(absolute);
-  } catch {
-    throw new Error(`${target} does not exist (looked at ${absolute})`);
+  if (requireExists) {
+    try {
+      await fsp.access(absolute);
+    } catch {
+      throw new Error(`${target} does not exist (looked at ${absolute})`);
+    }
   }
   const realDirectory = await fsp.realpath(directory).catch(() => directory);
   return { directory: realDirectory, root, absolute, relative: toRelative(realDirectory, absolute) };
+}
+
+function drawingPath(target: unknown): asserts target is string {
+  if (typeof target !== "string" || !target || path.extname(target).toLowerCase() !== ".excalidraw") {
+    throw new Error("drawing paths must name a .excalidraw JSON file");
+  }
+}
+
+function normalizedDrawing(serialized: unknown): string {
+  if (typeof serialized !== "string" || Buffer.byteLength(serialized, "utf8") > MAX_DRAWING_BYTES) {
+    throw new Error("drawing scenes must be JSON no larger than 20 MiB");
+  }
+  const normalized = JSON.stringify(parseDrawingScene(serialized));
+  if (Buffer.byteLength(normalized, "utf8") > MAX_DRAWING_BYTES) {
+    throw new Error("drawing scenes must be JSON no larger than 20 MiB");
+  }
+  return normalized;
+}
+
+/** Atomic creation with no replacement: link commits fully written bytes only if the destination is free. */
+async function createDrawingFile(directory: string, absolute: string, scene: string): Promise<void> {
+  if (await resolveInRoot(directory, path.dirname(absolute)) !== path.dirname(absolute)) {
+    throw new Error("the drawing's location changed while saving");
+  }
+  const temporary = path.join(path.dirname(absolute), `.${path.basename(absolute)}.hardcore-${randomUUID()}.tmp`);
+  const handle = await fsp.open(temporary, "wx");
+  try {
+    try { await handle.writeFile(scene, "utf8"); await handle.sync(); }
+    finally { await handle.close(); }
+    if (await resolveInRoot(directory, path.dirname(absolute)) !== path.dirname(absolute)) {
+      throw new Error("the drawing's location changed while saving");
+    }
+    await fsp.link(temporary, absolute).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "EEXIST") throw new Error("that drawing file already exists; set overwrite:true to replace it explicitly");
+      throw error;
+    });
+  } finally { await fsp.unlink(temporary).catch(() => {}); }
 }
 
 export function createActions(deps: ActionDeps, commands: RendererCommands): BridgeActions {
@@ -158,6 +202,56 @@ export function createActions(deps: ActionDeps, commands: RendererCommands): Bri
         throw new Error(`only http(s) URLs open in the explorer, not ${protocol}`);
       }
       return relay("open-url", session, { url });
+    },
+
+    open_drawing: async (session, { path: target, title }) => {
+      if (title !== undefined && (typeof title !== "string" || !title.trim() || title.length > 200)) {
+        throw new Error("a drawing title must be between 1 and 200 characters");
+      }
+      const workspace = deps.sessionRoot(session);
+      if (!workspace) throw new Error("this session's project is no longer open in Hardcore");
+      if (target === undefined) return relay("open-drawing", session, { root: workspace.root, title });
+      drawingPath(target);
+      const resolved = await resolveForSession(deps, session, target);
+      const stat = await fsp.stat(resolved.absolute);
+      if (!stat.isFile()) throw new Error("the drawing path must name a file");
+      if (stat.size > MAX_DRAWING_BYTES) throw new Error("drawing scenes must be JSON no larger than 20 MiB");
+      const scene = normalizedDrawing(await fsp.readFile(resolved.absolute, "utf8"));
+      return relay("open-drawing", session, {
+        root: resolved.root, path: resolved.relative, scene, title: title ?? path.parse(resolved.relative).name.slice(0, 200),
+      });
+    },
+
+    save_drawing: async (session, { tabId, path: target, overwrite }) => {
+      if (typeof tabId !== "string" || !tabId) throw new Error("save_drawing needs a drawing tabId");
+      if (overwrite !== undefined && typeof overwrite !== "boolean") throw new Error("overwrite must be a boolean");
+      drawingPath(target);
+      const resolved = await resolveForSession(deps, session, target, false);
+      // A missing leaf has no realpath. Resolve its existing parent separately,
+      // catching a new file beneath a symlink that points outside the workspace.
+      const parent = await resolveInRoot(resolved.directory, path.dirname(resolved.absolute));
+      if (!(await fsp.stat(parent)).isDirectory()) throw new Error("the drawing's parent must be a directory");
+      const absolute = path.join(parent, path.basename(resolved.absolute));
+      const relative = toRelative(resolved.directory, absolute);
+      const answer = await relay("drawing-scene", session, { tabId, root: resolved.root });
+      const scene = normalizedDrawing((answer as { scene?: unknown } | null)?.scene);
+      if (await resolveInRoot(resolved.directory, parent) !== parent) {
+        throw new Error("the drawing's location changed while saving");
+      }
+      const existing = await fsp.lstat(absolute).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      });
+      if (existing) {
+        if (!overwrite) throw new Error("that drawing file already exists; set overwrite:true to replace it explicitly");
+        if (!existing.isFile()) throw new Error("the drawing path must name a regular file");
+        if (existing.size > MAX_DRAWING_BYTES) throw new Error("existing drawing files over 20 MiB cannot be replaced");
+        const revision = revisionOf(await fsp.readFile(absolute));
+        await writeTextFile(resolved.directory, relative, scene, revision);
+      } else {
+        await createDrawingFile(resolved.directory, absolute, scene);
+      }
+      return { saved: relative, root: resolved.root, tabId, ephemeral: true };
     },
 
     list_open_tabs: (session) => relay("list-tabs", session),

@@ -860,8 +860,8 @@ poor thing to put in front of them.
 
 ## The explorer strip
 
-The strip's `+` is one button and a menu of the four kinds, each with its
-binding — ⌘T file, ⇧⌘R review, ⇧⌘B browser, ⌃` terminal
+The strip's `+` is one button and a menu of the five kinds, each with its
+binding — ⌘T file, ⇧⌘R review, ⇧⌘B browser, ⌃` terminal, ⇧⌘D drawing
 (`lib/shortcuts.ts` is the table the menu prints and `ExplorerPane` answers
 to). It sits **after the last tab, inside the scrolling row**, and is
 `position: sticky` at its right edge: it slides along with the tabs until the
@@ -872,10 +872,41 @@ never part of it. The file tree's open folders and its listings live in the expl
 store, not in the file tab, because opening a file makes a tab and the pane
 mounts one tab at a time.
 
-Tab edits are saved after a 400 ms debounce. Leaving a project flushes its
+Ordinary tab edits are saved after a 400 ms debounce. Drawing tabs and scenes
+are excluded from both the IPC persistence schema and database writes.
+Leaving a project flushes its
 pending snapshot immediately; returning waits for that project's in-flight
 saves before restoring its tabs. Other projects load independently, and a late
 response from an earlier visit cannot overwrite the current strip.
+
+### Temporary drawings
+
+Choose **Drawing** from `+` (or ⇧⌘D / Ctrl+Shift+D) for an Excalidraw sketchpad.
+Freehand, shapes, arrows, text and embedded raster images can be added to a
+prompt with **Add to prompt**. This appends a PNG and drawing tab identity to
+the current draft, preserves existing text, and never submits the prompt.
+The draft is bound before image encoding, so switching chats cannot redirect
+the result. Workspace mismatches use the same “Start chat here” flow as CAD
+references and captures.
+
+Drawings live only in renderer memory. Switching tabs or projects keeps them;
+closing the tab, removing the project, reloading or exiting discards them.
+An image already added to a draft or transcript is a separate copy.
+**Save drawing copy** opens a native file dialog for an editable `.excalidraw`
+document; **Open drawing file** imports a copy into a new temporary tab. Neither
+enables autosave. Agents can use `open_drawing({path?, title?})` and
+`save_drawing({tabId, path, overwrite?})`; paths belong to that session's project
+or worktree, existing files require explicit `overwrite: true`, and saving a
+background drawing does not change the selected tab. Closing a drawing makes
+its tab ID unavailable. A saved `.excalidraw` opened as a regular file remains
+source text; use the Drawing import or `open_drawing` to edit it visually.
+
+The shared editor is `@hardcore/ui/drawing`; desktop owns its lifetime, native
+dialogs, assets and prompt port. Fonts are bundled for offline use and the
+editor loads only on opening a Drawing tab. Read [the drawing contract](../../packages/ui/docs/drawing.md)
+for document limits, asset licensing, tests, and the reuse boundary for future
+CAD overlays. This feature does not change the web app or existing CAD drawing
+overlay.
 
 Directory listings show every regular file and directory, including dotfiles,
 Git-ignored outputs, dependency folders and unsupported formats. Renderer
@@ -1200,7 +1231,8 @@ server on `@modelcontextprotocol/sdk` that every `session/new` carries
 Electron binary as Node (`ELECTRON_RUN_AS_NODE=1`), the source in a checkout,
 the bundle in `out/hardcore-mcp/` when packaged — with a per-session token
 and the session's cwd and skills root in its environment. Its tools:
-`open_file(path)`, `reveal(path)`, `open_url(url)`, `list_open_tabs()`,
+`open_file(path)`, `reveal(path)`, `open_url(url)`, `open_drawing({path?, title?})`,
+`save_drawing({tabId, path, overwrite?})`, `list_open_tabs()`,
 `viewer_state()`, `attach_snapshot(path)` (returned as image content, so the
 transcript shows the PNG), and the two that read the skills root without
 touching main — `list_skills()`, `read_skill(name, path?)`. Every other call
@@ -1289,7 +1321,8 @@ src/renderer/
     ComposerChips.tsx     project / git mode / mode / model / effort chips
     ContextMeter.tsx      the context ring at the end of the composer's row, and the
                           panel behind it: the window, the plan limits, the tokens
-  features/explorer       the one tab strip and its four kinds of tab
+  features/explorer       the one tab strip and its five kinds of tab
+    drawing/              temporary Excalidraw host and prompt attachment action
     adapters/fileSource.ts  this app's file/navigation service: the listings, read a
                           directory at a time over IPC, and the crumb entry menus
     markdown/document.ts  markdown <-> the editor's document, keeping every block the

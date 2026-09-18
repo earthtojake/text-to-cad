@@ -25,6 +25,11 @@ const Chosen = z.object({ path: z.string() }).nullable();
 
 export const dialogsContract = {
   dialogs: {
+    /** Explicit native export; no autosave and no renderer-supplied output path. */
+    saveDrawing: invoke(z.object({
+      projectId: z.string().min(1), root: z.string().optional(), title: z.string().max(200),
+      scene: z.string().max(20 * 1024 * 1024),
+    }), Chosen),
     chooseDirectory: invoke(
       z.object({
         title: z.string().optional(),
