@@ -71,6 +71,7 @@ robot description files, simulation, and local review.
 | CAD          | Creates and edits CAD models from plain-language or image requests, with STEP as the main output along with options to export to STL, 3MF and GLB. | [skills/cad](skills/cad/SKILL.md)                   |
 | CAD Viewer   | Shows local browser previews for CAD and robot files.                                                                                     | [skills/cad-viewer](skills/cad-viewer/SKILL.md)     |
 | step.parts   | Finds off-the-shelf STEP parts like screws, bearings, motors, and connectors.                                                                      | [skills/step-parts](skills/step-parts/SKILL.md)     |
+| Drawing | Dimensioned engineering drawings from a part: views, hidden lines, dimensions, title block, DXF + paged PDF. | [skills/drawing](skills/drawing/SKILL.md) |
 | DXF          | Creates 2D DXF drawings like profiles, templates, gaskets, and cut layouts from Python sources or CAD geometry.                                    | [skills/dxf](skills/dxf/SKILL.md)                   |
 | URDF         | Writes robot structure files with links, joints, limits, inertials, and meshes.                                                                    | [skills/urdf](skills/urdf/SKILL.md)                 |
 | SRDF         | Adds MoveIt planning groups, end effectors, poses, and collision rules to a URDF.                                                                  | [skills/srdf](skills/srdf/SKILL.md)                 |

@@ -28,6 +28,7 @@ that changes them is a real change to report, not noise.
 | `clamp_plate.py` | `DXF/clamp_plate.dxf` | Cut profile projected from 3D topology (`lib/clamp_plate_profile.py`) |
 | `gasket_plate.py` | `DXF/gasket_plate.dxf` | Rounded gasket, bolt holes, centre cutout, engraved crosshair |
 | `l_bracket_flat.py` | `DXF/l_bracket_flat.dxf` | Sheet-metal flat pattern with a single bend line |
+| `enclosure_drawing.py` | `DXF/enclosure_drawing.dxf` + `PDF/enclosure_drawing.pdf` | **Engineering drawing** (`@drawing`): three views with hidden lines and centre marks, measured dimensions, title block; documents the examples project's enclosure STEP (run that model first) |
 | `label_plate.py` | `DXF/label_plate.dxf` | Laser-cut label: engraved text outlines + an open score line |
 | `multi_bend_test_panel.py` | `DXF/multi_bend_test_panel.dxf` | **Four bends in three orientations** on one blank |
 | `u_channel_bracket.py` | `DXF/u_channel_bracket.dxf` | U-channel flat pattern with **two parallel** bend lines |
