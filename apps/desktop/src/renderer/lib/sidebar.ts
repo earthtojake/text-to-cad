@@ -6,7 +6,7 @@
  * `lib/panes.ts` and `lib/git-mode.ts` are: the answer has four inputs
  * (the sessions, the projects, the filters, the collapsed set) and five rules
  * on top of them, and a section that quietly listed a pinned thread twice, or
- * kept an empty project on screen when the toggle said not to, is a defect
+ * kept an empty project on screen, is a defect
  * nobody can see in a screenshot. Everything here is pure and unit-tested
  * (`tests/unit/renderer/sidebar.test.ts`); the components only draw it.
  */
@@ -55,10 +55,10 @@ export type SidebarSection = {
  *     behaviour, and the only one that makes pinning mean anything: a row
  *     that stayed in its project as well would just be a duplicate.
  *  3. **`Group by › Project` keeps the project list's own order**, which is
- *     the order projects were added (`projects.list`). `None` is one list.
+ *     derived from their sessions. `None` is one list.
  *  4. **`Sort by` orders inside every section**, `Pinned` included.
- *  5. **`Show empty groups`** is about project headers only. A flat list has
- *     no header to keep, and `Pinned` is only there when it is not empty.
+ *  5. **No empty groups.** Directories only exist through their sessions.
+ *     A pinned-only directory has no duplicate, empty header.
  */
 export function sidebarSections(input: {
   sessions: readonly Session[];
@@ -98,7 +98,7 @@ export function sidebarSections(input: {
       loose.filter((session) => session.projectId === project.id),
       filters.sortBy,
     );
-    if (sessions.length === 0 && !filters.showEmptyGroups) {
+    if (sessions.length === 0) {
       continue;
     }
     sections.push({ id: project.id, kind: "project", name: project.name, project, sessions });

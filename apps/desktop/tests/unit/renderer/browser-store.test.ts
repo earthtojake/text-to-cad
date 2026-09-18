@@ -3,7 +3,7 @@ import { useBrowser } from "@renderer/state/browser";
 import { useExplorer } from "@renderer/state/explorer";
 import type { BrowserTarget } from "@shared/browser";
 
-const binding = { projectId: "browser-project", root: null, tabId: "browser-tab" };
+const binding = { sessionId: "browser-session", projectId: "browser-project", root: null, tabId: "browser-tab" };
 const target: BrowserTarget = { ...binding, root: "/browser-project", generation: 0, title: "Form", url: "https://example.com/", loading: false, canGoBack: false, canGoForward: false, visible: false, logs: [] };
 let element: HTMLDivElement;
 let cleanups: (() => void)[];
@@ -11,7 +11,7 @@ let cleanups: (() => void)[];
 beforeEach(() => {
   vi.useFakeTimers(); vi.clearAllMocks();
   useBrowser.setState({ targets: {}, errors: {} });
-  useExplorer.setState({ projectId: binding.projectId, root: null, tabs: [{ id: binding.tabId, projectId: binding.projectId, kind: "browser", root: null, url: target.url, order: 0 }], ready: true });
+  useExplorer.setState({ sessionId: "browser-session", projectId: binding.projectId, root: null, tabs: [{ sessionId: "browser-session", id: binding.tabId, projectId: binding.projectId, kind: "browser", root: null, url: target.url, order: 0 }], ready: true });
   vi.mocked(window.hardcore.browser.ensure).mockResolvedValue(target);
   vi.mocked(window.hardcore.browser.metadata).mockResolvedValue(target);
   element = document.createElement("div");
@@ -48,7 +48,7 @@ describe("browser presentation lifetime", () => {
     vi.mocked(window.hardcore.browser.ensure).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
     const release = mount();
     release();
-    useExplorer.setState({ projectId: "another-project", tabs: [] });
+    useExplorer.setState({ sessionId: "browser-session", projectId: "another-project", tabs: [] });
     finish(target);
     await vi.advanceTimersByTimeAsync(1);
     expect(vi.mocked(window.hardcore.browser.present).mock.calls.every(([request]) => request.bounds === null)).toBe(true);

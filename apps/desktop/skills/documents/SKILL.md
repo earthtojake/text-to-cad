@@ -5,6 +5,12 @@ description: Read and edit the live text buffer in a Hardcore file tab, retainin
 
 # Live documents
 
+App tabs belong to this session only. Even another session in the same directory
+has separate tabs. Opening or showing a tab updates this session's explorer;
+background tool calls never switch the user's selected session. Use IDs returned
+by this session's tools.
+
+
 Find the file's tab with `list_open_tabs`, then activate/open it if necessary.
 Use the `documents` MCP server's `read_document` to read the current editor
 buffer, including unsaved typing. Its revision is a live buffer token, distinct

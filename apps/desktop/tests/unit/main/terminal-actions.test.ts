@@ -21,19 +21,19 @@ function fixture() {
   const sent: IntegrationCommand[] = [];
   const session: BridgeSession = { sessionId: 's', projectId: 'project', cwd: directory };
   let answer: unknown = { id: 'tab', kind: 'terminal', root: directory };
-  let refusal = ''; let paused = false; let sequence = 0;
-  const deps = { sessionRoot: () => ({ directory, root: directory }), newId: () => `r${++sequence}`,
+  let refusal = ''; let paused = false; let sequence = 0; let active = true;
+  const deps = { sessionRoot: () => active ? ({ directory, root: directory }) : null, newId: () => `r${++sequence}`,
     send(command: IntegrationCommand) { sent.push(command); if (!paused) relay.reply(refusal ? { requestId: command.requestId, ok: false, error: refusal } : { requestId: command.requestId, ok: true, result: answer }); } };
   const relay = new RendererCommands(deps); relays.push(relay);
-  return { session, terminals, process, sent, actions: createTerminalActions(deps, relay, () => terminals),
+  return { session, terminals, process, sent, archive: () => { active = false; }, actions: createTerminalActions(deps, relay, () => terminals),
     answer: (value: unknown) => { answer = value; }, refuse: (value: string) => { refusal = value; }, pause: () => { paused = true; } };
 }
-it('creates a PTY in authenticated cwd and relays its project-owned identity to the scoped tab', async () => {
+it('creates a PTY in authenticated cwd and relays its session-owned identity to the scoped tab', async () => {
   const f = fixture(); await fs.mkdir(path.join(directory, 'nested'));
   await f.actions.create_terminal!(f.session, { cwd: 'nested' });
   const info = f.terminals.list()[0]!;
   expect(info.cwd).toBe(path.join(directory, 'nested'));
-  expect(f.terminals.owns(info.id, 'project')).toBe(true);
+  expect(f.terminals.owns(info.id, 's')).toBe(true);
   expect(f.sent[0]).toMatchObject({ kind: 'terminal-open', projectId: 'project', root: directory, rootDirectory: directory, params: { cwd: info.cwd, ptyId: info.id } });
   f.terminals.killAll();
 });
@@ -43,8 +43,8 @@ it('refuses outside or file cwd paths before spawning', async () => {
   await expect(f.actions.create_terminal!(f.session, { cwd: 'file' })).rejects.toThrow('directory');
   expect(spawn).not.toHaveBeenCalled(); expect(f.sent).toEqual([]);
 });
-it('requires a scoped terminal tab and project-owned PTY before read, write or stop', async () => {
-  const f = fixture(); const info = await f.terminals.create({ cwd: directory, projectId: 'other' });
+it('requires a scoped terminal tab and session-owned PTY before read, write or stop', async () => {
+  const f = fixture(); const info = await f.terminals.create({ cwd: directory, projectId: 'project', sessionId: 'other' });
   f.answer({ id: 'tab', kind: 'terminal', root: directory, ptyId: info.id });
   await expect(f.actions.read_terminal!(f.session, { tabId: 'tab' })).rejects.toThrow('app-owned');
   f.answer({ id: 'tab', kind: 'browser', root: directory, ptyId: info.id });
@@ -55,7 +55,7 @@ it('requires a scoped terminal tab and project-owned PTY before read, write or s
   expect(f.process.write).not.toHaveBeenCalled(); expect(f.process.kill).not.toHaveBeenCalled(); f.terminals.killAll();
 });
 it('honors cursor limits and guarded input and leaves stopped output available', async () => {
-  const f = fixture(); const info = await f.terminals.create({ cwd: directory, projectId: 'project' });
+  const f = fixture(); const info = await f.terminals.create({ cwd: directory, projectId: 'project', sessionId: 's' });
   f.answer({ id: 'tab', kind: 'terminal', root: directory, ptyId: info.id });
   const onData = f.process.onData.mock.calls[0]![0] as (text: string) => void;
   onData('older'); onData('newer');
@@ -82,4 +82,19 @@ it('does not spawn for an already-aborted creation request', async () => {
   const f = fixture(); const abort = new AbortController(); abort.abort(new Error('cancelled'));
   await expect(f.actions.create_terminal!(f.session, {}, abort.signal)).rejects.toThrow('cancelled');
   expect(spawn).not.toHaveBeenCalled(); expect(f.sent).toEqual([]);
+});
+
+it('kills a terminal that finishes spawning after its session is archived', async () => {
+  const f = fixture();
+  const create = f.terminals.create.bind(f.terminals);
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const delayed = vi.spyOn(f.terminals, 'create').mockImplementationOnce(async options => { await gate; return create(options); });
+  const pending = f.actions.create_terminal!(f.session, {});
+  await vi.waitFor(() => expect(delayed).toHaveBeenCalledOnce());
+  f.archive(); release();
+  await expect(pending).rejects.toThrow('no longer active');
+  expect(f.terminals.list()).toEqual([]);
+  expect(f.process.kill).toHaveBeenCalledOnce();
+  expect(f.sent).toEqual([]);
 });

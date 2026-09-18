@@ -1,85 +1,70 @@
 import { create } from "zustand";
 
-import { useExplorer } from "@renderer/state/explorer";
-
-import type { Project } from "@shared/types";
+import { projectsFromSessions } from "@renderer/lib/projects";
+import type { Project, Session } from "@shared/types";
 
 /**
- * The project list, mirrored from main. Every mutation is an IPC call; the
- * `projects.changed` event is what actually updates this store, so a change
- * made from the menu or another window lands here too.
- *
- * Whether a project's sidebar section is expanded is **not** here: it is
- * `settings.sidebar.collapsedProjects`, in sqlite, so a collapsed section is
- * still collapsed after a relaunch. One copy, one place to read it.
+ * Directory descriptors derived from the session index, never saved projects.
+ * `draft` is only the folder chosen for a session that has not been created yet;
+ * it does not add a sidebar group and does not survive a relaunch.
  */
 type ProjectsState = {
   projects: Project[];
   ready: boolean;
-  /** The project the sidebar and the session pane are scoped to. */
   activeId: string | null;
-
-  load: () => Promise<void>;
-  /** Opens the native folder chooser. Resolves to null when cancelled. */
+  draft: Project | null;
+  /** Opens the native folder chooser without creating any persistent state. */
   add: () => Promise<Project | null>;
-  remove: (id: string) => Promise<void>;
-  rename: (id: string, name: string) => Promise<void>;
   setActive: (id: string | null) => void;
-  receive: (projects: Project[]) => void;
+  selectDirectory: (project: Project) => void;
+  derive: (sessions: readonly Session[]) => void;
 };
 
 export const useProjects = create<ProjectsState>((set, get) => ({
   projects: [],
   ready: false,
   activeId: null,
-
-  load: async () => {
-    const projects = await window.hardcore.projects.list();
-    set({ projects, ready: true, activeId: get().activeId ?? projects[0]?.id ?? null });
-  },
+  draft: null,
 
   add: async () => {
     const project = await window.hardcore.projects.add();
     if (project) {
-      set({ activeId: project.id });
+      get().selectDirectory(project);
     }
     return project;
   },
 
-  remove: async (id) => {
-    await window.hardcore.projects.remove({ id });
-    useExplorer.getState().discardProjectResources(id);
-    if (get().activeId === id) {
-      set({ activeId: null });
-    }
-  },
+  selectDirectory: (project) => set({ activeId: project.id, draft: project }),
 
-  rename: async (id, name) => {
-    await window.hardcore.projects.rename({ id, name });
-  },
+  setActive: (activeId) => set((state) => ({
+    activeId,
+    draft: state.draft?.id === activeId ? state.draft : null,
+  })),
 
-  setActive: (activeId) => set({ activeId }),
-
-  receive: (projects) => {
-    for (const previous of get().projects) {
-      if (!projects.some(project => project.id === previous.id)) useExplorer.getState().discardProjectResources(previous.id);
-    }
-    set((state) => ({
+  derive: (sessions) => {
+    const projects = projectsFromSessions(sessions);
+    const activeIds = new Set(sessions.filter(session => !session.archived).map(session => session.projectId));
+    const state = get();
+    // session/create broadcasts a provisional connecting row before the agent
+    // accepts it. Keep the draft through that phase so a failed connection can
+    // remove its row without unmounting the composer and its error message.
+    const established = sessions.some(session => !session.archived && session.projectId === state.draft?.id && session.acpSessionId);
+    const draft = established ? null : state.draft;
+    set({
       projects,
       ready: true,
-      // A removed project must not stay selected, and the first project added
-      // to an empty app should be the one the session pane talks about.
-      activeId:
-        state.activeId && projects.some((project) => project.id === state.activeId)
-          ? state.activeId
-          : (projects[0]?.id ?? null),
-    }));
+      draft,
+      activeId: state.activeId && (activeIds.has(state.activeId) || draft?.id === state.activeId)
+        ? state.activeId
+        : projects.find(project => activeIds.has(project.id))?.id ?? null,
+    });
   },
 }));
 
-/** The active project object, or null. */
+/** The selected session directory, including a folder chosen for its first draft. */
 export function useActiveProject(): Project | null {
-  return useProjects(
-    (state) => state.projects.find((project) => project.id === state.activeId) ?? null,
+  return useProjects((state) =>
+    state.draft?.id === state.activeId ? state.draft :
+      state.projects.find((project) => project.id === state.activeId) ?? null,
   );
 }

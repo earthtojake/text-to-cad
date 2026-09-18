@@ -98,7 +98,7 @@ for (const agentId of ["codex", "claude-code"]) {
       await page.waitForLoadState("domcontentloaded");
       const replay = await page.evaluate((id) => window.hardcore.sessions.load({ id }), session.id);
       expect(JSON.stringify(replay.turns)).toContain(marker);
-      const tabs = await page.evaluate((projectId) => window.hardcore.explorer.loadTabs({ projectId }), added.id);
+      const tabs = await page.evaluate((sessionId) => window.hardcore.explorer.loadTabs({ sessionId }), session.id);
       expect(tabs.some((tab) => tab.kind === "file" && tab.path === "models/car.step" && tab.root === session.cwd)).toBe(true);
       const record = { agentId, acpSessionId: session.acpSessionId, cwd: session.cwd, marker, base };
       await testInfo.attach("native-handoff", { body: JSON.stringify(record), contentType: "application/json" });

@@ -16,12 +16,13 @@ import { z } from "zod";
 /* -------------------------------------------------------------------------- */
 
 /**
- * A project is a directory. Sessions live under projects; there are no loose
- * sessions (plan §3).
+ * A directory descriptor, derived from sessions or a transient folder choice.
+ * There is no saved project entity. Its id is the original directory path;
+ * worktree sessions keep their original directory as their grouping identity.
  */
 export const ProjectSchema = z.object({
   id: z.string(),
-  /** Display name. Defaults to the directory's basename; renameable. */
+  /** Display name derived from the directory's basename. */
   name: z.string(),
   /** Absolute path of the directory. */
   path: z.string(),
@@ -82,8 +83,10 @@ export const SessionSchema = z.object({
    * that nothing is ever allowed to delete.
    */
   worktreePath: z.string().optional(),
-  /** First prompt, trimmed — Codex's convention. */
+  /** Agent-provided name, first-prompt fallback, or an explicit user rename. */
   title: z.string(),
+  /** A user rename takes precedence over subsequent agent title updates. */
+  titleSource: z.enum(["prompt", "agent", "user"]).default("prompt"),
   createdAt: z.number().int(),
   updatedAt: z.number().int(),
   status: SessionStatusSchema,
@@ -140,16 +143,10 @@ export type Session = z.infer<typeof SessionSchema>;
 export const ExplorerTabKindSchema = z.enum(["file", "review", "browser", "terminal", "drawing"]);
 export type ExplorerTabKind = z.infer<typeof ExplorerTabKindSchema>;
 
-/**
- * A strip belongs to a *project*, not to a session.
- *
- * A person opening a file, a terminal and a review is looking at a directory;
- * closing a thread and starting another one in the same directory should not
- * take those away. Sessions live under projects (§3), so the project is the
- * longer-lived of the two, and it is the one the strip is keyed by.
- */
+/** Each session owns an independent explorer, including sessions in the same directory. */
 const ExplorerTabBase = {
   id: z.string(),
+  sessionId: z.string().min(1),
   projectId: z.string(),
   /** Strip order, ascending. */
   order: z.number().int(),
@@ -303,16 +300,6 @@ export const ReviewTabSchema = z.object({
   ...ExplorerTabBase,
   kind: z.literal("review"),
   scope: ReviewScopeSchema.default("all"),
-  /**
-   * The session the `turn` and `session` scopes are measured from, pinned when
-   * one of them is chosen.
-   *
-   * The strip belongs to the project, not to a thread, so a review tab that
-   * followed "whichever session is selected" would change what it is showing
-   * every time someone clicked another thread in the sidebar. Null means the
-   * project's own checkout, which is what `all` and the time presets read.
-   */
-  sessionId: z.string().nullable().default(null),
 });
 
 /** A persistent, root-scoped native browser target with renderer chrome. */
@@ -445,9 +432,9 @@ export const PANE_LIMITS = {
 
 /**
  * The sidebar's half of the layout — its width and whether it is on screen,
- * and nothing else. The explorer's pair of the same two values is per project
+ * and nothing else. The explorer's pair of the same two values is per session
  * and lives in the renderer (`state/explorer.ts`), because whether the
- * right-hand pane earns its width is a fact about the project rather than
+ * right-hand pane earns its width is a fact about the session rather than
  * about the app. There is no third value anywhere: what is rendered, where
  * the toggles are and which pane makes room for the traffic lights are all
  * derived from these two pairs.
@@ -500,8 +487,6 @@ export const SidebarSettingsSchema = z.object({
   environment: SidebarEnvironmentFilterSchema.default("all"),
   groupBy: SidebarGroupBySchema.default("project"),
   sortBy: SidebarSortBySchema.default("activity"),
-  /** Keep a project's header on screen when nothing under it matches. */
-  showEmptyGroups: z.boolean().default(true),
   /** A faint branch (or worktree) name after a session's title. */
   showBranch: z.boolean().default(false),
   /** Project ids whose section is collapsed to its header. */

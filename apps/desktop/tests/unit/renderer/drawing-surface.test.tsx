@@ -50,16 +50,16 @@ beforeEach(() => {
   useProjects.setState({ projects: [project, { ...project, id: "other", path: "/other" }], activeId: project.id });
   useSessions.setState({ sessions: [session("source"), session("other-chat", "other", "/other")], activeId: "source" });
   useComposer.setState({ drafts: {}, pendingFiles: {}, draftRoots: {}, acceptedContexts: {}, focusRequest: null, referenceLabels: {}, queues: {} });
-  useExplorer.setState({ projectId: project.id, root: null, tabs: [], activeId: null, ready: true });
+  useExplorer.setState({ sessionId: "source", projectId: project.id, root: null, tabs: [], activeId: null, ready: true });
   tabId = useExplorer.getState().open("drawing")!.id;
 });
 afterEach(async () => {
-  useExplorer.getState().discardProjectResources(project.id);
-  await useExplorer.getState().bindProject(null);
+  useExplorer.getState().discardSessionResources("source");
+  await useExplorer.getState().bindSession(null, null);
   if (originalArrayBuffer) Object.defineProperty(Blob.prototype, "arrayBuffer", originalArrayBuffer);
   else Reflect.deleteProperty(Blob.prototype, "arrayBuffer");
 });
-const mount = () => render(<DrawingSurface project={project} tabId={tabId} root={null} title="Bracket sketch" />);
+const mount = () => render(<DrawingSurface sessionId="source" project={project} tabId={tabId} root={null} title="Bracket sketch" />);
 
 it("binds the selected chat while encoding and attaches a PNG without navigating or submitting", async () => {
   let resolve!: (blob: Blob) => void;
@@ -90,7 +90,7 @@ it("cancels delivery if its destination project is removed while encoding", asyn
   editor.controller.exportPng.mockImplementation(() => new Promise<Blob>(done => { resolve = done; }));
   const { unmount } = mount();
   fireEvent.click(screen.getByRole("button", { name: "Add to prompt" }));
-  act(() => useProjects.getState().receive(useProjects.getState().projects.filter(item => item.id !== project.id)));
+  act(() => useSessions.getState().receive(useSessions.getState().sessions.filter(item => item.id !== "source")));
   resolve(png());
   await waitFor(() => expect(toast.error).toHaveBeenCalled());
   expect(useComposer.getState().pendingFiles).toEqual({});

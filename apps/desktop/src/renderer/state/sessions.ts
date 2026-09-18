@@ -6,6 +6,7 @@ import type { GitMode, Session } from "@shared/types";
 
 import { useAgents } from "./agents";
 import { useProjects } from "./projects";
+import { flushSessionTabs, useExplorer } from "./explorer";
 import { useSettings, useSidebarSettings } from "./settings";
 
 /**
@@ -57,7 +58,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
 
   load: async () => {
     const sessions = await window.hardcore.sessions.list({});
-    set({ sessions, ready: true });
+    get().receive(sessions);
   },
 
   setActive: (activeId) => set({ activeId }),
@@ -86,6 +87,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
   },
 
   archive: async (id, archived) => {
+    if (archived) await flushSessionTabs(id);
     await window.hardcore.sessions.archive({ id, archived });
     if (archived && get().activeId === id) {
       set({ activeId: null });
@@ -103,17 +105,24 @@ export const useSessions = create<SessionsState>((set, get) => ({
     }
   },
 
-  receive: (sessions) =>
-    set((state) => ({
-      sessions,
-      ready: true,
-      // A deleted session must not stay selected.
-      activeId:
-        state.activeId &&
-        sessions.some((session) => session.id === state.activeId)
-          ? state.activeId
-          : null,
-    })),
+  receive: (sessions) => {
+    const previous = get();
+    const byId = new Map(sessions.map(session => [session.id, session]));
+    for (const session of previous.sessions) {
+      const current = byId.get(session.id);
+      if (!current || (!session.archived && current.archived)) {
+        useExplorer.getState().discardSessionResources(session.id, { preserveTabs: Boolean(current?.archived) });
+      }
+    }
+    const selected = previous.activeId ? byId.get(previous.activeId) : undefined;
+    const alreadyArchived = previous.sessions.find(session => session.id === previous.activeId)?.archived;
+    // Archiving the open session dismisses it, but a deliberately opened
+    // archived transcript remains readable when some other session changes.
+    const activeId = selected && (!selected.archived || alreadyArchived) ? selected.id : null;
+    useProjects.getState().derive(sessions);
+    if (selected?.archived && activeId) useProjects.getState().setActive(selected.projectId);
+    set({ sessions, ready: true, activeId });
+  },
 
   start: async (input, options) => {
     const agentId = input.agentId ?? defaultAgentId();
@@ -127,10 +136,9 @@ export const useSessions = create<SessionsState>((set, get) => ({
       ...(input.cwd ? { cwd: input.cwd } : {}),
       ...(input.name ? { name: input.name } : {}),
     });
-    set(state => ({
-      sessions: state.sessions.some(item => item.id === session.id) ? state.sessions : [...state.sessions, session],
-      ...(options?.select === false ? {} : { activeId: session.id }),
-    }));
+    const sessions = get().sessions;
+    if (!sessions.some(item => item.id === session.id)) get().receive([...sessions, session]);
+    if (options?.select !== false) get().select(session.id);
     return session;
   },
 }));

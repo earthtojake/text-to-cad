@@ -56,6 +56,7 @@ let base: string;
 let repo: string;
 let worktreeRoot: string;
 let projectId: string;
+let worktreeSessionId: string;
 const projectName = "worktree-fixture";
 
 test.beforeAll(async () => {
@@ -82,7 +83,7 @@ test.beforeAll(async () => {
   const project = await page.evaluate((root) => window.hardcore.projects.addPath({ path: root }), repo);
   projectId = project.id;
   await expect(page.getByText(projectName).first()).toBeVisible();
-  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
+  await expect(page.getByTestId("explorer")).toHaveCount(0);
 });
 
 test.afterAll(async () => {
@@ -98,8 +99,12 @@ test("an agent in a worktree opens the file it wrote there, and the explorer roo
     (id) => window.hardcore.sessions.create({ projectId: id, agentId: "claude-code", gitMode: "worktree", name: "Model the wrist" }),
     projectId,
   );
-  const worktree = path.join(worktreeRoot, projectName, "model-the-wrist");
-  expect(session.worktreePath).toBe(worktree);
+  worktreeSessionId = session.id;
+  const worktree = session.worktreePath!;
+  expect(worktree).toBeTruthy();
+  expect(path.relative(worktreeRoot, worktree)).not.toMatch(/^\.\.(?:[/\\]|$)/);
+  expect(path.basename(worktree)).toBe("model-the-wrist");
+  expect(session.cwd).toBe(worktree);
 
   // The thread is selected the way a person selects it, so the explorer's
   // root follows it (the strip switches roots with the session).
@@ -152,14 +157,27 @@ test("an agent in a worktree opens the file it wrote there, and the explorer roo
   await page.screenshot({ path: test.info().outputPath("worktree-explorer.png"), animations: "disabled" });
 });
 
-test("the new-session state roots the explorer at the project again", async () => {
-  // Leaving the thread for the project's new-session state: the root goes
-  // back to the checkout, and a file tab opened now has no worktree crumb.
+test("a new draft has no explorer and a local session gets its own checkout tabs", async () => {
   await page.keyboard.press(process.platform === "darwin" ? "Meta+n" : "Control+n");
   await expect(page.locator("[data-new-session]")).toBeVisible();
+  await expect(page.getByTestId("explorer")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Toggle explorer" })).toHaveCount(0);
+
+  const local = await page.evaluate(
+    (id) => window.hardcore.sessions.create({ projectId: id, agentId: "claude-code", gitMode: "none" }),
+    projectId,
+  );
+  await page.locator(`[data-session-row="${local.id}"]`).getByRole("button").first().click();
+  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
+  await expect(page.getByRole("tab")).toHaveCount(0);
+  await page.getByRole("button", { name: "Toggle explorer" }).click();
   await page.getByRole("button", { name: "New tab", exact: true }).click();
   await page.getByRole("menuitem", { name: "File" }).click();
   await expect(page.locator("[data-crumb=worktree]")).toHaveCount(0);
   await expect(page.locator('[data-path="hello.txt"]')).toHaveCount(0);
   await expect(page.locator('[data-path="tracked.txt"]')).toBeVisible();
+
+  await page.locator(`[data-session-row="${worktreeSessionId}"]`).getByRole("button").first().click();
+  await expect(page.getByRole("tab", { name: /hello\.txt/ })).toBeVisible();
+  await expect(page.locator("[data-crumb=worktree]")).toContainText("model-the-wrist");
 });

@@ -108,7 +108,7 @@ export function ReviewTab(props: {
   tabId: string;
   project: Project;
   scope: ReviewScope;
-  sessionId: string | null;
+  sessionId: string;
 }) {
   return (
     <ReviewBody
@@ -127,25 +127,18 @@ function ReviewBody({
   tabId: string;
   project: Project;
   scope: ReviewScope;
-  sessionId: string | null;
+  sessionId: string;
 }) {
   const update = useExplorer((state) => state.update);
   const sessions = useSessions((state) => state.sessions);
-  const activeSessionId = useSessions((state) => state.activeId);
   const info = useProjectGitInfo(project.id);
 
-  // The session the scope is measured in. A pinned one that has since been
-  // deleted falls back to the project, which is what an unpinned tab reads —
-  // unless the active thread runs in a worktree (plan §9): its changes are
-  // in that directory and nowhere else, so an unpinned `All changes` follows
-  // it there rather than reviewing a checkout the thread never touched.
-  const pinned = sessions.find((candidate) => candidate.id === sessionId) ?? null;
-  const candidate =
-    pinned ?? sessions.find((session) => session.id === activeSessionId) ?? null;
-  const target = scopeNeedsSession(scope) ? candidate : (pinned ?? (candidate?.worktreePath ? candidate : null));
+  // Review revisions always belong to this tab's immutable session owner.
+  const candidate = sessions.find(session => session.id === sessionId) ?? null;
+  const target = candidate;
   const request = useMemo(
-    () => ({ projectId: project.id, ...(target ? { sessionId: target.id } : {}) }),
-    [project.id, target],
+    () => ({ projectId: project.id, sessionId }),
+    [project.id, sessionId],
   );
 
   const [status, setStatus] = useState<GitStatus | null>(null);
@@ -212,7 +205,6 @@ function ReviewBody({
     // the thread it was opened against rather than following the sidebar.
     update(tabId, {
       scope: next,
-      sessionId: scopeNeedsSession(next) ? (candidate?.id ?? null) : null,
     });
   };
 
@@ -383,7 +375,7 @@ function emptyDescription(scope: ReviewScope): string {
 /* -------------------------------------------------------------------------- */
 
 /** The project (and optionally session) every read in this tab is answered for. */
-type ReviewRequest = { projectId: string; sessionId?: string };
+type ReviewRequest = { projectId: string; sessionId: string };
 
 function Totals({ insertions, deletions }: { insertions: number; deletions: number }) {
   return (
@@ -437,7 +429,7 @@ function FileSection({
   const [diff, setDiff] = useState<FileDiff | null>(null);
   const selection = useRef<{ side: string; start: number; end: number; text: string } | null>(null);
   const listeners = useRef<IDisposable[]>([]);
-  const promptContext = useMemo(() => createDesktopPromptContext(request.projectId, root, JSON.stringify(["desktop", request.projectId, root])), [request.projectId, root]);
+  const promptContext = useMemo(() => createDesktopPromptContext(request.projectId, root, JSON.stringify(["desktop", request.projectId, root]), request.sessionId), [request.projectId, root, request.sessionId]);
   useEffect(() => () => { listeners.current.forEach((listener) => listener.dispose()); }, []);
   const requestRevision = () => {
     const selected = selection.current;

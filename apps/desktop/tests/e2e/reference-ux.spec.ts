@@ -131,23 +131,26 @@ test("viewer context and revision requests stay with the right draft and workspa
     const other = await page.evaluate((projectId) => window.hardcore.sessions.create({ projectId, agentId: "claude-code", gitMode: "worktree", name: "Other workspace" }), added.id);
     await page.locator(`[data-session-row="${other.id}"]`).getByRole("button").first().click();
     await draft.fill("Preserve my other workspace draft.");
+    await expect(page.getByRole("tab", { name: /car.step/ })).toHaveCount(0);
+    await expect(page.getByTestId("explorer")).toHaveCount(0);
+
+    // Each viewer stays with its owner: switch back to that session before
+    // adding context, then prove the other session's draft remains untouched.
+    await page.locator(`[data-session-row="${session.id}"]`).getByRole("button").first().click();
     await page.getByRole("tab", { name: /car.step/ }).click();
     await expect(wheel).toBeVisible();
     if (await wheel.getAttribute("aria-selected") !== "true") await wheel.click();
     await expect(wheel).toHaveAttribute("aria-selected", "true");
     await page.getByRole("button", { name: "Capture", exact: true }).click();
     await page.getByTestId("capture-to-chat").click();
-    const startHere = page.getByRole("button", { name: "Start chat here", exact: true });
-    await expect(startHere).toBeVisible();
-    await expect(draft).toHaveText("Preserve my other workspace draft.");
-    await startHere.click();
+    await expect(page.getByRole("button", { name: "Start chat here", exact: true })).toHaveCount(0);
     await expect(chip).toHaveText("car.step · wheel_front_left");
     await expect(page.locator("[data-composer]").getByText(/car-.*\.png/)).toHaveCount(1);
     await expect(draft).toBeFocused();
+    await expect(draft).toContainText("Keep the wheel centered.");
     const sessions = await page.evaluate((projectId) => window.hardcore.sessions.list({ projectId }), added.id);
-    const created = sessions.find((item) => item.id !== session.id && item.id !== other.id);
-    expect(created?.cwd).toBe(project);
-    expect((await page.evaluate((id) => window.hardcore.sessions.state({ id }), created!.id))?.state.turns).toHaveLength(0);
+    expect(sessions.map(item => item.id).sort()).toEqual([session.id, other.id].sort());
+    expect((await page.evaluate((id) => window.hardcore.sessions.state({ id }), other.id))?.state.turns).toHaveLength(0);
     await page.screenshot({ path: test.info().outputPath("view-in-correct-workspace.png"), animations: "disabled" });
     await page.locator("[data-composer]").getByRole("button", { name: "Remove", exact: true }).click();
     await expect(page.getByRole("button", { name: /^Enlarge car-/ })).toHaveCount(0);
@@ -155,6 +158,8 @@ test("viewer context and revision requests stay with the right draft and workspa
     await expect(chip).toHaveText("car.step · wheel_front_left");
     await page.locator(`[data-session-row="${other.id}"]`).getByRole("button").first().click();
     await expect(draft).toHaveText("Preserve my other workspace draft.");
+    await expect(chip).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Enlarge car-/ })).toHaveCount(0);
   } catch (error) {
     await app.windows()[0]?.screenshot({ path: test.info().outputPath("failure.png") }).catch(() => {});
     throw error;

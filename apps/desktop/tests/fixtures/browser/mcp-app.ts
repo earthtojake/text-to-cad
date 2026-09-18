@@ -15,7 +15,7 @@ void app.whenReady().then(async () => {
   const window = new BrowserWindow({ show: false, width: 1200, height: 800 });
   await window.loadURL(`${origin}/shell`);
   const service = new BrowserService();
-  const scope = { projectId: "fixture", root };
+  const scope = { sessionId: "fixture-session", projectId: "fixture", root };
   const calls: { kind: string; tabId?: string }[] = [];
   const present = (id: string) => service.present(scope, id, window, id, { x: 0, y: 0, width: 950, height: 650 });
   const commands = { request: async (command: { kind: string; tabId?: string; url?: string }) => {
@@ -28,7 +28,7 @@ void app.whenReady().then(async () => {
     throw new Error(`Unexpected command: ${command.kind}`);
   } };
   await service.open(scope, { tabId: "form", url: `${origin}/form` }); present("form");
-  const other = { ...scope, root: `${root}/other` };
+  const other = { ...scope, sessionId: "other-session" };
   await service.open(other, { tabId: "other", url: `${origin}/other` });
   const connections = new BrowserConnections({ sessionRoot: () => ({ directory: root, root: null }) }, commands, path.join(root, "artifacts"), service);
   const bridge = new McpBridge({ browser_connection: (session, _params, signal) => connections.connect(session, signal) },

@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
+import { selectFixtureSession } from "./session-fixture";
 
 declare const window: {
   DataTransfer: new () => { items: { add(file: File): void } };
@@ -12,7 +13,7 @@ declare const window: {
   hardcore: {
     projects: { addPath(input: { path: string }): Promise<{ id: string }> };
     settings: { set(input: Record<string, unknown>): Promise<unknown> };
-    explorer: { loadTabs(input: { projectId: string }): Promise<Array<{ kind: string; id: string }>> };
+    explorer: { loadTabs(input: { sessionId: string }): Promise<Array<{ kind: string; id: string }>> };
   };
 };
 
@@ -21,7 +22,7 @@ let app: ElectronApplication;
 let page: Page;
 let base: string;
 let project: string;
-let projectId: string;
+let sessionId: string;
 let drawingId: string;
 const externalRequests: string[] = [];
 const rendererErrors: string[] = [];
@@ -49,8 +50,7 @@ test.beforeAll(async () => {
   });
   await page.waitForLoadState("domcontentloaded");
   await page.evaluate(() => window.hardcore.settings.set({ theme: "dark" }));
-  projectId = (await page.evaluate(root => window.hardcore.projects.addPath({ path: root }), project)).id;
-  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
+  sessionId = (await selectFixtureSession(page, project)).id;
   await page.getByRole("button", { name: "Toggle explorer" }).click();
 });
 test.afterAll(async () => {
@@ -121,7 +121,7 @@ test("real canvas ink attaches a PNG without submitting, survives tab switches, 
   })).toBe(true);
   await expect(composer).toContainText(draft);
   await expect(composer).toContainText("Drawing: Bracket concept.");
-  await expect(page.locator("[data-session-row]")).toHaveCount(0);
+  await expect(page.locator("[data-session-row]")).toHaveCount(1);
   await expect(page.locator("[data-turn][data-role=user]")).toHaveCount(0);
   await page.screenshot({ path: test.info().outputPath("drawing-with-prompt-dark.png"), animations: "disabled" });
 
@@ -179,10 +179,10 @@ test("close discards ink and same-profile reload restores only persistent tabs",
   await expect(page.getByRole('tab', { name: /^Drawing/ })).toHaveCount(0);
   await newTab('Drawing');
   await expect(page.locator('[data-drawing-tab]').getByRole('button', { name: 'Add to prompt', exact: true })).toBeDisabled();
-  await expect.poll(async () => (await page.evaluate(id => window.hardcore.explorer.loadTabs({ projectId: id }), projectId))
+  await expect.poll(async () => (await page.evaluate(id => window.hardcore.explorer.loadTabs({ sessionId: id }), sessionId))
     .map(tab => tab.kind)).toEqual(['browser']);
   await page.reload();
-  await expect(page.locator('[data-explorer-ready=true]')).toBeVisible();
+  await selectFixtureSession(page, project);
   await expect(page.getByRole('tab', { name: /^Drawing/ })).toHaveCount(0);
   await expect(page.locator('[data-drawing-tab]')).toHaveCount(0);
   await expect(page.getByRole('tab', { name: /^New tab/ })).toBeVisible();

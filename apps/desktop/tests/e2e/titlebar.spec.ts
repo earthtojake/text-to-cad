@@ -39,6 +39,7 @@ import {
 
 import { TITLEBAR_HEIGHT, TRAFFIC_LIGHTS_INSET, trafficLightPosition } from "../../src/shared/titlebar";
 import { PANE_LIMITS } from "../../src/shared/types";
+import { selectFixtureSession } from "./session-fixture";
 
 /**
  * `page.evaluate` bodies run in the renderer; see the note in shell.spec.ts.
@@ -49,10 +50,7 @@ import { PANE_LIMITS } from "../../src/shared/types";
  */
 declare const window: {
   hardcore: {
-    projects: {
-      addPath(request: { path: string }): Promise<{ id: string }>;
-      remove(request: { id: string }): Promise<void>;
-    };
+    sessions: { delete(request: { id: string }): Promise<void> };
   };
 };
 interface DomRect {
@@ -96,7 +94,7 @@ test.beforeAll(async () => {
   userData = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-titlebar-e2e-"));
   app = await electron.launch({
     args: [path.join(appRoot, "out", "main", "index.js"), `--user-data-dir=${userData}`],
-    env: { ...process.env, NODE_ENV: "test" },
+    env: { ...process.env, NODE_ENV: "test", HARDCORE_FAKE_AGENT: path.join(appRoot, "tests/fake-agent/index.mjs") },
   });
   page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
@@ -187,12 +185,9 @@ test("the session's bar takes the corner when the sidebar is hidden", async () =
   await setContentSize(1440, 900);
 });
 
-test("a project and its explorer do not move the corner", async () => {
+test("a session and its explorer do not move the corner", async () => {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-titlebar-project-"));
-  const project = await page.evaluate(
-    (directory) => window.hardcore.projects.addPath({ path: directory }),
-    fixture,
-  );
+  const session = await selectFixtureSession(page, fixture);
   await expect(page.getByRole("button", { name: "Toggle explorer" })).toBeVisible();
   await page.getByRole("button", { name: "Toggle explorer" }).click();
   await expect(page.getByTestId("explorer")).toBeVisible();
@@ -205,8 +200,8 @@ test("a project and its explorer do not move the corner", async () => {
   await expectLeftmost("session", "[data-session-header]");
   await collapseSidebar(false);
 
-  await page.evaluate((id) => window.hardcore.projects.remove({ id }), project.id);
-  await expect(page.getByText("Add a project to get started")).toBeVisible();
+  await page.evaluate((id) => window.hardcore.sessions.delete({ id }), session.id);
+  await expect(page.getByText("Choose a folder to get started")).toBeVisible();
   fs.rmSync(fixture, { recursive: true, force: true });
 });
 
@@ -220,7 +215,7 @@ test("Settings reserves the corner itself", async () => {
   await shootTitlebar("titlebar-settings.png");
 
   await page.getByRole("button", { name: "Back to app" }).click();
-  await expect(page.getByText("Add a project to get started")).toBeVisible();
+  await expect(page.getByText("Choose a folder to get started")).toBeVisible();
 });
 
 test("the command palette puts nothing in the corner", async () => {

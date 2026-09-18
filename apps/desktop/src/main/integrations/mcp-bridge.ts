@@ -107,10 +107,6 @@ export class McpBridge {
     return token;
   }
 
-  revokeProject(projectId: string): void {
-    for (const entry of [...this.tokens.values()]) if (entry.session.projectId === projectId) this.revoke(entry.session.sessionId);
-  }
-
   revoke(sessionId: string): void {
     this.resources?.revoke(sessionId);
     for (const [controller, session] of this.inFlight) if (session.sessionId === sessionId) controller.abort(new Error("Session authorization revoked"));

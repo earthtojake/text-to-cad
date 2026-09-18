@@ -433,7 +433,7 @@ export const SessionStateSchema = z.object({
   status: LiveStatusSchema,
   /** Set while `status` is `error`. */
   error: z.string().nullable(),
-  /** From `session_info_update`; the sidebar prefers the first prompt. */
+  /** From `session_info_update`; the index adopts it unless the user renamed the session. */
   title: z.string().nullable(),
   turns: z.array(TurnSchema),
   currentModeId: z.string().nullable(),

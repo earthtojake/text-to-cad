@@ -4,10 +4,11 @@ import type { PromptContextPort } from "@hardcore/core/prompt";
 import type { ExternalEntryAction, FileEntry } from "@hardcore/ui/file-viewer";
 import type { ClipboardPort } from "@hardcore/ui/host";
 import type { Platform } from "@hardcore/ui/navigation";
-import { useExplorer } from "@renderer/state/explorer";
+import { openSessionTab } from "@renderer/state/explorer";
 import type { ExplorerRoot } from "@shared/types";
 
 export type EntryActionContext = {
+  sessionId: string;
   projectId: string;
   root: ExplorerRoot;
   sourceId: string;
@@ -49,7 +50,7 @@ export async function performEntryAction(action: ExternalEntryAction, entry: Pic
     }
     case "open-terminal": {
       const { path } = await window.hardcore.explorer.absolutePath(at);
-      if (useExplorer.getState().projectId === ctx.projectId) useExplorer.getState().open("terminal", { cwd: path });
+      await openSessionTab(ctx.sessionId, ctx.projectId, ctx.root, "terminal", { cwd: path });
       return;
     }
   }

@@ -26,6 +26,7 @@ import type * as pty from "node-pty";
 export type TerminalOptions = {
   /** Working directory. The project root, or a session's worktree. */
   cwd: string;
+  sessionId?: string;
   projectId?: string;
   /** Override the login shell — tests use this to run something predictable. */
   shell?: string;
@@ -91,6 +92,7 @@ class Session {
     public cols: number,
     public rows: number,
     readonly projectId?: string,
+    readonly sessionId?: string,
   ) {}
 
   /** Record a chunk and answer with its sequence number. */
@@ -239,7 +241,7 @@ export class Terminals {
       env: terminalEnv(process.env, options.env ?? {}),
     });
 
-    const session = new Session(id, child, options.cwd, shell, cols, rows, options.projectId);
+    const session = new Session(id, child, options.cwd, shell, cols, rows, options.projectId, options.sessionId);
     this.sessions.set(id, session);
 
     child.onData((data) => {
@@ -271,8 +273,8 @@ export class Terminals {
     return session.read(after, limit);
   }
 
-  owns(id: string, projectId: string): boolean {
-    return this.sessions.get(id)?.projectId === projectId;
+  owns(id: string, sessionId: string): boolean {
+    return this.sessions.get(id)?.sessionId === sessionId;
   }
 
   writeGuarded(id: string, data: string, expectedSequence: number, expectedInputRevision: number): void {
@@ -331,8 +333,8 @@ export class Terminals {
     return [...this.sessions.values()].map((session) => session.info());
   }
 
-  disposeProject(projectId: string): void {
-    for (const [id, session] of this.sessions) if (session.projectId === projectId) this.kill(id);
+  disposeSession(sessionId: string): void {
+    for (const [id, session] of this.sessions) if (session.sessionId === sessionId) this.kill(id);
   }
 
   /** On quit. A pty outliving the app is a shell nobody can see or stop. */

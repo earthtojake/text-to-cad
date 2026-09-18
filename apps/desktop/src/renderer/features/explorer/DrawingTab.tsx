@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import type { Project } from '@shared/types';
 
 const DrawingSurface = lazy(() => import('./drawing/DrawingSurface'));
-export interface DrawingTabProps { tabId: string; project: Project; root: string | null; title: string }
+export interface DrawingTabProps { sessionId: string; tabId: string; project: Project; root: string | null; title: string }
 
 class DrawingBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
   override state = { error: null as string | null };

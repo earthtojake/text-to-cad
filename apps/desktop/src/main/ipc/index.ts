@@ -9,8 +9,7 @@
 import { BrowserWindow, app, dialog, shell } from "electron";
 
 import { ipcContract, type IpcContract } from "../../shared/ipc";
-import { projects, sessions, settings } from "../db/repositories";
-import { forgetProject } from "../integrations";
+import { projects, settings } from "../db/repositories";
 import { viewers } from "../cad";
 import { track } from "../telemetry";
 import { applySettingsEffects } from "../settings-effects";
@@ -22,9 +21,8 @@ import { integrationHandlers } from "./integrations";
 import { cadHandlers } from "./cad";
 import { clipboardHandlers } from "./clipboard";
 import { browserHandlers } from "./browser";
-import { browserService } from "../browser/service";
 import { dialogsHandlers } from "./dialogs";
-import { explorerHandlers, initExplorerServices, explorerTerminals } from "./explorer";
+import { explorerHandlers, initExplorerServices } from "./explorer";
 import { gitHandlers } from "./git";
 import { runtimeHandlers } from "./runtime";
 import { skillsHandlers } from "./skills";
@@ -57,35 +55,15 @@ const handlers = {
       if (!directory) {
         return null;
       }
-      const project = projects.add(directory);
-      broadcast("projects.changed", projects.list());
-      return project;
+      const selected = projects.add(directory);
+      broadcast("ui.directorySelected", selected);
+      return selected;
     },
 
     addPath: ({ path: directory }: { path: string }) => {
-      const project = projects.add(directory);
-      broadcast("projects.changed", projects.list());
-      return project;
-    },
-
-    remove: ({ id }: { id: string }) => {
-      const project = projects.list().find((candidate) => candidate.id === id);
-      forgetProject(id);
-      browserService.disposeProject(id);
-      explorerTerminals().disposeProject(id);
-      projects.remove(id);
-      // The viewer served that root for this project; nothing else asks for it.
-      if (project && !projects.list().some((other) => other.path === project.path)) {
-        viewers().stop(project.path);
-      }
-      broadcast("projects.changed", projects.list());
-      broadcast("sessions.changed", sessions.list());
-    },
-
-    rename: ({ id, name }: { id: string; name: string }) => {
-      const project = projects.rename(id, name);
-      broadcast("projects.changed", projects.list());
-      return project;
+      const selected = projects.add(directory);
+      broadcast("ui.directorySelected", selected);
+      return selected;
     },
   },
 

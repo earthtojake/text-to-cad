@@ -5,6 +5,12 @@ description: Inspect and present CAD files inside Hardcore using its CAD and wor
 
 # CAD inside Hardcore
 
+App tabs belong to this session only. Even another session in the same directory
+has separate tabs. Opening or showing a tab updates this session's explorer;
+background tool calls never switch the user's selected session. Use IDs returned
+by this session's tools.
+
+
 The embedded viewer already belongs to the workspace. Use workspace `open_file` on a completed artifact instead of starting `cadgen viewer` or posting a localhost link. Use `list_open_tabs` for tab IDs and `show_tab` to display a model before controlling it.
 
 The `cad` integration supplies `viewer_state`, `select_reference` and `capture_view`. Viewer state includes model revision, actual selection and camera. Inactive snapshots are marked `active:false`; activate the model before mutating or capturing its viewport. Captures are tool results, not a submitted prompt.

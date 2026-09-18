@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { BrowserTargetSchema, BrowserInputSchema } from "../browser";
 import { invoke } from "./define";
-const Scope = z.object({ projectId: z.string().min(1), root: z.string().nullable().optional() });
+const Scope = z.object({ sessionId: z.string().min(1), projectId: z.string().min(1), root: z.string().nullable().optional() });
 const At = Scope.extend({ tabId: z.string().min(1) });
 export const browserIpc = {
   browser: {

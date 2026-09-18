@@ -118,12 +118,8 @@ test.beforeAll(async () => {
   );
   projectId = project.id;
   await expect(page.getByText(projectName).first()).toBeVisible();
-  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
-  // The explorer pane starts closed and opens when something opens in it
-  // (plan §3). This suite is about what it *shows*, so it is opened once
-  // here rather than incidentally by the first file.
-  await page.getByRole("button", { name: "Toggle explorer" }).click();
-  await expect(page.getByTestId("explorer")).toBeVisible();
+  // A chosen folder is only a draft; the explorer appears after selecting a session.
+  await expect(page.getByRole("button", { name: "Toggle explorer" })).toHaveCount(0);
 });
 
 test.afterAll(async () => {
@@ -172,6 +168,9 @@ test("a checkout session runs in the project, on the branch it is already on", a
   const row = page.locator("[data-session-row]").filter({ hasText: /please write/ }).getByRole("button", { name: /^please write/ }).first();
   await expect(row).toBeVisible();
   await row.click();
+  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
+  await page.getByRole("button", { name: "Toggle explorer" }).click();
+  await expect(page.getByTestId("explorer")).toBeVisible();
 });
 
 test("a change made in the terminal tab lands in the review, in every scope", async () => {

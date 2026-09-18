@@ -2,7 +2,7 @@
  * One place where main's pushes land in the stores.
  *
  * Components subscribe to stores, never to IPC. That keeps the event listeners
- * out of React's lifecycle — a `projects.changed` listener mounted per row
+ * out of React's lifecycle — a `sessions.changed` listener mounted per row
  * would be re-registered on every render of the sidebar — and it means a
  * change made from the app menu updates the same state a click would.
  */
@@ -31,8 +31,9 @@ export type UiCommand = IpcEventPayload<"ui.command">["command"];
 export function subscribeToMain(): () => void {
   const commands = new Map<string, AbortController>();
   const off = [
-    window.hardcore.on("projects.changed", (projects) => {
-      useProjects.getState().receive(projects);
+    window.hardcore.on("ui.directorySelected", (directory) => {
+      useProjects.getState().selectDirectory(directory);
+      useSessions.getState().setActive(null);
     }),
     window.hardcore.on("sessions.changed", (sessions) => {
       useSessions.getState().receive(sessions);
@@ -95,27 +96,15 @@ export function subscribeToMain(): () => void {
     window.hardcore.on("ui.command", (payload) => runUiCommand(payload)),
   ];
 
-  // The explorer strip belongs to the active project, so it follows the
-  // project selection rather than being loaded once. Subscribing to the store
-  // rather than doing this in a component keeps the load off React's
-  // lifecycle — a remount must not re-read the strip and lose the selection.
-  let boundProject: string | null | undefined;
-  const unsubscribeProjects = useProjects.subscribe((state) => {
-    if (state.activeId === boundProject) {
-      return;
-    }
-    boundProject = state.activeId;
-    void useExplorer.getState().bindProject(state.activeId, explorerRootFor(state.activeId));
-  });
-  // And its root follows the session selection (plan §9): a thread in a
-  // worktree makes the explorer look at that worktree; a thread in the
-  // checkout, or no thread, makes it look at the project.
-  const unsubscribeSessions = useSessions.subscribe(() => {
-    const explorer = useExplorer.getState();
-    if (explorer.projectId && explorer.ready) {
-      explorer.setRoot(explorerRootFor(explorer.projectId));
-    }
-  });
+  // Session selection is the only authority for which explorer is displayed.
+  // A directory may group several sessions, but it never owns their tabs.
+  const bindExplorer = () => {
+    const { activeId, sessions } = useSessions.getState();
+    const session = sessions.find(session => session.id === activeId && !session.archived);
+    void useExplorer.getState().bindSession(session?.id ?? null, session?.projectId ?? null,
+      session ? explorerRootFor(session.projectId) : null).catch(error => console.error("[explorer] restore failed", error));
+  };
+  const unsubscribeSessions = useSessions.subscribe(bindExplorer);
 
   // Back and forward are a history of the selection, recorded by watching it
   // (`state/history.ts`): every door into "show me this thread" ends at these
@@ -125,7 +114,6 @@ export function subscribeToMain(): () => void {
   return () => {
     for (const controller of commands.values()) controller.abort(new Error("Window disconnected"));
     commands.clear();
-    unsubscribeProjects();
     unsubscribeSessions();
     unsubscribeHistory();
     for (const detach of off) {
@@ -218,14 +206,13 @@ function toggleLayout(key: "sidebarCollapsed") {
 export async function hydrate(): Promise<void> {
   await Promise.all([
     useSettings.getState().load(),
-    useProjects.getState().load(),
     useSessions.getState().load(),
     useUpdates.getState().load(),
     useAgents.getState().load(),
     useAgentOptions.getState().load(),
   ]);
-  // The explorer's strip follows the active project, which the subscription
-  // in `subscribeToMain` picks up as soon as `useProjects.load` resolves.
-  const projectId = useProjects.getState().activeId;
-  await useExplorer.getState().bindProject(projectId, explorerRootFor(projectId));
+  const state = useSessions.getState();
+  const session = state.sessions.find(session => session.id === state.activeId && !session.archived);
+  await useExplorer.getState().bindSession(session?.id ?? null, session?.projectId ?? null,
+    session ? explorerRootFor(session.projectId) : null);
 }

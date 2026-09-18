@@ -1,14 +1,12 @@
-import { toast } from "sonner";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { PromptContext, PromptPart } from "@hardcore/core/prompt";
 
 import { createDesktopPromptContext } from "@renderer/features/explorer/host/promptContext";
-import { newSessionKey, useComposer } from "@renderer/state/composer";
+import { useComposer } from "@renderer/state/composer";
 import { useProjects } from "@renderer/state/projects";
 import { useSessions } from "@renderer/state/sessions";
 import type { Project, Session } from "@shared/types";
 
-vi.mock("sonner", () => ({ toast: { error: vi.fn(), dismiss: vi.fn() } }));
 const workspaceId = JSON.stringify(["desktop", "car", null]);
 const png = () => new Blob([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], { type: "image/png" });
 const reference: PromptPart = { id: "part", kind: "reference", reference: { resource: { kind: "workspace-file", workspaceId, path: "models/car.step", revision: "v7" }, target: { kind: "cad-selector", selectors: ["o1.f2"] }, label: "body" } };
@@ -28,20 +26,19 @@ beforeEach(() => {
     });
   } });
   useProjects.setState({ activeId: "car", projects: [{ id: "car", path: "/car" }, { id: "other", path: "/other" }] as Project[] });
-  useSessions.setState({ activeId: null, sessions: [] });
+  useSessions.setState({ activeId: "first", sessions: [session("first"), session("second")] });
   useComposer.setState({ drafts: {}, pendingFiles: {}, draftRoots: {}, acceptedContexts: {}, focusRequest: null, referenceLabels: {}, queues: {} });
 });
 afterEach(() => {
-  for (const call of vi.mocked(toast.error).mock.calls) (call[1]?.onDismiss as unknown as (() => void) | undefined)?.();
   if (originalArrayBuffer) Object.defineProperty(Blob.prototype, "arrayBuffer", originalArrayBuffer); else Reflect.deleteProperty(Blob.prototype, "arrayBuffer");
   vi.restoreAllMocks();
 });
 
 it("allows a failed operation to retry with valid attachment bytes", async () => {
-  const port = createDesktopPromptContext("car", null, workspaceId);
+  const port = createDesktopPromptContext("car", null, workspaceId, "first");
   expect((await port.deliver(context("retry", [{ id: "image", kind: "attachment", name: "view.png", mimeType: "image/png", content: Promise.reject(new Error("Encoder failed")) }]))).status).toBe("failed");
   expect((await port.deliver(context("retry", [{ id: "image", kind: "attachment", name: "view.png", mimeType: "image/png", content: png() }]))).status).toBe("added");
-  expect(useComposer.getState().pendingFiles[newSessionKey("car")]).toHaveLength(1);
+  expect(useComposer.getState().pendingFiles["first"]).toHaveLength(1);
 });
 
 it.each(["constructor", "toString", "__proto__"])("accepts and deduplicates the own receipt for operation %s", async operationId => {
@@ -50,27 +47,15 @@ it.each(["constructor", "toString", "__proto__"])("accepts and deduplicates the 
     { id: "image", kind: "attachment", name: "view.png", mimeType: "image/png", content: png() },
   ]);
   const receipt = { status: "added", partIds: ["text", "image"] };
-  expect(await createDesktopPromptContext("car", null, workspaceId).deliver(bundle)).toEqual(receipt);
+  expect(await createDesktopPromptContext("car", null, workspaceId, "first").deliver(bundle)).toEqual(receipt);
   // A second port must consult the shared receipt without duplicating either part.
-  expect(await createDesktopPromptContext("car", null, workspaceId).deliver(bundle)).toEqual(receipt);
+  expect(await createDesktopPromptContext("car", null, workspaceId, "first").deliver(bundle)).toEqual(receipt);
   const state = useComposer.getState();
-  expect(state.drafts[newSessionKey("car")]).toBe("Inspect this view");
-  expect(state.pendingFiles[newSessionKey("car")]).toHaveLength(1);
+  expect(state.drafts["first"]).toBe("Inspect this view");
+  expect(state.pendingFiles["first"]).toHaveLength(1);
   expect(Object.keys(state.acceptedContexts)).toEqual([operationId]);
   expect(Object.getPrototypeOf(state.acceptedContexts)).toBe(Object.prototype);
   expect(JSON.parse(JSON.stringify(state.acceptedContexts))).toEqual(state.acceptedContexts);
-});
-
-it("caps deferred offers and invalidates an evicted action without starting a chat", async () => {
-  useSessions.setState({ activeId: "old", sessions: [session("old")] });
-  const start = vi.spyOn(useSessions.getState(), "start");
-  vi.mocked(toast.error).mockReturnValue(1);
-  const port = createDesktopPromptContext("car", "/car-worktree", workspaceId);
-  for (let i = 0; i < 9; i++) await port.deliver(context(`offer-${i}`));
-  expect(toast.dismiss).toHaveBeenCalledWith(1);
-  const action = vi.mocked(toast.error).mock.calls[0]?.[1]?.action as unknown as { onClick(): void };
-  action.onClick();
-  expect(start).not.toHaveBeenCalled();
 });
 
 it("binds the destination before PNG resolution, preserves order and never focuses a different chat", async () => {
@@ -78,7 +63,7 @@ it("binds the destination before PNG resolution, preserves order and never focus
   useComposer.getState().setDraft("first", "Keep my draft");
   let resolve!: (blob: globalThis.Blob) => void;
   const image = new Promise<globalThis.Blob>(done => { resolve = done; });
-  const port = createDesktopPromptContext("car", null, workspaceId);
+  const port = createDesktopPromptContext("car", null, workspaceId, "first");
   const bundle = context("capture", [{ id: "intro", kind: "text", text: "Inspect" }, reference, { id: "image", kind: "attachment", name: "view.png", mimeType: "image/png", content: image, about: ["part"] }, { id: "outro", kind: "text", text: "Keep the holes" }]);
   const delivered = port.deliver(bundle);
   expect(port.deliver(bundle)).toBe(delivered);
@@ -97,7 +82,7 @@ it("binds the destination before PNG resolution, preserves order and never focus
 });
 
 it("rejects an invalid attachment without accepting text or reference parts", async () => {
-  const port = createDesktopPromptContext("car", null, workspaceId);
+  const port = createDesktopPromptContext("car", null, workspaceId, "first");
   const result = await port.deliver(context("binary", [reference, { id: "binary", kind: "attachment", name: "archive.zip", mimeType: "application/zip", content: new Blob([new Uint8Array([1, 0, 2])], { type: "application/zip" }) as unknown as globalThis.Blob }]));
   expect(result.status).toBe("failed");
   expect(useComposer.getState().drafts).toEqual({});
@@ -109,7 +94,7 @@ it("cancels when the bound chat disappears during capture", async () => {
   useSessions.setState({ activeId: "first", sessions: [session("first")] });
   let resolve!: (blob: globalThis.Blob) => void;
   const image = new Promise<globalThis.Blob>(done => { resolve = done; });
-  const port = createDesktopPromptContext("car", null, workspaceId);
+  const port = createDesktopPromptContext("car", null, workspaceId, "first");
   const delivered = port.deliver(context("deleted", [{ id: "image", kind: "attachment", name: "view.png", mimeType: "image/png", content: image }]));
   useSessions.setState({ activeId: null, sessions: [] });
   resolve(png() as unknown as globalThis.Blob);
@@ -117,9 +102,9 @@ it("cancels when the bound chat disappears during capture", async () => {
   expect(useComposer.getState().drafts).toEqual({});
 });
 
-it("uses a project-specific new draft and readable URL/text-range references", async () => {
-  const port = createDesktopPromptContext("car", null, workspaceId);
-  const key = newSessionKey("car");
+it("uses the owner session draft and readable URL/text-range references", async () => {
+  const port = createDesktopPromptContext("car", null, workspaceId, "first");
+  const key = "first";
   useComposer.getState().setDraft(key, "Existing prose");
   expect((await port.deliver(context("readable", [
     { id: "url", kind: "reference", reference: { resource: { kind: "url", url: "https://example.com/spec" }, target: { kind: "whole-resource" } } },
@@ -131,67 +116,53 @@ it("uses a project-specific new draft and readable URL/text-range references", a
 });
 
 it("rejects a foreign workspace reference", async () => {
-  const port = createDesktopPromptContext("car", null, workspaceId);
+  const port = createDesktopPromptContext("car", null, workspaceId, "first");
   const foreign = structuredClone(reference) as Extract<PromptPart, { kind: "reference" }>;
   foreign.reference.resource = { kind: "workspace-file", workspaceId: "other", path: "car.step" };
   expect((await port.deliver(context("foreign", [foreign]))).status).toBe("failed");
   expect(useComposer.getState().drafts).toEqual({});
 });
 
-it.each(["mismatch", "constructor", "toString", "__proto__"])("defers operation %s to an explicit workspace action and revalidates that action", async operationId => {
-  useSessions.setState({ activeId: "old", sessions: [session("old")] });
-  useComposer.getState().setDraft("old", "Unfinished");
-  const start = vi.spyOn(useSessions.getState(), "start").mockImplementation(async () => {
-    const created = session("new", "/car-worktree");
-    useSessions.setState({ sessions: [...useSessions.getState().sessions, created] });
-    return created;
-  });
-  const port = createDesktopPromptContext("car", "/car-worktree", workspaceId);
-  const bundle = context(operationId);
-  expect((await port.deliver(bundle)).status).toBe("deferred");
-  expect(start).not.toHaveBeenCalled();
-  const action = vi.mocked(toast.error).mock.calls.at(-1)?.[1]?.action as unknown as { onClick(): void };
-  action.onClick(); action.onClick();
-  await vi.waitFor(() => expect(useComposer.getState().drafts.new).toBe("models/car.step#o1.f2 "));
-  expect(start).toHaveBeenCalledExactlyOnceWith({ projectId: "car", cwd: "/car-worktree" }, { select: false });
-  expect(useComposer.getState().drafts.old).toBe("Unfinished");
-  expect((await port.deliver(bundle)).status).toBe("added");
+it("binds the owner before deliver is called, even when a renderer callback outlives a session switch", async () => {
+  const port = createDesktopPromptContext("car", null, workspaceId, "first");
+  useSessions.setState({ activeId: "second" });
+  expect((await port.deliver(context("late-callback"))).status).toBe("added");
+  expect(useComposer.getState().drafts.first).toBe("models/car.step#o1.f2 ");
+  expect(useComposer.getState().drafts.second).toBeUndefined();
+  expect(useComposer.getState().focusRequest).toBeNull();
 });
 
-it("keeps an explicitly requested workspace chat bound while PNG capture outlives navigation", async () => {
-  useSessions.setState({ activeId: "old", sessions: [session("old")] });
+it("cancels capture if the owner is archived without changing another session's draft", async () => {
   let resolve!: (blob: Blob) => void;
   const image = new Promise<Blob>(done => { resolve = done; });
-  const start = vi.spyOn(useSessions.getState(), "start").mockImplementation(async () => {
-    const created = session("new", "/car-worktree");
-    useSessions.setState({ sessions: [...useSessions.getState().sessions, created] });
-    return created;
-  });
-  const port = createDesktopPromptContext("car", "/car-worktree", workspaceId);
-  expect((await port.deliver(context("navigate", [reference, { id: "image", kind: "attachment", name: "view.png", mimeType: "image/png", content: image }]))).status).toBe("deferred");
-  const action = vi.mocked(toast.error).mock.calls.at(-1)?.[1]?.action as unknown as { onClick(): void };
-  action.onClick();
-  useProjects.setState({ activeId: "other" });
-  useSessions.setState({ activeId: null });
+  const port = createDesktopPromptContext("car", null, workspaceId, "first");
+  const delivered = port.deliver(context("archived", [{ id: "image", kind: "attachment", name: "view.png", mimeType: "image/png", content: image }]));
+  useSessions.setState({ activeId: "second", sessions: [{ ...session("first"), archived: true }, session("second")] });
   resolve(png());
-  await vi.waitFor(() => expect(useComposer.getState().pendingFiles.new).toHaveLength(1));
-  expect(start).toHaveBeenCalledExactlyOnceWith({ projectId: "car", cwd: "/car-worktree" }, { select: false });
-  expect(useComposer.getState().drafts.new).toBe("models/car.step#o1.f2 ");
-  expect(useProjects.getState().activeId).toBe("other");
-  expect(useSessions.getState().activeId).toBeNull();
-  expect(useComposer.getState().focusRequest).toBeNull();
-  expect(useComposer.getState().queues).toEqual({});
+  expect((await delivered).status).toBe("cancelled");
+  expect(useComposer.getState().drafts).toEqual({});
+  expect(useComposer.getState().pendingFiles).toEqual({});
 });
 
-it("rejects a deferred workspace action after its project disappears", async () => {
-  useSessions.setState({ activeId: "old", sessions: [session("old")] });
-  const start = vi.spyOn(useSessions.getState(), "start");
-  const port = createDesktopPromptContext("car", "/car-worktree", workspaceId);
-  expect((await port.deliver(context("removed-project"))).status).toBe("deferred");
-  const action = vi.mocked(toast.error).mock.calls.at(-1)?.[1]?.action as unknown as { onClick(): void };
-  useProjects.setState({ activeId: "other", projects: useProjects.getState().projects.filter(project => project.id !== "car") });
-  action.onClick();
-  expect(start).not.toHaveBeenCalled();
-  expect(useComposer.getState().acceptedContexts).toEqual({});
+it("rejects a workspace mismatch instead of directing context into another session", async () => {
+  const port = createDesktopPromptContext("car", "/car-worktree", workspaceId, "first");
+  expect((await port.deliver(context("mismatch"))).status).toBe("failed");
   expect(useComposer.getState().drafts).toEqual({});
+});
+
+it("does not reuse another session's delivery receipt", async () => {
+  const bundle = context("reused-operation");
+  await createDesktopPromptContext("car", null, workspaceId, "first").deliver(bundle);
+  expect((await createDesktopPromptContext("car", null, workspaceId, "second").deliver(bundle)).status).toBe("failed");
+  expect(useComposer.getState().drafts.second).toBeUndefined();
+});
+
+it("does not reuse a receipt produced by another session while encoding was pending", async () => {
+  const bundle = context("concurrent-operation", [{ id: "image", kind: "attachment", name: "view.png", mimeType: "image/png", content: png() }]);
+  const results = await Promise.all([
+    createDesktopPromptContext("car", null, workspaceId, "first").deliver(bundle),
+    createDesktopPromptContext("car", null, workspaceId, "second").deliver(bundle),
+  ]);
+  expect(results.map(result => result.status).sort()).toEqual(["added", "failed"]);
+  expect(Object.values(useComposer.getState().pendingFiles).flat()).toHaveLength(1);
 });

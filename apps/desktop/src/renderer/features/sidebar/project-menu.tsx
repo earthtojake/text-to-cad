@@ -1,6 +1,6 @@
-import { FolderOpen, MessageSquarePlus, Pencil, Trash2 } from "lucide-react";
+import { FolderOpen, MessageSquarePlus } from "lucide-react";
 
-import { MenuItem, MenuSeparator } from "@renderer/features/sidebar/menu";
+import { MenuItem } from "@renderer/features/sidebar/menu";
 import { useProjects } from "@renderer/state/projects";
 import { useSessions } from "@renderer/state/sessions";
 import type { Project } from "@shared/types";
@@ -18,13 +18,10 @@ import type { Project } from "@shared/types";
  */
 export function ProjectMenuItems({
   project,
-  onRename,
 }: {
   project: Project;
-  onRename: () => void;
 }) {
   const setActiveProject = useProjects((state) => state.setActive);
-  const removeProject = useProjects((state) => state.remove);
   const setActiveSession = useSessions((state) => state.setActive);
 
   return (
@@ -37,7 +34,6 @@ export function ProjectMenuItems({
           setActiveSession(null);
         }}
       />
-      <MenuItem icon={<Pencil />} label="Rename" onSelect={onRename} />
       <MenuItem
         label="Copy path"
         onSelect={() => void navigator.clipboard.writeText(project.path)}
@@ -46,13 +42,6 @@ export function ProjectMenuItems({
         icon={<FolderOpen />}
         label="Reveal in Finder"
         onSelect={() => void window.hardcore.shell.showItemInFolder({ path: project.path })}
-      />
-      <MenuSeparator />
-      <MenuItem
-        destructive
-        icon={<Trash2 />}
-        label="Remove from Hardcore"
-        onSelect={() => void removeProject(project.id)}
       />
     </>
   );

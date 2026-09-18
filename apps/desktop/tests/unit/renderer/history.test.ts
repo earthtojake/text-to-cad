@@ -23,6 +23,7 @@ function session(id: string, projectId: string): Session {
     projectId,
     agentId: "fake",
     title: id,
+    titleSource: "prompt",
     cwd: `/tmp/${projectId}`,
     gitMode: "none",
     createdAt: 0,
@@ -50,7 +51,7 @@ let detach: () => void;
 
 beforeEach(() => {
   useHistory.setState({ entries: [], index: -1 });
-  useProjects.setState({ projects: [project("p1"), project("p2")], ready: true, activeId: null });
+  useProjects.setState({ projects: [project("p1"), project("p2")], ready: true, activeId: null, draft: null });
   useSessions.setState({
     sessions: [session("s1", "p1"), session("s2", "p1"), session("s3", "p2")],
     ready: true,
@@ -163,7 +164,7 @@ describe("the top-level history", () => {
     await land(() => useProjects.getState().setActive("p1"));
     await land(() => useSessions.getState().select("s3"));
     await land(() => useProjects.getState().setActive("p1"));
-    await land(() => useProjects.getState().receive([project("p1")]));
+    await land(() => useSessions.getState().receive([session("s1", "p1"), session("s2", "p1")]));
 
     await land(() => useHistory.getState().back());
     expect(useHistory.getState().index).toBe(0);

@@ -72,6 +72,7 @@ describe("the document", () => {
 describe("the editor", () => {
   let editor: Editor | null = null;
   const make = (text: string) => {
+    editor?.destroy();
     editor = new Editor({
       extensions: [Document.extend({ content: "paragraph" }), Paragraph, Text, HardBreak, ReferenceNode],
       content: docFromText(text),

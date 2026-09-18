@@ -4,17 +4,19 @@
 The UI and the session's browser tools operate on that same page. Unmounting a
 browser tab hides its native view; it does not navigate, destroy or recreate the
 page. Form values, page JavaScript, history and scroll therefore survive tab and
-project switches. Closing a browser tab destroys its page. Project removal and
+session switches. Closing a browser tab destroys its page. Session archive/deletion and
 app shutdown dispose all affected pages. App restarts restore saved URLs; live
 form state is not serialized across restarts.
 
-Every page carries the project ID and a canonical workspace root. Browser tool
-handlers derive these from the authenticated session, and UI handlers validate
-roots with `rootOf`. IDs cannot be reused across roots. Listing only returns the
-caller's root. Storage partitions are hashed from project ID plus canonical root:
-tabs in one root share cookies and storage, while projects and worktrees do not.
-A project switch keeps the background pages alive, even when no browser chrome
-is mounted. This costs one Chromium page per live tab.
+Every page carries its immutable session ID, directory identity and canonical
+workspace root. Browser tools derive all three from the authenticated session;
+UI handlers validate the session and its root. IDs cannot be reused across
+sessions, including two sessions in the same directory. Listing exposes only the
+caller's pages. Storage partitions are hashed from session ID, directory and
+root: pages in one session share storage, separate sessions do not. Background
+browser commands never navigate the user's session selection. A session switch
+keeps its pages alive while hiding their presentation; this costs one Chromium
+page per live tab.
 
 ## Playwright MCP
 
@@ -90,11 +92,12 @@ console are read from main, including agent and page-initiated navigation.
 The browser toolbar offers selected text and page screenshot actions. Both add a
 URL reference plus a text/PNG attachment through the same desktop prompt port
 used by files and drawings. Selection is a `.txt` attachment so native capture
-can finish asynchronously after the port has bound the destination. Capture
+can finish asynchronously after the port has bound the tab's owner session. Capture
 checks the page URL and navigation generation before and after reading it. A
 changed page fails explicitly. Switching chats during capture cannot redirect
 the attachment, existing draft text is preserved, and nothing is submitted.
-A workspace mismatch uses the shared Start chat here recovery.
+Deleting or archiving the owner cancels delivery. A workspace mismatch fails
+without redirecting context into another chat.
 
 ## Validation
 

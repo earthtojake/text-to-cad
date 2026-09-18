@@ -5,6 +5,12 @@ description: Browse, inspect and interact with the same embedded pages the user 
 
 # Embedded browser
 
+App tabs belong to this session only. Even another session in the same directory
+has separate tabs. Opening or showing a tab updates this session's explorer;
+background tool calls never switch the user's selected session. Use IDs returned
+by this session's tools.
+
+
 Use this session's `hardcore-browser` tools. They run the bundled Playwright MCP
 against Hardcore's actual browser tabs. No browser installer, separate browser,
 external profile or cloud account is needed. The session sees only its project's

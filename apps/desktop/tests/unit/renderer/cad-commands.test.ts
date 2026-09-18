@@ -4,7 +4,7 @@ import { useExplorer } from "@renderer/state/explorer";
 
 beforeEach(() => {
   vi.useFakeTimers();
-  useExplorer.setState({ projectId: "project", root: null, tabs: [], activeId: null,
+  useExplorer.setState({ sessionId: "session", projectId: "project", root: null, tabs: [], activeId: null,
     cadSelection: null, cadCapture: null, ready: true });
 });
 afterEach(() => { vi.runOnlyPendingTimers(); vi.useRealTimers(); });

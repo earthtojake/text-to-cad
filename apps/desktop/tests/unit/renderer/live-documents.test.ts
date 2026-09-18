@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { desktopLiveDocuments, performDocumentCommand, performPdfCommand, hasDirtyDocument, releaseDocumentTab } from '@renderer/state/live-documents';
+import { desktopLiveDocuments, performDocumentCommand, performPdfCommand, hasDirtyDocument, releaseDocumentTab, discardDocumentTab } from '@renderer/state/live-documents';
 import type { LiveTextSnapshot } from '@hardcore/ui/host';
 
 test('inactive documents preserve unsaved reads, isolate worktrees, and cannot silently close', async () => {
@@ -56,4 +56,16 @@ test('explicit discard removes owned drafts, including earlier files, and unmoun
   expect(host.documents!.drafts.get('root', 'prior.txt')).toBeUndefined();
   expect(host.documents!.drafts.get('root', 'current.txt')).toBeUndefined();
   await expect(performDocumentCommand('document-read', { tabId: 'discard' }, scope)).rejects.toThrow(/workspace/);
+});
+
+test('two sessions opening the same resource retain independent unsaved buffers', () => {
+  const a = desktopLiveDocuments('session-a-tab', { projectId: 'shared', root: null });
+  const b = desktopLiveDocuments('session-b-tab', { projectId: 'shared', root: null });
+  a.documents!.drafts.put('same-root', 'same.txt', { base: { content: 'disk' }, value: 'A unsaved', stale: false });
+  expect(b.documents!.drafts.get('same-root', 'same.txt')).toBeUndefined();
+  b.documents!.drafts.put('same-root', 'same.txt', { base: { content: 'disk' }, value: 'B unsaved', stale: false });
+  expect(a.documents!.drafts.get('same-root', 'same.txt')?.value).toBe('A unsaved');
+  discardDocumentTab('session-a-tab');
+  expect(b.documents!.drafts.get('same-root', 'same.txt')?.value).toBe('B unsaved');
+  discardDocumentTab('session-b-tab');
 });

@@ -23,6 +23,7 @@ const session = (projectId: string, updatedAt: number, overrides: Partial<Sessio
   cwd: "/repo",
   gitMode: "none",
   title: "A thread",
+  titleSource: "prompt",
   createdAt: 0,
   updatedAt,
   status: "idle",

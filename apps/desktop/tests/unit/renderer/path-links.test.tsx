@@ -135,7 +135,7 @@ describe("PathLink", () => {
   beforeEach(() => {
     usePathLinks.setState({ kinds: {} });
     window.localStorage.clear();
-    useExplorer.setState({ projectId: "p1", root: null, tabs: [], activeId: null, ready: true, collapsed: true, cadSelection: null, reveal: null });
+    useExplorer.setState({ sessionId: "s1", projectId: "p1", root: null, tabs: [], activeId: null, ready: true, collapsed: true, cadSelection: null, reveal: null });
   });
 
   it("is the words it was until the path is known to exist, then a link that opens the file", async () => {

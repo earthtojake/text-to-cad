@@ -21,7 +21,7 @@ import type { IpcContext } from "./register";
 export const cadHandlers = {
   cad: {
     viewerOrigin: async ({ projectId, root }): Promise<ViewerOrigin> => {
-      const project = projects.list().find((candidate) => candidate.id === projectId);
+      const project = projects.get(projectId);
       if (!project) {
         return { origin: null, reason: "no-project" };
       }
@@ -42,7 +42,7 @@ export const cadHandlers = {
     },
 
     warm: ({ projectId, root }) => {
-      if (!projects.list().some((candidate) => candidate.id === projectId)) {
+      if (!projects.get(projectId)) {
         return;
       }
       // The suite adds a project in nearly every spec; a viewer and a daemon

@@ -13,7 +13,7 @@ import type { BrowserService } from "../../src/main/browser/service";
 import type { BrowserConnections } from "../../src/main/browser/connections";
 import type { McpBridge, BridgeSession } from "../../src/main/integrations/mcp-bridge";
 
-declare const browserMcpFixture: { service: BrowserService; scope: { projectId: string; root: string }; other: { projectId: string; root: string };
+declare const browserMcpFixture: { service: BrowserService; scope: { sessionId: string; projectId: string; root: string }; other: { sessionId: string; projectId: string; root: string };
   window: Electron.BrowserWindow; calls: { kind: string; tabId?: string }[]; connections: BrowserConnections; session: BridgeSession; bridge: McpBridge;
   mcp: { command: string; args: string[]; env: { name: string; value: string }[] } };
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");

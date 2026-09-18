@@ -48,7 +48,7 @@ UI never imports Electron, IPC, session stores or native filesystem code.
 
 File kind remains `file`. CAD and PDF are renderer choices, not sibling tab
 kinds. `list_open_tabs` returns the tab ID and renderer where applicable. IDs
-are scoped by project and workspace root, and a reused file tab must also match
+are scoped by the authenticated session, directory and workspace root, and a reused file tab must also match
 the resource path before a live capability or retained snapshot is accepted.
 Paths on disk are resolved against the session's project/worktree using main's
 normal realpath boundary. A matching filename in another root is not the same
@@ -56,14 +56,19 @@ resource.
 
 ## Lifetimes and conflict behavior
 
-Removing a project revokes its integration credentials and releases retained app resources.
-Switching tabs or projects does not mean closing their resources. Opening or
-showing a tab explicitly changes focus; background state reads do not select
-another project or redirect the person's current view.
+Archiving/deleting a session revokes its integration credentials and releases
+its native app resources. Unsaved text drafts remain in memory on archive so
+restoring the session can recover them; deletion discards them. Switching tabs or sessions does not close resources.
+Each session starts with an empty explorer. All commands carry the authenticated
+session ID chosen by main, never supplied by the model. Open/show/close updates
+only that session's strip, including while it is in the background; no command
+selects another session or redirects the person's current view. A tab ID from
+another session is rejected even when both sessions have the same directory.
+Browser targets/storage partitions and PTYs carry the same session owner.
 
 | Resource | Inactive behavior | Close behavior |
 | --- | --- | --- |
-| Text | Unsaved buffers remain in window memory; read returns a retained snapshot with `active: false`. Editing/saving requires reactivation. | Dirty tabs refuse ordinary/tool close. The UI offers explicit discard; clean closure releases records. |
+| Text | Unsaved buffers remain in per-tab window memory; read returns a retained snapshot with `active: false`. Editing/saving requires reactivation. | Dirty tabs refuse ordinary/tool close. The UI offers explicit discard; clean closure releases records. |
 | PDF | Retains the last page/selection snapshot, marked inactive; page extraction/capture/navigation requires the mounted document. | Releases worker, loading task, text layer and capability. |
 | CAD | Retains serializable last-view state, marked inactive; viewport changes and capture require the mounted model. | Releases controller registration and inactive snapshot; shared CAD cache policy remains separate. |
 | Browser | Main retains the actual page and its navigation state; presentation can detach without destroying it. Tools address that page even in the background. | Destroys the app-owned page. |
@@ -99,10 +104,11 @@ OpenAI PDF skill.
 A capture tool returns an image to the agent. An **Add to prompt** action
 prepares a draft through the existing `PromptContextPort`; neither submits a
 prompt. The producer freezes file/revision, selected range or page, and capture
-identity before asynchronous encoding. Desktop binds the compatible draft
-destination before awaiting bytes and rechecks it before accepting them.
-Switching chats cannot deliver an in-flight capture into the new chat.
-Workspace mismatches use the existing explicit “Start chat here” recovery.
+identity before asynchronous encoding. Desktop binds the tab's owning session
+in the host, independently of the selected chat, and rechecks it before
+accepting bytes. Switching chats cannot redirect a delayed callback or capture.
+Deleted or archived owners cancel delivery; workspace mismatches fail without
+creating or selecting another session.
 
 Code and Markdown source selections carry zero-based UTF-16 ranges and selected
 text. PDF context includes a page image and any selected text. Browser context
@@ -150,7 +156,7 @@ another runtime or replace the person's agent configuration.
    `src/renderer/state/integration-commands.ts`. Bind shared capabilities via an
    explicit host port. Do not discover another tab's DOM or instantiate a second
    hidden copy of its document just to answer tools.
-5. Define mount, inactive read, close, project removal and cancellation behavior.
+5. Define mount, inactive read, close, session archive/deletion and cancellation behavior.
    Decide whether a stale result is refused or returned as a named snapshot;
    never silently substitute a different revision or current tab. Mutations
    need conflict/ownership policy and truthful completion receipts.

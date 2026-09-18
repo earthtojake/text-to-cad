@@ -9,11 +9,12 @@ declare const window: { hardcore: HardcoreApi };
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 let application: ElectronApplication, page: Page, scratch: string, origin: string;
 let server: http.Server;
-let projectA: { id: string; path: string }, projectB: { id: string; path: string };
+let sessionA: string, sessionB: string;
+let projectA: { id: string; path: string };
 
 test.beforeAll(async () => {
   scratch = await fs.mkdtemp(path.join(os.tmpdir(), "hardcore-browser-app-"));
-  await fs.mkdir(path.join(scratch, "project-a")); await fs.mkdir(path.join(scratch, "project-b"));
+  await fs.mkdir(path.join(scratch, "project-a"));
   server = http.createServer((_request, response) => { response.setHeader("Content-Type", "text/html"); response.end('<!doctype html><title>Persistent browser</title><label>Name <input id="name"></label><p>Native page fixture</p>'); });
   await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
   const address = server.address(); if (!address || typeof address === "string") throw new Error("Missing fixture port");
@@ -21,8 +22,9 @@ test.beforeAll(async () => {
   application = await electron.launch({ args: [path.join(appRoot, "out/main/index.js"), `--user-data-dir=${path.join(scratch, "profile")}`], env: { ...process.env, NODE_ENV: "test", HARDCORE_E2E_HIDDEN: "1", HARDCORE_FAKE_AGENT: path.join(appRoot, "tests/fake-agent/index.mjs") } });
   page = await application.firstWindow(); await page.waitForLoadState("domcontentloaded");
   projectA = await page.evaluate(directory => window.hardcore.projects.addPath({ path: directory }), path.join(scratch, "project-a"));
-  projectB = await page.evaluate(directory => window.hardcore.projects.addPath({ path: directory }), path.join(scratch, "project-b"));
-  await page.getByRole("button", { name: "New chat in project-a" }).click();
+  sessionA = (await page.evaluate(projectId => window.hardcore.sessions.create({ projectId, agentId: "claude-code", gitMode: "checkout" }), projectA.id)).id;
+  sessionB = (await page.evaluate(projectId => window.hardcore.sessions.create({ projectId, agentId: "claude-code", gitMode: "checkout" }), projectA.id)).id;
+  await page.locator(`[data-session-row="${sessionA}"]`).click();
   await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
   await page.getByRole("button", { name: "Toggle explorer" }).click();
 });
@@ -37,12 +39,12 @@ async function newTab(kind: "Browser" | "File") {
   await expect(page.getByRole("menu")).toHaveCount(0);
 }
 
-test("the explorer and app tool IPC share one page across tab/project switches, then close it", async () => {
+test("the explorer and app tool IPC share one page across tab/session switches, then close it", async () => {
   await newTab("Browser");
   await page.getByRole("textbox", { name: "Address" }).fill(origin);
   await page.getByRole("textbox", { name: "Address" }).press("Enter");
   const tabId = (await page.locator("[data-browser-target]").getAttribute("data-browser-target"))!;
-  const scope = { projectId: projectA.id, root: null, tabId };
+  const scope = { sessionId: sessionA, projectId: projectA.id, root: null, tabId };
   await expect.poll(async () => (await page.evaluate(scope => window.hardcore.browser.metadata(scope), scope)).url).toBe(origin);
   await expect.poll(async () => (await page.evaluate(scope => window.hardcore.browser.metadata(scope), scope)).visible).toBe(true);
   const nativeId = await application.evaluate(async ({ webContents }, origin) => {
@@ -58,11 +60,12 @@ test("the explorer and app tool IPC share one page across tab/project switches, 
   await expect.poll(async () => (await page.evaluate(scope => window.hardcore.browser.metadata(scope), scope)).visible).toBe(false);
   await page.getByRole("tab", { name: /127\.0\.0\.1/ }).click();
   await expect.poll(fieldValue).toBe("Still here");
-  await page.getByRole("button", { name: "New chat in project-b" }).click();
+  await page.locator(`[data-session-row="${sessionB}"]`).click();
+  await expect(page.getByRole("tab", { name: /127\.0\.0\.1/ })).toHaveCount(0);
   await expect(page.locator("[data-browser-target]")).toHaveCount(0);
   await expect.poll(async () => (await page.evaluate(scope => window.hardcore.browser.metadata(scope), scope)).visible).toBe(false);
-  await expect(page.evaluate(scope => window.hardcore.browser.metadata(scope), { ...scope, projectId: projectB.id })).rejects.toThrow();
-  await page.getByRole("button", { name: "New chat in project-a" }).click();
+  await expect(page.evaluate(scope => window.hardcore.browser.metadata(scope), { ...scope, sessionId: sessionB })).rejects.toThrow();
+  await page.locator(`[data-session-row="${sessionA}"]`).click();
   await expect(page.locator(`[data-browser-target="${tabId}"]`)).toBeVisible();
   await expect.poll(fieldValue).toBe("Still here");
   const attached = await application.evaluate(({ BrowserWindow }, id) => {
@@ -78,7 +81,7 @@ test("the explorer and app tool IPC share one page across tab/project switches, 
   await expect(image).toBeVisible();
   await expect.poll(() => image.evaluate(element => (element as unknown as { naturalWidth: number }).naturalWidth)).toBeGreaterThan(200);
   await expect(composer).toContainText("Keep this draft");
-  await expect(page.locator("[data-session-row]")).toHaveCount(0);
+  await expect(page.locator("[data-session-row]")).toHaveCount(2);
   await expect(page.locator("[data-turn][data-role=user]")).toHaveCount(0);
   await application.evaluate(async ({ webContents }, id) => {
     await webContents.fromId(id)!.executeJavaScript("{const r=document.createRange();r.selectNodeContents(document.querySelector('p'));const s=window.getSelection();s.removeAllRanges();s.addRange(r);}");

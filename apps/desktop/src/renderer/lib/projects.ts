@@ -10,13 +10,31 @@
  */
 import type { Project, Session } from "@shared/types";
 
+/** One directory descriptor per session group; worktree cwd never changes the group. */
+export function projectsFromSessions(sessions: readonly Session[]): Project[] {
+  const groups = new Map<string, Project>();
+  for (const session of sessions) {
+    const path = session.projectId;
+    const existing = groups.get(path);
+    if (existing) {
+      existing.createdAt = Math.min(existing.createdAt, session.createdAt);
+    } else {
+      groups.set(path, {
+        id: path,
+        path,
+        name: path.split(/[\\/]/).filter(Boolean).pop() ?? path,
+        createdAt: session.createdAt,
+      });
+    }
+  }
+  return [...groups.values()].sort((a, b) => a.createdAt - b.createdAt || a.path.localeCompare(b.path));
+}
+
 /**
  * Projects most recently worked in first: a project's activity is the newest
  * `updatedAt` of any of its sessions (archived ones included — the folder was
- * still where the work happened). A project nobody has run a thread in has
- * none, so it keeps the project list's own order, which is the order projects
- * were added; that order is also the tiebreak, so the result is total and a
- * fresh index does not reshuffle the menu.
+ * still where the work happened). The derived directory order is the tiebreak, so a fresh index does not
+ * reshuffle the menu.
  */
 export function recentProjects(
   projects: readonly Project[],

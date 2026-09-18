@@ -7,13 +7,13 @@ import type { Project, Session } from "@shared/types";
 
 beforeEach(() => {
   useProjects.setState({ activeId: "car", projects: [{ id: "car", path: "/car" }, { id: "other", path: "/other" }] as Project[] });
-  useSessions.setState({ activeId: null, sessions: [] });
+  useSessions.setState({ activeId: "first", sessions: [{ id: "first", projectId: "car", cwd: "/car" }] as Session[] });
   useComposer.setState({ drafts: {}, pendingFiles: {}, draftRoots: {}, acceptedContexts: {}, focusRequest: null, referenceLabels: {} });
 });
 
 it("binds a destination without changing a draft and does not follow a later chat switch", () => {
   useSessions.setState({ activeId: "first", sessions: [{ id: "first", projectId: "car", cwd: "/car" }, { id: "second", projectId: "car", cwd: "/car" }] as Session[] });
-  const target = bindDraftDestination("car", null);
+  const target = bindDraftDestination("car", null, "first");
   useSessions.setState({ activeId: "second" });
   validateDraftDestination(target);
   expect(target.key).toBe("first");
@@ -24,7 +24,7 @@ it("binds a destination without changing a draft and does not follow a later cha
 });
 
 it("accepts ordered context atomically, preserves prose and attachments, and retries once", () => {
-  const target = bindDraftDestination("car", null);
+  const target = bindDraftDestination("car", null, "first");
   const existing = new File(["old"], "old.txt", { type: "text/plain" });
   const capture = new File(["png"], "view.png", { type: "image/png" });
   useComposer.getState().setDraft(target.key, "My draft");
@@ -48,8 +48,8 @@ it("accepts ordered context atomically, preserves prose and attachments, and ret
   expect(useComposer.getState().queues).toEqual({});
 });
 
-it("revalidates a pending new draft workspace before acceptance", () => {
-  const target = bindDraftDestination("car", "/car-worktree");
-  useComposer.getState().setDraftRoot(target.key, "/different-worktree");
-  expect(() => validateDraftDestination(target)).toThrow("another workspace");
+it("revalidates an archived owner before acceptance", () => {
+  const target = bindDraftDestination("car", null, "first");
+  useSessions.setState({ sessions: [{ id: "first", projectId: "car", cwd: "/car", archived: true }] as Session[] });
+  expect(() => validateDraftDestination(target)).toThrow("archived");
 });

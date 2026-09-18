@@ -6,6 +6,12 @@ description: "Use when tasks involve reading, creating, or reviewing PDF files w
 
 # PDF Skill
 
+App tabs belong to this session only. Even another session in the same directory
+has separate tabs. Opening or showing a tab updates this session's explorer;
+background tool calls never switch the user's selected session. Use IDs returned
+by this session's tools.
+
+
 ## When to use
 - Read or review PDF content where layout and visuals matter.
 - Create PDFs programmatically with reliable formatting.

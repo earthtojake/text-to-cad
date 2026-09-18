@@ -16,8 +16,8 @@ import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-r
  *     Add to prompt lands one in the box; the viewer's camera button
  *     attaches the viewport as an image.
  *
- * The project is this repository, as in explorer.spec.ts, so the STEP
- * fixture and the paths the fake agent names are real. The agent is
+ * A temporary workspace contains the tiny STEP fixture and the paths the
+ * fake agent names, without cataloging the developer’s checkout. The agent is
  * `tests/fake-agent`: "mention" makes it name files, and the composer's
  * text arrives at it unchanged, which is what `sessions.state` shows.
  */
@@ -38,7 +38,7 @@ declare const window: {
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const repoRoot = path.resolve(appRoot, "..", "..");
-const projectName = path.basename(repoRoot);
+const projectName = "workspace";
 const fakeAgent = path.join(appRoot, "tests", "fake-agent", "index.mjs");
 const STEP = "tests/fixtures/cad/import-smoke.step";
 
@@ -49,6 +49,13 @@ let sessionId: string;
 
 test.beforeAll(async () => {
   userData = cadTestProfile("references");
+  const workspace = path.join(fs.realpathSync(userData), projectName);
+  for (const file of ["README.md", "apps/desktop/AGENTS.md", STEP]) {
+    const target = path.join(workspace, file);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    if (file === STEP) fs.copyFileSync(path.join(repoRoot, file), target);
+    else fs.writeFileSync(target, `# ${path.basename(file)}\nReference fixture.\n`);
+  }
   // The CAD runtime the app resolves on its own, as explorer.spec.ts does.
   const { CAD_DESKTOP_PYTHON: _unset, ...inherited } = process.env;
   app = await electron.launch({
@@ -62,17 +69,17 @@ test.beforeAll(async () => {
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1440, 900));
   await expect.poll(() => page.evaluate(() => window.innerWidth)).toBe(1440);
 
-  const project = await page.evaluate((root) => window.hardcore.projects.addPath({ path: root }), repoRoot);
+  const project = await page.evaluate((root) => window.hardcore.projects.addPath({ path: root }), workspace);
   await expect(page.getByText(projectName).first()).toBeVisible();
-  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
 
   const session = await page.evaluate(
     ({ projectId, cwd }) => window.hardcore.sessions.create({ projectId, agentId: "claude-code", gitMode: "none", cwd }),
-    { projectId: project.id, cwd: repoRoot },
+    { projectId: project.id, cwd: workspace },
   );
   sessionId = session.id;
   await page.locator(`[data-session-row="${session.id}"]`).click();
   await expect(page.locator("[data-session-view]")).toBeVisible();
+  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
 });
 
 test.afterAll(async () => {
@@ -148,9 +155,13 @@ test("the viewer's Add to prompt lands a chip, and the camera an image", async (
   test.skip(!cadRuntimeReady(status), "no CAD runtime on this machine");
   test.setTimeout(240_000);
 
-  // Open the STEP through the tree's filter, the way explorer.spec.ts does
-  // (Mod+T is the strip's own "new file tab").
-  await page.keyboard.press(process.platform === "darwin" ? "Meta+t" : "Control+t");
+  // Open through the owned explorer even when running this test on its own.
+  if (!(await page.getByRole("button", { name: "New tab", exact: true }).isVisible())) {
+    await page.getByRole("button", { name: "Toggle explorer" }).click();
+  }
+  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await page.getByRole("menuitem", { name: "File" }).click();
+  await expect(page.getByRole("menu")).toHaveCount(0);
   const filter = page.getByLabel("Filter files");
   await filter.fill(STEP);
   await page.getByRole("option", { name: STEP, exact: false }).first().click();

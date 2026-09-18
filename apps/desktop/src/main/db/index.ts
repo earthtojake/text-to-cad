@@ -1,5 +1,5 @@
 /**
- * The app's index: projects, the session index, settings and the explorer
+ * The app's index: sessions, settings and each session's explorer
  * strip. It lives under `app.getPath("userData")`, which is per-user and
  * survives updates.
  *
@@ -38,7 +38,22 @@ export function db(): Db {
   // session updating its status mid-turn).
   opened.pragma("journal_mode = WAL");
   opened.pragma("foreign_keys = ON");
-  runMigrations(opened, MIGRATIONS);
+  try {
+    const version = Number(opened.pragma("user_version", { simple: true }));
+    const latest = MIGRATIONS.at(-1)!.version;
+    if (version > 0 && version < latest) {
+      // VACUUM INTO includes committed WAL contents. A filesystem copy of just
+      // hardcore.db can silently miss recent sessions while WAL is in use.
+      const backup = `${databaseFile()}.before-v${latest}-${Date.now()}.bak`;
+      opened.prepare("VACUUM INTO ?").run(backup);
+      console.info(`[database] upgrade backup: ${backup}`);
+    }
+    runMigrations(opened, MIGRATIONS);
+  } catch (error) {
+    opened.close();
+    // Never delete or recreate a database to hide a migration failure.
+    throw error;
+  }
   handle = opened;
   return handle;
 }

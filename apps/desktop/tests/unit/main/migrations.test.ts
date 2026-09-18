@@ -76,12 +76,18 @@ describe("runMigrations", () => {
     expect(() => runMigrations(db, outOfOrder)).toThrow(/1\.\.n/);
   });
 
+  it("refuses a newer database without running or resetting anything", () => {
+    const { db, statements } = fakeDb(12);
+    expect(() => runMigrations(db, fixture(11))).toThrow(/newer than this app/);
+    expect(statements).toEqual([]);
+  });
+
   it("ships migrations that satisfy that rule", () => {
     const { db } = fakeDb();
     expect(() => runMigrations(db, MIGRATIONS)).not.toThrow();
   });
 
-  it("creates the five tables the app indexes", () => {
+  it("creates the original index tables before applying upgrades", () => {
     const { db, statements } = fakeDb();
     runMigrations(db, MIGRATIONS);
     const sql = statements.join("\n");
@@ -92,9 +98,8 @@ describe("runMigrations", () => {
 
   it("gives agent_options a column for each thing the composer's chips need", () => {
     const { db, statements } = fakeDb(5);
-    runMigrations(db, MIGRATIONS);
-    // The sessions table is never rebuilt from here on: an installed app is
-    // already at 5, so only the migrations above it run.
+    runMigrations(db, MIGRATIONS.slice(0, 10));
+    // These historical additive migrations preserved the sessions table.
     const sql = statements.join("\n");
     expect(sql).not.toContain("CREATE TABLE sessions");
     for (const column of [
@@ -165,8 +170,8 @@ describe("runMigrations", () => {
    */
   it("adds the pinned column to a database that already has sessions", () => {
     const { db, statements, version } = fakeDb(6);
-    expect(runMigrations(db, MIGRATIONS)).toBe(MIGRATIONS.at(-1)!.version);
-    expect(version()).toBe(MIGRATIONS.at(-1)!.version);
+    expect(runMigrations(db, MIGRATIONS.slice(0, 7))).toBe(7);
+    expect(version()).toBe(7);
     const sql = statements.join("\n");
     expect(sql).not.toContain("CREATE TABLE sessions");
     expect(sql).toContain("ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0");
@@ -181,8 +186,8 @@ describe("runMigrations", () => {
    */
   it("adds the session_state table without touching the sessions table", () => {
     const { db, statements, version } = fakeDb(9);
-    expect(runMigrations(db, MIGRATIONS)).toBe(MIGRATIONS.at(-1)!.version);
-    expect(version()).toBe(MIGRATIONS.at(-1)!.version);
+    expect(runMigrations(db, MIGRATIONS.slice(0, 10))).toBe(10);
+    expect(version()).toBe(10);
     const sql = statements.join("\n");
     expect(sql).toContain("CREATE TABLE session_state");
     expect(sql).toContain("REFERENCES sessions(id) ON DELETE CASCADE");

@@ -3,14 +3,14 @@ import type { PromptContextPort } from "@hardcore/core/prompt";
 import type { FileChanges } from "@hardcore/ui/file-viewer";
 import type { FileMutationResult } from "@shared/ipc/explorer";
 import { createDesktopFileActions, createDesktopFileSource } from "@renderer/features/explorer/adapters/fileSource";
-import { useExplorer, treeKey } from "@renderer/state/explorer";
+import { readSessionStrip, useExplorer, treeKey } from "@renderer/state/explorer";
 
 beforeEach(() => {
   vi.useFakeTimers();
-  useExplorer.setState({ projectId: "p", ready: true, root: null, tabs: [], activeId: null, trees: {}, fsRevision: 0, changedPaths: [], changedEntries: [] });
+  useExplorer.setState({ sessionId: "file-source-owner", projectId: "p", ready: true, root: null, tabs: [], activeId: null, trees: {}, fsRevision: 0, changedPaths: [], changedEntries: [] });
 });
 afterEach(() => { vi.runOnlyPendingTimers(); vi.useRealTimers(); vi.restoreAllMocks(); });
-const source = () => createDesktopFileSource({ projectId: "p", projectName: "project", root: null });
+const source = () => createDesktopFileSource({ sessionId: "file-source-owner", projectId: "p", projectName: "project", root: null });
 const signal = () => new AbortController().signal;
 const row = (path: string) => ({ path, name: path.split("/").pop()!, kind: "file" as const, size: 0, modifiedAt: 0, symlink: false });
 
@@ -68,7 +68,7 @@ test("Copy reference preserves clipboard text and uses the injected draft destin
   const deliver = vi.fn<PromptContextPort["deliver"]>(async () => ({ status: "added" as const, partIds: ["reference"] }));
   const writeText = vi.fn(async () => {});
   const files = source();
-  const actions = createDesktopFileActions({ projectId: "p", root: null, sourceId: files.id,
+  const actions = createDesktopFileActions({ sessionId: "file-source-owner", projectId: "p", root: null, sourceId: files.id,
     clipboard: { writeText, readText: async () => "", writeImage: async () => {} },
     promptContext: { deliver, getSnapshot: () => ({ kind: "composer", available: true }), subscribe: () => () => {} } });
   let copied!: () => void;
@@ -103,4 +103,34 @@ test("managed binary leases keep workspace identity and bytes without extra meta
     lease.release();
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:fixture");
   } finally { vi.unstubAllGlobals(); }
+});
+
+test("a delayed file duplicate reveals only in its original session after switching within a directory", async () => {
+  const files = source();
+  let finish!: (result: FileMutationResult) => void;
+  vi.mocked(window.hardcore.explorer.duplicate).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const pending = files.duplicate!("part.step", { signal: signal() });
+  await useExplorer.getState().bindSession("duplicate-other-session", "p", null);
+  finish({ status: "committed", path: "part-copy.step", change: { kind: "added", path: "part-copy.step", directory: false } });
+  expect(await pending).toMatchObject({ status: "committed" });
+  expect((await readSessionStrip("file-source-owner")).reveal).toMatchObject({ path: "part-copy.step" });
+  expect(useExplorer.getState().sessionId).toBe("duplicate-other-session");
+  expect(useExplorer.getState().tabs).toEqual([]);
+  expect(useExplorer.getState().reveal).toBeNull();
+});
+
+test("opening a terminal after async path resolution cannot target a different session", async () => {
+  const files = source();
+  const actions = createDesktopFileActions({ sessionId: "file-source-owner", projectId: "p", root: null, sourceId: files.id,
+    clipboard: { writeText: async () => {}, readText: async () => "", writeImage: async () => {} },
+    promptContext: { deliver: async () => ({ status: "added", partIds: [] }), getSnapshot: () => ({ kind: "composer", available: true }), subscribe: () => () => {} } });
+  let finish!: (value: { path: string }) => void;
+  vi.mocked(window.hardcore.explorer.absolutePath).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const pending = actions.perform!["open-terminal"]!({ path: "src", kind: "directory" });
+  await useExplorer.getState().bindSession("terminal-other-session", "p", null);
+  finish({ path: "/workspace/src" });
+  await pending;
+  expect((await readSessionStrip("file-source-owner")).tabs).toEqual(expect.arrayContaining([expect.objectContaining({ sessionId: "file-source-owner", kind: "terminal", cwd: "/workspace/src" })]));
+  expect(useExplorer.getState().sessionId).toBe("terminal-other-session");
+  expect(useExplorer.getState().tabs).toEqual([]);
 });

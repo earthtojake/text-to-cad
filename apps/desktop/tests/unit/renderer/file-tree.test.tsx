@@ -76,7 +76,7 @@ const testRenderers = [defineFileRenderer({
 })];
 type TreeProps = { activePath?: string | null; onOpenFile?: (path: string) => void };
 function Tree({ activePath = null, onOpenFile = () => {} }: TreeProps) {
-  const source = useMemo(() => createDesktopFileSource({ projectId: "p1", root: null, projectName: "text-to-cad" }), []);
+  const source = useMemo(() => createDesktopFileSource({ sessionId: "file-tree-owner", projectId: "p1", root: null, projectName: "text-to-cad" }), []);
   const { open } = useTree(null);
   return <FileViewer file={activePath} host={{ files: source, navigation: { openFile: onOpenFile }, environment: { colorScheme: "light" },
       clipboard: { writeText: async () => {}, readText: async () => "", writeImage: async () => {} },

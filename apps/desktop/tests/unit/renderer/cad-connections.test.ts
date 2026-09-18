@@ -1,9 +1,10 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createCadClient } from "@hardcore/core/client";
 import type * as CadClientModule from "@hardcore/core/client";
 import type { CadClient } from "@hardcore/core/client";
 import type { PrepareContext } from "@hardcore/ui/file-viewer";
-import { createDesktopCadConnections } from "@renderer/features/explorer/adapters/cadRuntime";
+import { createDesktopCadConnectionRegistry, createDesktopCadConnections } from "@renderer/features/explorer/adapters/cadRuntime";
+import { closeSessionTab, useExplorer } from "@renderer/state/explorer";
 import { createDesktopRenderers } from "@renderer/features/explorer/renderers";
 import type { ViewerOrigin } from "@shared/ipc/cad";
 
@@ -34,6 +35,65 @@ function client() {
 beforeEach(() => {
   vi.mocked(createCadClient).mockReset();
   vi.mocked(window.hardcore.cad.viewerOrigin).mockReset().mockResolvedValue({ origin: "http://127.0.0.1:3010" });
+});
+
+afterEach(() => {
+  for (const id of ["cad-owner-a", "cad-owner-b", "cad-owner-other"]) useExplorer.getState().discardSessionResources(id);
+});
+
+it("retains the root client through an empty session, a different project and a collapsed pane", async () => {
+  const runtime = client();
+  vi.mocked(createCadClient).mockReturnValue(runtime as unknown as CadClient);
+  const registry = createDesktopCadConnectionRegistry();
+  try {
+    await useExplorer.getState().bindSession("cad-owner-a", "project");
+    const first = useExplorer.getState().openFile("part.stl")!;
+    if (first.kind !== "file") throw new Error("Expected a file tab");
+    const borrowed = registry.forTab(first);
+    expect(await borrowed.acquire(context())).toBe(runtime);
+
+    await useExplorer.getState().bindSession("cad-owner-b", "project");
+    expect(useExplorer.getState().tabs).toHaveLength(0);
+    await useExplorer.getState().bindSession("cad-owner-other", "another-project");
+    await useExplorer.getState().bindSession(null, null);
+    expect(runtime.dispose).not.toHaveBeenCalled();
+
+    await useExplorer.getState().bindSession("cad-owner-a", "project");
+    useExplorer.getState().setCollapsed(true);
+    expect(registry.forTab(first)).toBe(borrowed);
+    expect(await registry.forTab(first).acquire(context())).toBe(runtime);
+    expect(createCadClient).toHaveBeenCalledTimes(1);
+    expect(runtime.dispose).not.toHaveBeenCalled();
+
+    useExplorer.getState().close(first.id);
+    expect(runtime.dispose).toHaveBeenCalledTimes(1);
+    expect(() => borrowed.acquire(context())).toThrow(/closed/);
+  } finally { registry.dispose(); }
+  expect(runtime.dispose).toHaveBeenCalledTimes(1);
+});
+
+it("shares a root across sessions and releases it only after the final background owner is discarded", async () => {
+  const runtime = client();
+  vi.mocked(createCadClient).mockReturnValue(runtime as unknown as CadClient);
+  const registry = createDesktopCadConnectionRegistry();
+  try {
+    await useExplorer.getState().bindSession("cad-owner-a", "project");
+    const first = useExplorer.getState().openFile("a.stl")!;
+    if (first.kind !== "file") throw new Error("Expected a file tab");
+    expect(await registry.forTab(first).acquire(context("a.stl"))).toBe(runtime);
+    await useExplorer.getState().bindSession("cad-owner-b", "project");
+    const second = useExplorer.getState().openFile("b.stl")!;
+    if (second.kind !== "file") throw new Error("Expected a file tab");
+    expect(await registry.forTab(second).acquire(context("b.stl"))).toBe(runtime);
+    expect(createCadClient).toHaveBeenCalledTimes(1);
+    await closeSessionTab("cad-owner-a", first.id);
+    expect(runtime.dispose).not.toHaveBeenCalled();
+
+    await useExplorer.getState().bindSession("cad-owner-other", "another-project");
+    useExplorer.getState().discardSessionResources("cad-owner-b");
+    expect(runtime.dispose).toHaveBeenCalledTimes(1);
+  } finally { registry.dispose(); }
+  expect(runtime.dispose).toHaveBeenCalledTimes(1);
 });
 
 it("reuses a root client when A, B and A mount in turn, then releases the final root owner", async () => {

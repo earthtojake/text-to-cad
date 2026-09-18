@@ -3,7 +3,7 @@
  * into the widths a frame is drawn with, and two that a drag is made of.
  *
  * There is exactly one source of truth per side pane — `{ collapsed, width }`,
- * the sidebar's in `settings.layout` and the explorer's per project in
+ * the sidebar's in `settings.layout` and the explorer's per session in
  * `state/explorer.ts` — and everything on screen is derived from those. No
  * panel holds a collapse of its own, so a pane cannot be off screen with its
  * state saying open, which is the state that used to leave the person with no

@@ -60,8 +60,9 @@ export function projectWorktreeDir(
   settings: Pick<Settings, "worktreeRoot">,
   project: Pick<Project, "name" | "path">,
 ): string {
-  // The directory's basename is the fallback, not the display name: a project
-  // renamed to "Robot arm (v2)" must not move every worktree it already has.
+  // Directory descriptors derive their name from the basename. Existing
+  // session worktree paths remain authoritative if an older build used a
+  // custom project name for this folder.
   const name = git.slugify(project.name) || git.slugify(path.basename(project.path)) || "project";
   return path.join(worktreeRoot(settings), name);
 }
@@ -120,6 +121,8 @@ export type ResolveInput = {
    * renderer asking main to run an agent somewhere it was never shown.
    */
   cwd?: string | undefined;
+  /** Existing session worktrees, including paths created by older app layouts. */
+  knownWorktrees?: readonly string[];
 };
 
 /**
@@ -169,7 +172,8 @@ export async function resolveWorkspace(input: ResolveInput): Promise<Workspace> 
  */
 async function explicitWorkspace(cwd: string, input: ResolveInput): Promise<Workspace> {
   const requested = path.resolve(cwd);
-  if (!rootBelongsToProject(input.settings, input.project, requested)) {
+  if (!rootBelongsToProject(input.settings, input.project, requested) &&
+      !input.knownWorktrees?.some(root => git.samePath(root, requested))) {
     throw new git.GitError("that directory does not belong to this project");
   }
 

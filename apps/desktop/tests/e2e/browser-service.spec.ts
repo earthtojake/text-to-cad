@@ -13,7 +13,7 @@ type PageState = BrowserTarget & { document: { text: string; width: number; heig
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 let scratch: string, application: ElectronApplication, origin: string;
 let server: http.Server;
-const scope = { projectId: "project-a", root: "/work/project-a" };
+const scope = { sessionId: "browser-session", projectId: "project-a", root: "/work/project-a" };
 
 test.beforeAll(async () => {
   scratch = await fs.mkdtemp(path.join(os.tmpdir(), "hardcore-browser-"));
@@ -79,7 +79,7 @@ test("Browser Use controls the presented native page; form state survives hiding
 
   await application.evaluate(async (_, { scope, url }) => {
     browserFixture.service.present(scope, "form", browserFixture.window, "first", null);
-    const second = { projectId: scope.projectId, root: "/work/other-root" };
+    const second = { sessionId: scope.sessionId, projectId: scope.projectId, root: "/work/other-root" };
     await browserFixture.service.open(second, { tabId: "other-root", url });
     browserFixture.service.present(second, "other-root", browserFixture.window, "second", { x: 400, y: 100, width: 700, height: 600 });
     browserFixture.service.present(scope, "form", browserFixture.window, "third", { x: 400, y: 100, width: 700, height: 600 });
@@ -123,9 +123,9 @@ test("native resize, wheel scrolling, offscreen node clicks and keyboard input u
   await application.evaluate((_, scope) => browserFixture.service.close(scope, "fidelity"), scope);
 });
 
-test("project isolation, same-root storage sharing, scheme restrictions and disposal", async () => {
+test("same-directory session isolation, within-session storage sharing, scheme restrictions and disposal", async () => {
   const result = await application.evaluate(async ({ webContents }, { scope, url }) => {
-    const other = { projectId: "project-b", root: scope.root };
+    const other = { ...scope, sessionId: "other-session" };
     await browserFixture.service.open(other, { url, tabId: "project-b" });
     await browserFixture.service.open(scope, { url, tabId: "same-root" });
     const scopes = browserFixture.service.list(scope);
@@ -134,7 +134,7 @@ test("project isolation, same-root storage sharing, scheme restrictions and disp
     let blocked = false;
     try { await browserFixture.service.invoke("navigate", scope, { tabId: "form", url: "file:///etc/passwd" }); }
     catch { blocked = true; }
-    browserFixture.service.disposeProject("project-a");
+    browserFixture.service.disposeSession(scope.sessionId);
     return { scopes: scopes.map(t => t.tabId), sessions: partitionSessions.size, blocked, remainingA: browserFixture.service.list(scope).length, remainingB: browserFixture.service.list(other).length };
   }, { scope, url: origin });
   expect(result).toEqual({ scopes: ["form", "same-root"], sessions: 3, blocked: true, remainingA: 0, remainingB: 1 });

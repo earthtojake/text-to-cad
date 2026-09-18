@@ -8,7 +8,7 @@ import { useSessions } from "@renderer/state/sessions";
 import type { Project, Session } from "@shared/types";
 import type { BrowserTarget } from "@shared/browser";
 
-const target: BrowserTarget = { tabId: "page", projectId: "project", root: "/project", generation: 1, title: "Example page", url: "https://example.com/", loading: false, visible: true, canGoBack: false, canGoForward: false, logs: [] };
+const target: BrowserTarget = { sessionId: "first", tabId: "page", projectId: "project", root: "/project", generation: 1, title: "Example page", url: "https://example.com/", loading: false, visible: true, canGoBack: false, canGoForward: false, logs: [] };
 const originalMount = useBrowser.getState().mount;
 const originalArrayBuffer = Object.getOwnPropertyDescriptor(Blob.prototype, "arrayBuffer");
 beforeEach(() => {
@@ -29,9 +29,9 @@ afterEach(() => {
 it.each(["screenshot", "selection"] as const)("adds browser %s to the original draft without submitting or redirecting after chat switch", async kind => {
   let finish!: (value: { base64: string; mimeType: string; url: string; generation: number }) => void;
   vi.mocked(window.hardcore.browser.capture).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
-  render(<BrowserTab projectId="project" root={null} tabId="page" url={target.url} />);
+  render(<BrowserTab sessionId="first" projectId="project" root={null} tabId="page" url={target.url} />);
   fireEvent.click(screen.getByRole("button", { name: kind === "screenshot" ? "Add page screenshot to prompt" : "Add selected text to prompt" }));
-  expect(window.hardcore.browser.capture).toHaveBeenCalledWith({ projectId: "project", root: null, tabId: "page", url: target.url, generation: 1, kind });
+  expect(window.hardcore.browser.capture).toHaveBeenCalledWith({ sessionId: "first", projectId: "project", root: null, tabId: "page", url: target.url, generation: 1, kind });
   act(() => useSessions.setState({ activeId: "second" }));
   await act(async () => finish({ base64: kind === "screenshot" ? "iVBORw0KGgo=" : btoa("Selected page text"), mimeType: kind === "screenshot" ? "image/png" : "text/plain", url: target.url, generation: 1 }));
   await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Added to prompt"));

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const BrowserTargetSchema = z.object({
-  tabId: z.string(), projectId: z.string(), root: z.string(), url: z.string(),
+  tabId: z.string(), sessionId: z.string(), projectId: z.string(), root: z.string(), url: z.string(),
   generation: z.number().int().nonnegative(), title: z.string(), loading: z.boolean(), canGoBack: z.boolean(), canGoForward: z.boolean(),
   visible: z.boolean(),
   logs: z.array(z.object({ level: z.enum(["log", "warn", "error"]), message: z.string() })),

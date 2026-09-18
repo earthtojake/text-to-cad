@@ -70,10 +70,10 @@ test.beforeAll(async () => {
   await page.waitForLoadState('domcontentloaded');
   await page.evaluate(() => window.hardcore.settings.set({ theme: 'dark' }));
   const { id: projectId } = await page.evaluate(root => window.hardcore.projects.addPath({ path: root }), project);
-  await expect(page.locator('[data-explorer-ready=true]')).toBeVisible();
   const session = await page.evaluate(projectId => window.hardcore.sessions.create({ projectId, agentId: 'claude-code', gitMode: 'none', name: 'Integration proof' }), projectId);
   sessionId = session.id;
   await page.locator(`[data-session-row="${sessionId}"]`).click();
+  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
 });
 test.afterAll(async () => { await app?.close(); if (base) fs.rmSync(base, { recursive: true, force: true }); });
 

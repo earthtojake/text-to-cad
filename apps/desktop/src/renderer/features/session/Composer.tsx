@@ -33,7 +33,7 @@ import {
 } from "@renderer/components/ai-elements/queue";
 import type { FileUIPart } from "@renderer/components/ai-elements/types";
 import { NEW_SESSION_KEY, useComposer, useQueue } from "@renderer/state/composer";
-import { useProjects } from "@renderer/state/projects";
+import { useActiveProject } from "@renderer/state/projects";
 import { useSessions } from "@renderer/state/sessions";
 import type { AvailableCommand, PromptBlock } from "@shared/acp/types";
 
@@ -109,7 +109,7 @@ export function Composer({
   // sessions and back does not lose typed text and a suggestion card can
   // fill the box from outside.
   const draftKey = sessionId ?? newDraftKey ?? NEW_SESSION_KEY;
-  const project = useProjects((state) => state.projects.find((item) => item.id === state.activeId));
+  const project = useActiveProject();
   const session = useSessions((state) => state.sessions.find((item) => item.id === sessionId));
   const draftRoot = useComposer((state) => state.draftRoots[draftKey]);
   const referenceScope = useMemo(() => {

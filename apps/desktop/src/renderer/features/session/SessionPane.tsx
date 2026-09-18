@@ -41,14 +41,14 @@ export function SessionPane() {
 
   return (
     <div className="flex h-full flex-col">
-      <SessionHeader session={null} title={project ? project.name : "No project"} />
+      <SessionHeader session={null} title={project ? project.name : "New session"} />
       {project ? (
         <NewSession key={project.id} project={project} />
       ) : (
         <div className="flex min-h-0 flex-1 items-center justify-center px-6 pb-10" data-no-project>
           <div className="w-full max-w-[720px]">
             <h1 className="text-center text-[22px] leading-tight font-medium tracking-tight text-balance">
-              Add a project to get started
+              Choose a folder to get started
             </h1>
             <p className="mt-2 text-center text-[13px] text-balance text-muted-foreground">
               A session always belongs to a folder.

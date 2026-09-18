@@ -29,8 +29,8 @@ describe("defineIpc", () => {
 
 describe("the contract", () => {
   it("rejects a drawing in explorer persistence requests and responses", () => {
-    const drawing = { id: "scratch", projectId: "p1", order: 0, kind: "drawing", title: "Drawing", root: null };
-    expect(ipcContract.explorer.saveTabs.request.safeParse({ projectId: "p1", tabs: [drawing] }).success).toBe(false);
+    const drawing = { id: "scratch", sessionId: "s1", projectId: "p1", order: 0, kind: "drawing", title: "Drawing", root: null };
+    expect(ipcContract.explorer.saveTabs.request.safeParse({ sessionId: "s1", tabs: [drawing] }).success).toBe(false);
     expect(ipcContract.explorer.loadTabs.response.safeParse([drawing]).success).toBe(false);
   });
   it("declares every channel, in the order the map spreads them", () => {
@@ -44,8 +44,6 @@ describe("the contract", () => {
       "projects.list",
       "projects.add",
       "projects.addPath",
-      "projects.remove",
-      "projects.rename",
       "sessions.list",
       "sessions.get",
       "sessions.create",
@@ -153,11 +151,13 @@ describe("the contract", () => {
 
   it("validates requests, which is the whole reason the schemas are there", () => {
     const channels = Object.fromEntries(ipcChannels(ipcContract));
-    const rename = channels["projects.rename"];
-    expect(rename?.request.safeParse({ id: "p1", name: "Robot" }).success).toBe(true);
-    // An empty name would rename a project to nothing at all.
-    expect(rename?.request.safeParse({ id: "p1", name: "" }).success).toBe(false);
-    expect(rename?.request.safeParse({ id: "p1" }).success).toBe(false);
+    const rename = channels["sessions.rename"];
+    expect(rename?.request.safeParse({ id: "s1", title: "Robot" }).success).toBe(true);
+    expect(rename?.request.safeParse({ id: "s1", title: "" }).success).toBe(false);
+    expect(rename?.request.safeParse({ id: "s1" }).success).toBe(false);
+    const directory = channels["projects.addPath"];
+    expect(directory?.request.safeParse({ path: "/robot" }).success).toBe(true);
+    expect(directory?.request.safeParse({ path: "" }).success).toBe(false);
   });
 
   it("keeps non-URLs out of openExternal before main even sees them", () => {

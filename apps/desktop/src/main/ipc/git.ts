@@ -36,7 +36,7 @@ import { IpcError } from "./register";
 /* -------------------------------------------------------------------------- */
 
 function projectOf(projectId: string): Project {
-  const project = projects.list().find((candidate) => candidate.id === projectId);
+  const project = projects.get(projectId);
   if (!project) {
     throw new IpcError("that project is no longer open");
   }
@@ -74,7 +74,7 @@ function cwdFor(request: { projectId: string; sessionId?: string }): string {
 /**
  * A project's worktrees, as the settings page shows them.
  *
- * Only the ones under this project's worktree directory: a worktree the person
+ * Only generated or session-recorded worktrees: a worktree the person
  * made themselves, somewhere else, is theirs, and a Delete button beside it
  * would be Hardcore offering to remove something it never created.
  */
@@ -85,7 +85,8 @@ async function worktreesOf(project: Project): Promise<Worktree[]> {
 
   const rows: Worktree[] = [];
   for (const worktree of await git.listWorktrees(project.path)) {
-    if (worktree.primary || !git.isUnder(parent, worktree.path)) {
+    if (worktree.primary || (!git.isUnder(parent, worktree.path) &&
+        !open.some(session => session.worktreePath && git.samePath(session.worktreePath, worktree.path)))) {
       continue;
     }
     const stat = await fs.stat(worktree.path).catch(() => null);
@@ -137,7 +138,8 @@ export const gitHandlers = {
         const parent = projectWorktreeDir(settings.get(), project);
         const worktrees = info.isRepository
           ? (await git.listWorktrees(project.path)).filter(
-              (worktree) => !worktree.primary && git.isUnder(parent, worktree.path),
+              (worktree) => !worktree.primary && (git.isUnder(parent, worktree.path) ||
+                sessions.list(project.id).some(session => session.worktreePath && git.samePath(session.worktreePath, worktree.path))),
             )
           : [];
         return {
@@ -212,7 +214,9 @@ export const gitHandlers = {
       fsCall(async () => {
         const project = projectOf(projectId);
         const parent = projectWorktreeDir(settings.get(), project);
-        if (!git.isUnder(parent, path.resolve(target))) {
+        const recorded = sessions.list(project.id).some(session =>
+          session.worktreePath && git.samePath(session.worktreePath, target));
+        if (!git.isUnder(parent, path.resolve(target)) && !recorded) {
           throw new IpcError("that worktree does not belong to this project");
         }
         await git.removeWorktree(target, force === undefined ? {} : { force });

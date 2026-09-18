@@ -5,14 +5,12 @@ import { selectRenderer } from "@hardcore/ui/file-viewer";
 import { createDesktopRenderers } from "@renderer/features/explorer/renderers";
 import type { IntegrationCommand } from "@shared/ipc/integrations";
 import type { ExplorerTab } from "@shared/types";
-import { readProjectStrip, renameDrawingTab, tabTitle, useExplorer } from "./explorer";
+import { readSessionStrip, renameDrawingTab, tabTitle, openSessionTab, closeSessionTab, selectSessionTab, revealSessionPath } from "./explorer";
 import { getDrawingScene } from "./drawings";
 import { useProjects } from "./projects";
 import { useSessions } from "./sessions";
-import { useUi } from "./ui";
 import { hasDirtyDocument, performDocumentCommand, performPdfCommand } from "./live-documents";
 import { performCadViewerCommand } from "./live-cad";
-import { explorerRootFor } from "./workspace-root";
 
 async function rendererIdForPath(projectId: string, root: string | null, path: string, tabId: string) {
   const composition = createDesktopRenderers(projectId, root, tabId);
@@ -23,27 +21,8 @@ async function rendererIdForPath(projectId: string, root: string | null, path: s
   finally { composition.dispose(); }
 }
 
-async function focusProject(projectId: string, signal?: AbortSignal) {
-  signal?.throwIfAborted();
-  const projects = useProjects.getState();
-  if (!projects.projects.some(project => project.id === projectId)) throw new Error("that project is no longer open in Hardcore");
-  const current = useExplorer.getState();
-  const root = current.projectId === projectId ? current.root : explorerRootFor(projectId);
-  if (projects.activeId !== projectId) projects.setActive(projectId);
-  await useExplorer.getState().bindProject(projectId, root);
-  signal?.throwIfAborted();
-  const restored = useExplorer.getState();
-  // bindProject quietly drops superseded loads. An older command must not act
-  // against the new project's strip after the user (or another command) switches.
-  if (useProjects.getState().activeId !== projectId || restored.projectId !== projectId || !restored.ready) {
-    throw new Error("The active project changed while opening this tab. Try again in the intended project.");
-  }
-  useUi.getState().closeSettings();
-  useExplorer.getState().show();
-}
-
 function inScope(tab: ExplorerTab, command: IntegrationCommand) {
-  if (tab.projectId !== command.projectId) return false;
+  if (tab.sessionId !== command.sessionId || tab.projectId !== command.projectId) return false;
   if ("root" in tab) return tab.root === (command.root ?? null);
   if (tab.kind === "terminal") {
     const root = command.rootDirectory?.replace(/\\/g, "/").replace(/\/$/, "");
@@ -54,13 +33,15 @@ function inScope(tab: ExplorerTab, command: IntegrationCommand) {
   if (tab.kind !== "review") return false;
   const session = useSessions.getState().sessions.find(candidate => candidate.id === tab.sessionId);
   const project = useProjects.getState().projects.find(candidate => candidate.id === command.projectId);
-  return session ? session.cwd === (command.rootDirectory ?? project?.path) : tab.sessionId === null && (command.root ?? null) === null;
+  return Boolean(session && session.cwd === (command.rootDirectory ?? project?.path));
 }
 
 async function scopedTabs(command: IntegrationCommand, signal?: AbortSignal) {
   signal?.throwIfAborted();
   if (!useProjects.getState().projects.some(project => project.id === command.projectId)) throw new Error("that project is no longer open in Hardcore");
-  const strip = await readProjectStrip(command.projectId);
+  const session = useSessions.getState().sessions.find(session => session.id === command.sessionId && session.projectId === command.projectId && !session.archived);
+  if (!session) throw new Error("This session is no longer active.");
+  const strip = await readSessionStrip(command.sessionId);
   signal?.throwIfAborted();
   return { tabs: strip.tabs.filter(tab => inScope(tab, command)), activeId: strip.activeId };
 }
@@ -72,17 +53,6 @@ async function scopedTab(command: IntegrationCommand, signal?: AbortSignal) {
   return tab;
 }
 
-/** Recheck identity after project restoration; closed/replaced tabs cannot be acted on. */
-function currentTab(previous: ExplorerTab, command: IntegrationCommand) {
-  const current = useExplorer.getState().tabs.find(tab => tab.id === previous.id);
-  if (!current || !inScope(current, command) || current.kind !== previous.kind
-    || (current.kind === "file" && previous.kind === "file" && current.path !== previous.path)
-    || (current.kind === "terminal" && previous.kind === "terminal" && current.ptyId !== previous.ptyId)) {
-    throw new Error("That tab closed or changed while the project was opening.");
-  }
-  return current;
-}
-
 async function imageResult(blob: Blob, metadata: Record<string, unknown>) {
   const bytes = new Uint8Array(await blob.arrayBuffer());
   let binary = ""; for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -91,48 +61,42 @@ async function imageResult(blob: Blob, metadata: Record<string, unknown>) {
 
 export async function performIntegrationCommand(command: IntegrationCommand, signal?: AbortSignal): Promise<unknown> {
   signal?.throwIfAborted();
+  const owner = useSessions.getState().sessions.find(session => session.id === command.sessionId && session.projectId === command.projectId && !session.archived);
+  if (!owner) throw new Error("This session is no longer active.");
   const scope = { projectId: command.projectId, root: command.root ?? null };
   const params: Record<string, unknown> = { ...command.params, ...(command.tabId ? { tabId: command.tabId } : {}) };
   if (command.kind.startsWith("document-")) {
     const tab = await scopedTab(command, signal);
     signal?.throwIfAborted();
     if (tab.kind !== "file" || !tab.path) throw new Error("This is not a document tab.");
-    return performDocumentCommand(command.kind, params, { ...scope, path: tab.path });
+    return performDocumentCommand(command.kind, { ...params, tabId: tab.id }, { ...scope, path: tab.path });
   }
   if (command.kind.startsWith("pdf-")) {
     const tab = await scopedTab(command, signal);
     signal?.throwIfAborted();
     if (tab.kind !== "file" || !tab.path) throw new Error("This is not a PDF tab.");
-    return performPdfCommand(command.kind, params, { ...scope, path: tab.path });
+    return performPdfCommand(command.kind, { ...params, tabId: tab.id }, { ...scope, path: tab.path });
   }
   switch (command.kind) {
     case "open-file": {
       if (!command.path) throw new Error("open-file needs a path");
-      await focusProject(command.projectId, signal);
-      signal?.throwIfAborted();
-      const tab = useExplorer.getState().openFile(command.path, scope.root);
+      const tab = await openSessionTab(command.sessionId, command.projectId, scope.root, "file", { path: command.path }, signal);
       if (!tab) throw new Error("the explorer could not open a tab");
       return { opened: command.path, root: scope.root, tabId: tab.id, renderer: await rendererIdForPath(command.projectId, scope.root, command.path, tab.id) };
     }
     case "reveal": {
       if (!command.path) throw new Error("reveal needs a path");
-      await focusProject(command.projectId, signal);
-      signal?.throwIfAborted();
-      useExplorer.getState().revealPath(command.path, command.directory ?? false, scope.root);
+      await revealSessionPath(command.sessionId, command.projectId, scope.root, command.path, command.directory ?? false, signal);
       return { revealed: command.path, root: scope.root };
     }
     case "open-url": {
       if (!command.url) throw new Error("open-url needs a URL");
-      await focusProject(command.projectId, signal);
-      signal?.throwIfAborted();
-      const tab = useExplorer.getState().open("browser", { url: command.url, root: scope.root });
+      const tab = await openSessionTab(command.sessionId, command.projectId, scope.root, "browser", { url: command.url, root: scope.root }, signal);
       if (!tab) throw new Error("the explorer could not open a browser tab");
       return { opened: command.url, tabId: tab.id, root: scope.root };
     }
     case "open-drawing": {
-      await focusProject(command.projectId, signal);
-      signal?.throwIfAborted();
-      const tab = useExplorer.getState().open("drawing", { root: scope.root, title: command.title ?? "Drawing" });
+      const tab = await openSessionTab(command.sessionId, command.projectId, scope.root, "drawing", { root: scope.root, title: command.title ?? "Drawing" }, signal);
       if (!tab) throw new Error("the explorer could not open a drawing tab");
       return { tabId: tab.id, title: tabTitle(tab), root: scope.root, ephemeral: true };
     }
@@ -140,7 +104,7 @@ export async function performIntegrationCommand(command: IntegrationCommand, sig
       const tab = await scopedTab(command, signal);
       signal?.throwIfAborted();
       if (tab.kind !== "drawing") throw new Error("this is not a drawing tab");
-      renameDrawingTab(tab.id, tab.projectId, command.title ?? "");
+      renameDrawingTab(tab.id, tab.sessionId, command.title ?? "");
       return { tabId: tab.id, title: command.title!.trim(), root: tab.root };
     }
     case "drawing-state":
@@ -166,30 +130,20 @@ export async function performIntegrationCommand(command: IntegrationCommand, sig
     case "show-tab": {
       const tab = await scopedTab(command, signal);
       signal?.throwIfAborted();
-      await focusProject(command.projectId, signal);
-      signal?.throwIfAborted();
-      currentTab(tab, command);
-      useExplorer.getState().setActive(tab.id);
+      await selectSessionTab(command.sessionId, tab.id, signal, tab);
       return { tabId: tab.id, shown: true };
     }
     case "close-tab": {
       const tab = await scopedTab(command, signal);
       signal?.throwIfAborted();
       if (hasDirtyDocument(tab.id)) throw new Error("Save or explicitly discard the document before closing its tab.");
-      // Close uses the ordinary UI path and its lifecycle policy; focus is explicit.
-      await focusProject(command.projectId, signal);
-      signal?.throwIfAborted();
-      currentTab(tab, command);
-      if (hasDirtyDocument(tab.id)) throw new Error("Save or explicitly discard the document before closing its tab.");
-      useExplorer.getState().close(tab.id);
+      // Close only this session’s strip; another session stays selected.
+      await closeSessionTab(command.sessionId, tab.id, signal, tab);
       return { tabId: tab.id, closed: true };
     }
     case "terminal-open": {
-      await focusProject(command.projectId, signal);
-      signal?.throwIfAborted();
-      const tab = useExplorer.getState().open("terminal", { cwd: String(params.cwd ?? command.rootDirectory) });
+      const tab = await openSessionTab(command.sessionId, command.projectId, scope.root, "terminal", { cwd: String(params.cwd ?? command.rootDirectory), ptyId: String(params.ptyId) }, signal);
       if (!tab) throw new Error("the explorer could not open a terminal tab");
-      useExplorer.getState().update(tab.id, { ptyId: String(params.ptyId) });
       return { tabId: tab.id, ptyId: params.ptyId, cwd: params.cwd };
     }
     case "viewer-state":

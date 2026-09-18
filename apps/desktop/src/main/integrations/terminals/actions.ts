@@ -9,9 +9,9 @@ export function createTerminalActions(deps: ActionDeps, commands: RendererComman
   async function resolve(session: BridgeSession, params: Record<string, unknown>, signal?: AbortSignal) {
     const scope = deps.sessionRoot(session);
     if (!scope) throw new Error("workspace no longer exists");
-    const tab = await commands.request({ kind: "tab-resource", projectId: session.projectId, root: scope.root,
+    const tab = await commands.request({ kind: "tab-resource", sessionId: session.sessionId, projectId: session.projectId, root: scope.root,
       rootDirectory: await fs.realpath(scope.directory), tabId: String(params.tabId) }, signal) as ExplorerTab;
-    if (tab.kind !== "terminal" || !tab.ptyId || !terminals().owns(tab.ptyId, session.projectId)) throw new Error("this tab has no app-owned terminal in the workspace");
+    if (tab.kind !== "terminal" || !tab.ptyId || !terminals().owns(tab.ptyId, session.sessionId)) throw new Error("this tab has no app-owned terminal in the workspace");
     return tab.ptyId;
   }
   return {
@@ -20,9 +20,11 @@ export function createTerminalActions(deps: ActionDeps, commands: RendererComman
       const location = await resolveForSession(deps, session, typeof params.cwd === "string" ? params.cwd : ".");
       if (!(await fs.stat(location.absolute)).isDirectory()) throw new Error("terminal cwd must be a directory");
       signal?.throwIfAborted();
-      const info = await terminals().create({ projectId: session.projectId, cwd: location.absolute });
+      const info = await terminals().create({ sessionId: session.sessionId, projectId: session.projectId, cwd: location.absolute });
       try {
-        return await commands.request({ kind: "terminal-open", projectId: session.projectId, root: location.root,
+        signal?.throwIfAborted();
+        if (!deps.sessionRoot(session)) throw new Error("This session is no longer active.");
+        return await commands.request({ kind: "terminal-open", sessionId: session.sessionId, projectId: session.projectId, root: location.root,
           rootDirectory: location.directory, params: { cwd: info.cwd, ptyId: info.id } }, signal);
       } catch (error) { terminals().kill(info.id); throw error; }
     },

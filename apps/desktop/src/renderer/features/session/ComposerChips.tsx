@@ -118,25 +118,22 @@ export function Chip({
 /* -------------------------------------------------------------------------- */
 
 /**
- * Which folder the session runs in, and the one place a new folder is added
- * (Codex's shape): `Recent` over the projects a person has worked in, newest
- * first, a check on the one this session is for, and `Open folder…` at the
- * bottom.
- *
- * There is no `Add project` button anywhere else. Adding a folder *is*
- * choosing one — the chooser, then that folder's new-session screen — so a
- * second control for it would be the same menu item with a different name.
- * The order is `lib/projects.ts`, over the session index.
+ * The draft's directory: recently active session directories first, followed
+ * by the folder chooser. Choosing a folder opens an in-memory draft; it does
+ * not create a saved project or a sidebar group.
  */
 export function ProjectChip({ project, onChange }: { project: Project | null; onChange: (id: string) => void }) {
   const projects = useProjects((state) => state.projects);
   const sessions = useSessions((state) => state.sessions);
   const openFolder = useOpenFolder();
-  const recent = useMemo(() => recentProjects(projects, sessions), [projects, sessions]);
+  const recent = useMemo(() => {
+    const activeDirectories = new Set(sessions.filter(session => !session.archived).map(session => session.projectId));
+    return recentProjects(projects.filter(candidate => activeDirectories.has(candidate.id)), sessions);
+  }, [projects, sessions]);
   return (
     <Chip
       icon={<Folder />}
-      label={project?.name ?? "No project"}
+      label={project?.name ?? "Choose folder"}
       menu={
         <>
           <DropdownMenuLabel className="text-[11px] text-muted-foreground uppercase">Recent</DropdownMenuLabel>

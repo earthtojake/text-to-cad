@@ -8,7 +8,7 @@
  * while the sidebar is open, at the left of the session's title bar once it is
  * gone. The explorer's toggle sits at the window's right edge: in the
  * session's title bar while the explorer is shut, at the end of the explorer's
- * tab strip once it is open — and is absent entirely while no project is
+ * tab strip once it is open — and is absent entirely while no session is
  * selected, since there is then no explorer to toggle.
  */
 import { ChevronLeft, ChevronRight, PanelLeft, PanelRight } from "lucide-react";
@@ -17,7 +17,6 @@ import { Button } from "@renderer/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
 import { useExplorer } from "@renderer/state/explorer";
 import { useHistory, useHistoryReach } from "@renderer/state/history";
-import { useActiveProject } from "@renderer/state/projects";
 import { useSettings } from "@renderer/state/settings";
 
 /** Show or hide the projects sidebar. */
@@ -35,20 +34,20 @@ export function SidebarToggle() {
 }
 
 /**
- * Show or hide the explorer. The state is the explorer's own and per project
- * (`state/explorer.ts`), so this writes the person's choice for the project
+ * Show or hide the explorer. The state is the explorer's own and per session
+ * (`state/explorer.ts`), so this writes the person's choice for the session
  * they are looking at.
  *
- * Nothing at all without a project: the pane is a view of a directory, and
+ * Nothing at all without a session: an unsubmitted draft has no tabs, so
  * with none bound `Shell` does not render it. A control that collapses
  * something that is not there is a control that does nothing.
  */
 export function ExplorerToggle() {
-  const hasProject = useActiveProject() !== null;
+  const hasSession = useExplorer(state => state.sessionId !== null);
   const collapsed = useExplorer((state) => state.collapsed);
   const ready = useExplorer((state) => state.ready);
   const toggle = useExplorer((state) => state.toggleCollapsed);
-  if (!hasProject) {
+  if (!hasSession) {
     return null;
   }
   return (
@@ -56,7 +55,7 @@ export function ExplorerToggle() {
       active={!collapsed}
       // The strip's readiness, on the one control that is in the document
       // whether the pane is open or shut. A closed pane is not rendered at
-      // all, so this is the only place "the strip has loaded this project's
+      // all, so this is the only place "the strip has loaded this session's
       // tabs" can be read from outside — which is what the e2e suites wait
       // for before opening anything (a tab opened mid-restore is a tab the
       // restore overwrites).
