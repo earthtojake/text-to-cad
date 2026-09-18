@@ -1,4 +1,4 @@
-/** Portable, explicitly saved Excalidraw documents. No editor or storage is loaded here. */
+/** Bounded in-memory Excalidraw scenes. No editor or storage is loaded here. */
 export const MAX_DRAWING_BYTES = 20 * 1024 * 1024;
 export const MAX_DRAWING_ELEMENTS = 10_000;
 const elementTypes = new Set(['rectangle', 'diamond', 'ellipse', 'line', 'arrow', 'freedraw', 'text', 'image', 'frame']);
@@ -41,7 +41,7 @@ export function parseDrawingScene(serialized) {
       throw new Error('The drawing contains invalid line points.');
     }
     // Drawings are visual context, never embedded pages or navigation. The SDK
-    // restores supported element fields; links/custom application data do not travel.
+    // restores supported element fields; links/custom application data are discarded.
     const { customData: _customData, ...copy } = element;
     return { ...copy, link: null };
   });

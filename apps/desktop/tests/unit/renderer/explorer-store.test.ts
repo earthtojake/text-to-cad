@@ -27,8 +27,8 @@ function deferred<T>() {
 }
 
 function reset() {
-  useExplorer.getState().discardProjectDrawings(PROJECT);
-  useExplorer.getState().discardProjectDrawings("project-2");
+  useExplorer.getState().discardProjectResources(PROJECT);
+  useExplorer.getState().discardProjectResources("project-2");
   window.localStorage.clear();
   useExplorer.setState({
     projectId: PROJECT,
@@ -187,7 +187,7 @@ describe("the explorer strip", () => {
   it("disposes drawings of a removed background project", async () => {
     const drawing = useExplorer.getState().open("drawing")!;
     await useExplorer.getState().bindProject("project-2");
-    useExplorer.getState().discardProjectDrawings(PROJECT);
+    useExplorer.getState().discardProjectResources(PROJECT);
     expect(deleteDrawingScene).toHaveBeenCalledWith(drawing.id);
     expect(getDrawingTab(drawing.id, PROJECT)).toBeNull();
     await useExplorer.getState().bindProject(PROJECT);
@@ -520,10 +520,10 @@ describe("the explorer strip", () => {
       "wrist.step",
     );
     expect(tabTitle({ ...base, kind: "file", path: null, root: null, panel: null })).toBe("Untitled");
-    expect(tabTitle({ ...base, kind: "browser", url: "https://example.com/a/b" })).toBe(
+    expect(tabTitle({ ...base, kind: "browser", root: null, url: "https://example.com/a/b" })).toBe(
       "example.com",
     );
-    expect(tabTitle({ ...base, kind: "browser", url: null })).toBe("New tab");
+    expect(tabTitle({ ...base, kind: "browser", root: null, url: null })).toBe("New tab");
     expect(tabTitle({ ...base, kind: "review", scope: "all", sessionId: null })).toBe("Review");
   });
 });

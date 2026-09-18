@@ -7,13 +7,12 @@
  * change made from the app menu updates the same state a click would.
  */
 import type { IpcEventPayload } from "@shared/ipc";
-import type { ExplorerRoot } from "@shared/types";
 
 import { useAcp } from "./acp";
 import { useAgentOptions } from "./agent-options";
 import { useAgents } from "./agents";
 import { useComposer } from "./composer";
-import { performCadCommand } from "./cad-commands";
+import { performIntegrationCommand } from "./integration-commands";
 import { useExplorer } from "./explorer";
 import { attachHistory, useHistory } from "./history";
 import { usePathLinks } from "./path-links";
@@ -23,11 +22,14 @@ import { useSessions } from "./sessions";
 import { useSettings } from "./settings";
 import { useUi } from "./ui";
 import { useUpdates } from "./updates";
+import { explorerRootFor } from "./workspace-root";
+export { explorerRootFor } from "./workspace-root";
 
 export type UiCommand = IpcEventPayload<"ui.command">["command"];
 
 /** Attach every main → renderer listener. Returns a detach function. */
 export function subscribeToMain(): () => void {
+  const commands = new Map<string, AbortController>();
   const off = [
     window.hardcore.on("projects.changed", (projects) => {
       useProjects.getState().receive(projects);
@@ -75,17 +77,20 @@ export function subscribeToMain(): () => void {
     }),
     // An agent's tool call, relayed by main; answered whatever happens, so
     // the bridge's wait ends with the reason rather than a timeout.
-    window.hardcore.on("cad.command", (command) => {
-      void performCadCommand(command)
-        .then((result) => window.hardcore.cad.reply({ requestId: command.requestId, ok: true, result }))
+    window.hardcore.on("integrations.cancel", ({ requestId }) => commands.get(requestId)?.abort(new Error("Tool request cancelled"))),
+    window.hardcore.on("integrations.command", (command) => {
+      const controller = new AbortController();
+      commands.set(command.requestId, controller);
+      void performIntegrationCommand(command, controller.signal)
+        .then((result) => window.hardcore.integrations.reply({ requestId: command.requestId, ok: true, result }))
         .catch((error: unknown) =>
-          window.hardcore.cad.reply({
+          window.hardcore.integrations.reply({
             requestId: command.requestId,
             ok: false,
             error: error instanceof Error ? error.message : String(error),
           }),
         )
-        .catch(() => {});
+        .catch(() => {}).finally(() => commands.delete(command.requestId));
     }),
     window.hardcore.on("ui.command", (payload) => runUiCommand(payload)),
   ];
@@ -118,6 +123,8 @@ export function subscribeToMain(): () => void {
   const unsubscribeHistory = attachHistory();
 
   return () => {
+    for (const controller of commands.values()) controller.abort(new Error("Window disconnected"));
+    commands.clear();
     unsubscribeProjects();
     unsubscribeSessions();
     unsubscribeHistory();
@@ -125,20 +132,6 @@ export function subscribeToMain(): () => void {
       detach();
     }
   };
-}
-
-/**
- * The explorer root the active session implies for a project: its worktree
- * when it has one and belongs to that project, else null — the project
- * directory. The new-session state has no session and reads the project.
- */
-export function explorerRootFor(projectId: string | null): ExplorerRoot {
-  if (!projectId) {
-    return null;
-  }
-  const { activeId, sessions } = useSessions.getState();
-  const session = sessions.find((candidate) => candidate.id === activeId);
-  return session && session.projectId === projectId ? (session.worktreePath ?? null) : null;
 }
 
 /**

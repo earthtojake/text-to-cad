@@ -63,7 +63,7 @@ src/
     markdown/       preview/editor and lossless Markdown bridge
     code/           Monaco editor and worker setup
     image/          image view and zoom
-    pdf/            sandboxed PDF view
+    pdf/            PDF.js pages, text selection and host-bound capture
     unsupported/    Not supported message and optional OS-open action
   primitives/       shared controls retaining the viewer's existing styling
   lib/              browser helpers
@@ -104,9 +104,9 @@ Public entry points include `/host`, `/file-viewer`, `/navigation`, `/renderers/
 Declarations are owned here; apps need no ambient shims or aliases into this
 source tree.
 
-`/drawing` is a separate lazy entry point for the Excalidraw editor, with no
-platform or persistence policy. Desktop owns its temporary Drawing tabs,
-explicit import/export and prompt delivery; web's viewer remains unchanged.
+`/drawing` is a separate lazy entry point for the Excalidraw editor, for temporary
+sketches, with no platform discovery or persistent storage. Desktop owns its temporary Drawing tabs,
+in-memory scene retention and prompt delivery; web's viewer remains unchanged.
 Read [drawing](docs/drawing.md) before extending this editor or reusing it for
 viewer annotations.
 

@@ -456,6 +456,7 @@ export const explorerHandlers = {
         // whichever of those it is (`Open in terminal` on a folder).
         const directory = await terminalDirectory(projectId, cwd);
         return services().terminals.create({
+          projectId,
           cwd: directory,
           ...(cols === undefined ? {} : { cols }),
           ...(rows === undefined ? {} : { rows }),
@@ -479,3 +480,6 @@ export const explorerHandlers = {
     },
   },
 };
+
+/** The app-owned PTY registry shared by UI and integration tools. */
+export function explorerTerminals(): Terminals { return services().terminals; }

@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DocumentSession, FileRendererProps, FileSource } from "../file-viewer/types.js";
 import CodeRenderer from "./code/CodeRenderer.js";
 import ImageRenderer from "./image/ImageRenderer.js";
-import PdfRenderer from "./pdf/PdfRenderer.js";
 import { ViewerHostContext } from "../host/context.js";
 import { testHost } from "../host/testing/host.js";
 import UnsupportedRenderer from "./unsupported/UnsupportedRenderer.js";
@@ -74,7 +73,7 @@ describe("CodeRenderer", () => {
   it("preserves editor options, appearance, edits, save binding, and isolated model identity", () => {
     const document = documentSession();
     const props = common(null, { document });
-    const first = render(<CodeRenderer {...props} />);
+    const first = render(<ViewerHostContext.Provider value={testHost()}><CodeRenderer {...props} /></ViewerHostContext.Provider>);
     expect(screen.getByTestId("monaco-editor")).toBeTruthy();
     expect(editorProps?.language).toBe("typescript");
     expect(editorProps?.theme).toBe("hardcore-dark");
@@ -93,23 +92,23 @@ describe("CodeRenderer", () => {
     expect(document.setValue).toHaveBeenCalledWith("changed");
     let saveCommand: (() => void) | undefined;
     (editorProps?.onMount as (instance: unknown, monaco: unknown) => void)(
-      { addCommand: (_key: number, command: () => void) => { saveCommand = command; }, dispose: vi.fn() },
+      { addAction: vi.fn(), addCommand: (_key: number, command: () => void) => { saveCommand = command; }, dispose: vi.fn() },
       { KeyMod: { CtrlCmd: 1 }, KeyCode: { KeyS: 2 } },
     );
     saveCommand?.();
     expect(document.save).toHaveBeenCalledOnce();
 
-    const second = render(<CodeRenderer {...props} />);
+    const second = render(<ViewerHostContext.Provider value={testHost()}><CodeRenderer {...props} /></ViewerHostContext.Provider>);
     expect(editorProps?.path).not.toBe(firstPath);
     first.unmount();
     second.unmount();
   });
 
   it("keeps prose wrapped and honors read-only documents", () => {
-    render(<CodeRenderer {...common(null, {
+    render(<ViewerHostContext.Provider value={testHost()}><CodeRenderer {...common(null, {
       file: { path: "README.md", name: "README.md", kind: "file", size: 4, extension: "md" },
       document: documentSession({ readOnly: true }),
-    })} />);
+    })} /></ViewerHostContext.Provider>);
     expect(editorProps?.options).toMatchObject({ readOnly: true, wordWrap: "on" });
   });
 });
@@ -130,14 +129,8 @@ describe("asset and fallback renderers", () => {
     expect(screen.getByRole("button", { name: "Fit" })).toBeTruthy();
   });
 
-  it("keeps the PDF in Chromium's sandboxed viewer", () => {
-    render(<PdfRenderer {...common({ url: "blob:pdf", mime: "application/pdf" }, {
-      file: { path: "paper.pdf", name: "paper.pdf", kind: "file", size: 9, extension: "pdf", mediaType: "pdf" },
-    })} />);
-    const frame = screen.getByTitle("paper.pdf");
-    expect(frame.getAttribute("src")).toBe("blob:pdf");
-    expect(frame.getAttribute("sandbox")).toBe("");
-  });
+  // PDF rendering, selection, capture and capability cleanup use the real worker
+  // in pdf/PdfRenderer.browser.test.mjs rather than a simulated iframe.
 
   it("offers the existing OS fallback only when the host provides it", () => {
     const openDefault = vi.fn();

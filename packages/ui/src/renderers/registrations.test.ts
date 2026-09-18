@@ -71,7 +71,7 @@ describe("non-CAD renderer registrations", () => {
 
   it.each([imageRenderer, pdfRenderer])("releases every managed asset lease", async (renderer) => {
     const release = vi.fn();
-    const readAsset = vi.fn(async () => ({ url: "blob:fixture", mime: "application/octet-stream", release }));
+    const readAsset = vi.fn(async () => ({ url: "blob:fixture", mime: "application/octet-stream", bytes: new Uint8Array([37, 80, 68, 70]), release }));
     const prepared = await renderer.prepare({
       file: file(renderer.id === "image" ? "photo.png" : "paper.pdf", renderer.id),
       source: source({ readAsset }),
@@ -81,15 +81,25 @@ describe("non-CAD renderer registrations", () => {
     expect(release).toHaveBeenCalledOnce();
   });
 
-  it("releases an asset when its request is cancelled after acquisition", async () => {
+  it("releases a PDF lease when the host cannot supply bytes", async () => {
+    const release = vi.fn();
+    await expect(pdfRenderer.prepare({
+      file: file("paper.pdf", "pdf"),
+      source: source({ readAsset: async () => ({ url: "blob:pdf", release }) }),
+      signal: new AbortController().signal,
+    })).rejects.toThrow("asset bytes");
+    expect(release).toHaveBeenCalledOnce();
+  });
+
+  it.each([imageRenderer, pdfRenderer])("releases an asset when its request is cancelled after acquisition", async (renderer) => {
     const controller = new AbortController();
     const release = vi.fn();
     const readAsset = vi.fn(async () => {
       controller.abort();
-      return { url: "blob:cancelled", release };
+      return { url: "blob:cancelled", bytes: new Uint8Array([37, 80, 68, 70]), release };
     });
-    await expect(imageRenderer.prepare({
-      file: file("photo.png", "image"),
+    await expect(renderer.prepare({
+      file: file(renderer.id === "image" ? "photo.png" : "paper.pdf", renderer.id),
       source: source({ readAsset }),
       signal: controller.signal,
     })).rejects.toMatchObject({ name: "AbortError" });

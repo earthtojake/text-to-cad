@@ -90,7 +90,7 @@ export type SessionConnectionOptions = {
   /** Passed to `session/new` and `session/load`; P5 adds the Hardcore server. */
   mcpServers?: McpServer[];
   /**
-   * The skills root (`src/main/cad/skills.ts`), named in `session/new` and
+   * The skills root (`src/main/integrations/skills.ts`), named in `session/new` and
    * `session/load` as an additional directory — under both spellings, always
    * (see `sessionRoots` below).
    */

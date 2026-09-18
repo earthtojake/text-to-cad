@@ -10,6 +10,7 @@ import { BrowserWindow, app, dialog, shell } from "electron";
 
 import { ipcContract, type IpcContract } from "../../shared/ipc";
 import { projects, sessions, settings } from "../db/repositories";
+import { forgetProject } from "../integrations";
 import { viewers } from "../cad";
 import { track } from "../telemetry";
 import { applySettingsEffects } from "../settings-effects";
@@ -17,10 +18,13 @@ import { acpHandlers } from "./acp";
 import { agentOptionsHandlers } from "./agent-options";
 import { agentsHandlers } from "./agents";
 import { appHandlers } from "./app";
+import { integrationHandlers } from "./integrations";
 import { cadHandlers } from "./cad";
 import { clipboardHandlers } from "./clipboard";
+import { browserHandlers } from "./browser";
+import { browserService } from "../browser/service";
 import { dialogsHandlers } from "./dialogs";
-import { explorerHandlers, initExplorerServices } from "./explorer";
+import { explorerHandlers, initExplorerServices, explorerTerminals } from "./explorer";
 import { gitHandlers } from "./git";
 import { runtimeHandlers } from "./runtime";
 import { skillsHandlers } from "./skills";
@@ -66,6 +70,9 @@ const handlers = {
 
     remove: ({ id }: { id: string }) => {
       const project = projects.list().find((candidate) => candidate.id === id);
+      forgetProject(id);
+      browserService.disposeProject(id);
+      explorerTerminals().disposeProject(id);
       projects.remove(id);
       // The viewer served that root for this project; nothing else asks for it.
       if (project && !projects.list().some((other) => other.path === project.path)) {
@@ -152,7 +159,9 @@ const handlers = {
   ...explorerHandlers,
   ...gitHandlers,
   ...cadHandlers,
+  ...integrationHandlers,
   ...clipboardHandlers,
+  ...browserHandlers,
 } satisfies Parameters<typeof registerIpc<IpcContract>>[1];
 
 // The words on the native chooser are the words on the control that opened

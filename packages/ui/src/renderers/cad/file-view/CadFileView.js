@@ -1,3 +1,4 @@
+import { attachCadLiveBinding } from "../live.js";
 import { buildEdgeChainGraph } from "../workbench/edgeChainSelection.js";
 "use client";
 
@@ -346,7 +347,7 @@ export default function CadFileView(props) {
 
 function CadFileViewSurface({
   client, entry, serverInfo, renderSession: cadRenderSession, preferences, onPreferenceChange, onOpenFile, className = "",
-  panelSlot, colorScheme = "light", selectReference, captureRequest, acknowledgeCommand, documentResource, slots,
+  panelSlot, colorScheme = "light", selectReference, captureRequest, acknowledgeCommand, documentResource, slots, live,
   openPanel = "", onPanelOpen, onChromeVisibilityChange, onActivityChange, onReload, state, onStateChange
 }) {
   const host = useViewerHost();
@@ -4183,6 +4184,10 @@ function CadFileViewSurface({
   const promptResource = useMemo(() => ({ ...documentResource,
     revision: String(selectedEntry?.documentHash || selectedEntry?.hash || documentResource.revision || '')
   }), [documentResource, selectedEntry?.documentHash, selectedEntry?.hash]);
+  // Rebuilds keep the previous same-file mesh visible until its replacement is
+  // ready. Observe that mesh's document revision while interaction is blocked.
+  const displayedResourceRef = useRef(promptResource);
+  if (!retainingPreviousStepMesh) displayedResourceRef.current = promptResource;
   // Copy is clipboard-only. Adding context is an explicit host action.
   const deliverReferenceText = useCallback((text) => host.clipboard.writeText(text), [host.clipboard]);
   const showPromptResult = useCallback((result) => setCopyStatus(promptDeliveryMessage(result)), []);
@@ -5862,6 +5867,95 @@ function CadFileViewSurface({
     handleCapture();
   }, [captureKey, viewerLoading, stepInteractionBlocked, promptAvailable, acknowledgeCommand, handleCapture]);
 
+  // App tools bind to this actual mounted viewport, never catalog metadata.
+  const liveRuntimeRef = useRef(null);
+  liveRuntimeRef.current = {
+    readState() {
+      const displayedResource = displayedResourceRef.current;
+      const text = inspectionHighlight ? stepGeometryPromptText(inspectionHighlight, {
+        referenceMap: effectiveActiveReferenceMap, parts: selectedMeshData?.parts || EMPTY_LIST, entry: selectedEntry,
+      }) : canonicalCopySelectionLines.join("\n");
+      const references = referencesForHost(text).map(reference => ({
+        resource: { ...displayedResource },
+        target: reference.selector ? { kind: 'cad-selector', selectors: reference.selector.split(',') } : { kind: 'whole-resource' },
+        ...(reference.label ? { label: reference.label } : {}),
+      }));
+      return {
+        resource: { ...displayedResource }, revision: String(displayedResource.revision || ''),
+        loading: Boolean(viewerLoading || stepInteractionBlocked),
+        selection: references,
+        selectedPartIds: [...(robotComponentsActive ? robotSelection.selectedIds : inspectionHighlight ? inspectionHighlight.partIds || [] : viewerSelectedPartIds)],
+        selectedReferenceIds: [...(inspectionHighlight ? inspectionHighlight.faceIds || [] : selectedReferenceIdsRef.current)],
+        hiddenPartIds: [...hiddenPartIds], isolatedPartIds: [...isolatedAssemblyNodeIds],
+        camera: clonePerspectiveSnapshot(viewerRef.current?.getPerspective?.() || activePerspectiveRef.current),
+        display: normalizeDisplaySettings(resolvedScene.display), renderMode: renderSession.enabled ? 'render' : 'inspect',
+      };
+    },
+    select({ selectors, replace = true }) {
+      if (renderSession.enabled) throw new Error('Switch to Inspect before selecting CAD references.');
+      if (stepModuleTreeSelectionDisabled) throw new Error(stepModuleTreeSelectionDisabledReason || 'Selection is unavailable for this model.');
+      const names = uniqueStringList(selectors.flatMap(selector => String(selector).split(',').map(value => value.trim())).filter(Boolean));
+      if (!names.length) throw new Error('Choose at least one CAD selector.');
+      const selections = names.map(selector => resolveSelectorSelection(selector, {
+        referenceMap: effectiveActiveReferenceMap, treeRoot: displayStepTreeRoot || stepTreeRoot,
+      }));
+      const missing = names.filter((_name, index) => !selections[index]);
+      if (missing.length) throw new Error(`Selectors are unavailable in the displayed revision: ${missing.join(', ')}. Expand their model tree entries to load topology.`);
+      if (isAssemblyView && selections.some(selection => selection.kind === 'part' && !validAssemblySelectionIdSet.has(selection.id))) {
+        throw new Error('The requested assembly selection is unavailable in the displayed model.');
+      }
+      const parts = uniqueStringList([...(replace ? [] : selectedPartIdsRef.current), ...selections.filter(selection => selection.kind === 'part').map(selection => selection.id)]);
+      const references = uniqueStringList([...(replace ? [] : selectedReferenceIdsRef.current), ...selections.filter(selection => selection.kind === 'reference').map(selection => selection.id)]);
+      selectedPartIdsRef.current = parts;
+      selectedReferenceIdsRef.current = references;
+      setSelectedPartIds(parts);
+      setSelectedReferenceIds(references);
+      setSelectedWholeEntryCadRefToken('');
+      setInspectionHighlight(null);
+      setSelectedRenderPartIdByAssemblyPartId(current => Object.fromEntries(parts.map(id => [id, renderPartIdForAssemblySelection(id, current[id])]).filter(([, id]) => id)));
+      const last = selections[selections.length - 1];
+      revealStepTreeNode(last.kind === 'part' ? last.id : findStepTreeTopologyNodeIdForReference(displayStepTreeRoot, last.id) || referencePartId(effectiveActiveReferenceMap.get(last.id)), { source: 'reference' });
+    },
+    clearSelection() {
+      selectedPartIdsRef.current = [];
+      setSelectedPartIds([]);
+      setSelectedRenderPartIdByAssemblyPartId({});
+      clearReferenceSelection();
+      setInspectionHighlight(null);
+      robotSelection.select('');
+    },
+    setCamera(camera) {
+      const validVector = vector => Array.isArray(vector) && vector.length === 3 && vector.every(Number.isFinite);
+      if (!['position', 'target', 'up'].every(key => validVector(camera?.[key]))
+        || (camera.projection != null && !['perspective', 'orthographic'].includes(camera.projection))
+        || ['zoom', 'focalLength', 'orthographicHalfHeight'].some(key => camera[key] != null && (!Number.isFinite(camera[key]) || camera[key] <= 0))) {
+        throw new Error('Camera vectors must contain three finite numbers and camera scales must be positive.');
+      }
+      const snapshot = clonePerspectiveSnapshot(camera);
+      if (!snapshot || !viewerRef.current?.setPerspective?.(snapshot, { resetZoomBaseline: true })) throw new Error('The viewer could not apply this camera.');
+      const scoped = scopedWorkspacePerspective(snapshot, selectedKey, selectedEntry);
+      setViewerPerspective(scoped);
+      handlePerspectiveChange(scoped);
+    },
+    resetCamera() {
+      if (!viewerRef.current?.resetView?.()) throw new Error('The viewer camera is unavailable.');
+      if (selectedEntryIsDrawing && drawingViewMode === '2d') viewerRef.current?.activateViewPlaneFace?.('z');
+    },
+    setDisplaySettings(patch) {
+      if (renderSession.enabled) throw new Error('Switch to Inspect before changing display settings.');
+      updateDisplaySettings(normalizeDisplaySettings(patch, { fallback: displaySettings }));
+    },
+    setRenderMode(enabled) { handleRenderEnabledChange(enabled); },
+    capture() {
+      if (!viewerRef.current?.captureScreenshotBlob) throw new Error('The viewer cannot capture this model yet.');
+      return viewerRef.current.captureScreenshotBlob();
+    },
+  };
+  useEffect(() => {
+    if (!live) return;
+    return attachCadLiveBinding(live, () => liveRuntimeRef.current);
+  }, [live]);
+
   const handleScreenshotCopy = useCallback(async () => {
     if (!selectedEntry) return;
     try {
@@ -6158,7 +6252,7 @@ function CadFileViewSurface({
                 assemblyPickingActive={robotComponentsActive || viewerInAssemblyMode}
                 assemblyParts={robotComponentsActive ? (selectedUrdfPreview.meshData?.parts || EMPTY_LIST) : viewerAssemblyRenderParts}
                 hiddenPartIds={viewerHiddenPartIds}
-                selectedPartIds={robotComponentsActive ? robotSelection.selectedIds : inspectionHighlight ? inspectionHighlight.partIds : viewerSelectedPartIds}
+                selectedPartIds={robotComponentsActive ? robotSelection.selectedIds : inspectionHighlight ? inspectionHighlight.partIds || [] : viewerSelectedPartIds}
                 hoveredPartId={robotComponentsActive ? robotSelection.hoveredId : viewerHoveredPartIds}
                 hoveredReferenceId={effectiveHoveredReferenceId}
                 selectedReferenceIds={inspectionHighlight ? inspectionHighlight.faceIds : selectedReferenceIds}

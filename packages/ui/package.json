@@ -94,7 +94,8 @@
     "@hardcore/core": "*",
     "clsx": "^2.1.1",
     "tailwind-merge": "^3.7.0",
-    "@excalidraw/excalidraw": "0.18.1"
+    "@excalidraw/excalidraw": "0.18.1",
+    "pdfjs-dist": "6.3.289"
   },
   "devDependencies": {
     "@types/react": "19.2.18",

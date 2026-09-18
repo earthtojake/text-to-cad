@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { emptyDrawingDocument } from "@hardcore/core/drawing";
-import { deleteDrawingScene, getDrawingScene, retainDrawingScene, setDrawingScene } from "@renderer/state/drawings";
+import { deleteDrawingScene, getDrawingScene, retainDrawingScene } from "@renderer/state/drawings";
 import { useExplorer } from "@renderer/state/explorer";
 import { useProjects } from "@renderer/state/projects";
 import type { Project } from "@shared/types";
@@ -15,7 +15,7 @@ beforeEach(() => {
 });
 afterEach(async () => {
   deleteDrawingScene(tabId);
-  useExplorer.getState().discardProjectDrawings("scene-project");
+  useExplorer.getState().discardProjectResources("scene-project");
   await useExplorer.getState().bindProject(null);
   await vi.runOnlyPendingTimersAsync();
   vi.useRealTimers();
@@ -49,7 +49,7 @@ it("closing a drawing releases content and ignores its editor's late unmount", (
 it("a stale editor cannot overwrite a replacement scene", () => {
   const oldRead = vi.fn(() => document("#abcdef"));
   const leave = retainDrawingScene(tabId, oldRead);
-  setDrawingScene(tabId, document("#123456"));
+  retainDrawingScene(tabId, () => document("#123456"));
   leave();
   expect(JSON.parse(getDrawingScene(tabId)!).appState.viewBackgroundColor).toBe("#123456");
   expect(oldRead).not.toHaveBeenCalled();

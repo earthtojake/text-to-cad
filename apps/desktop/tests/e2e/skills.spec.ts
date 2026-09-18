@@ -8,7 +8,7 @@ import { _electron as electron, expect, test, type ElectronApplication, type Pag
 /**
  * What the app gives an agent (plan §8, as revised): the skills root in every
  * `session/new`, the preamble only for an agent that will not read one, the
- * `hardcore` MCP server's two skills tools, and the bundled runtime's `cadgen`
+ * `hardcore-workspace` MCP server's two skills tools, and the bundled runtime's `cadgen`
  * on the session's PATH. Nothing is installed into any agent's own
  * configuration — there is no plugin.
  *
@@ -104,7 +104,8 @@ test("the skills root exists in both layouts and is named in session/new", async
   const info = await page.evaluate(() => window.hardcore.skills.info());
   expect(info.root).not.toBeNull();
   expect(info.skills.map((skill) => skill.name)).toContain("cad");
-  expect(info.skills.map((skill) => skill.name)).toContain("hardcore-app-use");
+  expect(info.skills.map((skill) => skill.name)).toEqual(expect.arrayContaining(["cad-viewer", "documents", "pdf", "drawings", "terminals", "hardcore-browser"]));
+  expect(info.skills.map((skill) => skill.name)).not.toContain("hardcore-app-use");
   // One directory per app version, under the app's own user-data directory.
   // (Realpath'd: Electron resolves `--user-data-dir`, and /var is a link.)
   expect(path.dirname(info.root!)).toBe(path.join(fs.realpathSync(userData), "skills"));
@@ -118,7 +119,10 @@ test("the skills root exists in both layouts and is named in session/new", async
   // the way each native loader reads them.
   for (const layout of [path.join(".claude", "skills"), path.join(".agents", "skills")]) {
     expect(fs.existsSync(path.join(info.root!, layout, "cad", "SKILL.md"))).toBe(true);
-    expect(fs.existsSync(path.join(info.root!, layout, "hardcore-app-use", "SKILL.md"))).toBe(true);
+    for (const name of ["cad-viewer", "documents", "pdf", "drawings", "terminals", "hardcore-browser"]) {
+      expect(fs.existsSync(path.join(info.root!, layout, name, "SKILL.md"))).toBe(true);
+    }
+    expect(fs.existsSync(path.join(info.root!, layout, "hardcore-app-use"))).toBe(false);
   }
 });
 
@@ -128,15 +132,16 @@ test("an agent that does not load the root gets the preamble once, and a native 
   const prompts = told.filter((frame) => frame.kind === "prompt");
   expect(prompts).toHaveLength(2);
   const first = JSON.stringify(prompts[0]!.params.prompt);
-  expect(first).toContain("whose skills are at");
-  expect(first).toContain("cad/SKILL.md");
+  expect(first).toContain("Additional skills are at");
+  expect(first).toContain("- cad:");
+  expect(first).toContain("- documents:");
   expect(first).toContain("first");
-  expect(JSON.stringify(prompts[1]!.params.prompt)).not.toContain("whose skills are at");
+  expect(JSON.stringify(prompts[1]!.params.prompt)).not.toContain("Additional skills are at");
 
   // Claude Code loads the root itself, so its transcript is the person's words.
   const native = await run("claude-code", ["first", "second"]);
   for (const prompt of native.filter((frame) => frame.kind === "prompt")) {
-    expect(JSON.stringify(prompt.params.prompt)).not.toContain("whose skills are at");
+    expect(JSON.stringify(prompt.params.prompt)).not.toContain("Additional skills are at");
   }
 });
 
@@ -146,10 +151,8 @@ test("list_skills and read_skill reach the same root through the MCP server", as
 
   const answer = sent.find((frame) => frame.kind === "skills");
   expect(answer, "the fake agent's list_skills/read_skill turn").toBeDefined();
-  expect(answer!.params.root).toBe(path.join(info.root!, ".claude", "skills"));
-  expect(answer!.params.names).toContain("cad");
-  expect(answer!.params.names).toContain("hardcore-app-use");
-  expect((answer!.params.cad as { path: string; text: string }).text).toContain("name: cad");
+  expect((answer!.params.names as string[]).sort()).toEqual(info.skills.map(skill => skill.name).sort());
+  expect(answer!.params.cad).toEqual({ path: "cad/SKILL.md", text: fs.readFileSync(path.join(info.root!, ".claude", "skills", "cad", "SKILL.md"), "utf8") });
 });
 
 test("cadgen inside a session is the app's own", async () => {

@@ -1,3 +1,4 @@
+import type { DocumentDrafts, LiveTextDocument, LivePdfDocument } from './documents.js';
 import type { PromptContextPort } from '@hardcore/core/prompt';
 import type { FileActions, FileSource } from '../file-viewer/types.js';
 
@@ -23,6 +24,9 @@ export interface ViewerCommandTarget {
 }
 export interface ViewerHost {
   files: FileSource;
+  documents?: { drafts: DocumentDrafts; bind(target: LiveTextDocument): () => void };
+  /** Optional URL of host-bundled PDF.js cmaps/, standard_fonts/, wasm/, and iccs/. */
+  pdf?: { assetBaseUrl?: string; bind(target: LivePdfDocument): () => void };
   /** Optional per-view registration, never a global command bus. */
   commands?: { bind(target: ViewerCommandTarget): () => void };
   fileActions?: FileActions;

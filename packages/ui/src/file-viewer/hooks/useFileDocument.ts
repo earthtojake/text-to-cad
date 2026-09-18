@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { selectRenderer } from "../registry.js";
 import type { DocumentSaveResult, DocumentSession, FileMetadata, FileSource, PreparedRenderer, RendererRegistration, TextDocument } from "../types.js";
+import type { DocumentDrafts } from '../../host/documents.js';
 import { isSameOrUnder, movedFilePath } from "../fileChanges.js";
 
 type ReadyDocument = { status: "ready"; file: FileMetadata; renderer: RendererRegistration; prepared: PreparedRenderer };
@@ -10,7 +11,7 @@ type EditState = { key: string; base: TextDocument; value: string; saving: boole
 export function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error); }
 
 /** The lifetime of one file. Source identity participates in every asynchronous guard. */
-export function useFileDocument(file: string | FileMetadata | null, source: FileSource, renderers: readonly RendererRegistration[]) {
+export function useFileDocument(file: string | FileMetadata | null, source: FileSource, renderers: readonly RendererRegistration[], drafts?: DocumentDrafts) {
   const path = typeof file === "string" ? file : file?.path ?? null;
   const [generation, setGeneration] = useState(0);
   const key = JSON.stringify([source.id, path, generation]);
@@ -20,7 +21,7 @@ export function useFileDocument(file: string | FileMetadata | null, source: File
   current.current = { key, edit, source };
   const writes = useRef(new Set<AbortController>());
   const relocation = useRef<{ source: FileSource; path: string; edit: EditState | null } | null>(null);
-  const reload = useCallback(() => setGeneration((value) => value + 1), []);
+  const reload = useCallback(() => { if (path) drafts?.put(source.id, path, null); setGeneration((value) => value + 1); }, [drafts, source.id, path]);
   const previousLoad = useRef<{ key: string; source: FileSource; path: string | null; generation: number; refresh: boolean } | null>(null);
 
   useEffect(() => {
@@ -43,9 +44,10 @@ export function useFileDocument(file: string | FileMetadata | null, source: File
         setResult({ key, document: { status: "ready", file: metadata, renderer, prepared } });
         if (prepared.text) {
           const moved = relocation.current?.source === source && relocation.current.path === path ? relocation.current.edit : null;
+          const retained = moved ?? (!refresh ? drafts?.get(source.id, path) : null);
           relocation.current = null;
-          setEdit(moved && moved.value !== moved.base.content
-            ? { ...moved, key, saving: false, stale: moved.stale || prepared.text.revision !== moved.base.revision }
+          setEdit(retained && retained.value !== retained.base.content
+            ? { ...retained, key, saving: false, error: null, stale: retained.stale || prepared.text.revision !== retained.base.revision }
             : { key, base: prepared.text, value: prepared.text.content, saving: false, stale: false, error: null });
         }
       } catch (error) {
@@ -55,6 +57,10 @@ export function useFileDocument(file: string | FileMetadata | null, source: File
     return () => { controller.abort(); owned?.dispose?.(); };
     // Metadata is refreshed on explicit reload; its object identity is not a file change.
   }, [key, path, source, renderers]);
+
+  useEffect(() => {
+    if (path && edit?.key === key) drafts?.put(source.id, path, edit.value !== edit.base.content ? { base: edit.base, value: edit.value, stale: edit.stale } : null);
+  }, [drafts, source.id, path, key, edit]);
 
   useEffect(() => () => {
     for (const controller of writes.current) controller.abort();
@@ -70,7 +76,10 @@ export function useFileDocument(file: string | FileMetadata | null, source: File
       const document = state.edit?.key === key ? state.edit : null;
       const moved = change.changes.find(item => item.kind === "moved" && isSameOrUnder(path, item.from));
       if (moved?.kind === "moved") {
-        relocation.current = { source, path: movedFilePath(path, moved.from, moved.to), edit: document };
+        const nextPath = movedFilePath(path, moved.from, moved.to);
+        relocation.current = { source, path: nextPath, edit: document };
+        if (document && document.value !== document.base.content) drafts?.put(source.id, nextPath, { base: document.base, value: document.value, stale: document.stale });
+        drafts?.put(source.id, path, null);
         return;
       }
       if (!change.changes.some(item => (item.kind === "content" && item.path === path && (!item.revision || item.revision !== document?.base.revision))
@@ -80,12 +89,16 @@ export function useFileDocument(file: string | FileMetadata | null, source: File
         setEdit((previous) => previous?.key === key ? { ...previous, stale: true } : previous);
       } else reload();
     });
-  }, [key, path, source, reload]);
+  }, [key, path, source, reload, drafts]);
 
   const setValue = useCallback((value: string) => {
-    setEdit((previous) => previous?.key === key && !previous.base.readOnly && !previous.base.truncated && source.writeText
-      ? { ...previous, value, error: null } : previous);
-  }, [key, source]);
+    const previous = current.current.edit;
+    if (previous?.key !== key || previous.base.readOnly || previous.base.truncated || !source.writeText) return;
+    const next = { ...previous, value, error: null };
+    current.current.edit = next;
+    if (path) drafts?.put(source.id, path, next.value !== next.base.content ? { base: next.base, value: next.value, stale: next.stale } : null);
+    setEdit(next);
+  }, [key, source, path, drafts]);
   const keepMine = useCallback(() => setEdit((previous) => previous?.key === key ? { ...previous, stale: false } : previous), [key]);
   const save = useCallback(async (): Promise<DocumentSaveResult> => {
     const state = current.current;

@@ -1,7 +1,7 @@
 import { useSyncExternalStore, type ComponentType } from 'react';
 import type { FileActivity, FileRendererProps, JsonValue } from '../../file-viewer/types.js';
 import type { CadWorkspaceService, CadEntry, CadRenderSession, CadServerInfo } from '@hardcore/core/client';
-import type { CadCommands, CadCommandSource, CadRendererSlots, PreparedCadDocument } from './index.js';
+import type { CadCommands, CadCommandSource, CadLiveBinding, CadRendererSlots, PreparedCadDocument } from './index.js';
 import type { ResourceRef } from '@hardcore/core/prompt';
 import type { CadPreferences } from './preferences.js';
 import CadFileView from './file-view/CadFileView.js';
@@ -31,6 +31,7 @@ interface CadSurfaceProps {
   acknowledgeCommand?: CadCommandSource['acknowledge'];
   documentResource: ResourceRef;
   slots?: CadRendererSlots;
+  live?: CadLiveBinding;
 }
 const Surface = CadFileView as ComponentType<CadSurfaceProps>;
 
@@ -62,6 +63,7 @@ export default function CadRenderer(props: FileRendererProps<PreparedCadDocument
     onStateChange={props.onStateChange}
     documentResource={{ kind: 'workspace-file', workspaceId: props.source.id, path: props.file.path, revision: String(data.entry.hash || props.file.revision || '') }}
     slots={data.services.slots}
+    live={data.services.live}
     selectReference={commands.selectReference}
     captureRequest={commands.captureRequest}
     acknowledgeCommand={data.services.commands?.acknowledge}

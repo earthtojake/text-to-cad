@@ -31,7 +31,7 @@ are for reading and maintaining the contracts.
 | `FileSource`, `FileActions`, mutation receipts, `FileViewerState` | [File viewer types](../src/file-viewer/types.ts) | `@hardcore/ui/file-viewer` |
 | `PromptContextPort`, bundles, references and delivery receipts | [Prompt types](../../core/src/prompt/types.ts) | `@hardcore/core/prompt` |
 | `CadWorkspaceService`, `CadResourceProvider`, worker tickets | [CAD service types](../../core/src/client/types.ts) | `@hardcore/core/client` |
-| `CadRendererSlots`, selection props, `CadCommandSource` | [CAD registration](../src/renderers/cad/index.ts) | `@hardcore/ui/renderers/cad` |
+| `CadRendererSlots`, selection props, `CadCommandSource`, `CadLiveBinding` | [CAD registration](../src/renderers/cad/index.ts) | `@hardcore/ui/renderers/cad` |
 | `CadPreferenceSource` | [CAD preferences](../src/renderers/cad/preferences.ts) | `@hardcore/ui/renderers/cad` |
 | CAD snapshot validation and versioning | [CAD state](../src/renderers/cad/state.ts) | `@hardcore/ui/renderers/cad/state` |
 
@@ -126,6 +126,27 @@ its draft when `selectionKey` changes. Freeze the context when starting the
 interaction; a changed document/revision must not silently retarget it. Submission
 uses the same host prompt port. Session-specific controls stay in apps.
 
+The optional CAD `live` binding receives a `CadLiveController` only while its
+viewport is mounted. `readState()` returns a detached serializable snapshot of
+the actual resource/revision, current selections, camera, display and render
+mode. It reads the viewport camera directly, with its last camera snapshot as
+an unmount fallback. During a rebuild that retains a predecessor mesh, its
+displayed document revision remains in the snapshot until replacement. Apps
+own the binding registry and any IPC/tool transport;
+shared UI does not infer view state from a backend catalog or stored tab state.
+
+The controller selects available selectors, clears selection, applies a camera,
+resets framing, changes Inspect display settings, switches Inspect/Render and
+captures a PNG. Unavailable selectors fail explicitly; topology is not silently
+loaded. Mutations return a view snapshot after the React frame; a mode switch
+waits for its lazy UI to commit the requested mode, with a ten-second bound.
+Loading views
+reject commands, and an operation whose resource/revision changes or viewport
+unmounts before completion rejects its late result. On unmount, the controller
+releases its component closure and retains only its final snapshot with
+`active:false`; every subsequent command requires showing the model tab first.
+Hosts may cache that inactive snapshot without retaining a scene or moving focus.
+
 ## Files, state and shutdown
 
 `FileSource` contains storage operations; `FileActions` contains native/menu
@@ -167,3 +188,29 @@ only events from their viewer or its last pointer-owned background, so another
 viewer or the composer does not receive Escape/undo on its behalf. Existing
 reverse CAD selection/capture commands remain tab-scoped domain commands;
 ordinary native window Reload retains its existing app behavior.
+
+## Live text and PDF capabilities
+
+An optional `host.documents` supplies a draft store with workspace/path identity
+and binds the mounted text buffer. Draft retention is host-owned and survives
+view unmounts. Shared UI restores a draft against fresh disk metadata, marking
+external revision changes stale. Explicit reload discards it. The live buffer
+revision is separate from the disk revision: read/edit/save commands compare the
+live token before acting, and saving still uses FileSource's disk conflict check.
+Bindings reject calls after unmount; the desktop may retain read-only snapshots
+for inactive tabs, tagged `active: false`, and refuse edits until reactivated.
+
+`host.pdf.bind` registers page state, bounded page text reads, navigation and
+PNG capture on the renderer's actual PDF.js document. It exposes no disk write
+or script execution. Binary sources supply `ManagedFileAsset.bytes` for PDF
+preparation; shared UI discovers no transport. Each mounted PDF owns its worker,
+loading task, canvas and text layer, all released on unmount. Page references
+and captures use the source identity and path, never the asset URL. See
+[renderer contracts](renderers.md) for PDF and text selection behavior.
+
+PDF hosts may provide `host.pdf.assetBaseUrl`, an absolute trailing-slash URL
+containing the pinned PDF.js `cmaps/`, `standard_fonts/`, `wasm/`, and `iccs/`
+assets. Hosts bundle and serve these assets with their notices; shared UI never
+discovers a CDN. These support predefined CJK encodings, standard fonts,
+JPEG2000/JBIG2 images and color profiles. Hosts allowing WebAssembly should
+permit its compilation in CSP without enabling JavaScript eval.

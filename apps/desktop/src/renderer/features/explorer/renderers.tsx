@@ -1,3 +1,4 @@
+import { desktopCadLive } from "@renderer/state/live-cad";
 import type { RendererRegistration } from "@hardcore/ui/file-viewer";
 import { createCadRenderer } from "@hardcore/ui/renderers/cad";
 import { codeRenderer } from "@hardcore/ui/renderers/code";
@@ -19,6 +20,7 @@ export function createDesktopRenderers(projectId: string, root: ExplorerRoot, ta
     client: (context) => connection.acquire(context),
     preferences: desktopCadPreferences(),
     commands: createDesktopCadCommands(projectId, root, tabId),
+    live: desktopCadLive(tabId, { projectId, root }),
   });
   const desktopCad: RendererRegistration = {
     ...cad,

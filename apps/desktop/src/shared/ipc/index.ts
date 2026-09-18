@@ -45,10 +45,12 @@ import { agentsContract, agentsEvents } from "./agents";
 import { dialogsContract } from "./dialogs";
 import { runtimeContract, runtimeEvents } from "./runtime";
 import { skillsContract } from "./skills";
-import { cadEvents, cadIpc } from "./cad";
+import { integrationsIpc, integrationsEvents } from "./integrations";
+import { cadIpc } from "./cad";
 import { explorerEvents, explorerIpc } from "./explorer";
 import { gitIpc } from "./git";
 import { clipboardContract } from "./clipboard";
+import { browserIpc } from "./browser";
 
 export * from "./define";
 export * from "./agent-options";
@@ -131,6 +133,7 @@ export const ipcContract = defineIpc({
   },
 
   ...clipboardContract,
+  ...browserIpc,
 
   // The branches a phase owns are declared in their own file and spread in
   // here, so this map stays a map. `explorer.*` and `terminal.*` come from
@@ -139,6 +142,7 @@ export const ipcContract = defineIpc({
   ...explorerIpc,
   ...gitIpc,
   ...cadIpc,
+  ...integrationsIpc,
 });
 
 export type IpcContract = typeof ipcContract;
@@ -194,8 +198,8 @@ export const ipcEvents = {
   ...runtimeEvents,
   // `files.changed`, `terminal.data` and `terminal.exit` (P3).
   ...explorerEvents,
-  // `cad.command` — the Hardcore MCP server's way into the explorer (P5).
-  ...cadEvents,
+  // `integrations.command` — the Hardcore MCP server's way into the explorer (P5).
+  ...integrationsEvents,
 } as const;
 
 export type IpcEvents = typeof ipcEvents;

@@ -15,7 +15,8 @@ import type { AgentSnapshot } from "../acp/agent-options";
 import { spawnPtyTerminal } from "../acp/pty-backend";
 import { AgentOptionStore } from "../acp/agent-options";
 import { SessionManager } from "../acp/sessions";
-import { forgetSession, mcpServersFor, sessionPreamble, sessionRuntimePath, skillsRoot } from "../cad";
+import { forgetSession, mcpServersFor, sessionPreamble, skillsRoot } from "../integrations";
+import { forgetCadSession, sessionRuntimePath } from "../cad";
 import {
   agentOptions as agentOptionsRepo,
   projects,
@@ -73,9 +74,9 @@ export const sessionManager: SessionManager = new SessionManager({
   broadcast,
   // Every session gets the Hardcore MCP server, with a token that names it.
   mcpServers: mcpServersFor,
-  forgetProbe: (probeId) => forgetSession(probeId, null),
+  forgetProbe: (probeId) => forgetSession(probeId),
   // …the app's skills as an additional directory, and the preamble for an
-  // agent that will not read one (src/main/cad/skills.ts)…
+  // agent that will not read one (src/main/integrations/skills.ts)…
   skills: { root: skillsRoot, preamble: sessionPreamble },
   // …and the bundled runtime's `cadgen` and `python` in front of its PATH.
   runtimePath: sessionRuntimePath,
@@ -166,12 +167,13 @@ export const acpHandlers = {
     rename: ({ id, title }) => surfacing(() => sessionManager.rename(id, title)),
     archive: ({ id, archived }) => surfacing(() => sessionManager.archive(id, archived)),
     setPinned: ({ id, pinned }) => surfacing(() => sessionManager.setPinned(id, pinned)),
-    close: ({ id }) => surfacing(() => sessionManager.close(id)),
+    close: ({ id }) => surfacing(async () => { forgetSession(id); await sessionManager.close(id); }),
     delete: ({ id }) =>
       surfacing(async () => {
         const row = sessions.get(id);
         await sessionManager.delete(id);
-        forgetSession(id, row?.worktreePath ?? null);
+        forgetSession(id);
+        forgetCadSession(id, row?.worktreePath ?? null);
       }),
   },
 } satisfies IpcHandlers<typeof acpContract, IpcContext>;

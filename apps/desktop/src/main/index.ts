@@ -7,7 +7,9 @@ import { fileURLToPath } from "node:url";
 
 import { BrowserWindow, app, nativeImage, nativeTheme, shell } from "electron";
 
+import { initIntegrations, shutdownIntegrations } from "./integrations";
 import { initCad, shutdownCad } from "./cad";
+import { browserService } from "./browser/service";
 import { endTrackedChildren, killTrackedChildren } from "./children";
 import { closeDb, databaseFile, db } from "./db";
 import { settings as settingsRepository } from "./db/repositories";
@@ -127,11 +129,8 @@ function createWindow() {
       // (above) all need frames and unthrottled timers. Chromium slows both
       // to a crawl for a hidden window unless told otherwise.
       backgroundThrottling: false,
-      // The explorer's browser tab is an Electron `<webview>` (plan §7). The
-      // tag is off by default and has to be asked for; the guest it creates
-      // is its own process with node integration off, which is why a browser
-      // tab is a webview and not an iframe pointed at the open internet.
-      webviewTag: true,
+      // Browser pages are main-owned WebContentsViews, never renderer-created guests.
+      webviewTag: false,
     },
   });
 
@@ -221,7 +220,8 @@ if (!app.requestSingleInstanceLock()) {
     // bridge, before the first window: the file tab's first
     // `cad.viewerOrigin` and the first session's `mcpServers` and
     // `additionalDirectories` all need them up.
-    await initCad({ sendCommand: (command) => broadcast("cad.command", command) });
+    await initCad();
+    await initIntegrations({ sendCommand: (command) => broadcast("integrations.command", command), cancelCommand: requestId => broadcast("integrations.cancel", { requestId }) });
     installMenu(() => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null);
     initTelemetry();
     createWindow();
@@ -264,9 +264,11 @@ if (!app.requestSingleInstanceLock()) {
     // The viewers this app started, the bridge, and any tool call still
     // waiting on a window.
     void shutdownCad();
+    void shutdownIntegrations();
     shutdownAcp();
     shutdownAgents();
     disposeSettingsEffects();
+    browserService.dispose();
     disposeExplorerServices();
     closeDb();
     endTrackedChildren();

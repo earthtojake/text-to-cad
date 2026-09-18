@@ -216,11 +216,10 @@ export function skillsPreamble(root: string, skills: readonly SkillSummary[]): s
     return null;
   }
   const opening = [
-    `You are running inside Hardcore, whose skills are at ${path.join(root, CLAUDE_LAYOUT)} —`,
-    "a folder each, with a SKILL.md. Nothing loads them for you: read the one that fits the task",
-    "before you start, with your file tools or the `hardcore` MCP server's `list_skills` and",
-    "`read_skill`. Read cad/SKILL.md before any CAD, STEP, DXF, mesh or robot-description work, and",
-    "hardcore-app-use/SKILL.md before showing the person a file — this app has its own tools for that.",
+    `You are running inside Hardcore. Additional skills are at ${path.join(root, CLAUDE_LAYOUT)}.`,
+    "Read the skill that fits the task using file tools or the workspace MCP list_skills/read_skill tools.",
+    "Workspace tools open resources in the app; domain integrations operate on their contents.",
+    "Tabs belong to this workspace. Add to prompt captures context without submitting it.",
   ].join(" ");
   const list = skills.map((skill) => `- ${skill.name}: ${summarise(skill.description)}`).join("\n");
   return `${opening}\n\n${list}`;

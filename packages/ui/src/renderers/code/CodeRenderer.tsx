@@ -1,7 +1,8 @@
 import Editor, { type OnMount } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
-import { useEffect, useId, useMemo, useRef } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
+import { useViewerHost } from '../../host/context.js';
 import type { FileRendererProps } from "../../file-viewer/types.js";
 
 import {
@@ -38,6 +39,10 @@ export default function CodeRenderer({
   onReady,
 }: FileRendererProps<CodeRendererData>) {
   setupMonaco();
+  const host = useViewerHost();
+  const [delivery, setDelivery] = useState('');
+  const contextRef = useRef({ host, document });
+  contextRef.current = { host, document };
   const viewId = useId();
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   // The command is registered once, on the editor, and lives as long as it
@@ -52,6 +57,20 @@ export default function CodeRenderer({
 
   const onMount: OnMount = (instance, monaco) => {
     editorRef.current = instance;
+    instance.addAction({ id: 'hardcore.selection-to-prompt', label: 'Use selection in prompt', contextMenuGroupId: 'navigation', contextMenuOrder: 2,
+      precondition: 'editorHasSelection', run: () => {
+        const selection = instance.getSelection(); const model = instance.getModel();
+        if (!selection || !model || selection.isEmpty()) return;
+        const current = contextRef.current;
+        const text = model.getValueInRange(selection);
+        void current.host.promptContext.deliver({ schemaVersion: 1, operationId: crypto.randomUUID(), parts: [
+          { id: 'reference', kind: 'reference', reference: { resource: { kind: 'workspace-file', workspaceId: source.id, path: file.path,
+            revision: current.document?.dirty ? undefined : current.document?.revision }, target: { kind: 'text-range', start: { line: selection.startLineNumber - 1, character: selection.startColumn - 1 },
+            end: { line: selection.endLineNumber - 1, character: selection.endColumn - 1 } } } },
+          { id: 'selection', kind: 'text', text },
+        ] }).then(result => setDelivery(result.status === 'added' ? 'Added to prompt' : result.status === 'copied' ? 'Copied for prompt' : ('message' in result ? result.message : '') ?? result.status))
+          .catch(error => setDelivery(String(error)));
+      } });
     instance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => void saveRef.current?.());
   };
 
@@ -65,7 +84,7 @@ export default function CodeRenderer({
   );
 
   return (
-    <Editor
+    <div className="flex h-full flex-col"><div className="sr-only" role="status">{delivery}</div><div className="min-h-0 flex-1"><Editor
       language={language}
       loading={<div className="p-4 text-xs text-muted-foreground">Opening…</div>}
       onChange={(next) => document?.setValue(next ?? "")}
@@ -80,6 +99,6 @@ export default function CodeRenderer({
       path={modelPath}
       theme={monacoTheme(appearance.colorScheme)}
       value={document?.value ?? ""}
-    />
+    /></div></div>
   );
 }

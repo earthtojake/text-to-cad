@@ -4,9 +4,9 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { RendererCommands, createActions, resolveForSession } from "@main/cad/actions";
-import { BRIDGE_ENV, McpBridge, type BridgeActions, type BridgeSession } from "@main/cad/mcp-bridge";
-import type { CadCommand } from "@shared/ipc/cad";
+import { RendererCommands, createActions, resolveForSession } from "@main/integrations/actions";
+import { BRIDGE_ENV, McpBridge, type BridgeSession } from "@main/integrations/mcp-bridge";
+import type { IntegrationCommand } from "@shared/ipc/integrations";
 
 const temps: string[] = [];
 function tempDir(prefix: string): string {
@@ -26,7 +26,7 @@ afterEach(async () => {
 
 const SESSION: BridgeSession = { sessionId: "s1", projectId: "p1", cwd: "/proj" };
 
-function recordingActions(): BridgeActions & { calls: Array<{ method: string; session: BridgeSession; params: unknown }> } {
+function recordingActions() {
   const calls: Array<{ method: string; session: BridgeSession; params: unknown }> = [];
   const record = (method: string) => async (session: BridgeSession, params: unknown) => {
     calls.push({ method, session, params });
@@ -38,17 +38,17 @@ function recordingActions(): BridgeActions & { calls: Array<{ method: string; se
     reveal: record("reveal"),
     open_url: record("open_url"),
     open_drawing: record("open_drawing"),
-    save_drawing: record("save_drawing"),
     list_open_tabs: record("list_open_tabs"),
     viewer_state: record("viewer_state"),
-    attach_snapshot: async (session, params) => {
+    attach_snapshot: async (session: BridgeSession, params: Record<string, unknown>) => {
       calls.push({ method: "attach_snapshot", session, params });
       return { path: params.path, mimeType: "image/png", base64: "" };
     },
   };
 }
 
-async function startBridge(actions: BridgeActions = recordingActions()) {
+async function startBridge(recorded = recordingActions()) {
+  const { calls: _calls, ...actions } = recorded;
   const bridge = new McpBridge(actions, () => ({ command: "/electron", args: ["/server.mjs"], env: { ELECTRON_RUN_AS_NODE: "1" } }));
   bridges.push(bridge);
   const url = await bridge.start();
@@ -69,7 +69,7 @@ describe("McpBridge", () => {
     const { bridge, url } = await startBridge();
     expect(url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
     const spec = bridge.serverFor(SESSION);
-    expect(spec.name).toBe("hardcore");
+    expect(spec.name).toBe("hardcore-workspace");
     expect(spec).not.toHaveProperty("type");
     expect((spec as { command: string }).command).toBe("/electron");
     expect((spec as { args: string[] }).args).toEqual(["/server.mjs"]);
@@ -94,6 +94,24 @@ describe("McpBridge", () => {
     expect((await rpc(url, token, { method: "list_open_tabs" })).status).toBe(401);
   });
 
+  it("rejects non-object JSON and revokes an in-flight request", async () => {
+    const actions = recordingActions();
+    let began!: () => void;
+    const started = new Promise<void>(resolve => { began = resolve; });
+    actions.open_file = async (_session, _params, signal?: AbortSignal) => {
+      began();
+      await new Promise<void>((_resolve, reject) => signal!.addEventListener("abort", () => reject(signal!.reason), { once: true }));
+      return { done: "open_file" };
+    };
+    const { bridge, url } = await startBridge(actions);
+    const token = bridge.tokenFor(SESSION);
+    for (const body of [null, [], "hello", 42]) expect((await rpc(url, token, body)).status).toBe(400);
+    const pending = rpc(url, token, { method: "open_file", params: { path: "a.txt" } });
+    await started;
+    bridge.revoke(SESSION.sessionId);
+    expect((await pending).body).toMatchObject({ ok: false, error: "Session authorization revoked" });
+  });
+
   it("dispatches each method to its action with the token's session", async () => {
     const actions = recordingActions();
     const { bridge, url } = await startBridge(actions);
@@ -101,13 +119,16 @@ describe("McpBridge", () => {
     const answer = await rpc(url, token, { method: "open_file", params: { path: "a.step" } });
     expect(answer.body).toEqual({ ok: true, result: { done: "open_file" } });
     expect(actions.calls).toEqual([{ method: "open_file", session: SESSION, params: { path: "a.step" } }]);
-    expect((await rpc(url, token, { method: "open_drawing", params: { title: "Plan" } })).body).toEqual({ ok: true, result: { done: "open_drawing" } });
-    expect((await rpc(url, token, { method: "save_drawing", params: { tabId: "drawing", path: "plan.excalidraw" } })).body).toEqual({ ok: true, result: { done: "save_drawing" } });
-    expect(actions.calls.slice(1)).toEqual([
-      { method: "open_drawing", session: SESSION, params: { title: "Plan" } },
-      { method: "save_drawing", session: SESSION, params: { tabId: "drawing", path: "plan.excalidraw" } },
-    ]);
-    expect((await rpc(url, token, { method: "not_a_tool" })).status).toBe(400);
+    expect((await rpc(url, token, { method: "open_drawing", params: {} })).status).toBe(403);
+    const drawings = bridge.tokenFor(SESSION, "drawings");
+    expect(drawings).not.toBe(token);
+    expect((await rpc(url, drawings, { method: "open_drawing", params: { title: "Plan" } })).body.ok).toBe(true);
+    expect((await rpc(url, drawings, { method: "open_drawing", params: { path: "saved.excalidraw" } })).status).toBe(400);
+    expect((await rpc(url, drawings, { method: "save_drawing", params: {} })).status).toBe(400);
+    expect((await rpc(url, token, { method: "open_file", params: { path: 42 } })).status).toBe(400);
+    bridge.revoke(SESSION.sessionId);
+    expect((await rpc(url, drawings, { method: "open_drawing", params: {} })).status).toBe(401);
+    expect((await rpc(url, token, { method: "not_a_tool" })).status).toBe(401);
   });
 
   it("returns an action's refusal as ok:false with its message", async () => {
@@ -124,7 +145,7 @@ describe("McpBridge", () => {
 
 describe("RendererCommands", () => {
   it("pushes a command with a request id and resolves on the matching reply", async () => {
-    const sent: CadCommand[] = [];
+    const sent: IntegrationCommand[] = [];
     let id = 0;
     const commands = new RendererCommands({ sessionRoot: () => ({ directory: "/proj", root: null }), send: (command) => sent.push(command), newId: () => `r${++id}` });
     const pending = commands.request({ kind: "open-file", projectId: "p1", path: "a.step" });
@@ -180,10 +201,10 @@ describe("the actions", () => {
     await expect(resolveForSession(deps, session, path.join(project, "STEP", "old.step"))).rejects.toThrow("outside this session's worktree");
 
     // And the command the explorer gets names the worktree, so the tab opens there.
-    const sent: CadCommand[] = [];
+    const sent: IntegrationCommand[] = [];
     const commands = new RendererCommands({ ...deps, send: (command) => sent.push(command), newId: () => "r" });
     const actions = createActions({ ...deps, send: () => {}, newId: () => "r" }, commands);
-    const opened = actions.open_file(session, { path: "STEP/new.step" });
+    const opened = actions.open_file!(session, { path: "STEP/new.step" });
     while (sent.length < 1) {
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
@@ -198,7 +219,7 @@ describe("the actions", () => {
     fs.writeFileSync(path.join(root, "part.step"), "");
     fs.writeFileSync(path.join(root, "tmp", "review.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
     fs.writeFileSync(path.join(root, "notes.txt"), "text");
-    const sent: CadCommand[] = [];
+    const sent: IntegrationCommand[] = [];
     const sessionRoot = () => ({ directory: root, root: null });
     const commands = new RendererCommands({ sessionRoot, send: (command) => sent.push(command), newId: () => "r" });
     const actions = createActions({ sessionRoot, send: () => {}, newId: () => "r" }, commands);
@@ -212,24 +233,23 @@ describe("the actions", () => {
         await new Promise((resolve) => setTimeout(resolve, 5));
       }
     };
-    const opened = actions.open_file(session, { path: "part.step" });
+    const opened = actions.open_file!(session, { path: "part.step" });
     await untilSent(1);
     commands.reply({ requestId: "r", ok: true, result: { opened: "part.step" } });
     expect(await opened).toEqual({ opened: "part.step" });
     expect(sent[0]).toMatchObject({ kind: "open-file", path: "part.step", root: null, projectId: "p" });
 
-    await expect(actions.open_file(session, { path: "tmp" })).rejects.toThrow("is a directory");
+    await expect(actions.open_file!(session, { path: "tmp" })).rejects.toThrow("is a directory");
 
-    const revealed = actions.reveal(session, { path: "tmp" });
+    const revealed = actions.reveal!(session, { path: "tmp" });
     await untilSent(2);
     commands.reply({ requestId: "r", ok: true, result: { revealed: "tmp" } });
     await revealed;
     expect(sent[1]).toMatchObject({ kind: "reveal", path: "tmp", directory: true });
 
-    await expect(actions.open_url(session, { url: "file:///etc/passwd" })).rejects.toThrow("http(s)");
 
-    const snapshot = await actions.attach_snapshot(session, { path: "tmp/review.png" });
+    const snapshot = await actions.attach_snapshot!(session, { path: "tmp/review.png" });
     expect(snapshot).toEqual({ path: "tmp/review.png", mimeType: "image/png", base64: Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString("base64") });
-    await expect(actions.attach_snapshot(session, { path: "notes.txt" })).rejects.toThrow("not a PNG");
+    await expect(actions.attach_snapshot!(session, { path: "notes.txt" })).rejects.toThrow("not a PNG");
   });
 });
