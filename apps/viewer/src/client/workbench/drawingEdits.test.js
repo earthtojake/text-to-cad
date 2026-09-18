@@ -7,7 +7,10 @@ import {
   drawingEditSnippet,
   drawingEditsPromptText,
   nearestView,
+  sheetSnapTargets,
   sheetToModel,
+  smartDimensionFromSnaps,
+  snapSheetPoint,
   viewAtSheetPoint
 } from "./drawingEdits.js";
 
@@ -74,4 +77,41 @@ test("snippets speak the drawing API and the prompt lists them", () => {
   assert.match(text, /^Please make these changes to the script that writes DXF\/clevis.dxf/);
   assert.match(text, /\n- Move the `front` view/);
   assert.equal(drawingEditsPromptText({ edits: [] }), "");
+});
+
+test("the pointer snaps to holes, corners and edges of a view's line work only", () => {
+  const targets = sheetSnapTargets({
+    lines: [
+      { layer: "VISIBLE", view: "front", start: [80, 40], end: [140, 40] },
+      { layer: "DIM", view: "front", dim: "0", start: [80, 30], end: [140, 30] },
+      { layer: "SHEET", start: [0, 0], end: [200, 0] }
+    ],
+    circles: [{ layer: "VISIBLE", view: "front", center: [110, 50], radius: 3 }],
+    arcs: [{ layer: "VISIBLE", view: "front", center: [90, 50], radius: 2, startAngleDeg: 0, sweepAngleDeg: 360 }]
+  });
+  assert.equal(targets.lines.length, 1);
+  assert.equal(targets.circles.length, 2);
+  assert.equal(snapSheetPoint(targets, [81, 40.5]).kind, "vertex");
+  assert.deepEqual(snapSheetPoint(targets, [81, 40.5]).point, [80, 40]);
+  assert.equal(snapSheetPoint(targets, [110, 41]).kind, "edge");
+  assert.deepEqual(snapSheetPoint(targets, [110, 41]).point, [110, 40]);
+  assert.equal(snapSheetPoint(targets, [112.5, 50]).kind, "circle");
+  assert.equal(snapSheetPoint(targets, [110, 30.5]), null, "dimension lines are not targets");
+  assert.equal(snapSheetPoint(targets, [110, 60]), null);
+});
+
+test("a smart pick means the obvious dimension", () => {
+  const view = { name: "front", minX: 80, minY: 40, maxX: 140, maxY: 60 };
+  const edge = { kind: "edge", view: "front", point: [110, 40], line: { start: [80, 40], end: [140, 40] } };
+  const hole = { kind: "circle", view: "front", point: [110, 50], circle: { center: [110, 50], radius: 3 } };
+  const cornerA = { kind: "vertex", view: "front", point: [80, 40] };
+  const cornerB = { kind: "vertex", view: "front", point: [80, 60] };
+  assert.deepEqual(smartDimensionFromSnaps(view, [edge]), { kind: "dim", view: "front", x1: 80, y1: 40, x2: 140, y2: 40, offset: -12, orientation: "h" });
+  assert.deepEqual(smartDimensionFromSnaps(view, [hole]), { kind: "dia", view: "front", cx: 110, cy: 50, r: 3 });
+  assert.equal(smartDimensionFromSnaps(view, [cornerA]), null, "a corner waits for a second pick");
+  assert.equal(smartDimensionFromSnaps(view, [cornerA, cornerB]).orientation, "v");
+  assert.deepEqual(drawingEditParams([{ kind: "dia", view: "front", cx: 110, cy: 50, r: 3 }]), { dia: "110,50,3" });
+  const front = { name: "front", at: [110, 50], map: [110, 45, 0.5, 0, 0, 0, 0, 0.5] };
+  assert.equal(drawingEditSnippet({ kind: "dia", view: "front", cx: 110, cy: 50, r: 3 }, { views: [front] }),
+    "front.hole((0, 0, 10), 6, thru=True)  # model mm; say depth=... instead of thru if it is blind");
 });

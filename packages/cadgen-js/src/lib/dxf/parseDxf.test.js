@@ -463,4 +463,6 @@ test("a cadgen sheet's tags give each view an extent and each dimension a home",
     { kind: "callout", view: "top", index: "0", value: "∅6 THRU", position: [140, 110] }
   ]);
   assert.equal(parsed.geometry.lines.find((line) => line.layer === "SHEET").view, undefined);
+  assert.equal(parsed.geometry.lines.find((line) => line.layer === "VISIBLE").view, "front");
+  assert.equal(parsed.geometry.lines.find((line) => line.layer === "VISIBLE").dim, undefined);
 });
