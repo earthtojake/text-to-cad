@@ -2,11 +2,14 @@ import { FILE_PANEL_TREE, PANEL_DEFAULT_WIDTH, clampPanelWidth } from "@hardcore
 import { create } from "zustand";
 
 import { reconcileFileTree, movedFilePath } from "@hardcore/ui/file-viewer";
+import { deleteDrawingScene } from "@renderer/state/drawings";
 import { viewerFileChange } from "@renderer/features/explorer/file-changes";
 import type { DirEntry, FileChange } from "@shared/ipc/explorer";
 import { PANE_LIMITS } from "@shared/types";
 import type {
   BrowserTab,
+  DrawingTab,
+  PersistedExplorerTab,
   ExplorerRoot,
   ExplorerTab,
   ExplorerTabKind,
@@ -16,13 +19,15 @@ import type {
 } from "@shared/types";
 
 /**
- * The explorer's one tab strip. Four kinds, no bottom panel — the terminal is
+ * The explorer's one tab strip. No bottom panel — the terminal is
  * a tab like every other secondary surface (plan §3).
  *
  * The strip belongs to the **project**, not to a thread: a person with a file,
  * a terminal and a review open is looking at a directory, and closing a thread
  * should not take those away. It is loaded from `explorer_tabs` when the
  * active project changes and written back, debounced, on every mutation.
+ * Scratch drawings stay in renderer memory across project switches and are
+ * excluded from every persistence snapshot.
  *
  * Every mutation therefore goes through `commit`, which is the only place that
  * renumbers `order` and schedules the save. A setter that wrote `tabs`
@@ -139,6 +144,7 @@ type TabInit = {
   review: Partial<Pick<ReviewTab, "scope" | "sessionId">>;
   browser: Partial<Pick<BrowserTab, "url">>;
   terminal: Partial<Pick<TerminalTab, "cwd" | "readOnly">>;
+  drawing: Partial<Pick<DrawingTab, "root" | "title">>;
 };
 
 type ExplorerState = {
@@ -216,6 +222,8 @@ type ExplorerState = {
    * left is kept, so coming back to a thread finds its folders still open.
    */
   setRoot: (root: ExplorerRoot) => void;
+  /** Dispose scratch drawings when their project is removed. */
+  discardProjectDrawings: (projectId: string) => void;
   open: <K extends ExplorerTabKind>(kind: K, init?: TabInit[K]) => ExplorerTab | null;
   /**
    * Open a file, reusing a tab already showing it. `root` defaults to the
@@ -277,6 +285,8 @@ function blankTab(
       return { ...base, kind: "review", scope: "all" as const, sessionId: null, ...init };
     case "browser":
       return { ...base, kind: "browser", url: null, ...init } as BrowserTab;
+    case "drawing":
+      return { ...base, kind: "drawing", root: null, title: "Drawing", ...init } as DrawingTab;
     case "terminal":
       return {
         ...base,
@@ -290,7 +300,25 @@ function blankTab(
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
-let pendingSave: { projectId: string; tabs: ExplorerTab[] } | null = null;
+let pendingSave: { projectId: string; tabs: PersistedExplorerTab[] } | null = null;
+// Only scratch metadata is retained here; ordinary tabs still load from main.
+const projectDrawings = new Map<string, { tabs: DrawingTab[]; activeId: string | null }>();
+function rememberDrawings(projectId: string | null, tabs: ExplorerTab[], activeId: string | null): void {
+  if (!projectId) return;
+  const drawings = tabs.filter((tab): tab is DrawingTab => tab.kind === "drawing");
+  if (drawings.length) projectDrawings.set(projectId, { tabs: drawings, activeId });
+  else projectDrawings.delete(projectId);
+}
+function restoreDrawings(projectId: string, persisted: ExplorerTab[]): { tabs: ExplorerTab[]; activeId: string | null } {
+  const snapshot = projectDrawings.get(projectId);
+  // Even an old or compromised response must not resurrect a scratch tab.
+  const tabs: ExplorerTab[] = persisted.filter(tab => tab.kind !== "drawing");
+  for (const drawing of snapshot?.tabs ?? []) tabs.splice(Math.min(drawing.order, tabs.length), 0, drawing);
+  return {
+    tabs: tabs.map((tab, order) => ({ ...tab, order })),
+    activeId: snapshot?.activeId && tabs.some(tab => tab.id === snapshot.activeId) ? snapshot.activeId : tabs[0]?.id ?? null,
+  };
+}
 const savingProjects = new Map<string, Promise<void>>();
 let bindingSequence = 0;
 let cadCommandSequence = 0;
@@ -365,7 +393,9 @@ function commit(
   if (saveTimer) {
     clearTimeout(saveTimer);
   }
-  pendingSave = { projectId, tabs: ordered };
+  rememberDrawings(projectId, ordered, unique.activeId);
+  pendingSave = { projectId, tabs: ordered.filter((tab): tab is PersistedExplorerTab => tab.kind !== "drawing")
+    .map((tab, order) => ({ ...tab, order })) };
   saveTimer = setTimeout(flushTabSave, SAVE_DEBOUNCE_MS);
 }
 
@@ -404,6 +434,7 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
       return;
     }
     // Keep the departing project's edits even when its debounce has not fired.
+    if (get().ready) rememberDrawings(get().projectId, get().tabs, get().activeId);
     flushTabSave();
     const binding = ++bindingSequence;
     const previous = get().projectId;
@@ -454,8 +485,26 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
       return;
     }
     // A strip written by an older build may hold two tabs for one file.
-    const restored = dedupeFileTabs(tabs, tabs[0]?.id ?? null);
+    const merged = restoreDrawings(projectId, tabs);
+    const restored = dedupeFileTabs(merged.tabs, merged.activeId);
     set({ tabs: restored.tabs, activeId: restored.activeId, ready: true });
+  },
+
+  discardProjectDrawings: (projectId) => {
+    const snapshot = projectDrawings.get(projectId);
+    const active = get().projectId === projectId;
+    const drawings = [...(snapshot?.tabs ?? []), ...(active ? get().tabs.filter(tab => tab.kind === "drawing") : [])];
+    for (const tab of drawings) deleteDrawingScene(tab.id);
+    projectDrawings.delete(projectId);
+    if (pendingSave?.projectId === projectId) {
+      pendingSave = null;
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    if (active) {
+      const tabs = get().tabs.filter(tab => tab.kind !== "drawing").map((tab, order) => ({ ...tab, order }));
+      set({ tabs, activeId: tabs.some(tab => tab.id === get().activeId) ? get().activeId : tabs[0]?.id ?? null });
+    }
   },
 
   setRoot: (root) => {
@@ -473,15 +522,17 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
 
   open: (kind, init) => {
     const { projectId, root, tabs } = get();
-    if (!projectId) {
+    // A partial strip cannot replace the pending persisted/temporary snapshot.
+    // The tab menu is disabled until restore completes; shortcuts share this guard.
+    if (!projectId || !get().ready) {
       return null;
     }
     // A tab nobody can see is not an open tab: every kind reveals the pane.
     get().show();
-    // A file or a terminal opens in the active root unless told otherwise —
+    // Files, drawings and terminals open in the active root unless told otherwise —
     // the worktree of the thread being talked to, or the project.
     const rooted: Record<string, unknown> =
-      kind === "file"
+      (kind === "file" || kind === "drawing")
         ? { root, ...(init as Record<string, unknown> | undefined) }
         : kind === "terminal"
           ? { cwd: root, ...(init as Record<string, unknown> | undefined) }
@@ -542,6 +593,7 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
       // The pty belongs to the tab. Closing the tab is closing the shell.
       void window.hardcore.terminal.kill({ id: closing.ptyId }).catch(() => {});
     }
+    if (closing?.kind === "drawing") deleteDrawingScene(closing.id);
     const remaining = tabs.filter((tab) => tab.id !== id);
     const nextActive =
       activeId === id ? (remaining[Math.min(index, remaining.length - 1)]?.id ?? null) : activeId;
@@ -582,7 +634,9 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
   },
 
   update: (id, patch) => {
-    const { projectId, tabs, activeId } = get();
+    const { projectId, tabs, activeId, ready } = get();
+    // Delayed tab callbacks cannot mutate a different or partially restored strip.
+    if (!ready || !tabs.some(tab => tab.id === id)) return;
     const next = tabs.map((tab) => (tab.id === id ? ({ ...tab, ...patch } as ExplorerTab) : tab));
     commit(set, projectId, next, activeId);
   },
@@ -709,6 +763,14 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
   },
 }));
 
+/** Inspect a scratch tab without selecting it or switching the active project. */
+export function getDrawingTab(tabId: string, projectId: string): DrawingTab | null {
+  const state = useExplorer.getState();
+  const tab = (state.projectId === projectId ? state.tabs.find(tab => tab.id === tabId && tab.kind === "drawing") : null)
+    ?? projectDrawings.get(projectId)?.tabs.find(tab => tab.id === tabId);
+  return tab?.kind === "drawing" ? tab : null;
+}
+
 /** One root's tree: its open folders and listings, or the empty tree. */
 export function useTree(root: ExplorerRoot): TreeState {
   return useExplorer((state) => state.trees[treeKey(root)] ?? EMPTY_TREE);
@@ -730,6 +792,8 @@ export function tabTitle(tab: ExplorerTab): string {
       return tab.url ? hostOf(tab.url) : "New tab";
     case "terminal":
       return "Terminal";
+    case "drawing":
+      return tab.title;
   }
 }
 

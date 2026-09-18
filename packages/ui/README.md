@@ -55,6 +55,7 @@ these peers are not bundled into UI.
 ```text
 src/
   host/              explicit host ports, prompt actions and React binding
+  drawing/           reusable Excalidraw editor; desktop scratch drawing host
   file-viewer/       FileViewer, typed source/renderer contracts, lifecycle hooks
     navigation/     breadcrumbs, file tree, entry menus and panel frame
   renderers/
@@ -102,6 +103,12 @@ Public entry points include `/host`, `/file-viewer`, `/navigation`, `/renderers/
 `/utils`, `/primitives/*`, `/tokens.css`, and `/styles.css`.
 Declarations are owned here; apps need no ambient shims or aliases into this
 source tree.
+
+`/drawing` is a separate lazy entry point for the Excalidraw editor, with no
+platform or persistence policy. Desktop owns its temporary Drawing tabs,
+explicit import/export and prompt delivery; web's viewer remains unchanged.
+Read [drawing](docs/drawing.md) before extending this editor or reusing it for
+viewer annotations.
 
 The required host contract, typed prompt bundles, delivery receipts and named
 renderer slots are documented in [viewer host](docs/viewer-host.md). Clipboard

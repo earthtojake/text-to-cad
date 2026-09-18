@@ -6,14 +6,17 @@
  * `viewer_state` arrive here as `cad.command` events, are carried out on the
  * same stores a click would use, and the outcome goes back on `cad.reply`
  * (src/shared/ipc/cad.ts). Every command names its project; the explorer
- * switches to it first, the way clicking the project in the sidebar would,
- * because a tab opened into the wrong project's strip is a tab nobody sees.
+ * switches to it before opening, the way clicking the project in the sidebar
+ * would. Reading a drawing for an explicit save instead inspects its own
+ * project's retained metadata without changing navigation.
  */
 import { isCadFile } from "@hardcore/core/lib/fileFormats.js";
+import { emptyDrawingDocument, MAX_DRAWING_BYTES, parseDrawingScene } from "@hardcore/core/drawing";
 import { markdownRenderer } from "@hardcore/ui/renderers/markdown";
 import type { CadCommand } from "@shared/ipc/cad";
 
-import { hostOf, tabTitle, useExplorer } from "./explorer";
+import { getDrawingTab, hostOf, tabTitle, useExplorer } from "./explorer";
+import { getDrawingScene, setDrawingScene } from "./drawings";
 import { useProjects } from "./projects";
 import { useUi } from "./ui";
 
@@ -54,6 +57,7 @@ function describeTabs() {
       ...(tab.kind === "browser" ? { url: tab.url } : {}),
       ...(tab.kind === "terminal" ? { cwd: tab.cwd } : {}),
       ...(tab.kind === "review" ? { scope: tab.scope } : {}),
+      ...(tab.kind === "drawing" ? { root: tab.root, ephemeral: true } : {}),
     })),
   };
 }
@@ -100,6 +104,34 @@ export async function performCadCommand(command: CadCommand): Promise<unknown> {
       await focusProject(command.projectId);
       const tab = useExplorer.getState().open("browser", { url: command.url });
       return { opened: command.url, tabId: tab?.id ?? null, title: hostOf(command.url) };
+    }
+
+    case "open-drawing": {
+      // Validate before opening a tab so a bad file never leaves an empty tab.
+      const scene = command.scene === undefined
+        ? JSON.stringify(emptyDrawingDocument())
+        : JSON.stringify(parseDrawingScene(command.scene));
+      await focusProject(command.projectId);
+      const tab = useExplorer.getState().open("drawing", { root: command.root ?? null, title: command.title ?? "Drawing" });
+      if (!tab) throw new Error("the explorer could not open a drawing tab");
+      setDrawingScene(tab.id, scene);
+      return { tabId: tab.id, title: tabTitle(tab), root: command.root ?? null, ephemeral: true,
+        ...(command.path ? { loaded: command.path } : {}) };
+    }
+
+    case "drawing-scene": {
+      if (!command.tabId) throw new Error("drawing-scene needs a tabId");
+      if (!useProjects.getState().projects.some(project => project.id === command.projectId)) {
+        throw new Error("that project is no longer open in Hardcore");
+      }
+      const tab = getDrawingTab(command.tabId, command.projectId);
+      if (!tab || tab.projectId !== command.projectId) throw new Error("that drawing tab is closed or belongs to another project");
+      if (tab.root !== (command.root ?? null)) throw new Error("that drawing belongs to another workspace root");
+      const serialized = getDrawingScene(tab.id) ?? JSON.stringify(emptyDrawingDocument());
+      if (new TextEncoder().encode(serialized).byteLength > MAX_DRAWING_BYTES) {
+        throw new Error("drawing scenes must be JSON no larger than 20 MiB");
+      }
+      return { scene: JSON.stringify(parseDrawingScene(serialized)) };
     }
 
     case "list-tabs":

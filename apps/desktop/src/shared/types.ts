@@ -134,10 +134,10 @@ export type Session = z.infer<typeof SessionSchema>;
 /* -------------------------------------------------------------------------- */
 
 /**
- * The explorer is one tab strip with four kinds of tab and no bottom panel —
+ * The explorer is one tab strip with no bottom panel —
  * the terminal is a tab like everything else (plan §2, §7).
  */
-export const ExplorerTabKindSchema = z.enum(["file", "review", "browser", "terminal"]);
+export const ExplorerTabKindSchema = z.enum(["file", "review", "browser", "terminal", "drawing"]);
 export type ExplorerTabKind = z.infer<typeof ExplorerTabKindSchema>;
 
 /**
@@ -337,12 +337,30 @@ export const TerminalTabSchema = z.object({
   readOnly: z.boolean().default(false),
 });
 
-export const ExplorerTabSchema = z.discriminatedUnion("kind", [
+/** A scratch drawing. Metadata and scene live only in renderer memory. */
+export const DrawingTabSchema = z.object({
+  ...ExplorerTabBase,
+  kind: z.literal("drawing"),
+  root: z.string().nullable().default(null),
+  title: z.string().default("Drawing"),
+});
+
+/** The disk contract deliberately excludes scratch drawings. */
+export const PersistedExplorerTabSchema = z.discriminatedUnion("kind", [
   FileTabSchema,
   ReviewTabSchema,
   BrowserTabSchema,
   TerminalTabSchema,
 ]);
+export const ExplorerTabSchema = z.discriminatedUnion("kind", [
+  FileTabSchema,
+  ReviewTabSchema,
+  BrowserTabSchema,
+  TerminalTabSchema,
+  DrawingTabSchema,
+]);
+export type PersistedExplorerTab = z.infer<typeof PersistedExplorerTabSchema>;
+export type DrawingTab = z.infer<typeof DrawingTabSchema>;
 export type ExplorerTab = z.infer<typeof ExplorerTabSchema>;
 export type FileTab = z.infer<typeof FileTabSchema>;
 export type ReviewTab = z.infer<typeof ReviewTabSchema>;

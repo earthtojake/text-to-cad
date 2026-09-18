@@ -8,6 +8,7 @@ import {
   MessageSquarePlus,
   PanelLeft,
   PanelRight,
+  PencilRuler,
   Settings,
 } from "lucide-react";
 
@@ -160,6 +161,12 @@ export function CommandPalette() {
             >
               <PanelRight className="size-4" />
               Toggle explorer
+            </CommandItem>
+          ) : null}
+          {activeProjectId ? (
+            <CommandItem onSelect={run(() => { useExplorer.getState().open("drawing"); })} value="new drawing sketch canvas">
+              <PencilRuler className="size-4" />
+              New drawing
             </CommandItem>
           ) : null}
           <CommandItem onSelect={run(() => undefined)} value="new session chat">

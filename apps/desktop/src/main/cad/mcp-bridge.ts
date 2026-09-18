@@ -26,6 +26,8 @@ export type BridgeActions = {
   open_file: (session: BridgeSession, params: { path: string }) => Promise<unknown>;
   reveal: (session: BridgeSession, params: { path: string }) => Promise<unknown>;
   open_url: (session: BridgeSession, params: { url: string }) => Promise<unknown>;
+  open_drawing: (session: BridgeSession, params: { path?: string; title?: string }) => Promise<unknown>;
+  save_drawing: (session: BridgeSession, params: { tabId: string; path: string; overwrite?: boolean }) => Promise<unknown>;
   list_open_tabs: (session: BridgeSession, params: Record<string, never>) => Promise<unknown>;
   viewer_state: (session: BridgeSession, params: Record<string, never>) => Promise<unknown>;
   attach_snapshot: (
@@ -40,6 +42,8 @@ export const BRIDGE_METHODS: readonly BridgeMethod[] = [
   "open_file",
   "reveal",
   "open_url",
+  "open_drawing",
+  "save_drawing",
   "list_open_tabs",
   "viewer_state",
   "attach_snapshot",

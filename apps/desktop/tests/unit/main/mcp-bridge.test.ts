@@ -37,6 +37,8 @@ function recordingActions(): BridgeActions & { calls: Array<{ method: string; se
     open_file: record("open_file"),
     reveal: record("reveal"),
     open_url: record("open_url"),
+    open_drawing: record("open_drawing"),
+    save_drawing: record("save_drawing"),
     list_open_tabs: record("list_open_tabs"),
     viewer_state: record("viewer_state"),
     attach_snapshot: async (session, params) => {
@@ -99,6 +101,12 @@ describe("McpBridge", () => {
     const answer = await rpc(url, token, { method: "open_file", params: { path: "a.step" } });
     expect(answer.body).toEqual({ ok: true, result: { done: "open_file" } });
     expect(actions.calls).toEqual([{ method: "open_file", session: SESSION, params: { path: "a.step" } }]);
+    expect((await rpc(url, token, { method: "open_drawing", params: { title: "Plan" } })).body).toEqual({ ok: true, result: { done: "open_drawing" } });
+    expect((await rpc(url, token, { method: "save_drawing", params: { tabId: "drawing", path: "plan.excalidraw" } })).body).toEqual({ ok: true, result: { done: "save_drawing" } });
+    expect(actions.calls.slice(1)).toEqual([
+      { method: "open_drawing", session: SESSION, params: { title: "Plan" } },
+      { method: "save_drawing", session: SESSION, params: { tabId: "drawing", path: "plan.excalidraw" } },
+    ]);
     expect((await rpc(url, token, { method: "not_a_tool" })).status).toBe(400);
   });
 

@@ -76,6 +76,8 @@ describe("the Hardcore MCP server", () => {
         "list_open_tabs",
         "list_skills",
         "open_file",
+        "open_drawing",
+        "save_drawing",
         "open_url",
         "read_skill",
         "reveal",
@@ -109,6 +111,22 @@ describe("the Hardcore MCP server", () => {
     const content = result.content as Array<{ type: string; data?: string; mimeType?: string; text?: string }>;
     expect(content[0]).toEqual({ type: "image", data: png, mimeType: "image/png" });
     expect(content[1]!.text).toContain("tmp/review.png");
+  });
+
+  it("forwards explicit drawing open/save requests and validates overwrite", async () => {
+    const fake = fakeBridge();
+    const client = await connect(fake.bridge);
+    await client.callTool({ name: "open_drawing", arguments: {} });
+    await client.callTool({ name: "open_drawing", arguments: { path: "plan.excalidraw", title: "Plan" } });
+    await client.callTool({ name: "save_drawing", arguments: { tabId: "drawing", path: "saved.excalidraw", overwrite: true } });
+    expect(fake.calls).toEqual([
+      { method: "open_drawing", params: {} },
+      { method: "open_drawing", params: { path: "plan.excalidraw", title: "Plan" } },
+      { method: "save_drawing", params: { tabId: "drawing", path: "saved.excalidraw", overwrite: true } },
+    ]);
+    const invalid = await client.callTool({ name: "save_drawing", arguments: { tabId: "drawing", path: "saved.excalidraw", overwrite: "true" } });
+    expect(invalid.isError).toBe(true);
+    expect(fake.calls).toHaveLength(3);
   });
 
   it("turns a bridge refusal into an error result rather than a protocol failure", async () => {

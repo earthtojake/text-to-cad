@@ -13,7 +13,7 @@
  */
 import { z } from "zod";
 
-import { ExplorerTabSchema } from "../types";
+import { PersistedExplorerTabSchema } from "../types";
 import { invoke } from "./define";
 
 /* -------------------------------------------------------------------------- */
@@ -176,8 +176,8 @@ export const explorerIpc = {
     unwatch: invoke(InRoot, z.void()),
 
     /** The persisted tab strip for a project (the `explorer_tabs` table). */
-    loadTabs: invoke(InProject, z.array(ExplorerTabSchema)),
-    saveTabs: invoke(InProject.extend({ tabs: z.array(ExplorerTabSchema) }), z.void()),
+    loadTabs: invoke(InProject, z.array(PersistedExplorerTabSchema)),
+    saveTabs: invoke(InProject.extend({ tabs: z.array(PersistedExplorerTabSchema) }), z.void()),
   },
 
   terminal: {

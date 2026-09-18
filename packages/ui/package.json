@@ -58,6 +58,10 @@
     "./host": {
       "types": "./dist/host/index.d.ts",
       "import": "./dist/host/index.js"
+    },
+    "./drawing": {
+      "types": "./dist/drawing/index.d.ts",
+      "import": "./dist/drawing/index.js"
     }
   },
   "scripts": {
@@ -89,7 +93,8 @@
     "unified": "11.0.5",
     "@hardcore/core": "*",
     "clsx": "^2.1.1",
-    "tailwind-merge": "^3.7.0"
+    "tailwind-merge": "^3.7.0",
+    "@excalidraw/excalidraw": "0.18.1"
   },
   "devDependencies": {
     "@types/react": "19.2.18",

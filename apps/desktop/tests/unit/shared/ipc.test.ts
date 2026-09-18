@@ -28,6 +28,11 @@ describe("defineIpc", () => {
 });
 
 describe("the contract", () => {
+  it("rejects a drawing in explorer persistence requests and responses", () => {
+    const drawing = { id: "scratch", projectId: "p1", order: 0, kind: "drawing", title: "Drawing", root: null };
+    expect(ipcContract.explorer.saveTabs.request.safeParse({ projectId: "p1", tabs: [drawing] }).success).toBe(false);
+    expect(ipcContract.explorer.loadTabs.response.safeParse([drawing]).success).toBe(false);
+  });
   it("declares every channel, in the order the map spreads them", () => {
     expect(ipcChannels(ipcContract).map(([name]) => name)).toEqual([
       // P0
@@ -69,6 +74,7 @@ describe("the contract", () => {
       "skills.info",
       "runtime.status",
       "runtime.repair",
+      "dialogs.saveDrawing",
       "dialogs.chooseDirectory",
       "dialogs.chooseFile",
       "settings.get",

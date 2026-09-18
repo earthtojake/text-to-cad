@@ -20,12 +20,13 @@ import {
 } from "../../shared/acp/types";
 import type { AgentOptions } from "../../shared/ipc/agent-options";
 import {
-  ExplorerTabSchema,
+  PersistedExplorerTabSchema,
   ProjectSchema,
   SessionSchema,
   SettingsSchema,
   WindowStateSchema,
   type ExplorerTab,
+  type PersistedExplorerTab,
   type Project,
   type Session,
   type Settings,
@@ -427,21 +428,21 @@ export const explorerTabs = {
    * is a JSON blob written by whichever build was running, and one stale tab
    * must not cost the person the other five.
    */
-  list(projectId: string): ExplorerTab[] {
+  list(projectId: string): PersistedExplorerTab[] {
     const rows = db()
       .prepare(
         "SELECT id, project_id, payload FROM explorer_tabs WHERE project_id = ? ORDER BY position",
       )
       .all(projectId) as ExplorerTabRow[];
     return rows.flatMap((row) => {
-      const parsed = ExplorerTabSchema.safeParse(safeJson(row.payload));
+      const parsed = PersistedExplorerTabSchema.safeParse(safeJson(row.payload));
       return parsed.success ? [parsed.data] : [];
     });
   },
 
   /** Replaces a project's whole strip — the only write the UI ever needs. */
-  replace(projectId: string, tabs: ExplorerTab[]): ExplorerTab[] {
-    const parsed = tabs.map((tab) => ExplorerTabSchema.parse(tab));
+  replace(projectId: string, tabs: ExplorerTab[]): PersistedExplorerTab[] {
+    const parsed = tabs.filter((tab) => tab.kind !== "drawing").map((tab) => PersistedExplorerTabSchema.parse(tab));
     const connection = db();
     const write = connection.transaction(() => {
       connection.prepare("DELETE FROM explorer_tabs WHERE project_id = ?").run(projectId);

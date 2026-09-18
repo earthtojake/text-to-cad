@@ -7,7 +7,7 @@ import { useExplorer, treeKey } from "@renderer/state/explorer";
 
 beforeEach(() => {
   vi.useFakeTimers();
-  useExplorer.setState({ projectId: "p", root: null, tabs: [], activeId: null, trees: {}, fsRevision: 0, changedPaths: [], changedEntries: [] });
+  useExplorer.setState({ projectId: "p", ready: true, root: null, tabs: [], activeId: null, trees: {}, fsRevision: 0, changedPaths: [], changedEntries: [] });
 });
 afterEach(() => { vi.runOnlyPendingTimers(); vi.useRealTimers(); vi.restoreAllMocks(); });
 const source = () => createDesktopFileSource({ projectId: "p", projectName: "project", root: null });

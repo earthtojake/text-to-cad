@@ -30,6 +30,7 @@
  *   "open"        call the Hardcore MCP server's `open_file` on the path
  *                 after "open " — the server `session/new` carried in
  *                 `mcpServers`, spawned the way an adapter spawns it
+ *   "drawing-tool <JSON>"  call a drawing MCP tool with explicit name/args
  *   "mention"     reply with prose naming files — real and missing paths,
  *                 a CAD reference, one in backticks — for the transcript's
  *                 links
@@ -367,6 +368,17 @@ async function script(conn, params) {
   const words = text.split(/\s+/);
   const after = (word) => words[words.indexOf(word) + 1];
   const send = (update) => conn.sessionUpdate({ sessionId, update });
+
+  if (text.startsWith("drawing-tool ")) {
+    // Drawing E2E uses the same stdio MCP/token/root path as a real adapter.
+    const { name, args } = JSON.parse(text.slice("drawing-tool ".length));
+    if (!["open_drawing", "save_drawing", "list_open_tabs"].includes(name)) throw new Error("unsupported drawing test tool");
+    const toolCallId = `drawing-${Date.now()}`;
+    await send({ sessionUpdate: "tool_call", toolCallId, title: name, kind: "other", status: "in_progress", rawInput: args });
+    const result = await callHardcoreTool(name, args);
+    await send({ sessionUpdate: "tool_call_update", toolCallId, status: result.isError ? "failed" : "completed", rawOutput: result });
+    return { stopReason: "end_turn" };
+  }
 
   if (text.includes("crash")) {
     await send({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "about to " } });
