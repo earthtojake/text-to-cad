@@ -7,13 +7,13 @@
  * viewer manager, which spawns (or reuses) a `cadgen viewer --api-only` for it
  * and answers with its origin — or with the reason there is none, plus the
  * runtime's or the launcher's words, which the renderer shows as they are. `reply` is the other half of
- * `cad.command` (src/shared/ipc/cad.ts): the renderer did what an agent's
+ * `integrations.command` (src/shared/ipc/cad.ts): the renderer did what an agent's
  * tool asked and this hands the result back to the waiting bridge call.
  */
 import type { IpcHandlers } from "../../shared/ipc";
 import type { cadIpc } from "../../shared/ipc/cad";
 import type { ViewerOrigin } from "../../shared";
-import { cadRuntime, rendererCommands, viewers, warmCad } from "../cad";
+import { cadRuntime, viewers, warmCad } from "../cad";
 import { projects } from "../db/repositories";
 import { rootOf } from "./explorer";
 import type { IpcContext } from "./register";
@@ -59,8 +59,5 @@ export const cadHandlers = {
       });
     },
 
-    reply: (reply) => {
-      rendererCommands().reply(reply);
-    },
   },
 } satisfies IpcHandlers<typeof cadIpc, IpcContext>;

@@ -26,6 +26,7 @@ import type * as pty from "node-pty";
 export type TerminalOptions = {
   /** Working directory. The project root, or a session's worktree. */
   cwd: string;
+  projectId?: string;
   /** Override the login shell — tests use this to run something predictable. */
   shell?: string;
   args?: string[];
@@ -75,9 +76,12 @@ class Session {
   /** Kept as chunks so trimming is a shift, not a substring of a huge string. */
   private buffer: string[] = [];
   private bufferBytes = 0;
+  private firstChunkTrimmed = false;
   /** Chunks written so far. See the note on `TerminalEvent`. */
   private emitted = 0;
   exitCode: number | null = null;
+  inputRevision = 0;
+  inputPending = false;
 
   constructor(
     readonly id: string,
@@ -86,15 +90,25 @@ class Session {
     readonly shell: string,
     public cols: number,
     public rows: number,
+    readonly projectId?: string,
   ) {}
 
   /** Record a chunk and answer with its sequence number. */
   append(chunk: string): number {
     this.emitted += 1;
     this.buffer.push(chunk);
-    this.bufferBytes += chunk.length;
+    this.bufferBytes += Buffer.byteLength(chunk);
     while (this.bufferBytes > SCROLLBACK_BYTES && this.buffer.length > 1) {
-      this.bufferBytes -= (this.buffer.shift() ?? "").length;
+      this.bufferBytes -= Buffer.byteLength(this.buffer.shift() ?? "");
+      this.firstChunkTrimmed = false;
+    }
+    if (this.bufferBytes > SCROLLBACK_BYTES) {
+      const bytes = Buffer.from(this.buffer[0]!);
+      let start = bytes.length - SCROLLBACK_BYTES;
+      while (start < bytes.length && (bytes[start]! & 0xc0) === 0x80) start++;
+      this.buffer[0] = bytes.subarray(start).toString('utf8');
+      this.bufferBytes = bytes.length - start;
+      this.firstChunkTrimmed = true;
     }
     return this.emitted;
   }
@@ -107,6 +121,15 @@ class Session {
   /** Everything the tab missed, as one string to write into a fresh xterm. */
   scrollback(): string {
     return this.buffer.join("");
+  }
+
+  read(after = 0, limit = 32000) {
+    if (after > this.emitted) throw new Error("terminal cursor is ahead of the stream");
+    const first = this.emitted - this.buffer.length + 1;
+    const available = this.buffer.slice(Math.max(0, after - first + 1)).join("");
+    return { info: this.info(), data: available.slice(-limit), sequence: this.emitted,
+      inputRevision: this.inputRevision, inputPending: this.inputPending,
+      truncated: after < first - 1 || (this.firstChunkTrimmed && after < first) || available.length > limit };
   }
 
   info(): TerminalInfo {
@@ -216,7 +239,7 @@ export class Terminals {
       env: terminalEnv(process.env, options.env ?? {}),
     });
 
-    const session = new Session(id, child, options.cwd, shell, cols, rows);
+    const session = new Session(id, child, options.cwd, shell, cols, rows, options.projectId);
     this.sessions.set(id, session);
 
     child.onData((data) => {
@@ -236,7 +259,35 @@ export class Terminals {
     if (!session || session.exitCode !== null) {
       return;
     }
+    session.inputRevision++;
+    const resetAt = Math.max(data.lastIndexOf("\n"), data.lastIndexOf("\r"), data.lastIndexOf("\x03"));
+    session.inputPending = resetAt >= 0 ? resetAt < data.length - 1 : (session.inputPending || data.length > 0);
     session.process.write(data);
+  }
+
+  read(id: string, after = 0, limit = 32000) {
+    const session = this.sessions.get(id);
+    if (!session) throw new Error("terminal no longer exists");
+    return session.read(after, limit);
+  }
+
+  owns(id: string, projectId: string): boolean {
+    return this.sessions.get(id)?.projectId === projectId;
+  }
+
+  writeGuarded(id: string, data: string, expectedSequence: number, expectedInputRevision: number): void {
+    const session = this.sessions.get(id);
+    if (!session || session.exitCode !== null) throw new Error("terminal is no longer running");
+    if (session.sequence !== expectedSequence || session.inputRevision !== expectedInputRevision || session.inputPending) {
+      throw new Error("terminal changed or has unfinished input; read it again before sending input");
+    }
+    this.write(id, data);
+  }
+
+  stop(id: string): void {
+    const session = this.sessions.get(id);
+    if (!session) throw new Error("terminal no longer exists");
+    if (session.exitCode === null) session.process.kill();
   }
 
   resize(id: string, cols: number, rows: number): void {
@@ -278,6 +329,10 @@ export class Terminals {
 
   list(): TerminalInfo[] {
     return [...this.sessions.values()].map((session) => session.info());
+  }
+
+  disposeProject(projectId: string): void {
+    for (const [id, session] of this.sessions) if (session.projectId === projectId) this.kill(id);
   }
 
   /** On quit. A pty outliving the app is a shell nobody can see or stop. */

@@ -315,10 +315,11 @@ export const ReviewTabSchema = z.object({
   sessionId: z.string().nullable().default(null),
 });
 
-/** An Electron `<webview>` with browser chrome. */
+/** A persistent, root-scoped native browser target with renderer chrome. */
 export const BrowserTabSchema = z.object({
   ...ExplorerTabBase,
   kind: z.literal("browser"),
+  root: z.string().nullable().default(null),
   url: z.string().nullable(),
 });
 

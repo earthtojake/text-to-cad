@@ -5,6 +5,7 @@ import { GitBranch } from "lucide-react";
 import { useCallback, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { useResolvedTheme } from "@renderer/hooks/use-theme";
+import { desktopLiveDocuments } from "@renderer/state/live-documents";
 import { useExplorer } from "@renderer/state/explorer";
 import { useProjects } from "@renderer/state/projects";
 import type { ExplorerRoot, Project } from "@shared/types";
@@ -37,14 +38,15 @@ export function FileTab({ tabId, project, root, path, panel, cadConnection }: {
     if (existing) { if (existing.id !== tabId) explorer.setActive(existing.id); return; }
     explorer.update(tabId, { path: next, panel: null });
   }, [tabId, root]);
+  const liveDocuments = useMemo(() => desktopLiveDocuments(tabId, { projectId: project.id, root }), [tabId, project.id, root]);
   const host = useMemo<ViewerHost>(() => ({
-    files: source, fileActions, clipboard: desktopClipboard, promptContext,
+    ...liveDocuments, files: source, fileActions, clipboard: desktopClipboard, promptContext,
     navigation: { openFile: onOpenFile }, environment: { colorScheme, platform: fileActions.platform },
     lifecycle: { subscribeFlush(listener) {
       window.addEventListener("beforeunload", listener);
       return () => window.removeEventListener("beforeunload", listener);
     } },
-  }), [source, fileActions, promptContext, onOpenFile, colorScheme]);
+  }), [source, fileActions, promptContext, onOpenFile, colorScheme, liveDocuments]);
   return <FileViewer file={path} host={host} renderers={composition.renderers} state={state} onStateChange={onStateChange}
     reveal={reveal?.root === root ? reveal : null}
     onError={(error) => toast.error(error.message)}

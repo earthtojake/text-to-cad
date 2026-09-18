@@ -288,7 +288,7 @@ function RuntimeCard({ appVersion }: { appVersion: string | null }) {
           skills?.root ??
           "The CAD, drawing, mesh and robot-description skills every session in this app is handed."
         }
-        keywords="skills cad hardcore-app-use additional directories preamble"
+        keywords="skills cad browser pdf drawings documents terminals additional directories preamble"
         title="Skills"
       >
         {skills?.root ? (

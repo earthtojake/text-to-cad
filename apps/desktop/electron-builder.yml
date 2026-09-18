@@ -43,8 +43,8 @@ files:
 #   resources/cadgen   the cadgen wheel and its constraints file, which the
 #                      bundler installs from; kept beside the app so a person
 #                      can see what shipped (a couple of megabytes).
-#   resources/skills   the app's skills (the repo's, minus cad-viewer, plus
-#                      hardcore-app-use), handed to every session as a directory.
+#   resources/skills   repo authoring and registered integration skills,
+#                      handed to every session as a directory.
 #
 # The runtime's executables keep their mode bits and their symlinks
 # (python/bin/python3 -> python3.13): electron-builder copies extraResources
@@ -54,6 +54,8 @@ files:
 # hand to codesign — Resources/ is a fine place for them as long as each one
 # is signed; nothing here has to move.
 extraResources:
+  - from: src/main/browser/vendor/LICENSE
+    to: notices/browser-use-browser-harness-js-LICENSE
   - from: resources/runtime/${os}-${arch}
     to: runtime/${os}-${arch}
   - from: resources/cadgen

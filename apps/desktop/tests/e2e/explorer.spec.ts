@@ -536,9 +536,9 @@ test("browses to a URL in a browser tab", async () => {
 
   await page.getByLabel("Address").fill("https://example.com");
   await page.keyboard.press("Enter");
-  // The webview is its own process; asserting on the address bar and the tag
+  // The native browser is its own process; assert its chrome and host slot
   // is what this suite can do without depending on the network.
-  await expect(page.locator("webview")).toBeAttached();
+  await expect(page.locator("[data-browser-target]")).toBeAttached();
   await expect(page.getByLabel("Address")).toHaveValue(/example\.com/);
   // The tab is titled by host, not by the whole URL.
   await expect(page.getByRole("tab", { name: /example\.com/ })).toBeVisible();

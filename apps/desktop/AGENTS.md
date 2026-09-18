@@ -22,7 +22,7 @@ phase is not an oversight — it is the seam.
 | P2 | `src/renderer/features/session` — the transcript, activity rows, composer chips, permissions, plan card — plus what the model and effort chips are drawn from before a session exists: `src/shared/acp/options.ts`, `src/{shared,main}/ipc/agent-options.ts`, `src/main/acp/agent-options.ts`, `src/renderer/state/agent-options.ts` |
 | P3 (done) | `src/main/explorer`, `src/main/ipc/{explorer,cad}.ts`, `src/shared/ipc/{explorer,cad}.ts`, `src/renderer/features/explorer` — file tab, tree, Monaco, review, browser, terminal |
 | P4 (done) | `@hardcore/ui` CAD renderer and explicit `@hardcore/core/client`; FileTab hosts the shared FileViewer |
-| P5 (done) | `src/main/cad/`, `src/main/ipc/{cad,runtime,skills}.ts`, `resources/`, `skills/hardcore-app-use`, `scripts/{build,build-skills,build-mcp,cad-resources,bundle-runtime}.mjs`, `src/renderer/state/cad-commands.ts`, the `reveal` field of the explorer store and tree |
+| P5 (done) | `src/main/{cad,integrations}/`, `src/main/ipc/{cad,integrations,runtime,skills}.ts`, `resources/`, `skills/`, `scripts/{build,build-skills,build-mcp,cad-resources,bundle-runtime}.mjs`, `src/renderer/state/integration-commands.ts`, the `reveal` field of the explorer store and tree |
 | P6 | `src/renderer/features/settings` — the pages' contents |
 | P7 (done) | `src/main/projects/{git,workspace}.ts`, `src/shared/ipc/git.ts`, `src/main/ipc/git.ts`, `src/renderer/lib/git-mode.ts`, the review tab's scopes and commit popover, Git & Worktrees' per-project cards, `tests/e2e/git.spec.ts` |
 | P8 (done) | `electron-builder.yml`, `build/`, `resources/`, `scripts/{package,make-icons}.mjs`, `updater.ts`, `telemetry.ts`, `src/{shared,main}/ipc/app.ts`, the CI jobs |
@@ -155,3 +155,5 @@ not.
   (`sessions.sessionHead` / `turnHead`); the renderer sends the scope's *name*
   and main resolves it. Two commits can share a second, and `--before=` picks a
   commit rather than a moment, so a timestamp cannot do this job.
+
+Domain MCP servers and focused skills are composed by `src/main/integrations/registry.mjs`. Read [the integration contract](docs/integrations.md) before adding session-to-app capabilities.

@@ -57,7 +57,7 @@ export function createDesktopFileSource({ projectId, projectName, root }: { proj
       const blob = new Blob([bytes], { type: binary.mime });
       signal.throwIfAborted();
       const url = URL.createObjectURL(blob);
-      return { url, mime: binary.mime, byteLength: binary.size, resource: { kind: "workspace-file", workspaceId: id, path: binary.path }, release: () => URL.revokeObjectURL(url) };
+      return { url, bytes, mime: binary.mime, byteLength: binary.size, resource: { kind: "workspace-file", workspaceId: id, path: binary.path }, release: () => URL.revokeObjectURL(url) };
     },
     async writeText(path, { content, expectedRevision, signal }) {
       if (signal.aborted) return { status: "cancelled" };

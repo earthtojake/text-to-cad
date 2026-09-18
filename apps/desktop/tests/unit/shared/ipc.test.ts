@@ -74,7 +74,6 @@ describe("the contract", () => {
       "skills.info",
       "runtime.status",
       "runtime.repair",
-      "dialogs.saveDrawing",
       "dialogs.chooseDirectory",
       "dialogs.chooseFile",
       "settings.get",
@@ -86,6 +85,14 @@ describe("the contract", () => {
       "clipboard.readText",
       "clipboard.writeImage",
       "clipboard.writeContent",
+      "browser.ensure",
+      "browser.metadata",
+      "browser.navigate",
+      "browser.input",
+      "browser.present",
+      "browser.close",
+      "browser.clearConsole",
+      "browser.capture",
       // P3 — src/shared/ipc/explorer.ts
       "explorer.list",
       "explorer.paths",
@@ -124,7 +131,7 @@ describe("the contract", () => {
       // P5 — src/shared/ipc/cad.ts
       "cad.viewerOrigin",
       "cad.warm",
-      "cad.reply",
+      "integrations.reply",
     ]);
   });
 

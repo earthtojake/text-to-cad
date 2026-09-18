@@ -309,8 +309,7 @@ function SkillsSection({ agent }: { agent: AgentStatus }) {
     >
       <p className="text-xs text-muted-foreground">
         {count > 0
-          ? `Every session in Hardcore is handed the app's skills — the cad, drawing, mesh and
-             robot-description skills plus hardcore-app-use — as an extra directory,
+          ? `Every session in Hardcore is handed the app's CAD skills and focused workspace integration skills as an extra directory,
              ${
                native
                  ? `which ${agent.name} loads by itself.`

@@ -74,6 +74,7 @@ export function MarkdownEditor({
 
   // `onChange` is called from a callback the editor keeps for its lifetime, so
   // it is read through a ref rather than captured once.
+  const lastContent = useRef(content);
   const notify = useRef(onChange);
   useEffect(() => {
     notify.current = onChange;
@@ -92,11 +93,22 @@ export function MarkdownEditor({
       // see `capturePristine`.
       onCreate: ({ editor: instance }) => capturePristine(frame, instance.getJSON()),
       onUpdate: ({ editor: instance }) => {
-        notify.current?.(documentToMarkdown(instance.getJSON(), frame));
+        const next = documentToMarkdown(instance.getJSON(), frame);
+        lastContent.current = next;
+        notify.current?.(next);
       },
     },
     [doc, frame],
   );
+
+  useEffect(() => {
+    if (!editor || content === lastContent.current) return;
+    const incoming = markdownToDocument(content);
+    Object.assign(frame, incoming.frame);
+    editor.commands.setContent(incoming.doc, { emitUpdate: false });
+    capturePristine(frame, editor.getJSON());
+    lastContent.current = content;
+  }, [editor, content, frame]);
 
   const onKeyDown = useCallback(
     (event: React.KeyboardEvent) => {

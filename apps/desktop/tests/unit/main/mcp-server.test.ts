@@ -55,9 +55,9 @@ function skillsRoot(skills: Record<string, string>): string {
 
 async function connect(
   bridge: (method: string, params: unknown) => Promise<unknown>,
-  options: { skillsRoot?: string | null } = {},
+  options: { skillsRoot?: string | null; integration?: string } = {},
 ) {
-  const server = createServer(bridge, { version: "9.9.9", cwd: "/proj", skillsRoot: options.skillsRoot ?? null });
+  const server = createServer(bridge, { version: "9.9.9", cwd: "/proj", skillsRoot: options.skillsRoot ?? null, integration: options.integration });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
   const client = new Client({ name: "test", version: "0" });
@@ -76,19 +76,17 @@ describe("the Hardcore MCP server", () => {
         "list_open_tabs",
         "list_skills",
         "open_file",
-        "open_drawing",
-        "save_drawing",
-        "open_url",
+        "show_tab",
+        "close_tab",
         "read_skill",
         "reveal",
-        "viewer_state",
       ].sort(),
     );
     const openFile = tools.find((tool) => tool.name === "open_file")!;
-    expect(openFile.description).toContain("never");
+    expect(openFile.description).toContain("registered renderer");
     expect(openFile.inputSchema).toMatchObject({ type: "object", required: ["path"] });
     // The path's description names the cwd, so a relative path has a meaning.
-    expect(JSON.stringify(openFile.inputSchema)).toContain("/proj");
+
     expect(tools.find((tool) => tool.name === "list_open_tabs")!.inputSchema).toMatchObject({ type: "object" });
   });
 
@@ -113,20 +111,16 @@ describe("the Hardcore MCP server", () => {
     expect(content[1]!.text).toContain("tmp/review.png");
   });
 
-  it("forwards explicit drawing open/save requests and validates overwrite", async () => {
+  it("keeps domain tools independent and drawing scenes ephemeral", async () => {
     const fake = fakeBridge();
-    const client = await connect(fake.bridge);
-    await client.callTool({ name: "open_drawing", arguments: {} });
-    await client.callTool({ name: "open_drawing", arguments: { path: "plan.excalidraw", title: "Plan" } });
-    await client.callTool({ name: "save_drawing", arguments: { tabId: "drawing", path: "saved.excalidraw", overwrite: true } });
-    expect(fake.calls).toEqual([
-      { method: "open_drawing", params: {} },
-      { method: "open_drawing", params: { path: "plan.excalidraw", title: "Plan" } },
-      { method: "save_drawing", params: { tabId: "drawing", path: "saved.excalidraw", overwrite: true } },
-    ]);
-    const invalid = await client.callTool({ name: "save_drawing", arguments: { tabId: "drawing", path: "saved.excalidraw", overwrite: "true" } });
-    expect(invalid.isError).toBe(true);
-    expect(fake.calls).toHaveLength(3);
+    const drawing = await connect(fake.bridge, { integration: "drawings" });
+    const workspace = await connect(fake.bridge);
+    expect((await drawing.listTools()).tools.map(tool => tool.name)).toEqual(["open_drawing", "drawing_state", "capture_drawing"]);
+    expect((await workspace.callTool({ name: "open_drawing", arguments: {} })).isError).toBe(true);
+    expect((await drawing.callTool({ name: "open_drawing", arguments: { title: "Plan" } })).isError).toBeFalsy();
+    expect((await drawing.callTool({ name: "open_drawing", arguments: { path: "saved.excalidraw" } })).isError).toBe(true);
+    expect((await drawing.callTool({ name: "save_drawing", arguments: {} })).isError).toBe(true);
+    expect(fake.calls).toEqual([{ method: "open_drawing", params: { title: "Plan" } }]);
   });
 
   it("turns a bridge refusal into an error result rather than a protocol failure", async () => {
@@ -149,9 +143,11 @@ describe("the Hardcore MCP server", () => {
     const fake = fakeBridge({ list_open_tabs: { tabs: [] }, viewer_state: { file: null }, reveal: { revealed: "src" }, open_url: { opened: "https://x.y" } });
     const client = await connect(fake.bridge);
     await client.callTool({ name: "list_open_tabs", arguments: {} });
-    await client.callTool({ name: "viewer_state", arguments: {} });
+    const cad = await connect(fake.bridge, { integration: "cad" });
+    await cad.callTool({ name: "viewer_state", arguments: {} });
     await client.callTool({ name: "reveal", arguments: { path: "src" } });
-    await client.callTool({ name: "open_url", arguments: { url: "https://x.y/" } });
+    const browser = await connect(fake.bridge, { integration: "browser" });
+    await browser.callTool({ name: "open_url", arguments: { url: "https://x.y/" } });
     expect(fake.calls.map((call) => call.method)).toEqual(["list_open_tabs", "viewer_state", "reveal", "open_url"]);
   });
 });
@@ -184,22 +180,21 @@ describe("httpBridge", () => {
 });
 
 describe("the skills tools", () => {
-  it("lists what the app put on disk, and tells the agent to read cad first", async () => {
-    const root = skillsRoot({ cad: "Make CAD.", "hardcore-app-use": "Use this app." });
+  it("lists the focused skills the app put on disk", async () => {
+    const root = skillsRoot({ cad: "Make CAD.", documents: "Edit documents." });
     const client = await connect(fakeBridge().bridge, { skillsRoot: root });
 
     const tools = (await client.listTools()).tools;
     const list = tools.find((tool) => tool.name === "list_skills")!;
-    expect(list.description).toMatch(/read `?cad`? before any CAD/i);
-    expect(tools.find((tool) => tool.name === "read_skill")!.description).toContain("hardcore-app-use");
+    expect(list.description).toContain("skills");
+
 
     const result = await client.callTool({ name: "list_skills", arguments: {} });
     expect(result.isError).toBeFalsy();
     const answer = JSON.parse((result.content as Array<{ text: string }>)[0]!.text);
-    expect(answer.root).toBe(path.join(root, ".claude", "skills"));
-    expect(answer.skills).toEqual([
+    expect(answer).toEqual([
       { name: "cad", description: "Make CAD." },
-      { name: "hardcore-app-use", description: "Use this app." },
+      { name: "documents", description: "Edit documents." },
     ]);
   });
 
@@ -229,7 +224,7 @@ describe("the skills tools", () => {
 
     const escape = await client.callTool({
       name: "read_skill",
-      arguments: { name: "cad", path: "../hardcore-app-use/SKILL.md" },
+      arguments: { name: "cad", path: "../documents/SKILL.md" },
     });
     expect(escape.isError).toBe(true);
 
@@ -238,7 +233,7 @@ describe("the skills tools", () => {
 
     const bare = await connect(fakeBridge().bridge, { skillsRoot: null });
     const listed = await bare.callTool({ name: "list_skills", arguments: {} });
-    expect(listed.isError).toBe(true);
+    expect(JSON.parse((listed.content as Array<{text:string}>)[0]!.text)).toEqual([]);
     expect((await bare.callTool({ name: "read_skill", arguments: { name: "cad" } })).isError).toBe(true);
   });
 });

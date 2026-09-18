@@ -93,6 +93,7 @@
  * re-issued and awaited (terminal ids are mapped from the recorded response
  * to the live one), and the recorded prompt response is returned.
  */
+import { toolByName } from "../../src/main/integrations/registry.mjs";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
@@ -277,6 +278,7 @@ new AgentSideConnection((conn) => ({
 
   async loadSession(params) {
     record("session/load", params);
+    mcpServers = Array.isArray(params?.mcpServers) ? params.mcpServers : [];
     if (loadDelayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, loadDelayMs));
     }
@@ -369,10 +371,23 @@ async function script(conn, params) {
   const after = (word) => words[words.indexOf(word) + 1];
   const send = (update) => conn.sessionUpdate({ sessionId, update });
 
+  if (process.env.FAKE_AGENT_INTEGRATION_PROOF === "1" && text.startsWith("integration-proof ")) {
+    const request = JSON.parse(text.slice("integration-proof ".length));
+    const { integrationProof } = await import("./integration-proof.mjs");
+    const toolCallId = `proof-${request.id}`;
+    await send({ sessionUpdate: "tool_call", toolCallId, title: request.name ?? request.operation, kind: "other", status: "in_progress" });
+    let result;
+    try { result = await integrationProof(mcpServers, request); }
+    catch (error) { result = { isError: true, content: [{ type: "text", text: String(error.message ?? error) }] }; }
+    record("integration-proof", { id: request.id, result });
+    await send({ sessionUpdate: "tool_call_update", toolCallId, status: result.isError ? "failed" : "completed", rawOutput: result });
+    return { stopReason: "end_turn" };
+  }
+
   if (text.startsWith("drawing-tool ")) {
     // Drawing E2E uses the same stdio MCP/token/root path as a real adapter.
     const { name, args } = JSON.parse(text.slice("drawing-tool ".length));
-    if (!["open_drawing", "save_drawing", "list_open_tabs"].includes(name)) throw new Error("unsupported drawing test tool");
+    if (!["open_drawing", "drawing_state", "capture_drawing", "list_open_tabs", "show_tab", "close_tab"].includes(name)) throw new Error("unsupported drawing test tool");
     const toolCallId = `drawing-${Date.now()}`;
     await send({ sessionUpdate: "tool_call", toolCallId, title: name, kind: "other", status: "in_progress", rawInput: args });
     const result = await callHardcoreTool(name, args);
@@ -502,8 +517,9 @@ async function script(conn, params) {
       const listed = await callHardcoreTool("list_skills", {});
       const read = await callHardcoreTool("read_skill", { name: "cad" });
       const answer = JSON.parse(listed.content[0].text);
-      const names = answer.skills.map((skill) => skill.name);
-      record("skills", { root: answer.root, names, cad: JSON.parse(read.content[0].text) });
+      if (listed.isError || read.isError) throw new Error("Skill MCP request failed");
+      const names = answer.map((skill) => skill.name);
+      record("skills", { names, cad: JSON.parse(read.content[0].text) });
       await send({ sessionUpdate: "tool_call_update", toolCallId: "skills-1", status: "completed", rawOutput: { names } });
       await send({
         sessionUpdate: "agent_message_chunk",
@@ -603,9 +619,10 @@ async function script(conn, params) {
 
 /** Spawn the `hardcore` MCP server from `session/new`, call one tool, and let it go. */
 async function callHardcoreTool(name, args) {
-  const server = mcpServers.find((candidate) => candidate.name === "hardcore") ?? mcpServers[0];
+  const domain = toolByName(name)?.integration.id;
+  const server = mcpServers.find((candidate) => candidate.name === `hardcore-${domain}`);
   if (!server) {
-    throw new Error("session/new carried no MCP servers");
+    throw new Error(`Session carried no MCP server for ${name}`);
   }
   const env = { ...process.env };
   for (const entry of server.env ?? []) {

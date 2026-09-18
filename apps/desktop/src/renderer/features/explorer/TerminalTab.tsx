@@ -1,13 +1,18 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal } from "@xterm/xterm";
-import { SquareTerminal } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { createPromptContext } from "@hardcore/core/prompt";
+import { createDesktopPromptContext } from "./host/promptContext";
+import { useSessions } from "@renderer/state/sessions";
+import { toast } from "sonner";
+import { SquareTerminal, MessageSquarePlus } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import "@xterm/xterm/css/xterm.css";
 
 import { Button } from "@renderer/components/ui/button";
 import { useResolvedTheme } from "@renderer/hooks/use-theme";
+import { terminalPromptRoot } from "@renderer/lib/terminal-workspace";
 import { useExplorer } from "@renderer/state/explorer";
 import type { Project } from "@shared/types";
 
@@ -97,7 +102,20 @@ export function TerminalTab({
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selection, setSelection] = useState("");
   const [exited, setExited] = useState<number | null>(null);
+
+  const sessions = useSessions(state => state.sessions);
+  const promptRoot = useMemo(() => terminalPromptRoot(project, cwd, sessions), [cwd, project, sessions]);
+  const prompt = useMemo(() => createDesktopPromptContext(project.id, promptRoot, JSON.stringify(['desktop', project.id, promptRoot])), [project.id, promptRoot]);
+  const addSelection = () => {
+    if (!selection) return;
+    void prompt.deliver(createPromptContext([{ id: 'terminal-selection', kind: 'text',
+      text: `Terminal output from ${cwd ?? project.path} (${tabId}):\n${selection}` }])).then(result => {
+      if (result.status === 'added') toast.success('Terminal selection added to prompt');
+      else if (result.status === 'failed' || result.status === 'cancelled') toast.error(result.message ?? 'Could not add terminal selection.');
+    }).catch(error => toast.error(String(error)));
+  };
 
   // Spawn once, when the tab has no pty yet. `starting` guards React's double
   // effect invocation in development, which would otherwise leave an orphan
@@ -110,7 +128,7 @@ export function TerminalTab({
     starting.current = true;
     void window.hardcore.terminal
       .create({ projectId: project.id, ...(cwd ? { cwd } : {}) })
-      .then((info) => update(tabId, { ptyId: info.id }))
+      .then((info) => update(tabId, { ptyId: info.id, cwd: info.cwd }))
       .catch((caught: unknown) => {
         setError(caught instanceof Error ? caught.message : String(caught));
       })
@@ -141,6 +159,8 @@ export function TerminalTab({
       scrollOnUserInput: true,
     });
     termRef.current = term;
+    setSelection("");
+    term.onSelectionChange(() => setSelection(term.getSelection().slice(0, 128000)));
 
     const fit = new FitAddon();
     term.loadAddon(fit);
@@ -299,6 +319,8 @@ export function TerminalTab({
         <span className="truncate">{cwd ?? project.path}</span>
         {readOnly ? <span className="shrink-0 rounded-sm bg-muted px-1">agent</span> : null}
         <span className="flex-1" />
+        <button type="button" className="inline-flex h-5 shrink-0 items-center gap-1 hover:text-foreground disabled:opacity-40"
+          disabled={!selection} onClick={addSelection}><MessageSquarePlus className="size-3" />Add to prompt</button>
         {exited === null ? null : (
           <span className="shrink-0">
             exited {exited}

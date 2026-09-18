@@ -6,6 +6,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 
 import { appVersion } from "./scripts/app-version.mjs";
+import { pdfAssetsPlugin } from "./scripts/pdf-assets.mjs";
 import { drawingAssetsPlugin } from "./scripts/drawing-assets.mjs";
 const appRoot = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(appRoot, "..", "..");
@@ -64,7 +65,7 @@ export default defineConfig({
     // default to leave in place.
     worker: { format: "es" },
     define: { __APP_VERSION__: JSON.stringify(appVersion()) },
-    plugins: [drawingAssetsPlugin(), react(), tailwindcss()],
+    plugins: [pdfAssetsPlugin(), drawingAssetsPlugin(), react(), tailwindcss()],
     // Off Vite's default 5173, which `npm --prefix apps/web run dev` claims
     // with strictPort — the two dev servers have to be able to run together.
     // Matches the `desktop-dev` entry in the repo's .claude/launch.json.

@@ -48,7 +48,7 @@ export const useProjects = create<ProjectsState>((set, get) => ({
 
   remove: async (id) => {
     await window.hardcore.projects.remove({ id });
-    useExplorer.getState().discardProjectDrawings(id);
+    useExplorer.getState().discardProjectResources(id);
     if (get().activeId === id) {
       set({ activeId: null });
     }
@@ -62,7 +62,7 @@ export const useProjects = create<ProjectsState>((set, get) => ({
 
   receive: (projects) => {
     for (const previous of get().projects) {
-      if (!projects.some(project => project.id === previous.id)) useExplorer.getState().discardProjectDrawings(previous.id);
+      if (!projects.some(project => project.id === previous.id)) useExplorer.getState().discardProjectResources(previous.id);
     }
     set((state) => ({
       projects,

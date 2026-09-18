@@ -140,6 +140,15 @@ can resolve against the current model.
 viewer loading/error presentations. Their markup and wording are the original
 CAD artwork. They mount inside a relative container and require no CAD client.
 
+The optional `live: CadLiveBinding` registration binds a mounted
+`CadLiveController` for app-owned view tools. It reports the actual resource
+revision, selection, camera, display and mode, supports explicit controls and
+captures a PNG without prompt delivery or clipboard effects. It never substitutes
+catalog or persisted state for a live viewport. On unmount it retains only a
+serializable inactive snapshot; controls require the tab to be shown. See the
+[viewer host contract](viewer-host.md#app-specific-interfaces) for lifecycle and
+stale-operation rules and [`live.ts`](../src/renderers/cad/live.ts) for signatures.
+
 ## Lifetimes
 
 The injected `CadWorkspaceService` owns its catalog and request controllers. The first

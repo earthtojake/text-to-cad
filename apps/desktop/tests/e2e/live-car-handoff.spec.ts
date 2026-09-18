@@ -39,9 +39,9 @@ for (const agentId of ["codex", "claude-code"]) {
       const session = await page.evaluate(({ projectId, agentId }) => window.hardcore.sessions.create({ projectId, agentId, gitMode: "worktree", name: "car-ux-check" }), { projectId: added.id, agentId });
       await page.locator(`[data-session-row="${session.id}"]`).getByRole("button").first().click();
       for (const directory of [".agents", ".claude"]) {
-        const skills = path.join(session.cwd, directory, "skills", "hardcore-app-use");
+        const skills = path.join(session.cwd, directory, "skills", "cad-viewer");
         fs.mkdirSync(skills, { recursive: true });
-        fs.copyFileSync(path.join(appRoot, "skills/hardcore-app-use/SKILL.md"), path.join(skills, "SKILL.md"));
+        fs.copyFileSync(path.join(appRoot, "skills/cad-viewer/SKILL.md"), path.join(skills, "SKILL.md"));
       }
       const state = await page.evaluate((id) => window.hardcore.sessions.state({ id }), session.id);
       const model = state?.state.configOptions.find((option) => option.id === "model" && option.type === "select");
@@ -54,7 +54,7 @@ for (const agentId of ["codex", "claude-code"]) {
       const build = `PYTHONPATH=${JSON.stringify(path.resolve(appRoot, "../../packages/cadgen/src"))} ${JSON.stringify(python)} models/car.py`;
       const marker = `CAR_HANDOFF_${agentId.replaceAll("-", "_")}`;
       const draft = page.getByPlaceholder("Do anything");
-      await draft.fill(`Remember ${marker} as this conversation's verification marker. Read the local hardcore-app-use skill. Build models/car.py by running exactly: ${build}. Do not change its dimensions. Open models/car.step using the Hardcore open_file tool. Do not start another viewer. Reply briefly.`);
+      await draft.fill(`Remember ${marker} as this conversation's verification marker. Read the local cad-viewer skill. Build models/car.py by running exactly: ${build}. Do not change its dimensions. Open models/car.step using the Hardcore open_file tool. Do not start another viewer. Reply briefly.`);
       await draft.press("Enter");
       await expect(page.getByRole("tab", { name: /car\.step/ })).toBeVisible({ timeout: 150_000 });
       await expect(page.locator("[data-session-view]")).toHaveAttribute("data-session-status", "idle", { timeout: 90_000 });

@@ -1,6 +1,6 @@
 import { defineFileRenderer } from "../../file-viewer/registry.js";
 
-export const pdfRenderer = defineFileRenderer<{ url: string; mime?: string }>({
+export const pdfRenderer = defineFileRenderer<{ bytes: Uint8Array<ArrayBuffer> }>({
   id: "pdf",
   priority: 100,
   matches: (file) =>
@@ -8,8 +8,9 @@ export const pdfRenderer = defineFileRenderer<{ url: string; mime?: string }>({
   async prepare({ file, source, signal }) {
     if (!source.readAsset) throw new Error(`This file source cannot read binary assets: ${file.path}`);
     const asset = await source.readAsset(file.path, { signal });
+    if (!asset.bytes) { asset.release(); throw new Error("PDF rendering requires a file source supplying asset bytes."); }
     return {
-      data: { url: asset.url, mime: asset.mime },
+      data: { bytes: asset.bytes },
       dispose: asset.release,
     };
   },

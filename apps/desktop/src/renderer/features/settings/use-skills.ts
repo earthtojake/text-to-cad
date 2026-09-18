@@ -2,7 +2,7 @@
  * The skills root every session is handed, read once per mount.
  *
  * Made at launch and never changed while the app runs (`skills.info`,
- * `src/main/cad/skills.ts`), and read-only — there is nothing to install — so
+ * `src/main/integrations/skills.ts`), and read-only — there is nothing to install — so
  * it is a hook around one IPC call rather than a store.
  */
 import { useEffect, useState } from "react";

@@ -1,5 +1,5 @@
-import { ArrowLeft, ArrowRight, ExternalLink, Globe, RotateCw, Terminal } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, Camera, ExternalLink, Globe, MessageSquareQuote, RotateCw, Terminal } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   WebPreview,
@@ -8,118 +8,59 @@ import {
 } from "@renderer/components/ai-elements/web-preview";
 import { Button } from "@renderer/components/ui/button";
 import { cn } from "@renderer/lib/utils";
-import { useExplorer } from "@renderer/state/explorer";
+import { useBrowser } from "@renderer/state/browser";
 
 import { EmptyState } from "@hardcore/ui/navigation";
+import { createPromptContext } from "@hardcore/core/prompt";
+import { createDesktopPromptContext } from "./host/promptContext";
 
-/**
- * A browser, as a tab in the one strip.
- *
- * An Electron `<webview>`, not an `<iframe>`: a webview is its own process
- * with its own session, it is not stopped by `X-Frame-Options` (which every
- * site worth opening sets), and it can be asked for its navigation state. An
- * iframe would be a pane that shows a blank page for most of the web.
- *
- * The chrome is AI Elements' Web Preview — its navigation row, its address
- * field and its console panel — with the body replaced, since `WebPreviewBody`
- * renders the iframe this tab cannot use.
- *
- * The URL is persisted on the tab, so a reopened strip comes back where it was.
- */
-
-/** Chromium's own tag; React has no JSX typing for it. */
-type WebviewElement = HTMLElement & {
-  src: string;
-  canGoBack(): boolean;
-  canGoForward(): boolean;
-  goBack(): void;
-  goForward(): void;
-  reload(): void;
-  stop(): void;
-  getURL(): string;
-};
-
-type ConsoleLine = { level: "log" | "warn" | "error"; message: string; timestamp: Date };
-
-export function BrowserTab({ tabId, url }: { tabId: string; url: string | null }) {
-  const update = useExplorer((state) => state.update);
-  const viewRef = useRef<WebviewElement | null>(null);
-
-  const [address, setAddress] = useState(url ?? "");
-  const [current, setCurrent] = useState(url);
-  const [loading, setLoading] = useState(false);
-  const [canGoBack, setCanGoBack] = useState(false);
-  const [canGoForward, setCanGoForward] = useState(false);
-  const [logs, setLogs] = useState<ConsoleLine[]>([]);
+/** Chrome for a main-owned native page. Its document survives this component. */
+type ConsoleLine = { level: "log" | "warn" | "error"; message: string };
+export function BrowserTab({ projectId, root, tabId, url }: { projectId: string; root: string | null; tabId: string; url: string | null }) {
+  const viewRef = useRef<HTMLDivElement | null>(null);
+  const target = useBrowser(state => state.targets[tabId]);
+  const failure = useBrowser(state => state.errors[tabId]);
+  const mount = useBrowser(state => state.mount);
+  const navigatePage = useBrowser(state => state.navigate);
+  const clearConsole = useBrowser(state => state.clearConsole);
+  const contextAttachment = useBrowser(state => state.contextAttachment);
+  const prompt = useMemo(() => createDesktopPromptContext(projectId, root, JSON.stringify(["desktop", projectId, root])), [projectId, root]);
+  const [adding, setAdding] = useState(false);
+  const [promptStatus, setPromptStatus] = useState<string | null>(null);
+  const [draft, setDraft] = useState<{ value: string; source: string | null } | null>(null);
   const [showConsole, setShowConsole] = useState(false);
-
-  const navigate = useCallback(
-    (raw: string) => {
-      const resolved = resolveAddress(raw);
-      if (!resolved) {
-        return;
-      }
-      setCurrent(resolved);
-      setAddress(resolved);
-      setLogs([]);
-      update(tabId, { url: resolved });
-    },
-    [tabId, update],
-  );
-
-  // The webview's events are DOM events on the tag, so they are attached
-  // imperatively rather than as React props.
+  const current = target?.url && target.url !== "about:blank" ? target.url : url;
+  const loading = target?.loading ?? false;
+  const canGoBack = target?.canGoBack ?? false;
+  const canGoForward = target?.canGoForward ?? false;
+  const logs = target?.logs ?? [];
+  const initialURL = useRef(url);
   useEffect(() => {
-    const view = viewRef.current;
-    if (!view) {
-      return;
-    }
-    const sync = () => {
-      setCanGoBack(view.canGoBack());
-      setCanGoForward(view.canGoForward());
-    };
-    const onStart = () => {
-      setLoading(true);
-    };
-    const onStop = () => {
-      setLoading(false);
-      sync();
-      // A redirect or a link click changes the address without going through
-      // `navigate`, and the bar has to follow it.
-      const at = view.getURL();
-      if (at && at !== "about:blank") {
-        setAddress(at);
-        update(tabId, { url: at });
-      }
-    };
-    const onConsole = (event: Event) => {
-      const detail = event as Event & { level: number; message: string };
-      setLogs((previous) =>
-        [
-          ...previous,
-          {
-            // Chromium's levels: 0 verbose, 1 info, 2 warning, 3 error.
-            level: detail.level >= 3 ? "error" : detail.level === 2 ? "warn" : "log",
-            message: detail.message,
-            timestamp: new Date(),
-          } as ConsoleLine,
-        ].slice(-200),
-      );
-    };
+    if (viewRef.current) return mount({ projectId, root, tabId }, initialURL.current, viewRef.current);
+  }, [mount, projectId, root, tabId]);
+  const address = draft?.source === current ? draft.value : current ?? "";
+  const setAddress = (value: string) => setDraft({ value, source: current });
+  const navigate = useCallback((raw: string) => {
+    const resolved = resolveAddress(raw);
+    if (!resolved) return;
+    setDraft({ value: resolved, source: current });
+    void navigatePage({ projectId, root, tabId }, { url: resolved });
+  }, [navigatePage, projectId, root, tabId, current]);
+  const move = (direction: "back" | "forward" | "reload" | "stop") => void navigatePage({ projectId, root, tabId }, { direction });
 
-    view.addEventListener("did-start-loading", onStart);
-    view.addEventListener("did-stop-loading", onStop);
-    view.addEventListener("did-navigate", onStop);
-    view.addEventListener("did-navigate-in-page", onStop);
-    view.addEventListener("console-message", onConsole);
-    return () => {
-      view.removeEventListener("did-start-loading", onStart);
-      view.removeEventListener("did-stop-loading", onStop);
-      view.removeEventListener("did-navigate", onStop);
-      view.removeEventListener("did-navigate-in-page", onStop);
-      view.removeEventListener("console-message", onConsole);
-    };
-  }, [current, tabId, update]);
+  const addContext = (kind: "selection" | "screenshot") => {
+    if (!target || !current || adding) return;
+    setAdding(true); setPromptStatus(null);
+    const referenceId = crypto.randomUUID();
+    // Deliver immediately: the draft destination binds before native capture finishes.
+    const context = createPromptContext([
+      { id: referenceId, kind: "reference", reference: { resource: { kind: "url", url: target.url, revision: String(target.generation) }, target: { kind: "whole-resource" }, label: target.title || target.url } },
+      { id: crypto.randomUUID(), kind: "attachment", name: kind === "screenshot" ? "browser-page.png" : "browser-selection.txt", mimeType: kind === "screenshot" ? "image/png" : "text/plain", about: [referenceId], content: contextAttachment({ projectId, root, tabId }, target, kind) },
+    ]);
+    void prompt.deliver(context).then(result => {
+      setPromptStatus(result.status === "added" ? "Added to prompt" : ("message" in result ? result.message : undefined) ?? "Could not add browser context.");
+    }).catch(error => setPromptStatus(error instanceof Error ? error.message : String(error))).finally(() => setAdding(false));
+  };
 
   const errors = logs.filter((line) => line.level === "error").length;
 
@@ -128,21 +69,21 @@ export function BrowserTab({ tabId, url }: { tabId: string; url: string | null }
       <WebPreviewNavigation className="h-9 gap-0.5 px-2 py-0">
         <WebPreviewNavigationButton
           disabled={!canGoBack}
-          onClick={() => viewRef.current?.goBack()}
+          onClick={() => move("back")}
           tooltip="Back"
         >
           <ArrowLeft className="size-3.5" />
         </WebPreviewNavigationButton>
         <WebPreviewNavigationButton
           disabled={!canGoForward}
-          onClick={() => viewRef.current?.goForward()}
+          onClick={() => move("forward")}
           tooltip="Forward"
         >
           <ArrowRight className="size-3.5" />
         </WebPreviewNavigationButton>
         <WebPreviewNavigationButton
           disabled={!current}
-          onClick={() => (loading ? viewRef.current?.stop() : viewRef.current?.reload())}
+          onClick={() => move(loading ? "stop" : "reload")}
           tooltip={loading ? "Stop" : "Reload"}
         >
           <RotateCw className={cn("size-3.5", loading && "animate-spin")} />
@@ -167,6 +108,12 @@ export function BrowserTab({ tabId, url }: { tabId: string; url: string | null }
           value={address}
         />
 
+        <WebPreviewNavigationButton disabled={!current || !target || adding} onClick={() => addContext("selection")} aria-label="Add selected text to prompt" tooltip="Add selected text to prompt">
+          <MessageSquareQuote className="size-3.5" />
+        </WebPreviewNavigationButton>
+        <WebPreviewNavigationButton disabled={!current || !target || adding} onClick={() => addContext("screenshot")} aria-label="Add page screenshot to prompt" tooltip="Add page screenshot to prompt">
+          <Camera className="size-3.5" />
+        </WebPreviewNavigationButton>
         <WebPreviewNavigationButton
           onClick={() => setShowConsole((open) => !open)}
           tooltip={errors > 0 ? `Console (${errors} errors)` : "Console"}
@@ -186,33 +133,16 @@ export function BrowserTab({ tabId, url }: { tabId: string; url: string | null }
         </WebPreviewNavigationButton>
       </WebPreviewNavigation>
 
-      <div className="relative min-h-0 flex-1 overflow-hidden border-t bg-background">
-        {current ? (
-          <webview
-            // Remounting on a URL change is what makes `src` behave: the tag
-            // reads it once, and assigning it later navigates only sometimes.
-            key={current}
-            // `@types/react`'s `HTMLWebViewElement` is an empty interface — it
-            // knows the tag exists and nothing about Electron's methods on it,
-            // so the ref is typed to what this component actually calls.
-            ref={viewRef as unknown as React.Ref<HTMLElement>}
-            src={current}
-            // Pinned, not `width: 100%`: the tag sizes itself from the guest
-            // page's own layout, so a page wider than the pane paints past
-            // the window edge unless it is given an explicit box.
-            style={{ position: "absolute", inset: 0, display: "flex" }}
-          />
-        ) : (
-          <EmptyState
-            description="Type a URL or a search above. Agents can open pages here too."
-            icon={Globe}
-            title="Start browsing"
-          />
-        )}
+      {promptStatus ? <p className="px-3 py-1 text-xs text-muted-foreground" role="status">{promptStatus}</p> : null}
+      {failure ? <p className="px-3 py-1 text-xs text-destructive" role="alert">{failure}</p> : null}
+      <div className="relative min-h-0 flex-1 overflow-hidden border-t bg-background" data-browser-target={tabId} ref={viewRef}>
+        {!current ? (
+          <EmptyState description="Type a URL or a search above. Agents can open pages here too." icon={Globe} title="Start browsing" />
+        ) : null}
       </div>
 
       {showConsole ? (
-        <ConsolePanel logs={logs} onClear={() => setLogs([])} />
+        <ConsolePanel logs={logs} onClear={() => clearConsole(tabId)} />
       ) : null}
     </WebPreview>
   );

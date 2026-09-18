@@ -12,7 +12,7 @@ import {
   materialiseSkillsRoot,
   skillFrontmatter,
   skillsPreamble,
-} from "../../../src/main/cad/skills";
+} from "../../../src/main/integrations/skills";
 
 const temps: string[] = [];
 afterEach(() => {
@@ -62,7 +62,7 @@ describe("SKILL.md front matter", () => {
 
 describe("the skills root", () => {
   it("materialises both layouts under the app's version, with the whole skill", () => {
-    const from = source({ cad: "Make CAD.", "hardcore-app-use": "Use this app." });
+    const from = source({ cad: "Make CAD.", "cad-viewer": "Use this app." });
     const base = temp("hardcore-userdata-");
 
     const result = materialiseSkillsRoot({ source: from, base, version: "1.2.3" });
@@ -70,11 +70,11 @@ describe("the skills root", () => {
     expect(result.root).toBe(path.join(base, "1.2.3"));
     expect(result.skills).toEqual([
       { name: "cad", description: "Make CAD." },
-      { name: "hardcore-app-use", description: "Use this app." },
+      { name: "cad-viewer", description: "Use this app." },
     ]);
     for (const layout of [CLAUDE_LAYOUT, AGENTS_LAYOUT]) {
       expect(fs.existsSync(path.join(result.root!, layout, "cad", "SKILL.md"))).toBe(true);
-      expect(fs.existsSync(path.join(result.root!, layout, "hardcore-app-use", "SKILL.md"))).toBe(true);
+      expect(fs.existsSync(path.join(result.root!, layout, "cad-viewer", "SKILL.md"))).toBe(true);
       // Not just the SKILL.md: a skill's references travel with it.
       expect(fs.readFileSync(path.join(result.root!, layout, "cad", "references", "notes.md"), "utf8")).toBe("detail\n");
     }
@@ -84,7 +84,7 @@ describe("the skills root", () => {
     }
     expect(JSON.parse(fs.readFileSync(path.join(result.root!, ROOT_MANIFEST), "utf8"))).toEqual({
       version: "1.2.3",
-      skills: ["cad", "hardcore-app-use"],
+      skills: ["cad", "cad-viewer"],
     });
   });
 
@@ -147,15 +147,15 @@ describe("the skills root", () => {
 describe("the preamble", () => {
   const skills = [
     { name: "cad", description: "Create, modify, inspect and validate parametric CAD parts. Use for STEP." },
-    { name: "hardcore-app-use", description: "How to work inside the Hardcore desktop app." },
+    { name: "cad-viewer", description: "How to work inside the Hardcore desktop app." },
   ];
 
-  it("names the root, lists the skills, and says to read cad first", () => {
+  it("names the root, lists domain skills and explains discovery without an umbrella skill", () => {
     const text = skillsPreamble("/data/skills/1.2.3", skills)!;
     expect(text).toContain(path.join("/data/skills/1.2.3", CLAUDE_LAYOUT));
     expect(text).toContain("- cad: Create, modify, inspect and validate parametric CAD parts.");
-    expect(text).toContain("- hardcore-app-use: How to work inside the Hardcore desktop app.");
-    expect(text).toMatch(/read cad\/SKILL\.md before any CAD/i);
+    expect(text).toContain("- cad-viewer: How to work inside the Hardcore desktop app.");
+    expect(text).toContain("domain integrations operate on their contents");
     expect(text).toContain("list_skills");
   });
 

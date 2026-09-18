@@ -595,8 +595,7 @@ node in the schema and are held as their own bytes. See
 `packages/ui/src/renderers/markdown/{document,editor}.test.ts` for the proof, which is run against
 these three files.
 
-**Paths in a transcript are links** when they exist (plan §8, and what the
-`hardcore-app-use` skill promises the agent). `features/session/links` is
+**Paths in a transcript are links** when they exist (plan §8). `features/session/links` is
 the whole of it: a remark plugin marks every path-shaped token in an
 agent's prose — `models/bracket.step`, `README.md`, a code span holding a
 path — as a link candidate; `state/path-links.ts` asks main which of them
@@ -881,32 +880,46 @@ response from an earlier visit cannot overwrite the current strip.
 
 ### Temporary drawings
 
-Choose **Drawing** from `+` (or ⇧⌘D / Ctrl+Shift+D) for an Excalidraw sketchpad.
-Freehand, shapes, arrows, text and embedded raster images can be added to a
-prompt with **Add to prompt**. This appends a PNG and drawing tab identity to
-the current draft, preserves existing text, and never submits the prompt.
-The draft is bound before image encoding, so switching chats cannot redirect
-the result. Workspace mismatches use the same “Start chat here” flow as CAD
-references and captures.
+Choose **Drawing** from `+` (or ⇧⌘D / Ctrl+Shift+D) for a light Excalidraw
+sketchpad. Freehand, shapes, arrows and text become visual prompt context with
+**Add to prompt**. This appends a PNG and sketch description to the current
+draft, preserving existing text and never submitting it. The destination is
+bound before image encoding, so switching chats cannot redirect the result.
+Workspace mismatches use the same “Start chat here” flow as CAD references.
 
 Drawings live only in renderer memory. Switching tabs or projects keeps them;
 closing the tab, removing the project, reloading or exiting discards them.
-An image already added to a draft or transcript is a separate copy.
-**Save drawing copy** opens a native file dialog for an editable `.excalidraw`
-document; **Open drawing file** imports a copy into a new temporary tab. Neither
-enables autosave. Agents can use `open_drawing({path?, title?})` and
-`save_drawing({tabId, path, overwrite?})`; paths belong to that session's project
-or worktree, existing files require explicit `overwrite: true`, and saving a
-background drawing does not change the selected tab. Closing a drawing makes
-its tab ID unavailable. A saved `.excalidraw` opened as a regular file remains
-source text; use the Drawing import or `open_drawing` to edit it visually.
+An image already added to a draft or transcript is a separate copy. This
+scratch surface has no file import/export, autosave, Mermaid insertion, image
+embedding or scene-editing MCP tool. The `drawings` integration provides
+`open_drawing({title?})`, `drawing_state({tabId})` and
+`capture_drawing({tabId})`. Opening a saved `.excalidraw` as a regular file
+continues to show its source text.
 
-The shared editor is `@hardcore/ui/drawing`; desktop owns its lifetime, native
-dialogs, assets and prompt port. Fonts are bundled for offline use and the
-editor loads only on opening a Drawing tab. Read [the drawing contract](../../packages/ui/docs/drawing.md)
-for document limits, asset licensing, tests, and the reuse boundary for future
-CAD overlays. This feature does not change the web app or existing CAD drawing
-overlay.
+The shared editor is `@hardcore/ui/drawing`; desktop owns its temporary
+lifetime and prompt port. Fonts are bundled for offline use and the editor
+loads only on opening a Drawing tab. Read [the drawing contract](../../packages/ui/docs/drawing.md)
+for limits, asset licensing and the reuse boundary for future CAD overlays.
+
+### Live files and terminals
+
+A file tab keeps its `file` kind and chooses a renderer: CAD, PDF, Markdown,
+code, image or unsupported. The `documents` integration reads the live text
+buffer, including unsaved typing, and requires its revision before replacing
+or saving it. Tab/project switches retain drafts and inactive read snapshots;
+reactivate a text file before editing or saving. Dirty tabs refuse ordinary
+and agent-driven close; the UI provides explicit discard. These drafts last
+for the app window, not across quitting. PDF tools operate on the same PDF.js
+document as the page on screen. See [workspace integrations](docs/integrations.md)
+for the complete tab/renderer/integration mapping and lifecycle rules.
+
+Terminal tabs are views of main-owned PTYs. Switching tabs does not stop a
+process or lose its scrollback. The `terminals` integration creates, reads,
+writes and stops those same PTYs through scoped tab IDs. Reads return an output
+sequence and input revision; writes require both, preventing a tool from racing
+new output or user typing. Closing a terminal releases its process; stopping
+it leaves the output available until close. A provider's own shell tool has
+separate process IDs and does not automatically create a Hardcore terminal tab.
 
 Directory listings show every regular file and directory, including dotfiles,
 Git-ignored outputs, dependency folders and unsupported formats. Renderer
@@ -1159,95 +1172,74 @@ before the click, and `viewerOrigin` shares the launch already in flight.
 
 ## Skills and tools in a session
 
-Two things reach the agent from the app (plan §8), and `src/main/cad/` owns
-both. Neither is installed: **nothing Hardcore does writes to an agent's own
-configuration** — no plugin, no marketplace, no copy into `~/.claude/skills`.
-Every session is given what it needs when it is created, and a session that
-ends leaves nothing behind.
+The app gives each session focused skills and independent domain MCP servers.
+`src/main/integrations/registry.mjs` is their shared composition point; the
+[workspace integration guide](docs/integrations.md) defines resource scopes,
+lifetimes, prompt handoff and the recipe for adding a domain. Nothing installs
+into an agent's own configuration: no plugin, marketplace or copy into
+`~/.claude/skills`, and no mandatory umbrella `hardcore-app-use` skill.
 
-**The skills** — `resources/skills/`, composed by `scripts/build-skills.mjs`:
-the repository's skills minus `cad-viewer` (the viewer is beside the chat here)
-plus `skills/hardcore-app-use` (which replaces the `cad` skill's `$cad-viewer`
-hand-off), one directory each, copies and never symlinks.
+**Skills.** `scripts/build-skills.mjs` composes repository skills plus the
+registry's app skills into `resources/skills/`. The standalone `cad-viewer`
+skill is replaced by the focused embedded-viewer handoff. Browser, PDF,
+documents, terminals and drawings supply their own instructions; upstream
+skills retain licenses and provenance. The app supplies cadgen/Python on PATH,
+and the embedded CAD skill directs agents to that runtime.
 
-At launch `src/main/cad/skills.ts` materialises them into
-`<userData>/skills/<appVersion>/`, twice, because the two native loaders read
-two layouts:
+At launch `src/main/integrations/skills.ts` materializes real copies into both
+native loader layouts:
 
 ```
-<userData>/skills/<version>/.claude/skills/<skill>/SKILL.md   what Claude Code reads
-<userData>/skills/<version>/.agents/skills/<skill>/SKILL.md   what Codex reads
+<userData>/skills/<version>/.claude/skills/<skill>/SKILL.md
+<userData>/skills/<version>/.agents/skills/<skill>/SKILL.md
 ```
 
-Real copies both times (packaging and some agents drop symlinks — repo
-`AGENTS.md`), rebuilt when the app's version or the composed set changes,
-idempotent otherwise, and every other version's directory is removed. A
-`hardcore-skills.json` written last is the marker of a complete root.
+This is rebuilt when the app version or composed content changes and is
+idempotent otherwise. `hardcore-skills.json` is written last as the completion
+marker. Symlinks are never shipped. Every `session/new` and `session/load`
+receives the root in both `additionalDirectories` and `_meta.additionalRoots`;
+adapters read whichever spelling they understand. Claude Code and Codex use
+their native skill-root mechanisms. Other adapters retain the concise first
+prompt preamble; workspace `list_skills` and `read_skill` read the same root.
+These are discovery options, not a requirement to load every skill on a turn.
 
-That one directory is then handed to **every** session, whatever the agent:
-`session/new` and `session/load` both carry it as `additionalDirectories:
-[root]` (ACP's field, SDK 1.4.0) *and* as `_meta: { additionalRoots: [root] }`
-(the older spelling). Both, always: an adapter reads whichever it knows and
-ignores the other, and which one a given version reads is not something this
-app can detect.
+**MCP servers.** The registry supplies separate `hardcore-workspace`,
+`hardcore-browser`, `hardcore-pdf`, `hardcore-cad`, `hardcore-documents`,
+`hardcore-terminals` and `hardcore-drawings` entries. Each runs the shared
+`resources/hardcore-mcp/server.mjs` executable with its domain selected in the
+environment, using this app's Electron binary as Node. Packaging bundles it
+in `out/hardcore-mcp/`. Each session/domain gets a different token, restricted
+to that integration's registered methods; a domain's tool does not acquire
+another domain's capabilities. The stdio entries omit `type`, because the ACP
+adapters otherwise interpret them as HTTP/SSE.
 
-Two agents pick the skills up from there by themselves — the registry's
-`skillRoots: "native"`:
+The loopback bridge in `src/main/integrations/mcp-bridge.ts` authenticates the
+session, checks method ownership and validates its schema. Native services
+operate in main; UI-bound calls use `integrations.command` / `integrations.reply`
+and `src/renderer/state/integration-commands.ts`. Main resolves the session's
+project/worktree, and the owning service checks tab/resource identity again.
+Background reads do not change focus. A capture tool returns an image; an
+Add to prompt action separately binds a compatible draft and never sends it.
 
-| Agent | What it does with the root |
-| --- | --- |
-| Claude Code | `claude-agent-acp` reads `additionalDirectories ?? _meta.additionalRoots` and passes them to the Agent SDK, which loads `<dir>/.claude/skills/<name>/SKILL.md`. Verified on this machine with `claude -p --add-dir`: the skill appears by name, unprefixed |
-| Codex | `codex-acp` reads the same two fields and registers `<root>/.agents/skills` with the Codex app server (`skills/extraRoots/set`), then refreshes its skill list |
+Provider-owned filesystem/shell tools still access disk and their own process
+IDs. They do not read unsaved editor buffers or control Hardcore's terminals.
+Use the app's document and terminal integrations for those live resources.
+Existing disk watchers reconcile changes made by ordinary repository tools.
 
-Every other agent (`skillRoots: "preamble"` — Gemini CLI's `newSession`
-ignores additional directories, and the rest are assumed to) gets the same
-files by two paths that need nothing of the agent:
+**Runtime.** `CadRuntime.sessionPath` puts the app's pinned CAD runtime ahead
+of the login-shell PATH. In a packaged runtime, `<userData>/bin/cadgen` invokes
+`python -m cadgen.cli`; it does not depend on a build-machine pip shebang.
+Python discovery, daemon startup and CAD viewer backend lifetime stay in
+`src/main/cad/`, separate from generic integration plumbing.
 
-- **A preamble.** The first prompt of a session created here carries one text
-  block in front of the person's words: the root's path, the skills with a
-  clipped line of description each, and to read `cad`'s SKILL.md before CAD
-  work. Under 1.5k characters, sent once — never on a later turn, and never on
-  a resumed session, because the transcript already holds it. It is not in the
-  app's transcript: the person sees what they typed.
-- **The MCP server's own tools.** `list_skills()` and `read_skill(name, path?)`
-  read the same root (the server is given it as `HARDCORE_SKILLS_ROOT`), so an
-  agent that ignores everything else can still ask.
-
-**The runtime on the session's PATH.** The environment every adapter is
-spawned with — and so every command a session runs — has the resolved CAD
-runtime in front of its `PATH` (`CadRuntime.sessionPath`,
-`SessionManager.environment`): `cadgen` and `python` inside a session are the
-app's own, pinned to its version, and `hardcore-app-use` tells the agent never
-to install cadgen. A checkout's `.venv/bin` has the console script pip
-installed; the bundled runtime does not (it is a `pip install --target`, and
-the bundler prunes the scripts pip wrote there because their shebang names the
-build machine), so the app writes `<userData>/bin/cadgen` — one line running
-`python -m cadgen.cli`, the same dispatcher the console script runs — and puts
-that directory first.
-
-**The Hardcore MCP server** — `resources/hardcore-mcp/server.mjs`, a stdio
-server on `@modelcontextprotocol/sdk` that every `session/new` carries
-(`SessionManager.deps.mcpServers`). The agent spawns it — this app's own
-Electron binary as Node (`ELECTRON_RUN_AS_NODE=1`), the source in a checkout,
-the bundle in `out/hardcore-mcp/` when packaged — with a per-session token
-and the session's cwd and skills root in its environment. Its tools:
-`open_file(path)`, `reveal(path)`, `open_url(url)`, `open_drawing({path?, title?})`,
-`save_drawing({tabId, path, overwrite?})`, `list_open_tabs()`,
-`viewer_state()`, `attach_snapshot(path)` (returned as image content, so the
-transcript shows the PNG), and the two that read the skills root without
-touching main — `list_skills()`, `read_skill(name, path?)`. Every other call
-is one `POST /rpc` to `src/main/cad/mcp-bridge.ts`, a
-loopback HTTP listener that refuses anything without a live session's
-token; main resolves the path inside the session's project and relays the
-explorer actions to the renderer as `cad.command`, which
-`src/renderer/state/cad-commands.ts` performs against the stores and answers
-on `cad.reply`. Snapshots are read in main. Neither adapter wants a `type`
-field on a stdio entry: claude-agent-acp reads one as http/sse.
-
-`tests/unit/main/{cad-runtime,viewer,skills,build-skills,mcp-server,mcp-bridge}.test.ts`
-cover each piece with a fake machine, a fake child, a fake CLI, the real
-build script into a temp directory, the SDK's client over an in-memory
-transport, and the bridge over real loopback HTTP.
+The unit suites cover the registry, skill composition/materialization, MCP
+registration, authenticated loopback bridge and domain ownership/conflicts.
+Browser/PDF integration tests exercise the actual page/renderer; live-document
+tests cover retained drafts, revision conflicts and stale capability cleanup.
+`tests/e2e/integrations.spec.ts` runs a hidden Electron app with the opt-in fake
+ACP scenario: it spawns the actual session-supplied stdio servers with the MCP
+SDK, validates all seven registrations and token isolation, and exercises live
+text/PDF/drawing/terminal resources without spending model credits.
 
 ## Layout
 
@@ -1277,15 +1269,18 @@ src/main/                 the Electron main process: everything with a side effe
   ipc/agent-options.ts    agentOptions.*: the cache, the probe and the stored defaults
   ipc/{skills,runtime}.ts   the skills root and CAD runtime branches (P5's bodies, P6's shape)
   ipc/dialogs.ts          the native folder and file choosers Settings' path rows use
-  ipc/{explorer,cad}.ts   P3's handler branches: files, terminals; cad.viewerOrigin + cad.warm + cad.reply (P5)
+  ipc/{explorer,cad}.ts   files, terminals; cad.viewerOrigin + cad.warm
+  ipc/integrations.ts    scoped integration command/reply relay
   ipc/git.ts              P7's: the review's reads in a session's directory, the
                           commit, the pull request, and the worktree list
   explorer/               fs.ts (complete listings, read/write, scoped watchers),
                           terminal.ts (node-pty sessions + scrollback)
   cad/                    runtime.ts (which Python: override, bundled, checkout), viewer.ts (one viewer per project root),
                           daemon.ts (the warm build daemon, started at project open),
-                          skills.ts (the skills root every session is handed), mcp-bridge.ts + actions.ts
-                          (the MCP server's way into the explorer), index.ts (the wiring)
+                          index.ts (CAD runtime wiring)
+  integrations/           registry.mjs + domain/module.mjs (tools and focused skills),
+                          manager.ts, skills.ts, mcp-bridge.ts + actions.ts (generic relay),
+                          domain services/actions and lifecycle policy
   projects/git.ts         status, per-file diff, commit and push; then repository
                           detection, worktrees, the keep-limit sweep and `gh pr create`
   projects/workspace.ts   a git mode as a directory: the three modes, the worktree
@@ -1304,7 +1299,8 @@ src/shared/               types.ts (domain types as zod schemas)
   acp/types.ts, acp/reduce.ts  SessionState and the pure session/update reducer
   ipc/explorer.ts         explorer.* terminal.* and their events (P3)
   ipc/git.ts              git.* — the review's reads plus P7's worktrees
-  ipc/cad.ts              cad.viewerOrigin, cad.warm, and cad.command / cad.reply for the MCP server
+  ipc/cad.ts              cad.viewerOrigin and cad.warm
+  ipc/integrations.ts    integrations.command / integrations.reply for domain MCP tools
 src/renderer/
   app/                    Shell (three panes in a flex row), App, CommandPalette
     PaneSeparator.tsx     one pane divider: drag, arrow keys, and the overshoot collapse
@@ -1338,7 +1334,7 @@ src/renderer/
   components/ui           shadcn/ui, vendored
   components/ai-elements  Vercel AI Elements, vendored (types.ts replaces the `ai` package)
   state/                  one zustand store per domain, plus bridge.ts for main's pushes and
-                          cad-commands.ts for an agent's tool calls against the stores
+                          integration-commands.ts for an agent's tool calls against the stores
     history.ts            back and forward over the top level, recorded from the selection
   styles/globals.css      stock shadcn neutral tokens — the same ones apps/web uses
 tests/unit/               vitest
@@ -1354,7 +1350,8 @@ scripts/make-brand.mjs    npm run brand: the wordmark and the H monogram into re
 scripts/make-icons.mjs    npm run icons: the sidebar star onto its tile -> build/icon.png
 resources/brand/          the committed marks, and the JetBrains Mono face they are set in
 resources/hardcore-mcp/   the MCP server's source (bundled into out/hardcore-mcp by the build)
-skills/hardcore-app-use/      the skill only this app ships; composed into resources/skills
+skills/                  focused domain instructions and licensed upstream skills,
+                          selected by the integration registry for resources/skills
 ```
 
 ## ACP
@@ -1524,8 +1521,8 @@ worktrees.
   `resolveProjectRoot` (`src/main/projects/workspace.ts`): the project
   directory, or a directory under the project's worktree folder, and a
   sentence for anything else. The MCP bridge resolves an agent's paths
-  against the session's root the same way (`src/main/cad/actions.ts`,
-  `sessionRoot`), and the `cad.command` it produces names the root so the
+  against the session's root the same way (`src/main/integrations/actions.ts`,
+  `sessionRoot`), and the `integrations.command` it produces names the root so the
   renderer opens the file where it is. `files.changed` names the root its
   paths are relative to.
 
@@ -1562,6 +1559,13 @@ Adding an IPC channel is the shape of most work here:
 The preload needs no edit: it builds the client from the contract. Components
 read stores, never IPC, so a change pushed from the menu or another window
 lands in the same place a click would.
+
+## Embedded browser
+
+Browser tabs borrow persistent native pages owned by the browser domain. UI and
+agent tools share the same Chromium target, partitioned by project and root.
+The [browser guide](docs/browser.md) documents lifecycle, the pinned MIT Browser
+Use control runtime, supported operations, packaging and validation.
 
 ## Shared package integration
 

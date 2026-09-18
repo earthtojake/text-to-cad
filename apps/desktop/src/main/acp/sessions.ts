@@ -75,7 +75,7 @@ export type SessionManagerDeps = {
   forgetProbe?: (probeId: string) => void;
 
   /**
-   * P5: the skills every session gets (src/main/cad/skills.ts). `root` is
+   * P5: the skills every session gets (src/main/integrations/skills.ts). `root` is
    * named in `session/new` and `session/load` as an additional directory;
    * `preamble` is the text an agent that ignores those gets in front of its
    * first prompt, and is asked for per agent (`skillRoots` in the registry).

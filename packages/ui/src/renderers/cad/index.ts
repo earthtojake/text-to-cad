@@ -9,6 +9,9 @@ import { defineFileRenderer } from '../../file-viewer/registry.js';
 import type { PrepareContext } from '../../file-viewer/types.js';
 import { cadPanels } from '../../file-viewer/navigation/panels.js';
 
+export type { CadLiveBinding, CadLiveController, CadLiveState, CadCameraSnapshot } from './live.js';
+import type { CadLiveBinding } from './live.js';
+
 export interface CadSelectionSlotProps {
   selection: readonly PromptReference[];
   selectionKey: string;
@@ -31,6 +34,7 @@ export interface CadRendererOptions {
   client: CadWorkspaceService | ((context: PrepareContext) => Promise<CadWorkspaceService>);
   slots?: CadRendererSlots;
   commands?: CadCommandSource;
+  live?: CadLiveBinding;
   preferences?: CadPreferenceSource;
 }
 export interface PreparedCadDocument {

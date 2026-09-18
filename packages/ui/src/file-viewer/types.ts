@@ -21,7 +21,7 @@ export interface TextDocument {
   readOnly?: boolean;
 }
 /** A source owns the URL; each successful read supplies a distinct release lease. */
-export interface ManagedFileAsset { url: string; mime?: string; resource?: ResourceRef; byteLength?: number; release: () => void }
+export interface ManagedFileAsset { url: string; bytes?: Uint8Array<ArrayBuffer>; mime?: string; resource?: ResourceRef; byteLength?: number; release: () => void }
 export type FileFailureCode = "denied" | "not-found" | "already-exists" | "unsupported" | "conflict" | "error";
 export type FileChange =
   | { kind: "content" | "metadata"; path: string; revision?: string }

@@ -1,5 +1,8 @@
 import { FILE_PANEL_TREE, PANEL_DEFAULT_WIDTH, clampPanelWidth } from "@hardcore/ui/navigation";
 import { create } from "zustand";
+import { toast } from "sonner";
+import { hasDirtyDocument, releaseDocumentTab, discardDocumentTab } from "./live-documents";
+import { releaseCadTab } from "./live-cad";
 
 import { reconcileFileTree, movedFilePath } from "@hardcore/ui/file-viewer";
 import { deleteDrawingScene } from "@renderer/state/drawings";
@@ -142,7 +145,7 @@ const EMPTY_TREE: TreeState = { open: new Set([""]), listings: {} };
 type TabInit = {
   file: Partial<Pick<FileTab, "path" | "root" | "panel">>;
   review: Partial<Pick<ReviewTab, "scope" | "sessionId">>;
-  browser: Partial<Pick<BrowserTab, "url">>;
+  browser: Partial<Pick<BrowserTab, "url" | "root">>;
   terminal: Partial<Pick<TerminalTab, "cwd" | "readOnly">>;
   drawing: Partial<Pick<DrawingTab, "root" | "title">>;
 };
@@ -223,7 +226,7 @@ type ExplorerState = {
    */
   setRoot: (root: ExplorerRoot) => void;
   /** Dispose scratch drawings when their project is removed. */
-  discardProjectDrawings: (projectId: string) => void;
+  discardProjectResources: (projectId: string) => void;
   open: <K extends ExplorerTabKind>(kind: K, init?: TabInit[K]) => ExplorerTab | null;
   /**
    * Open a file, reusing a tab already showing it. `root` defaults to the
@@ -284,7 +287,7 @@ function blankTab(
     case "review":
       return { ...base, kind: "review", scope: "all" as const, sessionId: null, ...init };
     case "browser":
-      return { ...base, kind: "browser", url: null, ...init } as BrowserTab;
+      return { ...base, kind: "browser", url: null, root: null, ...init } as BrowserTab;
     case "drawing":
       return { ...base, kind: "drawing", root: null, title: "Drawing", ...init } as DrawingTab;
     case "terminal":
@@ -490,21 +493,21 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     set({ tabs: restored.tabs, activeId: restored.activeId, ready: true });
   },
 
-  discardProjectDrawings: (projectId) => {
-    const snapshot = projectDrawings.get(projectId);
+  discardProjectResources: (projectId) => {
     const active = get().projectId === projectId;
-    const drawings = [...(snapshot?.tabs ?? []), ...(active ? get().tabs.filter(tab => tab.kind === "drawing") : [])];
-    for (const tab of drawings) deleteDrawingScene(tab.id);
+    const tabs = new Map([...(retainedStrips.get(projectId)?.tabs ?? []), ...(projectDrawings.get(projectId)?.tabs ?? []), ...(active ? get().tabs : [])].map(tab => [tab.id, tab]));
+    for (const tab of tabs.values()) {
+      if (tab.kind === "drawing") deleteDrawingScene(tab.id);
+      discardDocumentTab(tab.id); releaseCadTab(tab.id);
+    }
     projectDrawings.delete(projectId);
     if (pendingSave?.projectId === projectId) {
       pendingSave = null;
       if (saveTimer) clearTimeout(saveTimer);
       saveTimer = null;
     }
-    if (active) {
-      const tabs = get().tabs.filter(tab => tab.kind !== "drawing").map((tab, order) => ({ ...tab, order }));
-      set({ tabs, activeId: tabs.some(tab => tab.id === get().activeId) ? get().activeId : tabs[0]?.id ?? null });
-    }
+    if (active) set({ tabs: [], activeId: null });
+    retainedStrips.delete(projectId);
   },
 
   setRoot: (root) => {
@@ -532,7 +535,7 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     // Files, drawings and terminals open in the active root unless told otherwise —
     // the worktree of the thread being talked to, or the project.
     const rooted: Record<string, unknown> =
-      (kind === "file" || kind === "drawing")
+      (kind === "file" || kind === "drawing" || kind === "browser")
         ? { root, ...(init as Record<string, unknown> | undefined) }
         : kind === "terminal"
           ? { cwd: root, ...(init as Record<string, unknown> | undefined) }
@@ -589,11 +592,25 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
       return;
     }
     const closing = tabs[index];
+    if (hasDirtyDocument(id)) {
+      toast.error("This file has unsaved changes.", { description: "Save it before closing, or discard your edits.",
+        action: { label: "Discard and close", onClick: () => {
+          // A toast can outlive a project switch. Do not close a different strip.
+          if (get().projectId !== projectId) return;
+          discardDocumentTab(id); get().close(id);
+        } } });
+      return;
+    }
+    releaseDocumentTab(id);
+    releaseCadTab(id);
     if (closing?.kind === "terminal" && closing.ptyId) {
       // The pty belongs to the tab. Closing the tab is closing the shell.
       void window.hardcore.terminal.kill({ id: closing.ptyId }).catch(() => {});
     }
     if (closing?.kind === "drawing") deleteDrawingScene(closing.id);
+    if (closing?.kind === "browser" && projectId) {
+      void window.hardcore.browser.close({ projectId, root: closing.root, tabId: closing.id }).catch(() => {});
+    }
     const remaining = tabs.filter((tab) => tab.id !== id);
     const nextActive =
       activeId === id ? (remaining[Math.min(index, remaining.length - 1)]?.id ?? null) : activeId;
@@ -804,4 +821,19 @@ export function hostOf(url: string): string {
   } catch {
     return url;
   }
+}
+
+
+/** Read other projects without changing the user's current project or tab. */
+const retainedStrips = new Map<string, { tabs: ExplorerTab[]; activeId: string | null }>();
+useExplorer.subscribe(state => {
+  if (state.projectId && state.ready) retainedStrips.set(state.projectId, { tabs: state.tabs, activeId: state.activeId });
+});
+export async function readProjectStrip(projectId: string): Promise<{ tabs: ExplorerTab[]; activeId: string | null }> {
+  const current = useExplorer.getState();
+  if (current.projectId === projectId && current.ready) return { tabs: current.tabs, activeId: current.activeId };
+  const retained = retainedStrips.get(projectId);
+  if (retained) return retained;
+  const tabs = await window.hardcore.explorer.loadTabs({ projectId });
+  return { tabs, activeId: null };
 }

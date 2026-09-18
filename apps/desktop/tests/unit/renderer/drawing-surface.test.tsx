@@ -54,7 +54,7 @@ beforeEach(() => {
   tabId = useExplorer.getState().open("drawing")!.id;
 });
 afterEach(async () => {
-  useExplorer.getState().discardProjectDrawings(project.id);
+  useExplorer.getState().discardProjectResources(project.id);
   await useExplorer.getState().bindProject(null);
   if (originalArrayBuffer) Object.defineProperty(Blob.prototype, "arrayBuffer", originalArrayBuffer);
   else Reflect.deleteProperty(Blob.prototype, "arrayBuffer");
@@ -75,7 +75,7 @@ it("binds the selected chat while encoding and attaches a PNG without navigating
   resolve(png());
   await waitFor(() => expect(useComposer.getState().pendingFiles.source).toHaveLength(1));
   expect(useComposer.getState().pendingFiles.source?.[0]).toMatchObject({ name: "Bracket_sketch.png", type: "image/png" });
-  expect(useComposer.getState().drafts.source).toContain(`temporary drawing tab ${tabId}`);
+  expect(useComposer.getState().drafts.source).toContain("Drawing: Bracket sketch.");
   expect(useComposer.getState().drafts["other-chat"]).toBeUndefined();
   expect(useComposer.getState().queues).toEqual({});
   expect(useComposer.getState().focusRequest).toBeNull();
@@ -99,11 +99,12 @@ it("cancels delivery if its destination project is removed while encoding", asyn
   expect(getDrawingScene(tabId)).toBeNull();
 });
 
-it("an empty drawing cannot be attached or saved", () => {
+it("an empty drawing cannot be attached", () => {
   editor.hasContent = false;
   mount();
   expect(screen.getByRole("button", { name: "Add to prompt" })).toBeDisabled();
-  expect(screen.getByRole("button", { name: "Save drawing copy" })).toBeDisabled();
+  expect(screen.queryByRole("button", { name: "Save drawing copy" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Open drawing file" })).not.toBeInTheDocument();
   expect(editor.controller.exportPng).not.toHaveBeenCalled();
 });
 

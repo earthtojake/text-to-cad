@@ -3,27 +3,53 @@
   width: 100%;
   min-height: 0;
   isolation: isolate;
+  color-scheme: light;
 }
 .hardcore-drawing-editor .excalidraw {
-  --color-primary: #6b6b6b;
-  --color-primary-darker: #4d4d4d;
-  --color-primary-darkest: #333;
-  --color-primary-light: #eee;
+  --ui-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --default-font: var(--ui-font);
+  --color-primary: #525252;
+  --color-primary-darker: #404040;
+  --color-primary-darkest: #262626;
+  --color-primary-light: #f5f5f5;
+  --color-primary-hover: #404040;
+  --color-brand-hover: #404040;
+  --color-brand-active: #525252;
+  --color-selection: #737373;
+  --color-surface-high: #f5f5f5;
+  --color-surface-mid: #fafafa;
+  --color-surface-low: #f5f5f5;
+  --color-surface-lowest: #fff;
   --color-surface-primary-container: #e5e5e5;
-  --color-on-primary-container: #222;
-  --default-font: inherit;
+  --color-on-primary-container: #262626;
+  --color-on-surface: #262626;
+  --color-border-outline: #a3a3a3;
+  --color-border-outline-variant: #e5e5e5;
+  --default-button-size: 1.75rem;
+  --lg-button-size: 1.75rem;
+  --border-radius-md: 0.375rem;
+  --border-radius-lg: 0.375rem;
+  --editor-container-padding: 0.75rem;
+  --shadow-island: 0 1px 3px rgb(0 0 0 / 0.08), 0 0 0 1px #e5e5e5;
+  font-family: var(--ui-font);
+  font-size: var(--text-ui, 0.8125rem);
 }
-.hardcore-drawing-editor .excalidraw.theme--dark {
-  --color-primary: #bbb;
-  --color-primary-darker: #ccc;
-  --color-primary-darkest: #eee;
-  --color-primary-light: #444;
-  --color-surface-primary-container: #444;
-  --color-on-primary-container: #eee;
+.hardcore-drawing-editor .excalidraw button,
+.hardcore-drawing-editor .excalidraw select,
+.hardcore-drawing-editor .excalidraw .dropdown-menu-item,
+.hardcore-drawing-editor .excalidraw .App-menu__left {
+  font-family: var(--ui-font);
+  font-size: var(--text-ui, 0.8125rem);
 }
-/* The SDK has no props to remove library/diagram generation or live embeds.
-   Keep this scratchpad to ink, shapes, text and images (no hosted workflows). */
+.hardcore-drawing-editor .excalidraw .main-menu-trigger { padding: 0.375rem; }
+.hardcore-drawing-editor .excalidraw .App-menu__left h3 {
+  font-size: 0.6875rem;
+  font-weight: 400;
+}
+/* The SDK has no props to remove library/diagram generation or footer help.
+   This scratchpad keeps ink, shapes, text and images with a clear-only menu. */
 .hardcore-drawing-editor .sidebar-trigger__label-element:has(.default-sidebar-trigger),
 .hardcore-drawing-editor .App-toolbar__extra-tools-trigger,
-.hardcore-drawing-editor .default-sidebar { display: none; }
+.hardcore-drawing-editor .default-sidebar,
+.hardcore-drawing-editor .help-icon { display: none; }
 .hardcore-drawing-editor[data-drawing-mode="overlay"] .excalidraw { background: transparent; }

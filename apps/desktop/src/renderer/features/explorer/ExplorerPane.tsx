@@ -24,7 +24,7 @@ import { createDesktopCadConnections } from "./adapters/cadRuntime";
  * cheaper half of a real trade-off — a webview and an xterm each cost a
  * process and a canvas, and eight background tabs of them is a slow window —
  * and the state that would otherwise be lost is kept where it belongs instead:
- * the pty's output in main, the browser's URL on the tab, the file's draft in
+ * the pty and live browser page in main, the browser's URL on the tab, the file's draft in
  * the tab's own component, the tree's geometry in the store.
  */
 export function ExplorerPane() {
@@ -109,7 +109,7 @@ function TabBody({ tab, project, cadConnections }: {
     case "drawing":
       return <DrawingTab project={project} root={tab.root} tabId={tab.id} title={tab.title} />;
     case "browser":
-      return <BrowserTab tabId={tab.id} url={tab.url} />;
+      return <BrowserTab projectId={project.id} root={tab.root} tabId={tab.id} url={tab.url} />;
     case "terminal":
       return (
         <TerminalTab

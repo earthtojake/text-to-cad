@@ -9,6 +9,7 @@ import { useFileDocument } from "./hooks/useFileDocument.js";
 import { useFileNavigation } from "./hooks/useFileNavigation.js";
 import type { FileActivity, FileViewerProps, JsonValue, FileViewerState } from "./types.js";
 import { ViewerElementContext, ViewerHostContext } from '../host/context.js';
+import { useLiveDocument } from '../host/useLiveDocument.js';
 import { useViewerCommands } from '../host/useViewerCommands.js';
 
 class RenderBoundary extends Component<{ children: ReactNode; onError?: (error: Error) => void }, { error: Error | null }> {
@@ -23,8 +24,9 @@ export function FileViewer({ file, host, renderers, state, onStateChange, leadin
   const source = host.files;
   const onOpenFile = host.navigation.openFile;
   const appearance = host.environment;
-  const session = useFileDocument(file, source, renderers);
+  const session = useFileDocument(file, source, renderers, host.documents?.drafts);
   const { loaded, document, key, path, reload } = session;
+  useLiveDocument(host, path, document);
   const selectedPath = navigationPath === undefined ? path : navigationPath;
   const currentKey = useRef(key);
   currentKey.current = key;
