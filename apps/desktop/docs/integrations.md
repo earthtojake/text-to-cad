@@ -10,7 +10,10 @@ The registry is the composition point, not a new user-visible mode or pane.
 [`src/main/integrations/registry.mjs`](../src/main/integrations/registry.mjs)
 imports each domain's `module.mjs`. A module declares its ID, description,
 skill directories, strict Zod tool contracts and optional renderer command
-mapping. Registry validation rejects duplicate IDs and method names. The same
+mapping. An external runtime can declare `runtime` and private `hostTools`
+for authenticated bootstrap; its upstream package owns the agent tool catalog.
+The browser uses this path for Playwright MCP, with no duplicate Zod catalog.
+Registry validation rejects duplicate IDs and method names. The same
 modules drive MCP tool registration and `scripts/build-skills.mjs`; changing
 one domain does not require maintaining a second tool/skill catalog.
 
@@ -18,7 +21,9 @@ Each session receives separate `hardcore-<domain>` stdio MCP server entries.
 They use the same packaged server executable with a different integration ID
 and a distinct per-session, per-integration bearer token. The loopback bridge
 validates the token, method ownership and input schema before dispatch. A PDF
-server token cannot call terminal methods. Closing a session revokes its tokens.
+server token cannot call terminal methods. Browser bootstrap opens a scoped native
+CDP connection; subsequent browser actions run through the upstream MCP and that
+adapter, rather than the HTTP action relay. Closing a session revokes its tokens.
 
 The generic relay, bridge and skill materialization belong to
 `src/main/integrations/`. CAD runtime startup, Python discovery, warm daemons
@@ -38,7 +43,7 @@ UI never imports Electron, IPC, session stores or native filesystem code.
 | File / `image` or unsupported | `workspace` | Open/reveal the file; image renderer or explicit unsupported presentation |
 | Browser | `browser` | Navigate and inspect the actual embedded page, input through its accessibility/CDP nodes, capture it |
 | Terminal | `terminals` | Create/read/write/stop an app-owned PTY using the same terminal identity as the tab |
-| Drawing | `drawings` | Open a temporary sketch, read its identity/element count, capture it for visual context |
+| Drawing | `drawings` | Open/name/rename a sketch, read its identity/element count, capture it for visual context |
 | Review | Workspace navigation | Existing git review workflow; it does not create a separate review MCP integration |
 
 File kind remains `file`. CAD and PDF are renderer choices, not sibling tab
@@ -76,8 +81,9 @@ across application exit and never serializes source bytes into camera settings.
 
 Browser page text, accessibility labels, terminal output and document content
 are untrusted data. They cannot change integration scopes or become tool
-instructions. Browser input uses bounded typed operations rather than exposing
-arbitrary agent-supplied JavaScript evaluation. Terminal writes require the
+instructions. Playwright MCP includes page evaluation and short Playwright scripts
+in its stdio subprocess; native target scope is enforced by the host adapter.
+It is not an OS sandbox for agent code (see [browser](browser.md)). Terminal writes require the
 observed output sequence and input revision; new output or intervening user
 input requires another read.
 

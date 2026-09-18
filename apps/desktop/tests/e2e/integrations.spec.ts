@@ -84,6 +84,17 @@ test('real ACP session starts isolated domain MCPs and operates the live app res
   expect(catalog.catalog.find(entry => entry.name === 'hardcore-documents')?.tools).toContain('edit_document');
   expect(catalog.catalog.find(entry => entry.name === 'hardcore-pdf')?.tools).not.toContain('edit_document');
 
+  expect(catalog.catalog.find(entry => entry.name === 'hardcore-browser')?.tools).toContain('browser_snapshot');
+  expect(catalog.catalog.find(entry => entry.name === 'hardcore-browser')?.tools).not.toContain('browser_connection');
+  const browser = await tool('browser', 'browser_tabs', { action: 'new' });
+  expect(browser.isError, JSON.stringify(browser)).not.toBe(true);
+  await expect(page.getByRole('tab', { name: /about:blank/ }).last()).toBeVisible();
+  const browserClosed = await proof({ operation: 'batch', domain: 'browser', calls: [
+    { name: 'browser_tabs', args: { action: 'list' } }, { name: 'browser_tabs', args: { action: 'close', index: 0 } },
+  ] }) as ToolResult[];
+  expect(browserClosed[1]?.isError, JSON.stringify(browserClosed)).not.toBe(true);
+  await expect(page.getByRole('tab', { name: /about:blank/ })).toHaveCount(0);
+
   const opened = json<{ tabId: string }>(await tool('workspace', 'open_file', { path: 'notes.txt' }));
   await expect(page.getByRole('tab', { name: /notes\.txt/ })).toBeVisible();
   await expect(page.locator('.monaco-editor').first()).toContainText('disk original');
@@ -105,6 +116,9 @@ test('real ACP session starts isolated domain MCPs and operates the live app res
 
   const drawing = json<{ tabId: string }>(await tool('drawings', 'open_drawing', { title: 'MCP scratch' }));
   expect(json(await tool('drawings', 'drawing_state', { tabId: drawing.tabId }))).toMatchObject({ elementCount: 0, ephemeral: true });
+  json(await tool('drawings', 'rename_drawing', { tabId: drawing.tabId, title: 'Assembly sketch' }));
+  await expect(page.getByRole('tab', { name: /Assembly sketch/ })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Drawing name' })).toHaveValue('Assembly sketch');
   live = json(await tool('documents', 'read_document', { tabId: opened.tabId }));
   expect(live).toMatchObject({ active: false, content: 'agent reviewed draft', dirty: true });
   json(await tool('workspace', 'show_tab', { tabId: opened.tabId }));

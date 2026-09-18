@@ -16,44 +16,68 @@ tabs in one root share cookies and storage, while projects and worktrees do not.
 A project switch keeps the background pages alive, even when no browser chrome
 is mounted. This costs one Chromium page per live tab.
 
-## Browser Use runtime
+## Playwright MCP
 
-Control uses `bindDomains(Transport)` from the MIT open-source
-[Browser Use JavaScript harness](https://github.com/browser-use/browser-harness-js/tree/2d9a5ed37ed11f31b2622cd69c4b55f979cb905f),
-pinned at `2d9a5ed37ed11f31b2622cd69c4b55f979cb905f`.
-The unmodified generated bindings are checked into `src/main/browser/vendor`.
-`harness.ts` implements the transport with the owned page's Electron debugger.
-No application-wide remote-debugging endpoint, Chrome profile discovery, Bun
-runtime, cloud API, paid account or first-run install is involved. Electron-vite
-bundles the bindings into main; electron-builder includes their MIT notice in
-`Resources/notices/browser-use-browser-harness-js-LICENSE`.
+The browser registry entry selects the unmodified, pinned
+[`@playwright/mcp`](https://github.com/microsoft/playwright-mcp) runtime (0.0.81).
+Its published tool catalog, locators, actionability waits, snapshots, form input,
+JavaScript/Playwright execution, file upload, screenshots and PDF capture run in
+the agent's stdio subprocess. Core, PDF and coordinate/vision capabilities are
+enabled. `snapshot.mode: none` and `codegen: none` keep action responses compact;
+read snapshots or targeted `browser_find` results explicitly. Action timeout is
+5 seconds, navigation 60 seconds, and post-action settling 500 milliseconds.
 
-The upstream Session class assumes a browser-wide WebSocket and optional Bun
-profile discovery. We use its exported transport boundary instead: the upstream
-typed domain methods execute directly on a page we own, with no ability to
-attach to the app shell or another root. This is a browser control integration;
-it does not embed Browser Use's separate model loop.
+The manual local benchmark compared stock/compact Playwright MCP, Playwright CLI,
+Browser Use's harness MCP/CLI and the previous adapter. Compact MCP passed all
+fixture workflows and actionability probes while producing substantially smaller
+responses than full accessibility dumps. Benchmarks and raw timing reports stay
+under ignored `tmp/`; the durable acceptance tests are described below. These
+measure tool overhead on local pages, not model reasoning or internet latency.
 
-## Operations and observation
+`browser_connection` is a private bridge bootstrap method, not an agent tool.
+After authentication, `browser/connections.ts` resolves the session's real
+workspace and returns a capability URL for `browser/cdp.ts`. That adapter exposes
+only that workspace's native views through a loopback WebSocket with an
+unguessable path and rejects browser-origin handshakes. Production never enables
+Electron's process-wide remote-debugging port. Chromium target IDs remain intact
+because Playwright uses them as main-frame identities; app tab IDs are mapped
+inside the adapter. Each client gets independent native debugger sessions.
 
-`shared/browser.ts` declares `list`, `open`, `state`, `screenshot`, `navigate`,
-`input` and `close`. A service invocation receives a trusted scope separately
-from its validated arguments. `state` supplies visible accessibility nodes with
-backend IDs, roles, names, values and properties, a bounded page text extract,
-and viewport/scroll information. Returned page content is untrusted. A screenshot
-captures the same page as PNG. Input supports node clicks/focus, coordinates,
-text insertion/replacement, common keys and scrolling. Inspect state again after
-navigation; old node IDs are not reusable document references. `open` with an
-existing tab ID reacquires the page; explicit navigation uses `navigate`.
+Electron exposes PDF printing through `WebContents.printToPDF`, so the adapter
+bridges that one operation with bounded in-memory CDP streams.
+The adapter handles browser discovery and tab lifetime; page-domain calls go to
+the owned `WebContents.debugger`. Create/select/close calls use the same renderer
+commands as the tab strip. Other workspace targets, fabricated sessions and new
+browser contexts are refused. Connection close detaches debugger sessions but
+keeps tabs alive. Deleting a session/project or changing its workspace revokes
+the endpoint and cancels pending app commands. A change already applied to a page
+cannot be undone by cancellation.
 
-Navigation permits HTTP(S) and the internal initial `about:blank` page. Guests
-have no Node, preload or app IPC, use sandbox and context isolation, and cannot
-open unmanaged windows: a popup navigates its owning tab. Permission prompts are
-denied until the app supplies a user-facing permission workflow. The browser
-integration does not expose arbitrary JavaScript, raw CDP, filesystem uploads,
-external browser profiles, extensions, PDF printing or credential APIs.
-Accessibility state may omit cross-origin frame content; screenshots and point
-input remain available. Site-specific unsupported controls report CDP errors.
+`build-mcp.mjs` bundles the app bridge entry and copies the pinned upstream MCP,
+Playwright and Playwright Core distributions beside it, including their runtime
+assets and notices. `out/hardcore-mcp/**` ships unpacked; the Electron binary runs
+that entry as Node. Nothing downloads a second browser or installs agent config.
+When upgrading, test the shipped directory outside the checkout: upstream uses
+runtime assets that must not be reduced to a single esbuild bundle.
+
+The native UI's existing typed CDP helpers still use the MIT Browser Use generated
+bindings under `browser/vendor`; those bindings provide protocol types, not an
+agent loop or MCP tool catalog. The previous custom browser MCP action layer has
+been removed. Browser navigation, native context capture and IPC remain app-owned.
+
+Navigation permits HTTP(S) and the initial `about:blank` page. Guests have no
+Node, preload or app IPC and use sandbox/context isolation. Popups navigate their
+owning tab; permission prompts are denied until a native permission workflow is
+provided. Hardcore owns pane size and partitions: browser resizing, installing a
+browser, creating contexts and extensions are unsupported. Playwright's download
+artifact API is not bridged; native downloads keep the host's behavior. These
+constraints are reported rather than implemented as successful no-ops.
+
+The stock MCP exposes JavaScript evaluation and file upload; its subprocess runs
+with the agent's ordinary OS permissions. Target scoping protects app pages and
+workspace partitions, not all filesystem or network effects of agent code.
+Page content remains untrusted. A typed reference is an observation of a page,
+not authorization to act on it.
 
 The native view is positioned inside the explorer content slot. Renderer chrome
 hides it while app dialogs and popover menus are open so native layers cannot
@@ -74,15 +98,15 @@ A workspace mismatch uses the shared Start chat here recovery.
 
 ## Validation
 
-`tests/e2e/browser-service.spec.ts` launches hidden Electron against a local HTTP
-fixture, invokes the real Browser Use bindings on the displayed native target,
-changes a form and clicks its button, captures PNG, hides and re-presents the
-page across root changes, checks stale presentation cleanup, rejects another
-root and non-web URL, checks partition isolation and closes project pages.
-`browser-app.spec.ts` verifies the actual built explorer and browser IPC share
-one native page through tab/project switches, captures page/selection into the
-existing composer draft, and closes the native page with its strip tab.
-`browser-store.test.ts` covers presentation leases, overlay hiding, late mounts
-and close; `browser-prompt.test.tsx` verifies selection and screenshot delivery
-to the original draft after a chat switch without submitting.
-It needs Electron already installed by the workspace; it downloads no browser.
+`tests/e2e/browser-mcp.spec.ts` builds the shipping MCP directory in a temporary
+location, starts it against hidden Electron/local fixtures, and exercises stock
+tools, forms, shadow DOM, screenshots, PDF, app tab lifecycle, reconnect and scope
+revocation. It rejects foreign targets and forbidden schemes. It needs no browser
+download. `integrations.spec.ts` additionally creates/closes a browser tab through
+a real ACP session and the built renderer command relay.
+
+`browser-service.spec.ts` covers native presentation, input, context capture,
+partition isolation and cleanup. `browser-app.spec.ts` checks the actual explorer
+and browser IPC share one page across tab/project switches and add context to the
+existing draft. Unit tests cover bridge authentication/cancellation, connection
+lifetimes, presentation leases and prompt delivery after chat switches.

@@ -71,12 +71,27 @@ test("real canvas ink attaches a PNG without submitting, survives tab switches, 
   drawingId = (await surface.getAttribute("data-drawing-tab"))!;
   await expect(surface.getByRole("button", { name: "Add to prompt", exact: true })).toBeDisabled();
 
+  const name = surface.getByRole("textbox", { name: "Drawing name" });
+  await name.fill("Bracket concept");
+  await name.press("Enter");
+  await expect(page.locator(`[data-tab="${drawingId}"]`)).toContainText("Bracket concept");
+  await expect(surface.getByText("Temporary", { exact: true })).toHaveCount(0);
+
   const editor = surface.locator(".hardcore-drawing-editor");
   const canvas = editor.locator("canvas.excalidraw__canvas.interactive");
   await expect(canvas).toBeVisible();
   const box = (await canvas.boundingBox())!;
   expect(box.width).toBeGreaterThan(350);
   expect(box.height).toBeGreaterThan(250);
+  await expect(editor.locator('label:has(input[data-testid="toolbar-lock"])')).toBeHidden();
+  const pan = editor.locator('label:has(input[data-testid="toolbar-hand"])');
+  await expect(pan).toBeVisible();
+  for (const control of [pan, editor.getByRole('button', { name: 'Undo', exact: true }), editor.getByTestId('main-menu-trigger')]) {
+    const controlBox = (await control.boundingBox())!;
+    expect(controlBox.y - box.y).toBeLessThan(100);
+    expect(controlBox.x).toBeGreaterThanOrEqual(box.x);
+    expect(controlBox.x + controlBox.width).toBeLessThanOrEqual(box.x + box.width);
+  }
   await editor.locator('label:has(input[data-testid="toolbar-rectangle"])').click();
   const x = box.x + box.width * 0.55;
   const y = box.y + box.height * 0.45;
@@ -96,7 +111,7 @@ test("real canvas ink attaches a PNG without submitting, survives tab switches, 
   const draft = "Keep this existing prompt text.";
   await composer.fill(draft);
   await surface.getByRole("button", { name: "Add to prompt", exact: true }).click();
-  const png = page.locator('[data-composer] img[alt="Drawing.png"]').first();
+  const png = page.locator('[data-composer] img[alt="Bracket_concept.png"]').first();
   await expect(png).toBeVisible();
   // The app's CSP correctly excludes blob URLs from fetch. Inspect decoding
   // through the actual image element, which is how the attachment is shown.
@@ -105,7 +120,7 @@ test("real canvas ink attaches a PNG without submitting, survives tab switches, 
     return decoded.complete && decoded.naturalWidth > 100 && decoded.naturalHeight > 100;
   })).toBe(true);
   await expect(composer).toContainText(draft);
-  await expect(composer).toContainText("Drawing: Drawing.");
+  await expect(composer).toContainText("Drawing: Bracket concept.");
   await expect(page.locator("[data-session-row]")).toHaveCount(0);
   await expect(page.locator("[data-turn][data-role=user]")).toHaveCount(0);
   await page.screenshot({ path: test.info().outputPath("drawing-with-prompt-dark.png"), animations: "disabled" });
@@ -149,7 +164,7 @@ test("real canvas ink attaches a PNG without submitting, survives tab switches, 
   });
   await expect(surface.getByRole('button', { name: 'Add to prompt', exact: true })).toBeEnabled();
   await newTab('Browser');
-  await page.locator(`[data-tab="${drawingId}"]`).getByRole('button', { name: 'Drawing', exact: true }).click();
+  await page.locator(`[data-tab="${drawingId}"]`).getByRole('button', { name: 'Bracket concept', exact: true }).click();
   await expect(surface.getByRole('button', { name: 'Add to prompt', exact: true })).toBeEnabled();
   expect(externalRequests).toEqual([]);
   expect(rendererErrors).toEqual([]);
@@ -160,7 +175,7 @@ test("close discards ink and same-profile reload restores only persistent tabs",
   const surface = page.locator('[data-drawing-tab]');
   await expect(surface.locator('.excalidraw')).not.toHaveClass(/theme--dark/);
   await page.screenshot({ path: test.info().outputPath('drawing-light.png'), animations: 'disabled' });
-  await page.getByRole('button', { name: 'Close Drawing', exact: true }).click();
+  await page.getByRole('button', { name: 'Close Bracket concept', exact: true }).click();
   await expect(page.getByRole('tab', { name: /^Drawing/ })).toHaveCount(0);
   await newTab('Drawing');
   await expect(page.locator('[data-drawing-tab]').getByRole('button', { name: 'Add to prompt', exact: true })).toBeDisabled();
@@ -173,6 +188,19 @@ test("close discards ink and same-profile reload restores only persistent tabs",
   await expect(page.getByRole('tab', { name: /^New tab/ })).toBeVisible();
   await newTab('Drawing');
   await expect(page.locator('[data-drawing-tab]').getByRole('button', { name: 'Add to prompt', exact: true })).toBeDisabled();
+  // Exercise Excalidraw's wide layout as well as the default narrow pane.
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setSize(1800, 1000));
+  const separator = (await page.locator('[data-separator="explorer"]').boundingBox())!;
+  await page.mouse.move(separator.x + separator.width / 2, separator.y + separator.height / 2);
+  await page.mouse.down(); await page.mouse.move(500, separator.y + separator.height / 2, { steps: 8 }); await page.mouse.up();
+  const editor = page.locator('.hardcore-drawing-editor');
+  await expect(editor.locator('.excalidraw')).not.toHaveClass(/excalidraw--mobile/);
+  const canvas = (await editor.locator('canvas.excalidraw__canvas.interactive').boundingBox())!;
+  for (const control of [editor.locator('label:has(input[data-testid="toolbar-hand"])'), editor.getByRole('button', { name: 'Undo', exact: true })]) {
+    const bounds = (await control.boundingBox())!;
+    expect(bounds.y - canvas.y).toBeLessThan(100);
+  }
+  await page.screenshot({ path: test.info().outputPath('drawing-wide.png'), animations: 'disabled' });
   expect(fs.readdirSync(project)).toEqual([]);
   expect(externalRequests).toEqual([]);
   expect(rendererErrors).toEqual([]);

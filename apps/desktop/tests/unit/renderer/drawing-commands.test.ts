@@ -59,6 +59,15 @@ it('refuses other projects, other roots and closed drawing tabs before capture',
   await expect(performIntegrationCommand({ ...base, root: '/worktrees/sketch' })).rejects.toThrow('closed');
   expect(capture).not.toHaveBeenCalled();
 });
+it('renames an inactive drawing without switching projects or accepting a different root', async () => {
+  const tab = useExplorer.getState().open('drawing', { root: '/worktrees/sketch', title: 'Plan' })!;
+  await useExplorer.getState().bindProject('other');
+  const command = { requestId: 'r', projectId, tabId: tab.id, root: '/worktrees/sketch', kind: 'drawing-rename' as const, title: '  Revised plan  ' };
+  await expect(performIntegrationCommand({ ...command, root: null })).rejects.toThrow(/closed|workspace/);
+  expect(await performIntegrationCommand(command)).toMatchObject({ title: 'Revised plan' });
+  expect(await performIntegrationCommand({ ...command, kind: 'drawing-state' })).toMatchObject({ title: 'Revised plan', elementCount: 0 });
+  expect(useExplorer.getState().projectId).toBe('other');
+});
 it('propagates encoder failures without changing the current sketch', async () => {
   const tab = useExplorer.getState().open('drawing')!;
   const scene = JSON.stringify({ ...emptyDrawingDocument(), elements: [{ id: 'ink', type: 'rectangle', x: 0, y: 0, width: 20, height: 20 }] });

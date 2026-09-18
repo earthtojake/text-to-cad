@@ -5,9 +5,10 @@
  *
  * The server knows nothing about Electron. It reads four environment
  * variables for the bridge URL, a scoped token, session metadata and integration ID,
- * and forwards every tool call to main as `POST <bridge>/rpc` (see
+ * and forwards app-owned tool calls to main as `POST <bridge>/rpc` (see
  * `src/main/integrations/mcp-bridge.ts`). Main does the work; this file is the
- * agent-facing description of it.
+ * agent-facing description of it. The browser entry instead bootstraps a
+ * scoped native connection and runs the upstream Playwright MCP server.
  *
  * Two tools are answered here instead: `list_skills` and `read_skill` read the
  * skills root the app materialised (`HARDCORE_SKILLS_ROOT`,
@@ -19,7 +20,7 @@
  * an in-memory transport against a fake bridge; the stdio wiring at the
  * bottom runs only when this file is the entry point. In a packaged app the
  * script the agent runs is the esbuild bundle of this file
- * (scripts/build-mcp.mjs), so it needs no `node_modules` beside it; in a
+ * (scripts/build-mcp.mjs), alongside the copied upstream Playwright packages; in a
  * checkout the source itself resolves the SDK from `apps/desktop`.
  */
 import fs from "node:fs";
@@ -164,6 +165,7 @@ const failure = (error) => ({
  */
 export function createServer(bridge, options = {}) {
   const integration = integrationById(options.integration ?? process.env.HARDCORE_INTEGRATION ?? "workspace");
+  if (integration.runtime) throw new Error(`${integration.id} uses its upstream MCP runtime`);
   const skillsRoot = options.skillsRoot ?? process.env[SKILLS_ROOT_ENV] ?? null;
   const server = new McpServer({ name: `hardcore-${integration.id}`, version: options.version ?? "0.0.0" });
   for (const definition of integration.tools) {
@@ -192,6 +194,17 @@ export function createServer(bridge, options = {}) {
 
 export async function main() {
   const version = readVersion();
+  if (integrationById(process.env.HARDCORE_INTEGRATION ?? "workspace").runtime === "playwright") {
+    const connection = await httpBridge()("browser_connection", {});
+    process.chdir(connection.root);
+    const { createConnection } = await import("@playwright/mcp");
+    const server = await createConnection({ browser: { cdpEndpoint: connection.endpoint },
+      capabilities: ["core", "pdf", "vision"],
+      snapshot: { mode: "none" }, codegen: "none", console: { level: "error" },
+      outputDir: connection.outputDir, timeouts: { action: 5000, navigation: 60000, settle: 500 } });
+    await server.connect(new StdioServerTransport());
+    return;
+  }
   const server = createServer(httpBridge(), { version });
   await server.connect(new StdioServerTransport());
 }
@@ -207,7 +220,7 @@ function readVersion() {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch((error) => {
     process.stderr.write(`hardcore-mcp: ${error instanceof Error ? error.message : String(error)}\n`);
     process.exit(1);

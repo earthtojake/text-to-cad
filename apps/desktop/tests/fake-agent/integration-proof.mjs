@@ -24,5 +24,10 @@ export async function integrationProof(servers, request) {
       body: JSON.stringify({ method: 'read_document', params: { tabId: request.tabId } }) });
     return { status: response.status, body: await response.json() };
   }
+  if (request.operation === 'batch') return withServer(servers.find(server => server.name === `hardcore-${request.domain}`), async client => {
+    const results = [];
+    for (const call of request.calls) results.push(await client.callTool({ name: call.name, arguments: call.args ?? {} }));
+    return results;
+  });
   return withServer(servers.find(server => server.name === `hardcore-${request.domain}`), client => client.callTool({ name: request.name, arguments: request.args ?? {} }));
 }

@@ -115,7 +115,7 @@ describe("the Hardcore MCP server", () => {
     const fake = fakeBridge();
     const drawing = await connect(fake.bridge, { integration: "drawings" });
     const workspace = await connect(fake.bridge);
-    expect((await drawing.listTools()).tools.map(tool => tool.name)).toEqual(["open_drawing", "drawing_state", "capture_drawing"]);
+    expect((await drawing.listTools()).tools.map(tool => tool.name)).toEqual(["open_drawing", "drawing_state", "rename_drawing", "capture_drawing"]);
     expect((await workspace.callTool({ name: "open_drawing", arguments: {} })).isError).toBe(true);
     expect((await drawing.callTool({ name: "open_drawing", arguments: { title: "Plan" } })).isError).toBeFalsy();
     expect((await drawing.callTool({ name: "open_drawing", arguments: { path: "saved.excalidraw" } })).isError).toBe(true);
@@ -134,21 +134,19 @@ describe("the Hardcore MCP server", () => {
   it("validates arguments before reaching the bridge", async () => {
     const fake = fakeBridge();
     const client = await connect(fake.bridge);
-    const result = await client.callTool({ name: "open_url", arguments: { url: "not a url" } });
+    const result = await client.callTool({ name: "open_file", arguments: { path: 123 } });
     expect(result.isError).toBe(true);
     expect(fake.calls).toEqual([]);
   });
 
-  it("carries every tool through the same bridge call", async () => {
-    const fake = fakeBridge({ list_open_tabs: { tabs: [] }, viewer_state: { file: null }, reveal: { revealed: "src" }, open_url: { opened: "https://x.y" } });
+  it("carries app-owned tools through the same bridge call", async () => {
+    const fake = fakeBridge({ list_open_tabs: { tabs: [] }, viewer_state: { file: null }, reveal: { revealed: "src" } });
     const client = await connect(fake.bridge);
     await client.callTool({ name: "list_open_tabs", arguments: {} });
     const cad = await connect(fake.bridge, { integration: "cad" });
     await cad.callTool({ name: "viewer_state", arguments: {} });
     await client.callTool({ name: "reveal", arguments: { path: "src" } });
-    const browser = await connect(fake.bridge, { integration: "browser" });
-    await browser.callTool({ name: "open_url", arguments: { url: "https://x.y/" } });
-    expect(fake.calls.map((call) => call.method)).toEqual(["list_open_tabs", "viewer_state", "reveal", "open_url"]);
+    expect(fake.calls.map((call) => call.method)).toEqual(["list_open_tabs", "viewer_state", "reveal"]);
   });
 });
 

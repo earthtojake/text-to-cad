@@ -3,7 +3,7 @@ import { z } from "zod";
 import { invoke } from "./define";
 /** What an agent can ask the explorer to do, through the Hardcore MCP server. */
 export const IntegrationCommandKindSchema = z.enum([
-  "open-file", "reveal", "open-url", "open-drawing", "drawing-state", "drawing-capture",
+  "open-file", "reveal", "open-url", "open-drawing", "drawing-state", "drawing-capture", "drawing-rename",
   "list-tabs", "show-tab", "close-tab", "viewer-state", "select-reference", "capture-view",
   "document-read", "document-edit", "document-save", "pdf-state", "pdf-read", "pdf-page", "pdf-capture",
   "terminal-open", "tab-resource", "cad-clear-selection", "cad-camera", "cad-reset-camera", "cad-render-mode",

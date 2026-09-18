@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { EventEmitter } from "node:events";
 import { type BrowserWindow, WebContentsView } from "electron";
 import { browserMethodSchemas, type BrowserInput, type BrowserMethod, type BrowserTarget } from "../../shared/browser";
 import { browserHarness } from "./harness";
@@ -20,6 +21,7 @@ export function browserURL(value: string) {
 
 /** Owns live pages independently of whichever project or tab is painted. */
 export class BrowserService {
+  readonly events = new EventEmitter();
   private targets = new Map<string, Target>();
   private get(scope: BrowserScope, id: string) {
     const target = this.targets.get(id);
@@ -37,6 +39,7 @@ export class BrowserService {
   list(scope: BrowserScope) {
     return [...this.targets.values()].filter(t => browserScopeKey(t.scope) === browserScopeKey(scope)).map(t => this.info(t));
   }
+  contents(scope: BrowserScope, id: string) { return this.get(scope, id).view.webContents; }
   async open(scope: BrowserScope, params: { tabId?: string; url?: string | null }) {
     const id = params.tabId ?? randomUUID();
     const existing = this.targets.get(id);
@@ -68,7 +71,8 @@ export class BrowserService {
       target.logs.push({ level: level >= 3 ? "error" : level === 2 ? "warn" : "log", message: message.slice(0, 1000) });
       target.logs = target.logs.slice(-100);
     });
-    wc.on("destroyed", () => this.targets.delete(id));
+    wc.on("destroyed", () => { this.targets.delete(id); this.events.emit("closed", { ...scope, tabId: id }); });
+    this.events.emit("opened", { ...scope, tabId: id });
     target.ready = (async () => {
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
