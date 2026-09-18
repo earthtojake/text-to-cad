@@ -85,7 +85,7 @@
  * Nothing interactive may start inside it.
  */
 :root {
-  --titlebar-height: 36px;
+  --titlebar-height: 48px;
   --titlebar-inset: 0px;
 }
 

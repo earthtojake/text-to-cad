@@ -449,8 +449,9 @@ persisted preference; the session's width is a consequence, so there is no
 number for it beyond the floor. Two separators (`[data-separator]`,
 `app/PaneSeparator.tsx`) size the side panes: drag, or focus one and use the
 arrow keys; Enter, Space or a double click closes the pane.
-The strips along the top are 36px (`--titlebar-height`), and whichever pane is leftmost makes room
-for the macOS traffic lights (`--titlebar-inset`, keyed off `data-leftmost` on
+The sidebar, session, explorer tabs and Settings share a 48px top strip
+(`--titlebar-height`), with their controls vertically centred. Whichever pane
+is leftmost makes room for the macOS traffic lights (`--titlebar-inset`, keyed off `data-leftmost` on
 the shell — `sidebar` or `session`, and nothing else). The controls of that
 row never move on screen (Codex's rule): the sidebar's toggle sits right after
 the traffic lights with back and forward beside it — in the sidebar's title
