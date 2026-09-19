@@ -1,0 +1,4 @@
+interface:
+  display_name: "STEP Parts"
+  short_description: "Find and download STEP files from step.parts"
+  default_prompt: "Use $step-parts to find and download a STEP file from step.parts."
