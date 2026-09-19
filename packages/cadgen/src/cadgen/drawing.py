@@ -333,7 +333,7 @@ class Sheet:
             iso_w, iso_h = _view_extent(shape, "iso", 1.0)
             # A hole callout beside the top view needs its knee (a dimension row plus
             # 10) and its text (about 13 characters); keep that much clear of the iso.
-            avail_w = self.width - m - 6 - (left + L + 27.0 + 8.0 + 13 * self.text_height * 0.7)
+            avail_w = self.width - m - 6 - (left + L + 30.0 + 8.0 + 13 * self.text_height * 0.7 + 8.0)
             avail_h = self.height - m - 6 - (bottom + H + gap)
             iso_scale = s * min(1.0, max(0.2, avail_w / iso_w if iso_w else 1.0), max(0.2, avail_h / iso_h if iso_h else 1.0))
             iso_w, iso_h = iso_w * iso_scale, iso_h * iso_scale
