@@ -53,6 +53,26 @@ import {
   normalizeDxfUnits
 } from "../components/workbench/DxfSettingsSection.js";
 import { buildDxfLayersTab } from "../components/workbench/DxfLayersSection.js";
+import {
+  DXF_DEFAULT_DIMENSION_DISPLAY,
+  DXF_DEFAULT_LINE_WEIGHT,
+  buildDxfSheetTab,
+  dxfDimensionDisplayParams,
+  dxfLineWeightScale,
+  normalizeDxfDimensionDisplay,
+  normalizeDxfLineWeight
+} from "../components/workbench/DxfSheetSection.js";
+import { drawingSheetFacts } from "../workbench/drawingSheetFacts.js";
+import {
+  createDrawingEditId,
+  drawingEditParams,
+  drawingEditsPromptText,
+  nearestView,
+  netViewMoves,
+  sheetSnapTargets,
+  smartDimensionFromSnaps,
+  viewAtSheetPoint
+} from "../workbench/drawingEdits.js";
 import StepFileSheet from "../components/workbench/StepFileSheet.js";
 import { FileSheetPortalContext, HostPanelSlotContext } from "../components/workbench/FileSheet.js";
 import { poseValuesForPreset } from "../components/workbench/PoseControlsSection.js";
@@ -291,6 +311,7 @@ import { ViewerElementContext, useViewerHost, usePromptDestination } from "../..
 import { createCadPromptContext, promptDeliveryMessage } from "./promptContext.js";
 import { HostReferenceContext, referenceLabel, referencesFromCopyText, resolveSelectorSelection } from "./hostReference.js";
 import { applySourceMaterialOverlayToMeshData, sourceAppearanceHasMaterials, sourceMaterialGeometry } from "../workbench/sourceMaterialSession.js";
+
 const EMPTY_MATERIAL_OVERRIDES = Object.freeze({});
 function sourceAnimationForEntry(entry) { return (entry?.editingPreview ? entry.previewAnimation : entry?.sourceSidecar?.animation) || null; }
 function sourceAnimationKeyForEntry(entry) { return sourceAnimationForEntry(entry) ? `${fileKey(entry)}:${entry?.animationHash || entry?.documentHash || entry?.hash || "animation"}` : ""; }
@@ -465,6 +486,17 @@ function CadFileViewSurface({
   const [drawingOrientation, setDrawingOrientation] = useState(DXF_DEFAULT_ORIENTATION);
   // Sheet material preset: theme tint + density for the weight fact.
   const [drawingMaterial, setDrawingMaterial] = useState(DXF_DEFAULT_MATERIAL);
+  // A drawing DOCUMENT's stroke scale (Fine/Normal/Bold), applied by the SVG route.
+  const [drawingLineWeight, setDrawingLineWeight] = useState(DXF_DEFAULT_LINE_WEIGHT);
+  // How a document's dimensions read (units, places, text size): re-rendered server-side.
+  const [drawingDimensionDisplay, setDrawingDimensionDisplay] = useState(DXF_DEFAULT_DIMENSION_DISPLAY);
+  // Sheet editing: staged edits (previewed by the server, sent to the agent as script
+  // changes), the tool in hand ("" | "pick" | "move"), the points picked for a new
+  // dimension, and the dimension selected in the list (highlighted in red).
+  const [drawingEdits, setDrawingEdits] = useState([]);
+  const [drawingEditTool, setDrawingEditTool] = useState("");
+  const [drawingPickedPoints, setDrawingPickedPoints] = useState([]);
+  const [drawingSelectedDimension, setDrawingSelectedDimension] = useState("");
   // The package's parsed contours, fetched once per entry and kept by URL. Curved bends
   // re-mesh from these; the URL carries the package version, so a rebuild refetches.
   const drawingGeometryCacheRef = useRef(new Map());
@@ -2115,10 +2147,11 @@ function CadFileViewSurface({
     emitState({ drawing: { thicknessMm: drawingThicknessMm, bends: drawingBends,
       bendStyle: drawingBendStyle, bendRadiusMm: drawingBendRadiusMm, kFactor: drawingKFactor,
       hiddenLayers: drawingHiddenLayers, units: drawingUnits, orientation: drawingOrientation,
-      material: drawingMaterial, viewMode: drawingViewMode } });
+      material: drawingMaterial, viewMode: drawingViewMode, lineWeight: drawingLineWeight,
+      dimensionDisplay: drawingDimensionDisplay } });
   }, [selectedKey, selectedEntryIsDrawing, drawingThicknessMm, drawingBends, drawingBendStyle,
     drawingBendRadiusMm, drawingKFactor, drawingHiddenLayers, drawingUnits, drawingOrientation,
-    drawingMaterial, drawingViewMode, emitState]);
+    drawingMaterial, drawingViewMode, drawingLineWeight, drawingDimensionDisplay, emitState]);
   useLayoutEffect(() => {
     const stored = restoreStateRef.current.drawing;
     drawingSettingsLoadedKeyRef.current = selectedKey;
@@ -2130,6 +2163,8 @@ function CadFileViewSurface({
     setDrawingUnits(normalizeDxfUnits(stored?.units, DXF_DEFAULT_UNITS));
     setDrawingOrientation(normalizeDxfOrientation(stored?.orientation));
     setDrawingMaterial(normalizeDxfMaterial(stored?.material, DXF_DEFAULT_MATERIAL));
+    setDrawingLineWeight(normalizeDxfLineWeight(stored?.lineWeight, DXF_DEFAULT_LINE_WEIGHT));
+    setDrawingDimensionDisplay(normalizeDxfDimensionDisplay(stored?.dimensionDisplay));
     setDrawingViewMode(stored?.viewMode === "2d" ? "2d" : "3d");
     setDrawingBends(Array.from({ length: selectedDrawingBendAxisCount }, (_, index) => ({
       angleDeg: normalizeDxfBendAngleDeg(stored?.bends?.[index]?.angleDeg, DXF_DEFAULT_BEND_ANGLE_DEG),
@@ -2143,6 +2178,51 @@ function CadFileViewSurface({
   const drawingGeometryUrl = selectedEntryIsDrawing
     ? String(entryAssetUrl(selectedEntry, "dxf") || "")
     : "";
+  // A dimensioned DOCUMENT is shown as ezdxf renders it (the same renderer that prints
+  // the PDF): the server answers /__cad/drawing with SVG for the same file ref the asset
+  // URL carries, minus whichever layers are switched off.
+  const drawingSvgUrl = useMemo(() => {
+    if (!drawingGeometryUrl || !selectedEntryIsDrawingDocument) {
+      return "";
+    }
+    let fileRef = "";
+    let origin = "";
+    try {
+      // The asset URL is relative in the web viewer and absolute (the viewer server's
+      // origin) in the desktop; the drawing route lives wherever the asset does.
+      const parsed = new URL(drawingGeometryUrl, "http://cad.local");
+      fileRef = parsed.searchParams.get("file") || "";
+      origin = parsed.origin === "http://cad.local" ? "" : parsed.origin;
+    } catch {
+      fileRef = "";
+    }
+    if (!fileRef) {
+      return "";
+    }
+    const params = new URLSearchParams({ file: fileRef });
+    const hidden = (Array.isArray(drawingHiddenLayers) ? drawingHiddenLayers : []).filter(Boolean);
+    if (hidden.length) {
+      params.set("hide", hidden.join(","));
+    }
+    const lineWeightScale = dxfLineWeightScale(drawingLineWeight);
+    if (lineWeightScale !== 1) {
+      params.set("lw", String(lineWeightScale));
+    }
+    for (const [key, value] of Object.entries(dxfDimensionDisplayParams(drawingDimensionDisplay))) {
+      params.set(key, value);
+    }
+    for (const [key, value] of Object.entries(drawingEditParams(drawingEdits, { highlight: drawingSelectedDimension }))) {
+      params.set(key, value);
+    }
+    return `${origin}/__cad/drawing?${params.toString()}`;
+  }, [drawingGeometryUrl, selectedEntryIsDrawingDocument, drawingHiddenLayers, drawingLineWeight, drawingDimensionDisplay, drawingEdits, drawingSelectedDimension]);
+  // Edits belong to one sheet: switching files drops them and the tool.
+  useEffect(() => {
+    setDrawingEdits([]);
+    setDrawingEditTool("");
+    setDrawingPickedPoints([]);
+    setDrawingSelectedDimension("");
+  }, [selectedKey]);
   useEffect(() => {
     if (!drawingGeometryUrl) {
       setDrawingGeometry(null);
@@ -2185,6 +2265,151 @@ function CadFileViewSurface({
     setDrawingThicknessMm(DXF_DEFAULT_THICKNESS_MM);
     setDrawingUnits(DXF_DEFAULT_UNITS);
     setDrawingMaterial(DXF_DEFAULT_MATERIAL);
+  }, []);
+
+  const drawingViews = useMemo(
+    () => (Array.isArray(drawingGeometry?.views) ? drawingGeometry.views : EMPTY_LIST),
+    [drawingGeometry]
+  );
+  const drawingSheetDimensions = useMemo(
+    () => (Array.isArray(drawingGeometry?.sheetDimensions) ? drawingGeometry.sheetDimensions : EMPTY_LIST),
+    [drawingGeometry]
+  );
+  const handleDrawingEditToolChange = useCallback((tool) => {
+    setDrawingEditTool(tool);
+    setDrawingPickedPoints([]);
+    drawingPickedSnapsRef.current = [];
+  }, []);
+  // Smart dimension: an edge or a hole dimensions itself on one click; a corner waits
+  // for a second pick and the two give a distance. Picks carry the snap they landed on.
+  // Staged moves shift what the tools see (outlines, snap targets) so a moved view is
+  // where it now shows; a pick on it is put back into the file's coordinates before it
+  // is staged, since the server applies the moves itself when it previews.
+  const drawingViewShifts = useMemo(() => netViewMoves(drawingEdits), [drawingEdits]);
+  const shiftForView = useCallback((name) => drawingViewShifts.get(name) || null, [drawingViewShifts]);
+  const drawingShiftedViews = useMemo(() => drawingViews.map((view) => {
+    const shift = drawingViewShifts.get(view.name);
+    return shift ? { ...view, minX: view.minX + shift[0], maxX: view.maxX + shift[0], minY: view.minY + shift[1], maxY: view.maxY + shift[1] } : view;
+  }), [drawingViews, drawingViewShifts]);
+  const drawingSnapTargets = useMemo(() => {
+    const targets = sheetSnapTargets(drawingGeometry?.geometry, drawingSheetDimensions);
+    if (!drawingViewShifts.size) return targets;
+    const move = (point, shift) => (shift ? [point[0] + shift[0], point[1] + shift[1]] : point);
+    return {
+      lines: targets.lines.map((line) => { const shift = drawingViewShifts.get(line.view); return shift ? { ...line, start: move(line.start, shift), end: move(line.end, shift) } : line; }),
+      circles: targets.circles.map((circle) => { const shift = drawingViewShifts.get(circle.view); return shift ? { ...circle, center: move(circle.center, shift) } : circle; }),
+      dimensions: targets.dimensions.map((dimension) => { const shift = drawingViewShifts.get(dimension.view); return shift ? { ...dimension, position: move(dimension.position, shift) } : dimension; })
+    };
+  }, [drawingGeometry, drawingSheetDimensions, drawingViewShifts]);
+  const drawingPickedSnapsRef = useRef([]);
+  const handleDrawingSheetPick = useCallback((picked) => {
+    if (picked.kind === "empty") {
+      const pendingView = drawingPickedSnapsRef.current[0]?.view;
+      const shift = pendingView ? shiftForView(pendingView) : null;
+      const pending = drawingPickedSnapsRef.current;
+      if (!pending.length) return;
+      const view = drawingViews.find((candidate) => candidate.name === pendingView)
+        || viewAtSheetPoint(drawingViews, pending[0].point) || nearestView(drawingViews, pending[0].point);
+      const placement = shift ? [picked.point[0] - shift[0], picked.point[1] - shift[1]] : picked.point;
+      const edit = smartDimensionFromSnaps(view, pending, placement);
+      if (edit) {
+        setDrawingEdits((edits) => [...edits, { id: createDrawingEditId(), ...edit, view: edit.view || view?.name }]);
+      }
+      drawingPickedSnapsRef.current = [];
+      setDrawingPickedPoints([]);
+      return;
+    }
+    // Picking an existing dimension selects it (red on the sheet) for a tolerance or removal.
+    if (picked.kind === "dimension") {
+      setDrawingSelectedDimension((current) => (current === `${picked.view}:${picked.index}` ? "" : `${picked.view}:${picked.index}`));
+      drawingPickedSnapsRef.current = [];
+      setDrawingPickedPoints([]);
+      return;
+    }
+    const shift = shiftForView(picked.view);
+    const back = (point) => (shift ? [point[0] - shift[0], point[1] - shift[1]] : point);
+    const snap = shift ? {
+      ...picked,
+      point: back(picked.point),
+      line: picked.line ? { ...picked.line, start: back(picked.line.start), end: back(picked.line.end) } : picked.line,
+      circle: picked.circle ? { ...picked.circle, center: back(picked.circle.center) } : picked.circle
+    } : picked;
+    // SolidWorks-style: picks accumulate (at most two), and a click on empty sheet
+    // places the dimension they make where the click landed. A lone corner waits.
+    const pending = drawingPickedSnapsRef.current;
+    const snaps = pending.length >= 2 || (pending.length && pending[0].view !== snap.view) ? [snap] : [...pending, snap];
+    drawingPickedSnapsRef.current = snaps;
+    setDrawingPickedPoints(snaps.map((item) => {
+      const itemShift = shiftForView(item.view);
+      return itemShift ? [item.point[0] + itemShift[0], item.point[1] + itemShift[1]] : item.point;
+    }));
+  }, [drawingViews, shiftForView]);
+  const handleDrawingViewMove = useCallback((view, dx, dy) => {
+    setDrawingEdits((edits) => [...edits, { id: createDrawingEditId(), kind: "move", view, dx, dy }]);
+  }, []);
+  const handleDrawingAddTolerance = useCallback((key, spec) => {
+    const [view, index] = String(key).split(":");
+    if (!view || index === undefined) return;
+    setDrawingEdits((edits) => [
+      ...edits.filter((edit) => !(edit.kind === "tol" && edit.view === view && String(edit.index) === index)),
+      { id: createDrawingEditId(), kind: "tol", view, index, spec }
+    ]);
+  }, []);
+  const handleDrawingRemoveDimension = useCallback((key) => {
+    const [view, index] = String(key).split(":");
+    if (!view || index === undefined) return;
+    setDrawingEdits((edits) => [
+      ...edits.filter((edit) => !((edit.kind === "del" || edit.kind === "tol") && edit.view === view && String(edit.index) === index)),
+      { id: createDrawingEditId(), kind: "del", view, index }
+    ]);
+    setDrawingSelectedDimension("");
+  }, []);
+  const handleDrawingDiscardEdit = useCallback((id) => {
+    setDrawingEdits((edits) => edits.filter((edit) => edit.id !== id));
+  }, []);
+  const handleDrawingDiscardEdits = useCallback(() => {
+    setDrawingEdits([]);
+    setDrawingEditTool("");
+    setDrawingPickedPoints([]);
+  }, []);
+  // The request goes through the host's prompt channel (Hardcore adds it to the chat
+  // composer; a host without one copies it), as a text part of a CAD prompt context.
+  const drawingEditsCanSend = typeof host.promptContext?.deliver === "function";
+  const handleDrawingSendEdits = useCallback(() => {
+    const text = drawingEditsPromptText({
+      drawingPath: selectedEntry ? cadFileParamForEntry(selectedEntry) : "",
+      edits: drawingEdits,
+      views: drawingViews,
+      dimensions: drawingSheetDimensions
+    });
+    if (!text) return;
+    const clear = () => {
+      setDrawingEdits([]);
+      setDrawingEditTool("");
+      setDrawingPickedPoints([]);
+    };
+    if (drawingEditsCanSend) {
+      const resource = { ...documentResource, revision: String(selectedEntry?.documentHash || selectedEntry?.hash || documentResource?.revision || "") };
+      let pending;
+      try { pending = host.promptContext.deliver(createCadPromptContext({ resource, text })); }
+      catch (error) { pending = Promise.reject(error); }
+      Promise.resolve(pending)
+        .catch((error) => ({ status: "failed", message: error instanceof Error ? error.message : String(error) }))
+        .then((result) => {
+          setCopyStatus(promptDeliveryMessage(result));
+          if (result.status === "added" || result.status === "copied") clear();
+        });
+      return;
+    }
+    const done = () => setCopyStatus("Drawing edits copied. Paste them to the agent that owns the script.");
+    host.clipboard?.writeText?.(text)?.then?.(done, () => setCopyStatus("Could not copy the drawing edits.")) ?? done();
+  }, [selectedEntry, drawingEdits, drawingViews, drawingSheetDimensions, drawingEditsCanSend, host, documentResource]);
+
+  // The Sheet tab's Reset: the document's own look, every layer shown.
+  const handleDrawingSheetReset = useCallback(() => {
+    setDrawingLineWeight(DXF_DEFAULT_LINE_WEIGHT);
+    setDrawingDimensionDisplay(DXF_DEFAULT_DIMENSION_DISPLAY);
+    setDrawingHiddenLayers([]);
   }, []);
 
   const handleDrawingBendsReset = useCallback(() => {
@@ -2236,6 +2461,12 @@ function CadFileViewSurface({
     () => (Array.isArray(drawingGeometry?.layers) ? drawingGeometry.layers : []),
     [drawingGeometry]
   );
+  // What the sheet says about itself (paper, scale, projection, revision): read from
+  // its frame and title block, so the Sheet tab states only what the drawing states.
+  const drawingSheetFactsValue = useMemo(
+    () => (selectedEntryIsDrawingDocument ? drawingSheetFacts(drawingGeometry) : null),
+    [selectedEntryIsDrawingDocument, drawingGeometry]
+  );
 
 
 
@@ -2260,6 +2491,21 @@ function CadFileViewSurface({
     }
     viewerRef.current?.activateDefaultViewPlane?.();
   }, []);
+
+  // A dimensioned drawing is a sheet: it opens looking straight down at it. The 3D toggle
+  // is still there for anyone who wants the tilt; the default is the drawing's own view.
+  const documentPlanKeyRef = useRef(null);
+  useEffect(() => {
+    if (!selectedEntryIsDrawingDocument) {
+      documentPlanKeyRef.current = null;
+      return;
+    }
+    if (documentPlanKeyRef.current === selectedKey) {
+      return;
+    }
+    documentPlanKeyRef.current = selectedKey;
+    handleDrawingViewModeChange("2d");
+  }, [selectedEntryIsDrawingDocument, selectedKey, handleDrawingViewModeChange]);
 
   const handleViewerZoomPercentChange = useCallback((nextZoomPercent) => {
     viewerRef.current?.applyZoomPercent?.(nextZoomPercent);
@@ -2347,6 +2593,7 @@ function CadFileViewSurface({
     measurementAvailable: effectiveSupportsMeasure,
     hasDxfBendsPanel: selectedFileSheetKind === "dxf" && drawingBends.length > 0,
     hasDxfLayersPanel: selectedFileSheetKind === "dxf" && drawingLayers.length > 1,
+    isDrawingDocument: selectedFileSheetKind === "dxf" && selectedEntryIsDrawingDocument,
     renderMode: renderSession.enabled,
     isSdf: selectedFileSheetKind === "sdf",
     hasRobotComponents: selectedUrdfComponents.length > 0,
@@ -2366,6 +2613,7 @@ function CadFileViewSurface({
     selectedUrdfComponents,
     drawingBends,
     drawingLayers,
+    selectedEntryIsDrawingDocument,
     renderSession.enabled
   ]);
 
@@ -6204,6 +6452,13 @@ function CadFileViewSurface({
             : null}
                 drawingGeometry={selectedEntryIsDrawing ? drawingGeometry : null}
                 drawingIsDocument={selectedEntryIsDrawingDocument}
+                drawingSvgUrl={drawingSvgUrl}
+          sheetEditTool={selectedEntryIsDrawingDocument ? drawingEditTool : ""}
+          sheetEditViews={drawingShiftedViews}
+          sheetEditSnapTargets={drawingSnapTargets}
+          sheetEditPickedPoints={drawingPickedPoints}
+          onSheetEditPick={handleDrawingSheetPick}
+          onSheetEditViewMove={handleDrawingViewMove}
                 drawingThicknessMm={selectedEntryIsDrawing && !renderSession.enabled
             ? drawingThicknessMm
             : DXF_DEFAULT_THICKNESS_MM}
@@ -6544,7 +6799,35 @@ function CadFileViewSurface({
                 viewerServerInfo={viewerServerInfo}
                 suppressDynamicMetadataStatus={selectedArtifactGenerating}
                 renderMode={renderSession.enabled}
-                settingsTabs={renderSession.enabled ? settingsTabs : [
+                settingsTabs={renderSession.enabled ? settingsTabs : selectedEntryIsDrawingDocument ? [
+                  buildDxfSheetTab({
+                    facts: drawingSheetFactsValue,
+                    lineWeight: drawingLineWeight,
+                    onLineWeightChange: setDrawingLineWeight,
+                    dimensionDisplay: drawingDimensionDisplay,
+                    onDimensionDisplayChange: setDrawingDimensionDisplay,
+                    dimensionCount: Number(drawingGeometry?.apparatus?.dimensions) || 0,
+                    views: drawingViews,
+                    sheetDimensions: drawingSheetDimensions,
+                    edits: drawingEdits,
+                    editTool: drawingEditTool,
+                    onEditToolChange: handleDrawingEditToolChange,
+                    pickedPointCount: drawingPickedPoints.length,
+                    selectedDimension: drawingSelectedDimension,
+                    onSelectDimension: setDrawingSelectedDimension,
+                    onAddTolerance: handleDrawingAddTolerance,
+                    onRemoveDimension: handleDrawingRemoveDimension,
+                    onDiscardEdit: handleDrawingDiscardEdit,
+                    onDiscardEdits: handleDrawingDiscardEdits,
+                    onSendEdits: handleDrawingSendEdits,
+                    sendLabel: drawingEditsCanSend ? "Send to chat" : "Copy for the agent",
+                    layers: drawingLayers,
+                    hiddenLayers: drawingHiddenLayers,
+                    onLayerVisibilityChange: handleDrawingLayerVisibilityChange,
+                    onReset: handleDrawingSheetReset
+                  }),
+                  ...settingsTabs
+                ] : [
                   buildDxfMaterialTab({
                     thicknessMm: drawingThicknessMm,
                     onThicknessChange: setDrawingThicknessMm,

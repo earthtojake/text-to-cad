@@ -441,6 +441,8 @@ class CadApp:
                     self._handle_store_asset(request, response, query)
                 elif pathname == "/__cad/asset":
                     self._handle_asset(request, response, query)
+                elif pathname == "/__cad/drawing":
+                    self._handle_drawing_svg(request, response, query)
                 else:
                     # An unrecognised /__cad/* path is a bad API call, not a
                     # page. Falling through to the SPA answered typo'd and
@@ -608,6 +610,61 @@ class CadApp:
             return
         content_type = self.backend.content_type_for_path(candidate) or "application/octet-stream"
         response.stream_file(candidate, stat_result, content_type)
+
+    def _handle_drawing_svg(self, request, response, query):
+        """A dimensioned DXF as SVG, rendered by ezdxf's drawing add-on.
+
+        Same file resolution and guards as ``/__cad/asset``; ``hide`` is a
+        comma-separated list of layer names to leave out, so the viewer's layer
+        switches apply to the printed look as well, and ``lw`` scales every
+        stroke (the Sheet tab's line weight; 1 is the file's own). ``dunits``
+        (drawn|mm|in), ``ddec`` (0-3) and ``dtext`` (scale) re-state how the
+        dimensions read without changing what they measure. Preview edits, never
+        saved: ``move=VIEW:dx,dy;...`` shifts a tagged view, ``dim=x1,y1,x2,y2,off[,h|v]``
+        adds draft dimensions in red (``;``-separated), ``hl=VIEW:INDEX`` paints a
+        dimension red and ``tol=VIEW:INDEX=SPEC;...`` restates them with a tolerance or fit.
+        """
+        candidate = self.backend.asset_path_for_file_ref(query.get("file") or "")
+        if not candidate or not os.path.isfile(candidate) or not str(candidate).lower().endswith(".dxf"):
+            response.send_json(404, {"error": "Not found"})
+            return
+        from .drawing_svg import (
+            DIMENSION_DECIMALS, DIMENSION_UNITS, parse_draft_angles, parse_draft_diameters, parse_draft_dimensions,
+            parse_draft_radii, parse_removals, parse_tolerances, parse_view_moves, render_drawing_svg,
+        )
+
+        hidden = tuple(name for name in str(query.get("hide") or "").split(",") if name)
+        try:
+            lineweight_scale = float(query.get("lw") or 1.0)
+        except (TypeError, ValueError):
+            lineweight_scale = 1.0
+        units = str(query.get("dunits") or "drawn")
+        if units not in DIMENSION_UNITS:
+            units = "drawn"
+        try:
+            decimals = int(query.get("ddec")) if query.get("ddec") not in (None, "") else None
+        except (TypeError, ValueError):
+            decimals = None
+        if decimals is not None and decimals not in DIMENSION_DECIMALS:
+            decimals = None
+        try:
+            text_scale = float(query.get("dtext") or 1.0)
+        except (TypeError, ValueError):
+            text_scale = 1.0
+        moves = parse_view_moves(query.get("move") or "")
+        draft = parse_draft_dimensions(query.get("dim") or "")
+        tolerance = parse_tolerances(query.get("tol") or "")
+        diameters = parse_draft_diameters(query.get("dia") or "")
+        removals = parse_removals(query.get("del") or "")
+        radii = parse_draft_radii(query.get("rad") or "")
+        angles = parse_draft_angles(query.get("ang") or "")
+        svg = render_drawing_svg(
+            candidate, hidden_layers=hidden, lineweight_scale=lineweight_scale,
+            dimension_units=units, dimension_decimals=decimals, dimension_text_scale=text_scale,
+            moves=moves, draft_dimension=draft, highlight=str(query.get("hl") or ""), tolerance=tolerance,
+            draft_diameter=diameters, removals=removals, draft_radius=radii, draft_angle=angles,
+        )
+        response.send_bytes(200, svg.encode("utf-8"), "image/svg+xml; charset=utf-8")
 
     def _handle_tess_get(self, request, response):
         """403 refused name, 404 miss, 200 hit.
