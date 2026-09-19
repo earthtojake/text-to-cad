@@ -70,14 +70,18 @@ are sheet millimetres.
 - `view.overall()`: overall width above and height left of the view.
 - `view.dim(p1, p2, offset=12, text=None, orientation=None, tol=None, fit=None)`:
   linear dimension. `orientation` `"h"`/`"v"` or None (whichever the pair spans
-  more). The sign of `offset` picks the side. `tol=0.1` states ±0.1 as a
+  more). `offset` is the dimension line's distance from the farther of the two
+  points (not from the view's edge), and its sign picks the side; a dimension
+  between interior points needs an offset that clears the geometry. `tol=0.1` states ±0.1 as a
   proper tolerance (stacked, smaller text); `tol=(0.05, 0.02)` states +0.05/-0.02
   deviations; `fit="H7"` appends an ISO fit class. `text` overrides the value;
   `"<>"` inside it inserts the measurement.
-- `view.hole(center, diameter, depth=None, thru=False, cbore=(dia, depth), csk=(dia, angle), thread=None, count=None, angle=45, tol=None, fit=None)`:
+- `view.hole(center, diameter, depth=None, thru=False, cbore=(dia, depth), csk=(dia, angle), thread=None, count=None, angle=45, tol=None, fit=None, label=None)`:
   a hole callout in the standard symbols, e.g. `4× ⌀6.6 ↧12`, `⌀6 THRU`,
   `⌴ ⌀11 ↧6.5` (counterbore), `⌵ ⌀12 × 90°` (countersink), or `M6x1 - 6H THRU`
-  when `thread` is given. Prefer it to `diameter()` for any hole a shop drills.
+  when `thread` is given; `label="WHEEL"` is appended; `angle` is where the
+  leader leaves the circle, in degrees from horizontal. Prefer it to
+  `diameter()` for any hole a shop drills.
 - `view.diameter(center, radius, angle=45, text=None)` and
   `view.radius(...)`: on a circular feature at `center`, plain value only.
 - `view.note(text, at, offset=(10, 10))`: a leader from a model point to text.

@@ -221,6 +221,36 @@ class DrawingSheetTests(unittest.TestCase):
         self.assertEqual(hole_callout_text({"diameter": 6.6, "depth": 12, "thru": False, "cbore": (11, 6.5), "csk": None,
                                             "thread": "M6x1 - 6H", "count": None}), "M6x1 - 6H \u21a712   \u2334 %%c11 \u21a76.5")
 
+    def test_every_side_view_maps_up_to_up(self) -> None:
+        """A model point higher in Z lands higher on the sheet in every view that
+        looks along a horizontal direction; the right and left views once mirrored."""
+        import ezdxf
+        from cadgen.drawing import Sheet, _render_sheet
+
+        part = _part()
+        sheet = Sheet("A3")
+        views = {name: sheet.view(part, name, at=(60 + 90 * i, 150)) for i, name in enumerate(["front", "back", "right", "left"])}
+        for view in views.values():
+            view.dim((0, 0, 0), (0, 0, 10), offset=12)
+        doc = _render_sheet(sheet, index=1, count=1, label="sides")
+        for d in doc.modelspace().query("DIMENSION"):
+            tags = [str(t.value) for t in d.get_xdata("CADGEN")]
+            name = next(v[5:] for v in tags if v.startswith("view="))
+            self.assertGreater(d.dxf.defpoint3.y, d.dxf.defpoint2.y, f"{name}: z=10 should sit above z=0")
+            self.assertGreater(d.dxf.defpoint3.y, views[name].at[1], f"{name}: the top of the part is above the view centre")
+
+    def test_view_label_sits_below_bottom_dimensions(self) -> None:
+        from cadgen.drawing import Sheet, _render_sheet
+
+        part = _part()
+        sheet = Sheet("A4")
+        front = sheet.view(part, "front", at=(100, 100))
+        front.dim((-20, -15, 0), (20, -15, 0), offset=-12)
+        doc = _render_sheet(sheet, index=1, count=1, label="label")
+        label = next(e for e in doc.modelspace().query("TEXT[layer=='NOTES']") if e.dxf.text == "FRONT")
+        dim = doc.modelspace().query("DIMENSION")[0]
+        self.assertLess(label.dxf.insert.y, dim.dxf.defpoint.y - 3, "the label hangs under the dimension line")
+
     def test_unknown_view_and_sheet_are_refused(self) -> None:
         from cadgen.drawing import Sheet
 
