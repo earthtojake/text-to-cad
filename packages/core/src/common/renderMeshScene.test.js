@@ -232,22 +232,22 @@ test("snapshot and shared CAD scene use the same appearance ink", () => {
   }
 });
 
-test("snapshot scene policy separates normal CAD, Render quality, and technical quality", () => {
+test("snapshot scene policy composes display Render quality with technical quality", () => {
   const normal = renderJobContext(twoPartMeshData(), {});
   assert.equal(normal.sceneSettings.render.enabled, false);
   assert.equal(normal.quality.id, "interactive");
   assert.equal(normal.sharedRenderOptions.renderScale, 1);
   assert.equal(normal.displaySettings.guides.grid.enabled, false, "snapshot adapter disables normal guides");
 
-  const rendered = renderJobContext(twoPartMeshData(), { render: {} });
+  const rendered = renderJobContext(twoPartMeshData(), { display: { mode: "render" } });
   assert.equal(rendered.sceneSettings.render.enabled, true);
   assert.equal(rendered.quality.id, "high");
-  assert.equal(rendered.projection, "perspective");
-  assert.equal(rendered.displayMode, "shaded");
+  assert.equal(rendered.projection, "orthographic");
+  assert.equal(rendered.displayMode, "render");
   assert.equal(rendered.sharedRenderOptions.renderScale, 2);
 
   const explicitScale = renderJobContext(twoPartMeshData(), {
-    render: { quality: "preview" },
+    display: { mode: "render", render: { quality: "preview" } },
     output: { renderScale: 3 }
   });
   assert.equal(explicitScale.quality.id, "standard");
@@ -264,20 +264,18 @@ test("per-output views inherit the photographic lens without inheriting a confli
   });
 });
 
-test("photographic Render skips CAD runtimes while retaining animation", () => {
+test("render display retains CAD runtimes and animation", () => {
   const stepAnimation = resolveAnimationFrame(SLIDE_CLIPS, { clip: "slide", time: 1.5 });
   const job = {
     kind: "step",
-    render: {},
+    display: { mode: "render" },
     selectorRuntime: {},
     displayEdgeRuntime: {},
     stepAnimation
   };
   const context = renderJobContext(twoPartMeshData(), job);
-  const cleanContext = renderJobContext(twoPartMeshData(), { kind: "step", render: {} });
-  assert.deepEqual(context.sceneSettings, cleanContext.sceneSettings);
-  assert.equal(context.selectorRuntime, null);
-  assert.equal(context.displayEdgeRuntime, null);
+  assert.equal(context.selectorRuntime, job.selectorRuntime);
+  assert.equal(context.displayEdgeRuntime, job.displayEdgeRuntime);
   assert.equal(context.edgesVisible, false);
   const options = modelOptionsForRenderJob(context, job);
   assert.equal(options.callbacks.animation, stepAnimation);
@@ -293,7 +291,7 @@ test("photographic Render skips CAD runtimes while retaining animation", () => {
 
 test("photographic Render rejects CAD-only capture modes", () => {
   for (const mode of ["list", "section"]) {
-    assert.throws(() => renderJobContext(twoPartMeshData(), { mode, render: {} }), /Render supports only view mode/);
+    assert.throws(() => renderJobContext(twoPartMeshData(), { mode, display: { mode: "render" } }), /Render display supports only view mode/);
   }
 });
 
@@ -401,7 +399,7 @@ test("the still frame rides the effects-pass channel the viewer and docs hero us
     null
   );
   assert.equal(options.receiveShadows, false, "normal CAD snapshots keep the inspection shadow policy");
-  const renderJob = { render: {}, outputs: [{ path: "render.png" }] };
+  const renderJob = { display: { mode: "render" }, outputs: [{ path: "render.png" }] };
   assert.equal(
     modelOptionsForRenderJob(renderJobContext(twoPartMeshData(), renderJob), renderJob).receiveShadows,
     true,
@@ -464,7 +462,7 @@ test("photographic Render applies a non-rest kinematics transform", () => {
   const job = {
     mode: "view",
     kind: "step",
-    render: {},
+    display: { mode: "render" },
     outputs: [{ path: "render-pose.png" }],
     stepParameters
   };
@@ -478,11 +476,24 @@ test("photographic Render applies a non-rest kinematics transform", () => {
   }
 });
 
-test("photographic scene requests reject explicitly supplied CAD controls", () => {
-  for (const key of ["camera", "display", "selection", "jointValues", "quality"]) {
-    assert.throws(() => renderJobContext(twoPartMeshData(), { render: {}, [key]: null }),
-      new RegExp(`render cannot be combined.*${key}`));
-  }
+test("render display accepts common camera, selection, clipping, and quality controls", () => {
+  const context = renderJobContext(twoPartMeshData(), {
+    camera: { projection: "orthographic", preset: "front" },
+    display: {
+      mode: "render",
+      clip: { enabled: true, axis: "x", offsets: { x: 0.5 } },
+      exploded: { enabled: true, amount: 0.5 },
+      partColor: { mode: "single", color: "#123456" }
+    },
+    selection: { hiddenPartIds: ["right"], selectedPartIds: ["left"] },
+    quality: { tessellation: { chordTolerance: 0.001 } }
+  });
+  assert.equal(context.camera.projection, "orthographic");
+  assert.equal(context.sharedRenderOptions.clip.enabled, true);
+  const options = modelOptionsForRenderJob(context, { selection: { hiddenPartIds: ["right"] } });
+  assert.deepEqual(options.selection.hiddenPartIds, ["right"]);
+  assert.equal(options.materialSettings.overrideSourceColors, true);
+  assert.equal(options.materialSettings.defaultColor, "#123456");
 });
 
 // A stub renderer: captureModel does everything except produce pixels, and the

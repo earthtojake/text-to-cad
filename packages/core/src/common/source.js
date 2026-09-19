@@ -233,12 +233,13 @@ export function normalizeRenderTessellation(value) {
 
 export function tessellationForSnapshotQuality(input = {}) {
   validateSnapshotRenderJob(input);
-  const explicit = input.render != null ? null : input.quality?.tessellation;
+  const explicit = input.quality?.tessellation;
   if (explicit != null) {
     return normalizeRenderTessellation(explicit);
   }
-  const quality = input.render != null
-    ? resolveRenderQuality(input.render.quality)
+  const renderDisplay = String(input.display?.mode || "").trim().toLowerCase() === "render";
+  const quality = renderDisplay
+    ? resolveRenderQuality(input.display?.render?.quality)
     : resolveSceneQuality(SCENE_QUALITY.INTERACTIVE);
   // Final uses the existing finest bounded rung. Preview and CAD inspection
   // retain the canonical L1 cache request.
@@ -508,7 +509,6 @@ export async function loadSource(input, options = {}) {
   options = { ...options, resources };
   const inputObject = isObject(input) ? input : {};
   validateSnapshotRenderJob(inputObject);
-  const photographicRender = inputObject.render != null;
   const resolved = isObject(inputObject.resolved) ? inputObject.resolved : {};
   const explicitMeshData = inputObject.meshData || options.meshData || (
     inputObject.vertices && inputObject.indices ? inputObject : null
@@ -517,7 +517,7 @@ export async function loadSource(input, options = {}) {
     typeof input === "string" ? sourceKindFromUrl(input) : ""
   );
   const kind = normalizeKind(rawKind);
-  const rawTessellation = photographicRender ? null : inputObject.quality?.tessellation;
+  const rawTessellation = inputObject.quality?.tessellation;
   const tessellation = tessellationForSnapshotQuality(inputObject);
   assertStepOnlyOption(kind, rawTessellation, "quality.tessellation");
   const kinematics = inputObject.kinematics ?? options.kinematics;
@@ -551,12 +551,12 @@ export async function loadSource(input, options = {}) {
     const diagnostics = options.stageTimings ? {} : null;
     meshData = await loadPackageMeshData(packageInfo, tessellation, sourceSidecar?.appearance, diagnostics, options.tessellationCache, options);
     if (diagnostics) options.stageTimings.sourceLoad = diagnostics;
-    const packageSelectorRuntime = photographicRender ? null : inputObject.selectorRuntime || options.selectorRuntime || null;
+    const packageSelectorRuntime = inputObject.selectorRuntime || options.selectorRuntime || null;
     return {
       kind: "step",
       meshData,
       selectorRuntime: packageSelectorRuntime,
-      displayEdgeRuntime: photographicRender ? null : inputObject.displayEdgeRuntime || options.displayEdgeRuntime || null,
+      displayEdgeRuntime: inputObject.displayEdgeRuntime || options.displayEdgeRuntime || null,
       // Parameter sidecars resolve features against composed occurrence ids, so
       // they stay fully functional for package sources even without a selector
       // runtime (feature refs prefix-match meshData part occurrence ids).
@@ -626,11 +626,16 @@ export async function loadSource(input, options = {}) {
     // kinds have none, and loading them anyway re-downloads the mesh binary just to
     // fail the GLB container parse — gate by kind so "no selectors for meshes" is
     // intent, not a swallowed error (matches the CLI's mesh-input validation).
-    const stepSidecarsEnabled = sourceIsStep(kind) && !photographicRender;
-    const selectorRuntime = photographicRender ? null : inputObject.selectorRuntime || options.selectorRuntime || (
+    // A still whose display mode is Render does not draw CAD edges and has no
+    // pointer interaction, so it must not pull selector topology solely because
+    // its source is STEP. Explicit runtimes remain an opt-in demand (the shared
+    // interactive loader can carry them while switching display modes).
+    const renderOnlyLoad = String(inputObject.display?.mode || "").trim().toLowerCase() === "render";
+    const stepSidecarsEnabled = sourceIsStep(kind) && !renderOnlyLoad;
+    const selectorRuntime = inputObject.selectorRuntime || options.selectorRuntime || (
       stepSidecarsEnabled ? await loadSelectorRuntime(glbUrl || url, { cadPath, resources, signal: options.signal }) : null
     );
-    const displayEdgeRuntime = photographicRender ? null : inputObject.displayEdgeRuntime || options.displayEdgeRuntime || (
+    const displayEdgeRuntime = inputObject.displayEdgeRuntime || options.displayEdgeRuntime || (
       stepSidecarsEnabled ? await loadDisplayEdgeRuntime(glbUrl || url, options) : null
     );
     const stepParameterSource = await loadStepParameters({

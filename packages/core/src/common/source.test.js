@@ -123,15 +123,18 @@ test("snapshot tessellation is explicit, finite and restricted to exact surfaces
 
 test("snapshot quality selects bounded shared tessellation policy", () => {
   assert.deepEqual(tessellationForSnapshotQuality({}), {});
-  assert.deepEqual(tessellationForSnapshotQuality({ render: { quality: "preview" } }), {});
+  assert.deepEqual(tessellationForSnapshotQuality({ display: { mode: "render", render: { quality: "preview" } } }), {});
   assert.deepEqual(
-    tessellationForSnapshotQuality({ render: { quality: "final" } }),
+    tessellationForSnapshotQuality({ display: { mode: "render", render: { quality: "final" } } }),
     { chordTolerance: 0.00015, angleTolerance: 0.35 }
   );
+  assert.deepEqual(tessellationForSnapshotQuality({
+    display: { mode: "render", render: { quality: "final" } },
+    quality: { tessellation: { chordTolerance: 0.001 } }
+  }), { chordTolerance: 0.001 });
   assert.throws(() => tessellationForSnapshotQuality({
-    render: { quality: "final" }, quality: { tessellation: { chordTolerance: 0.001 } }
-  }), /render cannot be combined.*quality/);
-  assert.throws(() => tessellationForSnapshotQuality({ render: { quality: "ultra" } }), /quality/i);
+    display: { mode: "render", render: { quality: "ultra" } }
+  }), /quality/i);
 });
 
 test("macro tessellation changes the rendered surface and uses its own cache entry", async (t) => {
@@ -564,14 +567,11 @@ test("loadSource accepts sidecar kinematics for STEP sources", async () => {
   }
 });
 
-test("photographic source loading keeps kinematics without requesting CAD selectors", async (t) => {
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => { throw new Error("Render must not fetch selector topology"); };
-  t.after(() => { globalThis.fetch = originalFetch; });
+test("render display source loading keeps kinematics and supplied CAD runtimes", async () => {
   const source = await loadSource({
     kind: "step",
     meshData: meshData(),
-    render: {},
+    display: { mode: "render" },
     cadPath: "hinge.step",
     glbUrl: "/unused-topology.glb",
     sourceSidecar: HINGE_SIDECAR,
@@ -581,9 +581,27 @@ test("photographic source loading keeps kinematics without requesting CAD select
     displayEdgeRuntime: { stale: true }
   });
   assert.equal(source.kind, "step");
+  assert.deepEqual(source.selectorRuntime, { stale: true });
+  assert.deepEqual(source.displayEdgeRuntime, { stale: true });
+  assert.deepEqual(source.stepParameterSource.renderParameters.values, { swing: 45 });
+});
+
+test("render-only source loading leaves STEP topology lazy", async (t) => {
+  const originalFetch = globalThis.fetch;
+  let fetches = 0;
+  globalThis.fetch = async () => { fetches += 1; throw new Error("unexpected topology fetch"); };
+  t.after(() => { globalThis.fetch = originalFetch; });
+
+  const source = await loadSource({
+    kind: "step",
+    meshData: meshData(),
+    display: { mode: "render" },
+    glbUrl: "/unused-topology.glb"
+  });
+
   assert.equal(source.selectorRuntime, null);
   assert.equal(source.displayEdgeRuntime, null);
-  assert.deepEqual(source.stepParameterSource.renderParameters.values, { swing: 45 });
+  assert.equal(fetches, 0);
 });
 
 function binaryStlTriangle() {
@@ -660,19 +678,13 @@ test("loadSource routes 3MF sources through the non-step return path", async () 
   assert.equal(source.displayEdgeRuntime, null);
 });
 
-test("photographic requests reject contradictory CAD fields before loading a source", async (t) => {
+test("retired render snapshot field is rejected before loading a source", async (t) => {
   const originalFetch = globalThis.fetch;
   let fetches = 0;
   globalThis.fetch = async () => { fetches += 1; throw new Error("unexpected fetch"); };
   t.after(() => { globalThis.fetch = originalFetch; });
-  for (const key of ["camera", "display", "selection", "jointValues", "quality"]) {
-    for (const value of [null, {}, ""]) {
-      await assert.rejects(() => loadSource({ kind: "step", url: "/never.step", render: {}, [key]: value }),
-        new RegExp(`render cannot be combined.*${key}`));
-    }
-  }
   for (const render of [null, false, "dark", { unknown: true }]) {
-    await assert.rejects(() => loadSource({ kind: "step", url: "/never.step", render }), /render/);
+    await assert.rejects(() => loadSource({ kind: "step", url: "/never.step", render }), /Unsupported snapshot field: render/);
   }
   assert.equal(fetches, 0);
 });

@@ -11,7 +11,7 @@ import { Slider } from "@hardcore/ui/primitives/slider";
 import {
   NO_PRESET_VALUE,
   KinematicsPoseRow,
-  KinematicsTransitionSubsection,
+  KinematicsTransitionRows,
   KinematicsValueActions
 } from "./KinematicsControls.js";
 import {
@@ -29,11 +29,7 @@ import {
   parseFileSheetNumberInput
 } from "./FileSheet.js";
 
-// The POSE tab: one control per kinematic DOF, plus the model's named presets.
-//
-// Half of the pose/animation split — this section knows nothing about clips or
-// playback. Choreography is AnimationControlsSection, driven by its own state;
-// the two compose in the viewport and nowhere else.
+// Position controls remain independent of animation playback inside Motion.
 
 const compactButtonClasses = FILE_SHEET_COMPACT_BUTTON_CLASSES;
 
@@ -132,7 +128,7 @@ export default function PoseControlsSection({
   }
 
   return (
-    <div className="py-2">
+    <>
       {status === "loading" ? (
         <FileSheetStatusText className="py-2">{loadingLabel}</FileSheetStatusText>
       ) : null}
@@ -267,6 +263,7 @@ export default function PoseControlsSection({
               </FileSheetSliderField>
             );
           })}
+          {poseNames.length ? <KinematicsTransitionRows transition={transition} /> : null}
           <KinematicsValueActions
             onReset={runtime?.onResetParameters ? () => runtime.onResetParameters() : null}
             onCopy={runtime?.onCopyParams ? () => runtime.onCopyParams() : null}
@@ -275,11 +272,7 @@ export default function PoseControlsSection({
           />
         </FileSheetSubsection>
       ) : null}
-
-      {definition && poseNames.length ? (
-        <KinematicsTransitionSubsection transition={transition} />
-      ) : null}
-    </div>
+    </>
   );
 }
 
@@ -293,18 +286,4 @@ export function poseControlsHaveContent(runtime, { hideWhenEmpty = false } = {})
     return false;
   }
   return Boolean(definition || status === "loading" || error);
-}
-
-// Build the kinematics tab descriptor, or null when there is nothing to show.
-// The tab is named for the system it drives; "pose" stays the word for the
-// state that system holds, and for the section id persisted in tab layouts.
-export function buildPoseControlsTab(props = {}) {
-  if (!poseControlsHaveContent(props.runtime, { hideWhenEmpty: props.hideWhenEmpty })) {
-    return null;
-  }
-  return {
-    id: props.value || "pose",
-    title: props.title || "Kinematics",
-    content: <PoseControlsSection {...props} />
-  };
 }

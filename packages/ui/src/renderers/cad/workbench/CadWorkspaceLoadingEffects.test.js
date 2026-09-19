@@ -66,7 +66,7 @@ function workspaceLoadingEffects() {
   return effects;
 }
 
-test("persisted Render loads model documents and cancels only inspection assets", () => {
+test("persisted Render loads model documents and shared interaction assets", () => {
   const effects = workspaceLoadingEffects();
   const byLoader = new Map(effects.map((effect) => [effect.loaderName, effect]));
   assert.equal(effects.length, 4, "expected one effect for each document or inspection loader");
@@ -128,7 +128,11 @@ test("persisted Render loads model documents and cancels only inspection assets"
   const referenceState = { cached: "topology" };
   const referenceEvents = [];
   byLoader.get("loadReferencesForEntry").run({
-    renderSession: { enabled: true },
+    selectedEntry,
+    selectedEntryHasReferences: true,
+    referenceLoadingEnabled: true,
+    selectedReferencesMatch: false,
+    requestedStepTreeTopologyNodeIds: ["part-1"],
     referenceState,
     cancelReferenceLoad: () => referenceEvents.push("cancel"),
     loadReferencesForEntry: () => {
@@ -139,13 +143,15 @@ test("persisted Render loads model documents and cancels only inspection assets"
     setReferenceStatus: () => referenceEvents.push("status"),
     setReferenceError: () => referenceEvents.push("error")
   });
-  assert.deepEqual(referenceEvents, ["cancel"]);
+  assert.deepEqual(referenceEvents, ["load"]);
   assert.deepEqual(referenceState, { cached: "topology" });
 
   const displayEdgeState = { cached: "edges" };
   const displayEdgeEvents = [];
   byLoader.get("loadDisplayEdgesForEntry").run({
-    renderSession: { enabled: true },
+    selectedEntry,
+    selectedStepDisplayEdgesRequested: true,
+    selectedDisplayEdgesMatch: false,
     displayEdgeState,
     cancelDisplayEdgeLoad: () => displayEdgeEvents.push("cancel"),
     loadDisplayEdgesForEntry: () => {
@@ -156,6 +162,6 @@ test("persisted Render loads model documents and cancels only inspection assets"
     setDisplayEdgeStatus: () => displayEdgeEvents.push("status"),
     setDisplayEdgeError: () => displayEdgeEvents.push("error")
   });
-  assert.deepEqual(displayEdgeEvents, ["cancel"]);
+  assert.deepEqual(displayEdgeEvents, ["load"]);
   assert.deepEqual(displayEdgeState, { cached: "edges" });
 });

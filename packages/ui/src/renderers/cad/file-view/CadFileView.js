@@ -22,7 +22,6 @@ import { useViewportLod } from "../render/useViewportLod.js";
 import { lodSceneMayMove } from "../render/lodCameraSample.js";
 import { registerLodDisplaySource } from "../render/lodSceneAdoption.js";
 import { buildDisplaySettingsTab } from "../components/workbench/DisplaySettingsTab.js";
-import { buildRenderSettingsTab } from "../components/workbench/RenderSettingsTab.js";
 import { prefetchRenderStudio } from "../render/renderStudioChunk.js";
 import MeshFileSheet from "../components/workbench/MeshFileSheet.js";
 import { DXF_PREVIEW_REFERENCE_THICKNESS_MM } from "@hardcore/core/lib/dxf/previewGlb.js";
@@ -76,6 +75,7 @@ import { useCadWorkspaceSelection } from "../components/workbench/hooks/useCadWo
 import { useCadWorkspaceSelectors } from "../components/workbench/hooks/useCadWorkspaceSelectors.js";
 import { useCadWorkspaceShortcuts } from "../components/workbench/hooks/useCadWorkspaceShortcuts.js";
 import {
+  CAD_DISPLAY_MODE,
   displayModeForcesEdges,
   displayModeIsWireframe,
   normalizeDisplaySettings
@@ -83,7 +83,8 @@ import {
 import { RENDER_QUALITY, resolveSceneSettings } from "@hardcore/core/common/sceneSettings.js";
 import {
   annotatePerspectiveSnapshot,
-  clonePerspectiveSnapshot
+  clonePerspectiveSnapshot,
+  perspectiveSnapshotEqual
 } from "@hardcore/core/lib/perspective.js";
 import {
   ASSET_STATUS,
@@ -168,7 +169,6 @@ import { createFileSessionSnapshot, normalizeFileSessionState } from "../workben
 import { shallowObjectValuesEqual, toFiniteNumber } from "../workbench/valueUtils.js";
 import {
   createRenderSessionState,
-  renderCameraSeed,
   renderCameraSnapshot,
   renderSessionForEnabledChange,
   renderSessionForReset,
@@ -423,8 +423,6 @@ function CadFileViewSurface({
   const [viewerContextMenu, setViewerContextMenu] = useState(null);
   const [displaySettings, setDisplaySettings] = useState(() => normalizeDisplaySettings());
   const [renderSession, setRenderSession] = useState(createRenderSessionState);
-  const renderEnabledRef = useRef(renderSession.enabled);
-  renderEnabledRef.current = renderSession.enabled;
   const [viewerPerspective, setViewerPerspective] = useState(null);
   const [hoveredListPartId, setHoveredListPartId] = useState("");
   const [hoveredModelPartId, setHoveredModelPartId] = useState("");
@@ -467,29 +465,19 @@ function CadFileViewSurface({
   // re-mesh from these; the URL carries the package version, so a rebuild refetches.
   const drawingGeometryCacheRef = useRef(new Map());
   const [drawingGeometry, setDrawingGeometry] = useState(null);
+  const [observedFocalLength, setObservedFocalLength] = useState(null);
   const renderVisualKey = renderVisualSettingsKey(renderSession.payload);
   const resolvedVisualScene = useMemo(() => resolveSceneSettings({
     appearance: resolvedColorSchemeMode,
     prefersDark: uiPrefersDark,
-    render: renderSession.enabled ? renderVisualPayload(renderSession.payload) : null,
-    display: renderSession.enabled ? null : displaySettings
-  }), [
-    resolvedColorSchemeMode,
-    displaySettings,
-    renderSession.enabled,
-    renderVisualKey,
-    uiPrefersDark
-  ]);
+    display: renderSession.enabled
+      ? { ...displaySettings, mode: CAD_DISPLAY_MODE.RENDER, render: renderVisualPayload(renderSession.payload) }
+      : displaySettings
+  }), [resolvedColorSchemeMode, displaySettings, renderSession.enabled, renderVisualKey, uiPrefersDark]);
   const resolvedCamera = useMemo(() => resolveSceneSettings({
-    render: renderSession.enabled ? {
-      ...(renderSession.payload.camera ? { camera: renderSession.payload.camera } : {})
-    } : null,
-    camera: renderSession.enabled ? null : { projection: renderSession.cadProjection }
-  }).camera, [
-    renderSession.cadProjection,
-    renderSession.enabled,
-    renderSession.payload.camera
-  ]);
+    camera: { ...(renderSession.cadCamera?.focalLength ? { focalLength: renderSession.cadCamera.focalLength } : {}),
+      projection: renderSession.cadProjection }
+  }).camera, [renderSession.cadProjection, renderSession.cadCamera?.focalLength]);
   const resolvedQuality = useMemo(() => resolveRenderSessionQuality(renderSession), [
     renderSession.enabled,
     renderSession.payload.quality
@@ -498,17 +486,15 @@ function CadFileViewSurface({
     const visualConfiguration = resolvedVisualScene.render.configuration || resolveSceneSettings({
       appearance: resolvedColorSchemeMode,
       prefersDark: uiPrefersDark,
-      render: renderVisualPayload(renderSession.payload)
+      display: { mode: CAD_DISPLAY_MODE.RENDER, render: renderVisualPayload(renderSession.payload) }
     }).render.configuration;
     // The visual resolve deliberately excludes camera and quality so an orbit
     // does not rebuild the scene. Put the session's own values back so the
     // recipe the rig and the settings UI read stays complete.
     return {
       ...visualConfiguration,
-      // In Inspect the recipe describes the Render defaults the panel shows, so
-      // it keeps its own default camera rather than borrowing the CAD one.
-      ...(renderSession.enabled ? { camera: resolvedCamera } : {}),
-      quality: renderSession.payload.quality || RENDER_QUALITY.FINAL
+      camera: resolvedCamera,
+      quality: renderSession.payload.quality || RENDER_QUALITY.PREVIEW
     };
   }, [
     resolvedColorSchemeMode,
@@ -529,8 +515,7 @@ function CadFileViewSurface({
       payload: renderSession.payload
     }
   }), [resolvedCamera, resolvedQuality, resolvedRenderConfiguration, resolvedVisualScene, renderSession.payload]);
-  // Render has no theme: the viewer builds it from the recipe in
-  // `render.configuration`, and the CAD scene settings stay behind in Inspect.
+  // Render supplies photographic lighting; common display settings stay active.
   const resolvedThemeSettings = resolvedScene.theme;
   const resolvedMaterialOverrides = renderSession.enabled
     ? EMPTY_MATERIAL_OVERRIDES
@@ -547,8 +532,9 @@ function CadFileViewSurface({
       typeof nextValue === "function" ? nextValue(resolvedScene.display) : nextValue,
       { fallback: resolvedScene.display }
     );
-    setDisplaySettings(next);
-  }, [resolvedScene.display]);
+    const { render: _render, ...common } = next;
+    setDisplaySettings({ ...common, mode: renderSession.enabled ? displaySettings.mode : common.mode });
+  }, [resolvedScene.display, renderSession.enabled, displaySettings.mode]);
   const [previewMode, setPreviewMode] = useState(false);
   useEffect(() => { onChromeVisibilityChange?.(!previewMode); }, [onChromeVisibilityChange, previewMode]);
   const tabToolsWidth = 365;
@@ -773,7 +759,6 @@ function CadFileViewSurface({
   const supportsParts = hasCapability(selectedEntrySourceFormat, "parts");
   const supportsTopology = hasCapability(selectedEntrySourceFormat, "topology");
   const supportsMeasure = hasCapability(selectedEntrySourceFormat, "measure");
-  const supportsDisplayModes = hasCapability(selectedEntrySourceFormat, "displayModes");
   const supportsSidecarParams =
     parameterSourceKind(selectedEntrySourceFormat) === PARAMETER_SOURCE.SIDECAR;
   const isAssemblyView = selectedEntry?.kind === "assembly";
@@ -1111,10 +1096,10 @@ function CadFileViewSurface({
       };
     }
   }, [selectedUrdfData, selectedUrdfMeshes]);
-  // Named-object splitting serves Inspect selection. Render keeps per-visual
-  // geometry; this separate memo avoids rebuilding link geometry on mode changes.
+  // Named-object splitting serves component selection in every display style.
+  // Keep geometry memoized independently of lighting changes.
   const selectedUrdfMeshGeometryResult = useMemo(() => {
-    if (renderSession.enabled || !selectedUrdfLinkMeshGeometryResult.meshData) {
+    if (!selectedUrdfLinkMeshGeometryResult.meshData) {
       return selectedUrdfLinkMeshGeometryResult;
     }
     try {
@@ -1127,7 +1112,7 @@ function CadFileViewSurface({
       console.warn("Failed to split robot mesh objects into components", error);
       return selectedUrdfLinkMeshGeometryResult;
     }
-  }, [renderSession.enabled, selectedUrdfLinkMeshGeometryResult]);
+  }, [selectedUrdfLinkMeshGeometryResult]);
   const selectedUrdfComponents = useMemo(
     () => robotComponents(selectedUrdfMeshGeometryResult.meshData),
     [selectedUrdfMeshGeometryResult.meshData]
@@ -1135,10 +1120,8 @@ function CadFileViewSurface({
   const robotSelection = useRobotComponentSelection(
     selectedUrdfComponents, selectedUrdfMeshGeometryResult.meshData, selectedUrdfFileRef
   );
-  // Inspect only, and stated twice on purpose: the geometry above is unsplit in Render,
-  // and this keeps the viewport's picking, hover and activate wiring on main's path even
-  // if that ever changes.
-  const robotComponentsActive = !renderSession.enabled &&
+  // Robot components keep the same picking, hover and activation across styles.
+  const robotComponentsActive =
     selectedEntryContentKind === VIEWPORT_CONTENT.ROBOT &&
     selectedUrdfComponents.length > 0;
   const movableUrdfJoints = useMemo(
@@ -1161,7 +1144,7 @@ function CadFileViewSurface({
       const posedPreview = applyUrdfPoseToMeshData(
         selectedUrdfData,
         selectedUrdfMeshGeometryResult.meshData,
-        renderSession.enabled ? defaultSelectedUrdfJointValues : selectedUrdfJointValues
+        selectedUrdfJointValues
       );
       return {
         ...posedPreview,
@@ -1222,7 +1205,7 @@ function CadFileViewSurface({
   const selectedMeshPartial = selectedMeshMatches && !meshStateIsComplete(meshState);
   const selectedStepModuleTopologyRequired = stepModuleRequiresTopology(selectedStepModuleDefinition);
   const selectedStepModuleTopologyRequested =
-    !renderSession.enabled && selectedStepModuleTopologyRequired;
+    selectedStepModuleTopologyRequired;
   // What the viewport needs to draw one animated frame: the compiled clip and a
   // time. The render pane swaps in the live clock while playing; everything else
   // about playback stays out of the render path.
@@ -2383,19 +2366,10 @@ function CadFileViewSurface({
     fileSheetOpenSectionIds,
     renderedCadFileSheetSectionIds
   ]);
-  const effectiveFileSheetOpenSectionIds = useMemo(() => renderSession.enabled
-    ? normalizeFileSheetOpenSectionIds(renderSession.openSectionIds, renderedSelectedFileSheetSectionIds)
-    : effectiveCadFileSheetOpenSectionIds,
-  [renderSession.enabled, renderSession.openSectionIds, renderedSelectedFileSheetSectionIds, effectiveCadFileSheetOpenSectionIds]);
-
+  const effectiveFileSheetOpenSectionIds = effectiveCadFileSheetOpenSectionIds;
   const handleFileSheetOpenSectionIdsChange = useCallback((nextSectionIds) => {
-    const normalized = normalizeFileSheetOpenSectionIds(nextSectionIds, renderedSelectedFileSheetSectionIds);
-    if (renderSession.enabled) {
-      setRenderSession((current) => createRenderSessionState({ ...current, openSectionIds: normalized }));
-    } else {
-      setFileSheetOpenSectionIds(normalized);
-    }
-  }, [renderSession.enabled, renderedSelectedFileSheetSectionIds]);
+    setFileSheetOpenSectionIds(normalizeFileSheetOpenSectionIds(nextSectionIds, renderedSelectedFileSheetSectionIds));
+  }, [renderedSelectedFileSheetSectionIds]);
 
   const openFileSheetSection = useCallback((sectionId, { openSheet = true, activate = false } = {}) => {
     const normalizedSectionId = String(sectionId || "").trim();
@@ -2501,29 +2475,16 @@ function CadFileViewSurface({
       ? getAnimationClock()
       : animationState.elapsedSec;
     const activeCamera = renderCameraSnapshot(activePerspectiveRef.current);
-    const snapshotRenderSession = createRenderSessionState(renderSession.enabled
-      ? {
-          ...renderSession,
-          payload: activeCamera
-            ? {
-                ...renderSession.payload,
-                camera: {
-                  ...renderCameraSeed(activeCamera),
-                  projection: activeCamera.projection || resolvedScene.camera.projection
-                }
-              }
-            : renderSession.payload
-        }
-      : {
-          ...renderSession,
-          cadCamera: activeCamera || renderSession.cadCamera,
-          cadProjection: activeCamera?.projection || renderSession.cadProjection
-        });
+    const snapshotRenderSession = createRenderSessionState({
+      ...renderSession,
+      cadCamera: activeCamera || renderSession.cadCamera,
+      cadProjection: activeCamera?.projection || renderSession.cadProjection
+    });
     return createFileSessionSnapshot({
       fileKey: targetFileKey,
       entry: targetEntry,
       slices: {
-        ...(entrySourceFormat(targetEntry) !== RENDER_FORMAT.DXF ? { display: displaySettings } : {}),
+        display: displaySettings,
         render: snapshotRenderSession,
         tab: buildActiveTabSnapshot(),
         stepModule: {
@@ -2598,10 +2559,7 @@ function CadFileViewSurface({
     const sessionState = fileSessionState || readEntrySessionState(normalizedKey);
     setLargeFileState(normalizeLargeFileState(sessionState?.slices?.largeFile));
     const entry = entryMap.get(normalizedKey);
-    const supportsDisplaySettings = entrySourceFormat(entry) !== RENDER_FORMAT.DXF;
-    setDisplaySettings(supportsDisplaySettings
-      ? normalizeDisplaySettings(sessionState?.slices?.display)
-      : normalizeDisplaySettings());
+    setDisplaySettings(normalizeDisplaySettings(sessionState?.slices?.display));
     const nextRenderSession = createRenderSessionState(sessionState?.slices?.render);
     setRenderSession(nextRenderSession);
     // Only a camera this file's session actually RECORDED comes back. A file
@@ -2610,13 +2568,7 @@ function CadFileViewSurface({
     // framed the model against a bounds-radius rule of its own, tagged it with
     // the new model's key, and so suppressed that fit -- which is how a fresh
     // model opened at a pose nothing had measured.
-    const restoredCamera = nextRenderSession.enabled
-      ? renderCameraSnapshot(resolveSceneSettings({
-          appearance: resolvedColorSchemeMode,
-          prefersDark: uiPrefersDark,
-          render: nextRenderSession.payload
-        }).camera)
-      : nextRenderSession.cadCamera;
+    const restoredCamera = nextRenderSession.cadCamera;
     if (restoredCamera) {
       const scopedCamera = scopedWorkspacePerspective(restoredCamera, normalizedKey, entry);
       activePerspectiveRef.current = scopedCamera;
@@ -2995,13 +2947,11 @@ function CadFileViewSurface({
     plainStepReferencePickingEnabled &&
     (topologyCapabilityRequested || selectedStepModuleTopologyRequested);
   const assemblyStepTreeTopologyLoadingEnabled =
-    !renderSession.enabled &&
     effectiveRenderFormat === RENDER_FORMAT.STEP &&
     selectedEntryHasReferences &&
     isAssemblyView &&
     requestedStepTreeTopologyNodeIds.length > 0;
   const selectedStepDisplayEdgesRequested =
-    !renderSession.enabled &&
     effectiveRenderFormat === RENDER_FORMAT.STEP &&
     selectedEntryHasDisplayEdges &&
     !displayModeIsWireframe(resolvedScene.display.mode) &&
@@ -3030,7 +2980,7 @@ function CadFileViewSurface({
     selectedStepPartRootActive ||
     plainStepReferencePickingRequested;
   const referenceLoadingEnabled =
-    !renderSession.enabled && (
+    (
       selectedStepPartRootActive ||
       assemblyStepTreeTopologyLoadingEnabled ||
       (
@@ -3041,10 +2991,6 @@ function CadFileViewSurface({
     );
 
   useEffect(() => {
-    if (renderSession.enabled) {
-      cancelReferenceLoad();
-      return;
-    }
     if (!selectedEntry) {
       cancelReferenceLoad();
       return;
@@ -3083,10 +3029,6 @@ function CadFileViewSurface({
   ]);
 
   useEffect(() => {
-    if (renderSession.enabled) {
-      cancelDisplayEdgeLoad();
-      return;
-    }
     if (!selectedEntry) {
       cancelDisplayEdgeLoad();
       return;
@@ -5663,23 +5605,22 @@ function CadFileViewSurface({
 
   const handlePerspectiveChange = useCallback((nextPerspective) => {
     const normalizedPerspective = clonePerspectiveSnapshot(nextPerspective);
+    const cameraMoved = !perspectiveSnapshotEqual(activePerspectiveRef.current, normalizedPerspective);
     if (normalizedPerspective) {
+      setObservedFocalLength(normalizedPerspective.focalLength || null);
       activePerspectiveRef.current = normalizedPerspective;
       scheduleActiveFileSessionSave();
     }
     // Camera moved: give the LOD scheduler a sample (it debounces internally).
     onLodCameraMoved();
     // Freehand strokes are anchored to the view they were drawn in, so a
-    // camera move ends them -- an orbit, Reset view, or the fit a mode switch
-    // performs. Render owns no CAD drawing layer, so its camera never does.
-    if (renderEnabledRef.current) {
-      return;
-    }
+    // camera move ends them. A display-style switch preserves the camera and
+    // may republish it from the replacement runtime; that must retain strokes.
     const hasPerspectiveDependentDrawings =
       drawingStrokesRef.current.length > 0 ||
       drawingUndoStackRef.current.some((strokes) => strokes.length > 0) ||
       drawingRedoStackRef.current.some((strokes) => strokes.length > 0);
-    if (!hasPerspectiveDependentDrawings) {
+    if (!cameraMoved || !hasPerspectiveDependentDrawings) {
       return;
     }
     drawingStrokesRef.current = [];
@@ -5708,46 +5649,23 @@ function CadFileViewSurface({
   }, [isUrdfView, selectedEntry, selectedKey, selectedMeshData?.bounds]);
 
   const handleRenderEnabledChange = useCallback((enabled) => {
-    if (enabled === renderSession.enabled) {
-      return;
+    if (enabled === renderSession.enabled) return;
+    const camera = readRenderSessionCamera(viewerRef.current, activePerspectiveRef.current);
+    if (enabled) prefetchRenderStudio();
+    if (camera) {
+      const scoped = scopedWorkspacePerspective(camera, selectedKey, selectedEntry);
+      activePerspectiveRef.current = scoped;
+      setViewerPerspective(scoped);
     }
-    // The switch carries no camera. Each mode owns a camera of its own -- an
-    // orthographic CAD frustum, a photographic lens -- and the viewer fits the
-    // one being entered to the model's zero pose (CadViewer's "mode" reframe).
-    // Handing it the other mode's pose only produced the framing this reset
-    // exists to replace. The session still RECORDS each mode's last camera, for
-    // the file session and for a snapshot request; nothing replays it on a
-    // switch.
-    const activeCamera = readRenderSessionCamera(viewerRef.current, activePerspectiveRef.current);
-    if (enabled) {
-      // Render's studio and its two settings panels are one lazy chunk. Asking
-      // for them here rather than waiting for the viewport effect and the
-      // Suspense boundary to ask separately is what keeps the switch to one
-      // request; the mode flips immediately either way, and the viewport stays
-      // under its destination backdrop until the studio has applied.
-      prefetchRenderStudio();
-      setTabToolsOpen(true);
-      renderEnabledRef.current = true;
-      setRenderSession(renderSessionForEnabledChange(renderSession, true, {
-        activeCamera,
-        activeProjection: resolvedScene.camera.projection
-      }));
-      setTabToolsOpen(true);
-      return;
-    }
-
-    renderEnabledRef.current = false;
-    // The projection travels, because orthographic-or-perspective is an Inspect
-    // display choice rather than a pose; the fit applies it to the new frame.
-    setRenderSession(renderSessionForEnabledChange(renderSession, false, {
-      activeCamera,
-      activeProjection: resolvedScene.camera.projection
+    setRenderSession(renderSessionForEnabledChange(renderSession, enabled, {
+      activeCamera: camera, activeProjection: resolvedScene.camera.projection
     }));
-  }, [
-    renderSession,
-    resolvedScene.camera.projection,
-    setTabToolsOpen
-  ]);
+  }, [renderSession, resolvedScene.camera.projection, selectedKey, selectedEntry]);
+
+  const handleViewModeChange = useCallback((mode) => {
+    handleRenderEnabledChange(mode === CAD_DISPLAY_MODE.RENDER);
+    if (mode !== CAD_DISPLAY_MODE.RENDER) setDisplaySettings(current => ({ ...current, mode }));
+  }, [handleRenderEnabledChange]);
 
   const handleRenderQualityChange = useCallback((quality) => {
     setRenderSession((current) => createRenderSessionState({
@@ -5757,43 +5675,23 @@ function CadFileViewSurface({
   }, []);
 
   const handleRenderPayloadValueChange = useCallback((path, value) => {
-    setRenderSession((current) => createRenderSessionState({
-      ...current,
-      payload: setRenderPayloadValue(
-        path?.[0] === "camera"
-          ? {
-              ...current.payload,
-              camera: renderCameraSeed(activePerspectiveRef.current) || current.payload.camera || {}
-            }
-          : current.payload,
-        path,
-        value
-      )
-    }));
+    if (path?.[0] === "camera") {
+      const camera = readRenderSessionCamera(viewerRef.current, activePerspectiveRef.current);
+      setRenderSession(current => createRenderSessionState({ ...current,
+        cadCamera: { ...(camera || current.cadCamera), [path[1]]: value } }));
+      return;
+    }
+    setRenderSession(current => createRenderSessionState({ ...current,
+      payload: setRenderPayloadValue(current.payload, path, value) }));
   }, []);
 
   const handleProjectionChange = useCallback((projection) => {
-    const camera = renderCameraSnapshot(activePerspectiveRef.current);
-    if (renderSession.enabled) {
-      const payload = {
-        ...renderSession.payload,
-        camera: {
-          ...(renderCameraSeed(camera) || renderSession.payload.camera || {}),
-          projection
-        }
-      };
-      setRenderSession(createRenderSessionState({ ...renderSession, payload }));
-    } else {
-      setRenderSession(createRenderSessionState({
-        ...renderSession,
-        cadCamera: camera ? { ...camera, projection } : renderSession.cadCamera,
-        cadProjection: projection
-      }));
-    }
-    if (camera) {
-      applyActiveCamera({ ...camera, projection });
-    }
-  }, [applyActiveCamera, renderSession]);
+    const camera = readRenderSessionCamera(viewerRef.current, activePerspectiveRef.current);
+    setRenderSession(current => createRenderSessionState({ ...current,
+      cadCamera: camera ? { ...camera, projection } : current.cadCamera,
+      cadProjection: projection }));
+    if (camera) applyActiveCamera({ ...camera, projection });
+  }, [applyActiveCamera]);
 
   const handleRenderReset = useCallback(() => {
     const camera = renderCameraSnapshot(activePerspectiveRef.current);
@@ -5810,7 +5708,7 @@ function CadFileViewSurface({
     setCopyStatus,
     setScreenshotStatus,
     previewMode,
-    inspectionEnabled: !renderSession.enabled,
+    inspectionEnabled: true,
     viewerAlertOpen,
     tabToolsOpen,
     isDesktop: isWideLayout,
@@ -5876,7 +5774,6 @@ function CadFileViewSurface({
       };
     },
     select({ selectors, replace = true }) {
-      if (renderSession.enabled) throw new Error('Switch to Inspect before selecting CAD references.');
       if (stepModuleTreeSelectionDisabled) throw new Error(stepModuleTreeSelectionDisabledReason || 'Selection is unavailable for this model.');
       const names = uniqueStringList(selectors.flatMap(selector => String(selector).split(',').map(value => value.trim())).filter(Boolean));
       if (!names.length) throw new Error('Choose at least one CAD selector.');
@@ -5918,6 +5815,8 @@ function CadFileViewSurface({
       const snapshot = clonePerspectiveSnapshot(camera);
       if (!snapshot || !viewerRef.current?.setPerspective?.(snapshot, { resetZoomBaseline: true })) throw new Error('The viewer could not apply this camera.');
       const scoped = scopedWorkspacePerspective(snapshot, selectedKey, selectedEntry);
+      setRenderSession(current => createRenderSessionState({ ...current,
+        cadCamera: snapshot, cadProjection: snapshot.projection || current.cadProjection }));
       setViewerPerspective(scoped);
       handlePerspectiveChange(scoped);
     },
@@ -5926,8 +5825,12 @@ function CadFileViewSurface({
       if (selectedEntryIsDrawing && drawingViewMode === '2d') viewerRef.current?.activateViewPlaneFace?.('z');
     },
     setDisplaySettings(patch) {
-      if (renderSession.enabled) throw new Error('Switch to Inspect before changing display settings.');
-      updateDisplaySettings(normalizeDisplaySettings(patch, { fallback: displaySettings }));
+      const next = normalizeDisplaySettings(patch, { fallback: resolvedScene.display });
+      const { render, ...common } = next;
+      handleViewModeChange(next.mode);
+      setDisplaySettings(current => ({ ...common,
+        mode: next.mode === CAD_DISPLAY_MODE.RENDER ? current.mode : next.mode }));
+      if (render) setRenderSession(current => createRenderSessionState({ ...current, payload: render }));
     },
     setRenderMode(enabled) { handleRenderEnabledChange(enabled); },
     capture() {
@@ -6075,29 +5978,25 @@ function CadFileViewSurface({
     { id: DRAWING_TOOL.FILL, label: "Fill", Icon: PaintBucket },
     { id: DRAWING_TOOL.ERASE, label: "Erase", Icon: Eraser }
   ];
-  // Handed over unconditionally: the pane gates it on the `displayModes` capability, so
-  // gating it a second time here only creates a place for the two to disagree.
+  // Every CAD format shares the View settings and camera contract.
   const renderDisplaySettings = resolvedScene.display;
-  const settingsTabs = [
-    supportsDisplayModes && !renderSession.enabled
-      ? buildDisplaySettingsTab({
-          displaySettings: resolvedScene.display,
-          updateDisplaySettings,
-          projection: resolvedScene.camera.projection,
-          onProjectionChange: handleProjectionChange,
-          clipBounds: selectedMeshData?.bounds || null,
-          explodeMeshData: selectedMeshData || null,
-          edgeStatus: displayEdgeStatus,
-          edgeError: displayEdgeError
-        })
-      : null,
-    renderSession.enabled ? buildRenderSettingsTab({
-      scene: resolvedScene,
-      onQualityChange: handleRenderQualityChange,
-      onPayloadValueChange: handleRenderPayloadValueChange,
-      onReset: handleRenderReset
-    }) : null
-  ].filter(Boolean);
+  const settingsTabs = [buildDisplaySettingsTab({
+    displaySettings: resolvedScene.display,
+    updateDisplaySettings,
+    rendering: renderSession.enabled,
+    onModeChange: handleViewModeChange,
+    projection: resolvedScene.camera.projection,
+    onProjectionChange: handleProjectionChange,
+    clipBounds: selectedMeshData?.bounds || null,
+    explodeMeshData: selectedMeshData || null,
+    edgeStatus: displayEdgeStatus,
+    edgeError: displayEdgeError,
+    scene: resolvedScene,
+    observedFocalLength,
+    onQualityChange: handleRenderQualityChange,
+    onPayloadValueChange: handleRenderPayloadValueChange,
+    onRenderReset: handleRenderReset
+  })];
 
   return (
     <FileSheetTabPreferencesContext.Provider value={{ store: preferences.fileSheetTabs || {}, update: (fileSheetTabs) => onPreferenceChange({ fileSheetTabs }) }}>
@@ -6141,39 +6040,37 @@ function CadFileViewSurface({
                 onReload={onReload}
                 viewerRef={viewerRef}
                 renderFormat={effectiveRenderFormat}
-                drawingThicknessScale={renderSession.enabled && selectedEntryIsDrawing
-            ? DXF_DEFAULT_THICKNESS_MM / DXF_PREVIEW_REFERENCE_THICKNESS_MM
-            : drawingThicknessScale}
+                drawingThicknessScale={drawingThicknessScale}
                 planMode={selectedEntryIsDrawing && drawingViewMode === "2d"}
                 bendAxisX={selectedEntryIsDrawing ? selectedEntry?.bendAxisX || null : null}
                 drawingBendLines={selectedEntryIsDrawing ? drawingBendLines : null}
                 bendAnglesRad={selectedEntryIsDrawing
-            ? (renderSession.enabled ? EMPTY_LIST : drawingBendAnglesRad)
+            ? drawingBendAnglesRad
             : null}
                 drawingBends={selectedEntryIsDrawing
-            ? (renderSession.enabled ? EMPTY_LIST : drawingBends)
+            ? drawingBends
             : null}
-                drawingBendStyle={selectedEntryIsDrawing && !renderSession.enabled
+                drawingBendStyle={selectedEntryIsDrawing
             ? drawingBendStyle
             : DXF_DEFAULT_BEND_STYLE}
-                drawingBendRadiusMm={selectedEntryIsDrawing && !renderSession.enabled
+                drawingBendRadiusMm={selectedEntryIsDrawing
             ? drawingBendRadiusMm
             : DXF_DEFAULT_BEND_RADIUS_MM}
-                drawingKFactor={selectedEntryIsDrawing && !renderSession.enabled
+                drawingKFactor={selectedEntryIsDrawing
             ? drawingKFactor
             : DXF_DEFAULT_KFACTOR}
                 drawingHiddenLayers={selectedEntryIsDrawing
-            ? (renderSession.enabled ? EMPTY_LIST : drawingHiddenLayers)
+            ? drawingHiddenLayers
             : null}
                 drawingOrientation={selectedEntryIsDrawing
-            ? (renderSession.enabled ? DXF_DEFAULT_ORIENTATION : drawingOrientation)
+            ? drawingOrientation
             : null}
-                drawingMaterialColor={selectedEntryIsDrawing && !renderSession.enabled
+                drawingMaterialColor={selectedEntryIsDrawing
             ? dxfMaterialPreset(drawingMaterial).colorHex
             : null}
                 drawingGeometry={selectedEntryIsDrawing ? drawingGeometry : null}
                 drawingIsDocument={selectedEntryIsDrawingDocument}
-                drawingThicknessMm={selectedEntryIsDrawing && !renderSession.enabled
+                drawingThicknessMm={selectedEntryIsDrawing
             ? drawingThicknessMm
             : DXF_DEFAULT_THICKNESS_MM}
                 onCameraZoomPercentChange={setViewerZoomPercent}
@@ -6285,7 +6182,6 @@ function CadFileViewSurface({
               </div>
 
               <FloatingToolBar
-                onRenderModeChange={handleRenderEnabledChange}
                 previewMode={previewMode}
                 renderMode={renderSession.enabled}
                 selectedEntry={selectedEntry}
@@ -6307,7 +6203,6 @@ function CadFileViewSurface({
                 handleAnimationPlayToggle={activeAnimationRuntime?.onPlayToggle}
                 drawToolActive={drawToolActive}
                 measureModeActive={measureModeActive}
-                displayPanel={supportsDisplayModes ? settingsTabs.find(tab => tab.id === FILE_SHEET_SECTION_IDS.DISPLAY)?.content : null}
                 measurementPanel={supportsTopology && supportsMeasure ? <>
                   <div className="py-1">
                     <p className="px-2 py-1 text-micro text-muted-foreground">Snap to</p>
@@ -6512,7 +6407,7 @@ function CadFileViewSurface({
                 viewerServerInfo={viewerServerInfo}
                 suppressDynamicMetadataStatus={selectedArtifactGenerating}
                 renderMode={renderSession.enabled}
-                settingsTabs={renderSession.enabled ? settingsTabs : [
+                settingsTabs={[
                   buildDxfMaterialTab({
                     thicknessMm: drawingThicknessMm,
                     onThicknessChange: setDrawingThicknessMm,

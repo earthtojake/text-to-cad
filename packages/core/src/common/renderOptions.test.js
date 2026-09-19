@@ -22,7 +22,8 @@ import {
   inferRenderSceneScale,
   outputSize,
   rendererDataUrlWithOptionalLabel,
-  resolveRenderView
+  resolveRenderView,
+  snapshotUsesLogarithmicDepthBuffer
 } from "./renderOptions.js";
 
 const SCALE_SETTINGS = Object.freeze({
@@ -77,6 +78,12 @@ test("shared render options preserve explicit caller-owned values without defaul
   assert.equal(Object.hasOwn(options, "displayMode"), false);
   assert.equal(options.background, false);
   assert.equal(options.renderScale, 0);
+});
+
+test("render display snapshots use ordinary depth for studio shadows", () => {
+  assert.equal(snapshotUsesLogarithmicDepthBuffer({}), true);
+  assert.equal(snapshotUsesLogarithmicDepthBuffer({ display: { mode: "shaded" } }), true);
+  assert.equal(snapshotUsesLogarithmicDepthBuffer({ display: { mode: "render" } }), false);
 });
 
 test("view presets and azimuth/elevation camera parsing remain stable", () => {

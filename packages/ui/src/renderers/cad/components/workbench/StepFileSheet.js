@@ -3,14 +3,12 @@ import { STEP_MODEL_ROOT_ID } from '@hardcore/core/lib/step/stepTree.js';
 import FileSheet from './FileSheet.js';
 import FileSheetTabbedSurface from './FileSheetTabbedSurface.js';
 import { buildFileStatusTab } from './FileStatusSection.js';
-import { buildPoseControlsTab } from './PoseControlsSection.js';
-import { buildAnimationControlsTab } from './AnimationControlsSection.js';
+import { buildMotionControlsTab } from './MotionControlsSection.js';
 import { buildStepReferenceTab } from './StepReferenceSection.js';
 import ModelingTree from './ModelingTree.jsx';
 import StepGeometryProperties from './StepGeometryProperties.jsx';
 import { useStepModeling } from '../../workbench/useStepModeling.js';
 import { stepGeometryMeasurements, stepGeometryDimension } from '../../workbench/stepGeometryMeasurements.js';
-import { FILE_SHEET_SECTION_IDS } from '../../workbench/fileSheetSections.js';
 const EMPTY = [];
 
 export default function StepFileSheet({
@@ -25,7 +23,7 @@ export default function StepFileSheet({
   onCopyTreeNodeReference, onHoverTreeNode, showAllHiddenParts,
   treeSelectionDisabled = false, treeSelectionDisabledReason = '',
   stepModule = null, stepAnimation = null, statusItems = EMPTY,
-  openSectionIds = EMPTY, onOpenSectionIdsChange, renderMode = false, settingsTabs = EMPTY,
+  openSectionIds = EMPTY, onOpenSectionIdsChange, settingsTabs = EMPTY,
 }) {
   const recognitionKey = `${selectedEntry?.file}:${geometryInspection?.revision}`;
   const [recognitionRequest, setRecognitionRequest] = useState({ key: recognitionKey, ids: EMPTY });
@@ -34,7 +32,7 @@ export default function StepFileSheet({
     current.key === recognitionKey && current.ids.length === ids.length && current.ids.every((id, index) => id === ids[index])
       ? current : { key: recognitionKey, ids }
   )), [recognitionKey]);
-  const modeling = useStepModeling(selectedEntry, open && !renderMode && !treeSelectionDisabled && !viewerLoading, { client, requestedOccurrenceIds });
+  const modeling = useStepModeling(selectedEntry, open && !treeSelectionDisabled && !viewerLoading, { client, requestedOccurrenceIds });
   const [inspection, setInspection] = useState(null);
   const modelReferences = geometryInspection?.references || EMPTY;
   const modelParts = geometryInspection?.parts || EMPTY;
@@ -71,7 +69,7 @@ export default function StepFileSheet({
       <StepGeometryProperties measurements={{...measurements,area:null}} inspection={inspection} inspect={inspect} />
     </details>}
   </> : null;
-  const sections = [!renderMode && {
+  const sections = [{
     id: 'tree', title: 'Model', keepMounted: true, scrollsContent: true,
     titleAttr: treeSelectionDisabled ? treeSelectionDisabledReason : undefined,
     content: active => <ModelingTree key={`${selectedEntry.file}:${geometryInspection?.revision}`}
@@ -86,15 +84,13 @@ export default function StepFileSheet({
         onSelectTreeNode, onFocusTreeNode, onUnfocusTreeNode, onExitAllIsolate,
         onTogglePartVisibility, showAllHiddenParts, onCopyTreeNodeReference, onHoverTreeNode}}
     />,
-  }, buildPoseControlsTab({
-    value: FILE_SHEET_SECTION_IDS.STEP_POSE, runtime: stepModule,
-    loadingLabel: 'Loading kinematics...', noParametersLabel: 'No pose controls.',
-    showEnableToggle: true, enableAriaLabel: 'Enable pose', resetTitle: 'Reset pose',
-  }), buildAnimationControlsTab({ value: FILE_SHEET_SECTION_IDS.STEP_ANIMATION, runtime: stepAnimation }),
-  ...settingsTabs.filter(tab => renderMode || tab?.id !== FILE_SHEET_SECTION_IDS.DISPLAY), !renderMode && buildFileStatusTab(statusItems)].filter(Boolean);
+  }, buildMotionControlsTab({
+    poseRuntime: stepModule, animationRuntime: stepAnimation,
+    poseProps: { loadingLabel: 'Loading kinematics...', noParametersLabel: 'No pose controls.', resetTitle: 'Reset pose' },
+  }), ...settingsTabs, buildFileStatusTab(statusItems)].filter(Boolean);
   return <FileSheet open={open} title="STEP" isDesktop={isDesktop} width={width}
     onOpenChange={onOpenChange} onStartResize={onStartResize} scrollBody={false}>
     <FileSheetTabbedSurface kind="step" sections={sections} openSectionIds={openSectionIds}
-      onOpenSectionIdsChange={onOpenSectionIdsChange} layoutMode={renderMode ? "render" : "cad"} layoutScope={selectedEntry.file} />
+      onOpenSectionIdsChange={onOpenSectionIdsChange} />
   </FileSheet>;
 }

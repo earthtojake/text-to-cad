@@ -1,4 +1,4 @@
-import { FILE_SHEET_SECTION_IDS } from "./fileSheetSections.js";
+import { FILE_SHEET_SECTION_IDS, normalizeFileSheetSectionId } from "./fileSheetSections.js";
 
 // Layout model for the tabbed file sheet sidebar.
 //
@@ -13,11 +13,9 @@ import { FILE_SHEET_SECTION_IDS } from "./fileSheetSections.js";
 // per-file `openSectionIds` list (see resolveFileSheetTabPanes) so that the
 // existing reveal-on-select behavior keeps working.
 
-// Bumped to reset saved arrangements when the default pane assignment changes.
-// v6: STEP motion controls share the top strip with Model. Other file kinds
-// retain their v5 arrangements when the store is first read.
-export const FILE_SHEET_TAB_LAYOUT_STORAGE_KEY = "cad-viewer:file-sheet-tab-layout:v6";
-const PREVIOUS_LAYOUT_STORAGE_KEY = "cad-viewer:file-sheet-tab-layout:v5";
+// v7 merges Motion/View IDs without discarding custom pane assignments.
+export const FILE_SHEET_TAB_LAYOUT_STORAGE_KEY = "cad-viewer:file-sheet-tab-layout:v7";
+const PREVIOUS_LAYOUT_STORAGE_KEYS = ["cad-viewer:file-sheet-tab-layout:v6", "cad-viewer:file-sheet-tab-layout:v5"];
 
 export const DEFAULT_FILE_SHEET_SPLIT_RATIO = 0.5;
 export const MIN_FILE_SHEET_SPLIT_RATIO = 0.2;
@@ -35,7 +33,7 @@ function uniqueStrings(values) {
   if (!Array.isArray(values)) {
     return [];
   }
-  return [...new Set(values.map(normalizeString).filter(Boolean))];
+  return [...new Set(values.map(normalizeFileSheetSectionId).filter(Boolean))];
 }
 
 export function kindSupportsSplit(kind) {
@@ -50,16 +48,14 @@ export function clampSplitRatio(ratio) {
   return Math.min(MAX_FILE_SHEET_SPLIT_RATIO, Math.max(MIN_FILE_SHEET_SPLIT_RATIO, numericRatio));
 }
 
-// Tabs that live in the top pane of a split layout; everything else defaults to
-// the bottom pane, in render order. STEP: Model, Kinematics and Animation
-// share the full-height top pane. DXF: Material on top, Bends/Layers below.
-const TOP_PANE_SECTION_IDS = Object.freeze(new Set([
+// The standard STEP tabs share one strip; unrelated readouts retain their
+// existing default bottom pane. Robot tabs remain a single strip by default.
+const STEP_TOP_PANE_SECTION_IDS = new Set([
   FILE_SHEET_SECTION_IDS.STEP_TREE,
   FILE_SHEET_SECTION_IDS.STEP_MODELING,
-  FILE_SHEET_SECTION_IDS.STEP_POSE,
-  FILE_SHEET_SECTION_IDS.STEP_ANIMATION,
-  FILE_SHEET_SECTION_IDS.DXF_MATERIAL
-]));
+  FILE_SHEET_SECTION_IDS.MOTION,
+  FILE_SHEET_SECTION_IDS.VIEW
+]);
 
 // Where to slot a tab that the stored arrangement has never seen: at its
 // render-order position among the tabs already in the pane, not at the end.
@@ -82,7 +78,7 @@ function defaultPaneForSection(kind, sectionId) {
   if (!kindSupportsSplit(kind)) {
     return FILE_SHEET_TAB_PANES.TOP;
   }
-  return TOP_PANE_SECTION_IDS.has(normalizeString(sectionId))
+  return (kind === "step" ? STEP_TOP_PANE_SECTION_IDS.has(sectionId) : kind === "dxf" && sectionId === FILE_SHEET_SECTION_IDS.DXF_MATERIAL)
     ? FILE_SHEET_TAB_PANES.TOP
     : FILE_SHEET_TAB_PANES.BOTTOM;
 }
@@ -106,35 +102,6 @@ export function defaultFileSheetTabArrangement(kind, sectionIds) {
     bottom: split ? bottom : [],
     ratio: DEFAULT_FILE_SHEET_SPLIT_RATIO
   };
-}
-
-// Render starts as one Studio-first strip on every entry. The surface keeps any
-// drag/split edits in component state for that Render visit; this arrangement is
-// never part of the durable per-kind CAD layout store.
-export function defaultRenderFileSheetTabArrangement(sectionIds) {
-  return {
-    split: false,
-    top: uniqueStrings(sectionIds),
-    bottom: [],
-    ratio: DEFAULT_FILE_SHEET_SPLIT_RATIO
-  };
-}
-
-export function renderFileSheetTabArrangementForScope(
-  arrangementState,
-  scope,
-  kind,
-  sectionIds
-) {
-  const normalizedScope = normalizeString(scope);
-  const scopedArrangement = arrangementState?.scope === normalizedScope
-    ? arrangementState.arrangement
-    : null;
-  return normalizeFileSheetTabArrangement(
-    scopedArrangement || defaultRenderFileSheetTabArrangement(sectionIds),
-    kind,
-    sectionIds
-  );
 }
 
 // Reconcile a stored arrangement against the sections currently rendered:
@@ -211,7 +178,7 @@ function arrangementPaneList(arrangement, pane) {
 // Move a tab into a pane at a target index. Removing the last tab from a pane
 // while split collapses the layout into a single strip.
 export function moveFileSheetTab(arrangement, kind, sectionId, targetPane, targetIndex) {
-  const id = normalizeString(sectionId);
+  const id = normalizeFileSheetSectionId(sectionId);
   if (!id) {
     return arrangement;
   }
@@ -271,7 +238,7 @@ export function setFileSheetTabRatio(arrangement, ratio) {
 // id that lives in the pane wins, falling back to the pane's leftmost tab — so a
 // pane needs no separate "preferred active tab" table.
 function resolveActiveTab(paneTabs, openSectionIds) {
-  const open = uniqueStrings(openSectionIds);
+  const open = (Array.isArray(openSectionIds) ? openSectionIds : []).map(normalizeFileSheetSectionId);
   let active = "";
   for (const id of open) {
     if (paneTabs.includes(id)) {
@@ -320,7 +287,7 @@ export function resolveFileSheetTabPanes(arrangement, kind, openSectionIds) {
 // Produce the next per-file open list when a tab is activated: drop the other
 // tabs that share its pane, then append it so it wins resolution.
 export function activateFileSheetTab(openSectionIds, arrangement, kind, pane, sectionId) {
-  const id = normalizeString(sectionId);
+  const id = normalizeFileSheetSectionId(sectionId);
   if (!id) {
     return uniqueStrings(openSectionIds);
   }
@@ -345,15 +312,17 @@ export function readFileSheetTabLayoutStore(storage) {
     return {};
   }
   try {
-    const raw = storage.getItem(FILE_SHEET_TAB_LAYOUT_STORAGE_KEY);
-    if (!raw) {
-      const previous = JSON.parse(storage.getItem(PREVIOUS_LAYOUT_STORAGE_KEY) || "null");
-      if (!isPlainObject(previous)) return {};
-      const { step: _step, ...otherKinds } = previous;
-      return otherKinds;
-    }
-    const parsed = JSON.parse(raw);
-    return isPlainObject(parsed) ? parsed : {};
+    const raw = storage.getItem(FILE_SHEET_TAB_LAYOUT_STORAGE_KEY)
+      || PREVIOUS_LAYOUT_STORAGE_KEYS.map(key => storage.getItem(key)).find(Boolean);
+    const parsed = JSON.parse(raw || "null");
+    if (!isPlainObject(parsed)) return {};
+    return Object.fromEntries(Object.entries(parsed).filter(([, value]) => isPlainObject(value)).map(([kind, value]) => {
+      const top = uniqueStrings(value.top);
+      const bottom = uniqueStrings(value.bottom).filter(id => !top.includes(id));
+      // If consolidation empties a pane, merge the remaining strip. Keep any
+      // still-useful custom split and its ratio, including nonstandard tabs.
+      return [kind, { ...value, top: top.length ? top : bottom, bottom: top.length ? bottom : [], split: value.split === true && top.length > 0 && bottom.length > 0 }];
+    }));
   } catch {
     return {};
   }

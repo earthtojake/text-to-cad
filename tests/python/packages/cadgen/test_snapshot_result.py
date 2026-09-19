@@ -332,8 +332,8 @@ class PublicVerbs(unittest.TestCase):
         The doors used to share ONE signature and refuse the options a format
         cannot act on at runtime — so `cadgen stl snapshot --help` advertised
         `--kinematics`, `--focus` and `--hide` to a reader holding a mesh, and
-        every one of them errored. Render, camera and the format-neutral parts
-        of Display are intentionally shared by every door.
+        every one of them errored. Camera and the unified format-neutral Display
+        object are intentionally shared by every door.
         """
         import importlib
         import inspect as inspect_module
@@ -353,7 +353,8 @@ class PublicVerbs(unittest.TestCase):
         for door in ("stl", "threemf", "glb", "dxf"):
             with self.subTest(door=door):
                 mesh = parameters(f"cadgen.{door}")
-                self.assertLessEqual({"render", "camera", "display"}, mesh)
+                self.assertLessEqual({"camera", "display"}, mesh)
+                self.assertNotIn("render", mesh)
                 for absent in ("kinematics", "focus", "hide", "joint_values"):
                     self.assertNotIn(absent, mesh, f"{absent} has nothing to act on here")
 
@@ -361,7 +362,8 @@ class PublicVerbs(unittest.TestCase):
             with self.subTest(door=door):
                 robot = parameters(f"cadgen.{door}")
                 self.assertIn("joint_values", robot)
-                self.assertLessEqual({"render", "camera", "display"}, robot)
+                self.assertLessEqual({"camera", "display"}, robot)
+                self.assertNotIn("render", robot)
                 for absent in ("kinematics", "focus", "hide"):
                     self.assertNotIn(absent, robot, f"{absent} requires STEP topology")
 

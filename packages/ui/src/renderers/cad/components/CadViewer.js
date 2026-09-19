@@ -1845,15 +1845,11 @@ const CadViewer = forwardRef(function CadViewer({
   const normalizedThemeSettings = normalizedViewerRenderState.themeSettings;
   const normalizedDisplaySettings = normalizedViewerRenderState.displaySettings;
   const normalizedDisplayMode = normalizedViewerRenderState.displayMode;
-  // Render lights one fixed studio finish and exposes no material or part-colour
-  // controls; CAD's finish comes from its theme and the display part-colour policy.
   const normalizedMaterialSettings = useMemo(
-    () => (renderMode
-      ? PHOTOGRAPHIC_STUDIO_MATERIAL_SETTINGS
-      : resolveDisplayMaterialSettings(
-        normalizedThemeSettings.materials,
-        normalizedDisplaySettings.partColor
-      )),
+    () => resolveDisplayMaterialSettings(
+      renderMode ? PHOTOGRAPHIC_STUDIO_MATERIAL_SETTINGS : normalizedThemeSettings.materials,
+      normalizedDisplaySettings.partColor
+    ),
     [normalizedDisplaySettings.partColor, normalizedThemeSettings.materials, renderMode]
   );
   const materialPartPolicyKey = `${
@@ -3490,7 +3486,6 @@ const CadViewer = forwardRef(function CadViewer({
     const camera = runtime?.perspectiveCamera;
     const nextFocalLength = explicitViewerFocalLength(focalLength);
     if (
-      !renderMode &&
       runtime?.controls &&
       camera &&
       nextFocalLength == null
@@ -4287,9 +4282,7 @@ const CadViewer = forwardRef(function CadViewer({
     };
     runtime.raycastBvhOptions = raycastBvhOptions;
     syncSelectorPickGroups(runtime, displaySelectorRuntime, modelOffset, { clearSceneGroup });
-    if (!renderMode) {
-      scheduleRuntimeRaycastBvh(runtime, raycastBvhOptions);
-    }
+    scheduleRuntimeRaycastBvh(runtime, raycastBvhOptions);
     syncRuntimeStepClipPlane(runtime, clipSettingsRef.current);
     if (typeof window !== "undefined") {
       // Byte attribution for the headless memory harness (read, never polled here).
@@ -4365,11 +4358,7 @@ const CadViewer = forwardRef(function CadViewer({
       framedCompleteModelKeyRef.current = modelKey || "";
     }
     if (reframe) {
-      if (reframe === "model" || reframe === "mode") {
-        // Entering a mode is a fresh start for ITS camera, so the stand-down a
-        // hand-framed view earns in the mode being left does not follow it.
-        runtime.userMovedCamera = false;
-      }
+      if (reframe === "model") runtime.userMovedCamera = false;
       const nextPerspective = resolvePerspectiveSnapshot(
         perspectiveRef ? perspectiveRef.current : undefined,
         perspective
@@ -4383,11 +4372,9 @@ const CadViewer = forwardRef(function CadViewer({
         requireCoordinateSystem: true
       });
       runWithoutPerspectiveEvents(() => {
-        // The re-frame always FITS. The perspective it would otherwise restore
-        // is the one this same effect emitted when it framed the first batch,
-        // so honouring it here would just re-apply the too-close view the
-        // re-frame exists to replace.
-        const restored = reframe === "model"
+        // A lighting-style switch restores the current camera; progressive
+        // extent changes still fit the completed model when appropriate.
+        const restored = (reframe === "model" || reframe === "mode")
           && nextPerspectiveMatchesScene
           && applyPerspectiveSnapshot(runtime, nextPerspective, { scheduleIdle: false });
         if (restored) {
@@ -4414,7 +4401,7 @@ const CadViewer = forwardRef(function CadViewer({
       // baseline is measured against -- and the scale it derives is 1, which is
       // what makes the opening view read as exactly 100%.
       runtime.zoomFitModelRadius = zeroPoseRadius;
-      resetRuntimeZoomBaseline(runtime);
+      if (runtime.previousViewState?.modelKey !== modelKey) resetRuntimeZoomBaseline(runtime);
       syncCameraZoomPercent(runtime);
       framedModelKeyRef.current = modelKey || "";
       framedViewingModeRef.current = viewingMode;
@@ -4425,6 +4412,16 @@ const CadViewer = forwardRef(function CadViewer({
         modelKey,
         sceneScaleMode: normalizedSceneScaleMode
       });
+    }
+
+    // Runtime replacement can be a style change, a rapid reversal or context
+    // recovery. Restore framing independently of which style last drew a frame.
+    if (runtime.previousViewState) {
+      if (runtime.previousViewState.modelKey === modelKey) {
+        Object.assign(runtime, runtime.previousViewState.framing);
+        syncCameraZoomPercent(runtime);
+      }
+      runtime.previousViewState = null;
     }
 
     recordSceneSyncTiming(sceneSyncStartedAt, { mode: reuseScene ? "reuse" : "rebuild", records: runtime.displayRecords.length, reason: rebuildReason });
@@ -5562,7 +5559,7 @@ const CadViewer = forwardRef(function CadViewer({
     onMeasurePick: handleMeasurePick,
     onMeasureHoverPoint: handleMeasureHoverPoint,
     viewerReadyTick,
-    suppressTopologyPicking: renderMode || stepAnimationPlaying,
+    suppressTopologyPicking: stepAnimationPlaying,
     allowMeshVertexSnap
   });
 

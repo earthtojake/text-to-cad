@@ -1,4 +1,4 @@
-export function createZoomPivotReanchor(THREE, { renderMode = false } = {}) {
+export function createZoomPivotReanchor(THREE) {
   const pointer = new THREE.Vector2();
   const forward = new THREE.Vector3();
   const scratch = new THREE.Vector3();
@@ -29,9 +29,9 @@ export function createZoomPivotReanchor(THREE, { renderMode = false } = {}) {
       camera.getWorldDirection(forward);
       const depthOf = point => Math.max(scratch.copy(point).sub(camera.position).dot(forward), 0);
       let depth = 0;
-      // Render zoom follows the stable subject bounds. Exact surface hits in
-      // Inspect can demand BVHs and materialize animated CPU geometry.
-      if (!renderMode && runtime.raycaster && runtime.modelGroup) {
+      // Anchor all display styles to the surface under the cursor. Raycast
+      // acceleration remains demand-driven; a miss falls back to model bounds.
+      if (runtime.raycaster && runtime.modelGroup) {
         runtime.raycaster.setFromCamera(pointer, camera);
         const previousFirstHitOnly = runtime.raycaster.firstHitOnly;
         runtime.raycaster.firstHitOnly = true;

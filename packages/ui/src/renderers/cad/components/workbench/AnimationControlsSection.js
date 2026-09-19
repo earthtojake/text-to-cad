@@ -22,7 +22,7 @@ import {
   parseFileSheetNumberInput
 } from "./FileSheet.js";
 
-// The ANIMATION tab: pick a clip, play it, scrub it.
+// The Animation section: pick a clip, play it, scrub it.
 //
 // STEP render-module clips and embedded glTF clips share this transport UI.
 // Their evaluators remain separate; this section only edits clip and clock state.
@@ -85,7 +85,7 @@ export default function AnimationControlsSection({ runtime = null }) {
   const activeClip = clips.find((clip) => clip.id === runtime?.activeClipId) || null;
   const duration = Math.max(Number(activeClip?.duration) || 1, 0.001);
   // The section's gate: with animation off the evaluator never runs and the
-  // model shows whatever the Pose tab set. A clip is always selected, so this
+  // model shows whatever the Position section set. A clip is always selected, so this
   // switch — not a picker entry — is how the transport is idled.
   const enabled = runtime?.enabled !== false;
   if (!animationControlsHaveContent(runtime)) {
@@ -93,7 +93,7 @@ export default function AnimationControlsSection({ runtime = null }) {
   }
 
   return (
-    <div className="py-2">
+    <>
       {status === "loading" ? (
         <FileSheetStatusText className="py-2">Loading animation...</FileSheetStatusText>
       ) : null}
@@ -102,14 +102,14 @@ export default function AnimationControlsSection({ runtime = null }) {
       ) : null}
 
       {clips.length ? (
-        // "Animation" names the system this group drives, the way the Kinematics
-        // tab's section does. It does not collide with any row inside it
+        // "Animation" names the system this group drives, the way the Position
+        // section does. It does not collide with any row inside it
         // (settings-ui.md forbids a group sharing a name with its own rows, and
         // the rows here are Clip, Loop, Time and Speed).
         <FileSheetSubsection
           title="Animation"
           // The transport gate rides this heading on the shared right-edge control
-          // axis, exactly as the Kinematics tab's mate gate does.
+          // axis, exactly as the Position section's mate gate does.
           trailing={runtime?.showEnableToggle === false ? null : (
             <FileSheetBooleanToggle
               checked={enabled}
@@ -122,7 +122,7 @@ export default function AnimationControlsSection({ runtime = null }) {
               transport and the time/speed rows beneath it. It lists the model's
               authored clips and nothing else -- the idle state is the gate switch
               above, not an entry here -- and the gate disables it with every
-              other row it owns, exactly as the Kinematics tab's gate disables the
+              other row it owns, exactly as the Position section's gate disables the
               DOFs and presets it owns. A gate turns its whole feature off; one
               live row under an off switch reads as a control that still does
               something, and this one silently rewinds the clock. */}
@@ -136,7 +136,7 @@ export default function AnimationControlsSection({ runtime = null }) {
             options={animationClipOptions(clips)}
           /> : null}
           {/* "Restart" is deliberately not called "Reset": it returns playback to
-              zero, where the Pose tab's Reset returns the DOFs to their defaults.
+              zero, where the Position section's Reset returns the DOFs to their defaults.
               Play is the ONE control the gate does not disable, here and on the
               toolbar: pressing it means "run this clip", so it opens the gate.
               The toolbar's copy sits outside this tab and has no way to say that
@@ -216,7 +216,7 @@ export default function AnimationControlsSection({ runtime = null }) {
           </FileSheetSliderField>
         </FileSheetSubsection>
       ) : null}
-    </div>
+    </>
   );
 }
 
@@ -225,15 +225,4 @@ export function animationControlsHaveContent(runtime) {
   const status = String(runtime?.status || "").trim();
   const error = String(runtime?.error || "").trim();
   return Boolean(clips.length || status === "loading" || error);
-}
-
-export function buildAnimationControlsTab(props = {}) {
-  if (!animationControlsHaveContent(props.runtime)) {
-    return null;
-  }
-  return {
-    id: props.value || "animation",
-    title: props.title || "Animation",
-    content: <AnimationControlsSection {...props} />
-  };
 }

@@ -625,27 +625,24 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await shoot("file-cad-1280x800.png", true);
   await resizeWindow(1440, 900);
 
-  // Display is an on-demand toolbar popover; closing it preserves per-file settings.
+  // View owns display settings; returning to Model preserves its controls and tree.
   await expect(page.getByRole("tab", { name: "Display", exact: true })).toHaveCount(0);
-  const display = page.getByRole("button", { name: "Display", exact: true });
-  await display.click();
-  const displayPanel = page.getByRole("dialog", { name: "Display settings" });
-  await expect(displayPanel).toBeVisible();
-  await displayPanel.getByRole("combobox", { name: "Mode" }).click();
+  const view = page.getByRole("tab", { name: "View", exact: true });
+  const model = page.getByRole("tab", { name: "Model", exact: true });
+  await view.click();
+  const viewPanel = page.getByRole("tabpanel", { name: "View", exact: true });
+  const mode = viewPanel.getByRole("combobox", { name: "Mode" });
+  await mode.click();
   await page.getByRole("option", { name: "Wire", exact: true }).click();
-  await displayPanel.getByRole("button", { name: "Close Display" }).click();
-  await expect(displayPanel).toHaveCount(0);
-  await display.click();
-  await expect(displayPanel.getByRole("combobox", { name: "Mode" })).toContainText("Wire");
-  await displayPanel.getByRole("combobox", { name: "Mode" }).click();
+  await model.click();
+  await expect(viewPanel).toBeHidden();
+  await view.click();
+  await expect(mode).toContainText("Wire");
+  await mode.click();
   await page.getByRole("option", { name: "Shaded with edges", exact: true }).click();
   await expect(page.getByRole("listbox")).toHaveCount(0);
-  await expect(displayPanel).toBeVisible();
-  await expect(displayPanel.getByRole("combobox", { name: "Mode" })).toBeFocused();
-  await page.keyboard.press("Escape");
-  await expect(displayPanel).toHaveCount(0);
-  await expect(display).toHaveAttribute("aria-expanded", "false");
-  await expect(display).toBeFocused();
+  await expect(mode).toBeFocused();
+  await model.click();
   await expect(tree).toBeVisible();
 
   // Measurements live under the toolbar tool and close when it is toggled off.
@@ -700,7 +697,7 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   const panelDark = await paint();
   await expect(page.locator("html")).toHaveClass(/\bdark\b/);
   await expect.poll(sceneBackdrop).toBe("51,51,51");
-  await expect(page.getByRole("button", { name: "Viewing mode: Inspect. Switch to Render", exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "View", exact: true })).toBeVisible();
 
   await page.evaluate(() => window.hardcore.settings.set({ theme: "light" }));
   await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);

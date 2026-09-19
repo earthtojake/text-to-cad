@@ -12,6 +12,7 @@ export { CAMERA_PROJECTION, normalizeCameraProjection };
 export const CAD_DISPLAY_MODE = Object.freeze({
   HIDDEN_EDGES: "hidden_edges",
   HIDDEN_LINES_REMOVED: "hidden_lines_removed",
+  RENDER: "render",
   SHADED: "shaded",
   SHADED_EDGES: "shaded_edges",
   TRANSPARENT: "transparent",
@@ -105,12 +106,23 @@ export const DEFAULT_DISPLAY_SETTINGS = Object.freeze({
 
 export const DISPLAY_SETTINGS_KEYS = Object.freeze([
   "mode",
+  "render",
   "clip",
   "exploded",
   "edges",
   "guides",
   "partColor"
 ]);
+
+export const DISPLAY_RENDER_SETTINGS_KEYS = Object.freeze([
+  "studio",
+  "quality",
+  "exposure",
+  "lighting",
+  "backdrop"
+]);
+export const DISPLAY_RENDER_LIGHTING_KEYS = Object.freeze(["rotation", "size", "fill"]);
+export const DISPLAY_RENDER_BACKDROP_KEYS = Object.freeze(["color", "transparent", "ground", "groundPlacement"]);
 
 export const DISPLAY_EDGE_SETTINGS_KEYS = Object.freeze(["enabled", "silhouette"]);
 export const DISPLAY_GUIDE_SETTINGS_KEYS = Object.freeze(["grid", "axis"]);
@@ -236,6 +248,12 @@ export function validateDisplaySettings(value) {
     }
     normalizeDisplayMode(source.mode);
   }
+  if (Object.prototype.hasOwnProperty.call(source, "render")) {
+    validateDisplayRenderSettings(source.render);
+    if (normalizeDisplayMode(source.mode) !== CAD_DISPLAY_MODE.RENDER) {
+      throw new Error("display.render requires display.mode 'render'");
+    }
+  }
   if (Object.prototype.hasOwnProperty.call(source, "clip")) {
     const clip = validateStrictObject(source.clip, "display.clip");
     validateObjectKeys(clip, DISPLAY_CLIP_SETTINGS_KEYS, "display.clip");
@@ -297,6 +315,38 @@ export function validateDisplaySettings(value) {
   return true;
 }
 
+export function validateDisplayRenderSettings(value) {
+  const render = validateStrictObject(value, "display.render");
+  validateObjectKeys(render, DISPLAY_RENDER_SETTINGS_KEYS, "display.render");
+  if (Object.hasOwn(render, "studio") && !["light", "dark"].includes(render.studio)) {
+    throw new Error("display.render.studio must be 'light' or 'dark'");
+  }
+  if (Object.hasOwn(render, "quality") && !["preview", "final"].includes(render.quality)) {
+    throw new Error("display.render.quality must be 'preview' or 'final'");
+  }
+  if (Object.hasOwn(render, "exposure")) validateStrictNumber(render.exposure, "display.render.exposure", -5, 5);
+  if (Object.hasOwn(render, "lighting")) {
+    const lighting = validateStrictObject(render.lighting, "display.render.lighting");
+    validateObjectKeys(lighting, DISPLAY_RENDER_LIGHTING_KEYS, "display.render.lighting");
+    validatePresent(lighting, ["rotation"],
+      (entry, fieldName) => validateStrictNumber(entry, fieldName, -180, 180), "display.render.lighting");
+    validatePresent(lighting, ["size"],
+      (entry, fieldName) => validateStrictNumber(entry, fieldName, 0.25, 3), "display.render.lighting");
+    validatePresent(lighting, ["fill"],
+      (entry, fieldName) => validateStrictNumber(entry, fieldName, 0, 1), "display.render.lighting");
+  }
+  if (Object.hasOwn(render, "backdrop")) {
+    const backdrop = validateStrictObject(render.backdrop, "display.render.backdrop");
+    validateObjectKeys(backdrop, DISPLAY_RENDER_BACKDROP_KEYS, "display.render.backdrop");
+    validatePresent(backdrop, ["color"], validateStrictColor, "display.render.backdrop");
+    validatePresent(backdrop, ["transparent", "ground"], validateStrictBoolean, "display.render.backdrop");
+    if (Object.hasOwn(backdrop, "groundPlacement") && !["origin", "lowest"].includes(backdrop.groundPlacement)) {
+      throw new Error("display.render.backdrop.groundPlacement must be 'origin' or 'lowest'");
+    }
+  }
+  return true;
+}
+
 export function normalizeDisplayGuideSettings(value = null, fallback = DEFAULT_DISPLAY_GUIDE_SETTINGS) {
   const source = isObject(value) ? value : {};
   validateObjectKeys(source, ["grid", "axis"], "display.guides");
@@ -339,8 +389,17 @@ export function normalizePartColorSettings(value = null, fallback = DEFAULT_PART
 export function normalizeDisplaySettings(value = null, { fallback = DEFAULT_DISPLAY_SETTINGS } = {}) {
   const source = isObject(value) ? value : {};
   validateObjectKeys(source, DISPLAY_SETTINGS_KEYS, "display");
+  const mode = normalizeDisplayMode(source.mode, { fallback: fallback.mode });
+  const render = source.render == null
+    ? (mode === CAD_DISPLAY_MODE.RENDER && isObject(fallback.render) ? structuredClone(fallback.render) : null)
+    : { ...source.render };
+  if (render != null) {
+    validateDisplayRenderSettings(render);
+    if (mode !== CAD_DISPLAY_MODE.RENDER) throw new Error("display.render requires display.mode 'render'");
+  }
   return {
-    mode: normalizeDisplayMode(source.mode, { fallback: fallback.mode }),
+    mode,
+    ...(render != null ? { render } : {}),
     clip: normalizeStepClipSettings(source.clip ?? fallback.clip),
     exploded: normalizeExplodedViewSettings(source.exploded, fallback.exploded),
     edges: normalizeDisplayEdgeSettings(source.edges, fallback.edges),
@@ -357,6 +416,7 @@ export function displaySettingsEqual(left, right) {
   const a = normalizeDisplaySettings(left);
   const b = normalizeDisplaySettings(right);
   return a.mode === b.mode &&
+    JSON.stringify(a.render) === JSON.stringify(b.render) &&
     stepClipSettingsEqual(a.clip, b.clip) &&
     JSON.stringify(a.exploded) === JSON.stringify(b.exploded) &&
     JSON.stringify(a.edges) === JSON.stringify(b.edges) &&
@@ -387,6 +447,7 @@ export function displayModeForcesEdges(value) {
 
 export function displayModeAllowsEdges(value) {
   return ![
+    CAD_DISPLAY_MODE.RENDER,
     CAD_DISPLAY_MODE.SHADED,
     CAD_DISPLAY_MODE.UNSHADED
   ].includes(normalizeDisplayMode(value));

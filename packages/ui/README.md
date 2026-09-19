@@ -193,7 +193,7 @@ The scene uses progressive component loading and demand-driven exact surfaces.
 The Model tree shares the file tree's row primitive. Its visible expansion
 controls viewport selection, exact topology and optional feature recognition;
 collapsed parts do not trigger whole-assembly analysis. Contextual measurements
-remain in Inspect. See [model tree and recognition](docs/cad-renderer.md#step-inspector-layout)
+remain available in Render too. See [model tree and recognition](docs/cad-renderer.md#step-inspector-layout)
 for selection, isolation, demand and cache ownership.
 
 Feature detection stays client-side in this renderer, separate from cadgen
@@ -202,14 +202,19 @@ and versioned, bounded memory cache; it adds no persistent store. Read
 [feature detection](docs/feature-detection.md) before changing inference rules,
 cache identity, cancellation or recognition limits.
 
-Inspect uses the fixed light or dark workbench basis selected by app appearance;
-legacy CAD theme preferences are not consumed. The floating toolbar switches to
-Render, whose studio, camera and quality have independent per-file state.
-Authored material color, finish and opacity are read-only in both modes; the
-Model tree's reference section shows selected materials and their properties.
-There is no Materials tab or persisted material override. Render does not
-receive inspection tints, picking or measurements. See
-[Render modes](docs/render-mode.md) and [progressive detail](docs/lod.md).
+The Model, Motion and View tabs share one per-file state and tab arrangement.
+View groups scene/camera/grid settings, followed by Clip and Explode. Render is
+its second Mode option, adding photographic controls at the bottom; changing
+style preserves projection (including orthographic), camera, zoom, motion,
+selection and common display settings. Interaction tools work in every style.
+Ordinary styles use the app's fixed light/dark workbench basis; Render uses a
+lazy photographic rig and defaults to Preview quality. Legacy CAD theme
+preferences are not consumed.
+
+Authored material color, finish and opacity are read-only in every style; the
+Model reference section shows their properties. There is no Materials editor or
+persisted material override. See [View styles](docs/render-mode.md) and
+[progressive detail](docs/lod.md).
 
 A renderer publishes `FileActivity` with a loading flag, label, title, optional
 tone and optional activation callback. FileViewer shows a generic filename

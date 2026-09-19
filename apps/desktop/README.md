@@ -1079,35 +1079,34 @@ default; other saved panel choices remain unchanged.
 ### Inspect and Render
 
 CAD controls are shared with web: the top **Interaction tools** group contains
-Select, Measure and Draw; **View and actions** contains filters, display and
-navigation settings, viewing mode and capture. The horizontal groups wrap in a
+Select, Measure and Draw; **View and actions** contains selection filters,
+navigation and capture. The horizontal groups wrap in a
 narrow explorer pane. Zoom buttons, a static percentage readout and Reset view
 sit above the bottom-right orientation axes; X/Y/Z labels sit outside the
 endpoints. Camera behavior and per-file state are unchanged.
 
-The floating toolbar switches between **Inspect** and **Render**. CAD Theme
-settings and presets are retired. Old theme records are ignored and left
-untouched; they cannot override either mode's base. Settings › Appearance
-still owns the app's System, Light and Dark preference, including the panel
-column, toolbar and tab strip.
+The shared STEP Inspector uses **Model | Motion | View**. Motion appears when
+position controls or animation clips exist, with Animation above Position.
+Playback and position retain independent runtimes, enable state and actions;
+preset-transition preferences are ordinary Position rows above Reset/Copy.
+Robots also use Motion for their joints and preserve Components/SDF tabs;
+drawings and mesh files retain their format-specific controls.
 
-**Inspect** uses fixed workbench lighting and dark edges in light and dark
-appearance; its canvas and guides adapt to the app. Authored material color,
-finish and opacity are preserved, with neutral defaults for unassigned parts. Display controls
-projection, shaded or wire presentation, edges, guides, clipping and exploded
-view. Model/Features, selection and contextual measurements remain inspection
-tools. The Inspector retains its saved section layout.
+View contains the single Mode dropdown for shaded, edge, wire and photographic
+Render presentation. All modes share the camera, projection, part colors,
+guides, clipping and explode controls. Render adds its lighting, backdrop and
+Preview/Final quality sections inside View. Switching modes never reframes the
+camera, replaces inspector tabs or resets the selected tab or split layout.
+Photographic settings persist per file. Saved Kinematics/Animation tab IDs merge
+to Motion, and Display/Studio IDs merge to View, without duplicate tabs or loss
+of unrelated custom pane arrangements.
 
-**Render** uses a photographic studio, perspective camera and shaded authored
-colors, with inspection guides, clipping and selection effects off. Studio
-starts from the app's light or dark appearance and exposes lens, exposure,
-lighting, backdrop and Preview/Final quality controls. Studio edits belong to
-the model session and survive mode switches; returning to Inspect restores
-its Display settings. Materials are read-only in both modes, with names and
-properties in the Model tree's reference section. There is no Materials tab,
-local assignment or material undo state; old saved material overrides are
-ignored. Use prompts to change authored material assignments or properties. Supported Kinematics and
-Animation controls remain available in both modes.
+Settings › Appearance owns the app's System, Light and Dark preference. CAD
+Theme settings are retired, and old theme records cannot override the current
+scene. Authored materials are read-only in every display mode, with names and
+properties in the Model reference section. There is no Materials tab, local
+assignment or material undo state; old overrides are ignored. Use prompts to
+change source material assignments or properties.
 
 Embedded STEP animation modules load through temporary Blob URLs in the
 renderer. Its content security policy permits `blob:` scripts for this path,
@@ -1115,10 +1114,10 @@ while retaining the restrictions on remote scripts, inline scripts and `eval`.
 The shared loader revokes each URL after module evaluation; no adjacent
 JavaScript file is discovered or written.
 
-Neither a mode switch nor a Studio edit changes the app's appearance. The
+Neither a display-mode change nor a photographic setting changes the app's appearance. The
 Electron `theme` suite samples the document through these interactions, and
-`cad-scenes` checks that Display and Studio retain their separate state
-and no Materials editor is exposed. See the shared [Render modes](../../packages/ui/docs/render-mode.md)
+`cad-scenes` checks View settings, Motion controls, authored material details
+and the absence of a Materials editor. See the shared [Render modes](../../packages/ui/docs/render-mode.md)
 playbook for the mode bases and camera behavior.
 
 ## Quitting

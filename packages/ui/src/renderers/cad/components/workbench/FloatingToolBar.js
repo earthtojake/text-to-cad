@@ -1,4 +1,3 @@
-import DisplayPopover from "./DisplayPopover.jsx";
 import SelectionFilterMenu from "./SelectionFilterMenu.jsx";
 import { SELECTION_FILTERS } from "../../workbench/selectionFilter.js";
 import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -9,8 +8,6 @@ import {
   Hand,
   MousePointer2,
   Orbit,
-  Box,
-  Clapperboard,
   Pause,
   Play,
   PenTool,
@@ -133,8 +130,6 @@ function DesktopFloatingToolBar({
   drawingViewMode = "3d",
   onDrawingViewModeChange,
   previewMode = false,
-  renderMode = false,
-  onRenderModeChange = null,
   toolbarHidden = false,
   onToolbarEnter,
   onToolbarLeave,
@@ -154,7 +149,6 @@ function DesktopFloatingToolBar({
   drawToolActive,
   measureModeActive = false,
   measurementPanel = null,
-  displayPanel = null,
   measureDisabled = false,
   measureSupported = null,
   panToolActive,
@@ -171,8 +165,7 @@ function DesktopFloatingToolBar({
   canRedoDrawing,
   drawingStrokes,
   handleScreenshotCopy,
-  handleCapture = null,
-  selectedEntry
+  handleCapture = null
 }) {
   // What this format can do, from the one capability table — never re-derived from
   // its identity, so a new format inherits the toolbar by declaring a row.
@@ -202,7 +195,7 @@ function DesktopFloatingToolBar({
   // The wrapper's compact/full marker remains a useful host diagnostic. Both
   // groups wrap as whole horizontal pills when this width is unavailable.
   const viewWidth = (showToolCluster ? 26 : 0) + (selectionFilter !== null ? 26 : 0) +
-    (displayPanel ? 31 : 0) + (drawingViewToggle ? 52 : 0) + (onRenderModeChange ? 31 : 0) + 42;
+    (drawingViewToggle ? 52 : 0) + 42;
   useLayoutEffect(() => {
     const scene = toolbarRef.current?.parentElement;
     if (!scene) return undefined;
@@ -260,15 +253,14 @@ function DesktopFloatingToolBar({
     </ToolbarButton>
   ) : null;
 
-  const showSelectTool = !renderMode && !previewMode && supportsTool(renderFormat, "select");
-  const showMeasureTool = !renderMode && !previewMode && canMeasure;
-  const showDrawTool = !renderMode && !previewMode && supportsTool(renderFormat, "draw");
+  const showSelectTool = !previewMode && supportsTool(renderFormat, "select");
+  const showMeasureTool = !previewMode && canMeasure;
+  const showDrawTool = !previewMode && supportsTool(renderFormat, "draw");
   const showInteractionTools = showSelectTool || showMeasureTool || showDrawTool;
-  const showSelectionSettings = !renderMode && !previewMode && selectionFilter !== null;
-  const showViewSettings = !renderMode && !previewMode && showToolCluster;
-  const showDrawingViewSettings = !renderMode && !previewMode && drawingViewToggle;
-  const hasSettingsBeforeMode = showSelectionSettings || showViewSettings || Boolean(displayPanel) || showDrawingViewSettings;
-  const showViewingMode = !previewMode && Boolean(onRenderModeChange);
+  const showSelectionSettings = !previewMode && selectionFilter !== null;
+  const showViewSettings = !previewMode && showToolCluster;
+  const showDrawingViewSettings = !previewMode && drawingViewToggle;
+  const hasViewActions = showSelectionSettings || showViewSettings || showDrawingViewSettings;
 
   return (
     <div
@@ -299,7 +291,6 @@ function DesktopFloatingToolBar({
         <div role="group" aria-label="View and actions" className={groupClasses} onPointerEnter={onToolbarEnter} onPointerLeave={onToolbarLeave}>
           {showSelectionSettings && <SelectionFilterMenu value={selectionFilter} onChange={onSelectionFilterChange} disabled={viewerLoading || !viewportContent} />}
           {showViewSettings && viewMenu}
-          {displayPanel && <DisplayPopover key={selectedEntry?.file} disabled={viewerLoading || !viewportContent}>{displayPanel}</DisplayPopover>}
           {showDrawingViewSettings && <>
             {/* `active`, not `isActive`: ToolbarButton switches variant on `active`. */}
             <ToolbarButton label="Top-down 2D view" active={drawingViewMode === "2d"} onClick={() => onDrawingViewModeChange?.("2d")}>
@@ -309,12 +300,7 @@ function DesktopFloatingToolBar({
               <span className="text-micro leading-none">3D</span>
             </ToolbarButton>
           </>}
-          {hasSettingsBeforeMode && (showViewingMode || previewMode) && <span className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" />}
-          {showViewingMode && <ToolbarButton label={renderMode ? "Viewing mode: Render. Switch to Inspect" : "Viewing mode: Inspect. Switch to Render"}
-            onClick={() => onRenderModeChange(!renderMode)} active={renderMode}>
-            {renderMode ? <Clapperboard className="size-3" aria-hidden="true" /> : <Box className="size-3" aria-hidden="true" />}
-          </ToolbarButton>}
-          {(hasSettingsBeforeMode || showViewingMode) && <span className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" />}
+          {hasViewActions && <span className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" />}
           {previewMode && animationButton}
           {captureMenu}
           {previewMode && <ToolbarButton label="Exit orbit" onClick={handleExitPreviewMode}>
@@ -331,13 +317,13 @@ function DesktopFloatingToolBar({
       {!previewMode && selectionToolActive && selectionFilterNotice && <p role="status" className="max-w-56 rounded-md border bg-background px-2 py-1 text-micro text-muted-foreground shadow-sm">{selectionFilterNotice}</p>}
 
 
-      {!renderMode && !previewMode && measureModeActive && measurementPanel && <ToolbarShell
+      {!previewMode && measureModeActive && measurementPanel && <ToolbarShell
         title="Measure" label="Measurements" className="max-h-64"
         onClose={() => handleSelectTabToolMode("references")} closeLabel="Finish measuring"
         footer="Clears when you leave Measure.">
         {measurementPanel}
       </ToolbarShell>}
-      {!renderMode && !previewMode && supportsTool(renderFormat, "draw") && drawToolActive ? (
+      {!previewMode && supportsTool(renderFormat, "draw") && drawToolActive ? (
         <DrawingToolbar
           onClose={() => handleSelectTabToolMode("references")}
           drawingToolOptions={drawingToolOptions}
@@ -367,7 +353,6 @@ export default function FloatingToolBar({
 
   return (
     <DesktopFloatingToolBar
-      selectedEntry={selectedEntry}
       previewMode={previewMode}
       toolbarHidden={toolbarHidden}
       onToolbarEnter={onToolbarEnter}

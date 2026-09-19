@@ -105,10 +105,10 @@ test('two browser preference views merge changed layout kinds and do not rewrite
     const a = createWebCadPreferences();
     const b = createWebCadPreferences();
     const step = { split: false, top: ['tree'], bottom: [], ratio: 0.5 };
-    const robot = { split: false, top: ['kinematics'], bottom: [], ratio: 0.5 };
+    const robot = { split: false, top: ['motion'], bottom: [], ratio: 0.5 };
     b.update({ fileSheetTabs: { robot }, poseTransition: { animate: false, speed: 2 } });
     a.update({ fileSheetTabs: { step } });
-    assert.deepEqual(JSON.parse(local.getItem('cad-viewer:file-sheet-tab-layout:v6')), { robot, step });
+    assert.deepEqual(JSON.parse(local.getItem('cad-viewer:file-sheet-tab-layout:v7')), { robot, step });
     assert.deepEqual(JSON.parse(local.getItem('cad-viewer:pose-transition:v1')), { animate: false, speed: 2 });
   } finally {
     if (previousStorage) Object.defineProperty(globalThis, 'localStorage', previousStorage); else delete globalThis.localStorage;

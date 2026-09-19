@@ -95,7 +95,8 @@ export function attachCadLiveBinding(binding: CadLiveBinding, readRuntime: () =>
     clearSelection: () => mutate(runtime => runtime.clearSelection()),
     setCamera: snapshot => mutate(runtime => runtime.setCamera(snapshot)),
     resetCamera: () => mutate(runtime => runtime.resetCamera()),
-    setDisplaySettings: patch => mutate(runtime => runtime.setDisplaySettings(patch)),
+    setDisplaySettings: patch => mutate(runtime => runtime.setDisplaySettings(patch),
+      state => patch.mode == null || state.display.mode === patch.mode),
     setRenderMode: enabled => mutate(runtime => runtime.setRenderMode(enabled),
       state => state.renderMode === (enabled ? 'render' : 'inspect')),
     async capture() {

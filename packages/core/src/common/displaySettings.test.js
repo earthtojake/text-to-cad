@@ -100,12 +100,43 @@ test("display mode policies describe edge and surface behavior", () => {
   assert.equal(displayModeShowsEdges(CAD_DISPLAY_MODE.SHADED_EDGES), true);
   assert.equal(displayModeForcesEdges(CAD_DISPLAY_MODE.SHADED_EDGES), true);
   assert.equal(displayModeShowsEdges(CAD_DISPLAY_MODE.SHADED), false);
+  assert.equal(displayModeShowsEdges(CAD_DISPLAY_MODE.RENDER), false);
+  assert.equal(displayModeForcesEdges(CAD_DISPLAY_MODE.RENDER), false);
+  assert.equal(displayModeUsesUnlitSurfaces(CAD_DISPLAY_MODE.RENDER), false);
+  assert.equal(displayModeSurfaceOpacity(CAD_DISPLAY_MODE.RENDER, 0.73), 0.73);
   assert.equal(displayModeShowsEdges(CAD_DISPLAY_MODE.WIREFRAME), true);
   assert.equal(displayModeShowsThroughEdges(CAD_DISPLAY_MODE.HIDDEN_EDGES), true);
   assert.equal(displayModeShowsThroughEdges(CAD_DISPLAY_MODE.TRANSPARENT), true);
   assert.equal(displayModeUsesUnlitSurfaces(CAD_DISPLAY_MODE.UNSHADED), true);
   assert.equal(displayModeSurfaceOpacity(CAD_DISPLAY_MODE.TRANSPARENT, 1), 0.22);
   assert.equal(displayModeSurfaceOpacity(CAD_DISPLAY_MODE.HIDDEN_LINES_REMOVED, 1), 0.045);
+});
+
+test("render display settings share the viewer envelope and exclude camera", () => {
+  const display = normalizeDisplaySettings({
+    mode: "render",
+    render: {
+      studio: "dark",
+      quality: "preview",
+      exposure: 1,
+      lighting: { rotation: 30, size: 1.5, fill: 0.4 },
+      backdrop: { color: "#123456", transparent: false, ground: true, groundPlacement: "origin" }
+    },
+    clip: { enabled: true, axis: "x", offsets: { x: 0.25 } },
+    exploded: { enabled: true, amount: 0.5 }
+  });
+  assert.equal(display.mode, CAD_DISPLAY_MODE.RENDER);
+  assert.equal(display.render.studio, "dark");
+  assert.equal(display.clip.enabled, true);
+  assert.equal(display.exploded.amount, 0.5);
+  assert.throws(
+    () => normalizeDisplaySettings({ mode: "render", render: { camera: { preset: "front" } } }),
+    /Unsupported display\.render fields: camera/
+  );
+  assert.throws(
+    () => normalizeDisplaySettings({ mode: "shaded", render: { studio: "light" } }),
+    /requires display\.mode 'render'/
+  );
 });
 
 test("display settings compare after normalization", () => {

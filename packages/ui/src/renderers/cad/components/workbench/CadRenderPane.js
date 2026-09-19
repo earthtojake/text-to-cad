@@ -374,12 +374,12 @@ export default function CadRenderPane({
   // no parts, so it gets the stripped-down prop set.
   const hasParts = capabilities.parts || (capabilities.content === VIEWPORT_CONTENT.ROBOT && robotComponentPicking);
   const hasTopology = capabilities.topology;
-  const inspectionEnabled = !renderMode;
+  const inspectionEnabled = true;
   const drawingGuides = viewerBendGuidesForRenderPane({ renderMode, bendAxisX, drawingBendLines });
   const effectivePlanMode = inspectionEnabled && planMode;
   // Render supplies one clean presentation display state to every format,
   // including plain meshes whose Inspect mode has no display-mode panel.
-  const displaySettingsActive = (renderMode || capabilities.displayModes) && !!displaySettings;
+  const displaySettingsActive = !!displaySettings;
   // A plan view additionally forces orthographic: a top-down lock still
   // foreshortens off-centre under perspective, which is exactly what a plan view must
   // not do. Every other format receives projection from the resolved scene camera.

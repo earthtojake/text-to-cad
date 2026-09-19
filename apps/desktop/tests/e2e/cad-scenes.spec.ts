@@ -146,23 +146,24 @@ async function selectOrOpenFile(file: string) {
 }
 
 async function setDisplayMode(mode: string) {
-  await page.getByRole("button", { name: "Display", exact: true }).click();
-  const display = page.getByRole("dialog", { name: "Display settings" });
-  const value = display.getByRole("combobox", { name: "Mode" });
+  await page.getByRole("tab", { name: "View", exact: true }).click();
+  const value = page.getByRole("tabpanel", { name: "View", exact: true }).getByRole("combobox", { name: "Mode" });
   await value.click();
   await page.getByRole("option", { name: mode, exact: true }).click();
   await expect(value).toContainText(mode);
-  await page.keyboard.press("Escape");
+  // Retain the helper's original return to geometry inspection.
+  const model = page.getByRole("tab", { name: "Model", exact: true });
+  if (await model.count()) await model.click();
   // The file-session writer batches ordinary UI changes for 180ms.
   await page.waitForTimeout(250);
 }
 
 async function expectDisplayMode(mode: string) {
-  await page.getByRole("button", { name: "Display", exact: true }).click();
-  const value = page.getByRole("dialog", { name: "Display settings" })
-    .getByRole("combobox", { name: "Mode" });
-  await expect(value).toContainText(mode);
-  await page.keyboard.press("Escape");
+  await page.getByRole("tab", { name: "View", exact: true }).click();
+  await expect(page.getByRole("tabpanel", { name: "View", exact: true })
+    .getByRole("combobox", { name: "Mode" })).toContainText(mode);
+  const model = page.getByRole("tab", { name: "Model", exact: true });
+  if (await model.count()) await model.click();
 }
 
 async function expectCadReady(file: string, componentCount = 1) {
@@ -183,12 +184,12 @@ async function expectCadReady(file: string, componentCount = 1) {
   const model = page.getByRole("list", { name: "Model", exact: true });
   await expect(model).toBeVisible({ timeout: 15_000 });
   if (componentCount === 1) {
-    await expect(page.getByRole("region", { name: "Model", exact: true })
+    await expect(page.getByRole("tabpanel", { name: "Model", exact: true })
       .getByText("1 feature", { exact: true })).toBeVisible({ timeout: 15_000 });
   }
 }
 
-test("Inspect and Render preserve display and studio edits without a Materials editor", async () => {
+test("View preserves display and render settings without a Materials editor", async () => {
   test.setTimeout(150_000);
   await openFile("part.step");
   await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible({ timeout: 90_000 });
@@ -215,16 +216,18 @@ test("Inspect and Render preserve display and studio edits without a Materials e
   await page.screenshot({ path: test.info().outputPath("inspect-material-unselected.png"), animations: "disabled" });
   await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
   await expect(page.locator("[data-file-panel=cad-theme], [data-file-sheet=Theme]")).toHaveCount(0);
-  const displayButton = page.getByRole("button", { name: "Display", exact: true });
-  await displayButton.click();
-  const display = page.getByRole("dialog", { name: "Display settings" });
-  await display.getByRole("combobox", { name: "Mode" }).click();
+  const viewTab = page.getByRole("tab", { name: "View", exact: true });
+  const view = page.getByRole("tabpanel", { name: "View", exact: true });
+  const mode = view.getByRole("combobox", { name: "Mode" });
+  await viewTab.click();
+  await mode.click();
   await page.getByRole("option", { name: "Wire", exact: true }).click();
-  await page.keyboard.press("Escape");
+  await expect(mode).toContainText("Wire");
   await expect(page.getByRole("tab", { name: "Materials", exact: true })).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Viewing mode: Inspect. Switch to Render", exact: true }).click();
-  await expect(displayButton).toHaveCount(0);
+  await mode.click();
+  await page.getByRole("option", { name: "Render", exact: true }).click();
+  await expect(viewTab).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
   const studio = page.locator("[data-cad-render-settings-section]");
   await expect(studio).toBeVisible();
@@ -234,21 +237,19 @@ test("Inspect and Render preserve display and studio edits without a Materials e
   await expect(page.getByRole("tab", { name: "Materials", exact: true })).toHaveCount(0);
   await expect(page.locator("[data-cad-materials-settings-section]")).toHaveCount(0);
   await expect(page.locator("[data-file-panel-container]")).toHaveCount(1);
-  await page.screenshot({ path: test.info().outputPath("render-studio.png"), animations: "disabled" });
+  await page.screenshot({ path: test.info().outputPath("render-view.png"), animations: "disabled" });
 
-  await page.getByRole("button", { name: "Viewing mode: Render. Switch to Inspect", exact: true }).click();
-  await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible();
+  await mode.click();
+  await page.getByRole("option", { name: "Wire", exact: true }).click();
+  await expect(viewTab).toHaveAttribute("aria-selected", "true");
+  await expect(studio).toHaveCount(0);
   await expect(page.getByRole("tab", { name: "Studio", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("tab", { name: "Materials", exact: true })).toHaveCount(0);
-  await displayButton.click();
-  await expect(display.getByRole("combobox", { name: "Mode" })).toContainText("Wire");
-  await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Viewing mode: Inspect. Switch to Render", exact: true }).click();
-  // Studio is the only section for this model, so its redundant tab strip is hidden.
-  await expect(studio).toBeVisible();
+  await mode.click();
+  await page.getByRole("option", { name: "Render", exact: true }).click();
   await expect(exposure).toHaveValue("1.5 EV");
-  await expect(page.getByRole("tab", { name: "Materials", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Viewing mode: Render. Switch to Inspect", exact: true }).click();
+  await mode.click();
+  await page.getByRole("option", { name: "Shaded with edges", exact: true }).click();
+  await page.getByRole("tab", { name: "Model", exact: true }).click();
   await page.getByRole("list", { name: "Model", exact: true })
     .getByRole("button", { name: "Select part.step", exact: true }).click();
   await expect(materialInfo).toContainText("Brushed steel");
@@ -261,10 +262,10 @@ test("Inspect and Render preserve display and studio edits without a Materials e
   expect(errors).toEqual([]);
 });
 
-test("robot Kinematics edits, preserves and resets a joint through the desktop Inspector", async () => {
+test("robot Motion edits, preserves and resets a joint through the desktop Inspector", async () => {
   await openFile("hinge.urdf");
-  // Primitive links supply one section; a one-item tab strip stays hidden.
-  await expect(page.getByRole("region", { name: "Kinematics", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Motion", exact: true }).click();
+  await expect(page.getByRole("tabpanel", { name: "Motion", exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Joints", exact: true })).toHaveCount(0);
   const joint = page.getByLabel("hinge value in deg", { exact: true });
   await expect(joint).toHaveValue("0°");
@@ -285,8 +286,8 @@ test("embedded STEP animation loads, plays and scrubs under the desktop CSP", as
   // Keep the ordinary UI budget separate from the existing cold CAD-load wait.
   test.setTimeout(60_000 + 90_000);
   await openFile("animated.step");
-  await page.getByRole("tab", { name: "Animation", exact: true }).click();
-  const animation = page.getByRole("tabpanel", { name: "Animation", exact: true });
+  await page.getByRole("tab", { name: "Motion", exact: true }).click();
+  const animation = page.getByRole("tabpanel", { name: "Motion", exact: true });
   const play = animation.getByRole("button", { name: "Play animation", exact: true });
   // The data: module regression renders an error in this panel instead of controls.
   await expect(play).toBeEnabled();
@@ -321,8 +322,9 @@ test("embedded STEP animation loads, plays and scrubs under the desktop CSP", as
   const policy = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute("content");
   const scriptSources = policy?.split(";").map(directive => directive.trim().split(/\s+/))
     .find(([directive]) => directive === "script-src")?.slice(1);
-  // Permit the document's in-memory module without enabling data:, eval or remote scripts.
-  expect(scriptSources).toEqual(["'self'", "blob:"]);
+  // Permit the document's in-memory module and compiled WASM without enabling
+  // data:, unrestricted JavaScript eval or remote scripts.
+  expect(scriptSources).toEqual(["'self'", "'wasm-unsafe-eval'", "blob:"]);
   expect(errors).toEqual([]);
 });
 
