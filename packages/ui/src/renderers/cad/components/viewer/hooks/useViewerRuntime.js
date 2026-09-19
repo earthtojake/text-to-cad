@@ -16,7 +16,7 @@ import {
 } from "@hardcore/core/common/renderEdges.js";
 // The studio lives in Render's lazy chunk. A runtime can only be holding studio
 // resources if that chunk loaded, so teardown asks the boundary rather than
-// importing it — an Inspect-only session tears down with nothing to dispose.
+// importing it. Inspect's small reflection fill owns its own disposable texture.
 import { studioScene } from "../../../render/renderStudioChunk.js";
 import {
   resolveInteractionPixelRatioCap
@@ -875,7 +875,7 @@ export function useViewerRuntime({
         disposeSceneObject(runtime.gridHelper);
         disposeSceneObject(runtime.axesHelper);
         disposeTexture(runtime.sceneBackgroundTexture);
-        studioScene()?.disposeEnvironmentResource(runtime.environmentResource);
+        runtime.environmentResource?.dispose();
         studioScene()?.disposePhotographicStudio(runtime);
         runtime.keyLight?.shadow?.map?.dispose?.();
         if (runtime.keyLight?.shadow) {

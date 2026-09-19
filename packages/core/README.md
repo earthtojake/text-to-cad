@@ -33,9 +33,17 @@ in [the drawing contract](../ui/docs/drawing.md); the mechanism is
   STEP bytes. Saved schema-9 sidecars require a matching document digest and
   use a closed declaration envelope. Their appearance section supplies named,
   sparse PBR materials plus canonical leaf assignments. Composition carries
-  material ids and names into mesh data, owns its overrides, and never mutates
-  the stored tree or component tessellation. Session overlays can patch or
-  duplicate materials and assignments while app workflow state stays in the app.
+  material ids and names into mesh data, owns its appearance wrappers, and never
+  mutates the stored tree or component tessellation. Materials are read-only in
+  viewers: Inspect and Render honor authored color, finish and opacity, with
+  scene settings supplying fallbacks. Live annotation updates and assignment
+  removal use `applySourceAppearanceToMeshData`; `sourceAppearanceGeometry`
+  retains the exact publication identity for LOD ownership. These mechanisms
+  live in [sourceSidecar.js](src/common/sourceSidecar.js). There are no session
+  material overlays.
+  Authored finishes use a small fixed reflection fill in Inspect so metals
+  remain legible. [inspectEnvironment.js](src/common/inspectEnvironment.js) owns
+  its procedural texture; it loads no studio or external HDR asset.
 - **Resource ownership**: component geometry and edge textures can have more
   than one scene owner; only the LAST release disposes shared GPU/BVH state,
   and a failed construction or disposal leaves ownership charged and retryable

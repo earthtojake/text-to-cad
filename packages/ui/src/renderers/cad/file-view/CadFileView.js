@@ -23,7 +23,6 @@ import { lodSceneMayMove } from "../render/lodCameraSample.js";
 import { registerLodDisplaySource } from "../render/lodSceneAdoption.js";
 import { buildDisplaySettingsTab } from "../components/workbench/DisplaySettingsTab.js";
 import { buildRenderSettingsTab } from "../components/workbench/RenderSettingsTab.js";
-import { buildMaterialsSettingsTab } from "../components/workbench/MaterialsSettingsTab.js";
 import { prefetchRenderStudio } from "../render/renderStudioChunk.js";
 import MeshFileSheet from "../components/workbench/MeshFileSheet.js";
 import { DXF_PREVIEW_REFERENCE_THICKNESS_MM } from "@hardcore/core/lib/dxf/previewGlb.js";
@@ -76,7 +75,6 @@ import { viewerLoadingState } from "../workbench/viewerLoading.js";
 import { useCadWorkspaceSelection } from "../components/workbench/hooks/useCadWorkspaceSelection.js";
 import { useCadWorkspaceSelectors } from "../components/workbench/hooks/useCadWorkspaceSelectors.js";
 import { useCadWorkspaceShortcuts } from "../components/workbench/hooks/useCadWorkspaceShortcuts.js";
-import { useSourceMaterialSession } from "../components/workbench/hooks/useSourceMaterialSession.js";
 import {
   displayModeForcesEdges,
   displayModeIsWireframe,
@@ -290,7 +288,7 @@ import {
 import { ViewerElementContext, useViewerHost, usePromptDestination } from "../../../host/context.js";
 import { createCadPromptContext, promptDeliveryMessage } from "./promptContext.js";
 import { HostReferenceContext, referenceLabel, referencesFromCopyText, resolveSelectorSelection } from "./hostReference.js";
-import { applySourceMaterialOverlayToMeshData, sourceAppearanceHasMaterials, sourceMaterialGeometry } from "../workbench/sourceMaterialSession.js";
+import { applySourceAppearanceToMeshData, sourceAppearanceGeometry } from "@hardcore/core/common/sourceSidecar.js";
 const EMPTY_MATERIAL_OVERRIDES = Object.freeze({});
 function sourceAnimationForEntry(entry) { return (entry?.editingPreview ? entry.previewAnimation : entry?.sourceSidecar?.animation) || null; }
 function sourceAnimationKeyForEntry(entry) { return sourceAnimationForEntry(entry) ? `${fileKey(entry)}:${entry?.animationHash || entry?.documentHash || entry?.hash || "animation"}` : ""; }
@@ -1113,11 +1111,8 @@ function CadFileViewSurface({
       };
     }
   }, [selectedUrdfData, selectedUrdfMeshes]);
-  // Splitting a visual into its named objects is an INSPECT affordance. Render owns an
-  // isolated photographic scene, and the parts it is handed are the Materials targets —
-  // so a robot in Render keeps the per-visual geometry it has always had, and the split
-  // never reaches the Materials picker. Keeping the split in its own memo also means a
-  // mode switch never rebuilds the link geometry underneath it.
+  // Named-object splitting serves Inspect selection. Render keeps per-visual
+  // geometry; this separate memo avoids rebuilding link geometry on mode changes.
   const selectedUrdfMeshGeometryResult = useMemo(() => {
     if (renderSession.enabled || !selectedUrdfLinkMeshGeometryResult.meshData) {
       return selectedUrdfLinkMeshGeometryResult;
@@ -1193,20 +1188,17 @@ function CadFileViewSurface({
       : null;
   const selectedSourceAppearance = selectedEntry?.editingPreview
     ? selectedEntry.previewAppearance || null
-    : selectedEntry?.sourceSidecar?.appearance || selectedMeshData?.appearance || null;
-  const materialSession = useSourceMaterialSession(selectedEntry, selectedMeshData, {
-    appearance: selectedSourceAppearance,
-    fileSheetKind: selectedFileSheetKind,
-    renderEnabled: renderSession.enabled
-  });
+    : selectedEntry?.sourceSidecar
+      ? selectedEntry.sourceSidecar.appearance || null
+      : selectedMeshData?.appearance || null;
   const selectedDisplayMeshData = useMemo(() => {
     return registerLodDisplaySource(
-      applySourceMaterialOverlayToMeshData(selectedMeshData, materialSession.overlay, selectedSourceAppearance),
+      applySourceAppearanceToMeshData(selectedMeshData, selectedSourceAppearance),
       selectedMeshData
     );
-  }, [materialSession.overlay, selectedMeshData, selectedSourceAppearance]);
+  }, [selectedMeshData, selectedSourceAppearance]);
   const handleDisplayMeshAdoption = useCallback((source, ok, detail) =>
-    onMeshSourceAdoption(sourceMaterialGeometry(source), ok, detail), [onMeshSourceAdoption]);
+    onMeshSourceAdoption(sourceAppearanceGeometry(source), ok, detail), [onMeshSourceAdoption]);
   const selectedGlbDocument = selectedMeshMatches ? meshState?.glbDocument || null : null;
   const embeddedGlbAnimationRuntime = useEmbeddedGlbAnimation(selectedGlbDocument);
   // Animated direct GLBs render their live hierarchy. Flattened triangle picks
@@ -2343,7 +2335,6 @@ function CadFileViewSurface({
       selectedAnimationError
     ),
     hasEmbeddedGlbAnimationPanel: Boolean(embeddedGlbAnimationRuntime),
-    hasMaterialsPanel: materialSession.enabled,
     measurementAvailable: effectiveSupportsMeasure,
     hasDxfBendsPanel: selectedFileSheetKind === "dxf" && drawingBends.length > 0,
     hasDxfLayersPanel: selectedFileSheetKind === "dxf" && drawingLayers.length > 1,
@@ -2356,7 +2347,6 @@ function CadFileViewSurface({
     selectedAnimationError,
     selectedAnimationStatus,
     embeddedGlbAnimationRuntime,
-    materialSession.enabled,
     effectiveSupportsMeasure,
     selectedFileSheetKind,
     selectedStepModuleDefinition,
@@ -2505,7 +2495,6 @@ function CadFileViewSurface({
     const targetUrdfJointValues = targetFileKey && jointValuesByFileRef?.[targetFileKey]
       ? jointValuesByFileRef[targetFileKey]
       : {};
-    const targetMaterialOverlay = materialSession.snapshotSlice(targetEntry);
     // While a clip plays the authoritative time is the clock store's, not React
     // state's — the loop only writes back when playback stops.
     const snapshotAnimationElapsedSec = animationState.playing
@@ -2547,7 +2536,6 @@ function CadFileViewSurface({
           speed: animationState.speed,
           loopEnabled: animationState.loopEnabled
         },
-        ...(targetMaterialOverlay ? { materials: targetMaterialOverlay } : {}),
         urdf: {
           jointValues: targetUrdfJointValues,
         },
@@ -2562,7 +2550,6 @@ function CadFileViewSurface({
     displaySettings,
     jointValuesByFileRef,
     largeFileState,
-    materialSession.snapshotSlice,
     renderSession,
     resolvedScene.camera.projection,
     selectedEntry,
@@ -2655,8 +2642,6 @@ function CadFileViewSurface({
       setAnimationClock(restoredAnimationState.elapsedSec);
     }
 
-    materialSession.restoreSlice(normalizedKey, entry, sessionState?.slices?.materials || null);
-
     const urdfSlice = sessionState?.slices?.urdf || null;
     if (urdfSlice) {
       setJointValuesByFileRef((current) => ({
@@ -2677,7 +2662,6 @@ function CadFileViewSurface({
     animationLoadState,
     resolvedColorSchemeMode,
     entryMap,
-    materialSession.restoreSlice,
     readEntrySessionState,
     uiPrefersDark
   ]);
@@ -6094,8 +6078,6 @@ function CadFileViewSurface({
   // Handed over unconditionally: the pane gates it on the `displayModes` capability, so
   // gating it a second time here only creates a place for the two to disagree.
   const renderDisplaySettings = resolvedScene.display;
-  const materialPickingEnabled = fileSheetOpen && renderSession.enabled && selectedFileSheetKind === "step" && effectiveFileSheetOpenSectionIds.includes(FILE_SHEET_SECTION_IDS.MATERIALS);
-  const materialParts = materialSession.withViewerSelection(viewerSelectedPartIds);
   const settingsTabs = [
     supportsDisplayModes && !renderSession.enabled
       ? buildDisplaySettingsTab({
@@ -6114,19 +6096,6 @@ function CadFileViewSurface({
       onQualityChange: handleRenderQualityChange,
       onPayloadValueChange: handleRenderPayloadValueChange,
       onReset: handleRenderReset
-    }) : null,
-    renderSession.enabled ? buildMaterialsSettingsTab({
-      appearance: selectedSourceAppearance,
-      overlay: materialSession.overlay,
-      undo: materialSession.undo,
-      targets: materialSession.targets,
-      scope: materialSession.scope,
-      enabled: materialSession.enabled,
-      selectedPartIds: materialParts.selectedIds,
-      onSelectParts: materialParts.select,
-      onOverlayChange: materialSession.change,
-      onUndo: materialSession.undoLast,
-      onReset: materialSession.reset
     }) : null
   ].filter(Boolean);
 
@@ -6210,11 +6179,9 @@ function CadFileViewSurface({
                 onCameraZoomPercentChange={setViewerZoomPercent}
                 onLodCameraChange={onLodCameraMoved}
                 onMeshSourceAdoption={handleDisplayMeshAdoption}
-                materialPickingEnabled={materialPickingEnabled}
-                onMaterialPartActivate={materialParts.activate}
                 renderPartsIndividually={
             isUrdfView || Boolean(selectedStepParameterRuntime) || Boolean(selectedAnimationRuntime) ||
-            sourceAppearanceHasMaterials(selectedDisplayMeshData?.appearance)
+            Boolean(Object.keys(selectedDisplayMeshData?.appearance?.materials || {}).length)
           }
                 stepParameters={selectedStepParameterRuntime}
                 stepAnimation={selectedAnimationRuntime}
@@ -6402,6 +6369,8 @@ function CadFileViewSurface({
 
             {selectedFileSheetKind === "step" ? (
               <StepFileSheet
+                selectedMeshData={selectedDisplayMeshData}
+                selectedSourceAppearance={selectedSourceAppearance}
                 client={client}
                 key={`step:${selectedKey}`}
                 geometryInspection={{ file: selectedEntry?.file, revision: artifactRevision, references: !viewerLoading && !stepUpdateInProgress ? isAssemblyView ? assemblyStepTreeTopologyReferences : selectedSelectorRuntime?.references || EMPTY_LIST : EMPTY_LIST, parts: !viewerLoading && !stepUpdateInProgress ? selectedMeshData?.parts || EMPTY_LIST : EMPTY_LIST, onHighlight: handleInspectionHighlight, onLoadTopology: loadInspectionTopology }}

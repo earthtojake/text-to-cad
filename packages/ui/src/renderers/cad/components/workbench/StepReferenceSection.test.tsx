@@ -82,3 +82,34 @@ it('keeps a single component header compact without losing its canonical path',(
  expect(screen.queryByRole('group',{name:'Selected element navigation'})).toBeNull();
  expect(screen.queryByText('Details')).toBeNull();
 });
+
+it('shows a read-only authored material summary for a face without turning its source color into a material name',()=>{
+ const face={id:'o1.2.f4',normalizedSelector:'o1.2.f4',selectorType:'face',pickData:{surfaceType:'plane'}};
+ const meshData={parts:[{occurrenceId:'o1.2',sourceColor:'#778899'}]};
+ const sourceAppearance={
+  materials:{steel:{name:'Brushed steel',roughness:0.25,metalness:1}},
+  assignments:{'o1.2':'steel'}
+ };
+ render(<StepReferenceSection references={[face]} meshData={meshData} sourceAppearance={sourceAppearance}/>);
+ const material=screen.getByRole('generic',{name:'Source material'});
+ expect(within(material).getByText('Brushed steel')).toBeTruthy();
+ expect(within(material).getByText('#778899')).toBeTruthy();
+ expect(within(material).getByText('Roughness')).toBeTruthy();
+ expect(within(material).getByText('25%')).toBeTruthy();
+ expect(within(material).getByText('Metalness')).toBeTruthy();
+ expect(within(material).getByText('100%')).toBeTruthy();
+ expect(within(material).queryByText('Steel')).toBeNull();
+ expect(within(material).queryByRole('button')).toBeNull();
+});
+
+it('material details follow the reference being browsed within a multi-selection',()=>{
+ const references=['o1','o2'].map(id=>({id:`${id}.f1`,normalizedSelector:`${id}.f1`,selectorType:'face',pickData:{surfaceType:'plane'}}));
+ const meshData={parts:[{occurrenceId:'o1',sourceColor:'#778899'},{occurrenceId:'o2',sourceColor:'#222222'}]};
+ const sourceAppearance={materials:{steel:{name:'Steel'},rubber:{name:'Rubber'}},assignments:{o1:'steel',o2:'rubber'}};
+ render(<StepReferenceSection references={references} meshData={meshData} sourceAppearance={sourceAppearance}/>);
+ const material=screen.getByRole('generic',{name:'Source material'});
+ expect(within(material).getByText('Rubber')).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'Previous element'}));
+ expect(within(material).getByText('Steel')).toBeTruthy();
+ expect(within(material).queryByText('Rubber')).toBeNull();
+});

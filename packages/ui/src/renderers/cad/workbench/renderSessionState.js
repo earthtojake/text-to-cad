@@ -43,7 +43,6 @@ export function createRenderSessionState(value = null) {
     openSectionIds: Array.isArray(source.openSectionIds)
       ? normalizeFileSheetOpenSectionIds(source.openSectionIds, [
           FILE_SHEET_SECTION_IDS.RENDER,
-          FILE_SHEET_SECTION_IDS.MATERIALS,
           FILE_SHEET_SECTION_IDS.STEP_POSE,
           FILE_SHEET_SECTION_IDS.STEP_ANIMATION
         ])

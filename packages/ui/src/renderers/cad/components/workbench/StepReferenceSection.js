@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, Copy, SquareMousePointer } from "lucide-react";
 import { cn } from "@hardcore/ui/utils";
 import { useViewerHost } from '../../../../host/context.js';
 import { useHostReference } from "../../file-view/hostReference.js";
 import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections.js";
 import { referenceMeasurements, selectionMeasurements } from "../../workbench/referenceMeasurements.js";
+import { stepSelectionMaterialInfo } from "../../workbench/stepSelectionMaterial.js";
 import { Button } from "@hardcore/ui/primitives/button";
 
 // A selected "element" is either a topology reference (face / edge / solid,
@@ -184,6 +185,48 @@ function MeasurementRows({rows}) {
   return rows.map(([label,value,unit])=><InfoRow key={label} label={label} title={MEASUREMENT_HINTS[label]}><MonoValue>{`${formatNumber(value)} ${unit}`}</MonoValue></InfoRow>);
 }
 
+function MaterialChannelValues({ channels }) {
+  return (
+    <span className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
+      {channels.map((channel) => (
+        <span key={channel.key} className="inline-flex items-baseline gap-1">
+          <span className="text-micro text-muted-foreground">{channel.label}</span>
+          <MonoValue>{`${formatNumber(channel.value * 100, 0)}%`}</MonoValue>
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function MaterialDetail({ info }) {
+  if (!info) return null;
+  const surface = info.channels.filter((channel) => ["roughness", "metalness"].includes(channel.key));
+  const coating = info.channels.filter((channel) => ["clearcoat", "clearcoatRoughness"].includes(channel.key));
+  const opacity = info.channels.filter((channel) => channel.key === "opacity");
+  return (
+    <div className="border-t border-sidebar-border/60 py-0.5" aria-label="Source material">
+      <InfoRow label="Material">{info.label}</InfoRow>
+      {info.color ? (
+        <InfoRow label="Color">
+          {info.color.mixed ? "Mixed" : (
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="size-3 shrink-0 rounded-[2px] border border-sidebar-border"
+                style={{ backgroundColor: info.color.value }}
+                aria-label={`${info.color.value} color swatch`}
+              />
+              <MonoValue>{info.color.value}</MonoValue>
+            </span>
+          )}
+        </InfoRow>
+      ) : null}
+      {surface.length ? <InfoRow label="Surface"><MaterialChannelValues channels={surface} /></InfoRow> : null}
+      {coating.length ? <InfoRow label="Coating"><MaterialChannelValues channels={coating} /></InfoRow> : null}
+      {opacity.length ? <InfoRow label="Opacity"><MaterialChannelValues channels={opacity} /></InfoRow> : null}
+    </div>
+  );
+}
+
 function TopologyDetail({ reference, navigation }) {
   const pick = reference.pickData || {};
   const type = reference.selectorType;
@@ -272,11 +315,18 @@ function itemKey(item) {
   return String(item?.id || item?.occurrenceId || item?.displaySelector || "").trim();
 }
 
-export function StepReferenceSection({ references = [] }) {
-  const items = Array.isArray(references) ? references.filter(Boolean) : [];
+export function StepReferenceSection({ references = [], meshData = null, sourceAppearance = null }) {
+  const items = useMemo(() => Array.isArray(references) ? references.filter(Boolean) : [], [references]);
   const count = items.length;
   const idsKey = items.map(itemKey).join("|");
   const [index, setIndex] = useState(0);
+  const safeIndex = Math.min(Math.max(index, 0), Math.max(count - 1, 0));
+  const activeItem = items[safeIndex];
+  const materialInfo = useMemo(() => stepSelectionMaterialInfo({
+    references: activeItem ? [activeItem] : [],
+    meshData,
+    appearance: sourceAppearance
+  }), [activeItem, meshData, sourceAppearance]);
 
   // When the selection set changes, jump to the most recently added element.
   useEffect(() => {
@@ -292,7 +342,6 @@ export function StepReferenceSection({ references = [] }) {
     );
   }
 
-  const safeIndex = Math.min(Math.max(index, 0), count - 1);
   const totals = count > 1 ? selectionMeasurements(items) : [];
 
   const navigation = count > 1 ? (
@@ -329,11 +378,12 @@ export function StepReferenceSection({ references = [] }) {
     <div className="flex min-w-0 flex-col pb-2 text-sm font-normal">
       {totals.length > 0 && <div className="border-b border-sidebar-border/60 py-1" aria-label="Selection measurements"><MeasurementRows rows={totals}/></div>}
       <ElementDetail item={items[safeIndex]} navigation={navigation} />
+      <MaterialDetail info={materialInfo} />
     </div>
   );
 }
 
-export function buildStepReferenceTab({ references = [] } = {}) {
+export function buildStepReferenceTab({ references = [], meshData = null, sourceAppearance = null } = {}) {
   const count = Array.isArray(references) ? references.filter(Boolean).length : 0;
   return {
     id: FILE_SHEET_SECTION_IDS.STEP_REFERENCE,
@@ -347,6 +397,6 @@ export function buildStepReferenceTab({ references = [] } = {}) {
         ) : null}
       </span>
     ),
-    content: <StepReferenceSection references={references} />
+    content: <StepReferenceSection references={references} meshData={meshData} sourceAppearance={sourceAppearance} />
   };
 }

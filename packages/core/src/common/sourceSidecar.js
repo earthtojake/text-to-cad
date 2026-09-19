@@ -1,6 +1,7 @@
 // Saved STEP declarations are document-bound data. Geometry remains identified
 // by the immutable STEP tree; these helpers validate declarations and compose
-// appearance into private descriptors owned by the current reader/session.
+// authored appearance into private descriptors and display wrappers owned by
+// the current reader.
 
 export const SOURCE_SIDECAR_SCHEMA_VERSION = 9;
 export const SOURCE_APPEARANCE_CHANNELS = Object.freeze([
@@ -22,6 +23,10 @@ export const SOURCE_MATERIAL_DEFAULTS = Object.freeze({
 const NUMERIC_MATERIAL_CHANNELS = SOURCE_APPEARANCE_CHANNELS.filter((key) => key !== "baseColor");
 const MATERIAL_KEYS = new Set(["name", ...SOURCE_APPEARANCE_CHANNELS]);
 const SIDECAR_KEYS = new Set(["schemaVersion", "documentHash", "kinematics", "appearance", "animation"]);
+// Appearance-only display wrappers share the exact geometry and ownership of
+// their source publication. Keep that relationship private rather than adding
+// runtime metadata to serialized mesh data.
+const appearanceGeometrySources = new WeakMap();
 
 function isObject(value) {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -46,7 +51,7 @@ function nonemptyString(value, where) {
   return value.trim();
 }
 
-function normalizeMaterial(value, materialId, { nameRequired = true } = {}) {
+function normalizeMaterial(value, materialId) {
   const keys = isObject(value) ? Object.keys(value) : [];
   if (!isObject(value) || keys.some((key) => !MATERIAL_KEYS.has(key))) {
     throw new Error(
@@ -56,7 +61,7 @@ function normalizeMaterial(value, materialId, { nameRequired = true } = {}) {
   const normalized = {};
   if (Object.hasOwn(value, "name")) {
     normalized.name = nonemptyString(value.name, `material ${JSON.stringify(materialId)}.name`);
-  } else if (nameRequired) {
+  } else {
     throw new Error(`material ${JSON.stringify(materialId)}.name must be a nonempty string`);
   }
   if (Object.hasOwn(value, "baseColor")) {
@@ -79,11 +84,8 @@ function normalizeMaterial(value, materialId, { nameRequired = true } = {}) {
   return normalized;
 }
 
-function normalizeAppearanceShape(block, {
-  label = "appearance",
-  allowPartialMaterials = false,
-  allowUnknownAssignments = false
-} = {}) {
+export function normalizeSourceAppearance(block) {
+  const label = "appearance";
   if (block === undefined || block === null) return null;
   if (!isObject(block) || Object.keys(block).length !== 2
     || !Object.hasOwn(block, "materials") || !Object.hasOwn(block, "assignments")) {
@@ -95,9 +97,7 @@ function normalizeAppearanceShape(block, {
   const materials = {};
   for (const rawMaterialId of Object.keys(block.materials).sort()) {
     const materialId = nonemptyString(rawMaterialId, `${label} material id`);
-    materials[materialId] = normalizeMaterial(block.materials[rawMaterialId], materialId, {
-      nameRequired: !allowPartialMaterials
-    });
+    materials[materialId] = normalizeMaterial(block.materials[rawMaterialId], materialId);
   }
   const assignments = {};
   for (const rawOccurrenceId of Object.keys(block.assignments).sort()) {
@@ -106,7 +106,7 @@ function normalizeAppearanceShape(block, {
       block.assignments[rawOccurrenceId],
       `${label} assignment ${occurrenceId}`
     );
-    if (!allowUnknownAssignments && !Object.hasOwn(materials, materialId)) {
+    if (!Object.hasOwn(materials, materialId)) {
       throw new Error(`${label} assignment ${occurrenceId} references unknown material ${JSON.stringify(materialId)}`);
     }
     assignments[occurrenceId] = materialId;
@@ -114,48 +114,75 @@ function normalizeAppearanceShape(block, {
   return Object.keys(materials).length || Object.keys(assignments).length ? { materials, assignments } : null;
 }
 
-export function normalizeSourceAppearance(block) {
-  return normalizeAppearanceShape(block);
-}
-
-// A session overlay uses the saved shape but may patch an existing material,
-// add a named material for duplication, and redirect leaf assignments. The
-// returned effective appearance owns every row and never mutates saved data.
-export function resolveSourceAppearance(baseAppearance, sessionOverlay = null) {
-  const base = normalizeSourceAppearance(baseAppearance);
-  if (sessionOverlay === undefined || sessionOverlay === null) return base;
-  const overlay = normalizeAppearanceShape(sessionOverlay, {
-    label: "appearance session overlay",
-    allowPartialMaterials: true,
-    allowUnknownAssignments: true
-  });
-  const materials = Object.fromEntries(
-    Object.entries(base?.materials || {}).map(([materialId, material]) => [materialId, { ...material }])
-  );
-  for (const [materialId, patch] of Object.entries(overlay?.materials || {})) {
-    const existing = materials[materialId];
-    if (!existing && !Object.hasOwn(patch, "name")) {
-      throw new Error(`new session material ${JSON.stringify(materialId)} requires a nonempty name`);
-    }
-    materials[materialId] = { ...(existing || {}), ...patch };
-  }
-  const assignments = { ...(base?.assignments || {}), ...(overlay?.assignments || {}) };
-  for (const [occurrenceId, materialId] of Object.entries(assignments)) {
-    if (!Object.hasOwn(materials, materialId)) {
-      throw new Error(
-        `appearance session assignment ${occurrenceId} references unknown material ${JSON.stringify(materialId)}`
-      );
-    }
-  }
-  return Object.keys(materials).length || Object.keys(assignments).length ? { materials, assignments } : null;
-}
-
-export function sourceMaterialForOccurrence(appearance, occurrenceId, sessionOverlay = null) {
-  const resolved = resolveSourceAppearance(appearance, sessionOverlay);
+export function sourceMaterialForOccurrence(appearance, occurrenceId) {
+  const resolved = normalizeSourceAppearance(appearance);
   const id = String(occurrenceId || "").trim();
   const materialId = resolved?.assignments?.[id];
   const material = materialId ? resolved.materials[materialId] : null;
   return material ? { materialId, ...SOURCE_MATERIAL_DEFAULTS, ...material } : null;
+}
+
+function sourceOpacityForPart(part) {
+  const value = Number(part?.sourceOpacity);
+  return Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : 1;
+}
+
+function unassignedSourcePart(part) {
+  const { materialId: _materialId, materialName: _materialName, material: _material, ...source } = part;
+  const opacity = sourceOpacityForPart(part);
+  return {
+    ...source,
+    color: part?.sourceColor || null,
+    ...(part.sourceHasVertexColors !== undefined ? { hasSourceColors: part.sourceHasVertexColors } : {}),
+    opacity: opacity < 0.999 ? opacity : undefined
+  };
+}
+
+function assignedSourcePart(part, materialId, material) {
+  const { name: materialName, baseColor, ...authoredChannels } = material;
+  const channels = { ...SOURCE_MATERIAL_DEFAULTS, ...authoredChannels };
+  const sourceOpacity = sourceOpacityForPart(part);
+  return {
+    ...part,
+    materialId,
+    materialName,
+    sourceHasVertexColors: part.sourceHasVertexColors ?? part.hasSourceColors,
+    hasSourceColors: baseColor ? false : (part.sourceHasVertexColors ?? part.hasSourceColors),
+    color: baseColor || part?.sourceColor || null,
+    material: channels,
+    opacity: sourceOpacity * channels.opacity
+  };
+}
+
+/**
+ * Apply one saved appearance declaration to public mesh data without changing
+ * its geometry or mutating the source publication. This is intentionally a
+ * read-only mapping: a new sidecar can replace or remove assignments, but no
+ * session edits are merged into the authored declaration.
+ *
+ * A null appearance is a no-op for native mesh formats. For a STEP mesh which
+ * still carries an older appearance, null removes that decoration and restores
+ * every occurrence's source colour and opacity.
+ */
+export function applySourceAppearanceToMeshData(meshData, block) {
+  if (!meshData || typeof meshData !== "object") return meshData;
+  const appearance = normalizeSourceAppearance(block);
+  if (!appearance && !meshData.appearance) return meshData;
+  const parts = (Array.isArray(meshData.parts) ? meshData.parts : []).map((part) => {
+    const occurrenceId = String(part?.occurrenceId || part?.id || "").trim();
+    const materialId = appearance?.assignments?.[occurrenceId];
+    const material = materialId ? appearance.materials[materialId] : null;
+    return material
+      ? assignedSourcePart(part, materialId, material)
+      : unassignedSourcePart(part);
+  });
+  const displayed = { ...meshData, appearance, parts };
+  appearanceGeometrySources.set(displayed, sourceAppearanceGeometry(meshData));
+  return displayed;
+}
+
+export function sourceAppearanceGeometry(meshData) {
+  return appearanceGeometrySources.get(meshData) || meshData;
 }
 
 export function normalizeSourceAnimation(block) {
@@ -233,11 +260,11 @@ export async function loadSourceSidecar(sidecarUrl, { documentHash = "", signal,
   return validateSourceSidecar(sidecar, { url, documentHash });
 }
 
-export function applySourceAppearance(descriptor, block, { sessionOverlay = null } = {}) {
+export function applySourceAppearance(descriptor, block) {
   if (!isObject(descriptor)) {
     throw new Error("appearance requires an assembly package descriptor");
   }
-  const appearance = resolveSourceAppearance(block, sessionOverlay);
+  const appearance = normalizeSourceAppearance(block);
   if (!appearance) return descriptor;
   const sourceOccurrences = Array.isArray(descriptor.occurrences) ? descriptor.occurrences : [];
   const byId = new Map(sourceOccurrences.map((occurrence) => [String(occurrence?.id || ""), occurrence]));

@@ -5,10 +5,11 @@ import {
   SOURCE_MATERIAL_DEFAULTS,
   SOURCE_SIDECAR_SCHEMA_VERSION,
   applySourceAppearance,
+  applySourceAppearanceToMeshData,
   loadSourceSidecar,
   normalizeSourceAnimation,
   normalizeSourceAppearance,
-  resolveSourceAppearance,
+  sourceAppearanceGeometry,
   sourceMaterialForOccurrence,
   validateSourceSidecar
 } from "./sourceSidecar.js";
@@ -52,31 +53,85 @@ test("schema-v9 appearance is closed, named, sparse, and assignment-bound", () =
   }), /unknown material/);
 });
 
-test("session overlays patch shared materials and can duplicate one assignment", () => {
-  const overlay = {
-    materials: {
-      aluminum: { roughness: 0.6 },
-      "aluminum-copy": { name: "Brushed aluminum copy", baseColor: "#112233", metalness: 0.9 }
-    },
-    assignments: { "o1.2": "aluminum-copy" }
-  };
-  const resolved = resolveSourceAppearance(APPEARANCE, overlay);
-  assert.deepEqual(resolved.assignments, { "o1.2": "aluminum-copy" });
-  assert.deepEqual(resolved.materials, {
-    aluminum: { name: "Brushed aluminum", baseColor: "#AABBCC", roughness: 0.6, metalness: 1 },
-    "aluminum-copy": { name: "Brushed aluminum copy", baseColor: "#112233", metalness: 0.9 },
-    unused: { name: "Unused", roughness: 0.8 }
-  });
-  assert.deepEqual(sourceMaterialForOccurrence(APPEARANCE, "o1.2", overlay), {
-    materialId: "aluminum-copy",
+test("authored occurrence material lookup expands sparse defaults", () => {
+  assert.deepEqual(sourceMaterialForOccurrence(APPEARANCE, "o1.2"), {
+    materialId: "aluminum",
     ...SOURCE_MATERIAL_DEFAULTS,
-    name: "Brushed aluminum copy",
-    baseColor: "#112233",
-    metalness: 0.9
+    name: "Brushed aluminum",
+    baseColor: "#AABBCC",
+    roughness: 0.25,
+    metalness: 1
   });
-  assert.throws(() => resolveSourceAppearance(APPEARANCE, {
-    materials: { copy: { roughness: 0.2 } }, assignments: { "o1.2": "copy" }
-  }), /requires a nonempty name/);
+  assert.equal(sourceMaterialForOccurrence(APPEARANCE, "o1.1"), null);
+});
+
+test("read-only mesh appearance mapping follows live assignments and preserves geometry identity", () => {
+  const geometry = { vertices: new Float32Array([0, 0, 0]) };
+  const transform = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+  const source = {
+    parts: [
+      { id: "o1.1", occurrenceId: "o1.1", sourceMesh: geometry, transform,
+        color: "#223344", sourceColor: "#223344", opacity: 0.6, sourceOpacity: 0.6 },
+      { id: "o1.2", occurrenceId: "o1.2", sourceMesh: geometry, transform,
+        color: "#556677", sourceColor: "#556677", sourceOpacity: 1 }
+    ]
+  };
+  const first = applySourceAppearanceToMeshData(source, APPEARANCE);
+  assert.notEqual(first, source);
+  assert.equal(sourceAppearanceGeometry(first), source);
+  assert.equal(first.parts[0].color, "#223344");
+  assert.equal(first.parts[0].material, undefined);
+  assert.deepEqual(first.parts[1].material, {
+    roughness: 0.25, metalness: 1, clearcoat: 0, clearcoatRoughness: 0.26, opacity: 1
+  });
+  assert.equal(first.parts[1].color, "#AABBCC");
+
+  const reassigned = applySourceAppearanceToMeshData(first, {
+    materials: { rubber: { name: "Rubber", roughness: 0.9, opacity: 0.5 } },
+    assignments: { "o1.1": "rubber" }
+  });
+  assert.equal(sourceAppearanceGeometry(reassigned), source);
+  assert.equal(reassigned.parts[0].materialId, "rubber");
+  assert.equal(reassigned.parts[0].opacity, 0.3);
+  assert.equal(reassigned.parts[1].materialId, undefined);
+  assert.equal(reassigned.parts[1].materialName, undefined);
+  assert.equal(reassigned.parts[1].material, undefined);
+  assert.equal(reassigned.parts[1].color, "#556677");
+  assert.equal(reassigned.parts[1].opacity, undefined);
+  assert.equal(source.parts[0].material, undefined, "the source publication stays immutable");
+});
+
+test("authored base color replaces vertex colors and removal restores their original mode", () => {
+  const sourceMesh = { vertices: new Float32Array(9), colors: new Float32Array(9) };
+  const source = { parts: [{ id: "o1.2", sourceMesh, hasSourceColors: true }] };
+  const painted = applySourceAppearanceToMeshData(source, APPEARANCE);
+  assert.equal(painted.parts[0].hasSourceColors, false);
+  assert.equal(painted.parts[0].sourceHasVertexColors, true);
+  const restored = applySourceAppearanceToMeshData(painted, null);
+  assert.equal(restored.parts[0].hasSourceColors, true);
+  assert.equal(restored.parts[0].sourceMesh, sourceMesh);
+  assert.equal(source.parts[0].hasSourceColors, true);
+});
+
+test("removing STEP appearance restores sources while null stays a no-op for native meshes", () => {
+  const native = { parts: [{ id: "mesh", color: "#123456", opacity: 0.4 }] };
+  assert.equal(applySourceAppearanceToMeshData(native, null), native);
+
+  const decorated = {
+    appearance: APPEARANCE,
+    parts: [{
+      id: "o1.2", occurrenceId: "o1.2", color: "#AABBCC", sourceColor: "#102030",
+      materialId: "aluminum", materialName: "Brushed aluminum", material: { metalness: 1, opacity: 0.4 },
+      opacity: 0.2, sourceOpacity: 0.5
+    }]
+  };
+  const restored = applySourceAppearanceToMeshData(decorated, null);
+  assert.equal(restored.appearance, null);
+  assert.deepEqual(restored.parts[0], {
+    id: "o1.2", occurrenceId: "o1.2", color: "#102030", sourceColor: "#102030",
+    opacity: 0.5, sourceOpacity: 0.5
+  });
+  assert.equal(decorated.parts[0].materialId, "aluminum");
 });
 
 test("appearance composition owns changes and carries material identity plus effective defaults", () => {

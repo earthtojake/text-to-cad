@@ -141,12 +141,6 @@ const STUDIO_BACKDROP_COLORS = Object.freeze({
   [RENDER_STUDIO.DARK]: "#121315"
 });
 
-const EXPLICIT_PBR_MATERIAL_KEYS = Object.freeze([
-  "roughness",
-  "metalness",
-  "clearcoat",
-  "clearcoatRoughness"
-]);
 const HEX_COLOR_PATTERN = /^#(?:[0-9a-fA-F]{3}){1,2}$/;
 
 const DEFAULT_NORMAL_CAMERA = Object.freeze({
@@ -460,13 +454,6 @@ function applyPartColor(settings, partColor) {
   };
 }
 
-function explicitMaterialOverrides(settings = {}) {
-  const materials = isPlainObject(settings.materials) ? settings.materials : {};
-  return Object.fromEntries(EXPLICIT_PBR_MATERIAL_KEYS
-    .filter((key) => Object.prototype.hasOwnProperty.call(materials, key))
-    .map((key) => [key, Number(materials[key])]));
-}
-
 /**
  * Resolve shared viewer/snapshot scene policy without retaining app state.
  *
@@ -492,10 +479,9 @@ export function resolveSceneSettings({
       appearance: baseAppearance,
       render: { enabled: false, configuration: null, payload: null },
       theme,
-      // CAD is an inspection view with no reflection environment. Keep the
-      // authored albedo and opacity, but use the workbench's matte PBR
-      // channels so authored metals do not collapse to near-black.
-      materialOverrides: explicitMaterialOverrides(theme),
+      // Authored finishes are shared with Render. The workbench recipe supplies
+      // fallback channels and lighting, never overrides the model's material.
+      materialOverrides: null,
       quality: resolveSceneQuality(quality, { fallback: SCENE_QUALITY.INTERACTIVE }),
       camera: resolveCamera(DEFAULT_NORMAL_CAMERA, camera),
       display: resolvedDisplay

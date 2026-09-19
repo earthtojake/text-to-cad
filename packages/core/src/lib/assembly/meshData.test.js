@@ -660,6 +660,7 @@ test("composed package drives a per-occurrence override colour through the mater
 test("composed package carries named material identity and multiplies source alpha", () => {
   const component = unitTriangleComponentMeshData();
   component.parts[0].color = "#123456";
+  component.colors = new Float32Array(component.vertices.length).fill(0.5);
   component.parts[0].opacity = 0.5;
   const appearance = {
     materials: { paint: { name: "Red paint", baseColor: "#CC1122", opacity: 0.4 } },
@@ -683,6 +684,8 @@ test("composed package carries named material identity and multiplies source alp
   assert.equal(composed.parts[0].sourceOpacity, 0.5);
   assert.equal(composed.parts[0].materialId, "paint");
   assert.equal(composed.parts[0].materialName, "Red paint");
+  assert.equal(composed.parts[0].hasSourceColors, false);
+  assert.equal(composed.parts[0].sourceHasVertexColors, true);
   assert.equal(composed.parts[0].opacity, 0.2);
   assert.equal(composed.assemblyRoot.children[0].materialId, "paint");
   assert.equal(composed.assemblyRoot.children[0].sourceColor, "#123456");

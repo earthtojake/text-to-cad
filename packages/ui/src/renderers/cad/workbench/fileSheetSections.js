@@ -18,7 +18,6 @@ export const FILE_SHEET_SECTION_IDS = Object.freeze({
   DXF_LAYERS: "dxfLayers",
   DISPLAY: "display",
   RENDER: "render",
-  MATERIALS: "materials",
   FILE_METADATA: "metadata"
 });
 
@@ -38,7 +37,6 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
   if (options.renderMode === true) {
     return [
       FILE_SHEET_SECTION_IDS.RENDER,
-      ...(options.hasMaterialsPanel ? [FILE_SHEET_SECTION_IDS.MATERIALS] : []),
       ...(normalizedKind === "step" && options.hasStepPosePanel
         ? [FILE_SHEET_SECTION_IDS.STEP_POSE]
         : []),

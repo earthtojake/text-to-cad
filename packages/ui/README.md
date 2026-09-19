@@ -204,9 +204,11 @@ cache identity, cancellation or recognition limits.
 
 Inspect uses the fixed light or dark workbench basis selected by app appearance;
 legacy CAD theme preferences are not consumed. The floating toolbar switches to
-Render, whose studio, materials, camera and quality have independent per-file
-state. Render does not receive inspection tints or measurements. Materials
-picking is enabled only while its visible panel is active. See
+Render, whose studio, camera and quality have independent per-file state.
+Authored material color, finish and opacity are read-only in both modes; the
+Model tree's reference section shows selected materials and their properties.
+There is no Materials tab or persisted material override. Render does not
+receive inspection tints, picking or measurements. See
 [Render modes](docs/render-mode.md) and [progressive detail](docs/lod.md).
 
 A renderer publishes `FileActivity` with a loading flag, label, title, optional

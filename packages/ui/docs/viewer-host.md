@@ -159,7 +159,8 @@ does not grant web arbitrary filesystem access or enable editing there.
 State remains controlled through FileViewer props. Apps merge changed chrome
 fields and document/renderer slices into the current root state; a stale view
 must not overwrite another view's independent fields. Existing versioned camera,
-pose, material and layout state restores through the same schemas. Global
+pose and layout state restores through the same schemas. Material appearance
+is source-owned and read-only; legacy material override slices are ignored. Global
 preferences belong to the app/window, document snapshots to workspace/path,
 and live selection/scene ownership to the mounted view.
 

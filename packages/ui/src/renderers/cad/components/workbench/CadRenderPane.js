@@ -288,8 +288,6 @@ export default function CadRenderPane({
   assemblyParts,
   hiddenPartIds,
   selectedPartIds,
-  materialPickingEnabled = false,
-  onMaterialPartActivate,
   hoveredPartId,
   hoveredReferenceId,
   selectedReferenceIds,
@@ -500,8 +498,7 @@ export default function CadRenderPane({
         viewPlaneOffsetBottom="1rem"
         compactViewPlane={false}
         isLoading={viewerLoading && !retainingPreviousStepMesh}
-        materialPickingEnabled={materialPickingEnabled}
-        pickMode={materialPickingEnabled ? VIEWER_PICK_MODE.PARTS : !inspectionEnabled || retainingPreviousStepMesh || (!hasTopology && !hasParts && !measureModeActive)
+        pickMode={!inspectionEnabled || retainingPreviousStepMesh || (!hasTopology && !hasParts && !measureModeActive)
           ? VIEWER_PICK_MODE.NONE
           : viewerPickModeForRenderPane({
             selectionFilter,
@@ -524,7 +521,7 @@ export default function CadRenderPane({
           ? true
           : ((renderPartsIndividually || Boolean(stepParameters?.definition))
             || Boolean(resolvedStepAnimation?.clip))}
-        pickableParts={materialPickingEnabled ? selectedMeshData?.parts || EMPTY_LIST : inspectionEnabled && hasParts && !retainingPreviousStepMesh ? assemblyParts : EMPTY_LIST}
+        pickableParts={inspectionEnabled && hasParts && !retainingPreviousStepMesh ? assemblyParts : EMPTY_LIST}
         hiddenPartIds={viewerHiddenPartIdsForRenderPane({ inspectionEnabled, hasParts, hiddenPartIds })}
         selectedPartIds={viewerSelectedPartIdsForRenderPane({ renderMode, hasParts, selectedPartIds })}
         hoveredPartId={inspectionEnabled && hasParts ? hoveredPartId : ""}
@@ -547,7 +544,7 @@ export default function CadRenderPane({
         onDrawingStrokesChange={inspectionEnabled ? handleDrawingStrokesChange : null}
         onPerspectiveChange={handlePerspectiveChange}
         onHoverReferenceChange={inspectionEnabled ? handleModelHoverChange : null}
-        onActivateReference={materialPickingEnabled ? onMaterialPartActivate : inspectionEnabled ? handleModelReferenceActivate : null}
+        onActivateReference={inspectionEnabled ? handleModelReferenceActivate : null}
         onDoubleActivateReference={inspectionEnabled ? handleModelReferenceDoubleActivate : null}
         onContextReference={inspectionEnabled ? handleModelReferenceContext : null}
         onMeasurePick={inspectionEnabled ? onMeasurePick : null}

@@ -147,5 +147,5 @@ same lighting, materials and stage settings.
 
 The shared browser qualification in `scripts/test/test-viewer-browser.sh`
 checks mode framing, scene presentation and exact picking across formats; its
-full run also covers Studio, Materials and quality. It uses isolated generated
+full run also covers Studio, read-only materials and quality. It uses isolated generated
 fixtures rather than a sweep of saved theme presets.

@@ -1,7 +1,7 @@
 # Settings UI Guidelines
 
 The contract for every settings surface rendered inside a file sheet tab:
-Display, Studio, Materials, and the DXF, STEP, URDF/SDF, and mesh sheets. The tab strip, navbar, and
+Display, Studio, and the DXF, STEP, URDF/SDF, and mesh sheets. The tab strip, navbar, and
 sheet frame are out of scope — this document governs the *contents* of a tab.
 
 Every pattern here has a primitive in

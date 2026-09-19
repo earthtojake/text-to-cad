@@ -100,13 +100,15 @@ Existing slice intent:
 
 - `tab`: file sheet section expansion, reference selection, part visibility,
   camera, tools, and drawing history.
-- `dxf`: DXF preview thickness and bend settings.
 - `stepModule`: kinematic parameter values.
 - `animation`: embedded clip, playback and elapsed-time state.
 - `render`: independent photographic mode, settings, camera and quality.
-- `materials`: per-file material overlays, invalidated by authored revisions.
 - `urdf`: joint values and motion-planning controls.
 - `largeFile`: large-file decisions such as selectable topology opt-in.
+
+Material appearance comes from the model and its sidecar, never session
+storage. Legacy `materials` overrides (and retired `dxf` preview slices) are
+ignored while the remaining file state is restored.
 
 Current writes store these slices in the CAD renderer's per-file state inside
 the root-scoped record. Reuse the existing slices when adding a control instead
