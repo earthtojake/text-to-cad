@@ -629,8 +629,8 @@ class CadApp:
             response.send_json(404, {"error": "Not found"})
             return
         from .drawing_svg import (
-            DIMENSION_DECIMALS, DIMENSION_UNITS, parse_draft_diameters, parse_draft_dimensions, parse_tolerances,
-            parse_view_moves, render_drawing_svg,
+            DIMENSION_DECIMALS, DIMENSION_UNITS, parse_draft_diameters, parse_draft_dimensions, parse_removals,
+            parse_tolerances, parse_view_moves, render_drawing_svg,
         )
 
         hidden = tuple(name for name in str(query.get("hide") or "").split(",") if name)
@@ -655,11 +655,12 @@ class CadApp:
         draft = parse_draft_dimensions(query.get("dim") or "")
         tolerance = parse_tolerances(query.get("tol") or "")
         diameters = parse_draft_diameters(query.get("dia") or "")
+        removals = parse_removals(query.get("del") or "")
         svg = render_drawing_svg(
             candidate, hidden_layers=hidden, lineweight_scale=lineweight_scale,
             dimension_units=units, dimension_decimals=decimals, dimension_text_scale=text_scale,
             moves=moves, draft_dimension=draft, highlight=str(query.get("hl") or ""), tolerance=tolerance,
-            draft_diameter=diameters,
+            draft_diameter=diameters, removals=removals,
         )
         response.send_bytes(200, svg.encode("utf-8"), "image/svg+xml; charset=utf-8")
 

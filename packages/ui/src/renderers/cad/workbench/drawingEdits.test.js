@@ -115,3 +115,16 @@ test("a smart pick means the obvious dimension", () => {
   assert.equal(drawingEditSnippet({ kind: "dia", view: "front", cx: 110, cy: 50, r: 3 }, { views: [front] }),
     "front.hole((0, 0, 10), 6, thru=True)  # model mm; say depth=... instead of thru if it is blind");
 });
+
+test("an existing dimension can be picked by its text, and removed", () => {
+  const targets = sheetSnapTargets({ lines: [], circles: [] }, [{ kind: "dimension", view: "front", index: "1", value: "34", position: [110, 30] }]);
+  const snap = snapSheetPoint(targets, [112, 31], 2);
+  assert.equal(snap.kind, "dimension");
+  assert.equal(snap.index, "1");
+  assert.deepEqual(drawingEditParams([{ kind: "del", view: "front", index: "1" }]), { del: "front:1" });
+  assert.equal(
+    drawingEditSnippet({ kind: "del", view: "front", index: "1" }, { dimensions: [{ view: "front", index: "1", value: "34" }] }),
+    "In the `front` view, remove its 2nd dim()/hole()/note() call (reads 34)."
+  );
+  assert.match(drawingEditSnippet({ kind: "del", view: "top", index: "overall-w" }, {}), /drop the overall width/);
+});

@@ -131,6 +131,8 @@ export function useViewerSheetEdit({
       const scale = mmPerPixel();
       if (snap?.kind === "vertex") {
         hoverGroup.add(ring(snap.point, 3 * scale, 5.5 * scale));
+      } else if (snap?.kind === "dimension") {
+        hoverGroup.add(ring(snap.point, 6 * scale, 8 * scale));
       } else if (snap?.kind === "edge") {
         hoverGroup.add(bar(snap.line.start, snap.line.end, 3 * scale));
       } else if (snap?.kind === "circle") {

@@ -113,8 +113,10 @@ function distancePointToSegment(p, a, b) {
   return { distance: Math.hypot(p[0] - q[0], p[1] - q[1]), point: q, t };
 }
 
-/** Line work a dimension can attach to: a view's edges and holes, never its annotation. */
-export function sheetSnapTargets(geometry) {
+/** Line work a dimension can attach to: a view's edges and holes, never its annotation.
+ *  The sheet's existing dimensions are targets too, so one can be picked to tolerance
+ *  or remove it. */
+export function sheetSnapTargets(geometry, sheetDimensions = []) {
   const lines = (Array.isArray(geometry?.lines) ? geometry.lines : [])
     .filter((line) => line.view && line.dim === undefined && !/^(SHEET|TITLE|NOTES|DIM|CENTER)$/i.test(String(line.layer || "")));
   const circles = (Array.isArray(geometry?.circles) ? geometry.circles : [])
@@ -123,7 +125,9 @@ export function sheetSnapTargets(geometry) {
     .filter((arc) => arc.view && arc.dim === undefined && Math.abs(Number(arc.sweepAngleDeg)) >= 359);
   return {
     lines,
-    circles: [...circles, ...arcs.map((arc) => ({ layer: arc.layer, view: arc.view, center: arc.center, radius: arc.radius }))]
+    circles: [...circles, ...arcs.map((arc) => ({ layer: arc.layer, view: arc.view, center: arc.center, radius: arc.radius }))],
+    dimensions: (Array.isArray(sheetDimensions) ? sheetDimensions : [])
+      .filter((dimension) => dimension?.view && dimension.index !== undefined && Array.isArray(dimension.position))
   };
 }
 
@@ -142,6 +146,14 @@ export function snapSheetPoint(targets, point, tolerance = 2) {
       best = candidate;
     }
   };
+  // An existing dimension is picked by its text; the text is a few mm wide, so it
+  // gets a little more reach than a corner.
+  for (const dimension of targets.dimensions || []) {
+    const distance = Math.hypot(point[0] - dimension.position[0], point[1] - dimension.position[1]);
+    if (distance <= tolerance * 1.6) {
+      consider({ kind: "dimension", rank: -1, distance: Math.min(distance, tolerance), point: dimension.position, view: dimension.view, index: dimension.index, value: dimension.value });
+    }
+  }
   for (const circle of targets.circles || []) {
     const toCentre = Math.hypot(point[0] - circle.center[0], point[1] - circle.center[1]);
     const toRim = Math.abs(toCentre - circle.radius);
@@ -213,6 +225,10 @@ export function drawingEditParams(edits, { highlight = "" } = {}) {
       return [edit.cx + shift[0], edit.cy + shift[1], edit.r].map(fmt).join(",");
     }).join(";");
   }
+  const removals = (edits || []).filter((edit) => edit.kind === "del");
+  if (removals.length) {
+    params.del = removals.map((edit) => `${edit.view}:${edit.index}`).join(";");
+  }
   const tolerances = (edits || []).filter((edit) => edit.kind === "tol" && edit.spec);
   if (tolerances.length) {
     params.tol = tolerances.map((edit) => `${edit.view}:${edit.index}=${edit.spec}`).join(";");
@@ -255,6 +271,14 @@ export function drawingEditSnippet(edit, { views = [], dimensions = [] } = {}) {
       return `${edit.view}.hole((${fmt(centre[0])}, ${fmt(centre[1])}, ${fmt(centre[2])}), ${fmt(2 * edit.r)}, thru=True)  # model mm; say depth=... instead of thru if it is blind`;
     }
     return `${edit.view}: add a diameter callout on the hole at sheet (${fmt(edit.cx)}, ${fmt(edit.cy)}), Ø${fmt(2 * edit.r)}.`;
+  }
+  if (edit.kind === "del") {
+    const dimension = dimensions.find((candidate) => candidate.view === edit.view && String(candidate.index) === String(edit.index)) || null;
+    const reads = dimension?.value ? ` (reads ${dimension.value})` : "";
+    if (/^overall/.test(String(edit.index))) {
+      return `In the \`${edit.view}\` view, drop the overall ${edit.index === "overall-w" ? "width" : "height"}: replace overall() with an explicit dim() for the one that stays${reads}.`;
+    }
+    return `In the \`${edit.view}\` view, remove its ${ordinal(edit.index)} dim()/hole()/note() call${reads}.`;
   }
   if (edit.kind === "tol") {
     const dimension = dimensions.find((candidate) => candidate.view === edit.view && String(candidate.index) === String(edit.index)) || null;

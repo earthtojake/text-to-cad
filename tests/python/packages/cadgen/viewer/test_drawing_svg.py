@@ -153,6 +153,18 @@ class DrawingPreviewEditTests(unittest.TestCase):
             dim = next(d for d in doc.modelspace().query("DIMENSION") if _entity_tags(d).get("view") == "front")
             self.assertGreater(dim.dxf.defpoint2.x, 100)
 
+    def test_a_removed_dimension_leaves_the_preview(self) -> None:
+        from cadgen.viewer.drawing_svg import _entity_tags, parse_removals, preview_edits
+
+        self.assertEqual(parse_removals("front:0;Top:overall-w;bad"), [("front", "0"), ("top", "overall-w")])
+        with temporary_directory(prefix="tmp-cad-drawing-preview-") as td:
+            doc = ezdxf.readfile(self._sheet(Path(td)))
+            before = len(doc.modelspace().query("DIMENSION"))
+            preview_edits(doc, removals=[("front", "0")])
+            dims = doc.modelspace().query("DIMENSION")
+            self.assertEqual(len(dims), before - 1)
+            self.assertFalse(any(_entity_tags(d).get("view") == "front" and _entity_tags(d).get("dim") == "0" for d in dims))
+
     def test_draft_dimension_highlight_and_tolerance_render_in_red(self) -> None:
         from cadgen.viewer.drawing_svg import preview_edits, render_drawing_svg
 

@@ -130,6 +130,7 @@ function editLabel(edit) {
   if (edit.kind === "move") return `Move ${edit.view} by ${edit.dx}, ${edit.dy}`;
   if (edit.kind === "dim") return `New dimension in ${edit.view}`;
   if (edit.kind === "dia") return `Ø${Math.round(edit.r * 200) / 100} callout in ${edit.view}`;
+  if (edit.kind === "del") return `Remove ${edit.view} ${/^overall/.test(String(edit.index)) ? edit.index.replace("overall-", "overall ") : `#${Number(edit.index) + 1 || edit.index}`}`;
   return `${edit.view} #${Number(edit.index) + 1 || edit.index}: ${edit.spec}`;
 }
 
@@ -155,6 +156,7 @@ export function DxfSheetSettings({
   selectedDimension = "",
   onSelectDimension,
   onAddTolerance,
+  onRemoveDimension,
   onDiscardEdit,
   onDiscardEdits,
   onSendEdits,
@@ -178,7 +180,7 @@ export function DxfSheetSettings({
   const editable = views.length > 0 && Boolean(onEditToolChange);
   const pickHint = editTool !== "pick" ? ""
     : pickedPointCount ? "Now click the second corner"
-      : "Click an edge for its length, a hole for its diameter, or two corners for a distance";
+      : "Click an edge for its length, a hole for its diameter, two corners for a distance, or a dimension to change or remove it";
 
   return (
     <FileSheetSectionBody>
@@ -240,7 +242,7 @@ export function DxfSheetSettings({
               onClick={() => setListOpen((open) => !open)}
             >
               {listOpen ? <ChevronDown className="size-3" aria-hidden="true" /> : <ChevronRight className="size-3" aria-hidden="true" />}
-              <span>{listOpen ? "Hide list" : "Show list, click one to tolerance it"}</span>
+              <span>{listOpen ? "Hide list" : "Show list, pick one to change or remove"}</span>
             </button>
           ) : null}
           {listOpen && sheetDimensions.length ? (
@@ -287,6 +289,13 @@ export function DxfSheetSettings({
                   onClick={() => { onAddTolerance(selectedDimension, toleranceDraft.trim()); setToleranceDraft(""); }}>
                   Apply
                 </Button>
+                {onRemoveDimension ? (
+                  <Button type="button" variant="outline" size="sm" className={FILE_SHEET_COMPACT_BUTTON_CLASSES}
+                    aria-label="Remove the selected dimension" title="Remove this dimension"
+                    onClick={() => { onRemoveDimension(selectedDimension); setToleranceDraft(""); }}>
+                    Remove
+                  </Button>
+                ) : null}
               </div>
             </FileSheetControlRow>
           ) : null}
