@@ -66,6 +66,7 @@ import {
   createDrawingEditId,
   drawingEditParams,
   drawingEditsPromptText,
+  SNAP_KINDS,
   nearestView,
   netViewMoves,
   sheetSnapTargets,
@@ -497,6 +498,8 @@ function CadFileViewSurface({
   const [drawingPickedPoints, setDrawingPickedPoints] = useState([]);
   // The picks in hand (in the coordinates the sheet shows), for the rubber band.
   const [drawingPendingSnaps, setDrawingPendingSnaps] = useState([]);
+  // The snap filter: which kinds the dimension tool may grab (all, until narrowed).
+  const [drawingSnapKinds, setDrawingSnapKinds] = useState(() => [...SNAP_KINDS]);
   const [drawingSelectedDimension, setDrawingSelectedDimension] = useState("");
   // The package's parsed contours, fetched once per entry and kept by URL. Curved bends
   // re-mesh from these; the URL carries the package version, so a rebuild refetches.
@@ -2281,6 +2284,17 @@ function CadFileViewSurface({
     setDrawingPickedPoints([]);
     setDrawingPendingSnaps([]);
     drawingPickedSnapsRef.current = [];
+  }, []);
+  const handleDrawingPickCancel = useCallback(() => {
+    drawingPickedSnapsRef.current = [];
+    setDrawingPickedPoints([]);
+    setDrawingPendingSnaps([]);
+  }, []);
+  const handleDrawingSnapKindToggle = useCallback((kind) => {
+    setDrawingSnapKinds((current) => {
+      const next = current.includes(kind) ? current.filter((item) => item !== kind) : [...current, kind];
+      return next.length ? next : [...SNAP_KINDS];
+    });
   }, []);
   // Smart dimension: an edge or a hole dimensions itself on one click; a corner waits
   // for a second pick and the two give a distance. Picks carry the snap they landed on.
@@ -6381,8 +6395,10 @@ function CadFileViewSurface({
           sheetEditSnapTargets={drawingSnapTargets}
           sheetEditPickedPoints={drawingPickedPoints}
           sheetEditPendingSnaps={drawingPendingSnaps}
+          sheetEditSnapKinds={drawingSnapKinds}
           onSheetEditPick={handleDrawingSheetPick}
           onSheetEditViewMove={handleDrawingViewMove}
+          onSheetEditCancel={handleDrawingPickCancel}
                 drawingThicknessMm={selectedEntryIsDrawing && !renderSession.enabled
             ? drawingThicknessMm
             : DXF_DEFAULT_THICKNESS_MM}
@@ -6737,6 +6753,8 @@ function CadFileViewSurface({
                     editTool: drawingEditTool,
                     onEditToolChange: handleDrawingEditToolChange,
                     pickedPointCount: drawingPickedPoints.length,
+                    snapKinds: drawingSnapKinds,
+                    onSnapKindToggle: handleDrawingSnapKindToggle,
                     selectedDimension: drawingSelectedDimension,
                     onSelectDimension: setDrawingSelectedDimension,
                     onAddTolerance: handleDrawingAddTolerance,

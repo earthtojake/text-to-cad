@@ -101,6 +101,15 @@ export const DXF_DRAWING_LINE_WORK = Object.freeze([
   { layer: "TITLE", label: "Title" }
 ]);
 
+/** The snap filter's chips, in the order a CAD selection filter lists them. */
+const SNAP_KIND_CHIPS = Object.freeze([
+  { kind: "edge", label: "Edges" },
+  { kind: "vertex", label: "Corners" },
+  { kind: "midpoint", label: "Midpoints" },
+  { kind: "circle", label: "Holes & arcs" },
+  { kind: "dimension", label: "Dimensions" }
+]);
+
 function titleCase(value) {
   return String(value || "").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
@@ -155,6 +164,8 @@ export function DxfSheetSettings({
   editTool = "",
   onEditToolChange,
   pickedPointCount = 0,
+  snapKinds = null,
+  onSnapKindToggle,
   selectedDimension = "",
   onSelectDimension,
   onAddTolerance,
@@ -181,7 +192,7 @@ export function DxfSheetSettings({
   ].filter(Boolean).join(" · ");
   const editable = views.length > 0 && Boolean(onEditToolChange);
   const pickHint = editTool !== "pick" ? ""
-    : pickedPointCount ? "The dimension follows your pointer. Click where it should sit, or pick a second edge, corner or hole for a distance or angle"
+    : pickedPointCount ? "The dimension follows your pointer. Click where it should sit (it snaps to the 12 mm rows outside the view), pick a second edge, corner or hole for a distance or angle, or press Esc to start over"
       : "Hover to snap to an edge, hole, arc or corner and click it. Then the dimension follows your pointer: click again to place it";
 
   return (
@@ -229,6 +240,17 @@ export function DxfSheetSettings({
               </Button>
             </div>
           </FileSheetControlRow>
+          {editTool === "pick" && onSnapKindToggle ? (
+            <div className="flex flex-wrap items-center gap-1 px-2">
+              <span className="mr-1 text-[11px] text-muted-foreground">Snap to</span>
+              {SNAP_KIND_CHIPS.map(({ kind, label: text }) => (
+                <Chip key={kind} pressed={!snapKinds || snapKinds.includes(kind)} title={`Snap to ${text.toLowerCase()}`}
+                  onClick={() => onSnapKindToggle(kind)}>
+                  {text}
+                </Chip>
+              ))}
+            </div>
+          ) : null}
           {pickHint ? <FileSheetStatusText>{pickHint}</FileSheetStatusText> : null}
           {editTool === "move" ? <FileSheetStatusText>Drag a view on the sheet. Click Move again to stop.</FileSheetStatusText> : null}
         </FileSheetSubsection>
