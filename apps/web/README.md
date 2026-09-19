@@ -206,8 +206,10 @@ base that follows the app's light/dark appearance. Inspect includes geometry-bas
 Features, prompt selections, contextual measurements and Display; it has no CAD
 Theme settings editor and never restores legacy custom scene themes.
 Render owns an independent camera, photographic studio, Preview/Final quality
-and material overlays. Robot files use unified Kinematics. In Inspect, linked
-meshes with authored object names also expose a Components tree grouped by link;
+and read-only authored materials. Material information lives in the Model
+tree's reference section; changing it requires editing the source model or
+its annotations. Inspect also displays authored material finish and opacity.
+Robot files use unified Kinematics. In Inspect, linked meshes with authored object names also expose a Components tree grouped by link;
 primitive-only robots have no object inventory.
 These controls live in `@hardcore/ui`; the web host keeps URL/history, appearance
 and root-scoped persistence. See the UI package's Render and LOD playbooks.

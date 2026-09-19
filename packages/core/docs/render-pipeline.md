@@ -42,9 +42,16 @@ Inspect theme or a Render recipe — and never a blend of them.
 A missing `render` selects responsive CAD inspection defaults, where the
 top-level quality, camera, and display fields apply. That result carries
 `theme`, the CAD scene settings — materials, background, floor, environment and
-the seven-light inspection rig — plus the `materialOverrides` the workbench's
-matte PBR channels imply. The Inspect base is selected by appearance; legacy
-host `theme` input cannot replace it.
+the seven-light inspection rig. `materialOverrides` is null: authored STEP
+finish and opacity remain intact, with workbench material channels used only
+where no source channel exists. Display color modes still control presentation
+color without changing the authored material. The Inspect base is selected by
+appearance; legacy host `theme` input cannot replace it. Models with authored
+material parts additionally receive a fixed neutral reflection hemisphere from
+`inspectEnvironment.js`: a 64×32 linear texture (32 KiB of source pixels), with
+Three-managed roughness prefiltering. The viewer and snapshots share it. Each
+renderer owns and disposes its texture; no model without authored materials
+loads it, and it imports no photographic rig or HDR asset.
 
 A Render envelope is isolated from those CAD fields and resolves `theme: null`:
 Render is built from its recipe alone, so no lighting rig, stage floor or
@@ -335,8 +342,9 @@ camera framing helper used by interactive rendering.
 Canonical display modes are `shaded`, `shaded_edges`, `transparent`,
 `hidden_edges`, `hidden_lines_removed`, `unshaded`, and `wireframe`. The
 retired `rendered` and `solid` values fail with their replacements. Normal CAD
-keeps authored albedo and opacity but applies the matte workbench PBR channels,
-because its inspection scene has no reflection environment.
+keeps authored albedo, opacity and finish. Workbench PBR channels are fallbacks;
+a small neutral reflection environment makes authored metals readable without
+loading the photographic studio.
 `resolveDisplayMaterialSettings()` applies the shared Original, Single color
 and Color by part policy without app state.
 

@@ -16,6 +16,7 @@ const EMPTY = [];
 export default function StepFileSheet({
   client, open, isDesktop, width, onOpenChange, onStartResize, selectedEntry, viewerLoading,
   geometryInspection = null, stepTreeRoot, isAssemblyView = false,
+  selectedMeshData = null, selectedSourceAppearance = null,
   selectedPartIds = EMPTY, selectedReferenceIds = EMPTY, selectedReferences = EMPTY,
   hiddenPartIds = EMPTY, focusedNodeIds = EMPTY, selectableNodeIds = null,
   expandedTreeNodeIds = EMPTY, onToggleTreeNode, onVisibleFeatureTargetsChange,
@@ -60,7 +61,11 @@ export default function StepFileSheet({
 
   if (!selectedEntry) return null;
   const selectionDetails = selectedReferences.length || measuredSelection.partIds.length ? <>
-    {selectedReferences.length > 0 && buildStepReferenceTab({ references: selectedReferences }).content}
+    {selectedReferences.length > 0 && buildStepReferenceTab({
+      references: selectedReferences,
+      meshData: selectedMeshData,
+      sourceAppearance: selectedSourceAppearance,
+    }).content}
     {(measurements.size || measurements.radii.length > 0) && <details className="mt-1">
       <summary className="cursor-pointer px-2 py-1 text-tiny text-muted-foreground">Dimension previews</summary>
       <StepGeometryProperties measurements={{...measurements,area:null}} inspection={inspection} inspect={inspect} />

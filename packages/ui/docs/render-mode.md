@@ -44,10 +44,8 @@ and **Render**, showing the active mode's cube or clapperboard icon.
 
 - Inspect shows only CAD inspection tabs and restores their saved split, order
   and active selection unchanged.
-- Render opens with **Studio** first and active; **Materials** follows for STEP
-  models, including those without named materials; **Kinematics** follows when
-  the model declares pose controls; **Animation** follows when it provides
-  clips.
+- Render opens with **Studio** first and active; **Kinematics** follows when
+  the model declares pose controls; **Animation** follows when it provides clips.
 - The default **Light** or **Dark** studio follows global app appearance; the
   session stores no studio choice of its own, and backdrop customizations stay
   local to the model session.
@@ -163,9 +161,9 @@ receives no inspection selectors and no DXF bend-guide overlays; STEP and
 embedded GLB animation stay independent of those inspection resources.
 
 **Render is a lazy chunk.** The photographic rig, the softbox environment, the
-Studio editor and the Materials editor are fetched the first time Render is
+Studio editor are fetched the first time Render is
 asked for, not on every load: an Inspect-only session never pays for them.
-`src/renderers/cad/render/renderStudioChunk.js` is the one boundary. The two panels go
+`src/renderers/cad/render/renderStudioChunk.js` is the one boundary. The Studio panel goes
 through `React.lazy`, and the scene half answers `studioScene()` with `null`
 until it arrives — a state the transition above already covers, because
 `environmentReady` stays false and the canvas stays under the destination
@@ -176,8 +174,8 @@ the tab's muted "Loading studio settings..." line for the round trip. There is
 no idle prefetch: a background fetch would compete with the tessellation work
 that actually governs first geometry.
 
-**What that means for tests.** A test that wants the Studio or Materials panel
-mounts `RenderSettingsContent.js` / `MaterialsSettingsContent.js` directly —
+**What that means for tests.** A test that wants the Studio panel
+mounts `RenderSettingsContent.js` directly —
 the tab builders return the lazy wrapper, not the panel — and a browser test
 that switches to Render waits for the scene as it already does, since the
 switch resolves the chunk before anything is presented.
@@ -192,29 +190,61 @@ The session still records where each mode's camera was left, for the file
 session it reopens with and for a snapshot request; nothing replays it across a
 switch.
 
-## The Materials tab
+## Read-only materials
 
-Click a part in the list or Render viewport (Shift-click for multiple), carry a
-selection from Inspect, or Select all parts. The Parts list marks the
-selection; the photographic scene receives no selected parts, because the
-Inspect selection tint and occlusion ghost would repaint the material being
-previewed.
+Authored appearance is shared by Inspect and Render. STEP sidecar assignments
+supply material names, optional base color, roughness, metalness, clearcoat,
+clearcoat roughness and opacity. Sparse fields resolve through core defaults;
+omitted base color preserves the STEP's color. Material opacity multiplies
+source alpha. Inspect's workbench lighting and Render's photographic lighting
+make the same material look different without changing its properties. Inspect
+adds a small fixed neutral reflection hemisphere only when authored materials
+are present, so metallic surfaces stay legible. This procedural texture uses
+no external assets or photographic studio; it is reused within the renderer
+and disposed on material removal or renderer teardown.
 
-- Click an **In this model** swatch or **Preset** to apply immediately; a
-  preset creates and assigns its material together.
-- Undo restores the last local material change.
-- A material's options menu can select every part using it. Color and surface
-  sliders stay behind **Advanced settings**. Shared editing remains explicit,
-  with **Make unique for selection** available before editing a shared
-  material.
-- **Reset authored** clears local assignments and definitions.
-- Part picking is enabled only while the STEP Materials tab is open; face and
-  edge selectors stay disabled. Appearance wrappers retain their geometry
-  identity for detail-adoption and disposal acknowledgments.
+The Model tree's reference section shows the selected occurrences' materials,
+including mixed assignments and unassigned parts. Face and edge references use
+the owning occurrence. A STEP color alone does not identify a physical material.
+There is no Materials tab, material editor, local assignment, preset or undo.
+Older persisted material overrides and retired tab IDs are ignored; changes
+must come from the model or its annotations, typically through a prompt.
 
-The edits, that one step of history and the panel's part selection are the
-model's session, held by the workspace rather than the panel, so looking at
-Studio and coming back leaves all three where they were.
+Live appearance changes wrap the cached mesh without copying geometry. Core's
+`applySourceAppearanceToMeshData` preserves source colors and alpha and exposes
+`sourceAppearanceGeometry` so detail-adoption and disposal acknowledgments
+still refer to the exact geometry publication. Removing an assignment restores
+the source appearance, rather than leaving stale finish settings behind.
+
+## Shared pipeline and remaining separation
+
+Both modes use the same CAD renderer, source assets, tessellation cache, LOD
+controller, animation/kinematics and authored material resolution. They are
+presentation and interaction policies over shared model data, not separate
+model loaders.
+
+| Concern | Inspect | Render |
+| --- | --- | --- |
+| Lighting | Fixed workbench rig; neutral reflection fill for authored materials | Lazy photographic softbox environment, ground shadows, exposure and lens controls |
+| Interaction | Tree/topology selection, references, measurements, clipping, isolation, explode, drawing | Presentation/orbit/capture; no inspection selectors or selection tints |
+| Camera | Display projection, cursor/surface zoom pivot | Perspective lens, model-center zoom pivot |
+| Detail | Interactive quality | Preview or Final quality; larger shadows/environment/captures at Final |
+| Depth buffer | Logarithmic for wide CAD ranges | Conventional for photographic ground shadows |
+| Native GLB | Static inspection mesh; animated GLB keeps its native hierarchy | Native hierarchy/materials/textures |
+
+`common/sceneSettings.js` in core resolves either scene recipe. UI's
+`sceneBuildSettings.js`, `viewerPickMode.js` and `useViewerRuntime.js` apply
+its build, interaction and GPU-runtime policy. Changing modes recreates the
+WebGL runtime because the depth-buffer mode is chosen at renderer construction;
+it retains cached CPU geometry and does not recompile the model.
+
+Combining the UI into one configurable view is possible, but retaining the
+current performance and behavior still requires these internal policies. Always
+loading the photographic rig adds work to first Inspect load; always enabling
+inspection adds selector/BVH costs to presentation-only use. Eliminating runtime
+recreation also requires choosing and validating one depth strategy across
+large CAD ranges and ground shadows. Authored materials are already shared, so
+merging modes is not necessary to remove material duplication.
 
 ## Setup and Reset
 

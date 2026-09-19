@@ -1,3 +1,4 @@
+import { createInspectEnvironmentResource, hasAuthoredMaterials } from "./inspectEnvironment.js";
 import { resolveCadEdgeSettings } from "./cadInk.js";
 import * as THREE from "three";
 import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
@@ -1008,7 +1009,7 @@ export function renderModel(_THREE, model, viewportOptions = {}) {
   const ready = Promise.resolve().then(() => {
     const resource = studioRuntime
       ? createEnvironmentResource(renderer, studioConfiguration, { size: context.quality.environmentMapSize })
-      : null;
+      : hasAuthoredMaterials(model.meshData) ? createInspectEnvironmentResource(THREE) : null;
     if (disposed) {
       disposeEnvironmentResource(resource);
       return null;

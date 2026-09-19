@@ -49,19 +49,6 @@ function stepEntry(file = "parts/bracket.step", hash = "mesh-a", moduleHash = "m
   };
 }
 
-function materialStepEntry(file = "parts/finished.step", appearanceHash = "appearance-a") {
-  return {
-    ...stepEntry(file, "mesh", "module"),
-    appearanceHash,
-    sourceSidecar: {
-      appearance: {
-        materials: { steel: { name: "Steel" } },
-        assignments: { palm: "steel" }
-      }
-    }
-  };
-}
-
 function dxfEntry(file = "drawings/bracket.dxf", hash = "dxf-a") {
   return {
     file,
@@ -480,42 +467,19 @@ test("pose and animation are stored as independent slices", () => {
   });
 });
 
-test("material overlays round-trip and reset when authored appearance changes", () => {
+test("retired material overrides are ignored without discarding other file state", () => {
   const storage = createMemoryStorage();
-  const entry = materialStepEntry();
-  const overlay = {
-    materials: {
-      steel: { roughness: 0.2 },
-      "steel-copy-1": { name: "Steel copy", metalness: 0.8 }
-    },
-    assignments: { finger: "steel-copy-1" }
-  };
-
-  writeFileSessionState("models", entry.file, createFileSessionSnapshot({
-    entry,
-    slices: { materials: overlay }
-  }), { storage });
-
-  assert.deepEqual(readFileSessionState("models", entry.file, entry, { storage }).slices.materials, overlay);
-  assert.equal(
-    readFileSessionState("models", entry.file, { ...entry, appearanceHash: "appearance-b" }, { storage }).slices.materials,
-    undefined
-  );
-
-  writeFileSessionState("models", entry.file, createFileSessionSnapshot({
-    entry,
-    slices: { materials: { materials: {}, assignments: {} } }
-  }), { storage });
-  assert.equal(readFileSessionState("models", entry.file, entry, { storage })?.slices?.materials, undefined);
-});
-
-test("materials added to a bare STEP survive reload but expire on geometry replacement", () => {
-  const storage = createMemoryStorage();
-  const entry = { file: "bare.step", kind: "step", hash: "geometry-a" };
-  const materials = { materials: { plastic: { name: "Plastic", metalness: 0 } }, assignments: { body: "plastic" } };
-  writeFileSessionState("models", entry.file, createFileSessionSnapshot({ entry, slices: { materials } }), { storage });
-  assert.deepEqual(readFileSessionState("models", entry.file, entry, { storage }).slices.materials, materials);
-  assert.equal(readFileSessionState("models", entry.file, { ...entry, hash: "geometry-b" }, { storage }).slices.materials, undefined);
+  const entry = stepEntry();
+  const saved = createFileSessionSnapshot({ entry, slices: { animation: { speed: 1.5 } } });
+  // Simulate bytes written before materials became source-owned and read-only.
+  saved.slices.materials = { materials: { steel: { roughness: 0.1 } }, assignments: { body: "steel" } };
+  saved.signatures.materials = "appearance-a";
+  storage.setItem(fileSessionStorageKey("models", entry.file), JSON.stringify(saved));
+  const restored = readFileSessionState("models", entry.file, entry, { storage });
+  assert.equal(restored.slices.materials, undefined);
+  assert.equal(restored.slices.animation.speed, 1.5);
+  const snapshot = createFileSessionSnapshot({ entry, slices: saved.slices });
+  assert.equal(snapshot.slices.materials, undefined);
 });
 
 test("an animation slice stored before the gate existed reopens gated on", () => {

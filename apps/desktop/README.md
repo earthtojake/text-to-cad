@@ -1084,8 +1084,9 @@ untouched; they cannot override either mode's base. Settings › Appearance
 still owns the app's System, Light and Dark preference, including the panel
 column, toolbar and tab strip.
 
-**Inspect** uses one fixed lighting, material and dark-edge recipe in light
-and dark appearance; its canvas and guides adapt to the app. Display controls
+**Inspect** uses fixed workbench lighting and dark edges in light and dark
+appearance; its canvas and guides adapt to the app. Authored material color,
+finish and opacity are preserved, with neutral defaults for unassigned parts. Display controls
 projection, shaded or wire presentation, edges, guides, clipping and exploded
 view. Model/Features, selection and contextual measurements remain inspection
 tools. The Inspector retains its saved section layout.
@@ -1093,10 +1094,12 @@ tools. The Inspector retains its saved section layout.
 **Render** uses a photographic studio, perspective camera and shaded authored
 colors, with inspection guides, clipping and selection effects off. Studio
 starts from the app's light or dark appearance and exposes lens, exposure,
-lighting, backdrop and Preview/Final quality controls. Materials retains its
-part selection, local assignments, undo and Reset authored controls. Studio
-and material edits belong to the model session and survive mode switches;
-returning to Inspect restores its Display settings. Supported Kinematics and
+lighting, backdrop and Preview/Final quality controls. Studio edits belong to
+the model session and survive mode switches; returning to Inspect restores
+its Display settings. Materials are read-only in both modes, with names and
+properties in the Model tree's reference section. There is no Materials tab,
+local assignment or material undo state; old saved material overrides are
+ignored. Use prompts to change authored material assignments or properties. Supported Kinematics and
 Animation controls remain available in both modes.
 
 Embedded STEP animation modules load through temporary Blob URLs in the
@@ -1107,8 +1110,8 @@ JavaScript file is discovered or written.
 
 Neither a mode switch nor a Studio edit changes the app's appearance. The
 Electron `theme` suite samples the document through these interactions, and
-`cad-scenes` checks that Display, Studio and Materials retain their separate
-state. See the shared [Render modes](../../packages/ui/docs/render-mode.md)
+`cad-scenes` checks that Display and Studio retain their separate state
+and no Materials editor is exposed. See the shared [Render modes](../../packages/ui/docs/render-mode.md)
 playbook for the mode bases and camera behavior.
 
 ## Quitting

@@ -21,6 +21,8 @@ test("normal CAD stays an orthographic responsive inspection scene", () => {
   assert.equal(light.display.guides.grid.enabled, true);
   assert.equal(light.display.guides.axis.enabled, true);
   assert.equal(light.theme.materials.overrideSourceColors, false);
+  assert.equal(light.materialOverrides, null);
+  assert.equal(dark.materialOverrides, null);
   assert.equal(light.quality.id, SCENE_QUALITY.INTERACTIVE);
   assert.equal(light.theme.background.solidColor, "#f0f4f9");
   assert.equal(dark.theme.background.solidColor, "#333333");

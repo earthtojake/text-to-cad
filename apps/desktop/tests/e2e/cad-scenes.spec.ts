@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { _electron as electron, expect, test, type ElectronApplication, type Page, type Request } from "@playwright/test";
 import type { HardcoreApi } from "../../src/shared/ipc";
 import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-runtime";
+import { selectFixtureSession } from "./session-fixture";
 
 declare const window: {
   hardcore: HardcoreApi;
@@ -107,7 +108,7 @@ test.beforeAll(async () => {
   fs.copyFileSync(path.join(project, "many-a.step"), path.join(project, "many-b.step"));
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1600, 900));
   await page.evaluate(() => window.hardcore.settings.set({ theme: "dark", reduceMotion: true, defaultGitMode: "none", fetchBeforeCreate: false }));
-  await page.evaluate(root => window.hardcore.projects.addPath({ path: root }), project);
+  await selectFixtureSession(page, project);
   await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
   await page.getByRole("button", { name: "Toggle explorer", exact: true }).click();
 });
@@ -187,10 +188,31 @@ async function expectCadReady(file: string, componentCount = 1) {
   }
 }
 
-test("Inspect and Render keep separate controls and preserve display, studio and material edits", async () => {
+test("Inspect and Render preserve display and studio edits without a Materials editor", async () => {
   test.setTimeout(150_000);
   await openFile("part.step");
   await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible({ timeout: 90_000 });
+  await page.getByRole("list", { name: "Model", exact: true })
+    .getByRole("button", { name: "Select part.step", exact: true }).click();
+  const materialInfo = page.locator('[aria-label="Source material"]');
+  await expect(materialInfo).toContainText("Unassigned");
+  await expect(materialInfo.locator("input, select, button")).toHaveCount(0);
+  // Authored changes arrive through the watched sidecar, never a viewer editor.
+  const occurrenceId = await page.evaluate(() => window.__cadDisplayRecords?.()[0]?.partId);
+  expect(occurrenceId).toBeTruthy();
+  fs.writeFileSync(path.join(project, "part.step.json"), JSON.stringify({
+    schemaVersion: 9,
+    documentHash: createHash("sha256").update(fs.readFileSync(path.join(project, "part.step"))).digest("hex"),
+    appearance: {
+      materials: { steel: { name: "Brushed steel", roughness: 0.25, metalness: 1 } },
+      assignments: { [occurrenceId!]: "steel" },
+    },
+  }));
+  await expect(materialInfo).toContainText("Brushed steel", { timeout: 30_000 });
+  await expect(materialInfo).toContainText("25%");
+  await page.screenshot({ path: test.info().outputPath("inspect-material.png"), animations: "disabled" });
+  await page.keyboard.press("Escape");
+  await page.screenshot({ path: test.info().outputPath("inspect-material-unselected.png"), animations: "disabled" });
   await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
   await expect(page.locator("[data-file-panel=cad-theme], [data-file-sheet=Theme]")).toHaveCount(0);
   const displayButton = page.getByRole("button", { name: "Display", exact: true });
@@ -209,14 +231,10 @@ test("Inspect and Render keep separate controls and preserve display, studio and
   const exposure = studio.getByLabel("Exposure value", { exact: true });
   await exposure.fill("1.5");
   await exposure.press("Enter");
-  await page.getByRole("tab", { name: "Materials", exact: true }).click();
-  const materials = page.locator("[data-cad-materials-settings-section]");
-  await materials.getByRole("button", { name: "Select all parts", exact: true }).click();
-  await materials.getByRole("button", { name: "Satin metal", exact: true }).click();
-  await expect(materials.getByRole("button", { name: "Reset authored", exact: true })).toBeEnabled();
-  await expect(materials).toContainText(/Selected: .* · Satin metal/);
+  await expect(page.getByRole("tab", { name: "Materials", exact: true })).toHaveCount(0);
+  await expect(page.locator("[data-cad-materials-settings-section]")).toHaveCount(0);
   await expect(page.locator("[data-file-panel-container]")).toHaveCount(1);
-  await page.screenshot({ path: test.info().outputPath("render-materials.png"), animations: "disabled" });
+  await page.screenshot({ path: test.info().outputPath("render-studio.png"), animations: "disabled" });
 
   await page.getByRole("button", { name: "Viewing mode: Render. Switch to Inspect", exact: true }).click();
   await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible();
@@ -226,13 +244,19 @@ test("Inspect and Render keep separate controls and preserve display, studio and
   await expect(display.getByRole("combobox", { name: "Mode" })).toContainText("Wire");
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Viewing mode: Inspect. Switch to Render", exact: true }).click();
-  await page.getByRole("tab", { name: "Studio", exact: true }).click();
+  // Studio is the only section for this model, so its redundant tab strip is hidden.
+  await expect(studio).toBeVisible();
   await expect(exposure).toHaveValue("1.5 EV");
-  await page.getByRole("tab", { name: "Materials", exact: true }).click();
-  await expect(materials.getByRole("button", { name: "Reset authored", exact: true })).toBeEnabled();
-  await materials.getByRole("button", { name: "Reset authored", exact: true }).click();
-  await expect(materials.getByRole("button", { name: "Reset authored", exact: true })).toBeDisabled();
+  await expect(page.getByRole("tab", { name: "Materials", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Viewing mode: Render. Switch to Inspect", exact: true }).click();
+  await page.getByRole("list", { name: "Model", exact: true })
+    .getByRole("button", { name: "Select part.step", exact: true }).click();
+  await expect(materialInfo).toContainText("Brushed steel");
+  const sidecarPath = path.join(project, "part.step.json");
+  const sidecar = JSON.parse(fs.readFileSync(sidecarPath, "utf8"));
+  delete sidecar.appearance;
+  fs.writeFileSync(sidecarPath, JSON.stringify(sidecar));
+  await expect(materialInfo).toContainText("Unassigned", { timeout: 30_000 });
   expect(await page.evaluate(() => localStorage.getItem("cad-viewer:theme"))).toBeNull();
   expect(errors).toEqual([]);
 });

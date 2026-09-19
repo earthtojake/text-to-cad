@@ -181,10 +181,6 @@ function entryStepModuleSignature(entry) {
   ].filter(Boolean).join(":");
 }
 
-function entryMaterialsSignature(entry) {
-  return normalizeString(entry?.appearanceHash || entry?.documentHash || entry?.hash);
-}
-
 function entryLargeFileSignature(entry) {
   return [
     normalizeString(entry?.kind).toLowerCase(),
@@ -215,8 +211,7 @@ export function fileSessionSignaturesForEntry(entry) {
     tab: entryTabSignature(entry),
     stepModule: entryStepModuleSignature(entry),
     urdf: entryUrdfSignature(entry),
-    largeFile: entryLargeFileSignature(entry),
-    materials: entryMaterialsSignature(entry)
+    largeFile: entryLargeFileSignature(entry)
   };
 }
 
@@ -287,15 +282,6 @@ function normalizeLargeFileSlice(value) {
   };
 }
 
-function normalizeMaterialsSlice(value) {
-  if (!isPlainObject(value)) return null;
-  const materials = isPlainObject(value.materials) ? cloneSerializable(value.materials) : {};
-  const assignments = isPlainObject(value.assignments) ? cloneSerializable(value.assignments) : {};
-  return Object.keys(materials).length || Object.keys(assignments).length
-    ? { materials, assignments }
-    : null;
-}
-
 const FILE_SESSION_SLICE_SCHEMA = Object.freeze({
   display: {
     normalize: normalizeDisplaySlice,
@@ -323,11 +309,6 @@ const FILE_SESSION_SLICE_SCHEMA = Object.freeze({
     normalize: normalizeAnimationSlice,
     equals: storageValuesEqual,
     signatureKey: "stepModule"
-  },
-  materials: {
-    normalize: normalizeMaterialsSlice,
-    equals: storageValuesEqual,
-    signatureKey: "materials"
   },
   urdf: {
     normalize: normalizeUrdfSlice,

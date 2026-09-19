@@ -111,20 +111,18 @@ test("named robot objects add Components after Joints, and no Reference tab", ()
   assert.deepEqual(defaultOpenFileSheetSectionIds("urdf", { hasRobotComponents: true }), ["joints"]);
 });
 
-test("Render mode orders Studio, Materials, Kinematics and Animation when authored", () => {
+test("Render mode orders Studio, Kinematics and Animation when authored", () => {
   assert.deepEqual(renderedFileSheetSectionIds("step", {
     renderMode: true,
-    hasMaterialsPanel: true,
     hasStepPosePanel: true,
     hasStepAnimationPanel: true
-  }), ["render", "materials", "pose", "animation"]);
+  }), ["render", "pose", "animation"]);
   assert.deepEqual(renderedFileSheetSectionIds("step", { renderMode: true }), ["render"]);
   assert.deepEqual(renderedFileSheetSectionIds("mesh", { renderMode: true }), ["render"]);
   assert.deepEqual(renderedFileSheetSectionIds("mesh", {
     renderMode: true,
-    hasMaterialsPanel: true,
     hasEmbeddedGlbAnimationPanel: true
-  }), ["render", "materials", "animation"]);
+  }), ["render", "animation"]);
   assert.deepEqual(renderedFileSheetSectionIds("dxf", { renderMode: true }), ["render"]);
   assert.deepEqual(renderedFileSheetSectionIds("sdf", { renderMode: true }), ["render"]);
   assert.deepEqual(defaultOpenFileSheetSectionIds("step", {

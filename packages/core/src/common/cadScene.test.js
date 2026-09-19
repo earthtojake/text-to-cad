@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
+import { resolveSceneSettings } from "./sceneSettings.js";
 import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
@@ -1482,7 +1483,46 @@ test("exact source-part identity skips work only for rows owned by the current c
   scene.dispose();
 });
 
-test("explicit Render PBR edits override authored channels while studio values remain fallbacks", () => {
+test("Inspect preserves authored finish and alpha through selection and source reuse", () => {
+  for (const appearance of ["light", "dark"]) {
+    const inspect = resolveSceneSettings({ appearance });
+    const source = sampleMeshData();
+    source.parts = source.parts.map((part, index) => ({
+      ...part, color: "#234567", opacity: 0.4,
+      material: index === 0 ? { roughness: 0.17, metalness: 0.83, clearcoat: 0.35, clearcoatRoughness: 0.12 } : null
+    }));
+    const scene = buildModel(THREE, source, {
+      renderPartsIndividually: true,
+      materialSettings: inspect.theme.materials,
+      materialOverrides: inspect.materialOverrides
+    });
+    try {
+      const record = scene.displayRecords[0];
+      const authoredColor = record.material.color.clone();
+      assert.equal(record.material.roughness, 0.17);
+      assert.equal(record.material.metalness, 0.83);
+      assert.equal(record.material.clearcoat, 0.35);
+      assert.equal(record.material.clearcoatRoughness, 0.12);
+      assert.equal(record.material.opacity, 0.4);
+      assert.equal(scene.displayRecords[1].material.roughness, inspect.theme.materials.roughness);
+      for (const apply of [applyPartVisualState, applyViewerPartVisualState]) {
+        apply(THREE, scene.displayRecords, { selectedPartIds: [record.partId] });
+        apply(THREE, scene.displayRecords, { selectedPartIds: [] });
+        assert.equal(record.material.roughness, 0.17);
+        assert.equal(record.material.metalness, 0.83);
+        assert.equal(record.material.opacity, 0.4);
+        assert.ok(record.material.color.equals(authoredColor));
+      }
+      scene.update({ source: { ...source } });
+      assert.equal(scene.displayRecords[0].material.roughness, 0.17);
+      assert.equal(scene.displayRecords[0].material.opacity, 0.4);
+    } finally {
+      scene.dispose();
+    }
+  }
+});
+
+test("explicit caller PBR overrides remain supported while scene values supply fallbacks", () => {
   const source = sampleMeshData();
   source.parts = source.parts.map((part, index) => ({
     ...part,

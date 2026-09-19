@@ -395,9 +395,10 @@ A complete previous revision stays visible until its replacement is ready.
 The floating toolbar switches Inspect and Render. Inspect uses its fixed scene
 basis with per-file Display controls, while Render has its own camera, studio
 and Preview/Final quality.
-Entering a mode fits that mode's camera. The Studio and Materials panels load
-lazily; Render's tab arrangement is temporary and never overwrites the host's
-Inspect arrangement. Material overlays and undo are per-file session state.
+Entering a mode fits that mode's camera. Studio loads lazily; Render's tab
+arrangement is temporary and never overwrites the host's Inspect arrangement.
+Authored materials are read-only in both modes and described in the Model
+tree's reference section; the viewer stores no material overrides or undo.
 
 The host-supplied render session owns its tessellation cache and worker leases.
 Photographic scene state is a separate value. Surface derivation and preview

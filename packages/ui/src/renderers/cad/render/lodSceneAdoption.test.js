@@ -6,7 +6,7 @@ import {
   registerLodDisplaySource,
 } from "./lodSceneAdoption.js";
 import { updateLodMeshState, updateLodReferenceState } from "./lodPublication.js";
-import * as materials from "../workbench/sourceMaterialSession.js";
+import { applySourceAppearanceToMeshData, sourceAppearanceGeometry } from "@hardcore/core/common/sourceSidecar.js";
 
 function source(mesh, extra = []) {
   return { parts: ["a1", "a2"].map(id => ({ id, occurrenceId: id, componentId: "a", sourceMesh: mesh })).concat(extra) };
@@ -33,10 +33,11 @@ async function ticks() { for (let i = 0; i < 12; i++) await Promise.resolve(); }
 
 test("material-only display wrappers acknowledge the exact published geometry", async () => {
   const f = fixture(), promise = f.expect(); f.publish();
-  const { overlay } = materials.applyMaterialChoice(null, null, ["a1"], "preset:satin-metal");
-  const display = materials.applySourceMaterialOverlayToMeshData(f.candidate, overlay);
+  const display = applySourceAppearanceToMeshData(f.candidate, {
+    materials: { steel: { name: "Steel", metalness: 1 } }, assignments: { a1: "steel" }
+  });
   assert.equal(f.tracker.adopted(display), false, "a copied display object cannot acknowledge the publication");
-  assert.equal(f.tracker.adopted(materials.sourceMaterialGeometry(display)), true);
+  assert.equal(f.tracker.adopted(sourceAppearanceGeometry(display)), true);
   assert.equal((await promise).status, "adopted");
   assert.equal(f.context.meshData, f.candidate);
 });

@@ -53,14 +53,14 @@ test("Render tab selection stays outside the photographic payload and starts at 
     openSectionIds: ["materials", "pose", "animation", "display", "animation"],
     payload: { exposure: 0.5 }
   });
-  assert.deepEqual(session.openSectionIds, ["materials", "pose", "animation"]);
+  assert.deepEqual(session.openSectionIds, ["pose", "animation"]);
   assert.deepEqual(session.payload, { exposure: 0.5 });
   assert.deepEqual(
     createRenderSessionState(JSON.parse(JSON.stringify(session))).openSectionIds,
-    ["materials", "pose", "animation"]
+    ["pose", "animation"]
   );
   const disabled = renderSessionForEnabledChange(session, false);
-  assert.deepEqual(disabled.openSectionIds, ["materials", "pose", "animation"]);
+  assert.deepEqual(disabled.openSectionIds, ["pose", "animation"]);
   const reenabled = renderSessionForEnabledChange(disabled, true);
   assert.deepEqual(reenabled.openSectionIds, ["render"]);
   assert.equal(reenabled.payload.exposure, 0.5);

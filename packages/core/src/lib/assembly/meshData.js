@@ -576,6 +576,8 @@ export function buildComposedPackageMeshData(descriptor, componentMeshDataByCid,
       opacity: overrideOpacity < 0.999 ? overrideOpacity : undefined,
       sourceOpacity,
       hasSourceColors: useComponentVertexColors,
+      // Retain the undecorated color mode for live sidecar assignment removal.
+      sourceHasVertexColors: !overrideColor && hasComponentColors,
       // Shared component geometry: cadScene caches one BufferGeometry per sourceMeshKey and
       // reuses it across every occurrence of this cid (+ colour mode). A viewport-LOD level
       // swap re-tessellates the component, so the level is part of the identity — a new key

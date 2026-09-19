@@ -20,10 +20,8 @@ export function viewerSelectorRuntimeForRenderPane({
 const EMPTY_PART_IDS = Object.freeze([]);
 
 // The part selection the scene may highlight. Render is a photographic view:
-// the Inspect selection effect tints the selected surface and draws a dithered
-// occlusion ghost through everything in front of it, which would repaint the
-// very material the Materials tab just applied. The Materials tab's Parts list
-// carries the selection instead, so Render hands the scene no selected parts.
+// the Inspect selection effect tints surfaces and draws occlusion ghosts.
+// Render shows authored appearance without those inspection overlays.
 export function viewerSelectedPartIdsForRenderPane({
   renderMode = false,
   hasParts = false,

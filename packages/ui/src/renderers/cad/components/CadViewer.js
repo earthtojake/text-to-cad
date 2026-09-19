@@ -1,3 +1,4 @@
+import { createInspectEnvironmentResource, hasAuthoredMaterials, INSPECT_ENVIRONMENT_ID } from "@hardcore/core/common/inspectEnvironment.js";
 "use client";
 
 import LoadingIndicator from "./workbench/LoadingIndicator.js";
@@ -1647,7 +1648,6 @@ const CadViewer = forwardRef(function CadViewer({
   materialOverrides = null,
   receiveShadows = false,
   renderMode = false,
-  materialPickingEnabled = false,
   appearance = "light",
   renderConfiguration = null,
   quality = null,
@@ -1958,6 +1958,7 @@ const CadViewer = forwardRef(function CadViewer({
   // authored coordinates. Normalization enforces the same rule; this guard
   // keeps the invariant local for raw settings.
   const floorFollowsModel = floorSettings.enabled === true && floorSettings.followModel !== false;
+  const inspectHasMaterials = useMemo(() => hasAuthoredMaterials(meshData), [meshData]);
   const renderEnvironmentMapSize = Number(quality?.environmentMapSize) > 0
     ? Number(quality.environmentMapSize)
     : 256;
@@ -3766,7 +3767,7 @@ const CadViewer = forwardRef(function CadViewer({
     const studio = studioScene();
     const clearEnvironmentResource = () => {
       runtime.scene.environment = null;
-      studio?.disposeEnvironmentResource(runtime.environmentResource);
+      runtime.environmentResource?.dispose();
       runtime.environmentResource = null;
       runtime.environmentResourceIdentity = "";
     };
@@ -3780,8 +3781,18 @@ const CadViewer = forwardRef(function CadViewer({
     }
     if (!renderMode || !renderConfiguration) {
       runtime.environmentReady = true;
-      clearEnvironmentResource();
-      runtime.scene.environmentIntensity = 0;
+      if (inspectHasMaterials) {
+        if (runtime.environmentResourceIdentity !== INSPECT_ENVIRONMENT_ID) {
+          clearEnvironmentResource();
+          runtime.environmentResource = createInspectEnvironmentResource(runtime.THREE);
+          runtime.environmentResourceIdentity = INSPECT_ENVIRONMENT_ID;
+        }
+        runtime.scene.environment = runtime.environmentResource.texture;
+        runtime.scene.environmentIntensity = 1;
+      } else {
+        clearEnvironmentResource();
+        runtime.scene.environmentIntensity = 0;
+      }
       applyActiveSceneBackground(runtime, viewerTheme, normalizedThemeSettings.background);
       viewerAlertChangeRef.current?.(null);
       runtime.requestRender();
@@ -3845,6 +3856,7 @@ const CadViewer = forwardRef(function CadViewer({
     applyActivePhotographicStudio,
     renderConfiguration,
     renderEnvironmentMapSize,
+    inspectHasMaterials,
     renderMode,
     studioSceneTick,
     viewerReadyTick,
@@ -5555,7 +5567,7 @@ const CadViewer = forwardRef(function CadViewer({
     onMeasurePick: handleMeasurePick,
     onMeasureHoverPoint: handleMeasureHoverPoint,
     viewerReadyTick,
-    suppressTopologyPicking: (renderMode && !materialPickingEnabled) || stepAnimationPlaying,
+    suppressTopologyPicking: renderMode || stepAnimationPlaying,
     allowMeshVertexSnap
   });
 

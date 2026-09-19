@@ -57,8 +57,7 @@ export default function MeshFileSheet({
   const sections = renderMode
     ? [
         ...settingsTabs.filter((section) => (
-          section?.id === FILE_SHEET_SECTION_IDS.RENDER ||
-          section?.id === FILE_SHEET_SECTION_IDS.MATERIALS
+          section?.id === FILE_SHEET_SECTION_IDS.RENDER
         )),
         ...(animationTab ? [animationTab] : [])
       ]
