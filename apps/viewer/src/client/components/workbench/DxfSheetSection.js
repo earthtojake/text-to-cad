@@ -181,8 +181,8 @@ export function DxfSheetSettings({
   ].filter(Boolean).join(" · ");
   const editable = views.length > 0 && Boolean(onEditToolChange);
   const pickHint = editTool !== "pick" ? ""
-    : pickedPointCount ? "Click empty sheet to place it, or pick a second edge, corner or hole for a distance or angle"
-      : "Pick an edge, hole, arc, corner or midpoint, then click where the dimension goes. Two picks give a distance or angle. Pick a dimension to change or remove it";
+    : pickedPointCount ? "The dimension follows your pointer. Click where it should sit, or pick a second edge, corner or hole for a distance or angle"
+      : "Hover to snap to an edge, hole, arc or corner and click it. Then the dimension follows your pointer: click again to place it";
 
   return (
     <FileSheetSectionBody>

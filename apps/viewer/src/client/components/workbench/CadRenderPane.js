@@ -285,6 +285,7 @@ export default function CadRenderPane({
   sheetEditViews = null,
   sheetEditSnapTargets = null,
   sheetEditPickedPoints = null,
+  sheetEditPendingSnaps = null,
   onSheetEditPick = null,
   onSheetEditViewMove = null,
   drawingThicknessMm = 0,
@@ -521,6 +522,7 @@ export default function CadRenderPane({
       sheetEditViews={sheetEditViews}
       sheetEditSnapTargets={sheetEditSnapTargets}
       sheetEditPickedPoints={sheetEditPickedPoints}
+      sheetEditPendingSnaps={sheetEditPendingSnaps}
       onSheetEditPick={onSheetEditPick}
       onSheetEditViewMove={onSheetEditViewMove}
         drawingThicknessMm={drawingThicknessMm}
