@@ -53,11 +53,13 @@ Reads the STEP the drawing documents, relative to the script. Missing file →
   UNLESS OTHERWISE SPECIFIED." Give one on any drawing a shop will quote from.
 - `revisions=[("A", "2026-09-01", "INITIAL RELEASE"), ...]`: a revision table
   (REV, DATE, DESCRIPTION) top-right inside the frame.
-- `sheet.three_views(shape, gap=30)` → `(top, front, right)` placed in
-  third-angle arrangement from the part's extents. Use `view()` with `at=` when
-  you need other views or a custom layout.
-- `sheet.view(shape, name, at=(x, y), label=None, hidden=True, centre_marks=True)`
-  → `View`. `name` is one of `top`, `bottom`, `front`, `back`, `left`,
+- `sheet.three_views(shape, gap=None, iso=False)` → `(top, front, right)` placed
+  in third-angle arrangement from the part's extents, with the gap sized for two
+  rows of dimensions unless you pass one. `iso=True` adds an isometric view in the
+  free top-right slot and returns it fourth. Use `view()` with `at=` only for a
+  custom layout.
+- `sheet.view(shape, name, at=(x, y), label=None, hidden=True, centre_marks=True, scale=None)`
+  → `View`. `scale` overrides the sheet's for this view (a pictorial drawn smaller); say so in its label. `name` is one of `top`, `bottom`, `front`, `back`, `left`,
   `right`, `iso`. The projected geometry is centred on `at`.
 
 ## `View`

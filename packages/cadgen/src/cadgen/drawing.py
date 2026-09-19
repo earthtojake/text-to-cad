@@ -148,6 +148,9 @@ class View:
     label: str | None = None
     hidden: bool = True
     centre_marks: bool = True
+    #: This view's own drawing scale; None means the sheet's. A pictorial view is
+    #: often drawn smaller so it fits the free corner.
+    scale: float | None = None
     _dims: list[_Dim] = field(default_factory=list)
     _overall: bool = False
 
@@ -289,34 +292,66 @@ class Sheet:
     def height(self) -> float:
         return SHEET_SIZES[self.size][1]
 
-    def three_views(self, shape, *, gap: float = 30.0, hidden: bool = True, centre_marks: bool = True) -> tuple[View, View, View]:
+    def three_views(self, shape, *, gap: float | None = None, hidden: bool = True, centre_marks: bool = True,
+                    iso: bool = False) -> tuple[View, View, View] | tuple[View, View, View, View]:
         """Top, front and right views in third-angle arrangement, placed from the
         part's own extents: front centred low on the sheet, top above it, right
-        beside it, with `gap` millimetres between them, leaving room for
-        dimensions. Returns ``(top, front, right)``."""
+        beside it. ``gap`` is the clear space between views; by default it is
+        sized for two rows of dimensions (offsets 12 and 24 plus their text) so
+        annotation never runs into the neighbouring view. ``iso=True`` adds an
+        isometric view in the free top-right slot and returns it fourth."""
         size = shape.bounding_box().size
         s = self.scale
         L, W, H = size.X * s, size.Y * s, size.Z * s
         m = _MARGIN
-        usable_w = self.width - 2 * m - 20
-        usable_h = self.height - 2 * m - _TITLE_H - 20
+        if gap is None:
+            gap = 24.0 + 2 * self.text_height + 16.0  # second dimension row + its text + air
+        # Annotation also reaches outside the block: left of the front view (heights),
+        # below it (the label), above the top view (widths); keep that clear too.
+        reach = 12.0 + 2 * self.text_height + 8.0
+        usable_w = self.width - 2 * m - 2 * reach
+        usable_h = self.height - 2 * m - _TITLE_H - reach - 12.0
         block_w = L + gap + W
         block_h = H + gap + W
-        left = m + 20 + max(0.0, (usable_w - block_w) / 2)
-        bottom = m + _TITLE_H + 24 + max(0.0, (usable_h - block_h) / 2)
+        left = m + reach + max(0.0, (usable_w - block_w) / 2)
+        bottom = m + _TITLE_H + 12.0 + max(0.0, (usable_h - block_h) / 2)
         front_at = (left + L / 2, bottom + H / 2)
         top_at = (front_at[0], bottom + H + gap + W / 2)
         right_at = (left + L + gap + W / 2, front_at[1])
-        return (
+        views = (
             self.view(shape, "top", at=top_at, hidden=hidden, centre_marks=centre_marks),
             self.view(shape, "front", at=front_at, hidden=hidden, centre_marks=centre_marks),
             self.view(shape, "right", at=right_at, hidden=hidden, centre_marks=centre_marks),
         )
+        if iso:
+            # The free slot is above the right view. The isometric is taller and wider
+            # than that view, so it is placed from its own projected extent: bottom edge
+            # level with the top view's, centred over the right view, kept inside the frame.
+            # The free corner is right of the top view and above the right view, less the
+            # room the top view's own callouts need. A pictorial that does not fit is drawn
+            # at a smaller scale and says so in its label.
+            iso_w, iso_h = _view_extent(shape, "iso", 1.0)
+            # A hole callout beside the top view needs its knee (a dimension row plus
+            # 10) and its text (about 13 characters); keep that much clear of the iso.
+            avail_w = self.width - m - 6 - (left + L + 27.0 + 8.0 + 13 * self.text_height * 0.7)
+            avail_h = self.height - m - 6 - (bottom + H + gap)
+            iso_scale = s * min(1.0, max(0.2, avail_w / iso_w if iso_w else 1.0), max(0.2, avail_h / iso_h if iso_h else 1.0))
+            iso_w, iso_h = iso_w * iso_scale, iso_h * iso_scale
+            iso_x = self.width - m - 6 - iso_w / 2
+            iso_y = bottom + H + gap + iso_h / 2
+            ratio = iso_scale / s
+            label = "ISOMETRIC" if abs(ratio - 1) < 1e-6 else f"ISOMETRIC (1:{1 / ratio:.3g})"
+            return views + (self.view(shape, "iso", at=(iso_x, iso_y), hidden=False, centre_marks=False, label=label,
+                                      scale=None if abs(ratio - 1) < 1e-6 else iso_scale),)
+        return views
 
-    def view(self, shape, name: str, *, at, label: str | None = None, hidden: bool = True, centre_marks: bool = True) -> View:
+    def view(self, shape, name: str, *, at, label: str | None = None, hidden: bool = True, centre_marks: bool = True,
+             scale: float | None = None) -> View:
         if name not in VIEW_DIRECTIONS:
             raise ValueError(f"unknown view {name!r}; one of {sorted(VIEW_DIRECTIONS)}")
-        view = View(self, shape, name, (float(at[0]), float(at[1])), label, hidden, centre_marks)
+        if scale is not None and not (scale > 0):
+            raise ValueError("a view's scale must be positive")
+        view = View(self, shape, name, (float(at[0]), float(at[1])), label, hidden, centre_marks, scale)
         self.views.append(view)
         return view
 
@@ -391,6 +426,16 @@ class _Projection:
 
     def point(self, p) -> tuple[float, float]:
         return self._raw_point(p)
+
+
+def _view_extent(shape, name: str, scale: float) -> tuple[float, float]:
+    """The projected (width, height) of a view in sheet millimetres, for placement."""
+    proj = _Projection(shape, name)
+    pts = [p for e in list(proj.visible) + list(proj.hidden) for p in _edge_polyline(e, 8)]
+    if not pts:
+        return (0.0, 0.0)
+    return ((max(p[0] for p in pts) - min(p[0] for p in pts)) * scale,
+            (max(p[1] for p in pts) - min(p[1] for p in pts)) * scale)
 
 
 def _edge_polyline(edge, samples: int = 24) -> list[tuple[float, float]]:
@@ -506,19 +551,40 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
                 text(value, x + 2, y + rh / 2, 2.5, TextEntityAlignment.MIDDLE_LEFT)
                 x += width
 
-    # Views.
+    # Views. Every view's box is known before any annotation is drawn, so a callout
+    # can avoid landing on a neighbour.
     s = sheet.scale
+    placed = []
     for view in sheet.views:
         proj = _Projection(view.shape, view.name)
-        # Centre the projected geometry on `at`.
         pts = [p for e in list(proj.visible) + (list(proj.hidden) if view.hidden else []) for p in _edge_polyline(e, 8)]
         if not pts:
             continue
         cx = (min(p[0] for p in pts) + max(p[0] for p in pts)) / 2
         cy = (min(p[1] for p in pts) + max(p[1] for p in pts)) / 2
+        sv = view.scale or s
+        half_w = (max(p[0] for p in pts) - min(p[0] for p in pts)) * sv / 2
+        half_h = (max(p[1] for p in pts) - min(p[1] for p in pts)) * sv / 2
+        placed.append((view, proj, pts, cx, cy, (view.at[0] - half_w, view.at[0] + half_w, view.at[1] - half_h, view.at[1] + half_h)))
+    boxes = [box for (_, _, _, _, _, box) in placed]
+
+    def blocked(x0, x1, y0, y1, own_box):
+        """Whether a landing area [x0,x1]x[y0,y1] runs off the frame or into another view."""
+        if min(x0, x1) < m + 2 or max(x0, x1) > W - m - 2:
+            return True
+        for box in boxes:
+            if box is own_box:
+                continue
+            if max(x0, x1) >= box[0] - 4 and min(x0, x1) <= box[1] + 4 and y1 >= box[2] - 4 and y0 <= box[3] + 4:
+                return True
+        return False
+
+    for view, proj, pts, cx, cy, own_box in placed:
+        sv = view.scale or s
+        # Centre the projected geometry on `at`.
 
         def to_sheet(p2):
-            return (view.at[0] + (p2[0] - cx) * s, view.at[1] + (p2[1] - cy) * s)
+            return (view.at[0] + (p2[0] - cx) * sv, view.at[1] + (p2[1] - cy) * sv)
 
         def model_to_sheet(p3):
             return to_sheet(proj.point(p3))
@@ -537,7 +603,7 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
         if view.centre_marks:
             for centre, radius in _circles(proj.visible):
                 c = to_sheet(centre)
-                arm = radius * s + 2.0
+                arm = radius * sv + 2.0
                 _tag(msp.add_line((c[0] - arm, c[1]), (c[0] + arm, c[1]), dxfattribs={"layer": "CENTER"}), view.name)
                 _tag(msp.add_line((c[0], c[1] - arm), (c[0], c[1] + arm), dxfattribs={"layer": "CENTER"}), view.name)
         xs = [to_sheet(p)[0] for p in pts]
@@ -547,14 +613,23 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
         # from model to sheet millimetres (map=bx,by,a00,a01,a10,a11,a20,a21: b plus
         # the sheet image of each model axis), so a viewer can turn a sheet point
         # back into model coordinates and state a new dimension the way this script does.
-        b = (view.at[0] + (proj.c[0] - cx) * s, view.at[1] + (proj.c[1] - cy) * s)
-        map_values = [b[0], b[1]] + [proj.m[i][j] * s for i in range(3) for j in range(2)]
+        b = (view.at[0] + (proj.c[0] - cx) * sv, view.at[1] + (proj.c[1] - cy) * sv)
+        map_values = [b[0], b[1]] + [proj.m[i][j] * sv for i in range(3) for j in range(2)]
         _tag(text((view.label or view.name).upper(), view.at[0], vy0 - 6, 3.5, TextEntityAlignment.TOP_CENTER, "NOTES"),
              view.name, extra=[f"at={_fmt(view.at[0])},{_fmt(view.at[1])}", "map=" + ",".join(f"{v:.6g}" for v in map_values)])
 
         # How far annotation already reaches past each side of the view, so a later
-        # callout lands outside the dimensions that came before it.
+        # callout lands outside the dimensions that came before it. Callouts on one
+        # side share a knee and stack upward instead of pushing each other outward.
         reach = {"left": 0.0, "right": 0.0, "top": 0.0, "bottom": 0.0}
+        landings = {"left": [], "right": []}
+
+        def free_landing_y(side, y):
+            step = sheet.text_height * 2.2
+            while any(abs(y - used) < sheet.text_height * 1.6 for used in landings[side]):
+                y += step
+            landings[side].append(y)
+            return y
 
         def linear(a, b, offset, override, orientation, tag_index, tol=None, fit=None):
             dx, dy = abs(b[0] - a[0]), abs(b[1] - a[1])
@@ -592,29 +667,40 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
                 # with the text reading along the landing. Nothing is drawn across the
                 # part, and stacked callouts on one side land at their own hole's height.
                 centre = model_to_sheet(dim.p1)
-                r = dim.radius * s
-                # Exit toward the sheet's outer margin: the other side of a view is
-                # usually another view, and a callout running across it is unreadable.
-                go_right = centre[0] >= sheet.width / 2
-                side = "right" if go_right else "left"
-                clear = reach[side] + 10.0
-                knee_x = (vx1 + clear) if go_right else (vx0 - clear)
-                # Leave the circle at 45 degrees toward the exit so the arrow reads as a
-                # pointer, then run level to the landing.
-                sign = 1.0 if go_right else -1.0
-                start = (centre[0] + sign * r * math.cos(math.radians(45)), centre[1] + r * math.sin(math.radians(45)))
-                knee = (knee_x, start[1] + abs(knee_x - start[0]) * 0.0 + 6.0)
-                landing = (knee[0] + sign * 6.0, knee[1])
-                _tag(msp.add_leader([start, knee, landing], dxfattribs={"layer": "DIM"},
-                                    override={"dimasz": sheet.text_height * 0.85, "dimldrblk": "_CLOSEDFILLED"}), view.name, str(index))
+                r = dim.radius * sv
                 if dim.kind == "hole":
                     value = hole_callout_text(dim.hole, tol=dim.tol, fit=dim.fit)
                 else:
                     prefix = "%%c" if dim.kind == "diameter" else "R"
                     value = dim.text if dim.text else f"{prefix}{_fmt(2 * dim.radius if dim.kind == 'diameter' else dim.radius)}"
+                text_w = 8.0 + len(value) * sheet.text_height * 0.7
+                # Exit on the hole's own side of the view (the short way out), unless the
+                # landing there would run into another view or off the frame; then the
+                # other side. A leader across the whole part is the last resort.
+                prefer_right = centre[0] >= (vx0 + vx1) / 2
+                choice = None
+                for go_right in (prefer_right, not prefer_right):
+                    clear_try = reach["right" if go_right else "left"] + 10.0
+                    knee_try = (vx1 + clear_try) if go_right else (vx0 - clear_try)
+                    land_x0, land_x1 = (knee_try, knee_try + text_w) if go_right else (knee_try - text_w, knee_try)
+                    if not blocked(land_x0, land_x1, centre[1] - sheet.text_height, centre[1] + r + 6.0 + sheet.text_height, own_box):
+                        choice = go_right
+                        break
+                go_right = prefer_right if choice is None else choice
+                side = "right" if go_right else "left"
+                clear = reach[side] + 10.0
+                knee_x = (vx1 + clear) if go_right else (vx0 - clear)
+                land_y = free_landing_y(side, centre[1] + r * math.sin(math.radians(45)) + 6.0)
+                # Leave the circle at 45 degrees toward the exit so the arrow reads as a
+                # pointer, then run level to the landing.
+                sign = 1.0 if go_right else -1.0
+                start = (centre[0] + sign * r * math.cos(math.radians(45)), centre[1] + r * math.sin(math.radians(45)))
+                knee = (knee_x, land_y)
+                landing = (knee[0] + sign * 6.0, knee[1])
+                _tag(msp.add_leader([start, knee, landing], dxfattribs={"layer": "DIM"},
+                                    override={"dimasz": sheet.text_height * 0.85, "dimldrblk": "_CLOSEDFILLED"}), view.name, str(index))
                 align = TextEntityAlignment.MIDDLE_LEFT if go_right else TextEntityAlignment.MIDDLE_RIGHT
                 _tag(text(value, landing[0] + sign * 2.0, landing[1], sheet.text_height, align, "DIM"), view.name, str(index))
-                reach[side] = clear + 8.0 + len(value) * sheet.text_height * 0.7
             elif dim.kind == "note":
                 p = model_to_sheet(dim.p1)
                 q = (p[0] + dim.radius, p[1] + dim.angle)
