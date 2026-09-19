@@ -327,4 +327,12 @@ def render_drawing_svg(
         min_lineweight=0.15,
     )).draw_layout(document.modelspace(), finalize=True)
     page = layout.Page(0, 0, layout.Units.mm, margins=layout.Margins.all(0))
-    return backend.get_string(page)
+    # The page is exactly the rendered content's extent, and that extent is written
+    # on the root element (drawing units, y up) so a viewer lays the image over the
+    # same rectangle instead of guessing from its own parse of the line work.
+    extent = backend.player().bbox()
+    svg = backend.get_string(page, render_box=extent)
+    if extent.has_data:
+        attr = f'data-extent="{extent.extmin.x:.4f} {extent.extmin.y:.4f} {extent.extmax.x:.4f} {extent.extmax.y:.4f}"'
+        svg = svg.replace("<svg ", f"<svg {attr} ", 1)
+    return svg
