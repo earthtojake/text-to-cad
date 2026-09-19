@@ -105,6 +105,7 @@ import {
 import { useSystemPrefersDark } from "@/ui/useSystemPrefersDark";
 import { useChromeBackdropColor } from "@/ui/useChromeBackdropColor";
 import { sceneBackdropEdgeColor } from "../workbench/chromeBackdrop.js";
+import { documentDeskColor } from "@/workbench/documentDesk";
 import {
   displayModeForcesEdges,
   displayModeIsWireframe,
@@ -1665,6 +1666,12 @@ export default function CadWorkspace({
   const selectedEntryIsDrawingDocument =
     assetKindForRenderFormat(selectedEntrySourceFormat) === ASSET_KIND.DRAWING
     && dxfDataIsDocument(drawingGeometry);
+  // A sheet lies on a desk, not in the void a model hangs in: the page needs a ground
+  // it can cast a shadow onto and end against. Decided here rather than with the
+  // backdrop itself, which is settled before the selection is known.
+  const effectiveSceneBackdrop = selectedEntryIsDrawingDocument && !renderSession.enabled
+    ? documentDeskColor(sceneBackdrop)
+    : sceneBackdrop;
   // The selected entry's render artifact is (re)building -> show the loading state. Replaces the
   // old !entryHasMesh + buildable-code derivation.
   const selectedStepArtifactRenderPending = selectedArtifactGenerating;
@@ -3202,6 +3209,9 @@ export default function CadWorkspace({
     drawingPickedSnapsRef.current = [];
     setDrawingPickedPoints([]);
     setDrawingPendingSnaps([]);
+  }, []);
+  const handleDrawingFitSheet = useCallback((mode) => {
+    viewerRef.current?.fitSheet?.(mode);
   }, []);
   const handleDrawingSnapKindToggle = useCallback((kind) => {
     setDrawingSnapKinds((current) => {
@@ -7711,8 +7721,8 @@ export default function CadWorkspace({
     >
       <div
         className="fixed inset-0 z-0"
-        data-cad-scene-backdrop={sceneBackdrop}
-        style={{ backgroundColor: sceneBackdrop }}
+        data-cad-scene-backdrop={effectiveSceneBackdrop}
+        style={{ backgroundColor: effectiveSceneBackdrop }}
       >
         <CadRenderPane
           viewerRef={viewerRef}
@@ -8144,6 +8154,7 @@ export default function CadWorkspace({
                     pickedPointCount: drawingPickedPoints.length,
                     snapKinds: drawingSnapKinds,
                     onSnapKindToggle: handleDrawingSnapKindToggle,
+                    onFitSheet: handleDrawingFitSheet,
                     selectedDimension: drawingSelectedDimension,
                     onSelectDimension: setDrawingSelectedDimension,
                     onAddTolerance: handleDrawingAddTolerance,

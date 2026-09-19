@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Move, Ruler, RotateCcw, Send, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Maximize2, Move, Ruler, RotateCcw, Send, X } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -166,6 +166,7 @@ export function DxfSheetSettings({
   pickedPointCount = 0,
   snapKinds = null,
   onSnapKindToggle,
+  onFitSheet,
   selectedDimension = "",
   onSelectDimension,
   onAddTolerance,
@@ -192,8 +193,9 @@ export function DxfSheetSettings({
   ].filter(Boolean).join(" · ");
   const editable = views.length > 0 && Boolean(onEditToolChange);
   const pickHint = editTool !== "pick" ? ""
-    : pickedPointCount ? "The dimension follows your pointer. Click where it should sit (it snaps to the 12 mm rows outside the view), pick a second edge, corner or hole for a distance or angle, or press Esc to start over"
-      : "Hover to snap to an edge, hole, arc or corner and click it. Then the dimension follows your pointer: click again to place it";
+    : pickedPointCount
+      ? "2 · Click where it goes. It snaps to the rows outside the view. Pick a second thing for a distance or angle, or Esc to start over"
+      : "1 · Click what to measure. The label at the pointer says what you would take";
 
   return (
     <FileSheetSectionBody>
@@ -201,6 +203,21 @@ export function DxfSheetSettings({
         {facts?.partNumber ? <FileSheetStatusText>{facts.partNumber}</FileSheetStatusText> : null}
         {factLine ? <FileSheetStatusText>{factLine}</FileSheetStatusText> : null}
         {!facts?.partNumber && !factLine ? <FileSheetStatusText>No title block in this drawing.</FileSheetStatusText> : null}
+        {onFitSheet ? (
+          <FileSheetInlineControlRow label="Zoom">
+            <FileSheetSegmentedControl
+              ariaLabel="Page zoom"
+              value=""
+              onChange={(next) => onFitSheet(next)}
+              options={[
+                { value: "page", label: "Fit page" },
+                { value: "width", label: "Width" },
+                { value: "actual", label: "100%" }
+              ]}
+              fit
+            />
+          </FileSheetInlineControlRow>
+        ) : null}
       </FileSheetSubsection>
 
       {editable ? (
