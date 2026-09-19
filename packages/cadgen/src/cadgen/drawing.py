@@ -334,11 +334,13 @@ class Sheet:
             # A hole callout beside the top view needs its knee (a dimension row plus
             # 10) and its text (about 13 characters); keep that much clear of the iso.
             avail_w = self.width - m - 6 - (left + L + 30.0 + 8.0 + 13 * self.text_height * 0.7 + 8.0)
-            avail_h = self.height - m - 6 - (bottom + H + gap)
+            # The revision table, when there is one, owns the top-right corner.
+            table_h = (len(self.revisions) + 1) * 6.0 + 6.0 if self.revisions else 0.0
+            avail_h = self.height - m - 6 - table_h - (bottom + H + gap)
             iso_scale = s * min(1.0, max(0.2, avail_w / iso_w if iso_w else 1.0), max(0.2, avail_h / iso_h if iso_h else 1.0))
             iso_w, iso_h = iso_w * iso_scale, iso_h * iso_scale
             iso_x = self.width - m - 6 - iso_w / 2
-            iso_y = bottom + H + gap + iso_h / 2
+            iso_y = min(bottom + H + gap + iso_h / 2, self.height - m - 6 - table_h - iso_h / 2)
             ratio = iso_scale / s
             label = "ISOMETRIC" if abs(ratio - 1) < 1e-6 else f"ISOMETRIC (1:{1 / ratio:.3g})"
             return views + (self.view(shape, "iso", at=(iso_x, iso_y), hidden=False, centre_marks=False, label=label,
@@ -388,7 +390,12 @@ class _Projection:
             a, b = e.position_at(0), e.position_at(1)
             probes.append(((a.X, a.Y), (b.X, b.Y)))
         # Each probe's start is the projected origin; its end minus start is the axis image.
-        o = probes[0][0]
+        # Anchor on the first probe that projected to a line: the X probe is parallel
+        # to the right and left views and comes back empty, and anchoring on its
+        # zero placeholder put the projected centre in the wrong place, so the
+        # fix-up below chose the wrong end of the Z probe and mirrored those views'
+        # annotations vertically.
+        o = next((p[0] for p in probes if p[0] != p[1]), (0.0, 0.0))
         self.c = o
         self.m = [(p[1][0] - p[0][0], p[1][1] - p[0][1]) for p in probes]
         # A probe whose line is parallel to the view direction projects to a point;
@@ -428,14 +435,27 @@ class _Projection:
         return self._raw_point(p)
 
 
+def _edges_bounds(edges) -> tuple[float, float, float, float] | None:
+    """Exact (x0, x1, y0, y1) of projected edges, from the kernel's own bounding boxes,
+    so a circle's extent is its diameter and not the chord of a few samples."""
+    x0 = y0 = math.inf
+    x1 = y1 = -math.inf
+    for edge in edges:
+        bb = edge.bounding_box()
+        x0, x1 = min(x0, bb.min.X), max(x1, bb.max.X)
+        y0, y1 = min(y0, bb.min.Y), max(y1, bb.max.Y)
+    if not math.isfinite(x0):
+        return None
+    return (x0, x1, y0, y1)
+
+
 def _view_extent(shape, name: str, scale: float) -> tuple[float, float]:
     """The projected (width, height) of a view in sheet millimetres, for placement."""
     proj = _Projection(shape, name)
-    pts = [p for e in list(proj.visible) + list(proj.hidden) for p in _edge_polyline(e, 8)]
-    if not pts:
+    bounds = _edges_bounds(list(proj.visible) + list(proj.hidden))
+    if not bounds:
         return (0.0, 0.0)
-    return ((max(p[0] for p in pts) - min(p[0] for p in pts)) * scale,
-            (max(p[1] for p in pts) - min(p[1] for p in pts)) * scale)
+    return ((bounds[1] - bounds[0]) * scale, (bounds[3] - bounds[2]) * scale)
 
 
 def _edge_polyline(edge, samples: int = 24) -> list[tuple[float, float]]:
@@ -557,15 +577,16 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
     placed = []
     for view in sheet.views:
         proj = _Projection(view.shape, view.name)
-        pts = [p for e in list(proj.visible) + (list(proj.hidden) if view.hidden else []) for p in _edge_polyline(e, 8)]
-        if not pts:
+        bounds = _edges_bounds(list(proj.visible) + (list(proj.hidden) if view.hidden else []))
+        if not bounds:
             continue
-        cx = (min(p[0] for p in pts) + max(p[0] for p in pts)) / 2
-        cy = (min(p[1] for p in pts) + max(p[1] for p in pts)) / 2
+        bx0, bx1, by0, by1 = bounds
+        cx = (bx0 + bx1) / 2
+        cy = (by0 + by1) / 2
         sv = view.scale or s
-        half_w = (max(p[0] for p in pts) - min(p[0] for p in pts)) * sv / 2
-        half_h = (max(p[1] for p in pts) - min(p[1] for p in pts)) * sv / 2
-        placed.append((view, proj, pts, cx, cy, (view.at[0] - half_w, view.at[0] + half_w, view.at[1] - half_h, view.at[1] + half_h)))
+        half_w = (bx1 - bx0) * sv / 2
+        half_h = (by1 - by0) * sv / 2
+        placed.append((view, proj, bounds, cx, cy, (view.at[0] - half_w, view.at[0] + half_w, view.at[1] - half_h, view.at[1] + half_h)))
     boxes = [box for (_, _, _, _, _, box) in placed]
 
     def blocked(x0, x1, y0, y1, own_box):
@@ -579,7 +600,7 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
                 return True
         return False
 
-    for view, proj, pts, cx, cy, own_box in placed:
+    for view, proj, bounds, cx, cy, own_box in placed:
         sv = view.scale or s
         # Centre the projected geometry on `at`.
 
@@ -606,9 +627,7 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
                 arm = radius * sv + 2.0
                 _tag(msp.add_line((c[0] - arm, c[1]), (c[0] + arm, c[1]), dxfattribs={"layer": "CENTER"}), view.name)
                 _tag(msp.add_line((c[0], c[1] - arm), (c[0], c[1] + arm), dxfattribs={"layer": "CENTER"}), view.name)
-        xs = [to_sheet(p)[0] for p in pts]
-        ys = [to_sheet(p)[1] for p in pts]
-        vx0, vx1, vy0, vy1 = min(xs), max(xs), min(ys), max(ys)
+        vx0, vx1, vy0, vy1 = own_box
         # The view label also carries the view's placement (at=) and the affine map
         # from model to sheet millimetres (map=bx,by,a00,a01,a10,a11,a20,a21: b plus
         # the sheet image of each model axis), so a viewer can turn a sheet point
