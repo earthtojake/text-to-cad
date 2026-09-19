@@ -134,16 +134,31 @@ def parse_draft_dimensions(spec: str) -> list[tuple]:
     return drafts
 
 
-def parse_draft_diameters(spec: str) -> list[tuple[float, float, float]]:
-    """``"cx,cy,r;..."`` -> [(cx, cy, r), ...]; bad parts skipped."""
+def parse_draft_diameters(spec: str) -> list[tuple[float, float, float, float]]:
+    """``"cx,cy,r[,angle];..."`` -> [(cx, cy, r, angle), ...]; bad parts skipped."""
+    out = []
+    for part in str(spec or "").split(";"):
+        fields = part.split(",")
+        try:
+            numbers = [float(v) for v in fields]
+        except ValueError:
+            continue
+        if len(numbers) not in (3, 4) or numbers[2] <= 0:
+            continue
+        out.append((numbers[0], numbers[1], numbers[2], numbers[3] if len(numbers) == 4 else 45.0))
+    return out
+
+
+def parse_draft_angles(spec: str) -> list[tuple[float, ...]]:
+    """``"vx,vy,ax,ay,bx,by,r;..."`` -> [(vx, vy, ax, ay, bx, by, r), ...]."""
     out = []
     for part in str(spec or "").split(";"):
         try:
-            cx, cy, r = (float(v) for v in part.split(","))
+            numbers = tuple(float(v) for v in part.split(","))
         except ValueError:
             continue
-        if r > 0:
-            out.append((cx, cy, r))
+        if len(numbers) == 7 and numbers[6] > 0:
+            out.append(numbers)
     return out
 
 
@@ -157,6 +172,11 @@ def parse_tolerances(spec: str) -> list[tuple[str, str]]:
     return out
 
 
+def parse_draft_radii(spec: str) -> list[tuple[float, float, float]]:
+    """``"cx,cy,r;..."`` -> [(cx, cy, r), ...]; bad parts skipped."""
+    return parse_draft_diameters(spec)
+
+
 def parse_removals(spec: str) -> list[tuple[str, str]]:
     """``"view:index;..."`` -> [("view", "index"), ...]."""
     out = []
@@ -168,7 +188,8 @@ def parse_removals(spec: str) -> list[tuple[str, str]]:
 
 
 def preview_edits(document, *, moves: dict | None = None, draft_dimension=None,
-                  highlight: str = "", tolerance=None, draft_diameter=None, removals=None) -> None:
+                  highlight: str = "", tolerance=None, draft_diameter=None, removals=None, draft_radius=None,
+                  draft_angle=None) -> None:
     """Apply the viewer's PREVIEW edits to an in-memory document. Nothing is saved:
     these show what a script change would look like before the agent makes it.
 
@@ -237,12 +258,28 @@ def preview_edits(document, *, moves: dict | None = None, draft_dimension=None,
         dim.render()
         for part in document.blocks.get(dim.dimension.dxf.geometry):
             part.dxf.color = 1
-    for cx, cy, r in (draft_diameter or []):
-        dim = msp.add_diameter_dim(center=(cx, cy), radius=r, angle=45, dimstyle="Standard",
-                                   override={"dimdsep": ord("."), "dimtoh": 1}, dxfattribs={"layer": "DIM", "color": 1})
+    def red(dim):
         dim.render()
         for part in document.blocks.get(dim.dimension.dxf.geometry):
             part.dxf.color = 1
+
+    for entry in (draft_diameter or []):
+        cx, cy, r, angle = (*entry, 45.0)[:4]
+        red(msp.add_diameter_dim(center=(cx, cy), radius=r, angle=angle, dimstyle="Standard",
+                                 override={"dimdsep": ord("."), "dimtoh": 1}, dxfattribs={"layer": "DIM", "color": 1}))
+    for entry in (draft_radius or []):
+        cx, cy, r, angle = (*entry, 45.0)[:4]
+        red(msp.add_radius_dim(center=(cx, cy), radius=r, angle=angle, dimstyle="Standard",
+                               override={"dimdsep": ord("."), "dimtoh": 1}, dxfattribs={"layer": "DIM", "color": 1}))
+    for vx, vy, ax, ay, bx, by, r in (draft_angle or []):
+        # The arc of the angle sits `r` from the vertex, on the bisector of the two legs.
+        import math as _math
+        ua = _math.atan2(ay - vy, ax - vx)
+        ub = _math.atan2(by - vy, bx - vx)
+        mid = ua + ((ub - ua + _math.pi) % (2 * _math.pi) - _math.pi) / 2
+        base = (vx + r * _math.cos(mid), vy + r * _math.sin(mid))
+        red(msp.add_angular_dim_3p(base=base, center=(vx, vy), p1=(ax, ay), p2=(bx, by), dimstyle="Standard",
+                                   override={"dimdsep": ord(".")}, dxfattribs={"layer": "DIM", "color": 1}))
 
 
 def render_drawing_svg(
@@ -260,6 +297,8 @@ def render_drawing_svg(
     tolerance: tuple[str, str] | None = None,
     draft_diameter=None,
     removals=None,
+    draft_radius=None,
+    draft_angle=None,
 ) -> str:
     """``lineweight_scale`` multiplies every stroke (the viewer's Fine/Normal/Bold);
     the DXF's own lineweights stay the reference at 1.0. The ``dimension_*`` options
@@ -270,9 +309,9 @@ def render_drawing_svg(
 
     document = ezdxf.readfile(str(dxf_path))
     restyle_dimensions(document, units=dimension_units, decimals=dimension_decimals, text_scale=dimension_text_scale)
-    if moves or draft_dimension or highlight or tolerance or draft_diameter or removals:
+    if moves or draft_dimension or highlight or tolerance or draft_diameter or removals or draft_radius or draft_angle:
         preview_edits(document, moves=moves, draft_dimension=draft_dimension, highlight=highlight, tolerance=tolerance,
-                      draft_diameter=draft_diameter, removals=removals)
+                      draft_diameter=draft_diameter, removals=removals, draft_radius=draft_radius, draft_angle=draft_angle)
     hidden = {name.strip().upper() for name in hidden_layers if name.strip()}
     if hidden:
         for layer in document.layers:

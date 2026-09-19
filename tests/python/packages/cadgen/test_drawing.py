@@ -251,6 +251,28 @@ class DrawingSheetTests(unittest.TestCase):
         dim = doc.modelspace().query("DIMENSION")[0]
         self.assertLess(label.dxf.insert.y, dim.dxf.defpoint.y - 3, "the label hangs under the dimension line")
 
+    def test_round_edges_are_written_as_circles_and_arcs(self) -> None:
+        from cadgen.drawing import Sheet, _render_sheet
+
+        sheet = Sheet("A4")
+        sheet.view(_part(), "top", at=(100, 120))
+        doc = _render_sheet(sheet, index=1, count=1, label="round")
+        msp = doc.modelspace()
+        circles = [c for c in msp.query("CIRCLE") if c.dxf.layer == "VISIBLE"]
+        self.assertEqual(len(circles), 1, "the hole seen from above is one CIRCLE")
+        self.assertAlmostEqual(circles[0].dxf.radius, 3.0, places=3)
+        self.assertTrue(circles[0].has_xdata("CADGEN"), "the circle carries its view tag")
+
+    def test_an_angular_dimension_is_written(self) -> None:
+        from cadgen.drawing import Sheet, _render_sheet
+
+        sheet = Sheet("A4")
+        front = sheet.view(_part(), "front", at=(100, 100))
+        front.angle((-20, -15, 0), (20, -15, 0), (-20, -15, 10), offset=14)
+        doc = _render_sheet(sheet, index=1, count=1, label="angle")
+        dims = doc.modelspace().query("DIMENSION")
+        self.assertTrue(any(d.dimtype == 5 for d in dims), "an angular dimension on the DIM layer")
+
     def test_unknown_view_and_sheet_are_refused(self) -> None:
         from cadgen.drawing import Sheet
 

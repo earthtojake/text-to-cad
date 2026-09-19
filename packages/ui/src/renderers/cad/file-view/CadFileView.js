@@ -2302,6 +2302,22 @@ function CadFileViewSurface({
   }, [drawingGeometry, drawingSheetDimensions, drawingViewShifts]);
   const drawingPickedSnapsRef = useRef([]);
   const handleDrawingSheetPick = useCallback((picked) => {
+    if (picked.kind === "empty") {
+      const pendingView = drawingPickedSnapsRef.current[0]?.view;
+      const shift = pendingView ? shiftForView(pendingView) : null;
+      const pending = drawingPickedSnapsRef.current;
+      if (!pending.length) return;
+      const view = drawingViews.find((candidate) => candidate.name === pendingView)
+        || viewAtSheetPoint(drawingViews, pending[0].point) || nearestView(drawingViews, pending[0].point);
+      const placement = shift ? [picked.point[0] - shift[0], picked.point[1] - shift[1]] : picked.point;
+      const edit = smartDimensionFromSnaps(view, pending, placement);
+      if (edit) {
+        setDrawingEdits((edits) => [...edits, { id: createDrawingEditId(), ...edit, view: edit.view || view?.name }]);
+      }
+      drawingPickedSnapsRef.current = [];
+      setDrawingPickedPoints([]);
+      return;
+    }
     // Picking an existing dimension selects it (red on the sheet) for a tolerance or removal.
     if (picked.kind === "dimension") {
       setDrawingSelectedDimension((current) => (current === `${picked.view}:${picked.index}` ? "" : `${picked.view}:${picked.index}`));
@@ -2317,16 +2333,10 @@ function CadFileViewSurface({
       line: picked.line ? { ...picked.line, start: back(picked.line.start), end: back(picked.line.end) } : picked.line,
       circle: picked.circle ? { ...picked.circle, center: back(picked.circle.center) } : picked.circle
     } : picked;
-    const snaps = [...drawingPickedSnapsRef.current, snap];
-    const view = drawingViews.find((candidate) => candidate.name === snap.view)
-      || viewAtSheetPoint(drawingViews, snap.point) || nearestView(drawingViews, snap.point);
-    const edit = smartDimensionFromSnaps(view, snaps);
-    if (edit) {
-      setDrawingEdits((edits) => [...edits, { id: createDrawingEditId(), ...edit, view: edit.view || view?.name }]);
-      drawingPickedSnapsRef.current = [];
-      setDrawingPickedPoints([]);
-      return;
-    }
+    // SolidWorks-style: picks accumulate (at most two), and a click on empty sheet
+    // places the dimension they make where the click landed. A lone corner waits.
+    const pending = drawingPickedSnapsRef.current;
+    const snaps = pending.length >= 2 || (pending.length && pending[0].view !== snap.view) ? [snap] : [...pending, snap];
     drawingPickedSnapsRef.current = snaps;
     setDrawingPickedPoints(snaps.map((item) => {
       const itemShift = shiftForView(item.view);

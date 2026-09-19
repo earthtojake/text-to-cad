@@ -93,8 +93,9 @@ test("the pointer snaps to holes, corners and edges of a view's line work only",
   assert.equal(targets.circles.length, 2);
   assert.equal(snapSheetPoint(targets, [81, 40.5]).kind, "vertex");
   assert.deepEqual(snapSheetPoint(targets, [81, 40.5]).point, [80, 40]);
-  assert.equal(snapSheetPoint(targets, [110, 41]).kind, "edge");
-  assert.deepEqual(snapSheetPoint(targets, [110, 41]).point, [110, 40]);
+  assert.equal(snapSheetPoint(targets, [120, 41]).kind, "edge");
+  assert.deepEqual(snapSheetPoint(targets, [120, 41]).point, [120, 40]);
+  assert.equal(snapSheetPoint(targets, [110, 41]).kind, "midpoint");
   assert.equal(snapSheetPoint(targets, [112.5, 50]).kind, "circle");
   assert.equal(snapSheetPoint(targets, [110, 30.5]), null, "dimension lines are not targets");
   assert.equal(snapSheetPoint(targets, [110, 60]), null);
@@ -107,10 +108,12 @@ test("a smart pick means the obvious dimension", () => {
   const cornerA = { kind: "vertex", view: "front", point: [80, 40] };
   const cornerB = { kind: "vertex", view: "front", point: [80, 60] };
   assert.deepEqual(smartDimensionFromSnaps(view, [edge]), { kind: "dim", view: "front", x1: 80, y1: 40, x2: 140, y2: 40, offset: -12, orientation: "h" });
-  assert.deepEqual(smartDimensionFromSnaps(view, [hole]), { kind: "dia", view: "front", cx: 110, cy: 50, r: 3 });
+  assert.deepEqual(smartDimensionFromSnaps(view, [hole]), { kind: "dia", view: "front", cx: 110, cy: 50, r: 3, angle: 45 });
+  assert.equal(smartDimensionFromSnaps(view, [hole], [120, 60]).angle, 45);
+  assert.equal(smartDimensionFromSnaps(view, [hole], [100, 50]).angle, 180);
   assert.equal(smartDimensionFromSnaps(view, [cornerA]), null, "a corner waits for a second pick");
   assert.equal(smartDimensionFromSnaps(view, [cornerA, cornerB]).orientation, "v");
-  assert.deepEqual(drawingEditParams([{ kind: "dia", view: "front", cx: 110, cy: 50, r: 3 }]), { dia: "110,50,3" });
+  assert.deepEqual(drawingEditParams([{ kind: "dia", view: "front", cx: 110, cy: 50, r: 3 }]), { dia: "110,50,3,45" });
   const front = { name: "front", at: [110, 50], map: [110, 45, 0.5, 0, 0, 0, 0, 0.5] };
   assert.equal(drawingEditSnippet({ kind: "dia", view: "front", cx: 110, cy: 50, r: 3 }, { views: [front] }),
     "front.hole((0, 0, 10), 6, thru=True)  # model mm; say depth=... instead of thru if it is blind");
@@ -127,4 +130,64 @@ test("an existing dimension can be picked by its text, and removed", () => {
     "In the `front` view, remove its 2nd dim()/hole()/note() call (reads 34)."
   );
   assert.match(drawingEditSnippet({ kind: "del", view: "top", index: "overall-w" }, {}), /drop the overall width/);
+});
+
+test("arcs snap for a radius and edges snap at their midpoint", () => {
+  const targets = sheetSnapTargets({
+    lines: [{ layer: "VISIBLE", view: "front", start: [80, 40], end: [140, 40] }],
+    circles: [],
+    arcs: [{ layer: "VISIBLE", view: "front", center: [110, 60], radius: 18, startAngleDeg: 0, sweepAngleDeg: 180 }]
+  });
+  assert.equal(targets.arcs.length, 1);
+  const onArc = snapSheetPoint(targets, [110, 78.5], 2);
+  assert.equal(onArc.kind, "arc");
+  const below = snapSheetPoint(targets, [124, 41.5], 2);
+  assert.equal(below.kind, "edge", "the arc's lower half is outside its sweep");
+  const mid = snapSheetPoint(targets, [110.5, 40.8], 2);
+  assert.equal(mid.kind, "midpoint");
+  assert.deepEqual(mid.point, [110, 40]);
+  const view = { name: "front", minX: 80, minY: 40, maxX: 140, maxY: 78 };
+  assert.deepEqual(smartDimensionFromSnaps(view, [onArc]), { kind: "rad", view: "front", cx: 110, cy: 60, r: 18, angle: 45 });
+  assert.deepEqual(drawingEditParams([{ kind: "rad", view: "front", cx: 110, cy: 60, r: 18 }]), { rad: "110,60,18,45" });
+  const front = { name: "front", at: [110, 50], map: [110, 45, 0.5, 0, 0, 0, 0, 0.5] };
+  assert.equal(drawingEditSnippet({ kind: "rad", view: "front", cx: 110, cy: 60, r: 18 }, { views: [front] }),
+    "front.radius((0, 0, 30), 18)  # model mm; the coordinate along the view's line of sight is 0");
+});
+
+test("two picks read the way SolidWorks reads them", () => {
+  const view = { name: "front", minX: 80, minY: 40, maxX: 140, maxY: 60 };
+  const bottom = { kind: "edge", view: "front", point: [110, 40], line: { start: [80, 40], end: [140, 40] } };
+  const top = { kind: "edge", view: "front", point: [110, 60], line: { start: [80, 60], end: [140, 60] } };
+  const side = { kind: "edge", view: "front", point: [80, 50], line: { start: [80, 40], end: [80, 60] } };
+  const slope = { kind: "edge", view: "front", point: [120, 50], line: { start: [100, 40], end: [140, 60] } };
+  const corner = { kind: "vertex", view: "front", point: [140, 60] };
+  const hole = { kind: "circle", view: "front", point: [110, 50], circle: { center: [110, 50], radius: 3 } };
+  const hole2 = { kind: "circle", view: "front", point: [130, 50], circle: { center: [130, 50], radius: 3 } };
+  // parallel edges: the distance between them, measured across
+  const between = smartDimensionFromSnaps(view, [bottom, top]);
+  assert.equal(between.orientation, "v");
+  assert.equal(Math.abs(between.y2 - between.y1), 20);
+  // a corner to an edge: the perpendicular distance
+  const toEdge = smartDimensionFromSnaps(view, [corner, side]);
+  assert.equal(toEdge.orientation, "h");
+  assert.equal(Math.abs(toEdge.x2 - toEdge.x1), 60);
+  // two holes: centre distance
+  const pitch = smartDimensionFromSnaps(view, [hole, hole2]);
+  assert.equal(pitch.orientation, "h");
+  assert.equal(Math.abs(pitch.x2 - pitch.x1), 20);
+  // a hole to an edge: centre to edge
+  const edgeToHole = smartDimensionFromSnaps(view, [hole, side]);
+  assert.equal(Math.abs(edgeToHole.x2 - edgeToHole.x1), 30);
+  // edges at an angle: the angle at their intersection
+  const angle = smartDimensionFromSnaps(view, [bottom, slope], [112, 44]);
+  assert.equal(angle.kind, "ang");
+  assert.deepEqual([angle.vx, angle.vy], [100, 40]);
+  assert.deepEqual(drawingEditParams([angle]).ang.split(",").length, 7);
+  // placement decides the side and the offset
+  const placedAbove = smartDimensionFromSnaps(view, [bottom], [110, 30]);
+  assert.equal(placedAbove.offset, -10);
+  const placedBelow = smartDimensionFromSnaps(view, [top], [110, 75]);
+  assert.equal(placedBelow.offset, 15);
+  const front = { name: "front", at: [110, 50], map: [110, 45, 0.5, 0, 0, 0, 0, 0.5] };
+  assert.match(drawingEditSnippet(angle, { views: [front] }), /^front\.angle\(\(-20, 0, -10\), /);
 });
