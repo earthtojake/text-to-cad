@@ -1747,6 +1747,7 @@ const CadViewer = forwardRef(function CadViewer({
   sheetEditViews = null,
   sheetEditSnapTargets = null,
   sheetEditPickedPoints = null,
+  sheetEditPendingSnaps = null,
   onSheetEditPick = null,
   onSheetEditViewMove = null,
   drawingThicknessMm = 0,
@@ -5911,6 +5912,7 @@ const CadViewer = forwardRef(function CadViewer({
     views: Array.isArray(sheetEditViews) ? sheetEditViews : EMPTY_SHEET_EDIT_LIST,
     snapTargets: sheetEditSnapTargets,
     pickedPoints: Array.isArray(sheetEditPickedPoints) ? sheetEditPickedPoints : EMPTY_SHEET_EDIT_LIST,
+    pendingSnaps: Array.isArray(sheetEditPendingSnaps) ? sheetEditPendingSnaps : EMPTY_SHEET_EDIT_LIST,
     onPick: onSheetEditPick,
     onViewMove: onSheetEditViewMove,
     viewerReadyTick

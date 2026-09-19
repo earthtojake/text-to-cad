@@ -495,6 +495,8 @@ function CadFileViewSurface({
   const [drawingEdits, setDrawingEdits] = useState([]);
   const [drawingEditTool, setDrawingEditTool] = useState("");
   const [drawingPickedPoints, setDrawingPickedPoints] = useState([]);
+  // The picks in hand (in the coordinates the sheet shows), for the rubber band.
+  const [drawingPendingSnaps, setDrawingPendingSnaps] = useState([]);
   const [drawingSelectedDimension, setDrawingSelectedDimension] = useState("");
   // The package's parsed contours, fetched once per entry and kept by URL. Curved bends
   // re-mesh from these; the URL carries the package version, so a rebuild refetches.
@@ -2277,6 +2279,7 @@ function CadFileViewSurface({
   const handleDrawingEditToolChange = useCallback((tool) => {
     setDrawingEditTool(tool);
     setDrawingPickedPoints([]);
+    setDrawingPendingSnaps([]);
     drawingPickedSnapsRef.current = [];
   }, []);
   // Smart dimension: an edge or a hole dimensions itself on one click; a corner waits
@@ -2316,6 +2319,7 @@ function CadFileViewSurface({
       }
       drawingPickedSnapsRef.current = [];
       setDrawingPickedPoints([]);
+      setDrawingPendingSnaps([]);
       return;
     }
     // Picking an existing dimension selects it (red on the sheet) for a tolerance or removal.
@@ -2323,6 +2327,7 @@ function CadFileViewSurface({
       setDrawingSelectedDimension((current) => (current === `${picked.view}:${picked.index}` ? "" : `${picked.view}:${picked.index}`));
       drawingPickedSnapsRef.current = [];
       setDrawingPickedPoints([]);
+      setDrawingPendingSnaps([]);
       return;
     }
     const shift = shiftForView(picked.view);
@@ -2341,6 +2346,16 @@ function CadFileViewSurface({
     setDrawingPickedPoints(snaps.map((item) => {
       const itemShift = shiftForView(item.view);
       return itemShift ? [item.point[0] + itemShift[0], item.point[1] + itemShift[1]] : item.point;
+    }));
+    // The rubber band works in what the sheet shows, so the picks go back out shifted.
+    setDrawingPendingSnaps(snaps.map((item) => {
+      const itemShift = shiftForView(item.view);
+      if (!itemShift) return item;
+      const fwd = (point) => [point[0] + itemShift[0], point[1] + itemShift[1]];
+      return { ...item, point: fwd(item.point),
+        line: item.line ? { ...item.line, start: fwd(item.line.start), end: fwd(item.line.end) } : item.line,
+        circle: item.circle ? { ...item.circle, center: fwd(item.circle.center) } : item.circle,
+        arc: item.arc ? { ...item.arc, center: fwd(item.arc.center) } : item.arc };
     }));
   }, [drawingViews, shiftForView]);
   const handleDrawingViewMove = useCallback((view, dx, dy) => {
@@ -2370,6 +2385,8 @@ function CadFileViewSurface({
     setDrawingEdits([]);
     setDrawingEditTool("");
     setDrawingPickedPoints([]);
+    setDrawingPendingSnaps([]);
+    drawingPickedSnapsRef.current = [];
   }, []);
   // The request goes through the host's prompt channel (Hardcore adds it to the chat
   // composer; a host without one copies it), as a text part of a CAD prompt context.
@@ -6363,6 +6380,7 @@ function CadFileViewSurface({
           sheetEditViews={drawingShiftedViews}
           sheetEditSnapTargets={drawingSnapTargets}
           sheetEditPickedPoints={drawingPickedPoints}
+          sheetEditPendingSnaps={drawingPendingSnaps}
           onSheetEditPick={handleDrawingSheetPick}
           onSheetEditViewMove={handleDrawingViewMove}
                 drawingThicknessMm={selectedEntryIsDrawing && !renderSession.enabled
