@@ -50,9 +50,9 @@ class _ScriptedChannel:
 
 
 PAYLOAD = {
-    "tool": "inspect",
-    "prog": "cadgen step inspect",
-    "argv": ["validate", "tmp/noexh/noexh.step", "--out", "validate.json"],
+    "tool": "step-compile",
+    "prog": "cadgen step compile",
+    "argv": ["tmp/noexh/noexh.step", "--force"],
     "cwd": "/work",
     "env": {},
     "token": "t",
@@ -81,7 +81,7 @@ class DeadWorkerMessage(unittest.TestCase):
         self.assertIn("died mid-job", err)
         self.assertIn("killed by SIGKILL (signal 9)", err)
         self.assertIn("out of memory", err)
-        self.assertIn("`cadgen step inspect validate tmp/noexh/noexh.step --out validate.json`", err)
+        self.assertIn("`cadgen step compile tmp/noexh/noexh.step --force`", err)
         self.assertIn("NOT retried", err)
         # The rerun spelling is the platform's, so ask the helper that composes it.
         # That makes this assertion only "the message carries the rerun"; the
@@ -109,13 +109,13 @@ class DeadWorkerMessage(unittest.TestCase):
         self.assertNotIn("CADGEN_DAEMON=0", err)
 
     def test_a_job_with_no_prog_is_named_by_its_tool(self):
-        payload = {**PAYLOAD, "prog": None, "argv": ["build", "a b.step", "out.step"]}
+        payload = {**PAYLOAD, "tool": "probe", "prog": None, "argv": ["a b.step"]}
         text = client.worker_died_message(payload, {"detail": "worker 1 exited with code 139"})
-        self.assertIn("`cadgen inspect build a b.step out.step`", text)
+        self.assertIn("`cadgen probe a b.step`", text)
         self.assertIn("exited with code 139", text)
         if sys.platform != "win32":
             # The rerun quotes what the shell needs quoted.
-            self.assertIn("CADGEN_DAEMON=0 cadgen inspect build 'a b.step' out.step", text)
+            self.assertIn("CADGEN_DAEMON=0 cadgen probe 'a b.step'", text)
 
     def test_a_model_script_run_is_named_and_rerun_as_python(self):
         # The decorator's warm handoff: prog `python <name>`, argv `[<path>, *args]`.
@@ -218,7 +218,7 @@ class ServerRelaysTheDeath(unittest.TestCase):
         pool = mock.Mock()
         pool.acquire.return_value = worker
         conn = self._Conn()
-        request = {"tool": "inspect", "argv": ["validate", "x.step"], "cwd": "/w", "prog": "cadgen step inspect"}
+        request = {"tool": "step-compile", "argv": ["x.step"], "cwd": "/w", "prog": "cadgen step compile"}
         logged: list[str] = []
         with mock.patch.object(server, "_POOL", pool), \
                 mock.patch.object(server, "_log", logged.append), \
@@ -285,7 +285,7 @@ class ColdRerunSpelling(unittest.TestCase):
     neutral instruction instead of guessing.
     """
 
-    COMMAND = "cadgen step inspect validate tmp/noexh/noexh.step --out validate.json"
+    COMMAND = "cadgen step compile tmp/noexh/noexh.step --force"
 
     def test_the_command_carries_no_env_prefix_on_either_platform(self):
         for name in ("posix", "nt"):

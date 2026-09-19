@@ -1,13 +1,7 @@
-"""The cad skill's project template is the exemplar: a reader who copies it verbatim gets
-a project that BUILDS — part, drawing, mesh-only part, mirrored pair,
-sub-assembly and root — with every output landing where the template's `out=`
-targets say, and with the store behaving as the skill describes (running the
-root builds everything beneath it; a rerun is a no-op; `store why` sees the
-frame's two children).
+"""Build the documented minimal part and assembly starters in an isolated store.
 
-Built cold (`CADGEN_DAEMON=0`, transient workers) in a throwaway project with a
-private store, exactly as an agent following the skill would in a fresh
-workspace.
+The assembly must build its children, preserve their placements and be current
+on rerun. The part starter must also work independently.
 """
 
 from __future__ import annotations
@@ -27,7 +21,7 @@ CADGEN_SRC = add_repo_path("packages/cadgen/src")
 SKILL = repo_path("skills/cad/references/project-layout.md")
 TEMPLATE = repo_path("skills/cad/references/project-template.md")
 
-_FILE_BLOCK = re.compile(r"## `([^`]+)`\n\n```(?:python|markdown|gitignore)\n(.*?)```", re.S)
+_FILE_BLOCK = re.compile(r"```python\n# (src/[\w/]+\.py)\n(.*?)```", re.S)
 
 
 def _template_files() -> dict[str, str]:
@@ -70,45 +64,43 @@ class TheTemplateBuilds(unittest.TestCase):
         self.assertTrue(first.stdout.startswith("built "), first.stdout)
         for relative in (
             "STEP/assembly.step",
-            "STEP/frame.step",
             "STEP/plate.step",
-            "STEP/bracket_left.step",
-            "STEP/bracket_right.step",
-            "STL/standoff.stl",
+            "STEP/standoff.step",
         ):
             with self.subTest(output=relative):
                 output = self.project / relative
                 self.assertTrue(output.is_file(), f"{relative} was not written by the root build")
                 self.assertGreater(output.stat().st_size, 0)
-        # No model here declares kinematics, animation or a mesh beside its STEP.
+        # No model here declares kinematics, materials or animation.
         self.assertEqual(sorted(p.name for p in (self.project / "STEP").glob("*.json")), [])
+
+        self.run_in_project("-c", """
+from cadgen import read_scene
+scene = read_scene("STEP/assembly.step")
+plate = scene.resolve("#plate").shape().bounding_box()
+for label in ("#standoff_left", "#standoff_right"):
+    post = scene.resolve(label).shape().bounding_box()
+    assert abs(post.min.Z - plate.max.Z) < 1e-6, (label, post.min.Z, plate.max.Z)
+""")
 
         second = self.run_in_project("src/assembly.py")
         self.assertTrue(second.stdout.startswith("current "), f"the rerun was not a no-op:\n{second.stdout}")
 
-        # The frame's record is current and pins exactly the two children its
+        # The assembly record is current and pins exactly the two children its
         # body called (per-child records being current is test_models_per_file's).
-        why = self.run_in_project("-m", "cadgen.cli", "store", "why", "src/frame.py")
+        why = self.run_in_project("-m", "cadgen.cli", "store", "why", "src/assembly.py")
         self.assertIn("verdict current", why.stdout)
         self.assertIn("3 children (2)", why.stdout)
         self.assertIn("plate.py", why.stdout)
         self.assertIn("standoff.py", why.stdout)
 
-    def test_the_drawing_builds(self) -> None:
-        run = self.run_in_project("src/plate_drawing.py")
+    def test_the_part_builds_without_the_assembly_files(self) -> None:
+        (self.project / "src/standoff.py").unlink()
+        (self.project / "src/assembly.py").unlink()
+        run = self.run_in_project("src/plate.py")
         self.assertTrue(run.stdout.startswith("built "), run.stdout)
-        drawing = self.project / "DXF" / "plate_drawing.dxf"
-        self.assertTrue(drawing.is_file())
-        self.assertGreater(drawing.stat().st_size, 0)
-
-    def test_the_finished_tree_names_every_output(self) -> None:
-        """The template's closing tree is what the verify loop produces: every
-        generated file it lists is one the scripts write."""
-        template = TEMPLATE.read_text(encoding="utf-8")
-        tree = template[template.index("## The finished tree") :]
-        for name in ("assembly.step", "frame.step", "bracket_left.step", "bracket_right.step", "standoff.stl", "plate_drawing.dxf"):
-            self.assertIn(name, tree, f"the finished tree lost {name}")
-        self.assertNotIn(".step.json", tree.split("```")[1], "no template model writes a sidecar")
+        self.assertTrue((self.project / "STEP/plate.step").is_file())
+        self.assertEqual(len(list((self.project / "STEP").glob("*.step"))), 1)
 
 
 class TheSkillTeachesTheContract(unittest.TestCase):
@@ -123,4 +115,3 @@ class TheSkillTeachesTheContract(unittest.TestCase):
         self.assertIn("running the root is the\nwhole build", text)
         self.assertIn("does NOT rebuild the assemblies", text)
         self.assertIn("models by result, constants by value, functions by file", text)
-        self.assertIn("A mirrored part is its own model", text)

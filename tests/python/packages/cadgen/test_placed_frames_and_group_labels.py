@@ -35,7 +35,6 @@ from build123d import Box, Compound, Cylinder, Pos, Rot  # noqa: E402
 
 from cadgen import analysis, assembly_lookup, lookup  # noqa: E402
 from cadgen._internal import component_package  # noqa: E402
-from cadgen.cli.step_inspect import inspect as refs_inspect  # noqa: E402
 from tests.python.support.store_fixtures import build_view  # noqa: E402
 
 
@@ -120,15 +119,6 @@ class PlacedPackageTestCase(unittest.TestCase):
                 return row
         self.fail("fixture produced no placed circular edge")
 
-    def _context(self) -> refs_inspect.EntryContext:
-        return refs_inspect.EntryContext(
-            cad_path="demo",
-            kind="assembly",
-            source_path=self.package_dir,
-            step_path=None,
-            manifest=dict(self.index.manifest),
-            selector_index=self.index,
-        )
 
 
 class AnalyticParamsAreWorldPlacedTest(PlacedPackageTestCase):
@@ -197,25 +187,7 @@ class GroupLabelsResolveTest(PlacedPackageTestCase):
     def test_a_group_label_canonicalizes_to_the_group_id(self) -> None:
         self.assertEqual(GROUP_ID, lookup.canonicalize_selector(f"#{GROUP_LABEL}", self.index))
 
-    def test_a_group_label_expands_to_exactly_what_its_id_expands_to(self) -> None:
-        """The reported asymmetry: `#o1.8` answered with its leaves and `#camera_assembly` did
-        not resolve at all. They are the same node, so they are the same answer."""
-        context = self._context()
-        by_label = refs_inspect._group_expanded_selectors(f"#{GROUP_LABEL}", context)
-        by_id = refs_inspect._group_expanded_selectors(f"#{GROUP_ID}", context)
-        self.assertEqual(by_id, by_label)
-        self.assertGreater(len(by_label), 1, "the fixture group holds more than one leaf")
 
-    def test_refs_reports_the_groups_leaves_for_a_label(self) -> None:
-        result = refs_inspect.inspect_cad_refs(
-            "demo", f"#{GROUP_LABEL}", detail=True, context_provider=lambda *_: self._context()
-        )
-        self.assertEqual([], result["errors"], "a group label must resolve")
-        selections = result["tokens"][0]["selections"]
-        self.assertTrue(selections)
-        for selection in selections:
-            self.assertEqual("resolved", selection["status"])
-            self.assertEqual(GROUP_LABEL, selection.get("fromGroup"))
 
     def test_leaf_labels_still_resolve_to_their_own_occurrence(self) -> None:
         """Additive. Adding interior nodes must not renumber or displace the leaves."""
@@ -224,13 +196,6 @@ class GroupLabelsResolveTest(PlacedPackageTestCase):
         self.assertEqual("o1.1.2", aliases.get("camera_plate"))
         self.assertEqual("o1.2", aliases.get("base_block"))
 
-    def test_an_entity_ref_under_a_group_label_is_not_treated_as_a_group(self) -> None:
-        """`#camera_assembly.f3` names a face, and a group owns no geometry, so it must reach
-        the ordinary resolver (and fail there) rather than silently expand to the subtree."""
-        self.assertEqual(
-            [f"#{GROUP_LABEL}.f3"],
-            refs_inspect._group_expanded_selectors(f"#{GROUP_LABEL}.f3", self._context()),
-        )
 
 
 class GroupLabelAmbiguityTest(unittest.TestCase):

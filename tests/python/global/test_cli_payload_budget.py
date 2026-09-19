@@ -79,7 +79,6 @@ class CompactStdoutTests(unittest.TestCase):
         # `--mode list` parts inventory, and each inspection's report.
         "packages/cadgen/src/cadgen/results.py",
         "packages/cadgen/src/cadgen/step_artifact_cli.py",
-        "packages/cadgen/src/cadgen/cli/step_inspect/cli.py",
         # Every GENERATED CLI (`cadgen <format> <verb>`) serializes its Result
         # here rather than in its own module, so one entry covers all of them.
         "packages/cadgen/src/cadgen/_internal/cli_from_function.py",

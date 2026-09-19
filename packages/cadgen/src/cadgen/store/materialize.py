@@ -447,23 +447,29 @@ def _bytes_for_object(digest: str) -> bytes:
     return payload
 
 
-def _location_from_matrix(matrix: list[float]):
+def _native_location_from_matrix(matrix: list[float]):
+    """Validate and construct a placement without importing build123d."""
     from OCP.Standard import Standard_ConstructionError
     from OCP.TopLoc import TopLoc_Location
     from OCP.gp import gp_Trsf
-    from build123d import Location
 
     trsf = gp_Trsf()
     try:
         if isinstance(matrix, (list, tuple)) and len(matrix) >= 12:
             trsf.SetValues(*[float(v) for v in matrix[:12]])
-        return Location(TopLoc_Location(trsf))
+        return TopLoc_Location(trsf)
     except Standard_ConstructionError as error:
         # OCP's Python exception inheritance differs between platform wheels:
         # this error need not derive from Standard_Failure. Invalid placements
         # are a malformed recipe on every platform, so saved readers can repair
         # the derived tree from its STEP bytes instead of failing to open it.
         raise ValueError("invalid geometry transform") from error
+
+
+def _location_from_matrix(matrix: list[float]):
+    from build123d import Location
+
+    return Location(_native_location_from_matrix(matrix))
 
 
 def _color_from_entry(entry: dict[str, Any]):

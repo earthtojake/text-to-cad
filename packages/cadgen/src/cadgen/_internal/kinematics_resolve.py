@@ -62,7 +62,7 @@ def _axis_from_ref(index, ref: str, *, mate: str, source_ref: str) -> dict[str, 
     if resolved is None:
         raise _fail(
             f"{source_ref} mate {mate!r}: axis ref {ref!r} does not resolve — "
-            "use `cadgen step inspect refs` to list this model's selectors and labels"
+            "use `read_scene(path).leaves()` and `occurrence.entities(kind)` to list saved selectors and labels"
         )
     selector_type, row = resolved
     if selector_type == "occurrence":
@@ -133,7 +133,7 @@ def _occurrence_id_for_ref(
     raise _fail(
         f"{source_ref} mate {mate!r}: {what} {ref!r} does not name an occurrence — "
         "label the part or subassembly in the model (cadgen.label_shape, or a "
-        "Compound label) or use its occurrence id; `cadgen step inspect refs` "
+        "Compound label) or use its occurrence id; `read_scene(path).leaves()` "
         "lists the leaf occurrences"
     )
 

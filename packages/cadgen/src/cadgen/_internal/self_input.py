@@ -1,6 +1,6 @@
 """A model must not declare one of its own outputs as a build input.
 
-``read_step``, ``load_step_scene`` and ``declare_input`` put a file's content
+``read_step``, ``read_scene`` and ``declare_input`` put a file's content
 hash in the model's closure. Pointed at a file the SAME model writes, that is
 not a loop but an input that changes every time the model runs: the gate can
 never say "current", every run is a full rebuild, and the geometry the model

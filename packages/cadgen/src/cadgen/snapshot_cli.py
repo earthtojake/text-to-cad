@@ -42,10 +42,8 @@ from cadgen.step_targets import ResolvedStepTarget, StepTopologyArtifact, StepTo
 
 from cadgen.cli_logging import CliLogger
 from cadgen.coordination import PHASE_BROWSER, SNAPSHOT, ProgressReporter
-# What a GROUP occurrence ref means is shared with `cadgen step inspect`
-# (cadgen.occurrence_groups). Two commands answering "does this document have an o1.4"
-# differently is a bug that reads as a data problem, and the near-miss hint is exactly
-# the sort of text that drifts when it is written twice. Re-exported here because
+# GROUP occurrence refs use cadgen.occurrence_groups so snapshots and scene
+# readers agree on which document occurrences a selector names. Re-exported here because
 # callers of this module have always reached for these names through it.
 from cadgen.occurrence_groups import (
     UnknownOccurrenceSelector,

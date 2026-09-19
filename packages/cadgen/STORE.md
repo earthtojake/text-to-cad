@@ -110,7 +110,7 @@ test:
 1. **No object references source.** No tree or component carries a path, a
    script name, a closure or source hash, or a record key. The same bytes
    anywhere on disk are the same tree.
-2. **A reader never consults a record.** A door (`inspect`, `snapshot`,
+2. **A reader never consults a record.** A reader (`read_scene`, `snapshot`,
    `stl|3mf|glb build`, `step build` on a document), the viewer's catalog and
    render, and the mesh ledger find a tree in ONE lookup — hash the file's
    bytes, read `index/document`, read objects — and never open `index/model`
@@ -123,6 +123,10 @@ test:
    must not select geometry, then hash a possibly replaced file to bind its
    annotations or export ledger. A snapshot rejects a topology manifest from
    a different selected document instead of combining revisions.
+   `read_scene` retains verified native bytes and decodes prototypes on demand.
+   Its occurrence and selector views stay bound to that captured revision;
+   each `shape()` returns privately copied topology. An already open scene
+   survives document replacement or deletion of its cached objects.
    An explicitly attached editing session has a different input: a complete
    preview tree announced by the build runtime (§9b). It still reads no
    model/output records and never runs source. This input is not a saved file.
@@ -751,7 +755,7 @@ Every build goes through one interface, `cadgen.daemon.executors.submit(model)
   spawn. Spares load build123d/OCP as well as the lazy tool parsers before
   announcing readiness; importing the supervisor never loads the kernel.
   Spares: `CADGEN_DAEMON_SPARES` (default 2). Requests that name no
-  model (`inspect` on a document or an artifact derivation) borrow a spare without binding
+  model (a document compile or artifact derivation) borrow a spare without binding
   it. Borrowed workers count toward spare capacity while busy, so a stream of
   artifact jobs reuses warm kernels instead of starting a replacement import
   for every request. A subject-less burst may briefly retain already-admitted
@@ -796,7 +800,7 @@ daemon ran in the last 120 s with its state (`submitted` → `queued` →
 declared, parsed statically from the script it names. The ledger is the CAD
 Viewer's only progress source, and it is process state, never a file.
 
-The CLI doors (`cadgen step inspect|build|compile`, `stl|3mf|glb build`)
+The CLI doors (`cadgen step build|compile`, `stl|3mf|glb build`)
 are themselves dispatched through the daemon when one is reachable, so they
 run on warm kernels; the subject-less commands (`store`, `doctor`, `daemon
 status`, all snapshot orchestration) run in-process. STEP snapshots delegate
@@ -820,7 +824,7 @@ CPU scheduling and reuse remain independent of memory admission:
    why a 1-slot pool still builds a 3-level tree. It retains its geometry and
    memory reservation. Slots count kernel work only:
    the build pipeline takes one around a model body and its emit. **Doors take
-   none and never run a body**: `inspect`, `snapshot` and the mesh doors
+   none and never run a body**: `snapshot` and the mesh doors
    (`stl|3mf|glb build`) ask one question of a document — does the store have a
    tree for this file's bytes (`doors.document_tree`: `sha256(bytes)` →
    `index/document` → tree; no record is opened, §2 the law)? Yes → read it; a
@@ -1128,9 +1132,13 @@ Explicit model saves still obey every child/output/publication requirement.
   reading it. Compact process-local metadata may be reused while every required
   immutable object retains the file identity observed around its verified read;
   deletion, damage or atomic replacement invalidates that snapshot and makes the
-  next request verify the complete byte closure again. The metadata cache is
-  byte-bounded, store-root isolated and returns a newly parsed flattened view to
-  every caller.
+  next request verify the complete byte closure again. A read is only remembered
+  once it is far enough past the write it observed that a further write must
+  stamp a different mtime — a filesystem times writes by a clock of its own
+  resolution (~15.6 ms on Windows, whose `st_ctime` is the creation time and
+  never moves for a rewrite), and a same-size rewrite inside that tick is
+  invisible to every stat field. The metadata cache is byte-bounded, store-root
+  isolated and returns a newly parsed flattened view to every caller.
   Components carry `brep`, `codec` and `faceColors`; display SURF resolves
   separately through `store.surfaces` and `index/surface`.
 - `cadgen store info` sizes the store. `cadgen store gc --dry-run` lists what

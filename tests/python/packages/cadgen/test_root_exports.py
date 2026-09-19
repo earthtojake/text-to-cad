@@ -34,8 +34,7 @@ class RootExports(unittest.TestCase):
         """
         for name in (
             "AssemblyHelper", "target", "track", "report",
-            "read_step", "load_step_scene", "located_shape",
-            "occurrence_selector_id", "scene_occurrence_shape",
+            "read_step", "read_scene", "StepScene", "Selection", "Occurrence",
             "declare_input",
         ):
             with self.subTest(name=name):

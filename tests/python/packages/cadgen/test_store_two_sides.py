@@ -278,8 +278,8 @@ class TwoSidesLaw(unittest.TestCase):
             stl = _cli("stl", "build", "robot.step", "exports/robot_no_records.stl", cwd=self.root)
             self.assertEqual(0, stl.returncode, stl.stderr)
             self.assertTrue((self.root / "exports" / "robot_no_records.stl").is_file())
-            inspect = _cli("step", "inspect", "refs", "robot.step", "#o1", cwd=self.root)
-            self.assertEqual(0, inspect.returncode, inspect.stderr)
+            from cadgen import read_scene
+            self.assertGreater(len(list(read_scene(self.root / "robot.step").leaves())), 0)
             if shutil.which("node"):
                 snapshot = _cli("step", "snapshot", "robot.step", "exports/robot.png", cwd=self.root)
                 self.assertEqual(0, snapshot.returncode, snapshot.stderr)
@@ -298,7 +298,7 @@ class TwoSidesLaw(unittest.TestCase):
     def test_property_4_copied_document_reuses_the_byte_addressed_tree(self) -> None:
         import hashlib
 
-        from cadgen import load_step_scene
+        from cadgen import read_scene
         from cadgen._internal import step_scene_package
         from cadgen.step_artifact_cli import build_step_artifact
         from cadgen.store.records import tree_for_document_hash
@@ -325,12 +325,12 @@ class TwoSidesLaw(unittest.TestCase):
             ),
         ):
             result = build_step_artifact(repo_root=self.root, step=copied)
-            scene = load_step_scene(copied)
+            scene = read_scene(copied)
 
         self.assertTrue(result.get("skipped"), result)
-        self.assertEqual(document_hash, scene.step_hash)
+        self.assertEqual(document_hash, scene.document_hash)
         self.assertTrue(scene.roots)
-        self.assertTrue(scene.prototype_shapes)
+        self.assertTrue(list(scene.leaves()))
         self.assertEqual(expected_tree, tree_for_document_hash(document_hash))
 
     # --- property 5: the document renders without its source ------------------------

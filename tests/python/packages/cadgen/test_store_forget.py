@@ -99,13 +99,12 @@ class StoreForget(unittest.TestCase):
         self.assertFalse(any((self.cache / "index" / "document").iterdir()))
         # The door compiles the bytes again and answers in one call.
         inspect = _run(
-            "-m", "cadgen.cli", "step", "inspect", "refs", "src/pin.step", "--facts",
+            "-c", "from cadgen import read_scene; import json; s = read_scene('src/pin.step'); print(json.dumps({'leaves': len(list(s.leaves()))}))",
             cwd=self.root, cache=self.cache,
         )
         self.assertEqual(0, inspect.returncode, inspect.stdout + inspect.stderr)
         answer = json.loads(inspect.stdout.strip())
-        self.assertTrue(answer["ok"], answer)
-        self.assertEqual("part", answer["tokens"][0]["summary"]["kind"])
+        self.assertEqual(answer["leaves"], 1)
         self.assertTrue(any((self.cache / "index" / "document").iterdir()))
 
     def test_an_unknown_target_is_nothing_to_forget(self) -> None:

@@ -2,8 +2,7 @@
 
 Every subcommand is also reachable as ``python -m cadgen.<module>``; this is the friendly
 front door, not a second implementation. A subcommand's parser lives in its own module and
-owns its arguments, so ``cadgen step inspect`` and ``python -m cadgen.cli.step_inspect.cli``
-take the same flags and print the same output.
+owns its arguments, so the console and module entry points cannot drift.
 
 Commands in the ``<format> <verb>`` grammar (design/format-doors.md) go one step further:
 their module names only the public verb function, and the parser is DERIVED from that
@@ -40,7 +39,6 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     # and the viewer compile on demand, so no skill documentation names it.
     "step build": ("cadgen.cli.step_build", "write a new STEP from one, with kinematics"),
     "step compile": ("cadgen.cli.step_compile", "make a STEP's tree current"),
-    "step inspect": ("cadgen.cli.step_inspect", "inspect selector references in a STEP"),
     "step snapshot": ("cadgen.cli.step_snapshot", "render a STEP model to an image"),
     # Mesh formats — one door each: `build` writes the model's declared
     # output(s), `snapshot` renders a mesh file. One format, one door.
@@ -147,7 +145,6 @@ def enforce_requirements_pin(requirements_path) -> None:
 _DAEMON_TOOLS = {
     "step build": "step-build",
     "step compile": "step-compile",
-    "step inspect": "inspect",
     "stl build": "stl-build",
     "3mf build": "3mf-build",
     "glb build": "glb-build",
@@ -233,6 +230,11 @@ def main(argv: list[str] | None = None) -> int:
 
         sys.stdout.write(f"cadgen {__version__}\n")
         return 0
+
+    if argv[:2] == ["step", "inspect"]:
+        from cadgen.cli.step_inspect.cli import main as retired_inspect
+
+        return retired_inspect(argv[2:])
 
     # Longest match first, so `step build` beats a hypothetical `step`.
     command, rest = " ".join(argv[:2]), argv[2:]

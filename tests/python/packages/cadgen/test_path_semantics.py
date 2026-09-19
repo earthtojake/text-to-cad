@@ -13,7 +13,6 @@ under test is one line of path handling in each.
 
 from __future__ import annotations
 
-import argparse
 import os
 import unittest
 from pathlib import Path
@@ -26,7 +25,6 @@ add_repo_path("packages/cadgen/src")
 
 from cadgen import catalog, snapshot_core  # noqa: E402
 from cadgen.cli import doctor  # noqa: E402
-from cadgen.cli.step_inspect import cli as inspect_cli  # noqa: E402
 
 
 class TildeExpansion(unittest.TestCase):
@@ -78,11 +76,11 @@ class TildeExpansion(unittest.TestCase):
         empty.mkdir(parents=True, exist_ok=True)
         self.assertIsNone(doctor._resolve_requirements("~/empty"))
 
-    def test_inspect_input_file_expands_a_tilde(self) -> None:
-        refs = self.home / "refs.txt"
-        refs.write_text("#o1.2\n", encoding="utf-8")
-        args = argparse.Namespace(inputs=["widget.step"], input_file=Path("~/refs.txt"))
-        self.assertEqual(inspect_cli._read_refs_input(args), ("widget.step", "#o1.2"))
+    def test_scene_reader_expands_a_tilde(self) -> None:
+        from cadgen.step_scene import _record_input
+        document = self.home / "part.step"
+        document.write_text("fixture", encoding="utf-8")
+        self.assertEqual(_record_input("~/part.step", reader="read_scene"), document)
 
     def test_source_from_path_expands_a_tilde(self) -> None:
         document = self.home / "imported.step"

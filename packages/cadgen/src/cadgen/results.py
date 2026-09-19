@@ -19,7 +19,6 @@ from pathlib import Path
 __all__ = [
     "BuildResult",
     "CompileResult",
-    "InspectResult",
     "MeshExportFile",
     "MeshExportResult",
     "SnapshotFile",
@@ -249,7 +248,7 @@ class SnapshotResult:
     #: Every file this run wrote, in the order the packet declared them.
     files: tuple[SnapshotFile, ...] = ()
     #: ``--mode list`` only: the model's part occurrences, each carrying the
-    #: ``ref`` that pastes straight into ``--focus``/``--hide`` and ``inspect``.
+    #: ``ref`` accepted by ``--focus``/``--hide`` and ``scene.resolve(ref)``.
     #: Empty for every mode that renders.
     parts: tuple[dict, ...] = ()
     #: Non-fatal notes from the renderer (an unresolved selector, a clamped
@@ -278,29 +277,6 @@ class SnapshotResult:
         ]
         lines += [f"warning: {warning}" for warning in self.warnings]
         return lines
-
-
-@dataclass(frozen=True)
-class InspectResult:
-    """The outcome of one ``cadgen step inspect`` subcommand.
-
-    Inspection answers with a DOCUMENT rather than a summary — refs, facts,
-    planes, measurements — and that document is the product: an agent reads it,
-    and every subcommand shapes it differently. So the typed result carries the
-    document rather than flattening it, and adds the two things a caller needs
-    without parsing it: whether the inspection succeeded, and which subcommand
-    produced it.
-    """
-
-    ok: bool
-    #: ``refs`` | ``diff`` | ``frame`` | ``measure`` | ``align`` | ``interfere``
-    #: | ``validate`` — the inspection that ran.
-    command: str
-    #: That subcommand's own JSON document, exactly as the CLI prints it.
-    report: dict = field(default_factory=dict)
-
-    def human_lines(self) -> list[str]:
-        return [json.dumps(self.report, separators=(",", ":"))]
 
 
 @dataclass(frozen=True)

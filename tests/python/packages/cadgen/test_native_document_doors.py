@@ -63,31 +63,16 @@ class NativeDocumentDoors(unittest.TestCase):
         self.assertFalse((self.store / "index/surface").exists())
         self.assertEqual(self.document.read_bytes(), self.original)
 
-    def test_summary_matches_static_metadata_without_surface_or_selector_work(self):
-        from cadgen import step
-        from cadgen.reporting import entry_summary_payload
-        from cadgen.step_targets import resolve_step_target
-        from cadgen.step_topology_artifact import ensure_step_topology_artifact
-        from cadgen.store.objects import object_path
-        from cadgen.store.surfaces import derive
-
-        # The previous summary path obtained this metadata through a complete
-        # static view. Preserve that exact report while removing its surface dependency.
-        artifact = ensure_step_topology_artifact(resolve_step_target(str(self.document)), require_selector=False)
-        expected = entry_summary_payload(artifact.manifest, kind="part")
-        for record in derive(self.tree).values():
-            object_path(record["object"]).unlink()
-        shutil.rmtree(self.store / "index/surface")
-        with self.native_only(), mock.patch(
-            "cadgen.step_topology_artifact.ensure_step_topology_artifact",
-            side_effect=AssertionError("summary constructed a selector artifact"),
-        ):
-            result = step.inspect(self.document)
-        self.assertTrue(result.ok, result.report)
-        self.assertEqual(result.report["tokens"][0]["summary"], expected)
+    def test_scene_selectors_skip_display_and_unrelated_source(self):
+        from cadgen import read_scene
+        with self.native_only():
+            scene = read_scene(self.document)
+            self.assertAlmostEqual(scene.resolve("#s1").shape().volume, 24)
+            self.assertEqual(len(list(scene.roots[0].entities("face"))), 6)
 
     def test_compile_native_inspections_and_reemit_skip_display_and_unrelated_source(self):
         from cadgen import read_step, step
+        from cadgen.geometry import topology_errors, overlap_volume
         from cadgen.store.trees import capture_tree
 
         closure = capture_tree(self.tree)[1]
@@ -96,11 +81,9 @@ class NativeDocumentDoors(unittest.TestCase):
             self.assertEqual(step.compile(self.document, force=True).tree, self.tree)
             self.assertEqual(capture_tree(self.tree)[1], closure)
             self.assertAlmostEqual(read_step(self.document).volume, 24.0)
-            self.assertTrue(step.inspect(self.document, inspection="validate", skip_self_intersection=True).ok)
-            interference = step.inspect(self.document, inspection="interfere").report
-            self.assertEqual(interference["errors"], [])
-            self.assertFalse(interference["conclusive"])
-            self.assertIn("at least two", interference["inconclusiveReason"])
+            body = read_step(self.document).solids()[0]
+            self.assertEqual(topology_errors(body), ())
+            self.assertAlmostEqual(overlap_volume(body, body), 24)
             first = step.build(self.document, destination)
             self.assertTrue(first.ok)
             output = destination.read_bytes()
