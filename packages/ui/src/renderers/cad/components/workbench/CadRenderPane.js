@@ -33,6 +33,7 @@ import { useAnimationClock } from "../../workbench/animationClockStore.js";
 import { useEmbeddedGlbAnimationClock } from "../../workbench/embeddedGlbAnimationClockStore.js";
 import { viewerHiddenPartIdsForRenderPane, viewerPickModeForRenderPane, viewerSelectedPartIdsForRenderPane, viewerSelectorRuntimeForRenderPane } from "../../workbench/viewerPickMode.js";
 import { viewerBendGuidesForRenderPane } from "../../workbench/renderPaneDrawing.js";
+import { ZoomControl } from "../viewer/ZoomControl.js";
 
 const EMPTY_LIST = Object.freeze([]);
 function viewerContextMenuAnchorStyle(menu) {
@@ -280,6 +281,9 @@ export default function CadRenderPane({
   drawingIsDocument = false,
   drawingThicknessMm = 0,
   onCameraZoomPercentChange = null,
+  zoomPercent = 100,
+  onZoomPercentChange = null,
+  onZoomReset = null,
   onLodCameraChange = null,
   onMeshSourceAdoption = null,
   viewerMode,
@@ -496,6 +500,15 @@ export default function CadRenderPane({
         showViewPlane={!previewMode}
         scale={capabilities.sceneScale === "urdf" ? VIEWER_SCENE_SCALE.URDF : VIEWER_SCENE_SCALE.CAD}
         viewPlaneOffsetBottom="1rem"
+        viewPlaneHeader={selectedMeshData ? (
+          <div className="inline-flex h-8 items-center rounded-md border border-border bg-background p-1 text-foreground shadow-sm">
+            <ZoomControl
+              zoomPercent={zoomPercent}
+              onZoomPercentChange={onZoomPercentChange}
+              onZoomReset={onZoomReset}
+            />
+          </div>
+        ) : null}
         compactViewPlane={false}
         isLoading={viewerLoading && !retainingPreviousStepMesh}
         pickMode={!inspectionEnabled || retainingPreviousStepMesh || (!hasTopology && !hasParts && !measureModeActive)

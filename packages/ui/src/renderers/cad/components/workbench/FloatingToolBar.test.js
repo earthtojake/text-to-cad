@@ -23,3 +23,26 @@ test('the resolved document capability can disable Measure for an animated mesh'
   assert.equal(measureButtons('glb', false).length, 0);
   assert.equal(measureButtons('glb', true).length, 1);
 });
+
+test('interaction modes and view actions occupy two separate horizontal groups', () => {
+  const outer = render(FloatingToolBar, {
+    selectedEntry: { file: 'part.step' }, renderFormat: 'step', selectedMeshData: {},
+    selectionFilter: 'all', onSelectionFilterChange() {}, onRenderModeChange() {},
+    displayPanel: { type: 'div', props: {} }, handleSelectTabToolMode() {},
+    handleScreenshotCopy() {},
+  });
+  const toolbar = render(outer.tree.type, outer.tree.props);
+  const groups = elements(toolbar.tree).filter(node => node.props.role === 'group');
+  const interaction = groups.find(node => node.props['aria-label'] === 'Interaction tools');
+  const actions = groups.find(node => node.props['aria-label'] === 'View and actions');
+  assert.ok(interaction);
+  assert.ok(actions);
+  assert.deepEqual(
+    elements(interaction).map(node => node.props.label).filter(Boolean),
+    ['Select', 'Measure', 'Draw']
+  );
+  assert.equal(elements(actions).some(node => node.props.label === 'View controls'), true);
+  assert.equal(elements(actions).some(node => String(node.props.label || '').startsWith('Viewing mode:')), true);
+  assert.equal(elements(toolbar.tree).some(node => node.props['aria-label'] === 'Zoom controls'), false);
+  toolbar.unmount(); outer.unmount();
+});

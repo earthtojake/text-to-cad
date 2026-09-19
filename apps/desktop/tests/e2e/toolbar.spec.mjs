@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from './cad-runtime.ts';
+import { selectFixtureSession } from './session-fixture.ts';
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = path.resolve(appRoot, '../..');
 // Playwright REQUIRES the first argument to be a destructuring pattern, and this
@@ -13,6 +14,12 @@ const root = path.resolve(appRoot, '../..');
 test('CAD toolbar compacts to its scene and restores every tool on widening', async ({}, testInfo) => {
   test.setTimeout(120000);
   const profile = cadTestProfile('toolbar');
+  // CAD checks own a tiny project; catalog resolution must not scan the repo's
+  // sample models, local bundles or unrelated workspaces.
+  const project = path.join(profile, 'project');
+  const fixture = 'tests/fixtures/cad/import-smoke.step';
+  fs.mkdirSync(path.dirname(path.join(project, fixture)), { recursive: true });
+  fs.copyFileSync(path.join(root, fixture), path.join(project, fixture));
   const output = testInfo.outputPath('screenshots');
   fs.mkdirSync(output, {
     recursive: true
@@ -70,9 +77,7 @@ test('CAD toolbar compacts to its scene and restores every tool on widening', as
       defaultGitMode: 'none',
       fetchBeforeCreate: false
     }));
-    await page.evaluate(folder => window.hardcore.projects.addPath({
-      path: folder
-    }), root);
+    await selectFixtureSession(page, project);
     await expect(page.locator('[data-explorer-ready=true]')).toBeVisible();
     await page.getByRole('button', {
       name: 'Toggle explorer',
@@ -119,14 +124,19 @@ test('CAD toolbar compacts to its scene and restores every tool on widening', as
     await resize(1600);
     await expect(toolbar).toHaveAttribute('data-cad-toolbar', 'full');
     const fullLabels = await toolbar.getByRole('button').evaluateAll(els => els.map(el => el.getAttribute('aria-label')));
-    const view = toolbar.getByRole('group', { name: 'View', exact: true });
-    const inspect = toolbar.getByRole('group', { name: 'Inspect', exact: true });
-    const markup = toolbar.getByRole('group', { name: 'Markup and capture', exact: true });
+    const view = toolbar.getByRole('group', { name: 'View and actions', exact: true });
+    const tools = toolbar.getByRole('group', { name: 'Interaction tools', exact: true });
+    const zoom = page.getByRole('group', { name: 'Zoom controls', exact: true });
     const grouping = async () => {
-      for (const name of ['View controls', 'Display', 'Reset view']) await expect(view.getByRole('button', { name, exact: true })).toBeVisible();
-      for (const name of ['Select', 'Selection filter: All', 'Measure']) await expect(inspect.getByRole('button', { name, exact: true })).toBeVisible();
-      for (const name of ['Draw', 'Capture']) await expect(markup.getByRole('button', { name, exact: true })).toBeVisible();
+      for (const name of ['View controls', 'Display', 'Selection filter: All', 'Capture']) await expect(view.getByRole('button', { name, exact: true })).toBeVisible();
+      for (const name of ['Select', 'Measure', 'Draw']) await expect(tools.getByRole('button', { name, exact: true })).toBeVisible();
+      for (const name of ['Zoom out', 'Zoom in', 'Reset view']) await expect(zoom.getByRole('button', { name, exact: true })).toBeVisible();
+      await expect(zoom.locator('input')).toHaveCount(0);
+      await expect(toolbar.getByRole('group', { name: 'Zoom controls', exact: true })).toHaveCount(0);
       await expect(toolbar.getByRole('button', { name: 'More tools' })).toHaveCount(0);
+      const cameraBounds = await zoom.boundingBox();
+      const axisBounds = await page.getByRole('img', { name: 'Perspective selector', exact: true }).boundingBox();
+      assert(cameraBounds.y + cameraBounds.height <= axisBounds.y + 1, 'zoom controls sit above the orientation axes');
       await fit();
     };
     await grouping();
@@ -145,7 +155,7 @@ test('CAD toolbar compacts to its scene and restores every tool on widening', as
     await page.keyboard.press('Escape');
     await expect(view.getByRole('button', { name: 'View controls' })).toBeFocused();
 
-    await markup.getByRole('button', { name: 'Capture', exact: true }).click();
+    await view.getByRole('button', { name: 'Capture', exact: true }).click();
     for (const name of ['Copy screenshot', 'Ask about this view']) await expect(page.getByRole('menuitem', { name, exact: true })).toBeEnabled();
     await expect(page.getByRole('menuitem', { name: 'Orbit' })).toHaveCount(0);
     await expect(page.getByRole('menu')).toHaveCSS('opacity', '1');
@@ -154,18 +164,18 @@ test('CAD toolbar compacts to its scene and restores every tool on widening', as
     const windowWidth = await page.evaluate(() => innerWidth);
     assert(menuBounds.x >= 0 && menuBounds.x + menuBounds.width <= windowWidth);
     await page.keyboard.press('Escape');
-    await expect(markup.getByRole('button', { name: 'Capture', exact: true })).toBeFocused();
+    await expect(view.getByRole('button', { name: 'Capture', exact: true })).toBeFocused();
 
-    await markup.getByRole('button', { name: 'Draw', exact: true }).click();
+    await tools.getByRole('button', { name: 'Draw', exact: true }).click();
     await expect(toolbar.getByRole('button', { name: 'Drawing tool: Freehand', exact: true })).toBeVisible();
     await fit();
-    await markup.getByRole('button', { name: 'Capture', exact: true }).click();
+    await view.getByRole('button', { name: 'Capture', exact: true }).click();
     await resize(1600);
     await expect(toolbar).toHaveAttribute('data-cad-toolbar', 'full');
     await expect(page.getByRole('menu')).toHaveCount(0);
-    await expect(markup.getByRole('button', { name: 'Draw', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(tools.getByRole('button', { name: 'Draw', exact: true })).toHaveAttribute('aria-pressed', 'true');
     assert.deepEqual((await toolbar.getByRole('button').evaluateAll(els => els.map(el => el.getAttribute('aria-label')))).slice(0, fullLabels.length), fullLabels);
-    await inspect.getByRole('button', { name: 'Select', exact: true }).click();
+    await tools.getByRole('button', { name: 'Select', exact: true }).click();
     await resize(960);
     await expect(toolbar).toHaveAttribute('data-cad-toolbar', 'compact');
     await grouping();
@@ -176,18 +186,21 @@ test('CAD toolbar compacts to its scene and restores every tool on widening', as
     await toolbar.getByRole('button', { name: 'Exit orbit', exact: true }).click();
     await expect(toolbar).toHaveAttribute('data-cad-toolbar', 'compact');
     await page.evaluate(() => window.hardcore.settings.set({ theme: 'light', reduceMotion: true }));
-    await markup.getByRole('button', { name: 'Capture', exact: true }).click();
+    await view.getByRole('button', { name: 'Capture', exact: true }).click();
     await page.screenshot({ path: `${output}/narrow-menu-light.png` });
     await page.keyboard.press('Escape');
     loading = true;
     await page.reload();
+    // Reload opens the new-session screen; restore this session's explorer
+    // before exercising its cold-compilation toolbar state.
+    await selectFixtureSession(page, project);
     await expect(page.getByText('12/50', { exact: true })).toBeVisible();
     await fit();
     for (const name of ['Select', 'Measure', 'Draw', 'Display']) await expect(toolbar.getByRole('button', { name, exact: true })).toBeDisabled();
     await view.getByRole('button', { name: 'View controls' }).click();
     for (const name of ['Pan', 'Orbit']) await expect(page.getByRole('menuitem', { name, exact: true })).toBeDisabled();
     await page.keyboard.press('Escape');
-    await markup.getByRole('button', { name: 'Capture', exact: true }).click();
+    await view.getByRole('button', { name: 'Capture', exact: true }).click();
     for (const name of ['Copy screenshot', 'Ask about this view']) await expect(page.getByRole('menuitem', { name, exact: true })).toBeDisabled();
     assert.deepEqual(errors, []);
     assert.deepEqual(sourceRequests, []);
@@ -195,6 +208,8 @@ test('CAD toolbar compacts to its scene and restores every tool on widening', as
     console.info('PASS: semantic groups at both widths; View and Capture menus; Draw; Pan/Orbit; focus; scene bounds; loading; no renderer errors');
   } finally {
     await page?.unrouteAll({ behavior: 'wait' });
+    const runtimeLog = path.join(profile, 'cad-runtime.log');
+    if (fs.existsSync(runtimeLog)) fs.copyFileSync(runtimeLog, testInfo.outputPath('cad-runtime.log'));
     await app.close();
     fs.rmSync(profile, {
       recursive: true,

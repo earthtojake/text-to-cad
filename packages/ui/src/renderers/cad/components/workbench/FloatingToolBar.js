@@ -15,7 +15,6 @@ import {
   Play,
   PenTool,
   Ruler,
-  Maximize2,
   X
 } from "lucide-react";
 import {
@@ -29,7 +28,6 @@ import {
 } from "@hardcore/ui/primitives/dropdown-menu";
 import DrawingToolbar from "./DrawingToolbar.js";
 import { ToolbarButton } from "./ToolbarButton.js";
-import { ZoomControl } from "../viewer/ZoomControl.js";
 import ToolbarShell from "./ToolbarShell.js";
 import { FileSheetPortalContext } from "./FileSheet.js";
 
@@ -131,10 +129,6 @@ function ToolbarMenu({ label, Icon, active = false, resetKey, onEnter, onLeave, 
 function DesktopFloatingToolBar({
   renderFormat,
   floatingCadToolbarPosition,
-  zoomControlsVisible = false,
-  zoomPercent = 100,
-  onZoomPercentChange,
-  onZoomReset,
   drawingViewToggle = false,
   drawingViewMode = "3d",
   onDrawingViewModeChange,
@@ -167,7 +161,6 @@ function DesktopFloatingToolBar({
   handleSelectTabToolMode,
   viewerLoading,
   selectedMeshData,
-  selectedDxfData,
   drawingToolOptions,
   drawingTool,
   handleSelectDrawingTool,
@@ -206,9 +199,10 @@ function DesktopFloatingToolBar({
   const toolbarRef = useRef(null);
   const [compact, setCompact] = useState(false);
   const hasCapture = typeof handleCapture === "function";
-  // The widest group is View: full zoom (110px), navigation and Display.
-  // Groups wrap independently; compact zoom keeps even that group inside a thin scene.
-  const viewWidth = (zoomControlsVisible ? 110 : 0) + (showToolCluster ? 26 : 0) + (displayPanel ? 31 : 0) + 10;
+  // The wrapper's compact/full marker remains a useful host diagnostic. Both
+  // groups wrap as whole horizontal pills when this width is unavailable.
+  const viewWidth = (showToolCluster ? 26 : 0) + (selectionFilter !== null ? 26 : 0) +
+    (displayPanel ? 31 : 0) + (drawingViewToggle ? 52 : 0) + (onRenderModeChange ? 31 : 0) + 42;
   useLayoutEffect(() => {
     const scene = toolbarRef.current?.parentElement;
     if (!scene) return undefined;
@@ -244,7 +238,10 @@ function DesktopFloatingToolBar({
       <Camera className="size-3.5" aria-hidden="true" />Ask about this view
     </DropdownMenuItem>}
   </ToolbarMenu>;
-  const groupClasses = `${toolbarHidden ? "pointer-events-none" : "pointer-events-auto"} inline-flex h-8 w-fit items-center gap-0.5 rounded-md p-1 ${FLOATING_TOOL_BAR_SURFACE_CLASS}`;
+  // A group stays one horizontal pill whenever it fits. At extreme widths its
+  // own buttons wrap inside the same semantic group instead of letting the
+  // pill extend past the scene edge.
+  const groupClasses = `${toolbarHidden ? "pointer-events-none" : "pointer-events-auto"} inline-flex min-h-8 w-fit min-w-0 max-w-full flex-wrap items-center justify-end gap-0.5 rounded-md p-1 ${FLOATING_TOOL_BAR_SURFACE_CLASS}`;
 
   // Buttons shared between the full toolbar and the reduced orbit-mode toolbar.
   const animationButton = showAnimationPlay ? (
@@ -263,50 +260,15 @@ function DesktopFloatingToolBar({
     </ToolbarButton>
   ) : null;
 
-  // A drawing's own toolbar, in its own pill to the LEFT of the shared one: 2D and 3D are a
-  // property of the drawing being viewed, not a tool that acts on it, so grouping them with
-  // select/pan/draw would read as a fourth mode of the same kind.
-  const drawingViewToolbar = !renderMode && drawingViewToggle ? (
-    <div
-      className={`${toolbarHidden ? "pointer-events-none" : "pointer-events-auto"} inline-flex h-8 w-fit items-center gap-0.5 rounded-md p-1 ${FLOATING_TOOL_BAR_SURFACE_CLASS}`}
-      onPointerEnter={onToolbarEnter}
-      onPointerLeave={onToolbarLeave}
-    >
-      {/* `active`, not `isActive`: ToolbarButton switches variant on `active`, and an unknown
-          prop is silently dropped -- which is why neither button looked selected. */}
-      <ToolbarButton
-        label="Top-down 2D view"
-        active={drawingViewMode === "2d"}
-        onClick={() => onDrawingViewModeChange?.("2d")}
-      >
-        <span className="text-micro leading-none">2D</span>
-      </ToolbarButton>
-      <ToolbarButton
-        label="3D view"
-        active={drawingViewMode !== "2d"}
-        onClick={() => onDrawingViewModeChange?.("3d")}
-      >
-        <span className="text-micro leading-none">3D</span>
-      </ToolbarButton>
-    </div>
-  ) : null;
-
-  const zoomToolbar = zoomControlsVisible || displayPanel || showToolCluster ? (
-    <div role="group" aria-label="View"
-      className={`${toolbarHidden ? "pointer-events-none" : "pointer-events-auto"} inline-flex h-8 w-fit items-center gap-0.5 rounded-md p-1 ${FLOATING_TOOL_BAR_SURFACE_CLASS}`}
-      onPointerEnter={onToolbarEnter}
-      onPointerLeave={onToolbarLeave}
-    >
-      {zoomControlsVisible && <ZoomControl
-        compact={compact}
-        zoomPercent={zoomPercent}
-        onZoomPercentChange={onZoomPercentChange}
-        onZoomReset={onZoomReset}
-      />}
-      {!renderMode && !previewMode && showToolCluster && viewMenu}
-      {displayPanel && <><span className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" /><DisplayPopover key={selectedEntry?.file} disabled={viewerLoading || !viewportContent}>{displayPanel}</DisplayPopover></>}
-    </div>
-  ) : null;
+  const showSelectTool = !renderMode && !previewMode && supportsTool(renderFormat, "select");
+  const showMeasureTool = !renderMode && !previewMode && canMeasure;
+  const showDrawTool = !renderMode && !previewMode && supportsTool(renderFormat, "draw");
+  const showInteractionTools = showSelectTool || showMeasureTool || showDrawTool;
+  const showSelectionSettings = !renderMode && !previewMode && selectionFilter !== null;
+  const showViewSettings = !renderMode && !previewMode && showToolCluster;
+  const showDrawingViewSettings = !renderMode && !previewMode && drawingViewToggle;
+  const hasSettingsBeforeMode = showSelectionSettings || showViewSettings || Boolean(displayPanel) || showDrawingViewSettings;
+  const showViewingMode = !previewMode && Boolean(onRenderModeChange);
 
   return (
     <div
@@ -316,37 +278,43 @@ function DesktopFloatingToolBar({
       style={{ ...floatingCadToolbarPosition, maxWidth: "calc(100% - 28px)" }}
     >
       <TooltipProvider delayDuration={250}>
-        {/* Wraps: in a host pane too narrow for the zoom pill beside the
-            tools, the pill drops under them rather than off the left edge. */}
-        <div className="flex w-fit max-w-full flex-wrap items-center justify-end gap-1 self-end">
-        {zoomToolbar}
-        {drawingViewToolbar}
-        {!renderMode && !previewMode && showToolCluster && <div role="group" aria-label="Inspect" className={groupClasses} onPointerEnter={onToolbarEnter} onPointerLeave={onToolbarLeave}>
-          <ToolbarButton label={selectLabel} active={referenceSelectionDeferred ? false : selectionToolActive}
+        {/* Interaction and view/action pills stay horizontal internally and
+            wrap as whole groups in a narrow host pane. */}
+        <div className="flex w-full max-w-full flex-wrap items-center justify-end gap-1 self-end">
+        {showInteractionTools && <div role="group" aria-label="Interaction tools" className={groupClasses} onPointerEnter={onToolbarEnter} onPointerLeave={onToolbarLeave}>
+          {showSelectTool && <ToolbarButton label={selectLabel} active={referenceSelectionDeferred ? false : selectionToolActive}
             onClick={() => handleSelectTabToolMode("references")} disabled={selectDisabled}
             aria-pressed={referenceSelectionDeferred ? false : selectionToolActive}>
             <MousePointer2 className="size-3" strokeWidth={2} aria-hidden="true" />
-          </ToolbarButton>
-          {selectionFilter !== null && <SelectionFilterMenu value={selectionFilter} onChange={onSelectionFilterChange} disabled={viewerLoading || !viewportContent} />}
-          {canMeasure && <ToolbarButton label="Measure" active={measureModeActive} onClick={() => handleSelectTabToolMode("measure")}
+          </ToolbarButton>}
+          {showMeasureTool && <ToolbarButton label="Measure" active={measureModeActive} onClick={() => handleSelectTabToolMode("measure")}
             disabled={measureDisabled} aria-pressed={measureModeActive}>
             <Ruler className="size-3" strokeWidth={2} aria-hidden="true" />
           </ToolbarButton>}
+          {showDrawTool && <ToolbarButton label="Draw" active={drawToolActive} onClick={() => handleSelectTabToolMode("draw")}
+            disabled={viewerLoading || !viewportContent} aria-pressed={drawToolActive}>
+            <PenTool className="size-3" strokeWidth={2} aria-hidden="true" />
+          </ToolbarButton>}
         </div>}
-        {!previewMode && onRenderModeChange ? <div role="group" aria-label="Viewing mode" className={groupClasses}>
-          <ToolbarButton label={renderMode ? "Viewing mode: Render. Switch to Inspect" : "Viewing mode: Inspect. Switch to Render"}
+        <div role="group" aria-label="View and actions" className={groupClasses} onPointerEnter={onToolbarEnter} onPointerLeave={onToolbarLeave}>
+          {showSelectionSettings && <SelectionFilterMenu value={selectionFilter} onChange={onSelectionFilterChange} disabled={viewerLoading || !viewportContent} />}
+          {showViewSettings && viewMenu}
+          {displayPanel && <DisplayPopover key={selectedEntry?.file} disabled={viewerLoading || !viewportContent}>{displayPanel}</DisplayPopover>}
+          {showDrawingViewSettings && <>
+            {/* `active`, not `isActive`: ToolbarButton switches variant on `active`. */}
+            <ToolbarButton label="Top-down 2D view" active={drawingViewMode === "2d"} onClick={() => onDrawingViewModeChange?.("2d")}>
+              <span className="text-micro leading-none">2D</span>
+            </ToolbarButton>
+            <ToolbarButton label="3D view" active={drawingViewMode !== "2d"} onClick={() => onDrawingViewModeChange?.("3d")}>
+              <span className="text-micro leading-none">3D</span>
+            </ToolbarButton>
+          </>}
+          {hasSettingsBeforeMode && (showViewingMode || previewMode) && <span className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" />}
+          {showViewingMode && <ToolbarButton label={renderMode ? "Viewing mode: Render. Switch to Inspect" : "Viewing mode: Inspect. Switch to Render"}
             onClick={() => onRenderModeChange(!renderMode)} active={renderMode}>
             {renderMode ? <Clapperboard className="size-3" aria-hidden="true" /> : <Box className="size-3" aria-hidden="true" />}
-          </ToolbarButton>
-        </div> : null}
-        <div role="group" aria-label="Markup and capture" className={groupClasses} onPointerEnter={onToolbarEnter} onPointerLeave={onToolbarLeave}>
-          {!renderMode && !previewMode && supportsTool(renderFormat, "draw") && <>
-            <ToolbarButton label="Draw" active={drawToolActive} onClick={() => handleSelectTabToolMode("draw")}
-              disabled={viewerLoading || !viewportContent} aria-pressed={drawToolActive}>
-              <PenTool className="size-3" strokeWidth={2} aria-hidden="true" />
-            </ToolbarButton>
-            <span className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" />
-          </>}
+          </ToolbarButton>}
+          {(hasSettingsBeforeMode || showViewingMode) && <span className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" />}
           {previewMode && animationButton}
           {captureMenu}
           {previewMode && <ToolbarButton label="Exit orbit" onClick={handleExitPreviewMode}>

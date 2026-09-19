@@ -135,12 +135,24 @@ function getAxisId(face) {
   return id.startsWith("x") ? "x" : id.startsWith("y") ? "y" : "z";
 }
 
-function axisLabelColor(rgb) {
-  const linear = rgb.map(value => {
-    const channel = value / 255;
-    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
-  });
-  return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722 > 0.179 ? '#000000' : '#ffffff';
+const AXIS_LABEL_FALLBACK_DIRECTIONS = Object.freeze({
+  x: [1, 0],
+  y: [0, -1],
+  z: [-1, 0]
+});
+
+function axisLabelPosition(axisId, x, y, radius) {
+  const screenX = Number(x) || 0;
+  const screenY = -(Number(y) || 0);
+  const magnitude = Math.hypot(screenX, screenY);
+  const [fallbackX, fallbackY] = AXIS_LABEL_FALLBACK_DIRECTIONS[axisId] || [1, 0];
+  const directionX = magnitude > 0.075 ? screenX / magnitude : fallbackX;
+  const directionY = magnitude > 0.075 ? screenY / magnitude : fallbackY;
+  const offset = radius + 7;
+  return {
+    x: 50 + screenX * 28 + directionX * offset,
+    y: 50 + screenY * 28 + directionY * offset
+  };
 }
 
 export default function ViewPlaneControl({
@@ -163,7 +175,8 @@ export default function ViewPlaneControl({
 }) {
   const [hoveredNodeId, setHoveredNodeId] = useState("");
 
-  if (!showViewPlane || previewMode || isLoading || !meshData) {
+  const showSelector = showViewPlane && !previewMode;
+  if (isLoading || !meshData || (!showSelector && !viewPlaneHeader)) {
     return null;
   }
 
@@ -178,16 +191,20 @@ export default function ViewPlaneControl({
       const depth = clamp((z + 1) / 2, 0, 1);
       const fillColor = mixRgb(axisPalette.back, axisPalette.front, depth);
       const edgeColor = mixRgb([10, 16, 28], axisPalette.front, depth * 0.82 + 0.08);
+      const radius = 4.95 + depth * 1.05;
+      const labelPosition = axisLabelPosition(axisId, x, y, radius);
       return {
         id: face.id,
         title: face.title,
         label: face.id === axisId ? axisId.toUpperCase() : '',
-        labelColor: axisLabelColor(fillColor),
+        labelColor: rgbToCss(mixRgb(axisPalette.back, axisPalette.front, 0.78)),
+        labelX: labelPosition.x,
+        labelY: labelPosition.y,
         x: 50 + x * 28,
         y: 50 - y * 28,
         z,
         depth,
-        radius: 4.95 + depth * 1.05,
+        radius,
         fill: rgbToCss(fillColor),
         edge: rgbToCss(edgeColor),
         stem: rgbToCss(fillColor, 0.32 + depth * 0.48)
@@ -297,11 +314,6 @@ export default function ViewPlaneControl({
           stroke={active ? "var(--sidebar-foreground)" : node.edge}
           strokeWidth={active ? 1.35 : 1}
         />
-        {node.label ? <text
-          x={node.x} y={node.y} textAnchor="middle" dominantBaseline="central"
-          fontSize="9" fontWeight="400" fill={node.labelColor}
-          pointerEvents="none" aria-hidden="true"
-        >{node.label}</text> : null}
       </g>
     );
   };
@@ -321,7 +333,7 @@ export default function ViewPlaneControl({
           {viewPlaneHeader}
         </div>
       ) : null}
-      <div
+      {showSelector ? <div
         className={`${viewPlaneSurfaceClasses} ${viewPlaneSizeClasses}`}
         style={viewPlaneSizeStyle}
         onPointerDown={(event) => {
@@ -329,25 +341,13 @@ export default function ViewPlaneControl({
         }}
       >
         <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" aria-label={viewPlaneLabel}>
-          <defs>
-            <radialGradient id="view-sphere-shell" cx="34%" cy="28%" r="74%">
-              <stop offset="0%" stopColor="var(--sidebar)" />
-              <stop offset="100%" stopColor="var(--sidebar)" />
-            </radialGradient>
-          </defs>
           {is2d ? (
             <>
-              <rect x="15" y="15" width="70" height="70" rx="8" fill="url(#view-sphere-shell)" stroke="var(--sidebar-border)" strokeWidth="0.75" />
+              <rect x="15" y="15" width="70" height="70" rx="8" fill="var(--sidebar)" stroke="var(--sidebar-border)" strokeWidth="0.75" />
               <line x1="22" y1="50" x2="78" y2="50" fill="none" stroke="color-mix(in oklch, var(--sidebar-foreground) 18%, transparent)" strokeWidth="1" strokeLinecap="round" />
               <line x1="50" y1="22" x2="50" y2="78" fill="none" stroke="color-mix(in oklch, var(--sidebar-foreground) 18%, transparent)" strokeWidth="1" strokeLinecap="round" />
             </>
-          ) : (
-            <>
-              <circle cx="50" cy="50" r="44" fill="url(#view-sphere-shell)" stroke="var(--sidebar-border)" strokeWidth="0.75" />
-              <ellipse cx="50" cy="50" rx="30" ry="11.8" fill="none" stroke="color-mix(in oklch, var(--sidebar-foreground) 12%, transparent)" strokeWidth="0.8" />
-              <ellipse cx="50" cy="50" rx="14" ry="30" fill="none" stroke="color-mix(in oklch, var(--sidebar-foreground) 12%, transparent)" strokeWidth="0.8" />
-            </>
-          )}
+          ) : null}
           {backNodes.map((node) => (
             <line
               key={`${node.id}-stem`}
@@ -448,8 +448,24 @@ export default function ViewPlaneControl({
             />
           ))}
           {frontNodes.map((node) => renderNode(node))}
+          {projectedNodes.filter((node) => node.label).map((node) => (
+            <text
+              key={`${node.id}-label`}
+              x={node.labelX}
+              y={node.labelY}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fontSize="9"
+              fontWeight="400"
+              fill={node.labelColor}
+              pointerEvents="none"
+              aria-hidden="true"
+            >
+              {node.label}
+            </text>
+          ))}
         </svg>
-      </div>
+      </div> : null}
     </div>
   );
 }

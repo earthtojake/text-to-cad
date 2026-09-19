@@ -1078,6 +1078,13 @@ default; other saved panel choices remain unchanged.
 
 ### Inspect and Render
 
+CAD controls are shared with web: the top **Interaction tools** group contains
+Select, Measure and Draw; **View and actions** contains filters, display and
+navigation settings, viewing mode and capture. The horizontal groups wrap in a
+narrow explorer pane. Zoom buttons, a static percentage readout and Reset view
+sit above the bottom-right orientation axes; X/Y/Z labels sit outside the
+endpoints. Camera behavior and per-file state are unchanged.
+
 The floating toolbar switches between **Inspect** and **Render**. CAD Theme
 settings and presets are retired. Old theme records are ignored and left
 untouched; they cannot override either mode's base. Settings › Appearance

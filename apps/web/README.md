@@ -191,13 +191,14 @@ the UI package's asset documentation for asset provenance and regeneration.
 
 ### Narrow CAD panes
 
-The floating toolbar watches its scene's width, including space taken by the
-Inspector. When the existing button row would overflow, Select, Pan and Measure
-stay visible; Draw, animation playback, Orbit and capture actions move into
-More tools. Widening the scene restores the original full toolbar. Zoom and
-2D/3D controls remain separate and wrap within the available width. In Orbit,
-Exit and playback remain direct controls. The overflow menu uses the same
-handlers, availability and disabled states as the full toolbar.
+The shared floating controls separate **Interaction tools** (Select, Measure,
+Draw) from **View and actions** (selection filters, navigation/display settings,
+viewing mode and capture). The compact horizontal groups wrap within the scene
+when the Inspector or a narrow host reduces the available width. Their actions
+and disabled states are the same at every width; Orbit retains Exit and playback.
+Zoom out, a read-only percentage, Zoom in and Reset view sit at the bottom-right
+above the orientation axes. The percentage tracks the live camera; it is not an
+input. X/Y/Z labels remain visible outside the axis endpoints as the view rotates.
 
 ## Current viewer behavior
 
