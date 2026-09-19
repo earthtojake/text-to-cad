@@ -1863,8 +1863,10 @@ const CadViewer = forwardRef(function CadViewer({
   sheetEditSnapTargets = null,
   sheetEditPickedPoints = null,
   sheetEditPendingSnaps = null,
+  sheetEditSnapKinds = null,
   onSheetEditPick = null,
   onSheetEditViewMove = null,
+  onSheetEditCancel = null,
   drawingThicknessMm = 0,
   onCameraZoomPercentChange = null,
   perspective = null,
@@ -6066,8 +6068,10 @@ const CadViewer = forwardRef(function CadViewer({
     snapTargets: sheetEditSnapTargets,
     pickedPoints: Array.isArray(sheetEditPickedPoints) ? sheetEditPickedPoints : EMPTY_SHEET_EDIT_LIST,
     pendingSnaps: Array.isArray(sheetEditPendingSnaps) ? sheetEditPendingSnaps : EMPTY_SHEET_EDIT_LIST,
+    snapKinds: sheetEditSnapKinds,
     onPick: onSheetEditPick,
     onViewMove: onSheetEditViewMove,
+    onCancel: onSheetEditCancel,
     viewerReadyTick
   });
 

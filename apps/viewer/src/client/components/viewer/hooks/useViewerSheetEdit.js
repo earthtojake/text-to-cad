@@ -25,12 +25,16 @@ export function useViewerSheetEdit({
   snapTargets = null,
   pickedPoints = [],
   pendingSnaps = [],
+  snapKinds = null,
   onPick,
   onViewMove,
+  onCancel,
   viewerReadyTick = 0
 }) {
-  const callbacksRef = useRef({ onPick, onViewMove });
-  callbacksRef.current = { onPick, onViewMove };
+  const callbacksRef = useRef({ onPick, onViewMove, onCancel });
+  callbacksRef.current = { onPick, onViewMove, onCancel };
+  const snapKindsRef = useRef(snapKinds);
+  snapKindsRef.current = snapKinds;
   const viewsRef = useRef(views);
   viewsRef.current = views;
   const targetsRef = useRef(snapTargets);
@@ -265,7 +269,7 @@ export function useViewerSheetEdit({
         return;
       }
       if (tool === "pick") {
-        const snap = snapSheetPoint(targetsRef.current, point, 10 * mmPerPixel());
+        const snap = snapSheetPoint(targetsRef.current, point, 10 * mmPerPixel(), snapKindsRef.current);
         drawHover(snap, null);
         if (pendingRef.current?.length) {
           disposeChildren(bandGroup);
@@ -288,7 +292,7 @@ export function useViewerSheetEdit({
       const point = sheetPointFromEvent(event);
       if (!point) return;
       if (tool === "pick") {
-        const snap = snapSheetPoint(targetsRef.current, point, 10 * mmPerPixel());
+        const snap = snapSheetPoint(targetsRef.current, point, 10 * mmPerPixel(), snapKindsRef.current);
         event.stopImmediatePropagation();
         event.preventDefault();
         // No snap: an empty click, which places a pending dimension where it landed.
@@ -328,10 +332,18 @@ export function useViewerSheetEdit({
       if (!drag) drawHover(null, null);
     };
 
+    const onKeyDown = (event) => {
+      if (event.key === "Escape" && tool === "pick") {
+        disposeChildren(bandGroup);
+        runtime.requestRender?.();
+        callbacksRef.current.onCancel?.();
+      }
+    };
     container.addEventListener("pointerdown", onPointerDown, true);
     container.addEventListener("pointermove", onPointerMove, true);
     container.addEventListener("pointerup", onPointerUp, true);
     container.addEventListener("pointerleave", onPointerLeave, true);
+    window.addEventListener("keydown", onKeyDown);
     const previousCursor = cursorTarget.style.cursor;
     cursorTarget.style.cursor = tool === "pick" ? "crosshair" : "default";
     return () => {
@@ -342,6 +354,7 @@ export function useViewerSheetEdit({
       container.removeEventListener("pointermove", onPointerMove, true);
       container.removeEventListener("pointerup", onPointerUp, true);
       container.removeEventListener("pointerleave", onPointerLeave, true);
+      window.removeEventListener("keydown", onKeyDown);
       cursorTarget.style.cursor = previousCursor;
       disposeChildren(hoverGroup);
       disposeChildren(bandGroup);

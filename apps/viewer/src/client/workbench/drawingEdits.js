@@ -118,12 +118,19 @@ export function sheetSnapTargets(geometry, sheetDimensions = []) {
  * hole (circle, by its centre or its rim), or an edge (line). Corners win over
  * edges so a click near an end reads as the end. Null when nothing is close.
  */
-export function snapSheetPoint(targets, point, tolerance = 2) {
+/** The snap kinds a filter can name; all on unless the user narrows it. */
+export const SNAP_KINDS = Object.freeze(["edge", "vertex", "midpoint", "circle", "dimension"]);
+
+export function snapSheetPoint(targets, point, tolerance = 2, kinds = null) {
   if (!targets || !Array.isArray(point)) {
     return null;
   }
+  const allowed = kinds ? new Set(kinds) : null;
+  // Arcs ride with circles in the filter: both are "round features".
+  const allow = (kind) => !allowed || allowed.has(kind === "arc" ? "circle" : kind);
   let best = null;
   const consider = (candidate) => {
+    if (!allow(candidate.kind)) return;
     if (candidate.distance <= tolerance && (!best || candidate.rank < best.rank || (candidate.rank === best.rank && candidate.distance < best.distance))) {
       best = candidate;
     }
@@ -169,20 +176,49 @@ export function snapSheetPoint(targets, point, tolerance = 2) {
 /** The staged dimension's sheet geometry. Without a placement the offset lands outside
  *  the nearer view edge; with one (the click that places it) the dimension line goes
  *  through that point. */
+/** Standard dimension rows sit this far apart outside a view; placement snaps to them. */
+export const DIMENSION_ROW_MM = 12;
+const ROW_SNAP_MM = 3;
+
+function snapToRow(value, edge, direction) {
+  // direction +1: rows at edge + 12k above/right; -1: below/left.
+  const distance = (value - edge) * direction;
+  if (distance <= 0) return value;
+  const k = Math.round(distance / DIMENSION_ROW_MM);
+  if (k < 1) return value;
+  const row = edge + direction * k * DIMENSION_ROW_MM;
+  return Math.abs(row - value) <= ROW_SNAP_MM ? row : value;
+}
+
 export function draftDimensionFromPicks(view, a, b, placement = null, orientationHint = null) {
   const dx = Math.abs(b[0] - a[0]);
   const dy = Math.abs(b[1] - a[1]);
-  const orientation = orientationHint || (dx >= dy ? "h" : "v");
+  let orientation = orientationHint || (dx >= dy ? "h" : "v");
+  if (!orientationHint && placement && dx > 1e-6 && dy > 1e-6) {
+    // A diagonal pair reads from where the pointer went: beyond the points above or
+    // below means horizontal, beside them means vertical; inside, the longer span.
+    const [x0, x1] = [Math.min(a[0], b[0]), Math.max(a[0], b[0])];
+    const [y0, y1] = [Math.min(a[1], b[1]), Math.max(a[1], b[1])];
+    const outsideX = placement[0] < x0 || placement[0] > x1;
+    const outsideY = placement[1] < y0 || placement[1] > y1;
+    if (outsideY && !outsideX) orientation = "h";
+    else if (outsideX && !outsideY) orientation = "v";
+    else if (outsideX && outsideY) orientation = Math.min(placement[0] - x0, x1 - placement[0]) < Math.min(placement[1] - y0, y1 - placement[1]) ? "v" : "h";
+  }
   let offset = 12;
   if (placement) {
     if (orientation === "h") {
       const top = Math.max(a[1], b[1]);
       const bottom = Math.min(a[1], b[1]);
-      offset = placement[1] >= (top + bottom) / 2 ? Math.max(placement[1] - top, 4) : -Math.max(bottom - placement[1], 4);
+      let y = placement[1];
+      if (view) y = y >= (top + bottom) / 2 ? snapToRow(y, view.maxY, 1) : snapToRow(y, view.minY, -1);
+      offset = y >= (top + bottom) / 2 ? Math.max(y - top, 4) : -Math.max(bottom - y, 4);
     } else {
       const right = Math.max(a[0], b[0]);
       const left = Math.min(a[0], b[0]);
-      offset = placement[0] >= (right + left) / 2 ? Math.max(placement[0] - right, 4) : -Math.max(left - placement[0], 4);
+      let x = placement[0];
+      if (view) x = x >= (right + left) / 2 ? snapToRow(x, view.maxX, 1) : snapToRow(x, view.minX, -1);
+      offset = x >= (right + left) / 2 ? Math.max(x - right, 4) : -Math.max(left - x, 4);
     }
   } else if (view) {
     if (orientation === "h") {

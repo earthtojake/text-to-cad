@@ -183,11 +183,22 @@ test("two picks read the way SolidWorks reads them", () => {
   assert.equal(angle.kind, "ang");
   assert.deepEqual([angle.vx, angle.vy], [100, 40]);
   assert.deepEqual(drawingEditParams([angle]).ang.split(",").length, 7);
-  // placement decides the side and the offset
+  // placement decides the side and the offset, snapping to 12 mm rows outside the view
   const placedAbove = smartDimensionFromSnaps(view, [bottom], [110, 30]);
-  assert.equal(placedAbove.offset, -10);
+  assert.equal(placedAbove.offset, -12, "30 is within 3 of the row at 28");
   const placedBelow = smartDimensionFromSnaps(view, [top], [110, 75]);
-  assert.equal(placedBelow.offset, 15);
+  assert.equal(placedBelow.offset, 12, "75 snaps to the row at 72");
+  const placedFree = smartDimensionFromSnaps(view, [top], [110, 79]);
+  assert.equal(placedFree.offset, 19, "79 is between rows and stays free");
+  // a diagonal pair follows the pointer: above means horizontal, beside means vertical
+  const c1 = { kind: "vertex", view: "front", point: [90, 42] };
+  const c2 = { kind: "vertex", view: "front", point: [130, 58] };
+  assert.equal(smartDimensionFromSnaps(view, [c1, c2], [110, 70]).orientation, "h");
+  assert.equal(smartDimensionFromSnaps(view, [c1, c2], [150, 50]).orientation, "v");
+  // the snap filter narrows what is picked
+  const only = sheetSnapTargets({ lines: [{ layer: "VISIBLE", view: "front", start: [80, 40], end: [140, 40] }], circles: [] });
+  assert.equal(snapSheetPoint(only, [110, 41], 2, ["edge"]).kind, "edge");
+  assert.equal(snapSheetPoint(only, [110, 41], 2, ["circle"]), null);
   const front = { name: "front", at: [110, 50], map: [110, 45, 0.5, 0, 0, 0, 0, 0.5] };
   assert.match(drawingEditSnippet(angle, { views: [front] }), /^front\.angle\(\(-20, 0, -10\), /);
 });
