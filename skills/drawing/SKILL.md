@@ -29,22 +29,31 @@ and a LAYER table with linetypes; a cut layout writes geometry only.
    [the template](references/sheet-api.md#template). Name the model facts the
    dimensions reference as constants (hole pitch, overall size, wall) so the
    script reads as a drawing brief.
-3. Choose views: `top`, `front`, `right` (third angle: right view to the right
-   of front, top above front), plus `iso` when it helps. Place each with
-   `at=(x, y)` in sheet millimetres from the bottom-left corner; A3 is
-   420 × 297, A4 is 297 × 210.
+3. Place views with `sheet.three_views(part, iso=True)`: top, front and right
+   in third angle with room for two rows of dimensions, and the isometric in
+   the free corner. Use `sheet.view(part, name, at=(x, y))` (sheet millimetres
+   from the bottom-left corner; A3 is 420 × 297, A4 is 297 × 210) only for a
+   custom layout.
 4. Dimension what a maker needs, in MODEL coordinates: overall size per view
-   (`view.overall()`), feature positions and sizes (`view.dim`,
-   `view.diameter`, `view.radius`), and notes with leaders (`view.note`).
-   Give the value only where the model does not define it (a callout such as
-   `"%%c3 x 8 DEEP, 4 PLACES"`); everywhere else leave `text` unset so the
-   dimension is measured.
+   (`view.overall()`), feature positions and sizes (`view.dim`, with `tol=`
+   or `fit=` where the design requires one), holes as callouts (`view.hole`:
+   thru, depth, counterbore, countersink, thread), and notes with leaders
+   (`view.note`). Leave `text` unset so the dimension is measured; give a
+   value only where the model does not define it. `offset` is measured from
+   the dimension's own points, not the view's edge: a dimension between
+   interior points needs an offset that clears the geometry. Keep notes few
+   and under about 45 characters; the layout reserves room for them.
 5. Run `python <name>_drawing.py`. It prints every file written: one `.dxf`
    per sheet under `DXF/` and one `.pdf` with a page per sheet under `PDF/`.
-6. Open the `.dxf` in `$cad-viewer` to check the layout; send the `.pdf`.
-   Check that no dimension text collides with a view, that hidden lines
-   appear where features are behind faces, and that every hole has a centre
-   mark. Move `at=` or `offset=` and rerun; never edit the DXF by hand.
+   When running unattended, set `MPLCONFIGDIR` to a writable directory so
+   matplotlib's font cache does not warn.
+6. Open the `.dxf` with `cadgen viewer` (run in the project directory; the
+   Sheet panel shows the drawing as it prints) to check the layout; send the
+   `.pdf`. Check that no dimension text collides with a view, that hidden
+   lines appear where features are behind faces, and that every hole has a
+   centre mark. Very small dimensions (a few mm) put their value on their
+   own extension line; dimension the larger feature instead. Move `at=` or
+   `offset=` and rerun; never edit the DXF by hand.
 
 ## What the sheet contains
 
@@ -54,15 +63,19 @@ and a LAYER table with linetypes; a cut layout writes geometry only.
 - Dimensions as `DIMENSION` entities with filled arrowheads and measured
   values, so a shop's CAD reads them as dimensions, not as lines and text.
 - A title block with title, part number, material, author, scale, units,
-  projection, revision and `SHEET n OF m`; numbered notes above it.
-- Bytes that are a function of the content: an unchanged drawing rebuilds to
-  identical files, like `@dxf`.
+  projection, revision, `SHEET n OF m` and the drawing function's name;
+  numbered notes above it (the general tolerance, when given, is note 1);
+  a revision table top-right when `revisions=` is given. Text longer than
+  its cell is set smaller, not clipped.
+- DXF bytes that are a function of the content: an unchanged drawing rebuilds
+  to an identical DXF, like `@dxf`. The PDF carries a creation date and
+  differs each run.
 
 ## Limits to state in the handoff
 
-- Tolerances are not generated. A dimension carries a tolerance only if you
-  write it into `text`; say so in the notes, and get the values from the
-  design requirements or the user, never invented.
+- Tolerances come only from `tol=`, `fit=` and `general_tolerance=` that you
+  write; get the values from the design requirements or the user, never
+  invented. A dimension without one is nominal.
 - Views are orthographic projections with hidden lines from the kernel; no
   sections, details, or auxiliary views yet. Say what a view does not show.
 - The sheet does not check for overlapping annotation. Look at the PDF.

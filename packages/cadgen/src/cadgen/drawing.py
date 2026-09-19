@@ -167,13 +167,15 @@ class View:
     def hole(self, center, diameter: float, *, depth: float | None = None, thru: bool = False,
              cbore: tuple[float, float] | None = None, csk: tuple[float, float] | None = None,
              thread: str | None = None, count: int | None = None, angle: float = 45.0,
-             tol: float | tuple[float, float] | None = None, fit: str | None = None) -> "View":
+             tol: float | tuple[float, float] | None = None, fit: str | None = None,
+             label: str | None = None) -> "View":
         """A hole callout in the standard symbols: ``4× ⌀6.6 ↧12``, ``THRU``, a
         counterbore ``⌴ ⌀11 ↧6.5``, a countersink ``⌵ ⌀12 × 90°``, or a thread
         such as ``M6x1 - 6H`` in place of the diameter. ``tol``/``fit`` qualify the
-        diameter the way :meth:`dim` does."""
+        diameter the way :meth:`dim` does; ``label`` is appended (``"WHEEL"``).
+        ``angle`` is where the leader leaves the circle, degrees from horizontal."""
         spec = {"diameter": float(diameter), "depth": depth, "thru": thru, "cbore": cbore, "csk": csk,
-                "thread": thread, "count": count}
+                "thread": thread, "count": count, "label": label}
         self._dims.append(_Dim("hole", _p3(center), None, 0.0, None, None, radius=float(diameter) / 2, angle=angle,
                                tol=_tol(tol), fit=fit, hole=spec))
         return self
@@ -240,6 +242,8 @@ def hole_callout_text(spec: dict, *, tol=None, fit: str | None = None) -> str:
     if spec.get("csk"):
         d, ang = spec["csk"]
         parts.append(f"\u2335 %%c{_fmt(d)} × {_fmt(ang)}°")
+    if spec.get("label"):
+        parts.append(str(spec["label"]))
     return "   ".join(parts)
 
 
@@ -310,11 +314,15 @@ class Sheet:
         # below it (the label), above the top view (widths); keep that clear too.
         reach = 12.0 + 2 * self.text_height + 8.0
         usable_w = self.width - 2 * m - 2 * reach
-        usable_h = self.height - 2 * m - _TITLE_H - reach - 12.0
+        # Notes stack upward from the title block; the block starts above them and
+        # above the label that hangs under the front view.
+        note_rows = len(self.notes) + (1 if self.general_tolerance else 0)
+        notes_h = (note_rows * 5.0 + 8.0) if note_rows else 0.0
+        usable_h = self.height - 2 * m - _TITLE_H - notes_h - reach - 12.0
         block_w = L + gap + W
         block_h = H + gap + W
         left = m + reach + max(0.0, (usable_w - block_w) / 2)
-        bottom = m + _TITLE_H + 12.0 + max(0.0, (usable_h - block_h) / 2)
+        bottom = m + _TITLE_H + notes_h + 12.0 + max(0.0, (usable_h - block_h) / 2)
         front_at = (left + L / 2, bottom + H / 2)
         top_at = (front_at[0], bottom + H + gap + W / 2)
         right_at = (left + L + gap + W / 2, front_at[1])
@@ -529,7 +537,11 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
         doc.appids.add(XDATA_APPID)
     W, H = sheet.width, sheet.height
 
-    def text(value, x, y, height, align, layer="TITLE"):
+    def text(value, x, y, height, align, layer="TITLE", fit: float | None = None):
+        # ``fit`` is the width the text may occupy; longer text is set smaller
+        # rather than run through a cell divider or off the sheet.
+        if fit is not None and value:
+            height = max(1.6, min(height, fit / (len(value) * 0.72)))
         entity = msp.add_text(value, dxfattribs={"height": height, "layer": layer})
         entity.set_placement((x, y), align=align)
         return entity
@@ -542,13 +554,14 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
     msp.add_lwpolyline([(x0, y0), (x0 + tw, y0), (x0 + tw, y0 + th), (x0, y0 + th)], close=True, dxfattribs={"layer": "TITLE"})
     msp.add_line((x0, y0 + th / 2), (x0 + tw, y0 + th / 2), dxfattribs={"layer": "TITLE"})
     msp.add_line((x0 + tw * 0.6, y0), (x0 + tw * 0.6, y0 + th), dxfattribs={"layer": "TITLE"})
-    text(sheet.title, x0 + 3, y0 + th * 0.75, 5.0, TextEntityAlignment.MIDDLE_LEFT)
+    left_w, right_w = tw * 0.6 - 6, tw * 0.4 - 6
+    text(sheet.title, x0 + 3, y0 + th * 0.75, 5.0, TextEntityAlignment.MIDDLE_LEFT, fit=left_w)
     sub = " · ".join(v for v in (sheet.part_number, sheet.material, sheet.author) if v)
     if sub:
-        text(sub, x0 + 3, y0 + th * 0.25, 2.5, TextEntityAlignment.MIDDLE_LEFT)
+        text(sub, x0 + 3, y0 + th * 0.25, 2.5, TextEntityAlignment.MIDDLE_LEFT, fit=left_w)
     scale_text = "1:1" if abs(sheet.scale - 1) < 1e-9 else (f"1:{1 / sheet.scale:g}" if sheet.scale < 1 else f"{sheet.scale:g}:1")
-    text(f"SCALE {scale_text}   {sheet.units.upper()}   {sheet.projection}", x0 + tw - 3, y0 + th * 0.75, 2.5, TextEntityAlignment.MIDDLE_RIGHT)
-    text(f"SHEET {index} OF {count}   REV {sheet.revision}   {label}", x0 + tw - 3, y0 + th * 0.25, 2.5, TextEntityAlignment.MIDDLE_RIGHT)
+    text(f"SCALE {scale_text}   {sheet.units.upper()}   {sheet.projection}", x0 + tw - 3, y0 + th * 0.75, 2.5, TextEntityAlignment.MIDDLE_RIGHT, fit=right_w)
+    text(f"SHEET {index} OF {count}   REV {sheet.revision}   {label}", x0 + tw - 3, y0 + th * 0.25, 2.5, TextEntityAlignment.MIDDLE_RIGHT, fit=right_w)
     notes = ([f"TOLERANCES PER {sheet.general_tolerance} UNLESS OTHERWISE SPECIFIED."] if sheet.general_tolerance else []) + list(sheet.notes)
     if notes:
         for row, note in enumerate(notes):
@@ -568,7 +581,7 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
             for c, (width, value) in enumerate(zip(cols, row)):
                 if c:
                     msp.add_line((x, y), (x, y + rh), dxfattribs={"layer": "TITLE"})
-                text(value, x + 2, y + rh / 2, 2.5, TextEntityAlignment.MIDDLE_LEFT)
+                text(value, x + 2, y + rh / 2, 2.5, TextEntityAlignment.MIDDLE_LEFT, fit=width - 4)
                 x += width
 
     # Views. Every view's box is known before any annotation is drawn, so a callout
@@ -628,14 +641,6 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
                 _tag(msp.add_line((c[0] - arm, c[1]), (c[0] + arm, c[1]), dxfattribs={"layer": "CENTER"}), view.name)
                 _tag(msp.add_line((c[0], c[1] - arm), (c[0], c[1] + arm), dxfattribs={"layer": "CENTER"}), view.name)
         vx0, vx1, vy0, vy1 = own_box
-        # The view label also carries the view's placement (at=) and the affine map
-        # from model to sheet millimetres (map=bx,by,a00,a01,a10,a11,a20,a21: b plus
-        # the sheet image of each model axis), so a viewer can turn a sheet point
-        # back into model coordinates and state a new dimension the way this script does.
-        b = (view.at[0] + (proj.c[0] - cx) * sv, view.at[1] + (proj.c[1] - cy) * sv)
-        map_values = [b[0], b[1]] + [proj.m[i][j] * sv for i in range(3) for j in range(2)]
-        _tag(text((view.label or view.name).upper(), view.at[0], vy0 - 6, 3.5, TextEntityAlignment.TOP_CENTER, "NOTES"),
-             view.name, extra=[f"at={_fmt(view.at[0])},{_fmt(view.at[1])}", "map=" + ",".join(f"{v:.6g}" for v in map_values)])
 
         # How far annotation already reaches past each side of the view, so a later
         # callout lands outside the dimensions that came before it. Callouts on one
@@ -709,11 +714,12 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
                 side = "right" if go_right else "left"
                 clear = reach[side] + 10.0
                 knee_x = (vx1 + clear) if go_right else (vx0 - clear)
-                land_y = free_landing_y(side, centre[1] + r * math.sin(math.radians(45)) + 6.0)
+                exit_angle = math.radians(dim.angle if dim.angle is not None else 45.0)
+                land_y = free_landing_y(side, centre[1] + r * math.sin(exit_angle) + 6.0)
                 # Leave the circle at 45 degrees toward the exit so the arrow reads as a
                 # pointer, then run level to the landing.
                 sign = 1.0 if go_right else -1.0
-                start = (centre[0] + sign * r * math.cos(math.radians(45)), centre[1] + r * math.sin(math.radians(45)))
+                start = (centre[0] + sign * r * abs(math.cos(exit_angle)), centre[1] + r * math.sin(exit_angle))
                 knee = (knee_x, land_y)
                 landing = (knee[0] + sign * 6.0, knee[1])
                 _tag(msp.add_leader([start, knee, landing], dxfattribs={"layer": "DIM"},
@@ -726,6 +732,16 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
                 _tag(msp.add_leader([p, q, (q[0] + (3 if dim.radius >= 0 else -3), q[1])], dxfattribs={"layer": "NOTES"}), view.name, str(index))
                 align = TextEntityAlignment.BOTTOM_LEFT if dim.radius >= 0 else TextEntityAlignment.BOTTOM_RIGHT
                 _tag(text(dim.text, q[0] + (4 if dim.radius >= 0 else -4), q[1] + 1, sheet.text_height, align, "NOTES"), view.name, str(index))
+
+        # The view label goes under everything that hangs below the view, so a
+        # dimension on the bottom side never sits on it. It also carries the view's
+        # placement (at=) and the affine map from model to sheet millimetres
+        # (map=bx,by,a00,a01,a10,a11,a20,a21: b plus the sheet image of each model
+        # axis), so a viewer can turn a sheet point back into model coordinates.
+        b = (view.at[0] + (proj.c[0] - cx) * sv, view.at[1] + (proj.c[1] - cy) * sv)
+        map_values = [b[0], b[1]] + [proj.m[i][j] * sv for i in range(3) for j in range(2)]
+        _tag(text((view.label or view.name).upper(), view.at[0], vy0 - reach["bottom"] - 6, 3.5, TextEntityAlignment.TOP_CENTER, "NOTES"),
+             view.name, extra=[f"at={_fmt(view.at[0])},{_fmt(view.at[1])}", "map=" + ",".join(f"{v:.6g}" for v in map_values)])
     return doc
 
 
