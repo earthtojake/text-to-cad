@@ -323,13 +323,22 @@ measurement overlay. Add to prompt uses canonical STEP references, optionally
 with the selected measured value. There is no separate Surfaces tab or source
 feature view. Display controls and per-file state retain their toolbar popover.
 
-The toolbar has stable View, Inspect, and Markup/capture groups. View groups zoom,
-a View controls menu (Pan, Orbit, and authored animation playback), and Display.
-Inspect groups Select, selection filtering, and Measure. Draw stays beside a
-separate Capture menu containing Copy screenshot and Ask about this view. The
-groups wrap independently at narrow widths; actions keep the same group at every
-width. Compact zoom keeps the editable percentage and Reset view; plus/minus
-return when the viewport widens. Capture actions do not contain navigation tools.
+The upper toolbar separates interaction modes from view settings and actions.
+**Interaction tools** holds Select, Measure, and Draw. **View and actions** holds
+the selection filter, View controls menu (Pan, Orbit, and authored animation
+playback), Display, drawing view controls, Inspect/Render mode, and Capture.
+These two compact horizontal groups sit beside each other and wrap as whole
+groups at narrow widths. If even one group cannot fit the available scene width,
+its buttons wrap inside the same semantic pill instead of clipping past the
+viewport edge. Capture contains Copy screenshot and Ask about this view; it does
+not contain interaction modes.
+
+Zoom sits at the lower right immediately above the orientation axes. Minus and
+plus step the camera, the percentage is a static readout, and Reset view restores
+the current mode's fitted camera. The compact axis control keeps X/Y/Z outside
+the endpoint bubbles in a final label layer, so all three labels remain visible
+as the axes rotate. Endpoint and centre controls retain their click, drag and
+keyboard behavior. Zoom remains available when plan or orbit mode hides the axes.
 
 ### Read-only STEP features
 

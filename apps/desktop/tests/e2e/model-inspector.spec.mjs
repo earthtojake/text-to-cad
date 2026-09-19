@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from './cad-runtime.ts';
+import { selectFixtureSession } from './session-fixture.ts';
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = path.resolve(appRoot, '../..');
 // Playwright REQUIRES the first argument to be a destructuring pattern, and this
@@ -13,6 +14,12 @@ const root = path.resolve(appRoot, '../..');
 test('Model tree preserves part controls and adds precise viewport references to the prompt', async ({}, testInfo) => {
   test.setTimeout(120000);
   const profile = cadTestProfile('surfaces');
+  // CAD checks own a tiny project; catalog resolution must not scan the repo's
+  // sample models, local bundles or unrelated workspaces.
+  const project = path.join(profile, 'project');
+  const fixture = 'tests/fixtures/cad/import-smoke.step';
+  fs.mkdirSync(path.dirname(path.join(project, fixture)), { recursive: true });
+  fs.copyFileSync(path.join(root, fixture), path.join(project, fixture));
   const output = testInfo.outputPath('screenshots');
   fs.mkdirSync(output, {
     recursive: true
@@ -43,9 +50,7 @@ test('Model tree preserves part controls and adds precise viewport references to
       defaultGitMode: 'none',
       fetchBeforeCreate: false
     }));
-    await page.evaluate(folder => window.hardcore.projects.addPath({
-      path: folder
-    }), root);
+    await selectFixtureSession(page, project);
     await expect(page.locator('[data-explorer-ready=true]')).toBeVisible();
     await page.getByRole('button', {
       name: 'Toggle explorer',
@@ -84,9 +89,13 @@ test('Model tree preserves part controls and adds precise viewport references to
     await expect(tree.getByRole('button',{name:/^Reveal /}).first()).toBeVisible();
     await page.getByRole('button',{name:'Show all',exact:true}).click();
     await expect(tree.getByRole('button',{name:/^Hide /}).first()).toBeVisible();
-    // Explicit selection requests exact topology; the initial display remains lightweight.
+    // Expanded parts expose exact topology. All mode may select inferred
+    // feature groups, so request Faces explicitly for this precise-ref check.
+    await tree.getByRole('button',{name:'Expand import-smoke.step',exact:true}).click();
+    await expect(tree.getByRole('button',{name:/^Select Base (extrude|revolve)$/}).first()).toBeVisible({timeout:30000});
+    await page.getByRole('button',{name:'Selection filter: All',exact:true}).click();
+    await page.getByRole('menuitemradio',{name:'Faces Faces only',exact:true}).click();
     const selectTool = page.getByRole('button', {name:'Select', exact:true});
-    await selectTool.click();
     await expect(selectTool).toBeEnabled({timeout:30000});
     // Pick the model itself; no exhaustive topology list is needed to inspect faces or edges.
     const canvas=page.locator('[data-cad-surface] canvas').first();
@@ -115,6 +124,8 @@ test('Model tree preserves part controls and adds precise viewport references to
     assert.deepEqual(errors,[]);
     await page.screenshot({path:`${output}/surfaces.png`});
   } finally {
+    const runtimeLog = path.join(profile, 'cad-runtime.log');
+    if (fs.existsSync(runtimeLog)) fs.copyFileSync(runtimeLog, testInfo.outputPath('cad-runtime.log'));
     await app.close();
     fs.rmSync(profile,{recursive:true,force:true});
   }

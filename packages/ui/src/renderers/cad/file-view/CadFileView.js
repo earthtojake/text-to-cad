@@ -6177,6 +6177,9 @@ function CadFileViewSurface({
             ? drawingThicknessMm
             : DXF_DEFAULT_THICKNESS_MM}
                 onCameraZoomPercentChange={setViewerZoomPercent}
+                zoomPercent={viewerZoomPercent}
+                onZoomPercentChange={handleViewerZoomPercentChange}
+                onZoomReset={handleViewerZoomReset}
                 onLodCameraChange={onLodCameraMoved}
                 onMeshSourceAdoption={handleDisplayMeshAdoption}
                 renderPartsIndividually={
@@ -6291,10 +6294,6 @@ function CadFileViewSurface({
                 drawingViewToggle={selectedEntryIsDrawing}
                 drawingViewMode={drawingViewMode}
                 onDrawingViewModeChange={handleDrawingViewModeChange}
-                zoomControlsVisible={!!selectedViewportContent}
-                zoomPercent={viewerZoomPercent}
-                onZoomPercentChange={handleViewerZoomPercentChange}
-                onZoomReset={handleViewerZoomReset}
                 selectionFilter={supportsTopology ? selectionFilter : null}
                 onSelectionFilterChange={value => { setSelectionFilter(value); handleSelectTabToolMode("references"); }}
                 selectionFilterNotice={selectionFilterNotice}

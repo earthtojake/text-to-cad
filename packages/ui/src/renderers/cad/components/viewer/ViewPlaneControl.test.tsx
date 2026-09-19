@@ -6,7 +6,7 @@ import { VIEW_PLANE_FACES } from './viewportCameraKit.js';
 
 afterEach(cleanup);
 
-it('labels positive axes without changing snapping, keyboard controls or pointer hit regions', () => {
+it('keeps X/Y/Z outside the endpoint bubbles while preserving snapping, keyboard controls and hit regions', () => {
   const activate = vi.fn(), reset = vi.fn(), parentPointer = vi.fn();
   const props = { showViewPlane: true, meshData: {}, viewPlaneFaces: VIEW_PLANE_FACES,
     viewPlaneOffsetRight: 16, activateViewPlaneFace: activate, activateDefaultViewPlane: reset };
@@ -15,7 +15,11 @@ it('labels positive axes without changing snapping, keyboard controls or pointer
     const text = screen.getByText(label);
     expect(text.tagName.toLowerCase()).toBe('text');
     expect(text.getAttribute('pointer-events')).toBe('none');
-    const hit = text.closest('[role="button"]')!;
+    expect(text.closest('[role="button"]')).toBeNull();
+    expect(text.getAttribute('font-weight')).toBe('400');
+  }
+  for (const name of ['Jump to right view', 'Jump to back view', 'Jump to top view']) {
+    const hit=screen.getByRole('button',{name});
     fireEvent.pointerDown(hit); fireEvent.click(hit);
   }
   expect(activate.mock.calls.flat()).toEqual(['x', 'y', 'z']);
@@ -28,7 +32,23 @@ it('labels positive axes without changing snapping, keyboard controls or pointer
   rerender(<ViewPlaneControl {...props} viewerTheme={{ viewPlanePalette: { axis: {
     x: { front: [250, 250, 250], back: [250, 250, 250] },
     y: { front: [10, 10, 10], back: [10, 10, 10] },
-  } } }} />);
-  expect(screen.getByText('X').getAttribute('fill')).toBe('#000000');
-  expect(screen.getByText('Y').getAttribute('fill')).toBe('#ffffff');
+  } } }} viewPlaneOrientation={{x:[0,0,1],y:[1,0,0],z:[0,1,0]}} />);
+  const finalButton=container.querySelector('svg [role="button"]:last-of-type')!;
+  for (const label of ['X', 'Y', 'Z']) {
+    const axisLabel=screen.getByText(label);
+    expect(axisLabel).toBeTruthy();
+    expect(finalButton.compareDocumentPosition(axisLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  }
+  expect(screen.getByText('X').getAttribute('fill')).toContain('rgba(');
+});
+
+it('keeps the camera header available when plan or orbit mode hides the axis selector', () => {
+  const props = { meshData: {}, viewPlaneFaces: VIEW_PLANE_FACES, viewPlaneOffsetRight: 16,
+    activateViewPlaneFace: vi.fn(), activateDefaultViewPlane: vi.fn(), viewPlaneHeader: <div>Zoom header</div> };
+  const {rerender}=render(<ViewPlaneControl {...props} showViewPlane={false}/>);
+  expect(screen.getByText('Zoom header')).toBeTruthy();
+  expect(screen.queryByLabelText('Perspective selector')).toBeNull();
+  rerender(<ViewPlaneControl {...props} showViewPlane previewMode/>);
+  expect(screen.getByText('Zoom header')).toBeTruthy();
+  expect(screen.queryByLabelText('Perspective selector')).toBeNull();
 });
