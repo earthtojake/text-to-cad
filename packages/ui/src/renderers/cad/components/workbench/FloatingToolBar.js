@@ -3,7 +3,6 @@ import { SELECTION_FILTERS } from "../../workbench/selectionFilter.js";
 import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Camera,
-  Check,
   Focus,
   Hand,
   MousePointer2,
@@ -196,22 +195,20 @@ function DesktopFloatingToolBar({
   // groups wrap as whole horizontal pills when this width is unavailable.
   const viewWidth = (showToolCluster ? 26 : 0) + (selectionFilter !== null ? 26 : 0) +
     (drawingViewToggle ? 52 : 0) + 42;
+  const toolsWidth = 8 + 26 * [supportsTool(renderFormat, "select"),
+    supportsTool(renderFormat, "pan"), canMeasure, supportsTool(renderFormat, "draw")].filter(Boolean).length;
   useLayoutEffect(() => {
     const scene = toolbarRef.current?.parentElement;
     if (!scene) return undefined;
-    const update = () => setCompact(scene.clientWidth < 28 + Math.max(viewWidth, 100));
+    const update = () => setCompact(scene.clientWidth < 28 + Math.max(viewWidth, toolsWidth));
     const observer = new ResizeObserver(update);
     observer.observe(scene);
     update();
     return () => observer.disconnect();
-  }, [viewWidth]);
+  }, [viewWidth, toolsWidth]);
   const menuProps = { resetKey: `${compact}:${previewMode}`, onEnter: onToolbarEnter, onLeave: onToolbarLeave };
-  const viewMenu = <ToolbarMenu label="View controls" Icon={Orbit} active={panToolActive || animationPlaying} {...menuProps}>
+  const viewMenu = <ToolbarMenu label="View controls" Icon={Orbit} active={animationPlaying} {...menuProps}>
     {!previewMode && <>
-      <DropdownMenuItem disabled={viewerLoading || !viewportContent} onSelect={() => handleSelectTabToolMode("pan")}>
-        <Hand className="size-3.5" aria-hidden="true" />Pan
-        {panToolActive && <Check className="ml-auto size-3.5" aria-label="Active" />}
-      </DropdownMenuItem>
       <DropdownMenuItem disabled={captureDisabled} onSelect={handleEnterPreviewMode}>
         <Orbit className="size-3.5" aria-hidden="true" />Orbit
       </DropdownMenuItem>
@@ -254,9 +251,10 @@ function DesktopFloatingToolBar({
   ) : null;
 
   const showSelectTool = !previewMode && supportsTool(renderFormat, "select");
+  const showPanTool = !previewMode && supportsTool(renderFormat, "pan");
   const showMeasureTool = !previewMode && canMeasure;
   const showDrawTool = !previewMode && supportsTool(renderFormat, "draw");
-  const showInteractionTools = showSelectTool || showMeasureTool || showDrawTool;
+  const showInteractionTools = showSelectTool || showPanTool || showMeasureTool || showDrawTool;
   const showSelectionSettings = !previewMode && selectionFilter !== null;
   const showViewSettings = !previewMode && showToolCluster;
   const showDrawingViewSettings = !previewMode && drawingViewToggle;
@@ -278,6 +276,10 @@ function DesktopFloatingToolBar({
             onClick={() => handleSelectTabToolMode("references")} disabled={selectDisabled}
             aria-pressed={referenceSelectionDeferred ? false : selectionToolActive}>
             <MousePointer2 className="size-3" strokeWidth={2} aria-hidden="true" />
+          </ToolbarButton>}
+          {showPanTool && <ToolbarButton label="Pan" active={panToolActive} onClick={() => handleSelectTabToolMode("pan")}
+            disabled={viewerLoading || !viewportContent} aria-pressed={panToolActive}>
+            <Hand className="size-3" strokeWidth={2} aria-hidden="true" />
           </ToolbarButton>}
           {showMeasureTool && <ToolbarButton label="Measure" active={measureModeActive} onClick={() => handleSelectTabToolMode("measure")}
             disabled={measureDisabled} aria-pressed={measureModeActive}>

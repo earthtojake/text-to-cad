@@ -8,7 +8,6 @@ import { stepGeometryContextText, stepGeometryPromptText } from "../workbench/st
 import { filterSelectionReferences, toggleReferenceGroupSelection, connectedReferenceIds, MEASURE_SELECTION_FILTERS } from "../workbench/selectionFilter.js";
 import { buildTangentFaceGraph } from "../workbench/tangentFaceSelection.js";
 
-import { FileSheetTabPreferencesContext } from "../workbench/fileSheetTabPreferences.js";
 import { buildRobotComponentGeometry, robotComponents } from "../workbench/robotComponents.js";
 import { useRobotComponentSelection } from "../workbench/useRobotComponentSelection.js";
 
@@ -2305,8 +2304,8 @@ function CadFileViewSurface({
   const selectedFileHasWarningOrErrorStatus = fileStatusHasWarningsOrErrors(selectedFileStatusItems);
 
   const fileSheetSectionOptions = useMemo(() => ({
-    // Gated separately, because the two systems are separate: mates give a Pose
-    // tab, clips give an Animation tab, and a model may have either or both.
+    // Motion contains independent Position and Animation sections; a model
+    // may support either or both.
     hasStepPosePanel: Boolean(
       selectedStepModuleDefinition ||
       selectedStepModuleStatus === "loading" ||
@@ -2371,34 +2370,18 @@ function CadFileViewSurface({
     setFileSheetOpenSectionIds(normalizeFileSheetOpenSectionIds(nextSectionIds, renderedSelectedFileSheetSectionIds));
   }, [renderedSelectedFileSheetSectionIds]);
 
-  const openFileSheetSection = useCallback((sectionId, { openSheet = true, activate = false } = {}) => {
+  const openFileSheetSection = useCallback((sectionId, { openSheet = true } = {}) => {
     const normalizedSectionId = String(sectionId || "").trim();
     if (!normalizedSectionId || !renderedSelectedFileSheetSectionIds.includes(normalizedSectionId)) {
       return false;
     }
-
-    if (openSheet) {
-      setTabToolsOpen(true);
-    }
-    setFileSheetOpenSectionIds((current) => {
-      const baseSectionIds = normalizeFileSheetOpenSectionIds(
-        Array.isArray(current) ? current : effectiveFileSheetOpenSectionIds,
-        renderedSelectedFileSheetSectionIds
-      );
-      if (baseSectionIds.includes(normalizedSectionId) && !activate) {
-        return baseSectionIds;
-      }
-      return normalizeFileSheetOpenSectionIds(
-        [...baseSectionIds.filter(id => id !== normalizedSectionId), normalizedSectionId],
-        renderedSelectedFileSheetSectionIds
-      );
-    });
+    if (openSheet) setTabToolsOpen(true);
+    // Reveal must activate the section, even when a legacy split list already
+    // contains it before another active tab.
+    setFileSheetOpenSectionIds(current => current?.length === 1 && current[0] === normalizedSectionId
+      ? current : [normalizedSectionId]);
     return true;
-  }, [
-    effectiveFileSheetOpenSectionIds,
-    renderedSelectedFileSheetSectionIds,
-    setTabToolsOpen
-  ]);
+  }, [renderedSelectedFileSheetSectionIds, setTabToolsOpen]);
 
   useEffect(() => {
     if (!Array.isArray(fileSheetOpenSectionIds)) {
@@ -2419,11 +2402,7 @@ function CadFileViewSurface({
     if (selectedUrdfComponents.some((component) => component.id === id)) {
       if (isWideLayout) setTabToolsOpen(true);
       // Components carries the reference at its foot, so revealing it is the whole jump.
-      const revealIds = [FILE_SHEET_SECTION_IDS.ROBOT_COMPONENTS];
-      setFileSheetOpenSectionIds((current) => [
-        ...(current || []).filter((sectionId) => !revealIds.includes(sectionId)),
-        ...revealIds
-      ]);
+      setFileSheetOpenSectionIds([FILE_SHEET_SECTION_IDS.ROBOT_COMPONENTS]);
     }
   }, [robotSelection.select, selectedUrdfComponents, isWideLayout]);
 
@@ -3391,9 +3370,7 @@ function CadFileViewSurface({
     setMeasureRulerState((current) => measureRulerStateForChange(current, { toolActive: measureModeActive }));
     if (measureModeActive) setInspectionHighlight(null);
   }, [measureModeActive]);
-  // A new measurement reveals the tab that holds it. Re-appending (rather than
-  // just ensuring membership) moves it to the end, and last-in-pane wins tab
-  // resolution — so it also wins the pane back if the user has since clicked Tree.
+  // A new measurement activates the tab that holds it.
   const measurementCountRef = useRef(0);
   useEffect(() => {
     const count = measureMeasurements.length;
@@ -3407,14 +3384,7 @@ function CadFileViewSurface({
       return;
     }
     setTabToolsOpen(true);
-    setFileSheetOpenSectionIds((current) => normalizeFileSheetOpenSectionIds(
-      [
-        ...(Array.isArray(current) ? current : [])
-          .filter((id) => id !== FILE_SHEET_SECTION_IDS.STEP_MEASUREMENTS),
-        FILE_SHEET_SECTION_IDS.STEP_MEASUREMENTS
-      ],
-      renderedSelectedFileSheetSectionIds
-    ));
+    setFileSheetOpenSectionIds([FILE_SHEET_SECTION_IDS.STEP_MEASUREMENTS]);
   }, [measureMeasurements, renderedSelectedFileSheetSectionIds, setTabToolsOpen]);
 
   const filteredViewerReferences = useMemo(() => filterSelectionReferences(viewerPickableReferences, selectionFilter),
@@ -4038,8 +4008,7 @@ function CadFileViewSurface({
     }
     setActiveTreeNodeScrollKey(source === "viewer" || source === "reference" ? `${source}:${Date.now()}:${normalizedNodeId}` : "");
     openFileSheetSection(FILE_SHEET_SECTION_IDS.STEP_TREE, {
-      openSheet: shouldOpenFileSheetForSelectionReveal({ isDesktop: isWideLayout, source }),
-      activate: source === "reference"
+      openSheet: shouldOpenFileSheetForSelectionReveal({ isDesktop: isWideLayout, source })
     });
     if (expandAncestors || expandSelf || source === "reference") {
       expandStepTreeAroundNode(normalizedNodeId, { expandSelf });
@@ -5999,7 +5968,6 @@ function CadFileViewSurface({
   })];
 
   return (
-    <FileSheetTabPreferencesContext.Provider value={{ store: preferences.fileSheetTabs || {}, update: (fileSheetTabs) => onPreferenceChange({ fileSheetTabs }) }}>
     <HostPanelSlotContext.Provider value={hostPanelSlot}>
     <FileSheetPortalContext.Provider value={hostElement}>
     <HostReferenceContext.Provider value={hostReference}>
@@ -6507,6 +6475,5 @@ function CadFileViewSurface({
     </HostReferenceContext.Provider>
     </FileSheetPortalContext.Provider>
     </HostPanelSlotContext.Provider>
-    </FileSheetTabPreferencesContext.Provider>
   );
 }

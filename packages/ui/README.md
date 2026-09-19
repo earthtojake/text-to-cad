@@ -202,7 +202,9 @@ and versioned, bounded memory cache; it adds no persistent store. Read
 [feature detection](docs/feature-detection.md) before changing inference rules,
 cache identity, cancellation or recognition limits.
 
-The Model, Motion and View tabs share one per-file state and tab arrangement.
+The Model, Motion and View tabs use one fixed row in canonical order. Tabs cannot
+be dragged, reordered or split; only the active selection is saved per file.
+Visited Model trees stay mounted when hidden, preserving disclosure and scroll.
 View groups scene/camera/grid settings, followed by Clip and Explode. Render is
 its second Mode option, adding photographic controls at the bottom; changing
 style preserves projection (including orthographic), camera, zoom, motion,

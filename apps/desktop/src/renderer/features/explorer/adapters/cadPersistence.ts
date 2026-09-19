@@ -1,8 +1,7 @@
 import { CAD_LEGACY_PREFERENCE_KEYS, createCadPreferences } from "@hardcore/ui/renderers/cad";
 import type { CadPreferences, CadPreferenceSource } from "@hardcore/ui/renderers/cad";
 import type { FileViewerState, JsonValue } from "@hardcore/ui/file-viewer";
-import { readFileSheetTabLayoutStore, readPoseTransition, writeFileSheetTabLayoutStore, writePoseTransition } from "@hardcore/ui/renderers/cad/state";
-import { mergeChangedRecords } from "./statePatch";
+import { readPoseTransition, writePoseTransition } from "@hardcore/ui/renderers/cad/state";
 
 const MIGRATION_KEY = "hardcore.cadMigration.v1";
 type JsonObject = { [key: string]: JsonValue };
@@ -13,16 +12,15 @@ function read(storage: Storage, key: string): JsonObject {
 }
 function write(storage: Storage, key: string, value: JsonObject) { try { storage.setItem(key, JSON.stringify(value)); } catch { /* Storage can be unavailable. */ } }
 
-/** Global layout and motion preferences apply to every desktop root. */
+/** Global motion preferences apply to every desktop root. */
 export function migrateCadPreferences(storage: Storage): CadPreferences {
   return {
-    fileSheetTabs: readFileSheetTabLayoutStore(storage),
     poseTransition: readPoseTransition(storage),
   };
 }
 
 let sharedPreferences: CadPreferenceSource | undefined;
-/** CAD layout and motion are shared by every root in this desktop window. */
+/** CAD motion preferences are shared by every root in this desktop window. */
 export function desktopCadPreferences(): CadPreferenceSource {
   if (!sharedPreferences) {
     let syncing = false;
@@ -30,7 +28,6 @@ export function desktopCadPreferences(): CadPreferenceSource {
     let baseline = snapshot();
     const source = createCadPreferences({ initial: baseline, onChange: (preferences) => {
       if (!syncing) {
-        if (JSON.stringify(preferences.fileSheetTabs) !== JSON.stringify(baseline.fileSheetTabs)) writeFileSheetTabLayoutStore(localStorage, mergeChangedRecords(readFileSheetTabLayoutStore(localStorage), baseline.fileSheetTabs ?? {}, preferences.fileSheetTabs ?? {}));
         if (preferences.poseTransition && JSON.stringify(preferences.poseTransition) !== JSON.stringify(baseline.poseTransition)) writePoseTransition(localStorage, preferences.poseTransition);
       }
       baseline = preferences;
@@ -38,7 +35,7 @@ export function desktopCadPreferences(): CadPreferenceSource {
     // Browser storage events carry updates from another Hardcore window. This
     // host-owned store has the lifetime of the window, independent of its roots.
     window.addEventListener("storage", event => {
-      if (!([CAD_LEGACY_PREFERENCE_KEYS.fileSheetTabs, CAD_LEGACY_PREFERENCE_KEYS.poseTransition] as string[]).includes(event.key ?? "")) return;
+      if (event.key !== CAD_LEGACY_PREFERENCE_KEYS.poseTransition) return;
       syncing = true;
       try { source.update(snapshot()); } finally { syncing = false; }
     });

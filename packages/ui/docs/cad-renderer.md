@@ -72,9 +72,10 @@ assets, which remain inside `@hardcore/core`.
 `CadPreferenceSource` exposes `getSnapshot`, `subscribe` and `update`.
 `createCadPreferences` provides an in-memory implementation and an optional
 host persistence callback. A host can share one source across its CAD panes.
-It contains the shared pose transition preference and each file kind's
-sheet-tab order/split arrangement. It never reads
-browser storage on import or construction.
+It contains the shared pose transition preference. Inspector tabs use one
+fixed row in each format's canonical order; active selection belongs to the
+file, not global preferences. Shared code never reads browser storage on
+import or construction.
 
 App light/dark appearance selects Inspect's fixed workbench basis, including
 the empty CAD stage. CAD preferences contain no theme choice or custom scene
@@ -95,17 +96,19 @@ Hosts preserve these existing preference keys and precedence when migrating:
 | --- | --- |
 | Directory layout | `cad-viewer:directory-session:v1` (legacy theme fields ignored) |
 | Pose transition preference | `cad-viewer:pose-transition:v1` |
-| Sheet tab order and split arrangement | `cad-viewer:file-sheet-tab-layout:v7` |
 | Per-file CAD session | `cad-viewer:file-session:v1:<namespace>:<file>` |
 
 `@hardcore/ui/renderers/cad/state` exports the existing tab/file
 normalizers and width defaults for migration. `readFileSessionState` requires
-an explicit `{ storage }` supplied by the host. The sheet layout helpers
-`readFileSheetTabLayoutStore(storage)` and
-`writeFileSheetTabLayoutStore(storage, preferences.fileSheetTabs)` likewise use
-only supplied storage. `CAD_LEGACY_PREFERENCE_KEYS`
-exports the directory, pose-transition and sheet-layout key names. Origins are transport locations,
-not persistence namespaces for new state.
+an explicit `{ storage }` supplied by the host. `CAD_LEGACY_PREFERENCE_KEYS`
+exports the directory and pose-transition key names. Retired
+`cad-viewer:file-sheet-tab-layout:v5`, `:v6` and `:v7` records are left untouched
+and ignored: hosts no longer read, write or subscribe to tab arrangements.
+Legacy per-file lists from a split view select their last available tab;
+Kinematics/Animation IDs map to Motion, and Display/Studio IDs map to View.
+New interactions save only one active ID. Visited Model trees remain mounted
+while hidden so disclosure and scroll survive tab changes. Origins are transport
+locations, not persistence namespaces for new state.
 
 ## Prompt references, captures and extensions
 
@@ -324,8 +327,8 @@ with the selected measured value. There is no separate Surfaces tab or source
 feature view. View contains the per-file display controls and photographic settings.
 
 The upper toolbar separates interaction modes from view settings and actions.
-**Interaction tools** holds Select, Measure, and Draw. **View and actions** holds
-the selection filter, View controls menu (Pan, Orbit, and authored animation
+**Interaction tools** holds Select, Pan, Measure, and Draw. **View and actions** holds
+the selection filter, View controls menu (Orbit and authored animation
 playback), drawing view controls, and Capture. The View tab owns the single
 display Mode dropdown, including Render.
 These two compact horizontal groups sit beside each other and wrap as whole
@@ -368,17 +371,16 @@ GIF/video export are isolated on `amy/step-reconstruction-playback`. They are
 not shipped in the shared app. Pure numerical recipe helpers remain as
 recognition regression checks, without a runtime interpreter or export path.
 
-STEP models place **Model | Motion | View** in one top tab strip by default.
+STEP models place **Model | Motion | View** in one fixed top tab strip.
 Motion appears when position controls or animation clips exist. It shows
 Animation above Position, preserving their independent runtimes and controls.
 Preset transitions stay in Position with the DOF values, above Reset/Copy.
-Switching display mode leaves every tab, active selection and custom split intact.
-
-The v7 layout migrates saved `pose`, `animation` and `joints` IDs to `motion`,
-and `display`/`render` to `view`. Merged tabs appear once. Useful custom pane
-assignments, other tabs and split ratios survive; a pane emptied by duplicate
-consolidation collapses. The latest selected old ID remains selected through
-its replacement. Existing v5 and v6 stores are read without resetting STEP.
+Switching display mode leaves every tab and the active selection intact.
+Tab order follows the format's section descriptors and cannot be customized.
+The retired split/reorder preference is ignored in both hosts. Saved per-file
+`pose`, `animation` and `joints` selections map to `motion`, and `display`/`render`
+map to `view`; a legacy list selects its last available tab. New selections and
+viewport-driven reveals store one active section ID.
 
 Robot Motion uses the same preset, value and inline transition controls. A
 Components tab remains available when a linked mesh contains authored object
@@ -389,11 +391,11 @@ Built-in robot primitives and unnamed mesh objects contribute no component rows.
 ### Inspector tabs and dark surfaces
 
 The inspector uses the shared shadcn Tabs primitives for Model, Motion and
-View, and for Geometry/Features within Model. Both levels use the default
-styling and native keyboard navigation; switching views preserves mounted trees.
-A single section shows its content directly without a redundant tab strip. Split panes retain tab labels
-so users can move them back together. Visited trees keep disclosure and scroll
-state across tab changes.
+View, with standard small UI typography and native keyboard navigation.
+The single top row scrolls horizontally when needed; it has no drag handles,
+drop zones, split panes or divider. A single section shows its content directly
+without a redundant tab strip. Visited Model trees remain mounted while hidden,
+so disclosure and scroll survive tab changes.
 
 The shared dark UI uses neutral charcoal tokens. Inspect's fixed dark workbench
 uses a slightly lighter `#333333` canvas; light app appearance selects its light basis.

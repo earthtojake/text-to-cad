@@ -49,7 +49,11 @@ Tab body                    px-0, vertical stack of sections
 - View owns one Mode dropdown for every display mode, including Render.
   Projection, part colors, guides, clipping and explode controls stay in View;
   photographic lighting/backdrop/quality rows appear there when Render is active.
-  Display changes never replace the inspector's tabs or their selected layout.
+  Display changes never replace the inspector's tabs or active selection.
+- Inspector tabs occupy one row at the top, in the format's canonical order
+  (Model, Motion, View for STEP, omitting unsupported sections). Do not add
+  dragging, reordering, split panes or layout preferences. Active selection
+  belongs to the file; visited Model trees retain disclosure and scroll state.
 
 ## Spacing and sizing tokens
 

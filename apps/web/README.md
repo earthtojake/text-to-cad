@@ -191,7 +191,7 @@ the UI package's asset documentation for asset provenance and regeneration.
 
 ### Narrow CAD panes
 
-The shared floating controls separate **Interaction tools** (Select, Measure,
+The shared floating controls separate **Interaction tools** (Select, Pan, Measure,
 Draw) from **View and actions** (selection filters, navigation and capture). The compact horizontal groups wrap within the scene
 when the Inspector or a narrow host reduces the available width. Their actions
 and disabled states are the same at every width; Orbit retains Exit and playback.
@@ -211,8 +211,11 @@ View owns a single Mode dropdown for shaded, edge, wire and Render presentation.
 All modes share the camera, projection and general display controls. Selecting
 Render adds photographic lighting, backdrop and Preview/Final settings in View;
 it does not refit the camera, replace tabs or change app appearance. Inspector
-selection, custom tab order and splits persist across mode changes. Saved
-Kinematics/Animation tabs migrate to Motion and Display/Studio tabs to View.
+tabs occupy one fixed row in canonical order, without dragging, reordering or
+splitting. Active selection is saved per file and preserved across mode changes.
+Old global tab layouts are ignored; a legacy split restores its last available
+selection. Kinematics/Animation IDs map to Motion and Display/Studio IDs to View.
+Visited Model trees retain disclosure and scroll when another tab is active.
 
 Authored material information lives in the Model reference details; editing it
 requires changing the source model or annotations. The viewer has no Materials

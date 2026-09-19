@@ -97,20 +97,32 @@ test('web CAD preferences ignore legacy custom themes and retired tutorial state
   }
 });
 
-test('two browser preference views merge changed layout kinds and do not rewrite stale motion', () => {
+test('web preferences ignore retired tab arrangements without rewriting them', () => {
+  const previousWindow = globalThis.window;
   const previousStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
   const local = storage();
+  const listeners = new Map();
+  globalThis.window = { addEventListener: (type, listener) => listeners.set(type, listener), removeEventListener: type => listeners.delete(type) };
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: local });
   try {
-    const a = createWebCadPreferences();
-    const b = createWebCadPreferences();
-    const step = { split: false, top: ['tree'], bottom: [], ratio: 0.5 };
-    const robot = { split: false, top: ['motion'], bottom: [], ratio: 0.5 };
-    b.update({ fileSheetTabs: { robot }, poseTransition: { animate: false, speed: 2 } });
-    a.update({ fileSheetTabs: { step } });
-    assert.deepEqual(JSON.parse(local.getItem('cad-viewer:file-sheet-tab-layout:v7')), { robot, step });
+    const layoutKey = 'cad-viewer:file-sheet-tab-layout:v7';
+    const legacy = JSON.stringify({ step: { split: true, top: ['render'], bottom: ['tree', 'pose'], ratio: 0.2 } });
+    local.setItem(layoutKey, legacy);
+    const source = createWebCadPreferences();
+    const disconnect = source.connect();
+    const initial = source.getSnapshot();
+    assert.equal('fileSheetTabs' in initial, false);
+    listeners.get('storage')({ key: layoutKey });
+    assert.equal(source.getSnapshot(), initial);
+    source.update({ poseTransition: { animate: false, speed: 2 } });
+    assert.equal(local.getItem(layoutKey), legacy);
     assert.deepEqual(JSON.parse(local.getItem('cad-viewer:pose-transition:v1')), { animate: false, speed: 2 });
+    local.setItem('cad-viewer:pose-transition:v1', JSON.stringify({ animate: true, speed: 4 }));
+    listeners.get('storage')({ key: 'cad-viewer:pose-transition:v1' });
+    assert.deepEqual(source.getSnapshot().poseTransition, { animate: true, speed: 4 });
+    disconnect();
   } finally {
+    globalThis.window = previousWindow;
     if (previousStorage) Object.defineProperty(globalThis, 'localStorage', previousStorage); else delete globalThis.localStorage;
   }
 });

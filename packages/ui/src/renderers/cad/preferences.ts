@@ -1,9 +1,6 @@
-import type { JsonValue } from '../../file-viewer/types.js';
-import { FILE_SHEET_TAB_LAYOUT_STORAGE_KEY } from './workbench/fileSheetTabLayout.js';
 
 export interface CadPreferences {
   poseTransition?: { animate: boolean; speed: number };
-  fileSheetTabs?: { [kind: string]: JsonValue };
 }
 export interface CadPreferenceSource {
   getSnapshot(): CadPreferences;
@@ -32,6 +29,5 @@ export function createCadPreferences({ initial = {}, onChange }: {
 
 export const CAD_LEGACY_PREFERENCE_KEYS = Object.freeze({
   poseTransition: 'cad-viewer:pose-transition:v1',
-  directory: 'cad-viewer:directory-session:v1',
-  fileSheetTabs: FILE_SHEET_TAB_LAYOUT_STORAGE_KEY
+  directory: 'cad-viewer:directory-session:v1'
 });

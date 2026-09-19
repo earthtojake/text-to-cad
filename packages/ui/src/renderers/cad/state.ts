@@ -2,7 +2,6 @@ import type { CadEntry } from '@hardcore/core/client';
 import type { JsonValue } from '../../file-viewer/types.js';
 import * as state from './workbench/state.js';
 import * as sessions from './workbench/fileSessionState.js';
-import * as tabs from './workbench/fileSheetTabLayout.js';
 
 export type CadStateObject = { [key: string]: JsonValue };
 export interface CadFileSessionState {
@@ -20,9 +19,6 @@ export interface CadFileSessionOptions {
 export interface CadSessionStorage {
   getItem(key: string): string | null;
 }
-export const readFileSheetTabLayoutStore = tabs.readFileSheetTabLayoutStore as (storage: CadSessionStorage | null) => CadStateObject;
-export const writeFileSheetTabLayoutStore = tabs.writeFileSheetTabLayoutStore as (storage: { setItem(key: string, value: string): void } | null, store: CadStateObject | undefined) => void;
-export { FILE_SHEET_TAB_LAYOUT_STORAGE_KEY } from './workbench/fileSheetTabLayout.js';
 
 // These adapters publish the existing schemas without duplicating their rules.
 // Storage is always supplied by the host; importing this module reads nothing.

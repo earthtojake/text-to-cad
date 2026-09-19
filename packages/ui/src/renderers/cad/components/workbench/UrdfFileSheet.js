@@ -426,7 +426,6 @@ export default function UrdfFileSheet({
       scrollBody={false}
     >
       <FileSheetTabbedSurface
-        kind={isSdf ? "sdf" : (sourceFormat || "urdf")}
         sections={sections}
         openSectionIds={openSectionIds}
         onOpenSectionIdsChange={onOpenSectionIdsChange}

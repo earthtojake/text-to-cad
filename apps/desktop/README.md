@@ -32,11 +32,11 @@ the shared CAD, Markdown, code, image, PDF and fallback renderers. The whole
 file-tab interface is shared with web. Projects, sessions, browser/terminal/
 review tabs, agent integrations and native services remain in this app.
 Neither shared package imports app source, and desktop imports no web source.
-The host keeps seen tutorial tips, pose-transition preferences and file-sheet
-tab layouts in one window-wide preference store backed by their existing global
-storage keys.
-Active and newly opened roots share those preferences; document and panel
-state remain scoped to their root or tab.
+The host keeps pose-transition preferences in one window-wide store backed by
+the existing global storage key. Active and newly opened roots share that
+preference; document state, inspector selection and panel state remain scoped
+to their root or tab. Retired tutorial and inspector tab-layout records are
+ignored. Inspector tabs cannot be dragged, reordered or split.
 
 ## Dev
 
@@ -1079,7 +1079,7 @@ default; other saved panel choices remain unchanged.
 ### Inspect and Render
 
 CAD controls are shared with web: the top **Interaction tools** group contains
-Select, Measure and Draw; **View and actions** contains selection filters,
+Select, Pan, Measure and Draw; **View and actions** contains selection filters,
 navigation and capture. The horizontal groups wrap in a
 narrow explorer pane. Zoom buttons, a static percentage readout and Reset view
 sit above the bottom-right orientation axes; X/Y/Z labels sit outside the
@@ -1096,10 +1096,12 @@ View contains the single Mode dropdown for shaded, edge, wire and photographic
 Render presentation. All modes share the camera, projection, part colors,
 guides, clipping and explode controls. Render adds its lighting, backdrop and
 Preview/Final quality sections inside View. Switching modes never reframes the
-camera, replaces inspector tabs or resets the selected tab or split layout.
-Photographic settings persist per file. Saved Kinematics/Animation tab IDs merge
-to Motion, and Display/Studio IDs merge to View, without duplicate tabs or loss
-of unrelated custom pane arrangements.
+camera, replaces inspector tabs or resets the selected tab. Inspector tabs
+use one fixed row in canonical order; dragging, reordering and splitting are
+unavailable. Photographic settings and the active tab persist per file. Old
+global tab arrangements are ignored. Saved Kinematics/Animation IDs map to
+Motion, and Display/Studio IDs map to View; a legacy split selects its last
+available tab. Visited Model trees retain disclosure and scroll while hidden.
 
 Settings › Appearance owns the app's System, Light and Dark preference. CAD
 Theme settings are retired, and old theme records cannot override the current
