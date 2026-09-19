@@ -129,7 +129,9 @@ class DrawingPreviewEditTests(unittest.TestCase):
         self.assertEqual(parse_draft_dimensions("1,2,3,4,5;6,7,8,9,10,v;bad"), [(1.0, 2.0, 3.0, 4.0, 5.0, None), (6.0, 7.0, 8.0, 9.0, 10.0, "v")])
         self.assertEqual(parse_tolerances("front:0=±0.1;top:1=H7;junk"), [("front:0", "±0.1"), ("top:1", "H7")])
         from cadgen.viewer.drawing_svg import parse_draft_diameters
-        self.assertEqual(parse_draft_diameters("110,50,3;bad;1,2,0"), [(110.0, 50.0, 3.0)])
+        self.assertEqual(parse_draft_diameters("110,50,3;bad;1,2,0;5,6,2,120"), [(110.0, 50.0, 3.0, 45.0), (5.0, 6.0, 2.0, 120.0)])
+        from cadgen.viewer.drawing_svg import parse_draft_angles
+        self.assertEqual(parse_draft_angles("100,40,140,40,140,60,14;bad"), [(100.0, 40.0, 140.0, 40.0, 140.0, 60.0, 14.0)])
 
     def test_moving_a_view_shifts_only_that_view(self) -> None:
         from cadgen.viewer.drawing_svg import _entity_tags, preview_edits
@@ -173,10 +175,13 @@ class DrawingPreviewEditTests(unittest.TestCase):
             doc = ezdxf.readfile(path)
             before = len(doc.modelspace().query("DIMENSION"))
             preview_edits(doc, draft_dimension=(80, 40, 120, 40, 15, None), highlight="front:0",
-                          tolerance=("front:0", "±0.1"), draft_diameter=[(100, 60, 3)])
+                          tolerance=("front:0", "±0.1"), draft_diameter=[(100, 60, 3, 135)], draft_radius=[(100, 60, 18)],
+                          draft_angle=[(100, 40, 140, 40, 140, 60, 14)])
             dims = doc.modelspace().query("DIMENSION")
-            self.assertEqual(len(dims), before + 2)
+            self.assertEqual(len(dims), before + 4)
             self.assertTrue(any(d.dimtype == 3 for d in dims), "a diameter dimension was drafted")
+            self.assertTrue(any(d.dimtype == 4 for d in dims), "a radius dimension was drafted")
+            self.assertTrue(any(d.dimtype == 5 for d in dims), "an angular dimension was drafted")
             texts = [e.text for d in dims for e in doc.blocks.get(d.dxf.geometry) if e.dxftype() == "MTEXT"]
             self.assertTrue(any("±0.1" in t for t in texts), texts)
             self.assertTrue(any(d.dxf.color == 1 for d in dims))

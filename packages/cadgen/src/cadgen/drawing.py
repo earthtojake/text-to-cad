@@ -189,6 +189,12 @@ class View:
         self._dims.append(_Dim("radius", _p3(center), None, 0.0, text, None, radius=radius, angle=angle))
         return self
 
+    def angle(self, vertex, p1, p2, *, offset: float = 14.0) -> "View":
+        """The angle at ``vertex`` between the legs toward ``p1`` and ``p2`` (model
+        points); ``offset`` is the arc's distance from the vertex, in sheet mm."""
+        self._dims.append(_Dim("angle", _p3(vertex), _p3(p1), offset, None, None, radius=0.0, angle=0.0, hole={"p2": _p3(p2)}))
+        return self
+
     def note(self, text: str, at, *, offset: tuple[float, float] = (10.0, 10.0)) -> "View":
         """A note with a leader from a model point; ``offset`` places the text, in
         sheet mm, relative to the projected point."""
@@ -624,7 +630,27 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
             return to_sheet(proj.point(p3))
 
         def put(edges, layer):
+            from build123d import GeomType
+
             for edge in edges:
+                # A circular edge stays a CIRCLE or ARC: exact on the sheet, and a
+                # viewer can snap to it as a hole or a radius rather than a polyline.
+                if edge.geom_type == GeomType.CIRCLE:
+                    c = to_sheet((edge.arc_center.X, edge.arc_center.Y))
+                    r = edge.radius * sv
+                    if edge.is_closed:
+                        _tag(msp.add_circle(c, r, dxfattribs={"layer": layer}), view.name)
+                        continue
+                    a, b = edge.position_at(0), edge.position_at(1)
+                    mid = edge.position_at(0.5)
+                    ang = lambda q: math.degrees(math.atan2(q.Y - edge.arc_center.Y, q.X - edge.arc_center.X)) % 360
+                    a0, a1, am = ang(a), ang(b), ang(mid)
+                    # ezdxf arcs run counter-clockwise from start to end; pick the
+                    # order whose sweep passes through the edge's midpoint.
+                    if (am - a0) % 360 > (a1 - a0) % 360:
+                        a0, a1 = a1, a0
+                    _tag(msp.add_arc(c, r, a0, a1, dxfattribs={"layer": layer}), view.name)
+                    continue
                 poly = [to_sheet(p) for p in _edge_polyline(edge)]
                 if len(poly) == 2:
                     _tag(msp.add_line(poly[0], poly[1], dxfattribs={"layer": layer}), view.name)
@@ -726,6 +752,17 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
                                     override={"dimasz": sheet.text_height * 0.85, "dimldrblk": "_CLOSEDFILLED"}), view.name, str(index))
                 align = TextEntityAlignment.MIDDLE_LEFT if go_right else TextEntityAlignment.MIDDLE_RIGHT
                 _tag(text(value, landing[0] + sign * 2.0, landing[1], sheet.text_height, align, "DIM"), view.name, str(index))
+            elif dim.kind == "angle":
+                v = model_to_sheet(dim.p1)
+                a = model_to_sheet(dim.p2)
+                b = model_to_sheet(dim.hole["p2"])
+                ua = math.atan2(a[1] - v[1], a[0] - v[0])
+                ub = math.atan2(b[1] - v[1], b[0] - v[0])
+                mid = ua + ((ub - ua + math.pi) % (2 * math.pi) - math.pi) / 2
+                base = (v[0] + dim.offset * math.cos(mid), v[1] + dim.offset * math.sin(mid))
+                d = msp.add_angular_dim_3p(base=base, center=v, p1=a, p2=b, dimstyle=dimstyle, dxfattribs={"layer": "DIM"})
+                d.render()
+                _tag(d.dimension, view.name, str(index))
             elif dim.kind == "note":
                 p = model_to_sheet(dim.p1)
                 q = (p[0] + dim.radius, p[1] + dim.angle)

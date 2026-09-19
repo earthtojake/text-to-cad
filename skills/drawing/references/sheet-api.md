@@ -84,6 +84,8 @@ are sheet millimetres.
   `diameter()` for any hole a shop drills.
 - `view.diameter(center, radius, angle=45, text=None)` and
   `view.radius(...)`: on a circular feature at `center`, plain value only.
+- `view.angle(vertex, p1, p2, offset=14)`: the angle at `vertex` between the legs
+  toward `p1` and `p2`; `offset` is the arc's distance from the vertex.
 - `view.note(text, at, offset=(10, 10))`: a leader from a model point to text.
 
 ## Layers written

@@ -82,26 +82,6 @@ export function nearestView(views, point) {
   return [...views].sort((a, b) => distance(a) - distance(b))[0];
 }
 
-/** The staged dimension's sheet geometry, offset placed away from the nearer view edge. */
-export function draftDimensionFromPicks(view, a, b) {
-  const dx = Math.abs(b[0] - a[0]);
-  const dy = Math.abs(b[1] - a[1]);
-  const orientation = dx >= dy ? "h" : "v";
-  let offset = 12;
-  if (view) {
-    if (orientation === "h") {
-      const top = view.maxY - Math.max(a[1], b[1]);
-      const bottom = Math.min(a[1], b[1]) - view.minY;
-      offset = top <= bottom ? 12 + top : -(12 + bottom);
-    } else {
-      const right = view.maxX - Math.max(a[0], b[0]);
-      const left = Math.min(a[0], b[0]) - view.minX;
-      offset = right <= left ? 12 + right : -(12 + left);
-    }
-  }
-  return { x1: a[0], y1: a[1], x2: b[0], y2: b[1], offset: round(offset), orientation };
-}
-
 // --- snapping: the sheet's own line work is what a dimension attaches to -----------
 
 function distancePointToSegment(p, a, b) {
@@ -121,11 +101,13 @@ export function sheetSnapTargets(geometry, sheetDimensions = []) {
     .filter((line) => line.view && line.dim === undefined && !/^(SHEET|TITLE|NOTES|DIM|CENTER)$/i.test(String(line.layer || "")));
   const circles = (Array.isArray(geometry?.circles) ? geometry.circles : [])
     .filter((circle) => circle.view && circle.dim === undefined);
-  const arcs = (Array.isArray(geometry?.arcs) ? geometry.arcs : [])
-    .filter((arc) => arc.view && arc.dim === undefined && Math.abs(Number(arc.sweepAngleDeg)) >= 359);
+  const allArcs = (Array.isArray(geometry?.arcs) ? geometry.arcs : []).filter((arc) => arc.view && arc.dim === undefined);
+  const fullArcs = allArcs.filter((arc) => Math.abs(Number(arc.sweepAngleDeg)) >= 359);
+  const partialArcs = allArcs.filter((arc) => Math.abs(Number(arc.sweepAngleDeg)) < 359);
   return {
     lines,
-    circles: [...circles, ...arcs.map((arc) => ({ layer: arc.layer, view: arc.view, center: arc.center, radius: arc.radius }))],
+    circles: [...circles, ...fullArcs.map((arc) => ({ layer: arc.layer, view: arc.view, center: arc.center, radius: arc.radius }))],
+    arcs: partialArcs,
     dimensions: (Array.isArray(sheetDimensions) ? sheetDimensions : [])
       .filter((dimension) => dimension?.view && dimension.index !== undefined && Array.isArray(dimension.position))
   };
@@ -159,37 +141,156 @@ export function snapSheetPoint(targets, point, tolerance = 2) {
     const toRim = Math.abs(toCentre - circle.radius);
     consider({ kind: "circle", rank: 0, distance: Math.min(toCentre, toRim), point: circle.center, view: circle.view, circle });
   }
+  for (const arc of targets.arcs || []) {
+    // On the arc's curve, within its sweep: a radius target.
+    const dx = point[0] - arc.center[0];
+    const dy = point[1] - arc.center[1];
+    const toCentre = Math.hypot(dx, dy);
+    const angle = ((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 360;
+    const start = ((Number(arc.startAngleDeg) % 360) + 360) % 360;
+    const sweep = Number(arc.sweepAngleDeg);
+    const rel = sweep >= 0 ? (angle - start + 360) % 360 : (start - angle + 360) % 360;
+    if (rel <= Math.abs(sweep)) {
+      consider({ kind: "arc", rank: 0.5, distance: Math.abs(toCentre - arc.radius), point: [arc.center[0] + (dx / (toCentre || 1)) * arc.radius, arc.center[1] + (dy / (toCentre || 1)) * arc.radius], view: arc.view, arc });
+    }
+  }
   for (const line of targets.lines || []) {
     for (const end of [line.start, line.end]) {
       consider({ kind: "vertex", rank: 1, distance: Math.hypot(point[0] - end[0], point[1] - end[1]), point: end, view: line.view, line });
     }
+    const mid = [(line.start[0] + line.end[0]) / 2, (line.start[1] + line.end[1]) / 2];
+    consider({ kind: "midpoint", rank: 1.5, distance: Math.hypot(point[0] - mid[0], point[1] - mid[1]), point: mid, view: line.view, line });
     const along = distancePointToSegment(point, line.start, line.end);
     consider({ kind: "edge", rank: 2, distance: along.distance, point: along.point, view: line.view, line });
   }
   return best;
 }
 
+/** The staged dimension's sheet geometry. Without a placement the offset lands outside
+ *  the nearer view edge; with one (the click that places it) the dimension line goes
+ *  through that point. */
+export function draftDimensionFromPicks(view, a, b, placement = null, orientationHint = null) {
+  const dx = Math.abs(b[0] - a[0]);
+  const dy = Math.abs(b[1] - a[1]);
+  const orientation = orientationHint || (dx >= dy ? "h" : "v");
+  let offset = 12;
+  if (placement) {
+    if (orientation === "h") {
+      const top = Math.max(a[1], b[1]);
+      const bottom = Math.min(a[1], b[1]);
+      offset = placement[1] >= (top + bottom) / 2 ? Math.max(placement[1] - top, 4) : -Math.max(bottom - placement[1], 4);
+    } else {
+      const right = Math.max(a[0], b[0]);
+      const left = Math.min(a[0], b[0]);
+      offset = placement[0] >= (right + left) / 2 ? Math.max(placement[0] - right, 4) : -Math.max(left - placement[0], 4);
+    }
+  } else if (view) {
+    if (orientation === "h") {
+      const top = view.maxY - Math.max(a[1], b[1]);
+      const bottom = Math.min(a[1], b[1]) - view.minY;
+      offset = top <= bottom ? 12 + top : -(12 + bottom);
+    } else {
+      const right = view.maxX - Math.max(a[0], b[0]);
+      const left = Math.min(a[0], b[0]) - view.minX;
+      offset = right <= left ? 12 + right : -(12 + left);
+    }
+  }
+  return { x1: a[0], y1: a[1], x2: b[0], y2: b[1], offset: round(offset), orientation };
+}
+
+function angleDegFrom(centre, point) {
+  return Math.round((((Math.atan2(point[1] - centre[1], point[0] - centre[0]) * 180) / Math.PI + 360) % 360) * 10) / 10;
+}
+
+function lineDirection(line) {
+  const dx = line.end[0] - line.start[0];
+  const dy = line.end[1] - line.start[1];
+  const length = Math.hypot(dx, dy) || 1;
+  return [dx / length, dy / length];
+}
+
+function footOnLine(point, line) {
+  const d = lineDirection(line);
+  const t = (point[0] - line.start[0]) * d[0] + (point[1] - line.start[1]) * d[1];
+  return [line.start[0] + t * d[0], line.start[1] + t * d[1]];
+}
+
+/** A snap as the point it stands for in a two-pick dimension: corners and midpoints
+ *  are themselves, a circle or arc is its centre. Edges have no single point. */
+function snapPoint(snap) {
+  if (snap.kind === "circle") return snap.circle.center;
+  if (snap.kind === "arc") return snap.arc.center;
+  if (snap.kind === "vertex" || snap.kind === "midpoint") return snap.point;
+  return null;
+}
+
 /**
- * The dimension a smart pick means. One edge: its length along the axis it mostly
- * runs on. One hole: its diameter. Two corners (or a corner and an edge): the
- * distance between the two points. Returns an edit body (without id) or null when
- * more picks are needed.
+ * What a set of smart picks means, the way SolidWorks reads them:
+ *   edge -> its length; circle -> diameter; arc -> radius;
+ *   point + point -> distance; point + edge -> perpendicular distance;
+ *   parallel edges -> distance between; edges at an angle -> the angle;
+ *   a circle or arc in a pair stands for its centre.
+ * `placement` is where the user clicked to put the dimension; without it a sensible
+ * default is chosen. Returns an edit body (without id) or null when the picks do not
+ * yet make a dimension (a lone corner).
  */
-export function smartDimensionFromSnaps(view, snaps) {
+export function smartDimensionFromSnaps(view, snaps, placement = null) {
   if (!Array.isArray(snaps) || !snaps.length) {
     return null;
   }
   const [first, second] = snaps;
   if (snaps.length === 1) {
     if (first.kind === "circle") {
-      return { kind: "dia", view: first.view, cx: first.circle.center[0], cy: first.circle.center[1], r: first.circle.radius };
+      const c = first.circle.center;
+      return { kind: "dia", view: first.view, cx: c[0], cy: c[1], r: first.circle.radius, angle: placement ? angleDegFrom(c, placement) : 45 };
+    }
+    if (first.kind === "arc") {
+      const c = first.arc.center;
+      return { kind: "rad", view: first.view, cx: c[0], cy: c[1], r: first.arc.radius, angle: placement ? angleDegFrom(c, placement) : 45 };
     }
     if (first.kind === "edge") {
-      return { kind: "dim", view: first.view, ...draftDimensionFromPicks(view, first.line.start, first.line.end) };
+      return { kind: "dim", view: first.view, ...draftDimensionFromPicks(view, first.line.start, first.line.end, placement) };
     }
     return null;
   }
-  return { kind: "dim", view: first.view, ...draftDimensionFromPicks(view, first.point, second.point) };
+  const pa = snapPoint(first);
+  const pb = snapPoint(second);
+  if (pa && pb) {
+    return { kind: "dim", view: first.view, ...draftDimensionFromPicks(view, pa, pb, placement) };
+  }
+  const point = pa || pb;
+  const edgeSnap = first.kind === "edge" ? first : second.kind === "edge" ? second : null;
+  if (point && edgeSnap) {
+    const foot = footOnLine(point, edgeSnap.line);
+    const d = lineDirection(edgeSnap.line);
+    const hint = Math.abs(d[1]) > Math.abs(d[0]) ? "h" : "v"; // a vertical edge: measure horizontally
+    return { kind: "dim", view: first.view, ...draftDimensionFromPicks(view, point, foot, placement, hint) };
+  }
+  if (first.kind === "edge" && second.kind === "edge") {
+    const da = lineDirection(first.line);
+    const db = lineDirection(second.line);
+    const cross = Math.abs(da[0] * db[1] - da[1] * db[0]);
+    if (cross < 0.02) {
+      const mid = [(first.line.start[0] + first.line.end[0]) / 2, (first.line.start[1] + first.line.end[1]) / 2];
+      const foot = footOnLine(mid, second.line);
+      const hint = Math.abs(da[1]) > Math.abs(da[0]) ? "h" : "v";
+      return { kind: "dim", view: first.view, ...draftDimensionFromPicks(view, mid, foot, placement, hint) };
+    }
+    // Two lines at an angle: the angle at their intersection, measured between the
+    // ends of each line that lie away from it.
+    const [x1, y1] = first.line.start; const [x2, y2] = first.line.end;
+    const [x3, y3] = second.line.start; const [x4, y4] = second.line.end;
+    const den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+    if (Math.abs(den) < 1e-9) return null;
+    const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den;
+    const vertex = [x1 + t * (x2 - x1), y1 + t * (y2 - y1)];
+    const far = (line) => (Math.hypot(line.start[0] - vertex[0], line.start[1] - vertex[1]) >= Math.hypot(line.end[0] - vertex[0], line.end[1] - vertex[1]) ? line.start : line.end);
+    const a = far(first.line);
+    const b = far(second.line);
+    const r = placement ? Math.max(Math.hypot(placement[0] - vertex[0], placement[1] - vertex[1]), 6) : 14;
+    return { kind: "ang", view: first.view, vx: vertex[0], vy: vertex[1], ax: a[0], ay: a[1], bx: b[0], by: b[1], r: round(r) };
+  }
+  return null;
 }
 
 /** Net move per view, in sheet mm, from the staged edits. */
@@ -218,11 +319,19 @@ export function drawingEditParams(edits, { highlight = "" } = {}) {
         .concat(edit.orientation || "").join(",");
     }).join(";");
   }
-  const diameters = (edits || []).filter((edit) => edit.kind === "dia");
-  if (diameters.length) {
-    params.dia = diameters.map((edit) => {
+  const circular = (kind) => (edits || []).filter((edit) => edit.kind === kind).map((edit) => {
+    const shift = moves.find(([view]) => view === edit.view)?.[1] || [0, 0];
+    return [edit.cx + shift[0], edit.cy + shift[1], edit.r, edit.angle ?? 45].map(fmt).join(",");
+  }).join(";");
+  const dia = circular("dia");
+  if (dia) params.dia = dia;
+  const rad = circular("rad");
+  if (rad) params.rad = rad;
+  const angles = (edits || []).filter((edit) => edit.kind === "ang");
+  if (angles.length) {
+    params.ang = angles.map((edit) => {
       const shift = moves.find(([view]) => view === edit.view)?.[1] || [0, 0];
-      return [edit.cx + shift[0], edit.cy + shift[1], edit.r].map(fmt).join(",");
+      return [edit.vx + shift[0], edit.vy + shift[1], edit.ax + shift[0], edit.ay + shift[1], edit.bx + shift[0], edit.by + shift[1], edit.r].map(fmt).join(",");
     }).join(";");
   }
   const removals = (edits || []).filter((edit) => edit.kind === "del");
@@ -265,12 +374,31 @@ export function drawingEditSnippet(edit, { views = [], dimensions = [] } = {}) {
     }
     return `${edit.view}: add a linear dimension between sheet points (${fmt(edit.x1)}, ${fmt(edit.y1)}) and (${fmt(edit.x2)}, ${fmt(edit.y2)}), offset=${fmt(edit.offset)}${orientation}.`;
   }
+  if (edit.kind === "ang") {
+    const v = sheetToModel(view, [edit.vx, edit.vy]);
+    const a = sheetToModel(view, [edit.ax, edit.ay]);
+    const b = sheetToModel(view, [edit.bx, edit.by]);
+    if (v && a && b) {
+      const tuple = (p) => `(${fmt(p[0])}, ${fmt(p[1])}, ${fmt(p[2])})`;
+      return `${edit.view}.angle(${tuple(v)}, ${tuple(a)}, ${tuple(b)}, offset=${fmt(edit.r)})  # model mm; the coordinate along the view's line of sight is 0`;
+    }
+    return `${edit.view}: add an angular dimension at sheet (${fmt(edit.vx)}, ${fmt(edit.vy)}) between the edges toward (${fmt(edit.ax)}, ${fmt(edit.ay)}) and (${fmt(edit.bx)}, ${fmt(edit.by)}).`;
+  }
   if (edit.kind === "dia") {
     const centre = sheetToModel(view, [edit.cx, edit.cy]);
     if (centre) {
-      return `${edit.view}.hole((${fmt(centre[0])}, ${fmt(centre[1])}, ${fmt(centre[2])}), ${fmt(2 * edit.r)}, thru=True)  # model mm; say depth=... instead of thru if it is blind`;
+      const angle = edit.angle != null && edit.angle !== 45 ? `, angle=${fmt(edit.angle)}` : "";
+      return `${edit.view}.hole((${fmt(centre[0])}, ${fmt(centre[1])}, ${fmt(centre[2])}), ${fmt(2 * edit.r)}, thru=True${angle})  # model mm; say depth=... instead of thru if it is blind`;
     }
     return `${edit.view}: add a diameter callout on the hole at sheet (${fmt(edit.cx)}, ${fmt(edit.cy)}), Ø${fmt(2 * edit.r)}.`;
+  }
+  if (edit.kind === "rad") {
+    const centre = sheetToModel(view, [edit.cx, edit.cy]);
+    if (centre) {
+      const angle = edit.angle != null && edit.angle !== 45 ? `, angle=${fmt(edit.angle)}` : "";
+      return `${edit.view}.radius((${fmt(centre[0])}, ${fmt(centre[1])}, ${fmt(centre[2])}), ${fmt(edit.r)}${angle})  # model mm; the coordinate along the view's line of sight is 0`;
+    }
+    return `${edit.view}: add a radius callout on the arc centred at sheet (${fmt(edit.cx)}, ${fmt(edit.cy)}), R${fmt(edit.r)}.`;
   }
   if (edit.kind === "del") {
     const dimension = dimensions.find((candidate) => candidate.view === edit.view && String(candidate.index) === String(edit.index)) || null;

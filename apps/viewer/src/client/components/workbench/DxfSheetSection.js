@@ -130,6 +130,8 @@ function editLabel(edit) {
   if (edit.kind === "move") return `Move ${edit.view} by ${edit.dx}, ${edit.dy}`;
   if (edit.kind === "dim") return `New dimension in ${edit.view}`;
   if (edit.kind === "dia") return `Ø${Math.round(edit.r * 200) / 100} callout in ${edit.view}`;
+  if (edit.kind === "rad") return `R${Math.round(edit.r * 100) / 100} callout in ${edit.view}`;
+  if (edit.kind === "ang") return `Angle in ${edit.view}`;
   if (edit.kind === "del") return `Remove ${edit.view} ${/^overall/.test(String(edit.index)) ? edit.index.replace("overall-", "overall ") : `#${Number(edit.index) + 1 || edit.index}`}`;
   return `${edit.view} #${Number(edit.index) + 1 || edit.index}: ${edit.spec}`;
 }
@@ -179,8 +181,8 @@ export function DxfSheetSettings({
   ].filter(Boolean).join(" · ");
   const editable = views.length > 0 && Boolean(onEditToolChange);
   const pickHint = editTool !== "pick" ? ""
-    : pickedPointCount ? "Now click the second corner"
-      : "Click an edge for its length, a hole for its diameter, two corners for a distance, or a dimension to change or remove it";
+    : pickedPointCount ? "Click empty sheet to place it, or pick a second edge, corner or hole for a distance or angle"
+      : "Pick an edge, hole, arc, corner or midpoint, then click where the dimension goes. Two picks give a distance or angle. Pick a dimension to change or remove it";
 
   return (
     <FileSheetSectionBody>

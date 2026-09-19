@@ -131,6 +131,11 @@ export function useViewerSheetEdit({
       const scale = mmPerPixel();
       if (snap?.kind === "vertex") {
         hoverGroup.add(ring(snap.point, 3 * scale, 5.5 * scale));
+      } else if (snap?.kind === "midpoint") {
+        hoverGroup.add(ring(snap.point, 2.5 * scale, 4.5 * scale));
+      } else if (snap?.kind === "arc") {
+        const r = snap.arc.radius;
+        hoverGroup.add(ring(snap.arc.center, Math.max(r - 1.2 * scale, 0), r + 1.8 * scale));
       } else if (snap?.kind === "dimension") {
         hoverGroup.add(ring(snap.point, 6 * scale, 8 * scale));
       } else if (snap?.kind === "edge") {
@@ -180,10 +185,10 @@ export function useViewerSheetEdit({
       if (!point) return;
       if (tool === "pick") {
         const snap = snapSheetPoint(targetsRef.current, point, 10 * mmPerPixel());
-        if (!snap) return;
         event.stopImmediatePropagation();
         event.preventDefault();
-        callbacksRef.current.onPick?.(snap);
+        // No snap: an empty click, which places a pending dimension where it landed.
+        callbacksRef.current.onPick?.(snap || { kind: "empty", point });
         return;
       }
       if (tool === "move") {
