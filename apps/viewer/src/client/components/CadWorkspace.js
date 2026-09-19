@@ -3204,16 +3204,24 @@ export default function CadWorkspace({
     return shift ? { ...view, minX: view.minX + shift[0], maxX: view.maxX + shift[0], minY: view.minY + shift[1], maxY: view.maxY + shift[1] } : view;
   }), [drawingViews, drawingViewShifts]);
   const drawingSnapTargets = useMemo(() => {
-    const targets = sheetSnapTargets(drawingGeometry?.geometry);
+    const targets = sheetSnapTargets(drawingGeometry?.geometry, drawingSheetDimensions);
     if (!drawingViewShifts.size) return targets;
     const move = (point, shift) => (shift ? [point[0] + shift[0], point[1] + shift[1]] : point);
     return {
       lines: targets.lines.map((line) => { const shift = drawingViewShifts.get(line.view); return shift ? { ...line, start: move(line.start, shift), end: move(line.end, shift) } : line; }),
-      circles: targets.circles.map((circle) => { const shift = drawingViewShifts.get(circle.view); return shift ? { ...circle, center: move(circle.center, shift) } : circle; })
+      circles: targets.circles.map((circle) => { const shift = drawingViewShifts.get(circle.view); return shift ? { ...circle, center: move(circle.center, shift) } : circle; }),
+      dimensions: targets.dimensions.map((dimension) => { const shift = drawingViewShifts.get(dimension.view); return shift ? { ...dimension, position: move(dimension.position, shift) } : dimension; })
     };
-  }, [drawingGeometry, drawingViewShifts]);
+  }, [drawingGeometry, drawingSheetDimensions, drawingViewShifts]);
   const drawingPickedSnapsRef = useRef([]);
   const handleDrawingSheetPick = useCallback((picked) => {
+    // Picking an existing dimension selects it (red on the sheet) for a tolerance or removal.
+    if (picked.kind === "dimension") {
+      setDrawingSelectedDimension((current) => (current === `${picked.view}:${picked.index}` ? "" : `${picked.view}:${picked.index}`));
+      drawingPickedSnapsRef.current = [];
+      setDrawingPickedPoints([]);
+      return;
+    }
     const shift = shiftForView(picked.view);
     const back = (point) => (shift ? [point[0] - shift[0], point[1] - shift[1]] : point);
     const snap = shift ? {
@@ -3248,6 +3256,15 @@ export default function CadWorkspace({
       ...edits.filter((edit) => !(edit.kind === "tol" && edit.view === view && String(edit.index) === index)),
       { id: createDrawingEditId(), kind: "tol", view, index, spec }
     ]);
+  }, []);
+  const handleDrawingRemoveDimension = useCallback((key) => {
+    const [view, index] = String(key).split(":");
+    if (!view || index === undefined) return;
+    setDrawingEdits((edits) => [
+      ...edits.filter((edit) => !((edit.kind === "del" || edit.kind === "tol") && edit.view === view && String(edit.index) === index)),
+      { id: createDrawingEditId(), kind: "del", view, index }
+    ]);
+    setDrawingSelectedDimension("");
   }, []);
   const handleDrawingDiscardEdit = useCallback((id) => {
     setDrawingEdits((edits) => edits.filter((edit) => edit.id !== id));
@@ -8084,6 +8101,7 @@ export default function CadWorkspace({
                     selectedDimension: drawingSelectedDimension,
                     onSelectDimension: setDrawingSelectedDimension,
                     onAddTolerance: handleDrawingAddTolerance,
+                    onRemoveDimension: handleDrawingRemoveDimension,
                     onDiscardEdit: handleDrawingDiscardEdit,
                     onDiscardEdits: handleDrawingDiscardEdits,
                     onSendEdits: handleDrawingSendEdits,

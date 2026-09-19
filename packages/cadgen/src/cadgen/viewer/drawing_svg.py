@@ -157,8 +157,18 @@ def parse_tolerances(spec: str) -> list[tuple[str, str]]:
     return out
 
 
+def parse_removals(spec: str) -> list[tuple[str, str]]:
+    """``"view:index;..."`` -> [("view", "index"), ...]."""
+    out = []
+    for part in str(spec or "").split(";"):
+        view, _, index = part.partition(":")
+        if view.strip() and index.strip():
+            out.append((view.strip().lower(), index.strip()))
+    return out
+
+
 def preview_edits(document, *, moves: dict | None = None, draft_dimension=None,
-                  highlight: str = "", tolerance=None, draft_diameter=None) -> None:
+                  highlight: str = "", tolerance=None, draft_diameter=None, removals=None) -> None:
     """Apply the viewer's PREVIEW edits to an in-memory document. Nothing is saved:
     these show what a script change would look like before the agent makes it.
 
@@ -176,10 +186,16 @@ def preview_edits(document, *, moves: dict | None = None, draft_dimension=None,
     for key, spec in (tolerance or []):
         view_name, _, index = str(key).partition(":")
         tolerances[(view_name.lower(), index)] = spec
+    removed = {(v, i) for v, i in (removals or [])}
     for entity in list(msp):
         tags = _entity_tags(entity)
         view = str(tags.get("view", "")).lower()
         if not view:
+            continue
+        # A removed dimension (or callout: its leader and text share the tag) is
+        # left out of the preview entirely.
+        if tags.get("dim") is not None and (view, str(tags.get("dim"))) in removed:
+            msp.delete_entity(entity)
             continue
         if view in moves:
             dx, dy = moves[view]
@@ -243,6 +259,7 @@ def render_drawing_svg(
     highlight: str = "",
     tolerance: tuple[str, str] | None = None,
     draft_diameter=None,
+    removals=None,
 ) -> str:
     """``lineweight_scale`` multiplies every stroke (the viewer's Fine/Normal/Bold);
     the DXF's own lineweights stay the reference at 1.0. The ``dimension_*`` options
@@ -253,9 +270,9 @@ def render_drawing_svg(
 
     document = ezdxf.readfile(str(dxf_path))
     restyle_dimensions(document, units=dimension_units, decimals=dimension_decimals, text_scale=dimension_text_scale)
-    if moves or draft_dimension or highlight or tolerance or draft_diameter:
+    if moves or draft_dimension or highlight or tolerance or draft_diameter or removals:
         preview_edits(document, moves=moves, draft_dimension=draft_dimension, highlight=highlight, tolerance=tolerance,
-                      draft_diameter=draft_diameter)
+                      draft_diameter=draft_diameter, removals=removals)
     hidden = {name.strip().upper() for name in hidden_layers if name.strip()}
     if hidden:
         for layer in document.layers:
