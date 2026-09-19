@@ -6,11 +6,10 @@ import {
   FILE_SHEET_COMPACT_BUTTON_CLASSES,
   FileSheetButtonRow,
   FileSheetSelectRow,
-  FileSheetSubsection,
   FileSheetToggleRow
 } from "./FileSheet.js";
 
-// The parts of the Kinematics tab that are the SAME for every kind of model that has
+// The Position controls that are the SAME for every kind of model that has
 // poses: which pose is on, what the person does to the values, and how the model
 // travels between poses.
 //
@@ -29,7 +28,7 @@ export const NO_PRESET_VALUE = "__none__";
 // position, so it belongs among the DOFs rather than in a section of its own with one
 // control in it.
 //
-// "Preset", not "Pose" or "Group state": the tab already says Kinematics and the section
+// "Preset", not "Pose" or "Group state": the tab already says Motion and the section
 // already says Position, so the row names what these ARE to the person using them -- a
 // named position to jump to -- in the same word for a STEP model's poses and a robot's
 // SRDF group states.
@@ -67,18 +66,18 @@ export function KinematicsPoseRow({
   );
 }
 
-// How the model TRAVELS between poses, at the FOOT of the tab: a setting about the
+// How the model TRAVELS between poses, at the foot of Position: a setting about the
 // controls above it rather than one of them.
 //
 // Speed is hidden when animation is off, not greyed. A disabled control still asks to
 // be read and still says "this applies to you"; one that cannot apply is better gone.
-export function KinematicsTransitionSubsection({ transition }) {
+export function KinematicsTransitionRows({ transition }) {
   if (!transition) {
     return null;
   }
   const animate = transition.animate !== false;
   return (
-    <FileSheetSubsection title="Transition">
+    <>
       <FileSheetToggleRow
         label="Animate"
         checked={animate}
@@ -94,7 +93,7 @@ export function KinematicsTransitionSubsection({ transition }) {
           options={POSE_TRANSITION_SPEEDS}
         />
       ) : null}
-    </FileSheetSubsection>
+    </>
   );
 }
 

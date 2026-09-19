@@ -229,7 +229,7 @@ name with `time=`.
 ### Rendering the whole clip
 
 `--video` renders the SPAN instead of a moment, into the `.mp4` or `.gif` the
-OUT names. Everything else is unchanged — same display or Render settings, camera
+OUT names. Everything else is unchanged — same unified display settings, camera
 and size profile as a still, and the same `--kinematics` base pose underneath:
 
 ```bash

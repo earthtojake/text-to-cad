@@ -28,7 +28,7 @@ import RobotComponentsSection from "./RobotComponentsSection.js";
 import {
   NO_PRESET_VALUE,
   KinematicsPoseRow,
-  KinematicsTransitionSubsection,
+  KinematicsTransitionRows,
   KinematicsValueActions
 } from "./KinematicsControls.js";
 
@@ -273,7 +273,6 @@ export default function UrdfFileSheet({
   sdf = null,
   viewerServerInfo = null,
   suppressDynamicMetadataStatus = false,
-  renderMode = false,
   settingsTabs = [],
   openSectionIds = [],
   onOpenSectionIdsChange
@@ -304,7 +303,7 @@ export default function UrdfFileSheet({
     ? activeGroupStateId
     : NO_PRESET_VALUE;
 
-  const allSections = [
+  const sections = [
     isSdf ? {
       id: "sdf",
       title: "SDF",
@@ -351,14 +350,13 @@ export default function UrdfFileSheet({
       )
     } : null,
     showJoints ? {
-      id: "joints",
+      id: FILE_SHEET_SECTION_IDS.MOTION,
       // Named for the system it drives, as the STEP sheet's is: one control, one word,
       // whichever file the person opened.
-      title: "Kinematics",
+      title: "Motion",
       content: (
             movableJoints.length ? (
-              // py-2, as the STEP Kinematics panel wraps its own: without it the first
-              // heading sat 8px under the tab strip while Transition got the full gap.
+              // Use the shared Motion body spacing around Position.
               <div className="py-2">
                 <FileSheetSubsection title="Position">
                 {/* A named state is a way of SETTING the joints, so it leads them. A
@@ -387,6 +385,7 @@ export default function UrdfFileSheet({
                     onValueChange={onJointValueChange}
                   />
                 ))}
+                {groupStatePresets.length ? <KinematicsTransitionRows transition={poseTransition} /> : null}
                 <KinematicsValueActions
                   onReset={onResetPose}
                   onCopy={onCopyJointAngles}
@@ -394,9 +393,6 @@ export default function UrdfFileSheet({
                   copyTitle={isSdf ? "Copy the current values" : "Copy the current joint angles"}
                 />
                 </FileSheetSubsection>
-                {groupStatePresets.length ? (
-                  <KinematicsTransitionSubsection transition={poseTransition} />
-                ) : null}
               </div>
             ) : (
               <FileSheetStatusText className="py-2">No movable joints.</FileSheetStatusText>
@@ -418,9 +414,6 @@ export default function UrdfFileSheet({
     } : null,
     ...settingsTabs
   ];
-  const sections = renderMode
-    ? allSections.filter((section) => section?.id === FILE_SHEET_SECTION_IDS.RENDER)
-    : allSections;
 
   return (
     <FileSheet
@@ -434,8 +427,6 @@ export default function UrdfFileSheet({
     >
       <FileSheetTabbedSurface
         kind={isSdf ? "sdf" : (sourceFormat || "urdf")}
-        layoutMode={renderMode ? "render" : "cad"}
-        layoutScope={selectedEntry?.rootRelativeFile || selectedEntry?.file || ""}
         sections={sections}
         openSectionIds={openSectionIds}
         onOpenSectionIdsChange={onOpenSectionIdsChange}

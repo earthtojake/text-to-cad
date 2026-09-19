@@ -1,7 +1,7 @@
 # Settings UI Guidelines
 
 The contract for every settings surface rendered inside a file sheet tab:
-Display, Studio, and the DXF, STEP, URDF/SDF, and mesh sheets. The tab strip, navbar, and
+View, Motion, and the DXF, STEP, URDF/SDF, and mesh sheets. The tab strip, navbar, and
 sheet frame are out of scope — this document governs the *contents* of a tab.
 
 Every pattern here has a primitive in
@@ -39,13 +39,17 @@ Tab body                    px-0, vertical stack of sections
   does something. The single exception is a control whose meaning IS "turn this
   on and do it" — Animation's `Play`, which opens the gate rather than sitting
   dead under it, because the toolbar carries the same button outside the sheet.
-- Split a tab by *what the controls act on*, not by what fits. Pose and
-  Animation are two tabs for exactly that reason: `Pose` is the enable switch,
-  a slider per kinematic DOF, and the model's named presets; `Animation` is the
-  transport (clip, play, restart, loop, time, speed). They act on independent
-  systems, so one tab carrying both would have read as one system with two
-  halves — and each is absent on its own terms, since a model may declare mates,
-  ship clips, both, or neither.
+- The standard STEP tabs are **Model | Motion | View**. Motion appears when
+  animation or position controls exist. It contains **Animation** first and
+  **Position** second; either section may be absent independently. Playback,
+  DOF values, presets and their enable states retain separate ownership.
+- Position includes preset, DOF and pose-transition rows in the same section.
+  Do not add a separate Transition subsection. Reset/Copy finish Position;
+  animation keeps its distinct Play/Pause and Restart actions.
+- View owns one Mode dropdown for every display mode, including Render.
+  Projection, part colors, guides, clipping and explode controls stay in View;
+  photographic lighting/backdrop/quality rows appear there when Render is active.
+  Display changes never replace the inspector's tabs or their selected layout.
 
 ## Spacing and sizing tokens
 
@@ -193,7 +197,7 @@ glyphs (a DXF bend's `↑`/`↓`). Two words as long as `Orthographic` and
 
 **The stacked exception.** A select is stacked full-width only when it is a
 *primary* control: the first row of its group, whose value reframes everything
-under it. These are Display › `Mode`, Joints › `Group state`, and Animation ›
+under it. These are View › `Mode`, Position › `Preset`, and Animation ›
 `Clip`, which reframes the transport
 and the time/speed rows beneath it. Pass `stacked` for those and for nothing
 else; a second stacked select in one group means one of them is not primary.
@@ -255,14 +259,11 @@ one sanctioned label-above pattern; independent settings never use it.
 - Reset is an outline button with the `RotateCcw` icon, full row width, placed
   as the last row of the section it resets. Its section names the scope, so the
   label is just "Reset".
-- **One reset per tab.** Two buttons reading "Reset" in one tab is a bug even
-  when they act on different things. Pose and Animation are separate tabs, and
-  each carries exactly one: **Reset** in Pose (DOFs back to their defaults) and
-  **Restart** in Animation (playback back to zero). They are named for what they
-  do rather than sharing a label they do not share a meaning with — which is why
-  the transport button is not a second "Reset" even though it now lives in a tab
-  of its own. Neither is conditioned on the other: a model with no clips still
-  resets its pose, and a model with no mates still restarts its clip.
+- **One reset per tab.** Motion has **Reset** in Position (DOFs back to their
+  defaults) and **Restart** in Animation (playback back to zero). These actions
+  remain independent: a model without clips can reset its position, and a model
+  without mates can restart its clip. View's render reset affects photographic
+  settings, preserving the common camera and display settings.
 
 ## States
 

@@ -68,6 +68,7 @@ import {
   normalizeCameraSpec
 } from "./camera.js";
 import {
+  resolveDisplayMaterialSettings,
   resolveSceneSettings
 } from "./sceneSettings.js";
 import {
@@ -799,9 +800,6 @@ function snapshotDisplayOverride(job = {}) {
   const display = job.display && typeof job.display === "object" && !Array.isArray(job.display)
     ? job.display
     : {};
-  if (job.render != null) {
-    return null;
-  }
   return {
     ...display,
     guides: {
@@ -825,7 +823,6 @@ export function renderJobContext(meshData, job = {}) {
   const stepDisplayEnabled = sourceKind === "step" || sourceKind === "stp";
   const sceneSettings = resolveSceneSettings({
     appearance: job.appearance || "light",
-    render: job.render ?? null,
     camera: job.camera || null,
     display: snapshotDisplayOverride(job)
   });
@@ -844,7 +841,7 @@ export function renderJobContext(meshData, job = {}) {
     camera: sceneSettings.camera,
     sceneScale,
     clip: displaySettings.clip,
-    selection: sceneSettings.render.enabled ? null : job.selection || null,
+    selection: job.selection || null,
     floor: theme?.floor || null,
     background: theme?.background || null,
     lighting: theme?.lighting || null,
@@ -860,12 +857,8 @@ export function renderJobContext(meshData, job = {}) {
   };
   const wireframeMode = displayModeIsWireframe(displayMode);
   const edgesVisible = stepDisplayEnabled && displayModeShowsEdges(displayMode);
-  const selectorRuntime = sceneSettings.render.enabled
-    ? null
-    : job.stepParameters?.selectorRuntime || job.selectorRuntime || null;
-  const displayEdgeRuntime = sceneSettings.render.enabled
-    ? null
-    : job.stepParameters?.displayEdgeRuntime || job.displayEdgeRuntime || null;
+  const selectorRuntime = job.stepParameters?.selectorRuntime || job.selectorRuntime || null;
+  const displayEdgeRuntime = job.stepParameters?.displayEdgeRuntime || job.displayEdgeRuntime || null;
   const topologyDisplayEdgesVisible = shouldRenderTopologyDisplayEdges({
     edgesVisible,
     wireframeMode,
@@ -900,7 +893,7 @@ export function renderJobContext(meshData, job = {}) {
 }
 
 export function modelOptionsForRenderJob(context, job = {}) {
-  const selection = context.sceneSettings.render.enabled ? {} : job.selection || {};
+  const selection = job.selection || {};
   const keepsAllParts = context.mode === "view";
   const filterSelection = keepsAllParts
     ? {
@@ -922,7 +915,12 @@ export function modelOptionsForRenderJob(context, job = {}) {
     theme: context.theme ?? undefined,
     // Render's finish is the studio's, not a theme's. CAD takes its material
     // settings from the resolved theme.
-    materialSettings: renderEnabled ? PHOTOGRAPHIC_STUDIO_MATERIAL_SETTINGS : undefined,
+    materialSettings: renderEnabled
+      ? resolveDisplayMaterialSettings(
+          PHOTOGRAPHIC_STUDIO_MATERIAL_SETTINGS,
+          context.displaySettings.partColor
+        )
+      : undefined,
     appearance: context.sceneSettings.appearance,
     edgeSettings: context.topologyDisplayEdgesVisible
       ? { ...context.edgeSettings, enabled: false }

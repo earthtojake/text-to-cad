@@ -74,7 +74,7 @@ test('Model tree preserves part controls and adds precise viewport references to
     })).toBeVisible({
       timeout: 60000
     });
-    await expect(page.getByRole('tab',{name:'Model',exact:true})).toHaveCount(0);
+    await expect(page.getByRole('tab',{name:'Model',exact:true})).toBeVisible();
     await expect(page.locator('[data-file-sheet-tab-panel=tree]')).toBeVisible();
     await expect(page.getByRole('tab',{name:'Surfaces',exact:true})).toHaveCount(0);
     await expect(page.getByRole('tab',{name:'Geometry',exact:true})).toHaveCount(0);

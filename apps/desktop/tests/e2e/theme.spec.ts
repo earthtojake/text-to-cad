@@ -10,6 +10,7 @@ import {
   type Page,
 } from "@playwright/test";
 import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-runtime";
+import { selectFixtureSession } from "./session-fixture";
 
 /**
  * The colour scheme, end to end: who is allowed to write it, and whether it
@@ -65,7 +66,6 @@ declare const window: {
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const repoRoot = path.resolve(appRoot, "..", "..");
-const projectName = path.basename(repoRoot);
 const STEP = "tests/fixtures/cad/import-smoke.step";
 
 /**
@@ -178,6 +178,8 @@ async function windowBackground(instance: ElectronApplication): Promise<string> 
 let app: ElectronApplication;
 let page: Page;
 let userData: string;
+let project: string;
+let fixtureSession: Awaited<ReturnType<typeof selectFixtureSession>>;
 let cadReady = false;
 
 /**
@@ -187,10 +189,12 @@ let cadReady = false;
  */
 test.beforeAll(async () => {
   userData = cadTestProfile("theme");
+  project = path.join(userData, "project");
+  fs.mkdirSync(path.dirname(path.join(project, STEP)), { recursive: true });
+  fs.copyFileSync(path.join(repoRoot, STEP), path.join(project, STEP));
+  fs.writeFileSync(path.join(project, "AGENTS.md"), "# AGENTS.md\n\nTheme fixture document.\n");
   app = await launch();
-  await page.evaluate((root) => window.hardcore.projects.addPath({ path: root }), repoRoot);
-  await expect(page.getByText(projectName).first()).toBeVisible();
-  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
+  fixtureSession = await selectFixtureSession(page, project);
   await page.getByRole("button", { name: "Toggle explorer" }).click();
   await expect(page.getByTestId("explorer")).toBeVisible();
 });
@@ -215,7 +219,7 @@ async function launch(): Promise<ElectronApplication> {
   const { CAD_DESKTOP_PYTHON: _unset, ...inherited } = process.env;
   const started = await electron.launch({
     args: [path.join(appRoot, "out", "main", "index.js"), `--user-data-dir=${userData}`],
-    env: { ...inherited, ...cadRegistryEnvironment(userData), NODE_ENV: "test", CADGEN_DAEMON: "0", CADGEN_CACHE_DIR: path.join(userData, "cad-cache"), CADGEN_DAEMON_STATE_DIR: path.join(userData, "cad-daemon") },
+    env: { ...inherited, ...cadRegistryEnvironment(userData), NODE_ENV: "test", HARDCORE_FAKE_AGENT: path.join(appRoot, "tests/fake-agent/index.mjs"), CADGEN_DAEMON: "0", CADGEN_CACHE_DIR: path.join(userData, "cad-cache"), CADGEN_DAEMON_STATE_DIR: path.join(userData, "cad-daemon") },
   });
   page = await started.firstWindow();
   await page.addInitScript(SAMPLER);
@@ -242,7 +246,7 @@ test("comes up dark on an OS in dark, with no light frame and nothing set", asyn
     .toBe("system");
 });
 
-test("stays dark through Inspect, Render and Studio edits", async () => {
+test("stays dark through display mode and render settings edits", async () => {
   test.setTimeout(300_000);
   const status = await page.evaluate(() => window.hardcore.runtime.status());
   cadReady = cadRuntimeReady(status);
@@ -259,7 +263,10 @@ test("stays dark through Inspect, Render and Studio edits", async () => {
   await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
   await expect(page.locator("[data-file-panel='cad-theme'], [data-file-sheet='Theme']")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Viewing mode: Inspect. Switch to Render", exact: true }).click();
+  await page.getByRole("tab", { name: "View", exact: true }).click();
+  const displayMode = page.getByRole("tabpanel", { name: "View", exact: true }).getByRole("combobox", { name: "Mode" });
+  await displayMode.click();
+  await page.getByRole("option", { name: "Render", exact: true }).click();
   const studio = page.locator("[data-cad-render-settings-section]");
   await expect(studio).toBeVisible();
   await expectNeverMoved(page, "dark", "entering Render");
@@ -285,7 +292,9 @@ test("stays dark through Inspect, Render and Studio edits", async () => {
   expect(await page.evaluate(() => window.localStorage.getItem("cad-viewer:theme"))).toBeNull();
   await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Viewing mode: Render. Switch to Inspect", exact: true }).click();
+  await displayMode.click();
+  await page.getByRole("option", { name: "Shaded with edges", exact: true }).click();
+  await page.getByRole("tab", { name: "Model", exact: true }).click();
   await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible();
   await expectNeverMoved(page, "dark", "returning to Inspect");
   expect(await surfaceWroteTheDocument(page)).toEqual({ theme: null, preference: null });
@@ -334,7 +343,7 @@ test("stays dark across tabs, routes, a project and a reload", async () => {
   // first frame of the new document.
   await page.reload();
   await page.waitForLoadState("domcontentloaded");
-  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
+  await restoreFixtureSession();
   await expectNeverMoved(page, "dark", "a reload");
   expect((await page.evaluate(() => window.hardcore.settings.get())).theme).toBe("system");
 });
@@ -380,7 +389,7 @@ test("paints the stored theme on the first frame of a restart", async () => {
   await app.close();
   app = await launch();
   expect(await windowBackground(app), "the empty frame is the light ground").toBe("#ffffff");
-  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
+  await restoreFixtureSession();
   await expectNeverMoved(page, "light", "a restart on a stored Light");
 
   // And back to System, which is what the app ships with.
@@ -396,7 +405,7 @@ test("paints the stored theme on the first frame of a restart", async () => {
   expect(await windowBackground(app)).toBe(
     (await app.evaluate(({ nativeTheme }) => nativeTheme.shouldUseDarkColors)) ? "#292929" : "#ffffff",
   );
-  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
+  await restoreFixtureSession();
   await expectNeverMoved(page, null, "a restart on System");
   expect((await page.evaluate(() => window.hardcore.settings.get())).theme).toBe("system");
 });
@@ -404,4 +413,13 @@ test("paints the stored theme on the first frame of a restart", async () => {
 async function newTab(label: "File" | "Review" | "Browser" | "Terminal") {
   await page.getByRole("button", { name: "New tab", exact: true }).click();
   await page.getByRole("menuitem", { name: label }).click();
+}
+
+/** Reloads and restarts begin on New session, while the existing strip stays owned by its session. */
+async function restoreFixtureSession() {
+  if (!(await page.getByTestId("sidebar").isVisible())) {
+    await page.getByRole("button", { name: "Toggle sidebar" }).click();
+  }
+  await page.getByTestId("sidebar").getByRole("button", { name: fixtureSession.title, exact: true }).click();
+  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
 }

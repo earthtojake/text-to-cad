@@ -1,14 +1,12 @@
 import { VIEWER_PICK_MODE } from "@hardcore/core/lib/viewer/constants.js";
 
 export function viewerSelectorRuntimeForRenderPane({
-  renderMode = false,
   hasTopology = false,
   retainingPreviousStepMesh = false,
   selectorRuntime = null
 } = {}) {
-  // Animation evaluates occurrence labels and mesh data. Inspection selectors
-  // would only allocate invisible picking geometry in the photographic scene.
-  return !renderMode && hasTopology && !retainingPreviousStepMesh ? selectorRuntime : null;
+  // Display style never changes the expanded topology frontier.
+  return hasTopology && !retainingPreviousStepMesh ? selectorRuntime : null;
 }
 
 // One shared empty list for every part-state prop this module hands the scene.
@@ -19,19 +17,15 @@ export function viewerSelectorRuntimeForRenderPane({
 // itself and never reports settled quality.
 const EMPTY_PART_IDS = Object.freeze([]);
 
-// The part selection the scene may highlight. Render is a photographic view:
-// the Inspect selection effect tints surfaces and draws occlusion ghosts.
-// Render shows authored appearance without those inspection overlays.
+// Part selection and visibility are independent of lighting/display style.
 export function viewerSelectedPartIdsForRenderPane({
-  renderMode = false,
   hasParts = false,
   selectedPartIds = []
 } = {}) {
-  return !renderMode && hasParts && Array.isArray(selectedPartIds) ? selectedPartIds : EMPTY_PART_IDS;
+  return hasParts && Array.isArray(selectedPartIds) ? selectedPartIds : EMPTY_PART_IDS;
 }
 
-// The parts the scene hides. Inspect owns part visibility; Render and formats
-// without parts hide nothing, and say so with the shared empty list.
+// Formats without parts use the shared empty list.
 export function viewerHiddenPartIdsForRenderPane({
   inspectionEnabled = false,
   hasParts = false,

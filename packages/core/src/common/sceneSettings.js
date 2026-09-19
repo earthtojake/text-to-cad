@@ -6,8 +6,6 @@ import {
   CAD_DISPLAY_MODE,
   CAD_PART_COLOR_MODE,
   DEFAULT_DISPLAY_SETTINGS,
-  DISABLED_DISPLAY_EDGE_SETTINGS,
-  DISABLED_DISPLAY_GUIDE_SETTINGS,
   normalizePartColorSettings,
   normalizeDisplaySettings,
   validateDisplaySettings
@@ -97,8 +95,7 @@ export const RENDER_PAYLOAD_KEYS = Object.freeze([
   "quality",
   "exposure",
   "lighting",
-  "backdrop",
-  "camera"
+  "backdrop"
 ]);
 
 export const RENDER_LIGHTING_KEYS = Object.freeze([
@@ -146,19 +143,6 @@ const HEX_COLOR_PATTERN = /^#(?:[0-9a-fA-F]{3}){1,2}$/;
 const DEFAULT_NORMAL_CAMERA = Object.freeze({
   preset: "iso",
   projection: CAMERA_PROJECTION.ORTHOGRAPHIC
-});
-
-const DEFAULT_RENDER_CAMERA = Object.freeze({
-  preset: "iso",
-  projection: CAMERA_PROJECTION.PERSPECTIVE,
-  focalLength: 50
-});
-
-const RENDER_DISPLAY_SETTINGS = Object.freeze({
-  ...DEFAULT_DISPLAY_SETTINGS,
-  mode: CAD_DISPLAY_MODE.SHADED,
-  edges: DISABLED_DISPLAY_EDGE_SETTINGS,
-  guides: DISABLED_DISPLAY_GUIDE_SETTINGS
 });
 
 function isPlainObject(value) {
@@ -293,13 +277,6 @@ export function normalizeRenderPayload(render) {
     validateRenderBackdrop(render.backdrop);
     result.backdrop = cloneValue(render.backdrop);
   }
-  if (Object.prototype.hasOwnProperty.call(render, "camera")) {
-    normalizeCameraSpec(render.camera, {
-      strict: true,
-      defaultProjection: CAMERA_PROJECTION.PERSPECTIVE
-    });
-    result.camera = cloneValue(render.camera);
-  }
   return result;
 }
 
@@ -325,8 +302,7 @@ function resolveRenderConfiguration(render = {}, appearance = SCENE_APPEARANCE.L
       transparent: payload.backdrop?.transparent ?? DEFAULT_RENDER_BACKDROP.transparent,
       ground: payload.backdrop?.ground ?? DEFAULT_RENDER_BACKDROP.ground,
       groundPlacement: payload.backdrop?.groundPlacement ?? DEFAULT_RENDER_BACKDROP.groundPlacement
-    },
-    camera: resolveCamera(DEFAULT_RENDER_CAMERA, payload.camera)
+    }
   };
 }
 
@@ -457,23 +433,24 @@ function applyPartColor(settings, partColor) {
 /**
  * Resolve shared viewer/snapshot scene policy without retaining app state.
  *
- * The two modes are separate scenes, not two dressings of one. Inspect owns
- * `theme` (the CAD scene settings) plus the top-level camera, display and
- * quality fields. Render owns `render.configuration`, the recipe of the
- * controls it exposes; it has no theme, so nothing can reach the CAD lighting
- * rig, stage floor or background gradients through it.
+ * Camera, display and model state are common. Inspect supplies `theme`, the CAD
+ * workbench lighting recipe. Display mode Render instead supplies
+ * `render.configuration`, the photographic lighting recipe; it has no theme,
+ * so nothing can reach the CAD rig, floor or background gradients through it.
  */
 export function resolveSceneSettings({
   appearance = DEFAULT_SCENE_APPEARANCE,
   prefersDark = false,
-  render = null,
   quality = null,
   camera = null,
   display = null
 } = {}) {
   const baseAppearance = normalizeSceneAppearance(appearance, { prefersDark });
-  if (render == null) {
-    const resolvedDisplay = resolveDisplay(DEFAULT_DISPLAY_SETTINGS, display);
+  const resolvedDisplay = resolveDisplay(DEFAULT_DISPLAY_SETTINGS, display);
+  const unifiedRender = resolvedDisplay.mode === CAD_DISPLAY_MODE.RENDER
+    ? (resolvedDisplay.render || {})
+    : null;
+  if (unifiedRender == null) {
     const theme = applyPartColor(cadSceneSettings(baseAppearance), resolvedDisplay.partColor);
     return {
       appearance: baseAppearance,
@@ -488,18 +465,19 @@ export function resolveSceneSettings({
     };
   }
 
-  const payload = normalizeRenderPayload(render);
-  const configuration = resolveRenderConfiguration(payload, baseAppearance);
-  // Render is an isolated photographic scene. CAD inspection camera, quality,
-  // clipping, exploded view, guides, edges, and part-colour state do not leak
-  // across the mode boundary.
+  const payload = normalizeRenderPayload(unifiedRender);
+  const cameraSettings = resolveCamera(DEFAULT_NORMAL_CAMERA, camera);
+  const configuration = {
+    ...resolveRenderConfiguration(payload, baseAppearance),
+    camera: cameraSettings
+  };
   return {
     appearance: baseAppearance,
     render: { enabled: true, configuration, payload },
     theme: null,
     materialOverrides: null,
     quality: resolveRenderQuality(configuration.quality),
-    camera: configuration.camera,
-    display: resolveDisplay(RENDER_DISPLAY_SETTINGS)
+    camera: cameraSettings,
+    display: resolvedDisplay
   };
 }

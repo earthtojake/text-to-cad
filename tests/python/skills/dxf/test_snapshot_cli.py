@@ -125,8 +125,8 @@ class DxfSnapshotCliTests(unittest.TestCase):
         self.assertIn("usage: cadgen dxf snapshot", result.stdout)
         self.assertIn("[TARGET] [OUT]", result.stdout)
         self.assertIn(".dxf", result.stdout)
-        for present in ("--display", "--render"):
-            self.assertIn(present, result.stdout)
+        self.assertIn("--display", result.stdout)
+        self.assertNotIn("--render", result.stdout)
         for absent in ("--kinematics", "--focus", "--input", "--output"):
             self.assertNotIn(absent, result.stdout, f"{absent} is not a drawing's business")
 

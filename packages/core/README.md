@@ -71,10 +71,13 @@ in [the drawing contract](../ui/docs/drawing.md); the mechanism is
   reports a typed miss before tessellation starts rather than turning a cheap
   decoded-mesh request into unbudgeted surface tessellation. Mechanism:
   [docs/resource-ownership.md](docs/resource-ownership.md) §5.
-- **One scene or the other**: `common/sceneSettings.js` is the public
-  scene-policy boundary shared by the Viewer and the snapshot runtime, and
-  `resolveSceneSettings()` returns EITHER an Inspect theme or a Render recipe,
-  never a blend of the two. The closed Render envelope and the rig it drives:
+- **One display state, two lighting recipes**: `common/sceneSettings.js` is the
+  public scene-policy boundary shared by the Viewer and snapshot runtime.
+  `display.mode: "render"` preserves the common camera, projection, clipping,
+  explode, guides, part colours, visibility and selection state while selecting
+  the photographic studio recipe. Other display modes select the Inspect
+  workbench recipe. Studio-only controls live under `display.render`; camera is
+  always top-level. The unified display contract and the rig it drives:
   [docs/render-pipeline.md](docs/render-pipeline.md).
 - **Kinematics is data, choreography is JS, independently**: the FK
   evaluator (`kinematicsRuntime.js`) folds sidecar mate data into
@@ -162,7 +165,7 @@ Where the mechanism is written:
 
 | Document | Covers |
 |---|---|
-| [docs/render-pipeline.md](docs/render-pipeline.md) | The staged pipeline (`loadSource` → `buildModel` → `renderModel` → `captureModel`), each module's options, `sceneSettings`' two scenes and the closed Render envelope, the photographic rig, display modes, CAD edges and per-component geometry sharing |
+| [docs/render-pipeline.md](docs/render-pipeline.md) | The staged pipeline (`loadSource` → `buildModel` → `renderModel` → `captureModel`), the unified display state, the two lighting recipes, the photographic rig, display modes, CAD edges and per-component geometry sharing |
 | [docs/resource-ownership.md](docs/resource-ownership.md) | Ownership and disposal, the selector/BVH demand boundary, recomposition and instancing reuse, the tessellation worker pool, mesh-cache admission |
 | [docs/tube-deformation.md](docs/tube-deformation.md) | Deforming a swept body's original STEP tessellation through analytic centerlines |
 

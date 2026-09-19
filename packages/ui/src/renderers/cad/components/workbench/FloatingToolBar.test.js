@@ -27,8 +27,7 @@ test('the resolved document capability can disable Measure for an animated mesh'
 test('interaction modes and view actions occupy two separate horizontal groups', () => {
   const outer = render(FloatingToolBar, {
     selectedEntry: { file: 'part.step' }, renderFormat: 'step', selectedMeshData: {},
-    selectionFilter: 'all', onSelectionFilterChange() {}, onRenderModeChange() {},
-    displayPanel: { type: 'div', props: {} }, handleSelectTabToolMode() {},
+    selectionFilter: 'all', onSelectionFilterChange() {}, handleSelectTabToolMode() {},
     handleScreenshotCopy() {},
   });
   const toolbar = render(outer.tree.type, outer.tree.props);
@@ -42,7 +41,24 @@ test('interaction modes and view actions occupy two separate horizontal groups',
     ['Select', 'Measure', 'Draw']
   );
   assert.equal(elements(actions).some(node => node.props.label === 'View controls'), true);
-  assert.equal(elements(actions).some(node => String(node.props.label || '').startsWith('Viewing mode:')), true);
+  assert.equal(elements(actions).some(node => node.props.label === 'Capture'), true);
+  assert.equal(elements(actions).some(node => node.props.label === 'Display'), false);
+  assert.equal(elements(actions).some(node => String(node.props.label || '').startsWith('Viewing mode:')), false);
   assert.equal(elements(toolbar.tree).some(node => node.props['aria-label'] === 'Zoom controls'), false);
+  toolbar.unmount(); outer.unmount();
+});
+
+test('Render keeps interaction tools and ordinary view actions available', () => {
+  const outer = render(FloatingToolBar, {
+    selectedEntry: { file: 'part.step' }, renderFormat: 'step', selectedMeshData: {},
+    renderMode: true, selectionFilter: 'all', onSelectionFilterChange() {},
+    handleSelectTabToolMode() {}, handleScreenshotCopy() {},
+  });
+  const toolbar = render(outer.tree.type, outer.tree.props);
+  const labels = elements(toolbar.tree).map(node => node.props.label).filter(Boolean);
+  for (const label of ['Select', 'Measure', 'Draw', 'View controls', 'Capture']) {
+    assert.equal(labels.includes(label), true, label);
+  }
+  assert.equal(elements(toolbar.tree).some(node => node.type?.name === 'SelectionFilterMenu'), true);
   toolbar.unmount(); outer.unmount();
 });

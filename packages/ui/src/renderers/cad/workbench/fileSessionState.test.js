@@ -392,43 +392,43 @@ test("display and Render setup survive ordinary geometry revisions", () => {
   assert.equal(restored.slices.render.payload.lighting.size, 1.4);
 });
 
-test("A to B to A restores distinct CAD and Render cameras", () => {
+test("A to B to A restores per-file common cameras and migrates a legacy Render camera", () => {
   const storage = createMemoryStorage();
   const entryA = stepEntry("parts/camera-a.step", "mesh-a", "module-a");
   const entryB = stepEntry("parts/camera-b.step", "mesh-b", "module-b");
   const cadA = { position: [10, 20, 30], target: [1, 2, 3], up: [0, 0, 1], projection: "orthographic", orthographicHalfHeight: 18 };
   const renderA = { position: [40, 50, 60], target: [4, 5, 6], up: [0, 0, 1], projection: "perspective", orthographicHalfHeight: 21 };
   const cadB = { position: [-10, -20, 15], target: [-1, -2, 0], up: [0, 0, 1], projection: "orthographic", orthographicHalfHeight: 35 };
-  const renderB = { position: [-40, -50, 25], target: [-4, -5, 0], up: [0, 0, 1], projection: "perspective", orthographicHalfHeight: 40 };
-
-  for (const [entry, cadCamera, renderCamera] of [
-    [entryA, cadA, renderA],
-    [entryB, cadB, renderB]
-  ]) {
-    writeFileSessionState("models", entry.file, createFileSessionSnapshot({
-      entry,
-      slices: {
-        render: {
-          enabled: true,
-          cadCamera,
-          cadProjection: cadCamera.projection,
-          payload: {
-            quality: "final",
-            camera: renderCamera
-          }
-        }
-      }
-    }), { storage });
-  }
+  // A exercises migration from the retired mode-specific camera. The live
+  // Render camera wins and is persisted as the file's one common camera.
+  writeFileSessionState("models", entryA.file, createFileSessionSnapshot({
+    entry: entryA,
+    slices: { render: {
+      enabled: true,
+      cadCamera: cadA,
+      cadProjection: cadA.projection,
+      payload: { quality: "final", camera: renderA }
+    } }
+  }), { storage });
+  // B is already in the canonical shape.
+  writeFileSessionState("models", entryB.file, createFileSessionSnapshot({
+    entry: entryB,
+    slices: { render: {
+      enabled: true,
+      cadCamera: cadB,
+      cadProjection: cadB.projection,
+      payload: { quality: "final" }
+    } }
+  }), { storage });
 
   const restoredA = readFileSessionState("models", entryA.file, entryA, { storage }).slices.render;
   const restoredB = readFileSessionState("models", entryB.file, entryB, { storage }).slices.render;
   const restoredAAgain = readFileSessionState("models", entryA.file, entryA, { storage }).slices.render;
 
-  assert.deepEqual(restoredA.cadCamera, cadA);
-  assert.deepEqual(restoredA.payload.camera, renderA);
+  assert.deepEqual(restoredA.cadCamera, renderA);
+  assert.equal(Object.hasOwn(restoredA.payload, "camera"), false);
   assert.deepEqual(restoredB.cadCamera, cadB);
-  assert.deepEqual(restoredB.payload.camera, renderB);
+  assert.equal(Object.hasOwn(restoredB.payload, "camera"), false);
   assert.deepEqual(restoredAAgain, restoredA);
 });
 

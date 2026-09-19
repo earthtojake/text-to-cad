@@ -95,7 +95,7 @@ Hosts preserve these existing preference keys and precedence when migrating:
 | --- | --- |
 | Directory layout | `cad-viewer:directory-session:v1` (legacy theme fields ignored) |
 | Pose transition preference | `cad-viewer:pose-transition:v1` |
-| Sheet tab order and split arrangement | `cad-viewer:file-sheet-tab-layout:v6` |
+| Sheet tab order and split arrangement | `cad-viewer:file-sheet-tab-layout:v7` |
 | Per-file CAD session | `cad-viewer:file-session:v1:<namespace>:<file>` |
 
 `@hardcore/ui/renderers/cad/state` exports the existing tab/file
@@ -321,12 +321,13 @@ follow when available. Extent and
 radius buttons preview the selected STEP geometry using the existing temporary
 measurement overlay. Add to prompt uses canonical STEP references, optionally
 with the selected measured value. There is no separate Surfaces tab or source
-feature view. Display controls and per-file state retain their toolbar popover.
+feature view. View contains the per-file display controls and photographic settings.
 
 The upper toolbar separates interaction modes from view settings and actions.
 **Interaction tools** holds Select, Measure, and Draw. **View and actions** holds
 the selection filter, View controls menu (Pan, Orbit, and authored animation
-playback), Display, drawing view controls, Inspect/Render mode, and Capture.
+playback), drawing view controls, and Capture. The View tab owns the single
+display Mode dropdown, including Render.
 These two compact horizontal groups sit beside each other and wrap as whole
 groups at narrow widths. If even one group cannot fit the available scene width,
 its buttons wrap inside the same semantic pill instead of clipping past the
@@ -367,22 +368,28 @@ GIF/video export are isolated on `amy/step-reconstruction-playback`. They are
 not shipped in the shared app. Pure numerical recipe helpers remain as
 recognition regression checks, without a runtime interpreter or export path.
 
-STEP models place Model, Kinematics and Animation in one top tab strip by
-default. Motion tabs appear only when their corresponding controls exist.
-Switching tabs gives the selected controls the full panel height; playback
-remains accessible from the viewer toolbar. The v6 layout resets saved STEP
-arrangements to this default and preserves other file kinds’ arrangements.
+STEP models place **Model | Motion | View** in one top tab strip by default.
+Motion appears when position controls or animation clips exist. It shows
+Animation above Position, preserving their independent runtimes and controls.
+Preset transitions stay in Position with the DOF values, above Reset/Copy.
+Switching display mode leaves every tab, active selection and custom split intact.
 
-Robot Kinematics uses the same preset, value and transition controls. Inspect
-adds Components when a linked mesh contains authored object names, grouping
-those objects under their links and connecting tree selection to the viewport.
+The v7 layout migrates saved `pose`, `animation` and `joints` IDs to `motion`,
+and `display`/`render` to `view`. Merged tabs appear once. Useful custom pane
+assignments, other tabs and split ratios survive; a pane emptied by duplicate
+consolidation collapses. The latest selected old ID remains selected through
+its replacement. Existing v5 and v6 stores are read without resetting STEP.
+
+Robot Motion uses the same preset, value and inline transition controls. A
+Components tab remains available when a linked mesh contains authored object
+names, grouping objects under their links and connecting selection to the viewport.
 Built-in robot primitives and unnamed mesh objects contribute no component rows.
 
 
 ### Inspector tabs and dark surfaces
 
-The inspector uses the shared shadcn Tabs primitives for Model, Kinematics and
-Animation, and for Geometry/Features within Model. Both levels use the default
+The inspector uses the shared shadcn Tabs primitives for Model, Motion and
+View, and for Geometry/Features within Model. Both levels use the default
 styling and native keyboard navigation; switching views preserves mounted trees.
 A single section shows its content directly without a redundant tab strip. Split panes retain tab labels
 so users can move them back together. Visited trees keep disclosure and scroll
@@ -401,11 +408,11 @@ hash must match the saved artifact before those annotations apply. Active build
 previews carry immutable geometry revisions and never initiate a source build.
 A complete previous revision stays visible until its replacement is ready.
 
-The floating toolbar switches Inspect and Render. Inspect uses its fixed scene
-basis with per-file Display controls, while Render has its own camera, studio
-and Preview/Final quality.
-Entering a mode fits that mode's camera. Studio loads lazily; Render's tab
-arrangement is temporary and never overwrites the host's Inspect arrangement.
+View's Mode dropdown selects shaded, edge, wire and photographic Render
+presentation. They share the camera, projection, display controls and inspector
+layout; changing display mode never refits the camera or replaces the tab strip.
+Render-only lighting, backdrop and Preview/Final controls load lazily inside
+View. Their settings persist per file without changing the app's appearance.
 Authored materials are read-only in both modes and described in the Model
 tree's reference section; the viewer stores no material overrides or undo.
 

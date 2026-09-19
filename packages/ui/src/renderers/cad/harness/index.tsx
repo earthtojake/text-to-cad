@@ -5,7 +5,7 @@ import type { FileSource, FileViewerState } from '@hardcore/ui/file-viewer';
 import { createCadClient } from '@hardcore/core/client';
 import { createCadPreferences, createCadRenderer } from '@hardcore/ui/renderers/cad';
 import type { ViewerHost } from '@hardcore/ui/host';
-import type { CadCommands } from '@hardcore/ui/renderers/cad';
+import type { CadLiveController, CadCommands } from '@hardcore/ui/renderers/cad';
 
 const captures: { file: string; size: number; type: string; references: unknown }[] = [];
 const preferences = createCadPreferences();
@@ -37,8 +37,10 @@ function workspace(id: string) {
       return { status: 'added', partIds: context.parts.map(part => part.id) };
     } }
   };
-  const renderers = [createCadRenderer({ client, preferences, commands })];
-  return { client, source, host, renderers, capture };
+  let controller: CadLiveController | null = null;
+  const live = { bind(next: CadLiveController) { controller = next; return () => { controller = null; }; } };
+  const renderers = [createCadRenderer({ client, preferences, commands, live })];
+  return { client, source, host, renderers, capture, get controller() { return controller; } };
 }
 const a = workspace('one'), b = workspace('two');
 // Directory navigation hydrates before a renderer mounts. Large workspaces
@@ -49,7 +51,7 @@ function App() {
   const [otherState, setOtherState] = useState<FileViewerState>({ panel: '', panelWidth: 300 });
   const [second, setSecond] = useState(false);
   const [mounted, setMounted] = useState(true);
-  Object.assign(window, { cadHarness: { state, otherState, preferences, captures, capture: a.capture, second: setSecond, mounted: setMounted } });
+  Object.assign(window, { cadHarness: { a, b, state, otherState, preferences, captures, capture: a.capture, second: setSecond, mounted: setMounted } });
   return <div style={{ display: 'flex', width: '1200px', height: '720px' }}>
     <section data-testid="one" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       {mounted && <FileViewer file="part.stl" host={a.host} renderers={a.renderers} state={state} onStateChange={setState} />}

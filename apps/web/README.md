@@ -174,7 +174,7 @@ Linux/Windows. Use the same graphics backend for baseline/refactor image
 comparisons.
 
 From the repository root, `scripts/test/test-viewer-browser.sh --ci` exercises
-the bundled client's format, picking, robot Components/Kinematics and camera
+the bundled client's format, picking, robot Components/Motion and camera
 contracts with fresh temporary fixtures and a private server/cache. Omit `--ci`
 to include full cold/warm/disabled-LOD picking, scene placement and Render quality
 checks. `--out /tmp/viewer-review` retains screenshots and bounded failure
@@ -192,8 +192,7 @@ the UI package's asset documentation for asset provenance and regeneration.
 ### Narrow CAD panes
 
 The shared floating controls separate **Interaction tools** (Select, Measure,
-Draw) from **View and actions** (selection filters, navigation/display settings,
-viewing mode and capture). The compact horizontal groups wrap within the scene
+Draw) from **View and actions** (selection filters, navigation and capture). The compact horizontal groups wrap within the scene
 when the Inspector or a narrow host reduces the available width. Their actions
 and disabled states are the same at every width; Orbit retains Exit and playback.
 Zoom out, a read-only percentage, Zoom in and Reset view sit at the bottom-right
@@ -202,16 +201,22 @@ input. X/Y/Z labels remain visible outside the axis endpoints as the view rotate
 
 ## Current viewer behavior
 
-The floating toolbar switches Inspect and Render. Each mode has an opinionated
-base that follows the app's light/dark appearance. Inspect includes geometry-based
-Features, prompt selections, contextual measurements and Display; it has no CAD
-Theme settings editor and never restores legacy custom scene themes.
-Render owns an independent camera, photographic studio, Preview/Final quality
-and read-only authored materials. Material information lives in the Model
-tree's reference section; changing it requires editing the source model or
-its annotations. Inspect also displays authored material finish and opacity.
-Robot files use unified Kinematics. In Inspect, linked meshes with authored object names also expose a Components tree grouped by link;
-primitive-only robots have no object inventory.
+The STEP inspector uses **Model | Motion | View**. Motion appears when supported,
+with Animation above Position and pose-transition preferences inside Position.
+The two systems keep their independent playback, preset and value state. Robot
+position controls also live in Motion; authored mesh components retain their
+Components tab, and DXF/mesh files retain their format-specific controls.
+
+View owns a single Mode dropdown for shaded, edge, wire and Render presentation.
+All modes share the camera, projection and general display controls. Selecting
+Render adds photographic lighting, backdrop and Preview/Final settings in View;
+it does not refit the camera, replace tabs or change app appearance. Inspector
+selection, custom tab order and splits persist across mode changes. Saved
+Kinematics/Animation tabs migrate to Motion and Display/Studio tabs to View.
+
+Authored material information lives in the Model reference details; editing it
+requires changing the source model or annotations. The viewer has no Materials
+or Theme editor and does not restore legacy material overrides or custom themes.
 These controls live in `@hardcore/ui`; the web host keeps URL/history, appearance
 and root-scoped persistence. See the UI package's Render and LOD playbooks.
 Saved references to the retired Theme panel restore the renderer's default

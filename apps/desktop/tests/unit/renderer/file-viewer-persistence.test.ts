@@ -71,10 +71,10 @@ describe("FileViewer persisted CAD state migration", () => {
   });
   it("a stale local preference change preserves another window's newer layout kind and motion", () => {
     const preferences = desktopCadPreferences();
-    const key = "cad-viewer:file-sheet-tab-layout:v6";
+    const key = "cad-viewer:file-sheet-tab-layout:v7";
     window.dispatchEvent(new StorageEvent("storage", { key }));
     const baseline = preferences.getSnapshot();
-    const robot = { split: false, top: ["kinematics"], bottom: [], ratio: 0.5 };
+    const robot = { split: false, top: ["motion"], bottom: [], ratio: 0.5 };
     const step = { split: false, top: ["tree"], bottom: [], ratio: 0.5 };
     // This is a concurrent remote publication before its storage event arrives.
     localStorage.setItem(key, JSON.stringify({ robot }));

@@ -20,6 +20,7 @@ import {
 import {
   createCadWebGlRenderer
 } from "./webglRenderer.js";
+import { CAD_DISPLAY_MODE } from "./displaySettings.js";
 import { PHOTOGRAPHIC_STUDIO_STAGE_RADIUS_MULTIPLIER } from "./photographicStudioRig.js";
 import {
   BASE_VIEWER_THEME,
@@ -714,6 +715,10 @@ export function outputSize(output, job) {
   };
 }
 
+export function snapshotUsesLogarithmicDepthBuffer(job = {}) {
+  return job.display?.mode !== CAD_DISPLAY_MODE.RENDER;
+}
+
 export function configurePngRenderer(width, height, job, {
   defaultRenderScale = 1,
   toneMappingExposure = 1
@@ -723,7 +728,7 @@ export function configurePngRenderer(width, height, job, {
     // Three's logarithmic depth shaders do not compare correctly with the
     // standard shadow map depth. Render uses a model-fitted camera range and
     // ordinary depth; CAD inspection retains its wide-range depth buffer.
-    logarithmicDepthBuffer: job.render == null
+    logarithmicDepthBuffer: snapshotUsesLogarithmicDepthBuffer(job)
   });
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;

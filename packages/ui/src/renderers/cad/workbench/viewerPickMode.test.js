@@ -13,7 +13,7 @@ import { loadTubeDeformation } from "@hardcore/core/common/tubeDeformationChunk.
 await loadTubeDeformation();
 import { viewerHiddenPartIdsForRenderPane, viewerPickModeForRenderPane, viewerSelectedPartIdsForRenderPane, viewerSelectorRuntimeForRenderPane } from "./viewerPickMode.js";
 
-test("Render drops retained picking proxies while STEP transforms and tube deformation still apply", () => {
+test("Render retains picking proxies while STEP transforms and tube deformation still apply", () => {
   const selectors = { proxy: {
     edgePositions: new Float32Array([0, 0, 0, 10, 0, 0]), edgeIndices: new Uint32Array([0, 1]),
     vertexPositions: new Float32Array([0, 0, 0])
@@ -23,7 +23,7 @@ test("Render drops retained picking proxies while STEP transforms and tube defor
   assert.equal(select({ renderMode: false, retainingPreviousStepMesh: true }), null);
   assert.equal(select({ hasTopology: false }), null);
   const selectorRuntime = select({ renderMode: true });
-  assert.equal(selectorRuntime, null);
+  assert.equal(selectorRuntime, selectors);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 1, 5, 0, 1, 10, 0, 1], 3));
   geometry.setAttribute("normal", new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1, 0, 0, 1], 3));
@@ -32,7 +32,7 @@ test("Render drops retained picking proxies while STEP transforms and tube defor
   const runtime = { THREE, displayRecords: [record], facePickGroup: new THREE.Group(), edgePickGroup: new THREE.Group(), vertexPickGroup: new THREE.Group() };
   try {
     syncSelectorPickGroups(runtime, selectorRuntime);
-    assert.equal(runtime.facePickGroup.children.length + runtime.edgePickGroup.children.length + runtime.vertexPickGroup.children.length, 0);
+    assert.ok(runtime.edgePickGroup.children.length + runtime.vertexPickGroup.children.length > 0);
     const path = y => ({ normal: [0, 0, 1], segments: [{ kind: "line", start: [0, y, 0], end: [10, y, 0] }] });
     const clip = { duration: 1, update(t, model) { model.get("rope").deformTube({ rest: path(0), path: path(t * 10) }).translate([0, 0, 5]); } };
     const result = applySceneState(THREE, {

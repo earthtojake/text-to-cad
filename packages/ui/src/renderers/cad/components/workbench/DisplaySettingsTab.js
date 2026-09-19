@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Plus, X } from "lucide-react";
 import {
+  CAD_DISPLAY_MODE,
   CAD_PART_COLOR_MODE,
   normalizeDisplaySettings,
   normalizeExplodedViewSettings
@@ -33,6 +34,7 @@ import {
   FileSheetToggleRow,
   parseFileSheetNumberInput
 } from "./FileSheet.js";
+import { RenderSettingsPanel } from "./RenderSettingsTab.js";
 
 const PROJECTION_OPTIONS = Object.freeze([
   {
@@ -205,10 +207,17 @@ function ClipSettings({ displaySettings, updateDisplaySettings, bounds }) {
 }
 
 export function DisplaySettingsSection({
+  observedFocalLength,
   displaySettings,
   updateDisplaySettings,
   projection = CAMERA_PROJECTION.ORTHOGRAPHIC,
   onProjectionChange,
+  rendering = false,
+  scene = null,
+  onModeChange = null,
+  onPayloadValueChange = null,
+  onQualityChange = null,
+  onRenderReset = null,
   clipBounds = null,
   explodeMeshData = null,
   edgeStatus = "idle",
@@ -230,13 +239,68 @@ export function DisplaySettingsSection({
   const exploded = normalizeExplodedViewSettings(display.exploded);
   const explodedAmount = exploded.enabled ? exploded.amount : 0;
   const explodedDisabled = Boolean(explodeMeshData) && explodablePartCount(explodeMeshData) <= 1;
+  const selectedMode = rendering ? CAD_DISPLAY_MODE.RENDER : display.mode;
+  const changeMode = (mode) => {
+    if (onModeChange) {
+      onModeChange(mode);
+      return;
+    }
+    if (mode !== CAD_DISPLAY_MODE.RENDER) {
+      setDisplay({ mode });
+    }
+  };
+  const setRenderValue = (path, value) => onPayloadValueChange?.(path, value);
 
   return (
     <div className="py-2" data-cad-display-settings-section="true">
       <FileSheetSubsection title="View">
-        <FileSheetSelectRow stacked label="Mode" value={display.mode} onValueChange={(mode) => setDisplay({ mode })} options={DISPLAY_MODE_OPTIONS} />
+        <FileSheetSelectRow stacked label="Mode" value={selectedMode} onValueChange={changeMode} options={DISPLAY_MODE_OPTIONS} />
+        <FileSheetSelectRow
+          label="Projection"
+          value={projection}
+          onValueChange={onProjectionChange}
+          options={PROJECTION_OPTIONS.map(({ Icon, ...option }) => ({
+            ...option,
+            icon: <Icon className="size-3.5" aria-hidden="true" />
+          }))}
+        />
+        {projection === CAMERA_PROJECTION.PERSPECTIVE ? (
+          <SettingsSlider
+            label="Lens"
+            value={scene?.camera?.focalLength ?? observedFocalLength}
+            min={20}
+            max={200}
+            step={1}
+            suffix=" mm"
+            digits={0}
+            onChange={(value) => setRenderValue(["camera", "focalLength"], value)}
+          />
+        ) : null}
+        <FileSheetSelectRow label="Parts" value={display.partColor.mode} onValueChange={(mode) => setPartColor({ mode })} options={PART_COLOR_OPTIONS} />
+        {display.partColor.mode === CAD_PART_COLOR_MODE.SINGLE ? (
+          <FileSheetColorRow label="Color" value={display.partColor.color} onChange={(color) => setPartColor({ color })} />
+        ) : null}
+        {display.partColor.mode === CAD_PART_COLOR_MODE.BY_PART ? (
+          <ColorPalette colors={display.partColor.colors} onChange={(colors) => setPartColor({ colors })} />
+        ) : null}
+        <FileSheetToggleRow label="Grid" checked={display.guides.grid.enabled} onCheckedChange={(enabled) => setGuide("grid", { enabled })} />
+        <FileSheetToggleRow label="Origin axes" checked={display.guides.axis.enabled} onCheckedChange={(enabled) => setGuide("axis", { enabled })} />
+        {display.guides.axis.enabled ? (
+          <>
+            <FileSheetColorRow label="Axis color" value={display.guides.axis.color} onChange={(color) => setGuide("axis", { color })} />
+            <SettingsSlider label="Axis opacity" value={display.guides.axis.opacity} min={0} max={1} onChange={(opacity) => setGuide("axis", { opacity })} />
+          </>
+        ) : null}
+        {edgeStatus === "loading" ? <p role="status" className="px-3 py-1 text-xs text-muted-foreground">Preparing edges…</p> : null}
+        {edgeError ? <p role="alert" className="px-3 py-1 text-xs text-destructive">Couldn’t load edges. {edgeError}</p> : null}
+        <FileSheetToggleRow label="Silhouette" checked={display.edges.silhouette} onCheckedChange={(silhouette) => setEdges({ silhouette })} />
+      </FileSheetSubsection>
+
+      <ClipSettings displaySettings={display} updateDisplaySettings={updateDisplaySettings} bounds={clipBounds} />
+
+      <FileSheetSubsection title="Explode">
         <SettingsSlider
-          label="Exploded"
+          label="Amount"
           value={explodedAmount * 100}
           min={0}
           max={100}
@@ -248,54 +312,22 @@ export function DisplaySettingsSection({
         />
       </FileSheetSubsection>
 
-      <FileSheetSubsection title="Camera">
-        <FileSheetSelectRow
-          label="Projection"
-          value={projection}
-          onValueChange={onProjectionChange}
-          options={PROJECTION_OPTIONS.map(({ Icon, ...option }) => ({
-            ...option,
-            icon: <Icon className="size-3.5" aria-hidden="true" />
-          }))}
+      {rendering ? (
+        <RenderSettingsPanel
+          scene={scene}
+          onQualityChange={onQualityChange}
+          onPayloadValueChange={onPayloadValueChange}
+          onReset={onRenderReset}
         />
-      </FileSheetSubsection>
-
-      <FileSheetSubsection title="Inspection colors">
-        <FileSheetSelectRow label="Parts" value={display.partColor.mode} onValueChange={(mode) => setPartColor({ mode })} options={PART_COLOR_OPTIONS} />
-        {display.partColor.mode === CAD_PART_COLOR_MODE.SINGLE ? (
-          <FileSheetColorRow label="Color" value={display.partColor.color} onChange={(color) => setPartColor({ color })} />
-        ) : null}
-        {display.partColor.mode === CAD_PART_COLOR_MODE.BY_PART ? (
-          <ColorPalette colors={display.partColor.colors} onChange={(colors) => setPartColor({ colors })} />
-        ) : null}
-      </FileSheetSubsection>
-
-      <FileSheetSubsection title="Guides">
-        <FileSheetToggleRow label="Grid" checked={display.guides.grid.enabled} onCheckedChange={(enabled) => setGuide("grid", { enabled })} />
-        <FileSheetToggleRow label="Origin axes" checked={display.guides.axis.enabled} onCheckedChange={(enabled) => setGuide("axis", { enabled })} />
-        {display.guides.axis.enabled ? (
-          <>
-            <FileSheetColorRow label="Axis color" value={display.guides.axis.color} onChange={(color) => setGuide("axis", { color })} />
-            <SettingsSlider label="Axis opacity" value={display.guides.axis.opacity} min={0} max={1} onChange={(opacity) => setGuide("axis", { opacity })} />
-          </>
-        ) : null}
-      </FileSheetSubsection>
-
-      <FileSheetSubsection title="Edges">
-        {edgeStatus === "loading" ? <p role="status" className="px-3 py-1 text-xs text-muted-foreground">Preparing edges…</p> : null}
-        {edgeError ? <p role="alert" className="px-3 py-1 text-xs text-destructive">Couldn’t load edges. {edgeError}</p> : null}
-        <FileSheetToggleRow label="Silhouette" checked={display.edges.silhouette} onCheckedChange={(silhouette) => setEdges({ silhouette })} />
-      </FileSheetSubsection>
-
-      <ClipSettings displaySettings={display} updateDisplaySettings={updateDisplaySettings} bounds={clipBounds} />
+      ) : null}
     </div>
   );
 }
 
 export function buildDisplaySettingsTab(props) {
   return {
-    id: FILE_SHEET_SECTION_IDS.DISPLAY,
-    title: "Display",
+    id: FILE_SHEET_SECTION_IDS.VIEW,
+    title: "View",
     content: <DisplaySettingsSection {...props} />
   };
 }

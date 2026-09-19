@@ -146,15 +146,65 @@ test('the shared CAD renderer resolves deferred files, reuses warm assets and re
   }
   assert.deepEqual(restoredState, previousState);
   assert.equal(requests.filter((path) => path === '/one/mesh.stl').length, 1, 'reopening a file reuses its decoded mesh without another asset request');
-  // Inspect and Render have separate scene recipes. The shared FileViewer must stay
-  // mounted while crossing that boundary, including with another viewer open.
-  await first.getByRole('button', { name: 'Viewing mode: Inspect. Switch to Render', exact: true }).click();
-  await first.getByRole('button', { name: 'Viewing mode: Render. Switch to Inspect', exact: true }).waitFor();
+  // Render is a display style: keep a non-default camera and all common
+  // settings across both depth-buffer runtimes, without touching a sibling.
+  await first.getByRole('button', { name: 'Inspector', exact: true }).click();
+  await first.getByRole('tab', { name: 'View', exact: true }).click();
+  await page.evaluate(async () => {
+    await window.cadHarness.a.controller.setDisplaySettings({
+      clip: { enabled: true, axis: 'x', offset: 0.6 },
+      guides: { grid: { enabled: true } },
+      partColor: { mode: 'single', color: '#336699' }
+    });
+  });
+  await page.waitForFunction(() => !window.cadHarness.a.controller.readState().loading);
+  let beforeStyle = await page.evaluate(() => window.cadHarness.a.controller.readState());
+  let beforeZoom = await first.getByLabel('Zoom level percent', { exact: true }).innerText();
+  const assertCommonState = async () => {
+    const current = await page.evaluate(() => window.cadHarness.a.controller.readState());
+    assert.equal(current.camera.projection, beforeStyle.camera.projection);
+    for (const key of ['position', 'target', 'up']) {
+      current.camera[key].forEach((v, i) => assert.ok(Math.abs(v - beforeStyle.camera[key][i]) < 1e-7, `${key}[${i}] unchanged across style switch`));
+    }
+    for (const key of ['zoom', 'orthographicHalfHeight']) {
+      assert.ok(Math.abs(current.camera[key] - beforeStyle.camera[key]) < 1e-7, `${key} unchanged across style switch`);
+    }
+    for (const key of ['clip', 'guides', 'partColor', 'exploded']) assert.deepEqual(current.display[key], beforeStyle.display[key]);
+    assert.equal(await first.getByLabel('Zoom level percent', { exact: true }).innerText(), beforeZoom);
+    assert.equal(await page.evaluate(() => window.cadHarness.b.controller.readState().display.mode), 'shaded_edges');
+  };
+  await first.getByRole('combobox', { name: 'Mode', exact: true }).click();
+  await page.getByRole('option', { name: 'Render', exact: true }).click();
+  await page.waitForFunction(() => {
+    const state = window.cadHarness.a.controller.readState();
+    return state.display.mode === 'render' && !state.loading;
+  });
+  await assertCommonState();
   assert.equal(await first.getByText('Could not display that file', { exact: true }).count(), 0);
   assert.equal(await first.getByRole('button', { name: 'Theme settings', exact: true }).count(), 0);
-  assert.equal(await page.getByTestId('two').getByRole('button', { name: 'Viewing mode: Inspect. Switch to Render', exact: true }).count(), 1);
-  await first.getByRole('button', { name: 'Viewing mode: Render. Switch to Inspect', exact: true }).click();
-  await first.getByRole('button', { name: 'Viewing mode: Inspect. Switch to Render', exact: true }).waitFor();
+  await first.getByRole('combobox', { name: 'Mode', exact: true }).click();
+  await page.getByRole('option', { name: 'Shaded with edges', exact: true }).click();
+  await page.waitForFunction(() => {
+    const state = window.cadHarness.a.controller.readState();
+    return state.display.mode === 'shaded_edges' && !state.loading;
+  });
+  await assertCommonState();
+  await first.getByRole('combobox', { name: 'Projection', exact: true }).click();
+  await page.getByRole('option', { name: 'Perspective', exact: true }).click();
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().camera.projection === 'perspective');
+  beforeStyle = await page.evaluate(() => window.cadHarness.a.controller.readState());
+  beforeZoom = await first.getByLabel('Zoom level percent', { exact: true }).innerText();
+  const lensReadout = parseFloat(await first.getByLabel('Lens value', { exact: true }).inputValue());
+  assert.ok(Math.abs(lensReadout - beforeStyle.camera.focalLength) < 0.51, 'Lens shows the actual camera value');
+  // The same unified display command drives agent integrations, including
+  // Render-specific options, rather than a separate render-state envelope.
+  await page.evaluate(() => window.cadHarness.a.controller.setDisplaySettings({ mode: 'render', render: { quality: 'preview', exposure: 0.5 } }));
+  await page.waitForFunction(() => !window.cadHarness.a.controller.readState().loading);
+  await assertCommonState();
+  assert.equal(await first.getByLabel('Exposure value', { exact: true }).inputValue(), '0.5 EV');
+  await page.evaluate(() => window.cadHarness.a.controller.setDisplaySettings({ mode: 'shaded_edges' }));
+  await page.waitForFunction(() => !window.cadHarness.a.controller.readState().loading);
+  await assertCommonState();
   assert.equal(await page.evaluate(() => window.cadHarness.captures.length), 1, 'an acknowledged capture does not replay after remount');
   assert.deepEqual(errors, []);
 });

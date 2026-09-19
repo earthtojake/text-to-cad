@@ -11,6 +11,7 @@ type CadLiveState = { active: boolean; loading: boolean; revision: string;
   resource: { kind: string; path?: string; revision?: string }; selection: unknown[];
   camera: { position: [number, number, number]; target: [number, number, number]; up: [number, number, number] } | null; renderMode: string };
 import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from './cad-runtime';
+import { selectFixtureSession } from './session-fixture';
 
 declare const window: { hardcore: HardcoreApi; __cadCamera?: () => { position: number[]; target: number[]; projection: string } | null };
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -35,7 +36,7 @@ test('live CAD commands observe and control the mounted tiny STEP viewport witho
   test.skip(!cadRuntimeReady(runtime), 'CAD runtime required');
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await page.evaluate(() => window.hardcore.settings.set({ reduceMotion: true, defaultGitMode: 'none', fetchBeforeCreate: false }));
-  const added = await page.evaluate(root => window.hardcore.projects.addPath({ path: root }), project);
+  const session = await selectFixtureSession(page, project);
   await expect(page.locator('[data-explorer-ready=true]')).toBeVisible();
   await page.getByRole('button', { name: 'Toggle explorer', exact: true }).click();
   // Intercept only this test window's replies. Production renderer dispatch and
@@ -49,7 +50,7 @@ test('live CAD commands observe and control the mounted tiny STEP viewport witho
   async function reply(kind: IntegrationCommand['kind'], tabId?: string, params?: Record<string, unknown>): Promise<IntegrationReply> {
     const requestId = `live-${++sequence}`;
     await app.evaluate(({ BrowserWindow }, command) => BrowserWindow.getAllWindows()[0]!.webContents.send('hardcore!integrations.command', command),
-      { requestId, kind, projectId: added.id, root: null, ...(tabId ? { tabId } : {}), ...(params ? { params } : {}), ...(kind === 'open-file' ? { path: 'part.step' } : {}) });
+      { requestId, kind, sessionId: session.id, projectId: session.projectId, root: null, ...(tabId ? { tabId } : {}), ...(params ? { params } : {}), ...(kind === 'open-file' ? { path: 'part.step' } : {}) });
     let result: IntegrationReply | null = null;
     await expect.poll(async () => {
       result = await app.evaluate((_electron, id) => (globalThis as unknown as { cadLiveReplies: Map<string, IntegrationReply> }).cadLiveReplies.get(id) ?? null, requestId);
@@ -93,9 +94,11 @@ test('live CAD commands observe and control the mounted tiny STEP viewport witho
   await command('cad-reset-camera', tabId);
   await expect.poll(async () => (await command('viewer-state', tabId) as CadLiveState).camera!.position[0]).not.toBeCloseTo(movedCamera.position[0]!, 2);
   expect((await command('cad-render-mode', tabId, { mode: 'render' }) as CadLiveState).renderMode).toBe('render');
-  await expect(page.getByRole('button', { name: 'Viewing mode: Render. Switch to Inspect', exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'View', exact: true }).click();
+  const displayMode = page.getByRole('tabpanel', { name: 'View', exact: true }).getByRole('combobox', { name: 'Mode' });
+  await expect(displayMode).toContainText('Render');
   await command('cad-render-mode', tabId, { mode: 'inspect' });
-  await expect(page.getByRole('button', { name: 'Viewing mode: Inspect. Switch to Render', exact: true })).toBeVisible();
+  await expect(displayMode).toContainText('Shaded with edges');
   await page.locator('[data-tab-strip] button[aria-label="New tab"][aria-haspopup="menu"]').click();
   await page.getByRole('menuitem', { name: /^Browser/ }).click();
   await page.getByRole('tab', { name: /^New tab/ }).click();
@@ -110,5 +113,5 @@ test('live CAD commands observe and control the mounted tiny STEP viewport witho
   const restoredCapture = await command('capture-view', tabId) as CadLiveState & { mimeType: string };
   expect(restoredCapture.revision).toBe(revision); expect(restoredCapture.mimeType).toBe('image/png');
   await expect(page.locator('[data-composer] img, [data-composer] [data-reference-chip]')).toHaveCount(0);
-  await expect(page.locator('[data-session-row]')).toHaveCount(0); expect(errors).toEqual([]);
+  await expect(page.locator('[data-session-row]')).toHaveCount(1); expect(errors).toEqual([]);
 });

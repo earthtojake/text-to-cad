@@ -27,7 +27,8 @@ describe('live CAD viewer binding', () => {
     await view.controller.resetCamera(); expect(view.commands.resetCamera).toHaveBeenCalledOnce();
     view.commands.clearSelection.mockImplementation(() => view.update(state()));
     expect((await view.controller.clearSelection()).selection).toEqual([]);
-    await view.controller.setDisplaySettings({ mode: 'wire' }); expect(view.commands.setDisplaySettings).toHaveBeenCalledWith({ mode: 'wire' });
+    view.commands.setDisplaySettings.mockImplementation(display => view.update({ ...state(), display }));
+    await view.controller.setDisplaySettings({ mode: 'wireframe' }); expect(view.commands.setDisplaySettings).toHaveBeenCalledWith({ mode: 'wireframe' });
     view.commands.setRenderMode.mockImplementation(enabled => view.update({ ...state(), renderMode: enabled ? 'render' : 'inspect' }));
     expect((await view.controller.setRenderMode(true)).renderMode).toBe('render');
     expect((await view.controller.setRenderMode(false)).renderMode).toBe('inspect');
@@ -50,6 +51,14 @@ describe('live CAD viewer binding', () => {
     expect((await view.controller.setRenderMode(true)).renderMode).toBe('render');
     expect(frames).toBe(3);
     expect(view.commands.setRenderMode).toHaveBeenCalledExactlyOnceWith(true);
+  });
+  it('waits for a unified display mode to commit through the lazy Render chunk', async () => {
+    let frames = 0;
+    const view = harness(async () => {
+      if (++frames === 3) view.update({ ...state(), display: { mode: 'render' }, renderMode: 'render' });
+    });
+    expect((await view.controller.setDisplaySettings({ mode: 'render' })).display.mode).toBe('render');
+    expect(frames).toBe(3);
   });
   it('bounds a render-mode command that never commits', async () => {
     const now = vi.spyOn(Date, 'now').mockReturnValueOnce(0).mockReturnValue(10_001);

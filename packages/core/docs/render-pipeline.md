@@ -33,13 +33,14 @@ import {
 } from "@hardcore/core/common/sceneSettings.js";
 ```
 
-`resolveSceneSettings({ appearance, render, quality, camera, display })` is the
-shared Viewer/snapshot policy resolver. It resolves ONE of two scenes — an
-Inspect theme or a Render recipe — and never a blend of them.
+`resolveSceneSettings({ appearance, quality, camera, display })` is the shared
+Viewer/snapshot policy resolver. Camera and display state are common to both
+view modes. `display.mode: "render"` selects the photographic recipe; every
+other mode selects the Inspect workbench recipe.
 `resolveDisplayMaterialSettings()` belongs to the display half; see
 [Display modes, CAD edges and geometry sharing](#display-modes-cad-edges-and-geometry-sharing).
 
-A missing `render` selects responsive CAD inspection defaults, where the
+A display mode other than `render` selects responsive CAD inspection defaults, where the
 top-level quality, camera, and display fields apply. That result carries
 `theme`, the CAD scene settings — materials, background, floor, environment and
 the seven-light inspection rig. `materialOverrides` is null: authored STEP
@@ -53,30 +54,23 @@ Three-managed roughness prefiltering. The viewer and snapshots share it. Each
 renderer owns and disposes its texture; no model without authored materials
 loads it, and it imports no photographic rig or HDR asset.
 
-A Render envelope is isolated from those CAD fields and resolves `theme: null`:
-Render is built from its recipe alone, so no lighting rig, stage floor or
-background gradient is reachable from it. The envelope has this closed sparse
-shape:
+Render resolves `theme: null`, so the Inspect lighting rig and stage are not
+mixed into the studio. Its studio-only settings live inside the ordinary
+display object. All sibling display fields remain active:
 
 ```js
 {
-  studio: "light", // or "dark"; omit to follow global appearance
-  quality: "final", // or "preview"
-  exposure: 0, // EV, -5..5
-  lighting: {
-    rotation: 0, // degrees around CAD Z, -180..180
-    size: 1, // relative softbox size, 0.25..3
-    fill: 0.25 // opposing fill ratio, 0..1
-  },
-  backdrop: {
-    color: "#e7e7e5",
-    transparent: false,
-    ground: true,
-    groundPlacement: "origin" // or "lowest"
-  },
-  camera: {
-    preset, projection, position, target, up, direction, zoom,
-    orthographicHalfHeight, focalLength
+  mode: "render",
+  clip, exploded, edges, guides, partColor,
+  render: {
+    studio: "light", // or "dark"; omit to follow global appearance
+    quality: "final", // or "preview"
+    exposure: 0, // EV, -5..5
+    lighting: { rotation: 0, size: 1, fill: 0.25 },
+    backdrop: {
+      color: "#e7e7e5", transparent: false, ground: true,
+      groundPlacement: "lowest" // or "origin"
+    }
   }
 }
 ```
@@ -89,30 +83,31 @@ pinning them into session state. That recipe is the only input
 `applyPhotographicStudio()` and `createEnvironmentResource()` take, and
 `resolved.camera` is its camera. The studio's one fixed finish is
 `PHOTOGRAPHIC_STUDIO_MATERIAL_SETTINGS`, a constant of the rig rather than
-anything the recipe can reach. Render
-always uses its private `shaded`, authored-color display policy with edges,
-guides, clipping, exploded view, selectors, and selection disabled. The Render
-camera comes only from `render.camera`; per-output snapshot cameras are applied
-later by the capture adapter. Animation remains active because it is authored
-model choreography rather than CAD inspection state.
+anything the recipe can reach. `render` surface shading follows the same lit,
+opaque geometry policy as `shaded` and does not force CAD edges. Authored
+materials remain authoritative unless `display.partColor` explicitly requests
+inspection colouring. Clipping, explode, guides, hidden parts, selectors and
+selection continue through the same CAD model path. Camera is always the common
+top-level camera, so switching modes preserves pose and projection, including
+orthographic scale. Per-output snapshot cameras remain explicit overrides.
 
-The translucent ground defaults to the authored Z=0 plane, including when
-geometry extends below it. `groundPlacement: "lowest"` aligns it to the model
-minimum; it moves only the floor, never the model or the lighting.
+The translucent ground defaults to the model minimum. Setting
+`groundPlacement: "origin"` pins it to the authored Z=0 plane; it moves only
+the floor, never the model or the lighting.
 `backdrop.ground: false` removes the floor.
 
 `orthographicHalfHeight` is the positive pre-zoom vertical half-extent of an
 orthographic camera. It may remain in a perspective camera payload so switching
 back restores the prior orthographic scale.
-`focalLength` is a perspective-camera lens in millimetres from 20 to 200 and
-defaults to 50 in Render.
+`focalLength` is a perspective-camera lens in millimetres from 20 to 200.
 
 Studio ids are exactly `light` and `dark`. Omitting `studio`
 follows the resolver's global appearance while keeping the normalized Render
 payload sparse. `resolved.render.configuration.studio` reports the effective id
 for UI. Quality is `preview` or `final` and does not select a studio; it maps to
-the internal standard or high scene policy respectively. Render defaults to
-perspective, `shaded`, authored materials, and final quality. Normal CAD defaults to
+the internal standard or high scene policy respectively. Render keeps the
+common camera (orthographic iso when none is supplied), uses `render` display
+shading, authored materials, and final quality. Normal CAD defaults to
 orthographic `shaded_edges`, Original part colors, and interactive quality;
 it keeps authored albedo and opacity while applying matte workbench PBR
 channels, and the snapshot adapter turns normal CAD guides off for deterministic
@@ -173,12 +168,11 @@ color, and no authored color for STL. Animated direct GLB keeps its native
 glTF hierarchy instead, so its textures and PBR channels stay attached to the
 scene.
 
-Snapshot job validation rejects a Render envelope combined with explicit
-top-level `camera`, `display`, `selection`, `jointValues` or `quality` fields —
-including null and empty values — before loading any asset. Render supports
-only the `view` capture mode; animation, video, kinematics, per-output cameras
-and output sizing remain available. An interactive viewer keeps dormant CAD
-session state separate rather than treating it as a snapshot request.
+Snapshots select the studio with `display.mode: "render"`; there is no separate
+Render job envelope. Render supports only the `view` capture mode. Camera,
+selection, clipping, exploded view, guides, part colour, animation, video,
+kinematics, robot joints, tessellation quality, per-output cameras and output
+sizing remain composable.
 
 Photographic Render creates its WebGL renderer with
 `logarithmicDepthBuffer: false`. Three's logarithmic depth shader path does not
@@ -230,9 +224,9 @@ Accepted input fields:
   key and the sidecar section.
 - `stepParameterUrl` or `resolved.stepParameterUrl`: model sidecar
   (`.step.json`) URL, whose `kinematics` section is compiled here.
-- `quality.tessellation`: explicit STEP tolerances for normal CAD snapshots.
-  Render is isolated from this top-level CAD quality field and derives its
-  bounded mesh rung only from `render.quality`.
+- `quality.tessellation`: explicit STEP tolerances in every display mode. When
+  omitted, `display.render.quality` selects the bounded preview/final mesh rung
+  for Render.
 
 STEP-only options are rejected for non-STEP sources. The old shared `params`
 field is rejected, and so is the retired `stepParameters` spelling; use
@@ -470,8 +464,8 @@ import {
 
 `renderJobContext(meshData, job)` resolves the shared scene contract plus
 snapshot-owned output policy: display, camera, quality, scene scale, outputs,
-STEP topology edge visibility, and warnings. Snapshot scene quality comes only
-from `render.quality`; `job.quality` contains technical tessellation only.
+STEP topology edge visibility, and warnings. Studio scene quality comes from
+`display.render.quality`; `job.quality` contains technical tessellation only.
 
 `modelOptionsForRenderJob(context, job)` converts that policy into
 `buildModel()` settings.

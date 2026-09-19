@@ -5,7 +5,6 @@ import { resolveSceneSettings } from "@hardcore/core/common/sceneSettings.js";
 import {
   DEFAULT_RENDER_PAYLOAD,
   createRenderSessionState,
-  renderCameraSeed,
   readRenderSessionCamera,
   renderSessionForEnabledChange,
   renderSessionForReset,
@@ -16,24 +15,29 @@ import {
   setRenderPayloadValue
 } from "./renderSessionState.js";
 
-test("mode switching preserves the live fitted camera before any camera-change event", () => {
+test("mode switching keeps one live camera in both directions", () => {
   const bounds = { min: [0, 0, 0], max: [34000, 0, 18000] };
   const fitted = resolveRenderCameraSnapshot({
     projection: "orthographic", orthographicHalfHeight: 21033, zoom: 1.3
   }, bounds);
   const viewer = { getPerspective: () => fitted };
-  for (const lastEvent of [null, { ...fitted, orthographicHalfHeight: 120 }]) {
-    const enabled = renderSessionForEnabledChange(createRenderSessionState(), true, {
-      activeCamera: readRenderSessionCamera(viewer, lastEvent)
-    });
-    const disabled = renderSessionForEnabledChange(enabled, false, {
-      activeCamera: resolveRenderCameraSnapshot({ projection: "perspective" }, bounds)
-    });
-    assert.deepEqual(disabled.cadCamera, fitted);
-    assert.equal(disabled.cadCamera.orthographicHalfHeight, 21033);
-    assert.equal(disabled.cadCamera.zoom, 1.3);
-    assert.equal(disabled.cadProjection, "orthographic");
-  }
+  const oldCamera = resolveRenderCameraSnapshot({ projection: "perspective", focalLength: 35 }, bounds);
+  const enabled = renderSessionForEnabledChange(createRenderSessionState({ cadCamera: oldCamera }), true, {
+    activeCamera: readRenderSessionCamera(viewer, null)
+  });
+  assert.deepEqual(enabled.cadCamera, fitted);
+  assert.equal(enabled.cadProjection, "orthographic");
+
+  const renderViewport = resolveRenderCameraSnapshot({
+    position: [3, 4, 5], target: [1, 2, 3], projection: "perspective", focalLength: 80
+  }, bounds);
+  const disabled = renderSessionForEnabledChange(enabled, false, { activeCamera: renderViewport });
+  assert.deepEqual(disabled.cadCamera, renderViewport);
+  assert.equal(disabled.cadProjection, "perspective");
+  assert.notDeepEqual(disabled.cadCamera, oldCamera);
+
+  const reenabled = renderSessionForEnabledChange(disabled, true, { activeCamera: renderViewport });
+  assert.deepEqual(reenabled.cadCamera, renderViewport);
   assert.deepEqual(readRenderSessionCamera(null, fitted), fitted);
 });
 
@@ -44,26 +48,37 @@ test("render sessions default to an off, sparse photographic setup", () => {
   assert.deepEqual(state.payload, DEFAULT_RENDER_PAYLOAD);
   assert.equal(state.cadProjection, "orthographic");
   assert.equal(state.cadCamera, null);
-  assert.deepEqual(state.openSectionIds, ["render"]);
+  assert.equal(Object.hasOwn(state, "openSectionIds"), false);
 });
 
-test("Render tab selection stays outside the photographic payload and starts at Studio on re-entry", () => {
+test("mode-specific tab state is discarded", () => {
   const session = createRenderSessionState({
     enabled: true,
     openSectionIds: ["materials", "pose", "animation", "display", "animation"],
     payload: { exposure: 0.5 }
   });
-  assert.deepEqual(session.openSectionIds, ["pose", "animation"]);
-  assert.deepEqual(session.payload, { exposure: 0.5 });
-  assert.deepEqual(
-    createRenderSessionState(JSON.parse(JSON.stringify(session))).openSectionIds,
-    ["pose", "animation"]
-  );
+  assert.equal(Object.hasOwn(session, "openSectionIds"), false);
+  assert.deepEqual(session.payload, { quality: "preview", exposure: 0.5 });
+  assert.equal(Object.hasOwn(createRenderSessionState(JSON.parse(JSON.stringify(session))), "openSectionIds"), false);
   const disabled = renderSessionForEnabledChange(session, false);
-  assert.deepEqual(disabled.openSectionIds, ["pose", "animation"]);
   const reenabled = renderSessionForEnabledChange(disabled, true);
-  assert.deepEqual(reenabled.openSectionIds, ["render"]);
+  assert.equal(Object.hasOwn(reenabled, "openSectionIds"), false);
   assert.equal(reenabled.payload.exposure, 0.5);
+});
+
+test("enabled legacy sessions migrate payload.camera into the common camera", () => {
+  const legacyCamera = {
+    position: [30, 40, 50], target: [3, 4, 5], up: [0, 0, 1],
+    projection: "perspective", focalLength: 75
+  };
+  const migrated = createRenderSessionState({
+    enabled: true,
+    cadCamera: { ...legacyCamera, position: [0, 0, 1] },
+    payload: { camera: legacyCamera, quality: "final", exposure: 0.25 }
+  });
+  assert.deepEqual(migrated.cadCamera, legacyCamera);
+  assert.deepEqual(migrated.payload, { quality: "final", exposure: 0.25 });
+  assert.equal(migrated.cadProjection, "perspective");
 });
 
 test("photographic edits write directly into the sparse public payload", () => {
@@ -72,99 +87,67 @@ test("photographic edits write directly into the sparse public payload", () => {
   payload = setRenderPayloadValue(payload, ["exposure"], -0.7);
 
   assert.deepEqual(payload, {
+    quality: "preview",
     lighting: { size: 1.75 },
     backdrop: { transparent: true },
     exposure: -0.7
   });
 });
 
-test("reset clears every customization while preserving the live pose, not its Render lens", () => {
-  const payload = resetRenderPayload({
-    position: [10, 20, 30],
-    target: [1, 2, 3],
-    up: [0, 0, 1],
-    zoom: 1.2,
-    projection: "perspective",
-    focalLength: 85
-  });
-
-  assert.deepEqual(payload, {
-    camera: {
-      position: [10, 20, 30],
-      target: [1, 2, 3],
-      up: [0, 0, 1],
-      zoom: 1.2
-    }
-  });
+test("reset payload returns the sparse Preview default", () => {
+  assert.deepEqual(resetRenderPayload(), { quality: "preview" });
 });
 
-test("reset preserves enablement and the saved CAD restore camera", () => {
-  const cadCamera = {
+test("reset preserves enablement and the common camera", () => {
+  const commonCamera = {
     position: [10, 20, 30], target: [1, 2, 3], up: [0, 0, 1],
     projection: "orthographic", orthographicHalfHeight: 24
   };
-  const renderCamera = {
-    position: [50, 60, 70], target: [4, 5, 6], up: [0, 0, 1],
-    projection: "perspective", focalLength: 90
-  };
   const customized = createRenderSessionState({
     enabled: false,
-    cadCamera,
+    cadCamera: commonCamera,
     cadProjection: "orthographic",
-    payload: { studio: "dark", quality: "preview", exposure: 1, camera: renderCamera }
+    payload: { quality: "final", exposure: 1 }
   });
 
-  const disabledReset = renderSessionForReset(customized, { activeCamera: renderCamera });
+  const disabledReset = renderSessionForReset(customized);
   assert.equal(disabledReset.enabled, false);
-  assert.deepEqual(disabledReset.payload, {});
-  assert.deepEqual(disabledReset.cadCamera, cadCamera);
+  assert.deepEqual(disabledReset.payload, { quality: "preview" });
+  assert.deepEqual(disabledReset.cadCamera, commonCamera);
 
-  const enabledReset = renderSessionForReset({ ...customized, enabled: true }, { activeCamera: renderCamera });
+  const enabledReset = renderSessionForReset({ ...customized, enabled: true });
   assert.equal(enabledReset.enabled, true);
-  assert.deepEqual(enabledReset.cadCamera, cadCamera);
-  assert.deepEqual(enabledReset.payload.camera, {
-    position: renderCamera.position,
-    target: renderCamera.target,
-    up: renderCamera.up
-  });
+  assert.deepEqual(enabledReset.cadCamera, commonCamera);
+  assert.deepEqual(enabledReset.payload, { quality: "preview" });
 });
 
-test("first enable saves the CAD camera without seeding Render composition from it", () => {
-  const cadCamera = {
+test("every mode transition records the current viewport instead of restoring an older camera", () => {
+  const firstViewport = {
     position: [90, 80, 70], target: [9, 8, 7], up: [0, 0, 1], zoom: 1.4,
     projection: "orthographic", focalLength: 21, orthographicHalfHeight: 18
   };
   const first = renderSessionForEnabledChange(createRenderSessionState(), true, {
-    activeCamera: cadCamera,
+    activeCamera: firstViewport,
     activeProjection: "orthographic"
   });
   assert.equal(first.enabled, true);
-  assert.deepEqual(first.cadCamera, cadCamera);
-  assert.deepEqual(first.payload, {});
+  assert.deepEqual(first.cadCamera, firstViewport);
+  assert.deepEqual(first.payload, { quality: "preview" });
 
-  const savedRenderCamera = {
+  const secondViewport = {
     position: [30, 40, 50], target: [3, 4, 5], up: [0, 0, 1],
     projection: "perspective", focalLength: 75
   };
   const disabled = renderSessionForEnabledChange({ ...first, payload: { exposure: 1 } }, false, {
-    activeCamera: savedRenderCamera
+    activeCamera: secondViewport
   });
-  const reenabled = renderSessionForEnabledChange(disabled, true, { activeCamera: cadCamera });
-  assert.deepEqual(reenabled.payload.camera, savedRenderCamera);
-  assert.deepEqual(reenabled.cadCamera, cadCamera);
+  assert.deepEqual(disabled.cadCamera, secondViewport);
+  assert.deepEqual(disabled.payload, { quality: "preview", exposure: 1 });
+  const reenabled = renderSessionForEnabledChange(disabled, true, { activeCamera: secondViewport });
+  assert.deepEqual(reenabled.cadCamera, secondViewport);
 });
 
-test("render camera seeds retain lens and framing without CAD projection or model metadata", () => {
-  assert.deepEqual(renderCameraSeed({
-    position: [10, 20, 30], target: [1, 2, 3], up: [0, 0, 1], zoom: 1.4,
-    projection: "orthographic", focalLength: 72, orthographicHalfHeight: 42, modelKey: "old"
-  }), {
-    position: [10, 20, 30], target: [1, 2, 3], up: [0, 0, 1], zoom: 1.4,
-    focalLength: 72, orthographicHalfHeight: 42
-  });
-});
-
-test("camera presets and projection-only payloads resolve against current model bounds", () => {
+test("camera presets and projection-only specs resolve against current model bounds", () => {
   const bounds = { min: [0, 0, 0], max: [20, 40, 10] };
   const front = resolveRenderCameraSnapshot({ preset: "front", projection: "perspective", focalLength: 80 }, bounds);
   assert.deepEqual(front.target, [10, 20, 5]);
@@ -175,12 +158,8 @@ test("camera presets and projection-only payloads resolve against current model 
   assert.equal(resolveRenderCameraSnapshot({ projection: "orthographic" }, bounds).projection, "orthographic");
 });
 
-test("camera and quality changes retain the Render visual settings identity", () => {
+test("quality changes retain the Render visual settings identity", () => {
   const base = { exposure: 0.5, lighting: { size: 1.2 }, backdrop: { ground: true } };
-  assert.equal(
-    renderVisualSettingsKey({ ...base, camera: { preset: "front" } }),
-    renderVisualSettingsKey({ ...base, camera: { preset: "top" } })
-  );
   assert.equal(
     renderVisualSettingsKey({ ...base, quality: "preview" }),
     renderVisualSettingsKey({ ...base, quality: "final" })
@@ -194,7 +173,10 @@ test("Render quality resolves independently from the photographic visual payload
     enabled: true,
     payload: { quality: "preview" }
   })).id, "standard");
-  const final = resolveRenderSessionQuality(createRenderSessionState({ enabled: true }));
+  const final = resolveRenderSessionQuality(createRenderSessionState({
+    enabled: true,
+    payload: { quality: "final" }
+  }));
   assert.equal(final.id, "high");
   assert.equal(final.targetPixelError, 0.25);
   assert.equal(final.snapshotLodLevel, 3);
@@ -208,7 +190,11 @@ for (const [appearance, prefersDark, studio] of [
   ["system", true, "dark"], ["system", false, "light"]
 ]) {
   test(`Render defaults and Reset use global ${appearance} appearance (dark system: ${prefersDark})`, () => {
-    const resolve = (session) => resolveSceneSettings({ appearance, prefersDark, render: session.payload }).render.configuration;
+    const resolve = (session) => resolveSceneSettings({
+      appearance,
+      prefersDark,
+      display: { mode: "render", render: session.payload }
+    }).render.configuration;
     const initial = createRenderSessionState({ enabled: true, payload: { studio: "dark" } });
     assert.equal(Object.hasOwn(initial.payload, "studio"), false);
     assert.equal(resolve(initial).studio, studio);

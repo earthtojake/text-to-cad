@@ -102,6 +102,7 @@ export function useViewerRuntime({
   // unmount, so the latter can distinguish a renderer handoff from the last
   // owner going away.
   const viewerMountedRef = useRef(false);
+  const previousViewStateRef = useRef(null);
   useLayoutEffect(() => {
     viewerMountedRef.current = true;
     return () => { viewerMountedRef.current = false; };
@@ -581,7 +582,7 @@ export function useViewerRuntime({
       // zoomed in and fast when zoomed out. After each wheel zoom, re-anchor the pivot depth
       // onto the cursor hit in Inspect or stable model depth in Render, keeping
       // it on the forward axis so the camera never re-orients or jumps the view.
-      const zoomReanchor = createZoomPivotReanchor(THREE, { renderMode });
+      const zoomReanchor = createZoomPivotReanchor(THREE);
       const zoomReanchorPointer = zoomReanchor.pointer;
       let zoomPivotReanchorPending = false;
 
@@ -731,6 +732,7 @@ export function useViewerRuntime({
       };
 
       runtimeRef.current = {
+        previousViewState: previousViewStateRef.current,
         THREE,
         scene,
         camera,
@@ -848,6 +850,13 @@ export function useViewerRuntime({
         if (!runtime) {
           return;
         }
+        if (runtime.activeModelKey && runtime.interactiveFraming) previousViewStateRef.current = {
+          modelKey: runtime.activeModelKey,
+          framing: Object.fromEntries([
+            "zoomBaseDistance", "zoomBaseHalfHeight", "zoomBaseModelRadius",
+            "zoomFitModelRadius", "viewportFitScale", "interactiveFraming", "userMovedCamera"
+          ].map(key => [key, runtime[key]]))
+        };
         if (runtime.interactionState.restoreTimerId) {
           window.clearTimeout(runtime.interactionState.restoreTimerId);
         }

@@ -2,6 +2,7 @@ import {
   Contrast,
   Eye,
   EyeOff,
+  Image,
   Layers,
   Paintbrush,
   Spline,
@@ -11,6 +12,7 @@ import { CAD_DISPLAY_MODE } from "@hardcore/core/lib/displaySettings.js";
 
 export const DISPLAY_MODE_OPTIONS = Object.freeze([
   Object.freeze({ value: CAD_DISPLAY_MODE.SHADED_EDGES, label: "Shaded with edges", title: "Shaded surfaces with CAD edges", Icon: Layers }),
+  Object.freeze({ value: CAD_DISPLAY_MODE.RENDER, label: "Render", title: "Photographic materials, lighting and backdrop", Icon: Image }),
   Object.freeze({ value: CAD_DISPLAY_MODE.SHADED, label: "Shaded", title: "Shaded surfaces without CAD edges", Icon: Paintbrush }),
   Object.freeze({ value: CAD_DISPLAY_MODE.TRANSPARENT, label: "X-Ray", title: "Transparent solids with visible CAD edges", Icon: Eye }),
   Object.freeze({ value: CAD_DISPLAY_MODE.HIDDEN_EDGES, label: "Hidden", title: "Shaded with hidden edges visible", Icon: EyeOff }),

@@ -8,9 +8,9 @@ import {
   resolveCameraSnapshot
 } from "@hardcore/core/common/camera.js";
 import { clonePerspectiveSnapshot } from "@hardcore/core/lib/perspective.js";
-import { FILE_SHEET_SECTION_IDS, normalizeFileSheetOpenSectionIds } from "./fileSheetSections.js";
+import { CAD_DISPLAY_MODE } from "@hardcore/core/lib/displaySettings.js";
 
-export const DEFAULT_RENDER_PAYLOAD = Object.freeze({});
+export const DEFAULT_RENDER_PAYLOAD = Object.freeze({ quality: "preview" });
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -28,57 +28,25 @@ function cloneValue(value) {
 
 export function createRenderSessionState(value = null) {
   const source = isPlainObject(value) ? value : {};
+  // Migrate old file sessions' mode-specific camera into the common camera.
+  // This is user-state migration, not a snapshot CLI compatibility path.
+  const oldPayload = isPlainObject(source.payload) ? source.payload : {};
+  const { studio: _studio, camera: oldCamera, ...settings } = oldPayload;
   let payload;
-  try {
-    // Studio selection belongs to snapshot requests. Viewer defaults always use
-    // global appearance; only explicit photographic customizations are stored.
-    const { studio: _studio, ...settings } = isPlainObject(source.payload) ? source.payload : DEFAULT_RENDER_PAYLOAD;
-    payload = normalizeRenderPayload(settings);
-  } catch {
-    payload = normalizeRenderPayload(DEFAULT_RENDER_PAYLOAD);
-  }
+  try { payload = normalizeRenderPayload({ ...DEFAULT_RENDER_PAYLOAD, ...settings }); }
+  catch { payload = normalizeRenderPayload(DEFAULT_RENDER_PAYLOAD); }
+  const camera = renderCameraSnapshot(source.enabled && oldCamera ? oldCamera : source.cadCamera);
   return {
     enabled: source.enabled === true,
     payload,
-    openSectionIds: Array.isArray(source.openSectionIds)
-      ? normalizeFileSheetOpenSectionIds(source.openSectionIds, [
-          FILE_SHEET_SECTION_IDS.RENDER,
-          FILE_SHEET_SECTION_IDS.STEP_POSE,
-          FILE_SHEET_SECTION_IDS.STEP_ANIMATION
-        ])
-      : [FILE_SHEET_SECTION_IDS.RENDER],
-    cadCamera: renderCameraSnapshot(source.cadCamera),
-    cadProjection: normalizeCameraProjection(
-      source.cadProjection || source.cadCamera?.projection,
-      CAMERA_PROJECTION.ORTHOGRAPHIC
-    )
+    cadCamera: camera,
+    cadProjection: normalizeCameraProjection(camera?.projection || source.cadProjection,
+      CAMERA_PROJECTION.ORTHOGRAPHIC)
   };
 }
 
 export function renderSessionStateEqual(a, b) {
   return JSON.stringify(createRenderSessionState(a)) === JSON.stringify(createRenderSessionState(b));
-}
-
-export function renderCameraSeed(snapshot, {
-  includeOrthographicFraming = true,
-  includeFocalLength = true
-} = {}) {
-  const camera = clonePerspectiveSnapshot(snapshot);
-  if (!camera) {
-    return null;
-  }
-  return {
-    position: camera.position,
-    target: camera.target,
-    up: camera.up,
-    ...(Object.prototype.hasOwnProperty.call(camera, "zoom") ? { zoom: camera.zoom } : {}),
-    ...(includeFocalLength && Object.prototype.hasOwnProperty.call(camera, "focalLength")
-      ? { focalLength: camera.focalLength }
-      : {}),
-    ...(includeOrthographicFraming && Object.prototype.hasOwnProperty.call(camera, "orthographicHalfHeight")
-      ? { orthographicHalfHeight: camera.orthographicHalfHeight }
-      : {})
-  };
 }
 
 export function renderCameraSnapshot(camera) {
@@ -126,20 +94,13 @@ export function setRenderPayloadValue(payload, path, value) {
   return normalizeRenderPayload(nextPayload);
 }
 
-export function resetRenderPayload(activeCamera = null) {
-  const camera = renderCameraSnapshot(activeCamera);
-  return normalizeRenderPayload({
-    ...DEFAULT_RENDER_PAYLOAD,
-    ...(camera ? { camera: renderCameraSeed(camera, { includeFocalLength: false }) } : {})
-  });
+export function resetRenderPayload() {
+  return normalizeRenderPayload(DEFAULT_RENDER_PAYLOAD);
 }
 
-export function renderSessionForReset(session, { activeCamera = null } = {}) {
+export function renderSessionForReset(session) {
   const current = createRenderSessionState(session);
-  return createRenderSessionState({
-    ...current,
-    payload: resetRenderPayload(current.enabled ? activeCamera : null)
-  });
+  return createRenderSessionState({ ...current, payload: resetRenderPayload() });
 }
 
 export function renderSessionForEnabledChange(session, enabled, {
@@ -147,31 +108,12 @@ export function renderSessionForEnabledChange(session, enabled, {
   activeProjection = null
 } = {}) {
   const current = createRenderSessionState(session);
-  if (enabled === current.enabled) {
-    return current;
-  }
-  const camera = renderCameraSnapshot(activeCamera);
-  if (enabled) {
-    return createRenderSessionState({
-      ...current,
-      enabled: true,
-      openSectionIds: [FILE_SHEET_SECTION_IDS.RENDER],
-      cadCamera: camera || current.cadCamera,
-      cadProjection: camera?.projection || activeProjection || current.cadProjection
-    });
-  }
+  const camera = renderCameraSnapshot(activeCamera) || current.cadCamera;
   return createRenderSessionState({
     ...current,
-    enabled: false,
-    payload: camera
-      ? {
-          ...current.payload,
-          camera: {
-            ...renderCameraSeed(camera),
-            projection: camera.projection || activeProjection
-          }
-        }
-      : current.payload
+    enabled,
+    cadCamera: camera,
+    cadProjection: camera?.projection || activeProjection || current.cadProjection
   });
 }
 
@@ -193,8 +135,9 @@ export function resolveRenderSessionQuality(session, options = {}) {
   return resolveSceneSettings({
     appearance: options.appearance,
     prefersDark: options.prefersDark === true,
-    render: current.enabled
-      ? (current.payload.quality ? { quality: current.payload.quality } : {})
-      : null
+    display: current.enabled ? {
+      mode: CAD_DISPLAY_MODE.RENDER,
+      render: { quality: current.payload.quality }
+    } : null
   }).quality;
 }

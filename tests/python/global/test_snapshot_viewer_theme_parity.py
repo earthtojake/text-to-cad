@@ -30,8 +30,7 @@ from cadgen.snapshot_core import (  # noqa: E402
     SUPPORTED_RENDER_KEYS,
     SnapshotError,
     validate_camera_option,
-    validate_render_option,
-    validate_render_job_compatibility,
+    validate_display_render_settings,
     validate_display_settings_values,
 )
 
@@ -59,20 +58,13 @@ def frozen_enum_values(path, export: str, next_export: str) -> set[str]:
 
 
 class SharedSceneContractParityTests(unittest.TestCase):
-    def test_snapshot_render_conflicts_match_shared_js(self):
+    def test_retired_top_level_render_field_is_rejected_by_shared_js(self):
         cases = [
             {},
             {"display": {"mode": "wireframe"}},
+            {"display": {"mode": "render"}},
+            {"display": {"mode": "render", "render": {"quality": "preview"}}, "camera": {"preset": "front"}},
             {"render": {}},
-            {"render": {"camera": {"preset": "front"}, "quality": "preview"}},
-            {"render": {}, "animation": {"clip": "spin", "time": 1},
-             "outputs": [{"camera": "front", "width": 640}]},
-            *({"render": {}, key: value}
-              for key in ("camera", "display", "selection", "kinematics", "jointValues", "quality")
-              for value in (None, {})),
-            {"render": {}, "mode": "section"},
-            {"render": {}, "mode": "list"},
-            {"render": None},
         ]
         validator = repo_path("packages/core/src/common/snapshotJobValidation.js")
         script = f"""
@@ -89,18 +81,7 @@ console.log(JSON.stringify(cases.map((job) => {{
             input=json.dumps(cases), text=True, capture_output=True, check=True,
             cwd=repo_path(),
         )
-        python_accepted = []
-        for job in cases:
-            try:
-                if "render" in job:
-                    validate_render_option(job["render"], source_label="parity test")
-                validate_render_job_compatibility(job)
-            except SnapshotError:
-                python_accepted.append(False)
-            else:
-                python_accepted.append(True)
-        self.assertEqual([True] * 5 + [False] * 6 + [True] * 2 + [False] * 7, python_accepted)
-        self.assertEqual(python_accepted, json.loads(completed.stdout))
+        self.assertEqual([True, True, True, True, False], json.loads(completed.stdout))
 
     def test_render_envelope_keys_match(self):
         self.assertEqual(exported_strings(SCENE, "RENDER_PAYLOAD_KEYS"), set(SUPPORTED_RENDER_KEYS))
@@ -170,7 +151,7 @@ console.log(JSON.stringify(cases.map((render) => {{
         python_accepted = []
         for render in cases:
             try:
-                validate_render_option(render, source_label="parity test")
+                validate_display_render_settings(render, source_label="parity test")
             except SnapshotError:
                 python_accepted.append(False)
             else:

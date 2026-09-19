@@ -45,16 +45,16 @@ test("legacy supplied themes cannot alter the fixed Inspect or Render scene base
     resolveSceneSettings({ appearance: "light" })
   );
   assert.deepEqual(
-    resolveSceneSettings({ appearance: "dark", render: {}, theme: legacy }),
-    resolveSceneSettings({ appearance: "dark", render: {} })
+    resolveSceneSettings({ appearance: "dark", display: { mode: "render" }, theme: legacy }),
+    resolveSceneSettings({ appearance: "dark", display: { mode: "render" } })
   );
 });
 
 test("omitted Render fields stay sparse while configuration expands effective defaults", () => {
   assert.deepEqual(normalizeRenderPayload({}), {});
 
-  const light = resolveSceneSettings({ appearance: "light", render: {} });
-  const dark = resolveSceneSettings({ appearance: "dark", render: {} });
+  const light = resolveSceneSettings({ appearance: "light", display: { mode: "render" } });
+  const dark = resolveSceneSettings({ appearance: "dark", display: { mode: "render" } });
   assert.deepEqual(light.render.payload, {});
   const { camera, ...envelope } = light.render.configuration;
   assert.deepEqual(envelope, {
@@ -64,22 +64,18 @@ test("omitted Render fields stay sparse while configuration expands effective de
     lighting: { rotation: 0, size: 1, fill: 0.25 },
     backdrop: { color: "#e7e7e5", transparent: false, ground: true, groundPlacement: "lowest" }
   });
-  // The recipe carries the Render camera, and it is the scene's camera.
-  assert.equal(camera.projection, "perspective");
-  assert.equal(camera.focalLength, 50);
+  assert.equal(camera.projection, "orthographic");
   assert.deepEqual(light.camera, camera);
   assert.equal(dark.render.configuration.studio, "dark");
   assert.equal(dark.render.configuration.backdrop.color, "#121315");
   assert.equal(Object.hasOwn(light.render.payload, "studio"), false);
-  assert.equal(light.camera.projection, "perspective");
-  assert.equal(light.camera.focalLength, 50);
-  assert.equal(light.display.mode, "shaded");
-  assert.equal(light.display.guides.grid.enabled, false);
+  assert.equal(light.camera.projection, "orthographic");
+  assert.equal(light.display.mode, "render");
   assert.equal(light.quality.id, SCENE_QUALITY.HIGH);
 });
 
 test("explicit studios pin only the backdrop default", () => {
-  const pinned = resolveSceneSettings({ appearance: "dark", render: { studio: "light" } });
+  const pinned = resolveSceneSettings({ appearance: "dark", display: { mode: "render", render: { studio: "light" } } });
   assert.equal(pinned.appearance, "dark");
   assert.equal(pinned.render.payload.studio, "light");
   assert.equal(pinned.render.configuration.studio, "light");
@@ -87,12 +83,11 @@ test("explicit studios pin only the backdrop default", () => {
 
   const { camera: _camera, ...custom } = resolveSceneSettings({
     appearance: "light",
-    render: {
-      studio: "dark",
-      exposure: 1.5,
+    display: { mode: "render", render: {
+      studio: "dark", exposure: 1.5,
       lighting: { rotation: -45, size: 2, fill: 0 },
       backdrop: { color: "#123456", transparent: true, ground: false, groundPlacement: "lowest" }
-    }
+    } }
   }).render.configuration;
   assert.deepEqual(custom, {
     studio: "dark",
@@ -108,15 +103,15 @@ test("Render quality maps to the existing bounded scene-quality ladder", () => {
   assert.equal(resolveRenderQuality("final").id, SCENE_QUALITY.HIGH);
   assert.equal(resolveRenderQuality().id, SCENE_QUALITY.HIGH);
 
-  const preview = resolveSceneSettings({ render: { quality: "preview" } });
+  const preview = resolveSceneSettings({ display: { mode: "render", render: { quality: "preview" } } });
   assert.equal(preview.render.payload.quality, "preview");
   assert.equal(preview.render.configuration.quality, "preview");
   assert.equal(preview.quality.id, SCENE_QUALITY.STANDARD);
 });
 
 test("Render resolves a recipe and no CAD scene settings at all", () => {
-  const light = resolveSceneSettings({ render: { studio: "light", exposure: -1 } });
-  const dark = resolveSceneSettings({ render: { studio: "dark", exposure: -1 } });
+  const light = resolveSceneSettings({ display: { mode: "render", render: { studio: "light", exposure: -1 } } });
+  const dark = resolveSceneSettings({ display: { mode: "render", render: { studio: "dark", exposure: -1 } } });
 
   // No theme means no way to reach the CAD lighting rig, stage floor or
   // background gradients from Render — not a theme that disables them.
@@ -140,37 +135,7 @@ test("Render resolves a recipe and no CAD scene settings at all", () => {
   }
 });
 
-test("Render camera, quality, and display are isolated from hostile CAD overrides", () => {
-  const baseline = resolveSceneSettings({
-    render: {
-      camera: { preset: "top", projection: "orthographic", focalLength: 85 }
-    }
-  });
-  const hostile = resolveSceneSettings({
-    render: {
-      camera: { preset: "top", projection: "orthographic", focalLength: 85 }
-    },
-    camera: { preset: "front", projection: "perspective", focalLength: 20 },
-    quality: "interactive",
-    display: {
-      mode: "wireframe",
-      clip: { enabled: true },
-      exploded: { enabled: true, amount: 1 },
-      guides: { grid: { enabled: true }, axis: { enabled: true } },
-      partColor: { mode: "single", color: "#ff0000" }
-    }
-  });
-
-  assert.deepEqual(hostile, baseline);
-  assert.equal(hostile.camera.preset, "top");
-  assert.equal(hostile.camera.focalLength, 85);
-  assert.equal(hostile.display.mode, "shaded");
-  assert.equal(hostile.display.guides.grid.enabled, false);
-  assert.equal(hostile.display.partColor.mode, "original");
-  assert.equal(hostile.quality.id, "high");
-});
-
-test("Render camera payload preserves a reusable photographic pose and lens", () => {
+test("Render uses the common reusable camera pose and lens", () => {
   const copiedPose = {
     position: [10, 20, 30],
     target: [1, 2, 3],
@@ -178,10 +143,48 @@ test("Render camera payload preserves a reusable photographic pose and lens", ()
     zoom: 1.4,
     focalLength: 72
   };
-  const resolved = resolveSceneSettings({ render: { camera: copiedPose } });
+  const resolved = resolveSceneSettings({ camera: copiedPose, display: { mode: "render" } });
   assert.equal(resolved.camera.focalLength, 72);
   assert.deepEqual(resolved.camera.position, copiedPose.position);
   assert.deepEqual(resolved.camera.target, copiedPose.target);
+});
+
+test("unified render display preserves the common orthographic camera and inspection display", () => {
+  const resolved = resolveSceneSettings({
+    appearance: "dark",
+    camera: {
+      preset: "front",
+      projection: "orthographic",
+      orthographicHalfHeight: 24,
+      zoom: 1.25
+    },
+    display: {
+      mode: "render",
+      render: { studio: "dark", exposure: 1 },
+      clip: { enabled: true, axis: "z", offsets: { z: 0.4 } },
+      exploded: { enabled: true, amount: 0.6 },
+      guides: { grid: { enabled: true }, axis: { enabled: false } },
+      partColor: { mode: "single", color: "#123456" }
+    }
+  });
+
+  assert.equal(resolved.render.enabled, true);
+  assert.equal(resolved.camera.projection, "orthographic");
+  assert.equal(resolved.camera.orthographicHalfHeight, 24);
+  assert.deepEqual(resolved.render.configuration.camera, resolved.camera);
+  assert.equal(resolved.display.mode, "render");
+  assert.equal(resolved.display.clip.enabled, true);
+  assert.equal(resolved.display.exploded.amount, 0.6);
+  assert.equal(resolved.display.guides.grid.enabled, true);
+  assert.equal(resolved.display.partColor.mode, "single");
+  assert.equal(resolved.render.configuration.exposure, 1);
+});
+
+test("render display without an explicit camera retains the normal orthographic view", () => {
+  const resolved = resolveSceneSettings({ display: { mode: "render" } });
+  assert.equal(resolved.camera.projection, "orthographic");
+  assert.equal(resolved.camera.preset, "iso");
+  assert.equal(resolved.render.configuration.camera.projection, "orthographic");
 });
 
 test("part-color policy stays display-owned and preserves its editable palette", () => {
@@ -224,7 +227,7 @@ test("Render validation rejects old and malformed fields with generic schema err
     [{ backdrop: { transparent: 1 } }, /render\.backdrop\.transparent must be a boolean/],
     [{ backdrop: { groundPlacement: "auto" } }, /render\.backdrop\.groundPlacement must be origin or lowest/],
     [{ backdrop: { floor: true } }, /Unsupported render\.backdrop fields: floor/],
-    [{ camera: { focalLength: 19 } }, /camera\.focalLength/],
+    [{ camera: { focalLength: 19 } }, /Unsupported render fields: camera/],
     [{ display: {} }, /Unsupported render fields: display/]
   ];
   for (const [render, pattern] of invalid) {
