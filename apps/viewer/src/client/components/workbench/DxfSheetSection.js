@@ -198,35 +198,35 @@ export function DxfSheetSettings({
             ))}
           </div>
           <FileSheetControlRow label={null}>
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               <Button
                 type="button"
                 variant={editTool === "pick" ? "secondary" : "outline"}
                 size="sm"
-                className={`${FILE_SHEET_COMPACT_BUTTON_CLASSES} flex-1 justify-center`}
+                className={`${FILE_SHEET_COMPACT_BUTTON_CLASSES} min-w-0 flex-1 justify-center`}
                 aria-pressed={editTool === "pick"}
                 aria-label="Smart dimension"
                 onClick={() => onEditToolChange(editTool === "pick" ? "" : "pick")}
               >
                 <Ruler className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-                <span>Smart dimension</span>
+                <span className="truncate">Dimension</span>
               </Button>
               <Button
                 type="button"
                 variant={editTool === "move" ? "secondary" : "outline"}
                 size="sm"
-                className={`${FILE_SHEET_COMPACT_BUTTON_CLASSES} flex-1 justify-center`}
+                className={`${FILE_SHEET_COMPACT_BUTTON_CLASSES} min-w-0 flex-1 justify-center`}
                 aria-pressed={editTool === "move"}
                 aria-label="Move views"
                 onClick={() => onEditToolChange(editTool === "move" ? "" : "move")}
               >
                 <Move className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-                <span>Move views</span>
+                <span className="truncate">Move</span>
               </Button>
             </div>
           </FileSheetControlRow>
           {pickHint ? <FileSheetStatusText>{pickHint}</FileSheetStatusText> : null}
-          {editTool === "move" ? <FileSheetStatusText>Drag a view on the sheet. Click Move views again to stop.</FileSheetStatusText> : null}
+          {editTool === "move" ? <FileSheetStatusText>Drag a view on the sheet. Click Move again to stop.</FileSheetStatusText> : null}
         </FileSheetSubsection>
       ) : null}
 

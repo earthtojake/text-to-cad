@@ -59,6 +59,7 @@ import {
   drawingEditParams,
   drawingEditsPromptText,
   nearestView,
+  netViewMoves,
   sheetSnapTargets,
   smartDimensionFromSnaps,
   viewAtSheetPoint
@@ -3193,9 +3194,34 @@ export default function CadWorkspace({
   }, []);
   // Smart dimension: an edge or a hole dimensions itself on one click; a corner waits
   // for a second pick and the two give a distance. Picks carry the snap they landed on.
-  const drawingSnapTargets = useMemo(() => sheetSnapTargets(drawingGeometry?.geometry), [drawingGeometry]);
+  // Staged moves shift what the tools see (outlines, snap targets) so a moved view is
+  // where it now shows; a pick on it is put back into the file's coordinates before it
+  // is staged, since the server applies the moves itself when it previews.
+  const drawingViewShifts = useMemo(() => netViewMoves(drawingEdits), [drawingEdits]);
+  const shiftForView = useCallback((name) => drawingViewShifts.get(name) || null, [drawingViewShifts]);
+  const drawingShiftedViews = useMemo(() => drawingViews.map((view) => {
+    const shift = drawingViewShifts.get(view.name);
+    return shift ? { ...view, minX: view.minX + shift[0], maxX: view.maxX + shift[0], minY: view.minY + shift[1], maxY: view.maxY + shift[1] } : view;
+  }), [drawingViews, drawingViewShifts]);
+  const drawingSnapTargets = useMemo(() => {
+    const targets = sheetSnapTargets(drawingGeometry?.geometry);
+    if (!drawingViewShifts.size) return targets;
+    const move = (point, shift) => (shift ? [point[0] + shift[0], point[1] + shift[1]] : point);
+    return {
+      lines: targets.lines.map((line) => { const shift = drawingViewShifts.get(line.view); return shift ? { ...line, start: move(line.start, shift), end: move(line.end, shift) } : line; }),
+      circles: targets.circles.map((circle) => { const shift = drawingViewShifts.get(circle.view); return shift ? { ...circle, center: move(circle.center, shift) } : circle; })
+    };
+  }, [drawingGeometry, drawingViewShifts]);
   const drawingPickedSnapsRef = useRef([]);
-  const handleDrawingSheetPick = useCallback((snap) => {
+  const handleDrawingSheetPick = useCallback((picked) => {
+    const shift = shiftForView(picked.view);
+    const back = (point) => (shift ? [point[0] - shift[0], point[1] - shift[1]] : point);
+    const snap = shift ? {
+      ...picked,
+      point: back(picked.point),
+      line: picked.line ? { ...picked.line, start: back(picked.line.start), end: back(picked.line.end) } : picked.line,
+      circle: picked.circle ? { ...picked.circle, center: back(picked.circle.center) } : picked.circle
+    } : picked;
     const snaps = [...drawingPickedSnapsRef.current, snap];
     const view = drawingViews.find((candidate) => candidate.name === snap.view)
       || viewAtSheetPoint(drawingViews, snap.point) || nearestView(drawingViews, snap.point);
@@ -3207,8 +3233,11 @@ export default function CadWorkspace({
       return;
     }
     drawingPickedSnapsRef.current = snaps;
-    setDrawingPickedPoints(snaps.map((item) => item.point));
-  }, [drawingViews]);
+    setDrawingPickedPoints(snaps.map((item) => {
+      const itemShift = shiftForView(item.view);
+      return itemShift ? [item.point[0] + itemShift[0], item.point[1] + itemShift[1]] : item.point;
+    }));
+  }, [drawingViews, shiftForView]);
   const handleDrawingViewMove = useCallback((view, dx, dy) => {
     setDrawingEdits((edits) => [...edits, { id: createDrawingEditId(), kind: "move", view, dx, dy }]);
   }, []);
@@ -7664,7 +7693,7 @@ export default function CadWorkspace({
           drawingIsDocument={selectedEntryIsDrawingDocument}
           drawingSvgUrl={drawingSvgUrl}
           sheetEditTool={selectedEntryIsDrawingDocument ? drawingEditTool : ""}
-          sheetEditViews={drawingViews}
+          sheetEditViews={drawingShiftedViews}
           sheetEditSnapTargets={drawingSnapTargets}
           sheetEditPickedPoints={drawingPickedPoints}
           onSheetEditPick={handleDrawingSheetPick}
