@@ -2955,13 +2955,22 @@ const CadViewer = forwardRef(function CadViewer({
     const state = { cancelled: false };
     fetch(drawingSvgUrl)
       .then((res) => (res.ok ? res.text() : Promise.reject(new Error(`drawing svg ${res.status}`))))
-      .then((svgText) => rasterizeSvgToTexture(THREE, svgText))
-      .then(({ texture }) => {
+      .then((svgText) => rasterizeSvgToTexture(THREE, svgText).then(({ texture }) => ({ texture, svgText })))
+      .then(({ texture, svgText }) => {
         if (state.cancelled || slot.container.parent !== slot.group) {
           texture.dispose();
           return;
         }
         if (slot.sheet) {
+          // A re-render can change the extent (a draft dimension past the frame), so
+          // the existing sheet is re-sized to the new image as well as re-textured.
+          const again = svgText.match(/data-extent="([-\d.]+) ([-\d.]+) ([-\d.]+) ([-\d.]+)"/);
+          if (again) {
+            const [x0, y0, x1, y1] = again.slice(1).map(Number);
+            slot.sheet.geometry.dispose();
+            slot.sheet.geometry = new THREE.PlaneGeometry(x1 - x0, y1 - y0);
+            slot.sheet.position.set((x0 + x1) / 2, (y0 + y1) / 2, 0.01);
+          }
           const previous = slot.sheet.material.map;
           slot.sheet.material.map = texture;
           slot.sheet.material.needsUpdate = true;
@@ -2970,13 +2979,21 @@ const CadViewer = forwardRef(function CadViewer({
           return;
         }
         const { sheetBounds, container } = slot;
-        const width = sheetBounds.max[0] - sheetBounds.min[0];
-        const height = sheetBounds.max[2] - sheetBounds.min[2];
+        // The image covers exactly the extent the server rendered (data-extent on the
+        // SVG root, drawing units). Placing it from the parsed line work instead would
+        // stretch it whenever text or arrows reach past the lines, and every feature
+        // would drift from the tool's overlay. The parse is only the fallback.
+        const extent = svgText.match(/data-extent="([-\d.]+) ([-\d.]+) ([-\d.]+) ([-\d.]+)"/);
+        const box = extent
+          ? { x0: Number(extent[1]), y0: Number(extent[2]), x1: Number(extent[3]), y1: Number(extent[4]) }
+          : { x0: sheetBounds.min[0], y0: sheetBounds.min[2], x1: sheetBounds.max[0], y1: sheetBounds.max[2] };
+        const width = box.x1 - box.x0;
+        const height = box.y1 - box.y0;
         const sheet = new THREE.Mesh(
           new THREE.PlaneGeometry(width, height),
           new THREE.MeshBasicMaterial({ map: texture, depthWrite: false, toneMapped: false })
         );
-        sheet.position.set((sheetBounds.min[0] + sheetBounds.max[0]) / 2, (sheetBounds.min[2] + sheetBounds.max[2]) / 2, 0.01);
+        sheet.position.set((box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2, 0.01);
         sheet.renderOrder = 6;
         sheet.userData.dxfDrawingSheet = true;
         for (const child of container.children) {

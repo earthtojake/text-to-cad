@@ -37,6 +37,14 @@ class DrawingSvgTests(unittest.TestCase):
         self.assertIn("stroke: #808080", svg, "the HIDDEN layer keeps its grey")
         self.assertGreaterEqual(svg.count("<path"), 6)
         self.assertIn('width="', svg)
+        # The rendered extent rides on the root element so the viewer can place the image exactly.
+        import re
+        extent = re.search(r'data-extent="([-\d.]+) ([-\d.]+) ([-\d.]+) ([-\d.]+)"', svg)
+        self.assertIsNotNone(extent, "data-extent on the <svg> root")
+        x0, y0, x1, y1 = (float(v) for v in extent.groups())
+        self.assertLessEqual(x0, 0.0)
+        self.assertGreaterEqual(x1, 100.0)
+        self.assertGreater(y1, 60.0, "the text above the outline is inside the extent")
 
     def test_hidden_layers_are_left_out(self) -> None:
         with temporary_directory(prefix="tmp-cad-drawing-svg-") as td:
