@@ -18,7 +18,7 @@ function normalizeString(value) {
   return String(value || "").trim();
 }
 
-// Saved layouts and per-file open selections keep their meaning across the merge.
+// Per-file active selections keep their meaning across the Motion/View merge.
 export function normalizeFileSheetSectionId(value) {
   const id = normalizeString(value);
   if (["pose", "animation", "joints"].includes(id)) return FILE_SHEET_SECTION_IDS.MOTION;
@@ -121,8 +121,16 @@ export function normalizeFileSheetOpenSectionIds(sectionIds, renderedSectionIds)
     return [];
   }
   const open = (Array.isArray(sectionIds) ? sectionIds : []).map(normalizeFileSheetSectionId);
-  // Last-open wins even when two retired tabs now point to the same section.
-  return [...new Set(open.filter(id => rendered.has(id)).reverse())].reverse();
+  // Only one section is active. Legacy split lists retain their last available
+  // selection, including retired IDs that now point to Motion or View.
+  return open.filter(id => rendered.has(id)).slice(-1);
+}
+
+// A legacy split can name two active tabs. The last selected available section
+// wins, and a missing/unsupported selection falls back to the format's first tab.
+export function resolveActiveFileSheetSectionId(openSectionIds, renderedSectionIds) {
+  const rendered = normalizeSectionIds(renderedSectionIds);
+  return normalizeFileSheetOpenSectionIds(openSectionIds, rendered).at(-1) || rendered[0] || "";
 }
 
 export function shouldOpenFileSheetForSelectionReveal({ isDesktop = true, source = "viewer" } = {}) {

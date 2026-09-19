@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { defaultOpenFileSheetSectionIds, renderedFileSheetSectionIds, normalizeFileSheetOpenSectionIds, shouldOpenFileSheetForSelectionReveal } from "./fileSheetSections.js";
+import { defaultOpenFileSheetSectionIds, renderedFileSheetSectionIds, normalizeFileSheetOpenSectionIds, resolveActiveFileSheetSectionId, shouldOpenFileSheetForSelectionReveal } from "./fileSheetSections.js";
 
 test("STEP shares Model, optional Motion, and View across both viewing modes", () => {
   for (const renderMode of [false, true]) {
@@ -33,8 +33,8 @@ test("defaults retain useful format-specific selections", () => {
 });
 
 test("legacy open selections migrate without losing the most recent tab", () => {
-  assert.deepEqual(normalizeFileSheetOpenSectionIds(["tree", "pose", "display", "animation"], ["tree", "motion", "view"]), ["tree", "view", "motion"]);
-  assert.deepEqual(normalizeFileSheetOpenSectionIds(["joints", "render", "materials"], ["motion", "view"]), ["motion", "view"]);
+  assert.deepEqual(normalizeFileSheetOpenSectionIds(["tree", "pose", "display", "animation"], ["tree", "motion", "view"]), ["motion"]);
+  assert.deepEqual(normalizeFileSheetOpenSectionIds(["joints", "render", "materials"], ["motion", "view"]), ["view"]);
   assert.deepEqual(normalizeFileSheetOpenSectionIds(null, ["tree"]), []);
 });
 
@@ -42,4 +42,14 @@ test("selection reveals keep the host's existing behavior", () => {
   assert.equal(shouldOpenFileSheetForSelectionReveal(), true);
   assert.equal(shouldOpenFileSheetForSelectionReveal({ isDesktop: false }), false);
   assert.equal(shouldOpenFileSheetForSelectionReveal({ isDesktop: false, source: "tree" }), true);
+});
+
+test("a single active tab restores legacy split selections without rearranging sections", () => {
+  const tabs = ["tree", "motion", "view"];
+  assert.equal(resolveActiveFileSheetSectionId(["tree", "pose", "display", "animation"], tabs), "motion");
+  assert.equal(resolveActiveFileSheetSectionId(["tree", "render"], tabs), "view");
+  assert.equal(resolveActiveFileSheetSectionId(["retired", "motion"], ["tree", "view"]), "tree");
+  assert.equal(resolveActiveFileSheetSectionId([], ["material", "bends", "dxfLayers", "view"]), "material");
+  assert.equal(resolveActiveFileSheetSectionId(null, []), "");
+  assert.deepEqual(tabs, ["tree", "motion", "view"]);
 });

@@ -8,7 +8,7 @@ import {
 } from "../../../workbench/stepTreeWindow.js";
 
 export default function useStepTreeWindow(rows, focusedRowId, contextRowId) {
-  // A callback ref observes tab moves, split-pane remounts and sheet reopening;
+  // A callback ref observes tree remounts and sheet reopening;
   // the scroll viewport itself belongs to FileSheetTabbedSurface.
   const [container, setContainer] = useState(null);
   const measureRef = useRef(null);

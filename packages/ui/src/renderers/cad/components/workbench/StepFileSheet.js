@@ -90,7 +90,7 @@ export default function StepFileSheet({
   }), ...settingsTabs, buildFileStatusTab(statusItems)].filter(Boolean);
   return <FileSheet open={open} title="STEP" isDesktop={isDesktop} width={width}
     onOpenChange={onOpenChange} onStartResize={onStartResize} scrollBody={false}>
-    <FileSheetTabbedSurface kind="step" sections={sections} openSectionIds={openSectionIds}
+    <FileSheetTabbedSurface sections={sections} openSectionIds={openSectionIds}
       onOpenSectionIdsChange={onOpenSectionIdsChange} />
   </FileSheet>;
 }

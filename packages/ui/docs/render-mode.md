@@ -4,7 +4,7 @@ The CAD viewer has one viewing state. **View → Mode** selects the surface styl
 Shaded with edges, **Render** (second), then the remaining CAD styles. Selecting
 Render changes lighting, material presentation and quality; it does not replace
 the camera, projection, clipping, explode, guides, visibility, selection, motion,
-or tab layout. The interaction tools remain available in every style.
+or active inspector tab. The interaction tools remain available in every style.
 
 The state contract is in [cad-renderer.md](./cad-renderer.md). Settings use the
 binding row and section rules in [settings-ui.md](./settings-ui.md). Core's
@@ -21,10 +21,13 @@ quality controls at the bottom. Hiding those controls preserves their values.
 Per-format controls continue to appear alongside these tabs.
 
 There is no Display popover, top-level Inspect/Render switch, or separate Studio
-layout. The floating interaction toolbar owns Select, Measure and Draw; its
-neighbor owns navigation and capture. A style change preserves the saved tab
-arrangement. Earlier Kinematics/Animation and Display/Studio arrangements migrate
-to Motion and View without discarding custom splits.
+layout. The floating interaction toolbar owns Select, Pan, Measure and Draw; its
+neighbor owns Orbit and capture. Inspector tabs occupy one fixed row in canonical
+order and cannot be dragged, reordered or split. A style change preserves the
+active tab. Earlier Kinematics/Animation and Display/Studio selection IDs map
+to Motion and View; a legacy split selects its last available active tab. Saved
+global tab arrangements are ignored. Visited Model trees keep their disclosure
+and scroll state while another tab is active.
 
 Projection remains independently selectable as Orthographic or Perspective in
 all styles. Lens appears for perspective projection. Camera motion, zoom, fit

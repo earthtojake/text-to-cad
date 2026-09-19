@@ -38,7 +38,7 @@ test('interaction modes and view actions occupy two separate horizontal groups',
   assert.ok(actions);
   assert.deepEqual(
     elements(interaction).map(node => node.props.label).filter(Boolean),
-    ['Select', 'Measure', 'Draw']
+    ['Select', 'Pan', 'Measure', 'Draw']
   );
   assert.equal(elements(actions).some(node => node.props.label === 'View controls'), true);
   assert.equal(elements(actions).some(node => node.props.label === 'Capture'), true);
@@ -56,7 +56,7 @@ test('Render keeps interaction tools and ordinary view actions available', () =>
   });
   const toolbar = render(outer.tree.type, outer.tree.props);
   const labels = elements(toolbar.tree).map(node => node.props.label).filter(Boolean);
-  for (const label of ['Select', 'Measure', 'Draw', 'View controls', 'Capture']) {
+  for (const label of ['Select', 'Pan', 'Measure', 'Draw', 'View controls', 'Capture']) {
     assert.equal(labels.includes(label), true, label);
   }
   assert.equal(elements(toolbar.tree).some(node => node.type?.name === 'SelectionFilterMenu'), true);

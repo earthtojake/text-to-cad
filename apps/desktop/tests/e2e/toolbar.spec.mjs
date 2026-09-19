@@ -141,7 +141,7 @@ test('CAD toolbar compacts to its scene and restores every tool on widening', as
     const zoom = page.getByRole('group', { name: 'Zoom controls', exact: true });
     const grouping = async () => {
       for (const name of ['View controls', 'Selection filter: All', 'Capture']) await expect(view.getByRole('button', { name, exact: true })).toBeVisible();
-      for (const name of ['Select', 'Measure', 'Draw']) await expect(tools.getByRole('button', { name, exact: true })).toBeVisible();
+      for (const name of ['Select', 'Pan', 'Measure', 'Draw']) await expect(tools.getByRole('button', { name, exact: true })).toBeVisible();
       await expect(toolbar.getByRole('button', { name: 'Display', exact: true })).toHaveCount(0);
       await expect(toolbar.getByRole('button', { name: /^Viewing mode:/ })).toHaveCount(0);
       for (const name of ['Zoom out', 'Zoom in', 'Reset view']) await expect(zoom.getByRole('button', { name, exact: true })).toBeVisible();
@@ -162,7 +162,7 @@ test('CAD toolbar compacts to its scene and restores every tool on widening', as
     await displayMode.click();
     await page.getByRole('option', { name: 'Render', exact: true }).click();
     await expect(displayMode).toContainText('Render');
-    for (const name of ['Select', 'Measure', 'Draw']) await expect(tools.getByRole('button', { name, exact: true })).toBeVisible();
+    for (const name of ['Select', 'Pan', 'Measure', 'Draw']) await expect(tools.getByRole('button', { name, exact: true })).toBeVisible();
     await displayMode.click();
     await page.getByRole('option', { name: 'Shaded with edges', exact: true }).click();
     await page.screenshot({ path: `${output}/wide.png` });
@@ -171,13 +171,13 @@ test('CAD toolbar compacts to its scene and restores every tool on widening', as
     await page.screenshot({ path: `${output}/narrow.png` });
 
     await view.getByRole('button', { name: 'View controls' }).click();
-    for (const name of ['Pan', 'Orbit']) await expect(page.getByRole('menuitem', { name, exact: true })).toBeEnabled();
+    await expect(page.getByRole('menuitem', { name: 'Orbit', exact: true })).toBeEnabled();
+    await expect(page.getByRole('menuitem', { name: 'Pan', exact: true })).toHaveCount(0);
     await expect(page.getByRole('menuitem', { name: 'Copy screenshot' })).toHaveCount(0);
-    await page.getByRole('menuitem', { name: 'Pan', exact: true }).click();
-    await view.getByRole('button', { name: 'View controls' }).click();
-    await expect(page.getByRole('menuitem', { name: /Pan/ }).getByLabel('Active')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(view.getByRole('button', { name: 'View controls' })).toBeFocused();
+    await tools.getByRole('button', { name: 'Pan', exact: true }).click();
+    await expect(tools.getByRole('button', { name: 'Pan', exact: true })).toHaveAttribute('aria-pressed', 'true');
 
     await view.getByRole('button', { name: 'Capture', exact: true }).click();
     for (const name of ['Copy screenshot', 'Ask about this view']) await expect(page.getByRole('menuitem', { name, exact: true })).toBeEnabled();
@@ -219,10 +219,10 @@ test('CAD toolbar compacts to its scene and restores every tool on widening', as
     await selectFixtureSession(page, project);
     await expect(page.getByText('12/50', { exact: true })).toBeVisible();
     await fit();
-    for (const name of ['Select', 'Measure', 'Draw']) await expect(toolbar.getByRole('button', { name, exact: true })).toBeDisabled();
+    for (const name of ['Select', 'Pan', 'Measure', 'Draw']) await expect(toolbar.getByRole('button', { name, exact: true })).toBeDisabled();
     await expect(toolbar.getByRole('button', { name: 'Display', exact: true })).toHaveCount(0);
     await view.getByRole('button', { name: 'View controls' }).click();
-    for (const name of ['Pan', 'Orbit']) await expect(page.getByRole('menuitem', { name, exact: true })).toBeDisabled();
+    await expect(page.getByRole('menuitem', { name: 'Orbit', exact: true })).toBeDisabled();
     await page.keyboard.press('Escape');
     await view.getByRole('button', { name: 'Capture', exact: true }).click();
     for (const name of ['Copy screenshot', 'Ask about this view']) await expect(page.getByRole('menuitem', { name, exact: true })).toBeDisabled();

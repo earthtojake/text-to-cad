@@ -7,7 +7,7 @@ describe("FileViewer persisted CAD state migration", () => {
     const retiredTheme = JSON.stringify({ version: 13, themeId: "cinematic", custom: { exposure: 1.2 } });
     localStorage.setItem("cad-viewer:theme", retiredTheme);
     localStorage.setItem("cad-viewer:tutorial-tips:v1", JSON.stringify({ version: 1, seen: ["copyReference", 5] }));
-    expect(migrateCadPreferences(localStorage)).toEqual({ poseTransition: { animate: true, speed: 1 }, fileSheetTabs: {} });
+    expect(migrateCadPreferences(localStorage)).toEqual({ poseTransition: { animate: true, speed: 1 } });
     expect(localStorage.getItem("cad-viewer:theme")).toBe(retiredTheme);
     localStorage.setItem("cad-viewer:tutorial-tips:v1", JSON.stringify({ version: 0, seen: ["copyReference"] }));
     expect(migrateCadPreferences(localStorage)).not.toHaveProperty("seenTips");
@@ -31,14 +31,14 @@ describe("FileViewer persisted CAD state migration", () => {
     migrateCadFileStates("root-a", "/projects/a", localStorage, sessionStorage);
     expect(JSON.parse(localStorage.getItem("hardcore.fileViewer.v1")!)["root-a"]).toEqual({ '["part.step","cad"]': { version: 1, drawing: "new" } });
   });
-  it("shares panel layouts across roots without reviving CAD themes or tutorial state", () => {
+  it("shares motion preferences across roots without reviving CAD themes or tutorial state", () => {
     const retiredTheme = JSON.stringify({ version: 13, themeId: "cinematic", custom: null });
     localStorage.setItem("cad-viewer:theme", retiredTheme);
     const firstRoot = desktopCadPreferences();
     const secondRoot = desktopCadPreferences();
-    const fileSheetTabs = { step: { split: false, top: ["tree", "pose"], bottom: [], ratio: 0.5 } };
-    firstRoot.update({ fileSheetTabs });
-    expect(secondRoot.getSnapshot().fileSheetTabs).toEqual(fileSheetTabs);
+    const poseTransition = { animate: false, speed: 2 };
+    firstRoot.update({ poseTransition });
+    expect(secondRoot.getSnapshot().poseTransition).toEqual(poseTransition);
     expect(desktopCadPreferences().getSnapshot()).not.toHaveProperty("seenTips");
     expect(secondRoot.getSnapshot()).not.toHaveProperty("theme");
     expect(localStorage.getItem("cad-viewer:theme")).toBe(retiredTheme);
@@ -69,18 +69,20 @@ describe("FileViewer persisted CAD state migration", () => {
     expect(firstRoot.getSnapshot().poseTransition).toEqual({ animate: false, speed: 1 });
     expect(JSON.parse(localStorage.getItem(key)!)).toEqual({ animate: false, speed: 0.001 });
   });
-  it("a stale local preference change preserves another window's newer layout kind and motion", () => {
+  it("ignores retired tab arrangements on migration, updates and other-window events", () => {
     const preferences = desktopCadPreferences();
-    const key = "cad-viewer:file-sheet-tab-layout:v7";
-    window.dispatchEvent(new StorageEvent("storage", { key }));
-    const baseline = preferences.getSnapshot();
-    const robot = { split: false, top: ["motion"], bottom: [], ratio: 0.5 };
-    const step = { split: false, top: ["tree"], bottom: [], ratio: 0.5 };
-    // This is a concurrent remote publication before its storage event arrives.
-    localStorage.setItem(key, JSON.stringify({ robot }));
-    localStorage.setItem("cad-viewer:pose-transition:v1", JSON.stringify({ animate: false, speed: 2 }));
-    preferences.update({ fileSheetTabs: { ...baseline.fileSheetTabs, step } });
-    expect(JSON.parse(localStorage.getItem(key)!)).toEqual({ robot, step });
-    expect(JSON.parse(localStorage.getItem("cad-viewer:pose-transition:v1")!)).toEqual({ animate: false, speed: 2 });
+    const before = preferences.getSnapshot();
+    for (const version of [5, 6, 7]) {
+      const key = `cad-viewer:file-sheet-tab-layout:v${version}`;
+      const legacy = JSON.stringify({ step: { split: true, top: ["render"], bottom: ["tree", "pose"], ratio: 0.2 } });
+      localStorage.setItem(key, legacy);
+      expect(migrateCadPreferences(localStorage)).not.toHaveProperty("fileSheetTabs");
+      window.dispatchEvent(new StorageEvent("storage", { key }));
+      expect(preferences.getSnapshot()).toBe(before);
+      expect(localStorage.getItem(key)).toBe(legacy);
+    }
+    preferences.update({ poseTransition: { animate: true, speed: 4 } });
+    expect(preferences.getSnapshot()).not.toHaveProperty("fileSheetTabs");
+    expect(JSON.parse(localStorage.getItem("cad-viewer:file-sheet-tab-layout:v7")!).step.split).toBe(true);
   });
 });

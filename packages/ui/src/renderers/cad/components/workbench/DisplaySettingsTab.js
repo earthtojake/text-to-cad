@@ -254,7 +254,7 @@ export function DisplaySettingsSection({
   return (
     <div className="py-2" data-cad-display-settings-section="true">
       <FileSheetSubsection title="View">
-        <FileSheetSelectRow stacked label="Mode" value={selectedMode} onValueChange={changeMode} options={DISPLAY_MODE_OPTIONS} />
+        <FileSheetSelectRow label="Mode" value={selectedMode} onValueChange={changeMode} options={DISPLAY_MODE_OPTIONS} />
         <FileSheetSelectRow
           label="Projection"
           value={projection}
