@@ -225,6 +225,20 @@ export function useViewerSheetEdit({
     };
     drawIdle();
 
+    // What a click here would take, in the words the panel uses.
+    const snapLabel = (snap) => {
+      if (snap.kind === "edge") {
+        const length = Math.hypot(snap.line.end[0] - snap.line.start[0], snap.line.end[1] - snap.line.start[1]);
+        return `Edge ${fmt(length)}`;
+      }
+      if (snap.kind === "circle") return `Hole \u00d8${fmt(2 * snap.circle.radius)}`;
+      if (snap.kind === "arc") return `Arc R${fmt(snap.arc.radius)}`;
+      if (snap.kind === "midpoint") return "Midpoint";
+      if (snap.kind === "vertex") return "Corner";
+      if (snap.kind === "dimension") return `Dimension ${snap.value || ""}`.trim();
+      return "";
+    };
+
     let hoverKey = "";
     const drawHover = (snap, view) => {
       const key = snap ? `${snap.kind}:${snap.point[0].toFixed(2)},${snap.point[1].toFixed(2)}` : view ? `view:${view.name}` : "";
@@ -232,6 +246,10 @@ export function useViewerSheetEdit({
       hoverKey = key;
       disposeChildren(hoverGroup);
       const scale = mmPerPixel();
+      if (snap && tool === "pick") {
+        const text = snapLabel(snap);
+        if (text) hoverGroup.add(label(text, [snap.point[0] + 9 * scale, snap.point[1] + 9 * scale]));
+      }
       if (snap?.kind === "vertex") {
         hoverGroup.add(ring(snap.point, 3 * scale, 5.5 * scale));
       } else if (snap?.kind === "midpoint") {

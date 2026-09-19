@@ -1717,6 +1717,14 @@ function updateGridHelper(
     disposeSceneObject,
     floorSettings
   });
+  // A drawing is a page on a desk, not a model on a stage: the floor grid and the
+  // origin axis read as 3D scenery behind it and are what make a sheet look like it
+  // is floating in space. Hidden here rather than at the call sites, so nothing that
+  // rebuilds the grid (theme, scale, render mode) can bring it back under a sheet.
+  if (runtime.hasDrawingDocument) {
+    if (runtime.gridHelper) runtime.gridHelper.visible = false;
+    if (runtime.originAxis) runtime.originAxis.visible = false;
+  }
   runtime.gridFloorZ = floorZ;
   runtime.floorMode = floorMode;
   return result;
@@ -2775,16 +2783,61 @@ const CadViewer = forwardRef(function CadViewer({
       const frame = drawingLineBounds({ layers: [sheetLayer] });
       if (frame) {
         const paper = ink === 0x172638 ? 0xffffff : 0x2f343b;
-        const width = frame.max[0] - frame.min[0];
-        const height = frame.max[2] - frame.min[2];
+        const margin = 3;
+        const width = frame.max[0] - frame.min[0] + 2 * margin;
+        const height = frame.max[2] - frame.min[2] + 2 * margin;
+        const centreX = (frame.min[0] + frame.max[0]) / 2;
+        const centreY = (frame.min[2] + frame.max[2]) / 2;
+        // The page's own rectangle, for the Fit page / Width / 100% presets.
+        runtime.drawingPageBox = { x0: centreX - width / 2, y0: centreY - height / 2, x1: centreX + width / 2, y1: centreY + height / 2 };
+        // The desk the page lies on. The viewport's own backdrop is the void a model
+        // hangs in: white paper on it reads as a lit rectangle in space, and a shadow
+        // cast onto it is invisible. A plane well past the page gives the sheet a
+        // ground, so the edge and the shadow have something to be seen against.
+        const desk = new THREE.Mesh(
+          new THREE.PlaneGeometry(Math.max(width, height) * 40, Math.max(width, height) * 40),
+          new THREE.MeshBasicMaterial({ color: ink === 0x172638 ? 0xe8e8e5 : 0x2a2e33, depthWrite: false })
+        );
+        desk.position.set(centreX, centreY, -0.12);
+        desk.renderOrder = -2;
+        desk.userData.dxfDrawingDesk = true;
+        container.add(desk);
+        // A drop shadow under the page: stacked quads, each a little larger than the
+        // last, so the darkness builds toward the page edge and fades outward. Quads
+        // rather than a blurred canvas, which would depend on ctx.filter, and drawn in
+        // millimetres so the shadow grows with the page as it is zoomed.
+        const shadowReach = Math.max(width, height) * 0.02;
+        const shadowSteps = 12;
+        for (let step = shadowSteps; step >= 1; step -= 1) {
+          const grow = (shadowReach * step) / shadowSteps;
+          const quad = new THREE.Mesh(
+            new THREE.PlaneGeometry(width + 2 * grow, height + 2 * grow),
+            new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.06, depthWrite: false })
+          );
+          quad.position.set(centreX + shadowReach * 0.25, centreY - shadowReach * 0.35, -0.09 - step * 1e-4);
+          quad.renderOrder = -1;
+          quad.userData.dxfDrawingPaperShadow = true;
+          container.add(quad);
+        }
         const plane = new THREE.Mesh(
-          new THREE.PlaneGeometry(width + 6, height + 6),
+          new THREE.PlaneGeometry(width, height),
           new THREE.MeshBasicMaterial({ color: paper, depthWrite: false })
         );
-        plane.position.set((frame.min[0] + frame.max[0]) / 2, (frame.min[2] + frame.max[2]) / 2, -0.05);
+        plane.position.set(centreX, centreY, -0.05);
         plane.renderOrder = 0;
         plane.userData.dxfDrawingPaper = true;
         container.add(plane);
+        // A hairline at the page edge, so the sheet ends somewhere definite even where
+        // the shadow is faint.
+        const edge = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints([
+            [-1, -1], [1, -1], [1, 1], [-1, 1], [-1, -1]
+          ].map(([sx, sy]) => new THREE.Vector3(centreX + (sx * width) / 2, centreY + (sy * height) / 2, -0.04))),
+          new THREE.LineBasicMaterial({ color: ink === 0x172638 ? 0xc8c8c8 : 0x4a5158, transparent: true, opacity: 0.9 })
+        );
+        edge.renderOrder = 1;
+        edge.userData.dxfDrawingPaperEdge = true;
+        container.add(edge);
       }
     }
     for (const layer of layers) {
@@ -3579,6 +3632,57 @@ const CadViewer = forwardRef(function CadViewer({
     },
     applyZoomPercent(nextZoomPercent) {
       return applyZoomPercent(nextZoomPercent);
+    },
+    /**
+     * Zoom a drawing the way a document editor does: the whole page, the page's
+     * width, or actual size (1 mm on the sheet is 1 mm on screen, at the 96 CSS
+     * pixels per inch the browser lays out with). Returns false when the current
+     * file is not a page.
+     */
+    fitSheet(mode = "page") {
+      const runtime = runtimeRef.current;
+      const page = runtime?.drawingPageBox;
+      const camera = runtime?.camera;
+      const controls = runtime?.controls;
+      if (!page || !camera || !controls || !runtime.THREE) {
+        return false;
+      }
+      const metrics = getViewportMetrics(runtime);
+      const aspect = metrics.aspect;
+      const pageWidth = page.x1 - page.x0;
+      const pageHeight = page.y1 - page.y0;
+      let halfHeight;
+      if (mode === "actual") {
+        halfHeight = metrics.height / 2 / (96 / 25.4);
+      } else if (mode === "width") {
+        halfHeight = (pageWidth / 2 / Math.max(aspect, 1e-6)) * 1.02;
+      } else {
+        halfHeight = Math.max(pageHeight / 2, pageWidth / 2 / Math.max(aspect, 1e-6)) * 1.04;
+      }
+      const centre = new runtime.THREE.Vector3((page.x0 + page.x1) / 2, (page.y0 + page.y1) / 2, 0);
+      // Fit width and actual size scroll to the top of the page, which is where a
+      // reader starts; fit page keeps the whole sheet centred.
+      if (mode !== "page" && halfHeight < pageHeight / 2) {
+        centre.y = page.y1 - halfHeight;
+      }
+      cancelCameraTransition(runtime);
+      const face = VIEW_PLANE_FACE_BY_ID.z;
+      camera.up.set(...face.up);
+      if (camera.isOrthographicCamera) {
+        camera.zoom = 1;
+        setOrthographicCameraHalfHeight(runtime, halfHeight, metrics);
+        const distance = Math.max(camera.position.distanceTo(controls.target), Math.max(pageWidth, pageHeight) * 2.5);
+        camera.position.set(centre.x, centre.y, centre.z + distance);
+      } else {
+        const fov = (camera.fov * Math.PI) / 180;
+        camera.position.set(centre.x, centre.y, centre.z + halfHeight / Math.tan(fov / 2));
+      }
+      controls.target.copy(centre);
+      camera.lookAt(controls.target);
+      camera.updateProjectionMatrix?.();
+      controls.update?.();
+      runtime.requestRender?.();
+      return true;
     },
     resetView() {
       const reset = zoomRuntimeToBounds(runtimeRef.current, runtimeFramingBounds(runtimeRef.current, meshData?.bounds), sceneScaleModeRef.current, {

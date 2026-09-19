@@ -336,6 +336,7 @@ import {
   statusOnlyFileSheetTitle
 } from "./fileViewState.js";
 import { sceneBackdropEdgeColor } from "./chromeBackdrop.js";
+import { documentDeskColor } from "../workbench/documentDesk.js";
 import { useChromeBackdropColor } from "./cadTheme.js";
 import {
   addReferenceLookupKeys,
@@ -860,6 +861,12 @@ function CadFileViewSurface({
   const selectedEntryIsDrawingDocument =
     assetKindForRenderFormat(selectedEntrySourceFormat) === ASSET_KIND.DRAWING
     && dxfDataIsDocument(drawingGeometry);
+  // A sheet lies on a desk, not in the void a model hangs in: the page needs a ground
+  // it can cast a shadow onto and end against. Decided here rather than with the
+  // backdrop itself, which is settled before the selection is known.
+  const effectiveSceneBackdrop = selectedEntryIsDrawingDocument && !renderSession.enabled
+    ? documentDeskColor(sceneBackdrop)
+    : sceneBackdrop;
   // The selected entry's render artifact is (re)building -> show the loading state. Replaces the
   // old !entryHasMesh + buildable-code derivation.
   const selectedStepArtifactRenderPending = selectedArtifactGenerating;
@@ -2289,6 +2296,9 @@ function CadFileViewSurface({
     drawingPickedSnapsRef.current = [];
     setDrawingPickedPoints([]);
     setDrawingPendingSnaps([]);
+  }, []);
+  const handleDrawingFitSheet = useCallback((mode) => {
+    viewerRef.current?.fitSheet?.(mode);
   }, []);
   const handleDrawingSnapKindToggle = useCallback((kind) => {
     setDrawingSnapKinds((current) => {
@@ -6349,8 +6359,8 @@ function CadFileViewSurface({
                 be read (chromeBackdrop.js). */}
             <div
               className="pointer-events-none relative min-w-0 flex-1 overflow-hidden"
-              data-cad-scene-backdrop={sceneBackdrop}
-              style={{ backgroundColor: sceneBackdrop }}
+              data-cad-scene-backdrop={effectiveSceneBackdrop}
+              style={{ backgroundColor: effectiveSceneBackdrop }}
             >
               <div className="pointer-events-auto absolute inset-0 z-0">
                 <CadRenderPane
@@ -6755,6 +6765,7 @@ function CadFileViewSurface({
                     pickedPointCount: drawingPickedPoints.length,
                     snapKinds: drawingSnapKinds,
                     onSnapKindToggle: handleDrawingSnapKindToggle,
+                    onFitSheet: handleDrawingFitSheet,
                     selectedDimension: drawingSelectedDimension,
                     onSelectDimension: setDrawingSelectedDimension,
                     onAddTolerance: handleDrawingAddTolerance,
