@@ -9,8 +9,8 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const { chromium } = createRequire(path.join(REPO, "packages/cadgen-js/package.json"))("playwright");
-const { PNG } = createRequire(path.join(REPO, "apps/viewer/package.json"))("pngjs");
+const { chromium } = createRequire(path.join(REPO, "packages/core/package.json"))("playwright");
+const { PNG } = createRequire(path.join(REPO, "apps/web/package.json"))("pngjs");
 
 function parseArgs(argv) {
   const args = { url: "", dir: "", out: "", only: "", ci: false };
@@ -29,6 +29,7 @@ function parseArgs(argv) {
 }
 
 const args = parseArgs(process.argv.slice(2));
+const diagnosticDir = args.out || process.env.VIEWER_TEST_DIAGNOSTICS_DIR || "";
 const root = path.resolve(args.dir || ".");
 const fixtures = [
   // `measure` mirrors renderCapabilities: a view that cannot measure has NO Measure
@@ -48,6 +49,8 @@ const latestReleaseApiUrl = "https://api.github.com/repos/earthtojake/text-to-ca
 const currentVersion = fs.readFileSync(path.join(REPO, "VERSION"), "utf8").trim();
 const failures = [];
 const results = [];
+const cameraReadiness = new WeakMap();
+let activeGate = "setup";
 
 function fail(message) {
   throw new Error(message);
@@ -71,6 +74,7 @@ const browser = await chromium.launch({
 async function newPage({ lod = true } = {}) {
   const context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
   const errors = [];
+  const responseReads = new Set();
   await context.route("**/*", async (route) => {
     const request = route.request();
     const url = request.url();
@@ -87,6 +91,14 @@ async function newPage({ lod = true } = {}) {
       return;
     }
     const parsed = new URL(url);
+    // Catalog identities are absolute so two hosted projects can keep separate
+    // file state. Artifact/editing endpoints accept the served-root reference.
+    if (["/__cad/artifact", "/__cad/preview"].includes(parsed.pathname)) {
+      const file = parsed.searchParams.get("file") || "";
+      if (/^(?:[/\\]|[a-z]:[/\\])/i.test(file)) {
+        errors.push(`absolute file identity leaked to ${parsed.pathname}: ${file}`);
+      }
+    }
     if (["http:", "https:"].includes(parsed.protocol) && parsed.origin !== viewerOrigin) {
       errors.push(`unexpected external request: ${request.method()} ${url} (${request.resourceType()})`);
       await route.abort("blockedbyclient");
@@ -95,6 +107,20 @@ async function newPage({ lod = true } = {}) {
     await route.continue();
   });
   const page = await context.newPage();
+  page.setDefaultTimeout(10_000);
+  page.on("response", response => {
+    if (response.status() < 400 || !response.url().startsWith(`${viewerOrigin}/__cad/`)) return;
+    const read = response.text().then(body => {
+      const request = response.request();
+      const payload = request.postData();
+      const detail = `HTTP ${response.status()} ${request.method()} ${response.url()}: ${body.slice(0, 2000)}`
+        + (payload ? `; request: ${payload.slice(0, 4000)}` : "");
+      errors.push(detail);
+      console.error(`  [gate ${activeGate}] ${detail}`);
+    }).catch(() => {});
+    responseReads.add(read);
+    void read.finally(() => responseReads.delete(read));
+  });
   page.on("pageerror", (error) => errors.push(`page: ${error.message || error}`));
   page.on("console", (message) => {
     if (message.type() !== "error") return;
@@ -108,7 +134,60 @@ async function newPage({ lod = true } = {}) {
     if (!lodOn) window.__CAD_VIEWER_LOD__ = false;
     window.__viewerTestLodEvents = [];
     window.addEventListener("cad:lod-level", (event) => window.__viewerTestLodEvents.push(event.detail));
+    window.__viewerTestCameraLodTrace = [];
+    window.addEventListener("cad:lod-status", (event) => {
+      const status = event.detail;
+      const trace = window.__viewerTestCameraLodTrace;
+      trace.push({ at: performance.now(), camera: window.__cadCamera?.(), pending: status?.pendingEvaluation,
+        occupied: status?.occupied, settled: status?.qualitySettled });
+      if (trace.length > 8) trace.shift();
+    });
   }, { lodOn: lod });
+  // Keep one bounded diagnostic snapshot per gate. It is written before the
+  // owned context closes, so a thrown assertion still leaves its actual UI and
+  // renderer state available instead of only a locator timeout.
+  const closeContext = context.close.bind(context);
+  context.close = async () => {
+    let responseTimer;
+    try {
+      await Promise.race([Promise.all([...responseReads]), new Promise(resolve => { responseTimer = setTimeout(resolve, 3000); })]);
+    } finally { clearTimeout(responseTimer); }
+    if (diagnosticDir && !page.isClosed()) {
+      fs.mkdirSync(diagnosticDir, { recursive: true });
+      const stem = path.join(diagnosticDir, `diagnostic-${activeGate}`);
+      let timer;
+      let stateWritten = false;
+      try {
+        const state = await Promise.race([
+          page.evaluate(() => ({
+            url: location.href,
+            text: document.body.innerText.slice(0, 24000),
+            buttons: [...document.querySelectorAll('button')].filter(node => node.getBoundingClientRect().height).map(node => ({ label: node.getAttribute('aria-label'), text: node.innerText.slice(0, 120), disabled: node.disabled })).slice(0, 120),
+            placement: window.__cadModelPlacement,
+            canvases: [...document.querySelectorAll('canvas')].map(canvas => canvas.getBoundingClientRect().toJSON()),
+            camera: window.__cadCamera?.(),
+            cameraLodTrace: window.__viewerTestCameraLodTrace,
+            lod: window.__cadViewportLod?.(),
+            quality: window.__cadViewerQuality,
+            badge: document.querySelector('[data-file-status]')?.dataset.fileStatus,
+          })),
+          new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('diagnostic state timed out')), 3000); }),
+        ]);
+        fs.writeFileSync(`${stem}.json`, JSON.stringify({ ...state, cameraReadiness: cameraReadiness.get(page), errors: errors.slice(-15).map(error => error.slice(0, 2500)) }, null, 2));
+        stateWritten = true;
+        if (args.out) await page.screenshot({ path: `${stem}.png`, timeout: 3000 });
+      } catch (error) {
+        console.error(`  diagnostic ${activeGate}: ${error.message}`);
+        if (!stateWritten) {
+          fs.writeFileSync(`${stem}.json`, JSON.stringify({
+            url: page.url(), diagnosticError: error.message, cameraReadiness: cameraReadiness.get(page),
+            errors: errors.slice(-15).map(error => error.slice(0, 2500)),
+          }, null, 2));
+        }
+      } finally { clearTimeout(timer); }
+    }
+    return closeContext();
+  };
   return {
     context,
     page,
@@ -216,9 +295,15 @@ function highlightComponents(selected, baseline, sceneWidth, mode = "face") {
 }
 
 async function chipRef(page) {
-  const chip = page.locator("text=/Copy .*#o/").first();
-  const text = await chip.count() ? await chip.textContent({ timeout: 100 }).catch(() => "") : "";
-  return text ? text.replace("Copy ", "").trim() : "";
+  return page.evaluate(() => {
+    const buttons = [...document.querySelectorAll('button[aria-label="Copy reference"]')];
+    for (const button of buttons) {
+      if (!button.getBoundingClientRect().height) continue;
+      const reference = button.parentElement?.querySelector('code')?.textContent?.trim();
+      if (/^o\d+(?:\.\d+)*(?:\.[a-z]\d+)?$/.test(reference || '')) return reference;
+    }
+    return '';
+  });
 }
 
 // Desktop activation is deliberately delayed 220ms so a second click can still
@@ -276,17 +361,12 @@ async function toggleOff(page, x, y, ref, tag) {
   if (stuck) fail(`${tag}: clicking ${ref} twice left ${stuck} selected`);
 }
 
-// The docked tree/reference panel overlays the canvas on the right; its tabs
-// mark its left edge. Highlight measurements stop there.
+// The shared FileViewer reserves a panel column beside the viewport. A single
+// Model section has no tab strip, so actual canvas bounds define the scene.
 async function sceneWidth(page) {
-  const left = await page.evaluate((half) => {
-    const lefts = [...document.querySelectorAll('[role="tab"], [role="tablist"]')]
-      .map((node) => node.getBoundingClientRect())
-      .filter((rect) => rect.width > 0 && rect.height > 0 && rect.left > half)
-      .map((rect) => rect.left);
-    return lefts.length ? Math.min(...lefts) : 0;
-  }, viewport.width / 2);
-  return left > 0 ? Math.floor(left) : viewport.width;
+  const box = await page.locator('canvas').first().boundingBox();
+  if (!box) fail('scene: no visible viewport canvas');
+  return Math.floor(box.x + box.width);
 }
 
 // Two clicks at one pixel only mean anything when they see the same geometry,
@@ -303,12 +383,105 @@ async function settleLod(page, lod) {
   }, null, { timeout: 60_000 });
 }
 
-// Park the pointer over the panel so a hover highlight cannot join the mask,
-// and settle the frame before reading it.
+// LOD completion means the replacement is adopted, not that the WebGL command
+// queue has reached the compositor. In particular, SwiftShader can still be
+// drawing after a fixed sleep. Let the hover-clear render run, finish its GPU
+// work, then yield two frames for presentation before asking Chromium to copy
+// the framebuffer. Keep the screenshot's own deadline unchanged.
+async function presentedFrame(page) {
+  const ready = await page.waitForFunction(async () => {
+    const startedAt = performance.now();
+    const nextFrame = () => new Promise(resolve => requestAnimationFrame(resolve));
+    await nextFrame();
+    await nextFrame();
+    const canvas = document.querySelector('canvas');
+    if (!canvas || canvas.getBoundingClientRect().width === 0 || getComputedStyle(canvas).visibility === 'hidden') return false;
+    const gl = canvas.getContext('webgl2');
+    if (!gl || gl.isContextLost()) throw new Error('capture: visible CAD canvas has no live WebGL2 context');
+    const gpuStartedAt = performance.now();
+    gl.finish();
+    const gpuMs = performance.now() - gpuStartedAt;
+    await nextFrame();
+    await nextFrame();
+    return { gpuMs, presentationMs: performance.now() - startedAt, width: canvas.width, height: canvas.height };
+  }, null, { timeout: 60_000, polling: 100 });
+  try {
+    const frame = await ready.jsonValue();
+    if (!frame || !Number.isFinite(frame.presentationMs)) fail('capture: CAD canvas was not presented');
+    return frame;
+  } finally {
+    await ready.dispose();
+  }
+}
+
+// Park the pointer over the panel so a hover highlight cannot join the mask.
 async function restingShot(page) {
   await page.mouse.move(viewport.width - 4, viewport.height - 4);
-  await page.waitForTimeout(400);
-  return PNG.sync.read(await page.screenshot());
+  const frame = await presentedFrame(page);
+  const startedAt = Date.now();
+  const stages = {};
+  let session;
+  let finished = false;
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('capture: 10000ms deadline exceeded')), 10_000);
+  });
+  const capture = async () => {
+    const acquired = await page.context().newCDPSession(page);
+    if (finished) {
+      await acquired.detach();
+      throw new Error('capture ended before its CDP session was ready');
+    }
+    session = acquired;
+    stages.sessionMs = Date.now() - startedAt;
+    let stageStartedAt = Date.now();
+    const fonts = await session.send('Runtime.evaluate', {
+      expression: 'document.fonts.ready.then(() => true)', awaitPromise: true, returnByValue: true,
+    });
+    if (fonts.exceptionDetails) throw new Error(`capture fonts: ${fonts.exceptionDetails.text}`);
+    stages.fontsMs = Date.now() - stageStartedAt;
+    stageStartedAt = Date.now();
+    const { visualViewport } = await session.send('Page.getLayoutMetrics');
+    stages.metricsMs = Date.now() - stageStartedAt;
+    // Keep Playwright's viewport and surface semantics while using fast lossless
+    // PNG encoding, which trades a larger payload for less CPU work.
+    const clip = {
+      x: visualViewport.pageX, y: visualViewport.pageY,
+      width: Math.floor(viewport.width / visualViewport.scale + 1e-3),
+      height: Math.floor(viewport.height / visualViewport.scale + 1e-3), scale: visualViewport.scale,
+    };
+    stageStartedAt = Date.now();
+    const { data } = await session.send('Page.captureScreenshot', {
+      format: 'png', clip, fromSurface: true, captureBeyondViewport: false, optimizeForSpeed: true,
+    });
+    stages.copyAndEncodeMs = Date.now() - stageStartedAt;
+    const png = PNG.sync.read(Buffer.from(data, 'base64'));
+    if (png.width !== viewport.width || png.height !== viewport.height) {
+      throw new Error(`capture: expected ${viewport.width}x${viewport.height}, got ${png.width}x${png.height}`);
+    }
+    return png;
+  };
+  try {
+    const png = await Promise.race([capture(), deadline]);
+    const captureMs = Date.now() - startedAt;
+    if (frame.presentationMs > 1000 || captureMs > 1000) {
+      console.log(`  capture: ${JSON.stringify({ ...frame, ...stages, captureMs })}`);
+    }
+    return png;
+  } catch (error) {
+    console.error(`  capture failed after presentation: ${JSON.stringify({ ...frame, ...stages, captureMs: Date.now() - startedAt })}`);
+    throw error;
+  } finally {
+    finished = true;
+    clearTimeout(timer);
+    await session?.detach().catch(() => {});
+  }
+}
+
+async function saveReview(page, name) {
+  if (!args.out) return;
+  fs.mkdirSync(args.out, { recursive: true });
+  fs.writeFileSync(path.join(args.out, `${name}.png`), PNG.sync.write(await restingShot(page)));
 }
 
 // Where the model actually IS, read off the frame rather than guessed as a
@@ -399,6 +572,13 @@ async function pickingGate(tag, lod, { depth = "full" } = {}) {
   const { context, page, errors } = await newPage({ lod });
   try {
     const canvas = await openFile(page, "smoke.step");
+    console.log(`  ${tag}: STEP rendered; settling the initial viewport`);
+    // All follows the model tree's expansion frontier. Exact entity tools open
+    // the relevant part; merely activating Select must keep closed parts cheap.
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    await page.getByRole("button", { name: /^Selection filter:/ }).click();
+    await page.getByRole("menuitemradio", { name: depth === "smoke" ? /^Faces/ : /^Edges/ }).click();
+    await page.getByRole("button", { name: "Select", exact: true }).waitFor({ timeout: 60_000 });
     const box = await canvas.boundingBox();
     const cx = box.x + box.width / 2;
     const cy = box.y + box.height / 2;
@@ -434,14 +614,14 @@ async function pickingGate(tag, lod, { depth = "full" } = {}) {
         + "and it toggles off and back on at the same pixel");
       return;
     }
-    // The cylinder's visible generator is vertical near the canvas center.
-    // Probe it densely before the bounded general grid so edge hit tolerance
-    // does not turn this into a hundreds-of-timeouts search.
+    // The shared shell reserves the inspector column instead of overlaying it.
+    // At this fixed viewport the cylinder's visible seam is near x=0.62 of the
+    // resulting canvas. Probe it first, then the top ring and a bounded grid.
+    for (const fx of [0.610, 0.614, 0.618, 0.622, 0.626]) {
+      for (const fy of [0.20, 0.40, 0.60, 0.72]) probePoints.push([fx, fy]);
+    }
     for (let fx = 0.25; fx <= 0.48; fx += 0.01) {
       for (const fy of [0.11, 0.12, 0.13]) probePoints.push([fx, fy]);
-    }
-    for (const fx of [0.554, 0.557, 0.560, 0.563, 0.566]) {
-      for (const fy of [0.20, 0.40, 0.60, 0.72]) probePoints.push([fx, fy]);
     }
     for (const fx of [0.24, 0.30, 0.36, 0.42, 0.48, 0.54, 0.60, 0.63]) {
       for (const fy of [0.12, 0.22, 0.34]) probePoints.push([fx, fy]);
@@ -450,6 +630,7 @@ async function pickingGate(tag, lod, { depth = "full" } = {}) {
     outer: for (const [fx, fy] of probePoints) {
         probes += 1;
         const ref = await clickForChip(page, box.x + box.width * fx, box.y + box.height * fy);
+        if (probes % 20 === 0) console.log(`  ${tag}: ${probes}/${probePoints.length} edge probes (${ref || "background"})`);
         if (!/\.e\d+$/.test(ref)) continue;
         if (!edgeHits.has(ref)) edgeHits.set(ref, []);
         edgeHits.get(ref).push([fx, fy]);
@@ -523,6 +704,8 @@ async function pickingGate(tag, lod, { depth = "full" } = {}) {
     if (lod && !lodEvents.length) fail(`${tag}: no LOD swap fired`);
     if (!lod && lodEvents.length) fail(`${tag}: LOD-off page emitted swaps`);
 
+    await page.getByRole("button", { name: /^Selection filter:/ }).click();
+    await page.getByRole("menuitemradio", { name: /^Faces/ }).click();
     const { faceRef, ratio } = await facePickPhase(page, box, scene, tag);
     if (errors.length) fail(`${tag}: ${errors.join(" | ")}`);
     console.log(`  ${tag}: ${lodEvents.length} LOD swap(s), face ${faceRef} ${(ratio * 100).toFixed(1)}% contiguous, `
@@ -564,9 +747,10 @@ async function canvasMenuItems(page, canvas) {
 }
 
 async function formatGate() {
-  // Fullscreen is the floating toolbar's rightmost button. Measure is absent, not
-  // disabled, on views that cannot measure, so it is asserted per capability below.
-  const tools = ["Select", "Pan", "Draw", "Copy screenshot", "Fullscreen"];
+  // Desktop7f6 groups navigation under View controls and capture under Capture.
+  // Its Orbit action provides the immersive preview (main called it Fullscreen).
+  // Require each action through that preserved layout, not one standalone button.
+  const tools = ["Select", "Draw", "View controls", "Capture"];
   const camera = ["Reset Zoom", "Zoom To Fit"];
   const tree = ["Show all", "Expand all", "Collapse all"];
   const presentTree = ["Expand all", "Collapse all"];
@@ -593,6 +777,16 @@ async function formatGate() {
         const button = page.locator(`button[aria-label="${label}"]`).first();
         if (!(await button.count()) || !(await button.isEnabled())) failures.push(`${fixture.format}: missing or disabled ${label}`);
       }
+      await page.getByRole('button', { name: 'View controls', exact: true }).click();
+      for (const action of ['Pan', 'Orbit']) {
+        const item = page.getByRole('menuitem', { name: action, exact: true });
+        if (!(await item.count()) || !(await item.isEnabled())) failures.push(`${fixture.format}: missing or disabled ${action}`);
+      }
+      await page.keyboard.press('Escape');
+      await page.getByRole('button', { name: 'Capture', exact: true }).click();
+      const capture = page.getByRole('menuitem', { name: 'Copy screenshot', exact: true });
+      if (!(await capture.count()) || !(await capture.isEnabled())) failures.push(`${fixture.format}: missing or disabled Copy screenshot`);
+      await page.keyboard.press('Escape');
       const measure = page.locator('button[aria-label="Measure"]');
       const measureCount = await measure.count();
       if (fixture.measure && (!measureCount || !(await measure.first().isEnabled()))) {
@@ -619,12 +813,16 @@ async function formatGate() {
   }
 }
 
+async function selectViewingMode(page, current, next) {
+  await page.getByRole("button", { name: `Viewing mode: ${current}. Switch to ${next}`, exact: true }).click();
+  await page.getByRole("button", { name: `Viewing mode: ${next}. Switch to ${current}`, exact: true }).waitFor();
+}
+
 async function configureScene(page, setting) {
-  await page.getByRole("button", { name: "Appearance", exact: true }).click();
+  await page.getByRole("button", { name: /^Appearance:/ }).click();
   await page.getByRole("menuitemradio", { name: setting.appearance, exact: true }).click();
   if (setting.render) {
-    await page.getByRole("button", { name: /^Viewing mode:/ }).click();
-    await page.getByRole("menuitemradio", { name: "Render", exact: true }).click();
+    await selectViewingMode(page, "Inspect", "Render");
   }
 }
 
@@ -670,7 +868,8 @@ async function sceneGates() {
       // Inspect's grid stays pinned to world z=0; Render's photographic floor
       // follows the model down to its lowest point by default.
       await page.waitForFunction(
-        (follows) => window.__cadModelPlacement?.floorFollowsModel === follows,
+        (follows) => window.__cadModelPlacement?.floorFollowsModel === follows
+          && (!follows || Number.isFinite(window.__cadModelPlacement?.groundZ)),
         setting.render,
         { timeout: 30_000 },
       );
@@ -744,7 +943,7 @@ async function belowOriginGroundGate() {
     await configureScene(page, { appearance: "Light", render: true });
     await page.waitForFunction(
       () => window.__cadModelPlacement?.floorFollowsModel === true
-        && Number.isFinite(Number(window.__cadModelPlacement?.groundZ)),
+        && Number.isFinite(window.__cadModelPlacement?.groundZ),
       null,
       { timeout: 30_000 },
     );
@@ -857,8 +1056,7 @@ async function qualityGate() {
     return current;
   }
   async function mode(current, next) {
-    await page.getByRole("button", { name: `Viewing mode: ${current}`, exact: true }).click();
-    await page.getByRole("menuitemradio", { name: next, exact: true }).click();
+    await selectViewingMode(page, current, next);
   }
   try {
     await openFile(page, "smoke.step");
@@ -866,6 +1064,13 @@ async function qualityGate() {
     for (let cycle = 0; cycle < 2; cycle += 1) {
       await mode("Inspect", "Render");
       await settled("high");
+      if (cycle === 0) {
+        await saveReview(page, "render-studio");
+        await page.getByRole("tab", { name: "Materials", exact: true }).click();
+        await page.getByRole("button", { name: "Select all parts", exact: true }).waitFor();
+        await saveReview(page, "render-materials");
+        await page.getByRole("tab", { name: "Studio", exact: true }).click();
+      }
       for (const [label, expected] of [["Preview", "standard"], ["Final", "high"]]) {
         await page.getByRole("combobox", { name: "Quality", exact: true }).click();
         await page.getByRole("option", { name: label, exact: true }).click();
@@ -984,7 +1189,10 @@ async function cameraHeld(page, zeroPose, what) {
 
 async function resetView(page) {
   await page.getByRole("button", { name: /Reset view/i }).first().click();
-  await page.waitForTimeout(1_500);
+  // Reset changes framing on the presented model. The pose and zero-pose
+  // camera assertions do not require a queued LOD camera sample to finish;
+  // actual geometry adoption, presentation and camera stability still do.
+  await settledCameraFrame(page, { stage: "reset view", requireSettledLod: false });
 }
 
 // --- the camera each mode opens at ----------------------------------------
@@ -994,17 +1202,69 @@ async function resetView(page) {
 // a perspective distance read as an orthographic frame. A view the user framed
 // by hand still stands within its own mode; it simply does not follow them
 // across the switch, because switching IS the reset.
+async function settledCameraFrame(page, { projection = null, stage, requireSettledLod = true, timeout = 60_000 } = {}) {
+  const startedAt = Date.now();
+  cameraReadiness.set(page, { ...cameraReadiness.get(page), pending: { stage, projection, requireSettledLod } });
+  // Projection is published during scene reconciliation, before Render's
+  // environment and first frame are necessarily ready. The presentation host
+  // clears aria-busy only after drawing that destination scene. Camera damping
+  // must settle for every framing assertion; mode/gesture checks also require
+  // settled LOD refinement.
+  const ready = await page.waitForFunction(({ want, requireSettledLod }) => {
+    const read = () => {
+      const canvas = document.querySelector("canvas");
+      const camera = window.__cadCamera?.();
+      const quality = window.__cadViewerQuality;
+      const lod = window.__cadViewportLod?.();
+      if (!canvas || !camera || (want && camera.projection !== want)
+        || canvas.closest("[aria-busy]")?.getAttribute("aria-busy") !== "false"
+        || getComputedStyle(canvas).visibility !== "visible"
+        || document.querySelector("[data-viewer-transition]")) return null;
+      const expectedQualities = camera.projection === "perspective" ? ["standard", "high"] : ["interactive"];
+      if (!quality?.standardQualityReady || !expectedQualities.includes(quality.quality)) return null;
+      if (lod?.componentCount > 0 && (lod.quality !== quality.quality || lod.busy || lod.collectionPending
+        || (requireSettledLod && (!lod.qualitySettled || lod.pendingEvaluation)))) return null;
+      return { canvas, camera, quality: quality.quality, levelCounts: lod?.levelCounts,
+        lodSettled: lod?.qualitySettled, lodPendingEvaluation: lod?.pendingEvaluation };
+    };
+    const after = read();
+    if (!after) {
+      delete window.__viewerTestCameraFrame;
+      return false;
+    }
+    const coordinates = camera => [...camera.position, ...camera.target, ...camera.up, camera.zoom, camera.zoomPercent,
+      ...(camera.projection === "orthographic" ? [camera.halfHeight] : [])];
+    const before = window.__viewerTestCameraFrame;
+    const a = before ? coordinates(before.camera) : [], b = coordinates(after.camera);
+    const stable = before?.canvas === after.canvas && before.quality === after.quality
+      && a.every((value, index) => Math.abs(value - b[index]) <= 1e-9 * Math.max(1, Math.abs(value)));
+    const stableFrames = stable ? before.stableFrames + 1 : 0;
+    window.__viewerTestCameraFrame = { ...after, stableFrames };
+    if (stableFrames < 2) return false;
+    const gl = after.canvas.getContext("webgl2");
+    if (!gl || gl.isContextLost()) throw new Error('camera: presented canvas has no live WebGL2 context');
+    gl.finish();
+    delete window.__viewerTestCameraFrame;
+    return { camera: after.camera, quality: after.quality, levelCounts: after.levelCounts,
+      lodSettled: after.lodSettled, lodPendingEvaluation: after.lodPendingEvaluation,
+      width: after.canvas.width, height: after.canvas.height };
+  }, { want: projection, requireSettledLod }, { timeout, polling: "raf" });
+  try {
+    const state = { stage, waitMs: Date.now() - startedAt, ...await ready.jsonValue() };
+    cameraReadiness.set(page, state);
+    console.log(`  camera ready: ${JSON.stringify(state)}`);
+  } finally {
+    await ready.dispose();
+  }
+}
+
 async function switchMode(page, current, next) {
-  await page.getByRole("button", { name: `Viewing mode: ${current}`, exact: true }).click();
-  await page.getByRole("menuitemradio", { name: next, exact: true }).click();
+  const deadline = Date.now() + 60_000;
+  await selectViewingMode(page, current, next);
   const projection = next === "Render" ? "perspective" : "orthographic";
-  await page.waitForFunction(
-    (want) => window.__cadCamera?.()?.projection === want,
-    projection,
-    { timeout: 60_000 },
-  );
-  // The fit lands in the scene sync that follows the new renderer.
-  await page.waitForTimeout(1_500);
+  const timeout = deadline - Date.now();
+  if (timeout <= 0) fail(`mode camera: ${next} transition exceeded 60s`);
+  await settledCameraFrame(page, { projection, stage: `${current} to ${next}`, timeout });
 }
 
 async function orbitAndZoom(page) {
@@ -1017,7 +1277,7 @@ async function orbitAndZoom(page) {
   await page.mouse.up();
   await page.mouse.move(x, y);
   await page.mouse.wheel(0, -420);
-  await page.waitForTimeout(1_500);
+  await settledCameraFrame(page, { stage: "orbit and zoom" });
 }
 
 async function cameraMoved(page, from, what) {
@@ -1033,6 +1293,7 @@ async function modeCameraGate() {
   const { context, page, errors } = await newPage();
   try {
     await openFile(page, "smoke.step");
+    await settledCameraFrame(page, { projection: "orthographic", stage: "initial Inspect frame" });
     const inspectFit = await cameraState(page);
     if (inspectFit?.projection !== "orthographic") {
       failures.push(`mode camera: Inspect did not open orthographic (${inspectFit?.projection})`);
@@ -1060,6 +1321,7 @@ async function modeCameraGate() {
     // A different model is framed against ITS zero pose, not the camera the
     // last one was left at. Reset view re-fits, so a fresh fit does not move.
     await openFile(page, "assembly.step");
+    await settledCameraFrame(page, { projection: "orthographic", stage: "new model Inspect frame" });
     const assemblyFit = await cameraState(page);
     if (cameraDrift(assemblyFit, inspectFit) <= 1e-3) {
       failures.push(`mode camera: a different model opened at the previous model's frame — ${describeCamera(assemblyFit)}`);
@@ -1083,6 +1345,52 @@ async function modeCameraGate() {
 }
 
 async function kinematicsGate() {
+  // Components inventories authored objects inside linked meshes. Built-in
+  // primitives have none, so the existing smoke robot alone cannot cover it.
+  const componentMesh = fs.readFileSync(path.join(root, "named-components.glb"));
+  const componentDocument = JSON.parse(componentMesh.subarray(20, 20 + componentMesh.readUInt32LE(12)).toString());
+  console.log(`  robot component fixture: ${JSON.stringify(componentDocument.nodes?.map(({ name, extras }) => ({ name, extras })))}`);
+  if (args.out) {
+    fs.mkdirSync(args.out, { recursive: true });
+    fs.writeFileSync(path.join(args.out, "component-fixture.json"), JSON.stringify(componentDocument, null, 2));
+  }
+  for (const extension of ["urdf", "srdf"]) {
+    const { context, page, errors } = await newPage();
+    try {
+      await openFile(page, `named-components.${extension}`);
+      const initialPlacement = await page.evaluate(() => window.__cadModelPlacement);
+      for (const [field, expected] of [["boundsMin", [-0.05, -0.04, -0.01]], ["boundsMax", [0.05, 0.04, 0.07]]]) {
+        if (initialPlacement?.[field]?.some((value, axis) => Math.abs(value - expected[axis]) > 1e-6)) {
+          fail(`${extension} components: the linked objects changed the authored metre-scale robot bounds`);
+        }
+      }
+      await page.getByRole("tab", { name: "Components", exact: true }).click();
+      const tree = page.getByRole("tree", { name: "Robot components", exact: true });
+      const link = tree.locator('[role="treeitem"][aria-level="1"]');
+      if (await link.count() !== 1) fail(`${extension} components: expected one link with authored mesh objects`);
+      if (await link.getAttribute("aria-expanded") !== "false") fail(`${extension} components: link should start collapsed`);
+      await link.click();
+      const objects = tree.locator('[role="treeitem"][aria-level="2"]');
+      if (await objects.count() !== 2) fail(`${extension} components: linked assembly lost its two named objects`);
+      await objects.first().click();
+      if (await objects.first().getAttribute("aria-selected") !== "true") fail(`${extension} components: selecting an object did not select its tree row`);
+      await page.getByText("Triangles", { exact: true }).waitFor();
+      const sizeField = page.getByText("Size (mm)", { exact: true });
+      await sizeField.waitFor();
+      const dimensions = await sizeField.evaluate(label => label.parentElement.querySelector('[title]')?.textContent.split('×').map(Number));
+      if (dimensions?.length !== 3 || dimensions.some(value => Math.abs(value - 10) > 0.001)) {
+        fail(`${extension} components: a 10 mm linked object reports ${dimensions}`);
+      }
+      await saveReview(page, `robot-components-${extension}`);
+      const inspectRecords = await page.evaluate(() => window.__cadDisplayRecords?.() || []);
+      if (inspectRecords.filter(record => record.linkName === "arm").length !== 2) fail(`${extension} components: named objects were not split in the renderer`);
+      await page.getByRole("tab", { name: "Kinematics", exact: true }).click();
+      await page.getByRole("textbox", { name: "shoulder value in deg", exact: true }).waitFor();
+      if (extension === "srdf") await page.getByRole("combobox", { name: "Preset position", exact: true }).waitFor();
+      await saveReview(page, `robot-kinematics-${extension}`);
+      if (errors.length) fail(`${extension} components: ${errors.join(" | ")}`);
+    } finally { await context.close(); }
+  }
   const { context, page, errors } = await newPage();
   try {
     await openFile(page, "smoke.urdf");
@@ -1142,7 +1450,7 @@ async function kinematicsGate() {
     await openFile(srdf.page, "smoke.srdf");
     await settledArmMatrix(srdf.page, 0, "srdf rest pose");
     const srdfZeroPoseCamera = await cameraState(srdf.page);
-    const groupState = srdf.page.getByRole("combobox", { name: "Group state", exact: true });
+    const groupState = srdf.page.getByRole("combobox", { name: "Preset position", exact: true });
     await groupState.waitFor({ timeout: 15_000 });
     await groupState.click();
     await srdf.page.getByRole("option", { name: "lifted", exact: true }).click();
@@ -1260,8 +1568,17 @@ if (!selected.length) fail(`unknown --only gate: ${args.only} (${gates.map(([nam
 try {
   for (const [name, gate] of selected) {
     const startedAt = Date.now();
-    await gate();
-    console.log(`  [gate ${name}] ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
+    const failuresBefore = failures.length;
+    activeGate = name;
+    console.log(`  [gate ${name}] starting`);
+    try {
+      await gate();
+    } catch (error) {
+      failures.push(`${name}: ${error.stack || error.message || error}`);
+      console.error(`  [gate ${name}] failed: ${error.message || error}`);
+    }
+    const addedFailures = failures.length - failuresBefore;
+    console.log(`  [gate ${name}] ${addedFailures ? `FAIL (${addedFailures})` : "PASS"} ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
   }
 } finally {
   await browser.close();

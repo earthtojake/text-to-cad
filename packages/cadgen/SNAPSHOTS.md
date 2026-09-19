@@ -60,7 +60,7 @@ reaching below the document's origin is never veiled by its own floor. To pin it
 to the document's Z=0 plane instead:
 
 ```bash
-cadgen step snapshot part.step review.png --render '{"backdrop":{"groundPlacement":"origin"}}'
+cadgen step snapshot part.step review.png --display '{"mode":"render","render":{"backdrop":{"groundPlacement":"origin"}}}'
 ```
 
 `groundPlacement` accepts `lowest` (the default) or `origin`; it moves only the

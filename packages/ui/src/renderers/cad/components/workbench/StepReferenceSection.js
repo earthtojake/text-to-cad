@@ -1,0 +1,402 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronLeft, ChevronRight, Copy, SquareMousePointer } from "lucide-react";
+import { cn } from "@hardcore/ui/utils";
+import { useViewerHost } from '../../../../host/context.js';
+import { useHostReference } from "../../file-view/hostReference.js";
+import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections.js";
+import { referenceMeasurements, selectionMeasurements } from "../../workbench/referenceMeasurements.js";
+import { stepSelectionMaterialInfo } from "../../workbench/stepSelectionMaterial.js";
+import { Button } from "@hardcore/ui/primitives/button";
+
+// A selected "element" is either a topology reference (face / edge / solid,
+// carrying reference.pickData) or an assembly node (component / subassembly).
+// Measurements use the current STEP selection, including its occurrence transforms.
+
+const SELECTOR_TYPE_LABELS = Object.freeze({
+  face: "Face",
+  edge: "Edge",
+  shape: "Solid",
+  occurrence: "Component"
+});
+
+const SURFACE_LABELS = Object.freeze({
+  plane: "Planar",
+  cylinder: "Cylindrical",
+  cone: "Conical",
+  sphere: "Spherical",
+  torus: "Toroidal",
+  spline: "Freeform",
+  bspline: "Freeform",
+  nurbs: "Freeform"
+});
+
+const CURVE_LABELS = Object.freeze({
+  line: "Line",
+  circle: "Circle",
+  arc: "Arc",
+  ellipse: "Ellipse",
+  spline: "Spline",
+  bspline: "Spline"
+});
+
+// Onshape-style axis colour coding for coordinate triples.
+const AXES = Object.freeze([
+  { key: "X", className: "text-rose-500 dark:text-rose-400" },
+  { key: "Y", className: "text-emerald-500 dark:text-emerald-400" },
+  { key: "Z", className: "text-sky-500 dark:text-sky-400" }
+]);
+
+function titleCase(value) {
+  const text = String(value || "").trim();
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
+}
+
+function formatNumber(value, digits = 2) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return "—";
+  }
+  return numeric.toLocaleString(undefined, { maximumFractionDigits: digits });
+}
+
+function readBbox(source) {
+  const bbox = source?.bbox || source?.boundingBox || null;
+  const min = Array.isArray(bbox?.min) ? bbox.min : null;
+  const max = Array.isArray(bbox?.max) ? bbox.max : null;
+  if (!min || !max) {
+    return null;
+  }
+  const dims = [0, 1, 2].map((axis) => Math.abs((Number(max[axis]) || 0) - (Number(min[axis]) || 0)));
+  const center = [0, 1, 2].map((axis) => ((Number(min[axis]) || 0) + (Number(max[axis]) || 0)) / 2);
+  return dims.some((value) => value > 1e-9) ? { dims, center } : null;
+}
+
+function isPartNode(item) {
+  return Boolean(item) && !item.pickData && (item.nodeType || Array.isArray(item.children));
+}
+
+function CopyButton({ text, className }) {
+  const { clipboard } = useViewerHost();
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef(null);
+  // Explicit copy uses the host clipboard; the primary prompt action is separate.
+  const host = useHostReference();
+  useEffect(() => () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+  }, []);
+  if (!text) {
+    return null;
+  }
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-xs"
+      className={cn("size-5 text-muted-foreground hover:text-foreground", className)}
+      aria-label="Copy reference"
+      title="Copy reference"
+      onClick={() => {
+        if (host) {
+          void host.deliverReference(text);
+        } else {
+          void clipboard.writeText(text);
+        }
+        setCopied(true);
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+        }
+        timerRef.current = setTimeout(() => setCopied(false), 1200);
+      }}
+    >
+      {copied ? (
+        <Check className="size-3 text-emerald-500" strokeWidth={2.5} aria-hidden="true" />
+      ) : (
+        <Copy className="size-3" strokeWidth={2} aria-hidden="true" />
+      )}
+    </Button>
+  );
+}
+
+function DetailHeader({ typeLabel, subtitle, selector, copyText, navigation }) {
+  return (
+    <header className="min-w-0 space-y-1 border-b border-sidebar-border/60 px-2 py-2" aria-label="Selected reference">
+      <div className="flex min-h-5 min-w-0 items-center gap-2">
+        <span className="min-w-0 flex-1 truncate text-sm font-normal text-sidebar-foreground" title={subtitle || typeLabel}>
+          {subtitle || typeLabel}
+        </span>
+        {navigation}
+      </div>
+      <div className="flex min-w-0 items-start gap-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-1 text-micro text-muted-foreground">
+          <span className="shrink-0">{typeLabel}</span>
+          {selector ? (
+            <code className="min-w-0 break-all font-mono">
+              {selector}
+            </code>
+          ) : null}
+        </div>
+        <CopyButton text={copyText} />
+      </div>
+    </header>
+  );
+}
+
+// Label-column rows keep the value next to its label instead of pushing it to
+// the far edge, so the readout scans top-to-bottom.
+function InfoRow({ label, children, title }) {
+  return (
+    <div className="flex items-baseline gap-3 px-2 py-1" title={title}>
+      <span className="w-[6.25rem] shrink-0 text-tiny text-muted-foreground">{label}</span>
+      <div className="min-w-0 flex-1 text-tiny text-sidebar-foreground [overflow-wrap:anywhere]">{children}</div>
+    </div>
+  );
+}
+
+function MonoValue({ children }) {
+  return <span className="font-mono tabular-nums">{children}</span>;
+}
+
+function CoordValue({ vector, digits = 2 }) {
+  const values = Array.isArray(vector) ? vector : [];
+  return (
+    <span className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 font-mono tabular-nums">
+      {AXES.map((axis, index) => (
+        <span key={axis.key} className="inline-flex items-baseline gap-1">
+          <span className={cn("text-micro", axis.className)}>{axis.key}</span>
+          <span>{formatNumber(values[index], digits)}</span>
+        </span>
+      ))}
+    </span>
+  );
+}
+
+const MEASUREMENT_HINTS = {
+  'Plane spacing': 'Perpendicular distance between the planes; not the minimum gap between their trimmed faces.',
+  'Line spacing': 'Perpendicular distance between the supporting lines; not the gap between their endpoints.',
+  'Axis spacing': 'Perpendicular distance between the cylinder axes.',
+  'Center distance': 'Straight-line distance between circle centers.',
+  'Angle': 'Smaller angle between the directions or planes (0–90°).',
+  'Axis angle': 'Smaller angle between the cylinder axes (0–90°).',
+};
+
+function MeasurementRows({rows}) {
+  return rows.map(([label,value,unit])=><InfoRow key={label} label={label} title={MEASUREMENT_HINTS[label]}><MonoValue>{`${formatNumber(value)} ${unit}`}</MonoValue></InfoRow>);
+}
+
+function MaterialChannelValues({ channels }) {
+  return (
+    <span className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
+      {channels.map((channel) => (
+        <span key={channel.key} className="inline-flex items-baseline gap-1">
+          <span className="text-micro text-muted-foreground">{channel.label}</span>
+          <MonoValue>{`${formatNumber(channel.value * 100, 0)}%`}</MonoValue>
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function MaterialDetail({ info }) {
+  if (!info) return null;
+  const surface = info.channels.filter((channel) => ["roughness", "metalness"].includes(channel.key));
+  const coating = info.channels.filter((channel) => ["clearcoat", "clearcoatRoughness"].includes(channel.key));
+  const opacity = info.channels.filter((channel) => channel.key === "opacity");
+  return (
+    <div className="border-t border-sidebar-border/60 py-0.5" aria-label="Source material">
+      <InfoRow label="Material">{info.label}</InfoRow>
+      {info.color ? (
+        <InfoRow label="Color">
+          {info.color.mixed ? "Mixed" : (
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="size-3 shrink-0 rounded-[2px] border border-sidebar-border"
+                style={{ backgroundColor: info.color.value }}
+                aria-label={`${info.color.value} color swatch`}
+              />
+              <MonoValue>{info.color.value}</MonoValue>
+            </span>
+          )}
+        </InfoRow>
+      ) : null}
+      {surface.length ? <InfoRow label="Surface"><MaterialChannelValues channels={surface} /></InfoRow> : null}
+      {coating.length ? <InfoRow label="Coating"><MaterialChannelValues channels={coating} /></InfoRow> : null}
+      {opacity.length ? <InfoRow label="Opacity"><MaterialChannelValues channels={opacity} /></InfoRow> : null}
+    </div>
+  );
+}
+
+function TopologyDetail({ reference, navigation }) {
+  const pick = reference.pickData || {};
+  const type = reference.selectorType;
+  const quantities = referenceMeasurements(reference);
+  let subtype = "";
+  if (type === "face") {
+    subtype = SURFACE_LABELS[pick.surfaceType] || titleCase(quantities.kind);
+  } else if (type === "edge") {
+    subtype = CURVE_LABELS[quantities.kind] || titleCase(quantities.kind);
+  } else {
+    subtype = titleCase(pick.kind || quantities.kind);
+  }
+  const box = readBbox(pick);
+  const center = quantities.circular && Array.isArray(pick.params?.center) ? pick.params.center : Array.isArray(pick.center) ? pick.center : box?.center;
+  const component = String(pick.sourceName || pick.name || reference.occurrenceId || "").trim();
+
+  return (
+    <div className="flex min-w-0 flex-col">
+      <DetailHeader
+        typeLabel={SELECTOR_TYPE_LABELS[type] || "Reference"}
+        subtitle={subtype}
+        selector={String(reference.displaySelector || reference.normalizedSelector || "").trim()}
+        copyText={reference.copyText}
+        navigation={navigation}
+      />
+      <div className="flex flex-col py-0.5">
+        <MeasurementRows rows={quantities.rows} />
+        {box ? (
+          <InfoRow label="Size">
+            <MonoValue>{`${formatNumber(box.dims[0])} × ${formatNumber(box.dims[1])} × ${formatNumber(box.dims[2])} mm`}</MonoValue>
+          </InfoRow>
+        ) : null}
+        {Array.isArray(center) && <InfoRow label="Center"><CoordValue vector={center}/></InfoRow>}
+        {Array.isArray(pick.normal) && <InfoRow label="Normal"><CoordValue vector={pick.normal} digits={3}/></InfoRow>}
+        {component && <InfoRow label="Component">{component}</InfoRow>}
+      </div>
+    </div>
+  );
+}
+
+function PartDetail({ node, navigation }) {
+  const isAssembly =
+    String(node.nodeType || "").trim() === "assembly" ||
+    (Array.isArray(node.children) && node.children.length > 0);
+  const name = String(node.name || node.displayName || "").trim();
+  const selector = String(node.displaySelector || node.occurrenceId || node.id || "").trim();
+  const partCount = Array.isArray(node.leafPartIds)
+    ? node.leafPartIds.length
+    : Array.isArray(node.children)
+      ? node.children.length
+      : 0;
+  const box = readBbox(node);
+
+  return (
+    <div className="flex min-w-0 flex-col">
+      <DetailHeader
+        typeLabel={isAssembly ? "Subassembly" : "Component"}
+        subtitle={name}
+        selector={selector}
+        copyText={node.copyText || selector}
+        navigation={navigation}
+      />
+      <div className="flex flex-col py-0.5">
+        {isAssembly && partCount > 0 ? (
+          <InfoRow label="Parts"><MonoValue>{formatNumber(partCount, 0)}</MonoValue></InfoRow>
+        ) : null}
+        {box ? (
+          <InfoRow label="Size">
+            <MonoValue>{`${formatNumber(box.dims[0])} × ${formatNumber(box.dims[1])} × ${formatNumber(box.dims[2])} mm`}</MonoValue>
+          </InfoRow>
+        ) : null}
+        {box && <InfoRow label="Center"><CoordValue vector={box.center}/></InfoRow>}
+      </div>
+    </div>
+  );
+}
+
+function ElementDetail({ item, navigation }) {
+  if (!item) {
+    return null;
+  }
+  return isPartNode(item) ? <PartDetail node={item} navigation={navigation} /> : <TopologyDetail reference={item} navigation={navigation} />;
+}
+
+function itemKey(item) {
+  return String(item?.id || item?.occurrenceId || item?.displaySelector || "").trim();
+}
+
+export function StepReferenceSection({ references = [], meshData = null, sourceAppearance = null }) {
+  const items = useMemo(() => Array.isArray(references) ? references.filter(Boolean) : [], [references]);
+  const count = items.length;
+  const idsKey = items.map(itemKey).join("|");
+  const [index, setIndex] = useState(0);
+  const safeIndex = Math.min(Math.max(index, 0), Math.max(count - 1, 0));
+  const activeItem = items[safeIndex];
+  const materialInfo = useMemo(() => stepSelectionMaterialInfo({
+    references: activeItem ? [activeItem] : [],
+    meshData,
+    appearance: sourceAppearance
+  }), [activeItem, meshData, sourceAppearance]);
+
+  // When the selection set changes, jump to the most recently added element.
+  useEffect(() => {
+    setIndex(count > 0 ? count - 1 : 0);
+  }, [idsKey, count]);
+
+  if (!count) {
+    return (
+      <div className="flex min-h-[4.5rem] flex-col items-center justify-center gap-1.5 px-4 py-5 text-center">
+        <SquareMousePointer className="size-4 text-muted-foreground/45" strokeWidth={1.5} aria-hidden="true" />
+        <p className="text-sm text-muted-foreground">Select geometry to inspect</p>
+      </div>
+    );
+  }
+
+  const totals = count > 1 ? selectionMeasurements(items) : [];
+
+  const navigation = count > 1 ? (
+    <div className="inline-flex shrink-0 items-center gap-0.5" role="group" aria-label="Selected element navigation">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        className="size-5 text-muted-foreground hover:text-foreground"
+        aria-label="Previous element"
+        title="Previous element"
+        onClick={() => setIndex((current) => (current - 1 + count) % count)}
+      >
+        <ChevronLeft className="size-3.5" strokeWidth={2} aria-hidden="true" />
+      </Button>
+      <span className="min-w-[2.75rem] text-center text-sm tabular-nums text-muted-foreground" aria-live="polite">
+        {safeIndex + 1} / {count}
+      </span>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        className="size-5 text-muted-foreground hover:text-foreground"
+        aria-label="Next element"
+        title="Next element"
+        onClick={() => setIndex((current) => (current + 1) % count)}
+      >
+        <ChevronRight className="size-3.5" strokeWidth={2} aria-hidden="true" />
+      </Button>
+    </div>
+  ) : null;
+
+  return (
+    <div className="flex min-w-0 flex-col pb-2 text-sm font-normal">
+      {totals.length > 0 && <div className="border-b border-sidebar-border/60 py-1" aria-label="Selection measurements"><MeasurementRows rows={totals}/></div>}
+      <ElementDetail item={items[safeIndex]} navigation={navigation} />
+      <MaterialDetail info={materialInfo} />
+    </div>
+  );
+}
+
+export function buildStepReferenceTab({ references = [], meshData = null, sourceAppearance = null } = {}) {
+  const count = Array.isArray(references) ? references.filter(Boolean).length : 0;
+  return {
+    id: FILE_SHEET_SECTION_IDS.STEP_REFERENCE,
+    title: (
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span>Reference</span>
+        {count > 1 ? (
+          <span className="rounded-full bg-accent px-1.5 text-micro tabular-nums text-accent-foreground">
+            {count}
+          </span>
+        ) : null}
+      </span>
+    ),
+    content: <StepReferenceSection references={references} meshData={meshData} sourceAppearance={sourceAppearance} />
+  };
+}

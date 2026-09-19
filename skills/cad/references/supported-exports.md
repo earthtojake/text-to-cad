@@ -127,9 +127,10 @@ cadgen glb snapshot meshes/bracket.glb tmp/bracket_glb.png
 ```
 
 A mesh carries no CAD topology. Its snapshot door accepts `--display` for the
-format-neutral `shaded`, `wireframe`, `transparent`, and `unshaded` modes, and
-accepts `--render` for the photographic view. The two settings are separate:
-`--display` cannot be combined with `--render`. Mesh doors do not have
+format-neutral `shaded`, `wireframe`, `transparent`, and `unshaded` modes, plus
+`--display render` for the photographic view. Inline JSON and JSON files use
+the unified display object, with studio-only settings nested under `render`.
+Mesh doors do not have
 `--focus`/`--hide`, `--kinematics`, or `--animation`/`--time`, and reject
 `--mode section`; meshes have no canonical CAD occurrences, edges, kinematics,
 or render-module clips for those controls to act on. `cadgen step snapshot`

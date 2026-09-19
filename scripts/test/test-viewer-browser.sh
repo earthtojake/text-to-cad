@@ -33,10 +33,15 @@ only_gate=""
 ci_subset=""
 while [ "$#" -ne 0 ]; do
   case "$1" in
-    --out) out_dir="${2:-}"; shift 2 || true ;;
+    --out|--only)
+      if [ "$#" -lt 2 ] || [[ "$2" == --* ]] || [ -z "$2" ]; then
+        echo "usage: $0 [--out SCREENSHOT_DIR] [--only GATE] [--ci]" >&2
+        exit 2
+      fi
+      if [ "$1" = "--out" ]; then out_dir="$2"; else only_gate="$2"; fi
+      shift 2 ;;
     # One gate while working on it: picking, pick, format, scene, quality,
     # kinematics, camera.
-    --only) only_gate="${2:-}"; shift 2 || true ;;
     # The CI-sized subset (format, pick, kinematics, camera). Without it this is
     # the full manual gate; tests/browser/viewer-e2e.mjs says what each covers and
     # why the rest stays manual.
@@ -44,13 +49,16 @@ while [ "$#" -ne 0 ]; do
     *) echo "usage: $0 [--out SCREENSHOT_DIR] [--only GATE] [--ci]" >&2; exit 2 ;;
   esac
 done
-if { [ -n "$out_dir" ] && [ "$out_dir" = "--only" ]; } || [ "$only_gate" = "--out" ]; then
-  echo "usage: $0 [--out SCREENSHOT_DIR] [--only GATE] [--ci]" >&2
-  exit 2
-fi
-
 started_at="$(date +%s)"
-project="$(mktemp -d)"
+# macOS Unix sockets have a 104-byte path limit. Keep the test's daemon state
+# and child-process scratch paths short as well as private.
+if [ "$(uname -s)" = "Darwin" ]; then
+  project="$(mktemp -d /tmp/cvb.XXXXXX)"
+  export TMPDIR="$project/tmp"
+  mkdir -p "$TMPDIR"
+else
+  project="$(mktemp -d)"
+fi
 log="$(mktemp)"
 viewer_pidfile="$project/viewer.pid"
 export CADGEN_CACHE_DIR="$project/cache"
@@ -133,6 +141,24 @@ right.label = "right_cylinder"
 assembly = bd.Compound(children=[left, right], label="smoke_assembly")
 export_build123d_step_scene(assembly, root / "assembly.step")
 PY
+
+# Two tiny authored mesh objects retain distinct display names and stable CAD
+# identities. Use the compiled GLB writer, with no extra CAD construction.
+node --input-type=module - "$project" "$REPO_ROOT" <<'JS'
+import fs from 'node:fs';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+const require = createRequire(path.join(process.argv[3], 'package.json'));
+const { writeGlb } = await import(require.resolve('@hardcore/core/lib/glb/writeGlb.js'));
+function tetrahedron(offset) {
+  const vertices = [[offset, 0, 0], [offset + 0.01, 0, 0], [offset, 0.01, 0], [offset, 0, 0.01]];
+  return Float32Array.from([[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]].flatMap(face => face.flatMap(index => vertices[index])));
+}
+fs.writeFileSync(path.join(process.argv[2], 'named-components.glb'), writeGlb({ primitives: [
+  { positions: tetrahedron(0), name: 'bracket', occurrenceId: 'o1', color: '#e88c30' },
+  { positions: tetrahedron(0.02), name: 'pulley', occurrenceId: 'o2', color: '#4080d0' },
+] }, { preset: 'export', upAxis: 'z', units: 'm' }));
+JS
 
 # A STEP document whose sidecar declares a mate: the other way a model is posed,
 # and the one whose pose reaches the scene through cadScene parameters rather
@@ -248,6 +274,31 @@ cat > "$project/smoke.urdf" <<'URDF'
   </joint>
 </robot>
 URDF
+
+# A linked mesh retains its two authored object names in both robot formats.
+cat > "$project/named-components.urdf" <<'URDF'
+<?xml version="1.0"?>
+<robot name="viewer_named_components">
+  <link name="base">
+    <visual><geometry><box size="0.10 0.08 0.02"/></geometry></visual>
+  </link>
+  <link name="arm">
+    <visual><geometry><mesh filename="named-components.glb" scale="0.001 0.001 0.001"/></geometry></visual>
+  </link>
+  <joint name="shoulder" type="revolute">
+    <parent link="base"/><child link="arm"/>
+    <origin xyz="0 0 0.06"/><axis xyz="0 1 0"/>
+    <limit lower="-1.0" upper="1.0" effort="1" velocity="1"/>
+  </joint>
+</robot>
+URDF
+cat > "$project/named-components.srdf" <<'SRDF'
+<?xml version="1.0"?>
+<robot name="viewer_named_components">
+  <group name="arm_group"><joint name="shoulder"/></group>
+  <group_state name="lifted" group="arm_group"><joint name="shoulder" value="0.5"/></group_state>
+</robot>
+SRDF
 
 # A robot whose base link origin sits ABOVE its lowest geometry: the clamp hangs
 # entirely below z=0, which is where the photographic floor used to be pinned.

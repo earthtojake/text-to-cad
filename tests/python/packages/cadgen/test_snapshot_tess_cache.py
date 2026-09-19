@@ -197,7 +197,7 @@ class SnapshotAssetServerTests(unittest.TestCase):
 
     def test_oversized_metadata_headers_are_rejected_without_reading_a_body(self) -> None:
         import http.client
-        from cadgen.viewer.tess_cache import TESS_CACHE_METADATA_MAX_BYTES
+        from cadgen.store.tess_cache import TESS_CACHE_METADATA_MAX_BYTES
 
         for path in ("/__tess_cache/probe", TESS_CACHE_BATCH_PATH):
             with self.subTest(path=path):
@@ -238,7 +238,7 @@ class SnapshotBrowserTessCacheIntegrationTest(unittest.TestCase):
     def test_cold_surface_write_is_a_warm_hit_after_the_surface_is_gone(self) -> None:
         repo = Path(__file__).resolve().parents[4]
         surface_bytes = (
-            repo / "packages/cadgen-js/src/lib/surf/fixtures/cam_follower_roller.surf"
+            repo / "packages/core/src/lib/surf/fixtures/cam_follower_roller.surf"
         ).read_bytes()
 
         async def exercise(root: Path) -> None:

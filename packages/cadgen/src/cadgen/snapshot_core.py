@@ -48,8 +48,8 @@ from cadgen._internal.atomic_replace import write_bytes_atomic
 SNAPSHOT_ORIGIN = "http://localhost"
 SNAPSHOT_RENDER_URL = f"{SNAPSHOT_ORIGIN}/render.html"
 SNAPSHOT_ROUTE_GLOB = f"{SNAPSHOT_ORIGIN}/**"
-# A normal snapshot leaves ``render`` absent and retains the deterministic CAD
-# scene. An explicit render envelope opts into the photographic renderer.
+# Photographic presentation is one display mode. Its optional studio recipe
+# lives under ``display.render`` while camera remains a common top-level field.
 RENDER_STUDIO_IDS = frozenset({"light", "dark"})
 RENDER_QUALITY_IDS = frozenset({"preview", "final"})
 DEFAULT_TIMEOUT_SECONDS = 300
@@ -71,7 +71,6 @@ SUPPORTED_JOB_KEYS = frozenset(
         "mode",
         "outputs",
         "display",
-        "render",
         "output",
         "quality",
         "camera",
@@ -98,12 +97,7 @@ SUPPORTED_JOB_KEYS = frozenset(
         "timeoutSeconds",
     }
 )
-SUPPORTED_RENDER_KEYS = frozenset(
-    {"studio", "quality", "exposure", "lighting", "backdrop", "camera"}
-)
-RENDER_INCOMPATIBLE_JOB_KEYS = frozenset(
-    {"camera", "display", "selection", "jointValues", "quality"}
-)
+SUPPORTED_RENDER_KEYS = frozenset({"studio", "quality", "exposure", "lighting", "backdrop"})
 RENDER_LIGHTING_KEYS = frozenset({"rotation", "size", "fill"})
 RENDER_BACKDROP_KEYS = frozenset({"color", "transparent", "ground", "groundPlacement"})
 SUPPORTED_OUTPUT_SETTINGS_KEYS = frozenset(
@@ -117,7 +111,7 @@ SUPPORTED_QUALITY_KEYS = frozenset({"tessellation"})
 # renderer dies, and the caller sees a lost Playwright driver connection rather
 # than a rejected request — so the request is rejected here, before a browser
 # is launched. Mirrored as RENDER_TESSELLATION_FLOORS in
-# packages/cadgen-js/src/common/source.js (that file validates the same job in
+# packages/core/src/common/source.js (that file validates the same job in
 # the page; the parity is tested).
 MIN_RENDER_TESSELLATION = {"chordTolerance": 1e-5, "angleTolerance": 5e-3}
 SUPPORTED_OUTPUT_KEYS = frozenset(
@@ -148,9 +142,9 @@ PRESENTATION_LARGE_RENDER_WIDTH = 2800
 PRESENTATION_LARGE_RENDER_HEIGHT = 1800
 CONTACT_SHEET_RENDER_WIDTH = 2400
 CONTACT_SHEET_RENDER_HEIGHT = 1600
-DISPLAY_OPTION_KEYS = {"mode", "clip", "exploded", "edges", "guides", "partColor"}
+DISPLAY_OPTION_KEYS = {"mode", "render", "clip", "exploded", "edges", "guides", "partColor"}
 DISPLAY_MODES = frozenset(
-    {"shaded", "shaded_edges", "transparent", "hidden_edges", "hidden_lines_removed", "unshaded", "wireframe"}
+    {"render", "shaded", "shaded_edges", "transparent", "hidden_edges", "hidden_lines_removed", "unshaded", "wireframe"}
 )
 PART_COLOR_MODES = frozenset({"original", "single", "by_part"})
 DISPLAY_CLIP_KEYS = frozenset({"enabled", "axis", "offset", "offsets", "invert"})
@@ -195,7 +189,7 @@ def load_json_text(text: str, source_label: str) -> object:
 #
 # Every option below arrives as TEXT from the CLI and has to be parsed. The public
 # `<format>.snapshot()` verbs hand the same options over as Python values -- a dict
-# for a Render envelope, a dict for a camera -- and stringifying one of those would produce
+# for display settings, a dict for a camera -- and stringifying one of those would produce
 # "{'settings': ...}", which cannot be parsed as JSON. So each loader takes the
 # already-parsed shape as itself.
 
@@ -328,6 +322,11 @@ def validate_display_settings_values(payload: Mapping[str, object], *, source_la
             raise SnapshotError(
                 f"--display mode must be one of: {supported}; got {payload.get('mode')!r} ({source_label})"
             )
+    render = payload.get("render")
+    if render is not None:
+        if re.sub(r"[\s-]+", "_", mode.lower()) != "render":
+            raise SnapshotError("display.render requires display.mode 'render'")
+        validate_display_render_settings(render, source_label=source_label)
     clip = payload.get("clip")
     if clip is not None:
         if not is_plain_object(clip):
@@ -495,32 +494,32 @@ def _render_boolean(value: object, field: str) -> None:
         raise SnapshotError(f"{field} must be a boolean")
 
 
-def validate_render_option(value: object, *, source_label: str) -> dict[str, object]:
+def validate_display_render_settings(value: object, *, source_label: str) -> dict[str, object]:
     if not is_plain_object(value):
-        raise SnapshotError(f"--render JSON must be a render object: {source_label}")
+        raise SnapshotError(f"display.render must be an object ({source_label})")
     payload = dict(value)
     unknown = sorted(set(payload) - SUPPORTED_RENDER_KEYS)
     if unknown:
         raise SnapshotError(
-            f"render has unknown key(s): {', '.join(unknown)}; "
+            f"display.render has unknown key(s): {', '.join(unknown)}; "
             f"supported keys: {', '.join(sorted(SUPPORTED_RENDER_KEYS))} ({source_label})"
         )
     if "studio" in payload:
         if not isinstance(payload["studio"], str) or payload["studio"] not in RENDER_STUDIO_IDS:
-            raise SnapshotError("render.studio must be light or dark")
+            raise SnapshotError("display.render.studio must be light or dark")
     if "quality" in payload:
         if not isinstance(payload["quality"], str) or payload["quality"] not in RENDER_QUALITY_IDS:
-            raise SnapshotError("render.quality must be preview or final")
+            raise SnapshotError("display.render.quality must be preview or final")
     if "exposure" in payload:
-        _render_number(payload["exposure"], "render.exposure", -5, 5)
+        _render_number(payload["exposure"], "display.render.exposure", -5, 5)
     if "lighting" in payload:
         lighting = payload["lighting"]
         if not is_plain_object(lighting):
-            raise SnapshotError(f"render.lighting must be an object ({source_label})")
+            raise SnapshotError(f"display.render.lighting must be an object ({source_label})")
         unknown_lighting = sorted(set(lighting) - RENDER_LIGHTING_KEYS)
         if unknown_lighting:
             raise SnapshotError(
-                f"render.lighting has unknown key(s): {', '.join(unknown_lighting)}; "
+                f"display.render.lighting has unknown key(s): {', '.join(unknown_lighting)}; "
                 f"supported keys: {', '.join(sorted(RENDER_LIGHTING_KEYS))}"
             )
         for key, bounds in {
@@ -529,62 +528,25 @@ def validate_render_option(value: object, *, source_label: str) -> dict[str, obj
             "fill": (0, 1),
         }.items():
             if key in lighting:
-                _render_number(lighting[key], f"render.lighting.{key}", *bounds)
+                _render_number(lighting[key], f"display.render.lighting.{key}", *bounds)
     if "backdrop" in payload:
         backdrop = payload["backdrop"]
         if not is_plain_object(backdrop):
-            raise SnapshotError(f"render.backdrop must be an object ({source_label})")
+            raise SnapshotError(f"display.render.backdrop must be an object ({source_label})")
         unknown_backdrop = sorted(set(backdrop) - RENDER_BACKDROP_KEYS)
         if unknown_backdrop:
             raise SnapshotError(
-                f"render.backdrop has unknown key(s): {', '.join(unknown_backdrop)}; "
+                f"display.render.backdrop has unknown key(s): {', '.join(unknown_backdrop)}; "
                 f"supported keys: {', '.join(sorted(RENDER_BACKDROP_KEYS))}"
             )
         if "color" in backdrop:
-            _render_color(backdrop["color"], "render.backdrop.color")
+            _render_color(backdrop["color"], "display.render.backdrop.color")
         for key in ("transparent", "ground"):
             if key in backdrop:
-                _render_boolean(backdrop[key], f"render.backdrop.{key}")
+                _render_boolean(backdrop[key], f"display.render.backdrop.{key}")
         if "groundPlacement" in backdrop and backdrop["groundPlacement"] not in ("origin", "lowest"):
-            raise SnapshotError("render.backdrop.groundPlacement must be origin or lowest")
-    if "camera" in payload:
-        camera = payload["camera"]
-        payload["camera"] = parse_camera_option(camera)
+            raise SnapshotError("display.render.backdrop.groundPlacement must be origin or lowest")
     return payload
-
-
-def snapshot_render_payload(value: object, *, source_label: str) -> dict[str, object]:
-    """Validate a Render envelope and bind the snapshot frontdoor's light default.
-
-    Render JSON keeps ``studio`` optional so the same object can follow an app's
-    appearance. A snapshot process has no app appearance, so its deterministic
-    fallback is the light photographic studio.
-    """
-    payload = validate_render_option(value, source_label=source_label)
-    payload.setdefault("studio", "light")
-    return payload
-
-
-def load_render_option(raw_render: object, *, cwd: Path) -> dict[str, object]:
-    if is_plain_object(raw_render):
-        return snapshot_render_payload(raw_render, source_label="render settings")
-    render = str(raw_render or "").strip()
-    if not render:
-        raise SnapshotError("--render requires a studio id, JSON object, or JSON file path")
-    if render.startswith("{"):
-        return snapshot_render_payload(load_json_text(render, "--render"), source_label="--render")
-    render_path = Path(render).expanduser()
-    if not render_path.is_absolute():
-        render_path = cwd / render_path
-    looks_like_file = render.lower().endswith(".json") or "/" in render or "\\" in render
-    if not looks_like_file and not render_path.exists():
-        return snapshot_render_payload({"studio": render}, source_label="--render")
-    if not render_path.exists():
-        raise SnapshotError(f"Render JSON file does not exist: {render}")
-    return snapshot_render_payload(
-        load_json_text(render_path.read_text(encoding="utf-8"), str(render_path)),
-        source_label=str(render_path),
-    )
 
 
 def validate_output_settings(value: object) -> dict[str, object]:
@@ -619,38 +581,9 @@ def validate_quality_settings(value: object) -> dict[str, object]:
 
 
 def effective_display_request(job: Mapping[str, object]) -> dict[str, object]:
-    """Return the CAD display request that can affect this snapshot.
-
-    Photographic Render owns a private shaded presentation. Its top-level CAD
-    display controls have already been rejected by
-    :func:`validate_render_job_compatibility`.
-    """
+    """Return the unified display request that affects this snapshot."""
     display = job.get("display") if is_plain_object(job.get("display")) else {}
     return copy.deepcopy(dict(display))
-
-
-def validate_render_job_compatibility(
-    job: Mapping[str, object], *, mode: object | None = None,
-) -> dict[str, object]:
-    """Reject normal-CAD scene state paired with photographic Render.
-
-    Presence is the contract: ``null`` and empty objects are still explicit
-    inputs, so they fail instead of being silently treated as absent. Callers
-    validate raw jobs before clearing outputs or resolving an input.
-    """
-    if "render" not in job:
-        return dict(job)
-    render_mode = str(mode if mode is not None else (job.get("mode") or "view")).strip().lower()
-    if render_mode != "view":
-        raise SnapshotError("Photographic Render supports only view mode")
-    conflicts = sorted(set(job) & RENDER_INCOMPATIBLE_JOB_KEYS)
-    if conflicts:
-        raise SnapshotError(
-            "Photographic Render cannot be combined with top-level CAD control(s): "
-            f"{', '.join(conflicts)}. Put photographic camera and quality settings "
-            "inside render."
-        )
-    return dict(job)
 
 
 def path_is_inside_or_equal(child: Path, parent: Path) -> bool:
@@ -956,7 +889,6 @@ def normalize_common_job(
     ``job_index``/``job_count`` are this job's place in its packet, needed only
     so a directory-valued output's generated name can discriminate across jobs
     as well as within one (see :func:`generated_output_name`)."""
-    job = validate_render_job_compatibility(job, mode=mode)
     outputs = job.get("outputs") if isinstance(job.get("outputs"), list) else []
     if mode != "list" and not outputs:
         raise SnapshotError("render job must include outputs for non-list modes")
@@ -990,10 +922,6 @@ def normalize_common_job(
                     "container, so name a .png output, or pass --video with --animation to "
                     "render the clip into it"
                 )
-
-    normalized_render = None
-    if "render" in job:
-        normalized_render = snapshot_render_payload(job.get("render"), source_label="job render")
 
     output_settings = validate_output_settings(job.get("output"))
     quality = validate_quality_settings(job.get("quality"))
@@ -1060,7 +988,7 @@ def normalize_common_job(
                 "height": height,
             }
         explicit_camera = output_object.get("camera")
-        if explicit_camera is None and normalized_render is None:
+        if explicit_camera is None:
             explicit_camera = job.get("camera")
         if explicit_camera is not None:
             normalized_output["camera"] = parse_camera_option(explicit_camera)
@@ -1069,9 +997,8 @@ def normalize_common_job(
     return {
         **job,
         "mode": mode,
-        **({"render": normalized_render} if normalized_render is not None else {}),
         "output": output_settings,
-        **({"quality": quality} if normalized_render is None else {}),
+        "quality": quality,
         "outputs": normalized_outputs,
     }
 def has_kinematics_render_values(value: object) -> bool:
@@ -1118,7 +1045,6 @@ def resolve_mesh_render_job(
     Meshes render through the shared mesh path, so this skips the STEP artifact/package
     pipeline entirely and hands the renderer a plain asset URL. STEP-only options are
     rejected up front with clear errors rather than silently ignored downstream."""
-    job = validate_render_job_compatibility(job)
     label = kind.upper()
 
     # Selector focus/hide/refs need the selector index built from STEP topology.
@@ -1156,8 +1082,8 @@ def resolve_mesh_render_job(
             f"{mode} mode requires STEP topology; {label} mesh inputs support: {supported}"
         )
 
-    # A normal mesh snapshot has no CAD topology for edge modes or exploded views.
-    # Photographic Render's incompatible CAD display request has already failed.
+    # A mesh snapshot has no CAD topology for edge modes or exploded views. Render
+    # remains valid because it uses the same format-neutral display object.
     display = effective_display_request(job)
     raw_display_mode = re.sub(r"[\s-]+", "_", str(display.get("mode") or "").strip().lower())
     canonical_display_mode = DISPLAY_MODE_ALIASES.get(raw_display_mode, raw_display_mode)
@@ -1221,7 +1147,7 @@ def route_file(pathname: str, prefix: str, root: Path) -> Path:
 #
 # The snapshot page resolves component tessellations through the SAME disk
 # cache the mesh-export CLI uses (immutable objects plus index/mesh; codec and
-# key scheme in packages/cadgen-js/src/lib/surf/tessellationCache.js). The page
+# key scheme in packages/core/src/lib/surf/tessellationCache.js). The page
 # cannot touch the filesystem, so the host serves the cache: GET
 # /__tess_cache/<key>.tess is a read, POST is a best-effort write-back after
 # an in-page tessellation miss. CADGEN_MESH_CACHE=0 turns both directions
@@ -1258,26 +1184,51 @@ def tessellation_cache_enabled() -> bool:
     return os.environ.get("CADGEN_MESH_CACHE") != "0"
 
 
+def _tessellation_cache_key(pathname: str) -> str | None:
+    name = str(pathname or "")[len(TESS_CACHE_ROUTE_PREFIX):]
+    if not TESS_CACHE_NAME_PATTERN.fullmatch(name) or ".." in name:
+        return None
+    return name[:-len(".tess")]
+
+
 def read_tessellation_cache_entry(pathname: str, *, expected_object=None, max_bytes=None) -> bytes | None:
     """One entry's bytes, from the mesh index (``index/mesh`` -> object); None
     for a refused name, a miss, or a disabled cache."""
-    from cadgen.viewer.tess_cache import read_tess_cache_entry
-
-    if not tessellation_cache_enabled():
+    from cadgen.store.tess_cache import read_tessellation_cache
+    key = _tessellation_cache_key(pathname)
+    if key is None or not tessellation_cache_enabled():
         return None
-    status, data = read_tess_cache_entry(pathname, expected_object=expected_object, max_bytes=max_bytes)
-    return data if status == 200 else None
+    try:
+        return read_tessellation_cache(
+            key, expected_object=expected_object, max_bytes=max_bytes,
+        )
+    except ValueError:
+        return None
 
 
 def write_tessellation_cache_entry(pathname: str, body: bytes | None) -> bool:
     """Best-effort write-back; False for an invalid or conflicting entry."""
-    from cadgen.viewer.tess_cache import write_tess_cache_entry
+    return _write_tessellation_cache_entry_status(pathname, body) == 204
 
-    return write_tess_cache_entry(pathname, body) == 204
+
+def _write_tessellation_cache_entry_status(pathname: str, body: bytes | None) -> int:
+    key = _tessellation_cache_key(pathname)
+    if key is None:
+        return 403
+    if body:
+        from cadgen.store.meshes import MeshConflictError
+        from cadgen.store.tess_cache import write_tessellation_cache
+        try:
+            write_tessellation_cache(key, body)
+        except MeshConflictError:
+            return 409
+        except (ValueError, TypeError, KeyError, OverflowError, struct.error):
+            return 400
+    return 204
 
 
 # Probe small index facts, then request only admitted exact objects. The shared
-# TESB container stays unchanged; viewer.tess_cache owns both hosts' framing.
+# TESB container stays unchanged; store.tess_cache owns both hosts' framing.
 TESS_CACHE_BATCH_PATH = "/__tess_cache/batch"
 TESS_CACHE_BATCH_MAGIC = 0x42534554  # "TESB" little-endian
 TESS_CACHE_BATCH_VERSION = 1
@@ -1287,7 +1238,7 @@ TESS_CACHE_PROBE_PATH = "/__tess_cache/probe"
 
 def read_tessellation_cache_batch(body: bytes | None) -> bytes | None:
     """One shared bounded exact-object TESB route for viewer and snapshots."""
-    from cadgen.viewer.tess_cache import read_tess_cache_batch
+    from cadgen.store.tess_cache import read_tess_cache_batch
 
     return read_tess_cache_batch(body)
 
@@ -1360,7 +1311,7 @@ class SnapshotAssetServer:
                 pathname = parsed.path
                 if pathname.startswith(TESS_CACHE_ROUTE_PREFIX):
                     query = parse_qs(parsed.query)
-                    from cadgen.viewer.tess_cache import parse_tess_cache_admission
+                    from cadgen.store.tess_cache import parse_tess_cache_admission
 
                     try:
                         digest, limit = parse_tess_cache_admission(
@@ -1410,7 +1361,7 @@ class SnapshotAssetServer:
                 if not pathname.startswith(TESS_CACHE_ROUTE_PREFIX):
                     self._send(404, b"not found", "text/plain; charset=utf-8")
                     return
-                from cadgen.viewer.tess_cache import TESS_CACHE_METADATA_MAX_BYTES
+                from cadgen.store.tess_cache import TESS_CACHE_METADATA_MAX_BYTES
 
                 try:
                     length = int(self.headers.get("content-length") or 0)
@@ -1427,7 +1378,7 @@ class SnapshotAssetServer:
                     return
                 body = self.rfile.read(length) if length > 0 else b""
                 if pathname == TESS_CACHE_PROBE_PATH:
-                    from cadgen.viewer.tess_cache import read_tess_cache_probe
+                    from cadgen.store.tess_cache import read_tess_cache_probe
 
                     result = read_tess_cache_probe(body)
                     if result is None:
@@ -1442,9 +1393,7 @@ class SnapshotAssetServer:
                         return
                     self._send(200, batch)
                     return
-                from cadgen.viewer.tess_cache import write_tess_cache_entry
-
-                self._send(write_tess_cache_entry(pathname, body))
+                self._send(_write_tessellation_cache_entry_status(pathname, body))
 
         self.root_provider = root_provider
         self._httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)

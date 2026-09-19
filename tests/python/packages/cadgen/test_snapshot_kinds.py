@@ -229,11 +229,12 @@ class GeneratedHelpTests(unittest.TestCase):
         for present in ("--kinematics", "--animation", "--time", "--focus", "section", "--view-labels"):
             self.assertIn(present, step_help)
 
-    def test_render_is_one_option_everywhere_and_theme_teaches_the_cutover(self):
+    def test_display_is_the_one_view_option_everywhere(self):
         for door in DOOR_COMMANDS:
             with self.subTest(door=door):
                 text = door_help(door)
-                self.assertIn("--render", text)
+                self.assertIn("--display", text)
+                self.assertNotIn("--render", text)
                 self.assertNotIn("--theme", text)
                 self.assertNotIn("--appearance", text)
 

@@ -5,7 +5,7 @@
 # The serial number is bd.Text OUTLINES, not a DXF TEXT entity: cut and marking
 # toolchains consume geometry, and font rendering inside CAM is unreliable.
 # (The retired ezdxf generator emitted a real TEXT entity here; TEXT-entity
-# PARSING is covered by unit fixtures in packages/cadgen-js/src/lib/dxf/.)
+# PARSING is covered by unit fixtures in packages/core/src/lib/dxf/.)
 
 from __future__ import annotations
 

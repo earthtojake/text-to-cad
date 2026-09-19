@@ -1,13 +1,10 @@
-"""Photographic Render, technical output, and tessellation are closed schemas."""
+"""Unified display, technical output, and tessellation are closed schemas."""
 
 from __future__ import annotations
 
-import io
-import json
+import inspect
 import re
-import tempfile
 import unittest
-from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from tests.python.support.paths import add_repo_path, repo_path
@@ -23,6 +20,7 @@ from cadgen.snapshot_core import (  # noqa: E402
     SUPPORTED_OUTPUT_SETTINGS_KEYS,
     SUPPORTED_QUALITY_KEYS,
     SnapshotError,
+    load_display_option,
     normalize_common_job,
     validate_render_tessellation,
 )
@@ -37,21 +35,21 @@ def normalize(**settings: object) -> dict[str, object]:
     )
 
 
-class RenderKeySchemaTest(unittest.TestCase):
-    def test_render_ids_are_closed_and_cli_defaults_to_light(self):
+class RenderDisplaySchemaTest(unittest.TestCase):
+    def test_render_ids_are_closed_and_render_shortcut_is_a_display_mode(self):
         self.assertEqual({"light", "dark"}, set(RENDER_STUDIO_IDS))
         self.assertEqual({"preview", "final"}, set(RENDER_QUALITY_IDS))
-        self.assertEqual({"studio": "light"}, normalize(render={})["render"])
+        self.assertEqual({"mode": "render"}, load_display_option("render", cwd=Path(".")))
         for invalid in ("unknown", None, True, [], {}):
             with self.subTest(studio=invalid), self.assertRaisesRegex(
-                SnapshotError, "render.studio must be light or dark"
+                SnapshotError, "display.render.studio must be light or dark"
             ):
-                normalize(render={"studio": invalid})
+                load_display_option({"mode": "render", "render": {"studio": invalid}}, cwd=Path("."))
         for invalid in ("unknown", None, False, [], {}):
             with self.subTest(quality=invalid), self.assertRaisesRegex(
-                SnapshotError, "render.quality must be preview or final"
+                SnapshotError, "display.render.quality must be preview or final"
             ):
-                normalize(render={"quality": invalid})
+                load_display_option({"mode": "render", "render": {"quality": invalid}}, cwd=Path("."))
 
     def test_render_values_are_strict_and_sparse(self):
         render = {
@@ -61,7 +59,8 @@ class RenderKeySchemaTest(unittest.TestCase):
             "lighting": {"rotation": 180, "size": 0.25, "fill": 1},
             "backdrop": {"color": "#123456", "transparent": True, "ground": False, "groundPlacement": "lowest"},
         }
-        self.assertEqual(render, normalize(render=render)["render"])
+        display = load_display_option({"mode": "render", "render": render}, cwd=Path("."))
+        self.assertEqual(render, display["render"])
         self.assertEqual({"rotation", "size", "fill"}, set(RENDER_LIGHTING_KEYS))
         self.assertEqual({"color", "transparent", "ground", "groundPlacement"}, set(RENDER_BACKDROP_KEYS))
 
@@ -78,86 +77,31 @@ class RenderKeySchemaTest(unittest.TestCase):
         )
         for render_value in invalid:
             with self.subTest(render=render_value), self.assertRaises(SnapshotError):
-                normalize(render=render_value)
+                load_display_option({"mode": "render", "render": render_value}, cwd=Path("."))
 
-    def test_render_camera_is_closed_and_display_is_not_a_render_field(self):
-        with self.assertRaisesRegex(SnapshotError, "camera has unknown key"):
-            normalize(render={"camera": {"projection": "perspective", "fov": 30}})
-        with self.assertRaisesRegex(SnapshotError, "camera projection"):
-            normalize(render={"camera": {"projection": "ortho"}})
-        for half_height in (0, -1, True, "12", float("inf"), float("nan")):
-            with self.subTest(orthographicHalfHeight=half_height), self.assertRaisesRegex(
-                SnapshotError, "orthographicHalfHeight must be a positive finite number"
-            ):
-                normalize(render={"camera": {"orthographicHalfHeight": half_height}})
-        self.assertEqual(
-            18.25,
-            normalize(render={"camera": {
-                "projection": "perspective", "orthographicHalfHeight": 18.25,
-            }})["render"]["camera"]["orthographicHalfHeight"],
-        )
-        for focal_length in (19.9, 200.1, True, "50", float("inf"), float("nan")):
-            with self.subTest(focalLength=focal_length), self.assertRaisesRegex(
-                SnapshotError, "focalLength must be a finite number between 20 and 200"
-            ):
-                normalize(render={"camera": {"focalLength": focal_length}})
-        self.assertEqual(
-            85,
-            normalize(render={"camera": {"focalLength": 85}})["render"]["camera"]["focalLength"],
-        )
-        with self.assertRaisesRegex(SnapshotError, r"render has unknown key\(s\): display"):
-            normalize(render={"display": {"mode": "shaded"}})
+    def test_camera_is_top_level_and_render_settings_require_render_mode(self):
+        with self.assertRaisesRegex(SnapshotError, r"display.render has unknown key\(s\): camera"):
+            load_display_option({"mode": "render", "render": {"camera": {"preset": "front"}}}, cwd=Path("."))
+        with self.assertRaisesRegex(SnapshotError, "requires display.mode 'render'"):
+            load_display_option({"mode": "shaded", "render": {}}, cwd=Path("."))
 
     def test_animation_and_output_capture_controls_remain_composable(self):
         job = normalize(
-            render={"camera": {"preset": "front"}},
+            camera={"preset": "front"}, display={"mode": "render"},
             animation={"clip": "spin", "time": 0.5},
             output={"sizeProfile": "diagnostic", "viewLabels": True},
         )
-        self.assertEqual(job["render"]["camera"], {"preset": "front"})
+        self.assertEqual(job["camera"], {"preset": "front"})
+        self.assertEqual(job["display"]["mode"], "render")
         self.assertEqual(job["animation"], {"clip": "spin", "time": 0.5})
         self.assertEqual(job["output"], {"sizeProfile": "diagnostic", "viewLabels": True})
 
-    def test_generated_cli_rejects_a_cad_flag_before_clearing_output(self):
-        from cadgen.cli import step_snapshot
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            output = root / "out.png"
-            output.write_bytes(b"previous")
-            stdout = io.StringIO()
-            with redirect_stderr(io.StringIO()), redirect_stdout(stdout):
-                code = step_snapshot.main(
-                    [
-                        str(root / "missing.step"),
-                        str(output),
-                        "--render", "{}",
-                        "--display", "shaded",
-                        "--json",
-                    ]
-                )
-            self.assertEqual(1, code)
-            self.assertIn(
-                "top-level CAD control(s): display",
-                json.loads(stdout.getvalue()).get("error", ""),
-            )
-            self.assertEqual(b"previous", output.read_bytes())
-
-    def test_public_api_distinguishes_an_explicit_default_from_omission(self):
+    def test_public_api_has_one_display_surface_and_no_render_parameter(self):
         from cadgen import step
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            with self.assertRaisesRegex(SnapshotError, "top-level CAD control\\(s\\): camera"):
-                step.snapshot(
-                    root / "missing.step",
-                    root / "out.png",
-                    render={},
-                    camera=None,
-                )
-            with self.assertRaises(Exception) as omitted:
-                step.snapshot(root / "missing.step", root / "out.png", render={})
-            self.assertNotIn("top-level CAD control", str(omitted.exception))
+        signature = inspect.signature(step.snapshot)
+        self.assertIn("display", signature.parameters)
+        self.assertIn("camera", signature.parameters)
+        self.assertNotIn("render", signature.parameters)
 
     def test_output_and_quality_are_closed(self):
         output = {
@@ -191,7 +135,7 @@ class RenderTessellationLimitsTest(unittest.TestCase):
         validate_render_tessellation(None)
 
     def test_the_floors_match_the_page_that_tessellates(self):
-        source = repo_path("packages/cadgen-js/src/common/source.js").read_text(encoding="utf-8")
+        source = repo_path("packages/core/src/common/source.js").read_text(encoding="utf-8")
         block = re.search(r"RENDER_TESSELLATION_FLOORS = Object\.freeze\(\{(.*?)\}\)", source, re.S)
         self.assertIsNotNone(block, "source.js no longer declares RENDER_TESSELLATION_FLOORS")
         declared = {

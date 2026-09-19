@@ -30,7 +30,7 @@ where those files ship, so these scripts are what produces them.
   `check-builds.sh`, the pre-commit hook.
 - `cadgen-runtime.sh` — builds the three runtime stages: `--node` (esbuilt Node
   builders), `--browser` (snapshot browser bundle), `--viewer` (vite build of
-  `apps/viewer`). `--print-outputs` lists the two directories a bundle always
+  `apps/web`). `--print-outputs` lists the two directories a bundle always
   produces; `--check` skips the viewer stage, which needs the client's
   `node_modules` and which nothing in a checkout reads. Called by `bundle.sh`,
   `check-builds.sh`, `test/test-installed.sh`, and `test/common.sh` when a test
@@ -39,16 +39,17 @@ where those files ship, so these scripts are what produces them.
   `test_js_runtime_reproducibility.py`. Call it directly only to debug one stage.
 - `lib/node_builders.sh`, `lib/snapshot_runtime.sh` — sourced by
   `cadgen-runtime.sh`; esbuild the Node builders and the browser bundle with
-  `three`/`meshoptimizer` pinned from `packages/cadgen-js/package-lock.json`.
+  `three`/`meshoptimizer` pinned from `package-lock.json`.
 
 `test/` — test runners.
 
 - `test.sh` — `test-js.sh`, then `test-python.sh`, then `test-global.sh`: the
   whole tree on one machine. Called by `release-publish.yml`; `test.yml` calls
   the focused runners per job instead.
-- `test-js.sh` — `packages/cadgen-js` and `apps/viewer` client suites, then the
-  `node --test` units under `bench/viewer-memory/` (the benchmark drivers are
-  manual; their pure helpers are not).
+- `test-js.sh [--select core|ui|web|all]` — builds the required shared exports,
+  checks dependency boundaries and runs the selected shared JS/UI/web suites.
+  Core includes the pure `bench/viewer-memory/` helper units. Electron's native
+  unit and end-to-end suites use `apps/desktop`'s `test` and `e2e` commands.
 - `test-python.sh [--keep-going] [--select GROUP] [--print-weights]`
   — the cadgen package suite, then every skill's suite. Each test FILE runs in
   its own interpreter against its own temporary store, `CADGEN_TEST_JOBS` at a
@@ -72,27 +73,29 @@ where those files ship, so these scripts are what produces them.
   when they are absent: the suites read them and a fresh clone has neither.
 - `test-docs.sh` — `npm --prefix apps/docs run check`, pulling the hero assets
   first. Called by `test.yml` and `release-publish.yml`.
-- `test-installed.sh` — builds the wheel, installs it into a scratch venv and
+- `test-installed.sh` — builds the wheel (or accepts `--wheel PATH` to test
+  the exact artifact already built), installs it into a scratch venv and
   exercises cadgen from outside the repo. Called by `test.yml` and
   `release-publish.yml`.
 - `test-viewer-launch.sh` — launches `cadgen viewer` against the built client and
   verifies reuse, cold STEP import, display derivation and browser drawing using
   a tiny test-owned STEP. Called by `test.yml`.
-- `test-viewer-browser.sh` — self-contained browser checks for supported formats,
-  Inspect/Render placement and appearance, and face/edge picking through detail
-  changes. Generates its inputs in a temporary project and owns its viewer and
-  cache; `--out DIR` keeps the screenshots it grades. Needs a bundled Viewer
-  (`bundle.sh`) and the Node Playwright's Chromium
-  (`npx --prefix packages/cadgen-js playwright install chromium`; `test.yml`
-  installs the Python one). Called by nobody: it is a manual gate, because one
-  run is over six minutes — too slow for `test.yml`, which already covers launch
-  and reuse with `test-viewer-launch.sh`.
+- `test-viewer-browser.sh` — creates tiny inputs and owns its temporary project,
+  viewer and cache. Requires a bundled viewer and npm Playwright Chromium
+  (`npx --no-install playwright install chromium`). `--ci` runs the format,
+  picking, kinematics and camera gates in `test.yml`; the full manual run adds
+  placement, appearance and quality checks. `--only NAME` selects a gate;
+  `--out DIR` retains screenshots.
 - `common.sh`, `unittest_files.py` — shared runner pieces (interpreter
   resolution, fail-closed unittest loading, the per-file parallel run). Sourced
   by the runners.
 
 `release/` — the version and the release identity.
 
+- `check-pr-version.sh BASE_REF HEAD_REF HEAD_SHA` — rejects VERSION edits
+  outside `release/*`, comparing with the current target branch's merge base
+  so inherited releases are not mistaken for PR edits. Requires fetched remote
+  history; called by `test.yml`.
 - `check-version.sh [--incremented-from REF]` — `VERSION` is valid semver, every
   skill pins `cadgen==VERSION`, and (with the flag) `VERSION` is greater than the
   one at `REF`. Called by `test.yml`, `release-prepare.yml`, `release-publish.yml`,
@@ -153,12 +156,12 @@ manual; their `*.test.mjs` helper units run in `test-js.sh`.
 
 | Workflow | Branches/events | Purpose |
 | -------- | --------------- | ------- |
-| `test.yml` | pushes to `main`; PRs to `main`; manual dispatch | One job per thing that has to work, each conditional on the paths that can break it (`AGENTS.md` has the table, `CONTRIBUTING.md` the reasoning): `Version Check` always; the cadgen package suite on Linux and Windows; cadgen-js, viewer, skills and docs jobs on Linux; `packaging` bundles from clean (nothing under `_runtime/` is committed, so this is where it comes from), checks the layout, inspects the wheel and runs the installed-mode tests. Superseded PR runs are cancelled. |
+| `test.yml` | pushes to `main`; PRs to `main`; manual dispatch | One job per thing that has to work, each conditional on the paths that can break it (`CONTRIBUTING.md` documents the graph): `Version Check` always; the cadgen package suite on Linux and Windows; `@hardcore/core` (the existing cadgen-js check name), shared UI/web, skills and docs on Linux; desktop native and Electron checks on macOS; `packaging` bundles from clean (nothing under `_runtime/` is committed, so this is where it comes from), checks the layout, inspects the wheel and runs the installed-mode tests. Superseded PR runs are cancelled. |
 | `release-prepare.yml` (`Prepare Release`) | manual dispatch | The version bump as a PR: bumps `VERSION`, stamps metadata and skill pins, opens `release/X.Y.Z` against `target` (default `main`; `build-test` rehearses) and merges it. The merge is what runs `Publish Release`. |
-| `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test`; manual dispatch (resume/republish the head) | Gate (VERSION past the latest tag, or untagged), bundle, tests, wheel build, an `unzip -l` assertion that the shipping wheel carries `_runtime`, install test, distribution artifact; then -- on `main` only -- PyPI upload, docs deploy, `v<VERSION>` tag and GitHub Release. On `build-test` it prints what it would have tagged and stops. |
+| `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test`; manual dispatch (resume/republish the head) | Gate (VERSION past the latest tag, or untagged), bundle, tests, wheel build, an `unzip -l` assertion that the shipping wheel carries `_runtime`, install test, distribution artifact; desktop installers and update feeds built from that exact wheel; then — on `main` only — PyPI upload, docs deploy, `v<VERSION>` tag and GitHub Release carrying both Python and desktop assets. On `build-test` it prints what it would have tagged and stops. |
 | `deploy-docs.yml` (`Deploy Docs`) | manual dispatch; called by `release-publish.yml` | Deploys the docs app to Vercel production from a ref (default `main`): configures Vercel Authentication for preview deployments only, runs `vercel pull/build/deploy --prod`, and verifies the public production URLs. |
 
-In short: `Prepare Release` bumps, `Publish Release` ships, `Deploy Docs`
+`Prepare Release` bumps, `Publish Release` ships, `Deploy Docs`
 redeploys. `main` is the one branch: the source, what installers clone, and what
 releases tag; `build-test` is the rehearsal. The CAD Viewer is a local-filesystem
 app with no hosted deployment.

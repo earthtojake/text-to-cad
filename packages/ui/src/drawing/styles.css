@@ -1,0 +1,105 @@
+.hardcore-drawing-editor {
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  isolation: isolate;
+  color-scheme: light;
+}
+.hardcore-drawing-editor .excalidraw {
+  --ui-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --default-font: var(--ui-font);
+  --color-primary: #525252;
+  --color-primary-darker: #404040;
+  --color-primary-darkest: #262626;
+  --color-primary-light: #f5f5f5;
+  --color-primary-hover: #404040;
+  --color-brand-hover: #404040;
+  --color-brand-active: #525252;
+  --color-selection: #737373;
+  --color-surface-high: #f5f5f5;
+  --color-surface-mid: #fafafa;
+  --color-surface-low: #f5f5f5;
+  --color-surface-lowest: #fff;
+  --color-surface-primary-container: #e5e5e5;
+  --color-on-primary-container: #262626;
+  --color-on-surface: #262626;
+  --color-border-outline: #a3a3a3;
+  --color-border-outline-variant: #e5e5e5;
+  --default-button-size: 1.75rem;
+  --lg-button-size: 1.75rem;
+  --border-radius-md: 0.375rem;
+  --border-radius-lg: 0.375rem;
+  --editor-container-padding: 0.75rem;
+  --shadow-island: 0 1px 3px rgb(0 0 0 / 0.08), 0 0 0 1px #e5e5e5;
+  font-family: var(--ui-font);
+  font-size: var(--text-ui, 0.8125rem);
+}
+.hardcore-drawing-editor .excalidraw button,
+.hardcore-drawing-editor .excalidraw select,
+.hardcore-drawing-editor .excalidraw .dropdown-menu-item,
+.hardcore-drawing-editor .excalidraw .App-menu__left {
+  font-family: var(--ui-font);
+  font-size: var(--text-ui, 0.8125rem);
+}
+.hardcore-drawing-editor .excalidraw .main-menu-trigger { padding: 0.375rem; }
+.hardcore-drawing-editor .excalidraw .App-menu__left h3 {
+  font-size: 0.6875rem;
+  font-weight: 400;
+}
+/* The SDK has no props to remove library/diagram generation or footer help.
+   This scratchpad keeps ink, shapes, text and images with a clear-only menu. */
+.hardcore-drawing-editor .sidebar-trigger__label-element:has(.default-sidebar-trigger),
+.hardcore-drawing-editor .App-toolbar__extra-tools-trigger,
+.hardcore-drawing-editor .default-sidebar,
+.hardcore-drawing-editor .help-icon { display: none; }
+.hardcore-drawing-editor[data-drawing-mode="overlay"] .excalidraw { background: transparent; }
+
+/* Keep the SDK's native actions/shortcuts, but put persistent controls at the
+   top in both responsive layouts. The second row wraps under the drawing tools. */
+.hardcore-drawing-editor .excalidraw label:has(input[data-testid="toolbar-lock"]),
+.hardcore-drawing-editor .excalidraw .ToolIcon__lock,
+.hardcore-drawing-editor .excalidraw .HintViewer,
+.hardcore-drawing-editor .excalidraw .App-toolbar__divider { display: none; }
+.hardcore-drawing-editor .excalidraw .mobile-misc-tools-container {
+  position: static;
+  flex-direction: row;
+  order: -1;
+  border: 0;
+  border-radius: 0.375rem;
+  flex-shrink: 0;
+}
+.hardcore-drawing-editor .excalidraw .mobile-misc-tools-container .ToolIcon__icon {
+  width: var(--default-button-size);
+  height: var(--default-button-size);
+  border-radius: 0.375rem;
+}
+.hardcore-drawing-editor .excalidraw .App-toolbar-container {
+  gap: 0;
+  padding: 4px;
+  border-radius: 0.375rem;
+  background: #fff;
+  box-shadow: var(--shadow-island);
+  max-width: 100%;
+}
+.hardcore-drawing-editor .excalidraw .App-toolbar-container > .Island {
+  box-shadow: none;
+  padding: 0;
+}
+.hardcore-drawing-editor .excalidraw .App-bottom-bar {
+  top: 52px;
+  bottom: auto;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100% - 24px);
+  margin: 0 !important;
+  padding: 0;
+  align-items: flex-start;
+  max-height: calc(100% - 64px);
+}
+.hardcore-drawing-editor .excalidraw .App-bottom-bar > .Island { flex-direction: column-reverse; }
+.hardcore-drawing-editor .excalidraw .App-toolbar-content { padding: 4px; gap: 4px; justify-content: center; }
+.hardcore-drawing-editor .excalidraw .App-toolbar-content .dropdown-menu--mobile { top: 36px; bottom: auto; }
+.hardcore-drawing-editor .excalidraw .App-menu_bottom { top: 52px; bottom: auto; }
+.hardcore-drawing-editor .excalidraw .App-mobile-menu { margin: 0; }

@@ -265,11 +265,10 @@ don't-care case and gets a generated timestamped name inside it, printed on the
 `saved snapshot:` line.
 
 Grammar: `cadgen dxf snapshot TARGET [OUT] [flags]`. Flags: `--mode view|list`,
-`--camera`, `--render`, `--display`, `--size-profile`, `--width`/`--height`,
-`--job`, `--view-labels`, `--debug`, `--json`. `--render` opts into the photographic
-scene and accepts `light`, `dark`, compact Render JSON, or a file path.
-Set the photographic camera inside Render JSON. Top-level `--camera` and `--display`
-control normal drawing snapshots and cannot be combined with Render.
+`--camera`, `--display`, `--size-profile`, `--width`/`--height`,
+`--job`, `--view-labels`, `--debug`, `--json`. `--display render` opts into the
+photographic scene. Inline display JSON and JSON files may set studio-only controls
+under `render`. Top-level `--camera` remains the common camera for every display mode.
 A drawing has no selectors, kinematics, section mode, exploded assembly structure,
 or CAD-edge topology, and those combinations are absent or rejected clearly.
 

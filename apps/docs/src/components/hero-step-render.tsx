@@ -1,5 +1,6 @@
 "use client";
 
+import { createHttpCadResourceProvider } from "@hardcore/core/client";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { Line2 } from "three/examples/jsm/lines/Line2.js";
@@ -11,18 +12,18 @@ import {
   animationClipDuration,
   findAnimationClip,
   firstAnimationClipId,
-} from "cadgen-js/common/animationClock.js";
-import { CAD_SCENE_SCALE, buildModel } from "cadgen-js/common/cadScene.js";
-import { loadSourceAnimation } from "cadgen-js/common/renderModule.js";
-import { renderModel } from "cadgen-js/common/renderModel.js";
+} from "@hardcore/core/common/animationClock.js";
+import { CAD_SCENE_SCALE, buildModel } from "@hardcore/core/common/cadScene.js";
+import { loadSourceAnimation } from "@hardcore/core/common/renderModule.js";
+import { renderModel } from "@hardcore/core/common/renderModel.js";
 import {
   loadSource,
   packageSourceFromBaseUrl,
   stepParameterRuntime,
-} from "cadgen-js/common/source.js";
-import { cloneThemePresetSettings } from "cadgen-js/common/themeSettings.js";
+} from "@hardcore/core/common/source.js";
+import { cloneThemePresetSettings } from "@hardcore/core/common/themeSettings.js";
 
-// The hero renders the planetary gear STEP the way every cadgen-js client
+// The hero renders the planetary gear STEP the way every @hardcore/core client
 // renders a STEP: the model's render package (exact surfaces, tessellated in
 // the browser) plus its sidecar (kinematics for the mate graph, copied
 // animation clips for choreography). No GLB export, no site-local gear math —
@@ -249,20 +250,14 @@ export function HeroStepRender() {
     const load = async () => {
       try {
         setStatus("loading step");
-        const descriptor = await fetch(`${HERO_PACKAGE_BASE_URL}/assembly.json`, {
-          cache: "no-store",
-        }).then((response) => {
-          if (!response.ok) {
-            throw new Error(`hero assembly.json: HTTP ${response.status}`);
-          }
-          return response.json();
-        });
+        const resources = createHttpCadResourceProvider({ cache: "no-store" });
+        const descriptor = await resources.readJson(`${HERO_PACKAGE_BASE_URL}/assembly.json`);
         const source = await loadSource({
           ...packageSourceFromBaseUrl(HERO_PACKAGE_BASE_URL, descriptor),
           stepParameterUrl: HERO_SIDECAR_URL,
           documentHash: HERO_DOCUMENT_HASH,
           cadPath: HERO_STEP_CAD_PATH,
-        });
+        }, { resources });
         const animation = await loadSourceAnimation(source.sourceSidecar, { name: "hero animation" });
         const clips = (animation?.clips ?? {}) as Parameters<typeof findAnimationClip>[0];
         if (disposed) {

@@ -4,7 +4,7 @@
 # scripts/bundle/cadgen-runtime.sh.
 #
 # The snapshot CLI drives this bundle in a Playwright page. It is built from the same
-# cadgen-js entrypoint the CAD Viewer uses, so the picture a snapshot produces matches the
+# @hardcore/core entrypoint the CAD Viewer uses, so the picture a snapshot produces matches the
 # viewport; STEP models, meshes and drawings all render through it.
 #
 # Callers set SNAPSHOT_RUNTIME_BUILD_DEPS_DIR (npm scratch) before sourcing, or accept the
@@ -12,7 +12,7 @@
 
 SNAPSHOT_RUNTIME_ESBUILD_VERSION="${CAD_SNAPSHOT_ESBUILD_VERSION:-0.27.7}"
 
-# three and meshoptimizer are read from packages/cadgen-js/package-lock.json, the one
+# three and meshoptimizer are read from package-lock.json, the one
 # place their exact versions are already pinned, so a dependency bump cannot silently change
 # what ships without also changing the lockfile. This matches node_builders.sh.
 # Resolved lazily: BUNDLE_REPO_ROOT is set before the first call, not necessarily before
@@ -27,10 +27,10 @@ snapshot_runtime_locked_version() {
     const lock = require(process.argv[1]);
     const entry = lock.packages && lock.packages['node_modules/$name'];
     if (!entry || !entry.version) {
-      throw new Error('packages/cadgen-js/package-lock.json has no pinned $name');
+      throw new Error('package-lock.json has no pinned $name');
     }
     entry.version;
-  " "$BUNDLE_REPO_ROOT/packages/cadgen-js/package-lock.json"
+  " "$BUNDLE_REPO_ROOT/package-lock.json"
 }
 
 # The lockfile version, unless the matching CAD_SNAPSHOT_* env var overrides it.
@@ -50,7 +50,7 @@ snapshot_runtime_pinned_version() {
 }
 
 snapshot_runtime_entrypoint() {
-  printf '%s\n' "$BUNDLE_REPO_ROOT/packages/cadgen-js/src/common/headlessRenderEntry.js"
+  printf '%s\n' "$BUNDLE_REPO_ROOT/packages/core/dist/common/headlessRenderEntry.js"
 }
 
 # snapshot_runtime_need_install <deps_dir> <three> <meshoptimizer>
@@ -59,19 +59,21 @@ snapshot_runtime_need_install() {
   local three="$2"
   local meshoptimizer="$3"
   [ -x "$deps_dir/node_modules/.bin/esbuild" ] || return 0
-  node <<EOF || return 0
+  # Pass the directory as an argument so Git Bash translates it for Node on
+  # Windows; embedding `/d/a/...` in JavaScript leaves Node unable to open it.
+  node -e '
 const deps = {
-  esbuild: "$SNAPSHOT_RUNTIME_ESBUILD_VERSION",
-  three: "$three",
-  meshoptimizer: "$meshoptimizer",
+  esbuild: process.argv[2],
+  three: process.argv[3],
+  meshoptimizer: process.argv[4],
 };
 for (const [name, expected] of Object.entries(deps)) {
-  const actual = require("$deps_dir/node_modules/" + name + "/package.json").version;
+  const actual = require(process.argv[1] + "/node_modules/" + name + "/package.json").version;
   if (actual !== expected) {
     process.exit(1);
   }
 }
-EOF
+' "$deps_dir" "$SNAPSHOT_RUNTIME_ESBUILD_VERSION" "$three" "$meshoptimizer" || return 0
   return 1
 }
 
@@ -138,10 +140,10 @@ build_snapshot_runtime() {
   rm -rf "$target_dir"
   mkdir -p "$target_dir"
   write_snapshot_render_html "$target_dir"
-  # NODE_PATH resolves cadgen-js's remaining bare imports directly
-  # from packages/ source, honoring the package's exports map, and resolves the
+  # NODE_PATH resolves @hardcore/core's remaining bare imports directly
+  # from workspace outputs, honoring the package's exports map, and resolves the
   # pinned meshoptimizer out of the tmp toolchain, so the bundle stays hermetic
-  # on fresh checkouts with no packages/cadgen-js/node_modules.
+  # on fresh checkouts with no packages/core/node_modules.
   # A directory --alias cannot do the first: it bypasses the exports map.
   #
   # meshoptimizer MUST be resolvable here. glbMeshData.js reaches it through a
@@ -150,7 +152,7 @@ build_snapshot_runtime() {
   # catches the failure and renders on without a decoder, so a bundle built
   # without it silently loses EXT_meshopt_compression support instead of failing
   # the build.
-  NODE_PATH="$BUNDLE_REPO_ROOT/packages:$deps_dir/node_modules" \
+  NODE_PATH="$BUNDLE_REPO_ROOT/node_modules:$deps_dir/node_modules" \
     "$deps_dir/node_modules/.bin/esbuild" "$(snapshot_runtime_entrypoint)" \
     --bundle \
     --format=esm \

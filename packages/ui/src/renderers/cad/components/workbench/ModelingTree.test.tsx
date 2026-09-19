@@ -1,0 +1,317 @@
+import React from 'react';
+import { createCadClient } from '@hardcore/core/client';
+let client: ReturnType<typeof createCadClient>;
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
+import ModelingTreeView from '../../../../../dist/renderers/cad/components/workbench/ModelingTree.js';
+
+import { useStepModeling } from '../../../../../dist/renderers/cad/workbench/useStepModeling.js';
+function ModelingTree(props:any) {
+ const modeling=useStepModeling(props.entry,!props.disabled,{client,requestedOccurrenceIds:fixtureDescriptor.occurrences.map(o=>o.id)});
+ return <ModelingTreeView {...props} modeling={modeling}/>;
+}
+Object.assign(globalThis,{React});
+afterEach(()=>{cleanup();client?.dispose();vi.unstubAllGlobals();WorkerStub.instances=[];});
+const feature={id:'cut:1-2',kind:'cut',label:'Cut extrude 1',faces:[1,2],edges:[],measurements:[['Depth',2,'mm']],children:[]};
+const tree=[{id:'body:1',kind:'body',label:'Body 1',faces:[1,2],edges:[],complete:true,children:[feature]}];
+const refs=(o='o1')=>[1,2].map(n=>({id:`${o}.f${n}`,selectorType:'face',occurrenceId:o,normalizedSelector:`${o}.f${n}`}));
+class WorkerStub {
+ static instances:WorkerStub[]=[];
+ terminate=vi.fn();postMessage=vi.fn();onmessage:((event:any)=>void)|null=null;
+ constructor(){WorkerStub.instances.push(this);}
+}
+const entry={file:'case.step',kind:'part',url:'http://localhost/__cad/asset?file=/cache/case&v=one'};
+const descriptor={components:{c:{surf:'components/c.surf'}},occurrences:[{id:'o1',component:'c',name:'Case'}]};
+let fixtureVersion=0;
+let fixtureDescriptor=descriptor;
+function expandIfCollapsed(label:string){ const trigger=screen.queryByRole('button',{name:`Expand ${label}`});if(trigger)fireEvent.click(trigger); }
+function setup(value=descriptor){
+ fixtureDescriptor=value;
+ entry.url=`http://localhost/__cad/asset?file=/cache/case&v=fixture-${++fixtureVersion}`;
+ vi.stubGlobal('Worker',WorkerStub);
+ const fetch=vi.fn().mockResolvedValue({ok:true,json:async()=>value});vi.stubGlobal('fetch',fetch);client=createCadClient();return fetch;
+}
+async function respond(data:any,index=0){
+ await waitFor(()=>expect(WorkerStub.instances.length).toBeGreaterThan(index));
+ await act(async()=>WorkerStub.instances[index].onmessage?.({data}));
+}
+it('renders previously requested recognition when the inspector opens',async()=>{
+ const fetch=setup(),onSelect=vi.fn();
+ const props={entry,references:refs(),selectedReferenceIds:[],onSelect};
+ const {rerender}=render(<ModelingTree {...props} active={false}/>);
+ await respond({tree});expandIfCollapsed('Body 1');
+ expect(fetch).toHaveBeenCalledTimes(1);expect(WorkerStub.instances[0].terminate).toHaveBeenCalled();
+ rerender(<ModelingTree {...props} active/>);
+ fireEvent.click(await screen.findByRole('button',{name:'Select Cut extrude 1'}));
+ expect(onSelect).toHaveBeenCalledWith(['o1.f1','o1.f2']);expect(WorkerStub.instances).toHaveLength(1);
+ expect(screen.queryByRole('button',{name:'Build modeling tree'})).toBeNull();
+});
+it('waits for every canonical face and cancels selection when its tab is inactive',async()=>{
+ setup();const onSelect=vi.fn(),onLoadTopology=vi.fn();
+ const props={active:true,entry,references:[],selectedReferenceIds:[],onSelect,onLoadTopology};
+ const {rerender}=render(<ModelingTree {...props}/>);await respond({tree});expandIfCollapsed('Body 1');
+ fireEvent.click(await screen.findByRole('button',{name:'Select Cut extrude 1'}));
+ expect(onLoadTopology).toHaveBeenCalledWith(['o1']);expect(onSelect).not.toHaveBeenCalled();
+ rerender(<ModelingTree {...props} references={refs().slice(0,1)}/>);expect(onSelect).not.toHaveBeenCalled();
+ rerender(<ModelingTree {...props} references={refs()}/>);await waitFor(()=>expect(onSelect).toHaveBeenCalledTimes(1));
+ rerender(<ModelingTree {...props}/>);fireEvent.click(screen.getByRole('button',{name:'Select Cut extrude 1'}));
+ rerender(<ModelingTree {...props} active={false}/>);rerender(<ModelingTree {...props} active={false} references={refs()}/>);
+ expect(onSelect).toHaveBeenCalledTimes(1);
+});
+it('recognizes repeated parts once and scopes their selections to the correct occurrence',async()=>{
+ setup({components:{c:{surf:'components/c.surf'}},occurrences:[{id:'o1',component:'c',name:'Left'},{id:'o2',component:'c',name:'Right'}]});
+ const onSelect=vi.fn();render(<ModelingTree active entry={entry} references={[...refs('o1'),...refs('o2')]} selectedReferenceIds={[]} onSelect={onSelect}/>);
+ await respond({tree});expandIfCollapsed('Body 1');
+ expect(WorkerStub.instances).toHaveLength(1);
+ expect(screen.getByRole('button',{name:'Expand Left'})).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'Expand Right'}));
+ const part=screen.getByRole('button',{name:'Select Right'}).closest('li')!;
+ fireEvent.click(within(part).getByRole('button',{name:'Select Cut extrude 1'}));
+ expect(onSelect).toHaveBeenLastCalledWith(['o2.f1','o2.f2']);
+});
+it('keeps both unsupported and recognized parts collapsed until explicitly expanded',async()=>{
+ setup({components:{c:{surf:'components/c.surf'},d:{surf:'components/d.surf'}},occurrences:[{id:'o1',component:'c',name:'Bodywork'},{id:'o2',component:'d',name:'Wheel'}]});
+ render(<ModelingTree active entry={entry}/>);
+ await respond({tree:[{...tree[0],complete:false,children:[{id:'other',kind:'remainder',label:'Other geometry',faces:[1,2]}]}]});
+ await respond({tree},1);
+ expect(screen.getByRole('button',{name:'Expand Bodywork'})).toBeTruthy();
+ expect(screen.getByRole('button',{name:'Expand Wheel'})).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'Expand Wheel'}));
+ expect(screen.getByRole('button',{name:'Select Cut extrude 1'})).toBeTruthy();
+});
+it('stops a worker on file disposal and ignores a late result',async()=>{
+ setup();const {unmount}=render(<ModelingTree active entry={entry}/>);
+ await waitFor(()=>expect(WorkerStub.instances).toHaveLength(1));const worker=WorkerStub.instances[0];
+ unmount();expect(worker.terminate).toHaveBeenCalled();await act(async()=>worker.onmessage?.({data:{tree}}));
+ expect(screen.queryByRole('button',{name:'Select Cut extrude 1'})).toBeNull();
+});
+it('retries failed components without rerunning successful ones',async()=>{
+ setup({components:{c:{surf:'components/c.surf'},d:{surf:'components/d.surf'}},occurrences:[{id:'o1',component:'c',name:'Left'},{id:'o2',component:'d',name:'Right'}]});
+ render(<ModelingTree active entry={entry}/>);
+ await respond({tree});expandIfCollapsed('Body 1');await respond({error:'Unavailable'},1);
+ fireEvent.click(await screen.findByRole('button',{name:'Retry'}));
+ await waitFor(()=>expect(WorkerStub.instances).toHaveLength(3));
+ expect(WorkerStub.instances[2].postMessage).toHaveBeenCalledWith({resource:{kind:'url',url:expect.stringContaining('d.surf'),maxBytes:16*1024*1024}},[]);
+ await respond({tree},2);expect(screen.queryByRole('alert')).toBeNull();
+});
+it('shows annotation-only data as empty instead of waiting for impossible selection',async()=>{
+ setup();render(<ModelingTree active entry={entry}/>);await respond({tree:[]});
+ expect(await screen.findByText('This component has no faces to inspect.')).toBeTruthy();
+ expect(screen.queryByRole('button',{name:/^Select /})).toBeNull();
+});
+it('reveals a part selected in Geometry without opening its topology or resetting selection',async()=>{
+ setup({components:{c:{surf:'components/c.surf'}},occurrences:[{id:'o1',component:'c',name:'Left'},{id:'o2',component:'c',name:'Right'}]});
+ const onSelect=vi.fn();render(<ModelingTree active entry={entry} selectedPartIds={['o2']} references={[...refs('o1'),...refs('o2')]} onSelect={onSelect}/>);
+ await respond({tree});expandIfCollapsed('Body 1');
+ expect(screen.getByRole('button',{name:'Expand Right'})).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'Expand Right'}));
+ expect(onSelect).not.toHaveBeenCalled();
+ const part=screen.getByRole('button',{name:'Select Right'}).closest('li')!;
+ fireEvent.click(within(part).getByRole('button',{name:'Select Cut extrude 1'}));
+ expect(onSelect).toHaveBeenCalledWith(['o2.f1','o2.f2']);
+});
+
+it('inspects STEP features without requesting kernel replay',async()=>{
+ const fetch=setup();render(<ModelingTree entry={entry} active/>);await respond({tree});expandIfCollapsed('Body 1');
+ expect(screen.getByRole('button',{name:'Select Cut extrude 1'})).toBeTruthy();
+ expect(fetch.mock.calls.every(([,init])=>!init?.method || init.method==='GET')).toBe(true);
+ expect(screen.queryByRole('button',{name:/Play/})).toBeNull();
+});
+
+it('does not fetch geometry or start a worker when modeling is disabled',async()=>{
+ const fetch=setup();
+ render(<ModelingTree entry={entry} active disabled/>);
+ await act(async()=>{});
+ expect(fetch).not.toHaveBeenCalled();expect(WorkerStub.instances).toHaveLength(0);
+});
+
+it('highlights a picked face’s feature while preserving its precise reference and details',async()=>{
+ setup();const onSelect=vi.fn();
+ render(<ModelingTree active entry={entry} references={refs()} selectedReferenceIds={['o1.f1']} onSelect={onSelect} selectionDetails={<p>Picked face details</p>}/>);
+ await respond({tree});expandIfCollapsed('Body 1');
+ expect(screen.getByRole('button',{name:'Select Cut extrude 1'}).getAttribute('aria-pressed')).toBe('true');
+ expect(screen.getByText('Picked face details')).toBeTruthy();
+ expect(onSelect).not.toHaveBeenCalled();
+});
+
+it('keeps imported parts selectable and revealable before recognition finishes',async()=>{
+ setup();const onSelectTreeNode=vi.fn(),onTogglePartVisibility=vi.fn();
+ const stepRoot={id:'__step_model__',nodeType:'part',displayName:'Imported case',leafPartIds:['__model__'],children:[]};
+ const props={entry,active:true,stepRoot,partControls:{onSelectTreeNode,onTogglePartVisibility,hiddenPartIds:[]}};
+ const {rerender}=render(<ModelingTree {...props}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Select Imported case'}));
+ expect(onSelectTreeNode).toHaveBeenCalledWith('__step_model__',expect.any(Object));
+ fireEvent.click(screen.getByRole('button',{name:'Hide Imported case'}));
+ expect(onTogglePartVisibility).toHaveBeenCalledWith('__step_model__');
+ rerender(<ModelingTree {...props} partControls={{...props.partControls,hiddenPartIds:['__model__']}}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Reveal Imported case'}));
+ expect(onTogglePartVisibility).toHaveBeenCalledTimes(2);
+ expect(screen.getByRole('button',{name:'Select Imported case'}).hasAttribute('disabled')).toBe(true);
+ expect(screen.queryByRole('button',{name:'Isolate Imported case'})).toBeNull();
+});
+
+it('does not overwrite a newer viewport selection when a feature’s topology finishes loading',async()=>{
+ setup();const onSelect=vi.fn();
+ const props={active:true,entry,references:[],selectedReferenceIds:[],onSelect};
+ const {rerender}=render(<ModelingTree {...props}/>);await respond({tree});expandIfCollapsed('Body 1');
+ fireEvent.click(screen.getByRole('button',{name:'Select Cut extrude 1'}));
+ rerender(<ModelingTree {...props} selectedReferenceIds={['o1.e3']}/>);
+ rerender(<ModelingTree {...props} selectedReferenceIds={['o1.e3']} references={refs()}/>);
+ expect(onSelect).not.toHaveBeenCalled();
+});
+it('summarizes canonical selection in the details header and clears through the host',async()=>{
+ setup();const onClearSelection=vi.fn();
+ const props={active:true,entry,references:refs(),selectedReferences:refs(),selectedReferenceIds:refs().map(r=>r.id),selectionDetails:<p>Face measurements</p>,onClearSelection};
+ const {rerender}=render(<ModelingTree {...props}/>);await respond({tree});expandIfCollapsed('Body 1');
+ expect(screen.getByText('2 faces')).toBeTruthy();expect(screen.getByTitle('2 faces · Case')).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'Hide selection details'}));
+ fireEvent.click(screen.getByRole('button',{name:'Clear selection'}));expect(onClearSelection).toHaveBeenCalledTimes(1);
+ rerender(<ModelingTree {...props} selectedReferences={[]} selectedReferenceIds={[]} selectionDetails={null}/>);
+ expect(screen.queryByRole('button',{name:'Clear selection'})).toBeNull();
+});
+
+const assemblyDescriptor={components:{c:{surf:'components/c.surf'}},occurrences:[{id:'arm.wrist',component:'c',name:'Wrist'},{id:'base',component:'c',name:'Base'}]};
+const partNode=(id:string,name:string)=>({id,nodeType:'part',name,leafPartIds:[id],children:[]});
+const assemblyRoot={id:'document',nodeType:'assembly',name:'tom',children:[{id:'arm',nodeType:'assembly',name:'Arm',leafPartIds:['arm.wrist'],children:[partNode('arm.wrist','Wrist')]},partNode('base','Base')]};
+const directModeling={descriptor:assemblyDescriptor,results:{},error:null,retryFailed:vi.fn()};
+
+it('uses compact shared rows, reserves the count header, and keeps disclosure separate from selection',()=>{
+ const onSelectTreeNode=vi.fn(),onToggleTreeNode=vi.fn(),onLoadTopology=vi.fn();
+ const controls={expandedTreeNodeIds:[],onSelectTreeNode,onToggleTreeNode};
+ const props={modeling:directModeling,stepRoot:assemblyRoot,active:true,onLoadTopology,partControls:controls};
+ const {rerender}=render(<ModelingTreeView {...props}/>);
+ expect(screen.queryByRole('button',{name:'Select tom'})).toBeNull();
+ const header=screen.getByLabelText('Model tree summary');
+ expect(within(header).getByText('2 features')).toBeTruthy();
+ expect(header.className).not.toContain('border');
+ expect(screen.queryByText(/Recognizing/)).toBeNull();
+ const select=screen.getByRole('button',{name:'Select Arm'});
+ expect(select.parentElement?.style.height).toBe('28px');
+ fireEvent.click(screen.getByRole('button',{name:'Expand Arm'}));
+ expect(onToggleTreeNode).toHaveBeenCalledWith('arm');
+ expect(onSelectTreeNode).not.toHaveBeenCalled();
+ fireEvent.click(select);
+ expect(onSelectTreeNode).toHaveBeenCalledWith('arm',expect.any(Object));
+ expect(onLoadTopology).not.toHaveBeenCalled();
+ expect(screen.queryByRole('button',{name:'Isolate Arm'})).toBeNull();
+ const eye=screen.getByRole('button',{name:'Hide Arm'});
+ expect(eye.className).toContain('text-muted-foreground');
+ rerender(<ModelingTreeView {...props} partControls={{...controls,hiddenPartIds:['base']}}/>);
+ expect(screen.getByLabelText('Model tree summary')).toBe(header);
+ expect(within(header).getByRole('button',{name:'Show all'})).toBeTruthy();
+});
+
+it('requests recognition only for visible expanded parts, never row selection or collapsed descendants',()=>{
+ const request=vi.fn(),onToggleTreeNode=vi.fn(),onSelectTreeNode=vi.fn();
+ const props={modeling:directModeling,stepRoot:assemblyRoot,active:true,onRequestRecognition:request};
+ const {rerender}=render(<ModelingTreeView {...props} partControls={{expandedTreeNodeIds:[],onToggleTreeNode,onSelectTreeNode}}/>);
+ expect(request).toHaveBeenLastCalledWith([]);
+ fireEvent.click(screen.getByRole('button',{name:'Select Base'}));
+ expect(request).toHaveBeenCalledTimes(1);
+ rerender(<ModelingTreeView {...props} partControls={{expandedTreeNodeIds:['arm'],onToggleTreeNode}}/>);
+ expect(screen.getByRole('button',{name:'Expand Wrist'})).toBeTruthy();
+ expect(request).toHaveBeenCalledTimes(1);
+ rerender(<ModelingTreeView {...props} partControls={{expandedTreeNodeIds:['arm','arm.wrist'],onToggleTreeNode}}/>);
+ expect(request).toHaveBeenLastCalledWith(['arm.wrist']);
+ rerender(<ModelingTreeView {...props} partControls={{expandedTreeNodeIds:['arm.wrist'],onToggleTreeNode}}/>);
+ expect(request).toHaveBeenLastCalledWith([]);
+});
+
+it('does not inherit isolate restrictions from an unavailable ancestor into the isolated subtree',()=>{
+ const modeling={...directModeling,results:{c:{tree}}};
+ const controls={expandedTreeNodeIds:['arm','arm.wrist'],selectableNodeIds:['arm.wrist'],focusedNodeIds:['arm.wrist'],isAssemblyView:true};
+ const props={modeling,stepRoot:assemblyRoot,active:true,references:refs('arm.wrist'),partControls:controls};
+ const {rerender}=render(<ModelingTreeView {...props}/>);
+ expect(screen.getByRole('button',{name:'Select Arm'}).hasAttribute('disabled')).toBe(true);
+ expect(screen.getByRole('button',{name:'Select Wrist'}).hasAttribute('disabled')).toBe(false);
+ expect(screen.getByRole('button',{name:'Select Cut extrude 1'}).hasAttribute('disabled')).toBe(false);
+ rerender(<ModelingTreeView {...props} partControls={{...controls,hiddenPartIds:['arm.wrist']}}/>);
+ expect(screen.getByRole('button',{name:'Select Wrist'}).hasAttribute('disabled')).toBe(true);
+ expect(screen.getByRole('button',{name:'Select Cut extrude 1'}).hasAttribute('disabled')).toBe(true);
+});
+
+it('reveals selection once, allows subsequent scrolling/collapse, and honors a new explicit reveal',()=>{
+ const scroll=vi.fn();
+ const previous=HTMLElement.prototype.scrollIntoView;
+ HTMLElement.prototype.scrollIntoView=scroll;
+ try{
+  const modeling={...directModeling,results:{c:{tree}}};
+  const props={modeling,stepRoot:assemblyRoot,active:true,selectedPartIds:['arm.wrist']};
+  const {rerender}=render(<ModelingTreeView {...props}/>);
+  expect(screen.getByRole('button',{name:'Select Wrist'})).toBeTruthy();
+  expect(scroll).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole('button',{name:'Collapse Arm'}));
+  expect(screen.queryByRole('button',{name:'Select Wrist'})).toBeNull();
+  rerender(<ModelingTreeView {...props} modeling={{...modeling,results:{c:{tree:[...tree]}}}}/>);
+  expect(scroll).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole('button',{name:'Select Wrist'})).toBeNull();
+  rerender(<ModelingTreeView {...props} activeTreeNodeScrollKey={1}/>);
+  expect(screen.getByRole('button',{name:'Select Wrist'})).toBeTruthy();
+  expect(scroll).toHaveBeenCalledTimes(2);
+ }finally{HTMLElement.prototype.scrollIntoView=previous;}
+});
+
+it('keeps feature summaries and measurements below the tree instead of truncating rows',()=>{
+ const modeling={...directModeling,results:{c:{tree}}};
+ render(<ModelingTreeView modeling={modeling} stepRoot={assemblyRoot} active selectedPartIds={['arm.wrist']} partControls={{expandedTreeNodeIds:['arm','arm.wrist']}}/>);
+ const row=screen.getByRole('button',{name:'Select Wrist'});
+ expect(row.textContent).toBe('Wrist');
+ expect(screen.getByText('1 feature')).toBeTruthy();
+ expect(screen.getByRole('button',{name:'Select Cut extrude 1'}).textContent).toBe('Cut extrude 1');
+});
+
+it('publishes deepest visible feature targets, keeps them when inactive, and drops them when the parent collapses',()=>{
+ const profile={id:'profile:1',kind:'profile',label:'Profile',faces:[],edges:[3],children:[]};
+ const featureTree=[{...tree[0],children:[{...feature,children:[profile]}]}];
+ const modeling={...directModeling,results:{c:{tree:featureTree}}};
+ const references=[...refs('arm.wrist'),{id:'arm.wrist.e3',selectorType:'edge',occurrenceId:'arm.wrist',normalizedSelector:'arm.wrist.e3'}];
+ const targets=vi.fn();
+ const props={modeling,stepRoot:assemblyRoot,active:true,references,onVisibleFeatureTargetsChange:targets,partControls:{expandedTreeNodeIds:['arm','arm.wrist']}};
+ const {rerender,unmount}=render(<ModelingTreeView {...props}/>);
+ expect(targets).toHaveBeenLastCalledWith([{nodeId:'arm.wrist/cut:1-2',referenceIds:['arm.wrist.f1','arm.wrist.f2']}]);
+ fireEvent.click(screen.getByRole('button',{name:'Expand Cut extrude 1'}));
+ expect(targets).toHaveBeenLastCalledWith([{nodeId:'arm.wrist/profile:1',referenceIds:['arm.wrist.e3']},{nodeId:'arm.wrist/cut:1-2',referenceIds:['arm.wrist.f1','arm.wrist.f2']}]);
+ const called=targets.mock.calls.length;
+ rerender(<ModelingTreeView {...props} active={false}/>);
+ expect(targets).toHaveBeenCalledTimes(called);
+ rerender(<ModelingTreeView {...props} partControls={{expandedTreeNodeIds:['arm.wrist']}}/>);
+ expect(targets).toHaveBeenLastCalledWith([]);
+ unmount();
+ expect(targets).toHaveBeenLastCalledWith([]);
+});
+
+it('does not request recognition for hidden or excluded isolated parts, while allowing an isolated descendant',()=>{
+ const request=vi.fn();
+ const props={modeling:directModeling,stepRoot:assemblyRoot,active:true,onRequestRecognition:request};
+ const expandedTreeNodeIds=['arm','arm.wrist','base'];
+ const {rerender}=render(<ModelingTreeView {...props} partControls={{expandedTreeNodeIds,hiddenPartIds:['base']}}/>);
+ expect(request).toHaveBeenLastCalledWith(['arm.wrist']);
+ rerender(<ModelingTreeView {...props} partControls={{expandedTreeNodeIds,selectableNodeIds:['arm.wrist']}}/>);
+ expect(request).toHaveBeenLastCalledWith(['arm.wrist']);
+ rerender(<ModelingTreeView {...props} partControls={{expandedTreeNodeIds,selectableNodeIds:['arm.wrist'],hiddenPartIds:['arm.wrist']}}/>);
+ expect(request).toHaveBeenLastCalledWith([]);
+});
+
+it('selects a collapsed feature group without expanding its children through canonical selection feedback',()=>{
+ const groupTree=[{...tree[0],children:Array.from({length:6},(_,index)=>({...feature,id:`pocket:${index}`,kind:'pocket',label:`Pocket ${index}`,faces:[index+1]}))}];
+ const modeling={...directModeling,results:{c:{tree:groupTree}}};
+ const references=Array.from({length:6},(_,index)=>({id:`arm.wrist.f${index+1}`,selectorType:'face',occurrenceId:'arm.wrist',normalizedSelector:`arm.wrist.f${index+1}`}));
+ const onSelect=vi.fn();
+ const props={modeling,stepRoot:assemblyRoot,active:true,references,onSelect,partControls:{expandedTreeNodeIds:['arm','arm.wrist']}};
+ const {rerender}=render(<ModelingTreeView {...props}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Select Pockets (6)'}));
+ expect(onSelect).toHaveBeenCalledWith(references.map(ref=>ref.id));
+ rerender(<ModelingTreeView {...props} selectedReferenceIds={references.map(ref=>ref.id)}/>);
+ expect(screen.getByRole('button',{name:'Expand Pockets (6)'})).toBeTruthy();
+ expect(screen.queryByRole('button',{name:'Select Pocket 0'})).toBeNull();
+});
+
+it('preserves a collapsed group when viewport selection sends its exact visible canonical bundle',()=>{
+ const groupTree=[{...tree[0],children:Array.from({length:6},(_,index)=>({...feature,id:`pocket:${index}`,kind:'pocket',label:`Pocket ${index}`,faces:[index+1]}))}];
+ const modeling={...directModeling,results:{c:{tree:groupTree}}};
+ const references=Array.from({length:6},(_,index)=>({id:`arm.wrist.f${index+1}`,selectorType:'face',occurrenceId:'arm.wrist',normalizedSelector:`arm.wrist.f${index+1}`}));
+ render(<ModelingTreeView modeling={modeling} stepRoot={assemblyRoot} active references={references} selectedReferenceIds={references.map(ref=>ref.id)} partControls={{expandedTreeNodeIds:['arm','arm.wrist']}}/>);
+ expect(screen.getByRole('button',{name:'Expand Pockets (6)'})).toBeTruthy();
+ expect(screen.getByRole('button',{name:'Select Pockets (6)'}).getAttribute('aria-pressed')).toBe('true');
+ expect(screen.queryByRole('button',{name:'Select Pocket 0'})).toBeNull();
+});

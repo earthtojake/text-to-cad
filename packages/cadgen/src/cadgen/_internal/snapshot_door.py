@@ -81,7 +81,6 @@ def _run(
     job: Path | None,
     mode: str,
     camera: object,
-    render: object,
     display: object = None,
     kinematics: object = None,
     animation: object = None,
@@ -118,9 +117,7 @@ def _run(
     options.mode_specified = "mode" in explicit
     # `None` is "not given" for each of these, which is not the same as the
     # default: the machinery distinguishes them through the `<name>_specified`
-    # flags, and an explicit Render preset must still count as a scene choice.
-    if render is not None or "render" in explicit:
-        options.render, options.render_specified = render, True
+    # flags.
     if display is not None or "display" in explicit:
         options.display, options.display_specified = display, True
     if camera is not None or "camera" in explicit:
@@ -154,10 +151,7 @@ def _run(
     options.hide_specified = "hide" in explicit
     if hide:
         options.hide = [str(value) for value in hide]
-    # A direct normal-CAD call can reject this before any I/O. With a job file,
-    # defer until its Render presence is known because photographic Render
-    # ignores both filters.
-    if options.focus and options.hide and render is None and job is None:
+    if options.focus and options.hide and job is None:
         raise ValueError("focus and hide cannot be used in the same snapshot")
     # An empty non-tty stream: the machinery reads a JSON packet off stdin when
     # given neither job nor target, and a library caller has no stdin to offer.
@@ -176,7 +170,6 @@ def step_snapshot_verb(door: str):
         job: Path | None = None,
         mode: str = "view",
         camera: str | dict | None = None,
-        render: str | dict | None = None,
         display: str | dict | None = None,
         kinematics: str | dict | None = None,
         animation: str | dict | None = None,
@@ -206,15 +199,14 @@ def step_snapshot_verb(door: str):
             {"jobs": [...]}. When given it wins: target/out are ignored, and
             a missing job file raises FileNotFoundError.
         mode: view (default), section, or list.
-        camera: a normal-CAD preset, an "azimuth:elevation" pair, or camera JSON;
+        camera: a preset, an "azimuth:elevation" pair, or camera JSON;
             focalLength is 20..200 mm and orthographicHalfHeight preserves an
-            orthographic view's scale. Render uses its envelope's camera.
-        render: light, dark, or photographic JSON with quality, exposure,
-            lighting, backdrop, and camera (inline or a file path); view mode only.
-        display: normal-CAD display settings; incompatible with Render.
+            orthographic view's scale.
+        display: viewer display settings, a display mode name, or JSON. Mode
+            render unlocks optional studio settings under display.render.
         kinematics: pose values — a declared preset name or {dof: value}
             JSON, validated against the model's kinematics declaration;
-            available in normal CAD and Render.
+            available in every display mode.
         animation: one still frame of a clip embedded in the document sidecar —
             the clip name (with --time),
             or {"clip": name, "time": seconds} JSON. Both viewing styles layer it
@@ -224,9 +216,9 @@ def step_snapshot_verb(door: str):
             .gif OUT names — {"fps": 30, "seconds": <what is left of the clip>,
             "start": 0, "quality": "review", "loop": true} JSON or a path to it;
             requires animation, excludes time, and needs ffmpeg on PATH.
-        focus: normal-CAD occurrence ref rendered at full opacity (repeatable);
-            the rest of the assembly is ghosted in place. Incompatible with Render.
-        hide: normal-CAD occurrence ref left out (repeatable); incompatible with Render.
+        focus: occurrence ref rendered at full opacity (repeatable); the rest
+            of the assembly is ghosted in place.
+        hide: occurrence ref left out (repeatable).
         width: output width in pixels, overriding the size profile.
         height: output height in pixels, overriding the size profile.
         size_profile: simple, diagnostic, labeled, assembly, presentation,
@@ -237,7 +229,7 @@ def step_snapshot_verb(door: str):
         return _run(
             kinds,
             target=target, out=out, job=job, mode=mode,
-            camera=camera, render=render, display=display, kinematics=kinematics,
+            camera=camera, display=display, kinematics=kinematics,
             animation=animation, time=time, video=video,
             focus=focus, hide=hide, width=width, height=height,
             size_profile=size_profile, view_labels=view_labels, debug=debug,
@@ -260,7 +252,6 @@ def mesh_snapshot_verb(door: str):
         job: Path | None = None,
         mode: str = "view",
         camera: str | dict | None = None,
-        render: str | dict | None = None,
         display: str | dict | None = None,
         width: int | None = None,
         height: int | None = None,
@@ -282,10 +273,9 @@ def mesh_snapshot_verb(door: str):
         mode: view (default) or list.
         camera: a normal-CAD preset, an "azimuth:elevation" pair, or camera JSON;
             focalLength is 20..200 mm and orthographicHalfHeight preserves an
-            orthographic view's scale. Render uses its envelope's camera.
-        render: light, dark, or photographic JSON with quality, exposure,
-            lighting, backdrop, and camera (inline or a file path); view mode only.
-        display: normal-CAD settings for this input kind; incompatible with Render.
+            orthographic view's scale.
+        display: viewer display settings for this input kind; mode render
+            unlocks optional studio settings under display.render.
         width: output width in pixels, overriding the size profile.
         height: output height in pixels, overriding the size profile.
         size_profile: simple, diagnostic, labeled, assembly, presentation,
@@ -296,7 +286,7 @@ def mesh_snapshot_verb(door: str):
         return _run(
             kinds,
             target=target, out=out, job=job, mode=mode,
-            camera=camera, render=render, display=display, width=width, height=height,
+            camera=camera, display=display, width=width, height=height,
             size_profile=size_profile, view_labels=view_labels, debug=debug,
         )
 
@@ -318,7 +308,6 @@ def robot_snapshot_verb(door: str):
         mode: str = "view",
         joint_values: str | dict | None = None,
         camera: str | dict | None = None,
-        render: str | dict | None = None,
         display: str | dict | None = None,
         width: int | None = None,
         height: int | None = None,
@@ -339,13 +328,12 @@ def robot_snapshot_verb(door: str):
             {"jobs": [...]}. When given it wins: target/out are ignored.
         mode: view (default) or list.
         joint_values: {joint: degrees} JSON posing the robot; joints not
-            named stay at the rest pose. Incompatible with Render.
+            named stay at the rest pose.
         camera: a normal-CAD preset, an "azimuth:elevation" pair, or camera JSON;
             focalLength is 20..200 mm and orthographicHalfHeight preserves an
-            orthographic view's scale. Render uses its envelope's camera.
-        render: light, dark, or photographic JSON with quality, exposure,
-            lighting, backdrop, and camera (inline or a file path); view mode only.
-        display: normal-CAD settings for this robot input; incompatible with Render.
+            orthographic view's scale.
+        display: viewer display settings for this robot input; mode render
+            unlocks optional studio settings under display.render.
         width: output width in pixels, overriding the size profile.
         height: output height in pixels, overriding the size profile.
         size_profile: simple, diagnostic, labeled, assembly, presentation,
@@ -356,7 +344,7 @@ def robot_snapshot_verb(door: str):
         return _run(
             kinds,
             target=target, out=out, job=job, mode=mode,
-            joint_values=joint_values, camera=camera, render=render, display=display,
+            joint_values=joint_values, camera=camera, display=display,
             width=width, height=height, size_profile=size_profile,
             view_labels=view_labels, debug=debug,
         )
@@ -378,7 +366,6 @@ def polymorphic_snapshot_verb():
         job: Path | None = None,
         mode: str = "view",
         camera: str | dict | None = None,
-        render: str | dict | None = None,
         display: str | dict | None = None,
         kinematics: str | dict | None = None,
         animation: str | dict | None = None,
@@ -405,13 +392,12 @@ def polymorphic_snapshot_verb():
         mode: view (default), section (STEP only), or list.
         camera: a normal-CAD preset, an "azimuth:elevation" pair, or camera JSON;
             focalLength is 20..200 mm and orthographicHalfHeight preserves an
-            orthographic view's scale. Render uses its envelope's camera.
-        render: light, dark, or photographic JSON with quality, exposure,
-            lighting, backdrop, and camera (inline or a file path); view mode only.
-        display: normal-CAD settings; incompatible with Render. CAD-edge and
+            orthographic view's scale.
+        display: viewer display settings; mode render unlocks optional studio
+            settings under display.render. CAD-edge and
             exploded modes require STEP topology.
         kinematics: pose values for a STEP model's kinematics — a preset
-            name or {dof: value} JSON; available in normal CAD and Render.
+            name or {dof: value} JSON; available in every display mode.
         animation: one still frame of a STEP model's clip — the clip name
             (with --time), or {"clip": name, "time": seconds} JSON.
         time: seconds into the animation clip (default 0); requires animation.
@@ -420,10 +406,10 @@ def polymorphic_snapshot_verb():
             "quality": "review", "loop": true} JSON or a path to it; requires
             animation, excludes time, and needs ffmpeg on PATH.
         joint_values: normal-CAD {joint: degrees} JSON posing a robot;
-            incompatible with Render.
+            available in every display mode.
         focus: normal-CAD occurrence ref rendered at full opacity (STEP only);
-            incompatible with Render.
-        hide: normal-CAD occurrence ref left out (STEP only); incompatible with Render.
+            available in every display mode.
+        hide: occurrence ref left out (STEP only).
         width: output width in pixels, overriding the size profile.
         height: output height in pixels, overriding the size profile.
         size_profile: simple, diagnostic, labeled, assembly, presentation,
@@ -434,7 +420,7 @@ def polymorphic_snapshot_verb():
         return _run(
             ALL_KINDS,
             target=target, out=out, job=job, mode=mode,
-            camera=camera, render=render, display=display, kinematics=kinematics,
+            camera=camera, display=display, kinematics=kinematics,
             animation=animation, time=time, video=video,
             joint_values=joint_values, focus=focus, hide=hide,
             width=width, height=height, size_profile=size_profile,

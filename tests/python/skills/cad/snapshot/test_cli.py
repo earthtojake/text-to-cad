@@ -108,7 +108,6 @@ from cadgen.snapshot_core import (
     resolve_output_target,
     resolve_snapshot_route_file,
     snapshot_result,
-    validate_render_job_compatibility,
 )
 from cadgen._internal.cli_from_function import emit, result_payload
 
@@ -248,8 +247,9 @@ class SnapshotCliTests(unittest.TestCase):
 
     def test_the_door_advertises_only_what_it_takes(self) -> None:
         text = cad_snapshot_entry.build_parser().format_help()
-        for flag in ("--camera", "--display", "--render"):
+        for flag in ("--camera", "--display"):
             self.assertIn(flag, text)
+        self.assertNotIn("--render", text)
         for flag in self.NON_FLAGS:
             if flag.startswith("--"):
                 with self.subTest(flag=flag):
@@ -384,51 +384,43 @@ class SnapshotCliTests(unittest.TestCase):
         # validation must not false-reject empty strings an agent emits for unset fields.
         self.assertEqual(self._display_job('{"mode":""}')["display"], {"mode": ""})
 
-    def test_render_accepts_the_exported_debug_envelope(self) -> None:
+    def test_display_accepts_the_exported_render_settings(self) -> None:
         job = job_from_argv(
             [
                 "parts/STEP/cylindrical_cap.step",
                 "tmp/cap.png",
-                "--render",
+                "--display",
                 json.dumps(
                     {
-                        "studio": "light",
-                        "quality": "final",
-                        "exposure": 0.6,
-                        "lighting": {"rotation": 35, "size": 1.4, "fill": 0.2},
-                        "backdrop": {"color": "#ffffff", "ground": True},
-                        "camera": {"direction": [1, -1, 0.8], "focalLength": 70},
+                        "mode": "render",
+                        "render": {
+                            "studio": "light", "quality": "final", "exposure": 0.6,
+                            "lighting": {"rotation": 35, "size": 1.4, "fill": 0.2},
+                            "backdrop": {"color": "#ffffff", "ground": True},
+                        },
                     }
                 ),
+                "--camera", '{"direction":[1,-1,0.8],"focalLength":70}',
             ]
         )
-        self.assertEqual(job["render"]["lighting"]["size"], 1.4)
-        self.assertEqual(job["render"]["camera"]["focalLength"], 70)
+        self.assertEqual(job["display"]["render"]["lighting"]["size"], 1.4)
+        self.assertEqual(job["outputs"][0]["camera"]["focalLength"], 70)
 
-    def test_empty_render_envelope_uses_light_through_generated_cli(self) -> None:
+    def test_render_display_shortcut_uses_the_unified_display_field(self) -> None:
         job = job_from_argv([
-            "parts/STEP/cylindrical_cap.step", "tmp/cap.png", "--render", "{}",
+            "parts/STEP/cylindrical_cap.step", "tmp/cap.png", "--display", "render",
         ])
-        self.assertEqual(job["render"], {"studio": "light"})
-        self.assertFalse(
-            {"camera", "display", "selection", "kinematics", "jointValues", "quality"}
-            & set(job)
-        )
+        self.assertEqual(job["display"], {"mode": "render"})
+        self.assertNotIn("render", job)
 
-    def test_top_level_camera_and_display_flags_conflict_with_render(self) -> None:
+    def test_common_camera_composes_with_render_display(self) -> None:
         job = job_from_argv([
             "parts/STEP/cylindrical_cap.step", "tmp/cap.png",
-            "--render", '{"camera":{"preset":"front"}}',
             "--camera", "back",
-            "--display", "wireframe",
+            "--display", "render",
         ])
-        self.assertEqual(job["render"]["camera"], {"preset": "front"})
-        self.assertEqual(job["camera"], "back")
-        self.assertEqual(job["display"], "wireframe")
-        with self.assertRaisesRegex(
-            SnapshotError, "top-level CAD control\\(s\\): camera, display"
-        ):
-            validate_render_job_compatibility(job)
+        self.assertEqual(job["outputs"][0]["camera"], "back")
+        self.assertEqual(job["display"], {"mode": "render"})
 
     def test_display_shortcut_rejects_unknown_modes(self) -> None:
         with self.assertRaisesRegex(SnapshotError, "Unsupported display mode"):
@@ -1199,18 +1191,18 @@ class SnapshotCliTests(unittest.TestCase):
                     cwd=root,
                 )
 
-    def test_photographic_render_rejects_non_view_modes_before_kind_checks(self) -> None:
+    def test_render_display_rejects_non_view_modes_before_kind_checks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = self._mesh_job_env(temporary_directory, "widget.glb", b"glTF")
             for mode in ("section", "list"):
                 with self.subTest(mode=mode), self.assertRaisesRegex(
-                    SnapshotError, "Photographic Render supports only view mode"
+                    SnapshotError, "Render display supports only view mode"
                 ):
                     resolve_render_job_packet(
                         {
                             "input": "models/widget.glb",
                             "mode": mode,
-                            "render": {},
+                            "display": {"mode": "render"},
                             "outputs": [] if mode == "list" else [{"path": "tmp/iso.png"}],
                         },
                         cwd=root,
@@ -1243,31 +1235,14 @@ class SnapshotCliTests(unittest.TestCase):
                         cwd=root,
                     )
 
-    def test_render_rejects_incompatible_cad_state_and_retains_per_output_camera(self) -> None:
+    def test_render_display_retains_per_output_camera(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = self._mesh_job_env(temporary_directory, "widget.glb", b"glTF")
-            base = {
-                "input": "models/widget.glb",
-                "render": {"studio": "light", "camera": {"preset": "front"}},
-                "camera": {"preset": "back"},
-                "display": {"mode": "hidden_edges"},
-                "selection": {"focus": ["missing/selector"]},
-                "jointValues": {"joint": 30},
-                "quality": {"tessellation": {"chordTolerance": "ignored"}},
-            }
-            with self.assertRaisesRegex(
-                SnapshotError,
-                "top-level CAD control\\(s\\): camera, display, jointValues, "
-                "quality, selection",
-            ):
-                resolve_render_job_packet(
-                    {**base, "outputs": [{"path": "tmp/render.png"}]}, cwd=root,
-                )
-
             packet = resolve_render_job_packet(
                 {
                     "input": "models/widget.glb",
-                    "render": {"studio": "light", "camera": {"preset": "front"}},
+                    "display": {"mode": "render", "render": {"studio": "light"}},
+                    "camera": {"preset": "front"},
                     "outputs": [{"path": "tmp/overridden.png", "camera": {"preset": "top"}}],
                 },
                 cwd=root,
@@ -2049,7 +2024,7 @@ class SnapshotCliTests(unittest.TestCase):
             RUNTIME_DIR / "snapshot-render.js",
         ]
         forbidden = (
-            "packages/cadgen-js",
+            "packages/core",
             "skills/cad-viewer",
             "/node_modules/",
             "\\node_modules\\",
@@ -2065,51 +2040,50 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class RenderOptionResolutionTests(unittest.TestCase):
-    """--render accepts a studio id or exported photographic Render JSON."""
+class RenderDisplayOptionResolutionTests(unittest.TestCase):
+    """--display accepts the render shortcut or exported unified display JSON."""
 
     def _job_for(self, root: Path, value: object):
         options = snapshot_main.SnapshotOptions(
             input="models/part.step", output="tmp/iso.png",
-            render=value, render_specified=True,
+            display=value, display_specified=True,
         )
         return load_job_from_options(options, stdin=_TtyStringIO(), cwd=root)
 
-    def test_render_file_path_is_loaded_as_the_photographic_envelope(self):
+    def test_display_file_path_is_loaded_with_photographic_settings(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             models = root / "models"
             models.mkdir()
             body = {
-                "studio": "dark", "quality": "final", "exposure": -0.5,
-                "lighting": {"rotation": 20, "size": 1.2, "fill": 0.3},
-                "backdrop": {"color": "#181818", "ground": True},
-                "camera": {"direction": [1, -1, 0.8], "focalLength": 65},
+                "mode": "render",
+                "render": {
+                    "studio": "dark", "quality": "final", "exposure": -0.5,
+                    "lighting": {"rotation": 20, "size": 1.2, "fill": 0.3},
+                    "backdrop": {"color": "#181818", "ground": True},
+                },
             }
-            (models / "stage.render.json").write_text(json.dumps(body), encoding="utf-8")
-            render = self._job_for(root, "models/stage.render.json")["render"]
-        self.assertEqual(render["studio"], "dark")
-        self.assertEqual(render["lighting"]["size"], 1.2)
-        self.assertEqual(render["camera"]["focalLength"], 65)
+            (models / "stage.display.json").write_text(json.dumps(body), encoding="utf-8")
+            display = self._job_for(root, "models/stage.display.json")["display"]
+        self.assertEqual(display["render"]["studio"], "dark")
+        self.assertEqual(display["render"]["lighting"]["size"], 1.2)
 
-    def test_render_preset_name_becomes_an_envelope(self):
-        job = self._job_for(Path.cwd(), "light")
-        self.assertEqual(job["render"], {"studio": "light"})
-        self.assertNotIn("camera", job)
-        self.assertNotIn("display", job)
+    def test_render_name_becomes_a_display_mode(self):
+        job = self._job_for(Path.cwd(), "render")
+        self.assertEqual(job["display"], {"mode": "render"})
 
-    def test_missing_render_file_raises(self):
+    def test_missing_display_file_raises(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaisesRegex(snapshot_main.SnapshotError, "does not exist"):
-                self._job_for(Path(tmp), "models/no_such_render.json")
+                self._job_for(Path(tmp), "models/no_such_display.json")
 
-    def test_a_job_render_is_already_an_object(self):
+    def test_retired_job_render_key_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             models = root / "models"
             models.mkdir()
             (models / "part.stl").write_text("solid p\nendsolid p\n", encoding="utf-8")
-            with self.assertRaisesRegex(SnapshotError, "render JSON must be a render object"):
+            with self.assertRaisesRegex(SnapshotError, "unknown render job key.*render"):
                 resolve_render_job_packet(
                     {"input": "models/part.stl", "render": "light", "mode": "list"},
                     cwd=root,
@@ -2520,7 +2494,7 @@ class StepAnimationFrameTests(unittest.TestCase):
         }
         self._step(kinematics=pose)
         packet = self._resolve(self._job(
-            render={"studio": "light"},
+            display={"mode": "render", "render": {"studio": "light"}},
             kinematics={"stroke": 1},
             animation={"clip": "spin", "time": 0.5},
         ))

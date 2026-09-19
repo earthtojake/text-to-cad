@@ -1,0 +1,914 @@
+import { disposeSectionCaps } from "@hardcore/core/lib/viewer/sectionCaps.js";
+import { disposeViewerCadScene } from "../../../render/lodSceneCleanup.js";
+import { useEffect, useLayoutEffect, useRef } from "react";
+import { isEditableTarget } from "../../../ui/dom.js";
+import {
+  isWebGlContextCreationError,
+  isSoftwareWebGlRenderer,
+  runtimeErrorMessage
+} from "@hardcore/core/lib/viewer/webglSupport.js";
+import {
+  createCadWebGlRenderer
+} from "@hardcore/core/common/webglRenderer.js";
+import { fitCameraDepthToBounds } from "@hardcore/core/common/renderOptions.js";
+import {
+  screenSpaceLineDeviceResolution
+} from "@hardcore/core/common/renderEdges.js";
+// The studio lives in Render's lazy chunk. A runtime can only be holding studio
+// resources if that chunk loaded, so teardown asks the boundary rather than
+// importing it. Inspect's small reflection fill owns its own disposable texture.
+import { studioScene } from "../../../render/renderStudioChunk.js";
+import {
+  resolveInteractionPixelRatioCap
+} from "@hardcore/core/lib/viewer/renderQuality.js";
+import { updateOrbitControls } from "../orbitControls.js";
+import { PERF_MEASURE_NAMES, perfMeasure, perfStart } from "@hardcore/core/lib/viewer/perfMarks.js";
+import { viewerLogarithmicDepthBuffer } from "../renderDepthPolicy.js";
+import { createZoomPivotReanchor } from "../zoomPivotReanchor.js";
+import { createFramePresentation } from "../framePresentation.js";
+
+function createWebGlRenderer(THREE, renderMode) {
+  return createCadWebGlRenderer(THREE, {
+    allowFallback: true,
+    isRecoverableError: isWebGlContextCreationError,
+    // Three's logarithmic-depth shaders suppress the photographic ground's
+    // shadow material. CAD inspection retains logarithmic depth for very wide
+    // model ranges; Render fits an ordinary depth range to the subject.
+    logarithmicDepthBuffer: viewerLogarithmicDepthBuffer(renderMode)
+  });
+}
+
+export function useViewerRuntime({
+  mountRef,
+  runtimeRef,
+  previewModeRef,
+  setError,
+  setViewerReadyTick,
+  viewerTheme,
+  syncDrawingCanvasSize,
+  renderDrawingOverlay,
+  emitPerspectiveChange,
+  setActiveViewPlaneFace,
+  activeViewPlaneFaceRef,
+  stepCameraTransition,
+  stepKeyboardOrbit,
+  getActiveViewPlaneFaceId,
+  cancelCameraTransition,
+  clearKeyboardOrbitState,
+  isTrackpadLikeWheelEvent,
+  isPinchWheelEvent,
+  WHEEL_PINCH_DELTA_BOOST,
+  getKeyboardOrbitCommand,
+  getKeyboardOrbitAxes,
+  applyOrbitDelta,
+  getViewerThemeValue,
+  getPixelRatioCap,
+  applySceneBackground,
+  applyInitialPerspective,
+  updateGridHelper,
+  clearSceneGroup,
+  onSceneDisposed,
+  disposeSceneObject,
+  disposeTexture,
+  syncViewPlaneOrientation,
+  BASE_VIEWER_THEME,
+  DEFAULT_LIGHTING,
+  DEFAULT_DAMPING_FACTOR,
+  DEFAULT_ZOOM_SPEED,
+  COARSE_POINTER_ZOOM_SPEED,
+  INTERACTION_PIXEL_RATIO_CAP,
+  IDLE_PIXEL_RATIO_CAP,
+  INTERACTION_IDLE_DELAY_MS,
+  TRACKPAD_PINCH_ZOOM_SPEED,
+  COARSE_POINTER_PINCH_ZOOM_SPEED,
+  ACCELERATED_WHEEL_ZOOM_SPEED,
+  KEYBOARD_ORBIT_NUDGE_RAD,
+  defaultGridRadius,
+  sceneScaleMode,
+  floorMode,
+  renderMode = false,
+  onManualCameraInteraction,
+  onViewportResize,
+  onContextLost,
+  onContextRestored,
+  onInitializationError,
+  onFramePresented,
+  presentationRequestRef,
+  preserveInteractionPixelRatio = false,
+  runtimeResetToken = 0
+}) {
+  // A dependency change replaces this WebGL runtime while CadViewer remains
+  // mounted. Layout cleanup runs before passive runtime cleanup on a final
+  // unmount, so the latter can distinguish a renderer handoff from the last
+  // owner going away.
+  const viewerMountedRef = useRef(false);
+  const previousViewStateRef = useRef(null);
+  useLayoutEffect(() => {
+    viewerMountedRef.current = true;
+    return () => { viewerMountedRef.current = false; };
+  }, []);
+
+  useEffect(() => {
+    if (runtimeRef.current) {
+      runtimeRef.current.preserveInteractionPixelRatio = preserveInteractionPixelRatio === true;
+    }
+  }, [preserveInteractionPixelRatio, runtimeRef, runtimeResetToken]);
+
+  useEffect(() => {
+    runtimeRef.current?.setIdlePixelRatioCap?.(IDLE_PIXEL_RATIO_CAP);
+  }, [IDLE_PIXEL_RATIO_CAP, runtimeRef, runtimeResetToken]);
+
+  // Runtime setup/teardown should run once per WebGL runtime epoch.
+  useEffect(() => {
+    let cancelled = false;
+    let cleanup = () => {};
+
+    async function initializeViewer() {
+      const [
+        THREE,
+        { OrbitControls },
+        { Line2 },
+        { LineGeometry },
+        { LineSegments2 },
+        { LineSegmentsGeometry },
+        { LineMaterial }
+      ] = await Promise.all([
+        import("three"),
+        import("three/examples/jsm/controls/OrbitControls.js"),
+        import("three/examples/jsm/lines/Line2.js"),
+        import("three/examples/jsm/lines/LineGeometry.js"),
+        import("three/examples/jsm/lines/LineSegments2.js"),
+        import("three/examples/jsm/lines/LineSegmentsGeometry.js"),
+        import("three/examples/jsm/lines/LineMaterial.js")
+      ]);
+      if (cancelled || !mountRef.current) {
+        return;
+      }
+
+      const container = mountRef.current;
+      const coarsePointerQuery = typeof window.matchMedia === "function"
+        ? window.matchMedia("(pointer: coarse)")
+        : null;
+      const prefersCoarsePointer = coarsePointerQuery?.matches ?? false;
+      const getDefaultZoomSpeed = () => (prefersCoarsePointer ? COARSE_POINTER_ZOOM_SPEED : DEFAULT_ZOOM_SPEED);
+      const getPinchZoomSpeed = () => (prefersCoarsePointer ? COARSE_POINTER_PINCH_ZOOM_SPEED : TRACKPAD_PINCH_ZOOM_SPEED);
+      const width = container.clientWidth || 800;
+      const height = container.clientHeight || 640;
+
+      const scene = new THREE.Scene();
+
+      const syncCameraViewport = (targetCamera, nextWidth = width, nextHeight = height) => {
+        if (!targetCamera) {
+          return;
+        }
+        const aspect = Math.max(nextWidth, 1) / Math.max(nextHeight, 1);
+        if (targetCamera.isPerspectiveCamera) {
+          targetCamera.aspect = aspect;
+          const focalLength = Number(targetCamera.userData?.cadFocalLength);
+          if (Number.isFinite(focalLength) && focalLength > 0) {
+            targetCamera.setFocalLength(focalLength);
+          }
+        } else if (targetCamera.isOrthographicCamera) {
+          const halfHeight = Math.max(Number(targetCamera.userData?.cadHalfHeight) || 120, 1e-3);
+          targetCamera.left = -halfHeight * aspect;
+          targetCamera.right = halfHeight * aspect;
+          targetCamera.top = halfHeight;
+          targetCamera.bottom = -halfHeight;
+        }
+        targetCamera.updateProjectionMatrix?.();
+      };
+
+      const perspectiveCamera = new THREE.PerspectiveCamera(48, width / height, 0.1, 50000);
+      const orthographicCamera = new THREE.OrthographicCamera(-120, 120, 120, -120, 0.1, 50000);
+      orthographicCamera.userData.cadHalfHeight = 120;
+      const camera = perspectiveCamera;
+      camera.up.set(0, 0, 1);
+      camera.position.set(180, -180, 120);
+      orthographicCamera.up.copy(camera.up);
+      orthographicCamera.position.copy(camera.position);
+      syncCameraViewport(perspectiveCamera, width, height);
+      syncCameraViewport(orthographicCamera, width, height);
+
+      const renderer = createWebGlRenderer(THREE, renderMode);
+      const presentation = createFramePresentation({ canvas: renderer.domElement, renderMode, onPresent: onFramePresented });
+      const softwareRendering = isSoftwareWebGlRenderer(renderer);
+      let idlePixelRatioCap = softwareRendering
+        ? 1
+        : Math.max(Number(IDLE_PIXEL_RATIO_CAP) || 1, 0.25);
+      const interactionPixelRatioCap = softwareRendering ? 1 : INTERACTION_PIXEL_RATIO_CAP;
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = getViewerThemeValue(viewerTheme, "toneMappingExposure", DEFAULT_LIGHTING.toneMappingExposure);
+      renderer.localClippingEnabled = true;
+      renderer.shadowMap.enabled = !softwareRendering;
+      renderer.shadowMap.type = THREE.PCFShadowMap;
+      // Shadow maps are re-rendered only when the scene changes (see
+      // interactionState.shadowsDirty); camera-only frames reuse the last map.
+      renderer.shadowMap.autoUpdate = false;
+      renderer.setPixelRatio(getPixelRatioCap(idlePixelRatioCap));
+      renderer.setSize(width, height);
+      container.innerHTML = "";
+      container.appendChild(renderer.domElement);
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = DEFAULT_DAMPING_FACTOR;
+      controls.rotateSpeed = 1;
+      controls.panSpeed = 1.35;
+      controls.zoomSpeed = getDefaultZoomSpeed();
+      if ("zoomToCursor" in controls) {
+        controls.zoomToCursor = true;
+      }
+
+      const hemisphereLight = new THREE.HemisphereLight(
+        getViewerThemeValue(viewerTheme, "hemisphereSky", DEFAULT_LIGHTING.hemisphereSky),
+        getViewerThemeValue(viewerTheme, "hemisphereGround", DEFAULT_LIGHTING.hemisphereGround),
+        getViewerThemeValue(viewerTheme, "hemisphereIntensity", DEFAULT_LIGHTING.hemisphereIntensity)
+      );
+      scene.add(hemisphereLight);
+      const ambientLight = new THREE.AmbientLight("#ffffff", 0);
+      scene.add(ambientLight);
+      const keyLight = new THREE.DirectionalLight(
+        getViewerThemeValue(viewerTheme, "keyLightColor", DEFAULT_LIGHTING.keyLightColor),
+        getViewerThemeValue(viewerTheme, "keyLightIntensity", DEFAULT_LIGHTING.keyLightIntensity)
+      );
+      keyLight.position.set(240, -150, 340);
+      keyLight.castShadow = !softwareRendering;
+      keyLight.shadow.mapSize.set(2048, 2048);
+      keyLight.shadow.bias = -0.00025;
+      keyLight.shadow.normalBias = 0.024;
+      scene.add(keyLight);
+      const fillLight = new THREE.DirectionalLight(
+        getViewerThemeValue(viewerTheme, "fillLightColor", DEFAULT_LIGHTING.fillLightColor),
+        getViewerThemeValue(viewerTheme, "fillLightIntensity", DEFAULT_LIGHTING.fillLightIntensity)
+      );
+      fillLight.position.set(120, 80, 210);
+      scene.add(fillLight);
+      const rimLight = new THREE.DirectionalLight(
+        getViewerThemeValue(viewerTheme, "rimLightColor", DEFAULT_LIGHTING.rimLightColor),
+        getViewerThemeValue(viewerTheme, "rimLightIntensity", DEFAULT_LIGHTING.rimLightIntensity)
+      );
+      rimLight.position.set(-260, 240, 180);
+      scene.add(rimLight);
+      const spotLight = new THREE.SpotLight("#ffffff", 0, 0, Math.PI / 6);
+      spotLight.position.set(160, -120, 140);
+      spotLight.visible = false;
+      spotLight.castShadow = false;
+      spotLight.shadow.mapSize.set(1024, 1024);
+      spotLight.shadow.bias = -0.00025;
+      spotLight.shadow.normalBias = 0.01;
+      scene.add(spotLight);
+      scene.add(spotLight.target);
+      const pointLight = new THREE.PointLight("#ffffff", 0, 0);
+      pointLight.position.set(-120, 80, 140);
+      pointLight.visible = false;
+      pointLight.castShadow = false;
+      scene.add(pointLight);
+      const axesHelper = null;
+
+      const stageGroup = new THREE.Group();
+      const modelGroup = new THREE.Group();
+      const edgesGroup = new THREE.Group();
+      const facePickGroup = new THREE.Group();
+      const edgePickGroup = new THREE.Group();
+      const vertexPickGroup = new THREE.Group();
+      // Pick proxies are opacity-0 raycast targets; keep them out of the render
+      // pass entirely. Raycaster does not check `visible`, so picking still works.
+      facePickGroup.visible = false;
+      edgePickGroup.visible = false;
+      vertexPickGroup.visible = false;
+      scene.add(stageGroup);
+      scene.add(modelGroup);
+      scene.add(edgesGroup);
+      scene.add(facePickGroup);
+      scene.add(edgePickGroup);
+      scene.add(vertexPickGroup);
+
+      const raycaster = new THREE.Raycaster();
+      const pointer = new THREE.Vector2();
+      const interactionState = {
+        active: false,
+        pixelRatioCap: idlePixelRatioCap,
+        pixelRatio: getPixelRatioCap(idlePixelRatioCap),
+        renderQueued: false,
+        renderQueuedAt: 0,
+        renderFallbackTimerId: 0,
+        restoreTimerId: 0,
+        shadowsDirty: true,
+        interactionQuality: false
+      };
+      const keyboardOrbitState = {
+        pressedKeys: new Set(),
+        directionCounts: {
+          left: 0,
+          right: 0,
+          up: 0,
+          down: 0
+        },
+        lastFrameTime: 0
+      };
+      const screenSpaceLineMaterials = new Set();
+
+      const getScreenSpaceLineMaterialCount = () => (
+        screenSpaceLineMaterials.size +
+        Number(runtimeRef.current?.cadScene?.runtime?.screenSpaceLineMaterials?.size || 0)
+      );
+
+      // A screen-space line's `resolution` is the DRAWING BUFFER, in device
+      // pixels — not the CSS size the container reports and `setSize` takes.
+      // The shaders normalise their extrusion by resolution.y, so syncing CSS
+      // pixels would make every configured edge thickness devicePixelRatio
+      // times wider on screen. See screenSpaceLineDeviceResolution.
+      const lineMaterialResolution = () => screenSpaceLineDeviceResolution(
+        renderer,
+        container.clientWidth || width || 1,
+        container.clientHeight || height || 1
+      );
+
+      const syncScreenSpaceLineMaterials = () => {
+        const { width: nextWidth, height: nextHeight } = lineMaterialResolution();
+        for (const material of screenSpaceLineMaterials) {
+          material?.resolution?.set?.(nextWidth, nextHeight);
+        }
+        runtimeRef.current?.cadScene?.runtime?.syncScreenSpaceLineMaterials?.(nextWidth, nextHeight);
+      };
+
+      const registerScreenSpaceLineMaterial = (material) => {
+        if (!material?.resolution?.set) {
+          return;
+        }
+        screenSpaceLineMaterials.add(material);
+        const { width: nextWidth, height: nextHeight } = lineMaterialResolution();
+        material.resolution.set(nextWidth, nextHeight);
+      };
+
+      const unregisterScreenSpaceLineMaterial = (material) => {
+        if (!material) {
+          return;
+        }
+        screenSpaceLineMaterials.delete(material);
+      };
+      const handleContextLost = (event) => {
+        event.preventDefault();
+        clearKeyboardOrbitState(keyboardOrbitState);
+        setError("WebGL context was lost. Restoring CAD Viewer...");
+        onContextLost?.();
+      };
+      const handleContextRestored = () => {
+        interactionState.shadowsDirty = true;
+        setError("");
+        onContextRestored?.();
+      };
+
+      // A render type may tighten the pixel ratio further than the shared
+      // idle/interaction caps (a renderer may trade resolution for
+      // step budget while the camera moves). It only ever caps DOWN, so the
+      // mesh path — which installs no resolver — is unaffected.
+      const resolveRenderPixelRatio = (pixelRatioCap, interaction) => {
+        const base = getPixelRatioCap(pixelRatioCap);
+        const extraCap = Number(runtimeRef.current?.resolveExtraPixelRatioCap?.(interaction));
+        return Number.isFinite(extraCap) && extraCap > 0 ? Math.min(base, extraCap) : base;
+      };
+
+      const applyRenderQuality = (pixelRatioCap, { force = false, interaction = null } = {}) => {
+        const nextInteraction = interaction === null
+          ? interactionState.interactionQuality === true
+          : interaction === true;
+        interactionState.interactionQuality = nextInteraction;
+        const nextPixelRatio = resolveRenderPixelRatio(pixelRatioCap, nextInteraction);
+        if (
+          !force &&
+          Math.abs(interactionState.pixelRatioCap - pixelRatioCap) < 1e-4 &&
+          Math.abs((interactionState.pixelRatio || 0) - nextPixelRatio) < 1e-4
+        ) {
+          return;
+        }
+        interactionState.pixelRatioCap = pixelRatioCap;
+        interactionState.pixelRatio = nextPixelRatio;
+        renderer.setPixelRatio(nextPixelRatio);
+        renderer.setSize(container.clientWidth || width, container.clientHeight || height, false);
+        syncScreenSpaceLineMaterials();
+        syncDrawingCanvasSize(runtimeRef.current);
+        renderDrawingOverlay();
+      };
+
+      const setIdlePixelRatioCap = (nextCap) => {
+        idlePixelRatioCap = softwareRendering
+          ? 1
+          : Math.max(Number(nextCap) || 1, 0.25);
+        if (!interactionState.active) {
+          applyRenderQuality(idlePixelRatioCap, { interaction: false });
+          requestRender();
+        }
+      };
+
+      const fitCameraDepthRange = (runtime) => {
+        const activeCamera = runtime?.camera;
+        if (
+          !renderMode ||
+          !activeCamera?.isCamera ||
+          renderer.capabilities?.logarithmicDepthBuffer
+        ) {
+          return;
+        }
+        fitCameraDepthToBounds(activeCamera, runtime?.modelBounds, {
+          displayRecords: runtime?.displayRecords,
+          modelGroup: runtime?.modelGroup
+        });
+      };
+
+      let rafId = 0;
+      const requestRender = () => {
+        if (interactionState.renderQueued) {
+          const now = typeof performance !== "undefined" && typeof performance.now === "function"
+            ? performance.now()
+            : Date.now();
+          if (interactionState.renderQueuedAt && now - interactionState.renderQueuedAt < 120) {
+            return;
+          }
+          window.cancelAnimationFrame(rafId);
+          interactionState.renderQueued = false;
+          interactionState.renderQueuedAt = 0;
+        }
+        interactionState.renderQueued = true;
+        interactionState.renderQueuedAt = typeof performance !== "undefined" && typeof performance.now === "function"
+          ? performance.now()
+          : Date.now();
+        rafId = window.requestAnimationFrame(renderFrame);
+        if (interactionState.renderFallbackTimerId) {
+          window.clearTimeout(interactionState.renderFallbackTimerId);
+        }
+        interactionState.renderFallbackTimerId = window.setTimeout(() => {
+          if (!interactionState.renderQueued) {
+            return;
+          }
+          window.cancelAnimationFrame(rafId);
+          renderFrame(
+            typeof performance !== "undefined" && typeof performance.now === "function"
+              ? performance.now()
+              : Date.now()
+          );
+        }, 120);
+        if (runtimeRef.current) {
+          runtimeRef.current.rafId = rafId;
+        }
+      };
+
+      function renderFrame(timestamp) {
+        const frameStartedAt = perfStart();
+        interactionState.renderQueued = false;
+        interactionState.renderQueuedAt = 0;
+        if (interactionState.renderFallbackTimerId) {
+          window.clearTimeout(interactionState.renderFallbackTimerId);
+          interactionState.renderFallbackTimerId = 0;
+        }
+        const cameraTransitionActive = stepCameraTransition(runtimeRef.current, timestamp);
+        const keyboardOrbitMoved = stepKeyboardOrbit(runtimeRef.current, timestamp);
+        const needsMoreFrames = updateOrbitControls(controls, timestamp, runtimeRef.current);
+        if (cameraTransitionActive || keyboardOrbitMoved) {
+          emitPerspectiveChange(runtimeRef.current);
+        }
+        fitCameraDepthRange(runtimeRef.current);
+        renderer.shadowMap.needsUpdate = interactionState.shadowsDirty === true;
+        interactionState.shadowsDirty = false;
+        presentation.draw(
+          runtimeRef.current,
+          () => renderer.render(scene, runtimeRef.current?.camera || camera),
+          presentationRequestRef?.current,
+        );
+        perfMeasure(PERF_MEASURE_NAMES.frame, frameStartedAt, { interacting: interactionState.active === true });
+        const previewOrbitActive = !!runtimeRef.current?.previewOrbitEnabled;
+        if (!previewOrbitActive) {
+          const nextActiveFace = getActiveViewPlaneFaceId(runtimeRef.current);
+          if (nextActiveFace !== activeViewPlaneFaceRef.current) {
+            activeViewPlaneFaceRef.current = nextActiveFace;
+            setActiveViewPlaneFace(nextActiveFace);
+          }
+          syncViewPlaneOrientation(runtimeRef.current);
+        }
+        if (
+          cameraTransitionActive ||
+          keyboardOrbitMoved ||
+          needsMoreFrames ||
+          // Hold the loop open for the whole gesture so a mesh scene keeps
+          // repainting at interaction quality. A render type whose frame costs
+          // tens of milliseconds opts out: it would
+          // otherwise re-render every vsync between wheel ticks even though the
+          // camera has not moved, and a 60 Hz pinch saturates the queue. Camera
+          // movement still repaints through the controls `change` handler, and
+          // damping/transition/keyboard/preview keep their own terms above.
+          (interactionState.active && runtimeRef.current?.renderOnDemandOnly !== true) ||
+          previewOrbitActive
+        ) {
+          requestRender();
+        }
+      }
+
+      const beginInteraction = () => {
+        if (interactionState.restoreTimerId) {
+          window.clearTimeout(interactionState.restoreTimerId);
+          interactionState.restoreTimerId = 0;
+        }
+        interactionState.active = true;
+        applyRenderQuality(resolveInteractionPixelRatioCap({
+          idlePixelRatioCap,
+          interactionPixelRatioCap,
+          preservePixelRatio: runtimeRef.current?.preserveInteractionPixelRatio === true,
+          screenSpaceLineMaterialCount: getScreenSpaceLineMaterialCount()
+        }), { interaction: true });
+        requestRender();
+      };
+
+      const scheduleIdleQuality = () => {
+        if (interactionState.restoreTimerId) {
+          window.clearTimeout(interactionState.restoreTimerId);
+        }
+        // Restoring full quality costs one expensive frame plus a drawing-buffer
+        // reallocation. At 140 ms that lands BETWEEN discrete wheel ticks, so a
+        // slow render type pays it repeatedly mid-gesture; such a type raises the
+        // delay past a comfortable tick cadence.
+        const idleDelayMs = Math.max(
+          Number(runtimeRef.current?.idleQualityDelayMs) || 0,
+          INTERACTION_IDLE_DELAY_MS
+        );
+        interactionState.restoreTimerId = window.setTimeout(() => {
+          interactionState.restoreTimerId = 0;
+          interactionState.active = false;
+          controls.enableDamping = true;
+          controls.dampingFactor = DEFAULT_DAMPING_FACTOR;
+          controls.zoomSpeed = getDefaultZoomSpeed();
+          // Two-stage restore: give the render type its idle quality and let it
+          // repaint, then raise the pixel ratio on the next tick so the costly
+          // frame and the buffer reallocation do not land on the same vsync.
+          const onIdleQuality = runtimeRef.current?.onIdleQualityRestore;
+          if (typeof onIdleQuality === "function") {
+            onIdleQuality();
+            requestRender();
+            window.setTimeout(() => {
+              applyRenderQuality(idlePixelRatioCap, { interaction: false });
+              requestRender();
+            }, 0);
+            return;
+          }
+          applyRenderQuality(idlePixelRatioCap, { interaction: false });
+          requestRender();
+        }, idleDelayMs);
+      };
+
+      const onResize = () => {
+        const w = container.clientWidth || 800;
+        const h = container.clientHeight || 640;
+        applyRenderQuality(interactionState.pixelRatioCap);
+        renderer.setSize(w, h);
+        syncCameraViewport(perspectiveCamera, w, h);
+        syncCameraViewport(orthographicCamera, w, h);
+        syncScreenSpaceLineMaterials();
+        syncDrawingCanvasSize(runtimeRef.current);
+        renderDrawingOverlay();
+        runtimeRef.current?.onViewportResize?.();
+        requestRender();
+      };
+      window.addEventListener("resize", onResize);
+      const resizeObserver = typeof ResizeObserver === "function"
+        ? new ResizeObserver(() => {
+          onResize();
+        })
+        : null;
+      resizeObserver?.observe(container);
+
+      // Zoom-to-cursor leaves the orbit pivot (controls.target) drifting along the view ray
+      // at the new camera distance. Perspective pan and dolly both scale by the
+      // camera->pivot distance, so a drifted pivot makes panning and zooming feel slow when
+      // zoomed in and fast when zoomed out. After each wheel zoom, re-anchor the pivot depth
+      // onto the cursor hit in Inspect or stable model depth in Render, keeping
+      // it on the forward axis so the camera never re-orients or jumps the view.
+      const zoomReanchor = createZoomPivotReanchor(THREE);
+      const zoomReanchorPointer = zoomReanchor.pointer;
+      let zoomPivotReanchorPending = false;
+
+      let controlsStartDistance = null;
+      const readControlsDistance = () => {
+        const activeRuntime = runtimeRef.current;
+        if (!activeRuntime?.camera || !activeRuntime?.controls?.target) {
+          return null;
+        }
+        return activeRuntime.camera.position.distanceTo(activeRuntime.controls.target);
+      };
+      const handleControlsStart = () => {
+        controlsStartDistance = readControlsDistance();
+        // Any drag on the controls — orbit, pan or zoom — means the view is the
+        // user's now. A progressive load re-frames the camera when the model
+        // finishes arriving, and must not do that over someone's shoulder.
+        if (runtimeRef.current) {
+          runtimeRef.current.userMovedCamera = true;
+        }
+        cancelCameraTransition(runtimeRef.current);
+        beginInteraction();
+      };
+      const handleControlsChange = () => {
+        if (zoomPivotReanchorPending) {
+          zoomPivotReanchorPending = false;
+          zoomReanchor.apply(runtimeRef.current);
+        }
+        emitPerspectiveChange(runtimeRef.current);
+        requestRender();
+      };
+      const handleControlsEnd = () => {
+        const controlsEndDistance = readControlsDistance();
+        if (Number.isFinite(controlsStartDistance) && Number.isFinite(controlsEndDistance)) {
+          const threshold = Math.max(Math.abs(controlsStartDistance) * 0.002, 1e-4);
+          if (Math.abs(controlsEndDistance - controlsStartDistance) > threshold) {
+            runtimeRef.current?.onManualCameraInteraction?.("zoom");
+          }
+        }
+        controlsStartDistance = null;
+        scheduleIdleQuality();
+      };
+      const handleWheel = (event) => {
+        if (runtimeRef.current) {
+          runtimeRef.current.userMovedCamera = true;
+        }
+        runtimeRef.current?.onManualCameraInteraction?.("wheel");
+        cancelCameraTransition(runtimeRef.current);
+        controls.enableDamping = false;
+        // Three input classes, three speeds. OrbitControls (r161+) normalizes the delta
+        // itself -- deltaMode to pixels, and ctrl+wheel multiplied by 10 because browsers
+        // report a trackpad PINCH as a tiny ctrl+wheel. That last boost is already applied
+        // by the time zoomSpeed is used, so the pinch speed here is divided by it rather
+        // than stacked on top; otherwise a pinch lands ten times hotter than a two-finger
+        // scroll of the same size.
+        controls.zoomSpeed = isPinchWheelEvent(event)
+          ? getPinchZoomSpeed() / WHEEL_PINCH_DELTA_BOOST
+          : (isTrackpadLikeWheelEvent(event) ? getPinchZoomSpeed() : ACCELERATED_WHEEL_ZOOM_SPEED);
+        // Capture the cursor (NDC) so the post-zoom pivot re-anchor can raycast under it.
+        const rect = renderer.domElement.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          zoomReanchorPointer.set(
+            ((event.clientX - rect.left) / rect.width) * 2 - 1,
+            -((event.clientY - rect.top) / rect.height) * 2 + 1
+          );
+          zoomPivotReanchorPending = true;
+        }
+        beginInteraction();
+      };
+      const wheelListenerOptions = { passive: true, capture: true };
+
+      controls.addEventListener("start", handleControlsStart);
+      controls.addEventListener("change", handleControlsChange);
+      controls.addEventListener("end", handleControlsEnd);
+      renderer.domElement.addEventListener("wheel", handleWheel, wheelListenerOptions);
+      renderer.domElement.addEventListener("webglcontextlost", handleContextLost, false);
+      renderer.domElement.addEventListener("webglcontextrestored", handleContextRestored, false);
+
+      const handleKeyDown = (event) => {
+        if (
+          previewModeRef.current ||
+          event.defaultPrevented ||
+          event.ctrlKey ||
+          event.metaKey ||
+          event.altKey ||
+          isEditableTarget(event.target)
+        ) {
+          return;
+        }
+
+        const command = getKeyboardOrbitCommand(event);
+        if (!command) {
+          return;
+        }
+        if (keyboardOrbitState.pressedKeys.has(command.keyId)) {
+          event.preventDefault();
+          return;
+        }
+
+        keyboardOrbitState.pressedKeys.add(command.keyId);
+        keyboardOrbitState.directionCounts[command.direction] += 1;
+        keyboardOrbitState.lastFrameTime = 0;
+        cancelCameraTransition(runtimeRef.current);
+        beginInteraction();
+        applyOrbitDelta(
+          runtimeRef.current,
+          (command.direction === "right" ? 1 : command.direction === "left" ? -1 : 0) * KEYBOARD_ORBIT_NUDGE_RAD,
+          (command.direction === "down" ? 1 : command.direction === "up" ? -1 : 0) * KEYBOARD_ORBIT_NUDGE_RAD
+        );
+        emitPerspectiveChange(runtimeRef.current);
+        requestRender();
+        event.preventDefault();
+      };
+
+      const handleKeyUp = (event) => {
+        const command = getKeyboardOrbitCommand(event);
+        if (!command) {
+          return;
+        }
+        if (!keyboardOrbitState.pressedKeys.delete(command.keyId)) {
+          return;
+        }
+
+        keyboardOrbitState.directionCounts[command.direction] = Math.max(
+          0,
+          keyboardOrbitState.directionCounts[command.direction] - 1
+        );
+        const axes = getKeyboardOrbitAxes(keyboardOrbitState);
+        if (!axes.azimuth && !axes.polar) {
+          keyboardOrbitState.lastFrameTime = 0;
+          scheduleIdleQuality();
+        }
+        event.preventDefault();
+      };
+
+      const clearKeyboardOrbit = () => {
+        if (!keyboardOrbitState.pressedKeys.size) {
+          return;
+        }
+        clearKeyboardOrbitState(keyboardOrbitState);
+        scheduleIdleQuality();
+      };
+
+      const handleVisibilityChange = () => {
+        if (document.visibilityState !== "visible") {
+          clearKeyboardOrbit();
+        }
+      };
+
+      runtimeRef.current = {
+        previousViewState: previousViewStateRef.current,
+        THREE,
+        scene,
+        camera,
+        perspectiveCamera,
+        orthographicCamera,
+        projection: "perspective",
+        syncCameraViewport,
+        renderer,
+        softwareRendering,
+        Line2,
+        LineGeometry,
+        LineSegments2,
+        LineSegmentsGeometry,
+        LineMaterial,
+        controls,
+        stageGroup,
+        modelGroup,
+        edgesGroup,
+        facePickGroup,
+        edgePickGroup,
+        vertexPickGroup,
+        facePickMesh: null,
+        edgePickLines: null,
+        vertexPickPoints: null,
+        edgePickObjects: [],
+        displayRecords: [],
+        modelBounds: null,
+        modelRadius: 1,
+        activeModelKey: "",
+        sceneScaleMode,
+        raycaster,
+        pointer,
+        hemisphereLight,
+        ambientLight,
+        keyLight,
+        fillLight,
+        rimLight,
+        spotLight,
+        pointLight,
+        axesHelper,
+        sceneBackgroundTexture: null,
+        environmentResource: null,
+        environmentResourceIdentity: "",
+        environmentReady: !renderMode,
+        photographicStudio: null,
+        shadowMapSize: 2048,
+        gridConfig: null,
+        gridHelper: null,
+        floorMode,
+        hasVisibleModel: false,
+        hasDrawingDocument: false,
+        edgePickThreshold: 1.5,
+        vertexPickThreshold: 0.9,
+        cameraTransition: null,
+        previewOrbitEnabled: false,
+        orbitControlsLastTimestamp: 0,
+        preserveInteractionPixelRatio: preserveInteractionPixelRatio === true,
+        interactionState,
+        keyboardOrbitState,
+        onResize,
+        resizeObserver,
+        rafId,
+        // Renders requested through the runtime come from scene mutations
+        // (model/theme/params/overlay effects), so they also refresh shadows.
+        // Camera-driven paths use the closure-local requestRender and keep the
+        // last shadow map.
+        requestRender: () => {
+          interactionState.shadowsDirty = true;
+          requestRender();
+        },
+        invalidateShadows: () => {
+          interactionState.shadowsDirty = true;
+        },
+        beginInteraction,
+        scheduleIdleQuality,
+        setIdlePixelRatioCap,
+        // Hooks a render type installs to tune the shared loop for its own frame
+        // cost. All are inert on the mesh path, which leaves them at these
+        // defaults.
+        //
+        // renderOnDemandOnly  - do not hold the loop open for the whole gesture
+        // idleQualityDelayMs  - raise the idle-restore delay above the default
+        // onIdleQualityRestore- restore full quality before the pixel ratio
+        // resolveExtraPixelRatioCap - cap resolution below the shared caps
+        renderOnDemandOnly: false,
+        idleQualityDelayMs: 0,
+        onIdleQualityRestore: null,
+        resolveExtraPixelRatioCap: null,
+        refreshRenderQuality: () => {
+          applyRenderQuality(interactionState.pixelRatioCap, { force: true });
+        },
+        onManualCameraInteraction,
+        onViewportResize,
+        registerScreenSpaceLineMaterial,
+        unregisterScreenSpaceLineMaterial,
+        // The scene sync calls this after building or updating a model so line
+        // materials created for it (the cadScene's own registry) start at the
+        // viewport's resolution rather than waiting for a resize.
+        syncScreenSpaceLineMaterials
+      };
+      syncDrawingCanvasSize(runtimeRef.current);
+      renderDrawingOverlay();
+      applySceneBackground(runtimeRef.current, viewerTheme);
+      applyInitialPerspective?.(runtimeRef.current);
+      window.addEventListener("keydown", handleKeyDown);
+      window.addEventListener("keyup", handleKeyUp);
+      window.addEventListener("blur", clearKeyboardOrbit);
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+      requestRender();
+      updateGridHelper(runtimeRef.current, viewerTheme, defaultGridRadius, 0, sceneScaleMode, floorMode);
+      setViewerReadyTick((value) => value + 1);
+
+      cleanup = () => {
+        const runtime = runtimeRef.current;
+        if (!runtime) {
+          return;
+        }
+        if (runtime.activeModelKey && runtime.interactiveFraming) previousViewStateRef.current = {
+          modelKey: runtime.activeModelKey,
+          framing: Object.fromEntries([
+            "zoomBaseDistance", "zoomBaseHalfHeight", "zoomBaseModelRadius",
+            "zoomFitModelRadius", "viewportFitScale", "interactiveFraming", "userMovedCamera"
+          ].map(key => [key, runtime[key]]))
+        };
+        if (runtime.interactionState.restoreTimerId) {
+          window.clearTimeout(runtime.interactionState.restoreTimerId);
+        }
+        if (runtime.interactionState.renderFallbackTimerId) {
+          window.clearTimeout(runtime.interactionState.renderFallbackTimerId);
+        }
+        cancelCameraTransition(runtime, { scheduleIdle: false });
+        window.cancelAnimationFrame(runtime.rafId);
+        window.removeEventListener("resize", runtime.onResize);
+        runtime.resizeObserver?.disconnect();
+        runtime.controls.removeEventListener("start", handleControlsStart);
+        runtime.controls.removeEventListener("change", handleControlsChange);
+        runtime.controls.removeEventListener("end", handleControlsEnd);
+        runtime.renderer.domElement.removeEventListener("wheel", handleWheel, wheelListenerOptions);
+        runtime.renderer.domElement.removeEventListener("webglcontextlost", handleContextLost, false);
+        runtime.renderer.domElement.removeEventListener("webglcontextrestored", handleContextRestored, false);
+        window.removeEventListener("keydown", handleKeyDown);
+        window.removeEventListener("keyup", handleKeyUp);
+        window.removeEventListener("blur", clearKeyboardOrbit);
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+        runtime.controls.dispose();
+        disposeSectionCaps(runtime);
+        const disposedSource = disposeViewerCadScene(runtime, { clearSceneGroup });
+        onSceneDisposed?.(disposedSource, { handoff: viewerMountedRef.current });
+        disposeSceneObject(runtime.gridHelper);
+        disposeSceneObject(runtime.axesHelper);
+        disposeTexture(runtime.sceneBackgroundTexture);
+        runtime.environmentResource?.dispose();
+        studioScene()?.disposePhotographicStudio(runtime);
+        runtime.keyLight?.shadow?.map?.dispose?.();
+        if (runtime.keyLight?.shadow) {
+          runtime.keyLight.shadow.map = null;
+        }
+        runtime.renderer.dispose();
+        if (container.contains(runtime.renderer.domElement)) {
+          container.removeChild(runtime.renderer.domElement);
+        }
+        runtimeRef.current = null;
+      };
+    }
+
+    initializeViewer().catch((err) => {
+      if (!cancelled) {
+        setError(runtimeErrorMessage(err));
+        onInitializationError?.(err);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      cleanup();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [renderMode, runtimeResetToken]);
+}

@@ -11,11 +11,9 @@ looks for ``node``: ``pip install cadgen`` must succeed on a machine with no Nod
 browser, and the CAD Viewer's long-lived server must import light. A format that needs an
 asset asks for it at the moment it needs it, and gets an actionable error if it is absent.
 
-**Development beats the installed package, on purpose.** In this repo the builders resolve to the
-live ``packages/cadgen-js/bin`` sources rather than the committed bundles, so editing builder
-JS takes effect without a rebundle, and the viewer client resolves to ``apps/viewer/dist``
-so ``npm run build`` there is what ``cadgen viewer`` serves. An installed wheel has no such
-sources and falls through to ``_runtime``.
+In a source checkout the builders resolve to compiled ``packages/core/bin``
+sources and the Viewer resolves to ``apps/web/dist``. An installed wheel has
+neither source tree and falls through to its bundled ``_runtime`` copy.
 """
 
 from __future__ import annotations
@@ -26,6 +24,7 @@ from pathlib import Path
 __all__ = [
     "AssetMissing",
     "browser_runtime_dir",
+    "dev_node_modules_missing",
     "node_builders_dir",
     "require_browser_runtime",
     "runtime_build_hint",
@@ -71,7 +70,7 @@ def _in_source_checkout() -> bool:
     """True when this cadgen is being imported out of the repository that builds it.
 
     The same anchor the dev resolvers below use: a ``packages`` ancestor with
-    ``cadgen-js`` beside us. A wheel matches nothing here.
+    ``core`` beside us. A wheel matches nothing here.
     """
     return _dev_builders_dir() is not None
 
@@ -80,7 +79,7 @@ def require_browser_runtime(directory: Path | str) -> Path:
     """The snapshot browser runtime, or :class:`AssetMissing` naming how to get it.
 
     Unlike the builders, this one has no live source to fall back on: ``render.html`` is
-    written by the bundler and ``snapshot-render.js`` is an esbuild of cadgen-js, so a
+    written by the bundler and ``snapshot-render.js`` is an esbuild of @hardcore/core, so a
     checkout that has never bundled cannot render at all. Without this the failure was a
     404 inside a headless browser page.
     """
@@ -105,32 +104,20 @@ def _env_dir(name: str) -> Path | None:
 
 
 def _dev_builders_dir() -> Path | None:
-    """``packages/cadgen-js/bin`` when cadgen is imported from a source checkout.
-
-    Walks up from this module looking for a sibling ``cadgen-js/bin`` under a ``packages``
-    directory -- true for ``packages/cadgen/src/cadgen/assets.py`` in this repo, and for a
-    skill runtime that still vendors ``packages/cadgen`` beside ``packages/cadgen-js``. An
-    installed wheel matches nothing here and falls through to the packaged copy.
-    """
+    """``packages/core/bin`` when imported from this repository checkout."""
     for parent in Path(__file__).resolve().parents:
         if parent.name != "packages":
             continue
-        candidate = parent / "cadgen-js" / "bin"
-        if candidate.is_dir():
+        candidate = parent / "core" / "bin"
+        if candidate.is_dir() and (parent / "core" / "package.json").is_file():
             return candidate
     return None
 
 
 def _dev_viewer_dist_dir() -> Path | None:
-    """``apps/viewer/dist`` when cadgen is imported from a source checkout.
-
-    Anchored on the repository root -- the first parent that holds
-    ``apps/viewer/package.json`` -- rather than on a ``packages`` directory, because the
-    client app is not a sibling package. The dist is what ``npm run build`` writes there;
-    an unbuilt checkout returns ``None`` and the caller says so.
-    """
+    """A built ``apps/web/dist`` when imported from this repository checkout."""
     for parent in Path(__file__).resolve().parents:
-        app = parent / "apps" / "viewer"
+        app = parent / "apps" / "web"
         if (app / "package.json").is_file():
             dist = app / "dist"
             return dist if (dist / "index.html").is_file() else None
@@ -138,26 +125,19 @@ def _dev_viewer_dist_dir() -> Path | None:
 
 
 def dev_node_modules_missing(builders_dir: Path) -> Path | None:
-    """The ``node_modules`` a source checkout's builders need but do not have, or None.
-
-    Only the DEV path (``packages/cadgen-js/bin`` in a checkout) resolves bare imports
-    such as ``three`` through a real ``node_modules``; the packaged builders are esbuilt
-    self-contained and need none. A fresh worktree has no ``node_modules`` at all, and
-    without this check every mesh export dies in the child with an opaque
-    ``ERR_MODULE_NOT_FOUND 'three'``.
-    """
+    """The root workspace dependencies needed by live core builders, if absent."""
     dev = _dev_builders_dir()
     if dev is None or Path(builders_dir).resolve() != dev.resolve():
         return None
-    node_modules = dev.parent / "node_modules"
+    node_modules = dev.parents[2] / "node_modules"
     return None if node_modules.is_dir() else node_modules
 
 
 def node_builders_dir() -> Path:
     """Directory holding the esbuilt Node builders (``dxf-mesh.mjs`` and friends).
 
-    ``CADGEN_NODE_BUILDERS_DIR`` names it directly. Otherwise a checkout's live
-    ``packages/cadgen-js/bin`` wins over the packaged copy, so builder JS stays editable.
+    ``CADGEN_NODE_BUILDERS_DIR`` names it directly. Otherwise use live compiled
+    core builders in a checkout, then the packaged copy.
     """
     override = _env_dir("CADGEN_NODE_BUILDERS_DIR")
     if override:
@@ -186,11 +166,8 @@ def browser_runtime_dir(explicit: Path | str | None = None) -> Path:
 def viewer_dist_dir() -> Path:
     """Directory holding the CAD Viewer's built client (``index.html`` and its assets).
 
-    ``CADGEN_VIEWER_DIST`` names it directly (``cadgen viewer --dist`` is the flag twin and
-    is applied by the caller before asking here). Otherwise a checkout's ``apps/viewer/dist``
-    wins over the packaged copy, so a local ``npm run build`` is what gets served. The
-    returned directory may not exist -- an unbuilt checkout or a wheel built without the
-    viewer stage -- and ``cadgen viewer`` refuses to start with a build hint when it does not.
+    ``CADGEN_VIEWER_DIST`` names it directly (``cadgen viewer --dist`` is its CLI twin).
+    Otherwise a checkout's built ``apps/web/dist`` wins over the packaged copy.
     """
     override = _env_dir("CADGEN_VIEWER_DIST")
     if override:
