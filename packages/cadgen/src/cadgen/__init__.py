@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING
 # with it (issue #322, upstream in build123d's register_folder). This hides
 # unparseable fonts from that one listing.
 #
-# It belongs here rather than in a launcher because the skill shims, the daemon's warm
-# workers and `python -m cadgen.X` children all reach cadgen by different routes, and a
+# It belongs here rather than in a launcher because the `cadgen` front door, the daemon's
+# warm workers and `python -m cadgen.X` children all reach cadgen by different routes, and a
 # fix that covered only one of them would leave the builds it spawns still broken.
 #
 # Cost where nothing is wrong: one str.endswith per glob call. CADGEN_FONT_GUARD=0
@@ -158,7 +158,7 @@ def _resolve_version() -> str:
     """The installed distribution version, falling back to pyproject in a source tree.
 
     Installed metadata is the authority: it is what a consumer actually has, and it is
-    what the skill shims compare their pinned requirement against. A bare source checkout
+    what `cadgen doctor` compares a skill's pinned requirement against. A bare source checkout
     has no metadata, so fall back to the pyproject this file ships beside — release
     tooling stamps it from the canonical VERSION, so the two never disagree.
     """

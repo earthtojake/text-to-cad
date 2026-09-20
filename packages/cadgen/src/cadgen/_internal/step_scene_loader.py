@@ -301,6 +301,8 @@ def _xcaf_children(shape_tool: Any, label: object, resolved_label: object) -> li
 
 def _load_occurrence_tree(
     step_path: Path,
+    *,
+    named: Path | None = None,
 ) -> tuple[
     list[OccurrenceNode],
     dict[int, Any],
@@ -325,11 +327,11 @@ def _load_occurrence_tree(
         read_status = reader.ReadFile(str(step_path))
         transferred = int(read_status) == int(IFSelect_RetDone) and reader.Transfer(doc)
     if not transferred:
-        return (*_load_fallback_occurrence_tree(step_path), None)
+        return (*_load_fallback_occurrence_tree(step_path, named=named), None)
 
     loaded = _load_occurrence_tree_from_xcaf_doc(step_path, doc)
     if loaded is None:
-        return (*_load_fallback_occurrence_tree(step_path), None)
+        return (*_load_fallback_occurrence_tree(step_path, named=named), None)
     return (*loaded, doc)
 
 
@@ -484,17 +486,25 @@ def kernel_messages_on_stderr() -> Iterator[None]:
 
 def _load_fallback_occurrence_tree(
     step_path: Path,
+    *,
+    named: Path | None = None,
 ) -> tuple[list[OccurrenceNode], dict[int, Any], dict[int, str | None], dict[int, ColorRGBA], dict[int, dict[int, ColorRGBA]]]:
+    # ``named`` is the document the USER gave when ``step_path`` is cadgen's
+    # private snapshot of its bytes: an error names their file, never ours.
+    named = step_path if named is None else named
     reader = STEPControl_Reader()
     with kernel_messages_on_stderr():
         status = reader.ReadFile(str(step_path))
         if status == IFSelect_RetDone:
             reader.TransferRoots()
     if status != IFSelect_RetDone:
-        raise RuntimeError(f"failed to read STEP file: {step_path}")
+        raise RuntimeError(
+            f"failed to read STEP file: {named} -- the CAD kernel could not parse it as a "
+            "STEP document (its diagnostics, if any, are on stderr above)"
+        )
     shape = reader.OneShape()
     if shape.IsNull():
-        raise RuntimeError(f"STEP file produced no shape: {step_path}")
+        raise RuntimeError(f"STEP file produced no shape: {named}")
     # The fallback has no product names. Its representation must still depend
     # only on the bytes, not on the current filename of a copied document.
     location = _shape_location(shape)
@@ -520,7 +530,11 @@ def _load_fallback_occurrence_tree(
     )
 
 
-def load_step_scene(step_path: Path, *, record_read: bool = True) -> LoadedStepScene:
+def load_step_scene(
+    step_path: Path, *, record_read: bool = True, named: Path | None = None
+) -> LoadedStepScene:
+    """Parse ``step_path``. ``named`` is the path an ERROR should name instead --
+    the user's document, when ``step_path`` is a private snapshot of its bytes."""
     resolved_step_path = step_path.expanduser().resolve()
     if not resolved_step_path.exists():
         raise FileNotFoundError(f"STEP file does not exist: {resolved_step_path}")
@@ -540,7 +554,7 @@ def load_step_scene(step_path: Path, *, record_read: bool = True) -> LoadedStepS
         prototype_colors,
         prototype_face_colors,
         doc,
-    ) = _load_occurrence_tree(resolved_step_path)
+    ) = _load_occurrence_tree(resolved_step_path, named=named)
     return LoadedStepScene(
         step_path=resolved_step_path,
         roots=roots,

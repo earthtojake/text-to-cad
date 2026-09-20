@@ -263,8 +263,8 @@ test("stays dark through display mode and render settings edits", async () => {
   await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
   await expect(page.locator("[data-file-panel='cad-theme'], [data-file-sheet='Theme']")).toHaveCount(0);
 
-  await page.getByRole("tab", { name: "View", exact: true }).click();
-  const displayMode = page.getByRole("tabpanel", { name: "View", exact: true }).getByRole("combobox", { name: "Mode" });
+  await page.getByRole("tab", { name: "Display", exact: true }).click();
+  const displayMode = page.getByRole("tabpanel", { name: "Display", exact: true }).getByRole("combobox", { name: "Mode" });
   await displayMode.click();
   await page.getByRole("option", { name: "Render", exact: true }).click();
   await page.getByRole("button", { name: "Lighting", exact: true }).click();

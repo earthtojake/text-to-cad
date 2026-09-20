@@ -64,18 +64,25 @@ function Harness({ spy = {} as Record<string, (...args: any[]) => void>, groupNa
   </div>;
 }
 const rows = () => within(screen.getByRole('list', { name: 'Robot links' })).getAllByRole('button', { name: /^Select / }).map(row => row.getAttribute('aria-label'));
-const filter = () => screen.getByRole('textbox', { name: 'Filter components' });
+const filter = () => screen.getByRole('textbox', { name: 'Filter links' });
 
 it('draws the kinematic tree collapsed below the first real choice, with each link’s joint beside it', () => {
   render(<Harness/>);
-  expect(filter().getAttribute('placeholder')).toBe('Filter components…');
-  // base_footprint has a single child, so the chain opens until base_link offers a choice.
-  expect(rows()).toEqual(['Select base_footprint', 'Select base_link', 'Select shoulder_link', 'Select camera_link']);
+  expect(filter().getAttribute('placeholder')).toBe('Filter links…');
+  // base_footprint is only a frame (no geometry, no mass, base_link fixed to it): it has nothing
+  // to select or read back, so it gets no row and base_link leads the tree.
+  expect(rows()).toEqual(['Select base_link', 'Select shoulder_link', 'Select camera_link']);
   const shoulder = screen.getByRole('button', { name: 'Select shoulder_link' });
   expect(shoulder.textContent).toBe('shoulder_linkshoulder_pan · revolute');
   expect(shoulder.closest('div')!.style.height).toBe('28px');
   expect(shoulder.getAttribute('title')).toBeNull();
-  expect(screen.getByRole('button', { name: 'Select base_footprint' }).textContent).toBe('base_footprint');
+  expect(screen.getByRole('button', { name: 'Select base_link' }).textContent).toBe('base_linkfootprint_to_base · fixed');
+  // The one root is pinned: a row you can select, with nothing to collapse and no indent
+  // level of its own, so its child starts at the tree's left edge. Rows carry no icons.
+  expect(screen.queryByRole('button', { name: /^(Collapse|Expand) base_link$/ })).toBeNull();
+  const indent = (name: string) => (screen.getByRole('button', { name: `Select ${name}` }).closest('div') as HTMLElement).style.paddingLeft;
+  expect([indent('base_link'), indent('shoulder_link'), indent('camera_link')]).toEqual(['0px', '0px', '0px']);
+  expect(screen.getByRole('list', { name: 'Robot links' }).querySelectorAll('svg.lucide-box, svg.lucide-boxes')).toHaveLength(0);
   fireEvent.click(screen.getByRole('button', { name: 'Expand shoulder_link' }));
   expect(rows()).toContain('Select elbow_link');
   expect(rows()).not.toContain('Select wrist_link');
@@ -158,26 +165,26 @@ it('filters to a flat ranked list by link, joint or object name without expandin
   render(<Harness/>);
   fireEvent.change(filter(), { target: { value: 'wrist' } });
   expect(screen.queryByRole('list', { name: 'Robot links' })).toBeNull();
-  const results = within(screen.getByRole('list', { name: 'Component search results' }));
+  const results = within(screen.getByRole('list', { name: 'Link search results' }));
   expect(screen.getByText('1 match').getAttribute('role')).toBe('status');
   const hit = results.getByRole('button', { name: 'Select wrist_link' });
   // Name first, then the owners it sits under.
-  expect(hit.textContent).toBe('wrist_linkbase_footprint/base_link/shoulder_link/elbow_link');
+  expect(hit.textContent).toBe('wrist_linkbase_link/shoulder_link/elbow_link');
 
   // A joint name finds the link that hangs from it, and says why.
   fireEvent.change(filter(), { target: { value: 'elbow_lift' } });
-  expect(within(screen.getByRole('list', { name: 'Component search results' })).getByRole('button', { name: 'Select elbow_link' }).textContent)
+  expect(within(screen.getByRole('list', { name: 'Link search results' })).getByRole('button', { name: 'Select elbow_link' }).textContent)
     .toBe('elbow_linkelbow_lift · prismatic');
 
   fireEvent.change(filter(), { target: { value: 'flange' } });
-  expect(within(screen.getByRole('list', { name: 'Component search results' })).getByRole('button', { name: 'Select flange' })).toBeTruthy();
+  expect(within(screen.getByRole('list', { name: 'Link search results' })).getByRole('button', { name: 'Select flange' })).toBeTruthy();
 
   fireEvent.change(filter(), { target: { value: 'nothing here' } });
-  expect(screen.getByText('No link or component matches “nothing here”')).toBeTruthy();
+  expect(screen.getByText('No link matches “nothing here”')).toBeTruthy();
 
   // Typing never touched the tree's expansion.
   fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));
-  expect(rows()).toEqual(['Select base_footprint', 'Select base_link', 'Select shoulder_link', 'Select camera_link']);
+  expect(rows()).toEqual(['Select base_link', 'Select shoulder_link', 'Select camera_link']);
 });
 
 it('reveals a selected hit with its ancestors expanded when the filter is cleared', () => {
@@ -192,7 +199,7 @@ it('reveals a selected hit with its ancestors expanded when the filter is cleare
   fireEvent.keyDown(filter(), { key: 'Escape' });
   expect((filter() as HTMLInputElement).value).toBe('');
   // Its owners open; the hit itself stays closed.
-  expect(rows()).toEqual(['Select base_footprint', 'Select base_link', 'Select shoulder_link', 'Select elbow_link', 'Select wrist_link', 'Select camera_link']);
+  expect(rows()).toEqual(['Select base_link', 'Select shoulder_link', 'Select elbow_link', 'Select wrist_link', 'Select camera_link']);
   expect(screen.getByRole('button', { name: 'Select wrist_link' }).getAttribute('aria-pressed')).toBe('true');
   expect(scrollIntoView).toHaveBeenCalledTimes(1);
   fireEvent.click(screen.getByRole('button', { name: 'Expand wrist_link' }));
@@ -221,15 +228,15 @@ it('a viewport pick of an unnamed part selects its link; a named object selects 
   expect(screen.getByRole('button', { name: 'Select wrist_link' }).getAttribute('aria-pressed')).toBe('false');
 });
 
-it('is the robot sheet’s second tab, after Motion and before View', () => {
+it('is the robot sheet’s second tab, after Kinematics and before Display', () => {
   const selection = { selectedIds: [], selectedComponentIds: [], selectedLinkName: '', hoveredId: '', select() {}, selectLink() {}, hover() {}, hoverLink() {} };
   const slot = document.body.appendChild(document.createElement('div'));
   render(<HostPanelSlotContext.Provider value={slot}><UrdfFileSheet open isDesktop width={320} title="URDF" selectedEntry={{ file: 'arm.urdf' }} joints={[]} components={[]}
     robotDescription={description} robotParts={parts} componentSelection={selection}
-    settingsTabs={[{ id: 'view', title: 'View', content: <p>View settings</p> }]}
-    openSectionIds={['components']} onOpenSectionIdsChange={() => {}}/></HostPanelSlotContext.Provider>);
-  expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Motion', 'Components', 'View']);
-  expect(screen.getByRole('tab', { name: 'Components' }).getAttribute('aria-selected')).toBe('true');
+    settingsTabs={[{ id: 'display', title: 'Display', content: <p>Display settings</p> }]}
+    openSectionIds={['links']} onOpenSectionIdsChange={() => {}}/></HostPanelSlotContext.Provider>);
+  expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Kinematics', 'Links', 'Display']);
+  expect(screen.getByRole('tab', { name: 'Links' }).getAttribute('aria-selected')).toBe('true');
   expect(screen.getByRole('button', { name: 'Select base_link' })).toBeTruthy();
   slot.remove();
 });

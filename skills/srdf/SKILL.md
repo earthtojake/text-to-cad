@@ -89,7 +89,7 @@ the CAD Viewer shows.
 cadgen snapshot path/to/robot.srdf review.png
 ```
 
-Hand it the `.srdf`; it routes by suffix and renders the paired URDF's geometry. Pose the robot with `--joint-values` — `{joint: degrees}` JSON,
+Hand it the `.srdf`; it routes by suffix and renders the paired URDF's geometry — the same-folder `.urdf` whose `<robot name>` matches, exactly as `cadgen srdf validate` pairs them. No match, or more than one, is refused before anything renders, naming the robot name it looked for and the `.urdf` files it found. Pose the robot with `--joint-values` — `{joint: degrees}` JSON,
 joints you do not name staying at the rest pose (the `"jointValues"` job field is the same
 thing in a packet). Robots are authored in metres and are framed on the robot scene scale
 automatically.
@@ -107,7 +107,7 @@ Link meshes are resolved relative to the description, so they must be present: a
 unhydrated Git LFS pointer fails as "No link mesh loaded for robot". Run
 `git lfs checkout <mesh dir>` first.
 
-An SRDF's geometry comes from the URDF beside it, so it has no snapshot door of its
+An SRDF's geometry comes from its paired URDF, so it has no snapshot door of its
 own; the polymorphic `cadgen snapshot` routes one by suffix. The grammar is
 `cadgen snapshot TARGET [OUT] [flags]`, the same one every format door uses. Use
 `cadgen snapshot --help` for the complete current interface.

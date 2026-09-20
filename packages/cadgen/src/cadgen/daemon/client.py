@@ -189,7 +189,7 @@ def _request_payload(
     return {
         "tool": str(tool),
         # The name the caller is known by. Without it the daemon invented
-        # "scripts/<tool>", so `cadgen step gen --help` printed a different
+        # "scripts/<tool>", so `cadgen step build --help` printed a different
         # usage line warm than cold -- the same command answering to two names
         # depending on whether a daemon happened to be running.
         "prog": str(prog) if prog else None,
@@ -229,8 +229,8 @@ def run_via_daemon(
         return None
     argv = [str(arg) for arg in argv]
     if "-" in argv:
-        # "-" conventionally reads a payload from stdin (e.g. snapshot --job -);
-        # the daemon has no stdin channel, so run those inline.
+        # "-" conventionally reads a payload from stdin; the daemon has no stdin
+        # channel, so such an invocation runs inline.
         return None
     from cadgen.daemon.executors import emit_event
 

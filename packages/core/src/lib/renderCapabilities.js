@@ -66,7 +66,6 @@ export const ENTRY_ICON_KIND = Object.freeze({
 // row that overrides it is making a claim; today none do.
 const VIEWPORT_TOOLS = Object.freeze({
   select: true,
-  pan: true,
   draw: true,
   orbit: true,
   screenshot: true
@@ -80,8 +79,8 @@ const MESH_CAPABILITIES = Object.freeze({
   label: "STL",
   parts: false,
   topology: false,
-  // Triangle-corner Measure only. Not B-rep topology.
-  measure: true,
+  // Measure is a STEP tool: it snaps to B-rep topology. A mesh has only triangle corners.
+  measure: false,
   exploded: false,
   displayModes: false,
   clip: false,
@@ -144,10 +143,6 @@ const DEFAULT_CAPABILITIES = Object.freeze({
   // Anything listed here and NOT owned by the server blocks forever, so a format the
   // viewer renders from its own file must stay out of it.
   artifactManaged: false,
-  // The command that rebuilds this entry's assets by hand, shown on a build-failure card.
-  // Empty for everything the viewer can rebuild itself or that IS its own asset — which is
-  // every format but an imported STEP. Eight identity checks used to say that.
-  rebuildCommand: "",
 });
 
 export const RENDER_CAPABILITIES = Object.freeze({
@@ -165,7 +160,6 @@ export const RENDER_CAPABILITIES = Object.freeze({
     params: PARAMETER_SOURCE.SIDECAR,
     animations: true,
     artifactManaged: true,
-    rebuildCommand: "python -m cadgen.step_artifact_cli --repo-root . --step",
   }),
   [RENDER_FORMAT.STL]: Object.freeze({ ...DEFAULT_CAPABILITIES, ...MESH_CAPABILITIES, label: "STL" }),
   [RENDER_FORMAT.THREE_MF]: Object.freeze({
@@ -261,11 +255,4 @@ export function assetKindForRenderFormat(renderFormat) {
 
 export function entryIconKindForRenderFormat(renderFormat) {
   return renderCapabilities(renderFormat).iconKind;
-}
-
-// The manual rebuild command for an entry, or "" when there is nothing to run by hand.
-export function rebuildCommandForEntry(renderFormat, fileRef) {
-  const command = String(renderCapabilities(renderFormat).rebuildCommand || "").trim();
-  const ref = String(fileRef || "").trim();
-  return command && ref ? `${command} ${ref}` : "";
 }

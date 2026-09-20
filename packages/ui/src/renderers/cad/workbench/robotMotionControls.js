@@ -1,4 +1,4 @@
-import { jointValueMapsClose } from "@hardcore/core/lib/urdf/jointAnimation.js";
+import { jointValueMapsClose } from "@hardcore/core/lib/urdf/jointValues.js";
 import { nativeJointValueToDisplay } from "@hardcore/core/lib/urdf/motion.js";
 import { toFiniteNumber } from "./valueUtils.js";
 
@@ -91,46 +91,6 @@ export function findBestMatchingJointValueState(states, currentValues, defaultVa
   }
 
   return bestState;
-}
-
-export function interpolateTrajectoryJointValues(trajectory, elapsedSec, fallbackValues = {}) {
-  const points = Array.isArray(trajectory?.points) ? trajectory.points : [];
-  if (!points.length) {
-    return cloneJointValueMap(fallbackValues);
-  }
-  const firstPoint = points[0];
-  if (elapsedSec <= toFiniteNumber(firstPoint.timeFromStartSec, 0)) {
-    return {
-      ...cloneJointValueMap(fallbackValues),
-      ...cloneJointValueMap(firstPoint.positionsByNameDeg)
-    };
-  }
-  for (let index = 1; index < points.length; index += 1) {
-    const previousPoint = points[index - 1];
-    const nextPoint = points[index];
-    const previousTime = toFiniteNumber(previousPoint.timeFromStartSec, 0);
-    const nextTime = toFiniteNumber(nextPoint.timeFromStartSec, previousTime);
-    if (elapsedSec > nextTime) {
-      continue;
-    }
-    const span = Math.max(nextTime - previousTime, 1e-6);
-    const progress = Math.min(Math.max((elapsedSec - previousTime) / span, 0), 1);
-    const previousValues = cloneJointValueMap(previousPoint.positionsByNameDeg);
-    const nextValues = cloneJointValueMap(nextPoint.positionsByNameDeg);
-    const interpolated = {};
-    for (const [jointName, nextValue] of Object.entries(nextValues)) {
-      const previousValue = Object.hasOwn(previousValues, jointName) ? previousValues[jointName] : nextValue;
-      interpolated[jointName] = previousValue + ((nextValue - previousValue) * progress);
-    }
-    return {
-      ...cloneJointValueMap(fallbackValues),
-      ...interpolated
-    };
-  }
-  return {
-    ...cloneJointValueMap(fallbackValues),
-    ...cloneJointValueMap(points[points.length - 1].positionsByNameDeg)
-  };
 }
 
 export function roundedUrdfJointValue(value) {

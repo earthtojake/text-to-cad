@@ -140,12 +140,20 @@ test('web preferences ignore retired tab arrangements without rewriting them', (
     assert.equal('fileSheetTabs' in initial, false);
     listeners.get('storage')({ key: layoutKey });
     assert.equal(source.getSnapshot(), initial);
-    source.update({ poseTransition: { animate: false, speed: 2 } });
+    source.update({ orbit: { speed: 2 } });
     assert.equal(local.getItem(layoutKey), legacy);
-    assert.deepEqual(JSON.parse(local.getItem('cad-viewer:pose-transition:v1')), { animate: false, speed: 2 });
-    local.setItem('cad-viewer:pose-transition:v1', JSON.stringify({ animate: true, speed: 4 }));
+    assert.deepEqual(JSON.parse(local.getItem('cad-viewer:orbit:v1')), { speed: 2 });
+    local.setItem('cad-viewer:orbit:v1', JSON.stringify({ speed: 4 }));
+    listeners.get('storage')({ key: 'cad-viewer:orbit:v1' });
+    assert.deepEqual(source.getSnapshot().orbit, { speed: 4 });
+    // Pose transitions are retired: a stored preference is ignored, never read back or rewritten.
+    const retired = JSON.stringify({ animate: false, speed: 2 });
+    local.setItem('cad-viewer:pose-transition:v1', retired);
+    const before = source.getSnapshot();
     listeners.get('storage')({ key: 'cad-viewer:pose-transition:v1' });
-    assert.deepEqual(source.getSnapshot().poseTransition, { animate: true, speed: 4 });
+    assert.equal(source.getSnapshot(), before);
+    assert.equal('poseTransition' in source.getSnapshot(), false);
+    assert.equal(local.getItem('cad-viewer:pose-transition:v1'), retired);
     disconnect();
   } finally {
     globalThis.window = previousWindow;

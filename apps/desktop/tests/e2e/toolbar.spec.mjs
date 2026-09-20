@@ -141,7 +141,7 @@ test('CAD tools stay within the scene, with direct snapshot and Select filters',
     const grouping = async () => {
       await expect(page.getByRole('button', { name: 'Take snapshot', exact: true })).toBeVisible();
       await expect(toolbar.getByRole('group', { name: 'View and actions' })).toHaveCount(0);
-      for (const name of ['Select', 'Pan', 'Measure', 'Draw']) await expect(tools.getByRole('button', { name, exact: true })).toBeVisible();
+      for (const name of ['Select', 'Measure', 'Draw']) await expect(tools.getByRole('button', { name, exact: true })).toBeVisible();
       await expect(toolbar.getByRole('button', { name: 'Display', exact: true })).toHaveCount(0);
       await expect(toolbar.getByRole('button', { name: /^Viewing mode:/ })).toHaveCount(0);
       await expect(zoom).toBeVisible();
@@ -158,7 +158,7 @@ test('CAD tools stay within the scene, with direct snapshot and Select filters',
       await fit();
     };
     await grouping();
-    const viewTab = page.getByRole('tab', { name: 'View', exact: true });
+    const viewTab = page.getByRole('tab', { name: 'Display', exact: true });
     await expect(viewTab).toBeVisible();
     await viewTab.click();
     const displayMode = page.getByRole('combobox', { name: 'Mode', exact: true });
@@ -166,7 +166,7 @@ test('CAD tools stay within the scene, with direct snapshot and Select filters',
     await displayMode.click();
     await page.getByRole('option', { name: 'Render', exact: true }).click();
     await expect(displayMode).toContainText('Render');
-    for (const name of ['Select', 'Pan', 'Measure', 'Draw']) await expect(tools.getByRole('button', { name, exact: true })).toBeVisible();
+    for (const name of ['Select', 'Measure', 'Draw']) await expect(tools.getByRole('button', { name, exact: true })).toBeVisible();
     await displayMode.click();
     await page.getByRole('option', { name: 'Solid', exact: true }).click();
     await page.screenshot({ path: `${output}/wide.png` });
@@ -174,7 +174,8 @@ test('CAD tools stay within the scene, with direct snapshot and Select filters',
     await grouping();
     await page.screenshot({ path: `${output}/narrow.png` });
 
-    await tools.getByRole('button', { name: 'Pan', exact: true }).click();
+    await expect(tools.getByRole('button', { name: 'Pan', exact: true })).toHaveCount(0);
+    await tools.getByRole('button', { name: 'Measure', exact: true }).click();
     const select = tools.getByRole('button', { name: 'Select', exact: true });
     await select.click();
     await expect(select).toHaveAttribute('aria-pressed', 'true');
@@ -203,13 +204,13 @@ test('CAD tools stay within the scene, with direct snapshot and Select filters',
     await selectFixtureSession(page, project);
     await expect(page.getByText('12/50', { exact: true })).toBeVisible();
     await fit();
-    for (const name of ['Select', 'Pan', 'Measure', 'Draw']) await expect(toolbar.getByRole('button', { name, exact: true })).toBeDisabled();
+    for (const name of ['Select', 'Measure', 'Draw']) await expect(toolbar.getByRole('button', { name, exact: true })).toBeDisabled();
     await expect(toolbar.getByRole('button', { name: 'Display', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Take snapshot', exact: true })).toBeDisabled();
     assert.deepEqual(errors, []);
     assert.deepEqual(sourceRequests, []);
     await expect(page.getByRole('tab', { name: 'Source features' })).toHaveCount(0);
-    console.info('PASS: tools at both widths; View tab and Render; Select filter menu; Draw; Pan; focus; scene bounds; snapshot loading state; no renderer errors');
+    console.info('PASS: tools at both widths; Display tab and Render; Select filter menu; Draw; focus; scene bounds; snapshot loading state; no renderer errors');
   } finally {
     await page?.unrouteAll({ behavior: 'wait' });
     const runtimeLog = path.join(profile, 'cad-runtime.log');

@@ -32,9 +32,8 @@ the shared CAD, Markdown, code, image, PDF and fallback renderers. The whole
 file-tab interface is shared with web. Projects, sessions, browser/terminal/
 review tabs, agent integrations and native services remain in this app.
 Neither shared package imports app source, and desktop imports no web source.
-The host keeps pose-transition and fullscreen orbit preferences in one
-window-wide store backed by their global storage keys (`cad-viewer:pose-transition:v1`
-and `cad-viewer:orbit:v1`). Active and newly opened roots share that
+The host keeps the fullscreen orbit preference in one window-wide store backed
+by its global storage key (`cad-viewer:orbit:v1`). Active and newly opened roots share that
 preference; document state, inspector selection and panel state remain scoped
 to their root or tab. Retired tutorial and inspector tab-layout records are
 ignored. Inspector tabs cannot be dragged, reordered or split.
@@ -1080,36 +1079,40 @@ default; other saved panel choices remain unchanged.
 
 ### Inspect and Render
 
-CAD controls are shared with web: the top-right toolbar contains Select, Pan,
-Measure and Draw. Pressing Select again opens its selection-filter dropdown.
+CAD controls are shared with web: the top-right toolbar contains Select,
+Measure (STEP only) and Draw, plus Pose (drag joints by viewport handles; the tool a robot
+opens in) and Animate where a file has joints or routines. Pressing Select again opens its selection-filter dropdown.
 Buttons wrap inside the pill in a narrow explorer pane. The file navbar has a
-direct snapshot action before Inspector (`PanelLeft`) and file tree (`Folders`).
+direct snapshot action before Inspector (`SlidersHorizontal`) and file tree (`Folders`).
 Snapshot attaches the viewport PNG and references to this tab's owning session
 draft through the prompt-context adapter; it does not send a message. Playback
-lives in Motion. A small muted percentage beside the Inspector tabs opens
-zoom/fit controls, Reset camera and Reset model. Reset model clears motion and
-spatial tools while retaining display settings; View Reset instead restores
+lives in the Animate tool, not the Inspector. A small muted percentage beside the Inspector tabs opens
+zoom/fit controls, Reset camera and Reset model. Reset model clears kinematics and
+spatial tools while retaining display settings; Display Reset instead restores
 the selected preset and disables Clip/Explode. X/Y/Z labels stay outside the
 bottom-right axis endpoints, with the yellow center above their stems.
 The web header's fullscreen action is owned by that app.
 
-The shared STEP Inspector uses **Features | Motion | View**. Motion appears when
-position controls or animation clips exist, with Animation above Position.
-Playback and position retain independent runtimes, enable state and actions;
-preset-transition preferences are ordinary Position rows above Reset/Copy.
-Robots also use Motion for their joints, then Components (the link tree), and keep the SDF tab;
-drawings and mesh files retain their format-specific controls.
+The shared STEP Inspector uses **Features | Kinematics | Display**. Kinematics
+appears when the sidecar declares it, with Pose above Joints. Animate's
+playback and Kinematics' pose retain independent runtimes, enable state and
+actions; every pose write (a value, a named pose, a Pose-tool knob, Reset) is
+an instant jump, and Reset also stops any playing routine and hands the pose
+back to Kinematics. Robots also use Kinematics for their joints, then Links
+(the link tree), and keep the SDF tab; drawings and mesh files retain their
+format-specific controls.
 
-View contains the single Mode dropdown for shaded, edge, wire and photographic
+Display contains the single Mode dropdown for shaded, edge, wire and photographic
 Render presentation. All modes share the camera, projection, part colors,
 guides, clipping and explode controls. Render adds its lighting, backdrop and
-Preview/Final quality sections inside View. Switching modes never reframes the
+Preview/Final quality sections inside Display. Switching modes never reframes the
 camera, replaces inspector tabs or resets the selected tab. Inspector tabs
 use one fixed row in canonical order; dragging, reordering and splitting are
 unavailable. Photographic settings and the active tab persist per file. Old
-global tab arrangements are ignored. Saved Kinematics/Animation IDs map to
-Motion, and Display/Studio IDs map to View; a legacy split selects its last
-available tab. Visited Model trees retain disclosure and scroll while hidden.
+global tab arrangements are ignored. A saved section ID the current format
+does not have is simply not open, so the sheet lands on the format's first
+tab; a legacy split selects its last available tab. Visited Model trees retain
+disclosure and scroll while hidden.
 
 Settings › Appearance owns the app's System, Light and Dark preference. CAD
 Theme settings are retired, and old theme records cannot override the current
@@ -1126,7 +1129,7 @@ JavaScript file is discovered or written.
 
 Neither a display-mode change nor a photographic setting changes the app's appearance. The
 Electron `theme` suite samples the document through these interactions, and
-`cad-scenes` checks View settings, Motion controls, authored material details
+`cad-scenes` checks Display settings, Kinematics controls, authored material details
 and the absence of a Materials editor. See the shared [Render modes](../../packages/ui/docs/render-mode.md)
 playbook for the mode bases and camera behavior.
 

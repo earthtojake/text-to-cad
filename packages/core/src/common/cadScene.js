@@ -1501,10 +1501,7 @@ function filterMeshDataForSelection(meshData, selection = {}) {
   if (!parts.length) {
     return meshData;
   }
-  const focus = [
-    ...normalizedSelectorValues(selection.focus),
-    ...normalizedSelectorValues(selection.refs)
-  ];
+  const focus = normalizedSelectorValues(selection.focus);
   const hide = normalizedSelectorValues(selection.hide);
   if (!focus.length && !hide.length) {
     return meshData;

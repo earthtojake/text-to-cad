@@ -146,8 +146,8 @@ async function selectOrOpenFile(file: string) {
 }
 
 async function setDisplayMode(mode: string) {
-  await page.getByRole("tab", { name: "View", exact: true }).click();
-  const value = page.getByRole("tabpanel", { name: "View", exact: true }).getByRole("combobox", { name: "Mode" });
+  await page.getByRole("tab", { name: "Display", exact: true }).click();
+  const value = page.getByRole("tabpanel", { name: "Display", exact: true }).getByRole("combobox", { name: "Mode" });
   await value.click();
   await page.getByRole("option", { name: mode, exact: true }).click();
   await expect(value).toContainText(mode);
@@ -159,8 +159,8 @@ async function setDisplayMode(mode: string) {
 }
 
 async function expectDisplayMode(mode: string) {
-  await page.getByRole("tab", { name: "View", exact: true }).click();
-  await expect(page.getByRole("tabpanel", { name: "View", exact: true })
+  await page.getByRole("tab", { name: "Display", exact: true }).click();
+  await expect(page.getByRole("tabpanel", { name: "Display", exact: true })
     .getByRole("combobox", { name: "Mode" })).toContainText(mode);
   const model = page.getByRole("tab", { name: "Model", exact: true });
   if (await model.count()) await model.click();
@@ -216,8 +216,8 @@ test("View presets preserve authored materials and independent tools without a M
   await page.screenshot({ path: test.info().outputPath("inspect-material-unselected.png"), animations: "disabled" });
   await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
   await expect(page.locator("[data-file-panel=cad-theme], [data-file-sheet=Theme]")).toHaveCount(0);
-  const viewTab = page.getByRole("tab", { name: "View", exact: true });
-  const view = page.getByRole("tabpanel", { name: "View", exact: true });
+  const viewTab = page.getByRole("tab", { name: "Display", exact: true });
+  const view = page.getByRole("tabpanel", { name: "Display", exact: true });
   const mode = view.getByRole("combobox", { name: "Mode" });
   await viewTab.click();
   const displaySettings = view.getByRole("button", { name: "Surfaces", exact: true });
@@ -289,8 +289,8 @@ test("View presets preserve authored materials and independent tools without a M
 
 test("robot Motion edits, preserves and resets a joint through the desktop Inspector", async () => {
   await openFile("hinge.urdf");
-  await page.getByRole("tab", { name: "Motion", exact: true }).click();
-  await expect(page.getByRole("tabpanel", { name: "Motion", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Kinematics", exact: true }).click();
+  await expect(page.getByRole("tabpanel", { name: "Kinematics", exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Joints", exact: true })).toHaveCount(0);
   const joint = page.getByLabel("hinge value in deg", { exact: true });
   await expect(joint).toHaveValue("0°");
@@ -311,8 +311,8 @@ test("embedded STEP animation loads, plays and scrubs under the desktop CSP", as
   // Keep the ordinary UI budget separate from the existing cold CAD-load wait.
   test.setTimeout(60_000 + 90_000);
   await openFile("animated.step");
-  await page.getByRole("tab", { name: "Motion", exact: true }).click();
-  const animation = page.getByRole("tabpanel", { name: "Motion", exact: true });
+  await page.getByRole("tab", { name: "Kinematics", exact: true }).click();
+  const animation = page.getByRole("tabpanel", { name: "Kinematics", exact: true });
   const play = animation.getByRole("button", { name: "Play animation", exact: true });
   // The data: module regression renders an error in this panel instead of controls.
   await expect(play).toBeEnabled();

@@ -3,10 +3,10 @@ export const FILE_SHEET_SECTION_IDS = Object.freeze({
   STEP_TREE: "tree",
   STEP_MODELING: "modeling",
   STEP_REFERENCE: "reference",
-  MOTION: "motion",
-  VIEW: "view",
+  KINEMATICS: "kinematics",
+  DISPLAY: "display",
   ROBOT_SDF: "sdf",
-  ROBOT_COMPONENTS: "components",
+  ROBOT_LINKS: "links",
   DXF_MATERIAL: "material",
   DXF_BENDS: "bends",
   DXF_LAYERS: "dxfLayers",
@@ -17,12 +17,10 @@ function normalizeString(value) {
   return String(value || "").trim();
 }
 
-// Per-file active selections keep their meaning across the Motion/View merge.
+// A stored id this format no longer has simply is not open: the sheet lands on the
+// format's first tab. There is no table of retired names to keep alive.
 export function normalizeFileSheetSectionId(value) {
-  const id = normalizeString(value);
-  if (["pose", "animation", "joints"].includes(id)) return FILE_SHEET_SECTION_IDS.MOTION;
-  if (["display", "render"].includes(id)) return FILE_SHEET_SECTION_IDS.VIEW;
-  return id;
+  return normalizeString(value);
 }
 
 function normalizeSectionIds(value) {
@@ -48,34 +46,35 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
         FILE_SHEET_SECTION_IDS.DXF_MATERIAL,
         ...(options.hasDxfBendsPanel ? [FILE_SHEET_SECTION_IDS.DXF_BENDS] : []),
         ...(options.hasDxfLayersPanel ? [FILE_SHEET_SECTION_IDS.DXF_LAYERS] : []),
-        FILE_SHEET_SECTION_IDS.VIEW
+        FILE_SHEET_SECTION_IDS.DISPLAY
       ];
     case "step":
-      // Motion combines independently available animation and position controls.
+      // Kinematics appears only when the sidecar declares it.
       return [
         FILE_SHEET_SECTION_IDS.STEP_TREE,
-        ...(options.hasStepPosePanel || options.hasStepAnimationPanel ? [FILE_SHEET_SECTION_IDS.MOTION] : []),
-        FILE_SHEET_SECTION_IDS.VIEW
+        ...(options.hasStepPosePanel || options.hasStepAnimationPanel ? [FILE_SHEET_SECTION_IDS.KINEMATICS] : []),
+        FILE_SHEET_SECTION_IDS.DISPLAY
       ];
     case "urdf":
     case "srdf":
     case "sdf":
       // Robots retain their format-specific document inspector.
       return [
+        // Kinematics is always the leftmost tab and the one the sheet lands on: posing the
+        // robot is what a description is opened for. Links is the robot's link tree
+        // beside it: every description has links, so the tab never depends on what the
+        // meshes name, and it carries its own Reference at its foot rather than owning a
+        // second tab that stands empty until something is selected. An SDF's own
+        // metadata follows them.
+        ...(showJoints ? [FILE_SHEET_SECTION_IDS.KINEMATICS] : []),
+        FILE_SHEET_SECTION_IDS.ROBOT_LINKS,
         ...(isSdf ? [FILE_SHEET_SECTION_IDS.ROBOT_SDF] : []),
-        // Motion first: posing the robot is what a URDF is opened for, and it is the
-        // tab the sheet lands on. Components is the robot's link tree beside it: every
-        // description has links, so the tab never depends on what the meshes name, and
-        // it carries its own Reference at its foot rather than owning a second tab that
-        // stands empty until something is selected.
-        ...(showJoints ? [FILE_SHEET_SECTION_IDS.MOTION] : []),
-        FILE_SHEET_SECTION_IDS.ROBOT_COMPONENTS,
-        FILE_SHEET_SECTION_IDS.VIEW
+        FILE_SHEET_SECTION_IDS.DISPLAY
       ];
     case "mesh":
       // A mesh has nothing to inspect but how it is shown. Measurements belong to the
       // Measure tool's panel under the toolbar, and an embedded GLB clip to the Animate tool.
-      return [FILE_SHEET_SECTION_IDS.VIEW];
+      return [FILE_SHEET_SECTION_IDS.DISPLAY];
     default:
       return [];
   }
@@ -97,10 +96,7 @@ export function defaultOpenFileSheetSectionIds(kind, options = {}) {
     case "urdf":
     case "srdf":
     case "sdf":
-      return [
-        ...(isSdf ? [FILE_SHEET_SECTION_IDS.ROBOT_SDF] : []),
-        ...(showJoints ? [FILE_SHEET_SECTION_IDS.MOTION] : [])
-      ];
+      return showJoints ? [FILE_SHEET_SECTION_IDS.KINEMATICS] : [];
     case "mesh":
       return [];
     default:
@@ -114,13 +110,12 @@ export function normalizeFileSheetOpenSectionIds(sectionIds, renderedSectionIds)
     return [];
   }
   const open = (Array.isArray(sectionIds) ? sectionIds : []).map(normalizeFileSheetSectionId);
-  // Only one section is active. Legacy split lists retain their last available
-  // selection, including retired IDs that now point to Motion or View.
+  // Only one section is active: the last selected one this format still has.
   return open.filter(id => rendered.has(id)).slice(-1);
 }
 
-// A legacy split can name two active tabs. The last selected available section
-// wins, and a missing/unsupported selection falls back to the format's first tab.
+// The last selected available section wins, and a missing/unsupported selection
+// falls back to the format's first tab.
 export function resolveActiveFileSheetSectionId(openSectionIds, renderedSectionIds) {
   const rendered = normalizeSectionIds(renderedSectionIds);
   return normalizeFileSheetOpenSectionIds(openSectionIds, rendered).at(-1) || rendered[0] || "";

@@ -14,14 +14,14 @@ function measureButtons(format, measureSupported) {
   return buttons;
 }
 
-test('Measure is offered for STEP and meshes, and absent for drawings and robots', () => {
-  for (const format of ['step', 'stl', '3mf', 'glb']) assert.equal(measureButtons(format).length, 1, format);
-  for (const format of ['dxf', 'urdf', 'srdf', 'sdf']) assert.equal(measureButtons(format).length, 0, format);
+test('Measure is a STEP tool: no mesh, drawing or robot offers it', () => {
+  assert.equal(measureButtons('step').length, 1);
+  for (const format of ['stl', '3mf', 'glb', 'dxf', 'urdf', 'srdf', 'sdf']) assert.equal(measureButtons(format).length, 0, format);
 });
 
-test('the resolved document capability can disable Measure for an animated mesh', () => {
-  assert.equal(measureButtons('glb', false).length, 0);
-  assert.equal(measureButtons('glb', true).length, 1);
+test('the resolved document can still withhold Measure from a STEP file', () => {
+  assert.equal(measureButtons('step', false).length, 0);
+  assert.equal(measureButtons('step', true).length, 1);
 });
 
 test('the floating toolbar contains only interaction tools in every display mode', () => {
@@ -36,7 +36,7 @@ test('the floating toolbar contains only interaction tools in every display mode
     assert.deepEqual(groups.map(node => node.props['aria-label']), ['Interaction tools']);
     const filter = nodes.find(node => node.type?.name === 'SelectionFilterMenu');
     assert.equal(filter.props.trigger.props.label, 'Select');
-    assert.deepEqual(nodes.map(node => node.props.label).filter(Boolean), ['Pan', 'Measure', 'Draw']);
+    assert.deepEqual(nodes.map(node => node.props.label).filter(Boolean), ['Measure', 'Draw']);
     assert.equal(nodes.some(node => node.props['aria-label'] === 'Zoom controls'), false);
     toolbar.unmount(); outer.unmount();
   }

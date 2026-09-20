@@ -20,11 +20,11 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import copy
 import json
 import mimetypes
 import os
 import re
+import struct
 import sys
 import time
 from collections.abc import Mapping
@@ -61,7 +61,6 @@ VIDEO_TEARDOWN_TIMEOUT_SECONDS = 30
 VIDEO_NARRATE_INTERVAL_SECONDS = 15.0
 RENDER_BROWSER_STARTUP_TIMEOUT_MS = 15_000
 SUPPORTED_RENDER_MODES = {"view", "section", "list"}
-MESH_INPUT_KINDS = {"glb", "stl", "3mf"}
 MESH_SUPPORTED_RENDER_MODES = {"view", "list"}
 SUPPORTED_JOB_KEYS = frozenset(
     {
@@ -90,14 +89,24 @@ SUPPORTED_JOB_KEYS = frozenset(
         # {fps, seconds, start, quality, loop}, encoded to the .mp4/.gif the
         # output names. Meaningless without `animation` (cadgen.snapshot_video).
         "video",
+        # Where `mode: "section"` cuts: {"plane": "XY"|"XZ"|"YZ", "offset": <model
+        # units along the plane's normal>}. Spelled the same as the --section flag.
+        "section",
         "scale",
         "debug",
         "timeoutSeconds",
     }
 )
 SUPPORTED_OUTPUT_SETTINGS_KEYS = frozenset(
-    {"sizeProfile", "padding", "paddingPercent", "viewLabels", "tightFrame", "transparent", "renderScale"}
+    {"sizeProfile", "padding", "viewLabels", "tightFrame", "transparent", "renderScale"}
 )
+# One name per setting: a key that used to be accepted names its replacement.
+RETIRED_OUTPUT_SETTINGS_KEYS = {"paddingPercent": "padding"}
+# The ranges the renderer honours (renderOptions.js framePadding and
+# configurePngRenderer clamp to exactly these). A value outside one used to be
+# clamped in the page without a word, so it is refused here instead.
+OUTPUT_PADDING_RANGE = (0, 0.15)
+OUTPUT_RENDER_SCALE_RANGE = (1, 3)
 SUPPORTED_QUALITY_KEYS = frozenset({"tessellation"})
 # Floors for `quality.tessellation`. Chord tolerance is RELATIVE to each
 # component's bounding diagonal and angle tolerance is radians, so these are
@@ -117,26 +126,52 @@ SUPPORTED_OUTPUT_KEYS = frozenset(
         "camera",
         "label",
         "viewLabel",
-        "dataUrl",
-        "text",
     }
 )
-SIMPLE_RENDER_WIDTH = 1200
-SIMPLE_RENDER_HEIGHT = 900
-SIMPLE_SQUARE_RENDER_WIDTH = 1024
-SIMPLE_SQUARE_RENDER_HEIGHT = 1024
-DIAGNOSTIC_RENDER_WIDTH = 1600
-DIAGNOSTIC_RENDER_HEIGHT = 1200
-COMPLEX_ASSEMBLY_RENDER_WIDTH = 1800
-COMPLEX_ASSEMBLY_RENDER_HEIGHT = 1200
-COMPLEX_ASSEMBLY_LARGE_RENDER_WIDTH = 1920
-COMPLEX_ASSEMBLY_LARGE_RENDER_HEIGHT = 1440
-PRESENTATION_RENDER_WIDTH = 2400
-PRESENTATION_RENDER_HEIGHT = 1600
-PRESENTATION_LARGE_RENDER_WIDTH = 2800
-PRESENTATION_LARGE_RENDER_HEIGHT = 1800
-CONTACT_SHEET_RENDER_WIDTH = 2400
-CONTACT_SHEET_RENDER_HEIGHT = 1600
+# What the RENDERER puts on a finished output. A request that carries one is
+# confusing a result for a job, so it is refused by name rather than as a typo.
+RESULT_ONLY_OUTPUT_KEYS = frozenset({"dataUrl", "text", "mimeType"})
+# The closed set of size profiles: the names `--help` and the skill docs list.
+SIZE_PROFILES: dict[str, tuple[int, int]] = {
+    "simple": (1200, 900),
+    "simple-square": (1024, 1024),
+    "diagnostic": (1600, 1200),
+    "labeled": (1600, 1200),
+    "assembly": (1800, 1200),
+    "assembly-large": (1920, 1440),
+    "presentation": (2400, 1600),
+    "presentation-large": (2800, 1800),
+    "contact-sheet": (2400, 1600),
+}
+# What a snapshot is sized as when it names no profile and no width/height.
+DEFAULT_SIZE_PROFILE = "diagnostic"
+# Names that used to be accepted for the same sizes. One name per profile; an old
+# one is refused with the name that replaced it.
+RETIRED_SIZE_PROFILES = {
+    "square": "simple-square",
+    "simple-part": "simple",
+    "unlabeled": "simple",
+    "hero": "presentation-large",
+    "large-presentation": "presentation-large",
+    "complex-assembly": "assembly",
+    "complex-assembly-large": "assembly-large",
+    "contactsheet": "contact-sheet",
+    "dimensioned": "labeled",
+    "section": "labeled",
+}
+# The largest side an output may ask for. Past it the browser clamps the drawing
+# buffer without saying so and the file comes back a different size than was
+# requested, so the request is refused with this number instead. At the
+# photographic preset's 2x render scale this is the 16384 px renderbuffer limit.
+MAX_OUTPUT_DIMENSION = 8192
+SIMPLE_RENDER_WIDTH, SIMPLE_RENDER_HEIGHT = SIZE_PROFILES["simple"]
+# Where section mode cuts. Mirrored as SECTION_PLANES in
+# packages/core/src/common/renderMeshScene.js (the parity is tested).
+SECTION_PLANES = ("XY", "XZ", "YZ")
+SECTION_KEYS = frozenset({"plane", "offset"})
+# What an output's extension may be, per mode. The extension decides the
+# encoding; nothing in a job does.
+STILL_OUTPUT_SUFFIXES = {"view": (".png",), "section": (".png", ".svg")}
 DISPLAY_OPTION_KEYS = frozenset({
     "mode", "appearance", "camera", "surfaces", "edges", "lighting",
     "background", "floor", "grid", "axes", "clip", "exploded",
@@ -164,10 +199,20 @@ DISPLAY_GROUP_KEYS = {
 CAMERA_OPTION_KEYS = frozenset({
     "preset", "name", "position", "target", "up", "direction", "zoom", "orthographicHalfHeight",
 })
-SETTINGS_KEY_HOMES = {
-    **{key: "display" for key in DISPLAY_OPTION_KEYS if key != "camera"},
+# One name per view. Mirrored as RENDER_CAMERA_PRESETS in
+# packages/core/src/common/camera.js (the parity is tested).
+CAMERA_PRESETS = frozenset({"front", "back", "right", "left", "top", "bottom", "iso"})
+RETIRED_CAMERA_PRESETS = {"isometric": "iso", "side": "right"}
+# Keys a caller reaches for inside `display` that live somewhere else.
+DISPLAY_KEY_HOMES = {
     "projection": "display.camera", "focalLength": "display.camera",
     "orthographicHalfHeight": "camera",
+}
+# Display groups that were replaced, and what replaced each.
+RETIRED_DISPLAY_KEYS = {
+    "render": "display.lighting, display.background and display.floor",
+    "guides": "display.grid and display.axes",
+    "partColor": "display.surfaces",
 }
 class SnapshotError(RuntimeError):
     pass
@@ -191,6 +236,34 @@ def load_json_text(text: str, source_label: str) -> object:
 # already-parsed shape as itself.
 
 
+def validate_camera_name(camera: str) -> str:
+    """A camera given by NAME: one of the presets, or an ``azimuth:elevation`` pair."""
+    name = camera.strip().lower()
+    if name in CAMERA_PRESETS:
+        return camera
+    if name in RETIRED_CAMERA_PRESETS:
+        raise SnapshotError(
+            f"camera preset {camera!r} was removed; use {RETIRED_CAMERA_PRESETS[name]!r}"
+        )
+    parts = name.split(":")
+    if len(parts) >= 2:
+        try:
+            numeric = all(isfinite(float(part)) for part in parts)
+        except ValueError:
+            numeric = False
+        if numeric and len(parts) == 2:
+            return camera
+        if numeric:
+            raise SnapshotError(
+                f"camera {camera!r} names {len(parts)} numbers; an angle pair is exactly "
+                "azimuth:elevation in degrees — set distance with a camera JSON object's zoom"
+            )
+    raise SnapshotError(
+        f"Unknown camera preset: {camera}. Presets: {', '.join(sorted(CAMERA_PRESETS))}; "
+        "or an azimuth:elevation pair in degrees, or a camera JSON object"
+    )
+
+
 def parse_camera_option(raw_camera: object) -> object:
     if is_plain_object(raw_camera):
         return validate_camera_option(raw_camera, source_label="camera settings")
@@ -198,17 +271,7 @@ def parse_camera_option(raw_camera: object) -> object:
     if not camera:
         raise SnapshotError("--camera requires a preset, azimuth:elevation pair, or JSON camera object")
     if not camera.startswith("{"):
-        presets = {"front", "back", "right", "left", "top", "bottom", "iso", "isometric", "side"}
-        parts = camera.split(":")
-        angle_pair = len(parts) >= 2
-        if angle_pair:
-            try:
-                angle_pair = all(isfinite(float(part)) for part in parts)
-            except ValueError:
-                angle_pair = False
-        if camera.lower() not in presets and not angle_pair:
-            raise SnapshotError(f"Unknown camera preset: {camera}")
-        return camera
+        return validate_camera_name(camera)
     parsed = load_json_text(camera, "--camera")
     if not is_plain_object(parsed):
         raise SnapshotError("--camera must be a preset, azimuth:elevation pair, or JSON object")
@@ -230,6 +293,10 @@ def validate_camera_option(value: object, *, source_label: str) -> dict[str, obj
             f"camera has unknown key(s): {', '.join(unknown)}; "
             f"supported keys: {', '.join(sorted(CAMERA_OPTION_KEYS))} ({source_label})"
         )
+    if "preset" in payload:
+        if not isinstance(payload["preset"], str) or not payload["preset"].strip():
+            raise SnapshotError(f"camera preset must be a preset name or azimuth:elevation pair ({source_label})")
+        validate_camera_name(payload["preset"])
     for key in ("position", "target", "up", "direction"):
         if key not in payload:
             continue
@@ -257,63 +324,54 @@ def validate_camera_option(value: object, *, source_label: str) -> dict[str, obj
                 f"camera orthographicHalfHeight must be a positive finite number ({source_label})"
             )
     return payload
-def validate_direct_settings_payload(
-    parsed: object,
-    *,
-    option_name: str,
-    source_label: str,
-    allowed_keys: set[str],
-    setting_label: str,
-) -> dict[str, object]:
-    if not is_plain_object(parsed):
-        raise SnapshotError(f"{option_name} JSON must be a {setting_label} object: {source_label}")
-    # Underscore-prefixed keys are comments. JSON has none of its own, and an
-    # authored settings file is exactly the kind of file that needs to explain why its
-    # numbers are what they are; rejecting `_comment` as an unsupported setting
-    # pushes that rationale out of the file.
-    payload = {key: value for key, value in parsed.items() if not str(key).startswith("_")}
-    unknown_keys = [key for key in payload if key not in allowed_keys]
-    if unknown_keys:
-        misplaced = [
-            f"{key} belongs in {SETTINGS_KEY_HOMES[key]} JSON"
-            for key in unknown_keys
-            if key in SETTINGS_KEY_HOMES
-        ]
-        retired = {
-            "render": "display.lighting, display.background and display.floor",
-            "guides": "display.grid and display.axes", "partColor": "display.surfaces",
-        }
-        if option_name == "--display":
-            misplaced.extend(f"{key} was removed; use {retired[key]}" for key in unknown_keys if key in retired)
-        detail = f"; {', '.join(misplaced)}" if misplaced else ""
-        raise SnapshotError(
-            f"{option_name} JSON must be the {setting_label} object directly; "
-            f"unsupported keys: {', '.join(unknown_keys)}{detail}"
-        )
-    if not payload and option_name != "--display":
-        raise SnapshotError(f"{option_name} JSON must include at least one {setting_label} field: {source_label}")
-    return payload
 def _display_enum(value: object, field: str, allowed: frozenset[str]) -> None:
     if not isinstance(value, str) or value not in allowed:
         raise SnapshotError(f"{field} must be one of: {', '.join(sorted(allowed))}; got {value!r}")
 
 
-def validate_display_settings_values(payload: Mapping[str, object], *, source_label: str) -> None:
+def display_modes_for_kind(kind: str) -> frozenset[str]:
+    """The display presets an input of this kind can be given.
+
+    An error that lists modes lists THESE, so a mesh door never offers a preset it
+    is about to refuse. An unknown kind gets the full set: its own refusal comes
+    first and says what the file is.
+    """
+    if not kind or kind in CAD_MODEL_KINDS:
+        return DISPLAY_MODES
+    return DISPLAY_MODES - CAD_MODEL_DISPLAY_MODES
+
+
+def validate_display_settings_values(
+    payload: Mapping[str, object],
+    *,
+    source_label: str,
+    modes: frozenset[str] | None = None,
+) -> None:
     """Validate the same closed, sparse preset overrides as the shared viewer.
 
     Omitted groups inherit the preset. A present group implicitly enables itself;
     merging group parameters and applying that enablement belongs to the shared
     resolver, so this boundary preserves the caller's sparse request.
+
+    ``modes`` narrows the mode vocabulary an error LISTS to what the input's kind
+    accepts; a STEP-only mode on another kind is still refused by name, by
+    :func:`validate_display_for_kind`.
     """
     if not is_plain_object(payload):
-        raise SnapshotError(f"display must be an object ({source_label})")
+        raise SnapshotError(f"display must be a display settings object ({source_label})")
     unknown = sorted(set(payload) - DISPLAY_OPTION_KEYS)
     if unknown:
-        replacements = {"render": "lighting, background and floor", "guides": "grid and axes", "partColor": "surfaces"}
-        detail = "; ".join(f"display.{key} was removed; use display.{replacements[key]}" for key in unknown if key in replacements)
-        raise SnapshotError(f"display has unknown key(s): {', '.join(unknown)}" + (f"; {detail}" if detail else ""))
+        hints = [f"{key} belongs in {DISPLAY_KEY_HOMES[key]}" for key in unknown if key in DISPLAY_KEY_HOMES]
+        hints += [f"display.{key} was removed; use {RETIRED_DISPLAY_KEYS[key]}" for key in unknown if key in RETIRED_DISPLAY_KEYS]
+        raise SnapshotError(
+            f"display has unknown key(s): {', '.join(unknown)} ({source_label})"
+            + (f"; {'; '.join(hints)}" if hints else "")
+            + f"; supported keys: {', '.join(sorted(DISPLAY_OPTION_KEYS))}"
+        )
     if "mode" in payload:
-        _display_enum(payload["mode"], "--display mode", DISPLAY_MODES)
+        mode = payload["mode"]
+        if not (isinstance(mode, str) and mode in DISPLAY_MODES):
+            _display_enum(mode, "display.mode", modes or DISPLAY_MODES)
     if "appearance" in payload:
         _display_enum(payload["appearance"], "display.appearance", DISPLAY_APPEARANCES)
     for name, keys in DISPLAY_GROUP_KEYS.items():
@@ -402,53 +460,86 @@ def validate_display_for_kind(display: Mapping[str, object], *, kind: str, input
         )
 
 
-def load_display_option(raw_display: object, *, cwd: Path) -> dict[str, object]:
-    if is_plain_object(raw_display):
-        payload = validate_direct_settings_payload(
-            raw_display,
-            option_name="--display",
-            source_label="display settings",
-            allowed_keys=DISPLAY_OPTION_KEYS,
-            setting_label="display settings",
-        )
-        validate_display_settings_values(payload, source_label="display settings")
-        return payload
-    display = str(raw_display or "").strip()
-    if not display:
-        raise SnapshotError("--display requires a JSON object, JSON file path, or display mode")
-    if display.startswith("{"):
-        payload = validate_direct_settings_payload(
-            load_json_text(display, "--display"),
-            option_name="--display",
-            source_label="--display",
-            allowed_keys=DISPLAY_OPTION_KEYS,
-            setting_label="display settings",
-        )
-        validate_display_settings_values(payload, source_label="--display")
-        return payload
+class ValidatedDisplay(dict):
+    """A display object whose keys and values :func:`load_display_option` checked.
 
-    # Preset names are unambiguous even when the working directory contains a
-    # folder with the same name (for example an output folder called render).
-    if display in DISPLAY_MODES:
-        return {"mode": display}
-    display_path = Path(display).expanduser()
-    if not display_path.is_absolute():
-        display_path = cwd / display_path
-    looks_like_file = display.lower().endswith(".json") or "/" in display or "\\" in display
-    if not looks_like_file and not display_path.exists():
-        supported = ", ".join(sorted(DISPLAY_MODES))
-        raise SnapshotError(f"Unsupported display mode: {display}. Supported modes: {supported}")
-    if not display_path.exists():
-        raise SnapshotError(f"Display JSON file does not exist: {display}")
-    payload = validate_direct_settings_payload(
-        load_json_text(display_path.read_text(encoding="utf-8"), str(display_path)),
-        option_name="--display",
-        source_label=str(display_path),
-        allowed_keys=DISPLAY_OPTION_KEYS,
-        setting_label="display settings",
-    )
-    validate_display_settings_values(payload, source_label=str(display_path))
-    return payload
+    The type IS the record that the check ran. A display reaches a job from a
+    flag (loaded when the options become a job) or from the job file (loaded when
+    the job is prepared); whichever comes first validates it, and preparation
+    recognises the result instead of validating the same object again. It survives
+    ``copy.deepcopy``, which is how a job travels between those two steps.
+    """
+
+
+def _find_display_object(
+    raw_display: object,
+    *,
+    cwd: Path,
+    modes: frozenset[str] | None = None,
+) -> dict[str, object]:
+    """``--display`` (or a job's ``display``) as the display object it names.
+
+    A preset name, inline JSON, a path to a JSON file, or — from a verb call —
+    the object itself. ``modes`` is the preset vocabulary an unknown bare word is
+    told.
+
+    Underscore-prefixed keys are comments. JSON has none of its own, and an
+    authored settings file is exactly the kind of file that needs to explain why
+    its numbers are what they are.
+    """
+    if is_plain_object(raw_display):
+        parsed: object = raw_display
+        source_label = "display settings"
+    else:
+        display = str(raw_display or "").strip()
+        if not display:
+            raise SnapshotError("--display requires a JSON object, JSON file path, or display mode")
+        # Preset names are unambiguous even when the working directory contains a
+        # folder with the same name (for example an output folder called render).
+        if display in DISPLAY_MODES:
+            return {"mode": display}
+        if display.startswith("{"):
+            parsed, source_label = load_json_text(display, "--display"), "--display"
+        else:
+            display_path = Path(display).expanduser()
+            if not display_path.is_absolute():
+                display_path = cwd / display_path
+            looks_like_file = display.lower().endswith(".json") or "/" in display or "\\" in display
+            if not looks_like_file and not display_path.exists():
+                supported = ", ".join(sorted(modes or DISPLAY_MODES))
+                raise SnapshotError(f"Unsupported display mode: {display}. Supported modes: {supported}")
+            if not display_path.exists():
+                raise SnapshotError(f"Display JSON file does not exist: {display}")
+            if display_path.is_dir():
+                raise SnapshotError(
+                    f"--display names a directory, not a display JSON file: {display}"
+                )
+            try:
+                text = display_path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
+                raise SnapshotError(f"Cannot read display JSON file {display}: {exc}") from exc
+            parsed, source_label = load_json_text(text, str(display_path)), str(display_path)
+    if not is_plain_object(parsed):
+        raise SnapshotError(f"--display JSON must be a display settings object: {source_label}")
+    return {key: value for key, value in parsed.items() if not str(key).startswith("_")}
+
+
+def load_display_option(
+    raw_display: object,
+    *,
+    cwd: Path,
+    modes: frozenset[str] | None = None,
+) -> ValidatedDisplay:
+    """The validated display object for one job: found, then checked ONCE.
+
+    ``modes`` is the preset vocabulary errors list — the input kind's, when the
+    caller knows it (:func:`display_modes_for_kind`).
+    """
+    if isinstance(raw_display, ValidatedDisplay):
+        return raw_display
+    payload = _find_display_object(raw_display, cwd=cwd, modes=modes)
+    validate_display_settings_values(payload, source_label="display settings", modes=modes)
+    return ValidatedDisplay(payload)
 def _render_number(value: object, field: str, minimum: float, maximum: float) -> None:
     if (
         isinstance(value, bool)
@@ -478,11 +569,110 @@ def validate_output_settings(value: object) -> dict[str, object]:
     output = dict(value)
     unknown = sorted(set(output) - SUPPORTED_OUTPUT_SETTINGS_KEYS)
     if unknown:
+        retired = [
+            f"output.{key} was removed; use output.{RETIRED_OUTPUT_SETTINGS_KEYS[key]}"
+            for key in unknown
+            if key in RETIRED_OUTPUT_SETTINGS_KEYS
+        ]
         raise SnapshotError(
             f"output has unknown key(s): {', '.join(unknown)}; "
             f"supported keys: {', '.join(sorted(SUPPORTED_OUTPUT_SETTINGS_KEYS))}"
+            + (f"; {'; '.join(retired)}" if retired else "")
         )
+    if "sizeProfile" in output:
+        output["sizeProfile"] = validate_size_profile(output["sizeProfile"])
+    if "padding" in output:
+        _render_number(output["padding"], "output.padding", *OUTPUT_PADDING_RANGE)
+    if "renderScale" in output:
+        _render_number(output["renderScale"], "output.renderScale", *OUTPUT_RENDER_SCALE_RANGE)
+    for key in ("viewLabels", "tightFrame", "transparent"):
+        if key in output:
+            _render_boolean(output[key], f"output.{key}")
     return output
+
+
+def validate_size_profile(value: object) -> str:
+    """One of :data:`SIZE_PROFILES`, exactly as listed."""
+    if isinstance(value, str) and value in SIZE_PROFILES:
+        return value
+    if isinstance(value, str) and value in RETIRED_SIZE_PROFILES:
+        raise SnapshotError(
+            f"size profile {value!r} was removed; use {RETIRED_SIZE_PROFILES[value]!r}"
+        )
+    sizes = ", ".join(f"{name} ({width}x{height})" for name, (width, height) in SIZE_PROFILES.items())
+    raise SnapshotError(f"Unknown size profile: {value!r}. Size profiles: {sizes}")
+
+
+def validate_section(value: object) -> dict[str, object]:
+    """``{"plane": "XY"|"XZ"|"YZ", "offset": <number>}`` — where section mode cuts.
+
+    The plane is named by the two axes it contains; the offset moves it along its
+    own normal (Z for XY, Y for XZ, X for YZ) in model units, and defaults to 0.
+    These are exactly the two fields the renderer reads.
+    """
+    if not is_plain_object(value):
+        raise SnapshotError(
+            'section must be a {"plane": "XY"|"XZ"|"YZ", "offset": number} object, '
+            f"got {json.dumps(value)}"
+        )
+    unknown = sorted(set(value) - SECTION_KEYS)
+    if unknown:
+        raise SnapshotError(
+            f"section has unknown key(s): {', '.join(unknown)}; "
+            f"supported keys: {', '.join(sorted(SECTION_KEYS))}"
+        )
+    plane = value.get("plane", SECTION_PLANES[0])
+    if not isinstance(plane, str) or plane not in SECTION_PLANES:
+        raise SnapshotError(f"section.plane must be one of: {', '.join(SECTION_PLANES)}; got {plane!r}")
+    offset = value.get("offset", 0)
+    if isinstance(offset, bool) or not isinstance(offset, (int, float)) or not isfinite(float(offset)):
+        raise SnapshotError(f"section.offset must be a finite number in model units; got {offset!r}")
+    return {"plane": plane, "offset": offset}
+
+
+def parse_section_option(raw_section: object) -> dict[str, object]:
+    """``--section PLANE[:OFFSET]`` in job form.
+
+    Already an object when it came from a ``step.snapshot(section={...})`` call.
+    From argv it is one string shaped like ``--camera``'s angle pair: the plane,
+    then optionally a colon and the offset along its normal (``XZ:12.5``).
+    """
+    if is_plain_object(raw_section):
+        return validate_section(raw_section)
+    text = str(raw_section or "").strip()
+    if not text:
+        raise SnapshotError("--section requires PLANE[:OFFSET], for example XZ or XZ:12.5")
+    plane, separator, raw_offset = text.partition(":")
+    request: dict[str, object] = {"plane": plane.strip()}
+    if separator:
+        try:
+            request["offset"] = float(raw_offset)
+        except ValueError as exc:
+            raise SnapshotError(
+                f"--section offset must be a number in model units, got {raw_offset!r} (PLANE[:OFFSET])"
+            ) from exc
+    return validate_section(request)
+
+
+def normalize_render_mode(value: object) -> str:
+    """The job's ``mode``, lower-cased and checked — the ONE place its case is decided.
+
+    ``--mode LIST`` and a packet's ``"mode": "List"`` both mean ``list`` everywhere
+    downstream, including the rule that list mode needs no OUT.
+    """
+    mode = str(value or "view").strip().lower()
+    if mode not in SUPPORTED_RENDER_MODES:
+        raise SnapshotError(
+            f"Unsupported render mode: {mode or '(missing)'}. "
+            f"Modes: {', '.join(sorted(SUPPORTED_RENDER_MODES))}"
+        )
+    return mode
+
+
+def validate_timeout_seconds(value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(float(value)) or value <= 0:
+        raise SnapshotError(f"timeoutSeconds must be a positive finite number of seconds; got {value!r}")
+    return float(value)
 
 
 def validate_quality_settings(value: object) -> dict[str, object]:
@@ -499,12 +689,6 @@ def validate_quality_settings(value: object) -> dict[str, object]:
         )
     validate_render_tessellation(quality.get("tessellation"))
     return quality
-
-
-def effective_display_request(job: Mapping[str, object]) -> dict[str, object]:
-    """Return the unified display request that affects this snapshot."""
-    display = job.get("display") if is_plain_object(job.get("display")) else {}
-    return copy.deepcopy(dict(display))
 
 
 def path_is_inside_or_equal(child: Path, parent: Path) -> bool:
@@ -548,11 +732,9 @@ def asset_url_for_path(file_path: Path, root_path: Path) -> str:
     try:
         file_stat = resolved_path.stat()
     except FileNotFoundError:
-        # Same-stem generator inputs resolve to a STEP path that is never written
-        # (the generator runs with skip_step_write=True), so there is nothing to
-        # version; keep the unversioned URL for those. Any other stat failure is
-        # left to propagate: silently falling back to an unversioned URL would
-        # re-enable the very collision this key exists to prevent.
+        # Nothing to version. Any other stat failure is left to propagate:
+        # silently falling back to an unversioned URL would re-enable the very
+        # collision this key exists to prevent.
         return base_url
     cache_identity = "\0".join(
         (
@@ -563,46 +745,29 @@ def asset_url_for_path(file_path: Path, root_path: Path) -> str:
     )
     cache_key = sha256(cache_identity.encode("utf-8")).hexdigest()[:16]
     return f"{base_url}?v={cache_key}"
-def normalize_size_profile(value: object) -> str:
-    return str(value or "").strip().lower().replace("_", "-")
-def explicit_size_profile(job: Mapping[str, object], output: Mapping[str, object]) -> str:
-    del output
+def default_render_size(job: Mapping[str, object]) -> tuple[int, int]:
+    """The job's size profile, or :data:`DEFAULT_SIZE_PROFILE` when it names none."""
     output_settings = job.get("output") if is_plain_object(job.get("output")) else {}
-    return normalize_size_profile(output_settings.get("sizeProfile") or "")
-def default_render_size(job: Mapping[str, object], output: Mapping[str, object]) -> tuple[int, int]:
-    mode = str(job.get("mode") or "view").strip().lower()
-    profile = explicit_size_profile(job, output)
-    if profile in {"simple-square", "square"}:
-        return SIMPLE_SQUARE_RENDER_WIDTH, SIMPLE_SQUARE_RENDER_HEIGHT
-    if profile in {"simple", "simple-part", "unlabeled"}:
-        return SIMPLE_RENDER_WIDTH, SIMPLE_RENDER_HEIGHT
-    if profile in {"presentation-large", "hero", "large-presentation"}:
-        return PRESENTATION_LARGE_RENDER_WIDTH, PRESENTATION_LARGE_RENDER_HEIGHT
-    if profile == "presentation":
-        return PRESENTATION_RENDER_WIDTH, PRESENTATION_RENDER_HEIGHT
-    if profile in {"complex-assembly-large", "assembly-large"}:
-        return COMPLEX_ASSEMBLY_LARGE_RENDER_WIDTH, COMPLEX_ASSEMBLY_LARGE_RENDER_HEIGHT
-    if profile in {"complex-assembly", "assembly"}:
-        return COMPLEX_ASSEMBLY_RENDER_WIDTH, COMPLEX_ASSEMBLY_RENDER_HEIGHT
-    if profile in {"contact-sheet", "contactsheet"}:
-        return CONTACT_SHEET_RENDER_WIDTH, CONTACT_SHEET_RENDER_HEIGHT
-    output_settings = job.get("output") if is_plain_object(job.get("output")) else {}
-    if (
-        profile in {"dimensioned", "section", "labeled"}
-        or mode == "section"
-        or output_settings.get("viewLabels") is True
-        or output.get("viewLabel")
-        or output.get("label")
-    ):
-        return DIAGNOSTIC_RENDER_WIDTH, DIAGNOSTIC_RENDER_HEIGHT
-    if profile == "diagnostic" or not profile:
-        return DIAGNOSTIC_RENDER_WIDTH, DIAGNOSTIC_RENDER_HEIGHT
-    return SIMPLE_RENDER_WIDTH, SIMPLE_RENDER_HEIGHT
+    return SIZE_PROFILES[validate_size_profile(output_settings.get("sizeProfile", DEFAULT_SIZE_PROFILE))]
+
+
+def output_dimension(value: object, label: str) -> int:
+    """A requested output side: a whole number of pixels, 1..MAX_OUTPUT_DIMENSION."""
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise SnapshotError(f"{label} must be a positive whole number of pixels; got {value!r}")
+    if value > MAX_OUTPUT_DIMENSION:
+        raise SnapshotError(
+            f"{label} {value} exceeds the maximum of {MAX_OUTPUT_DIMENSION} px; past that the "
+            "renderer's drawing buffer is clamped and the image would not be the size requested"
+        )
+    return value
+
+
 def resolve_output_size(job: Mapping[str, object], output: Mapping[str, object]) -> tuple[int, int]:
-    default_width, default_height = default_render_size(job, output)
+    default_width, default_height = default_render_size(job)
     return (
-        positive_integer(output.get("width") or default_width, "output width"),
-        positive_integer(output.get("height") or default_height, "output height"),
+        output_dimension(output["width"], "output width") if output.get("width") is not None else default_width,
+        output_dimension(output["height"], "output height") if output.get("height") is not None else default_height,
     )
 def snapshot_timestamp() -> str:
     return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
@@ -729,11 +894,16 @@ def clear_render_output_targets(jobs: object, *, resolved_cwd: Path | None = Non
     it is why a declared path can now be honoured exactly: whatever happens next,
     the only thing that can appear at that path is this run's output.
 
-    "Before any work" is stronger than "before the browser starts", and the
-    difference is the common failure. Resolution builds the STEP package, and that
-    is where a bad input fails -- minutes in, and long before the renderer is
-    reached. Clearing at render time would leave the previous image sitting at the
-    requested path for exactly the runs most likely to be read anyway.
+    It runs AFTER the request is prepared and BEFORE it is resolved. A request
+    that is refused -- an unknown key, a setting this kind of input cannot take,
+    a conflict between options -- was never going to write anything, so it leaves
+    an existing file alone; every such refusal is decided in preparation, which
+    builds nothing. "Before any work" is still stronger than "before the browser
+    starts", and the difference is the common failure: resolution builds the STEP
+    package, and that is where a bad INPUT fails -- minutes in, and long before
+    the renderer is reached. Clearing at render time would leave the previous
+    image sitting at the requested path for exactly the runs most likely to be
+    read anyway.
 
     Directory-valued outputs are skipped: their name is generated fresh, so there
     is nothing of theirs to delete, and unlinking the directory itself would be
@@ -801,11 +971,13 @@ def normalize_common_job(
     job_count: int = 1,
 ) -> dict[str, object]:
     """Kind-independent job normalization shared by every input kind: the outputs
-    guard, scene/output/quality validation, output-path resolution, and the
+    guard, output/quality/section validation, output-path resolution, and the
     common return shape.
-    Kind resolvers run their capability checks first, then call this, so a
-    STEP/mesh/robot job all normalize identically; the caller attaches its
-    kind-specific ``resolved`` payload to the returned job.
+    Job preparation runs the kind's capability checks first, then calls this, so a
+    STEP/mesh/robot job all normalize identically; the kind resolver attaches its
+    ``resolved`` payload to the returned job. ``display`` arrives already validated
+    (:func:`load_display_option` — once per job, where the input's kind is known);
+    this only fills its two defaults.
 
     ``job_index``/``job_count`` are this job's place in its packet, needed only
     so a directory-valued output's generated name can discriminate across jobs
@@ -846,10 +1018,25 @@ def normalize_common_job(
 
     output_settings = validate_output_settings(job.get("output"))
     quality = validate_quality_settings(job.get("quality"))
-    display = dict(job.get("display", {})) if is_plain_object(job.get("display", {})) else job["display"]
-    validate_display_settings_values(display, source_label="job display")
-    display.setdefault("mode", "solid")
-    display.setdefault("appearance", "light")
+    if not is_plain_object(job.get("display", {})):
+        raise SnapshotError("display must be a display settings object")
+    # Every mode shares its preset defaults with the Viewer; only appearance is
+    # fixed to Light for deterministic CLI output.
+    display = {"mode": "solid", "appearance": "light", **job.get("display", {})}
+
+    # Where section mode cuts. The key means nothing to a view or a list, and a
+    # request that carries it there expected a cut it would not get.
+    if mode == "section":
+        job["section"] = validate_section(job.get("section", {}))
+    elif "section" in job:
+        raise SnapshotError(
+            f"section positions the cut of section mode, and this job's mode is {mode}; "
+            'set "mode": "section" (--mode section), or clip a view with display.clip'
+        )
+    if "timeoutSeconds" in job:
+        job["timeoutSeconds"] = validate_timeout_seconds(job["timeoutSeconds"])
+    if "debug" in job:
+        _render_boolean(job["debug"], "debug")
 
     raw_scale = str(job.get("scale") or "").strip().lower()
     if raw_scale:
@@ -876,6 +1063,13 @@ def normalize_common_job(
         # silently, so the render completed with nothing hidden/focused.
         unknown_output_keys = sorted(set(output_object) - SUPPORTED_OUTPUT_KEYS)
         if unknown_output_keys:
+            result_keys = [key for key in unknown_output_keys if key in RESULT_ONLY_OUTPUT_KEYS]
+            if result_keys:
+                raise SnapshotError(
+                    f"render output {index} carries {', '.join(result_keys)}: those are what the "
+                    "renderer reports about a finished output, not something a request sets — "
+                    f"supported output keys: {', '.join(sorted(SUPPORTED_OUTPUT_KEYS))}"
+                )
             if "selection" in unknown_output_keys:
                 raise SnapshotError(
                     f"render output {index} carries a selection; selection applies at job "
@@ -912,6 +1106,18 @@ def normalize_common_job(
                 "width": width,
                 "height": height,
             }
+        if video is None and mode in STILL_OUTPUT_SUFFIXES:
+            # The extension decides the encoding, so one the mode cannot write is
+            # refused: a view wrote PNG bytes under whatever name it was handed,
+            # and a `.svg` or `.jpg` that is really a PNG opens nowhere.
+            suffix = Path(str(normalized_output["path"])).suffix.lower()
+            allowed = STILL_OUTPUT_SUFFIXES[mode]
+            if suffix not in allowed:
+                raise SnapshotError(
+                    f"{mode} mode writes {' or '.join(allowed)}: render output {index} names "
+                    f"{output_path.strip()!r}"
+                    + ("; a section can also be written as .svg with --mode section" if mode == "view" and suffix == ".svg" else "")
+                )
         explicit_camera = output_object.get("camera")
         if explicit_camera is None:
             explicit_camera = job.get("camera")
@@ -939,75 +1145,110 @@ def selection_value_list(value: object) -> list[str]:
     if not text:
         return []
     return [entry.strip() for entry in text.split(",") if entry.strip()]
+SELECTION_KEYS = ("focus", "hide")
+RETIRED_SELECTION_KEYS = {"refs": "focus"}
+
+
+def validate_selection_keys(job: Mapping[str, object]) -> None:
+    """``selection`` is ``{"focus": [...]}`` or ``{"hide": [...]}`` and nothing else."""
+    if "selection" not in job or job["selection"] is None:
+        return
+    selection = job["selection"]
+    if not is_plain_object(selection):
+        raise SnapshotError('selection must be a {"focus": [refs]} or {"hide": [refs]} object')
+    unknown = sorted(set(selection) - set(SELECTION_KEYS))
+    if unknown:
+        retired = [
+            f"selection.{key} was removed; use selection.{RETIRED_SELECTION_KEYS[key]}"
+            for key in unknown
+            if key in RETIRED_SELECTION_KEYS
+        ]
+        raise SnapshotError(
+            f"selection has unknown key(s): {', '.join(unknown)}; "
+            f"supported keys: {', '.join(SELECTION_KEYS)}"
+            + (f"; {'; '.join(retired)}" if retired else "")
+        )
+
+
 def selection_filter_values(job: Mapping[str, object]) -> list[str]:
     selection = job.get("selection") if is_plain_object(job.get("selection")) else {}
     values: list[str] = []
-    for key in ("focus", "refs", "hide"):
+    for key in SELECTION_KEYS:
         values.extend(selection_value_list(selection.get(key)))
     return values
 
-def positive_integer(value: object, label: str) -> int:
-    try:
-        parsed = int(str(value or ""), 10)
-    except ValueError as exc:
-        raise SnapshotError(f"{label} must be a positive integer") from exc
-    if parsed <= 0:
-        raise SnapshotError(f"{label} must be a positive integer")
-    return parsed
+def refuse_cad_model_requests(
+    job: Mapping[str, object],
+    *,
+    mode: str,
+    subject: str,
+    pose_hint: str,
+    tessellation_hint: str,
+    joints: bool = False,
+) -> None:
+    """Refuse, by name, everything in ``job`` that only a STEP model can honour.
+
+    One rule for every input that is not a STEP model — a mesh, a drawing, a robot
+    description — so the three cannot drift: a request they cannot honour is
+    refused rather than rendered as though it had not been made. ``subject`` is
+    the plural the message talks about ("STL mesh inputs"); ``joints`` says whether
+    the input is a robot, the one thing ``jointValues`` poses.
+    """
+    if selection_filter_values(job):
+        raise SnapshotError(
+            f"selection focus/hide require STEP topology; {subject} have no "
+            "part/subassembly selectors"
+        )
+    if has_kinematics_render_values(job.get("kinematics")):
+        raise SnapshotError(f"kinematics values require a STEP model; {pose_hint}")
+    if job.get("jointValues") is not None and not joints:
+        raise SnapshotError(
+            "jointValues pose a robot description (URDF, SRDF or SDF); "
+            f"{subject} have no joints"
+        )
+    if job.get("animation") is not None:
+        raise SnapshotError(
+            "an animation frame requires a STEP document with animation in its sidecar; "
+            f"{subject} have no clips"
+        )
+    if job.get("video") is not None:
+        raise SnapshotError(f"a video renders an animation clip; {subject} have no clips to render")
+    quality = job.get("quality") if is_plain_object(job.get("quality")) else {}
+    if quality.get("tessellation") is not None:
+        raise SnapshotError(
+            f"quality.tessellation requires an exact-surface STEP package; {tessellation_hint}"
+        )
+    if mode not in MESH_SUPPORTED_RENDER_MODES or job.get("section") is not None:
+        supported = ", ".join(sorted(MESH_SUPPORTED_RENDER_MODES))
+        raise SnapshotError(f"section mode requires STEP topology; {subject} support: {supported}")
+
+
+def check_mesh_render_job(job: Mapping[str, object], *, kind: str, mode: str, **_context: object) -> None:
+    """What a direct mesh input (GLB/STL/3MF) cannot be asked for."""
+    label = kind.upper()
+    refuse_cad_model_requests(
+        job,
+        mode=mode,
+        subject=f"{label} mesh inputs",
+        pose_hint=f"{label} mesh inputs are not parametric",
+        tessellation_hint=f"{label} is an existing mesh",
+    )
+
+
 def resolve_mesh_render_job(
     job: dict[str, object],
     *,
     kind: str,
     input_path: Path,
     root_path: Path,
-    resolved_cwd: Path,
-    timestamp: str | None,
-    job_index: int = 0,
-    job_count: int = 1,
     **_kind_context: object,
 ) -> dict[str, object]:
     """Resolve a direct mesh input (GLB/STL/3MF) that carries no STEP topology.
 
     Meshes render through the shared mesh path, so this skips the STEP artifact/package
-    pipeline entirely and hands the renderer a plain asset URL. STEP-only options are
-    rejected up front with clear errors rather than silently ignored downstream."""
-    label = kind.upper()
-
-    # Selector focus/hide/refs need the selector index built from STEP topology.
-    if selection_filter_values(job):
-        raise SnapshotError(
-            f"selection focus/hide/refs require STEP topology; {label} mesh inputs have no "
-            "part/subassembly selectors"
-        )
-    # kinematics values drive the model's declared kinematics block.
-    if has_kinematics_render_values(job.get("kinematics")):
-        raise SnapshotError(
-            f"kinematics values require a STEP model; {label} mesh inputs are not parametric"
-        )
-    if job.get("animation") is not None:
-        raise SnapshotError(
-            f"an animation frame requires a STEP document with animation in its sidecar; "
-            f"{label} mesh inputs have no clips"
-        )
-    if job.get("video") is not None:
-        raise SnapshotError(
-            f"a video renders an animation clip; {label} mesh inputs have no clips to render"
-        )
-    quality = job.get("quality") if is_plain_object(job.get("quality")) else {}
-    if quality.get("tessellation") is not None:
-        raise SnapshotError(
-            f"quality.tessellation requires an exact-surface STEP package; {label} is an existing mesh"
-        )
-
-    mode = str(job.get("mode") or "view").strip().lower()
-    if mode not in SUPPORTED_RENDER_MODES:
-        raise SnapshotError(f"Unsupported render mode: {mode or '(missing)'}")
-    if mode not in MESH_SUPPORTED_RENDER_MODES:
-        supported = ", ".join(sorted(MESH_SUPPORTED_RENDER_MODES))
-        raise SnapshotError(
-            f"{mode} mode requires STEP topology; {label} mesh inputs support: {supported}"
-        )
-
+    pipeline entirely and hands the renderer a plain asset URL. ``job`` is the
+    prepared job: what a mesh cannot be asked for was refused by
+    :func:`check_mesh_render_job` before anything was cleared or built."""
     asset_url = asset_url_for_path(input_path, root_path)
     resolved: dict[str, object] = {
         "rootPath": str(root_path),
@@ -1018,17 +1259,7 @@ def resolve_mesh_render_job(
     }
     if bool(job.get("debug")):
         resolved["debug"] = {"meshSource": {"kind": kind}}
-
-    normalized = normalize_common_job(
-        job,
-        mode=mode,
-        resolved_cwd=resolved_cwd,
-        timestamp=timestamp,
-        job_index=job_index,
-        job_count=job_count,
-    )
-    normalized["resolved"] = resolved
-    return normalized
+    return {**job, "resolved": resolved}
 def content_type_for_path(path: Path) -> str:
     if path.suffix.lower() == ".mjs":
         return "text/javascript; charset=utf-8"
@@ -1089,10 +1320,6 @@ TESS_CACHE_ROUTE_PREFIX = "/__tess_cache/"
 TESS_CACHE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.+_-]*\.tess$")
 
 
-def tessellation_cache_enabled() -> bool:
-    return os.environ.get("CADGEN_MESH_CACHE") != "0"
-
-
 def _tessellation_cache_key(pathname: str) -> str | None:
     name = str(pathname or "")[len(TESS_CACHE_ROUTE_PREFIX):]
     if not TESS_CACHE_NAME_PATTERN.fullmatch(name) or ".." in name:
@@ -1105,9 +1332,10 @@ def read_tessellation_cache_entry(pathname: str, *, expected_object=None, max_by
     for a refused name, a miss, or a disabled cache."""
     from cadgen.store.tess_cache import read_tessellation_cache
     key = _tessellation_cache_key(pathname)
-    if key is None or not tessellation_cache_enabled():
+    if key is None:
         return None
     try:
+        # A disabled cache (CADGEN_MESH_CACHE=0) answers None from the store itself.
         return read_tessellation_cache(
             key, expected_object=expected_object, max_bytes=max_bytes,
         )
@@ -1139,9 +1367,6 @@ def _write_tessellation_cache_entry_status(pathname: str, body: bytes | None) ->
 # Probe small index facts, then request only admitted exact objects. The shared
 # TESB container stays unchanged; store.tess_cache owns both hosts' framing.
 TESS_CACHE_BATCH_PATH = "/__tess_cache/batch"
-TESS_CACHE_BATCH_MAGIC = 0x42534554  # "TESB" little-endian
-TESS_CACHE_BATCH_VERSION = 1
-TESS_CACHE_BATCH_MAX_NAMES = 256
 TESS_CACHE_PROBE_PATH = "/__tess_cache/probe"
 
 
@@ -1354,6 +1579,8 @@ def max_output_size(job: Mapping[str, object]) -> tuple[int, int]:
     heights = [int(output.get("height") or SIMPLE_RENDER_HEIGHT) for output in outputs if is_plain_object(output)]
     return max(widths or [SIMPLE_RENDER_WIDTH], default=SIMPLE_RENDER_WIDTH), max(heights or [SIMPLE_RENDER_HEIGHT], default=SIMPLE_RENDER_HEIGHT)
 async def with_snapshot_timeout(awaitable: Any, timeout_seconds: object, label: str = "snapshot") -> object:
+    # `timeoutSeconds` was validated when the job was prepared (normalize_common_job),
+    # so nothing can fail here between creating the awaitable and awaiting it.
     timeout = max(1, float(timeout_seconds or DEFAULT_TIMEOUT_SECONDS))
     try:
         return await asyncio.wait_for(awaitable, timeout=timeout)
@@ -1539,10 +1766,9 @@ class BatchSnapshotRenderer:
 
         ``narrate`` is how a video says what it is doing where nothing paints a
         bar. This is the one render whose work is measured in thousands of units
-        and tens of minutes, and the door that serves it (``cadgen step
-        snapshot``) always runs in a daemon worker, whose stderr is a frame relay
-        and not a tty -- so the frame counter below reaches nobody there. A
-        caller that IS painting passes nothing and gets none of these lines.
+        and tens of minutes, and a run from a script or an agent's tool call has
+        no tty -- so the frame counter below reaches nobody there. A caller that
+        IS painting passes nothing and gets none of these lines.
         """
         import tempfile
 
@@ -1776,9 +2002,9 @@ async def render_resolved_job_packet(
     narrate: object | None = None,
 ) -> dict[str, object]:
     snapshot_renderer = renderer or BatchSnapshotRenderer(runtime_dir)
-    # The CLI already cleared these before resolution; repeating it costs an
-    # unlink of an absent file and makes the invariant hold for a caller that
-    # builds a packet itself and comes straight here.
+    # The CLI already cleared these once the request was prepared; repeating it
+    # costs an unlink of an absent file and makes the invariant hold for a caller
+    # that builds a packet itself and comes straight here.
     clear_render_output_targets(packet["jobs"])
     report = resolve_progress(progress)
     started = time.perf_counter()
@@ -2001,7 +2227,7 @@ async def render_snapshot(
     """Render a resolved packet, write its outputs, and report what was written.
 
     The three steps are one call because their ORDER is the exact-path contract:
-    every declared target was cleared before resolution, the bytes land through a
+    every declared target was cleared before anything was built, the bytes land through a
     temp file and a rename, and only then does anything describe them. A caller
     that could render without writing could also be handed a path holding
     nothing.

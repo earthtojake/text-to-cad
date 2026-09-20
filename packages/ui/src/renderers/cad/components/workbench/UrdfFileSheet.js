@@ -142,10 +142,10 @@ const UrdfJointRow = memo(function UrdfJointRow({
     clearLocalOverrideTimeout();
   }, []);
 
-  const scheduleValueChange = (nextValueDeg, options = {}) => {
+  const scheduleValueChange = (nextValueDeg) => {
     pendingValueRef.current = nextValueDeg;
     if (typeof requestAnimationFrame !== "function") {
-      onValueChange(joint, nextValueDeg, options);
+      onValueChange(joint, nextValueDeg);
       return;
     }
     if (pendingFrameRef.current) {
@@ -153,11 +153,11 @@ const UrdfJointRow = memo(function UrdfJointRow({
     }
     pendingFrameRef.current = requestAnimationFrame(() => {
       pendingFrameRef.current = 0;
-      onValueChange(joint, pendingValueRef.current, options);
+      onValueChange(joint, pendingValueRef.current);
     });
   };
 
-  const commitValue = (nextValueDeg, options = {}) => {
+  const commitValue = (nextValueDeg) => {
     const normalizedValueDeg = clampJointInputValue(nextValueDeg, minValueDeg, maxValueDeg, liveValueDeg);
     pendingValueRef.current = normalizedValueDeg;
     if (pendingFrameRef.current && typeof cancelAnimationFrame === "function") {
@@ -166,7 +166,7 @@ const UrdfJointRow = memo(function UrdfJointRow({
     }
     setLiveValueDeg(normalizedValueDeg);
     holdLocalValueUntilParentSettles(normalizedValueDeg);
-    onValueChange(joint, normalizedValueDeg, options);
+    onValueChange(joint, normalizedValueDeg);
   };
 
   return (
@@ -197,10 +197,10 @@ const UrdfJointRow = memo(function UrdfJointRow({
             }
             setLiveValueDeg(nextValueDeg);
             holdLocalValueUntilParentSettles(nextValueDeg);
-            scheduleValueChange(nextValueDeg, { scrub: true });
+            scheduleValueChange(nextValueDeg);
           }}
           onValueCommit={(nextValue) => {
-            commitValue(nextValue?.[0], { scrub: true });
+            commitValue(nextValue?.[0]);
           }}
           aria-label={jointName || "Joint value"}
           title={`${formatJointValue(minValueDeg, joint)} to ${formatJointValue(maxValueDeg, joint)}`}
@@ -249,7 +249,7 @@ function SdfMetadataList({ title, items, fields }) {
   );
 }
 
-/** Robot Position controls for the Motion inspector. */
+/** A robot's Kinematics tab body: named poses, then joint values. */
 export function UrdfPositionSection({ joints = [], groupStates = [], activeGroupStateId, jointValues,
   onJointValueChange, onGroupStateSelect, onResetPose }) {
   const movableJoints = Array.isArray(joints) ? joints : [];
@@ -259,7 +259,7 @@ export function UrdfPositionSection({ joints = [], groupStates = [], activeGroup
     : NO_PRESET_VALUE;
   return (
     <div>
-      {groupStatePresets.length ? <FileSheetStaticSection title="Position">
+      {groupStatePresets.length ? <FileSheetStaticSection title="Pose">
       {/* A named state is a way of SETTING the joints, so it leads them. A
           plain URDF declares none and opens straight onto its values. */}
       <KinematicsPoseRow compact
@@ -279,7 +279,7 @@ export function UrdfPositionSection({ joints = [], groupStates = [], activeGroup
         }}
       />
       </FileSheetStaticSection> : null}
-      {movableJoints.length ? <FileSheetStaticSection title="Parameters">
+      {movableJoints.length ? <FileSheetStaticSection title="Joints">
       {movableJoints.map((joint) => (
         <UrdfJointRow
           key={joint.name}
@@ -318,7 +318,6 @@ export default function UrdfFileSheet({
   jointValues,
   onJointValueChange,
   onGroupStateSelect,
-  poseTransition = null,
   onCopyJointAngles,
   onResetPose,
   sdf = null,
@@ -351,6 +350,45 @@ export default function UrdfFileSheet({
   );
 
   const sections = [
+    showJoints ? {
+      id: FILE_SHEET_SECTION_IDS.KINEMATICS,
+      // Named for the system it drives, as the STEP sheet's is: one control, one word,
+      // whichever file the person opened.
+      title: "Kinematics",
+      content: (
+            movableJoints.length ? (
+              // The same body spacing as the STEP sheet's Kinematics tab.
+              <UrdfPositionSection joints={movableJoints} groupStates={groupStates} activeGroupStateId={activeGroupStateId}
+                jointValues={jointValues} onJointValueChange={onJointValueChange} onGroupStateSelect={onGroupStateSelect}
+                onCopyJointAngles={onCopyJointAngles} onResetPose={onResetPose} isSdf={isSdf}/>
+
+            ) : (
+              <FileSheetStatusText className="py-2">No movable joints.</FileSheetStatusText>
+            )
+      )
+    } : null,
+    {
+      // Always present: every robot description has links, and this is their tree.
+      // Mounted once visited, like the Model tree, so disclosure and scroll survive tab changes.
+      id: FILE_SHEET_SECTION_IDS.ROBOT_LINKS,
+      title: "Links",
+      keepMounted: true,
+      scrollsContent: true,
+      content: active => (
+        <RobotComponentsSection
+          key={String(selectedEntry?.file || "")}
+          active={active}
+          description={robotDescription}
+          components={components}
+          parts={robotParts}
+          selection={componentSelection}
+          groupNamesByLink={robotGroupNamesByLink}
+          meshPath={robotMeshPath}
+          onOpenFile={onOpenFile}
+        />
+      )
+    },
+    // An SDF's own metadata follows the two tabs every robot has.
     isSdf ? {
       id: "sdf",
       title: "SDF",
@@ -396,44 +434,6 @@ export default function UrdfFileSheet({
               </div>
       )
     } : null,
-    showJoints ? {
-      id: FILE_SHEET_SECTION_IDS.MOTION,
-      // Named for the system it drives, as the STEP sheet's is: one control, one word,
-      // whichever file the person opened.
-      title: "Motion",
-      content: (
-            movableJoints.length ? (
-              // Use the shared Motion body spacing around Position.
-              <UrdfPositionSection joints={movableJoints} groupStates={groupStates} activeGroupStateId={activeGroupStateId}
-                jointValues={jointValues} onJointValueChange={onJointValueChange} onGroupStateSelect={onGroupStateSelect}
-                poseTransition={poseTransition} onCopyJointAngles={onCopyJointAngles} onResetPose={onResetPose} isSdf={isSdf}/>
-
-            ) : (
-              <FileSheetStatusText className="py-2">No movable joints.</FileSheetStatusText>
-            )
-      )
-    } : null,
-    {
-      // Always present: every robot description has links, and this is their tree.
-      // Mounted once visited, like the Model tree, so disclosure and scroll survive tab changes.
-      id: FILE_SHEET_SECTION_IDS.ROBOT_COMPONENTS,
-      title: "Components",
-      keepMounted: true,
-      scrollsContent: true,
-      content: active => (
-        <RobotComponentsSection
-          key={String(selectedEntry?.file || "")}
-          active={active}
-          description={robotDescription}
-          components={components}
-          parts={robotParts}
-          selection={componentSelection}
-          groupNamesByLink={robotGroupNamesByLink}
-          meshPath={robotMeshPath}
-          onOpenFile={onOpenFile}
-        />
-      )
-    },
     ...settingsTabs
   ];
 

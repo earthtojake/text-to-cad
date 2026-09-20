@@ -10,12 +10,13 @@ const definition = { parameters: [{ id: 'hinge', label: 'Hinge', type: 'number' 
   defaultParameterValues: { hinge: 0 }, manifest: { poses: { rest: { hinge: 0 } } } };
 const animation = { clips: [{ id: 'turn', duration: 3 }], activeClipId: 'turn' };
 
-test('Motion is Position: animation is the Animate tool, so routines alone make no Motion tab', () => {
+test('Kinematics is poses and joints: animation is the Animate tool, so routines alone make no tab', () => {
   assert.equal(buildMotionControlsTab(), null);
   for (const props of [{ animationRuntime: animation }, { animationRuntime: { status: 'loading' } }]) assert.equal(buildMotionControlsTab(props), null);
   for (const props of [{ poseRuntime: { definition } }, { poseRuntime: { error: 'Invalid joints' } }, { poseRuntime: { definition }, animationRuntime: animation }]) {
     const tab = buildMotionControlsTab(props);
-    assert.equal(tab.id, 'motion');
+    assert.equal(tab.id, 'kinematics');
+    assert.equal(tab.title, 'Kinematics');
     assert.deepEqual(elements(tab.content).filter(node => node.type === PoseControlsSection).length, 1);
   }
 });
@@ -33,12 +34,12 @@ test('one global Reset calls the coordinated host command', () => {
   assert.equal(elements(PoseControlsSection({ runtime: pose })).some(node => node.props.onReset || node.props.onCopy || node.props.transition), false);
 });
 
-test('Position and Parameters are separate permanent sections; either can exist independently', () => {
+test('Pose and Joints are separate permanent sections; either can exist independently', () => {
   const titles = def => elements(PoseControlsSection({ runtime: { definition: def }, hideWhenEmpty: true }))
     .filter(node => node.type === FileSheetStaticSection).map(node => node.props.title);
-  assert.deepEqual(titles(definition), ['Position', 'Parameters']);
-  assert.deepEqual(titles({ ...definition, parameters: [] }), ['Position']);
-  assert.deepEqual(titles({ ...definition, manifest: {} }), ['Parameters']);
+  assert.deepEqual(titles(definition), ['Pose', 'Joints']);
+  assert.deepEqual(titles({ ...definition, parameters: [] }), ['Pose']);
+  assert.deepEqual(titles({ ...definition, manifest: {} }), ['Joints']);
 });
 
 test('animation-owned authored values do not claim a named position, and parameters stay editable', () => {

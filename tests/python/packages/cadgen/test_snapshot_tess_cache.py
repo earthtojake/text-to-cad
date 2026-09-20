@@ -29,11 +29,9 @@ ADMITTED = {"tessellationInput": FIXTURE["key"], "object": FIXTURE["facts"]["obj
 ADMISSION_QUERY = f"?object={ADMITTED['object']}&maxBytes={ADMITTED['maxBytes']}"
 
 from cadgen.snapshot_core import (  # noqa: E402
-    TESS_CACHE_BATCH_MAGIC,
     BatchSnapshotRenderer,
     SnapshotError,
     TESS_CACHE_BATCH_PATH,
-    TESS_CACHE_BATCH_VERSION,
     TESS_CACHE_ROUTE_PREFIX,
     SnapshotAssetServer,
     _write_http_body,
@@ -42,6 +40,8 @@ from cadgen.snapshot_core import (  # noqa: E402
     write_tessellation_cache_entry,
 )
 from cadgen.assets import browser_runtime_dir  # noqa: E402
+# The TESB framing is the store's; the snapshot host only routes to it.
+from cadgen.store.tess_cache import TESS_CACHE_BATCH_MAGIC, TESS_CACHE_BATCH_VERSION  # noqa: E402
 
 
 class AssetServerIsMandatoryTest(unittest.TestCase):

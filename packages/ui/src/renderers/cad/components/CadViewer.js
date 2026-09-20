@@ -33,6 +33,7 @@ import { VIEWER_PICK_MODE } from "@hardcore/core/lib/viewer/constants.js";
 import { resolveScenePartRendering } from "@hardcore/core/lib/viewer/partRendering.js";
 import { hasMeshGeometry } from "@hardcore/core/lib/render/meshCost.js";
 import {
+  applyGlbDocumentFinish,
   detachGlbDocumentScene,
   disposeGlbDocument,
   shouldUseNativeGlbScene
@@ -160,6 +161,7 @@ import {
 } from "@hardcore/core/lib/themeSettings.js";
 import ViewPlaneControl from "./viewer/ViewPlaneControl.js";
 import DrawingOverlay from "./viewer/DrawingOverlay.jsx";
+import JointHandleOverlay from "./viewer/JointHandleOverlay.jsx";
 import { usePlaybackFrames } from "./viewer/hooks/usePlaybackFrames.js";
 import { useAnimationClockStore } from "../workbench/animationClockStore.js";
 import { useEmbeddedGlbAnimationClockStore } from "../workbench/embeddedGlbAnimationClockStore.js";
@@ -1399,7 +1401,16 @@ function nativeGlbBounds(THREE, root) {
   return { min: box.min.toArray(), max: box.max.toArray() };
 }
 
-function buildNativeGlbCadScene(THREE, document, source, receiveShadows) {
+function buildNativeGlbCadScene(THREE, document, source, receiveShadows, { renderMode = false, theme = null } = {}) {
+  // The same surface finish the normalized mesh wears in Inspect, so entering Animate
+  // does not re-shade the model (`applyGlbDocumentFinish`).
+  applyGlbDocumentFinish(document, {
+    renderMode,
+    finish: {
+      roughness: Number(theme?.surfaceRoughness ?? 0.92), metalness: Number(theme?.surfaceMetalness ?? 0.03),
+      clearcoat: Number(theme?.surfaceClearcoat ?? 0)
+    }
+  });
   const modelGroup = new THREE.Group();
   modelGroup.matrix.fromArray(document.cadRootMatrix);
   modelGroup.matrixAutoUpdate = false;
@@ -1586,6 +1597,10 @@ const CadViewer = forwardRef(function CadViewer({
   // pickable for the whole mode, and leaving it returns the model to rest, so every piece
   // of pick-only state can stand still at rest pose while the mode lasts.
   animateMode = false,
+  // The Pose tool: the joints that can be dragged, in model space, for the pose
+  // on screen (`workbench/jointHandles.js`); `null` while the tool is off. The
+  // knobs are the only thing under the pointer, so the model itself picks nothing.
+  jointHandles = null,
   previewOrbitSpeed = 1,
   showViewPlane = true,
   viewPlaneOffsetRight = 16,
@@ -1598,7 +1613,6 @@ const CadViewer = forwardRef(function CadViewer({
   viewUpdate = null,
   loadingPresentation = null,
   pickMode = VIEWER_PICK_MODE.AUTO,
-  panToolActive = false,
   renderPartsIndividually = false,
   scale = "",
   sceneScaleMode = VIEWER_SCENE_SCALE.CAD,
@@ -1660,6 +1674,7 @@ const CadViewer = forwardRef(function CadViewer({
   const interactionHostRef = useRef(null);
   const mountRef = useRef(null);
   const measureCanvasRef = useRef(null);
+  const jointHandleLayoutRef = useRef(null);
   // The snap indicator needs the live hover point every frame; the workspace
   // only needs to know which entity is under the cursor. Keeping the point in a
   // ref lets the overlay track smoothly without re-rendering on every move.
@@ -2118,51 +2133,6 @@ const CadViewer = forwardRef(function CadViewer({
   perspectivePropRef.current = perspective;
   modelKeyRef.current = modelKey;
   sceneScaleModeRef.current = normalizedSceneScaleMode;
-  // The pan tool remaps the primary drag from orbit to pan. Right-drag stays
-  // pan either way, so the habitual gesture keeps working while the tool is on.
-  //
-  // The cursor closes to "grabbing" for the duration of a drag, which is what
-  // makes the tool feel like dragging the scene rather than just hovering over
-  // it. Driven by listeners instead of React state so a pan does not re-render
-  // the viewer on every press.
-  useEffect(() => {
-    const runtime = runtimeRef.current;
-    const controls = runtime?.controls;
-    const MOUSE = runtime?.THREE?.MOUSE;
-    const canvas = runtime?.renderer?.domElement;
-    if (!controls?.mouseButtons || !MOUSE) {
-      return undefined;
-    }
-    controls.mouseButtons.LEFT = panToolActive && !previewMode ? MOUSE.PAN : MOUSE.ROTATE;
-    if (!canvas) {
-      return undefined;
-    }
-    if (!panToolActive || previewMode) {
-      canvas.style.cursor = "";
-      return () => {
-        if (controls.mouseButtons) {
-          controls.mouseButtons.LEFT = MOUSE.ROTATE;
-        }
-      };
-    }
-
-    canvas.style.cursor = "grab";
-    const grab = () => { canvas.style.cursor = "grab"; };
-    const grabbing = () => { canvas.style.cursor = "grabbing"; };
-    canvas.addEventListener("pointerdown", grabbing);
-    window.addEventListener("pointerup", grab);
-    window.addEventListener("pointercancel", grab);
-    return () => {
-      canvas.removeEventListener("pointerdown", grabbing);
-      window.removeEventListener("pointerup", grab);
-      window.removeEventListener("pointercancel", grab);
-      canvas.style.cursor = "";
-      if (controls.mouseButtons) {
-        controls.mouseButtons.LEFT = MOUSE.ROTATE;
-      }
-    };
-  }, [panToolActive, previewMode, viewerReadyTick]);
-
   const runWithoutPerspectiveEvents = (callback) => {
     suppressPerspectiveEventsRef.current += 1;
     try {
@@ -3998,7 +3968,7 @@ const CadViewer = forwardRef(function CadViewer({
     } else {
       clearDisplayedModel({ releaseGpu: !runtime.hasVisibleModel || runtime.activeModelKey !== (modelKey || "") });
       cadScene = nativeGlbActive
-        ? buildNativeGlbCadScene(THREE, glbDocument, meshData, receiveShadows)
+        ? buildNativeGlbCadScene(THREE, glbDocument, meshData, receiveShadows, { renderMode, theme: sceneTheme })
         : buildModel(THREE, meshData, {
         theme: sceneTheme,
         displayMode: normalizedDisplayMode,
@@ -4250,6 +4220,9 @@ const CadViewer = forwardRef(function CadViewer({
       // Read-only debug/test seam beside __cadDisplayRecords: the clip the viewport
       // APPLIES (the resolved view), which for a mesh is off whatever was saved.
       window.__cadClip = () => ({ ...clipSettingsRef.current });
+      // Read-only debug/test seam beside __cadClip: where the Pose tool's knobs are,
+      // in CSS pixels of the viewport, with each joint's value; empty outside the tool.
+      window.__cadJointHandles = () => jointHandleLayoutRef.current?.() || [];
       // Read-only debug/test seam beside __cadDisplayRecords: the LIVE camera,
       // so a browser test can assert that posing a model leaves the framing
       // exactly where the zero pose put it.
@@ -5475,7 +5448,7 @@ const CadViewer = forwardRef(function CadViewer({
     onMeasurePick: handleMeasurePick,
     onMeasureHoverPoint: handleMeasureHoverPoint,
     viewerReadyTick,
-    suppressTopologyPicking: animateMode || stepAnimationPlaying || Boolean(embeddedGlbAnimation?.playing),
+    suppressTopologyPicking: animateMode || Array.isArray(jointHandles) || stepAnimationPlaying || Boolean(embeddedGlbAnimation?.playing),
     allowMeshVertexSnap
   });
 
@@ -5528,7 +5501,6 @@ const CadViewer = forwardRef(function CadViewer({
       {coveringModeTransition ? (
         <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center" style={transitionBackdrop} role="status" data-viewer-transition={renderMode ? "render" : "inspect"}>
           <LoadingIndicator
-            headline={renderMode ? "Preparing render…" : "Opening model…"}
             progress={loadingPresentation?.busy ? loadingPresentation.progress : { label: "Preparing view" }}
             operationKey={`${resolvedPresentationKey}:${renderMode}`}
           />
@@ -5541,6 +5513,7 @@ const CadViewer = forwardRef(function CadViewer({
         aria-hidden="true"
       />
       {drawingOverlayActive ? <DrawingOverlay drawing={drawing} onReady={handleDrawingReady} onContentChange={handleDrawingContent} onViewportChange={followDrawingViewport} /> : null}
+      {jointHandles ? <JointHandleOverlay handles={jointHandles} runtimeRef={runtimeRef} hostRef={interactionHostRef} layoutSeamRef={jointHandleLayoutRef} viewerReadyTick={viewerReadyTick} /> : null}
       <ViewPlaneControl
         showViewPlane={showViewPlane && !planMode && !drawingOverlayActive}
         previewMode={previewMode}

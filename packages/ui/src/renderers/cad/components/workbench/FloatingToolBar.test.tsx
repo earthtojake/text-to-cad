@@ -7,10 +7,10 @@ import FloatingToolBar from '../../../../../dist/renderers/cad/components/workbe
 Object.assign(globalThis, { React });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 function Harness() {
-  const [tool, setTool] = useState('pan');
+  const [tool, setTool] = useState('measure');
   const [filter, setFilter] = useState('all');
   return <FloatingToolBar selectedEntry={{ file: 'part.step' }} renderFormat="step" selectedMeshData={{}}
-    selectionToolActive={tool === 'references'} panToolActive={tool === 'pan'}
+    selectionToolActive={tool === 'references'} measureModeActive={tool === 'measure'}
     handleSelectTabToolMode={setTool} selectionFilter={filter} onSelectionFilterChange={setFilter} />;
 }
 
@@ -31,7 +31,7 @@ it('first activates Select, then opens its filter on a second press and restores
   await user.click(select);
   await user.keyboard('{Escape}');
   expect(document.activeElement).toBe(select);
-  await user.click(screen.getByRole('button', { name: 'Pan', exact: true }));
+  await user.click(screen.getByRole('button', { name: 'Measure', exact: true }));
   select.focus();
   await user.keyboard('{Enter}');
   expect(select.getAttribute('aria-pressed')).toBe('true');
@@ -160,11 +160,36 @@ it('Animate is the rightmost tool, and exists only in a file that has routines',
   const view = render(<FloatingToolBar {...props} />);
   const tools = () => [...screen.getByRole('group', { name: 'Interaction tools' }).querySelectorAll('button')].map(button => button.getAttribute('aria-label'));
   // Absent, never disabled: a model without animation has nothing to explain.
-  expect(tools()).toEqual(['Select', 'Pan', 'Measure', 'Draw']);
+  expect(tools()).toEqual(['Select', 'Measure', 'Draw']);
   view.rerender(<FloatingToolBar {...props} animateAvailable />);
-  expect(tools()).toEqual(['Select', 'Pan', 'Measure', 'Draw', 'Animate']);
+  expect(tools()).toEqual(['Select', 'Measure', 'Draw', 'Animate']);
   await user.click(screen.getByRole('button', { name: 'Animate', exact: true }));
   expect(handleSelectTabToolMode.mock.calls).toEqual([['animate']]);
   view.rerender(<FloatingToolBar {...props} animateAvailable animateToolActive />);
   expect(screen.getByRole('button', { name: 'Animate', exact: true }).getAttribute('aria-pressed')).toBe('true');
+});
+
+it('Pose exists only in a file with joints to drag: it leads a robot\'s tools and sits left of Animate in a STEP', async () => {
+  const handleSelectTabToolMode = vi.fn();
+  const user = userEvent.setup();
+  const step = { selectedEntry: { file: 'part.step' }, renderFormat: 'step', selectedMeshData: {}, measureSupported: true, handleSelectTabToolMode };
+  const view = render(<FloatingToolBar {...step} animateAvailable />);
+  const tools = () => [...screen.getByRole('group', { name: 'Interaction tools' }).querySelectorAll('button')].map(button => button.getAttribute('aria-label'));
+  // Absent, never disabled, like Animate.
+  expect(tools()).toEqual(['Select', 'Measure', 'Draw', 'Animate']);
+  view.rerender(<FloatingToolBar {...step} animateAvailable poseAvailable />);
+  expect(tools()).toEqual(['Select', 'Measure', 'Draw', 'Pose', 'Animate']);
+  view.rerender(<FloatingToolBar {...step} poseAvailable />);
+  expect(tools()).toEqual(['Select', 'Measure', 'Draw', 'Pose']);
+  await user.click(screen.getByRole('button', { name: 'Pose', exact: true }));
+  expect(handleSelectTabToolMode.mock.calls).toEqual([['pose']]);
+
+  const robot = { ...step, selectedEntry: { file: 'arm.urdf' }, renderFormat: 'urdf', measureSupported: false };
+  view.rerender(<FloatingToolBar {...robot} poseAvailable poseLeads poseToolActive selectionToolActive={false} />);
+  expect(tools()).toEqual(['Pose', 'Select', 'Draw']);
+  expect(screen.getByRole('button', { name: 'Pose', exact: true }).getAttribute('aria-pressed')).toBe('true');
+  expect(screen.getByRole('button', { name: 'Select', exact: true }).getAttribute('aria-pressed')).toBe('false');
+  // A robot without a movable joint has no Pose to lead with.
+  view.rerender(<FloatingToolBar {...robot} poseLeads selectionToolActive />);
+  expect(tools()).toEqual(['Select', 'Draw']);
 });

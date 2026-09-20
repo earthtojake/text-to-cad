@@ -373,18 +373,23 @@ function applyTightOrthographicFrame(camera, records, width, height, padding, zo
   };
 }
 
-function resolveSectionPlane(section = {}) {
-  const plane = String(section.plane || "XY").toUpperCase();
-  if (Array.isArray(section.normal) && section.normal.length >= 3) {
-    const normal = new THREE.Vector3(section.normal[0], section.normal[1], section.normal[2]).normalize();
-    const at = Array.isArray(section.at) && section.at.length >= 3
-      ? new THREE.Vector3(section.at[0], section.at[1], section.at[2])
-      : new THREE.Vector3();
-    const helper = Math.abs(normal.z) < 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
-    const u = new THREE.Vector3().crossVectors(helper, normal).normalize();
-    const v = new THREE.Vector3().crossVectors(normal, u).normalize();
-    return { normal, at, u, v };
+// Where section mode cuts: `job.section` is `{ plane, offset }` and nothing else.
+// The plane is named by the two axes it contains and `offset` moves it along its
+// own normal, in model units. Mirrored as SECTION_PLANES in cadgen's
+// snapshot_core.py, which validates the request before a browser starts (the
+// parity is tested).
+export const SECTION_PLANES = Object.freeze(["XY", "XZ", "YZ"]);
+
+function sectionPlaneName(section = {}) {
+  const plane = section.plane ?? SECTION_PLANES[0];
+  if (!SECTION_PLANES.includes(plane)) {
+    throw new Error(`section.plane must be one of: ${SECTION_PLANES.join(", ")}; got ${JSON.stringify(plane)}`);
   }
+  return plane;
+}
+
+function resolveSectionPlane(section = {}) {
+  const plane = sectionPlaneName(section);
   const offset = toFiniteNumber(section.offset, 0);
   if (plane === "XZ") {
     return {
@@ -479,15 +484,8 @@ function sectionBounds(segments) {
 }
 
 function sectionPlaneLabel(section = {}) {
-  const plane = String(section.plane || "XY").toUpperCase();
+  const plane = sectionPlaneName(section);
   const offset = toFiniteNumber(section.offset, 0);
-  if (Array.isArray(section.normal) && section.normal.length >= 3) {
-    const normal = section.normal.map((value) => Number(value).toFixed(3)).join(", ");
-    const at = Array.isArray(section.at) && section.at.length >= 3
-      ? section.at.map((value) => Number(value).toFixed(3)).join(", ")
-      : "0.000, 0.000, 0.000";
-    return `CUT N[${normal}] @ [${at}]`;
-  }
   const axis = plane === "YZ" ? "X" : plane === "XZ" ? "Y" : "Z";
   return `SECTION ${plane} @ ${axis}=${offset.toFixed(3)}`;
 }
@@ -799,7 +797,8 @@ export function renderJobContext(meshData, job = {}) {
   const sourceKind = String(job.resolved?.kind || job.kind || meshData?.sourceFormat || "").trim().toLowerCase();
   const stepDisplayEnabled = sourceKind === "step" || sourceKind === "stp";
   const sceneSettings = resolveViewSceneSettings({
-    appearance: job.appearance || "light",
+    // Appearance is `display.appearance`; the CLI default is Light.
+    appearance: "light",
     camera: job.camera || null,
     display: job.display ?? {},
     // The viewer's rule: only a CAD model has edges to draw, parts to explode or solids to section.
@@ -811,7 +810,7 @@ export function renderJobContext(meshData, job = {}) {
   const projection = sceneSettings.camera.projection;
   const displayMode = displaySettings.mode;
   const bounds = meshData.bounds || boundsFromVertices(meshData.vertices || []);
-  const outputs = toArray(job.outputs).length ? toArray(job.outputs) : [{ path: typeof job.output === "string" ? job.output : job.output?.base || job.output?.path || "" }];
+  const outputs = toArray(job.outputs);
   const warnings = [];
   const sharedRenderOptions = createSharedRenderOptions({
     themeSettings: theme,
@@ -882,12 +881,7 @@ export function modelOptionsForRenderJob(context, job = {}) {
   // assembly context (hide is the removal filter); the focused refs instead
   // ghost the rest of the model through the same focusedPartId path the
   // interactive viewer uses. Section mode still isolates via filterSelection.
-  const focusedPartId = keepsAllParts
-    ? [
-        ...normalizedSelectorValues(selection.focus),
-        ...normalizedSelectorValues(selection.refs)
-      ]
-    : [];
+  const focusedPartId = keepsAllParts ? normalizedSelectorValues(selection.focus) : [];
   const renderEnabled = context.sceneSettings.view.lighting.enabled;
   return {
     theme: context.theme ?? undefined,
@@ -1168,15 +1162,18 @@ export async function captureModel(viewport, captureOptions = {}) {
   if (mode === "section") {
     const section = job.section || {};
     const segments = sectionSegments(meshData, section);
+    if (!segments.length) {
+      // An empty drawing is a true answer to a plane that misses the model, and
+      // indistinguishable from a failed cut unless it is said.
+      warnings.push(`${sectionPlaneLabel(section)} does not intersect the model; the section is empty`);
+    }
     return {
       ok: true,
       mode,
       outputs: outputs.map((output) => {
         const { width, height } = outputSize(output, job);
-        const format = String(output.format || job.section?.format || "").toLowerCase() || (
-          String(output.path || "").toLowerCase().endsWith(".svg") ? "svg" : "png"
-        );
-        if (format === "svg") {
+        // The output's extension decides the encoding; no job key does.
+        if (String(output.path || "").toLowerCase().endsWith(".svg")) {
           return {
             path: String(output.path || ""),
             mimeType: "image/svg+xml",

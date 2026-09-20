@@ -126,7 +126,29 @@ export function buildRobotTree(description, { components = [], parts = [] } = {}
   // Whatever is left hangs only from itself (a cycle). Cut it at its first declared
   // link, which keeps the joint it arrived by so nothing the description says is lost.
   for (const name of names) if (!placed.has(name)) roots.push(place(name, parentJointByChild.get(name) || null));
-  return { roots, nodesById, parentById };
+
+  // A root that is only a frame (`base_footprint`: no geometry, no mass, its one child
+  // rigidly attached) has nothing to select, highlight or read back, so it gets no row
+  // and its child leads the tree. The child still names it: its parent joint says where
+  // it hangs from. A description with no content anywhere is all frames, and keeps them.
+  const hasContent = name => {
+    const link = linkByName.get(name);
+    return Boolean(partIdsByLink.get(name)?.length || link?.visuals?.length || link?.collisions?.length || Number.isFinite(link?.inertial?.mass));
+  };
+  const describesBodies = names.some(hasContent);
+  const frameOnly = node => describesBodies && node.kind === "link" && !hasContent(node.linkName)
+    && node.children.length === 1 && node.children[0].kind === "link" && text(node.children[0].joint?.type) === "fixed";
+  const elidedLinkNames = [];
+  for (let index = 0; index < roots.length; index += 1) {
+    while (frameOnly(roots[index])) {
+      const frame = roots[index];
+      elidedLinkNames.push(frame.linkName);
+      nodesById.delete(frame.id);
+      parentById.delete(frame.children[0].id);
+      roots[index] = frame.children[0];
+    }
+  }
+  return { roots, nodesById, parentById, elidedLinkNames };
 }
 
 /** Ancestor node ids of `nodeId`, outermost first; the node itself is not included. */

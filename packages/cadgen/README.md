@@ -44,8 +44,8 @@ when it works. Each carries a pressure-test to apply before writing code.
 A generated file (STEP, DXF, STL, GLB, 3MF) and its sidecar
 (`<name>.step.json`) stand alone, forever.
 
-*Pressure-test*: a generated file must be fully renderable — viewer,
-snapshot, inspect — by reading ONLY the generated file(s), the sidecar, and
+*Pressure-test*: a generated file must be fully readable — viewer,
+snapshot, `read_scene` — by reading ONLY the generated file(s), the sidecar, and
 the store's artifact side. Never the source. A file whose bytes have no tree
 in the store is compiled from those bytes (`cadgen step compile` semantics),
 never from source. Deleting every `.py` in a project must not change what
@@ -142,9 +142,10 @@ sync-tested.
 *Pressure-test*: for any option, "what is this called on the other two
 surfaces?" must answer with the same name and a role-determined payload —
 `kinematics` everywhere: on DECLARING surfaces (decorators, `step build`)
-it is the space (`{mates, couplings, poses, at}`); on CONSUMING surfaces
-(snapshot, mesh `build`) it is a point in that space (a preset name or
-`{dof: value}`). One name, one validator, no synonyms.
+it is the space (`{mates, couplings, poses}`); on the CONSUMING surface
+(snapshot) it is a point in that space (a preset name or `{dof: value}`).
+The mesh `build` doors take no `kinematics`: a mesh is the document's tree,
+tessellated as stored. One name, one validator, no synonyms.
 
 Geometry queries are a Python library surface, separate from document-format
 verbs. `read_step(path)` returns build123d geometry; `read_scene(path)` returns

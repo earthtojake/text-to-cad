@@ -689,6 +689,37 @@ export function shouldUseNativeGlbScene(document, { renderMode = false, clip = n
   return Boolean(document?.scene && (renderMode || clip));
 }
 
+const AUTHORED_FINISH_KEYS = ["roughness", "metalness", "clearcoat", "clearcoatRoughness", "envMapIntensity"];
+
+/**
+ * Dress a native GLB scene for the mode it is shown in.
+ *
+ * An animated GLB plays in its native hierarchy, but at rest Inspect draws the
+ * normalized mesh with the viewer's CAD surface. Left alone, the authored PBR
+ * finish (metal, with no environment to reflect in Inspect) makes the same model
+ * change shading the moment a clip becomes active. So Inspect gives the native
+ * materials the CAD surface FINISH and keeps what identifies the part: its colour,
+ * maps and opacity. Photographic Render restores the finish the file authored.
+ * The document owns its materials across mode toggles, so the authored values are
+ * kept on the material and this is safe to call on every scene build.
+ */
+export function applyGlbDocumentFinish(document, { renderMode = false, finish = null } = {}) {
+  const materials = new Set();
+  document?.scene?.traverse?.((object) => {
+    for (const material of Array.isArray(object?.material) ? object.material : [object?.material]) {
+      if (material?.isMeshStandardMaterial) materials.add(material);
+    }
+  });
+  for (const material of materials) {
+    const authored = material.userData.authoredFinish ||= Object.fromEntries(
+      AUTHORED_FINISH_KEYS.filter((key) => key in material).map((key) => [key, material[key]])
+    );
+    const values = renderMode || !finish ? authored : { ...authored, ...finish };
+    for (const key of Object.keys(authored)) material[key] = values[key];
+    material.needsUpdate = true;
+  }
+}
+
 // Scene hosts detach native GLBs when changing presentation. Detachment is not
 // disposal: the document retains geometry, material and texture ownership for
 // the next mode toggle.

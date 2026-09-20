@@ -15,6 +15,7 @@ import {
   renderMeshJob,
   resolveOutputCameraProjection,
   resolveOutputCameraSpec,
+  SECTION_PLANES,
   stepParametersForSnapshotOutput
 } from "./renderMeshScene.js";
 import { evaluateAnimationClip, normalizeAnimationClips } from "./animationRuntime.js";
@@ -89,10 +90,38 @@ test("component-only packages render and section every placed occurrence", async
   const list = await renderMeshJob(mesh, { mode: "list", selection: { focus: ["b"] } });
   assert.deepEqual(list.parts.map((part) => part.ref), ["#b"]);
   const result = await renderMeshJob(mesh, { mode: "section", section: { plane: "XY", offset: 0 },
-    outputs: [{ path: "section.svg", format: "svg" }] });
+    outputs: [{ path: "section.svg" }] });
   assert.equal(result.section.segmentCount, 2);
   assert.match(result.outputs[0].text, /10\.0000 0\.0000/);
   assert.match(result.outputs[0].text, /10\.5000 0\.5000/);
+  assert.deepEqual(result.warnings, []);
+});
+
+test("a section is cut where job.section says, and an output's extension is its only format switch", async () => {
+  // One triangle standing in the XZ plane (y = 0), spanning z = -1..1 and x = -1..1.
+  const mesh = {
+    vertices: new Float32Array([-1, 0, -1, 1, 0, 1, 0, 0, -1]),
+    indices: new Uint32Array([0, 1, 2]),
+    normals: new Float32Array([0, 1, 0, 0, 1, 0, 0, 1, 0]),
+    parts: [],
+    bounds: { min: [-1, 0, -1], max: [1, 0, 1] }
+  };
+  const cut = (section, path = "cut.svg") => renderMeshJob(mesh, { mode: "section", section, outputs: [{ path }] });
+  assert.deepEqual(SECTION_PLANES, ["XY", "XZ", "YZ"]);
+  // XY at Z=0 and YZ at X=0 both cross it; the offset moves the plane along its normal.
+  assert.equal((await cut({ plane: "XY", offset: 0 })).section.segmentCount, 1);
+  assert.equal((await cut({ plane: "YZ", offset: 0.5 })).section.segmentCount, 1);
+  const missed = await cut({ plane: "XY", offset: 5 });
+  assert.equal(missed.section.segmentCount, 0);
+  assert.match(missed.warnings[0], /SECTION XY @ Z=5\.000 does not intersect the model/);
+  // The default cut is XY at 0, the same thing Python fills in.
+  assert.equal((await cut(undefined)).section.segmentCount, 1);
+  // Only the two axis-aligned fields exist: an unknown plane is an error, not an XY cut.
+  await assert.rejects(cut({ plane: "XW" }), /section\.plane must be one of: XY, XZ, YZ/);
+  await assert.rejects(cut({ plane: "xy" }), /section\.plane must be one of/);
+  // `format` is not a key: a .svg name is SVG text whatever else the output says.
+  const svg = await renderMeshJob(mesh, { mode: "section", outputs: [{ path: "CUT.SVG", format: "png" }] });
+  assert.equal(svg.outputs[0].mimeType, "image/svg+xml");
 });
 
 test("renderMeshJob list capture uses buildModel selection", async () => {
@@ -224,7 +253,7 @@ test("output projection echo follows the per-output camera decision", () => {
 test("snapshot and shared CAD scene use the same appearance ink", () => {
   for (const appearance of ["light", "dark"]) {
     const mesh = twoPartMeshData();
-    const context = renderJobContext(mesh, { input: "part.step", kind: "step", appearance });
+    const context = renderJobContext(mesh, { input: "part.step", kind: "step", display: { appearance } });
     const scene = buildModel(THREE, mesh, modelOptionsForRenderJob(context));
     assert.deepEqual(scene.runtime.edgeSettings.classes, context.edgeSettings.classes);
     assert.equal(scene.runtime.edgeSettings.color, "#253443");

@@ -26,7 +26,7 @@ import { useRef } from "react";
  * them, and the `aria-valuemin`/`max` on the handle below are the real
  * numbers rather than a second opinion.
  */
-// Fits Features / Motion / View and the zoom readout without scrolling.
+// Fits Features / Kinematics / Display and the zoom readout without scrolling.
 export const PANEL_MIN_WIDTH = 256;
 export const PANEL_MAX_WIDTH = 480;
 export const PANEL_DEFAULT_WIDTH = 320;

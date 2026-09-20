@@ -5,7 +5,6 @@ import {
   buildUrdfJointAnglesCopyText,
   cloneJointValueMap,
   findBestMatchingJointValueState,
-  interpolateTrajectoryJointValues,
   jointValueSubsetClose,
   normalizePoint3,
   roundedUrdfJointValue,
@@ -65,29 +64,6 @@ test("best group-state match ignores partial presets when other joints changed",
   assert.equal(findBestMatchingJointValueState(states, { ...defaults, gripper: 12 }, defaults), null);
   assert.equal(findBestMatchingJointValueState(states, { ...defaults, gripper: 20 }, defaults)?.id, "gripper/closed");
   assert.equal(findBestMatchingJointValueState(states, { shoulder: 20, elbow: -30, gripper: 0 }, defaults), null);
-});
-
-test("trajectory interpolation keeps fallback values and interpolates only target joints", () => {
-  const trajectory = {
-    points: [
-      { timeFromStartSec: 0, positionsByNameDeg: { shoulder: 0 } },
-      { timeFromStartSec: 2, positionsByNameDeg: { shoulder: 20, elbow: 30 } },
-      { timeFromStartSec: 4, positionsByNameDeg: { shoulder: 40, elbow: 10 } }
-    ]
-  };
-
-  assert.deepEqual(interpolateTrajectoryJointValues(null, 1, { wrist: 5 }), { wrist: 5 });
-  assert.deepEqual(interpolateTrajectoryJointValues(trajectory, -1, { wrist: 5 }), { wrist: 5, shoulder: 0 });
-  assert.deepEqual(interpolateTrajectoryJointValues(trajectory, 1, { wrist: 5, elbow: 2 }), {
-    wrist: 5,
-    elbow: 30,
-    shoulder: 10
-  });
-  assert.deepEqual(interpolateTrajectoryJointValues(trajectory, 5, { wrist: 5 }), {
-    wrist: 5,
-    shoulder: 40,
-    elbow: 10
-  });
 });
 
 test("URDF pose and copy helpers preserve formatting and numeric rounding", () => {

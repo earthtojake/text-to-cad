@@ -21,7 +21,7 @@
  *
  * Pure but for its lucide glyphs, so `node --test` loads it with no bundler.
  */
-import { Code2, Eye, Folders, PanelLeft } from "lucide-react";
+import { Code2, Eye, Folders, PanelLeft, SlidersHorizontal } from "lucide-react";
 
 /**
  * Where a panel's content comes from — which is who draws it.
@@ -86,22 +86,30 @@ export const SOURCE_PANEL = "source";
  * Nothing until the surface is up: a CAD pane whose runtime did not start
  * shows a failure card, and a toggle over a card would open nothing.
  *
+ * A file whose Inspector is only its View settings (a mesh: STL, 3MF, GLB) opens
+ * with the column shut: there is nothing to inspect, and the model gets the room.
+ * It is a default, so a person who opens the Inspector keeps it open.
+ *
  * @param {boolean} ready
+ * @param {{ path?: string }} [file]
  * @returns {FilePanel[]}
  */
-export function cadPanels(ready) {
+export function cadPanels(ready, file) {
   return ready
     ? [
       {
         id: CAD_PANEL.fileSheet,
         label: "Inspector",
-        icon: PanelLeft,
+        icon: SlidersHorizontal,
         content: "slot",
-        defaultOpen: true
+        defaultOpen: !VIEW_ONLY_FILE.test(String(file?.path || ""))
       }
     ]
     : [];
 }
+
+// The formats whose Inspector is the View tab alone (`fileSheetSections.js`, kind "mesh").
+const VIEW_ONLY_FILE = /\.(stl|3mf|glb)$/i;
 
 /**
  * The desktop's markdown panel: the same bytes read as a document or as

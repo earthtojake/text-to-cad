@@ -157,6 +157,28 @@ def parser_dests(parser: argparse.ArgumentParser) -> tuple[str, ...]:
     )
 
 
+def _flag_metavars(names: Sequence[str]) -> dict[str, str]:
+    """``{parameter: METAVAR}`` for a command's value-taking flags.
+
+    A metavar is the parameter's LAST word (``--mesh-tolerance TOLERANCE``).
+    Where two flags of one command would share it, each takes one more leading
+    word until they differ (``MESH_TOLERANCE`` / ``ANGULAR_TOLERANCE``), so a
+    usage line never shows two different values under one name."""
+    words = {name: name.split("_") for name in names}
+    depth = {name: 1 for name in names}
+    while True:
+        metavars = {name: "_".join(words[name][-depth[name]:]).upper() for name in names}
+        clashing = [
+            name for name in names
+            if sum(1 for other in names if metavars[other] == metavars[name]) > 1
+            and depth[name] < len(words[name])
+        ]
+        if not clashing:
+            return metavars
+        for name in clashing:
+            depth[name] += 1
+
+
 def cli_from_function(func: Callable[..., Any], *, prog: str) -> argparse.ArgumentParser:
     """The argparse parser this function's signature implies."""
     summary, param_help = parse_docstring(func.__doc__)
@@ -167,6 +189,10 @@ def cli_from_function(func: Callable[..., Any], *, prog: str) -> argparse.Argume
     parser = argparse.ArgumentParser(prog=prog, description=summary, allow_abbrev=False)
     hints = _type_hints(func)
     where = func.__qualname__
+    metavars = _flag_metavars([
+        name for name, parameter in inspect.signature(func).parameters.items()
+        if parameter.kind is parameter.KEYWORD_ONLY and hints.get(name) is not bool
+    ])
     for name, parameter in inspect.signature(func).parameters.items():
         if parameter.kind in (parameter.VAR_POSITIONAL, parameter.VAR_KEYWORD):
             raise NotDerivable(f"{where}: variadic parameter {name!r} is not derivable")
@@ -186,7 +212,7 @@ def cli_from_function(func: Callable[..., Any], *, prog: str) -> argparse.Argume
                 # here read well for a `--tags TAG` and turned `--focus` into
                 # `FOCU`, so the repeatable-ness is stated in the help text
                 # instead, where it can be said in words.
-                metavar=name.rsplit("_", 1)[-1].upper(),
+                metavar=metavars[name],
                 help=help_text,
             )
             continue
@@ -205,7 +231,7 @@ def cli_from_function(func: Callable[..., Any], *, prog: str) -> argparse.Argume
                 flag,
                 type=base,
                 default=None if parameter.default is parameter.empty else parameter.default,
-                metavar=name.rsplit("_", 1)[-1].upper(),
+                metavar=metavars[name],
                 help=help_text,
             )
             continue
@@ -301,6 +327,36 @@ def result_lines(result: Any) -> list[str]:
     ]
 
 
+def report_failure(
+    exc: BaseException,
+    *,
+    prog: str,
+    as_json: bool,
+    verbose: bool = False,
+    verbose_hint: bool = True,
+    stdout: Any | None = None,
+    stderr: Any | None = None,
+) -> int:
+    """The ONE failure envelope of every cadgen command, and its exit code (1).
+
+    Under ``--json`` a failure is ``{"ok": false, "error": ...}`` on STDOUT -- the
+    result channel, so a caller parsing the last stdout line always finds an
+    answer; otherwise it is the one-line ``[tool] FAILED: ...`` report on stderr.
+    Shared by the generated doors (:func:`emit`) and the model-script runner
+    (``cadgen.cli._run_model``), which prints its own success lines and so cannot
+    go through :func:`emit` itself.
+    """
+    if as_json:
+        out = stdout if stdout is not None else sys.stdout
+        print(json.dumps({"ok": False, "error": str(exc)}, separators=(",", ":")), file=out)
+        return 1
+    from cadgen._internal.cli_errors import report_cli_error
+
+    return report_cli_error(
+        exc, tool=prog, verbose=verbose, verbose_hint=verbose_hint, stream=stderr
+    )
+
+
 def emit(
     invoke: Callable[[], Any],
     *,
@@ -322,13 +378,9 @@ def emit(
     try:
         result = invoke()
     except Exception as exc:  # noqa: BLE001 — the CLI boundary: report, do not traceback
-        if as_json:
-            print(json.dumps({"ok": False, "error": str(exc)}, separators=(",", ":")), file=out)
-            return 1
-        from cadgen._internal.cli_errors import report_cli_error
-
-        return report_cli_error(
-            exc, tool=prog, verbose=verbose, verbose_hint=verbose_hint, stream=stderr
+        return report_failure(
+            exc, prog=prog, as_json=as_json, verbose=verbose, verbose_hint=verbose_hint,
+            stdout=out, stderr=stderr,
         )
     if as_json:
         print(json.dumps(result_payload(result), separators=(",", ":")), file=out)

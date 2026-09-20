@@ -147,3 +147,32 @@ test("link facts report what the description says and nothing it does not", () =
   assert.equal(robotLinkFacts(description, "camera_link").parentJoint.axis, null);
   assert.deepEqual(robotLinkFacts(description, "wrist_link").endEffectors, ["gripper"]);
 });
+
+test("a root that is only a frame gets no row; a description of nothing but frames keeps them all", () => {
+  const body = { visuals: [{ id: "v" }] };
+  const robot = {
+    links: [{ name: "base_footprint" }, { name: "odom_frame" }, { name: "base_link", ...body }, { name: "arm_link", ...body }],
+    joints: [
+      { name: "odom", type: "fixed", parentLink: "odom_frame", childLink: "base_footprint" },
+      { name: "footprint", type: "fixed", parentLink: "base_footprint", childLink: "base_link" },
+      { name: "shoulder", type: "revolute", parentLink: "base_link", childLink: "arm_link" },
+    ],
+  };
+  const tree = buildRobotTree(robot);
+  assert.deepEqual(tree.roots.map(root => root.linkName), ["base_link"]);
+  assert.deepEqual(tree.elidedLinkNames, ["odom_frame", "base_footprint"]);
+  assert.equal(tree.nodesById.has("link:base_footprint"), false);
+  assert.deepEqual(robotTreeAncestorIds(tree, "link:arm_link"), ["link:base_link"]);
+  // The child still says where it hangs from.
+  assert.equal(tree.roots[0].joint.name, "footprint");
+
+  // Not a frame: it carries mass, or its child moves, or it branches.
+  const keeps = mutate => { const copy = structuredClone(robot); mutate(copy); return buildRobotTree(copy).roots[0].linkName; };
+  assert.equal(keeps(r => { r.links[1].inertial = { mass: 1 }; }), "odom_frame");
+  assert.equal(keeps(r => { r.joints[0].type = "continuous"; }), "odom_frame");
+  assert.equal(keeps(r => { r.links.push({ name: "imu" }); r.joints.push({ name: "imu", type: "fixed", parentLink: "odom_frame", childLink: "imu" }); }), "odom_frame");
+  // Geometry-less everywhere (a kinematics-only description): every link is a frame, so none is dropped.
+  const bare = { links: robot.links.map(link => ({ name: link.name })), joints: robot.joints };
+  assert.deepEqual(buildRobotTree(bare).elidedLinkNames, []);
+  assert.equal(buildRobotTree(bare).roots[0].linkName, "odom_frame");
+});

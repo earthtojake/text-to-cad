@@ -25,19 +25,19 @@ function advance(ms = 100) {
 }
 function setup(initialClips: any = clips) {
   const clock = createAnimationClock();
-  const hook = renderHook(({ fileKey, modelClips }) => {
+  const hook = renderHook(({ modelClips }) => {
     const [animation, setAnimation] = useState(buildDefaultAnimationState(modelClips));
     const [values, setValues] = useState(definition.defaultParameterValues);
     const [pose, setPose] = useState('');
     const animationRef = useRef(animation), valuesRef = useRef(values), revision = useRef(0);
-    const commands = useStepMotionControls({ fileKey, selectedStepModuleDefinition: definition,
+    const commands = useStepMotionControls({ selectedStepModuleDefinition: definition,
       selectedAnimationClips: modelClips, selectedActiveAnimationClip: findAnimationClip(modelClips, animation.activeClipId),
       animationState: animation, animationStateRef: animationRef, setAnimationState: setAnimation,
       stepModuleParameterValuesRef: valuesRef, setStepModuleParameterValues: setValues,
-      setAppliedStepPoseName: setPose, motionRevisionRef: revision, transitionDurationMs: 300 });
+      setAppliedStepPoseName: setPose, motionRevisionRef: revision });
     return { ...commands, animation, values, pose, animationRef, valuesRef,
       frame: animationRenderFrame({ ...animation, clip: findAnimationClip(modelClips, animation.activeClipId) }) };
-  }, { initialProps: { fileKey: 'first.step', modelClips: initialClips },
+  }, { initialProps: { modelClips: initialClips },
     wrapper: ({ children }) => <AnimationClockProvider value={clock}>{children}</AnimationClockProvider> });
   return { ...hook, clock };
 }
@@ -57,10 +57,10 @@ it('a parameter edit stops live playback, resets its preferences and clock, and 
   expect(result.current.values.hinge).toBe(30);
 });
 
-it.each(['play', 'scrub', 'restart', 'clip', 'speed', 'loop'])('%s resets position and cancels an in-flight pose transition', command => {
+it.each(['play', 'scrub', 'restart', 'clip', 'speed', 'loop'])('%s returns a posed model to its authored values', command => {
   const { result, clock } = setup();
-  act(() => result.current.handleApplyPose('open')); advance(0); advance(150);
-  expect(result.current.values.hinge).toBeGreaterThan(5);
+  act(() => result.current.handleApplyPose('open'));
+  expect(result.current.values.hinge).toBe(80);
   const stale = [...frames.values()];
   act(() => {
     const actions: Record<string, () => void> = {
@@ -78,12 +78,11 @@ it.each(['play', 'scrub', 'restart', 'clip', 'speed', 'loop'])('%s resets positi
   expect(clock.getAnimationClock()).toBe(time);
 });
 
-it('numeric edits cancel pose tweens and successive batched edits preserve each other', () => {
+it('numeric edits leave the named pose behind, and successive batched edits preserve each other', () => {
   const { result } = setup();
-  act(() => result.current.handleApplyPose('open')); advance(0);
-  const stale = [...frames.values()];
+  act(() => result.current.handleApplyPose('open'));
+  expect(result.current.pose).toBe('open');
   act(() => { result.current.handleStepModuleParameterChange('hinge', 12); result.current.handleStepModuleParameterChange('slide', 22); });
-  act(() => stale.forEach(frame => frame(performance.now() + 400)));
   expect(result.current.values).toEqual({ hinge: 12, slide: 22 });
   expect(result.current.pose).toBe('');
 });
@@ -91,11 +90,11 @@ it('numeric edits cancel pose tweens and successive batched edits preserve each 
 it('selecting a named position after paused scrubbing resets animation and applies a complete preset', () => {
   const { result, clock } = setup();
   act(() => result.current.handleAnimationScrub(2));
-  act(() => result.current.handleApplyPose('closed')); advance(0); advance(500);
+  act(() => result.current.handleApplyPose('closed'));
   expect(result.current.values).toEqual({ hinge: -20, slide: 7 });
   expect(result.current.pose).toBe('closed'); expect(result.current.frame).toBeNull();
   expect(clock.getAnimationClock()).toBe(0);
-  act(() => result.current.handleApplyPose('open')); advance(0); advance(500);
+  act(() => result.current.handleApplyPose('open'));
   expect(result.current.values).toEqual({ hinge: 80, slide: 2 });
 });
 
@@ -113,7 +112,7 @@ it.each(['playback', 'position'])('global motion reset clears %s and all pending
     act(() => result.current.handleAnimationClipSelect('close'));
     act(() => { result.current.handleAnimationSpeedChange(2); result.current.handleAnimationLoopToggle(true); result.current.handleAnimationPlayToggle(); });
     advance();
-  } else { act(() => result.current.handleApplyPose('closed')); advance(0); }
+  } else { act(() => result.current.handleApplyPose('closed')); }
   const stale = [...frames.values()];
   act(() => result.current.resetMotion());
   act(() => stale.forEach(frame => frame(performance.now() + 500)));
@@ -141,16 +140,12 @@ it('invalid stale selections do not reset the valid owner, and parameter-only fi
   act(() => result.current.resetMotion()); expect(result.current.values).toEqual(definition.defaultParameterValues);
 });
 
-it('departing files and unmounted views cannot receive stale tween updates', () => {
-  const { result, rerender, unmount } = setup();
-  act(() => result.current.handleApplyPose('open')); advance(0);
-  const stale = [...frames.values()];
-  rerender({ fileKey: 'second.step', modelClips: clips });
-  const values = result.current.values;
-  act(() => stale.forEach(frame => frame(performance.now() + 500)));
-  expect(result.current.values).toBe(values);
+it('an unmounted view leaves no frame queued', () => {
+  const { result, unmount } = setup();
+  act(() => result.current.handleApplyPose('open'));
   act(() => result.current.handleAnimationPlayToggle());
-  unmount(); expect(frames.size).toBe(1); // only the inert, cancelled pose callback remains
+  expect(frames.size).toBe(1);
+  unmount(); expect(frames.size).toBe(0);
 });
 
 it('repeated animation adjustments do not rewrite unchanged authored parameter values', () => {
@@ -159,4 +154,16 @@ it('repeated animation adjustments do not rewrite unchanged authored parameter v
   const values = result.current.values;
   act(() => { result.current.handleAnimationScrub(2); result.current.handleAnimationSpeedChange(2); });
   expect(result.current.values).toBe(values);
+});
+
+it('every pose write lands at once and asks for no frame: a value, a named pose, Reset', () => {
+  const { result } = setup();
+  // A slider, a typed number and a Pose knob all arrive as a parameter change.
+  act(() => result.current.handleStepModuleParameterChange('hinge', 47));
+  expect(result.current.values).toEqual({ hinge: 47, slide: 2 });
+  act(() => result.current.handleApplyPose('closed'));
+  expect(result.current.values).toEqual({ hinge: -20, slide: 7 });
+  act(() => result.current.handleResetStepModuleParameters());
+  expect(result.current.values).toEqual({ hinge: 5, slide: 2 });
+  expect(frames.size).toBe(0);
 });

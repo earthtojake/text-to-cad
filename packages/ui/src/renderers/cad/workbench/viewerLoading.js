@@ -21,7 +21,7 @@ export function loadingProgress(progress, { finding = false, preparing = false }
 
 export function viewerLoadingState({
   busy = false, editPending = false, previousView = false,
-  currentPreview = false, error = null, renderMode = false, progress = null,
+  currentPreview = false, error = null, progress = null,
   finding = false, preparing = false,
 } = {}) {
   const failed = error && (typeof error === "string" || error.severity !== "warning" || error.blocking === true);
@@ -30,7 +30,6 @@ export function viewerLoadingState({
     opening: active && !previousView,
     updating: active && previousView,
     busy: active,
-    headline: renderMode ? "Preparing render…" : "Opening model…",
     progress: loadingProgress(progress, { finding, preparing }),
   };
 }

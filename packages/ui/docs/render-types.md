@@ -26,7 +26,6 @@ format. Pure data: no behaviour, no imports beyond the format enum.
 | `iconKind` | The file-list glyph. |
 | `sheetKind` | Which file-sheet section set mounts. |
 | `label` | User-facing format name (status chips, sheet titles, loading labels). |
-| `rebuildCommand` | The manual rebuild command shown on a build-failure card, or `""` when the viewer builds it or the file IS the asset. |
 | `sceneScale` | `cad` or `urdf`; picks the scene-scale profile. |
 | `tools` | `select`, `pan`, `draw`, `orbit`, `screenshot`. Orbit and screenshot are true for everything — they act on the viewport, not the geometry. |
 | `parts` | Per-part selection, hiding, isolate, assembly tree. |

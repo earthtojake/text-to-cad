@@ -97,6 +97,47 @@ class Derivation(unittest.TestCase):
         self.assertIn("Do the thing to TARGET.", cli_from_function(verb, prog="t").format_help())
 
 
+class Metavars(unittest.TestCase):
+    """A flag's metavar is its parameter's last word -- until two flags of one
+    command would share it; then each takes leading words until they differ."""
+
+    def test_the_last_word_names_the_value(self):
+        def one(target: Path, *, size_profile: str | None = None, focus: tuple[str, ...] = ()) -> Result:
+            """Summary."""
+
+        actions = {a.dest: a.metavar for a in cli_from_function(one, prog="t")._actions}
+        self.assertEqual("PROFILE", actions["size_profile"])
+        self.assertEqual("FOCUS", actions["focus"])
+
+    def test_two_flags_never_share_a_metavar(self):
+        def two(
+            target: Path, *, mesh_tolerance: float | None = None,
+            mesh_angular_tolerance: float | None = None, deform_tolerance: float | None = None,
+        ) -> Result:
+            """Summary."""
+
+        actions = {a.dest: a.metavar for a in cli_from_function(two, prog="t")._actions}
+        self.assertEqual("MESH_TOLERANCE", actions["mesh_tolerance"])
+        self.assertEqual("ANGULAR_TOLERANCE", actions["mesh_angular_tolerance"])
+        self.assertEqual("DEFORM_TOLERANCE", actions["deform_tolerance"])
+
+    def test_every_generated_door_has_distinct_metavars(self):
+        import collections
+        import importlib
+
+        from cadgen import cli
+
+        for command, (module_name, _) in sorted(cli._COMMANDS.items()):
+            module = importlib.import_module(module_name)
+            if not hasattr(module, "VERB"):
+                continue
+            with self.subTest(command=command):
+                metavars = collections.Counter(
+                    a.metavar for a in module.build_parser()._actions if a.option_strings and a.metavar
+                )
+                self.assertEqual({}, {name: n for name, n in metavars.items() if n > 1})
+
+
 class OutsideTheSubset(unittest.TestCase):
     """Each of these must be an ADAPTER, and the helper has to say so."""
 

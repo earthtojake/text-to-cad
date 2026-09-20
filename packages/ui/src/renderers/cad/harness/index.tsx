@@ -7,6 +7,8 @@ import { createCadPreferences, createCadRenderer } from '@hardcore/ui/renderers/
 import type { ViewerHost } from '@hardcore/ui/host';
 import type { CadLiveController, CadCommands } from '@hardcore/ui/renderers/cad';
 
+// The one file both panes open: `?file=arm.urdf` for a test whose fixture is not the default mesh.
+const file = new URLSearchParams(location.search).get('file') || 'part.stl';
 const captures: { file: string; size: number; type: string; references: unknown }[] = [];
 const preferences = createCadPreferences();
 function workspace(id: string) {
@@ -25,15 +27,15 @@ function workspace(id: string) {
   const client = createCadClient({ origin: `${location.origin}/${id}`, workspaceId: id, pollIntervalMs: 0 });
   const source: FileSource = {
     id, rootName: id,
-    stat: async (path) => ({ path, name: path, kind: 'file', size: 400, extension: 'stl' }),
-    list: async () => [{ path: 'part.stl', name: 'part.stl', kind: 'file' }]
+    stat: async (path) => ({ path, name: path, kind: 'file', size: 400, extension: path.split('.').pop() || '' }),
+    list: async () => [{ path: file, name: file, kind: 'file' }]
   };
   const destination = { kind: 'composer' as const, available: true };
   const host: ViewerHost = { files: source, navigation: { openFile() {} }, environment: { colorScheme: 'dark' },
     clipboard: { writeText: async () => {}, readText: async () => '', writeImage: async () => {} },
     promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver: async context => {
       const attachment = context.parts.find(part => part.kind === 'attachment');
-      if (attachment?.kind === 'attachment') { const blob = await attachment.content; captures.push({ file: 'part.stl', size: blob.size, type: blob.type, references: context.parts.filter(part => part.kind === 'reference').map(part => part.reference) }); }
+      if (attachment?.kind === 'attachment') { const blob = await attachment.content; captures.push({ file, size: blob.size, type: blob.type, references: context.parts.filter(part => part.kind === 'reference').map(part => part.reference) }); }
       return { status: 'added', partIds: context.parts.map(part => part.id) };
     } }
   };
@@ -55,10 +57,10 @@ function App() {
   Object.assign(window, { cadHarness: { a, b, state, otherState, preferences, captures, capture: a.capture, second: setSecond, mounted: setMounted, fullscreen: setFullscreen } });
   return <div style={{ display: 'flex', width: '1200px', height: '720px' }}>
     <section data-testid="one" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-      {mounted && <FileViewer fullscreen={fullscreen} onExitFullscreen={() => setFullscreen(false)} file="part.stl" host={a.host} renderers={a.renderers} state={state} onStateChange={setState} />}
+      {mounted && <FileViewer fullscreen={fullscreen} onExitFullscreen={() => setFullscreen(false)} file={file} host={a.host} renderers={a.renderers} state={state} onStateChange={setState} />}
     </section>
     {second && <section data-testid="two" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-      <FileViewer file="part.stl" host={b.host} renderers={b.renderers} state={otherState} onStateChange={setOtherState} />
+      <FileViewer file={file} host={b.host} renderers={b.renderers} state={otherState} onStateChange={setOtherState} />
     </section>}
   </div>;
 }

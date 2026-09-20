@@ -302,7 +302,6 @@ export default function CadRenderPane({
   pickableVertices,
   focusedPartIds = "",
   displaySettings = null,
-  boundsAnimationActive = false,
   drawToolActive,
   drawing,
   handlePerspectiveChange,
@@ -337,8 +336,9 @@ export default function CadRenderPane({
   copyButtonLabel,
   copyButtonCountLabel = "",
   selectionFilter = "all",
-  panToolActive = false,
   animateToolActive = false,
+  // The Pose tool's handles, or null while another tool is active.
+  jointHandles = null,
   handleCopySelection,
   createPromptContext,
   onPromptResult,
@@ -370,7 +370,7 @@ export default function CadRenderPane({
     ? CAMERA_PROJECTION.ORTHOGRAPHIC
     : normalizeCameraProjection(projection, CAMERA_PROJECTION.ORTHOGRAPHIC);
   const cadViewerBoundsAnimationActive = Boolean(
-    boundsAnimationActive || stepAnimation?.playing || embeddedGlbAnimation?.playing
+    stepAnimation?.playing || embeddedGlbAnimation?.playing
   );
   const topologySelectionPending = Boolean(referenceSelectionPending && hasTopology);
   const topologySelectionUnavailable = Boolean(referenceSelectionUnavailable && hasTopology);
@@ -487,12 +487,11 @@ export default function CadRenderPane({
         viewPlaneOffsetBottom="1rem"
         compactViewPlane={false}
         isLoading={viewerLoading && !retainingPreviousStepMesh}
-        // Animate, like fullscreen, is watching: nothing under the pointer is pickable.
-        pickMode={previewMode || animateToolActive || !inspectionEnabled || retainingPreviousStepMesh || (!hasTopology && !hasParts && !measureModeActive)
+        // Animate, like fullscreen, is watching, and Pose offers its knobs alone: nothing of the model is pickable.
+        pickMode={previewMode || animateToolActive || jointHandles || !inspectionEnabled || retainingPreviousStepMesh || (!hasTopology && !hasParts && !measureModeActive)
           ? VIEWER_PICK_MODE.NONE
           : viewerPickModeForRenderPane({
             selectionFilter,
-            panToolActive,
             topologySelectionPending,
             topologySelectionUnavailable,
             topologySelectionDeferred,
@@ -506,7 +505,6 @@ export default function CadRenderPane({
             focusedPartIds,
             measureMode: measureModeActive
           })}
-        panToolActive={!previewMode && inspectionEnabled && panToolActive}
         renderPartsIndividually={capabilities.sceneScale === "urdf"
           ? true
           : ((renderPartsIndividually || Boolean(stepParameters?.definition))
@@ -524,11 +522,12 @@ export default function CadRenderPane({
         glbDocument={glbDocument}
         embeddedGlbAnimation={embeddedGlbAnimation}
         animateMode={previewMode || animateToolActive}
+        jointHandles={previewMode ? null : jointHandles}
         // One shared empty list: a fresh [] per render — per animation frame — invalidated the
-        // viewer's pickable memos and reference map. Animate and fullscreen pick nothing at all.
-        pickableFaces={inspectionEnabled && hasTopology && !retainingPreviousStepMesh && !previewMode && !animateToolActive ? pickableFaces : EMPTY_LIST}
-        pickableEdges={inspectionEnabled && hasTopology && !retainingPreviousStepMesh && !previewMode && !animateToolActive ? pickableEdges : EMPTY_LIST}
-        pickableVertices={inspectionEnabled && hasTopology && !retainingPreviousStepMesh && !previewMode && !animateToolActive ? pickableVertices : EMPTY_LIST}
+        // viewer's pickable memos and reference map. Animate, Pose and fullscreen pick nothing at all.
+        pickableFaces={inspectionEnabled && hasTopology && !retainingPreviousStepMesh && !previewMode && !animateToolActive && !jointHandles ? pickableFaces : EMPTY_LIST}
+        pickableEdges={inspectionEnabled && hasTopology && !retainingPreviousStepMesh && !previewMode && !animateToolActive && !jointHandles ? pickableEdges : EMPTY_LIST}
+        pickableVertices={inspectionEnabled && hasTopology && !retainingPreviousStepMesh && !previewMode && !animateToolActive && !jointHandles ? pickableVertices : EMPTY_LIST}
         focusedPartId={inspectionEnabled && hasParts ? focusedPartIds : ""}
         boundsAnimationActive={cadViewerBoundsAnimationActive}
         drawingEnabled={!previewMode && inspectionEnabled && drawEnabled && drawToolActive}

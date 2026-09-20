@@ -181,7 +181,7 @@ Linux/Windows. Use the same graphics backend for baseline/refactor image
 comparisons.
 
 From the repository root, `scripts/test/test-viewer-browser.sh --ci` exercises
-the bundled client's format, picking, robot Components/Motion and camera
+the bundled client's format, picking, robot Links/Kinematics and camera
 contracts with fresh temporary fixtures and a private server/cache. Omit `--ci`
 to include full cold/warm/disabled-LOD picking, scene placement and Render quality
 checks. `--out /tmp/viewer-review` retains screenshots and bounded failure
@@ -198,24 +198,27 @@ the UI package's asset documentation for asset provenance and regeneration.
 
 ### Narrow CAD panes
 
-The shared top-right toolbar contains Select, Pan, Measure and Draw. Pressing
+The shared top-right toolbar contains Select, Measure (STEP only) and Draw, plus Pose (drag
+joints by viewport handles; the tool a robot opens in) and Animate where a file
+has joints or routines. Pressing
 Select again opens its selection-filter dropdown. Buttons wrap inside the pill
 when the Inspector or a narrow host reduces the scene width. Snapshot is a
 direct action beside the Inspector and file-tree toggles in the file navbar;
 the web prompt adapter copies the viewport image and references to the clipboard.
 The small muted percentage beside the Inspector tabs opens zoom/fit controls,
-Reset camera and Reset model. Reset model clears motion, Clip/Explode and
+Reset camera and Reset model. Reset model clears kinematics, Clip/Explode and
 hide/isolate state, restores the original camera, and preserves display settings.
 X/Y/Z labels remain visible outside the bottom-right axis endpoints.
 
 Fullscreen (`Maximize2`) sits beside appearance in the web header. The app owns
 this transient state and passes it to FileViewer. It hides all chrome, sidebars
-and viewport tools. Shared CAD fullscreen controls show a transparent centered
-bottom animation bar and Settings/X at top-right. Settings opens a floating,
-content-height panel capped by the viewport, with permanent Animation (when
-available) and Orbit sections. Routine selection, speed and loop reuse Motion's
-controls; Orbit uses a slider and numeric input (0 stops rotation). The animation bar has plain play/pause,
-scrub and restart, and is absent without animation. Position stays in the inspector.
+and viewport tools. Shared CAD fullscreen controls show the Animate tool's
+transparent centered bottom playbar and an untooltipped orbit-settings button
+plus X at top-right. Settings opens a floating, content-height panel capped by
+the viewport, with one permanent Orbit section: a speed slider and numeric
+input (0 stops rotation). The bottom playbar has plain play/pause and a live
+scrub bar — there is no separate restart, since scrubbing to the start is the
+restart — and is absent without animation. Kinematics stays in the inspector.
 Both control areas fade after two seconds idle; an open settings panel and active
 slider/keyboard interaction keep them visible.
 The app supplies `onExitFullscreen` and honors prevented Escape events so nested
@@ -226,24 +229,28 @@ preference adapter; animation shares the inspector's per-file state and clocks.
 
 ## Current viewer behavior
 
-The STEP inspector uses **Features | Motion | View**. Motion appears when supported,
-with Animation above Position and pose-transition preferences inside Position.
-The two systems keep their independent playback, preset and value state. Robot
-position controls also live in Motion, followed by a Components tab that always
-shows the robot's link tree, and DXF/mesh files retain their format-specific controls.
+The STEP inspector uses **Features | Kinematics | Display**. Kinematics appears
+when the sidecar declares it, with Pose above Joints. Every pose write — a
+named pose, a slider, a typed value, or a Pose-tool knob — is an instant jump;
+there is no eased transition. Reset also stops any playing routine and hands
+the pose back to Kinematics, so the two never disagree about which one is in
+control afterward. Robot Pose and Joints controls also live in Kinematics,
+followed by a Links tab that always shows the robot's link tree, and DXF/mesh
+files retain their format-specific controls.
 
-View owns a single Mode dropdown: Solid, Render, X-ray, Hidden line and Wireframe.
+Display owns a single Mode dropdown: Solid, Render, X-ray, Hidden line and Wireframe.
 Modes are presets over one grouped display schema, and all settings groups are
 available in every preset. Render defaults to perspective; others to orthographic.
-Changing a view setting shows Custom. View Reset restores its base preset and
+Changing a view setting shows Custom. Display Reset restores its base preset and
 disables Clip/Explode; preset selection preserves those tools. Neither operation
-changes camera viewpoint/zoom, selection, Motion or app appearance.
+changes camera viewpoint/zoom, selection, Kinematics or app appearance.
 Expanded settings groups are enabled; the minus disables and restores neutral
 behavior. See [View presets](../../packages/ui/docs/render-mode.md). Inspector
 tabs occupy one fixed row in canonical order, without dragging, reordering or
 splitting. Active selection is saved per file and preserved across mode changes.
 Old global tab layouts are ignored; a legacy split restores its last available
-selection. Kinematics/Animation IDs map to Motion and Display/Studio IDs to View.
+selection, and a saved section ID the current format does not have is simply
+not open, so the sheet lands on the format's first tab.
 Visited Model trees retain disclosure and scroll when another tab is active.
 
 Authored material information lives in the Model reference details; editing it

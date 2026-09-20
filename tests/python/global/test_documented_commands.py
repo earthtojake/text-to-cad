@@ -1,6 +1,8 @@
-"""Every `cadgen ...` command form a skill documents has to be a real command.
+"""Every `cadgen ...` command form a skill -- or the package's own markdown --
+documents has to be a real command.
 
-Skills are the product, and an agent runs what they say verbatim. A renamed or
+Skills are the product, and an agent runs what they say verbatim; the package's
+markdown (README, STORE, SNAPSHOTS, MEMO) is what ships in the wheel beside them. A renamed or
 retired command leaves the docs still confidently teaching it — that is how
 `scripts/test/test-installed.sh` came to check four commands that no longer
 existed, and how `cadgen step export` would have outlived its deletion.
@@ -30,6 +32,7 @@ add_repo_path("packages/cadgen/src")
 from cadgen import cli  # noqa: E402
 
 SKILLS = Path(repo_path("skills"))
+PACKAGE_DOCS = Path(repo_path("packages/cadgen"))
 
 FENCE = re.compile(r"^\s*```")
 
@@ -81,7 +84,8 @@ def _command_forms(text: str) -> list[tuple[list[str], bool]]:
 
 def _documented_forms() -> list[tuple[Path, list[str], bool]]:
     found: list[tuple[Path, list[str], bool]] = []
-    for path in sorted(SKILLS.rglob("*.md")):
+    # The package's TOP-LEVEL markdown only: that is what the wheel ships.
+    for path in (*sorted(SKILLS.rglob("*.md")), *sorted(PACKAGE_DOCS.glob("*.md"))):
         for argv, elided in _command_forms(path.read_text(encoding="utf-8")):
             found.append((path.relative_to(SKILLS.parent), argv, elided))
     return found
@@ -112,7 +116,12 @@ def _parse(module, rest: list[str]) -> None:
 class DocumentedCommands(unittest.TestCase):
     def test_the_skills_document_command_forms_at_all(self):
         # A sweep that silently matched nothing would pass forever.
-        self.assertGreater(len(_documented_forms()), 20)
+        forms = _documented_forms()
+        self.assertGreater(len([source for source, _, _ in forms if source.parts[0] == "skills"]), 20)
+        self.assertTrue(
+            [source for source, _, _ in forms if source.parts[0] == "packages"],
+            "the package markdown sweep matched nothing",
+        )
 
     def test_every_documented_form_names_a_real_command(self):
         for source, argv, _elided in _documented_forms():

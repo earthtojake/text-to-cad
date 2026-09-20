@@ -1,6 +1,5 @@
 
 export interface CadPreferences {
-  poseTransition?: { animate: boolean; speed: number };
   orbit?: { speed: number };
 }
 export interface CadPreferenceSource {
@@ -29,6 +28,5 @@ export function createCadPreferences({ initial = {}, onChange }: {
 }
 
 export const CAD_LEGACY_PREFERENCE_KEYS = Object.freeze({
-  poseTransition: 'cad-viewer:pose-transition:v1',
   directory: 'cad-viewer:directory-session:v1'
 });

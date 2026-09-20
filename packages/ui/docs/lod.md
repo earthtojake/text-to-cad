@@ -212,8 +212,9 @@ saved settings produce a nonblocking model warning, with rebuild guidance and
 full diagnostics; geometry remains usable. Existing usable views remain visible
 during updates and failures.
 
-**Opening.** Opening uses one headline with **Finding file**, **Reading
-model**, **Loading geometry**, or **Preparing view** underneath. Counts measure
+**Opening.** Opening shows one step line — **Finding file**, **Reading
+model**, **Loading geometry**, or **Preparing view** — with no headline above
+it; the loading mark itself says a model is opening. Counts measure
 completed geometry items in the current stage, not assembly occurrences or an
 overall ETA; uncounted stages are indeterminate. Render initialization uses the
 same indicator against the destination backdrop until its first usable frame.

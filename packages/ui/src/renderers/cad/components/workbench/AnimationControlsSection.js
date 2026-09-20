@@ -73,7 +73,7 @@ const stopEscape = event => event.stopPropagation();
 const MENU_PROPS = { side: "top", sideOffset: 8, collisionPadding: 8, onEscapeKeyDown: stopEscape };
 // The speeds a player offers; an authored speed outside them is listed too, so the menu never lies.
 export const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3];
-const speedLabel = speed => speed === 1 ? "Normal" : `${speed}×`;
+const speedLabel = speed => `${speed}×`;
 
 // Which routine plays: a list button at the start of the bar, and only when
 // there is a choice to make.
@@ -113,7 +113,8 @@ function PlaybarSettings({ runtime, disabled, onOpenChange }) {
     <DropdownMenuContent {...MENU_PROPS} align="end" className="w-48">
       <DropdownMenuSub>
         <DropdownMenuSubTrigger>
-          Speed<span className="ml-auto text-muted-foreground">{speedLabel(speed)}</span>
+          {/* The value sits against the arrow, as Loop's check sits against the edge. */}
+          <span className="flex-1">Speed</span><span className="text-muted-foreground tabular-nums">{speedLabel(speed)}</span>
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent className="w-32" onEscapeKeyDown={stopEscape}>
           <DropdownMenuRadioGroup value={String(speed)} onValueChange={value => runtime?.onSpeedChange?.(Number(value))}>

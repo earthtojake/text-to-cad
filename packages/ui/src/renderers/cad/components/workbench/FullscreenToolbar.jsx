@@ -80,7 +80,7 @@ export default function FullscreenToolbar({ surface, orbitSpeed, onOrbitSpeedCha
         <div className={cn('absolute right-3 top-3 flex items-center gap-1', pointerClass)}>
           <PopoverTrigger asChild>
             <Button type="button" variant="ghost" size="icon-xs" className={buttonClass}
-              aria-label="Orbit settings" title="Orbit" aria-pressed={settingsOpen}>
+              aria-label="Orbit settings" aria-pressed={settingsOpen}>
               <Orbit className="size-3" aria-hidden="true"/>
             </Button>
           </PopoverTrigger>
@@ -93,7 +93,7 @@ export default function FullscreenToolbar({ surface, orbitSpeed, onOrbitSpeedCha
       <PopoverContent align="end" sideOffset={8} collisionPadding={12} aria-label="Orbit settings" onEscapeKeyDown={stopEscape}
         className="w-72 max-w-[calc(100vw-24px)] max-h-[min(calc(100dvh-24px),var(--radix-popover-content-available-height))] overflow-y-auto p-0 text-tiny [&>section:last-child]:border-b-0">
         <FileSheetStaticSection title="Orbit">
-          <FileSheetSliderField compact label="Speed" labelTitle="Orbit speed: 0 stops orbit; 1× is one turn per minute"
+          <FileSheetSliderField compact label="Speed"
             value={`${Number(orbitSpeed.toFixed(2))}×`} onValueCommit={value => onOrbitSpeedChange(normalizeOrbit({
               speed: parseFileSheetNumberInput(value, { fallback: orbitSpeed, min: 0, max: MAX_ORBIT_SPEED }) }).speed)}
             valueInputProps={{ ariaLabel: 'Orbit speed value' }}>
