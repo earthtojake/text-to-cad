@@ -32,7 +32,8 @@ are for reading and maintaining the contracts.
 | `PromptContextPort`, bundles, references and delivery receipts | [Prompt types](../../core/src/prompt/types.ts) | `@hardcore/core/prompt` |
 | `CadWorkspaceService`, `CadResourceProvider`, worker tickets | [CAD service types](../../core/src/client/types.ts) | `@hardcore/core/client` |
 | `CadRendererSlots`, selection props, `CadCommandSource`, `CadLiveBinding` | [CAD registration](../src/renderers/cad/index.ts) | `@hardcore/ui/renderers/cad` |
-| `CadPreferenceSource` | [CAD preferences](../src/renderers/cad/preferences.ts) | `@hardcore/ui/renderers/cad` |
+| `CadPreferenceSource` | [Viewer preferences](../src/renderers/workspace/preferences.ts) | `@hardcore/ui/renderers/cad` (also `@hardcore/ui/renderers/workspace`) |
+| `GlbRendererOptions`, `GlbCommandSource`, `LiveViewBinding`, `LiveViewController` | [GLB registration](../src/renderers/glb/index.ts), [live binding](../src/renderers/kit/shell/liveBinding.ts) | `@hardcore/ui/renderers/glb` |
 | CAD snapshot validation and versioning | [CAD state](../src/renderers/cad/state.ts) | `@hardcore/ui/renderers/cad/state` |
 
 Start with the actual composition in [web App](../../../apps/web/src/App.tsx)

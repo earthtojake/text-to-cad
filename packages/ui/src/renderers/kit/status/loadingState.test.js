@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { loadingProgress, viewerLoadingState, prolongedLoadingMessage } from "./viewerLoading.js";
+import { loadingProgress, viewerLoadingState, prolongedLoadingMessage } from "./loadingState.js";
 
 test("opening counts real geometry work and an update preserves the prior view", () => {
   const progress = { phase: "geometry", label: "Loading geometry", done: 3, total: 8, determinate: true };

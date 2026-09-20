@@ -1,13 +1,11 @@
-import { createCadPreferences, type CadPreferenceSource } from "./preferences.js";
-export { createCadPreferences, CAD_LEGACY_PREFERENCE_KEYS } from "./preferences.js";
-export type { CadPreferences, CadPreferenceSource } from "./preferences.js";
-import type { CadWorkspaceService, CadEntry, CadRenderSession, CadServerInfo } from '@hardcore/core/client';
+import { createCadPreferences, prepareWorkspaceEntry, type CadPreferenceSource, type PreparedWorkspaceEntry, type WorkspaceClientOption } from "../workspace/index.js";
+export { createCadPreferences, CAD_LEGACY_PREFERENCE_KEYS } from "../workspace/index.js";
+export type { CadPreferences, CadPreferenceSource } from "../workspace/index.js";
 import type { PromptContext, PromptReference } from '@hardcore/core/prompt';
 import type { ComponentType } from 'react';
 import { isCadFile } from '@hardcore/core/lib/fileFormats.js';
 import { defineFileRenderer } from '../../file-viewer/registry.js';
-import type { PrepareContext } from '../../file-viewer/types.js';
-import { cadPanels } from '../../file-viewer/navigation/panels.js';
+import { inspectorPanels } from '../../file-viewer/navigation/panels.js';
 
 export type { CadLiveBinding, CadLiveController, CadLiveState, CadCameraSnapshot } from './live.js';
 import type { CadLiveBinding } from './live.js';
@@ -31,19 +29,20 @@ export interface CadCommandSource {
   acknowledge?(kind: keyof CadCommands, key: string | number): void;
 }
 export interface CadRendererOptions {
-  client: CadWorkspaceService | ((context: PrepareContext) => Promise<CadWorkspaceService>);
+  client: WorkspaceClientOption;
   slots?: CadRendererSlots;
   commands?: CadCommandSource;
   live?: CadLiveBinding;
   preferences?: CadPreferenceSource;
 }
-export interface PreparedCadDocument {
-  entry: CadEntry;
-  client: CadWorkspaceService;
-  serverInfo: CadServerInfo;
-  renderSession: CadRenderSession;
+export interface PreparedCadDocument extends PreparedWorkspaceEntry {
   services: Omit<CadRendererOptions, 'client'>;
 }
+
+// A native glTF scene has its own renderer (`renderers/glb`).
+const OTHER_RENDERERS_FILE = /\.glb$/i;
+// The formats whose Inspector is the Display tab alone open with the column shut.
+const DISPLAY_ONLY_FILE = /\.(stl|3mf)$/i;
 
 /** Registers CAD without loading Three.js, a viewport, or a backend connection. */
 export function createCadRenderer({ client, ...services }: CadRendererOptions) {
@@ -51,20 +50,11 @@ export function createCadRenderer({ client, ...services }: CadRendererOptions) {
   return defineFileRenderer<PreparedCadDocument>({
     id: 'cad',
     priority: 100,
-    matches: (file) => file.mediaType === 'cad' || Boolean(isCadFile(file.path)),
-    panels: ({ ready, file }) => cadPanels(ready, file),
+    matches: (file) => !OTHER_RENDERERS_FILE.test(file.path) && (file.mediaType === 'cad' || Boolean(isCadFile(file.path))),
+    panels: ({ ready, file }) => inspectorPanels(ready, { defaultOpen: !DISPLAY_ONLY_FILE.test(file.path) }),
     async prepare(context) {
-      const connection = typeof client === 'function' ? await client(context) : client;
-      context.signal.throwIfAborted();
-      if (context.refresh) await connection.refresh({ file: context.file.path, signal: context.signal, markRefreshing: false });
-      context.signal.throwIfAborted();
-      const [entry, serverInfo] = await Promise.all([
-        connection.resolveEntry(context.file.path, { signal: context.signal }),
-        connection.serverInfo({ signal: context.signal })
-      ]);
-      context.signal.throwIfAborted();
-      const renderSession = connection.createRenderSession({ file: context.file.path });
-      return { data: { entry, serverInfo, client: connection, renderSession, services }, dispose: () => renderSession.dispose() };
+      const prepared = await prepareWorkspaceEntry(client, context);
+      return { data: { ...prepared.data, services }, dispose: prepared.dispose };
     },
     load: () => import('./CadRenderer.js')
   });

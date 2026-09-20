@@ -57,7 +57,7 @@ export {
   CAD_PANEL,
   FILE_PANEL_TREE,
   SOURCE_PANEL,
-  cadPanels,
+  inspectorPanels,
   markdownPanels,
   nextOpenPanel,
   panelClosedBy,

@@ -14,10 +14,3 @@ export function createCadPromptContext({ resource, references = [], text = '', c
   }
   return createPromptContext(parts, operationId);
 }
-
-export function promptDeliveryMessage(result) {
-  if (result.status === 'added') return 'Added to prompt';
-  if (result.status === 'copied') return 'Copied for prompt';
-  if (result.status === 'cancelled') return '';
-  return result.message || (result.status === 'deferred' ? 'Choose a prompt destination' : 'Could not deliver prompt context');
-}

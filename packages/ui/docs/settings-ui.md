@@ -153,7 +153,7 @@ Do not advertise keyboard shortcuts that the viewer does not implement.
 | Display → Reset | Restore selected preset defaults and disable Clip/Explode; keep Kinematics and camera pose |
 
 A model reset must stop clocks before writing authored pose values,
-so a queued frame cannot undo it. Embedded GLB returns to its authored rest
+so a queued frame cannot undo it. A GLB returns to its authored rest
 transforms, not the possibly displaced first frame of an animation clip. Robot
 joints and drawing fold/orientation controls follow the same spatial reset rule.
 
@@ -209,7 +209,7 @@ activity. An open settings panel, a scrub gesture or keyboard focus keeps them
 visible. The animation clock's ticks do not reset the idle timer. Hidden controls are
 inert and do not intercept viewport input. Escape closes a nested picker, then
 the settings panel, then fullscreen. Fullscreen and the regular viewport's playbar use
-the same callbacks and renderer-scoped STEP/GLB clocks; do not duplicate animation state.
+the same callbacks and the renderer's one clock; do not duplicate animation state.
 
 ## State, input, and verification
 

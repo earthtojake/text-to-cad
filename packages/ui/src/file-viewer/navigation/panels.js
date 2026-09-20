@@ -63,7 +63,7 @@ import { Code2, Eye, Folders, PanelLeft, SlidersHorizontal } from "lucide-react"
  */
 export const FILE_PANEL_TREE = "tree";
 
-/** The CAD Inspector's panel id, shared by both hosts. */
+/** The Inspector's panel id, shared by both hosts and every viewer renderer. */
 export const CAD_PANEL = Object.freeze({
   fileSheet: "cad-file-sheet"
 });
@@ -72,29 +72,29 @@ export const CAD_PANEL = Object.freeze({
 export const SOURCE_PANEL = "source";
 
 /**
- * The CAD Inspector holds the file's tree, measurements and parameters.
+ * The Inspector: the panel a viewer renderer declares for its file's tabs.
  *
- * Declared here rather than in either app, because both draw it: the desktop
- * portals it into its panel column through `panelSlot`, and the standalone
- * now does exactly the same thing. The Inspector is what a CAD file opens
- * with; a STEP file's tree and its measurements are the reason it is open.
+ * Declared here rather than in either app, because both draw it: each portals
+ * it into its panel column through `panelSlot`. Every viewer renderer declares
+ * this SAME panel, so a person who opened the Inspector keeps it open from one
+ * model to the next, whichever renderer shows it.
  *
  * "Inspector" is the name a person sees. The id stays `cad-file-sheet` because
  * the desktop's stored `panel` field holds it and the viewer's host contract
  * calls the same panel `fileSheetOpen`.
  *
- * Nothing until the surface is up: a CAD pane whose runtime did not start
- * shows a failure card, and a toggle over a card would open nothing.
+ * Nothing until the surface is up: a pane whose runtime did not start shows a
+ * failure card, and a toggle over a card would open nothing.
  *
- * A file whose Inspector is only its View settings (a mesh: STL, 3MF, GLB) opens
- * with the column shut: there is nothing to inspect, and the model gets the room.
- * It is a default, so a person who opens the Inspector keeps it open.
+ * Whether it starts open is the renderer's to say (`defaultOpen`): a file whose
+ * Inspector is only its Display settings opens with the column shut, so the model
+ * gets the room. It is a default, so a person who opens the Inspector keeps it open.
  *
  * @param {boolean} ready
- * @param {{ path?: string }} [file]
+ * @param {{ defaultOpen?: boolean }} [options]
  * @returns {FilePanel[]}
  */
-export function cadPanels(ready, file) {
+export function inspectorPanels(ready, { defaultOpen = true } = {}) {
   return ready
     ? [
       {
@@ -102,14 +102,11 @@ export function cadPanels(ready, file) {
         label: "Inspector",
         icon: SlidersHorizontal,
         content: "slot",
-        defaultOpen: !VIEW_ONLY_FILE.test(String(file?.path || ""))
+        defaultOpen
       }
     ]
     : [];
 }
-
-// The formats whose Inspector is the View tab alone (`fileSheetSections.js`, kind "mesh").
-const VIEW_ONLY_FILE = /\.(stl|3mf|glb)$/i;
 
 /**
  * The desktop's markdown panel: the same bytes read as a document or as

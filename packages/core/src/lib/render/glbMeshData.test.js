@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { applyGlbDocumentFinish, buildMeshDataFromGlbBuffer } from "./glbMeshData.js";
+import { buildMeshDataFromGlbBuffer } from "./glbMeshData.js";
 
 function pad4(buffer, padByte = 0) {
   const padding = (4 - (buffer.length % 4)) % 4;
@@ -679,26 +679,4 @@ test('external glTF buffers use the resource provider and release temporary URLs
   assert.equal(mesh.vertices.length, 9);
   assert.equal(revoke.mock.callCount(), 1);
   assert.deepEqual(calls,[['resolve','private:document','private.bin'],['read','private:bytes',64*1024*1024]]);
-});
-
-test("a native GLB wears the CAD surface finish in Inspect and its authored finish in Render, keeping its colour", () => {
-  // An animated GLB plays in its native scene but rests as the normalized mesh: without this
-  // the authored metal, with nothing to reflect in Inspect, re-shades the model when a clip starts.
-  const material = { isMeshStandardMaterial: true, roughness: 0.2, metalness: 1, color: "#336699", opacity: 0.5, userData: {} };
-  const shared = { material }, other = { material: [material, { isMeshBasicMaterial: true, userData: {} }] };
-  const document = { scene: { traverse(visit) { [shared, other, {}].forEach(visit); } } };
-  const finish = { roughness: 0.92, metalness: 0.03, clearcoat: 0 };
-
-  applyGlbDocumentFinish(document, { renderMode: false, finish });
-  assert.deepEqual([material.roughness, material.metalness], [0.92, 0.03]);
-  assert.deepEqual([material.color, material.opacity], ["#336699", 0.5], "what identifies the part is left alone");
-  assert.equal("clearcoat" in material, false, "a property the material does not have is not invented");
-  assert.equal(other.material[1].userData.authoredFinish, undefined, "an unlit material has no finish to replace");
-
-  applyGlbDocumentFinish(document, { renderMode: true, finish });
-  assert.deepEqual([material.roughness, material.metalness], [0.2, 1]);
-  // Toggling back and forth never loses the authored values.
-  applyGlbDocumentFinish(document, { renderMode: false, finish });
-  applyGlbDocumentFinish(document, { renderMode: true, finish });
-  assert.deepEqual([material.roughness, material.metalness], [0.2, 1]);
 });

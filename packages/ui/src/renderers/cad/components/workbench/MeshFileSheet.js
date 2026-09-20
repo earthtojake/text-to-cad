@@ -1,8 +1,7 @@
 import FileSheet from "../../../kit/inspector/FileSheet.js";
 import FileSheetTabbedSurface from "../../../kit/inspector/FileSheetTabbedSurface.js";
-import { buildMotionControlsTab } from "./MotionControlsSection.js";
 
-// The mesh Inspector: View, plus whatever settings tabs the caller adds (DXF reuses
+// The mesh Inspector: Display, plus whatever settings tabs the caller adds (DXF reuses
 // this sheet). Measurements are the Measure tool's panel, not an Inspector tab.
 export default function MeshFileSheet({
   headerActions = null,
@@ -17,16 +16,9 @@ export default function MeshFileSheet({
   viewerServerInfo = null,
   suppressDynamicMetadataStatus = false,
   settingsTabs = [],
-  animationRuntime = null,
   openSectionIds = [],
   onOpenSectionIdsChange
 }) {
-  const motionTab = buildMotionControlsTab({ animationRuntime });
-  const sections = [
-    ...(motionTab ? [motionTab] : []),
-    ...settingsTabs
-  ];
-
   return (
     <FileSheet
       open={open}
@@ -38,7 +30,7 @@ export default function MeshFileSheet({
       scrollBody={false}
     >
       <FileSheetTabbedSurface headerActions={headerActions}
-        sections={sections}
+        sections={settingsTabs}
         openSectionIds={openSectionIds}
         onOpenSectionIdsChange={onOpenSectionIdsChange}
       />

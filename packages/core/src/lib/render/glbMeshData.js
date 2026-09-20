@@ -3,7 +3,6 @@
 // bundle that reaches this module -- which includes the GLB and surf WORKERS,
 // where nothing else needs three at all. Three classes are all this file uses.
 import { AnimationMixer, LoadingManager, Box3, Group, LoopOnce, Matrix3, Matrix4, Vector3 } from "three";
-import { applySurfaceFinish } from "../viewer/surfaceFinish.js";
 
 const GLB_CAD_UNIT_SCALE = 1000;
 const GENERATED_STEP_DEFAULT_BASE_COLOR = Object.freeze([0.72, 0.72, 0.72, 1]);
@@ -650,9 +649,46 @@ function sampledAnimatedBounds(scene, clips, cadRootMatrix) {
 }
 
 /**
- * Parse an interactive direct GLB once. The flattened mesh remains the Inspect
- * path for picking and matte CAD presentation; the native hierarchy remains
- * document-owned so Render can retain its textures and PBR materials.
+ * Say, on each native material, whether its colour is a SOURCE colour. A file with
+ * no materials, a material its writer flagged (`cadSourceColor: false`) and the
+ * grey a STEP export stamps on uncoloured parts are not: a viewer paints those
+ * with its own surface colour, exactly as the flattened mesh path drops them.
+ * The answer is `material.userData.cadSourceColor` (true/false), one rule for both.
+ */
+function markGlbSourceColors(gltf) {
+  const json = gltf?.parser?.json;
+  const rawMaterials = Array.isArray(json?.materials) ? json.materials : [];
+  const stepTopology = !!json?.extensions?.STEP_topology;
+  gltf?.scene?.traverse?.((object) => {
+    for (const material of Array.isArray(object?.material) ? object.material : [object?.material]) {
+      if (!material?.color || !material.userData) continue;
+      const rawMaterial = rawMaterials[gltf.parser?.associations?.get(material)?.materials] || null;
+      material.userData.cadSourceColor = Boolean(rawMaterials.length > 0 &&
+        colorFromMaterial(material, true, { rawMaterial, stepTopology }));
+    }
+  });
+}
+
+function nativeRestBounds(scene, cadRootMatrix) {
+  const root = new Group();
+  root.matrix.copy(cadRootMatrix);
+  root.matrixAutoUpdate = false;
+  root.add(scene);
+  root.updateMatrixWorld(true);
+  const box = new Box3().setFromObject(root, true);
+  scene.removeFromParent();
+  scene.updateMatrixWorld(true);
+  if (box.isEmpty()) return { min: [0, 0, 0], max: [0, 0, 0] };
+  return { min: box.min.toArray(), max: box.max.toArray() };
+}
+
+/**
+ * Parse an interactive direct GLB once, as the document a viewer shows: the
+ * native hierarchy (nodes, skins, morphs, authored materials), its playable
+ * clips, the matrix that places it in CAD space, and two boxes in that space.
+ * `restBounds` is the file as authored; `animatedBounds` (null without clips)
+ * also covers every sampled pose, so a camera framed on it never clips a clip.
+ * The document owns its geometry, materials and textures (`disposeGlbDocument`).
  */
 export async function buildGlbDocumentFromBuffer(buffer, options) {
   const [{ GLTFLoader }, decoder] = await Promise.all([
@@ -661,49 +697,22 @@ export async function buildGlbDocumentFromBuffer(buffer, options) {
   ]);
   const gltf = await parseGlb(GLTFLoader, decoder, buffer, options);
   try {
+    markGlbSourceColors(gltf);
     const clips = playableGlbAnimationClips(gltf);
     const cadRootMatrix = nativeCadRootMatrix(gltf);
+    const restBounds = nativeRestBounds(gltf.scene, cadRootMatrix);
     const animatedBounds = clips.length ? sampledAnimatedBounds(gltf.scene, clips, cadRootMatrix) : null;
-    const restMeshData = buildMeshDataFromGltf(gltf);
-    // The workspace's Inspect/Render cameras consume meshData.bounds before
-    // CadViewer mounts the native hierarchy. Give both modes the same stable
-    // animation-aware frame; triangle inspection is disabled on this path.
-    const meshData = animatedBounds ? { ...restMeshData, bounds: animatedBounds } : restMeshData;
     return {
-      meshData,
       scene: gltf.scene,
       clips,
       cadRootMatrix: cadRootMatrix.toArray(),
       animatedBounds,
-      restBounds: restMeshData.bounds,
+      restBounds,
     };
   } catch (error) {
     disposeGlbDocument({ scene: gltf.scene });
     throw error;
   }
-}
-
-// Animated GLBs need their native hierarchy in both modes. A static GLB uses
-// it only in photographic Render; Inspect keeps the normalized mesh and its
-// CAD interaction behavior.
-export function shouldUseNativeGlbScene(document, { renderMode = false, clip = null } = {}) {
-  return Boolean(document?.scene && (renderMode || clip));
-}
-
-/**
- * Dress a native GLB scene for the mode it is shown in.
- *
- * An animated GLB plays in its native hierarchy, but at rest Inspect draws the
- * normalized mesh with the viewer's CAD surface. Left alone, the authored PBR
- * finish (metal, with no environment to reflect in Inspect) makes the same model
- * change shading the moment a clip becomes active. So Inspect gives the native
- * materials the CAD surface FINISH and keeps what identifies the part: its colour,
- * maps and opacity. Photographic Render restores the finish the file authored.
- * The document owns its materials across mode toggles, so the authored values are
- * kept on the material and this is safe to call on every scene build.
- */
-export function applyGlbDocumentFinish(document, { renderMode = false, finish = null } = {}) {
-  applySurfaceFinish(document?.scene, renderMode ? null : finish);
 }
 
 // Scene hosts detach native GLBs when changing presentation. Detachment is not

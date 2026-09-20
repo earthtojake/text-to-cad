@@ -4,7 +4,6 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import FullscreenToolbar, { FULLSCREEN_TOOLBAR_IDLE_MS } from '../../../../../dist/renderers/cad/components/workbench/FullscreenToolbar.js';
 import { AnimationClockProvider, createAnimationClock } from '../../../../../dist/renderers/cad/workbench/animationClockStore.js';
-import { EmbeddedGlbAnimationClockProvider } from '../../../../../dist/renderers/cad/workbench/embeddedGlbAnimationClockStore.js';
 
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
@@ -15,18 +14,17 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 const clips = [{ id: 'turn', label: 'Turn', duration: 8 }, { id: 'sweep', label: 'Sweep', duration: 4 }];
-function Harness({ clips: available = clips, toggle = vi.fn(), select = vi.fn(), exit = vi.fn(), restart = vi.fn(), scrub = vi.fn(), speed = vi.fn(), loop = vi.fn(), clockKind = 'step', stepClock, glbClock }: any) {
+function Harness({ clips: available = clips, toggle = vi.fn(), select = vi.fn(), exit = vi.fn(), restart = vi.fn(), scrub = vi.fn(), speed = vi.fn(), loop = vi.fn(), stepClock }: any) {
   const [playing, setPlaying] = React.useState(false), [activeClipId, setClip] = React.useState('turn'), [orbitSpeed, setOrbit] = React.useState(1);
   const [animationSpeed, setSpeed] = React.useState(1), [loopEnabled, setLoop] = React.useState(true);
   const [step] = React.useState(() => stepClock || createAnimationClock());
-  const [glb] = React.useState(() => glbClock || createAnimationClock());
-  return <AnimationClockProvider value={step}><EmbeddedGlbAnimationClockProvider value={glb}>
+  return <AnimationClockProvider value={step}>
     <FullscreenToolbar orbitSpeed={orbitSpeed} onOrbitSpeedChange={setOrbit} onExit={exit}
-      animation={{ clips: available, playing, activeClipId, elapsedSec: 2, clockKind, onRestart: restart, onScrub: scrub, speed: animationSpeed, loopEnabled,
+      animation={{ clips: available, playing, activeClipId, elapsedSec: 2, onRestart: restart, onScrub: scrub, speed: animationSpeed, loopEnabled,
         onSpeedChange(value: number) { speed(value); setSpeed(value); }, onLoopToggle(value: boolean) { loop(value); setLoop(value); },
         onPlayToggle() { toggle(); setPlaying(value => !value); },
         onClipSelect(id: string) { select(id); setClip(id); setPlaying(false); } }}/>
-  </EmbeddedGlbAnimationClockProvider></AnimationClockProvider>;
+  </AnimationClockProvider>;
 }
 
 it('fades both control areas on idle, wakes on pointer/keyboard activity, and cleans up', () => {
@@ -96,17 +94,17 @@ it('the playbar carries the routine list and the settings menu, and an open menu
   expect(document.querySelector('[aria-label="Fullscreen controls"]')!.getAttribute('data-visible')).toBe('true');
 });
 
-it.each(['step', 'embedded-glb'])('shares live %s progress and scrub with the Animate tool\'s bar', clockKind => {
-  const stepClock = createAnimationClock(), glbClock = createAnimationClock(), scrub = vi.fn();
-  render(<Harness clockKind={clockKind} stepClock={stepClock} glbClock={glbClock} scrub={scrub}/>);
+it('shares live progress and scrub with the Animate tool\'s bar', () => {
+  const stepClock = createAnimationClock(), scrub = vi.fn();
+  render(<Harness stepClock={stepClock} scrub={scrub}/>);
   const time = screen.getByRole('slider', { name: 'Animation time' });
   expect(time.getAttribute('aria-valuenow')).toBe('2');
   fireEvent.keyDown(time, { key: 'ArrowRight' });
   expect(scrub).toHaveBeenLastCalledWith(2.01);
   expect(screen.queryByRole('button', { name: 'Restart animation' })).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Play animation' }));
-  act(() => { stepClock.setAnimationClock(3); glbClock.setAnimationClock(4); });
-  expect(time.getAttribute('aria-valuenow')).toBe(clockKind === 'step' ? '3' : '4');
+  act(() => { stepClock.setAnimationClock(3); });
+  expect(time.getAttribute('aria-valuenow')).toBe('3');
 });
 
 it('Escape closes settings before reaching the fullscreen host', () => {

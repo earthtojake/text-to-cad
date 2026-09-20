@@ -15,7 +15,7 @@ test('the shared CAD renderer resolves deferred files, reuses warm assets and re
   const temporary = await mkdtemp(join(tmpdir(), 'hardcore-cad-browser-'));
   let server, browser;
   t.after(async () => { await browser?.close(); if (server) await new Promise((resolve) => server.close(resolve)); await rm(temporary, { recursive: true, force: true }); });
-  await build({ entryPoints: [fileURLToPath(new URL('./harness/index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.woff2': 'dataurl' } });
+  await build({ entryPoints: [fileURLToPath(new URL('../harness/index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.woff2': 'dataurl' } });
   const bundle = await readFile(join(temporary, 'harness.js'));
   const compiledCss = await readFile(new URL('../../../dist/styles.css', import.meta.url));
   const requests = [];

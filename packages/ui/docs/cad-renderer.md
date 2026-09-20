@@ -15,8 +15,10 @@ the shared `FileViewer`; they do not import another application's source.
 ## Kit
 
 `src/renderers/kit` is the format-blind half of the viewer: small modules a
-renderer composes, none of which asks what it is showing. The CAD renderer
-(`src/renderers/cad`) is a consumer of it. The kit imports itself, shared UI
+renderer composes, none of which asks what it is showing. There is one renderer
+per file family, each a vertical slice over the kit: `src/renderers/glb` (the
+first one split out, see [GLB renderer](#glb-renderer)) and `src/renderers/cad`
+(every other format, until its families are split out in turn). The kit imports itself, shared UI
 (`primitives`, `lib`, `drawing`) and the format-blind half of `@hardcore/core`
 (`lib/viewer/*`, `lib/perspective.js`, `common/viewSettings.js`,
 `common/sceneSettings.js`, the Render studio); a renderer imports the kit, never
@@ -26,11 +28,12 @@ the reverse.
 | --- | --- |
 | `viewport/` | `useViewerRuntime` (three.js renderer lifecycle, on-demand render loop and `requestRender`, resize and device-pixel-ratio caps, context loss, keyboard orbit, teardown), `framePresentation`, `viewportBuffer`, `renderDepthPolicy`, `sceneObjects` (`disposeSceneObject`), DOM helpers. The scene in the viewport is its owner's: teardown calls the injected `disposeScene(runtime)` and `disposeStudio(runtime)`. |
 | `camera/` | `runtimeCamera` (zoom percent against the authored framing, projection and lens sync, perspective snapshots, eased transitions, fit-to-bounds, recentre), `useViewportCamera` (that behaviour bound to a mounted viewport: live zoom, the perspective a session stores, the fullscreen camera swap and its restore, view-cube presets), `usePlanMode`, `viewportCameraKit` and `viewportCameraFit`, `orbitControls`, `zoomPivotReanchor`, `zoomSpeeds`, `cameraLens`, `ViewPlaneControl` (view cube), `ZoomControl`. |
-| `look/` | `stageEffects` (lighting rig scaled to the model, floor, glow and shadow catcher, grid and origin axes), the Render studio boundary (`renderStudioChunk`, `studioEnvironmentCache` and its worker). The surface FINISH is data in core: `lib/viewer/surfaceFinish.js` (`resolveSurfaceFinish(theme)`, `applySurfaceFinish(root, finish)`); a scene applies it to its own materials. |
+| `look/` | `stageEffects` (lighting rig scaled to the model, floor, glow and shadow catcher, grid and origin axes), the Render studio boundary (`renderStudioChunk`, `studioEnvironmentCache` and its worker). `chromeBackdrop` and `useChromeBackdropColor` (the frame colour around a scene). The surface LOOK is data the viewport resolves and a scene applies to its own materials: `@hardcore/core/lib/viewer/surfaceLook.js` (`createSurfaceLook(THREE, root).apply(look)`) does it for any authored material tree. |
 | `view-settings/` | The settings model and store (`viewSettingsStore`, `useViewSettings`, `viewerDisplaySettings`, `renderState`), applying a change to a viewport (`useAppliedViewSettings`, `viewUpdateCoordinator`, `viewUpdateGate`, `viewUpdatePlan`), and the Display tab (`DisplaySettingsTab`, `DisplayModeOptions`). |
 | `tools/` | `FloatingToolBar` (the dumb strip), `toolModes` (the tool-mode state machine), `ToolbarButton`, and the format-blind tools: `draw/` (overlay, view lock, `useDrawingViewLock`), `fullscreen/` (controls and the orbit preference), `playbar/` (`ViewportAnimationBar`, `animationClock`, `usePlaybackFrames`), `pose/` (the handle overlay, canvas, drag mathematics). Screenshot capture is `@hardcore/core/lib/viewer/screenshotCapture.js`. |
 | `inspector/` | `FileSheet` and its row primitives, `FileSheetTabbedSurface`, `activeSection`, `InspectorSplit`, `modelTreeSearch`, `referenceRows` (`InfoRow`, `MonoValue`, `CoordValue`). The tree row and filter box are `primitives/tree-row` and `primitives/tree-filter`. |
-| `status/` | `LoadingIndicator` and `ViewerLoadingOverlay`, `ViewerAlertDialog` and `ViewerAlertBody`, `MissingFileAlert`, `StatusToast`, `ViewUpdateStatus`, `useFileActivityReport`, `artifactWarnings`. |
+| `status/` | `LoadingIndicator` and `ViewerLoadingOverlay`, `ViewerAlertDialog` and `ViewerAlertBody`, `BlockingViewerAlert`, `MissingFileAlert`, `StatusToast`, `ViewUpdateStatus`, `useFileActivityReport`, `artifactWarnings`, `loadingState` (`viewerLoadingState`), `fileStatus` (`resolveFileStatus`, the chip beside the filename), `loadAlerts` (`failureAlert`, `noGeometryAlert`, `resolveFileStatusAlert`). |
+| `shell/` | The host glue every renderer needs that is not about its scene: see [Shell](#shell). |
 
 **What a view opts into.** The Display tab and `resolveViewSettings` take explicit
 lists, `features: { sections, modes, surfaceStyles }` (`ViewFeatures` in
@@ -54,10 +57,13 @@ the runtime it is handed (`runtime.clock`, an `AnimationClock`); the Pose overla
 takes a plain handle list.
 
 **The scene contract** (`kit/scene.js`, a JSDoc typedef): `{ object3D, bounds,
-restBounds?, dispose(), setSurfaceFinish?(finish), pick?(ray) }`. `buildModel`
-(`@hardcore/core/common/cadScene.js`) and the native glTF scene
-(`buildNativeGlbCadScene`) both expose `object3D`, `bounds`, `restBounds` and
-`dispose()`; the native glTF scene also exposes `setSurfaceFinish`.
+restBounds?, dispose(), setSurfaceLook?(look), keepsAuthoredFinish?, pick?(ray) }`.
+The viewport adopts `object3D`, frames `restBounds`, lights and floors `bounds`,
+and hands over the surface look the Display tab resolved
+(`{ materialSettings, authored, surface: { style, opacity } }`); it only ever
+detaches a scene, whose owner disposes it. `buildModel`
+(`@hardcore/core/common/cadScene.js`) exposes `object3D`, `bounds`, `restBounds`
+and `dispose()`; the GLB renderer's scene implements the whole contract.
 
 **The rule and its check.** Kit code names no file format, no file-kind switch
 and no STEP-assembly concept (topology, selectors, display records, explode,
@@ -66,7 +72,91 @@ Clip and Explode sections a view opts into. `npm run check:boundaries` runs
 `scripts/test/check-kit-boundaries.mjs`, which scans every kit source for imports
 of a renderer or of a file-family core module and for those words, against a
 short allowlist that carries a reason per line and fails when an entry goes
-stale. The unbound-identifier test covers the kit with the renderer.
+stale. The same script holds every split-out renderer to its slice
+(`RENDERER_SLICES`): a renderer imports the kit, `renderers/workspace` (the
+backend connection a file is prepared against, and the host's viewer
+preferences), shared UI and core, and never another renderer. The
+unbound-identifier test covers the kit and the split-out renderers with the CAD
+renderer.
+
+### Shell
+
+`kit/shell` is what a file-family renderer needs from its host that is not about
+its scene. A renderer loads its document, builds its scene (`kit/scene.js`) and
+calls one hook; the shell owns the rest.
+
+| module | what it is |
+| --- | --- |
+| `useRendererShell.js` | The hook. Per-file state through the host, the Display settings store and tab, tool modes with Draw and Animate, the Inspector panel, navbar actions, prompt snapshots, the clipboard screenshot, fullscreen, file activity, alerts, shortcuts and the live command surface. |
+| `RendererShell.jsx` | The frame: viewport box, tool strip, bottom action, playbar, fullscreen controls, loading/update/alert overlays, status toast and the Inspector portaled into the host's panel column. One DOM structure (`data-slot="cad-file-view"`, `data-cad-surface`, `data-cad-scene-backdrop`, `data-cad-toolbar`, `data-file-sheet`) for every renderer. |
+| `ShellViewport.jsx` | The three.js viewport around ONE kit scene: `useViewerRuntime`, `useViewportCamera`, the look (rig or studio, environment, background, floor, grid, axes), the Draw overlay and view lock, the view cube, frame presentation and the queued view-settings handshake. |
+| `shellState.js` | The per-file record `{ version, camera, display, inspectorTab, tool, renderer }`, read forgivingly and written exactly. The host keys it `[file path, renderer id]`. |
+| `liveBinding.ts` | `attachLiveBinding`: the live command surface. Base commands (`readState`, `setCamera`, `resetCamera`, `setDisplaySettings`, `setRenderMode`, `capture`) mean the same for every renderer; a renderer ADDS commands by name and DECLINES the known host commands (`HOST_LIVE_COMMANDS`) that make no sense for it with the sentence the caller reads. Binding fails when a renderer does neither. |
+| `promptContext.js` | `createViewPromptContext` (a snapshot and what it depicts) and `promptDeliveryMessage`. |
+| `useViewerShortcuts.js` | Which mounted viewer an Escape belongs to; the renderer says what Escape means. |
+| `ViewportBottomAction.jsx`, `ViewportContextMenu.jsx` | The active tool's one bottom button (Draw: the view with its ink, to the prompt or clipboard); the canvas's camera menu (Reset Zoom, Zoom To Fit). |
+
+```jsx
+const shell = useRendererShell({
+  view,                 // RendererViewProps, unchanged
+  services,             // { preferences, onPreferenceChange, live?, captureRequest?, acknowledgeCommand? }
+  resource, modelKey, revisionKey,
+  features,             // ViewFeatures: the Display sections this family opts into
+  toolModes,            // createToolModes({ defaultMode, modes })
+  scene,                // KitScene | null
+  load,                 // { busy, updating?, progress?, alert? }: the renderer's document load
+  animation,            // playbar runtime with its own `clock` and `resetModel`, or null
+  live,                 // { commands?, declined?, state? }
+  // optional: promptReferences, navigationActions, onResetModel, escape, rendererState, displayTabProps, sceneScaleMode
+});
+const tools = [shell.tools.own({ id, label, icon }), shell.tools.draw, shell.tools.animate].filter(Boolean);
+return <RendererShell shell={shell} tools={tools} inspector={{ title, tabs: [...own, shell.displayTab] }} />;
+```
+
+The CAD renderer still carries its own copy of the frame, the viewport
+orchestration and the session record inside `CadFileView.js`, `CadRenderPane.js`
+and `CadViewer.js`; it shares the leaf pieces (`liveBinding`, `loadAlerts`,
+`fileStatus`, `loadingState`, `BlockingViewerAlert`, `useViewerShortcuts`,
+`promptDeliveryMessage`, `chromeBackdrop`). It moves onto the shell when it
+becomes the STEP renderer.
+
+## GLB renderer
+
+`createGlbRenderer` (`@hardcore/ui/renderers/glb`, id `glb`) shows a `.glb` as
+its NATIVE glTF scene, always: one path whether or not a clip is playing. The
+CAD renderer does not match `.glb`.
+
+- **Scene** (`glb/glbScene.js`): the file's hierarchy (nodes, skins, morph
+  targets, authored materials) placed in CAD space by the document's root
+  matrix. Embedded lights stay hidden, skinned and morphed meshes are never
+  frustum-culled, every mesh casts shadows. The scene owns its document and
+  releases its geometry, materials and textures. Bounds are the box sampled
+  over every clip at load, so a playing clip never re-frames or re-lights.
+- **Look**: Inspect wears the viewer's surface (a physical stand-in with the
+  viewer's roughness, metalness, clear coat and trace emissive) and keeps what
+  identifies a part: its colour, maps and opacity. Photographic Render restores
+  the authored materials exactly. Surfaces apply in both: Flat is unlit, Single
+  colour and By part override source colours and maps (the palette cycles per
+  mesh), opacity scales the authored opacity. A material without a source colour
+  (`userData.cadSourceColor === false`: no materials in the file, a writer's
+  flag, or the grey a STEP export stamps on uncoloured parts) takes the viewer's
+  surface colour in Inspect.
+- **Display**: `EDGELESS_VIEW_FEATURES` (Solid and Render; no Edges, Clip or Explode).
+- **Tools**, left to right: **Orbit** (the default; a GLB picks nothing, so
+  there is no Select, no filter menu and no copy-references action), **Draw**,
+  and **Animate** when the file has playable clips. No Measure, no Pose.
+  Fullscreen is Animate when the file has clips, else no tool.
+- **Animation** (`glb/useGlbAnimation.js`): one `AnimationMixer` on the native
+  scene, alive only while a routine owns the pose, driven by the kit playbar
+  through the renderer's own clock. Leaving Animate stops the action and three
+  restores every animated property, so the model is at rest again exactly.
+- **Inspector**: the single Display tab; the panel starts shut
+  (`inspectorPanels(ready, { defaultOpen: false })`).
+- **Host commands**: the base live commands; `select` and `clearSelection` are
+  declined with a sentence, and a `selectReference` host request is consumed and
+  answered in the status toast.
+- **State**: the shell record under `[path, "glb"]`. Records written under
+  `[path, "cad"]` are not migrated.
 
 ## Host integration
 
@@ -256,8 +346,8 @@ remain object-isolated. Each component retains its exact surface-input/object
 binding and concrete tessellation key and level. Editing previews, changed
 revisions and runtime replacement views invalidate the snapshot. Tabs borrowing the same workspace service can reopen while the bounded entry
 survives. A replacement service or changed backend identity starts a new resource
-generation, preventing URL cache reuse across changed credentials or origins. Mutable native GLB scenes and animation mixers remain
-separately owned.
+generation, preventing URL cache reuse across changed credentials or origins. A native GLB scene and its animation mixer are never cached:
+they are mutable state with one owner, the GLB renderer's mounted scene.
 
 Worker infrastructure is reference-counted across live render sessions. The
 last session releases workers and pending work. Playback clocks are separate
@@ -539,7 +629,7 @@ No component renders for a playing frame. The viewer's pose pass is one function
 with two callers: React runs it when something it reads changes (a scrub, a
 pose, a display setting, a new mesh) and publishes it through a ref; while a
 routine plays, the animation clock calls that same function once per tick
-(`usePlaybackFrames`), for STEP routines and embedded GLB clips alike. The
+(`usePlaybackFrames`; the GLB renderer drives its mixer the same way). The
 scrubber is the clock's only React subscriber. Because the pass now runs inside
 the tick, the clock's adaptive pacing measures a frame's real cost. A frame that
 only moved parts skips material and instance-membership reconciliation: the
@@ -588,8 +678,9 @@ the frame; selection handles are not included), plus the selected references.
 
 The file navbar holds a direct snapshot action, Inspector (`SlidersHorizontal`) and file
 tree (`Folders`). The Inspector opens by default, except over a file whose
-Inspector is only Display (STL, 3MF, GLB): there the model gets the room until a
-person opens it (`cadPanels(ready, file)`). Snapshot uses the host prompt-context port: desktop attaches
+Inspector is only Display (STL, 3MF, and a GLB under its own renderer): there the
+model gets the room until a person opens it. Each renderer says so in its own
+`panels()` (`inspectorPanels(ready, { defaultOpen })`). Snapshot uses the host prompt-context port: desktop attaches
 the viewport image and references to the owning session's draft; web copies
 through its clipboard adapter. DXF also contributes its 2D/3D projection action.
 The shared FileViewer renders these registered actions without importing CAD.
@@ -626,7 +717,7 @@ listeners are detached, drawing is unmounted, measurement overlays stop their
 frame loop, and selection highlights are hidden. Normal camera dragging remains
 available regardless of the tool selected before entry.
 
-STEP and embedded GLB keep their existing transports and renderer-scoped clocks;
+Each renderer keeps one transport and one renderer-scoped clock;
 there is no second animation store. Leaving fullscreen for any tool but Animate
 releases the routine, as leaving the Animate tool does. Escape dismisses a
 nested menu, then orbit settings, then fullscreen.
@@ -661,9 +752,8 @@ recognition regression checks, without a runtime interpreter or export path.
 STEP models place **Features | Kinematics | Display** in one fixed top tab strip.
 Kinematics appears only when the sidecar declares it; animation is the Animate
 tool, not an Inspector section, so a file with routines and no kinematics has
-no Kinematics tab. A mesh (STL, 3MF, GLB) has only Display: its measurements
-are the Measure tool's panel under the toolbar, as for STEP, and an embedded
-GLB clip is the Animate tool's. An Inspector with a single section draws it as
+no Kinematics tab. A mesh (STL, 3MF) has only Display, as a GLB has under its
+own renderer. An Inspector with a single section draws it as
 a single selected tab, so every Inspector reads the same way.
 Each section requires its own sidecar block and stays expanded, without a gate.
 Every pose write is a jump: a slider drag, a typed number, a Pose knob, a named

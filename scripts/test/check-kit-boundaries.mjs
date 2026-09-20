@@ -43,6 +43,7 @@ export const KIT_WORD_ALLOWLIST = [
   ['camera/ViewPlaneControl.js', 'view selector', 'user-visible aria label of the same control ("2D view selector" / "Perspective selector")'],
   ['viewport/useViewerRuntime.js', 'displayRecords: []', 'runtime slot the current scene builders fill; it leaves with the STEP scene (renderer-split phase 5)'],
   ['viewport/renderDepthPolicy.js', 'displayRecords: runtime?.displayRecords', 'passes that same slot to the depth fit; leaves with it'],
+  ['status/loadingState.js', 'building robot', "a loader's own progress label, matched as text to bucket it under \"Preparing view\"; it leaves when that loader reports a stage instead (renderer-split phase 3)"],
   ['view-settings/viewerDisplaySettings.js', 'buildStepClipPatch', "core's clip-settings API carries STEP in its names; the settings model only passes the Clip section through"],
   ['view-settings/DisplaySettingsTab.js', 'DEFAULT_STEP_CLIP_SETTINGS', 'same core API, read by the opt-in Clip section'],
   ['view-settings/DisplaySettingsTab.js', 'normalizeStepClipSettings', 'same core API, read by the opt-in Clip section'],
@@ -91,9 +92,48 @@ export function checkKitBoundaries(repo, { allowlist = KIT_WORD_ALLOWLIST } = {}
   return { errors, sourceCount: files.length };
 }
 
+// RENDERER SLICES. One renderer per file family, each a vertical slice: it imports
+// the kit, the shared workspace module (backend connection, preferences), shared
+// UI and core. It never imports another renderer, so a family can be changed,
+// lazy-loaded and deleted alone. A slice joins this list when it is split out of
+// the legacy `cad` renderer; `workspace` is held to the same rule.
+export const RENDERERS_ROOT = 'packages/ui/src/renderers';
+export const RENDERER_SLICES = ['glb', 'workspace'];
+const SLICE_SHARED = ['kit', 'workspace'];
+
+export function checkRendererSlices(repo, { slices = RENDERER_SLICES } = {}) {
+  const renderers = path.join(repo, RENDERERS_ROOT);
+  const errors = [];
+  let sourceCount = 0;
+  for (const slice of slices) {
+    const root = path.join(renderers, slice);
+    if (!fs.existsSync(root)) { errors.push(`renderer slice "${slice}" is listed but ${RENDERERS_ROOT}/${slice} does not exist`); continue; }
+    for (const file of kitSources(root)) {
+      sourceCount += 1;
+      const repoRel = path.relative(repo, file).split(path.sep).join('/');
+      fs.readFileSync(file, 'utf8').split('\n').forEach((line, index) => {
+        for (const match of line.matchAll(/(?:from\s*|import\s*\(\s*|import\s+|new URL\(\s*)["']([^"']+)["']/g)) {
+          const specifier = match[1];
+          let owner = '';
+          if (specifier.startsWith('.')) {
+            const target = path.resolve(path.dirname(file), specifier);
+            if (target.startsWith(renderers + path.sep)) owner = path.relative(renderers, target).split(path.sep)[0];
+          } else owner = /^@hardcore\/ui\/renderers\/([^/]+)/.exec(specifier)?.[1] || '';
+          if (owner && owner !== slice && !SLICE_SHARED.includes(owner)) {
+            errors.push(`${repoRel}:${index + 1} imports the "${owner}" renderer (${specifier}); a renderer imports the kit, the workspace module, shared UI and core, never another renderer`);
+          }
+        }
+      });
+    }
+  }
+  return { errors, sourceCount };
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-  const result = checkKitBoundaries(repo);
-  if (result.errors.length) { console.error(result.errors.join('\n')); process.exitCode = 1; }
-  else console.log(`Kit boundaries passed (${result.sourceCount} format-blind sources).`);
+  const kit = checkKitBoundaries(repo);
+  const slices = checkRendererSlices(repo);
+  const errors = [...kit.errors, ...slices.errors];
+  if (errors.length) { console.error(errors.join('\n')); process.exitCode = 1; }
+  else console.log(`Kit boundaries passed (${kit.sourceCount} format-blind sources); renderer slices passed (${RENDERER_SLICES.join(', ')}: ${slices.sourceCount} sources).`);
 }

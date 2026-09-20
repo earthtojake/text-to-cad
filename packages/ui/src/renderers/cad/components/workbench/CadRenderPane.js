@@ -1,9 +1,7 @@
 import { useHostReference } from "../../file-view/hostReference.js";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import CadViewer from "../CadViewer.js";
-import { CircleAlert, X } from "lucide-react";
 import MissingFileAlert from "../../../kit/status/MissingFileAlert.js";
-import { Alert } from "@hardcore/ui/primitives/alert";
 import { Button } from "@hardcore/ui/primitives/button";
 import {
   DropdownMenu,
@@ -14,7 +12,7 @@ import {
 } from "@hardcore/ui/primitives/dropdown-menu";
 import AssemblyContextMenuItems from "./AssemblyContextMenuItems.js";
 import { PromptContextAction } from "../../../../host/PromptContextAction.js";
-import ViewerAlertBody from "../../../kit/status/ViewerAlertBody.js";
+import BlockingViewerAlert, { blockingViewerAlert } from "../../../kit/status/BlockingViewerAlert.jsx";
 import { cn } from "@hardcore/ui/utils";
 import { RENDER_FORMAT } from "../../workbench/constants.js";
 import {
@@ -295,8 +293,6 @@ export default function CadRenderPane({
   displayEdgeRuntime,
   stepParameters = null,
   stepAnimation = null,
-  glbDocument = null,
-  embeddedGlbAnimation = null,
   pickableFaces,
   pickableEdges,
   pickableVertices,
@@ -369,9 +365,7 @@ export default function CadRenderPane({
   const cadProjection = effectivePlanMode
     ? CAMERA_PROJECTION.ORTHOGRAPHIC
     : normalizeCameraProjection(projection, CAMERA_PROJECTION.ORTHOGRAPHIC);
-  const cadViewerBoundsAnimationActive = Boolean(
-    stepAnimation?.playing || embeddedGlbAnimation?.playing
-  );
+  const cadViewerBoundsAnimationActive = Boolean(stepAnimation?.playing);
   const topologySelectionPending = Boolean(referenceSelectionPending && hasTopology);
   const topologySelectionUnavailable = Boolean(referenceSelectionUnavailable && hasTopology);
   const topologySelectionDeferred = Boolean(referenceSelectionDeferred && selectedMeshData && hasTopology);
@@ -424,13 +418,7 @@ export default function CadRenderPane({
   const ctaDisabled = ctaMode === "screenshot"
     ? viewerLoading || !viewportHasRenderableContent
     : false;
-  const blockingViewerAlert = viewerAlert && viewerAlert.blocking !== false && (
-    viewerAlert.blocking ||
-    viewerAlert.severity !== "warning" ||
-    !viewportHasRenderableContent
-  )
-    ? viewerAlert
-    : null;
+  const blockingAlert = blockingViewerAlert(viewerAlert, viewportHasRenderableContent);
   const viewerContextMenuStyle = useMemo(
     () => viewerContextMenuAnchorStyle(viewerContextMenu),
     [viewerContextMenu]
@@ -519,8 +507,6 @@ export default function CadRenderPane({
         displayEdgeRuntime={inspectionEnabled && hasTopology && !retainingPreviousStepMesh ? displayEdgeRuntime : null}
         stepParameters={capabilities.params === PARAMETER_SOURCE.SIDECAR ? stepParameters : null}
         stepAnimation={capabilities.params === PARAMETER_SOURCE.SIDECAR ? stepAnimation : null}
-        glbDocument={glbDocument}
-        embeddedGlbAnimation={embeddedGlbAnimation}
         animateMode={previewMode || animateToolActive}
         jointHandles={previewMode ? null : jointHandles}
         // One shared empty list: a fresh [] per render — per animation frame — invalidated the
@@ -568,20 +554,7 @@ export default function CadRenderPane({
         />
       ) : null}
       <MissingFileAlert missingFileRef={missingFileRef} rootPath={viewerServerInfo?.rootPath} previewMode={previewMode} />
-      {!previewMode && blockingViewerAlert ? (
-        <div className="pointer-events-none absolute inset-0 z-30 flex min-w-0 items-center justify-center px-3 py-3 sm:px-4">
-          <div
-            role="alert"
-            className="bg-popover pointer-events-auto w-full max-w-lg min-w-0 max-h-full overflow-y-auto rounded-lg border p-5 text-left shadow-md"
-          >
-            <h2 className="mb-3 flex items-start gap-2 text-base font-semibold leading-6 text-foreground">
-              <CircleAlert className={cn("mt-0.5 size-5 shrink-0", blockingViewerAlert.severity === "warning" ? "text-amber-500" : "text-destructive")} aria-hidden="true" />
-              {blockingViewerAlert.title || blockingViewerAlert.summary || "Couldn’t display the model"}
-            </h2>
-            <ViewerAlertBody alert={blockingViewerAlert} onReload={onReload} />
-          </div>
-        </div>
-      ) : null}
+      {!previewMode ? <BlockingViewerAlert alert={blockingAlert} onReload={onReload} /> : null}
       {!previewMode && ctaMode && !stepUpdateInProgress && !topologySelectionPending && !topologySelectionUnavailable && !topologySelectionDeferred ? (
         <div className={cn("pointer-events-none absolute inset-x-4 z-20 flex min-w-0 justify-center", composerDestination ? "bottom-36" : "bottom-4")}>
           {/* A hidden ruler carrying the FULL ref label under the same width constraints as
