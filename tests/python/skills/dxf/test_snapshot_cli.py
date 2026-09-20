@@ -110,6 +110,28 @@ class DxfSnapshotCliTests(unittest.TestCase):
                     kinds=snapshot.enabled_kinds(DOOR_KINDS["dxf"]),
                 )
 
+    def test_a_drawing_refuses_the_display_settings_made_of_cad_edges(self) -> None:
+        import tempfile
+
+        # A drawing's preview is a mesh: it has no CAD edges for Hidden line to draw, and the
+        # "hidden" surface style without them is an empty picture.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            (root / "a.dxf").write_text("0\nSECTION\n", encoding="utf-8")
+            mesh = root / "drawing.glb"
+            mesh.write_bytes(b"glTF")
+            kinds = snapshot.enabled_kinds(DOOR_KINDS["dxf"])
+            for display, named in (({"mode": "hidden-line"}, r"display\.mode 'hidden-line'"),
+                                   ({"mode": "solid", "surfaces": {"style": "hidden"}}, r"display\.surfaces\.style 'hidden'")):
+                with self.subTest(display=display), mock.patch.object(snapshot, "drawing_mesh_path", return_value=mesh), \
+                        self.assertRaisesRegex(snapshot.SnapshotError, named + r" applies to STEP models only; a\.dxf"):
+                    snapshot.resolve_render_job_packet({"input": "a.dxf", "display": display, "outputs": [{"path": "a.png"}]}, cwd=root, kinds=kinds)
+            with mock.patch.object(snapshot, "drawing_mesh_path", return_value=mesh):
+                packet = snapshot.resolve_render_job_packet({
+                    "input": "a.dxf", "display": {"mode": "solid", "surfaces": {"style": "flat"}}, "outputs": [{"path": "a.png"}],
+                }, cwd=root, kinds=kinds)
+            self.assertEqual({"appearance": "light", "mode": "solid", "surfaces": {"style": "flat"}}, packet["jobs"][0]["display"])
+
     def test_cadgen_dxf_snapshot_help_names_drawings(self) -> None:
         result = subprocess.run(
             [sys.executable, "-m", "cadgen.cli", "dxf", "snapshot", "--help"],

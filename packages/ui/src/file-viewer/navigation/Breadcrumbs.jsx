@@ -167,14 +167,14 @@ function DirectoryMenuItems({ directory, activePath, onOpen, source }) {
 
   if (entries === null) {
     return (
-      <DropdownMenuItem className="text-sm text-muted-foreground" disabled>
+      <DropdownMenuItem className="text-muted-foreground" disabled>
         Reading…
       </DropdownMenuItem>
     );
   }
   if (entries.length === 0) {
     return (
-      <DropdownMenuItem className="text-sm text-muted-foreground" disabled>
+      <DropdownMenuItem className="text-muted-foreground" disabled>
         {directory === "" ? "Empty" : `${nameOf(directory)} is empty`}
       </DropdownMenuItem>
     );
@@ -195,7 +195,7 @@ function DirectoryMenuItems({ directory, activePath, onOpen, source }) {
         ) : (
           <DropdownMenuItem
             aria-current={entry.current ? "page" : undefined}
-            className={cn("min-w-0 text-sm font-normal", entry.current && "bg-accent/60 text-foreground")}
+            className={cn("min-w-0 font-normal", entry.current && "bg-accent/60 text-foreground")}
             data-active={entry.current || undefined}
             data-entry={entry.path}
             key={entry.path}
@@ -225,7 +225,7 @@ function DirectorySubMenu({ directory, label, marked, activePath, onOpen, source
     <DropdownMenuSub onOpenChange={setOpen} open={open}>
       <DropdownMenuSubTrigger
         aria-current={marked ? "page" : undefined}
-        className={cn("min-w-0 text-sm font-normal", marked && "bg-accent/60 text-foreground")}
+        className={cn("min-w-0 font-normal", marked && "bg-accent/60 text-foreground")}
         data-active={marked || undefined}
         data-entry={directory}
         title={directory}

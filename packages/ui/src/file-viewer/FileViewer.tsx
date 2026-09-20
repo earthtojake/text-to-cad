@@ -1,13 +1,13 @@
 import FileActivityStatus from "./FileActivityStatus.js";
 import { FileText, RotateCw } from "lucide-react";
-import { Component, useCallback, useMemo, useRef, useState } from "react";
+import { Component, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ErrorInfo, ReactNode } from "react";
 import { Button } from "../primitives/button.jsx";
 import { Spinner } from "../primitives/spinner.js";
-import { buildCrumbs, clampPanelWidth, EmptyState, FILE_PANEL_TREE, FileNavRow, FilePanelColumn, FileTree, nextOpenPanel, PanelToggle, resolveOpenPanel, treePanel, useElementWidth } from "./navigation/index.js";
+import { buildCrumbs, clampPanelWidth, EmptyState, FILE_PANEL_TREE, FileNavRow, FilePanelColumn, FileTree, nextOpenPanel, PanelToggle, PANEL_DEFAULT_WIDTH, PANEL_MIN_WIDTH, resolveOpenPanel, treePanel, useElementWidth } from "./navigation/index.js";
 import { useFileDocument } from "./hooks/useFileDocument.js";
 import { useFileNavigation } from "./hooks/useFileNavigation.js";
-import type { FileActivity, FileViewerProps, JsonValue, FileViewerState } from "./types.js";
+import type { FileActivity, FileNavigationAction, FileViewerProps, JsonValue, FileViewerState } from "./types.js";
 import { ViewerElementContext, ViewerHostContext } from '../host/context.js';
 import { useLiveDocument } from '../host/useLiveDocument.js';
 import { useViewerCommands } from '../host/useViewerCommands.js';
@@ -20,7 +20,7 @@ class RenderBoundary extends Component<{ children: ReactNode; onError?: (error: 
 }
 
 /** The complete file tab. Its only knowledge of formats comes from registrations. */
-export function FileViewer({ file, host, renderers, state, onStateChange, leading, navigationPath, narrowCrumbs, reveal, onError, presentation }: FileViewerProps) {
+export function FileViewer({ file, host, renderers, state, onStateChange, leading, navigationPath, narrowCrumbs, reveal, onError, presentation, fullscreen = false, onExitFullscreen }: FileViewerProps) {
   const source = host.files;
   const onOpenFile = host.navigation.openFile;
   const appearance = host.environment;
@@ -47,18 +47,24 @@ export function FileViewer({ file, host, renderers, state, onStateChange, leadin
   const [panelSlot, setPanelSlot] = useState<HTMLDivElement | null>(null);
   const [readiness, setReadiness] = useState<{ key: string; ready: boolean } | null>(null);
   const [chrome, setChrome] = useState<{ key: string; visible: boolean } | null>(null);
+  const [navActions, setNavActions] = useState<{ key: string; actions: readonly FileNavigationAction[] } | null>(null);
+  const onNavigationActionsChange = useCallback((actions: readonly FileNavigationAction[]) => { if (currentKey.current === key) setNavActions({ key, actions }); }, [key]);
   const [activity, setActivity] = useState<{ key: string; value: FileActivity | null } | null>(null);
   const onReady = useCallback((ready: boolean) => { if (currentKey.current === key) setReadiness((previous) => previous?.key === key && previous.ready === ready ? previous : { key, ready }); }, [key]);
   const onChromeVisibilityChange = useCallback((visible: boolean) => { if (currentKey.current === key) setChrome((previous) => previous?.key === key && previous.visible === visible ? previous : { key, visible }); }, [key]);
   const onActivityChange = useCallback((value: FileActivity | null) => { if (currentKey.current === key) setActivity((previous) => previous?.key === key && previous.value === value ? previous : { key, value }); }, [key]);
-  const chromeVisible = chrome?.key === key ? chrome.visible : true;
+  const chromeVisible = !fullscreen && (chrome?.key === key ? chrome.visible : true);
   const ready = loaded.status === "ready" && (readiness?.key === key ? readiness.ready : true);
   const declared = (open: string) => loaded.status === "ready" ? loaded.renderer.panels?.({ open, ready, file: loaded.file }) ?? [] : [];
   const panelsAt = (open: string) => [...declared(open), ...(source.list ? [treePanel(open)] : [])];
   const openId = resolveOpenPanel(panelsAt(state.panel ?? ""), state.panel)?.id ?? "";
   const panels = panelsAt(openId);
   const openPanel = panels.find((panel) => panel.id === openId);
-  const panelWidth = clampPanelWidth(state.panelWidth);
+  const collapsePanel = useCallback(() => changeState(previous => ({ ...previous, panel: "", panelWidth: PANEL_DEFAULT_WIDTH })), [changeState]);
+  const panelWidth = Math.min(clampPanelWidth(state.panelWidth), paneWidth > PANEL_MIN_WIDTH ? paneWidth - 1 : Infinity);
+  useEffect(() => {
+    if (chromeVisible && openPanel && openPanel.content !== "body" && paneWidth > 0 && paneWidth <= PANEL_MIN_WIDTH) collapsePanel();
+  }, [chromeVisible, openId, openPanel?.content, paneWidth, collapsePanel]);
   const width = chromeVisible && openPanel && openPanel.content !== "body" ? panelWidth : 0;
   const crumbs = useMemo(() => buildCrumbs({ path: selectedPath, narrow: narrowCrumbs ?? (paneWidth > 0 && paneWidth - width < 720) }), [selectedPath, paneWidth, width, narrowCrumbs]);
   const rendererStateKey = loaded.status === "ready" ? JSON.stringify([loaded.file.path, loaded.renderer.id]) : "";
@@ -74,25 +80,25 @@ export function FileViewer({ file, host, renderers, state, onStateChange, leadin
     const Renderer = loaded.prepared.Component;
     body = <RenderBoundary key={key} onError={onError}><Renderer key={key} file={loaded.file} source={source} document={document}
       openPanel={openId} panelSlot={panelSlot} onPanelOpen={setPanel} onReady={onReady} onChromeVisibilityChange={onChromeVisibilityChange}
-      onActivityChange={onActivityChange}
+      onActivityChange={onActivityChange} fullscreen={fullscreen} onExitFullscreen={onExitFullscreen} onNavigationActionsChange={onNavigationActionsChange}
       onOpenFile={(next, options) => onOpenFile(next, options ?? { target: "new" })} appearance={appearance}
       state={state.renderers?.[rendererStateKey]} onStateChange={setRendererState} reload={reload} /></RenderBoundary>;
   }
   return <ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={viewerElement}><div className="hardcore-file-viewer text-ui font-normal flex h-full min-h-0 flex-col" ref={bindElement} tabIndex={-1} data-source-id={source.id}>
     {chromeVisible ? <FileNavRow activePath={selectedPath} crumbs={crumbs} leading={leading} onOpen={(next) => onOpenFile(next, { target: "current" })} source={navigation.crumbs}
       status={<>{document?.dirty ? <span aria-label="Unsaved changes" title="Unsaved changes" className="ml-1 size-1.5 shrink-0 rounded-full bg-foreground/60" /> : null}{presentation?.activity ? presentation.activity(activity?.key === key ? activity.value : null) : <FileActivityStatus activity={activity?.key === key ? activity.value : null} />}</>}
-      trailing={panels.map((panel) => <PanelToggle key={panel.id} id={panel.id} active={panel.id === openId} icon={panel.icon} label={panel.label} onClick={() => setPanel(nextOpenPanel(openId, panel.id))} testId={panel.id === FILE_PANEL_TREE ? "tree-toggle" : undefined} />)} /> : null}
-    {document?.stale ? <div className="flex shrink-0 items-center gap-2 border-b bg-amber-500/10 px-3 py-1.5 text-[12px] text-amber-700 dark:text-amber-400" role="status">
+      trailing={<>{navActions?.key === key && ready ? navActions.actions.map(({ id, label, icon: Icon, disabled, active, onInvoke }) => <Button key={id} type="button" variant="ghost" size="icon-xs" className="size-6 text-muted-foreground aria-pressed:bg-accent aria-pressed:text-accent-foreground" aria-label={label} title={label} disabled={disabled} aria-pressed={active} data-file-action={id} onClick={() => { try { void Promise.resolve(onInvoke()).catch(error => onError?.(error)); } catch (error) { onError?.(error instanceof Error ? error : new Error(String(error))); } }}><Icon className="size-3.5" aria-hidden="true" /></Button>) : null}{panels.map((panel) => <PanelToggle key={panel.id} id={panel.id} active={panel.id === openId} icon={panel.icon} label={panel.label} onClick={() => setPanel(nextOpenPanel(openId, panel.id))} testId={panel.id === FILE_PANEL_TREE ? "tree-toggle" : undefined} />)}</>} /> : null}
+    {chromeVisible && document?.stale ? <div className="flex shrink-0 items-center gap-2 border-b bg-amber-500/10 px-3 py-1.5 text-[12px] text-amber-700 dark:text-amber-400" role="status">
       <RotateCw className="size-3.5 shrink-0" /><span className="flex-1">This file changed on disk since you opened it.</span>
       <Button className="h-6 px-2 text-[12px] font-normal" onClick={document.reload} size="sm" variant="secondary">Reload</Button>
       <Button className="h-6 px-2 text-[12px] font-normal" onClick={document.keepMine} size="sm" variant="ghost">Keep mine</Button>
     </div> : null}
-    {document?.error ? <div className="flex shrink-0 items-center gap-2 border-b bg-destructive/10 px-3 py-1.5 text-[12px] text-destructive" role="alert">
+    {chromeVisible && document?.error ? <div className="flex shrink-0 items-center gap-2 border-b bg-destructive/10 px-3 py-1.5 text-[12px] text-destructive" role="alert">
       <span className="flex-1">Could not save: {document.error}</span><Button className="h-6 px-2 text-[12px] font-normal" size="sm" variant="secondary" onClick={() => void document.save()}>Try again</Button>
     </div> : null}
     <div className="relative flex min-h-0 flex-1">
       <div className="min-w-0 flex-1 overflow-hidden">{body}</div>
-      {chromeVisible && openPanel && openPanel.content !== "body" ? <FilePanelColumn id={openPanel.id} label={openPanel.label} width={panelWidth} onWidthChange={(nextWidth) => changeState((previous) => ({ ...previous, panelWidth: clampPanelWidth(nextWidth) }))}>
+      {chromeVisible && openPanel && openPanel.content !== "body" ? <FilePanelColumn id={openPanel.id} label={openPanel.label} width={panelWidth} onWidthChange={(nextWidth) => changeState((previous) => ({ ...previous, panelWidth: clampPanelWidth(nextWidth) }))} onCollapse={collapsePanel}>
         {openPanel.content === "tree" ? <FileTree key={source.id} source={navigation.tree} activePath={selectedPath} edit={navigation.edit} reveal={reveal} onOpen={(next) => onOpenFile(next, { target: "new" })} /> : <div className="h-full min-h-0" ref={setPanelSlot} />}
       </FilePanelColumn> : null}
     </div>

@@ -225,6 +225,58 @@ function resolveVisualColor(visualElement, namedMaterialColors, { linkName, visu
   return materialName ? String(namedMaterialColors.get(materialName) || "") : "";
 }
 
+// What the description SAYS, kept beside what the renderer derives from it. The
+// viewer's Components tab reads these back to a person, so they are lenient: a
+// malformed optional value is left out rather than failing a robot that renders.
+function optionalNumberList(value, count) {
+  if (typeof value !== "string" || !value.trim()) {
+    return null;
+  }
+  const parsed = value.trim().split(/\s+/).map((entry) => Number(entry));
+  return parsed.length === count && parsed.every((entry) => Number.isFinite(entry)) ? parsed : null;
+}
+
+function describeOrigin(originElement) {
+  return {
+    xyz: optionalNumberList(originElement?.getAttribute("xyz"), 3) || [0, 0, 0],
+    rpy: optionalNumberList(originElement?.getAttribute("rpy"), 3) || [0, 0, 0]
+  };
+}
+
+function describeLimit(limitElement) {
+  if (!limitElement) {
+    return null;
+  }
+  const limit = {};
+  for (const name of ["lower", "upper", "effort", "velocity"]) {
+    const text = limitElement.getAttribute(name);
+    const value = typeof text === "string" && text.trim() ? Number(text) : NaN;
+    if (Number.isFinite(value)) {
+      limit[name] = value;
+    }
+  }
+  return limit;
+}
+
+function describeGeometry(geometryElement) {
+  const meshElement = geometryElement ? childElementsByTag(geometryElement, "mesh")[0] : null;
+  if (meshElement) {
+    return { type: "mesh", filename: String(meshElement.getAttribute("filename") || "").trim() };
+  }
+  const primitive = ["box", "cylinder", "sphere"].find((tagName) => geometryElement && childElementsByTag(geometryElement, tagName)[0]);
+  return { type: primitive || "unknown", filename: "" };
+}
+
+function describeInertial(linkElement) {
+  const inertialElement = childElementsByTag(linkElement, "inertial")[0];
+  if (!inertialElement) {
+    return null;
+  }
+  const massText = childElementsByTag(inertialElement, "mass")[0]?.getAttribute("value");
+  const mass = typeof massText === "string" && massText.trim() ? Number(massText) : NaN;
+  return { mass: Number.isFinite(mass) ? mass : null };
+}
+
 function parseJointMimic(jointElement, jointName) {
   const mimicElement = childElementsByTag(jointElement, "mimic")[0];
   if (!mimicElement) {
@@ -299,6 +351,9 @@ function parseJoint(jointElement, linkNames) {
     parentLink,
     childLink,
     originTransform: parseOriginTransform(childElementsByTag(jointElement, "origin")[0]),
+    // As written (metres, radians): the origin and the full <limit>, effort and velocity included.
+    origin: describeOrigin(childElementsByTag(jointElement, "origin")[0]),
+    limit: describeLimit(childElementsByTag(jointElement, "limit")[0]),
     axis,
     defaultValueDeg: 0,
     minValueDeg,
@@ -407,6 +462,7 @@ export function parseUrdf(xmlText, { sourceUrl, resolveResource } = {}) {
         }
         return {
           ...visualBase,
+          filename,
           label: labelForMeshFilename(filename),
           meshUrl: resolveResource ? resolveResource(filename) : resolveMeshUrl(filename, sourceUrl || "/"),
           localTransform: multiplyTransforms(
@@ -431,7 +487,11 @@ export function parseUrdf(xmlText, { sourceUrl, resolveResource } = {}) {
     });
     return {
       name,
-      visuals
+      visuals,
+      // Described, never rendered: collision geometry and mass are facts for inspection.
+      collisions: childElementsByTag(linkElement, "collision")
+        .map((collisionElement) => describeGeometry(childElementsByTag(collisionElement, "geometry")[0])),
+      inertial: describeInertial(linkElement)
     };
   });
 

@@ -356,7 +356,9 @@ class CadApp:
         an ordinary static server: serve the file if the bundle has it,
         otherwise fall back to index.html — EXCEPT under ``/assets/``, where a
         miss must be a 404 rather than HTML, or a stale hashed bundle reference
-        turns into an ES-module parse error instead of a readable status.
+        turns into an ES-module parse error instead of a readable status. The
+        drawing editor's fonts under ``/excalidraw/`` are the same: a family the
+        bundle leaves out must read as missing, not as an HTML "font".
         """
         if not self.dist_dir:
             # No built client. Answering here rather than joining against an
@@ -378,7 +380,7 @@ class CadApp:
             return
         if self._serve_file(response, file_path, content_type_for_static_asset(file_path)):
             return
-        if request_path.startswith("/assets/"):
+        if request_path.startswith(("/assets/", "/excalidraw/")):
             response.send_plain(404, "Not found")
             return
         index_html = os.path.join(self.dist_dir, "index.html")

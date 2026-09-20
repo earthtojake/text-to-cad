@@ -1,26 +1,22 @@
 import {
-  Contrast,
   Eye,
-  EyeOff,
-  Image,
-  Layers,
-  Paintbrush,
+  Circle,
   Spline,
   SquareDashed
 } from "lucide-react";
-import { CAD_DISPLAY_MODE } from "@hardcore/core/lib/displaySettings.js";
+
+export function RenderModeIcon(props) {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M18 11a6 6 0 0 1-6 7" />
+    <circle cx="15.5" cy="8" r="1.2" fill="currentColor" stroke="none" />
+  </svg>;
+}
 
 export const DISPLAY_MODE_OPTIONS = Object.freeze([
-  Object.freeze({ value: CAD_DISPLAY_MODE.SHADED_EDGES, label: "Shaded with edges", title: "Shaded surfaces with CAD edges", Icon: Layers }),
-  Object.freeze({ value: CAD_DISPLAY_MODE.RENDER, label: "Render", title: "Photographic materials, lighting and backdrop", Icon: Image }),
-  Object.freeze({ value: CAD_DISPLAY_MODE.SHADED, label: "Shaded", title: "Shaded surfaces without CAD edges", Icon: Paintbrush }),
-  Object.freeze({ value: CAD_DISPLAY_MODE.TRANSPARENT, label: "X-Ray", title: "Transparent solids with visible CAD edges", Icon: Eye }),
-  Object.freeze({ value: CAD_DISPLAY_MODE.HIDDEN_EDGES, label: "Hidden", title: "Shaded with hidden edges visible", Icon: EyeOff }),
-  Object.freeze({ value: CAD_DISPLAY_MODE.HIDDEN_LINES_REMOVED, label: "Lines", title: "Visible lines with hidden lines removed", Icon: SquareDashed }),
-  Object.freeze({ value: CAD_DISPLAY_MODE.UNSHADED, label: "Flat", title: "Unshaded flat color", Icon: Contrast }),
-  Object.freeze({ value: CAD_DISPLAY_MODE.WIREFRAME, label: "Wire", title: "Full wireframe", Icon: Spline })
+  Object.freeze({ value: "solid", label: "Solid", title: "Solid surfaces with visible CAD edges", Icon: Circle }),
+  Object.freeze({ value: "render", label: "Render", title: "Photographic materials, lighting and backdrop", Icon: RenderModeIcon }),
+  Object.freeze({ value: "xray", label: "X-ray", title: "Transparent surfaces with visible and hidden CAD edges", Icon: Eye }),
+  Object.freeze({ value: "hidden-line", label: "Hidden line", title: "Visible contours with obscured edges removed", Icon: SquareDashed }),
+  Object.freeze({ value: "wireframe", label: "Wireframe", title: "All CAD edges through the model", Icon: Spline })
 ]);
-
-export function displayModeOptionForValue(value) {
-  return DISPLAY_MODE_OPTIONS.find((option) => option.value === value) || DISPLAY_MODE_OPTIONS[0];
-}

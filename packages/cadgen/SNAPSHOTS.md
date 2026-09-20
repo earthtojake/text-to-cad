@@ -1,4 +1,35 @@
-# Snapshot diagnostics
+# Snapshots
+
+## Display presets
+
+`--display` accepts `solid` (the default), `render`, `xray`, `hidden-line`,
+`wireframe`, a JSON object, or a JSON file path. The CLI defaults to
+`appearance: "light"`; use `"dark"` to request dark appearance. Presets supply
+all group defaults. An omitted group inherits its preset; a supplied group
+merges its parameters and implies `enabled: true` unless explicitly false.
+
+```bash
+cadgen step snapshot part.step review.png --display render
+cadgen step snapshot part.step review.png --display '{"mode":"render","appearance":"dark","floor":{"enabled":false},"background":{"opacity":0.5}}'
+cadgen step snapshot part.step review.png --display display.json --camera front
+```
+
+The public groups are `camera`, `surfaces`, `edges`, `lighting`, `background`,
+`floor`, `grid`, and `axes`. `clip` and `exploded` remain independent inspection
+tools. `--camera` or a job/output `camera` specifies pose and framing;
+`display.camera` specifies projection and focal length (20–200 mm). Render
+defaults to perspective; other presets use orthographic projection. Opacity is
+0 for transparent and 1 for opaque, including partially transparent PNG
+backgrounds. Unknown keys and retired modes are refused.
+
+`edges`, `clip`, `exploded`, the `xray`, `hidden-line` and `wireframe` presets and
+the `hidden` and `off` surface styles describe a CAD model: its topology edges,
+its parts and its solids. They apply to STEP/STP inputs only. Every other input
+(STL, 3MF, GLB, DXF, URDF, SRDF, SDF) takes `solid` or `render`, the `shaded` or
+`flat` surface style and the remaining groups, and refuses the rest by name
+before anything is rendered.
+
+## Diagnostics
 
 `cadgen step snapshot part.step review.png --debug --json` adds diagnostics to
 `SnapshotResult.debug`. The same flag is available on the other snapshot doors
@@ -54,14 +85,14 @@ that total or to the complete CLI process time. Use this attribution to choose
 a targeted profile; a small model's stage proportions do not establish where
 a larger assembly spends its time.
 
-Photographic snapshots use the same ground placement as the Viewer. The
-translucent floor sits at the model's lowest point by default, so geometry
-reaching below the document's origin is never veiled by its own floor. To pin it
-to the document's Z=0 plane instead:
+Photographic snapshots use the same floor placement as the Viewer. The
+translucent floor defaults to the document's Z=0 plane. To place it at the
+model's lowest point instead:
 
 ```bash
-cadgen step snapshot part.step review.png --display '{"mode":"render","render":{"backdrop":{"groundPlacement":"origin"}}}'
+cadgen step snapshot part.step review.png --display '{"mode":"render","floor":{"placement":"lowest"}}'
 ```
 
-`groundPlacement` accepts `lowest` (the default) or `origin`; it moves only the
-floor, never the model or lighting. `backdrop.ground: false` removes the floor.
+`display.floor.placement` accepts `origin` (the default) or `lowest`; it moves
+only the floor, never the model or lighting. `display.floor.enabled: false`
+removes the floor.

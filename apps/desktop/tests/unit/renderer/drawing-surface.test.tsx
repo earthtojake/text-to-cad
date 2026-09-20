@@ -14,7 +14,10 @@ import type { Project, Session } from "@shared/types";
 
 const editor = vi.hoisted(() => ({
   hasContent: true,
-  controller: { serialize: vi.fn<() => string>(), exportPng: vi.fn<() => Promise<Blob>>() },
+  controller: {
+    serialize: vi.fn<() => string>(), exportPng: vi.fn<() => Promise<Blob>>(),
+    setTool: vi.fn(), setColor: vi.fn(), undo: vi.fn(), redo: vi.fn(), clear: vi.fn(), inkCanvas: vi.fn(() => null),
+  },
 }));
 vi.mock("@hardcore/ui/drawing", () => ({
   DrawingEditor: ({ onReady, onContentChange }: DrawingEditorProps) => {

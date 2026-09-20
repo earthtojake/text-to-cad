@@ -58,9 +58,10 @@ The CAD renderer declares the Inspector panel, `cad-file-sheet`. The shared
 viewer owns its frame and open state; the renderer portals panel contents into
 `panelSlot`. The retired `cad-theme` panel is not declared; hosts migrate its
 saved selection to the renderer's default Inspector.
-Preview mode calls the generic chrome visibility callback so the same preview
-can hide the shared navigation and panel frame. Leaving preview restores the
-previous panel selection through the existing controls.
+The web host owns fullscreen and passes `FileViewer.fullscreen`. The renderer
+hides inspection controls and disables picking, drawing, measurement and tool
+shortcuts. A transparent fullscreen play bar controls animation. The shared frame hides navigation and sidebars without
+changing the saved panel or active tool. Exit restores those controls.
 
 All package exports are compiled ESM with declarations. Consumers need no
 source aliases, JSX transforms for dependency `.js`, or cross-app stylesheet
@@ -96,6 +97,7 @@ Hosts preserve these existing preference keys and precedence when migrating:
 | --- | --- |
 | Directory layout | `cad-viewer:directory-session:v1` (legacy theme fields ignored) |
 | Pose transition preference | `cad-viewer:pose-transition:v1` |
+| Global fullscreen orbit speed | `cad-viewer:orbit:v1` |
 | Per-file CAD session | `cad-viewer:file-session:v1:<namespace>:<file>` |
 
 `@hardcore/ui/renderers/cad/state` exports the existing tab/file
@@ -219,8 +221,9 @@ and state round trips through unmount/remount.
 The camera session schema stores vectors and zoom while omitting runtime scope
 metadata. The viewport restores the serialized camera in its current file
 session, so a 110% view reopens at 110% while a second renderer starts from its
-own 100% default. Switching Inspect/Render fits the destination mode's camera
-without losing their separate stored snapshots. Initial/reset/fit views use the
+own 100% default. Presets update projection/lens while retaining viewpoint and
+zoom on the same renderer, canvas and controls. Ordinary settings edits never
+restart the viewport. Initial/reset/fit views use the
 projected bounds with 1.1 padding (roughly 91% occupancy in the limiting viewport
 dimension), rather than a bounding sphere. Saved/manual views retain their own
 zoom and pose. This policy belongs to the interactive UI; snapshot/export
@@ -251,11 +254,15 @@ Shift-click adds/removes entities. Escape clears the
 selection after any open menu has been dismissed. Input fields
 keep their own Escape behaviour.
 
-Measure has a temporary panel below its toolbar button, with Any geometry,
-Points, Edges and Faces snap filters. Measure reuses the selection-filter dropdown
-component, including radio rows and keyboard behaviour; its panel uses the same
-popover surface, spacing and type styles. Draw uses the same tool chooser and
-panel shell, with labelled Undo/Redo/Clear actions. The View and Capture menus share the dropdown width, offset and collision boundary.
+Measure works like Select: the first press takes up the tool, and a press while
+it is active opens its snap filter — Any geometry, Points, Edges or Faces — in
+the selection-filter dropdown; a narrowed snap is named in a small pill under the
+tools. It does not toggle off: another tool or Escape ends the session. There is
+no panel until something is measured. `MeasurePanel.jsx` then appears below the
+tools in the drawing toolbar's surface and width, in rows rather than a grid:
+one 24px row per measurement — its ruler's colour, the reading, and a delete
+button on hover; deltas and what each end snapped to are in the row's title —
+and a Clear all row once there are two. It has no title, close button or footer. The View and Capture menus share the dropdown width, offset and collision boundary.
 Leaving Measure or changing models clears
 completed rulers and the current draft. Escape first cancels a draft, then exits
 the tool. The existing measurement engine supplies planar-face spacing and
@@ -291,17 +298,40 @@ Shift toggles the resulting group and Add to prompt uses its canonical edge refs
 
 ### STEP inspector layout
 
-The STEP inspector uses one Model tab. Its rows share the file tree's row
+The STEP inspector uses a Features tab. Its rows share the file tree's row
 primitive and 28px height, with the model tree's horizontal inset. The disclosure
 button expands children; the rest of the row selects its canonical references.
 Labels keep the row's width; summaries and measurements belong in the selected
 reference details. The small eye action changes visibility, while Isolate stays
-in the context menu. A fixed-height, borderless header shows the number of
-top-level presented features and conditional visibility/isolation reset actions.
+in the context menu. The tree starts directly below `Filter model…`, the file
+tree's filter box (`primitives/tree-filter`). Conditional Show all and Exit isolate
+actions sit on the filter row's right side; there is no feature-count header.
+Clicking empty tree space clears selection, including a pending topology pick.
+
+The filter is a second view of the tree, never a filter over its expansion.
+Typing replaces the rows with a flat, ranked list (first 200; a search-only status line counts
+every match) drawn from an index of what the presented tree already holds: every
+assembly and part by name or occurrence reference (`#o1.2`), and the features of
+parts recognized earlier. Typing expands nothing, requests no topology and starts
+no recognition, so the picking frontier is the same before, during and after a
+search; a part's features become searchable once that part has been opened. The
+query matches a name as the file filter matches a filename; several words may
+also name owners (`bridge screw`), provided one of them is in the name. A hit is
+the tree row without its place: name first, its owners muted and truncating
+behind it, with the same menu, visibility action, hover and availability.
+Selecting a hit selects it in the viewport and immediately expands its owners
+through the controlled expansion state — a selection is always a row the tree
+holds — while the hit itself stays closed. The one reveal scroll waits until the
+search ends (clear, Escape or an empty box); without a new selection the tree
+returns to its previous scroll position. Up/Down move the cursor; Enter selects.
 
 Parts retain their assembly hierarchy, except redundant document wrappers are
-flattened for presentation. Flattening never rewrites occurrence or reference
-IDs. Assembly and part expansion use the same controlled state as viewport
+flattened for presentation. A single structural root (assembly, part, or body)
+is also implicitly expanded until its children offer a real choice. Its canonical
+owner is expanded in the host and its topology/recognition requested once, so
+viewport picking matches the visible features. Feature groups are never implicitly
+expanded. Flattening never rewrites occurrence or reference IDs, and hidden-owner
+restrictions still apply to the exposed children. Assembly and part expansion use the same controlled state as viewport
 picking and topology requests. A collapsed assembly is picked as a unit;
 expanding it exposes its children, and expanding a visible part requests that
 part's exact topology and inferred features. Collapsing an ancestor removes its
@@ -316,33 +346,155 @@ unselectable. Selection reveals expand the required ancestors and scroll once
 per selection or explicit reveal command. Later expansion, recognition updates
 and manual scrolling must not pull the view back to that row.
 
-The selection pane is collapsible and resizable, but its reference fields are
-visible by default without a second Details disclosure. Its item header gives
-the name and multi-selection pager one row, and the kind, wrapping canonical
-reference and copy action another. Measurements, center, normal and component
-follow when available. Extent and
-radius buttons preview the selected STEP geometry using the existing temporary
-measurement overlay. Add to prompt uses canonical STEP references, optionally
-with the selected measured value. There is no separate Surfaces tab or source
-feature view. View contains the per-file display controls and photographic settings.
+The Reference pane is read-only, resizable, and independently scrollable. Its
+static heading has one X action to clear selection; neither the pane nor its
+fields collapse. A compact dropdown browses the selected references directly
+without modifying the selection. New selections show their newest reference.
+Selection totals remain above the current reference's name, type, wrapping
+canonical ID, dimensions, coordinates and source material. Rows share an 8px
+gutter, an 80px label column and 11px text, with thin separators between totals,
+reference facts and material. There are no copy or dimension-preview buttons;
+reference delivery stays in the tree/viewport context actions and measurement
+previews in the Measure tool. There is no separate Surfaces tab or source
+feature view. View contains per-file display controls and photographic settings.
 
-The upper toolbar separates interaction modes from view settings and actions.
-**Interaction tools** holds Select, Pan, Measure, and Draw. **View and actions** holds
-the selection filter, View controls menu (Orbit and authored animation
-playback), drawing view controls, and Capture. The View tab owns the single
-display Mode dropdown, including Render.
-These two compact horizontal groups sit beside each other and wrap as whole
-groups at narrow widths. If even one group cannot fit the available scene width,
-its buttons wrap inside the same semantic pill instead of clipping past the
-viewport edge. Capture contains Copy screenshot and Ask about this view; it does
-not contain interaction modes.
+The top-right **Interaction tools** toolbar holds Select, Pan, Measure and Draw,
+and Animate, rightmost, in a file that has animation routines (it is absent
+otherwise, never disabled). Press Select to activate selection; press it again
+while active to open its selection-filter dropdown. The buttons wrap inside
+their pill when the scene is narrow. The View tab owns display settings and
+Motion owns Position. The active tool owns the bottom action: Select the prompt
+references, Draw the drawing capture, Animate the playbar.
 
-Zoom sits at the lower right immediately above the orientation axes. Minus and
-plus step the camera, the percentage is a static readout, and Reset view restores
-the current mode's fitted camera. The compact axis control keeps X/Y/Z outside
-the endpoint bubbles in a final label layer, so all three labels remain visible
-as the axes rotate. Endpoint and centre controls retain their click, drag and
-keyboard behavior. Zoom remains available when plan or orbit mode hides the axes.
+A selection exists only while Select is the tool. Leaving Select for any other
+tool drops the selection, in the viewport and the Model tree alike; choosing a
+row in the Model tree (or a host `selectReference`) under another tool returns
+to Select first. No other tool ever sees a selection, so none needs a rule for one.
+
+### Animate
+
+Animate is a session, like Draw: never persisted, never restored. While it is
+active nothing under the pointer is pickable and the camera orbits as usual.
+Its controls are the playbar at the bottom centre (`ViewportAnimationBar`),
+transparent, in one row: a routine list button (only with two or more
+routines), Play/Pause, the live scrubber, and a settings cog. Settings is a
+player's menu: a Speed row showing the current speed and opening the list of
+speeds (an authored speed outside the presets is listed too), and a Loop row
+whose check sits on the right and which toggles without closing the menu.
+There is no Restart; the scrubber's start is the restart.
+
+A routine owns the model's pose only inside the mode. Outside it the clip is
+released — stopped, rewound, the pose handed back to Position — so selection,
+topology and Position never meet an animated model. Nothing of the playback
+survives leaving: returning starts from the start, and a restored session that
+was mid-routine is released the same way. A routine that failed to load has no
+Animate tool to say so on; it is reported beside the filename with the file's
+other unavailable settings.
+
+Because the mode picks nothing and ends at rest pose, pick-only state stands
+still while it lasts (`animateMode` in `CadViewer.js`): the transformed selector
+runtime is not rebuilt per posed frame (which as React state used to rebuild pick
+groups, their BVH, the picking listeners and the highlight overlays every
+frame), pickable lists are one shared empty list, presses and releases cast no
+model ray, and part visual state is not reconciled while a routine plays. The
+pass that leaves the mode re-runs once and rebuilds the pick state. Independent
+of the mode, a routine's feature resolution is memoized per definition and parts
+array (`stepModule.js`), the clip-plane sync is skipped when no section is or
+was active, and the view cube is memoized.
+
+No component renders for a playing frame. The viewer's pose pass is one function
+with two callers: React runs it when something it reads changes (a scrub, a
+pose, a display setting, a new mesh) and publishes it through a ref; while a
+routine plays, the animation clock calls that same function once per tick
+(`usePlaybackFrames`), for STEP routines and embedded GLB clips alike. The
+scrubber is the clock's only React subscriber. Because the pass now runs inside
+the tick, the clock's adaptive pacing measures a frame's real cost. A frame that
+only moved parts skips material and instance-membership reconciliation: the
+effects pass reports whether a style, visibility or highlight changed
+(`applyStepModuleEffectsToRecords`), and moved instances sync their own matrix.
+
+### Draw
+
+Draw is the shared [drawing editor](drawing.md) (Excalidraw) laid transparently
+over the viewport. The chunk loads on the first use of the tool, and the surface
+stays hidden until the editor has its scene, so its default white page never
+flashes over the model. Pressing Draw again, like Measure, ends the session.
+
+The editor's own toolbar, `DrawingToolbar`, is placed by the viewer as a second
+row under the interaction tools in the same button metrics: Select and move
+drawings, Pan view, Pen, Line, Arrow, Rectangle, Ellipse, Text, Fill area and
+Eraser, then Color, Undo, Redo and Clear drawing. It shows the editor's active
+tool. Tools are sticky: a line is followed by another line. Color opens a strip
+of neon swatches (plus white and black) in the toolbar's own flow; it sets the
+color of what is drawn next and never recolors existing ink. Fill area is not an
+SDK tool (`drawing/fill.ts`): a click inside drawn ink adds a translucent
+polygon of the current color, from an outline that need not be closed. Draw opens on the pen in neon red.
+
+While Draw is active the view direction is locked: orbit controls, inertia,
+keyboard orbit and the view cube are off, and the editor covers the viewport so
+no drag reaches them. Pan and zoom belong to the editor (the Pan view tool,
+scroll or two-finger pan, space-drag, middle-drag, pinch or modified wheel) and
+the camera follows it
+so model and ink stay one picture. `drawingViewLock.js` derives every camera
+pose from the pose Draw started with and the editor's absolute scroll/zoom,
+never from the previous frame, so a long pan cannot drift, and re-derives it
+after a viewport resize. A viewport runtime replaced mid-sketch re-locks against
+the scroll and zoom the editor is still showing. Pan moves the orbit target along the camera's right/up;
+zoom is orthographic zoom or a perspective dolly. In perspective only the focal
+plane through the orbit target tracks the ink exactly. The camera keeps its
+panned pose when Draw ends.
+
+A sketch is session-only. It lives in the mounted editor, is never written to
+tab or file state, and is discarded when Draw is deselected, the file changes or
+the renderer unmounts; a restored tab never reopens in Draw. The bottom action
+is **Copy Drawing**, or **Add to Prompt** where the host has a composer
+destination. It delivers one prompt bundle through the host prompt-context port:
+the viewport capture with the editor's committed ink composited over it
+viewport-aligned (the ink canvas keeps its own pixel ratio and is scaled into
+the frame; selection handles are not included), plus the selected references.
+
+The file navbar holds a direct snapshot action, Inspector (`PanelLeft`) and file
+tree (`Folders`). Snapshot uses the host prompt-context port: desktop attaches
+the viewport image and references to the owning session's draft; web copies
+through its clipboard adapter. DXF also contributes its 2D/3D projection action.
+The shared FileViewer renders these registered actions without importing CAD.
+
+Zoom is a small muted percentage at the right of the Inspector tab strip. Its
+menu offers zoom steps, 100%, fit, selection fit, Reset camera and Reset model.
+The viewport has no zoom toolbar. Reset camera uses the original authored
+bounds; Reset model also restores authored motion and disables spatial tools
+while preserving display settings. See [settings-ui.md](settings-ui.md). X/Y/Z labels
+remain outside the bottom-right axis endpoints. Fullscreen hides all of these
+controls. The web header owns Fullscreen (`Maximize2`) beside appearance; while
+active, shared `FullscreenToolbar` places a transparent animation play bar at
+bottom center and Settings/X at top-right. Both areas fade after two seconds
+without pointer, wheel or keyboard activity, except during scrubbing, keyboard
+focus, or while settings is open. Movement reveals them again. There are no
+fullscreen Position controls, and no bottom bar when the file has no animation.
+
+Fullscreen is the Animate tool with the rest of the viewer put away: a file with
+routines shows the same playbar, mounted from the same component over the same
+runtime (routine list, Play/Pause, scrubber, settings menu); a file without has
+no tool and no bar. An open menu of the bar's holds the fading controls visible.
+The corner button is orbit settings only, a content-height floating panel
+bounded by the viewport. Orbit uses a 0–5× slider and numeric input; 0 stops rotation,
+and at 1× a turn takes 60 seconds. Stopping returns the renderer to idle quality
+without rebuilding the scene. Its speed is global via `CadPreferences.orbit`
+and host-owned storage (`cad-viewer:orbit:v1`), separate from per-file animation
+and display settings.
+
+Each fullscreen entry captures the regular camera and framing, then fits the
+authored model at the default angle. Exit restores the saved angle, target,
+projection and zoom, accounting for viewport resize. Fullscreen camera events
+still drive LOD but cannot overwrite the persisted file camera. Topology picking
+listeners are detached, drawing is unmounted, measurement overlays stop their
+frame loop, and selection highlights are hidden. Normal camera dragging remains
+available regardless of the tool selected before entry.
+
+STEP and embedded GLB keep their existing transports and renderer-scoped clocks;
+there is no second animation store. Leaving fullscreen for any tool but Animate
+releases the routine, as leaving the Animate tool does. Escape dismisses a
+nested menu, then orbit settings, then fullscreen.
 
 ### Read-only STEP features
 
@@ -371,9 +523,14 @@ GIF/video export are isolated on `amy/step-reconstruction-playback`. They are
 not shipped in the shared app. Pure numerical recipe helpers remain as
 recognition regression checks, without a runtime interpreter or export path.
 
-STEP models place **Model | Motion | View** in one fixed top tab strip.
-Motion appears when position controls or animation clips exist. It shows
-Animation above Position, preserving their independent runtimes and controls.
+STEP models place **Features | Motion | View** in one fixed top tab strip.
+Motion appears when position controls exist; animation is the Animate tool, not
+an Inspector section, so a file with routines and no joints has no Motion tab.
+A mesh (STL, 3MF, GLB) has only View: its measurements are the Measure tool's
+panel under the toolbar, as for STEP, and an embedded GLB clip is the Animate
+tool's. An Inspector with a single section shows that section's title in place
+of a tab strip.
+Each section requires its own sidecar block and stays expanded, without a gate.
 Preset transitions stay in Position with the DOF values, above Reset/Copy.
 Switching display mode leaves every tab and the active selection intact.
 Tab order follows the format's section descriptors and cannot be customized.
@@ -382,10 +539,48 @@ The retired split/reorder preference is ignored in both hosts. Saved per-file
 map to `view`; a legacy list selects its last available tab. New selections and
 viewport-driven reveals store one active section ID.
 
-Robot Motion uses the same preset, value and inline transition controls. A
-Components tab remains available when a linked mesh contains authored object
-names, grouping objects under their links and connecting selection to the viewport.
-Built-in robot primitives and unnamed mesh objects contribute no component rows.
+Robot Motion uses the same preset, value and inline transition controls.
+
+### Robot components
+
+URDF, SRDF and SDF place **Motion | Components | View** in the tab strip (an SDF
+leads with its SDF tab; an SRDF without joint controls has no Motion). Components
+is always present: it is the description's kinematic tree, not an inventory of
+mesh names. `workbench/robotTree.js` builds it as plain data. Links are the
+rows; a child link sits under its parent link and shows the joint between them
+as muted text (`shoulder_pan · revolute`); the named objects inside a link's
+meshes (`robotComponents`) are leaves under that link, after its child links.
+Built-in primitives and unnamed mesh objects contribute no leaves. Every link
+appears once: a cycle, a second parent or a missing parent cannot hang the
+builder or drop a link, and orphans become roots. An SRDF shows its paired
+URDF's tree.
+
+The tab reuses the Features tree's pieces rather than cloning them: the 28px
+row primitive, `Filter components…` (`primitives/tree-filter`), the ranked flat
+search of `modelTreeSearch.js`, and `InspectorSplit` for the Reference pane. The
+search index also reads a row's `searchAliases`, so a link is found by its joint
+name and the hit shows that joint in place of its owners. The root opens, along
+with a chain of single child links below it; everything else starts collapsed.
+Selecting a hit opens its owners at once and scrolls to it when the search ends.
+
+Selection reuses mesh-part picking. Every robot mesh part names its link, so a
+link is hovered and selected in the viewport as all of its parts, and a viewport
+pick of a part that is not a named object selects its link; a named object
+still selects itself (Shift/Ctrl/Cmd add). A link with no geometry selects its
+row and details only. As for STEP, a robot selection exists only while Select
+is the tool: choosing a row or a part under another tool returns to Select, and
+leaving Select clears it.
+
+The Reference pane reads back what the description says: link name, mass,
+visual and collision geometry with mesh filenames, the parent joint (name,
+type, parent link, axis, lower/upper limits as written plus degrees, effort,
+velocity, mimic, origin xyz/rpy) and the child joints. `parseUrdf` keeps those
+facts (`joint.origin`, `joint.limit`, `link.inertial`, `link.collisions`,
+`visual.filename`) beside the transforms it renders from; an SDF model reports
+only what its parser records. With an SRDF, the link's planning groups
+(`srdfGroupNamesByLink`) and end effectors are listed as secondary facts; there
+is no second tree. A named object shows its link, colour, triangles and size.
+There is no copy action: robot formats have no reference grammar to deliver.
 
 
 ### Inspector tabs and dark surfaces
@@ -410,19 +605,32 @@ hash must match the saved artifact before those annotations apply. Active build
 previews carry immutable geometry revisions and never initiate a source build.
 A complete previous revision stays visible until its replacement is ready.
 
-View's Mode dropdown selects shaded, edge, wire and photographic Render
-presentation. They share the camera, projection, display controls and inspector
-layout; changing display mode never refits the camera or replaces the tab strip.
-Render-only lighting, backdrop and Preview/Final controls load lazily inside
-View. Their settings persist per file without changing the app's appearance.
-Authored materials are read-only in both modes and described in the Model
-tree's reference section; the viewer stores no material overrides or undo.
+View's Mode dropdown selects Solid, Render, X-ray, Hidden line or Wireframe
+presets over the same grouped settings. Render defaults to perspective; the
+others to orthographic. Changing values shows Custom. Reset restores the base
+preset and disables Clip/Explode, preserving camera viewpoint/zoom, selection
+and Motion.
+The groups and gate behavior are specified in [View presets](render-mode.md).
+Photographic lighting and stage code stay lazy; the lightweight grouped settings
+panel is always available. Authored materials remain read-only in the Model
+reference section, with no material override or undo state.
 
 The host-supplied render session owns its tessellation cache and worker leases.
-Photographic scene state is a separate value. Surface derivation and preview
-requests use that file's injected service and abort when the consumer leaves.
-The Features inspector resolves exact surfaces on demand through the same client.
+The file session's display slice is the sole view-settings authority; its render
+slice holds only the camera snapshot. Surface derivation and preview requests
+use the file's injected service and abort when the consumer leaves. The Features
+inspector resolves exact surfaces on demand through the same client.
 
 File status reports Opening, Updating, Limited detail and actionable failures.
 Full diagnostics stay expandable; Try again uses FileViewer's renderer reload,
 which rechecks the artifact and does not restart the desktop window.
+
+### Camera framing and zoom
+
+The zoom ruler and Reset use the original authored model bounds and default
+orientation. Explode, clipping, animation, kinematics, visibility, floor and
+other scene effects never redefine 100%. Perspective and orthographic derive
+their own baseline from that same box and the current viewport dimensions.
+Selection fit may move the camera but cannot make that new framing become 100%.
+`viewportCameraFit.js` owns the fit calculation; live posed bounds remain useful
+for clipping, lighting and picking. Zoom controls live in the Inspector header percentage menu.

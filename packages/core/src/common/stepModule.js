@@ -347,41 +347,75 @@ function mergeBounds(boundsList) {
   return { min, max };
 }
 
+// Which parts a selector or a name means is a fact of the parts list, not of the
+// frame. A routine resolves every feature on every frame it poses, and doing it
+// by string comparison across every part each time was the largest script cost
+// of playback. The answers are kept per parts ARRAY (a new mesh publishes a new
+// one, and the cache goes with the old), frozen because they are shared.
+const partLookupCache = new WeakMap();
+const EMPTY_PART_IDS = Object.freeze([]);
+
+function partLookup(meshData) {
+  const parts = Array.isArray(meshData?.parts) ? meshData.parts : null;
+  if (!parts?.length) {
+    return null;
+  }
+  let lookup = partLookupCache.get(parts);
+  if (!lookup) {
+    lookup = {
+      entries: parts.map((part) => ({
+        ids: [part?.id, part?.occurrenceId].map((id) => normalizeString(id)).filter(Boolean),
+        name: normalizeString(part?.name),
+        resolvedId: normalizeString(part?.id || part?.occurrenceId),
+      })),
+      bySelector: new Map(),
+      byName: new Map(),
+    };
+    partLookupCache.set(parts, lookup);
+  }
+  return lookup;
+}
+
 function partIdsForSelector(selector, meshData) {
   const normalizedSelector = normalizeString(selector);
-  const parts = Array.isArray(meshData?.parts) ? meshData.parts : [];
-  if (!normalizedSelector || !parts.length) {
-    return [];
+  const lookup = normalizedSelector ? partLookup(meshData) : null;
+  if (!lookup) {
+    return EMPTY_PART_IDS;
   }
-  return parts
-    .filter((part) => {
-      const ids = [part?.id, part?.occurrenceId]
-        .map((id) => normalizeString(id))
-        .filter(Boolean);
-      return ids.some((id) => (
+  let partIds = lookup.bySelector.get(normalizedSelector);
+  if (!partIds) {
+    partIds = Object.freeze(lookup.entries
+      .filter((entry) => entry.ids.some((id) => (
         id === normalizedSelector ||
         id.startsWith(`${normalizedSelector}.`) ||
         normalizedSelector.startsWith(`${id}.`)
-      ));
-    })
-    .map((part) => normalizeString(part.id || part.occurrenceId))
-    .filter(Boolean);
+      )))
+      .map((entry) => entry.resolvedId)
+      .filter(Boolean));
+    lookup.bySelector.set(normalizedSelector, partIds);
+  }
+  return partIds;
 }
 
 function partIdsForName(name, meshData) {
   const normalizedName = normalizeString(name);
-  const parts = Array.isArray(meshData?.parts) ? meshData.parts : [];
-  if (!normalizedName || !parts.length) {
-    return [];
+  const lookup = normalizedName ? partLookup(meshData) : null;
+  if (!lookup) {
+    return EMPTY_PART_IDS;
   }
   // Exact match on the occurrence name the generator authored. Names are not
   // unique — a group emits many leaves sharing a role name — so every match is
   // returned, which makes `names: "spoke:front_left_0"` behave like the group
   // selector a designer expects.
-  return parts
-    .filter((part) => normalizeString(part?.name) === normalizedName)
-    .map((part) => normalizeString(part.id || part.occurrenceId))
-    .filter(Boolean);
+  let partIds = lookup.byName.get(normalizedName);
+  if (!partIds) {
+    partIds = Object.freeze(lookup.entries
+      .filter((entry) => entry.name === normalizedName)
+      .map((entry) => entry.resolvedId)
+      .filter(Boolean));
+    lookup.byName.set(normalizedName, partIds);
+  }
+  return partIds;
 }
 
 function referenceForSelector(selector, selectorRuntime) {
@@ -409,7 +443,29 @@ function featureSelectors(feature) {
   return token.selectors.length ? token.selectors : ["__model__"];
 }
 
+// A routine resolves its features on every frame it poses, against inputs that do
+// not change between frames: the definition, the parts and the selector runtime.
+// The last resolution per definition is kept and handed back as fresh shallow
+// copies, so a module that writes on a feature never reaches the next frame.
+const resolvedFeaturesCache = new WeakMap();
+
 export function resolveStepModuleFeatures(definition, {
+  meshData = null,
+  selectorRuntime = null
+} = {}) {
+  const features = definition?.features;
+  const cached = definition && typeof definition === "object" ? resolvedFeaturesCache.get(definition) : null;
+  if (!cached || cached.features !== features || cached.parts !== meshData?.parts ||
+      cached.bounds !== meshData?.bounds || cached.selectorRuntime !== selectorRuntime) {
+    const resolved = resolveStepModuleFeaturesUncached(definition, { meshData, selectorRuntime });
+    if (!definition || typeof definition !== "object") return resolved;
+    resolvedFeaturesCache.set(definition, { features, parts: meshData?.parts, bounds: meshData?.bounds, selectorRuntime, resolved });
+    return resolved;
+  }
+  return Object.fromEntries(Object.entries(cached.resolved).map(([id, feature]) => [id, { ...feature }]));
+}
+
+function resolveStepModuleFeaturesUncached(definition, {
   meshData = null,
   selectorRuntime = null
 } = {}) {

@@ -1,3 +1,4 @@
+import { createViewportBuffer } from "../viewportBuffer.js";
 import { disposeSectionCaps } from "@hardcore/core/lib/viewer/sectionCaps.js";
 import { disposeViewerCadScene } from "../../../render/lodSceneCleanup.js";
 import { useEffect, useLayoutEffect, useRef } from "react";
@@ -23,18 +24,15 @@ import {
 } from "@hardcore/core/lib/viewer/renderQuality.js";
 import { updateOrbitControls } from "../orbitControls.js";
 import { PERF_MEASURE_NAMES, perfMeasure, perfStart } from "@hardcore/core/lib/viewer/perfMarks.js";
-import { viewerLogarithmicDepthBuffer } from "../renderDepthPolicy.js";
+import { viewerDepthSettings, viewerLogarithmicDepthBuffer } from "../renderDepthPolicy.js";
 import { createZoomPivotReanchor } from "../zoomPivotReanchor.js";
 import { createFramePresentation } from "../framePresentation.js";
 
-function createWebGlRenderer(THREE, renderMode) {
+function createWebGlRenderer(THREE) {
   return createCadWebGlRenderer(THREE, {
     allowFallback: true,
     isRecoverableError: isWebGlContextCreationError,
-    // Three's logarithmic-depth shaders suppress the photographic ground's
-    // shadow material. CAD inspection retains logarithmic depth for very wide
-    // model ranges; Render fits an ordinary depth range to the subject.
-    logarithmicDepthBuffer: viewerLogarithmicDepthBuffer(renderMode)
+    logarithmicDepthBuffer: viewerLogarithmicDepthBuffer()
   });
 }
 
@@ -45,8 +43,6 @@ export function useViewerRuntime({
   setError,
   setViewerReadyTick,
   viewerTheme,
-  syncDrawingCanvasSize,
-  renderDrawingOverlay,
   emitPerspectiveChange,
   setActiveViewPlaneFace,
   activeViewPlaneFaceRef,
@@ -97,6 +93,11 @@ export function useViewerRuntime({
   preserveInteractionPixelRatio = false,
   runtimeResetToken = 0
 }) {
+  const renderModeRef = useRef(renderMode);
+  renderModeRef.current = renderMode;
+  useLayoutEffect(() => {
+    if (runtimeRef.current) runtimeRef.current.renderMode = renderMode;
+  }, [renderMode, runtimeRef]);
   // A dependency change replaces this WebGL runtime while CadViewer remains
   // mounted. Layout cleanup runs before passive runtime cleanup on a final
   // unmount, so the latter can distinguish a renderer handoff from the last
@@ -189,7 +190,7 @@ export function useViewerRuntime({
       syncCameraViewport(perspectiveCamera, width, height);
       syncCameraViewport(orthographicCamera, width, height);
 
-      const renderer = createWebGlRenderer(THREE, renderMode);
+      const renderer = createWebGlRenderer(THREE);
       const presentation = createFramePresentation({ canvas: renderer.domElement, renderMode, onPresent: onFramePresented });
       const softwareRendering = isSoftwareWebGlRenderer(renderer);
       let idlePixelRatioCap = softwareRendering
@@ -207,6 +208,11 @@ export function useViewerRuntime({
       renderer.shadowMap.autoUpdate = false;
       renderer.setPixelRatio(getPixelRatioCap(idlePixelRatioCap));
       renderer.setSize(width, height);
+      renderer.domElement.style.width = "100%";
+      renderer.domElement.style.height = "100%";
+      const viewportBuffer = createViewportBuffer(renderer, {
+        width, height, pixelRatio: renderer.getPixelRatio(),
+      });
       container.innerHTML = "";
       container.appendChild(renderer.domElement);
 
@@ -385,11 +391,8 @@ export function useViewerRuntime({
         }
         interactionState.pixelRatioCap = pixelRatioCap;
         interactionState.pixelRatio = nextPixelRatio;
-        renderer.setPixelRatio(nextPixelRatio);
-        renderer.setSize(container.clientWidth || width, container.clientHeight || height, false);
-        syncScreenSpaceLineMaterials();
-        syncDrawingCanvasSize(runtimeRef.current);
-        renderDrawingOverlay();
+        viewportBuffer.request({ pixelRatio: nextPixelRatio,
+          width: container.clientWidth || width, height: container.clientHeight || height });
       };
 
       const setIdlePixelRatioCap = (nextCap) => {
@@ -405,16 +408,12 @@ export function useViewerRuntime({
       const fitCameraDepthRange = (runtime) => {
         const activeCamera = runtime?.camera;
         if (
-          !renderMode ||
           !activeCamera?.isCamera ||
           renderer.capabilities?.logarithmicDepthBuffer
         ) {
           return;
         }
-        fitCameraDepthToBounds(activeCamera, runtime?.modelBounds, {
-          displayRecords: runtime?.displayRecords,
-          modelGroup: runtime?.modelGroup
-        });
+        fitCameraDepthToBounds(activeCamera, runtime?.modelBounds, viewerDepthSettings(runtime));
       };
 
       let rafId = 0;
@@ -469,13 +468,21 @@ export function useViewerRuntime({
           emitPerspectiveChange(runtimeRef.current);
         }
         fitCameraDepthRange(runtimeRef.current);
-        renderer.shadowMap.needsUpdate = interactionState.shadowsDirty === true;
-        interactionState.shadowsDirty = false;
-        presentation.draw(
-          runtimeRef.current,
-          () => renderer.render(scene, runtimeRef.current?.camera || camera),
-          presentationRequestRef?.current,
-        );
+        if (!runtimeRef.current?.viewUpdateGate?.held) {
+          renderer.shadowMap.needsUpdate = interactionState.shadowsDirty === true;
+          interactionState.shadowsDirty = false;
+          const didDraw = presentation.draw(
+            runtimeRef.current,
+            () => {
+              if (viewportBuffer.flush()) {
+                syncScreenSpaceLineMaterials();
+              }
+              renderer.render(scene, runtimeRef.current?.camera || camera);
+            },
+            presentationRequestRef?.current,
+          );
+          if (didDraw) runtimeRef.current?.viewUpdateGate?.didDraw();
+        }
         perfMeasure(PERF_MEASURE_NAMES.frame, frameStartedAt, { interacting: interactionState.active === true });
         const previewOrbitActive = !!runtimeRef.current?.previewOrbitEnabled;
         if (!previewOrbitActive) {
@@ -559,12 +566,10 @@ export function useViewerRuntime({
         const w = container.clientWidth || 800;
         const h = container.clientHeight || 640;
         applyRenderQuality(interactionState.pixelRatioCap);
-        renderer.setSize(w, h);
+        viewportBuffer.request({ width: w, height: h });
         syncCameraViewport(perspectiveCamera, w, h);
         syncCameraViewport(orthographicCamera, w, h);
         syncScreenSpaceLineMaterials();
-        syncDrawingCanvasSize(runtimeRef.current);
-        renderDrawingOverlay();
         runtimeRef.current?.onViewportResize?.();
         requestRender();
       };
@@ -732,6 +737,7 @@ export function useViewerRuntime({
       };
 
       runtimeRef.current = {
+        renderMode: renderModeRef.current,
         previousViewState: previousViewStateRef.current,
         THREE,
         scene,
@@ -833,8 +839,6 @@ export function useViewerRuntime({
         // viewport's resolution rather than waiting for a resize.
         syncScreenSpaceLineMaterials
       };
-      syncDrawingCanvasSize(runtimeRef.current);
-      renderDrawingOverlay();
       applySceneBackground(runtimeRef.current, viewerTheme);
       applyInitialPerspective?.(runtimeRef.current);
       window.addEventListener("keydown", handleKeyDown);
@@ -853,8 +857,7 @@ export function useViewerRuntime({
         if (runtime.activeModelKey && runtime.interactiveFraming) previousViewStateRef.current = {
           modelKey: runtime.activeModelKey,
           framing: Object.fromEntries([
-            "zoomBaseDistance", "zoomBaseHalfHeight", "zoomBaseModelRadius",
-            "zoomFitModelRadius", "viewportFitScale", "interactiveFraming", "userMovedCamera"
+            "zoomBaseDistance", "zoomBaseHalfHeight", "viewportFitScale", "interactiveFraming", "userMovedCamera"
           ].map(key => [key, runtime[key]]))
         };
         if (runtime.interactionState.restoreTimerId) {
@@ -884,6 +887,8 @@ export function useViewerRuntime({
         disposeSceneObject(runtime.gridHelper);
         disposeSceneObject(runtime.axesHelper);
         disposeTexture(runtime.sceneBackgroundTexture);
+        runtime.viewUpdateGate?.dispose();
+        runtime.studioEnvironmentCache?.dispose();
         runtime.environmentResource?.dispose();
         studioScene()?.disposePhotographicStudio(runtime);
         runtime.keyLight?.shadow?.map?.dispose?.();
@@ -910,5 +915,5 @@ export function useViewerRuntime({
       cleanup();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [renderMode, runtimeResetToken]);
+  }, [runtimeResetToken]);
 }

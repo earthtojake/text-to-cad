@@ -1,7 +1,7 @@
 import { clonePerspectiveSnapshot, perspectiveSnapshotEqual } from "@hardcore/core/lib/perspective.js";
 import { normalizeRenderFormat } from "@hardcore/core/lib/fileFormats.js";
 import { isCadWorkspaceCompactFileSheetViewport } from "./breakpoints.js";
-import { DRAWING_TOOL, RENDER_FORMAT, TAB_TOOL_MODE } from "./constants.js";
+import { RENDER_FORMAT, TAB_TOOL_MODE } from "./constants.js";
 
 export const CAD_DIRECTORY_SESSION_STORAGE_VERSION = 1;
 export const CAD_DIRECTORY_SESSION_STORAGE_KEY = `cad-viewer:directory-session:v${CAD_DIRECTORY_SESSION_STORAGE_VERSION}`;
@@ -91,28 +91,6 @@ function stringListEqual(a, b) {
   return true;
 }
 
-function cloneDrawingPoint(point) {
-  return {
-    x: Number(point?.x) || 0,
-    y: Number(point?.y) || 0
-  };
-}
-
-function clonePoint3(point) {
-  return Array.isArray(point) ? [
-    Number(point[0]) || 0,
-    Number(point[1]) || 0,
-    Number(point[2]) || 0
-  ] : null;
-}
-
-function clonePoint2(point) {
-  return Array.isArray(point) ? [
-    Number(point[0]) || 0,
-    Number(point[1]) || 0
-  ] : null;
-}
-
 function normalizeTabCameraSnapshot(value) {
   const snapshot = clonePerspectiveSnapshot(value);
   if (!snapshot) {
@@ -127,162 +105,19 @@ function normalizeTabCameraSnapshot(value) {
   };
 }
 
-function normalizeDrawingTool(value) {
-  const normalized = normalizeString(value || DRAWING_TOOL.FREEHAND);
-  switch (normalized) {
-    case DRAWING_TOOL.LINE:
-    case DRAWING_TOOL.ARROW:
-    case DRAWING_TOOL.DOUBLE_ARROW:
-    case DRAWING_TOOL.RECTANGLE:
-    case DRAWING_TOOL.CIRCLE:
-    case DRAWING_TOOL.FILL:
-    case DRAWING_TOOL.ERASE:
-    case DRAWING_TOOL.FREEHAND:
-      return normalized;
-    default:
-      return DRAWING_TOOL.FREEHAND;
-  }
-}
-
+// A tab's recorded tool mode. Draw is a live mode only: its sketch exists in
+// the mounted drawing editor and is discarded with it, so a record never holds
+// Draw. A restored tab would otherwise come back with the camera locked under
+// an empty sketch.
 function normalizeTabToolMode(value) {
   const normalized = normalizeString(value || TAB_TOOL_MODE.REFERENCES);
   if (
-    normalized === TAB_TOOL_MODE.DRAW ||
     normalized === TAB_TOOL_MODE.MEASURE ||
     normalized === TAB_TOOL_MODE.PAN
   ) {
     return normalized;
   }
   return TAB_TOOL_MODE.REFERENCES;
-}
-
-function pointsEqualN(a, b, length) {
-  if (a === b) {
-    return true;
-  }
-  if (!Array.isArray(a) || !Array.isArray(b) || a.length < length || b.length < length) {
-    return false;
-  }
-  for (let index = 0; index < length; index += 1) {
-    if (a[index] !== b[index]) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function cloneSurfaceLineData(surfaceLine) {
-  if (!surfaceLine || typeof surfaceLine !== "object") {
-    return null;
-  }
-  return {
-    referenceId: String(surfaceLine.referenceId || ""),
-    selector: String(surfaceLine.selector || ""),
-    normalizedSelector: String(surfaceLine.normalizedSelector || ""),
-    faceToken: String(surfaceLine.faceToken || ""),
-    partId: String(surfaceLine.partId || ""),
-    surfaceType: String(surfaceLine.surfaceType || ""),
-    startPoint: clonePoint3(surfaceLine.startPoint),
-    endPoint: clonePoint3(surfaceLine.endPoint),
-    startUv: clonePoint2(surfaceLine.startUv),
-    endUv: clonePoint2(surfaceLine.endUv)
-  };
-}
-
-function surfaceLineEqual(a, b) {
-  if (a === b) {
-    return true;
-  }
-  if (!a || !b) {
-    return false;
-  }
-  return (
-    a.referenceId === b.referenceId &&
-    a.selector === b.selector &&
-    a.normalizedSelector === b.normalizedSelector &&
-    a.faceToken === b.faceToken &&
-    a.partId === b.partId &&
-    a.surfaceType === b.surfaceType &&
-    pointsEqualN(a.startPoint, b.startPoint, 3) &&
-    pointsEqualN(a.endPoint, b.endPoint, 3) &&
-    pointsEqualN(a.startUv, b.startUv, 2) &&
-    pointsEqualN(a.endUv, b.endUv, 2)
-  );
-}
-
-function drawingPointsEqual(a, b) {
-  if (a === b) {
-    return true;
-  }
-  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) {
-    return false;
-  }
-  for (let index = 0; index < a.length; index += 1) {
-    if (a[index]?.x !== b[index]?.x || a[index]?.y !== b[index]?.y) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function cloneDrawingStroke(stroke) {
-  const rawTool = normalizeString(stroke?.tool || DRAWING_TOOL.FREEHAND);
-  if (rawTool === DRAWING_TOOL.SURFACE_LINE) {
-    return null;
-  }
-  return {
-    id: String(stroke?.id || ""),
-    tool: normalizeDrawingTool(rawTool),
-    points: Array.isArray(stroke?.points) ? stroke.points.map(cloneDrawingPoint) : [],
-    fillPoints: Array.isArray(stroke?.fillPoints) ? stroke.fillPoints.map(cloneDrawingPoint) : [],
-    guessed: stroke?.guessed === true,
-    surfaceLine: cloneSurfaceLineData(stroke?.surfaceLine)
-  };
-}
-
-export function cloneDrawingStrokes(strokes) {
-  return Array.isArray(strokes) ? strokes.map(cloneDrawingStroke).filter(Boolean) : [];
-}
-
-export function drawingStrokesEqual(a, b) {
-  if (a === b) {
-    return true;
-  }
-  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) {
-    return false;
-  }
-  for (let index = 0; index < a.length; index += 1) {
-    if (
-      a[index]?.id !== b[index]?.id ||
-      a[index]?.tool !== b[index]?.tool ||
-      a[index]?.guessed !== b[index]?.guessed ||
-      !surfaceLineEqual(a[index]?.surfaceLine, b[index]?.surfaceLine) ||
-      !drawingPointsEqual(a[index]?.points, b[index]?.points) ||
-      !drawingPointsEqual(a[index]?.fillPoints, b[index]?.fillPoints)
-    ) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function cloneDrawingHistoryStack(stack) {
-  return Array.isArray(stack) ? stack.map(cloneDrawingStrokes) : [];
-}
-
-function drawingHistoryStackEqual(a, b) {
-  if (a === b) {
-    return true;
-  }
-  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) {
-    return false;
-  }
-  for (let index = 0; index < a.length; index += 1) {
-    if (!drawingStrokesEqual(a[index], b[index])) {
-      return false;
-    }
-  }
-  return true;
 }
 
 const TAB_STATE_SCHEMA = [
@@ -363,35 +198,9 @@ const TAB_STATE_SCHEMA = [
     equals: perspectiveSnapshotEqual
   },
   {
-    key: "drawingTool",
-    defaultValue: DRAWING_TOOL.FREEHAND,
-    normalize: normalizeDrawingTool
-  },
-  {
     key: "tabToolMode",
     defaultValue: TAB_TOOL_MODE.REFERENCES,
     normalize: normalizeTabToolMode
-  },
-  {
-    key: "drawingStrokes",
-    defaultValue: [],
-    normalize: cloneDrawingStrokes,
-    clone: cloneDrawingStrokes,
-    equals: drawingStrokesEqual
-  },
-  {
-    key: "drawingUndoStack",
-    defaultValue: [],
-    normalize: cloneDrawingHistoryStack,
-    clone: cloneDrawingHistoryStack,
-    equals: drawingHistoryStackEqual
-  },
-  {
-    key: "drawingRedoStack",
-    defaultValue: [],
-    normalize: cloneDrawingHistoryStack,
-    clone: cloneDrawingHistoryStack,
-    equals: drawingHistoryStackEqual
   }
 ];
 

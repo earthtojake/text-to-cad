@@ -71,13 +71,15 @@ in [the drawing contract](../ui/docs/drawing.md); the mechanism is
   reports a typed miss before tessellation starts rather than turning a cheap
   decoded-mesh request into unbudgeted surface tessellation. Mechanism:
   [docs/resource-ownership.md](docs/resource-ownership.md) §5.
-- **One display state, two lighting recipes**: `common/sceneSettings.js` is the
-  public scene-policy boundary shared by the Viewer and snapshot runtime.
-  `display.mode: "render"` preserves the common camera, projection, clipping,
-  explode, guides, part colours, visibility and selection state while selecting
-  the photographic studio recipe. Other display modes select the Inspect
-  workbench recipe. Studio-only controls live under `display.render`; camera is
-  always top-level. The unified display contract and the rig it drives:
+- **One grouped view state**: `common/viewSettings.js` validates the public
+  Solid, Render, X-ray, Hidden line and Wireframe presets. Every preset exposes
+  the same independent camera, surfaces, edges, lighting, background, floor,
+  grid and axes groups. `resolveViewSceneSettings()` in `common/sceneSettings.js`
+  is the Viewer/snapshot policy boundary: enabled capabilities select scene
+  resources, never the preset name. Disabled lighting retains neutral CAD
+  illumination; disabled background restores the workbench canvas. Camera pose,
+  clipping and explode remain model tools, outside preset selection and Custom
+  comparison. View Reset clears display overrides and disables those tools. The grouped contract and the rig it drives:
   [docs/render-pipeline.md](docs/render-pipeline.md).
 - **Kinematics is data, choreography is JS, independently**: the FK
   evaluator (`kinematicsRuntime.js`) folds sidecar mate data into

@@ -1,7 +1,8 @@
-import { Children, createContext, useContext, useEffect, useRef, useState } from "react";
+import { Children, createContext, useContext, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, Minus, Plus } from "lucide-react";
 import { cn } from "@hardcore/ui/utils";
+import { Button } from "@hardcore/ui/primitives/button";
 import {
   AccordionContent,
   AccordionItem,
@@ -47,14 +48,14 @@ const FILE_SHEET_CONTROL_TEXT_CLASSES = [
   "[&_[data-slot=color-picker-trigger]]:!text-tiny"
 ].join(" ");
 
-export const FILE_SHEET_SECTION_TRIGGER_CLASSES = "px-2 py-2 text-sm text-sidebar-foreground/90";
+export const FILE_SHEET_SECTION_TRIGGER_CLASSES = "px-2 py-2 text-xs font-normal text-sidebar-foreground/90";
 export const FILE_SHEET_SECTION_CONTENT_CLASSES = "py-2";
 export const FILE_SHEET_CONTROL_ROW_CLASSES = "space-y-1 px-2";
 export const FILE_SHEET_ROW_STACK_CLASSES = "space-y-3";
 export const FILE_SHEET_SECTION_BODY_CLASSES = `${FILE_SHEET_ROW_STACK_CLASSES} py-2`;
 export const FILE_SHEET_SLIDER_FIELD_CLASSES = "space-y-1 px-2";
 export const FILE_SHEET_INLINE_CONTROL_ROW_CLASSES = "px-2";
-// Section headers sit at the navbar's size (12px medium) — a sheet's headings
+// Section headers sit at the navbar's size (12px, normal weight) — a sheet's headings
 // and the chrome above it read as the same level of structure. Row labels stay
 // 11px muted, so a header separates from its rows by both size and colour.
 export const FILE_SHEET_SECTION_TITLE_CLASSES = "text-xs text-sidebar-foreground";
@@ -163,6 +164,81 @@ export function FileSheetSection({
         {children}
       </AccordionContent>
     </AccordionItem>
+  );
+}
+
+// A properties-panel section that is always visible: no disclosure affordance
+// or hover treatment. Use for primary controls such as Mode and Projection.
+export function FileSheetStaticSection({ title, children }) {
+  const titleId = useId();
+  return (
+    <section aria-labelledby={titleId} className="border-b border-border pb-2">
+      <h3 id={titleId} className="flex min-h-7 items-center px-2 py-1 text-xs font-normal leading-4 text-foreground">{title}</h3>
+      <div className="space-y-1">{children}</div>
+    </section>
+  );
+}
+
+// Expanded IS enabled. Only explicit activation changes settings: hover, focus,
+// scrolling and another section moving under the pointer must never write state.
+export function FileSheetGatedSection({ title, enabled, onEnabledChange, children }) {
+  const contentId = useId();
+  const headingId = useId();
+  const enable = () => onEnabledChange(true);
+  return (
+    <section className="border-b border-border" aria-labelledby={headingId}>
+      <div className={cn("flex min-h-7 items-center", !enabled && "hover:bg-accent")}>
+        <h3 className="min-w-0 flex-1">
+          {enabled ? <span id={headingId} className="flex min-h-7 items-center px-2 py-1 text-xs font-normal leading-4 text-foreground">{title}</span> : <button id={headingId} type="button" aria-expanded={false} aria-controls={contentId}
+            onClick={enable}
+            className="flex min-h-7 w-full items-center px-2 py-1 text-left text-xs font-normal leading-4 text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45">
+            {title}
+          </button>}
+        </h3>
+        <Button type="button" variant="ghost" size="icon-xs" aria-label={`${enabled ? "Disable" : "Enable"} ${title}`} title={`${enabled ? "Disable" : "Enable"} ${title}`}
+          aria-expanded={enabled} aria-controls={contentId}
+          onClick={enabled ? () => onEnabledChange(false) : enable}
+          className="mr-1 size-6 shrink-0 text-muted-foreground hover:text-foreground">
+          {enabled ? <Minus className="size-3.5" strokeWidth={1.5} /> : <Plus className="size-3.5" strokeWidth={1.5} />}
+        </Button>
+      </div>
+      {enabled ? <div id={contentId} className="space-y-1 pb-2">{children}</div> : null}
+    </section>
+  );
+}
+
+export function FileSheetCheckboxRow({ label, checked, onCheckedChange, disabled = false, title, className }) {
+  return (
+    <label title={title} className={cn("flex min-h-6 cursor-pointer items-center gap-2 px-2 text-tiny text-muted-foreground has-disabled:cursor-default has-disabled:opacity-40", className)}>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={event => onCheckedChange(event.target.checked)} className="size-3.5 shrink-0 accent-primary" />
+      <span>{label}</span>
+    </label>
+  );
+}
+
+// Figma-like property: the icon/unit carries the visible meaning; its accessible
+// name and native hover hint keep the exact setting discoverable.
+export function FileSheetNumberProperty({ label, Icon, value, onValueCommit, disabled = false }) {
+  return (
+    <div title={label} className="flex h-7 min-w-0 items-center gap-1 rounded-md border border-input bg-muted/30 px-2 focus-within:ring-1 focus-within:ring-ring">
+      {Icon ? <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /> : null}
+      <FileSheetValueInput ariaLabel={`${label} value`} value={value} onValueCommit={onValueCommit} disabled={disabled}
+        className="h-6 min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 text-left shadow-none focus-visible:ring-0 dark:bg-transparent" />
+    </div>
+  );
+}
+
+export function FileSheetColorProperty({ label, value, onChange, opacity, onOpacityChange, disabled = false, className }) {
+  const withOpacity = typeof onOpacityChange === "function";
+  return (
+    <div className={cn("min-w-0 px-2", className)}>
+      <div className="flex h-7 min-w-0 items-center overflow-hidden rounded-md border border-input bg-muted/30">
+        <FileSheetColorPicker value={value} onChange={onChange} opacity={opacity} onOpacityChange={onOpacityChange}
+          showOpacity={withOpacity} disabled={disabled} aria-label={label} title={label}
+          className="min-w-0 flex-1 rounded-none border-0 bg-transparent shadow-none dark:bg-transparent" />
+
+      </div>
+    </div>
   );
 }
 
@@ -334,6 +410,7 @@ export function FileSheetValueInput({
   disabled = false,
   ariaLabel,
   inputMode = "decimal",
+  title,
   className,
   style
 }) {
@@ -381,6 +458,7 @@ export function FileSheetValueInput({
       ref={inputRef}
       type="text"
       inputMode={inputMode}
+      title={title}
       value={visibleValue}
       disabled={disabled}
       data-editing={editing ? "true" : "false"}
@@ -447,7 +525,10 @@ export function FileSheetSliderField({
   children,
   className,
   contentClassName,
-  labelClassName
+  labelClassName,
+  labelTitle,
+  compact = false,
+  hideLabel = false
 }) {
   const valueTrailing = trailing ?? (onValueCommit ? (
     <FileSheetValueInput
@@ -457,6 +538,17 @@ export function FileSheetSliderField({
     />
   ) : null);
 
+  if (compact) {
+    return (
+      <div className={cn("px-2", className)} title={labelTitle || (typeof label === "string" ? label : undefined)}>
+        <div className={cn("flex min-h-7 items-center gap-2", contentClassName)}>
+          {!hideLabel && label != null ? <span className={cn("min-w-0 max-w-[40%] truncate text-tiny text-muted-foreground", labelClassName)}>{label}</span> : null}
+          <div className="min-w-12 flex-1">{children}</div>
+          {valueTrailing}
+        </div>
+      </div>
+    );
+  }
   return (
     <FileSheetControlRow
       label={valueTrailing ? null : label}
@@ -582,7 +674,7 @@ export function FileSheetStatusText({ children, tone = "muted", className }) {
 
 // Micro-labelled cell for a FileSheetFieldGrid: 11px label above a 28px control.
 // The one sanctioned label-above arrangement — reserved for tightly coupled
-// tuples (coordinates, solver numerics); independent settings use rows.
+// tuples and paired properties-panel controls; other settings use rows.
 export function FileSheetField({ label, children, className }) {
   return (
     <label className={cn("block min-w-0", className)}>
@@ -616,7 +708,7 @@ export function FileSheetFieldGrid({ columns = 2, children, className }) {
   return (
     <div
       className={cn("grid gap-2 px-2", className)}
-      style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+      style={{ gridTemplateColumns: typeof columns === "number" ? `repeat(${columns}, minmax(0, 1fr))` : columns }}
       data-file-sheet-field-grid=""
     >
       {children}
@@ -707,13 +799,16 @@ export function FileSheetSelectRow({
   placeholder,
   triggerContent,
   stacked = false,
+  hideLabel = false,
+  triggerClassName,
   className
 }) {
   const select = (
     <Select value={value} onValueChange={onValueChange} disabled={disabled}>
       <SelectTrigger
         size="sm"
-        className={stacked ? FILE_SHEET_SELECT_TRIGGER_CLASSES : FILE_SHEET_INLINE_SELECT_TRIGGER_CLASSES}
+        className={cn(stacked || hideLabel ? FILE_SHEET_SELECT_TRIGGER_CLASSES : FILE_SHEET_INLINE_SELECT_TRIGGER_CLASSES, triggerClassName)}
+        title={hideLabel ? ariaLabel || label : undefined}
         aria-label={ariaLabel || (typeof label === "string" ? label : undefined)}
       >
         {triggerContent ?? <SelectValue placeholder={placeholder} />}
@@ -726,7 +821,7 @@ export function FileSheetSelectRow({
             <SelectItem
               key={option.value}
               value={option.value}
-              className="text-xs"
+              disabled={option.disabled}
               title={option.title}
               icon={option.icon}
             >
@@ -755,6 +850,7 @@ export function FileSheetSelectRow({
       </SelectContent>
     </Select>
   );
+  if (hideLabel) return <div className={cn("min-w-0 px-2", className)}>{select}</div>;
   if (stacked) {
     return (
       <FileSheetControlRow label={label} className={className}>
@@ -793,7 +889,7 @@ export function FileSheetCascadeSelectRow({
   const renderItem = (option) => (
     <DropdownMenuItem
       key={option.value}
-      className="justify-between gap-2 text-xs"
+      className="justify-between gap-2"
       onSelect={() => onValueChange?.(option.value)}
     >
       <span className="min-w-0 truncate">{option.label}</span>
@@ -823,7 +919,7 @@ export function FileSheetCascadeSelectRow({
           {ungrouped.map(renderItem)}
           {groupNames.map((groupName) => (
             <DropdownMenuSub key={groupName}>
-              <DropdownMenuSubTrigger className="text-xs">{groupName}</DropdownMenuSubTrigger>
+              <DropdownMenuSubTrigger>{groupName}</DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="max-h-80 w-56 overflow-y-auto">
                 {options.filter((option) => option.group === groupName).map(renderItem)}
               </DropdownMenuSubContent>

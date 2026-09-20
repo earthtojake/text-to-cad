@@ -54,7 +54,6 @@ from cadgen.occurrence_groups import (
 from cadgen.cli_progress import cli_progress_line
 from cadgen.results import SnapshotResult
 from cadgen.snapshot_core import (
-    DISPLAY_MODE_ALIASES,
     DISPLAY_OPTION_KEYS,
     MESH_SUPPORTED_RENDER_MODES,
     SUPPORTED_JOB_KEYS,
@@ -63,7 +62,6 @@ from cadgen.snapshot_core import (
     asset_url_for_path,
     clear_render_output_targets,
     declared_output_path,
-    effective_display_request,
     is_plain_object,
     load_display_option,
     load_json_text,
@@ -80,6 +78,7 @@ from cadgen.snapshot_core import (
     selection_value_list,
     snapshot_timestamp,
     validate_direct_settings_payload,
+    validate_display_for_kind,
     validate_display_settings_values,
 )
 from cadgen.snapshot_video import (
@@ -783,21 +782,6 @@ def resolve_robot_render_job(
             f"{mode} mode requires STEP topology; {label} robots support: {supported}"
         )
 
-    display = effective_display_request(job)
-    raw_display_mode = re.sub(r"[\s-]+", "_", str(display.get("mode") or "").strip().lower())
-    canonical_display_mode = DISPLAY_MODE_ALIASES.get(raw_display_mode, raw_display_mode)
-    if canonical_display_mode in {"shaded_edges", "hidden_edges", "hidden_lines_removed"}:
-        raise SnapshotError(
-            f"{canonical_display_mode} display mode is not supported for {label} robots; "
-            "robot link meshes have no CAD edge topology"
-        )
-    exploded = display.get("exploded") if is_plain_object(display.get("exploded")) else None
-    if exploded is not None and exploded.get("enabled"):
-        raise SnapshotError(
-            f"exploded view requires STEP assembly occurrence structure; {label} robots "
-            "cannot be exploded"
-        )
-
     if kind == "sdf":
         unrenderable = unrenderable_sdf_geometry(input_path)
         if unrenderable:
@@ -939,26 +923,26 @@ def resolve_render_job(
             setting_label="display settings",
         )
         validate_display_settings_values(job["display"], source_label="job display")
-        if (
-            str(job["display"].get("mode") or "").strip().lower() == "render"
-            and str(job.get("mode") or "view").strip().lower() != "view"
-        ):
+        lighting = job["display"].get("lighting")
+        lighting_enabled = (
+            lighting.get("enabled", True) if is_plain_object(lighting)
+            else job["display"].get("mode") == "render"
+        )
+        if lighting_enabled and str(job.get("mode") or "view").strip().lower() != "view":
             raise SnapshotError("Render display supports only view mode")
 
-    # Still evidence omits viewport guides in every display mode unless the
-    # request explicitly turns them back on.
-    display = dict(job.get("display") if is_plain_object(job.get("display")) else {})
-    guides = dict(display.get("guides") if is_plain_object(display.get("guides")) else {})
-    guides.setdefault("grid", {"enabled": False})
-    guides.setdefault("axis", {"enabled": False})
-    display["guides"] = guides
-    job["display"] = display
+    # Every mode shares its preset defaults with the Viewer; only appearance is
+    # fixed to Light for deterministic CLI output.
+    display = job.get("display", {})
+    validate_display_settings_values(display, source_label="job display")
+    job["display"] = {"mode": "solid", "appearance": "light", **display}
 
     input_path = resolve_input_path(raw_input, cwd=resolved_cwd)
     root_path = input_path.parent.resolve()
     reference_root = reference_root_for_input(input_path, resolved_cwd)
     kind = input_kind(input_path)
     source_path = input_path
+    validate_display_for_kind(display, kind=kind, input_label=input_path.name)
     if kind == "python":
         # Scripts are RUN, never rendered: `python <script>` writes the
         # document, and snapshot renders the document.
@@ -1262,20 +1246,6 @@ def resolve_drawing_render_job(
         supported = ", ".join(sorted(MESH_SUPPORTED_RENDER_MODES))
         raise SnapshotError(
             f"{mode} mode requires STEP topology; drawings support: {supported}"
-        )
-
-    display = effective_display_request(job)
-    raw_display_mode = re.sub(r"[\s-]+", "_", str(display.get("mode") or "").strip().lower())
-    canonical_display_mode = DISPLAY_MODE_ALIASES.get(raw_display_mode, raw_display_mode)
-    if canonical_display_mode in {"shaded_edges", "hidden_edges", "hidden_lines_removed"}:
-        raise SnapshotError(
-            f"{canonical_display_mode} display mode is not supported for drawings; "
-            "a drawing mesh has no CAD edge topology"
-        )
-    exploded = display.get("exploded") if is_plain_object(display.get("exploded")) else None
-    if exploded is not None and exploded.get("enabled"):
-        raise SnapshotError(
-            "exploded view requires STEP assembly occurrence structure; drawings cannot be exploded"
         )
 
     preview = drawing_mesh_path(input_path, force=bool(job.get("force")))

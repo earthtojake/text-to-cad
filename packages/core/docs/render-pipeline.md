@@ -24,101 +24,98 @@ resolution, Playwright routing, and writing returned outputs to disk.
 
 ## Modules
 
-### `common/sceneSettings.js`
+### `common/viewSettings.js` and `common/sceneSettings.js`
 
-```js
-import {
-  resolveSceneSettings,
-  resolveDisplayMaterialSettings
-} from "@hardcore/core/common/sceneSettings.js";
-```
+`normalizeViewSettings(display)` is the strict public schema shared with the
+snapshot CLI. It preserves omitted groups and inherited appearance, defaulting
+only `mode` to `solid`. The presets, in order, are `solid`, `render`, `xray`,
+`hidden-line`, and `wireframe`. Legacy public display fields are rejected.
 
-`resolveSceneSettings({ appearance, quality, camera, display })` is the shared
-Viewer/snapshot policy resolver. Camera and display state are common to both
-view modes. `display.mode: "render"` selects the photographic recipe; every
-other mode selects the Inspect workbench recipe.
-`resolveDisplayMaterialSettings()` belongs to the display half; see
-[Display modes, CAD edges and geometry sharing](#display-modes-cad-edges-and-geometry-sharing).
-
-A display mode other than `render` selects responsive CAD inspection defaults, where the
-top-level quality, camera, and display fields apply. That result carries
-`theme`, the CAD scene settings — materials, background, floor, environment and
-the seven-light inspection rig. `materialOverrides` is null: authored STEP
-finish and opacity remain intact, with workbench material channels used only
-where no source channel exists. Display color modes still control presentation
-color without changing the authored material. The Inspect base is selected by
-appearance; legacy host `theme` input cannot replace it. Models with authored
-material parts additionally receive a fixed neutral reflection hemisphere from
-`inspectEnvironment.js`: a 64×32 linear texture (32 KiB of source pixels), with
-Three-managed roughness prefiltering. The viewer and snapshots share it. Each
-renderer owns and disposes its texture; no model without authored materials
-loads it, and it imports no photographic rig or HDR asset.
-
-Render resolves `theme: null`, so the Inspect lighting rig and stage are not
-mixed into the studio. Its studio-only settings live inside the ordinary
-display object. All sibling display fields remain active:
+Every preset has the same independent groups:
 
 ```js
 {
   mode: "render",
-  clip, exploded, edges, guides, partColor,
-  render: {
-    studio: "light", // or "dark"; omit to follow global appearance
-    quality: "final", // or "preview"
-    exposure: 0, // EV, -5..5
-    lighting: { rotation: 0, size: 1, fill: 0.25 },
-    backdrop: {
-      color: "#e7e7e5", transparent: false, ground: true,
-      groundPlacement: "lowest" // or "origin"
-    }
-  }
+  appearance: "light", // omit to inherit the viewer; CLI defaults to light
+  camera: { projection: "perspective", focalLength: 50 },
+  surfaces: { style: "shaded", colorMode: "original", opacity: 1 },
+  edges: { enabled: false, visibility: "visible", color: "#253443" },
+  lighting: { quality: "final", exposure: 0, rotation: 0, size: 1, fill: 0.25 },
+  background: { color: "#e7e7e5", opacity: 1 },
+  floor: { placement: "origin", color: "#e7e7e5", opacity: 0.6 },
+  grid: { enabled: false, color: "#cbd5e1", opacity: 0.16 },
+  axes: { enabled: false, color: "#6b7280", opacity: 0.28 }
 }
 ```
 
-The normalized Render payload preserves omission. The resolved scene expands
-the effective values into the RENDER RECIPE at `resolved.render.configuration`
-— `{studio, quality, exposure, lighting, backdrop, camera}`, each with its
-effective value — so a UI can display the active studio and defaults without
-pinning them into session state. That recipe is the only input
-`applyPhotographicStudio()` and `createEnvironmentResource()` take, and
-`resolved.camera` is its camera. The studio's one fixed finish is
-`PHOTOGRAPHIC_STUDIO_MATERIAL_SETTINGS`, a constant of the rig rather than
-anything the recipe can reach. `render` surface shading follows the same lit,
-opaque geometry policy as `shaded` and does not force CAD edges. Authored
-materials remain authoritative unless `display.partColor` explicitly requests
-inspection colouring. Clipping, explode, guides, hidden parts, selectors and
-selection continue through the same CAD model path. Camera is always the common
-top-level camera, so switching modes preserves pose and projection, including
-orthographic scale. Per-output snapshot cameras remain explicit overrides.
+Omission inherits the selected preset. A present group merges its partial
+fields and enables the group unless `enabled: false` is explicit. Thus
+`{mode: "solid", floor: {color: "#ffffff"}}` adds a floor under neutral CAD
+lighting. Disabling lighting retains neutral CAD lights and the small authored
+material reflection hemisphere from `inspectEnvironment.js`; it does not make
+the model black. Disabling background restores the natural workbench canvas.
+Disabling floor, grid, axes or edges removes that effect. Disabling surfaces
+restores authored, lit surfaces at full view opacity; `surfaces.style: "off"`
+explicitly removes visible surfaces. Camera disable restores orthographic/50mm.
 
-The translucent ground defaults to the model minimum. Setting
-`groundPlacement: "origin"` pins it to the authored Z=0 plane; it moves only
-the floor, never the model or the lighting.
-`backdrop.ground: false` removes the floor.
+`resolveViewSettings(display, {appearance, lightingQuality})` expands all groups. Solid defaults
+to shaded original colors, visible edges, neutral lighting, grid and axes.
+Render defaults to perspective, no edges, photographic lighting, opaque
+background and the translucent floor; the other presets are orthographic.
+X-ray uses 0.22 surface opacity with all edges. Hidden line uses depth-only
+surfaces with visible edges. Wireframe turns surfaces off and draws all edges.
+Every group remains independently editable in every preset. Surface styles are
+`shaded`, `flat`, `hidden` (depth only) and `off`; color modes are `original`,
+`single` and `by-part`, with `color` and an optional `colors` palette.
 
-`orthographicHalfHeight` is the positive pre-zoom vertical half-extent of an
-orthographic camera. It may remain in a perspective camera payload so switching
-back restores the prior orthographic scale.
-`focalLength` is a perspective-camera lens in millimetres from 20 to 200.
+`viewSettingsAreCustom()` compares effective settings with the selected preset.
+`resetViewSettings()` clears all View overrides, including `clip`/`exploded`,
+keeping only the selected mode. Preset selection separately preserves the tools.
+Tools never make a preset Custom. Appearance inherits
+until explicitly supplied. Surface opacity multiplies authored source opacity;
+color modes change presentation without mutating authored materials.
 
-Studio ids are exactly `light` and `dark`. Omitting `studio`
-follows the resolver's global appearance while keeping the normalized Render
-payload sparse. `resolved.render.configuration.studio` reports the effective id
-for UI. Quality is `preview` or `final` and does not select a studio; it maps to
-the internal standard or high scene policy respectively. Render keeps the
-common camera (orthographic iso when none is supplied), uses `render` display
-shading, authored materials, and final quality. Normal CAD defaults to
-orthographic `shaded_edges`, Original part colors, and interactive quality;
-it keeps authored albedo and opacity while applying matte workbench PBR
-channels, and the snapshot adapter turns normal CAD guides off for deterministic
-stills.
-Final uses the bounded L3 (finest) mesh rung, a 0.25px viewport target, 4096px
-spotlight shadows, a 512px procedural environment, and 2x snapshot capture.
-Those values are derived from the quality id and do not expand the public JSON.
-Explicit `output.renderScale` remains authoritative for the internal drawing
-buffer. PNG and video-frame output keeps the requested pixel dimensions:
-supersampled frames are downsampled in full before encoding, with labels drawn
-afterward.
+Clip keeps coordinates below its plane by default (`invert: false`); Flip keeps
+coordinates above it. Its offset remains measured from the bounds minimum to
+maximum regardless of Flip. The neutral boundary is therefore offset 1 normally,
+or offset 0 when flipped. Interactive viewers and snapshots share this policy;
+orbiting the camera never changes the clipped half.
+
+`resolveViewSceneSettings({display, camera, appearance, quality})` is the public
+Viewer/snapshot scene-policy boundary. Its `view` is the full grouped state;
+`display` is the historical internal draw policy, including `surfaces` and
+edge color/visibility. `camera` combines the top-level pose with the grouped
+lens. Public top-level and per-output cameras contain pose/framing only;
+projection and focal length belong to `display.camera`. Focal length ranges
+from 20 to 200 mm. `orthographicHalfHeight` is the positive pre-zoom vertical
+half-extent and may be retained while perspective is active.
+
+The resolver's `render.enabled` means lighting, background or floor needs the
+studio scene helper. `render.configuration.lighting.enabled` independently
+controls photographic illumination and PMREM allocation. `theme` retains the
+neutral workbench recipe whenever photographic lighting is disabled, including
+when a custom background or floor is present. Consumers build CAD models with
+`surfaceSettings: resolved.view.surfaces` and the resolved edges; they must not
+reapply historical mode-owned edge forcing. `resolveSceneSettings()` remains an
+internal compatibility resolver for older low-level consumers.
+
+Background opacity follows the ordinary alpha convention: 0 is transparent and
+1 is opaque. Fractional alpha is carried by the renderer clear color with
+`scene.background = null`, so viewer checkerboards and PNG captures agree.
+The floor is independent of background alpha. It defaults to authored Z=0;
+`placement: "lowest"` follows the current model minimum without moving geometry
+or lighting. Its double-sided plane uses one transparency pass, keeping geometry
+below the origin visible. Depth fitting includes the actual floor elevation;
+orthographic views can use a signed near plane when the floor crosses the eye.
+
+Lighting quality is `preview` or `final`, mapping to standard/high scene policy.
+The viewer passes `lightingQuality: "preview"`; the CLI baseline is `final`.
+That environment default also feeds Custom comparison and does not pin a saved
+override. An explicit `lighting.quality` wins in either context.
+Final uses the bounded L3 mesh rung, a 0.25px viewport target, 4096px spotlight
+shadows, a 512px procedural environment and 2x snapshot capture. Technical
+`quality.tessellation` and `output.renderScale` remain explicit overrides.
+PNG output retains requested dimensions by resampling the full drawing buffer.
 
 The two studios use one physical Render pipeline. A neutral HDR key card and
 opposing fill card generate a procedural PMREM for authored PBR reflections;
@@ -141,12 +138,15 @@ work, returned directly rather than as a promise — assigns its
 texture to `scene.environment`, and releases it through
 `disposeEnvironmentResource()`. `environmentResourceIdentity()` includes
 softbox size, fill, and PMREM resolution; it excludes rotation so rotating the
-rig is a live scene update rather than an environment rebuild.
+rig is a live scene update rather than an environment rebuild. A resource also
+exposes `readPixels()` for transferring its half-float PMREM from worker WebGL.
+The interactive UI prepares and caches these maps off the main thread; snapshot
+rendering can keep the synchronous caller-owned path.
 
 The ground uses `PHOTOGRAPHIC_STUDIO_STAGE_RADIUS_MULTIPLIER` for its full
 square width. Camera fitting uses the same constant as far-plane padding, which
-keeps the finite two-triangle ground outside practical product views without
-weakening the model-fitted near plane.
+keeps the finite two-triangle ground outside practical product views. Near-plane
+fitting includes the visible floor as well as the model.
 
 Environment radiance and direct illumination are calibrated together at zero EV
 across colored assemblies, gray mechanical models, and authored metal/plastic
@@ -168,17 +168,22 @@ color, and no authored color for STL. Animated direct GLB keeps its native
 glTF hierarchy instead, so its textures and PBR channels stay attached to the
 scene.
 
-Snapshots select the studio with `display.mode: "render"`; there is no separate
-Render job envelope. Render supports only the `view` capture mode. Camera,
+Snapshots use the same grouped display contract. Photographic lighting supports
+only the `view` capture mode. Camera,
 selection, clipping, exploded view, guides, part colour, animation, video,
 kinematics, robot joints, tessellation quality, per-output cameras and output
 sizing remain composable.
 
-Photographic Render creates its WebGL renderer with
+Photographic lighting creates its WebGL renderer with
 `logarithmicDepthBuffer: false`. Three's logarithmic depth shader path does not
 produce usable contact shadows. Render callers fit ordinary-depth near/far
-planes to current model bounds with `fitCameraDepthToBounds(camera, bounds)`;
-normal CAD retains logarithmic depth for broad inspection scales.
+planes to current model bounds with `fitCameraDepthToBounds(camera, bounds)`.
+The interactive viewer uses this fitted conventional depth for every preset so
+settings can enable shadows without replacing its renderer/canvas. The fit also
+uses visible records for closeups, the floor's actual elevation, and the grid's
+plane and bounds independently of Floor. Otherwise the subject's near plane
+clips foreground guides, or the far plane truncates their finite span. Standalone
+CAD snapshots may still use logarithmic depth: they render one fixed configuration.
 
 ### `common/source.js`
 
@@ -224,9 +229,9 @@ Accepted input fields:
   key and the sidecar section.
 - `stepParameterUrl` or `resolved.stepParameterUrl`: model sidecar
   (`.step.json`) URL, whose `kinematics` section is compiled here.
-- `quality.tessellation`: explicit STEP tolerances in every display mode. When
-  omitted, `display.render.quality` selects the bounded preview/final mesh rung
-  for Render.
+- `quality.tessellation`: explicit STEP tolerances in every preset. When
+  omitted, enabled `display.lighting.quality` selects the bounded preview/final
+  mesh rung.
 
 STEP-only options are rejected for non-STEP sources. The old shared `params`
 field is rejected, and so is the retired `stepParameters` spelling; use
@@ -333,9 +338,10 @@ camera framing helper used by interactive rendering.
 
 ### Display modes, CAD edges and geometry sharing
 
-Canonical display modes are `shaded`, `shaded_edges`, `transparent`,
-`hidden_edges`, `hidden_lines_removed`, `unshaded`, and `wireframe`. The
-retired `rendered` and `solid` values fail with their replacements. Normal CAD
+Internal draw modes are `shaded`, `shaded_edges`, `transparent`,
+`hidden_edges`, `hidden_lines_removed`, `unshaded`, and `wireframe`. Public
+presets resolve to those implementation details plus independent surface and
+edge settings; never feed a public preset into `normalizeDisplayMode()`. Normal CAD
 keeps authored albedo, opacity and finish. Workbench PBR channels are fallbacks;
 a small neutral reflection environment makes authored metals readable without
 loading the photographic studio.
@@ -359,9 +365,15 @@ highlight).
 
 `cadInk.js` fixes one dark model-edge palette and nominal widths per class:
 feature 1, tangent 0.65, seam 0.8, and degenerate 0 (hidden). Public
-`display.edges` keeps only enabled/silhouette choices; grid settings keep only
-enabled. Viewer and snapshots share the same grid spacing and fixed ink.
-Appearance updates preserve model lighting, materials, class ink, geometry,
+`display.edges` exposes enabled, visible/all visibility and color; widths stay
+renderer-owned and the default color preserves the restrained class palette. Grid settings keep
+`enabled` plus optional `color` and `opacity`; omission follows the appearance
+palette, while an explicit color applies to both cell and origin lines. Viewer
+and snapshots share the same grid spacing:
+five cells across the default model framing, with 112 divisions spanning the
+floor so orbiting and panning do not expose an abrupt grid edge.
+Grid and Axes share the appearance's default guide color.
+Appearance updates preserve model lighting, materials, geometry,
 segment textures and occurrence slots; only the canvas and guides adapt.
 
 A thickness is a FULL width in DEVICE pixels — every line shader normalises its
@@ -464,8 +476,8 @@ import {
 
 `renderJobContext(meshData, job)` resolves the shared scene contract plus
 snapshot-owned output policy: display, camera, quality, scene scale, outputs,
-STEP topology edge visibility, and warnings. Studio scene quality comes from
-`display.render.quality`; `job.quality` contains technical tessellation only.
+STEP topology edge visibility, and warnings. Studio scene quality comes from enabled
+`display.lighting.quality`; `job.quality` contains technical tessellation only.
 
 `modelOptionsForRenderJob(context, job)` converts that policy into
 `buildModel()` settings.

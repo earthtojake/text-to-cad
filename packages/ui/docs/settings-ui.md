@@ -1,300 +1,241 @@
-# Settings UI Guidelines
+# File-viewer settings design system
 
-The contract for every settings surface rendered inside a file sheet tab:
-View, Motion, and the DXF, STEP, URDF/SDF, and mesh sheets. The tab strip, navbar, and
-sheet frame are out of scope — this document governs the *contents* of a tab.
+This is the binding contract for settings in shared file-viewer tabs, including
+View and Motion. Use the primitives in
+[`FileSheet.js`](../src/renderers/cad/components/workbench/FileSheet.js), and the
+fixed strip in [`FileSheetTabbedSurface.js`](../src/renderers/cad/components/workbench/FileSheetTabbedSurface.js).
+Extend a shared primitive when a new control shape is needed. Do not recreate
+rows or section behavior inside each renderer. Environmental effects belong to
+the host, per [viewer-host.md](viewer-host.md); these controls work in either app.
 
-Every pattern here has a primitive in
-`src/renderers/cad/components/workbench/FileSheet.js`. Build settings UI from those
-primitives; do not hand-roll rows, labels, inputs, or switches inside a sheet.
-If a new control shape is genuinely needed, add the primitive to `FileSheet.js`
-first, then use it — never inline a one-off.
+## Sections express behavior
 
-## Anatomy
+Sections are a flat stack separated by thin borders. Do not nest disclosures or
+put the display groups inside another “Display settings” accordion.
 
-```text
-Tab body                    px-0, vertical stack of sections
-└─ Section                  FileSheetSubsection: hairline rule + header + rows
-   ├─ Header row            title (+ optional trailing control, e.g. gate switch)
-   └─ Row stack             rows, 8px apart
-      └─ Row                one setting: inline | slider | block | field grid
-```
+| Kind | Primitive | Behavior | Examples |
+| --- | --- | --- | --- |
+| Always available | `FileSheetStaticSection` | Always open; no plus/minus, hover treatment, or enable switch | Mode, Surfaces, Animation, Position, Parameters |
+| Optional feature | `FileSheetGatedSection` | Expanded means enabled; collapsed means disabled | Explode, Clip, Edges, Grid, Axes, Lighting, Background, Floor |
 
-- A tab body is a flat list of sections. Sections never nest.
-- **Every section carries a heading, and every row carries a label** — including
-  a section that holds a single row, which shows both (`Material` / `Thickness`,
-  `Model` / `Mode`). A heading never stands in for a row's label: a labelless
-  row reads as an orphaned control, and a row whose only name is the heading
-  above it cannot be scanned in a list. Name the group and the control
-  differently; if the only honest name for both is the same word, the group is
-  wrong, not the label.
-- Action rows are the one exception: a button says what it does, so a row of
-  buttons (Reset, Flip, Play) takes no label.
-- Everyday settings stay visible. Progressive disclosure is allowed only when a
-  gate switch turns a whole feature off (Floor, Grid, Environment, a light):
-  the switch stays, the dependent rows unmount.
-- A gate reaches every row it owns. Whether they unmount (Floor, Grid) or go
-  disabled (Kinematics, Animation), the section picks one and applies it to all
-  of them: one live control under an off switch reads as a control that still
-  does something. The single exception is a control whose meaning IS "turn this
-  on and do it" — Animation's `Play`, which opens the gate rather than sitting
-  dead under it, because the toolbar carries the same button outside the sheet.
-- The standard STEP tabs are **Model | Motion | View**. Motion appears when
-  animation or position controls exist. It contains **Animation** first and
-  **Position** second; either section may be absent independently. Playback,
-  DOF values, presets and their enable states retain separate ownership.
-- Position includes preset, DOF and pose-transition rows in the same section.
-  Do not add a separate Transition subsection. Reset/Copy finish Position;
-  animation keeps its distinct Play/Pause and Restart actions.
-- View owns one Mode dropdown for every display mode, including Render.
-  Projection, part colors, guides, clipping and explode controls stay in View;
-  photographic lighting/backdrop/quality rows appear there when Render is active.
-  Display changes never replace the inspector's tabs or active selection.
-- Inspector tabs occupy one row at the top, in the format's canonical order
-  (Model, Motion, View for STEP, omitting unsupported sections). Do not add
-  dragging, reordering, split panes or layout preferences. Active selection
-  belongs to the file; visited Model trees retain disclosure and scroll state.
+A section is gated only when its entire feature has a meaningful disabled state.
+Surfaces stays open because the group configures the model's basic presentation;
+its style picker can still explicitly select Off. Animation and Position are
+controls over authored motion, not optional display effects: neither collapses.
 
-## Spacing and sizing tokens
+For an optional feature:
 
-All values sit on a 4px grid. The panel gutter is 8px (`px-2`) on both sides;
-every row aligns its label to the left gutter and its control to the right
-gutter — one label axis, one control axis, no exceptions.
+- The disabled header has muted text and a plus. The title and plus enable it
+  on click or keyboard activation. Hover provides a gray background only.
+- The enabled header is static primary text. Only the separate minus is an
+  interactive icon button, with the standard button hover/focus treatment.
+- Enabling initializes the group's defaults. Disabling removes its overrides
+  and applies its neutral behavior. Reopening never restores old edits.
+- Do not add an enable checkbox inside the section, and do not infer whether it
+  is open from the numerical value of a control. Explode stays open at 0%.
+- Hover, focus, scrolling, layout movement, or renderer completion must never
+  write settings or open/close a section.
 
-| Token | Value | Where |
-| --- | --- | --- |
-| Row height (inline) | `min-h-7` (28px) | switch, color, value, select-trailing rows |
-| Control height | `h-7` (28px) | every input, select, button, stepper, picker |
-| Dropdown width | `w-fit`, `min-w-20`, `max-w-44` | inline select trigger |
-| Gap between rows | 12px (`space-y-3` stack) | within a section |
-| Label → control, stacked | 4px (`space-y-1`) | inside one block row |
-| Rule → heading | 16px (`mb-4` on the rule) | `FileSheetSubsection` owns it |
-| Heading → first row | 12px (`pb-3`) | `FileSheetSubsection` owns it |
-| Last row → next rule | 16px (`pb-4`) | `FileSheetSubsection` owns it |
-| Row gutter | `px-2` | every row, list, and message |
-| Grid gap (field grids, button rows) | `gap-2` / `gap-1.5` | see Field grids, Buttons |
+Feature state comes from the canonical per-file settings store. There is no
+second accordion-open state to synchronize with it. Clip opens with an X center
+cut and Flip off, exposing the section toward the default camera. Flip reverses
+the kept half without moving the plane; orbiting does not change the cut.
+Explode opens at 50%. These two tools stay outside presets.
 
-A section's dividing rule belongs to its own top edge, so the 16px above a
-heading and the 16px below the previous section's last row are the same
-measurement seen twice: **the space on either side of every rule is equal.**
-This holds when a gated section collapses to its heading alone: the heading's
-bottom gap exists only to clear the first row, so with no rows it is dropped
-and the collapsed section stays 16px on both sides.
+## Read-only inspection
 
-Inside a section, rows sit 12px apart and the heading takes 12px to clear the
-group it names. Three spacings for the whole panel, each a step on the 4px
-grid: 4px binds a label to its control, 12px separates rows within a group,
-16px holds groups apart.
+Reference information uses a static heading with an X to clear selection, not a
+gated settings section. Its body may scroll independently and its divider may
+resize it; fields never hide behind nested disclosures. Use compact label/value
+rows with the same 8px gutters and 11px text as settings. A dropdown may browse
+multiple selected items without altering the selection. Keep copy, prompt and
+geometry-manipulation actions out of this read-only panel.
 
-**Every control is exactly 28px tall** — input, select, colour picker, stepper,
-button, segmented item — so a column of them shares one rhythm and one right
-edge. Selects need `!h-7`, not `h-7`: the shadcn trigger carries
-`data-[size=sm]:h-8`, and an attribute selector outranks a plain utility class,
-which is how every dropdown in the panel silently stood 32px tall.
+## Density and spacing
 
-Never add ad-hoc `py-*`/`mt-*` spacing inside a tab; spacing belongs to the
-stack and section primitives so rhythm cannot drift per surface.
+Use 8px horizontal gutters throughout. The tab strip also has 8px of top inset;
+its container is 28px high with 2px internal padding and 24px triggers. Tabs use
+the standard 13px text size, regular weight, and remain in a fixed order.
+The shared inspector/file-explorer column has a 256px minimum width so the full
+tab strip and zoom value fit without scrolling. Dragging narrower collapses the
+panel; reopening starts at 320px. Both panels use the same resize frame and rule.
+If the containing file view itself becomes narrower than the minimum, collapse
+the column as well. Collapsing never resets file, motion, or display state.
 
-## Type scale
+Section headers are at least 28px high with regular 12px text. Controls follow
+the header directly, without extra top padding; expanded headers have no hover
+background to separate from the controls. Keep 4px between rows and 8px after
+the last row. Controls are generally 28px high. Use muted smaller labels for secondary
+information; do not enlarge every label to the default body size. Avoid bold.
 
-| Role | Style |
+Related controls share rows through `FileSheetFieldGrid` (two or three equal
+columns), which owns the gutter. Children use `className="px-0"` when their
+primitive normally adds its own gutter. Never double-pad a grid cell.
+
+| Control | Pattern |
 | --- | --- |
-| Section header | `text-xs` (12px), full-strength `sidebar-foreground` (the navbar's size) |
-| Row label | `text-tiny` (11px), muted (`FILE_SHEET_FIELD_LABEL_CLASSES`) |
-| Control text / values | `text-tiny` (11px); numerics `tabular-nums`; hex/coords mono |
-| Secondary line, units, meta | `text-micro` (10px), muted |
-| Status / empty / loading text | `text-tiny` (11px), muted, `px-2` |
+| Related choices | Two or three compact dropdowns on one row; equal widths |
+| Scalar with a useful range | `FileSheetSliderField compact`: short label, slider, committed value on one row |
+| Scalar where the range is less useful | `FileSheetNumberProperty` with recognizable icon/unit and a tooltip |
+| Boolean option within a feature | `FileSheetCheckboxRow`, label directly beside the checkbox |
+| Color and opacity | `FileSheetColorProperty`; swatch, hex value, and percentage together |
+| Actions | `FileSheetButtonRow`; compact buttons, verb labels, icons where useful |
 
-A section header matches the navbar's 12px, so a sheet's headings and
-the chrome above them read as one level of structure. Row labels stay 11px and
-muted, so a header separates from its rows by size *and* colour. Never reach
-for uppercase or letter-spacing to mark a header — and never make it smaller
-than its rows.
+Omit a visible label only when the selected value, icon, unit, or swatch makes
+its meaning clear. Always provide an accessible name and a tooltip for omitted
+labels. Keep labels on ambiguous controls such as authored joint values.
+Long labels truncate while reserving at least 48px for sliders and keeping
+numeric inputs visible, without pushing controls outside the panel;
+the full name remains available in a tooltip/accessibility label. Never use an
+unlabelled switch whose neighboring labels could refer to it.
 
-- Sizes come from `src/styles/tokens.css`: `text-micro` 10px, `text-tiny`
-  11px and `text-xs` 12px preserve this compact settings scale. The app's
-  `text-ui`, `text-sm` and `text-base` default is 13px; it does not replace the
-  explicit smaller roles above. Never write a literal `text-[11px]`.
-- Muted text is always `text-muted-foreground`; passive glyphs and hints are
-  `text-foreground-passive`. Colours, radii and shadows come from the same
-  token file — no `rgb(...)` literals and no `--ui-*` aliases in components.
-- Labels are sentence case, 1–3 words, leading with the distinguishing word
-  ("Motion resolution", not "Resolution for motion"). No trailing colons.
-- Boolean labels name the thing, not the action: "Floor", not "Enable floor".
-  ARIA labels may keep the verb ("Enable floor") for screen readers.
-- No helper sentences or added tooltips to explain a label; if a label needs a
-  paragraph, the label is wrong. Existing `title` hints on options may stay.
+Menu items default to 11px text with a 16px line height in the shared dropdown,
+select and context-menu primitives, including submenus and checkbox/radio rows.
+Do not override this at each settings control: popup portals must retain the
+same compact size independently of the trigger's or host body's typography.
+Menu shortcut hints use the 10px metadata size.
 
-## Row kinds
+Dropdowns show useful icons in both the selected value and menu options. Use
+specific projection icons and complementary Solid/Render icons. Color opacity
+uses the checkerboard preview; 0% is transparent and 100% is opaque. Do not add a
+separate transparency toggle or duplicate opacity slider.
 
-There are exactly four row kinds. Every setting uses one of them.
+## View
 
-### 1. Inline row — `FileSheetInlineControlRow` / `FileSheetToggleRow`
+Keep this order in every preset; enabling a feature never moves it:
 
-Label left, control right, single 28px line. **This is the default row.** For:
-switches, color pickers, read-only values, short numeric/text inputs, steppers,
-and — the point most easily got wrong — selects and segmented controls.
+| Section | Contents |
+| --- | --- |
+| Mode | Equal-width Mode and Projection dropdowns |
+| Surfaces | Style and part-color mode together; compact color/opacity controls |
+| Explode | Amount slider/value |
+| Clip | X/Y/Z slider/value rows, then Flip checkbox |
+| Edges | Visibility and color together |
+| Grid | Color/opacity |
+| Axes | Color/opacity, matching Grid's default color |
+| Lighting | Quality, then paired numeric properties for exposure/rotation and size/fill |
+| Background | Color/opacity |
+| Floor | Placement and color/opacity, using model origin by default |
 
-- **Switches are always right-aligned at the control axis.** This includes
-  section gate switches, which sit in the section header's trailing slot —
-  never beside the title text. One vertical line of switches per panel.
-- Switches apply instantly; a switch never needs a confirm/save step.
-- The optional `description` line (10px, muted) is reserved for live counts or
-  state readouts (e.g. travel-move count) — not prose.
+Explode, Clip and Edges are for CAD models (STEP). A mesh, a robot or a drawing has
+no parts to separate, no solid to section and no topology to draw edges from: those
+three sections are not rendered for it, they resolve disabled whatever was saved,
+and the presets made of edges (X-ray, Hidden line, Wireframe) are not offered
+(`cadModel` in `resolveViewSettings`). The snapshot CLI applies the same rule.
 
-### 2. Slider row — `FileSheetSliderField`
+Solid's basic display groups precede the effects disabled by default in Solid.
+Presets are batches of settings; controls do not branch on the mode name. An
+edit makes the selected value read muted **Custom**, which is not a menu option.
+**Reset** restores the currently selected preset's display defaults and disables
+Clip and Explode. It leaves Motion and camera pose unchanged. See
+[render-mode.md](render-mode.md) for the grouped settings/CLI contract.
 
-Label at top-left above the track, editable value box (`FileSheetValueInput`,
-`w-20 h-7`, right-aligned, tabular) at the right control axis. The track fills
-the remaining width. Every slider uses `FILE_SHEET_PRECISION_SLIDER_CLASSES`
-and every slider shows its value; a slider without a numeric readout is not
-allowed.
+The desired settings update immediately. Expensive changes can take longer to
+appear in the viewport, but rendering cannot rewrite controls. The small status
+indicator, cancellation, and presentation policy live in
+[view-updates.md](view-updates.md).
 
-- Units live inside the value string: `52.0 mm`, `1.00x`, `45°`, `78%`, `1.2s`.
-- Degrees are always `°`, never `deg`.
-- No min/max micro-labels under the track: the value box already carries the
-  number, and a second text row under the slider breaks the row rhythm.
+## Zoom and reset menu
 
-### 3. Block row — `FileSheetControlRow`
+Place the muted 10px zoom percentage at the far right of the inspector header,
+beside the fixed tabs, using `FileSheetTabbedSurface.headerActions`. It remains
+outside the tablist and does not scroll with a tab's content. The percentage is
+read-only; clicking it opens the shared `ZoomControl` menu. There is no duplicate
+zoom toolbar over the viewport. The menu contains Zoom in/out, Zoom to 100%,
+Zoom to fit, Zoom to selection (disabled without a selection), and two resets.
+Do not advertise keyboard shortcuts that the viewer does not implement.
 
-Label line on top (label left, optional value/trailing right), full-width
-control underneath. For controls that genuinely need the whole gutter width:
-editors (fill-color grid, position pad, explode-step list) and the one select
-per surface that earns it (see below).
+| Action | Scope |
+| --- | --- |
+| Reset camera | Original authored bounds and default camera pose; current projection remains |
+| Reset model | Stop/reset animation and position, cancel active pose transitions, disable Clip/Explode, reveal hidden/isolated geometry, restore original camera framing; keep the exact display settings, including Custom and projection |
+| View → Reset | Restore selected preset defaults and disable Clip/Explode; keep Motion and camera pose |
 
-The label and its control are **one item**: the label line stays compact
-(16px) and sits 4px above the control, tighter than the 8px between rows, so a
-stacked pair reads as a unit rather than as two rows. Only a row whose control
-lives in the trailing slot takes the full 28px line, matching the switch rows
-beside it — `FileSheetControlRow` picks the right one from whether it was given
-block content.
+A model reset must stop clocks/transitions before writing authored pose values,
+so a queued frame cannot undo it. Embedded GLB returns to its authored rest
+transforms, not the possibly displaced first frame of an animation clip. Robot
+joints and drawing fold/orientation controls follow the same spatial reset rule.
 
-## Choosing a mode control
+## Motion
 
-A control that picks one of several values is an **inline row like any other**:
-label left, control right, on the shared control axis. A strip stretched across
-the full width is not a settings row — it reads as a toolbar, and a column of
-them turns the panel into a stack of unrelated widgets.
+The standard STEP strip is **Features | Motion | View**. Include Motion only
+when the file has motion content. Detect Animation and Position independently
+from their respective sidecar blocks (or embedded clips for GLB), not from the
+file extension or the existence of the other block. Loading/error status for a
+requested block can be shown; absence of a block does not create empty controls.
 
-**A dropdown is the default.** `FileSheetSelectRow` handles every mode control
-unless the options are short enough that a button group costs no more width
-than the dropdown would — in practice a two-option pair of universally readable
-glyphs (a DXF bend's `↑`/`↓`). Two words as long as `Orthographic` and
-`Perspective` are already too wide: that is a dropdown.
+**Animation** comes first and is permanently open when clips exist. Show the
+clip dropdown only for multiple clips. Use one transport row: icon-only
+Play/Pause, a flexible time scrubber, then Restart on the right, with time/duration
+in the scrubber's tooltip and accessible value, not a seconds input. Keep Speed
+compact (64px) beside the content-sized Loop checkbox, both aligned left in a
+row above the transport. No enable switch. Pause holds
+the current frame; Restart returns to zero. Selecting/scrubbing a clip takes
+animation ownership of the pose. Editing Position returns ownership to
+kinematics and resets the animation (stopped, time zero, default routine/speed/loop).
+Any animation control edit resets parameter values to the authored defaults and
+clears the selected position. The controls remain editable. All entry points,
+including viewport/fullscreen transport and parameter paste, use the same motion
+commands (`useStepMotionControls.js`). Cancel in-flight pose transitions before
+changing ownership, and publish state refs before the clock so queued frames
+cannot revive the previous owner. Session restoration enforces the same rule.
 
-- Dropdowns: `Projection`, `Light` (5), `Backdrop` `Type` (4), explode
-  `Direction` (5), `Layout`, `Order`, `Map`, animation pickers, every enum
-  parameter.
-- Segmented (`FileSheetSegmentedControl` with `fit`, sized to content, never
-  stretched): DXF bend direction, and nothing else today. Options may set
-  `iconOnly` with an `Icon` to render as a glyph pair; the `label` still feeds
-  the accessible name and the `title` tooltip says what the glyph does
-  ("Bend up") — icon-only is only for glyphs as unambiguous as a direction
-  arrow.
-- An inline trigger hugs its value between two bounds — never narrower than the
-  standard 80px control, never wider than 176px — and truncates past that. Use
-  a fixed max width, not a percentage: the row wrapper is shrink-to-fit, so a
-  percentage resolves against a width the trigger itself sets, and the value
-  overflows its own border instead of ellipsizing.
-- Never use a Radix `Tabs` strip to switch an edit target inside a sheet — that
-  was how the five-light selector ended up as a full-width row of tabs.
+While animation is playing in the regular viewer, also show the shared compact
+transport at the bottom center of the canvas. Reserve the bottom-right XYZ
+control's space: shrink and shift the bar left on narrow canvases, and move it
+above the XYZ control on very narrow canvases, wrapping the scrubber below the
+buttons if needed. This overlay uses the same
+callbacks and clock as Motion. Reveal it on playback and retain it while paused
+or scrubbing, so the controls do not disappear during a gesture. A different
+file/routine starts fresh; returning ownership to Position hides it.
 
-**The stacked exception.** A select is stacked full-width only when it is a
-*primary* control: the first row of its group, whose value reframes everything
-under it. These are View › `Mode`, Position › `Preset`, and Animation ›
-`Clip`, which reframes the transport
-and the time/speed rows beneath it. Pass `stacked` for those and for nothing
-else; a second stacked select in one group means one of them is not primary.
+**Position** is a permanent section containing only the named-position dropdown,
+present only if named positions exist. **Parameters** is a separate permanent
+section below it, present only if parameters exist. Keep each DOF's label and
+unit: these are not self-explanatory icons. Numeric DOFs use compact slider/value
+rows with 4px gaps and a label column capped at 96px; longer labels truncate to
+preserve slider space. Do not include Transition controls or a Copy button.
 
-**A built-in state is not a list entry — it is a gate switch.** A select lists
-the artifact's own items and nothing else. When a feature also has an idle
-state, that state is the section's gate switch, not a row in the list: Animation
-› `Clip` names only the model's authored clips, and the Animation section's
-header switch is what stops the clip driving the model. The list used to lead
-with a built-in `No clip` entry, and one entry that reads like the others but
-means something else is the failure this rules out — a robot's pose preset named
-`rest` beside a transport entry standing for "not playing". Two kinds of thing,
-two controls.
+Place one **Reset** at the bottom of Motion. It stops playback, resets the clock,
+routine, speed and loop, cancels pending pose transitions and restores authored
+parameters. Neither animation nor a named position owns a modified pose after
+reset. View settings and camera remain unchanged. Animation's transport Restart
+only returns its clip to time zero; it is not this global motion reset.
 
-### Repeated item groups — `FileSheetItemGroup`
+## Fullscreen presentation controls
 
-When one section holds the same controls repeated per item — a drawing's bends,
-a light per index — the section keeps its single heading and each item renders
-as an **item group**: an item label row, then that item's rows. The section is
-the *kind* of thing ("Bends"); the groups are the *instances* ("Bend 1",
-"Bend 2"). Splitting the instances into sibling sections is wrong — it promotes
-an index to a concept and fills the panel with rules.
+`FullscreenToolbar` places an animation-only transparent play bar at the bottom
+center, with Settings and X at the top-right. Use shared 24px buttons and 12px
+icons without a toolbar background, border or shadow. Reuse `AnimationTransport`
+from Motion: a plain Play/Pause button, live scrubber and Restart. Play/Pause
+never opens a picker. Without animation, omit the bottom bar entirely.
 
-- Item label: 11px, full-strength `sidebar-foreground` — heavier than a
-  muted row label, smaller than the 12px section header, so the three levels
-  (section › item › row) read as three levels.
-- Rows inside a group sit the standard 12px apart; the label takes 4px to bind
-  to its first row (it names the group the way a stacked label names its
-  control, not the way a heading clears a section).
-- Groups sit 16px apart with **no rule between them** — the next item label is
-  the boundary. Rules stay reserved for sections.
-- Items are numbered from 1 in the artifact's own order; the label is
-  `<Thing> <n>` and nothing else. Per-item state (an angle readout) belongs in
-  the item's rows, not in its label.
-- **Single-row items need no group wrapper.** When an item's controls fit one
-  row, the item label *is* that row's label (`Bend 2` on a slider row, its
-  direction toggle inline beside the value box) and `FileSheetItemGroup` is not
-  used. The group form exists for items that genuinely need several rows.
+Settings opens a floating, content-height panel aligned to the top-right.
+Clamp its width and height to the viewport and scroll its contents when needed.
+Use permanent `FileSheetStaticSection` sections: **Animation** (when clips exist)
+and **Orbit**. Animation reuses `AnimationClipControl` for the routine picker
+(only for multiple clips) and `AnimationPlaybackSettings` for speed and loop.
+Orbit uses a compact speed slider plus numeric input (0–5×, slider steps of
+0.05; 0 stops rotation). Persist this global preference through `CadPreferences`;
+animation choices stay in the per-file runtime. Settings never changes the inspector's tab
+or opens its panel, and closing it does not disable either feature.
 
-### 4. Field grid — `FileSheetFieldGrid` + `FileSheetField`
+Both control areas fade together after two seconds without pointer/wheel/keyboard
+activity. An open settings panel, a scrub gesture or keyboard focus keeps them
+visible. Motion clock ticks do not reset the idle timer. Hidden controls are
+inert and do not intercept viewport input. Escape closes a nested picker, then
+the settings panel, then fullscreen. Fullscreen and Motion use the same callbacks
+and renderer-scoped STEP/GLB clocks; do not duplicate animation state.
 
-A 2–3 column grid of micro-labelled fields, used **only** for tightly coupled
-tuples that are read together: coordinates (X/Y/Z), solver numerics, document
-facts. Label (11px muted) sits above its field; fields are 28px. This is the
-one sanctioned label-above pattern; independent settings never use it.
+## State, input, and verification
 
-- Editable cells: `Input`/`Select` at 28px, numerics right-aligned.
-- Read-only cells: `FileSheetValueField` (bordered, muted fill, truncating).
-  All read-only facts use it — never disabled `<Input>`s, never bespoke boxes.
+Use controlled values from the owning store/runtime. Input drafts stay local
+until Enter or blur commits them; Escape cancels. Normalize/clamp at the write
+boundary. Do not mirror props into effects that write them back to the owner.
+Native sliders and editable number fields must share one update path.
 
-## Buttons and actions
-
-- All buttons in a sheet are compact: `size="sm"`, 28px, 11px text
-  (`FILE_SHEET_COMPACT_BUTTON_CLASSES`), `variant="outline"` unless it is the
-  single primary action of the tab.
-- Sibling actions form a button row: equal-width columns
-  (`grid grid-cols-N gap-1.5` inside a `FileSheetControlRow`), icon + label,
-  centered. No ragged `flex-wrap` clusters.
-- Reset is an outline button with the `RotateCcw` icon, full row width, placed
-  as the last row of the section it resets. Its section names the scope, so the
-  label is just "Reset".
-- **One reset per tab.** Motion has **Reset** in Position (DOFs back to their
-  defaults) and **Restart** in Animation (playback back to zero). These actions
-  remain independent: a model without clips can reset its position, and a model
-  without mates can restart its clip. View's render reset affects photographic
-  settings, preserving the common camera and display settings.
-
-## States
-
-- Empty / loading / info: one pattern — `text-[11px] text-muted-foreground`
-  in the row gutter (`px-2`), sentence case ("No movable joints.",
-  "Loading kinematics...").
-- Errors: same pattern in `text-destructive`.
-- Disabled controls keep their row; hide rows only behind a section gate
-  switch. Disabled state is the control's own (`disabled`), no extra styling.
-- Non-obvious disabled reasons may use the existing `title` hint; do not add
-  explanatory rows.
-
-## Dark and light
-
-Primitives only use theme tokens (`border`, `muted`, `accent`, `primary`,
-`sidebar-*`). Never hard-code a palette color in a sheet; if a primitive needs
-a fixed color pair (e.g. the switch track), it is defined once in
-`FileSheet.js` with its dark variant beside it.
-
-## Checklist for a new settings row
-
-1. Pick the row kind (inline / slider / block / field grid) from the tables
-   above — the control type decides, not taste.
-2. Use the `FileSheet.js` primitive; pass `aria-label` for unlabeled controls.
-3. Selects and segmented controls go inline on the right; `stacked` is only for
-   a surface's primary control.
-4. Label the row *and* its section, even when the section holds only this row.
-5. Label: sentence case, 1–3 words, no verb prefix, no colon.
-6. Value strings carry their unit; degrees are `°`.
-7. No ad-hoc spacing, font sizes, or colors — tokens only.
+New behavior must work with mouse and keyboard. Verify disabled/enabled
+semantics, preset stability, independently available motion blocks, empty and
+error states, and narrow panels. Test state transitions rather than exact class
+strings. The View/Animation/Position components are the reference consumers;
+legacy subsection primitives elsewhere are not the pattern for new settings.

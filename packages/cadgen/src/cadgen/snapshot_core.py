@@ -48,9 +48,8 @@ from cadgen._internal.atomic_replace import write_bytes_atomic
 SNAPSHOT_ORIGIN = "http://localhost"
 SNAPSHOT_RENDER_URL = f"{SNAPSHOT_ORIGIN}/render.html"
 SNAPSHOT_ROUTE_GLOB = f"{SNAPSHOT_ORIGIN}/**"
-# Photographic presentation is one display mode. Its optional studio recipe
-# lives under ``display.render`` while camera remains a common top-level field.
-RENDER_STUDIO_IDS = frozenset({"light", "dark"})
+# Display is a sparse preset override. The shared browser resolver owns defaults.
+DISPLAY_APPEARANCES = frozenset({"light", "dark"})
 RENDER_QUALITY_IDS = frozenset({"preview", "final"})
 DEFAULT_TIMEOUT_SECONDS = 300
 # Tearing a video sequence down is one dispose call over objects already in
@@ -64,7 +63,6 @@ RENDER_BROWSER_STARTUP_TIMEOUT_MS = 15_000
 SUPPORTED_RENDER_MODES = {"view", "section", "list"}
 MESH_INPUT_KINDS = {"glb", "stl", "3mf"}
 MESH_SUPPORTED_RENDER_MODES = {"view", "list"}
-TOPOLOGY_DISPLAY_MODES = {"hidden_edges", "hidden_lines_removed"}
 SUPPORTED_JOB_KEYS = frozenset(
     {
         "input",
@@ -97,9 +95,6 @@ SUPPORTED_JOB_KEYS = frozenset(
         "timeoutSeconds",
     }
 )
-SUPPORTED_RENDER_KEYS = frozenset({"studio", "quality", "exposure", "lighting", "backdrop"})
-RENDER_LIGHTING_KEYS = frozenset({"rotation", "size", "fill"})
-RENDER_BACKDROP_KEYS = frozenset({"color", "transparent", "ground", "groundPlacement"})
 SUPPORTED_OUTPUT_SETTINGS_KEYS = frozenset(
     {"sizeProfile", "padding", "paddingPercent", "viewLabels", "tightFrame", "transparent", "renderScale"}
 )
@@ -142,35 +137,37 @@ PRESENTATION_LARGE_RENDER_WIDTH = 2800
 PRESENTATION_LARGE_RENDER_HEIGHT = 1800
 CONTACT_SHEET_RENDER_WIDTH = 2400
 CONTACT_SHEET_RENDER_HEIGHT = 1600
-DISPLAY_OPTION_KEYS = {"mode", "render", "clip", "exploded", "edges", "guides", "partColor"}
-DISPLAY_MODES = frozenset(
-    {"render", "shaded", "shaded_edges", "transparent", "hidden_edges", "hidden_lines_removed", "unshaded", "wireframe"}
-)
-PART_COLOR_MODES = frozenset({"original", "single", "by_part"})
+DISPLAY_OPTION_KEYS = frozenset({
+    "mode", "appearance", "camera", "surfaces", "edges", "lighting",
+    "background", "floor", "grid", "axes", "clip", "exploded",
+})
+DISPLAY_MODES = frozenset({"solid", "render", "xray", "hidden-line", "wireframe"})
+DISPLAY_SURFACE_STYLES = frozenset({"shaded", "flat", "hidden", "off"})
+PART_COLOR_MODES = frozenset({"original", "single", "by-part"})
+DISPLAY_CAMERA_KEYS = frozenset({"enabled", "projection", "focalLength"})
+DISPLAY_SURFACE_KEYS = frozenset({"enabled", "style", "colorMode", "color", "colors", "opacity"})
+DISPLAY_EDGE_KEYS = frozenset({"enabled", "visibility", "color"})
+DISPLAY_LIGHTING_KEYS = frozenset({"enabled", "quality", "exposure", "rotation", "size", "fill"})
+DISPLAY_BACKGROUND_KEYS = frozenset({"enabled", "color", "opacity"})
+DISPLAY_FLOOR_KEYS = frozenset({"enabled", "placement", "color", "opacity"})
+DISPLAY_GRID_KEYS = frozenset({"enabled", "color", "opacity"})
+DISPLAY_AXES_KEYS = frozenset({"enabled", "color", "opacity"})
 DISPLAY_CLIP_KEYS = frozenset({"enabled", "axis", "offset", "offsets", "invert"})
 DISPLAY_EXPLODED_KEYS = frozenset({"enabled", "amount"})
-DISPLAY_EDGE_KEYS = frozenset({"enabled", "silhouette"})
-DISPLAY_GUIDE_KEYS = frozenset({"grid", "axis"})
-DISPLAY_GRID_GUIDE_KEYS = frozenset({"enabled"})
-DISPLAY_AXIS_GUIDE_KEYS = frozenset({"enabled", "color", "opacity"})
-DISPLAY_PART_COLOR_KEYS = frozenset({"mode", "color", "colors"})
-DISPLAY_MODE_ALIASES = {mode: mode for mode in DISPLAY_MODES}
-CAMERA_OPTION_KEYS = frozenset(
-    {
-        "preset", "name", "projection", "position", "target", "up", "direction", "zoom",
-        "orthographicHalfHeight", "focalLength",
-    }
-)
+DISPLAY_GROUP_KEYS = {
+    "camera": DISPLAY_CAMERA_KEYS, "surfaces": DISPLAY_SURFACE_KEYS,
+    "edges": DISPLAY_EDGE_KEYS, "lighting": DISPLAY_LIGHTING_KEYS,
+    "background": DISPLAY_BACKGROUND_KEYS, "floor": DISPLAY_FLOOR_KEYS,
+    "grid": DISPLAY_GRID_KEYS, "axes": DISPLAY_AXES_KEYS,
+    "clip": DISPLAY_CLIP_KEYS, "exploded": DISPLAY_EXPLODED_KEYS,
+}
+CAMERA_OPTION_KEYS = frozenset({
+    "preset", "name", "position", "target", "up", "direction", "zoom", "orthographicHalfHeight",
+})
 SETTINGS_KEY_HOMES = {
-    "edges": "display",
-    "mode": "display",
-    "exploded": "display",
-    "clip": "display",
-    "guides": "display",
-    "partColor": "display",
-    "projection": "camera",
+    **{key: "display" for key in DISPLAY_OPTION_KEYS if key != "camera"},
+    "projection": "display.camera", "focalLength": "display.camera",
     "orthographicHalfHeight": "camera",
-    "focalLength": "camera",
 }
 class SnapshotError(RuntimeError):
     pass
@@ -222,17 +219,16 @@ def validate_camera_option(value: object, *, source_label: str) -> dict[str, obj
     if not is_plain_object(value):
         raise SnapshotError(f"camera must be a preset name or camera object ({source_label})")
     payload = dict(value)
+    moved = sorted(set(payload) & {"projection", "focalLength"})
+    if moved:
+        raise SnapshotError(
+            f"camera {', '.join(moved)} belongs in display.camera; --camera controls pose and framing"
+        )
     unknown = sorted(set(payload) - CAMERA_OPTION_KEYS)
     if unknown:
         raise SnapshotError(
             f"camera has unknown key(s): {', '.join(unknown)}; "
             f"supported keys: {', '.join(sorted(CAMERA_OPTION_KEYS))} ({source_label})"
-        )
-    projection = str(payload.get("projection") or "").strip().lower()
-    if projection and projection not in {"orthographic", "perspective"}:
-        raise SnapshotError(
-            f"camera projection must be orthographic or perspective; "
-            f"got {payload.get('projection')!r} ({source_label})"
         )
     for key in ("position", "target", "up", "direction"):
         if key not in payload:
@@ -260,18 +256,6 @@ def validate_camera_option(value: object, *, source_label: str) -> dict[str, obj
             raise SnapshotError(
                 f"camera orthographicHalfHeight must be a positive finite number ({source_label})"
             )
-    if "focalLength" in payload:
-        focal_length = payload["focalLength"]
-        if (
-            isinstance(focal_length, bool)
-            or not isinstance(focal_length, (int, float))
-            or not isfinite(float(focal_length))
-            or float(focal_length) < 20
-            or float(focal_length) > 200
-        ):
-            raise SnapshotError(
-                f"camera focalLength must be a finite number between 20 and 200 ({source_label})"
-            )
     return payload
 def validate_direct_settings_payload(
     parsed: object,
@@ -295,138 +279,129 @@ def validate_direct_settings_payload(
             for key in unknown_keys
             if key in SETTINGS_KEY_HOMES
         ]
+        retired = {
+            "render": "display.lighting, display.background and display.floor",
+            "guides": "display.grid and display.axes", "partColor": "display.surfaces",
+        }
+        if option_name == "--display":
+            misplaced.extend(f"{key} was removed; use {retired[key]}" for key in unknown_keys if key in retired)
         detail = f"; {', '.join(misplaced)}" if misplaced else ""
         raise SnapshotError(
             f"{option_name} JSON must be the {setting_label} object directly; "
             f"unsupported keys: {', '.join(unknown_keys)}{detail}"
         )
-    if not payload:
+    if not payload and option_name != "--display":
         raise SnapshotError(f"{option_name} JSON must include at least one {setting_label} field: {source_label}")
     return payload
+def _display_enum(value: object, field: str, allowed: frozenset[str]) -> None:
+    if not isinstance(value, str) or value not in allowed:
+        raise SnapshotError(f"{field} must be one of: {', '.join(sorted(allowed))}; got {value!r}")
+
+
 def validate_display_settings_values(payload: Mapping[str, object], *, source_label: str) -> None:
-    """Reject typo'd closed-set display VALUES up front. The renderer silently falls back
-    to defaults on unknown projection/mode values (e.g. ``projection:"ortho"`` renders
-    perspective), so a late no-op produces a wrong image with no error — catch it here.
+    """Validate the same closed, sparse preset overrides as the shared viewer.
 
-    Only closed-set, typo-prone fields are validated; alias-rich/coerced fields are left
-    to the renderer's lenient normalization to avoid false rejections of inputs the
-    browser accepts."""
-    # An empty/whitespace value means "unset": the renderer treats it as absent and falls
-    # back to the default (it does not error), so validating it here would be a false
-    # rejection of input the browser accepts. Only validate genuinely-present values.
-    mode = str(payload.get("mode") or "").strip()
-    if mode:
-        normalized_mode = re.sub(r"[\s-]+", "_", mode.lower())
-        if normalized_mode not in DISPLAY_MODES:
-            supported = ", ".join(sorted(DISPLAY_MODES))
-            raise SnapshotError(
-                f"--display mode must be one of: {supported}; got {payload.get('mode')!r} ({source_label})"
-            )
-    render = payload.get("render")
-    if render is not None:
-        if re.sub(r"[\s-]+", "_", mode.lower()) != "render":
-            raise SnapshotError("display.render requires display.mode 'render'")
-        validate_display_render_settings(render, source_label=source_label)
-    clip = payload.get("clip")
-    if clip is not None:
-        if not is_plain_object(clip):
-            raise SnapshotError(f"display clip must be an object ({source_label})")
-        unknown = sorted(set(clip) - DISPLAY_CLIP_KEYS)
+    Omitted groups inherit the preset. A present group implicitly enables itself;
+    merging group parameters and applying that enablement belongs to the shared
+    resolver, so this boundary preserves the caller's sparse request.
+    """
+    if not is_plain_object(payload):
+        raise SnapshotError(f"display must be an object ({source_label})")
+    unknown = sorted(set(payload) - DISPLAY_OPTION_KEYS)
+    if unknown:
+        replacements = {"render": "lighting, background and floor", "guides": "grid and axes", "partColor": "surfaces"}
+        detail = "; ".join(f"display.{key} was removed; use display.{replacements[key]}" for key in unknown if key in replacements)
+        raise SnapshotError(f"display has unknown key(s): {', '.join(unknown)}" + (f"; {detail}" if detail else ""))
+    if "mode" in payload:
+        _display_enum(payload["mode"], "--display mode", DISPLAY_MODES)
+    if "appearance" in payload:
+        _display_enum(payload["appearance"], "display.appearance", DISPLAY_APPEARANCES)
+    for name, keys in DISPLAY_GROUP_KEYS.items():
+        if name not in payload:
+            continue
+        value = payload[name]
+        if not is_plain_object(value):
+            raise SnapshotError(f"display.{name} must be an object ({source_label})")
+        unknown = sorted(set(value) - keys)
         if unknown:
-            raise SnapshotError(f"display clip has unknown key(s): {', '.join(unknown)} ({source_label})")
-        for key in ("enabled", "invert"):
-            if key in clip:
-                _render_boolean(clip[key], f"display.clip.{key}")
-        if "axis" in clip and clip["axis"] not in {"x", "y", "z"}:
-            raise SnapshotError("display.clip.axis must be x, y, or z")
-        if "offset" in clip:
-            _render_number(clip["offset"], "display.clip.offset", 0, 1)
-        if "offsets" in clip:
-            offsets = clip["offsets"]
-            if not is_plain_object(offsets):
-                raise SnapshotError(f"display clip.offsets must be an object ({source_label})")
-            unknown = sorted(set(offsets) - {"x", "y", "z"})
-            if unknown:
-                raise SnapshotError(f"display clip.offsets has unknown key(s): {', '.join(unknown)} ({source_label})")
-            for axis, value in offsets.items():
-                _render_number(value, f"display.clip.offsets.{axis}", 0, 1)
-
-    exploded = payload.get("exploded")
-    if exploded is not None:
-        if not is_plain_object(exploded):
-            raise SnapshotError(f"display exploded must be an object ({source_label})")
-        unknown = sorted(set(exploded) - DISPLAY_EXPLODED_KEYS)
-        if unknown:
-            raise SnapshotError(
-                f"--display exploded supports only enabled and amount (the exploded layout "
-                f"is automatic); unsupported keys: {', '.join(unknown)} ({source_label})"
-            )
-        if "enabled" in exploded:
-            _render_boolean(exploded["enabled"], "display.exploded.enabled")
-        if "amount" in exploded:
-            _render_number(exploded["amount"], "display.exploded.amount", 0, 1)
-
-    edges = payload.get("edges")
-    if edges is not None:
-        if not is_plain_object(edges):
-            raise SnapshotError(f"display edges must be an object ({source_label})")
-        unknown = sorted(set(edges) - DISPLAY_EDGE_KEYS)
-        if unknown:
-            raise SnapshotError(f"display edges has unknown key(s): {', '.join(unknown)} ({source_label})")
-        for key in ("enabled", "silhouette"):
-            if key in edges:
-                _render_boolean(edges[key], f"display.edges.{key}")
-    guides = payload.get("guides")
-    if guides is not None:
-        if not is_plain_object(guides):
-            raise SnapshotError(f"display guides must be an object ({source_label})")
-        unknown = sorted(set(guides) - DISPLAY_GUIDE_KEYS)
-        if unknown:
-            raise SnapshotError(f"display guides has unknown key(s): {', '.join(unknown)} ({source_label})")
-        for name, keys in {
-            "grid": DISPLAY_GRID_GUIDE_KEYS,
-            "axis": DISPLAY_AXIS_GUIDE_KEYS,
-        }.items():
-            value = guides.get(name)
-            if value is None:
-                continue
-            if not is_plain_object(value):
-                raise SnapshotError(f"display guides.{name} must be an object ({source_label})")
-            nested_unknown = sorted(set(value) - keys)
-            if nested_unknown:
-                raise SnapshotError(
-                    f"display guides.{name} has unknown key(s): {', '.join(nested_unknown)} ({source_label})"
-                )
-            if "enabled" in value:
-                _render_boolean(value["enabled"], f"display.guides.{name}.enabled")
-            for key in (() if name == "grid" else ("color",)):
-                if key in value:
-                    _render_color(value[key], f"display.guides.{name}.{key}")
-            if "opacity" in value:
-                _render_number(value["opacity"], f"display.guides.{name}.opacity", 0, 1)
-    part_color = payload.get("partColor")
-    if part_color is not None:
-        if not is_plain_object(part_color):
-            raise SnapshotError(f"display partColor must be an object ({source_label})")
-        unknown = sorted(set(part_color) - DISPLAY_PART_COLOR_KEYS)
-        if unknown:
-            raise SnapshotError(f"display partColor has unknown key(s): {', '.join(unknown)} ({source_label})")
-        color_mode = str(part_color.get("mode") or "").strip().lower()
-        if color_mode and color_mode not in PART_COLOR_MODES:
-            raise SnapshotError(
-                f"display partColor.mode must be original, single, or by_part ({source_label})"
-            )
-        color = part_color.get("color")
-        if color is not None:
-            _render_color(color, "display.partColor.color")
-        colors = part_color.get("colors")
-        if colors is not None:
+            raise SnapshotError(f"display.{name} has unknown key(s): {', '.join(unknown)}; supported keys: {', '.join(sorted(keys))}")
+        if "enabled" in value:
+            _render_boolean(value["enabled"], f"display.{name}.enabled")
+        if "color" in value:
+            _render_color(value["color"], f"display.{name}.color")
+        if "opacity" in value:
+            _render_number(value["opacity"], f"display.{name}.opacity", 0, 1)
+        for key, allowed in {
+            "camera": {"projection": frozenset({"orthographic", "perspective"})},
+            "surfaces": {"style": DISPLAY_SURFACE_STYLES, "colorMode": PART_COLOR_MODES},
+            "edges": {"visibility": frozenset({"visible", "all"})},
+            "lighting": {"quality": RENDER_QUALITY_IDS},
+            "floor": {"placement": frozenset({"origin", "lowest"})},
+            "clip": {"axis": frozenset({"x", "y", "z"})},
+        }.get(name, {}).items():
+            if key in value:
+                _display_enum(value[key], f"display.{name}.{key}", allowed)
+        for key, bounds in {
+            "camera": {"focalLength": (20, 200)},
+            "lighting": {"exposure": (-5, 5), "rotation": (-180, 180), "size": (0.25, 3), "fill": (0, 1)},
+            "exploded": {"amount": (0, 1)}, "clip": {"offset": (0, 1)},
+        }.get(name, {}).items():
+            if key in value:
+                _render_number(value[key], f"display.{name}.{key}", *bounds)
+        if name == "surfaces" and "colors" in value:
+            colors = value["colors"]
             if not isinstance(colors, list) or not 1 <= len(colors) <= 50:
-                raise SnapshotError(
-                    f"display partColor.colors must contain 1 to 50 hex colors ({source_label})"
-                )
-            for index, item in enumerate(colors):
-                _render_color(item, f"display.partColor.colors[{index}]")
+                raise SnapshotError("display.surfaces.colors must contain 1 to 50 hex colors")
+            for index, color in enumerate(colors):
+                _render_color(color, f"display.surfaces.colors[{index}]")
+        if name == "clip":
+            if "invert" in value:
+                _render_boolean(value["invert"], "display.clip.invert")
+            if "offsets" in value:
+                offsets = value["offsets"]
+                if not is_plain_object(offsets) or set(offsets) - {"x", "y", "z"}:
+                    raise SnapshotError("display.clip.offsets must be an object containing only x, y, z")
+                for axis, offset in offsets.items():
+                    _render_number(offset, f"display.clip.offsets.{axis}", 0, 1)
+
+
+# What belongs to a CAD model (STEP) alone. Edges are drawn from B-rep topology,
+# Explode separates an assembly's parts and Clip sections its solids; a mesh, a robot
+# description or a drawing has none of those. The shared viewer does not offer them
+# for such a file, and the presets built from edges with them.
+CAD_MODEL_DISPLAY_GROUPS = ("edges", "clip", "exploded")
+CAD_MODEL_DISPLAY_MODES = frozenset({"xray", "hidden-line", "wireframe"})
+# "hidden" and "off" let the edges carry the picture; without edges they draw nothing.
+CAD_MODEL_SURFACE_STYLES = frozenset({"hidden", "off"})
+CAD_MODEL_KINDS = frozenset({"step", "stp"})
+
+
+def validate_display_for_kind(display: Mapping[str, object], *, kind: str, input_label: str) -> None:
+    """Refuse STEP-only display settings for an input that is not a STEP model.
+
+    Asking for a section of a mesh would otherwise render a picture that silently
+    ignores the request, so the request is refused by name, as the viewer refuses
+    to offer the control.
+    """
+    if kind in CAD_MODEL_KINDS or not is_plain_object(display):
+        return
+    requested = [f"display.{name}" for name in CAD_MODEL_DISPLAY_GROUPS if name in display]
+    mode = display.get("mode")
+    if isinstance(mode, str) and mode in CAD_MODEL_DISPLAY_MODES:
+        requested.append(f"display.mode {mode!r}")
+    surfaces = display.get("surfaces")
+    style = surfaces.get("style") if is_plain_object(surfaces) else None
+    if isinstance(style, str) and style in CAD_MODEL_SURFACE_STYLES:
+        requested.append(f"display.surfaces.style {style!r}")
+    if requested:
+        raise SnapshotError(
+            f"{', '.join(requested)} {'applies' if len(requested) == 1 else 'apply'} to STEP models only; "
+            f"{input_label} has no CAD edges, parts to explode or solids to section. "
+            "Remove the setting; the modes available here are 'solid' and 'render', "
+            "and the surface styles 'shaded' and 'flat'."
+        )
+
+
 def load_display_option(raw_display: object, *, cwd: Path) -> dict[str, object]:
     if is_plain_object(raw_display):
         payload = validate_direct_settings_payload(
@@ -452,16 +427,17 @@ def load_display_option(raw_display: object, *, cwd: Path) -> dict[str, object]:
         validate_display_settings_values(payload, source_label="--display")
         return payload
 
+    # Preset names are unambiguous even when the working directory contains a
+    # folder with the same name (for example an output folder called render).
+    if display in DISPLAY_MODES:
+        return {"mode": display}
     display_path = Path(display).expanduser()
     if not display_path.is_absolute():
         display_path = cwd / display_path
     looks_like_file = display.lower().endswith(".json") or "/" in display or "\\" in display
     if not looks_like_file and not display_path.exists():
-        normalized_mode = re.sub(r"[\s-]+", "_", display.lower())
-        if normalized_mode not in DISPLAY_MODES:
-            supported = ", ".join(sorted(DISPLAY_MODES))
-            raise SnapshotError(f"Unsupported display mode: {display}. Supported modes: {supported}")
-        return {"mode": normalized_mode}
+        supported = ", ".join(sorted(DISPLAY_MODES))
+        raise SnapshotError(f"Unsupported display mode: {display}. Supported modes: {supported}")
     if not display_path.exists():
         raise SnapshotError(f"Display JSON file does not exist: {display}")
     payload = validate_direct_settings_payload(
@@ -492,61 +468,6 @@ def _render_color(value: object, field: str) -> None:
 def _render_boolean(value: object, field: str) -> None:
     if not isinstance(value, bool):
         raise SnapshotError(f"{field} must be a boolean")
-
-
-def validate_display_render_settings(value: object, *, source_label: str) -> dict[str, object]:
-    if not is_plain_object(value):
-        raise SnapshotError(f"display.render must be an object ({source_label})")
-    payload = dict(value)
-    unknown = sorted(set(payload) - SUPPORTED_RENDER_KEYS)
-    if unknown:
-        raise SnapshotError(
-            f"display.render has unknown key(s): {', '.join(unknown)}; "
-            f"supported keys: {', '.join(sorted(SUPPORTED_RENDER_KEYS))} ({source_label})"
-        )
-    if "studio" in payload:
-        if not isinstance(payload["studio"], str) or payload["studio"] not in RENDER_STUDIO_IDS:
-            raise SnapshotError("display.render.studio must be light or dark")
-    if "quality" in payload:
-        if not isinstance(payload["quality"], str) or payload["quality"] not in RENDER_QUALITY_IDS:
-            raise SnapshotError("display.render.quality must be preview or final")
-    if "exposure" in payload:
-        _render_number(payload["exposure"], "display.render.exposure", -5, 5)
-    if "lighting" in payload:
-        lighting = payload["lighting"]
-        if not is_plain_object(lighting):
-            raise SnapshotError(f"display.render.lighting must be an object ({source_label})")
-        unknown_lighting = sorted(set(lighting) - RENDER_LIGHTING_KEYS)
-        if unknown_lighting:
-            raise SnapshotError(
-                f"display.render.lighting has unknown key(s): {', '.join(unknown_lighting)}; "
-                f"supported keys: {', '.join(sorted(RENDER_LIGHTING_KEYS))}"
-            )
-        for key, bounds in {
-            "rotation": (-180, 180),
-            "size": (0.25, 3),
-            "fill": (0, 1),
-        }.items():
-            if key in lighting:
-                _render_number(lighting[key], f"display.render.lighting.{key}", *bounds)
-    if "backdrop" in payload:
-        backdrop = payload["backdrop"]
-        if not is_plain_object(backdrop):
-            raise SnapshotError(f"display.render.backdrop must be an object ({source_label})")
-        unknown_backdrop = sorted(set(backdrop) - RENDER_BACKDROP_KEYS)
-        if unknown_backdrop:
-            raise SnapshotError(
-                f"display.render.backdrop has unknown key(s): {', '.join(unknown_backdrop)}; "
-                f"supported keys: {', '.join(sorted(RENDER_BACKDROP_KEYS))}"
-            )
-        if "color" in backdrop:
-            _render_color(backdrop["color"], "display.render.backdrop.color")
-        for key in ("transparent", "ground"):
-            if key in backdrop:
-                _render_boolean(backdrop[key], f"display.render.backdrop.{key}")
-        if "groundPlacement" in backdrop and backdrop["groundPlacement"] not in ("origin", "lowest"):
-            raise SnapshotError("display.render.backdrop.groundPlacement must be origin or lowest")
-    return payload
 
 
 def validate_output_settings(value: object) -> dict[str, object]:
@@ -925,6 +846,10 @@ def normalize_common_job(
 
     output_settings = validate_output_settings(job.get("output"))
     quality = validate_quality_settings(job.get("quality"))
+    display = dict(job.get("display", {})) if is_plain_object(job.get("display", {})) else job["display"]
+    validate_display_settings_values(display, source_label="job display")
+    display.setdefault("mode", "solid")
+    display.setdefault("appearance", "light")
 
     raw_scale = str(job.get("scale") or "").strip().lower()
     if raw_scale:
@@ -999,6 +924,7 @@ def normalize_common_job(
         "mode": mode,
         "output": output_settings,
         "quality": quality,
+        "display": display,
         "outputs": normalized_outputs,
     }
 def has_kinematics_render_values(value: object) -> bool:
@@ -1080,23 +1006,6 @@ def resolve_mesh_render_job(
         supported = ", ".join(sorted(MESH_SUPPORTED_RENDER_MODES))
         raise SnapshotError(
             f"{mode} mode requires STEP topology; {label} mesh inputs support: {supported}"
-        )
-
-    # A mesh snapshot has no CAD topology for edge modes or exploded views. Render
-    # remains valid because it uses the same format-neutral display object.
-    display = effective_display_request(job)
-    raw_display_mode = re.sub(r"[\s-]+", "_", str(display.get("mode") or "").strip().lower())
-    canonical_display_mode = DISPLAY_MODE_ALIASES.get(raw_display_mode, raw_display_mode)
-    if canonical_display_mode in {"shaded_edges", *TOPOLOGY_DISPLAY_MODES}:
-        raise SnapshotError(
-            f"{canonical_display_mode} display requires STEP CAD edges; {label} mesh inputs "
-            "have no CAD edge topology"
-        )
-    exploded = display.get("exploded") if is_plain_object(display.get("exploded")) else None
-    if exploded is not None and exploded.get("enabled"):
-        raise SnapshotError(
-            f"exploded view requires STEP assembly occurrence structure; {label} mesh inputs "
-            "cannot be exploded"
         )
 
     asset_url = asset_url_for_path(input_path, root_path)

@@ -7,12 +7,8 @@ import { Line2 } from "three/examples/jsm/lines/Line2.js";
 import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import {
-  displayModeForcesEdges,
   displayModeIsWireframe,
-  displayModeShowsEdges,
-  displayModeShowsThroughEdges,
   CAMERA_PROJECTION,
-  DISABLED_DISPLAY_GUIDE_SETTINGS,
   resolveDisplayEdgeSettings
 } from "./displaySettings.js";
 import {
@@ -69,7 +65,7 @@ import {
 } from "./camera.js";
 import {
   resolveDisplayMaterialSettings,
-  resolveSceneSettings
+  resolveViewSceneSettings
 } from "./sceneSettings.js";
 import {
   createEnvironmentResource,
@@ -796,38 +792,20 @@ export function resolveOutputCameraProjection(context, cameraSpec) {
   }).projection;
 }
 
-function snapshotDisplayOverride(job = {}) {
-  const display = job.display && typeof job.display === "object" && !Array.isArray(job.display)
-    ? job.display
-    : {};
-  return {
-    ...display,
-    guides: {
-      grid: {
-        ...DISABLED_DISPLAY_GUIDE_SETTINGS.grid,
-        ...(display.guides?.grid || {})
-      },
-      axis: {
-        ...DISABLED_DISPLAY_GUIDE_SETTINGS.axis,
-        ...(display.guides?.axis || {})
-      }
-    }
-  };
-}
-
 export function renderJobContext(meshData, job = {}) {
   validateSnapshotRenderJob(job);
   const mode = String(job.mode || "view").trim().toLowerCase();
   const sceneScale = resolveRenderSceneScale(job, meshData);
   const sourceKind = String(job.resolved?.kind || job.kind || meshData?.sourceFormat || "").trim().toLowerCase();
   const stepDisplayEnabled = sourceKind === "step" || sourceKind === "stp";
-  const sceneSettings = resolveSceneSettings({
+  const sceneSettings = resolveViewSceneSettings({
     appearance: job.appearance || "light",
     camera: job.camera || null,
-    display: snapshotDisplayOverride(job)
+    display: job.display ?? {},
+    // The viewer's rule: only a CAD model has edges to draw, parts to explode or solids to section.
+    cadModel: stepDisplayEnabled
   });
-  // Null for Render: the photographic scene is built from the Render recipe
-  // and never reads CAD scene settings.
+  // Neutral CAD lights remain available when only the background/floor is on.
   const theme = sceneSettings.theme;
   const displaySettings = sceneSettings.display;
   const projection = sceneSettings.camera.projection;
@@ -852,11 +830,11 @@ export function renderJobContext(meshData, job = {}) {
   );
   const edgeSettings = {
     ...displayEdgeSettings,
-    enabled: displayModeForcesEdges(displayMode) ? true : displayEdgeSettings.enabled,
-    depthTest: displayModeShowsThroughEdges(displayMode) ? false : displayEdgeSettings.depthTest
+    enabled: sceneSettings.view.edges.enabled,
+    depthTest: sceneSettings.view.edges.visibility !== "all"
   };
   const wireframeMode = displayModeIsWireframe(displayMode);
-  const edgesVisible = stepDisplayEnabled && displayModeShowsEdges(displayMode);
+  const edgesVisible = sceneSettings.view.edges.enabled;
   const selectorRuntime = job.stepParameters?.selectorRuntime || job.selectorRuntime || null;
   const displayEdgeRuntime = job.stepParameters?.displayEdgeRuntime || job.displayEdgeRuntime || null;
   const topologyDisplayEdgesVisible = shouldRenderTopologyDisplayEdges({
@@ -910,7 +888,7 @@ export function modelOptionsForRenderJob(context, job = {}) {
         ...normalizedSelectorValues(selection.refs)
       ]
     : [];
-  const renderEnabled = context.sceneSettings.render.enabled;
+  const renderEnabled = context.sceneSettings.view.lighting.enabled;
   return {
     theme: context.theme ?? undefined,
     // Render's finish is the studio's, not a theme's. CAD takes its material
@@ -930,7 +908,8 @@ export function modelOptionsForRenderJob(context, job = {}) {
     materialOverrides: context.sceneSettings.materialOverrides,
     receiveShadows: renderEnabled,
     displayMode: context.displayMode,
-    applyDisplayModeEdgePolicy: !context.topologyDisplayEdgesVisible,
+    surfaceSettings: context.sceneSettings.view.surfaces,
+    applyDisplayModeEdgePolicy: false,
     scale: context.sceneScale,
     clip: context.sharedRenderOptions.clip,
     silhouette: context.topologyDisplayEdgesVisible && context.edgeSettings.silhouette === true,
@@ -986,7 +965,7 @@ export function renderModel(_THREE, model, viewportOptions = {}) {
   let backgroundTexture = null;
   const photographicConfiguration = context.sceneSettings.render.configuration || null;
   const studioConfiguration = photographicConfiguration && normalizeBoolean(job.output?.transparent, false)
-    ? { ...photographicConfiguration, backdrop: { ...photographicConfiguration.backdrop, transparent: true } }
+    ? { ...photographicConfiguration, backdrop: { ...photographicConfiguration.backdrop, transparent: true, opacity: 0 } }
     : photographicConfiguration;
   const studioRuntime = studioConfiguration ? { scene, renderer, modelBounds: model.bounds || context.bounds } : null;
   if (studioRuntime) {
@@ -1005,7 +984,7 @@ export function renderModel(_THREE, model, viewportOptions = {}) {
   // PMREM generation is synchronous, but `ready` stays a promise so a failure
   // reaches the caller after it holds a viewport it can dispose.
   const ready = Promise.resolve().then(() => {
-    const resource = studioRuntime
+    const resource = context.sceneSettings.view.lighting.enabled
       ? createEnvironmentResource(renderer, studioConfiguration, { size: context.quality.environmentMapSize })
       : hasAuthoredMaterials(model.meshData) ? createInspectEnvironmentResource(THREE) : null;
     if (disposed) {
@@ -1016,7 +995,7 @@ export function renderModel(_THREE, model, viewportOptions = {}) {
     scene.environment = resource?.texture || null;
     return resource;
   });
-  if (!studioRuntime) applyLighting(
+  if (!context.sceneSettings.view.lighting.enabled) applyLighting(
     scene,
     context.theme,
     model.bounds || context.bounds,
@@ -1037,10 +1016,10 @@ export function renderModel(_THREE, model, viewportOptions = {}) {
   // to be in right now — right for a still, which is posed before it gets here,
   // and wrong for a video, whose camera frames the union across its frames and
   // would otherwise show the grid's edge with the moving part walking off it.
-  if (!studioRuntime) addFloor(
+  addFloor(
     scene,
     viewportOptions.floorBounds || model.bounds || context.bounds,
-    { ...context.theme, colorMode: context.sceneSettings.appearance },
+    { ...context.theme, floor: { enabled: false }, colorMode: context.sceneSettings.appearance },
     context.sceneScale,
     context.displaySettings.guides
   );
@@ -1296,14 +1275,15 @@ export async function captureModel(viewport, captureOptions = {}) {
     if (outputTimings) outputTimings.frameCameraMs = Math.round(performance.now() - stageStarted);
     if (viewport.studioRuntime) {
       stageStarted = performance.now();
-      fitCameraDepthToBounds(renderCamera, outputBounds, {
-        displayRecords: viewport.model.displayRecords,
-        modelGroup: viewport.model.runtime.modelGroup
-      });
       applyPhotographicStudio(THREE, viewport.studioRuntime, viewport.studioConfiguration, {
         bounds: outputBounds,
         sceneScale,
         shadowMapSize: context.quality.shadowMapSize
+      });
+      fitCameraDepthToBounds(renderCamera, outputBounds, {
+        displayRecords: viewport.model.displayRecords,
+        modelGroup: viewport.model.runtime.modelGroup,
+        groundZ: viewport.studioRuntime.photographicStudio?.ground?.position.z ?? null
       });
       if (outputTimings) outputTimings.prepareStudioMs = Math.round(performance.now() - stageStarted);
     }

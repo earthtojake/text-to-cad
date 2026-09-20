@@ -2,7 +2,6 @@ export const FILE_SHEET_SECTION_IDS = Object.freeze({
   FILE_STATUS: "status",
   STEP_TREE: "tree",
   STEP_MODELING: "modeling",
-  STEP_MEASUREMENTS: "measurements",
   STEP_REFERENCE: "reference",
   MOTION: "motion",
   VIEW: "view",
@@ -37,7 +36,6 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
   const normalizedKind = normalizeString(kind);
   const isSdf = options.isSdf === true || normalizedKind === "sdf";
   const showJoints = options.showJoints !== false;
-  const showRobotComponents = options.hasRobotComponents === true;
   switch (normalizedKind) {
     // A drawing HAS controls of its own. Thickness (and, where the drawing declares
     // them, bends) are render-time parameters applied to the cached prism rather than bake
@@ -62,25 +60,22 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
     case "urdf":
     case "srdf":
     case "sdf":
-      // Robots retain their format-specific document and component inspectors.
+      // Robots retain their format-specific document inspector.
       return [
         ...(isSdf ? [FILE_SHEET_SECTION_IDS.ROBOT_SDF] : []),
         // Motion first: posing the robot is what a URDF is opened for, and it is the
-        // tab the sheet lands on. Components is the inspection affordance next to it,
-        // and it carries its own Reference at its foot rather than owning a tab that
+        // tab the sheet lands on. Components is the robot's link tree beside it: every
+        // description has links, so the tab never depends on what the meshes name, and
+        // it carries its own Reference at its foot rather than owning a second tab that
         // stands empty until something is selected.
         ...(showJoints ? [FILE_SHEET_SECTION_IDS.MOTION] : []),
-        ...(showRobotComponents ? [FILE_SHEET_SECTION_IDS.ROBOT_COMPONENTS] : []),
+        FILE_SHEET_SECTION_IDS.ROBOT_COMPONENTS,
         FILE_SHEET_SECTION_IDS.VIEW
       ];
     case "mesh":
-      // Direct GLB may add embedded animation. Measurement stays the static
-      // triangle tool and is omitted while a native animated hierarchy is live.
-      return [
-        ...(options.hasEmbeddedGlbAnimationPanel ? [FILE_SHEET_SECTION_IDS.MOTION] : []),
-        ...(options.measurementAvailable === false ? [] : [FILE_SHEET_SECTION_IDS.STEP_MEASUREMENTS]),
-        FILE_SHEET_SECTION_IDS.VIEW
-      ];
+      // A mesh has nothing to inspect but how it is shown. Measurements belong to the
+      // Measure tool's panel under the toolbar, and an embedded GLB clip to the Animate tool.
+      return [FILE_SHEET_SECTION_IDS.VIEW];
     default:
       return [];
   }
@@ -107,9 +102,7 @@ export function defaultOpenFileSheetSectionIds(kind, options = {}) {
         ...(showJoints ? [FILE_SHEET_SECTION_IDS.MOTION] : [])
       ];
     case "mesh":
-      return options.hasEmbeddedGlbAnimationPanel
-        ? [FILE_SHEET_SECTION_IDS.MOTION]
-        : options.measurementAvailable === false ? [] : [FILE_SHEET_SECTION_IDS.STEP_MEASUREMENTS];
+      return [];
     default:
       return [];
   }

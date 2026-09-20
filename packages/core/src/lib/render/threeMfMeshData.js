@@ -1,3 +1,5 @@
+import { displayGeometryWithNormals } from "./meshNormals.js";
+
 const GENERATED_DEFAULT_MATERIAL_NAMES = new Set(["default"]);
 const GENERATED_DEFAULT_MATERIAL_COLORS = new Set(["#fafafb", "#b6c4ce"]);
 const WORKBENCH_DEFAULT_MATERIAL_COLOR = Object.freeze({
@@ -258,9 +260,6 @@ function appendMeshPrimitive(THREE, accumulator, mesh, group, material) {
   if (!positions || positions.itemSize !== 3 || positions.count <= 0) {
     return;
   }
-  if (!geometry.getAttribute("normal")) {
-    geometry.computeVertexNormals?.();
-  }
   mesh.updateWorldMatrix?.(true, false);
   const matrixWorld = mesh.matrixWorld || null;
   const normalMatrix = matrixWorld ? new THREE.Matrix3().getNormalMatrix(matrixWorld) : null;
@@ -340,7 +339,7 @@ function appendMeshPrimitive(THREE, accumulator, mesh, group, material) {
   }
 }
 
-export function buildMeshDataFromThreeMfGroup(THREE, group) {
+export function buildMeshDataFromThreeMfGroup(THREE, group, { toCreasedNormals = null } = {}) {
   const accumulator = {
     vertices: [],
     indices: [],
@@ -352,6 +351,8 @@ export function buildMeshDataFromThreeMfGroup(THREE, group) {
   group?.updateWorldMatrix?.(true, true);
   group?.traverse?.((object) => {
     if (object?.isMesh && object.geometry) {
+      // A 3MF mesh shares its vertices, so plain vertex normals round every hard edge.
+      object.geometry = displayGeometryWithNormals(object.geometry, toCreasedNormals);
       const groups = Array.isArray(object.geometry.groups) && object.geometry.groups.length
         ? object.geometry.groups
         : [null];
@@ -580,13 +581,14 @@ async function buildMeshDataFrom3MfPackageFallback(THREE, buffer) {
 }
 
 export async function buildMeshDataFrom3MfBuffer(buffer) {
-  const [THREE, { ThreeMFLoader }] = await Promise.all([
+  const [THREE, { ThreeMFLoader }, { toCreasedNormals }] = await Promise.all([
     import("three"),
     import("three/examples/jsm/loaders/3MFLoader.js"),
+    import("three/examples/jsm/utils/BufferGeometryUtils.js"),
   ]);
   const loader = new ThreeMFLoader();
   try {
-    return buildMeshDataFromThreeMfGroup(THREE, loader.parse(buffer));
+    return buildMeshDataFromThreeMfGroup(THREE, loader.parse(buffer), { toCreasedNormals });
   } catch (error) {
     try {
       return await buildMeshDataFrom3MfPackageFallback(THREE, buffer);

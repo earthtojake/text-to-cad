@@ -1,17 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Box, Boxes, Circle, CornerUpRight, Layers, RotateCw, Shapes, Spline, SquareDashed, X } from 'lucide-react';
 import { Button } from '@hardcore/ui/primitives/button';
 import { TreeRowSurface, TreeRowChevron, TreeRowLabel } from '@hardcore/ui/primitives/tree-row';
-import { selectionSummary } from '../../workbench/selectionSummary.js';
+import { TreeFilterHighlight, TreeFilterInput } from '@hardcore/ui/primitives/tree-filter';
 import { cn } from '@hardcore/ui/utils';
 import ModelPartMenu from './ModelPartMenu.jsx';
 import ModelPartActions from './ModelPartActions.jsx';
 import { modelingSelectionPaths } from '../../workbench/modelingSelection.js';
 import InspectorSplit from './InspectorSplit.jsx';
 import { modelingReferenceIds } from '../../workbench/modelingTree.js';
-import { presentModelingAssembly } from '../../workbench/modelingPresentation.js';
+import { implicitModelingRoots, presentModelingAssembly } from '../../workbench/modelingPresentation.js';
+import { buildModelTreeSearchIndex, modelTreeSearchChain, searchModelTree } from '../../workbench/modelTreeSearch.js';
 
 const EMPTY = [];
+const NO_MATCHES = {matches:EMPTY,total:0};
 const icons = {part:Box,assembly:Boxes,group:Boxes,boss:Layers,pocket:Shapes,hole:Circle,body:Box,extrude:Layers,loft:Layers,cut:Shapes,revolve:RotateCw,round:CornerUpRight,profile:SquareDashed,curve:Spline,remainder:Box};
 const number = n => n.toLocaleString(undefined,{maximumFractionDigits:3});
 
@@ -53,16 +55,77 @@ function ModelingRow({ node, depth=0, selected, expanded, toggle, choose, disabl
   </li>;
 }
 
+// A search hit is the tree row without its place in the tree: the same menu, eye
+// and availability, with the owners it would sit under named instead of drawn.
+function ModelingSearchRow({ match, index, selected, cursor, choose, disabled, partControls }) {
+  const {entry,indices}=match,{node}=entry;
+  const Icon = icons[node.kind] || Box;
+  const {hiddenByOwner,unavailable}=modelTreeSearchChain(index,match.at).reduce(
+    (owner,step)=>nodeAvailability(step,partControls,owner.hiddenByOwner,owner.outsideFrontier),{hiddenByOwner:false,outsideFrontier:false});
+  return <li className="min-w-0" data-search-row={node.id}>
+    <ModelPartMenu node={node} controls={partControls} disabled={disabled} selectDisabled={disabled || unavailable} selected={selected.has(node.id)} onSelect={event=>choose(node,event)}>
+      <TreeRowSurface active={selected.has(node.id)} cursor={cursor} className={cn('gap-0 pr-0', hiddenByOwner && 'opacity-50')}
+        onMouseEnter={() => partControls.onHoverTreeNode?.(node.selectionId || node.occurrenceId || '')}
+        onMouseLeave={() => partControls.onHoverTreeNode?.('')}>
+        <button type="button" aria-label={`Select ${node.label}`} aria-pressed={selected.has(node.id)}
+          disabled={disabled || unavailable || !(node.selectionId || node.faces?.length || node.edges?.length)}
+          onClick={event=>choose(node,event)} title={`${entry.prefix}${node.label}`}
+          className="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded pl-2 pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40">
+          <Icon className="size-3.5 shrink-0 text-muted-foreground"/>
+          {/* Name first: in a narrow inspector a deep owner path takes the truncation, never the name. */}
+          <TreeRowLabel className="max-w-full shrink-0"><TreeFilterHighlight indices={indices} text={entry.label}/></TreeRowLabel>
+          {entry.prefix && <TreeRowLabel className="flex-1 text-micro text-muted-foreground">{entry.prefix.slice(0,-1)}</TreeRowLabel>}
+        </button>
+        {node.selectionId && <ModelPartActions node={node} controls={partControls} disabled={disabled}/>}
+      </TreeRowSurface>
+    </ModelPartMenu>
+  </li>;
+}
+
 /** Read-only geometry inference; assembly instances share recognition, never selection IDs. */
 export default function ModelingTree({ modeling, active, disabled, references=EMPTY, selectedReferenceIds=EMPTY, selectedPartIds=EMPTY, onLoadTopology, onRequestRecognition, onVisibleFeatureTargetsChange, onSelect, onClearSelection, stepRoot, selectedReferences, selectionDetails, activeTreeNodeScrollKey, partControls={} }) {
   const {descriptor,results,error,retryFailed}=modeling;
   const [selected,setSelected]=useState(null),[pending,setPending]=useState(null),[localExpanded,setLocalExpanded]=useState(new Set());
   const tree=useMemo(()=>presentModelingAssembly(descriptor,results,stepRoot),[descriptor,results,stepRoot]);
+  const implicitRoots=useMemo(()=>implicitModelingRoots(tree),[tree]);
+  const visibleRoots=implicitRoots.length ? implicitRoots.at(-1).children || EMPTY : tree;
+  const implicitOwner=implicitRoots.reduce((owner,node)=>nodeAvailability(node,partControls,owner.hiddenByOwner,owner.outsideFrontier),{hiddenByOwner:false,outsideFrontier:false});
   const componentIds=useMemo(()=>[...new Set(descriptor?.occurrences.map(o=>o.component)||[])],[descriptor]);
-  const expanded=useMemo(()=>new Set([...localExpanded,...(partControls.expandedTreeNodeIds || EMPTY).map(id=>`model:${id}`)]),[localExpanded,partControls.expandedTreeNodeIds]);
+  const expanded=useMemo(()=>new Set([...localExpanded,...implicitRoots.map(node=>node.id),...(partControls.expandedTreeNodeIds || EMPTY).map(id=>`model:${id}`)]),[localExpanded,implicitRoots,partControls.expandedTreeNodeIds]);
+  const openedRoots=useRef(new Set());
+  useEffect(()=>{
+    if(!active || disabled)return;
+    let owner={hiddenByOwner:false,outsideFrontier:false};
+    for(const node of implicitRoots){
+      owner=nodeAvailability(node,partControls,owner.hiddenByOwner,owner.outsideFrontier);
+      const key=node.occurrenceId ? `occurrence:${node.occurrenceId}` : node.id;
+      if(openedRoots.current.has(key) || owner.hiddenByOwner || (node.occurrenceId && owner.unavailable))continue;
+      // Loading a part also expands its canonical owner in the host. That keeps
+      // viewport picking and lazy topology aligned with the flattened tree.
+      if(node.occurrenceId && onLoadTopology){
+        onLoadTopology([node.occurrenceId]);openedRoots.current.add(key);
+      } else if(node.selectionId && partControls.onToggleTreeNode){
+        if(!partControls.expandedTreeNodeIds?.includes(node.selectionId))partControls.onToggleTreeNode(node.selectionId);
+        openedRoots.current.add(key);
+      }
+    }
+  },[active,disabled,implicitRoots,onLoadTopology,partControls.expandedTreeNodeIds,partControls.onToggleTreeNode,partControls.hiddenPartIds,partControls.selectableNodeIds]);
   const rowRefs=useRef(new Map());
+  // Search is a second view of the same tree. Typing never touches expansion,
+  // which is also the picking frontier and the topology request; the rows
+  // unmount so a large open tree is not re-rendered per keystroke.
+  const [query,setQuery]=useState(''),[cursor,setCursor]=useState(null);
+  const searching=query.trim() !== '',deferredQuery=useDeferredValue(query);
+  const searchIndex=useMemo(()=>searching ? buildModelTreeSearchIndex(tree) : null,[searching,tree]);
+  const found=useMemo(()=>searchIndex ? searchModelTree(searchIndex,deferredQuery) : NO_MATCHES,[searchIndex,deferredQuery]);
+  const listRef=useRef(null),resumeScroll=useRef(0);
+  const changeQuery=value=>{
+    if(!searching && value.trim() && listRef.current)resumeScroll.current=listRef.current.scrollTop;
+    setQuery(value);setCursor(null);
+  };
+  // Back where the tree was; a hit selected meanwhile is then scrolled to by the reveal below.
+  useLayoutEffect(()=>{if(!searching && listRef.current)listRef.current.scrollTop=resumeScroll.current;},[searching]);
   const picked=useMemo(()=>selectedReferences || references.filter(ref=>selectedReferenceIds.includes(ref.id)),[selectedReferences,references,selectedReferenceIds]);
-  const summary=selectionSummary(picked,descriptor?.occurrences);
   const ids=selected ? modelingReferenceIds(selected,selected.occurrenceId,references) : EMPTY;
   const selection=new Set(selectedReferenceIds),showDetails=selected && (pending || (ids.length > 0 && ids.length === selection.size && ids.every(id=>selection.has(id))));
   const paths=useMemo(()=>{
@@ -112,10 +175,12 @@ export default function ModelingTree({ modeling, active, disabled, references=EM
       if(local.length)setLocalExpanded(current=>new Set([...current,...local]));
       return;
     }
-    if(waitingForFeature)return;
+    // A search hit's owners open at once, so the selection is always a row the
+    // tree holds; the one scroll waits for the tree to be back on screen.
+    if(waitingForFeature || searching)return;
     const row=rowRefs.current.get(target.id);
     if(row){row.scrollIntoView?.({block:'nearest'});reveal.current.complete=true;}
-  },[active,revealKey,paths,expanded,picked,partControls.onToggleTreeNode]);
+  },[active,revealKey,paths,expanded,picked,partControls.onToggleTreeNode,searching]);
 
   const requestedOccurrences=useMemo(()=>{
     if(!active || disabled)return EMPTY;
@@ -176,37 +241,54 @@ export default function ModelingTree({ modeling, active, disabled, references=EM
     if(node.selectionId && partControls.onToggleTreeNode){partControls.onToggleTreeNode(node.selectionId);return;}
     setLocalExpanded(current=>{const next=new Set(current);if(next.has(node.id))next.delete(node.id);else next.add(node.id);return next;});
   };
+  const clearSelection=()=>{setSelected(null);setPending(null);onClearSelection?.();};
+  const cursorId=found.matches.some(match=>match.entry.node.id === cursor) ? cursor : found.matches[0]?.entry.node.id ?? null;
+  useEffect(()=>{if(cursorId)listRef.current?.querySelector(`[data-search-row="${CSS.escape(cursorId)}"]`)?.scrollIntoView?.({block:'nearest'});},[cursorId]);
+  const onSearchKeyDown=event=>{
+    if(event.key === 'Escape' && query){event.preventDefault();event.stopPropagation();changeQuery('');return;}
+    if(!found.matches.length)return;
+    const at=found.matches.findIndex(match=>match.entry.node.id === cursorId);
+    if(event.key === 'ArrowDown' || event.key === 'ArrowUp'){
+      event.preventDefault();
+      setCursor(found.matches[Math.min(Math.max(at+(event.key === 'ArrowDown' ? 1 : -1),0),found.matches.length-1)].entry.node.id);
+    } else if(event.key === 'Enter' && at >= 0){
+      event.preventDefault();
+      listRef.current?.querySelector(`[data-search-row="${CSS.escape(cursorId)}"] button[aria-pressed]:not(:disabled)`)?.click();
+    }
+  };
   const highlighted=new Set(showDetails ? [selected.id] : paths.map(path=>path.at(-1).id));
   const selectedNode=showDetails ? selected : paths.length === 1 ? paths[0].at(-1) : null;
   const nodeDetails=selectedNode && (selectedNode.summary || selectedNode.note || selectedNode.measurements?.length);
   const details=showDetails && selected.edges?.length === 1 && !pending && selectionDetails ? selectionDetails : <>
-    {nodeDetails && <div className="space-y-3 p-3" aria-label="Modeling details">
+    {nodeDetails && (showDetails || !selectionDetails) && <div className="mb-2 space-y-1 text-tiny" aria-label="Feature details">
+      {showDetails && <p>{selectedNode.label}</p>}
       {selectedNode.summary && <p className="text-muted-foreground">{selectedNode.summary}</p>}
       {selectedNode.note && <p className="text-muted-foreground">{selectedNode.note}</p>}
-      {!!selectedNode.measurements?.length && <dl className="space-y-2">{selectedNode.measurements.map(([label,value,unit])=><div key={label} className="flex flex-wrap justify-between gap-x-3 gap-y-1"><dt className="text-muted-foreground">{label}</dt><dd className="tabular-nums">{number(value)} {unit}</dd></div>)}</dl>}
+      {!!selectedNode.measurements?.length && <dl>{selectedNode.measurements.map(([label,value,unit])=><div key={label} className="grid grid-cols-[5rem_minmax(0,1fr)] gap-2 py-1"><dt className="text-muted-foreground">{label}</dt><dd className="tabular-nums">{number(value)} {unit}</dd></div>)}</dl>}
     </div>}
-    {pending && <p role="status" className="p-3 text-micro text-muted-foreground">Loading selectable geometry…</p>}
+    {pending && <p role="status" className="py-1 text-tiny text-muted-foreground">Loading selectable geometry…</p>}
     {selectionDetails}
   </>;
   const empty=descriptor && done===componentIds.length && !failed && componentIds.every(id=>!results[id]?.tree?.length);
   return <div className="flex h-full min-h-0 flex-col text-xs" aria-label="Modeling tree">
-    <div className="flex h-8 shrink-0 items-center justify-between gap-3 px-3 text-micro text-muted-foreground" aria-label="Model tree summary">
-      <span>{tree.length} {tree.length === 1 ? 'feature' : 'features'}</span>
-      <div className="flex items-center gap-3">
-        {partControls.hiddenPartIds?.length > 0 && <button disabled={disabled} type="button" className="hover:text-foreground" onClick={partControls.showAllHiddenParts}>Show all</button>}
-        {partControls.focusedNodeIds?.length > 0 && <button disabled={disabled} type="button" className="hover:text-foreground" onClick={partControls.onExitAllIsolate}>Exit isolate</button>}
-      </div>
-    </div>
+    <TreeFilterInput label="Filter model" placeholder="Filter model…" value={query} onChange={changeQuery} onKeyDown={onSearchKeyDown}
+      trailing={<>
+        {partControls.hiddenPartIds?.length > 0 && <Button disabled={disabled} type="button" variant="ghost" size="sm" className="h-6 shrink-0 px-1.5 text-tiny text-muted-foreground" onClick={partControls.showAllHiddenParts}>Show all</Button>}
+        {partControls.focusedNodeIds?.length > 0 && <Button disabled={disabled} type="button" variant="ghost" size="sm" className="h-6 shrink-0 px-1.5 text-tiny text-muted-foreground" onClick={partControls.onExitAllIsolate}>Exit isolate</Button>}
+      </>}/>
     {(error || failed>0) && <p role="alert" className="px-3 pb-2 text-micro text-muted-foreground">{error || `${failed} ${failed===1?'component is':'components are'} unavailable.`} <button type="button" className="underline" onClick={retryFailed}>Retry</button></p>}
-    <InspectorSplit title={summary.label ? <span className="flex min-w-0 items-center gap-1">
-      <span className="max-w-full shrink-0 truncate">{summary.label}</span>
-      {summary.context && <span className="truncate text-muted-foreground">· {summary.context}</span>}
-    </span> : showDetails ? selected?.label : 'Selection'}
-      titleTooltip={summary.label ? [summary.label,summary.context].filter(Boolean).join(' · ') : undefined}
-      actions={summary.label && onClearSelection ? <Button type="button" variant="ghost" size="icon-xs" aria-label="Clear selection" title="Clear selection" disabled={disabled} onClick={()=>{setSelected(null);setPending(null);onClearSelection();}}><X className="size-3.5" aria-hidden="true"/></Button> : null}
-      label="Modeling details" details={nodeDetails || pending || selectionDetails ? details : null}>
-      <div className="min-h-0 flex-1 overflow-auto px-1 py-1">
-        {empty && !stepRoot ? <p role="status" className="p-2 leading-relaxed text-muted-foreground">This component has no faces to inspect.</p> : <ul aria-label="Model">{tree.map(node=><ModelingRow key={node.id} {...{node,selected:highlighted,expanded,choose,disabled,partControls,rowRefs,toggle}}/>)}</ul>}
+    <InspectorSplit title="Reference"
+      actions={<Button type="button" variant="ghost" size="icon-xs" aria-label="Clear selection" title="Clear selection" disabled={disabled} onClick={clearSelection}><X className="size-3.5" aria-hidden="true"/></Button>}
+      label="Reference details" details={nodeDetails || pending || selectionDetails ? details : null}>
+      <div ref={listRef} className="min-h-0 flex-1 overflow-auto px-1 py-1" aria-label="Model tree area"
+        onClick={event=>{if(!disabled && !event.target.closest('li,button,input,[role="menu"]'))clearSelection();}}>
+        {searching && <p role="status" className="px-2 py-1 text-micro text-muted-foreground">{found.total > found.matches.length ? `First ${found.matches.length} of ${found.total.toLocaleString()} matches` : `${found.total} ${found.total === 1 ? 'match' : 'matches'}`}</p>}
+        {searching ? found.matches.length
+          ? <ul aria-label="Model search results">{found.matches.map(match=><ModelingSearchRow key={match.entry.node.id} {...{match,index:searchIndex,selected:highlighted,cursor:match.entry.node.id === cursorId,choose,disabled,partControls}}/>)}</ul>
+          : deferredQuery.trim() && <p className="px-3 py-6 text-center text-xs text-muted-foreground">{`No part or feature matches “${deferredQuery.trim()}”`}</p>
+        : empty && !stepRoot ? <p role="status" className="p-2 leading-relaxed text-muted-foreground">This component has no faces to inspect.</p>
+        : !visibleRoots.length && implicitRoots.at(-1)?.recognitionPending ? <p role="status" className="p-2 text-tiny text-muted-foreground">Loading features…</p>
+        : <ul aria-label="Model">{visibleRoots.map(node=><ModelingRow key={node.id} {...{node,selected:highlighted,expanded,choose,disabled,partControls,rowRefs,toggle,inheritedHidden:implicitOwner.hiddenByOwner,inheritedUnavailable:implicitOwner.outsideFrontier}}/>)}</ul>}
       </div>
     </InspectorSplit>
   </div>;

@@ -96,7 +96,7 @@ test("normalizeScreenshotCrop clamps crop rectangles to the source frame", () =>
 test("paintScreenshotImageData flattens transparent captures over a provided background", () => {
   const events = [];
   const imageData = { id: "webgl-pixels" };
-  const overlayCanvas = { id: "overlay" };
+  const overlayCanvas = { id: "overlay", width: 24, height: 16 };
   const imageCanvas = {
     id: "image-canvas",
     width: 0,
@@ -153,7 +153,7 @@ test("paintScreenshotImageData preserves direct image data path without a backgr
   };
 
   paintScreenshotImageData(context, imageData, 10, 8, {
-    overlayCanvas: { id: "overlay" }
+    overlayCanvas: { id: "overlay", width: 10, height: 8 }
   });
 
   assert.deepEqual(events, [
@@ -192,7 +192,7 @@ test("paintScreenshotImageData crops render and overlay pixels to the visible vi
 
   paintScreenshotImageData(context, imageData, 100, 60, {
     crop: { x: 8, y: 12, width: 70, height: 40 },
-    overlayCanvas: { id: "overlay" },
+    overlayCanvas: { id: "overlay", width: 100, height: 60 },
     createCanvas: () => imageCanvas
   });
 
@@ -203,7 +203,7 @@ test("paintScreenshotImageData crops render and overlay pixels to the visible vi
   ]);
 });
 
-test("paintScreenshotSourceCanvas copies the live framebuffer crop and overlays drawings", () => {
+test("paintScreenshotSourceCanvas copies the live framebuffer crop and registers an overlay of another pixel ratio", () => {
   const events = [];
   const context = {
     fillStyle: "#111111",
@@ -218,14 +218,16 @@ test("paintScreenshotSourceCanvas copies the live framebuffer crop and overlays 
   paintScreenshotSourceCanvas(context, { id: "webgl-canvas" }, 100, 60, {
     backgroundColor: "rgb(13, 17, 23)",
     crop: { x: 5, y: 7, width: 70, height: 40 },
-    overlayCanvas: { id: "overlay" }
+    // The drawing editor renders at the display's pixel ratio, the viewport at
+    // its own: the same viewport, twice the pixels.
+    overlayCanvas: { id: "overlay", width: 200, height: 120 }
   });
 
   assert.equal(context.fillStyle, "#111111");
   assert.deepEqual(events, [
     ["fillRect", "rgb(13, 17, 23)", 0, 0, 70, 40],
     ["drawImage", "webgl-canvas", 5, 7, 70, 40, 0, 0, 70, 40],
-    ["drawImage", "overlay", 5, 7, 70, 40, 0, 0, 70, 40]
+    ["drawImage", "overlay", 10, 14, 140, 80, 0, 0, 70, 40]
   ]);
 });
 

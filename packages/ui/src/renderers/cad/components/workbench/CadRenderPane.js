@@ -29,11 +29,8 @@ import {
 } from "@hardcore/core/lib/displaySettings.js";
 import { VIEWER_SCENE_SCALE } from "@hardcore/core/lib/viewer/sceneScale.js";
 import { VIEWER_PICK_MODE } from "@hardcore/core/lib/viewer/constants.js";
-import { useAnimationClock } from "../../workbench/animationClockStore.js";
-import { useEmbeddedGlbAnimationClock } from "../../workbench/embeddedGlbAnimationClockStore.js";
 import { viewerHiddenPartIdsForRenderPane, viewerPickModeForRenderPane, viewerSelectedPartIdsForRenderPane, viewerSelectorRuntimeForRenderPane } from "../../workbench/viewerPickMode.js";
 import { viewerBendGuidesForRenderPane } from "../../workbench/renderPaneDrawing.js";
-import { ZoomControl } from "../viewer/ZoomControl.js";
 
 const EMPTY_LIST = Object.freeze([]);
 function viewerContextMenuAnchorStyle(menu) {
@@ -255,11 +252,13 @@ export default function CadRenderPane({
   renderConfiguration = null,
   quality = null,
   previewMode,
+  previewOrbitSpeed = 1,
   viewerLoading,
   retainingPreviousStepMesh = false,
   viewerAlert,
   presentationKey,
   onPresentationChange,
+  viewUpdate,
   loadingPresentation,
   stepUpdateInProgress,
   referenceSelectionPending = false,
@@ -281,9 +280,6 @@ export default function CadRenderPane({
   drawingIsDocument = false,
   drawingThicknessMm = 0,
   onCameraZoomPercentChange = null,
-  zoomPercent = 100,
-  onZoomPercentChange = null,
-  onZoomReset = null,
   onLodCameraChange = null,
   onMeshSourceAdoption = null,
   viewerMode,
@@ -308,9 +304,7 @@ export default function CadRenderPane({
   displaySettings = null,
   boundsAnimationActive = false,
   drawToolActive,
-  drawingTool,
-  drawingStrokes,
-  handleDrawingStrokesChange,
+  drawing,
   handlePerspectiveChange,
   handleModelHoverChange,
   handleModelReferenceActivate,
@@ -344,6 +338,7 @@ export default function CadRenderPane({
   copyButtonCountLabel = "",
   selectionFilter = "all",
   panToolActive = false,
+  animateToolActive = false,
   handleCopySelection,
   createPromptContext,
   onPromptResult,
@@ -351,21 +346,9 @@ export default function CadRenderPane({
   selectionExtras = null,
   handleScreenshotCopy,
 }) {
-  // The clock is the ONE thing that changes per frame during playback, and this
-  // is the only component that re-renders for it: subscribing here (rather than
-  // in the workspace) keeps a playing clip off the workspace's render path.
-  const liveAnimationElapsedSec = useAnimationClock();
-  const liveEmbeddedGlbElapsedSec = useEmbeddedGlbAnimationClock();
-  const resolvedStepAnimation = useMemo(() => {
-    if (!stepAnimation?.playing) {
-      return stepAnimation;
-    }
-    return { ...stepAnimation, elapsedSec: liveAnimationElapsedSec };
-  }, [stepAnimation, liveAnimationElapsedSec]);
-  const resolvedEmbeddedGlbAnimation = useMemo(() => {
-    if (!embeddedGlbAnimation?.playing) return embeddedGlbAnimation;
-    return { ...embeddedGlbAnimation, elapsedSec: liveEmbeddedGlbElapsedSec };
-  }, [embeddedGlbAnimation, liveEmbeddedGlbElapsedSec]);
+  // No component re-renders for a playing frame: the viewer poses the model straight
+  // from the animation clock (`usePlaybackFrames`). These props change on play, pause,
+  // scrub and clip changes only; the scrubber is the clock's one React subscriber.
   // One capability lookup replaces the per-format mode booleans. Every gate below asks
   // what this format CAN do; none of them ask what it IS.
   const capabilities = renderCapabilities(renderFormat);
@@ -387,7 +370,7 @@ export default function CadRenderPane({
     ? CAMERA_PROJECTION.ORTHOGRAPHIC
     : normalizeCameraProjection(projection, CAMERA_PROJECTION.ORTHOGRAPHIC);
   const cadViewerBoundsAnimationActive = Boolean(
-    boundsAnimationActive || resolvedStepAnimation?.playing || resolvedEmbeddedGlbAnimation?.playing
+    boundsAnimationActive || stepAnimation?.playing || embeddedGlbAnimation?.playing
   );
   const topologySelectionPending = Boolean(referenceSelectionPending && hasTopology);
   const topologySelectionUnavailable = Boolean(referenceSelectionUnavailable && hasTopology);
@@ -411,7 +394,7 @@ export default function CadRenderPane({
   const ctaFullLabelRef = useRef(null);
   const [ctaLabelFits, setCtaLabelFits] = useState(true);
   const ctaMetricsClass = composerDestination ? "h-9 w-fit min-w-0 max-w-full shrink overflow-hidden px-4 text-xs" : CTA_METRICS_CLASS;
-  const ctaRefLabel = ctaMode === "screenshot" ? "Copy Screenshot" : composerDestination ? "Add to prompt" : copyButtonLabel;
+  const ctaRefLabel = ctaMode === "screenshot" ? (composerDestination ? "Add to Prompt" : "Copy Drawing") : composerDestination ? "Add to prompt" : copyButtonLabel;
   useLayoutEffect(() => {
     const ruler = ctaFullLabelRef.current;
     if (!ruler) {
@@ -437,7 +420,7 @@ export default function CadRenderPane({
     ? ctaRefLabel
     : copyButtonCountLabel;
   // The title always carries the full ref, so the truncated case is still discoverable.
-  const ctaTitle = ctaMode === "screenshot" ? "Copy screenshot to clipboard" : ctaRefLabel;
+  const ctaTitle = ctaMode === "screenshot" ? (composerDestination ? "Add the view and its drawing to the prompt" : "Copy the view and its drawing to the clipboard") : ctaRefLabel;
   const ctaDisabled = ctaMode === "screenshot"
     ? viewerLoading || !viewportHasRenderableContent
     : false;
@@ -462,6 +445,7 @@ export default function CadRenderPane({
         modelKey={selectedKey}
         presentationKey={presentationKey}
         onPresentationChange={onPresentationChange}
+        viewUpdate={viewUpdate}
         loadingPresentation={loadingPresentation}
         renderFormat={renderFormat}
         drawingThicknessScale={drawingThicknessScale}
@@ -497,21 +481,14 @@ export default function CadRenderPane({
         quality={quality}
         displaySettings={displaySettingsActive ? displaySettings : null}
         previewMode={previewMode}
+        previewOrbitSpeed={previewOrbitSpeed}
         showViewPlane={!previewMode}
         scale={capabilities.sceneScale === "urdf" ? VIEWER_SCENE_SCALE.URDF : VIEWER_SCENE_SCALE.CAD}
         viewPlaneOffsetBottom="1rem"
-        viewPlaneHeader={selectedMeshData ? (
-          <div className="inline-flex h-8 items-center rounded-md border border-border bg-background p-1 text-foreground shadow-sm">
-            <ZoomControl
-              zoomPercent={zoomPercent}
-              onZoomPercentChange={onZoomPercentChange}
-              onZoomReset={onZoomReset}
-            />
-          </div>
-        ) : null}
         compactViewPlane={false}
         isLoading={viewerLoading && !retainingPreviousStepMesh}
-        pickMode={!inspectionEnabled || retainingPreviousStepMesh || (!hasTopology && !hasParts && !measureModeActive)
+        // Animate, like fullscreen, is watching: nothing under the pointer is pickable.
+        pickMode={previewMode || animateToolActive || !inspectionEnabled || retainingPreviousStepMesh || (!hasTopology && !hasParts && !measureModeActive)
           ? VIEWER_PICK_MODE.NONE
           : viewerPickModeForRenderPane({
             selectionFilter,
@@ -529,42 +506,43 @@ export default function CadRenderPane({
             focusedPartIds,
             measureMode: measureModeActive
           })}
-        panToolActive={inspectionEnabled && panToolActive}
+        panToolActive={!previewMode && inspectionEnabled && panToolActive}
         renderPartsIndividually={capabilities.sceneScale === "urdf"
           ? true
           : ((renderPartsIndividually || Boolean(stepParameters?.definition))
-            || Boolean(resolvedStepAnimation?.clip))}
+            || Boolean(stepAnimation?.clip))}
         pickableParts={inspectionEnabled && hasParts && !retainingPreviousStepMesh ? assemblyParts : EMPTY_LIST}
         hiddenPartIds={viewerHiddenPartIdsForRenderPane({ inspectionEnabled, hasParts, hiddenPartIds })}
-        selectedPartIds={viewerSelectedPartIdsForRenderPane({ renderMode, hasParts, selectedPartIds })}
-        hoveredPartId={inspectionEnabled && hasParts ? hoveredPartId : ""}
-        hoveredReferenceId={inspectionEnabled && hasTopology && !retainingPreviousStepMesh ? hoveredReferenceId : ""}
-        selectedReferenceIds={inspectionEnabled && hasTopology && !retainingPreviousStepMesh ? selectedReferenceIds : []}
+        selectedPartIds={previewMode ? EMPTY_LIST : viewerSelectedPartIdsForRenderPane({ renderMode, hasParts, selectedPartIds })}
+        hoveredPartId={!previewMode && inspectionEnabled && hasParts ? hoveredPartId : ""}
+        hoveredReferenceId={!previewMode && inspectionEnabled && hasTopology && !retainingPreviousStepMesh ? hoveredReferenceId : ""}
+        selectedReferenceIds={!previewMode && inspectionEnabled && hasTopology && !retainingPreviousStepMesh ? selectedReferenceIds : EMPTY_LIST}
         selectorRuntime={viewerSelectorRuntimeForRenderPane({ renderMode, hasTopology, retainingPreviousStepMesh, selectorRuntime })}
         displayEdgeRuntime={inspectionEnabled && hasTopology && !retainingPreviousStepMesh ? displayEdgeRuntime : null}
         stepParameters={capabilities.params === PARAMETER_SOURCE.SIDECAR ? stepParameters : null}
-        stepAnimation={capabilities.params === PARAMETER_SOURCE.SIDECAR ? resolvedStepAnimation : null}
+        stepAnimation={capabilities.params === PARAMETER_SOURCE.SIDECAR ? stepAnimation : null}
         glbDocument={glbDocument}
-        embeddedGlbAnimation={resolvedEmbeddedGlbAnimation}
-        pickableFaces={inspectionEnabled && hasTopology && !retainingPreviousStepMesh ? pickableFaces : []}
-        pickableEdges={inspectionEnabled && hasTopology && !retainingPreviousStepMesh ? pickableEdges : []}
-        pickableVertices={inspectionEnabled && hasTopology && !retainingPreviousStepMesh ? pickableVertices : []}
+        embeddedGlbAnimation={embeddedGlbAnimation}
+        animateMode={previewMode || animateToolActive}
+        // One shared empty list: a fresh [] per render — per animation frame — invalidated the
+        // viewer's pickable memos and reference map. Animate and fullscreen pick nothing at all.
+        pickableFaces={inspectionEnabled && hasTopology && !retainingPreviousStepMesh && !previewMode && !animateToolActive ? pickableFaces : EMPTY_LIST}
+        pickableEdges={inspectionEnabled && hasTopology && !retainingPreviousStepMesh && !previewMode && !animateToolActive ? pickableEdges : EMPTY_LIST}
+        pickableVertices={inspectionEnabled && hasTopology && !retainingPreviousStepMesh && !previewMode && !animateToolActive ? pickableVertices : EMPTY_LIST}
         focusedPartId={inspectionEnabled && hasParts ? focusedPartIds : ""}
         boundsAnimationActive={cadViewerBoundsAnimationActive}
-        drawingEnabled={inspectionEnabled && drawEnabled && drawToolActive}
-        drawingTool={drawingTool}
-        drawingStrokes={inspectionEnabled && drawEnabled ? drawingStrokes : []}
-        onDrawingStrokesChange={inspectionEnabled ? handleDrawingStrokesChange : null}
+        drawingEnabled={!previewMode && inspectionEnabled && drawEnabled && drawToolActive}
+        drawing={drawing}
         onPerspectiveChange={handlePerspectiveChange}
-        onHoverReferenceChange={inspectionEnabled ? handleModelHoverChange : null}
-        onActivateReference={inspectionEnabled ? handleModelReferenceActivate : null}
-        onDoubleActivateReference={inspectionEnabled ? handleModelReferenceDoubleActivate : null}
-        onContextReference={inspectionEnabled ? handleModelReferenceContext : null}
-        onMeasurePick={inspectionEnabled ? onMeasurePick : null}
-        onMeasureHoverPoint={inspectionEnabled ? onMeasureHoverPoint : null}
+        onHoverReferenceChange={!previewMode && inspectionEnabled ? handleModelHoverChange : null}
+        onActivateReference={!previewMode && inspectionEnabled ? handleModelReferenceActivate : null}
+        onDoubleActivateReference={!previewMode && inspectionEnabled ? handleModelReferenceDoubleActivate : null}
+        onContextReference={!previewMode && inspectionEnabled ? handleModelReferenceContext : null}
+        onMeasurePick={!previewMode && inspectionEnabled ? onMeasurePick : null}
+        onMeasureHoverPoint={!previewMode && inspectionEnabled ? onMeasureHoverPoint : null}
         activeMeasurementId={activeMeasurementId}
         measureState={inspectionEnabled ? measureState : null}
-        measureModeActive={inspectionEnabled && measureModeActive}
+        measureModeActive={!previewMode && inspectionEnabled && measureModeActive}
         allowMeshVertexSnap={inspectionEnabled && !hasTopology}
         onViewerAlertChange={handleViewerAlertChange}
         onStepModuleTransformDetectedChange={handleStepModuleTransformDetectedChange}

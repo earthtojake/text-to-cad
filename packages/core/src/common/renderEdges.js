@@ -684,7 +684,7 @@ export function createDisplayEdgeObject(context = {}, {
       color,
       transparent: opacity < 0.999,
       opacity,
-      depthTest: false,
+      depthTest: edgeSettings?.depthTest ?? false,
       depthWrite: false,
       toneMapped: false
     });

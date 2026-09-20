@@ -345,15 +345,19 @@ function ColorPicker({
         >
           <span
             className={cn(
-              "size-4 shrink-0 rounded bg-clip-border shadow-[0_0_0_1px_rgba(15,23,42,0.24)] dark:shadow-[0_0_0_1px_rgba(255,255,255,0.24)]",
+              "relative size-4 shrink-0 overflow-hidden rounded bg-clip-border shadow-[0_0_0_1px_rgba(15,23,42,0.24)] dark:shadow-[0_0_0_1px_rgba(255,255,255,0.24)]",
               swatchClassName
             )}
             style={{
-              backgroundColor: normalizedValue,
-              opacity: showOpacity ? normalizedOpacity : undefined
+              backgroundColor: "var(--background)",
+              backgroundImage: showOpacity ? "conic-gradient(var(--muted-foreground) 25%, transparent 0 50%, var(--muted-foreground) 0 75%, transparent 0)" : undefined,
+              backgroundSize: "8px 8px"
             }}
             aria-hidden="true"
-          />
+          >
+            <span className="absolute inset-0" data-color-preview="true"
+              style={{ backgroundColor: normalizedValue, opacity: showOpacity ? normalizedOpacity : 1 }} />
+          </span>
           {showValue ? (
             <span className={cn("truncate font-mono uppercase leading-none", valueClassName)}>{normalizedValue}</span>
           ) : null}

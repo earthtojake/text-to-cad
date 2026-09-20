@@ -252,7 +252,7 @@ It takes the `.dxf` document only — a model script is refused by name (run
 the flat pattern on demand through the bundled Node one-shot and
 renders it through the shared snapshot CLI (`cadgen.snapshot_cli`) and the same
 headless browser runtime every rendering skill uses. A normal snapshot uses
-deterministic light CAD lighting and hides grid and axis guides.
+the Solid preset and Light appearance; omitted groups inherit preset defaults.
 
 OUT — the second positional — is written exactly as given, with a relative path resolved against the
 current working directory. The target is deleted before the render starts and the
@@ -267,10 +267,13 @@ don't-care case and gets a generated timestamped name inside it, printed on the
 Grammar: `cadgen dxf snapshot TARGET [OUT] [flags]`. Flags: `--mode view|list`,
 `--camera`, `--display`, `--size-profile`, `--width`/`--height`,
 `--job`, `--view-labels`, `--debug`, `--json`. `--display render` opts into the
-photographic scene. Inline display JSON and JSON files may set studio-only controls
-under `render`. Top-level `--camera` remains the common camera for every display mode.
-A drawing has no selectors, kinematics, section mode, exploded assembly structure,
-or CAD-edge topology, and those combinations are absent or rejected clearly.
+photographic scene. Inline display JSON and JSON files use grouped settings such
+as `lighting`, `background`, and `floor`; `appearance` is `light` (default) or
+`dark`. `--camera` controls pose; projection belongs in `display.camera`.
+A drawing has no selectors, kinematics or section mode, so those are absent. The
+display modes are `solid` and `render`: `edges`, `clip`, `exploded`, the `xray`,
+`hidden-line` and `wireframe` modes and the `hidden`/`off` surface styles describe
+a STEP model's CAD edges, parts and solids, and are refused by name here.
 
 No CLI inspects an existing `.dxf`. For entity/layer checks read it with `ezdxf`
 directly (it arrives with build123d), and `validate_dxf_file` for the drawing checks;

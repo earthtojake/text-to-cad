@@ -123,17 +123,17 @@ test("snapshot tessellation is explicit, finite and restricted to exact surfaces
 
 test("snapshot quality selects bounded shared tessellation policy", () => {
   assert.deepEqual(tessellationForSnapshotQuality({}), {});
-  assert.deepEqual(tessellationForSnapshotQuality({ display: { mode: "render", render: { quality: "preview" } } }), {});
+  assert.deepEqual(tessellationForSnapshotQuality({ display: { mode: "render", lighting: { quality: "preview" } } }), {});
   assert.deepEqual(
-    tessellationForSnapshotQuality({ display: { mode: "render", render: { quality: "final" } } }),
+    tessellationForSnapshotQuality({ display: { mode: "render", lighting: { quality: "final" } } }),
     { chordTolerance: 0.00015, angleTolerance: 0.35 }
   );
   assert.deepEqual(tessellationForSnapshotQuality({
-    display: { mode: "render", render: { quality: "final" } },
+    display: { mode: "render", lighting: { quality: "final" } },
     quality: { tessellation: { chordTolerance: 0.001 } }
   }), { chordTolerance: 0.001 });
   assert.throws(() => tessellationForSnapshotQuality({
-    display: { mode: "render", render: { quality: "ultra" } }
+    display: { mode: "render", lighting: { quality: "ultra" } }
   }), /quality/i);
 });
 

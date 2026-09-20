@@ -180,8 +180,7 @@ test("the viewer's Add to prompt lands a chip, and the camera an image", async (
   const selector = (await chip.getAttribute("data-selector")) ?? "";
 
   // The camera button: the viewport as a PNG attachment.
-  await page.getByRole("button", { name: "Capture", exact: true }).click();
-  await page.getByTestId("capture-to-chat").click();
+  await page.getByRole("button", { name: "Take snapshot", exact: true }).click();
   const captures = page.locator("[data-composer]").getByText(/import-smoke-.*\.png/);
   await expect(captures).toHaveCount(1, { timeout: 15_000 });
   await page.waitForTimeout(500);

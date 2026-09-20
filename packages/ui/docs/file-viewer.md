@@ -64,7 +64,10 @@ supplied through `presentation`, without duplicating the tab's placement.
 `onActivityChange` publishes work on the current file. FileViewer displays its
 loading flag, label, title and optional tone beside the filename; an optional
 `onActivate` callback makes that status actionable. `presentation.activity` can
-replace the default indicator. `narrowCrumbs` optionally
+replace the default indicator. Each publish renders the whole FileViewer, so a
+renderer publishes status changes as they happen and coalesces progress detail
+that changes only `title` (CAD: `useFileActivityReport`, latest value a few times
+a second) rather than publishing from an effect per progress tick. `narrowCrumbs` optionally
 overrides automatic breadcrumb folding. Per-file renderer state is also accepted
 during a departing renderer's cleanup, while it still belongs to the same root.
 `navigationPath` can keep navigation unselected while a requested file is still

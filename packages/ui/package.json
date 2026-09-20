@@ -6,6 +6,9 @@
   "files": [
     "dist",
     "docs",
+    "licenses",
+    "scripts/drawing-assets.mjs",
+    "scripts/drawing-assets.d.mts",
     "README.md"
   ],
   "sideEffects": [
@@ -62,7 +65,8 @@
     "./drawing": {
       "types": "./dist/drawing/index.d.ts",
       "import": "./dist/drawing/index.js"
-    }
+    },
+    "./drawing-assets": "./scripts/drawing-assets.mjs"
   },
   "scripts": {
     "build": "node scripts/build.mjs",
@@ -76,6 +80,7 @@
     "three": "0.186.0"
   },
   "dependencies": {
+    "@betteroffice/fonts": "0.2.0",
     "@monaco-editor/react": "4.7.0",
     "@tiptap/core": "3.31.3",
     "@tiptap/extension-image": "3.31.3",

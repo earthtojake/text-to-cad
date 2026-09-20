@@ -141,10 +141,10 @@ export function viewportFitScale({
 // live pose instead made the zoom a function of the kinematics: a reset after
 // moving a joint landed at a different distance and a different pivot, and the
 // percent it reported was no longer the 100% the model opened at.
-// `runtime.modelBounds` tracks whichever pose was applied last, so it is only
-// the fallback for a runtime that has not published a zero pose yet.
+// A source fallback must also be authored bounds. Live modelBounds are never
+// a safe fallback: before adoption they may still describe another pose.
 export function runtimeFramingBounds(runtime, fallbackBounds = null) {
-  return runtime?.zeroPoseBounds || runtime?.modelBounds || fallbackBounds;
+  return runtime?.zeroPoseBounds || fallbackBounds || runtime?.cadScene?.restBounds || null;
 }
 
 // How far a zero-pose box has to move before it counts as a DIFFERENT zero pose.

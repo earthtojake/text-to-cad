@@ -9,6 +9,7 @@ function Slider({
   value,
   min = 0,
   max = 100,
+  thumbProps,
   ...props
 }) {
   const values = React.useMemo(
@@ -49,6 +50,7 @@ function Slider({
       </SliderPrimitive.Track>
       {values.map((_, index) => (
         <SliderPrimitive.Thumb
+          {...thumbProps}
           data-slot="slider-thumb"
           key={index}
           className="relative z-10 block size-3.5 shrink-0 rounded-full border border-background bg-primary shadow-sm ring-1 ring-foreground/15 transition-[color,box-shadow] outline-none hover:ring-2 hover:ring-ring/25 focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"

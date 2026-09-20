@@ -1,13 +1,13 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { drawingAssetsPlugin } from "@hardcore/ui/drawing-assets";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 
 import { appVersion } from "./scripts/app-version.mjs";
 import { pdfAssetsPlugin } from "./scripts/pdf-assets.mjs";
-import { drawingAssetsPlugin } from "./scripts/drawing-assets.mjs";
 const appRoot = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(appRoot, "..", "..");
 const alias = {

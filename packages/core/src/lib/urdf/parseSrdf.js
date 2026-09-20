@@ -393,6 +393,25 @@ function parseDisabledCollisionPairs(robot, urdfData) {
   });
 }
 
+/**
+ * Planning-group membership per link, for inspection: link name -> group names in
+ * SRDF order. Uses the same group resolution (links, joints, chains, subgroups) as
+ * end-effector validation, so the viewer never re-derives MoveIt semantics.
+ */
+export function srdfGroupNamesByLink(urdfData, srdf = urdfData?.srdf) {
+  const planningGroups = Array.isArray(srdf?.planningGroups) ? srdf.planningGroups : [];
+  const groupsByName = new Map(planningGroups.map((group) => [group.name, group]));
+  const groupNamesByLink = new Map();
+  for (const group of planningGroups) {
+    for (const linkName of linkNamesForGroup(group, urdfData, groupsByName)) {
+      const names = groupNamesByLink.get(linkName) || [];
+      names.push(group.name);
+      groupNamesByLink.set(linkName, names);
+    }
+  }
+  return groupNamesByLink;
+}
+
 export function motionFromSrdf(srdf) {
   if (!isPlainObject(srdf)) {
     return null;

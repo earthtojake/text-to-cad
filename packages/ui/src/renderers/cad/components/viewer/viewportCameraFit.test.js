@@ -106,3 +106,20 @@ test('degenerate point bounds and axis-aligned view have finite fit plans', () =
   assert.ok([...frame.position.toArray(), frame.distance, frame.halfHeight].every(Number.isFinite));
   assert.ok(frame.distance > 0 && frame.halfHeight > 0);
 });
+
+for (const orthographic of [false, true]) {
+  test(`original framing is invariant under live pose, reset, and saved camera (${orthographic ? 'ortho' : 'perspective'})`, async () => {
+    const { originalModelCameraFrame } = await import('./viewportCameraFit.js');
+    const camera = orthographic ? new THREE.OrthographicCamera(-20, 20, 20, -20) : new THREE.PerspectiveCamera(48, 1.5);
+    const bounds = { min: [-10, -8, -4], max: [20, 30, 12] };
+    const options = { camera, bounds, frameAspect: 1.5 };
+    const before = originalModelCameraFrame(THREE, options);
+    camera.position.set(4000, -5000, 1500); camera.zoom = 4; camera.near = 900;
+    camera.up.set(1, 0, 0);
+    const after = originalModelCameraFrame(THREE, options);
+    assert.deepEqual(after.position.toArray(), before.position.toArray());
+    assert.deepEqual(after.target.toArray(), before.target.toArray());
+    assert.equal(after.halfHeight, before.halfHeight);
+    assert.equal(after.distance, before.distance);
+  });
+}

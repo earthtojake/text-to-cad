@@ -159,12 +159,12 @@ it('does not overwrite a newer viewport selection when a feature’s topology fi
  rerender(<ModelingTree {...props} selectedReferenceIds={['o1.e3']} references={refs()}/>);
  expect(onSelect).not.toHaveBeenCalled();
 });
-it('summarizes canonical selection in the details header and clears through the host',async()=>{
+it('uses one static Reference heading and clears through the host',async()=>{
  setup();const onClearSelection=vi.fn();
  const props={active:true,entry,references:refs(),selectedReferences:refs(),selectedReferenceIds:refs().map(r=>r.id),selectionDetails:<p>Face measurements</p>,onClearSelection};
  const {rerender}=render(<ModelingTree {...props}/>);await respond({tree});expandIfCollapsed('Body 1');
- expect(screen.getByText('2 faces')).toBeTruthy();expect(screen.getByTitle('2 faces · Case')).toBeTruthy();
- fireEvent.click(screen.getByRole('button',{name:'Hide selection details'}));
+ expect(screen.getByRole('heading',{name:'Reference'})).toBeTruthy();
+ expect(screen.queryByRole('button',{name:'Hide selection details'})).toBeNull();
  fireEvent.click(screen.getByRole('button',{name:'Clear selection'}));expect(onClearSelection).toHaveBeenCalledTimes(1);
  rerender(<ModelingTree {...props} selectedReferences={[]} selectedReferenceIds={[]} selectionDetails={null}/>);
  expect(screen.queryByRole('button',{name:'Clear selection'})).toBeNull();
@@ -175,15 +175,15 @@ const partNode=(id:string,name:string)=>({id,nodeType:'part',name,leafPartIds:[i
 const assemblyRoot={id:'document',nodeType:'assembly',name:'tom',children:[{id:'arm',nodeType:'assembly',name:'Arm',leafPartIds:['arm.wrist'],children:[partNode('arm.wrist','Wrist')]},partNode('base','Base')]};
 const directModeling={descriptor:assemblyDescriptor,results:{},error:null,retryFailed:vi.fn()};
 
-it('uses compact shared rows, reserves the count header, and keeps disclosure separate from selection',()=>{
+it('starts the compact tree immediately below the filter and keeps disclosure separate from selection',()=>{
  const onSelectTreeNode=vi.fn(),onToggleTreeNode=vi.fn(),onLoadTopology=vi.fn();
  const controls={expandedTreeNodeIds:[],onSelectTreeNode,onToggleTreeNode};
  const props={modeling:directModeling,stepRoot:assemblyRoot,active:true,onLoadTopology,partControls:controls};
  const {rerender}=render(<ModelingTreeView {...props}/>);
  expect(screen.queryByRole('button',{name:'Select tom'})).toBeNull();
- const header=screen.getByLabelText('Model tree summary');
- expect(within(header).getByText('2 features')).toBeTruthy();
- expect(header.className).not.toContain('border');
+ const filter=screen.getByRole('textbox',{name:'Filter model'}).parentElement!.parentElement!;
+ expect(screen.queryByLabelText('Model tree summary')).toBeNull();
+ expect(screen.queryByText('2 features')).toBeNull();
  expect(screen.queryByText(/Recognizing/)).toBeNull();
  const select=screen.getByRole('button',{name:'Select Arm'});
  expect(select.parentElement?.style.height).toBe('28px');
@@ -197,8 +197,7 @@ it('uses compact shared rows, reserves the count header, and keeps disclosure se
  const eye=screen.getByRole('button',{name:'Hide Arm'});
  expect(eye.className).toContain('text-muted-foreground');
  rerender(<ModelingTreeView {...props} partControls={{...controls,hiddenPartIds:['base']}}/>);
- expect(screen.getByLabelText('Model tree summary')).toBe(header);
- expect(within(header).getByRole('button',{name:'Show all'})).toBeTruthy();
+ expect(within(filter).getByRole('button',{name:'Show all'})).toBeTruthy();
 });
 
 it('requests recognition only for visible expanded parts, never row selection or collapsed descendants',()=>{
@@ -314,4 +313,136 @@ it('preserves a collapsed group when viewport selection sends its exact visible 
  expect(screen.getByRole('button',{name:'Expand Pockets (6)'})).toBeTruthy();
  expect(screen.getByRole('button',{name:'Select Pockets (6)'}).getAttribute('aria-pressed')).toBe('true');
  expect(screen.queryByRole('button',{name:'Select Pocket 0'})).toBeNull();
+});
+
+// Model search: a flat ranked view over the same presented tree, never a
+// filter over its expansion (see packages/ui/src/renderers/cad/workbench/modelTreeSearch.js).
+const wheelsDescriptor={components:{c:{surf:'components/c.surf'}},occurrences:[{id:'w1',component:'c',name:'Left Wheel'},{id:'w2',component:'c',name:'Right Wheel'},{id:'w3',component:'c',name:'Rear Wheel'}]};
+const wheelsRoot={id:'document',nodeType:'assembly',name:'doc',children:[partNode('w1','Left Wheel'),partNode('w2','Right Wheel'),partNode('w3','Rear Wheel')]};
+const wheelsModeling={descriptor:wheelsDescriptor,results:{},error:null,retryFailed:vi.fn()};
+// Feeds a hit's selection back as selectedPartIds/expandedTreeNodeIds, the way a
+// real host does, so the reveal effect's ancestor-expansion can be observed.
+function ControlledSearch({onSelectTreeNode,onToggleTreeNode,...props}:any){
+ const [expandedTreeNodeIds,setExpanded]=React.useState<string[]>([]);
+ const [selectedPartIds,setSelectedPartIds]=React.useState<string[]>([]);
+ const toggle=(id:string)=>{onToggleTreeNode?.(id);setExpanded(current=>current.includes(id)?current:[...current,id]);};
+ const select=(id:string,options:any)=>{onSelectTreeNode?.(id,options);setSelectedPartIds([id]);};
+ return <ModelingTreeView {...props} selectedPartIds={selectedPartIds} partControls={{...props.partControls,expandedTreeNodeIds,onToggleTreeNode:toggle,onSelectTreeNode:select}}/>;
+}
+
+it('finds a nested part inside a collapsed subassembly, showing its owner path, without touching expansion or recognition',async()=>{
+ const modeling={...directModeling,results:{c:{tree}}};
+ const request=vi.fn(),onToggleTreeNode=vi.fn();
+ render(<ModelingTreeView modeling={modeling} stepRoot={assemblyRoot} active onRequestRecognition={request} partControls={{expandedTreeNodeIds:[],onToggleTreeNode}}/>);
+ expect(screen.queryByRole('button',{name:'Select Wrist'})).toBeNull();
+ const callsBefore=request.mock.calls.length;
+ fireEvent.change(screen.getByRole('textbox',{name:'Filter model'}),{target:{value:'Wrist'}});
+ await screen.findByRole('list',{name:'Model search results'});
+ const hit=screen.getByRole('button',{name:'Select Wrist'});
+ expect(hit.title).toBe('Arm/Wrist');
+ expect(within(hit).getByText('Arm')).toBeTruthy();
+ expect(onToggleTreeNode).not.toHaveBeenCalled();
+ expect(request.mock.calls.length).toBe(callsBefore);
+});
+
+it('expands a search hit’s collapsed ancestor once selected, then restores it collapsed and pressed after clearing',async()=>{
+ const modeling={...directModeling,results:{c:{tree}}};
+ const onSelectTreeNode=vi.fn(),onToggleTreeNode=vi.fn();
+ render(<ControlledSearch modeling={modeling} stepRoot={assemblyRoot} active onSelectTreeNode={onSelectTreeNode} onToggleTreeNode={onToggleTreeNode}/>);
+ fireEvent.change(screen.getByRole('textbox',{name:'Filter model'}),{target:{value:'Wrist'}});
+ await screen.findByRole('list',{name:'Model search results'});
+ fireEvent.click(screen.getByRole('button',{name:'Select Wrist'}));
+ expect(onSelectTreeNode).toHaveBeenCalledWith('arm.wrist',expect.any(Object));
+ await waitFor(()=>expect(onToggleTreeNode).toHaveBeenCalledWith('arm'));
+ expect(screen.queryByRole('list',{name:'Model'})).toBeNull();
+ fireEvent.click(screen.getByRole('button',{name:'Clear filter'}));
+ const wrist=await screen.findByRole('button',{name:'Select Wrist'});
+ expect(wrist.getAttribute('aria-pressed')).toBe('true');
+ expect(screen.getByRole('button',{name:'Collapse Arm'})).toBeTruthy();
+ expect(screen.getByRole('button',{name:'Expand Wrist'})).toBeTruthy();
+});
+
+it('disables a hidden search hit and one outside the isolate frontier, like the tree rows they mirror',async()=>{
+ render(<ModelingTreeView modeling={wheelsModeling} stepRoot={wheelsRoot} active partControls={{expandedTreeNodeIds:[],hiddenPartIds:['w1'],selectableNodeIds:['w1','w3']}}/>);
+ fireEvent.change(screen.getByRole('textbox',{name:'Filter model'}),{target:{value:'Wheel'}});
+ await screen.findByRole('list',{name:'Model search results'});
+ expect(screen.getByRole('button',{name:'Select Left Wheel'}).hasAttribute('disabled')).toBe(true);
+ expect(screen.getByRole('button',{name:'Select Right Wheel'}).hasAttribute('disabled')).toBe(true);
+ expect(screen.getByRole('button',{name:'Select Rear Wheel'}).hasAttribute('disabled')).toBe(false);
+});
+
+it('clears the search on Escape and selects the second hit with ArrowDown then Enter',async()=>{
+ const onSelectTreeNode=vi.fn();
+ render(<ModelingTreeView modeling={wheelsModeling} stepRoot={wheelsRoot} active partControls={{expandedTreeNodeIds:[],onSelectTreeNode}}/>);
+ const input=screen.getByRole('textbox',{name:'Filter model'});
+ fireEvent.change(input,{target:{value:'Wheel'}});
+ const list=await screen.findByRole('list',{name:'Model search results'});
+ const rows=within(list).getAllByRole('listitem');
+ expect(rows.length).toBe(3);
+ const secondLabel=within(rows[1]).getByRole('button',{name:/^Select /}).getAttribute('aria-label');
+ const idByLabel:Record<string,string>={'Select Left Wheel':'w1','Select Right Wheel':'w2','Select Rear Wheel':'w3'};
+ fireEvent.keyDown(input,{key:'ArrowDown'});
+ fireEvent.keyDown(input,{key:'Enter'});
+ expect(onSelectTreeNode).toHaveBeenCalledWith(idByLabel[secondLabel as string],expect.any(Object));
+ fireEvent.keyDown(input,{key:'Escape'});
+ await waitFor(()=>expect(screen.queryByRole('list',{name:'Model search results'})).toBeNull());
+ expect(screen.getByRole('list',{name:'Model'})).toBeTruthy();
+ expect((input as HTMLInputElement).value).toBe('');
+});
+
+it('finds a recognized feature by label and selects its scoped canonical references',async()=>{
+ // Both occurrences share component 'c', so this label is shared by Wrist's and
+ // Base's features too; scope to Wrist's row by its search-index node id.
+ const modeling={...directModeling,results:{c:{tree}}};
+ const onSelect=vi.fn();
+ render(<ModelingTreeView modeling={modeling} stepRoot={assemblyRoot} active references={refs('arm.wrist')} onSelect={onSelect}/>);
+ fireEvent.change(screen.getByRole('textbox',{name:'Filter model'}),{target:{value:'Cut extrude'}});
+ const list=await screen.findByRole('list',{name:'Model search results'});
+ const row=list.querySelector('[data-search-row="arm.wrist/cut:1-2"]') as HTMLElement;
+ const hit=within(row).getByRole('button',{name:'Select Cut extrude 1'});
+ fireEvent.click(hit);
+ expect(onSelect).toHaveBeenCalledWith(['arm.wrist.f1','arm.wrist.f2']);
+});
+
+
+it('clears selection only from empty tree space, not a row or its controls',()=>{
+ const clear=vi.fn(),select=vi.fn();
+ render(<ModelingTreeView modeling={directModeling} stepRoot={assemblyRoot} active onClearSelection={clear} partControls={{onSelectTreeNode:select}}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Select Base'}));
+ expect(select).toHaveBeenCalledOnce();expect(clear).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByLabelText('Model tree area'));
+ expect(clear).toHaveBeenCalledOnce();
+});
+
+it('opens a lone part implicitly, requests its recognition and topology once, and presents its features directly',()=>{
+ const onLoadTopology=vi.fn(),request=vi.fn(),onSelect=vi.fn(),targets=vi.fn();
+ const stepRoot={id:'__step_model__',nodeType:'part',name:'Case',leafPartIds:['__model__'],children:[]};
+ const props={active:true,stepRoot,onLoadTopology,onSelect,onRequestRecognition:request,onVisibleFeatureTargetsChange:targets,references:refs()};
+ const {rerender}=render(<ModelingTreeView {...props} modeling={{descriptor,results:{},error:null}}/>);
+ expect(onLoadTopology).toHaveBeenCalledExactlyOnceWith(['o1']);
+ expect(request).toHaveBeenLastCalledWith(['o1']);
+ expect(screen.getByText('Loading features…')).toBeTruthy();
+ rerender(<ModelingTreeView {...props} modeling={{descriptor,results:{c:{tree}},error:null}}/>);
+ expect(onLoadTopology).toHaveBeenCalledTimes(1);
+ expect(screen.queryByRole('button',{name:'Select Case'})).toBeNull();
+ expect(screen.queryByRole('button',{name:'Expand Body 1'})).toBeNull();
+ fireEvent.click(screen.getByRole('button',{name:'Select Cut extrude 1'}));
+ expect(onSelect).toHaveBeenCalledWith(['o1.f1','o1.f2']);
+ expect(targets).toHaveBeenLastCalledWith([{nodeId:'o1/cut:1-2',referenceIds:['o1.f1','o1.f2']}]);
+ rerender(<ModelingTreeView {...props} modeling={{descriptor,results:{c:{tree}},error:null}} partControls={{hiddenPartIds:['__model__']}}/>);
+ expect(screen.getByRole('button',{name:'Select Cut extrude 1'}).hasAttribute('disabled')).toBe(true);
+ expect(targets).toHaveBeenLastCalledWith([]);
+ expect(request).toHaveBeenLastCalledWith([]);
+});
+
+it('blank-area deselection cancels pending geometry selection',async()=>{
+ setup();const clear=vi.fn(),onSelect=vi.fn();
+ const props={active:true,entry,references:[],selectedReferenceIds:[],onSelect,onClearSelection:clear};
+ const {rerender}=render(<ModelingTree {...props}/>);await respond({tree});
+ fireEvent.click(screen.getByRole('button',{name:'Select Cut extrude 1'}));
+ expect(screen.getByText('Loading selectable geometry…')).toBeTruthy();
+ fireEvent.click(screen.getByLabelText('Model tree area'));
+ rerender(<ModelingTree {...props} references={refs()}/>);
+ expect(onSelect).not.toHaveBeenCalled();expect(clear).toHaveBeenCalledOnce();
+ expect(screen.queryByRole('region',{name:'Reference details'})).toBeNull();
 });

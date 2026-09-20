@@ -26,6 +26,13 @@ export default function App(props: { client: CadClient; server: CadServerInfo })
 
 /** A root change creates a new session before any view state can be persisted. */
 function RootView({ client, server }: { client: CadClient; server: CadServerInfo }) {
+  const [fullscreen, setFullscreen] = useState(false);
+  useEffect(() => {
+    if (!fullscreen) return;
+    const exit = (event: KeyboardEvent) => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); setFullscreen(false); } };
+    window.addEventListener("keydown", exit);
+    return () => window.removeEventListener("keydown", exit);
+  }, [fullscreen]);
   const [copyStatus, setCopyStatus] = useState('');
   const viewerReloading = useViewerAutoReload(server, { fetchServerInfo: () => client.serverInfo({ fresh: true }).then(info => ({ ok: true, identityToken: String(info.identityToken || '') }), () => ({ ok: false })) });
   const source = useMemo(() => createWebFileSource(client, server), [client, server]);
@@ -94,8 +101,8 @@ function RootView({ client, server }: { client: CadClient; server: CadServerInfo
     navigation: { openFile: open }, environment: appearance, lifecycle: browserLifecycle,
   }), [source, fileActions, promptContext, open, appearance]);
   const empty = <div className="pointer-events-auto absolute inset-0 z-10 bg-background"><EmptyState icon={FileText} title="No file open" description="Pick one from the tree on the right, or filter by name." /></div>;
-  return <div className="flex h-svh flex-col overflow-hidden"><ViewerTopBar colorSchemePreference={colorSchemePreference} resolvedColorSchemeMode={appearance.colorScheme} onColorSchemePreferenceChange={changeColorScheme} /><div className="min-h-0 flex-1">
-    <FileViewer file={file || null} host={host} renderers={renderers} state={state} onStateChange={setState} narrowCrumbs={false}
+  return <div className="flex h-svh flex-col overflow-hidden"><ViewerTopBar fullscreen={fullscreen} onFullscreenChange={setFullscreen} fullscreenAvailable={Boolean(selectedEntry)} colorSchemePreference={colorSchemePreference} resolvedColorSchemeMode={appearance.colorScheme} onColorSchemePreferenceChange={changeColorScheme} /><div className="min-h-0 flex-1">
+    <FileViewer fullscreen={fullscreen} onExitFullscreen={() => setFullscreen(false)} file={file || null} host={host} renderers={renderers} state={state} onStateChange={setState} narrowCrumbs={false}
       navigationPath={selectedEntry ? normalizeCadFileQueryParam(cadFileParamForEntry(selectedEntry)) : null}
       onError={error => setCopyStatus(error.message)} presentation={{
         empty: <div className="relative h-full">{empty}</div>,
@@ -103,5 +110,5 @@ function RootView({ client, server }: { client: CadClient; server: CadServerInfo
         error: () => <div className="relative h-full">{catalog.error ? empty : <EmptyCadBackdrop colorScheme={appearance.colorScheme}><MissingFileAlert missingFileRef={file} rootPath={server.rootPath} /></EmptyCadBackdrop>}</div>,
         activity: activity => <FilenameLoadStatus activity={viewerReloading ? { loading: true, label: "Reloading", title: "The viewer is restarting after a code change." } : activity} />,
       }} />
-  </div><StatusToast copyStatus={copyStatus} onClear={() => setCopyStatus('')} /></div>;
+  </div><StatusToast previewMode={fullscreen} copyStatus={copyStatus} onClear={() => setCopyStatus('')} /></div>;
 }

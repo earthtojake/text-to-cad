@@ -307,17 +307,37 @@ export function buildStepModuleContext({
   };
 }
 
+function sameEffectStyle(previous, next) {
+  if (previous === next) return true;
+  if (!previous || !next) return false;
+  const keys = Object.keys(next);
+  return keys.length === Object.keys(previous).length && keys.every((key) => previous[key] === next[key]);
+}
+
+/**
+ * Write this pass's effects onto the display records.
+ *
+ * Returns whether anything but a transform changed since the last pass: style,
+ * visibility or highlight. A routine that only moves parts — nearly every frame
+ * of nearly every routine — changes none of them, and its caller can then skip
+ * reconciling materials and instance membership, which a transform cannot affect.
+ */
 export function applyStepModuleEffectsToRecords(THREE, records, effectsByPartId) {
-  resetStepModuleRecordEffects(records);
+  let appearanceChanged = false;
   for (const record of Array.isArray(records) ? records : []) {
     const effect = effectsByPartId.get(String(record?.partId || "").trim());
     tubeDeformation()?.applyRecordTubeDeformation(THREE, record, effect?.deformation || null);
-    if (!effect) {
-      continue;
+    const style = effect?.style && typeof effect.style === "object" ? { ...effect.style } : null;
+    const visible = effect ? effect.visible : null;
+    const highlighted = effect?.highlighted === true;
+    if (!sameEffectStyle(record.effectStyle || null, style) || (record.effectVisible ?? null) !== (visible ?? null) ||
+        (record.effectHighlighted === true) !== highlighted) {
+      appearanceChanged = true;
     }
-    record.effectMatrix = effect.matrix instanceof THREE.Matrix4 ? effect.matrix.clone() : null;
-    record.effectStyle = effect.style && typeof effect.style === "object" ? { ...effect.style } : null;
-    record.effectVisible = effect.visible;
-    record.effectHighlighted = effect.highlighted === true;
+    record.effectMatrix = effect?.matrix instanceof THREE.Matrix4 ? effect.matrix.clone() : null;
+    record.effectStyle = style;
+    record.effectVisible = visible;
+    record.effectHighlighted = highlighted;
   }
+  return { appearanceChanged };
 }

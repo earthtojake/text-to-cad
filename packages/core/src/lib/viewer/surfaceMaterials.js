@@ -152,13 +152,16 @@ export function resolveSourceBaseColor(THREE, {
 }
 
 export function applyMaterialSettingsToRecord(THREE, record, materialSettings, {
-  displayMode = CAD_DISPLAY_MODE.SHADED_EDGES
+  displayMode = CAD_DISPLAY_MODE.SHADED_EDGES,
+  surfaceSettings = null
 } = {}) {
   if (!record?.material || !materialSettings) {
     return;
   }
   const previousVertexColors = record.material.vertexColors;
   const previousTransparent = record.material.transparent;
+  record.surfaceSettings = surfaceSettings;
+  record.material.colorWrite = !surfaceSettings || !["hidden", "off"].includes(surfaceSettings.style);
   const wireframeMode = displayModeIsWireframe(displayMode);
   const forceFill = materialSettings.overrideSourceColors === true || wireframeMode;
   const hasVertexColors = !forceFill && !!record.hasVertexColors;
@@ -191,16 +194,16 @@ export function applyMaterialSettingsToRecord(THREE, record, materialSettings, {
   record.material.clearcoatRoughness = resolveMaterialChannel("clearcoatRoughness");
   const partOpacity = Number(record.sourceOpacity);
   const opacityScale = Number.isFinite(partOpacity) ? clamp(partOpacity, 0, 1) : 1;
-  record.baseOpacity = clamp(
-    displayModeSurfaceOpacity(displayMode, (Number(materialSettings.opacity) || 0) * opacityScale),
-    0,
-    1
-  );
+  record.baseOpacity = surfaceSettings?.style === "hidden" ? 1
+    : surfaceSettings?.style === "off" ? 0
+      : surfaceSettings ? clamp(surfaceSettings.opacity * opacityScale, 0, 1)
+        : clamp(displayModeSurfaceOpacity(displayMode, (Number(materialSettings.opacity) || 0) * opacityScale), 0, 1);
   record.material.opacity = record.baseOpacity;
   record.material.transparent = wireframeMode || record.baseOpacity < 0.999;
-  record.material.depthWrite = displayMode === CAD_DISPLAY_MODE.TRANSPARENT || wireframeMode
+  record.material.depthWrite = surfaceSettings?.style === "hidden" ? true : displayMode === CAD_DISPLAY_MODE.TRANSPARENT || wireframeMode
     ? false
     : record.baseOpacity >= 0.999;
+  record.baseDepthWrite = record.material.depthWrite;
   record.material.envMapIntensity = Math.max(Number(materialSettings.envMapIntensity) || 0, 0);
   if (record.material.color && record.baseColor) {
     record.material.color.copy(record.baseColor);

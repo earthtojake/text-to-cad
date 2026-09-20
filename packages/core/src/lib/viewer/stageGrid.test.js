@@ -58,7 +58,7 @@ test("stage grid cells scale with model radius near default framing", () => {
   assert.equal(cadConfig.cellSize, (24 * DEFAULT_AUTO_ZOOM_PADDING) / GRID_TARGET_VISIBLE_CELLS);
   assert.equal(cadConfig.size, cadConfig.cellSize * cadConfig.divisions);
   const cadDefaultZoomCells = (12 * 2 * DEFAULT_AUTO_ZOOM_PADDING) / cadConfig.cellSize;
-  assert.equal(cadDefaultZoomCells, GRID_TARGET_VISIBLE_CELLS);
+  assert.equal(cadDefaultZoomCells, 5);
 
   const urdfConfig = buildGridConfig(0.12, VIEWER_SCENE_SCALE.URDF);
   assert.equal(urdfConfig.cellSize, (0.24 * DEFAULT_AUTO_ZOOM_PADDING) / GRID_TARGET_VISIBLE_CELLS);

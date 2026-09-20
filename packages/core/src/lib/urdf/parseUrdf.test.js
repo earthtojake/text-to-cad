@@ -191,3 +191,42 @@ test("parseUrdf accepts prismatic mimic joints", () => {
     offset: 0
   });
 });
+
+test("parseUrdf keeps what the description says about joints and links", () => {
+  const robot = new FakeElement("robot", { name: "described_robot" }, [
+    new FakeElement("link", { name: "base_link" }, [
+      new FakeElement("inertial", {}, [new FakeElement("mass", { value: "2.5" })]),
+      new FakeElement("visual", {}, [
+        new FakeElement("geometry", {}, [new FakeElement("mesh", { filename: "package://robot/meshes/base.stl" })])
+      ]),
+      new FakeElement("collision", {}, [
+        new FakeElement("geometry", {}, [new FakeElement("mesh", { filename: "meshes/base_collision.stl" })])
+      ]),
+      new FakeElement("collision", {}, [
+        new FakeElement("geometry", {}, [new FakeElement("box", { size: "1 1 1" })])
+      ])
+    ]),
+    new FakeElement("link", { name: "arm_link" }),
+    new FakeElement("joint", { name: "shoulder", type: "revolute" }, [
+      new FakeElement("parent", { link: "base_link" }),
+      new FakeElement("child", { link: "arm_link" }),
+      new FakeElement("origin", { xyz: "0 0.1 0.25", rpy: "0 0 1.5708" }),
+      new FakeElement("axis", { xyz: "0 0 1" }),
+      new FakeElement("limit", { lower: "-1.57", upper: "1.57", effort: "12", velocity: "3.5" })
+    ])
+  ]);
+
+  const urdfData = withFakeDomParser(new FakeDocument(robot), () => parseUrdf("<robot />", { sourceUrl: "/workspace/described_robot.urdf" }));
+
+  assert.deepEqual(urdfData.joints[0].origin, { xyz: [0, 0.1, 0.25], rpy: [0, 0, 1.5708] });
+  assert.deepEqual(urdfData.joints[0].limit, { lower: -1.57, upper: 1.57, effort: 12, velocity: 3.5 });
+  assert.deepEqual(urdfData.links[0].inertial, { mass: 2.5 });
+  assert.equal(urdfData.links[0].visuals[0].filename, "package://robot/meshes/base.stl");
+  assert.deepEqual(urdfData.links[0].collisions, [
+    { type: "mesh", filename: "meshes/base_collision.stl" },
+    { type: "box", filename: "" }
+  ]);
+  // A link that declares none of it says so, rather than reporting zeros.
+  assert.equal(urdfData.links[1].inertial, null);
+  assert.deepEqual(urdfData.links[1].collisions, []);
+});

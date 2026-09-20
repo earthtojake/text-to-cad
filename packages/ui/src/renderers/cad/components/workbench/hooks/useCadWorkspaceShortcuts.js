@@ -16,15 +16,9 @@ export function useCadWorkspaceShortcuts({
   tabToolsOpen,
   isDesktop,
   filesPanelOpen,
-  previewUiStateRef,
   tabToolMode,
   measureDraftActive = false,
   onCancelMeasureDraft = null,
-  drawingUndoStackRef,
-  drawingRedoStackRef,
-  handleUndoDrawing,
-  handleRedoDrawing,
-  setPreviewMode,
   setViewerAlertOpen,
   setTabToolsOpen,
   setFilesPanelOpen,
@@ -53,6 +47,7 @@ export function useCadWorkspaceShortcuts({
     }
 
     const handleKeyDown = (event) => {
+      if (previewMode) return; // The host owns fullscreen Escape; tools are inactive.
       const element = viewerElement?.current;
       if (!element) return;
       const target = event.target;
@@ -60,43 +55,7 @@ export function useCadWorkspaceShortcuts({
       const background = target === document.body || target === document || target === window;
       const focus = document.activeElement;
       if (!inViewer && !(background && pointerInside.current && (focus === document.body || (focus && element.contains(focus))))) return;
-      if (
-        !event.defaultPrevented &&
-        !isEditableTarget(event.target) &&
-        !event.altKey &&
-        (event.metaKey || event.ctrlKey)
-      ) {
-        const lowerKey = String(event.key || "").toLowerCase();
-        const redoShortcut =
-          lowerKey === "y" ||
-          (lowerKey === "z" && event.shiftKey);
-        const undoShortcut = lowerKey === "z" && !event.shiftKey;
-        if (inspectionEnabled && undoShortcut && drawingUndoStackRef.current.length) {
-          event.preventDefault();
-          handleUndoDrawing();
-          return;
-        }
-
-        if (inspectionEnabled && redoShortcut && drawingRedoStackRef.current.length) {
-          event.preventDefault();
-          handleRedoDrawing();
-          return;
-        }
-      }
-
       if (event.key === "Escape" && !event.defaultPrevented && !isEditableTarget(event.target)) {
-        if (previewMode) {
-          const previousUiState = previewUiStateRef.current;
-          previewUiStateRef.current = null;
-          setPreviewMode(false);
-          if (previousUiState) {
-            setViewerAlertOpen(previousUiState.viewerAlertOpen);
-            setFilesPanelOpen(previousUiState.filesPanelOpen);
-            setTabToolsOpen(previousUiState.tabToolsOpen);
-            setTabToolMode(previousUiState.tabToolMode);
-          }
-          return;
-        }
         if (inspectionEnabled && tabToolMode === TAB_TOOL_MODE.MEASURE) {
           // Escape cancels the measurement in progress and leaves the tool
           // armed, the way it does in a CAD measure tool. Only once there is
@@ -128,15 +87,9 @@ export function useCadWorkspaceShortcuts({
     viewerElement,
     selectionActive,
     onClearSelection,
-    drawingRedoStackRef,
-    drawingUndoStackRef,
-    handleRedoDrawing,
-    handleUndoDrawing,
     isDesktop,
     inspectionEnabled,
     previewMode,
-    previewUiStateRef,
-    setPreviewMode,
     setFilesPanelOpen,
     setTabToolMode,
     setTabToolsOpen,

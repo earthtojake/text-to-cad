@@ -24,41 +24,26 @@ test('the resolved document capability can disable Measure for an animated mesh'
   assert.equal(measureButtons('glb', true).length, 1);
 });
 
-test('interaction modes and view actions occupy two separate horizontal groups', () => {
-  const outer = render(FloatingToolBar, {
-    selectedEntry: { file: 'part.step' }, renderFormat: 'step', selectedMeshData: {},
-    selectionFilter: 'all', onSelectionFilterChange() {}, handleSelectTabToolMode() {},
-    handleScreenshotCopy() {},
-  });
-  const toolbar = render(outer.tree.type, outer.tree.props);
-  const groups = elements(toolbar.tree).filter(node => node.props.role === 'group');
-  const interaction = groups.find(node => node.props['aria-label'] === 'Interaction tools');
-  const actions = groups.find(node => node.props['aria-label'] === 'View and actions');
-  assert.ok(interaction);
-  assert.ok(actions);
-  assert.deepEqual(
-    elements(interaction).map(node => node.props.label).filter(Boolean),
-    ['Select', 'Pan', 'Measure', 'Draw']
-  );
-  assert.equal(elements(actions).some(node => node.props.label === 'View controls'), true);
-  assert.equal(elements(actions).some(node => node.props.label === 'Capture'), true);
-  assert.equal(elements(actions).some(node => node.props.label === 'Display'), false);
-  assert.equal(elements(actions).some(node => String(node.props.label || '').startsWith('Viewing mode:')), false);
-  assert.equal(elements(toolbar.tree).some(node => node.props['aria-label'] === 'Zoom controls'), false);
-  toolbar.unmount(); outer.unmount();
+test('the floating toolbar contains only interaction tools in every display mode', () => {
+  for (const renderMode of [false, true]) {
+    const outer = render(FloatingToolBar, {
+      selectedEntry: { file: 'part.step' }, renderFormat: 'step', selectedMeshData: {},
+      renderMode, selectionFilter: 'all', onSelectionFilterChange() {}, handleSelectTabToolMode() {},
+    });
+    const toolbar = render(outer.tree.type, outer.tree.props);
+    const nodes = elements(toolbar.tree);
+    const groups = nodes.filter(node => node.props.role === 'group');
+    assert.deepEqual(groups.map(node => node.props['aria-label']), ['Interaction tools']);
+    const filter = nodes.find(node => node.type?.name === 'SelectionFilterMenu');
+    assert.equal(filter.props.trigger.props.label, 'Select');
+    assert.deepEqual(nodes.map(node => node.props.label).filter(Boolean), ['Pan', 'Measure', 'Draw']);
+    assert.equal(nodes.some(node => node.props['aria-label'] === 'Zoom controls'), false);
+    toolbar.unmount(); outer.unmount();
+  }
 });
 
-test('Render keeps interaction tools and ordinary view actions available', () => {
-  const outer = render(FloatingToolBar, {
-    selectedEntry: { file: 'part.step' }, renderFormat: 'step', selectedMeshData: {},
-    renderMode: true, selectionFilter: 'all', onSelectionFilterChange() {},
-    handleSelectTabToolMode() {}, handleScreenshotCopy() {},
-  });
-  const toolbar = render(outer.tree.type, outer.tree.props);
-  const labels = elements(toolbar.tree).map(node => node.props.label).filter(Boolean);
-  for (const label of ['Select', 'Pan', 'Measure', 'Draw', 'View controls', 'Capture']) {
-    assert.equal(labels.includes(label), true, label);
-  }
-  assert.equal(elements(toolbar.tree).some(node => node.type?.name === 'SelectionFilterMenu'), true);
-  toolbar.unmount(); outer.unmount();
+test('fullscreen has no floating controls, even with an active tool', () => {
+  const toolbar = render(FloatingToolBar, { selectedEntry: { file: 'part.step' }, previewMode: true, drawToolActive: true });
+  assert.equal(toolbar.tree, null);
+  toolbar.unmount();
 });

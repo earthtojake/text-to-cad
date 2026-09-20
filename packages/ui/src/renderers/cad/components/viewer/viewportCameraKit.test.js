@@ -144,11 +144,12 @@ test("reset and fit frame the zero pose, never the pose on screen", () => {
   );
 });
 
-test("a runtime with no zero pose yet falls back to the live bounds, then to the caller's", () => {
+test("before adoption only authored fallback bounds can define the zoom ruler", () => {
   const fallback = { min: [1, 1, 1], max: [2, 2, 2] };
-  assert.deepEqual(runtimeFramingBounds({ modelBounds: POSED }, fallback), POSED);
+  assert.deepEqual(runtimeFramingBounds({ modelBounds: POSED }, fallback), fallback);
   assert.deepEqual(runtimeFramingBounds({}, fallback), fallback);
   assert.equal(runtimeFramingBounds(null), null);
+  assert.equal(runtimeFramingBounds({ modelBounds: POSED }), null, "never use live bounds to define the original zoom");
 });
 
 // A model is framed once per viewing mode, on its zero pose. These are the only

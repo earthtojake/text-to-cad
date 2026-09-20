@@ -51,10 +51,11 @@ function App() {
   const [otherState, setOtherState] = useState<FileViewerState>({ panel: '', panelWidth: 300 });
   const [second, setSecond] = useState(false);
   const [mounted, setMounted] = useState(true);
-  Object.assign(window, { cadHarness: { a, b, state, otherState, preferences, captures, capture: a.capture, second: setSecond, mounted: setMounted } });
+  const [fullscreen, setFullscreen] = useState(false);
+  Object.assign(window, { cadHarness: { a, b, state, otherState, preferences, captures, capture: a.capture, second: setSecond, mounted: setMounted, fullscreen: setFullscreen } });
   return <div style={{ display: 'flex', width: '1200px', height: '720px' }}>
     <section data-testid="one" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-      {mounted && <FileViewer file="part.stl" host={a.host} renderers={a.renderers} state={state} onStateChange={setState} />}
+      {mounted && <FileViewer fullscreen={fullscreen} onExitFullscreen={() => setFullscreen(false)} file="part.stl" host={a.host} renderers={a.renderers} state={state} onStateChange={setState} />}
     </section>
     {second && <section data-testid="two" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <FileViewer file="part.stl" host={b.host} renderers={b.renderers} state={otherState} onStateChange={setOtherState} />

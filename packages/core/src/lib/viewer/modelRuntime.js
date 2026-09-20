@@ -120,6 +120,14 @@ export function syncRuntimeStepClipPlane(runtime, clipSettings) {
     runtime.modelBounds,
     runtime.modelGroup?.position
   );
+  // No section now and none last time: every material already has no planes (a new
+  // material is born that way), so there is nothing to reconcile. A posed frame asks
+  // for this sync each time it draws its edges, and walking every record's materials
+  // to clear what was never set was a fixed cost of every animation frame.
+  if (!clipPlane && runtime.stepClipPlaneCleared === true) {
+    return;
+  }
+  runtime.stepClipPlaneCleared = !clipPlane;
   const clipPlanes = clipPlane ? [clipPlane] : [];
   runtime.activeClipPlane = clipPlane;
   runtime.activeClipPlanes = clipPlanes;
@@ -136,7 +144,6 @@ export function syncRuntimeStepClipPlane(runtime, clipSettings) {
   syncObjectClipPlanes(runtime.facePickGroup, clipPlanes);
   syncObjectClipPlanes(runtime.edgePickGroup, clipPlanes);
   syncObjectClipPlanes(runtime.vertexPickGroup, clipPlanes);
-  syncObjectClipPlanes(runtime.surfaceLineGroup, clipPlanes);
   syncObjectClipPlanes(runtime.topologyDisplayEdgeLine, clipPlanes);
   syncSectionCaps(runtime, clipPlane);
   // Clipping changes draw materials, not occurrence membership, transforms or

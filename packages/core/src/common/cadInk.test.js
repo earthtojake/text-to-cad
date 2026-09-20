@@ -26,16 +26,26 @@ test("fixed CAD classes retain distinct restrained device-pixel ink at every pix
   segments.texture.dispose();
 });
 
-test("model ink is fixed while grid ink adapts to appearance", () => {
+test("edge color is configurable while widths stay fixed and grid adapts to appearance", () => {
   const edges = resolveCadEdgeSettings({ color: "#ff0000", thickness: 6 });
   assert.equal(edges.thickness, 1);
-  assert.equal(edges.color, "#253443");
-  assert.equal(new Set(["feature", "tangent", "seam"].map((id) => edges.classes[id].color)).size, 3);
+  assert.equal(edges.color, "#ff0000");
+  assert.equal(new Set(["feature", "tangent", "seam"].map((id) => edges.classes[id].color)).size, 1);
+  assert.equal(new Set(Object.values(resolveCadEdgeSettings().classes).map(style => style.color)).size, 3);
   for (const colorMode of ["light", "dark"]) {
-    const grid = resolveCadGridSettings({ enabled: true, density: 4, opacity: 1, centerColor: "#ff0000" }, { colorMode });
+    const grid = resolveCadGridSettings({ enabled: true, density: 4, centerColor: "#ff0000" }, { colorMode });
     assert.equal(grid.enabled, true);
     assert.equal(grid.density, 1);
     assert.equal(grid.opacity, 0.16);
     assert.notEqual(grid.centerColor, "#ff0000");
+  }
+});
+
+
+test("explicit grid appearance maps identically to cell and origin lines", () => {
+  for (const colorMode of ["light", "dark"]) {
+    assert.deepEqual(resolveCadGridSettings({ enabled: true, color: "#123456", opacity: 0 }, { colorMode }), {
+      enabled: true, centerColor: "#123456", cellColor: "#123456", opacity: 0, density: 1
+    });
   }
 });

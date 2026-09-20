@@ -1,3 +1,5 @@
+import { createStudioEnvironmentCache } from "../render/studioEnvironmentCache.js";
+import { createViewUpdateGate } from "../render/viewUpdateGate.js";
 import { createInspectEnvironmentResource, hasAuthoredMaterials, INSPECT_ENVIRONMENT_ID } from "@hardcore/core/common/inspectEnvironment.js";
 "use client";
 
@@ -7,7 +9,6 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffec
 import * as THREE from "three";
 import { LoaderCircle, Minus, Plus, RotateCcw } from "lucide-react";
 import { viewerTransitionBackdrop } from "./viewer/framePresentation.js";
-import { parseCadRefToken } from "@hardcore/core/lib/cadRefs.js";
 import {
   dxfBendGuideSegments,
   dxfFlatPatternExtents,
@@ -42,22 +43,6 @@ import {
   setGlbAnimationTime
 } from "@hardcore/core/lib/render/glbAnimationRuntime.js";
 import { normalizeStepClipSettings } from "@hardcore/core/lib/viewer/clipPlane.js";
-import {
-  buildDrawingPoint,
-  distanceToStrokeInPixels,
-  drawingToolNeedsTwoPoints,
-  isSurfaceLineStroke,
-  strokeLengthInPixels
-} from "@hardcore/core/lib/viewer/drawingGeometry.js";
-import {
-  buildFillStrokeAtPoint,
-  DRAWING_ERASE_THRESHOLD_PX,
-  DRAWING_MIN_POINT_DISTANCE_PX,
-  DRAWING_MIN_STROKE_LENGTH_PX,
-  maxDrawingStrokeOrdinal,
-  redrawDrawingCanvas,
-  SURFACE_LINE_COLOR
-} from "@hardcore/core/lib/viewer/drawingCanvas.js";
 import {
   shouldBuildDerivedDisplayEdges,
   shouldShowRecordDisplayEdges
@@ -154,11 +139,6 @@ import {
 import { sampleLodCamera, resampleLodAfterViewportResize } from "../render/lodCameraSample.js";
 import { sceneBuildStructuralKey } from "../render/sceneBuildSettings.js";
 import {
-  buildSurfaceLinePositions,
-  projectPointToSurfaceUv,
-  SURFACE_LINE_UNSUPPORTED_TYPES
-} from "@hardcore/core/lib/viewer/surfaceLineGeometry.js";
-import {
   buildCompositeScreenshotBlob,
   resolveElementBackgroundColor
 } from "@hardcore/core/lib/viewer/screenshotCapture.js";
@@ -174,14 +154,17 @@ import {
   REFERENCE_SELECTED_COLOR
 } from "@hardcore/core/lib/viewer/referenceGeometry.js";
 import { buildRuntimeInitializationAlert } from "@hardcore/core/lib/viewer/webglSupport.js";
-import { DRAWING_TOOL } from "../workbench/constants.js";
 import { hasCapability } from "@hardcore/core/lib/renderCapabilities.js";
 import {
   THEME_FLOOR_MODES
 } from "@hardcore/core/lib/themeSettings.js";
 import ViewPlaneControl from "./viewer/ViewPlaneControl.js";
-import { interactiveCameraFrameForBounds, interactiveViewportFitScale } from "./viewer/viewportCameraFit.js";
-import { useViewerDrawingOverlay } from "./viewer/hooks/useViewerDrawingOverlay.js";
+import DrawingOverlay from "./viewer/DrawingOverlay.jsx";
+import { usePlaybackFrames } from "./viewer/hooks/usePlaybackFrames.js";
+import { useAnimationClockStore } from "../workbench/animationClockStore.js";
+import { useEmbeddedGlbAnimationClockStore } from "../workbench/embeddedGlbAnimationClockStore.js";
+import { applyDrawingViewLock, captureDrawingViewLock } from "./viewer/drawingViewLock.js";
+import { originalModelCameraFrame, interactiveCameraFrameForBounds, interactiveViewportFitScale } from "./viewer/viewportCameraFit.js";
 import { useViewerMeasureOverlay } from "./viewer/hooks/useViewerMeasureOverlay.js";
 import { useViewerPicking } from "./viewer/hooks/useViewerPicking.js";
 import { useViewerRuntime } from "./viewer/hooks/useViewerRuntime.js";
@@ -220,7 +203,7 @@ import {
   viewportFitScale,
   WORLD_UP
 } from "./viewer/viewportCameraKit.js";
-import { normalizeViewerRenderState } from "./viewer/renderState.js";
+import { createViewerRenderStateResolver } from "./viewer/renderState.js";
 import { buildModel } from "@hardcore/core/common/cadScene.js";
 import {
   resolveTopologyDisplayEdgeRuntimes,
@@ -450,50 +433,19 @@ function boundsModelRadius(THREE, bounds, sceneScaleMode) {
   );
 }
 
-// 100% means "framed to the model at rest". The camera is always fitted to the
-// CURRENT pose, so when a parameter sidecar opens a model mid-animation -- an
-// extended lift, an exploded assembly -- fitting that pose would define the
-// enlarged framing as 100%. Framing distance and orthographic half-height are
-// both proportional to model radius, so scaling the captured value by
-// base/fitted radius recovers the at-rest baseline. A model whose animation
-// opens 1.5x larger now reads ~67%, which is what it is.
-//
-// zoomFitModelRadius is the radius of the bounds the camera was last fitted to;
-// runtime.modelRadius is only a fallback because it tracks whichever bounds were
-// applied last, which is not always what the camera framed.
-function runtimeZoomBaselineScale(runtime) {
-  const baseRadius = Number(runtime?.zoomBaseModelRadius);
-  const fittedRadius = Number(runtime?.zoomFitModelRadius) > 1e-6
-    ? Number(runtime.zoomFitModelRadius)
-    : Number(runtime?.modelRadius);
-  if (
-    !Number.isFinite(baseRadius) || baseRadius <= 1e-6 ||
-    !Number.isFinite(fittedRadius) || fittedRadius <= 1e-6
-  ) {
-    return 1;
-  }
-  return baseRadius / fittedRadius;
-}
-
+// Recompute from authored geometry, never from the camera being reset. Both
+// projections have their own baseline, independent of pose and scene effects.
 function resetRuntimeZoomBaseline(runtime) {
-  const scale = runtimeZoomBaselineScale(runtime);
-  // The baseline is only ever reset right after the camera has been fitted, so
-  // this is also the moment the framing matches the live viewport.
-  captureRuntimeViewportFitScale(runtime);
-  if (runtime?.camera?.isOrthographicCamera) {
-    const halfHeight = readOrthographicHalfHeight(runtime);
-    if (halfHeight) {
-      runtime.zoomBaseHalfHeight = halfHeight * scale;
-      return runtime.zoomBaseHalfHeight;
-    }
-    return halfHeight;
-  }
-  const distance = readCameraTargetDistance(runtime);
-  if (distance) {
-    runtime.zoomBaseDistance = distance * scale;
-    return runtime.zoomBaseDistance;
-  }
-  return distance;
+  const bounds = runtimeFramingBounds(runtime);
+  if (!runtime?.camera || !runtime?.THREE || !bounds) return null;
+  const frame = originalModelCameraFrame(runtime.THREE, {
+    camera: runtime.camera, bounds, frameAspect: getViewportMetrics(runtime).aspect,
+    minRadius: getSceneScaleSettings(runtime.sceneScaleMode).minModelRadius,
+  });
+  if (!frame) return null;
+  runtime.zoomBaseHalfHeight = frame.halfHeight;
+  runtime.zoomBaseDistance = frame.distance;
+  return runtime.camera.isOrthographicCamera ? frame.halfHeight : frame.distance;
 }
 
 function readRuntimeZoomPercent(runtime) {
@@ -501,6 +453,7 @@ function readRuntimeZoomPercent(runtime) {
   if (!camera) {
     return 100;
   }
+  resetRuntimeZoomBaseline(runtime);
   const cameraZoom = Number.isFinite(Number(camera.zoom)) && Number(camera.zoom) > 0
     ? Number(camera.zoom)
     : 1;
@@ -530,6 +483,7 @@ function setRuntimeZoomPercent(runtime, percent) {
   if (!runtime?.THREE || !runtime?.camera || !runtime?.controls?.target) {
     return false;
   }
+  resetRuntimeZoomBaseline(runtime);
   const nextZoom = normalizeZoomPercent(percent) / 100;
   const camera = runtime.camera;
   cancelCameraTransition(runtime, { scheduleIdle: false });
@@ -768,20 +722,6 @@ function captureRuntimeViewportFitScale(runtime, frameMetrics = null) {
   runtime.viewportFitScale = runtimeViewportFitScale(runtime, metrics);
 }
 
-// Only the active projection's baseline moves. An orthographic reframe changes
-// the half-height and leaves the camera position -- and with it the perspective
-// baseline -- untouched, and a perspective reframe is the mirror of that.
-function scaleRuntimeZoomBaseline(runtime, ratio) {
-  if (!runtime || !Number.isFinite(ratio) || ratio <= 0) {
-    return;
-  }
-  const baselineKey = runtime.camera?.isOrthographicCamera ? "zoomBaseHalfHeight" : "zoomBaseDistance";
-  const baseline = Number(runtime[baselineKey]);
-  if (Number.isFinite(baseline) && baseline > 1e-6) {
-    runtime[baselineKey] = baseline * ratio;
-  }
-}
-
 // A viewport change -- the window resizing, or a side sheet opening, closing or
 // being dragged wider and resizing the canvas beside it -- leaves the camera
 // framed for the viewport it no longer has. The vertical field of view is fixed and the orthographic half-height is
@@ -789,10 +729,8 @@ function scaleRuntimeZoomBaseline(runtime, ratio) {
 // model instead of shrinking it. Rescale the camera by the change in fit scale so
 // the model keeps its share of the framed area.
 //
-// The zoom baseline rides along by the same ratio. Without that, the percent
-// readout keeps describing the old viewport: it still says 100% while the framing
-// no longer fits, and the next reset re-fits for real and visibly moves the camera
-// with the readout unchanged at 100%.
+// The zoom ruler is recalculated from the authored box in the new viewport.
+// It cannot inherit a selection fit or the bounds of a moving assembly.
 function syncRuntimeViewportFraming(runtime, frameMetrics = null) {
   if (!runtime?.camera) {
     return false;
@@ -847,7 +785,7 @@ function syncRuntimeViewportFraming(runtime, frameMetrics = null) {
     camera.position.copy(target.clone().add(camera.position.clone().sub(target).multiplyScalar(appliedRatio)));
     camera.lookAt(target);
   }
-  scaleRuntimeZoomBaseline(runtime, appliedRatio);
+  resetRuntimeZoomBaseline(runtime);
   // Bare controls.update() ticks OrbitControls' auto-rotate branch, so a resize
   // during a preview orbit would nudge the camera an extra step.
   if (runtime.controls) {
@@ -1203,6 +1141,9 @@ function zoomRuntimeToBounds(runtime, bounds, sceneScaleMode, {
   // Render adjusts its clipping range to the current pose every frame. A fit
   // must use the model's base range, or resetting after zooming out would fit
   // behind the old distant near plane instead of returning to the default view.
+  // A physical lens changes vertical FOV with aspect. Fit using the destination
+  // viewport before installing the pose, not the outgoing inspector's aspect.
+  runtime.syncCameraViewport?.(runtime.camera, frameMetrics.width, frameMetrics.height);
   const fitNearClip = Math.max(boundsModelRadius(runtime.THREE, normalizedBounds, sceneScaleMode) / 1200, 0.01);
   const frame = interactiveCameraFrameForBounds(runtime.THREE, {
     camera: runtime.camera,
@@ -1224,9 +1165,6 @@ function zoomRuntimeToBounds(runtime, bounds, sceneScaleMode, {
     nearClip: fitNearClip,
   };
   captureRuntimeViewportFitScale(runtime, frameMetrics);
-  if (resetZoomBaseline) {
-    runtime.zoomFitModelRadius = boundsModelRadius(runtime.THREE, normalizedBounds, sceneScaleMode);
-  }
   const snapshot = {
     position: frame.position.toArray(),
     target: frame.target.toArray(),
@@ -1584,10 +1522,6 @@ function clearOverlayGroup(runtime, group) {
   }
 }
 
-function parseFaceToken(copyText) {
-  return String(parseCadRefToken(copyText)?.token || "").trim();
-}
-
 function updateGridHelper(
   runtime,
   viewerTheme,
@@ -1648,6 +1582,11 @@ const CadViewer = forwardRef(function CadViewer({
   quality = null,
   floorModeOverride = "",
   previewMode = false,
+  // Watching, not inspecting: the Animate tool, or fullscreen. Nothing under the pointer is
+  // pickable for the whole mode, and leaving it returns the model to rest, so every piece
+  // of pick-only state can stand still at rest pose while the mode lasts.
+  animateMode = false,
+  previewOrbitSpeed = 1,
   showViewPlane = true,
   viewPlaneOffsetRight = 16,
   viewPlaneOffsetBottom = 16,
@@ -1656,6 +1595,7 @@ const CadViewer = forwardRef(function CadViewer({
   isLoading = false,
   presentationKey = "",
   onPresentationChange = null,
+  viewUpdate = null,
   loadingPresentation = null,
   pickMode = VIEWER_PICK_MODE.AUTO,
   panToolActive = false,
@@ -1677,13 +1617,10 @@ const CadViewer = forwardRef(function CadViewer({
   pickableFaces = [],
   pickableEdges = [],
   pickableVertices = [],
-  surfaceLineFaceId = "",
   focusedPartId = "",
   displaySettings = null,
   drawingEnabled = false,
-  drawingTool = DRAWING_TOOL.FREEHAND,
-  drawingStrokes = [],
-  onDrawingStrokesChange,
+  drawing = null,
   onPerspectiveChange,
   onLodCameraChange,
   onMeshSourceAdoption,
@@ -1722,15 +1659,11 @@ const CadViewer = forwardRef(function CadViewer({
   const defaultGridRadius = defaultSceneGridRadius(normalizedSceneScaleMode);
   const interactionHostRef = useRef(null);
   const mountRef = useRef(null);
-  const drawingCanvasRef = useRef(null);
   const measureCanvasRef = useRef(null);
   // The snap indicator needs the live hover point every frame; the workspace
   // only needs to know which entity is under the cursor. Keeping the point in a
   // ref lets the overlay track smoothly without re-rendering on every move.
   const measureHoverRef = useRef(null);
-  const drawingDraftRef = useRef(null);
-  const drawingStrokesRef = useRef(Array.isArray(drawingStrokes) ? drawingStrokes : []);
-  const drawingChangeRef = useRef(onDrawingStrokesChange);
   const perspectiveChangeRef = useRef(onPerspectiveChange);
   const lodCameraChangeRef = useRef(onLodCameraChange);
   lodCameraChangeRef.current = onLodCameraChange;
@@ -1749,8 +1682,16 @@ const CadViewer = forwardRef(function CadViewer({
   const lastEmittedPerspectiveRef = useRef(null);
   const lastProjectionRef = useRef(normalizedProjection);
   const suppressPerspectiveEventsRef = useRef(0);
-  const drawingIdRef = useRef(0);
   const runtimeRef = useRef(null);
+  const viewUpdateBindingRef = useRef(null);
+  viewUpdateBindingRef.current = viewUpdate?.binding;
+  useLayoutEffect(() => {
+    const runtime = runtimeRef.current;
+    if (runtime && viewUpdate?.revision) {
+      runtime.viewUpdateGate ??= createViewUpdateGate(runtime);
+      runtime.viewUpdateGate.hold();
+    }
+  }, [viewUpdate?.revision]);
   const explodedViewAnimationRef = useRef({
     rafId: 0,
     progress: 0,
@@ -1784,7 +1725,7 @@ const CadViewer = forwardRef(function CadViewer({
   const [error, setError] = useState("");
   const [viewerReadyTick, setViewerReadyTick] = useState(0);
   const [runtimeResetToken, setRuntimeResetToken] = useState(0);
-  const presentationEpoch = useMemo(() => ({}), [renderMode, runtimeResetToken]);
+  const presentationEpoch = useMemo(() => ({}), [runtimeResetToken]);
   const [presentedEpoch, setPresentedEpoch] = useState(null);
   const [presentedKey, setPresentedKey] = useState("");
   const resolvedPresentationKey = String(presentationKey || modelKey || "");
@@ -1794,8 +1735,7 @@ const CadViewer = forwardRef(function CadViewer({
     setPresentedKey(String(key || ""));
   }, [presentationEpoch]);
   useLayoutEffect(() => {
-    // Hide the old canvas in the same commit as the mode control changes,
-    // before asynchronous runtime teardown/setup can expose an empty frame.
+    // Cover only an actual context recovery. View edits reuse the live canvas.
     const canvas = runtimeRef.current?.renderer?.domElement;
     if (canvas) canvas.style.visibility = "hidden";
   }, [presentationEpoch]);
@@ -1828,6 +1768,10 @@ const CadViewer = forwardRef(function CadViewer({
   const activeViewPlaneFaceRef = useRef("");
   const defaultPerspectiveResettingRef = useRef(false);
   const previewModeRef = useRef(previewMode);
+  // The presentation camera never becomes the file's persisted camera. Retain
+  // its original framing as well as its pose, so fullscreen resize/orbit cannot
+  // change the zoom ruler or the regular viewport's resize behavior.
+  const fullscreenCameraRef = useRef(null);
   const perspectivePropRef = useRef(perspective);
   const modelKeyRef = useRef(modelKey);
   const sceneScaleModeRef = useRef(normalizedSceneScaleMode);
@@ -1838,19 +1782,23 @@ const CadViewer = forwardRef(function CadViewer({
     ? transformedDisplayEdgeRuntime.runtime
     : displayEdgeRuntime;
   const viewerTheme = theme || BASE_VIEWER_THEME;
-  const normalizedViewerRenderState = useMemo(() => normalizeViewerRenderState({
+  const resolveViewerRenderState = useMemo(() => createViewerRenderStateResolver(), []);
+  const normalizedViewerRenderState = useMemo(() => resolveViewerRenderState({
     themeSettings,
     displaySettings
-  }), [themeSettings, displaySettings]);
+  }), [resolveViewerRenderState, themeSettings, displaySettings]);
   const normalizedThemeSettings = normalizedViewerRenderState.themeSettings;
   const normalizedDisplaySettings = normalizedViewerRenderState.displaySettings;
   const normalizedDisplayMode = normalizedViewerRenderState.displayMode;
+  const surfaceSettings = normalizedDisplaySettings.surfaces;
+  const explicitViewPolicy = Boolean(surfaceSettings);
+  const photographicLighting = renderMode && renderConfiguration?.lighting?.enabled !== false;
   const normalizedMaterialSettings = useMemo(
     () => resolveDisplayMaterialSettings(
-      renderMode ? PHOTOGRAPHIC_STUDIO_MATERIAL_SETTINGS : normalizedThemeSettings.materials,
+      photographicLighting ? PHOTOGRAPHIC_STUDIO_MATERIAL_SETTINGS : normalizedThemeSettings.materials,
       normalizedDisplaySettings.partColor
     ),
-    [normalizedDisplaySettings.partColor, normalizedThemeSettings.materials, renderMode]
+    [normalizedDisplaySettings.partColor, normalizedThemeSettings.materials, photographicLighting]
   );
   const materialPartPolicyKey = `${
     normalizedMaterialSettings.cycleColors === true &&
@@ -1881,8 +1829,8 @@ const CadViewer = forwardRef(function CadViewer({
   const shouldUseCadEdgeSource = hasCapability(renderFormat, "topology");
   const displayEdgeSettings = normalizedViewerRenderState.edgeSettings;
   const wireframeMode = displayModeIsWireframe(normalizedDisplayMode);
-  const displayModeForceEdges = displayModeForcesEdges(normalizedDisplayMode);
-  const displayModeThroughEdges = displayModeShowsThroughEdges(normalizedDisplayMode);
+  const displayModeForceEdges = !explicitViewPolicy && displayModeForcesEdges(normalizedDisplayMode);
+  const displayModeThroughEdges = !explicitViewPolicy && displayModeShowsThroughEdges(normalizedDisplayMode);
   const wireframeEdgeColor = displayEdgeSettings.color;
   const wireframeEdgeOpacity = useMemo(() => {
     const baseOpacity = Number.isFinite(Number(displayEdgeSettings?.opacity))
@@ -2047,7 +1995,7 @@ const CadViewer = forwardRef(function CadViewer({
     );
   }, [guideFloorSettings]);
   const applyActiveSceneBackground = applySceneBackground;
-  const edgesVisible = showEdges && shouldUseCadEdgeSource && displayModeShowsEdges(normalizedDisplayMode);
+  const edgesVisible = showEdges && (explicitViewPolicy ? displayEdgeSettings.enabled : shouldUseCadEdgeSource && displayModeShowsEdges(normalizedDisplayMode));
   const topologyDisplayEdgesVisible = shouldRenderTopologyDisplayEdges({
     edgesVisible,
     wireframeMode,
@@ -2125,7 +2073,6 @@ const CadViewer = forwardRef(function CadViewer({
     viewerTheme,
     visualEdgeSettings
   ]);
-  const activeSurfaceLineFaceId = String(surfaceLineFaceId || "").trim();
   const visibleReferenceFilter = useCallback((reference) => {
     const partId = String(reference?.partId || "").trim();
     if (partId && hiddenPartIdSet.has(partId)) {
@@ -2168,31 +2115,6 @@ const CadViewer = forwardRef(function CadViewer({
     }
     return map;
   }, [activeSelectorRuntime, filteredPickableEdges, filteredPickableFaces, filteredPickableVertices, visibleReferenceFilter]);
-  const pickableFaceReferenceIds = useMemo(
-    () => new Set(filteredPickableFaces.map((reference) => String(reference?.id || "").trim()).filter(Boolean)),
-    [filteredPickableFaces]
-  );
-  const syncDrawingCanvasSize = (runtime = runtimeRef.current) => {
-    const canvas = drawingCanvasRef.current;
-    if (!canvas) {
-      return null;
-    }
-    const rendererCanvas = runtime?.renderer?.domElement;
-    const width = rendererCanvas?.width || mountRef.current?.clientWidth || 1;
-    const height = rendererCanvas?.height || mountRef.current?.clientHeight || 1;
-    if (canvas.width !== width || canvas.height !== height) {
-      canvas.width = width;
-      canvas.height = height;
-    }
-    return canvas;
-  };
-  const renderDrawingOverlay = () => {
-    const canvas = syncDrawingCanvasSize();
-    if (!canvas) {
-      return;
-    }
-    redrawDrawingCanvas(canvas, drawingStrokesRef.current, drawingDraftRef.current);
-  };
   perspectivePropRef.current = perspective;
   modelKeyRef.current = modelKey;
   sceneScaleModeRef.current = normalizedSceneScaleMode;
@@ -2211,11 +2133,11 @@ const CadViewer = forwardRef(function CadViewer({
     if (!controls?.mouseButtons || !MOUSE) {
       return undefined;
     }
-    controls.mouseButtons.LEFT = panToolActive ? MOUSE.PAN : MOUSE.ROTATE;
+    controls.mouseButtons.LEFT = panToolActive && !previewMode ? MOUSE.PAN : MOUSE.ROTATE;
     if (!canvas) {
       return undefined;
     }
-    if (!panToolActive) {
+    if (!panToolActive || previewMode) {
       canvas.style.cursor = "";
       return () => {
         if (controls.mouseButtons) {
@@ -2239,7 +2161,7 @@ const CadViewer = forwardRef(function CadViewer({
         controls.mouseButtons.LEFT = MOUSE.ROTATE;
       }
     };
-  }, [panToolActive, viewerReadyTick]);
+  }, [panToolActive, previewMode, viewerReadyTick]);
 
   const runWithoutPerspectiveEvents = (callback) => {
     suppressPerspectiveEventsRef.current += 1;
@@ -2279,6 +2201,11 @@ const CadViewer = forwardRef(function CadViewer({
       return;
     }
     syncCameraZoomPercent(runtime);
+    if (previewModeRef.current || fullscreenCameraRef.current) {
+      // LOD still follows the presentation camera, but session persistence does not.
+      lodCameraChangeRef.current?.();
+      return;
+    }
     if (suppressPerspectiveEventsRef.current > 0) {
       lastEmittedPerspectiveRef.current = nextPerspective;
       return;
@@ -2315,6 +2242,7 @@ const CadViewer = forwardRef(function CadViewer({
     syncDefaultPerspectiveState(runtime);
   };
   const applyInitialPerspective = useCallback((runtime = runtimeRef.current) => {
+    if (previewModeRef.current) return false;
     const nextPerspective = resolvePerspectiveSnapshot(
       perspectiveRef ? perspectiveRef.current : undefined,
       perspectivePropRef.current
@@ -2331,6 +2259,60 @@ const CadViewer = forwardRef(function CadViewer({
     }
     return runWithoutPerspectiveEvents(() => applyPerspectiveSnapshot(runtime, nextPerspective, { scheduleIdle: false }));
   }, [perspectiveRef]);
+  const syncFullscreenCamera = (runtime = runtimeRef.current) => {
+    if (!runtimeModelKeyMatches(runtime, modelKeyRef.current) || !runtimeFramingBounds(runtime)) return;
+    let saved = fullscreenCameraRef.current;
+    if (saved && saved.modelKey !== modelKeyRef.current) {
+      fullscreenCameraRef.current = null;
+      saved = null;
+    }
+    const entering = previewModeRef.current;
+    if (entering ? saved?.runtime === runtime : !saved) return;
+    const controls = runtime.controls;
+    // Drain pending OrbitControls damping before either snapshot is installed;
+    // otherwise the next frame applies the outgoing camera's remaining drag.
+    runWithoutPerspectiveEvents(() => {
+      cancelCameraTransition(runtime, { scheduleIdle: false });
+      clearKeyboardOrbitState(runtime.keyboardOrbitState);
+      controls.autoRotate = false;
+      controls.enableDamping = false;
+      if (entering && !saved) {
+        saved = { modelKey: modelKeyRef.current, runtime,
+          camera: readPerspectiveSnapshot(runtime),
+          interactiveFraming: runtime.interactiveFraming,
+          viewportFitScale: runtime.viewportFitScale,
+          userMovedCamera: runtime.userMovedCamera };
+        fullscreenCameraRef.current = saved;
+      }
+      controls.update();
+      if (entering) {
+        saved.runtime = runtime;
+        runtime.userMovedCamera = false;
+        zoomRuntimeToBounds(runtime, runtimeFramingBounds(runtime), sceneScaleModeRef.current, {
+          animate: false, modelOffset: modelTransformRef.current.offset,
+          viewDirection: DEFAULT_VIEW_DIRECTION, viewUp: WORLD_UP,
+        });
+      } else {
+        applyPerspectiveSnapshot(runtime, saved.camera, { scheduleIdle: false });
+        runtime.interactiveFraming = saved.interactiveFraming;
+        runtime.viewportFitScale = saved.viewportFitScale;
+        runtime.userMovedCamera = saved.userMovedCamera;
+        syncRuntimeViewportFraming(runtime);
+        fullscreenCameraRef.current = null;
+      }
+      controls.enableDamping = true;
+      controls.autoRotate = entering && previewOrbitSpeed > 0;
+      captureRuntimeViewportFitScale(runtime);
+      syncCameraZoomPercent(runtime);
+      syncViewPlaneOrientation(runtime);
+      runtime.requestRender?.();
+    });
+  };
+  useLayoutEffect(() => {
+    previewModeRef.current = previewMode;
+    syncFullscreenCamera();
+    // Entry/exit must precede ResizeObserver and the next presented frame.
+  }, [previewMode, modelKey, viewerReadyTick]);
   const handleViewportResize = useCallback(() => {
     const runtime = runtimeRef.current;
     resampleLodAfterViewportResize(runtime, {
@@ -2388,106 +2370,9 @@ const CadViewer = forwardRef(function CadViewer({
     syncCameraZoomPercent,
     syncViewPlaneOrientation
   ]);
-  const buildSurfaceLineFaceAnchor = (event, canvas, lockedReferenceId = "", startUv = null) => {
-    const runtime = runtimeRef.current;
-    if (!runtime?.raycaster || !runtime?.camera || !activeSelectorRuntime?.faceReferenceByRowIndex) {
-      return null;
-    }
-    const activeLockedReferenceId = String(lockedReferenceId || activeSurfaceLineFaceId).trim();
-
-    const rect = canvas.getBoundingClientRect();
-    const width = rect.width || 1;
-    const height = rect.height || 1;
-    runtime.pointer.x = ((event.clientX - rect.left) / width) * 2 - 1;
-    runtime.pointer.y = -((event.clientY - rect.top) / height) * 2 + 1;
-    runtime.raycaster.setFromCamera(runtime.pointer, runtime.camera);
-
-    const modelMeshes = (runtime.displayRecords || [])
-      .map((record) => record?.mesh)
-      .filter((mesh) => mesh?.visible && mesh.userData?.faceIds instanceof Uint32Array);
-    const modelIntersections = modelMeshes.length ? runtime.raycaster.intersectObjects(modelMeshes, false) : [];
-    const proxyIntersections = runtime.facePickMesh ? runtime.raycaster.intersectObject(runtime.facePickMesh, false) : [];
-    const intersections = modelIntersections.length
-      ? modelIntersections.map((intersection) => ({ intersection, source: "model" }))
-      : proxyIntersections.map((intersection) => ({ intersection, source: "proxy" }));
-    for (const { intersection, source } of intersections) {
-      const triangleIndex = Number(intersection?.faceIndex);
-      const rowIndex = Number.isInteger(triangleIndex) ? Number(intersection?.object?.userData?.faceIds?.[triangleIndex]) : NaN;
-      if (!Number.isInteger(rowIndex)) {
-        continue;
-      }
-      const reference = activeSelectorRuntime.faceReferenceByRowIndex.get(rowIndex) || null;
-      const referenceId = String(reference?.id || "").trim();
-      if (!referenceId) {
-        continue;
-      }
-      if (activeLockedReferenceId) {
-        if (referenceId !== activeLockedReferenceId) {
-          continue;
-        }
-      } else if (pickableFaceReferenceIds.size && !pickableFaceReferenceIds.has(referenceId)) {
-        continue;
-      }
-
-      const surface = reference?.pickData?.surface || {};
-      if (SURFACE_LINE_UNSUPPORTED_TYPES.has(String(surface.type || "").trim())) {
-        return null;
-      }
-      const localPoint = source === "model" && runtime.modelGroup
-        ? runtime.modelGroup.worldToLocal(intersection.point.clone())
-        : intersection.object.worldToLocal(intersection.point.clone());
-      const point = [localPoint.x, localPoint.y, localPoint.z];
-      const angleCenter = surface.type === "CYLINDRICAL_SURFACE" && Array.isArray(startUv) ? (startUv[0] / Math.max(Number(surface.radius) || 1, 1)) : null;
-      const uv = projectPointToSurfaceUv(surface, point, angleCenter);
-      if (!uv) {
-        return null;
-      }
-      return {
-        screenPoint: buildDrawingPoint(event, canvas),
-        surfaceLine: {
-          referenceId,
-          selector: String(reference?.displaySelector || "").trim(),
-          normalizedSelector: String(reference?.normalizedSelector || "").trim(),
-          faceToken: parseFaceToken(reference?.copyText),
-          partId: String(reference?.partId || "").trim(),
-          surfaceType: String(surface.type || "").trim(),
-          startPoint: point,
-          endPoint: point,
-          startUv: uv,
-          endUv: uv
-        }
-      };
-    }
-    return null;
-  };
-  const updateSurfaceLineFaceAnchor = (event, canvas, draftSurfaceLine) => {
-    const lockedReferenceId = String(draftSurfaceLine?.referenceId || "").trim();
-    if (!lockedReferenceId) {
-      return null;
-    }
-    const nextAnchor = buildSurfaceLineFaceAnchor(event, canvas, lockedReferenceId, draftSurfaceLine?.startUv);
-    if (!nextAnchor) {
-      return null;
-    }
-    return {
-      screenPoint: nextAnchor.screenPoint,
-      surfaceLine: {
-        ...draftSurfaceLine,
-        endPoint: nextAnchor.surfaceLine.endPoint,
-        endUv: nextAnchor.surfaceLine.endUv
-      }
-    };
-  };
-
-
-
-
-
-
-
-
-
-  const activateViewPlaneFace = (faceId) => {
+  // Stable, and built only from refs and setters: the view cube is memoized, so a viewer
+  // render that changed nothing of the cube's (every animation frame) does not redraw it.
+  const activateViewPlaneFace = useCallback((faceId) => {
     const runtime = runtimeRef.current;
     const face = VIEW_PLANE_FACE_BY_ID[faceId];
     if (!runtime || !face) {
@@ -2501,8 +2386,8 @@ const CadViewer = forwardRef(function CadViewer({
       setDefaultPerspectiveDetached(true);
     }
     return transitioned;
-  };
-  const activateDefaultViewPlane = () => {
+  }, []);
+  const activateDefaultViewPlane = useCallback(() => {
     const runtime = runtimeRef.current;
     if (!runtime) {
       return false;
@@ -2515,7 +2400,73 @@ const CadViewer = forwardRef(function CadViewer({
       setDefaultPerspectiveDetached(false);
     }
     return transitioned;
-  };
+  }, []);
+
+  // DRAW MODE: the view direction is locked and the drawing editor owns pan and
+  // zoom; the camera follows it so ink and model stay one picture. Orbit input
+  // never reaches the controls (the editor covers the viewport), and everything
+  // else that could turn or reframe the camera is switched off for the duration.
+  const drawingOverlayActive = drawingEnabled && !previewMode && hasViewportContent;
+  const drawingControllerRef = useRef(null);
+  const drawingViewRef = useRef(null);
+  const drawingViewportRef = useRef({ scrollX: 0, scrollY: 0, zoom: 1 });
+  const drawingHasInkRef = useRef(false);
+  const followDrawingViewport = useCallback((viewport, { lock = false } = {}) => {
+    const view = drawingViewRef.current, runtime = runtimeRef.current, host = mountRef.current;
+    if (!view || !runtime?.camera || !runtime?.controls || !host) return;
+    const frame = { camera: runtime.camera, controls: runtime.controls, width: host.clientWidth, height: host.clientHeight };
+    // The lock is taken when there is first something to keep aligned — ink, or a
+    // pan — against the viewport the camera is still showing. Until then the
+    // camera is nobody's but the viewer's: a resize or a restored view stands.
+    if (viewport || lock) view.lock ??= captureDrawingViewLock(THREE, frame, view.viewport);
+    if (viewport) view.viewport = drawingViewportRef.current = viewport;
+    if (!view.lock) return;
+    if (!applyDrawingViewLock(THREE, view.lock, frame, view.viewport)) return;
+    runtime.userMovedCamera = true;
+    runtime.controls.dispatchEvent?.({ type: "change" });
+    runtime.requestRender?.();
+  }, []);
+  useEffect(() => {
+    const runtime = runtimeRef.current, controls = runtime?.controls, host = mountRef.current;
+    if (!drawingOverlayActive || !controls || !host) return undefined;
+    cancelCameraTransition(runtime);
+    clearKeyboardOrbitState(runtime.keyboardOrbitState);
+    const previous = { enabled: controls.enabled, enableDamping: controls.enableDamping };
+    controls.enabled = false;
+    // Residual orbit inertia would keep turning the model under the first stroke.
+    controls.enableDamping = false;
+    controls.update?.();
+    // A runtime replaced mid-sketch re-locks against the viewport the editor is still showing.
+    drawingViewRef.current = { lock: null, viewport: drawingViewportRef.current };
+    if (drawingHasInkRef.current) followDrawingViewport(null, { lock: true });
+    // The runtime refits its projection to a resized viewport first; then the ink's mapping is restored.
+    let frame = 0;
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => {
+      clearTimeout(frame);
+      frame = setTimeout(() => followDrawingViewport(), 0);
+    });
+    observer?.observe(host);
+    return () => {
+      observer?.disconnect();
+      clearTimeout(frame);
+      drawingViewRef.current = null;
+      const active = runtimeRef.current?.controls;
+      if (active) { active.enabled = previous.enabled; active.enableDamping = previous.enableDamping; active.update?.(); }
+      runtimeRef.current?.requestRender?.();
+    };
+  }, [drawingOverlayActive, followDrawingViewport, viewerReadyTick]);
+  // A new sketch starts from the editor's own origin; only a runtime swap inherits a viewport.
+  useEffect(() => { if (!drawingOverlayActive) { drawingViewportRef.current = { scrollX: 0, scrollY: 0, zoom: 1 }; drawingHasInkRef.current = false; } }, [drawingOverlayActive]);
+  const handleDrawingContent = useCallback((hasContent) => {
+    const hadInk = drawingHasInkRef.current;
+    drawingHasInkRef.current = hasContent;
+    if (hasContent && !hadInk) followDrawingViewport(null, { lock: true });
+    drawing?.onContentChange(hasContent);
+  }, [drawing?.onContentChange, followDrawingViewport]);
+  const handleDrawingReady = useCallback((controller) => {
+    drawingControllerRef.current = controller;
+    drawing?.onReady(controller);
+  }, [drawing?.onReady]);
 
   // PLAN MODE: a generic top-down camera lock, reusable by any model, not a DXF feature.
   //
@@ -3198,15 +3149,28 @@ const CadViewer = forwardRef(function CadViewer({
   }, [bendAxisX, drawingBendLines, bendAnglesRad, drawingBends, drawingBendStyle, drawingBendRadiusMm, drawingKFactor, drawingHiddenLayers, drawingOrientation, drawingMaterialColor, drawingGeometry, drawingThicknessMm, drawingThicknessScale, meshData, viewerReadyTick]);
 
   useImperativeHandle(ref, () => ({
+    async prepareViewSettings(scene, signal) {
+      const runtime = runtimeRef.current;
+      if (scene.render.enabled) {
+        const studio = await loadStudioScene();
+        signal.throwIfAborted();
+        if (runtime?.renderer && scene.view.lighting.enabled) {
+          runtime.studioEnvironmentCache ??= createStudioEnvironmentCache();
+          await runtime.studioEnvironmentCache.prepare(studio, runtime.renderer,
+            scene.render.configuration, scene.quality.environmentMapSize, signal, runtime.environmentResource);
+        }
+      }
+    },
+    presentViewSettings() { return runtimeRef.current?.viewUpdateGate?.present(); },
     // The viewport produces pixels. Its host owns clipboard/draft delivery.
     async captureScreenshotBlob() {
+      await viewUpdateBindingRef.current?.whenReady();
       const runtime = runtimeRef.current;
       if (!runtime?.renderer || !runtime?.scene || !runtime?.camera) {
         throw new Error("CAD Viewer not ready");
       }
 
-      renderDrawingOverlay();
-      return await buildCompositeScreenshotBlob(runtime, drawingCanvasRef.current, {
+      return await buildCompositeScreenshotBlob(runtime, drawingControllerRef.current?.inkCanvas() || null, {
         backgroundColor: resolveElementBackgroundColor(runtime.renderer.domElement)
       });
     },
@@ -3325,14 +3289,6 @@ const CadViewer = forwardRef(function CadViewer({
   ]);
 
   useEffect(() => {
-    previewModeRef.current = previewMode;
-  }, [previewMode]);
-
-  useEffect(() => {
-    drawingChangeRef.current = onDrawingStrokesChange;
-  }, [onDrawingStrokesChange]);
-
-  useEffect(() => {
     perspectiveChangeRef.current = onPerspectiveChange;
   }, [onPerspectiveChange]);
 
@@ -3392,13 +3348,6 @@ const CadViewer = forwardRef(function CadViewer({
     normalizedClipSettings.offset
   ]);
 
-
-  useEffect(() => {
-    drawingStrokesRef.current = Array.isArray(drawingStrokes) ? drawingStrokes : [];
-    drawingIdRef.current = Math.max(drawingIdRef.current, maxDrawingStrokeOrdinal(drawingStrokesRef.current));
-    renderDrawingOverlay();
-  }, [drawingStrokes]);
-
   const handleRuntimeContextRestored = useCallback(() => {
     framedModelKeyRef.current = "";
     framedCompleteModelKeyRef.current = "";
@@ -3426,8 +3375,6 @@ const CadViewer = forwardRef(function CadViewer({
     setError,
     setViewerReadyTick,
     viewerTheme,
-    syncDrawingCanvasSize,
-    renderDrawingOverlay,
     emitPerspectiveChange,
     setActiveViewPlaneFace,
     activeViewPlaneFaceRef,
@@ -3524,9 +3471,6 @@ const CadViewer = forwardRef(function CadViewer({
       );
       if (Number.isFinite(distanceScale) && distanceScale > 0) {
         camera.position.copy(runtime.controls.target).add(offset.multiplyScalar(distanceScale));
-        if (Number.isFinite(runtime.zoomBaseDistance) && runtime.zoomBaseDistance > 0) {
-          runtime.zoomBaseDistance *= distanceScale;
-        }
       }
     }
     camera.lookAt(runtime.controls.target);
@@ -3614,20 +3558,22 @@ const CadViewer = forwardRef(function CadViewer({
         appearance,
         materialSettings,
         materialOverrides,
-        receiveShadows
+        receiveShadows,
+        surfaceSettings
       });
       runtime.displayRecords = runtime.cadScene.displayRecords;
     } else {
       for (const record of runtime.displayRecords || []) {
         applyMaterialSettingsToRecord(runtime.THREE, record, materialSettings, {
           displayMode: normalizedDisplayMode,
+          surfaceSettings,
           materialOverrides
         });
       }
     }
     runtime.cadScene?.syncSurfaceInstances();
 
-    if (renderMode) {
+    if (photographicLighting) {
       runtime.hemisphereLight.visible = false;
       runtime.ambientLight.visible = false;
       runtime.keyLight.visible = false;
@@ -3650,7 +3596,7 @@ const CadViewer = forwardRef(function CadViewer({
       return;
     }
 
-    studioScene()?.disposePhotographicStudio(runtime);
+    if (!renderMode) studioScene()?.disposePhotographicStudio(runtime);
     applyActiveSceneBackground(runtime, viewerTheme, normalizedThemeSettings.background);
     runtime.renderer.toneMappingExposure = Math.max(normalizedThemeSettings.lighting.toneMappingExposure, 0.05);
 
@@ -3729,9 +3675,12 @@ const CadViewer = forwardRef(function CadViewer({
     } else {
       clearSceneGroup(runtime.stageGroup);
     }
+    if (renderMode) applyActivePhotographicStudio(runtime);
     runtime.requestRender();
   }, [
     defaultGridRadius,
+    surfaceSettings,
+    photographicLighting,
     normalizedDisplayMode,
     appearance,
     materialOverrides,
@@ -3757,7 +3706,7 @@ const CadViewer = forwardRef(function CadViewer({
     const studio = studioScene();
     const clearEnvironmentResource = () => {
       runtime.scene.environment = null;
-      runtime.environmentResource?.dispose();
+      if (!runtime.studioEnvironmentCache?.owns(runtime.environmentResource)) runtime.environmentResource?.dispose();
       runtime.environmentResource = null;
       runtime.environmentResourceIdentity = "";
     };
@@ -3769,7 +3718,7 @@ const CadViewer = forwardRef(function CadViewer({
       runtime.environmentReady = false;
       return;
     }
-    if (!renderMode || !renderConfiguration) {
+    if (!photographicLighting || !renderConfiguration) {
       runtime.environmentReady = true;
       if (inspectHasMaterials) {
         if (runtime.environmentResourceIdentity !== INSPECT_ENVIRONMENT_ID) {
@@ -3783,7 +3732,8 @@ const CadViewer = forwardRef(function CadViewer({
         clearEnvironmentResource();
         runtime.scene.environmentIntensity = 0;
       }
-      applyActiveSceneBackground(runtime, viewerTheme, normalizedThemeSettings.background);
+      if (renderMode) applyActivePhotographicStudio(runtime);
+      else applyActiveSceneBackground(runtime, viewerTheme, normalizedThemeSettings.background);
       viewerAlertChangeRef.current?.(null);
       runtime.requestRender();
       return;
@@ -3810,14 +3760,14 @@ const CadViewer = forwardRef(function CadViewer({
       }
 
       if (!runtime.environmentResource || runtime.environmentResourceIdentity !== resourceIdentity) {
-        const nextResource = studio.createEnvironmentResource(runtime.renderer, renderConfiguration, {
+        const nextResource = runtime.studioEnvironmentCache?.get(resourceIdentity) || studio.createEnvironmentResource(runtime.renderer, renderConfiguration, {
           size: renderEnvironmentMapSize
         });
         const previousResource = runtime.environmentResource;
         runtime.scene.environment = null;
         runtime.environmentResource = nextResource;
         runtime.environmentResourceIdentity = resourceIdentity;
-        studio.disposeEnvironmentResource(previousResource);
+        if (!runtime.studioEnvironmentCache?.owns(previousResource)) studio.disposeEnvironmentResource(previousResource);
       }
 
       runtime.scene.environment = runtime.environmentResource.texture;
@@ -3846,6 +3796,7 @@ const CadViewer = forwardRef(function CadViewer({
     applyActivePhotographicStudio,
     renderConfiguration,
     renderEnvironmentMapSize,
+    photographicLighting,
     inspectHasMaterials,
     renderMode,
     studioSceneTick,
@@ -3865,21 +3816,22 @@ const CadViewer = forwardRef(function CadViewer({
       runtime.interactionState.restoreTimerId = 0;
     }
     clearKeyboardOrbitState(runtime.keyboardOrbitState);
-    runtime.previewOrbitEnabled = !!previewMode;
+    const orbitActive = previewMode && previewOrbitSpeed > 0;
+    runtime.previewOrbitEnabled = orbitActive;
     runtime.orbitControlsLastTimestamp = 0;
-    runtime.controls.autoRotate = !!previewMode;
-    runtime.controls.autoRotateSpeed = PREVIEW_AUTO_ROTATE_SPEED;
-    runtime.controls.enabled = true;
-    runtime.controls.enableDamping = true;
+    runtime.controls.autoRotate = orbitActive;
+    runtime.controls.autoRotateSpeed = PREVIEW_AUTO_ROTATE_SPEED * previewOrbitSpeed;
+    if (previewMode) runtime.controls.enabled = true;
+    if (!drawingOverlayActive) runtime.controls.enableDamping = true;
     runtime.controls.dampingFactor = DEFAULT_DAMPING_FACTOR;
-    if (previewMode) {
+    if (orbitActive) {
       cancelCameraTransition(runtime, { scheduleIdle: false });
       runtime.beginInteraction?.();
     } else {
       runtime.scheduleIdleQuality();
     }
     runtime.requestRender();
-  }, [previewMode, viewerReadyTick]);
+  }, [previewMode, previewOrbitSpeed, viewerReadyTick]);
 
 
 
@@ -3954,7 +3906,7 @@ const CadViewer = forwardRef(function CadViewer({
         }
       : null;
 
-    const sceneTheme = wireframeMode
+    const sceneTheme = wireframeMode && !explicitViewPolicy
       ? {
           ...normalizedThemeSettings,
           edges: {
@@ -3982,7 +3934,7 @@ const CadViewer = forwardRef(function CadViewer({
     // materials, visual and deformation state and BVHs.
     const sceneBuildKey = sceneBuildStructuralKey({
       displayMode: normalizedDisplayMode,
-      applyDisplayModeEdgePolicy: !topologyDisplayEdgesVisible,
+      applyDisplayModeEdgePolicy: !explicitViewPolicy && !topologyDisplayEdgesVisible,
       sceneScaleMode: normalizedSceneScaleMode,
       edgeSettings: sceneTheme.edges,
       recomputeNormals,
@@ -3990,6 +3942,7 @@ const CadViewer = forwardRef(function CadViewer({
     });
     const sceneModelSettings = {
       appearance,
+      surfaceSettings,
       parts: shouldRenderParts ? renderedParts : [],
       renderPartsIndividually: effectiveRenderPartsIndividually,
       stepParameters: modelStepParameters,
@@ -4049,7 +4002,7 @@ const CadViewer = forwardRef(function CadViewer({
         : buildModel(THREE, meshData, {
         theme: sceneTheme,
         displayMode: normalizedDisplayMode,
-        applyDisplayModeEdgePolicy: !topologyDisplayEdgesVisible,
+        applyDisplayModeEdgePolicy: !explicitViewPolicy && !topologyDisplayEdgesVisible,
         scale: normalizedSceneScaleMode,
         baseTheme: viewerTheme,
         materialSettings,
@@ -4138,10 +4091,9 @@ const CadViewer = forwardRef(function CadViewer({
     // moved anything, a mesh as loaded. The CAMERA is grounded on that one, so
     // driving a joint, picking a group state or scrubbing an animation never
     // re-frames the model, and 100% keeps meaning "framed at the zero pose".
-    const zeroPoseBounds = cadScene.restBounds || meshData.bounds;
+    const zeroPoseBounds = mergeBoundsList([cadScene.restBounds || meshData.bounds]);
     runtime.zeroPoseBounds = zeroPoseBounds;
     const zeroPoseRadius = boundsModelRadius(THREE, zeroPoseBounds, normalizedSceneScaleMode);
-    runtime.zoomBaseModelRadius = zeroPoseRadius;
     const boundsMin = Array.isArray(displayBounds?.min) ? displayBounds.min : [0, 0, 0];
     const boundsMax = Array.isArray(displayBounds?.max) ? displayBounds.max : [0, 0, 0];
     const zeroPoseMin = Array.isArray(zeroPoseBounds?.min) ? zeroPoseBounds.min : [0, 0, 0];
@@ -4295,6 +4247,9 @@ const CadViewer = forwardRef(function CadViewer({
         linkName: String(record?.sourcePart?.linkName || ""),
         matrix: record?.mesh?.matrix?.toArray?.() || null
       }));
+      // Read-only debug/test seam beside __cadDisplayRecords: the clip the viewport
+      // APPLIES (the resolved view), which for a mesh is off whatever was saved.
+      window.__cadClip = () => ({ ...clipSettingsRef.current });
       // Read-only debug/test seam beside __cadDisplayRecords: the LIVE camera,
       // so a browser test can assert that posing a model leaves the framing
       // exactly where the zero pose put it.
@@ -4311,7 +4266,8 @@ const CadViewer = forwardRef(function CadViewer({
           up: camera.up.toArray(),
           zoom: Number(camera.zoom),
           halfHeight: readOrthographicHalfHeight(active),
-          zoomPercent: readRuntimeZoomPercent(active)
+          zoomPercent: readRuntimeZoomPercent(active),
+          originalBounds: active.zeroPoseBounds
         };
       };
     }
@@ -4374,7 +4330,7 @@ const CadViewer = forwardRef(function CadViewer({
       runWithoutPerspectiveEvents(() => {
         // A lighting-style switch restores the current camera; progressive
         // extent changes still fit the completed model when appropriate.
-        const restored = (reframe === "model" || reframe === "mode")
+        const restored = !previewModeRef.current && (reframe === "model" || reframe === "mode")
           && nextPerspectiveMatchesScene
           && applyPerspectiveSnapshot(runtime, nextPerspective, { scheduleIdle: false });
         if (restored) {
@@ -4397,11 +4353,8 @@ const CadViewer = forwardRef(function CadViewer({
           runtime.requestRender();
         }
       });
-      // The initial framing fits the zero pose, so that is the radius the
-      // baseline is measured against -- and the scale it derives is 1, which is
-      // what makes the opening view read as exactly 100%.
-      runtime.zoomFitModelRadius = zeroPoseRadius;
-      if (runtime.previousViewState?.modelKey !== modelKey) resetRuntimeZoomBaseline(runtime);
+      captureRuntimeViewportFitScale(runtime);
+      resetRuntimeZoomBaseline(runtime);
       syncCameraZoomPercent(runtime);
       framedModelKeyRef.current = modelKey || "";
       framedViewingModeRef.current = viewingMode;
@@ -4447,7 +4400,11 @@ const CadViewer = forwardRef(function CadViewer({
       // environment or animation alert that replaced it during recovery.
       viewerAlertChangeRef.current?.(current => current === recoveredAlert ? null : current);
     }
-    if (adopted) markPresentationReady(runtime);
+    if (adopted) {
+      // Also handles opening fullscreen before the first model finishes loading.
+      syncFullscreenCamera(runtime);
+      markPresentationReady(runtime);
+    }
     } catch (error) {
       staticSceneResetRef.current.invalidate();
       if (error?.failedCadScene) {
@@ -4499,6 +4456,8 @@ const CadViewer = forwardRef(function CadViewer({
     displayEdgeRuntime,
     normalizedDisplayMode,
     materialPartPolicyKey,
+    surfaceSettings,
+    explicitViewPolicy,
     normalizedSceneScaleMode,
     resolvedFloorMode,
     receiveShadows,
@@ -4516,6 +4475,12 @@ const CadViewer = forwardRef(function CadViewer({
   ]);
 
   const embeddedGlbMixerRef = useRef(null);
+  // The frame functions playback runs per clock tick; each is published by the effect
+  // that owns the state it reads (`usePlaybackFrames`).
+  const stepPoseFrameRef = useRef(null);
+  const embeddedGlbFrameRef = useRef(null);
+  usePlaybackFrames(useAnimationClockStore(), stepAnimationPlaying, stepPoseFrameRef);
+  usePlaybackFrames(useEmbeddedGlbAnimationClockStore(), Boolean(embeddedGlbAnimation?.playing), embeddedGlbFrameRef);
   useEffect(() => () => {
     // This component is the sole owner of an interactive document. Detach the
     // scene before releasing GPU resources so generic group cleanup cannot
@@ -4541,9 +4506,17 @@ const CadViewer = forwardRef(function CadViewer({
   useEffect(() => {
     const runtime = runtimeRef.current;
     const mixerState = embeddedGlbMixerRef.current;
-    if (!runtime?.THREE || !mixerState || runtime.cadScene?.nativeDocument !== glbDocument) return;
-    setGlbAnimationTime(mixerState, embeddedGlbAnimation?.elapsedSec);
-    runtime.requestRender();
+    if (!runtime?.THREE || !mixerState || runtime.cadScene?.nativeDocument !== glbDocument) return undefined;
+    // One function, two callers: React for a scrub or a new clip, the clock per playing tick.
+    const glbFrame = (elapsedSec) => {
+      setGlbAnimationTime(mixerState, elapsedSec);
+      runtime.requestRender();
+    };
+    glbFrame(embeddedGlbAnimation?.elapsedSec);
+    embeddedGlbFrameRef.current = glbFrame;
+    return () => {
+      if (embeddedGlbFrameRef.current === glbFrame) embeddedGlbFrameRef.current = null;
+    };
   }, [
     embeddedGlbAnimation?.clip,
     embeddedGlbAnimation?.elapsedSec,
@@ -4804,114 +4777,138 @@ const CadViewer = forwardRef(function CadViewer({
     // ONE effects pass, shared with the headless twin (applySceneState):
     // kinematics update, then the clip merged OVER it — the two systems meet
     // in the effect records and nowhere else.
-    let transformDetected = false;
-    let passError = null;
-    const sceneState = applySceneState(runtime.THREE, {
-      runtime,
-      meshData,
-      stepParameterRuntime,
-      animation: animationClip
-        ? { clip: animationClip, elapsedSec: Number(stepAnimationRuntime?.elapsedSec) || 0 }
-        : null,
-      selectorRuntime: selectorRuntimeRef.current,
-      onTransformEffect: () => {
-        transformDetected = true;
-      },
-      onError: ({ phase, error }) => {
-        const title = phase === "animation" ? "Animation update failed" : "Pose update failed";
-        const message = error instanceof Error ? error.message : String(error);
-        passError = { title, message };
-        const previous = sceneEffectsAlertRef.current;
-        if (previous && previous.title === title && previous.message === message) {
-          return;
+    //
+    // It is one function with two callers. React runs it when anything it reads
+    // changes (a scrub, a pose, a display setting, a new mesh); while a routine
+    // plays, the animation clock runs the same function once per tick
+    // (`usePlaybackFrames`), so a playing frame renders no component at all.
+    const poseFrame = (elapsedSec) => {
+      let transformDetected = false;
+      let passError = null;
+      const sceneState = applySceneState(runtime.THREE, {
+        runtime,
+        meshData,
+        stepParameterRuntime,
+        animation: animationClip
+          ? { clip: animationClip, elapsedSec }
+          : null,
+        selectorRuntime: selectorRuntimeRef.current,
+        onTransformEffect: () => {
+          transformDetected = true;
+        },
+        onError: ({ phase, error }) => {
+          const title = phase === "animation" ? "Animation update failed" : "Pose update failed";
+          const message = error instanceof Error ? error.message : String(error);
+          passError = { title, message };
+          const previous = sceneEffectsAlertRef.current;
+          if (previous && previous.title === title && previous.message === message) {
+            return;
+          }
+          sceneEffectsAlertRef.current = passError;
+          viewerAlertChangeRef.current?.({
+            severity: "warning",
+            compact: true,
+            title,
+            message
+          });
+          console.error(title, error);
+        },
+        cleanup: (cleanup) => {
+          if (typeof cleanup === "function") {
+            stepModuleCleanupRef.current.push(cleanup);
+          }
         }
-        sceneEffectsAlertRef.current = passError;
-        viewerAlertChangeRef.current?.({
-          severity: "warning",
-          compact: true,
-          title,
-          message
-        });
-        console.error(title, error);
-      },
-      cleanup: (cleanup) => {
-        if (typeof cleanup === "function") {
-          stepModuleCleanupRef.current.push(cleanup);
+      });
+      if (!passError) {
+        clearSceneEffectsAlert();
+      }
+      const useRecordTopologyEdgeTransforms = explodedViewActive || shouldUseRecordTopologyEdgeTransforms({
+        transformDetected,
+        topologyDisplayEdgesVisible,
+        displayEdgeRuntime,
+        displayRecords: runtime.displayRecords
+      });
+      // The transformed selector runtime is pick-only output, and the costliest thing a
+      // posed frame makes: every face and edge proxy de-indexed and re-transformed into
+      // fresh arrays, behind a cache no moving frame can hit, and as React state it then
+      // rebuilt pick groups, their BVH, the picking listeners and the highlight overlays —
+      // every frame. In Animate mode none of it has a reader. The display edges keep their
+      // own runtime; only a model whose edges come from the selector runtime still needs it.
+      const posedSelectorRuntime = animateMode && displayEdgeRuntime ? null : selectorRuntime;
+      const nextEdgeRuntimes = resolveTopologyDisplayEdgeRuntimes({
+        selectorRuntime: posedSelectorRuntime,
+        displayEdgeRuntime,
+        displayRecords: transformDetected ? runtime.displayRecords : [],
+        transformDisplayEdges: !useRecordTopologyEdgeTransforms
+      });
+      const nextTopologyDisplayEdgesVisible = shouldRenderTopologyDisplayEdges({
+        edgesVisible,
+        wireframeMode,
+        cadEdgeSource: shouldUseCadEdgeSource,
+        displayEdgeRuntime: useRecordTopologyEdgeTransforms ? displayEdgeRuntime : nextEdgeRuntimes.displayEdgeRuntime,
+        selectorRuntime: nextEdgeRuntimes.selectorRuntime,
+        edgeSettings: visualEdgeSettings
+      });
+      stepModuleTransformDetectedChangeRef.current?.(nextEdgeRuntimes.transformCount > 0);
+      const nextSelectorRuntime = nextEdgeRuntimes.transformedSelectorRuntime;
+      const nextDisplayEdgeRuntime = useRecordTopologyEdgeTransforms
+        ? null
+        : nextEdgeRuntimes.transformedDisplayEdgeRuntime;
+      updateTransformedRuntimeState(setTransformedSelectorRuntime, nextSelectorRuntime && posedSelectorRuntime ? {
+        base: selectorRuntime,
+        runtime: nextSelectorRuntime
+      } : null);
+      updateTransformedRuntimeState(setTransformedDisplayEdgeRuntime, nextDisplayEdgeRuntime ? {
+        base: displayEdgeRuntime,
+        runtime: nextDisplayEdgeRuntime
+      } : null);
+      for (const record of runtime.displayRecords) {
+        applyDisplayRecordTransform(runtime.THREE, record, runtime.modelRadius || 1);
+      }
+      // A playing frame that only moved parts has already synced each moved instance's
+      // matrix (`applyDisplayRecordTransform`). Visual state and instance membership are
+      // reconciled when a frame changed a style, a visibility or a highlight, and by
+      // the passes React runs around playback.
+      if (!stepAnimationPlaying || sceneState.appearanceChanged) {
+        applyPartVisualState(runtime.THREE, runtime.displayRecords, partVisualStateRef.current);
+        runtime.cadScene?.syncSurfaceInstances();
+      }
+      runtime.topologyDisplayEdgeTransformByRecord = useRecordTopologyEdgeTransforms;
+      syncTopologyDisplayEdgeLine(
+        runtime,
+        useRecordTopologyEdgeTransforms ? displayEdgeRuntime : nextEdgeRuntimes.topologyRuntime,
+        {
+          visible: nextTopologyDisplayEdgesVisible,
+          edgeSettings: hiddenAwareVisualEdgeSettings,
+          focusedPartIds,
+          viewerTheme,
+          dimmedOpacity: FOCUSED_DIMMED_SURFACE_OPACITY,
+          transformByRecord: useRecordTopologyEdgeTransforms,
+          displayRecords: runtime.displayRecords,
+          syncClip: (activeRuntime) => syncRuntimeStepClipPlane(activeRuntime, clipSettingsRef.current)
         }
+      );
+      runtime.modelGroup?.updateMatrixWorld?.(true);
+      runtime.edgesGroup?.updateMatrixWorld?.(true);
+      const effectiveRuntime = nextEdgeRuntimes.selectorRuntime;
+      // Picking is suspended during STEP animation playback, so skip rebuilding
+      // pick-only state per frame; the playing->stopped rerun syncs the final pose.
+      if (!stepAnimationPlaying && !animateMode) {
+        syncDisplayMeshFaceIds(runtime, meshData, effectiveRuntime);
+        syncSelectorPickGroups(runtime, effectiveRuntime, modelTransformRef.current.offset, { clearSceneGroup });
+        // A kinematic edit (or a stopped scrub) is a one-shot model-bounds
+        // change for LOD and shadows. Playback stays on its existing bounded
+        // frame loop; an idle posed model schedules no recurring work.
+        runtime.invalidateShadows?.();
+        lodCameraChangeRef.current?.();
       }
-    });
-    void sceneState;
-    if (!passError) {
-      clearSceneEffectsAlert();
-    }
-    const useRecordTopologyEdgeTransforms = explodedViewActive || shouldUseRecordTopologyEdgeTransforms({
-      transformDetected,
-      topologyDisplayEdgesVisible,
-      displayEdgeRuntime,
-      displayRecords: runtime.displayRecords
-    });
-    const nextEdgeRuntimes = resolveTopologyDisplayEdgeRuntimes({
-      selectorRuntime,
-      displayEdgeRuntime,
-      displayRecords: transformDetected ? runtime.displayRecords : [],
-      transformDisplayEdges: !useRecordTopologyEdgeTransforms
-    });
-    const nextTopologyDisplayEdgesVisible = shouldRenderTopologyDisplayEdges({
-      edgesVisible,
-      wireframeMode,
-      cadEdgeSource: shouldUseCadEdgeSource,
-      displayEdgeRuntime: useRecordTopologyEdgeTransforms ? displayEdgeRuntime : nextEdgeRuntimes.displayEdgeRuntime,
-      selectorRuntime: nextEdgeRuntimes.selectorRuntime,
-      edgeSettings: visualEdgeSettings
-    });
-    stepModuleTransformDetectedChangeRef.current?.(nextEdgeRuntimes.transformCount > 0);
-    const nextSelectorRuntime = nextEdgeRuntimes.transformedSelectorRuntime;
-    const nextDisplayEdgeRuntime = useRecordTopologyEdgeTransforms
-      ? null
-      : nextEdgeRuntimes.transformedDisplayEdgeRuntime;
-    updateTransformedRuntimeState(setTransformedSelectorRuntime, nextSelectorRuntime ? {
-      base: selectorRuntime,
-      runtime: nextSelectorRuntime
-    } : null);
-    updateTransformedRuntimeState(setTransformedDisplayEdgeRuntime, nextDisplayEdgeRuntime ? {
-      base: displayEdgeRuntime,
-      runtime: nextDisplayEdgeRuntime
-    } : null);
-    for (const record of runtime.displayRecords) {
-      applyDisplayRecordTransform(runtime.THREE, record, runtime.modelRadius || 1);
-    }
-    applyPartVisualState(runtime.THREE, runtime.displayRecords, partVisualStateRef.current);
-    runtime.cadScene?.syncSurfaceInstances();
-    runtime.topologyDisplayEdgeTransformByRecord = useRecordTopologyEdgeTransforms;
-    syncTopologyDisplayEdgeLine(
-      runtime,
-      useRecordTopologyEdgeTransforms ? displayEdgeRuntime : nextEdgeRuntimes.topologyRuntime,
-      {
-        visible: nextTopologyDisplayEdgesVisible,
-        edgeSettings: hiddenAwareVisualEdgeSettings,
-        focusedPartIds,
-        viewerTheme,
-        dimmedOpacity: FOCUSED_DIMMED_SURFACE_OPACITY,
-        transformByRecord: useRecordTopologyEdgeTransforms,
-        displayRecords: runtime.displayRecords,
-        syncClip: (activeRuntime) => syncRuntimeStepClipPlane(activeRuntime, clipSettingsRef.current)
-      }
-    );
-    runtime.modelGroup?.updateMatrixWorld?.(true);
-    runtime.edgesGroup?.updateMatrixWorld?.(true);
-    const effectiveRuntime = nextEdgeRuntimes.selectorRuntime;
-    // Picking is suspended during STEP animation playback, so skip rebuilding
-    // pick-only state per frame; the playing->stopped rerun syncs the final pose.
-    if (!stepAnimationPlaying) {
-      syncDisplayMeshFaceIds(runtime, meshData, effectiveRuntime);
-      syncSelectorPickGroups(runtime, effectiveRuntime, modelTransformRef.current.offset, { clearSceneGroup });
-      // A kinematic edit (or a stopped scrub) is a one-shot model-bounds
-      // change for LOD and shadows. Playback stays on its existing bounded
-      // frame loop; an idle posed model schedules no recurring work.
-      runtime.invalidateShadows?.();
-      lodCameraChangeRef.current?.();
-    }
-    runtime.requestRender?.();
+      runtime.requestRender?.();
+    };
+    poseFrame(Number(stepAnimationRuntime?.elapsedSec) || 0);
+    stepPoseFrameRef.current = animationClip ? poseFrame : null;
+    return () => {
+      if (stepPoseFrameRef.current === poseFrame) stepPoseFrameRef.current = null;
+    };
   }, [
     visualEdgeSettings,
     edgesVisible,
@@ -4935,7 +4932,9 @@ const CadViewer = forwardRef(function CadViewer({
     selectorRuntime,
     displayEdgeRuntime,
     stepParameterRuntime,
-    stepAnimationRuntime
+    stepAnimationRuntime,
+    // Leaving the mode must re-run this pass once: it is what rebuilds the pick state.
+    animateMode
   ]);
 
   useEffect(() => {
@@ -5094,63 +5093,6 @@ const CadViewer = forwardRef(function CadViewer({
       }
     );
   }, [activeDisplayEdgeRuntime, activeSelectorRuntime, displayEdgeRuntime, viewerReadyTick, viewerTheme, focusedPartIds, hiddenAwareVisualEdgeSettings, selectorRuntime, topologyDisplayEdgesVisible, visualEdgeSettings]);
-
-  useEffect(() => {
-    const runtime = runtimeRef.current;
-    if (!runtime?.THREE || !runtime?.edgesGroup) {
-      return;
-    }
-
-    const { THREE, edgesGroup } = runtime;
-    if (!runtime.surfaceLineGroup || runtime.surfaceLineGroup.parent !== edgesGroup) {
-      runtime.surfaceLineGroup = new THREE.Group();
-      runtime.surfaceLineGroup.renderOrder = 21;
-      edgesGroup.add(runtime.surfaceLineGroup);
-    }
-    const lineGroup = runtime.surfaceLineGroup;
-    clearOverlayGroup(runtime, lineGroup);
-
-    const surfaceLineStrokes = (Array.isArray(drawingStrokes) ? drawingStrokes : []).filter(isSurfaceLineStroke);
-    if (!surfaceLineStrokes.length) {
-      return () => {
-        clearOverlayGroup(runtime, lineGroup);
-      };
-    }
-
-    const lineWidth = Math.max(getEdgeThickness(displayEdgeSettings, viewerTheme) * 1.6, 1.8);
-    const lineOffset = Math.max(runtime.modelRadius || 0, 1) * 0.0008 + 0.02;
-    for (const stroke of surfaceLineStrokes) {
-      const surfaceLine = stroke?.surfaceLine;
-      const referenceId = String(surfaceLine?.referenceId || "").trim();
-      const reference = pickableReferenceMap.get(referenceId) || activeSelectorRuntime?.referenceMap?.get(referenceId) || null;
-      if (!reference) {
-        continue;
-      }
-      const linePositions = buildSurfaceLinePositions(reference, surfaceLine, {
-        offset: lineOffset
-      });
-      if (!linePositions.length) {
-        continue;
-      }
-      const line = createScreenSpaceLineSegments(runtime, linePositions, {
-        color: SURFACE_LINE_COLOR,
-        opacity: 0.98,
-        lineWidth,
-        renderOrder: 22,
-        depthTest: true,
-        depthWrite: false
-      });
-      if (line) {
-        lineGroup.add(line);
-      }
-    }
-    lineGroup.visible = lineGroup.children.length > 0;
-    runtime.requestRender();
-
-    return () => {
-      clearOverlayGroup(runtime, lineGroup);
-    };
-  }, [activeSelectorRuntime, drawingStrokes, displayEdgeSettings, pickableReferenceMap, viewerReadyTick, viewerTheme]);
 
   useEffect(() => {
     const runtime = runtimeRef.current;
@@ -5469,31 +5411,6 @@ const CadViewer = forwardRef(function CadViewer({
     };
   }, [activeSelectorRuntime, explodedViewPoseTick, hoveredReferenceId, pickableReferenceMap, selectedReferenceIds, viewerReadyTick, viewerTheme, displayEdgeSettings, measureModeActive]);
 
-  useViewerDrawingOverlay({
-    drawingCanvasRef,
-    drawingDraftRef,
-    drawingStrokesRef,
-    drawingChangeRef,
-    drawingIdRef,
-    drawingEnabled,
-    drawingTool,
-    meshData: viewportContent,
-    previewMode,
-    viewerReadyTick,
-    renderDrawingOverlay,
-    redrawDrawingCanvas,
-    buildDrawingPoint,
-    distanceToStrokeInPixels,
-    strokeLengthInPixels,
-    drawingToolNeedsTwoPoints,
-    buildFillStrokeAtPoint,
-    buildSurfaceLineAnchor: buildSurfaceLineFaceAnchor,
-    updateSurfaceLineAnchor: updateSurfaceLineFaceAnchor,
-    drawingEraseThresholdPx: DRAWING_ERASE_THRESHOLD_PX,
-    drawingMinPointDistancePx: DRAWING_MIN_POINT_DISTANCE_PX,
-    drawingMinStrokeLengthPx: DRAWING_MIN_STROKE_LENGTH_PX
-  });
-
   // Click is followed by OrbitControls clearing hover before React commits
   // draft.anchor, so the locked first point lives in a ref.
   const measureLockedAnchorRef = useRef(null);
@@ -5543,7 +5460,6 @@ const CadViewer = forwardRef(function CadViewer({
     runtimeRef,
     mountRef: interactionHostRef,
     sceneMountRef: mountRef,
-    drawingCanvasRef,
     previewMode,
     pickMode,
     selectorRuntime: activeSelectorRuntime,
@@ -5559,9 +5475,30 @@ const CadViewer = forwardRef(function CadViewer({
     onMeasurePick: handleMeasurePick,
     onMeasureHoverPoint: handleMeasureHoverPoint,
     viewerReadyTick,
-    suppressTopologyPicking: stepAnimationPlaying,
+    suppressTopologyPicking: animateMode || stepAnimationPlaying || Boolean(embeddedGlbAnimation?.playing),
     allowMeshVertexSnap
   });
+
+  // Runs after scene/material/clip effects. Controls already show desired values;
+  // this acknowledgement concerns only the applied viewport revision.
+  useEffect(() => {
+    if (!viewUpdate?.revision) return;
+    const { revision, expensive, binding } = viewUpdate;
+    const runtime = runtimeRef.current;
+    let cancelled = false;
+    const complete = error => {
+      if (cancelled) return;
+      const acknowledged = binding.complete(revision, error);
+      // Context recovery can recreate a runtime after this revision was
+      // already acknowledged. That new canvas still needs its first frame.
+      if (!acknowledged && !error) runtime?.viewUpdateGate?.present().catch(() => {});
+    };
+    if (!runtime) { complete(); return; }
+    runtime.viewUpdateGate ??= createViewUpdateGate(runtime);
+    runtime.viewUpdateGate.hold();
+    (expensive ? runtime.viewUpdateGate.compile() : Promise.resolve()).then(() => complete(), complete);
+    return () => { cancelled = true; };
+  }, [viewUpdate?.revision, viewUpdate?.binding, viewerReadyTick]);
 
   const hasPresentableContent = hasViewportContent || Boolean(drawingIsDocument && drawingGeometry?.geometry);
   const preparingFrame = Boolean(resolvedPresentationKey) &&
@@ -5603,19 +5540,9 @@ const CadViewer = forwardRef(function CadViewer({
         style={{ pointerEvents: "none" }}
         aria-hidden="true"
       />
-      <canvas
-        ref={drawingCanvasRef}
-        className="absolute inset-0 z-10 h-full w-full touch-none"
-        style={{
-          pointerEvents: drawingEnabled && !previewMode && hasViewportContent ? "auto" : "none",
-          cursor: drawingEnabled && !previewMode && hasViewportContent
-            ? (drawingTool === DRAWING_TOOL.ERASE ? "cell" : drawingTool === DRAWING_TOOL.FILL ? "copy" : "crosshair")
-            : "default"
-        }}
-        aria-hidden="true"
-      />
+      {drawingOverlayActive ? <DrawingOverlay drawing={drawing} onReady={handleDrawingReady} onContentChange={handleDrawingContent} onViewportChange={followDrawingViewport} /> : null}
       <ViewPlaneControl
-        showViewPlane={showViewPlane && !planMode}
+        showViewPlane={showViewPlane && !planMode && !drawingOverlayActive}
         previewMode={previewMode}
         isLoading={isLoading}
         meshData={viewportContent}

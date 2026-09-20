@@ -20,7 +20,7 @@ import {
 import {
   createCadWebGlRenderer
 } from "./webglRenderer.js";
-import { CAD_DISPLAY_MODE } from "./displaySettings.js";
+import { resolveViewSettings } from "./viewSettings.js";
 import { PHOTOGRAPHIC_STUDIO_STAGE_RADIUS_MULTIPLIER } from "./photographicStudioRig.js";
 import {
   BASE_VIEWER_THEME,
@@ -608,9 +608,12 @@ function groundPlaneFrustumDepths(camera, groundZ) {
     const distance = (groundZ - origin.z) / direction.z;
     hit.copy(origin).addScaledVector(direction, distance);
     const depth = -hit.applyMatrix4(camera.matrixWorldInverse).z;
-    if (Number.isFinite(depth) && depth > 0) depths.push(depth);
+    if (Number.isFinite(depth)) depths.push(depth);
   }
-  return depths;
+  // Orthographic rays can meet the floor behind the eye plane at low angles.
+  // Their signed depths remain meaningful: an orthographic projection permits
+  // a negative near plane, equivalent to moving the eye back without reframing.
+  return camera.isOrthographicCamera ? depths : depths.filter((depth) => depth > 0);
 }
 
 // A close camera can enter an assembly's mostly empty aggregate box while
@@ -668,7 +671,9 @@ function closeupSubjectNear(camera, displayRecords, modelGroup) {
 // The bounds corners cover the model; frustum-corner intersections cover the
 // foreground ground that is actually visible without forcing an arbitrary
 // scene-scale near plane.
-export function fitCameraDepthToBounds(camera, bounds, { displayRecords, modelGroup } = {}) {
+export function fitCameraDepthToBounds(camera, bounds, {
+  displayRecords, modelGroup, groundZ = bounds?.min?.[2], gridBounds = null
+} = {}) {
   if (!camera?.isCamera || !Array.isArray(bounds?.min) || !Array.isArray(bounds?.max)
     || bounds.min.length < 3 || bounds.max.length < 3
     || !bounds.min.every(Number.isFinite) || !bounds.max.every(Number.isFinite)
@@ -681,12 +686,17 @@ export function fitCameraDepthToBounds(camera, bounds, { displayRecords, modelGr
   if (subjectNear <= radius * 1e-5) {
     subjectNear = closeupSubjectNear(camera, displayRecords, modelGroup) ?? subjectNear;
   }
-  const groundDepths = groundPlaneFrustumDepths(camera, bounds.min[2]);
-  const groundNear = groundDepths.length
-    ? Math.min(...groundDepths) * 0.98
-    : Number.POSITIVE_INFINITY;
-  const near = Math.max(Math.min(subjectNear, groundNear), radius * 1e-5, 1e-7);
-  const far = Math.max(Math.max(...depths) + radius * PHOTOGRAPHIC_STUDIO_STAGE_RADIUS_MULTIPLIER, near * 2);
+  // Guides exist independently of the photographic floor. Fit their visible
+  // plane too, otherwise the model's near plane slices off foreground grid lines.
+  const planeHeights = [...new Set([groundZ, gridBounds?.min?.[2]].filter(Number.isFinite))];
+  const groundDepths = planeHeights.flatMap(z => groundPlaneFrustumDepths(camera, z));
+  const nearestGroundDepth = Math.min(...groundDepths);
+  const groundNear = nearestGroundDepth * (nearestGroundDepth < 0 ? 1.02 : 0.98);
+  const near = camera.isOrthographicCamera && groundNear < 0
+    ? Math.min(subjectNear, groundNear)
+    : Math.max(Math.min(subjectNear, groundNear), radius * 1e-5, 1e-7);
+  const gridDepths = gridBounds ? boundsCorners(gridBounds).map(point => -point.applyMatrix4(camera.matrixWorldInverse).z) : [];
+  const far = Math.max(Math.max(...depths, ...gridDepths) + radius * PHOTOGRAPHIC_STUDIO_STAGE_RADIUS_MULTIPLIER, near * 2);
   const unchanged = (actual, next) => Math.abs(actual - next)
     <= Math.max(Math.abs(next) * 1e-6, 1e-12);
   if (unchanged(camera.near, near) && unchanged(camera.far, far)) return false;
@@ -716,7 +726,7 @@ export function outputSize(output, job) {
 }
 
 export function snapshotUsesLogarithmicDepthBuffer(job = {}) {
-  return job.display?.mode !== CAD_DISPLAY_MODE.RENDER;
+  return !resolveViewSettings(job.display ?? {}).lighting.enabled;
 }
 
 export function configurePngRenderer(width, height, job, {

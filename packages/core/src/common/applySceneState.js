@@ -44,7 +44,7 @@ export function applySceneState(THREE, {
   const module = definition?.module || null;
   const clip = animation?.clip || null;
   if ((!definition && !clip) || !meshData || !runtime) {
-    return { applied: false, transformDetected: false, effectsByPartId: new Map() };
+    return { applied: false, transformDetected: false, appearanceChanged: false, effectsByPartId: new Map() };
   }
 
   let transformDetected = false;
@@ -89,8 +89,8 @@ export function applySceneState(THREE, {
     }
   }
 
-  applyStepModuleEffectsToRecords(THREE, runtime.displayRecords, effectsByPartId);
-  return { applied: true, transformDetected, effectsByPartId };
+  const { appearanceChanged } = applyStepModuleEffectsToRecords(THREE, runtime.displayRecords, effectsByPartId);
+  return { applied: true, transformDetected, appearanceChanged, effectsByPartId };
 }
 
 /** Normalized DOF values for a definition (clamped, defaulted). */

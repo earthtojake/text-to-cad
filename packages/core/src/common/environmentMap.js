@@ -107,11 +107,16 @@ function disposeScene(scene) {
   });
 }
 
-function ownedEnvironmentResource(identity, target) {
+function ownedEnvironmentResource(identity, target, renderer) {
   let disposed = false;
   return {
     identity,
     texture: target.texture,
+    async readPixels() {
+      const data = new Uint16Array(target.width * target.height * 4);
+      await renderer.readRenderTargetPixelsAsync(target, 0, 0, target.width, target.height, data);
+      return { data, width: target.width, height: target.height };
+    },
     dispose() {
       if (disposed) return;
       disposed = true;
@@ -141,7 +146,7 @@ export function createEnvironmentResource(renderer, configuration = {}, {
       size: proceduralEnvironmentSize(size)
     });
     target.texture.name = PROCEDURAL_STUDIO_ENVIRONMENT_ID;
-    return ownedEnvironmentResource(identity, target);
+    return ownedEnvironmentResource(identity, target, renderer);
   } finally {
     disposeScene(environmentScene);
     generator.dispose();

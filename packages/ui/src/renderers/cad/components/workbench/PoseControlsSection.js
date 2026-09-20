@@ -10,9 +10,7 @@ import { Button } from "@hardcore/ui/primitives/button";
 import { Slider } from "@hardcore/ui/primitives/slider";
 import {
   NO_PRESET_VALUE,
-  KinematicsPoseRow,
-  KinematicsTransitionRows,
-  KinematicsValueActions
+  KinematicsPoseRow
 } from "./KinematicsControls.js";
 import {
   FILE_SHEET_COMPACT_BUTTON_CLASSES,
@@ -23,13 +21,13 @@ import {
   FileSheetSelectRow,
   FileSheetSliderField,
   FileSheetStatusText,
-  FileSheetSubsection,
-  FileSheetToggleRow,
+  FileSheetStaticSection,
+  FileSheetCheckboxRow,
   FileSheetValueInput,
   parseFileSheetNumberInput
 } from "./FileSheet.js";
 
-// Position controls remain independent of animation playback inside Motion.
+// The host coordinates pose ownership with Animation; these rows stay editable.
 
 const compactButtonClasses = FILE_SHEET_COMPACT_BUTTON_CLASSES;
 
@@ -96,24 +94,21 @@ export default function PoseControlsSection({
   runtime = null,
   loadingLabel = "Loading pose...",
   noParametersLabel = "No pose controls.",
-  hideWhenEmpty = false,
-  resetTitle = "Reset every value to the model as authored"
+  hideWhenEmpty = false
 }) {
   const definition = runtime?.definition || null;
   const parameters = Array.isArray(definition?.parameters) ? definition.parameters : [];
   const status = String(runtime?.status || "").trim();
   const error = String(runtime?.error || "").trim();
   const values = runtime?.parameterValues || {};
-  // The pose-transition preference rides the runtime like every other pose concern.
-  const transition = runtime?.transition || null;
   const poseNames = poseNamesFromDefinition(definition);
   // Which pose is on: the one the person picked, until they move a DOF by hand; then
   // whichever preset the values match, or "None". The robot's group state reads the
   // same way, so the two dropdowns cannot disagree about what "the current pose" means.
   const pickedPose = String(runtime?.activePose || "");
-  const activePose = pickedPose && poseNames.includes(pickedPose)
-    ? pickedPose
-    : (activePoseName(definition, values) || NO_PRESET_VALUE);
+  const activePose = runtime?.positionActive === false ? NO_PRESET_VALUE
+    : pickedPose && poseNames.includes(pickedPose) ? pickedPose
+    : activePoseName(definition, values) || NO_PRESET_VALUE;
   // Back-drive routing: which members a coupling drives, and what every DOF's
   // effective value is. Both are pure functions of the definition and the
   // current values, so a driven slider needs no state of its own.
@@ -137,18 +132,17 @@ export default function PoseControlsSection({
       ) : null}
 
       {definition ? (
-        <FileSheetSubsection title="Position">
-          {/* A pose is a way of SETTING the values, so it leads them. */}
+        <>
           {poseNames.length ? (
-            <KinematicsPoseRow
+            <FileSheetStaticSection title="Position">
+            <KinematicsPoseRow compact
               poses={poseNames.map((poseName) => ({ value: poseName, label: poseName }))}
               activeValue={activePose}
               onSelect={(poseName) => runtime?.onApplyPose?.(poseName)}
             />
+            </FileSheetStaticSection>
           ) : null}
-          {!parameters.length ? (
-            <FileSheetStatusText>{noParametersLabel}</FileSheetStatusText>
-          ) : null}
+          {parameters.length ? <FileSheetStaticSection title="Parameters">
           {parameters.map((parameter) => {
             const driver = drivenDofs[parameter.id] || null;
             const currentValue = poseControlDisplayValue({
@@ -160,12 +154,12 @@ export default function PoseControlsSection({
             const controlStep = resolveParameterNumberControlStep(parameter);
             if (parameter.type === "boolean") {
               return (
-                <FileSheetToggleRow
+                <FileSheetCheckboxRow
                   key={parameter.id}
                   label={parameter.label}
                   checked={currentValue === true}
                   onCheckedChange={(checked) => runtime?.onParameterChange?.(parameter.id, checked)}
-                          ariaLabel={parameter.label}
+                  ariaLabel={parameter.label}
                 />
               );
             }
@@ -176,7 +170,7 @@ export default function PoseControlsSection({
                   label={parameter.label}
                   value={String(currentValue ?? "")}
                   onValueChange={(nextValue) => runtime?.onParameterChange?.(parameter.id, nextValue)}
-                          ariaLabel={parameter.label}
+                  ariaLabel={parameter.label}
                   options={parameter.options}
                 />
               );
@@ -190,7 +184,7 @@ export default function PoseControlsSection({
                     <FileSheetColorPicker
                       value={String(currentValue || "#ffffff")}
                       onChange={(nextValue) => runtime?.onParameterChange?.(parameter.id, nextValue)}
-                                  aria-label={parameter.label}
+                      aria-label={parameter.label}
                     />
                   )}
                 />
@@ -205,7 +199,7 @@ export default function PoseControlsSection({
                     size="sm"
                     className={cn(compactButtonClasses, "justify-center")}
                     onClick={() => runtime?.onParameterChange?.(parameter.id, Number(currentValue || 0) + 1)}
-                            >
+                  >
                     {parameter.label}
                   </Button>
                 </FileSheetButtonRow>
@@ -220,7 +214,7 @@ export default function PoseControlsSection({
                     <FileSheetValueInput
                       value={String(currentValue ?? "")}
                       onValueCommit={(nextValue) => runtime?.onParameterChange?.(parameter.id, nextValue)}
-                                  inputMode="text"
+                      inputMode="text"
                       ariaLabel={`${parameter.label} value`}
                       className="w-40 max-w-[min(12rem,55vw)] text-left tabular-nums"
                     />
@@ -229,16 +223,12 @@ export default function PoseControlsSection({
               );
             }
             return (
-              <FileSheetSliderField
+              <FileSheetSliderField compact
                 key={parameter.id}
-                // A driven member says so: its slider reads the effective value
-                // and writes through the coupling named here, never into itself.
-                label={driver ? (
-                  <>
-                    {parameter.label}
-                    <span className="ml-1 opacity-70">{`· driven by ${driver.coupling}`}</span>
-                  </>
-                ) : parameter.label}
+                label={parameter.label}
+                labelTitle={driver ? `${parameter.label} · driven by ${driver.coupling}` : parameter.label}
+                labelClassName="w-24"
+                contentClassName="gap-1"
                 value={`${formatControlNumber(currentValue)}${parameter.unit ? ` ${parameter.unit}` : ""}`}
                 onValueCommit={(nextValue) => {
                   changeParameter(parameter.id, parseFileSheetNumberInput(nextValue, {
@@ -258,19 +248,14 @@ export default function PoseControlsSection({
                   max={parameter.max}
                   step={controlStep}
                   onValueChange={(nextValue) => changeParameter(parameter.id, nextValue?.[0] ?? currentValue)}
-                          aria-label={parameter.label}
+                  aria-label={parameter.label}
                 />
               </FileSheetSliderField>
             );
           })}
-          {poseNames.length ? <KinematicsTransitionRows transition={transition} /> : null}
-          <KinematicsValueActions
-            onReset={runtime?.onResetParameters ? () => runtime.onResetParameters() : null}
-            onCopy={runtime?.onCopyParams ? () => runtime.onCopyParams() : null}
-            resetTitle={resetTitle}
-            copyTitle="Copy the current parameter values"
-          />
-        </FileSheetSubsection>
+          </FileSheetStaticSection> : null}
+          {!parameters.length && !poseNames.length ? <FileSheetStatusText>{noParametersLabel}</FileSheetStatusText> : null}
+        </>
       ) : null}
     </>
   );
@@ -282,7 +267,7 @@ export function poseControlsHaveContent(runtime, { hideWhenEmpty = false } = {})
   const parameters = Array.isArray(definition?.parameters) ? definition.parameters : [];
   const status = String(runtime?.status || "").trim();
   const error = String(runtime?.error || "").trim();
-  if (hideWhenEmpty && definition && !parameters.length && status !== "loading" && !error) {
+  if (hideWhenEmpty && definition && !parameters.length && !poseNamesFromDefinition(definition).length && status !== "loading" && !error) {
     return false;
   }
   return Boolean(definition || status === "loading" || error);

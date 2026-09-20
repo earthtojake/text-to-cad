@@ -19,21 +19,39 @@ calls to this component. The browser editing gestures inside Excalidraw are
 local; collaboration, external libraries, AI features, built-in file saving
 and theme switching are not offered by this wrapper.
 
-The editor offers no saving, loading, export, library or Help menus. Save/open
+The editor offers no saving, loading, export, library or Help routes. Save/open
 shortcuts and SDK actions are disabled, including the command palette that
-otherwise includes hardcoded export and library actions. The main menu retains
-only **Clear canvas**, alongside the normal drawing tools, undo/redo and zoom.
-Dropped scene/library files and pasted scene files are rejected. Dropped raster
-images are inserted directly as images so even PNG metadata cannot replace the
-current sketch. Ordinary copied elements and raster image insertion remain
-available; pasted elements pass bounded scene validation.
+otherwise includes hardcoded export and library actions. Dropped scene/library
+files and pasted scene files are rejected. Dropped raster images are inserted
+directly as images so even PNG metadata cannot replace the current sketch.
+Ordinary copied elements and raster image insertion remain available; pasted
+elements pass bounded scene validation.
 
-Controls use the host's system font and 13px UI token, neutral colors, compact
-28px buttons and 12px canvas-edge padding. Drawn text keeps its selected font.
-Persistent controls stay at the top in desktop and narrow layouts. Pan joins the
-drawing tools; lock is hidden. Narrow layouts place menu/style/undo controls in a
-compact second row, with selected-shape properties opening beneath it. These
-styles depend on Excalidraw's pinned DOM; verify both layouts when upgrading.
+Every SDK control is hidden. The canvases, the in-place text editor, the context
+menu and the toast remain, and `DrawingToolbar` (`drawing/toolbar.tsx`) is the
+one control surface: Select and move drawings, Pan view, Pen, Line, Arrow,
+Rectangle, Ellipse, Text, Fill area, Eraser, Color, Undo, Redo and Clear
+drawing, in the floating-toolbar button primitive. It imports nothing of the SDK.
+The standalone editor renders it top-centre and always light (its tokens are
+re-declared inside the editor, and the color strip is in the toolbar's flow
+rather than a portalled popover, so a dark application cannot restyle it). A
+host that places the toolbar itself passes `toolbar={false}` and drives the same
+component from `useDrawingSession` (`drawing/session.ts`), as the CAD viewport
+does. These styles depend on Excalidraw's pinned DOM; verify both hosts when
+upgrading.
+
+Tools are locked in the SDK's sense: a shape is followed by another of the same
+tool instead of a return to selection. Color sets what is drawn next
+(`currentItemStrokeColor`) and never recolors existing elements, selected or
+not; the swatches are neon so ink stands out from a shaded model. Fill area is
+this editor's tool, not the SDK's (`drawing/fill.ts`): a press renders the ink
+without earlier fills, finds the area around the point with
+`@hardcore/core/lib/drawing/fillRegion.js` — as drawn, then with nearby stroke
+ends joined, then guessed from what the ink does enclose, ignoring rays that
+leave through a gap — and appends a closed, strokeless, 35%-opacity line element
+(inserting below existing elements would cost a second, invisible undo step). A fill is an ordinary element: it moves, erases and undoes. The
+SDK's lock, image, frame, embed, diamond and laser tools are not offered and
+their shortcut keys are blocked.
 Drawing names belong to the host, which updates the editor name and prompt
 attachment title without recreating the scene or persisting it.
 
@@ -80,33 +98,53 @@ and follow
 the existing draft/transcript lifetime after being added; closing the drawing
 does not delete an already attached image.
 
-## Reusing the editor for viewport annotations
+## Viewport annotations
 
 The editor is independent of explorer tabs and prompt destinations. Its
-`mode="overlay"` uses a transparent drawing surface and defaults PNG export
-to transparent ink; `exportPng({ background: false })` also works explicitly.
-Use this same component and document contract when replacing screen-space
-viewer annotations. A host/renderer's integration must own the background
-capture, viewport coordinate mapping, camera lock/invalidation, and composition
-of ink with the captured image and any selected references in one prompt bundle.
-The current PNG export is content-cropped, not viewport-aligned: do not place
-it over a CAD screenshot without mapping its bounds. The existing CAD overlay
-has not been replaced by this tab feature, and geometry-snapped surface lines
-must retain their CAD-specific implementation when that migration happens.
+`mode="overlay"` uses a transparent drawing surface, red default ink and
+transparent PNG export; `exportPng({ background: false })` also works explicitly.
+The CAD renderer's Draw tool is this component ([Draw](cad-renderer.md#draw)).
+
+`toolbar={false}` leaves the toolbar to the host, and `initialTool` chooses the
+tool a new editor opens on. The controller drives the editor: `setTool` (one of
+`DRAWING_TOOLS`), `setColor`, `undo`/`redo` (the SDK exposes no history API, so
+these press its own shortcut on the editor), an undoable `clear`, and
+`inkCanvas()`. `onToolChange` and `onColorChange` report the SDK's state whoever
+changed it. The overlay stays hidden until the SDK has the given scene, because
+its default page is white.
+
+`onViewportChange({ scrollX, scrollY, zoom })` reports pan and zoom made inside
+the editor; a scene point `s` is drawn at `(s + scroll) * zoom` CSS pixels from
+the editor's top-left. A host that moves its own background with the ink (the
+CAD camera) follows this mapping. The host still owns the background capture,
+the camera lock and the composition of ink, image and references into one prompt
+bundle. `exportPng` is content-cropped, not viewport-aligned: compose
+`inkCanvas()` instead, which is the committed ink exactly as displayed,
+viewport-sized, without selection handles, at the editor's own pixel ratio.
 
 ## Offline assets and upgrades
 
-Desktop's `scripts/drawing-assets.mjs` serves the editor fonts in development
-and emits them into the packaged renderer. A script sets the asset directory
-before the editor imports. The SDK's CDN fallback is also redirected locally
-by a version-guarded build adaptation, applied during Vite dependency
-optimization as well as production transforms. No font binaries are committed.
-The distribution contains 233 WOFF2 files and unmodified OFL Liberation Sans
-2.1.5 TTF from pinned `@betteroffice/fonts`, plus font and editor notices.
-The SDK's older GPL Liberation font is excluded. Review the guarded font URI
-and fallback adaptations, notices, and offline Electron test when upgrading.
+The Vite plugin `@hardcore/ui/drawing-assets` (`scripts/drawing-assets.mjs`,
+notices in `licenses/excalidraw/`) serves the editor fonts in development and
+emits them into a host's build. Every host that loads this entry point adds it
+to its Vite config: desktop's renderer and the web Viewer both do. A script
+sets the asset directory before the editor imports. The SDK's CDN fallback is
+also redirected locally by a version-guarded build adaptation, applied during
+Vite dependency optimization (esbuild on Vite 7, Rolldown on Vite 8) as well
+as production transforms, so a missing font is a local miss and a system font,
+never a network request. No font binaries are committed.
+
+The full set, which desktop ships, is 233 WOFF2 files and unmodified OFL
+Liberation Sans 2.1.5 TTF from pinned `@betteroffice/fonts`, plus font and
+editor notices: 246 files, 12.9 MiB. The SDK's older GPL Liberation font is
+excluded. `drawingAssetsPlugin({ exclude })` takes RegExps tested against each
+emitted file name; a match is neither served nor emitted. The web Viewer ships
+inside a Python wheel and passes `[/\/fonts\/Xiaolai\//]`, dropping the 209-file
+CJK family: 37 files, 0.8 MiB. Review the guarded font URI and fallback
+adaptations, notices, and offline Electron test when upgrading.
 
 Validation lives in core's `drawing.test.js`, desktop's drawing document/tab,
-prompt, tools and asset unit tests, and `tests/e2e/drawing.spec.ts`. The latter
+prompt, tools and asset unit tests (`tests/unit/main/drawing-assets.test.ts`
+covers this plugin), and `tests/e2e/drawing.spec.ts`. The latter
 draws real ink, checks PNG decoding and disabled persistence routes, and
 reloads the app profile while blocking external requests.

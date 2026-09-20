@@ -4,16 +4,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DrawingEditor, exportDrawingScenePng } from './index';
 import type { DrawingController } from './index';
 
-const sdk = vi.hoisted(() => ({ props: null as any, export: vi.fn(), api: null as any, actions: {} as Record<string, any> }));
+const sdk = vi.hoisted(() => ({ props: null as any, export: vi.fn(), api: null as any, actions: {} as Record<string, any>, scroll: null as any, pointerDown: null as any, canvas: vi.fn() }));
 vi.mock('@excalidraw/excalidraw', async () => {
   const React = await import('react');
   class Canvas extends React.Component<any> {
     componentDidMount() {
       sdk.props = this.props;
       const elements = [{ id: 'rectangle', type: 'rectangle', x: 0, y: 0, width: 20, height: 20 }];
-      const appState = { scrollX: 11, scrollY: 22, zoom: { value: 1 }, viewBackgroundColor: '#fff' };
+      const appState = { scrollX: 11, scrollY: 22, zoom: { value: 1 }, viewBackgroundColor: '#fff', activeTool: { type: 'selection' }, currentItemStrokeColor: '#1e1e1e' };
       sdk.api = { getSceneElements: () => elements, getAppState: () => appState, getFiles: () => ({}),
-        addFiles: vi.fn(), updateScene: vi.fn(), registerAction: (action: any) => { sdk.actions[action.name] = action; }, setToast: vi.fn() };
+        addFiles: vi.fn(), updateScene: vi.fn(), setActiveTool: vi.fn(),
+        onScrollChange: (listener: any) => { sdk.scroll = listener; return () => { sdk.scroll = null; }; },
+        onPointerDown: (listener: any) => { sdk.pointerDown = listener; return () => { sdk.pointerDown = null; }; }, registerAction: (action: any) => { sdk.actions[action.name] = action; }, setToast: vi.fn() };
       this.props.onChange(elements, appState, {});
       this.props.excalidrawAPI(sdk.api);
     }
@@ -25,11 +27,13 @@ vi.mock('@excalidraw/excalidraw', async () => {
     }
     render() { return null; }
   }
-  const Menu = Object.assign(() => null, { DefaultItems: { ClearCanvas: () => null, Help: () => null } });
-  return { Excalidraw: Canvas, MainMenu: Menu, exportToBlob: sdk.export,
-    CaptureUpdateAction: { IMMEDIATELY: 'IMMEDIATELY' },
+  return { Excalidraw: Canvas, exportToBlob: sdk.export, exportToCanvas: sdk.canvas,
+    getCommonBounds: (elements: any[]) => [Math.min(...elements.map(e => e.x)), Math.min(...elements.map(e => e.y)),
+      Math.max(...elements.map(e => e.x + e.width)), Math.max(...elements.map(e => e.y + e.height))],
+    CaptureUpdateAction: { IMMEDIATELY: 'IMMEDIATELY', NEVER: 'NEVER' },
+    newElementWith: (element: any, updates: any) => ({ ...element, ...updates, version: (element.version ?? 1) + 1 }),
     viewportCoordsToSceneCoords: (point: any) => ({ x: point.clientX, y: point.clientY }),
-    convertToExcalidrawElements: (elements: any[]) => elements.map(element => ({ ...element, id: 'image-element' })),
+    convertToExcalidrawElements: (elements: any[]) => elements.map(element => ({ ...element, id: `${element.type}-element` })),
     serializeAsJSON: (elements: unknown, appState: unknown, files: unknown) => JSON.stringify({ type: 'excalidraw', version: 2, elements, appState, files }) };
 });
 afterEach(() => { vi.clearAllMocks(); vi.unstubAllGlobals(); });
@@ -124,6 +128,129 @@ describe('drawing editor', () => {
     expect(sdk.export.mock.calls[0][0]).toMatchObject({ elements: [{ width: 20 }],
       appState: { exportBackground: false, exportWithDarkMode: false }, maxWidthOrHeight: 2048 });
     expect(sdk.props.handleKeyboardGlobally).toBe(false);
+    view.unmount();
+  });
+  it('lets a host toolbar drive an overlay: sticky tools, color, history, an undoable clear and the viewport', async () => {
+    let controller: DrawingController | null = null;
+    const onToolChange = vi.fn(), onColorChange = vi.fn(), onViewportChange = vi.fn();
+    const view = render(<DrawingEditor mode="overlay" toolbar={false} initialTool="freedraw"
+      onReady={value => { controller = value; }} onToolChange={onToolChange} onColorChange={onColorChange} onViewportChange={onViewportChange} />);
+    await waitFor(() => expect(controller).not.toBeNull());
+    const editor = view.container.firstChild as HTMLElement;
+    expect(view.container.querySelector('[aria-label="Drawing tools"]')).toBeNull();
+    // Locked: a line is followed by another line, as a pen stroke always was by another stroke.
+    expect(sdk.props.initialData.appState).toMatchObject({ viewBackgroundColor: 'transparent', currentItemStrokeColor: '#ff2d55',
+      activeTool: { type: 'freedraw', locked: true } });
+    // The SDK paints a white page until the given scene is in place; the overlay stays hidden until then.
+    expect(editor.dataset.drawingReady).toBe('');
+
+    controller!.setTool('arrow');
+    expect(sdk.api.setActiveTool).toHaveBeenLastCalledWith({ type: 'arrow', locked: true });
+    controller!.setTool('hand');
+    expect(sdk.api.setActiveTool).toHaveBeenLastCalledWith({ type: 'hand', locked: true });
+    // The SDK's lock, image, frame, embed and laser tools are not the toolbar's to offer.
+    controller!.setTool('laser' as any);
+    expect(sdk.api.setActiveTool).toHaveBeenCalledTimes(2);
+    for (const key of ['q', 'k', 'f', 'd', '3', '9']) expect(fireEvent.keyDown(editor, { key })).toBe(false);
+    for (const key of ['p', 'e', '0', 'v', 'h']) expect(fireEvent.keyDown(editor, { key })).toBe(true);
+
+    // The color of what is drawn next: no element is touched, selected or not, and it is not an undo step.
+    controller!.setColor('#39ff14');
+    expect(sdk.api.updateScene).toHaveBeenLastCalledWith({ appState: { currentItemStrokeColor: '#39ff14' }, captureUpdate: 'NEVER' });
+
+    // The SDK reports every tool and color change, whoever made it.
+    expect(onToolChange).toHaveBeenLastCalledWith('selection');
+    expect(onColorChange).toHaveBeenLastCalledWith('#1e1e1e');
+    const next = { ...sdk.api.getAppState(), activeTool: { type: 'arrow' }, currentItemStrokeColor: '#39ff14' };
+    sdk.props.onChange(sdk.api.getSceneElements(), next, {});
+    sdk.props.onChange(sdk.api.getSceneElements(), next, {});
+    expect(onToolChange.mock.calls).toEqual([['selection'], ['arrow']]);
+    expect(onColorChange.mock.calls).toEqual([['#1e1e1e'], ['#39ff14']]);
+
+    sdk.scroll(40, -12, { value: 1.5 });
+    expect(onViewportChange).toHaveBeenLastCalledWith({ scrollX: 40, scrollY: -12, zoom: 1.5 });
+
+    // History has no imperative API: the editor's own shortcut is pressed on its canvas container.
+    const surface = document.createElement('div');
+    surface.className = 'excalidraw'; surface.tabIndex = -1;
+    editor.appendChild(surface);
+    const keys: KeyboardEvent[] = [];
+    surface.addEventListener('keydown', event => keys.push(event));
+    controller!.undo(); controller!.redo();
+    expect(keys.map(event => [event.key, event.shiftKey, event.metaKey || event.ctrlKey])).toEqual([['z', false, true], ['z', true, true]]);
+
+    controller!.clear();
+    expect(sdk.api.updateScene).toHaveBeenLastCalledWith({ elements: [expect.objectContaining({ id: 'rectangle', isDeleted: true, version: 2 })],
+      appState: { selectedElementIds: {} }, captureUpdate: 'IMMEDIATELY' });
+
+    const ink = document.createElement('canvas');
+    ink.className = 'excalidraw__canvas static';
+    surface.appendChild(ink);
+    expect(controller!.inkCanvas()).toBe(ink);
+    view.unmount();
+    expect(sdk.scroll).toBeNull();
+  });
+  it('the standalone editor carries the same toolbar, driving itself', async () => {
+    const view = render(<DrawingEditor onReady={() => {}} />);
+    await waitFor(() => expect(sdk.api?.setActiveTool).toBeDefined());
+    const tools = await waitFor(() => { const group = view.container.querySelector('[aria-label="Drawing tools"]'); expect(group).not.toBeNull(); return group!; });
+    const button = (name: string) => tools.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`)!;
+    await waitFor(() => expect(button('Line').disabled).toBe(false));
+    expect(sdk.props.initialData.appState).toMatchObject({ viewBackgroundColor: '#ffffff', activeTool: { type: 'selection', locked: true } });
+    expect(sdk.props.initialData.appState.currentItemStrokeColor).toBeUndefined();
+    expect(button('Select and move drawings').getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(button('Line'));
+    expect(sdk.api.setActiveTool).toHaveBeenLastCalledWith({ type: 'line', locked: true });
+    fireEvent.click(button('Pan view'));
+    expect(sdk.api.setActiveTool).toHaveBeenLastCalledWith({ type: 'hand', locked: true });
+    fireEvent.click(button('Color'));
+    fireEvent.click(view.container.querySelector<HTMLButtonElement>('[role="radio"][aria-label="Neon cyan"]')!);
+    expect(sdk.api.updateScene).toHaveBeenLastCalledWith({ appState: { currentItemStrokeColor: '#00e5ff' }, captureUpdate: 'NEVER' });
+    fireEvent.click(button('Clear drawing'));
+    expect(sdk.api.updateScene).toHaveBeenLastCalledWith(expect.objectContaining({ captureUpdate: 'IMMEDIATELY' }));
+    view.unmount();
+  });
+  it('fills the area inside drawn ink with a translucent, undoable element of the current color', async () => {
+    let controller: DrawingController | null = null;
+    const view = render(<DrawingEditor mode="overlay" toolbar={false} onReady={value => { controller = value; }} />);
+    await waitFor(() => expect(controller).not.toBeNull());
+    controller!.setTool('fill');
+    expect(sdk.api.setActiveTool).toHaveBeenLastCalledWith({ type: 'custom', customType: 'fill', locked: true });
+    // A 200 x 100 outline at (100, 50); the SDK's render of it, 12 px padded, at 420 / 224 scale.
+    const outline = { id: 'outline', type: 'rectangle', x: 100, y: 50, width: 200, height: 100, angle: 0, strokeColor: '#ff2d55', backgroundColor: 'transparent' };
+    const earlierFill = { id: 'old-fill', type: 'line', x: 0, y: 0, width: 900, height: 900, angle: 0, strokeColor: 'transparent', backgroundColor: '#39ff14', points: [[0, 0], [900, 0], [900, 900], [0, 0]] };
+    sdk.api.getSceneElements = () => [earlierFill, outline];
+    sdk.api.getAppState = () => ({ zoom: { value: 1 }, currentItemStrokeColor: '#00e5ff', activeTool: { type: 'custom', customType: 'fill' } });
+    sdk.canvas.mockImplementation(async ({ elements, getDimensions, exportPadding }: any) => {
+      // An earlier fill is never an outline: it would wall off, or swallow, every later one.
+      expect(elements.map((element: any) => element.id)).toEqual(['outline']);
+      const { width, height, scale } = getDimensions(200 + exportPadding * 2, 100 + exportPadding * 2);
+      const data = new Uint8ClampedArray(width * height * 4);
+      const [x0, y0, x1, y1] = [exportPadding, exportPadding, exportPadding + 200, exportPadding + 100].map(value => Math.round(value * scale));
+      for (let y = y0; y <= y1; y += 1) for (let x = x0; x <= x1; x += 1) {
+        if (x - x0 < 3 || x1 - x < 3 || y - y0 < 3 || y1 - y < 3) data[(y * width + x) * 4 + 3] = 255;
+      }
+      return { width, height, getContext: () => ({ getImageData: () => ({ data }) }) };
+    });
+    sdk.pointerDown({ type: 'custom', customType: 'fill' }, { origin: { x: 180, y: 90 } });
+    await waitFor(() => expect(sdk.api.updateScene).toHaveBeenCalledTimes(1));
+    const update = sdk.api.updateScene.mock.calls[0][0];
+    expect(update.captureUpdate).toBe('IMMEDIATELY');
+    // Appended, so one Undo removes it (an insertion below re-indexes the rest as a second step).
+    expect(update.elements.map((element: any) => element.id)).toEqual(['old-fill', 'outline', 'line-element']);
+    const fill = update.elements.at(-1);
+    expect(fill).toMatchObject({ type: 'line', strokeColor: 'transparent', backgroundColor: '#00e5ff', fillStyle: 'solid', opacity: 35 });
+    expect(fill.points[0]).toEqual(fill.points.at(-1));
+    const xs = fill.points.map((point: number[]) => fill.x + point[0]), ys = fill.points.map((point: number[]) => fill.y + point[1]);
+    for (const [value, expected] of [[Math.min(...xs), 100], [Math.max(...xs), 300], [Math.min(...ys), 50], [Math.max(...ys), 150]]) expect(Math.abs(value - expected)).toBeLessThan(4);
+
+    // Outside any ink there is no area to mean: a hint, and no element.
+    sdk.pointerDown({ type: 'custom', customType: 'fill' }, { origin: { x: 600, y: 600 } });
+    await waitFor(() => expect(sdk.api.setToast).toHaveBeenCalledTimes(1));
+    // Any other tool's press is the SDK's own business.
+    sdk.pointerDown({ type: 'freedraw' }, { origin: { x: 180, y: 90 } });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(sdk.api.updateScene).toHaveBeenCalledTimes(1);
     view.unmount();
   });
 });

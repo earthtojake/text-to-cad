@@ -151,6 +151,31 @@ test("a former renderer cannot change the new root's panels, state or preview", 
   assert.equal(await page.evaluate(() => window.harness.state.renderers), undefined);
 });
 
+test("navbar actions belong to the active file generation and ignore retired registrations", async () => {
+  await reset();
+  await page.evaluate(() => {
+    const current = window.harness.rendererCallbacks.get('root-a');
+    window.retiredNavbar = current.onNavigationActionsChange;
+    current.onNavigationActionsChange([{ id: 'fixture', label: 'Inspect notes', icon: 'span',
+      onInvoke: () => window.harness.events.push('notes-action') }]);
+  });
+  await page.getByRole('button', { name: 'Inspect notes', exact: true }).click();
+  assert.ok(await page.evaluate(() => window.harness.events.includes('notes-action')));
+  await page.evaluate(() => window.harness.open('next.txt'));
+  await waitValue('root-a next');
+  assert.equal(await page.getByRole('button', { name: 'Inspect notes', exact: true }).count(), 0);
+  await page.evaluate(() => {
+    window.harness.rendererCallbacks.get('root-a').onNavigationActionsChange([
+      { id: 'next', label: 'Inspect next', icon: 'span', onInvoke() {} }
+    ]);
+    window.retiredNavbar([]);
+  });
+  await page.getByRole('button', { name: 'Inspect next', exact: true }).waitFor();
+  await page.evaluate(() => window.retiredNavbar([{ id: 'stale', label: 'Stale action', icon: 'span', onInvoke() {} }]));
+  assert.equal(await page.getByRole('button', { name: 'Stale action', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Inspect next', exact: true }).count(), 1);
+});
+
 test("a departing renderer flushes its own state on file changes and reloads, but never into another root", async () => {
   await reset();
   await page.evaluate(() => { window.harness.cleanupWrites.set('root-a:notes.txt', { selection: 'last frame' }); window.harness.open('next.txt'); });

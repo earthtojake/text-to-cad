@@ -1,3 +1,4 @@
+import { MotionResetButton } from "./MotionControlsSection.js";
 import { memo, useEffect, useRef, useState } from "react";
 import { cn } from "@hardcore/ui/utils";
 import { Input } from "@hardcore/ui/primitives/input";
@@ -19,6 +20,7 @@ import FileSheet, {
   FileSheetSliderField,
   FileSheetStatusText,
   FileSheetSubsection,
+  FileSheetStaticSection,
   FileSheetValueField,
   parseFileSheetNumberInput
 } from "./FileSheet.js";
@@ -28,8 +30,6 @@ import RobotComponentsSection from "./RobotComponentsSection.js";
 import {
   NO_PRESET_VALUE,
   KinematicsPoseRow,
-  KinematicsTransitionRows,
-  KinematicsValueActions
 } from "./KinematicsControls.js";
 
 const compactNumericInputClasses = FILE_SHEET_COMPACT_NUMERIC_INPUT_CLASSES;
@@ -249,7 +249,53 @@ function SdfMetadataList({ title, items, fields }) {
   );
 }
 
+/** Robot Position controls for the Motion inspector. */
+export function UrdfPositionSection({ joints = [], groupStates = [], activeGroupStateId, jointValues,
+  onJointValueChange, onGroupStateSelect, onResetPose }) {
+  const movableJoints = Array.isArray(joints) ? joints : [];
+  const groupStatePresets = Array.isArray(groupStates) ? groupStates : [];
+  const activeGroupStateValue = groupStatePresets.some((state) => String(state?.id || "").trim() === activeGroupStateId)
+    ? activeGroupStateId
+    : NO_PRESET_VALUE;
+  return (
+    <div>
+      {groupStatePresets.length ? <FileSheetStaticSection title="Position">
+      {/* A named state is a way of SETTING the joints, so it leads them. A
+          plain URDF declares none and opens straight onto its values. */}
+      <KinematicsPoseRow compact
+        poses={groupStatePresets.map((groupState) => {
+          const groupStateId = String(groupState?.id || "").trim();
+          return {
+            value: groupStateId,
+            label: String(groupState?.label || groupState?.name || "").trim() || "State"
+          };
+        })}
+        activeValue={activeGroupStateValue}
+        onSelect={(value) => {
+          const groupState = groupStatePresets.find((candidate) => String(candidate?.id || "").trim() === value);
+          if (groupState) {
+            onGroupStateSelect?.(groupState);
+          }
+        }}
+      />
+      </FileSheetStaticSection> : null}
+      {movableJoints.length ? <FileSheetStaticSection title="Parameters">
+      {movableJoints.map((joint) => (
+        <UrdfJointRow
+          key={joint.name}
+          joint={joint}
+          valueDeg={jointValues?.[joint.name] ?? joint?.defaultValueDeg ?? 0}
+          onValueChange={onJointValueChange}
+        />
+      ))}
+      </FileSheetStaticSection> : null}
+      <MotionResetButton onReset={onResetPose} />
+    </div>
+  );
+}
+
 export default function UrdfFileSheet({
+  headerActions = null,
   open,
   title = "URDF",
   sourceFormat = "urdf",
@@ -260,6 +306,9 @@ export default function UrdfFileSheet({
   onOpenChange,
   onStartResize,
   joints,
+  robotDescription = null,
+  robotParts = [],
+  robotGroupNamesByLink = null,
   components = [],
   componentSelection,
   groupStates,
@@ -279,7 +328,6 @@ export default function UrdfFileSheet({
 }) {
   const isSdf = String(sourceFormat || "").trim().toLowerCase() === "sdf";
   const movableJoints = Array.isArray(joints) ? joints : [];
-  const groupStatePresets = Array.isArray(groupStates) ? groupStates : [];
   const sdfInfo = sdf?.info && typeof sdf.info === "object" ? sdf.info : {};
   const sdfStaticMetadata = sdfInfo.staticMetadata && typeof sdfInfo.staticMetadata === "object"
     ? sdfInfo.staticMetadata
@@ -299,9 +347,6 @@ export default function UrdfFileSheet({
     sdfLights.length ||
     sdfPhysics.length
   );
-  const activeGroupStateValue = groupStatePresets.some((state) => String(state?.id || "").trim() === activeGroupStateId)
-    ? activeGroupStateId
-    : NO_PRESET_VALUE;
 
   const sections = [
     isSdf ? {
@@ -357,61 +402,34 @@ export default function UrdfFileSheet({
       content: (
             movableJoints.length ? (
               // Use the shared Motion body spacing around Position.
-              <div className="py-2">
-                <FileSheetSubsection title="Position">
-                {/* A named state is a way of SETTING the joints, so it leads them. A
-                    plain URDF declares none and opens straight onto its values. */}
-                <KinematicsPoseRow
-                  poses={groupStatePresets.map((groupState) => {
-                    const groupStateId = String(groupState?.id || "").trim();
-                    return {
-                      value: groupStateId,
-                      label: String(groupState?.label || groupState?.name || "").trim() || "State"
-                    };
-                  })}
-                  activeValue={activeGroupStateValue}
-                  onSelect={(value) => {
-                    const groupState = groupStatePresets.find((candidate) => String(candidate?.id || "").trim() === value);
-                    if (groupState) {
-                      onGroupStateSelect?.(groupState);
-                    }
-                  }}
-                />
-                {movableJoints.map((joint) => (
-                  <UrdfJointRow
-                    key={joint.name}
-                    joint={joint}
-                    valueDeg={jointValues?.[joint.name] ?? joint?.defaultValueDeg ?? 0}
-                    onValueChange={onJointValueChange}
-                  />
-                ))}
-                {groupStatePresets.length ? <KinematicsTransitionRows transition={poseTransition} /> : null}
-                <KinematicsValueActions
-                  onReset={onResetPose}
-                  onCopy={onCopyJointAngles}
-                  resetTitle="Reset every joint to the robot as authored"
-                  copyTitle={isSdf ? "Copy the current values" : "Copy the current joint angles"}
-                />
-                </FileSheetSubsection>
-              </div>
+              <UrdfPositionSection joints={movableJoints} groupStates={groupStates} activeGroupStateId={activeGroupStateId}
+                jointValues={jointValues} onJointValueChange={onJointValueChange} onGroupStateSelect={onGroupStateSelect}
+                poseTransition={poseTransition} onCopyJointAngles={onCopyJointAngles} onResetPose={onResetPose} isSdf={isSdf}/>
+
             ) : (
               <FileSheetStatusText className="py-2">No movable joints.</FileSheetStatusText>
             )
       )
     } : null,
-    components.length ? {
-      id: "components",
+    {
+      // Always present: every robot description has links, and this is their tree.
+      // Mounted once visited, like the Model tree, so disclosure and scroll survive tab changes.
+      id: FILE_SHEET_SECTION_IDS.ROBOT_COMPONENTS,
       title: "Components",
-      titleAttr: "Named exported mesh components, by link",
-      content: (
+      keepMounted: true,
+      scrollsContent: true,
+      content: active => (
         <RobotComponentsSection
+          key={String(selectedEntry?.file || "")}
+          active={active}
+          description={robotDescription}
           components={components}
-          selectedIds={componentSelection.selectedIds}
-          onSelect={componentSelection.select}
-          onHover={componentSelection.hover}
+          parts={robotParts}
+          selection={componentSelection}
+          groupNamesByLink={robotGroupNamesByLink}
         />
       )
-    } : null,
+    },
     ...settingsTabs
   ];
 
@@ -425,7 +443,7 @@ export default function UrdfFileSheet({
       onStartResize={onStartResize}
       scrollBody={false}
     >
-      <FileSheetTabbedSurface
+      <FileSheetTabbedSurface headerActions={headerActions}
         sections={sections}
         openSectionIds={openSectionIds}
         onOpenSectionIdsChange={onOpenSectionIdsChange}

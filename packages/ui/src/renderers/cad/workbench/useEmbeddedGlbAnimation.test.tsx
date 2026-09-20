@@ -36,3 +36,22 @@ it('GLB playback, document replacement and unmount stay within their renderer', 
   second.unmount();
   expect(frames.size).toBe(0);
 });
+
+it('model reset returns to the authored pose rather than evaluating clip time zero', () => {
+  const clock = createEmbeddedGlbAnimationClock();
+  const document = { clips: [{ name: 'Offset from origin', duration: 2 }] };
+  const { result } = renderHook(() => useEmbeddedGlbAnimation(document), {
+    wrapper: ({ children }) => <EmbeddedGlbAnimationClockProvider value={clock}>{children}</EmbeddedGlbAnimationClockProvider>,
+  });
+  act(() => result.current!.onScrub(1));
+  act(() => result.current!.onPlayToggle());
+  expect(result.current!.playing).toBe(true);
+  act(() => result.current!.resetModel());
+  expect(result.current!.playing).toBe(false);
+  expect(result.current!.elapsedSec).toBe(0);
+  expect(clock.getAnimationClock()).toBe(0);
+  expect(result.current!.render.clip).toBeNull();
+  act(() => result.current!.onScrub(0.5));
+  expect(result.current!.render.clip).toBe(document.clips[0]);
+  expect(result.current!.elapsedSec).toBe(0.5);
+});

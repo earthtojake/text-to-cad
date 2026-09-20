@@ -9,7 +9,9 @@ import type { IntegrationCommand, IntegrationReply } from '../../src/shared/ipc/
 // Keep React/DOM declarations out of the plain Node Electron test project.
 type CadLiveState = { active: boolean; loading: boolean; revision: string;
   resource: { kind: string; path?: string; revision?: string }; selection: unknown[];
-  camera: { position: [number, number, number]; target: [number, number, number]; up: [number, number, number] } | null; renderMode: string };
+  camera: { position: [number, number, number]; target: [number, number, number]; up: [number, number, number];
+    projection?: 'orthographic' | 'perspective'; focalLength?: number } | null;
+  display: { mode: string; camera?: { enabled?: boolean; projection?: string; focalLength?: number } }; renderMode: string };
 import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from './cad-runtime';
 import { selectFixtureSession } from './session-fixture';
 
@@ -71,6 +73,7 @@ test('live CAD commands observe and control the mounted tiny STEP viewport witho
   }, { timeout: 90_000 }).toBe(true);
   expect(state.resource).toMatchObject({ kind: 'workspace-file', path: 'part.step', revision });
   expect(state.revision).toBe(revision);
+  expect(state.display).toEqual({ mode: 'solid' });
   const initialCamera = state.camera!;
   const model = page.getByRole('list', { name: 'Model', exact: true });
   await model.getByRole('button', { name: 'Select part.step', exact: true }).click();
@@ -87,18 +90,24 @@ test('live CAD commands observe and control the mounted tiny STEP viewport witho
   await expect(model.getByRole('button', { name: 'Select part.step', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await command('cad-clear-selection', tabId);
   const movedCamera = { ...initialCamera, position: initialCamera.position.map((value, index) => value + (index === 0 ? 5 : 0)) };
-  await command('cad-camera', tabId, { camera: movedCamera });
+  const movedState = await command('cad-camera', tabId, { camera: movedCamera }) as CadLiveState;
+  expect(movedState.display.camera).toMatchObject({ enabled: true, projection: movedCamera.projection, focalLength: movedCamera.focalLength });
   const actualCamera = await page.evaluate(() => window.__cadCamera?.());
   actualCamera!.position.forEach((value, index) => expect(value).toBeCloseTo(movedCamera.position[index]!, 5));
   const invalid = await reply('cad-camera', tabId, { camera: { ...initialCamera, position: [1, 2] } }); expect(invalid.ok).toBe(false);
   await command('cad-reset-camera', tabId);
   await expect.poll(async () => (await command('viewer-state', tabId) as CadLiveState).camera!.position[0]).not.toBeCloseTo(movedCamera.position[0]!, 2);
-  expect((await command('cad-render-mode', tabId, { mode: 'render' }) as CadLiveState).renderMode).toBe('render');
+  const renderedState = await command('cad-render-mode', tabId, { mode: 'render' }) as CadLiveState;
+  expect(renderedState.renderMode).toBe('render');
+  expect(renderedState.display.mode).toBe('render');
+  expect(renderedState.camera?.projection).toBe('perspective');
   await page.getByRole('tab', { name: 'View', exact: true }).click();
   const displayMode = page.getByRole('tabpanel', { name: 'View', exact: true }).getByRole('combobox', { name: 'Mode' });
   await expect(displayMode).toContainText('Render');
-  await command('cad-render-mode', tabId, { mode: 'inspect' });
-  await expect(displayMode).toContainText('Shaded with edges');
+  const solidState = await command('cad-render-mode', tabId, { mode: 'inspect' }) as CadLiveState;
+  expect(solidState.display.mode).toBe('solid');
+  expect(solidState.camera?.projection).toBe('orthographic');
+  await expect(displayMode).toContainText('Solid');
   await page.locator('[data-tab-strip] button[aria-label="New tab"][aria-haspopup="menu"]').click();
   await page.getByRole('menuitem', { name: /^Browser/ }).click();
   await page.getByRole('tab', { name: /^New tab/ }).click();

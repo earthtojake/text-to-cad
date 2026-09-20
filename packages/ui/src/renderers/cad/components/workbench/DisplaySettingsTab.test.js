@@ -1,153 +1,92 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CAMERA_PROJECTION } from "@hardcore/core/common/camera.js";
-import { CAD_DISPLAY_MODE, DEFAULT_DISPLAY_SETTINGS } from "@hardcore/core/lib/displaySettings.js";
+import { resolveViewSettings, viewSettingsAreCustom } from "@hardcore/core/common/viewSettings.js";
 import { elements, render } from "../../../../../scripts/reactHarness.mjs";
 import { DISPLAY_MODE_OPTIONS } from "../viewer/DisplayModeOptions.js";
-import {
-  buildDisplaySettingsTab,
-  DisplaySettingsSection
-} from "./DisplaySettingsTab.js";
-import RenderSettingsContent from "./RenderSettingsContent.js";
-import { RenderSettingsPanel } from "./RenderSettingsTab.js";
+import { buildDisplaySettingsTab, DisplaySettingsSection } from "./DisplaySettingsTab.js";
+import { createViewSettingsStore } from "../../workbench/viewSettingsStore.js";
 
-const SCENE = Object.freeze({
-  camera: Object.freeze({ focalLength: 50 }),
-  render: Object.freeze({
-    payload: Object.freeze({}),
-    configuration: Object.freeze({
-      quality: "final",
-      exposure: 0,
-      lighting: Object.freeze({ rotation: 0, size: 1, fill: 0.5 }),
-      backdrop: Object.freeze({
-        color: "#ffffff",
-        transparent: false,
-        ground: true,
-        groundPlacement: "lowest"
-      })
-    })
-  })
-});
-
-function sectionProps(extra = {}) {
-  return {
-    displaySettings: DEFAULT_DISPLAY_SETTINGS,
-    updateDisplaySettings() {},
-    scene: SCENE,
-    ...extra
-  };
-}
-
-function findByLabel(tree, label) {
-  return elements(tree).find((node) => node.props.label === label);
-}
-
-test("View is the single settings tab and Render is its second mode", () => {
-  const tab = buildDisplaySettingsTab(sectionProps());
-  assert.equal(tab.id, "view");
-  assert.equal(tab.title, "View");
-  assert.equal(DISPLAY_MODE_OPTIONS[1].value, CAD_DISPLAY_MODE.RENDER);
-  assert.equal(DISPLAY_MODE_OPTIONS[1].label, "Render");
-});
-
-test("ordinary controls share View while Clip and Explode stay flat sections", () => {
-  const view = render(DisplaySettingsSection, sectionProps());
-  assert.deepEqual(
-    elements(view.tree)
-      .filter((node) => node.type?.name === "FileSheetSubsection")
-      .map((node) => node.props.title),
-    ["View", "Explode"]
-  );
-  const clip = elements(view.tree).find((node) => node.type?.name === "ClipSettings");
-  assert.ok(clip);
-  const renderedClip = render(clip.type, clip.props);
-  assert.equal(elements(renderedClip.tree).find((node) => node.type?.name === "FileSheetSubsection")?.props.title, "Clip");
-  for (const label of ["Mode", "Projection", "Parts", "Grid", "Origin axes", "Silhouette"]) {
-    assert.ok(findByLabel(view.tree, label), label);
-  }
-  assert.equal(elements(view.tree).some((node) => node.type === RenderSettingsPanel), false);
-  renderedClip.unmount();
-  view.unmount();
-});
-
-test("mode transitions are delegated without overwriting inspection settings", () => {
-  const modes = [];
-  let displayWrites = 0;
-  const view = render(DisplaySettingsSection, sectionProps({
-    rendering: true,
-    onModeChange: (mode) => modes.push(mode),
-    updateDisplaySettings: () => { displayWrites += 1; }
-  }));
-  const mode = findByLabel(view.tree, "Mode");
-  assert.equal(mode.props.value, CAD_DISPLAY_MODE.RENDER);
-  mode.props.onValueChange(CAD_DISPLAY_MODE.SHADED);
-  assert.deepEqual(modes, [CAD_DISPLAY_MODE.SHADED]);
-  assert.equal(displayWrites, 0);
-  assert.equal(elements(view.tree).some((node) => node.type === RenderSettingsPanel), true);
-  view.unmount();
-});
-
-test("projection is always available and perspective exposes the shared camera lens", () => {
-  const payloadWrites = [];
-  const orthographic = render(DisplaySettingsSection, sectionProps({
-    rendering: true,
-    projection: CAMERA_PROJECTION.ORTHOGRAPHIC
-  }));
-  assert.ok(findByLabel(orthographic.tree, "Projection"));
-  assert.equal(findByLabel(orthographic.tree, "Lens"), undefined);
-  orthographic.unmount();
-
-  const perspective = render(DisplaySettingsSection, sectionProps({
-    projection: CAMERA_PROJECTION.PERSPECTIVE,
-    onPayloadValueChange: (path, value) => payloadWrites.push([path, value])
-  }));
-  const lens = findByLabel(perspective.tree, "Lens");
-  assert.ok(lens);
-  lens.props.onChange(80);
-  assert.deepEqual(payloadWrites, [[['camera', 'focalLength'], 80]]);
-  perspective.unmount();
-});
-
-test("perspective Lens reports the observed camera focal length without mutating scene input", () => {
-  const scene = {
-    ...SCENE,
-    camera: {}
-  };
-  const payloadWrites = [];
-  const perspective = render(DisplaySettingsSection, sectionProps({
-    scene,
-    observedFocalLength: 67,
-    projection: CAMERA_PROJECTION.PERSPECTIVE,
-    onPayloadValueChange: (path, value) => payloadWrites.push([path, value])
-  }));
-  const lens = findByLabel(perspective.tree, "Lens");
-  assert.equal(lens.props.value, 67);
-  lens.props.onChange(85);
-  assert.deepEqual(payloadWrites, [[["camera", "focalLength"], 85]]);
-  assert.deepEqual(scene.camera, {});
-  perspective.unmount();
-});
-
-test("render-only controls form one Render section and default Quality to Preview", () => {
-  const payloadWrites = [];
-  const resets = [];
-  const content = render(RenderSettingsContent, {
-    scene: SCENE,
-    onPayloadValueChange: (path, value) => payloadWrites.push([path, value]),
-    onReset: () => resets.push(true)
+function panel(input = {}) {
+  const store = createViewSettingsStore(input);
+  const { display: settings, scene } = store.getSnapshot();
+  const result = render(DisplaySettingsSection, {
+    viewSettings: settings, resolvedView: scene.view,
+    onViewSettingsPatch: store.patch, onGroupEnabledChange: store.setEnabled,
   });
-  const subsections = elements(content.tree)
-    .filter((node) => node.type?.name === "FileSheetSubsection");
-  assert.deepEqual(subsections.map((node) => node.props.title), ["Render"]);
-  assert.equal(findByLabel(content.tree, "Quality").props.value, "preview");
-  for (const label of ["Exposure", "Rotation", "Softbox size", "Fill ratio", "Transparent", "Backdrop", "Ground", "Ground position"]) {
-    assert.ok(findByLabel(content.tree, label), label);
+  return { ...result, settings: () => store.getSnapshot().display };
+}
+const labelled = (tree, label) => elements(tree).find(node => node.props.label === label);
+
+test("View has the same feature groups for every preset, with Render second", () => {
+  assert.equal(buildDisplaySettingsTab({}).title, "View");
+  assert.deepEqual(DISPLAY_MODE_OPTIONS.map(option => option.value), ["solid", "render", "xray", "hidden-line", "wireframe"]);
+  for (const mode of DISPLAY_MODE_OPTIONS.map(option => option.value)) {
+    const view = panel({ mode });
+    assert.deepEqual(elements(view.tree).filter(node => node.type?.name === "FileSheetGatedSection").map(node => node.props.title),
+      ["Explode", "Edges", "Grid", "Axes", "Lighting", "Background", "Floor"]);
+    assert.ok(labelled(view.tree, "Projection"));
+    assert.equal(labelled(view.tree, "Lens"), undefined);
+    assert.deepEqual(elements(view.tree).filter(node => node.type?.name === "FileSheetStaticSection").map(node => node.props.title),
+      ["Mode", "Surfaces"]);
+    view.unmount();
   }
-  findByLabel(content.tree, "Exposure").props.onChange(1.2);
-  assert.deepEqual(payloadWrites, [[['exposure'], 1.2]]);
-  const reset = elements(content.tree).find((node) => node.props.onClick && node.props.children?.some?.((child) => child === "Reset"));
-  assert.ok(reset);
-  reset.props.onClick();
-  assert.equal(resets.length, 1);
-  content.unmount();
+});
+
+test("group edits are sparse and disabling discards only that group's overrides", () => {
+  const view = panel({ mode: "render", floor: { color: "#abcdef", opacity: 0.8 }, clip: { enabled: true, offset: 0.3 } });
+  labelled(view.tree, "Floor color").props.onOpacityChange(0.4);
+  assert.deepEqual(view.settings().floor, { color: "#abcdef", opacity: 0.4 });
+  const floor = elements(view.tree).find(node => node.props.title === "Floor");
+  floor.props.onEnabledChange(false);
+  assert.deepEqual(view.settings().floor, { enabled: false });
+  assert.deepEqual(view.settings().clip, { enabled: true, offset: 0.3 });
+  floor.props.onEnabledChange(true);
+  assert.deepEqual(resolveViewSettings(view.settings()).floor, resolveViewSettings({ mode: "render" }).floor);
+  view.unmount();
+});
+
+test("projection and tools update independent groups; only the view change is Custom", () => {
+  const view = panel({ mode: "solid" });
+  labelled(view.tree, "Explode").props.onChange(45);
+  assert.equal(viewSettingsAreCustom(view.settings()), false);
+  assert.deepEqual(view.settings().exploded, { amount: 0.45, enabled: true });
+  labelled(view.tree, "Projection").props.onValueChange("perspective");
+  assert.equal(viewSettingsAreCustom(view.settings()), true);
+  assert.equal(view.settings().camera.projection, "perspective");
+  view.unmount();
+});
+
+test("surface controls remain usable when restoring a formerly disabled section", () => {
+  const view = panel({ surfaces: { enabled: false } });
+  labelled(view.tree, "Surface style").props.onValueChange("flat");
+  assert.equal(resolveViewSettings(view.settings()).surfaces.style, "flat");
+  assert.equal(view.settings().surfaces.enabled, true);
+  view.unmount();
+});
+
+test("a file that is not a CAD model has no Edges, Explode or Clip section and only the presets not made of edges", () => {
+  // A mesh opened while the saved preset is Wireframe: shown as Solid, never as its tessellation.
+  const store = createViewSettingsStore({ mode: "wireframe", edges: { enabled: true, visibility: "all" } }, { cadModel: false });
+  const { display, scene } = store.getSnapshot();
+  assert.equal(scene.view.edges.enabled, false);
+  assert.equal(display.mode, "wireframe", "the saved preset is not rewritten");
+  const view = render(DisplaySettingsSection, { cadModel: false, viewSettings: display, resolvedView: scene.view,
+    onViewSettingsPatch: store.patch, onGroupEnabledChange: store.setEnabled });
+  assert.deepEqual(elements(view.tree).filter(node => node.type?.name === "FileSheetGatedSection").map(node => node.props.title),
+    ["Grid", "Axes", "Lighting", "Background", "Floor"]);
+  assert.equal(elements(view.tree).some(node => node.type?.name === "ClipSettings"), false);
+  const mode = labelled(view.tree, "Mode");
+  assert.deepEqual(mode.props.options.map(option => option.value), ["solid", "render"]);
+  // Hidden and Off leave a STEP model its edges; here they would leave nothing.
+  assert.deepEqual(labelled(view.tree, "Surface style").props.options.map(option => option.value), ["shaded", "flat"]);
+  assert.equal(elements(view.tree).some(node => node.props?.label === "Edge visibility" || node.props?.label === "Edge color"), false);
+  view.unmount();
+  // The capability arrives separately from the appearance, and neither configuration drops the other.
+  const later = createViewSettingsStore({ mode: "xray" }, { appearance: "dark" });
+  assert.equal(later.getSnapshot().scene.view.edges.enabled, true);
+  later.configure({ cadModel: false });
+  assert.equal(later.getSnapshot().scene.view.edges.enabled, false);
+  assert.equal(later.getSnapshot().scene.view.appearance, "dark");
+  later.configure({ appearance: "light" });
+  assert.equal(later.getSnapshot().scene.view.edges.enabled, false);
 });

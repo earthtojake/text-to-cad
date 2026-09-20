@@ -111,7 +111,8 @@ export const DISPLAY_SETTINGS_KEYS = Object.freeze([
   "exploded",
   "edges",
   "guides",
-  "partColor"
+  "partColor",
+  "surfaces"
 ]);
 
 export const DISPLAY_RENDER_SETTINGS_KEYS = Object.freeze([
@@ -122,11 +123,11 @@ export const DISPLAY_RENDER_SETTINGS_KEYS = Object.freeze([
   "backdrop"
 ]);
 export const DISPLAY_RENDER_LIGHTING_KEYS = Object.freeze(["rotation", "size", "fill"]);
-export const DISPLAY_RENDER_BACKDROP_KEYS = Object.freeze(["color", "transparent", "ground", "groundPlacement"]);
+export const DISPLAY_RENDER_BACKDROP_KEYS = Object.freeze(["color", "transparent", "ground", "groundPlacement", "groundColor", "groundOpacity"]);
 
-export const DISPLAY_EDGE_SETTINGS_KEYS = Object.freeze(["enabled", "silhouette"]);
+export const DISPLAY_EDGE_SETTINGS_KEYS = Object.freeze(["enabled", "silhouette", "visibility", "color"]);
 export const DISPLAY_GUIDE_SETTINGS_KEYS = Object.freeze(["grid", "axis"]);
-export const DISPLAY_GRID_GUIDE_SETTINGS_KEYS = Object.freeze(["enabled"]);
+export const DISPLAY_GRID_GUIDE_SETTINGS_KEYS = Object.freeze(["enabled", "color", "opacity"]);
 export const DISPLAY_AXIS_GUIDE_SETTINGS_KEYS = Object.freeze(["enabled", "color", "opacity"]);
 export const DISPLAY_PART_COLOR_SETTINGS_KEYS = Object.freeze(["mode", "color", "colors"]);
 export const DISPLAY_EXPLODED_SETTINGS_KEYS = Object.freeze(["enabled", "amount"]);
@@ -166,7 +167,9 @@ export function normalizeDisplayEdgeSettings(value = null, fallback = DEFAULT_DI
   const source = isObject(value) ? value : {};
   return {
     enabled: normalizeBoolean(source.enabled, fallback.enabled),
-    silhouette: normalizeBoolean(source.silhouette, fallback.silhouette || false)
+    silhouette: normalizeBoolean(source.silhouette, fallback.silhouette || false),
+    ...(source.visibility != null || fallback.visibility != null ? { visibility: source.visibility ?? fallback.visibility } : {}),
+    ...(source.color != null || fallback.color != null ? { color: normalizeColor(source.color, fallback.color) } : {})
   };
 }
 
@@ -195,7 +198,7 @@ export function normalizeExplodedViewSettings(value = null, fallback = DEFAULT_E
   const source = isObject(value) ? value : {};
   return {
     enabled: normalizeBoolean(source.enabled, fallback.enabled),
-    amount: normalizeNumber(source.amount, fallback.amount, 0, 1)
+    amount: normalizeNumber(source.amount, source.enabled === true ? 0.5 : fallback.amount, 0, 1)
   };
 }
 
@@ -282,6 +285,10 @@ export function validateDisplaySettings(value) {
     const edges = validateStrictObject(source.edges, "display.edges");
     validateObjectKeys(edges, DISPLAY_EDGE_SETTINGS_KEYS, "display.edges");
     validatePresent(edges, ["enabled", "silhouette"], validateStrictBoolean, "display.edges");
+    validatePresent(edges, ["color"], validateStrictColor, "display.edges");
+    if (Object.hasOwn(edges, "visibility") && !["visible", "all"].includes(edges.visibility)) {
+      throw new Error("display.edges.visibility must be 'visible' or 'all'");
+    }
   }
   if (Object.prototype.hasOwnProperty.call(source, "guides")) {
     const guides = validateStrictObject(source.guides, "display.guides");
@@ -290,6 +297,9 @@ export function validateDisplaySettings(value) {
       const grid = validateStrictObject(guides.grid, "display.guides.grid");
       validateObjectKeys(grid, DISPLAY_GRID_GUIDE_SETTINGS_KEYS, "display.guides.grid");
       validatePresent(grid, ["enabled"], validateStrictBoolean, "display.guides.grid");
+      validatePresent(grid, ["color"], validateStrictColor, "display.guides.grid");
+      validatePresent(grid, ["opacity"],
+        (entry, fieldName) => validateStrictNumber(entry, fieldName, 0, 1), "display.guides.grid");
     }
     if (Object.prototype.hasOwnProperty.call(guides, "axis")) {
       const axis = validateStrictObject(guides.axis, "display.guides.axis");
@@ -338,8 +348,10 @@ export function validateDisplayRenderSettings(value) {
   if (Object.hasOwn(render, "backdrop")) {
     const backdrop = validateStrictObject(render.backdrop, "display.render.backdrop");
     validateObjectKeys(backdrop, DISPLAY_RENDER_BACKDROP_KEYS, "display.render.backdrop");
-    validatePresent(backdrop, ["color"], validateStrictColor, "display.render.backdrop");
+    validatePresent(backdrop, ["color", "groundColor"], validateStrictColor, "display.render.backdrop");
     validatePresent(backdrop, ["transparent", "ground"], validateStrictBoolean, "display.render.backdrop");
+    validatePresent(backdrop, ["groundOpacity"],
+      (entry, fieldName) => validateStrictNumber(entry, fieldName, 0, 1), "display.render.backdrop");
     if (Object.hasOwn(backdrop, "groundPlacement") && !["origin", "lowest"].includes(backdrop.groundPlacement)) {
       throw new Error("display.render.backdrop.groundPlacement must be 'origin' or 'lowest'");
     }
@@ -356,7 +368,11 @@ export function normalizeDisplayGuideSettings(value = null, fallback = DEFAULT_D
   validateObjectKeys(axis, ["enabled", "color", "opacity"], "display.guides.axis");
   return {
     grid: {
-      enabled: normalizeBoolean(grid.enabled, fallback.grid.enabled)
+      enabled: normalizeBoolean(grid.enabled, fallback.grid.enabled),
+      ...(grid.color != null || fallback.grid.color != null
+        ? { color: normalizeColor(grid.color, fallback.grid.color) } : {}),
+      ...(grid.opacity != null || fallback.grid.opacity != null
+        ? { opacity: normalizeNumber(grid.opacity, fallback.grid.opacity, 0, 1) } : {})
     },
     axis: {
       enabled: normalizeBoolean(axis.enabled, fallback.axis.enabled),
@@ -400,6 +416,7 @@ export function normalizeDisplaySettings(value = null, { fallback = DEFAULT_DISP
   return {
     mode,
     ...(render != null ? { render } : {}),
+    ...(source.surfaces != null || fallback.surfaces != null ? { surfaces: structuredClone(source.surfaces ?? fallback.surfaces) } : {}),
     clip: normalizeStepClipSettings(source.clip ?? fallback.clip),
     exploded: normalizeExplodedViewSettings(source.exploded, fallback.exploded),
     edges: normalizeDisplayEdgeSettings(source.edges, fallback.edges),
@@ -416,6 +433,7 @@ export function displaySettingsEqual(left, right) {
   const a = normalizeDisplaySettings(left);
   const b = normalizeDisplaySettings(right);
   return a.mode === b.mode &&
+    JSON.stringify(a.surfaces) === JSON.stringify(b.surfaces) &&
     JSON.stringify(a.render) === JSON.stringify(b.render) &&
     stepClipSettingsEqual(a.clip, b.clip) &&
     JSON.stringify(a.exploded) === JSON.stringify(b.exploded) &&

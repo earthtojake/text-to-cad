@@ -62,7 +62,7 @@ test("omitted Render fields stay sparse while configuration expands effective de
     quality: "final",
     exposure: 0,
     lighting: { rotation: 0, size: 1, fill: 0.25 },
-    backdrop: { color: "#e7e7e5", transparent: false, ground: true, groundPlacement: "lowest" }
+    backdrop: { color: "#e7e7e5", transparent: false, ground: true, groundPlacement: "origin", groundColor: "#e7e7e5", groundOpacity: 0.6 }
   });
   assert.equal(camera.projection, "orthographic");
   assert.deepEqual(light.camera, camera);
@@ -94,7 +94,7 @@ test("explicit studios pin only the backdrop default", () => {
     quality: "final",
     exposure: 1.5,
     lighting: { rotation: -45, size: 2, fill: 0 },
-    backdrop: { color: "#123456", transparent: true, ground: false, groundPlacement: "lowest" }
+    backdrop: { color: "#123456", transparent: true, ground: false, groundPlacement: "lowest", groundColor: "#123456", groundOpacity: 0.6 }
   });
 });
 
@@ -224,6 +224,8 @@ test("Render validation rejects old and malformed fields with generic schema err
     [{ lighting: { fill: true } }, /render\.lighting\.fill/],
     [{ lighting: { key: 2 } }, /Unsupported render\.lighting fields: key/],
     [{ backdrop: { color: "red" } }, /render\.backdrop\.color must be a hex color/],
+    [{ backdrop: { groundColor: "blue" } }, /render\.backdrop\.groundColor must be a hex color/],
+    [{ backdrop: { groundOpacity: 1.1 } }, /render\.backdrop\.groundOpacity must be a finite number/],
     [{ backdrop: { transparent: 1 } }, /render\.backdrop\.transparent must be a boolean/],
     [{ backdrop: { groundPlacement: "auto" } }, /render\.backdrop\.groundPlacement must be origin or lowest/],
     [{ backdrop: { floor: true } }, /Unsupported render\.backdrop fields: floor/],
@@ -238,4 +240,14 @@ test("Render validation rejects old and malformed fields with generic schema err
       assert.doesNotMatch(error.message, /removed|migrat|instead|use /i);
     }
   }
+});
+
+
+test("explicit floor appearance survives sparse resolution independently of background", () => {
+  const render = { backdrop: { groundColor: "#123456", groundOpacity: 0 } };
+  const resolved = resolveSceneSettings({ appearance: "dark", display: { mode: "render", render } });
+  assert.deepEqual(resolved.render.payload, render);
+  assert.equal(resolved.render.configuration.backdrop.groundColor, "#123456");
+  assert.equal(resolved.render.configuration.backdrop.groundOpacity, 0);
+  assert.equal(resolved.render.configuration.backdrop.color, "#121315");
 });
