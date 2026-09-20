@@ -150,12 +150,10 @@ test("formatArtifactProgress maps null progress to null, not a zeroed bar", () =
   assert.equal(formatArtifactProgress(null), null);
 });
 
-// A robot has no artifact build behind it — it is a URDF plus a pile of meshes — so its
-// loader's own count is the only progress in existence. It goes through the SAME two
-// functions as a build's, which is what lets the overlay stay ignorant of which subsystem
-// produced the frame. Before this the count was formatted into a string at the source and
-// only ever reached the filename chip.
-test("a robot mesh load formats through the same path as a build", () => {
+// A load with no artifact build behind it has only its loader's own count. It goes through
+// the SAME two functions as a build's, which is what lets the overlay stay ignorant of which
+// subsystem produced the frame.
+test("a loader's own count formats through the same path as a build", () => {
   const frame = formatArtifactProgress(
     normalizeArtifactProgress({
       phase: "meshes",
@@ -168,14 +166,14 @@ test("a robot mesh load formats through the same path as a build", () => {
   assert.equal(frame.label, "Loading meshes");
   assert.equal(frame.counts, "7/13");
   assert.equal(frame.percent, 54);
-  assert.equal(frame.ordinal, "", "a robot load has no phase sequence to place itself in");
+  assert.equal(frame.ordinal, "", "a plain load has no phase sequence to place itself in");
 });
 
-test("a robot stage with no count still renders as a labelled indeterminate frame", () => {
+test("a stage with no count still renders as a labelled indeterminate frame", () => {
   const frame = formatArtifactProgress(
-    normalizeArtifactProgress({ phase: "robot", label: "Building robot", determinate: false })
+    normalizeArtifactProgress({ phase: "view", label: "Building scene", determinate: false })
   );
-  assert.equal(frame.label, "Building robot");
+  assert.equal(frame.label, "Building scene");
   assert.equal(frame.percent, null);
   assert.equal(frame.counts, "");
 });

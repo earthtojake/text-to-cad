@@ -1,7 +1,4 @@
-import {
-  entryAssetHash,
-  entryUrdfAssetHash
-} from "@hardcore/core/lib/entryAssets.js";
+import { entryAssetHash } from "@hardcore/core/lib/entryAssets.js";
 import {
   cloneTabSnapshot,
   tabSnapshotEqual
@@ -169,10 +166,6 @@ function updateIndex(storage, namespace, fileKey, options = {}) {
     : writeIndex(storage, namespace, [...files, normalizedFileKey], options);
 }
 
-function entryUrdfSignature(entry) {
-  return entryUrdfAssetHash(entry);
-}
-
 function entryStepModuleSignature(entry) {
   return [
     entryAssetHash(entry, "stepModule"),
@@ -198,8 +191,7 @@ function entryTabSignature(entry) {
     entryAssetHash(entry, "selectorTopology"),
     entryAssetHash(entry, "topology"),
     entryAssetHash(entry, "glb"),
-    entryAssetHash(entry, "dxf"),
-    entryUrdfSignature(entry)
+    entryAssetHash(entry, "dxf")
   ].filter(Boolean).join(":") || normalizeString(entry?.file);
 }
 
@@ -207,7 +199,6 @@ export function fileSessionSignaturesForEntry(entry) {
   return {
     tab: entryTabSignature(entry),
     stepModule: entryStepModuleSignature(entry),
-    urdf: entryUrdfSignature(entry),
     largeFile: entryLargeFileSignature(entry)
   };
 }
@@ -250,26 +241,6 @@ function normalizeAnimationSlice(value) {
   };
 }
 
-function normalizeJointValues(value) {
-  if (!isPlainObject(value)) {
-    return {};
-  }
-  return Object.fromEntries(
-    Object.entries(value)
-      .map(([name, jointValue]) => [normalizeString(name), normalizeNumber(jointValue, 0)])
-      .filter(([name]) => name)
-  );
-}
-
-function normalizeUrdfSlice(value) {
-  if (!isPlainObject(value)) {
-    return null;
-  }
-  return {
-    jointValues: normalizeJointValues(value.jointValues)
-  };
-}
-
 function normalizeLargeFileSlice(value) {
   if (!isPlainObject(value)) {
     return null;
@@ -306,11 +277,6 @@ const FILE_SESSION_SLICE_SCHEMA = Object.freeze({
     normalize: normalizeAnimationSlice,
     equals: storageValuesEqual,
     signatureKey: "stepModule"
-  },
-  urdf: {
-    normalize: normalizeUrdfSlice,
-    equals: storageValuesEqual,
-    signatureKey: "urdf"
   },
   largeFile: {
     normalize: normalizeLargeFileSlice,

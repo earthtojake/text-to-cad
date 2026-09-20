@@ -42,7 +42,6 @@ function workspaceLoadingEffects() {
       const names = referencedNames(callbackPath);
       for (const loaderName of [
         "loadMeshForEntry",
-        "loadUrdfForEntry",
         "loadReferencesForEntry",
         "loadDisplayEdgesForEntry"
       ]) {
@@ -69,7 +68,7 @@ function workspaceLoadingEffects() {
 test("persisted Render loads model documents and shared interaction assets", () => {
   const effects = workspaceLoadingEffects();
   const byLoader = new Map(effects.map((effect) => [effect.loaderName, effect]));
-  assert.equal(effects.length, 4, "expected one effect for each document or inspection loader");
+  assert.equal(effects.length, 3, "expected one effect for each document or inspection loader");
 
   const selectedEntry = { path: "fixture.step" };
   const meshState = { cached: "mesh" };
@@ -101,29 +100,6 @@ test("persisted Render loads model documents and shared interaction assets", () 
   });
   assert.deepEqual(meshEvents, [["load", selectedEntry]]);
   assert.deepEqual(meshState, { cached: "mesh" });
-
-  const urdfState = { cached: "urdf" };
-  const urdfEvents = [];
-  byLoader.get("loadUrdfForEntry").run({
-    renderSession: { enabled: true },
-    selectedEntry,
-    effectiveRenderFormat: "urdf",
-    isRobotRenderFormat: () => true,
-    selectedEntryHasUrdf: true,
-    selectedUrdfMatches: false,
-    urdfState,
-    loadUrdfForEntry: (entry) => {
-      urdfEvents.push(["load", entry]);
-      return Promise.resolve();
-    },
-    cancelUrdfLoad: () => urdfEvents.push(["cancel"]),
-    setUrdfState: () => urdfEvents.push(["state"]),
-    setUrdfStatus: () => urdfEvents.push(["status"]),
-    setUrdfError: () => urdfEvents.push(["error"]),
-    ASSET_STATUS: { PENDING: "pending", ERROR: "error" }
-  });
-  assert.deepEqual(urdfEvents, [["load", selectedEntry]]);
-  assert.deepEqual(urdfState, { cached: "urdf" });
 
   const referenceState = { cached: "topology" };
   const referenceEvents = [];

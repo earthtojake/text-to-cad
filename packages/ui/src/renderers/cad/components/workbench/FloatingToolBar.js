@@ -15,7 +15,7 @@ export function cadInteractionTools({
   drawToolActive, measureModeActive = false, measurementPanel = null,
   measureDisabled = false, measureSupported = null, measureSnapFilter = null, onMeasureSnapFilterChange,
   animateAvailable = false, animateToolActive = false,
-  poseAvailable = false, poseToolActive = false, poseLeads = false, handleSelectTabToolMode,
+  poseAvailable = false, poseToolActive = false, handleSelectTabToolMode,
   viewerLoading, selectedMeshData, drawing,
 }) {
   const canMeasure = measureSupported ?? renderCapabilities(renderFormat).measure;
@@ -70,8 +70,7 @@ export function cadInteractionTools({
     onSelect: () => handleSelectTabToolMode("draw"),
     subToolbar: drawToolActive ? <DrawingToolbar drawing={drawing} /> : null,
   } : null;
-  // Only in a file with joints to drag (never a disabled button). A robot is posed
-  // before it is inspected, so there Pose leads the tools; a STEP's Pose sits with
+  // Only in a file with joints to drag (never a disabled button). It sits with
   // Animate, the other tool that moves the model.
   const poseTool = poseAvailable ? {
     id: "pose", label: "Pose",
@@ -86,7 +85,7 @@ export function cadInteractionTools({
     active: animateToolActive, disabled: idle,
     onSelect: () => handleSelectTabToolMode("animate"),
   } : null;
-  return [poseLeads ? poseTool : null, selectTool, measureTool, drawTool, poseLeads ? null : poseTool, animateTool].filter(Boolean);
+  return [selectTool, measureTool, drawTool, poseTool, animateTool].filter(Boolean);
 }
 
 export default function FloatingToolBar({ previewMode, selectedEntry, floatingCadToolbarPosition, ...props }) {

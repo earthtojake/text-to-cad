@@ -7,17 +7,11 @@ import {
   loadRenderSurf,
   loadRenderSelectorBundle,
   loadRenderSurfSelectorBundle,
-  loadRenderSdf,
-  loadRenderSrdf,
-  loadRenderUrdf,
   peekRenderDisplayEdgeBundle,
   peekRenderDxfMesh,
   peekRenderGlb,
   peekRenderSelectorBundle,
-  peekRenderSdf,
-  peekRenderSrdf,
   peekRenderTopologyIndex,
-  peekRenderUrdf,
   releaseRenderSurfLevel,
   releaseSurfWorkers,
   surfTessellationCacheKey
@@ -66,13 +60,8 @@ import {
   entrySelectorTopologyAssetUrl,
   entrySourceSidecarUrl,
   entryTopologyAssetUrl,
-  entryUrdfAssetHash,
   meshAssetKeyForEntry
 } from "@hardcore/core/lib/entryAssets.js";
-import {
-  loadRenderMeshByUrl,
-  peekRenderMeshByUrl
-} from "@hardcore/core/lib/render/meshLoaders.js";
 import { reclaimIdleSurfWorkers } from "@hardcore/core/lib/renderAssetClient.js";
 import { estimateMeshRenderCost } from "@hardcore/core/lib/render/meshCost.js";
 import { RENDER_FORMAT, entrySourceFormat } from "@hardcore/core/lib/fileFormats.js";
@@ -99,11 +88,9 @@ import {
   SurfaceResolutionError,
 } from "../../../workbench/surfaceResolution.js";
 
-// Robot link meshes are STLs, and `loadRenderStl` parses them in the STL worker — the
-// fetch and the parse both happen off the main thread. The cap used to be 3 with a
-// main-thread yield either side of every mesh, which was right when parsing blocked the
-// UI and is pure latency now: it serialised 13 fetches three at a time for no benefit.
-const ROBOT_MESH_LOAD_CONCURRENCY = 8;
+// A package's first-level surfaces are fetched and decoded off the main thread, so the
+// cap only bounds sockets and the worker's queue.
+const COMPONENT_SURFACE_LOAD_CONCURRENCY = 8;
 
 const GPU_BUFFER_ESTIMATE_MULTIPLIER = 1.15;
 const SURF_WORKER_TEMP_ESTIMATE_MULTIPLIER = 2;
@@ -148,20 +135,20 @@ function abortError() {
   return error;
 }
 
-function robotMeshLoadConcurrency() {
+function componentSurfaceLoadConcurrency() {
   const hardwareConcurrency = typeof navigator !== "undefined"
     ? Number(navigator.hardwareConcurrency)
     : 0;
   if (!Number.isFinite(hardwareConcurrency) || hardwareConcurrency <= 0) {
-    return ROBOT_MESH_LOAD_CONCURRENCY;
+    return COMPONENT_SURFACE_LOAD_CONCURRENCY;
   }
   // Bounded by cores because the worker still parses serially; going wider only queues.
-  return Math.max(2, Math.min(ROBOT_MESH_LOAD_CONCURRENCY, hardwareConcurrency));
+  return Math.max(2, Math.min(COMPONENT_SURFACE_LOAD_CONCURRENCY, hardwareConcurrency));
 }
 
 // Component-GLB packages fan out to many small content-addressed GLBs (141 for
 // falcon_heavy). They parse in the GLB worker (off the main thread), so — unlike
-// the large robot-mesh STL path above — a higher fetch concurrency just overlaps
+// a large single mesh — a higher fetch concurrency just overlaps
 // I/O without stalling the UI. Cap generously but bounded so we do not flood the
 // single worker's queue or open an unreasonable number of sockets.
 const PACKAGE_COMPONENT_LOAD_CONCURRENCY = 8;
@@ -199,33 +186,8 @@ function runtimeComponentSurfUrl(context, cid, resources) {
     || (component?.surf ? resolvePackageAssetUrl(entryAssetUrl(context.entry, "glb"), component.surf, resources) : "");
 }
 
-function urdfMeshUrls(urdfData) {
-  return [...new Set(
-    (Array.isArray(urdfData?.links) ? urdfData.links : [])
-      .flatMap((link) => Array.isArray(link?.visuals) ? link.visuals : [])
-      .map((visual) => String(visual?.meshUrl || "").trim())
-      .filter(Boolean)
-  )];
-}
-
-async function loadRenderRobotMeshes(meshUrls, { signal, resources, onProgress } = {}) {
-  const total = meshUrls.length;
-  let completed = 0;
-  onProgress?.(completed, total);
-  return mapWithConcurrency(meshUrls, robotMeshLoadConcurrency(), async (meshUrl) => {
-    if (signal?.aborted) {
-      throw abortError();
-    }
-    const mesh = await loadRenderMeshByUrl(meshUrl, { signal, resources, fallback: RENDER_FORMAT.STL });
-    completed += 1;
-    onProgress?.(completed, total);
-    return mesh;
-  });
-}
-
 // The one single-file model this renderer still loads whole is a drawing's prism:
-// every STEP is a package, a robot is its links, and a triangle mesh or a GLB has
-// its own renderer.
+// every STEP is a package, and a robot, a triangle mesh and a GLB have their own renderers.
 function peekRenderMeshForEntry(entry, resources) {
   return peekRenderDxfMesh(entryMeshAssetUrl(entry), { resources });
 }
@@ -316,41 +278,6 @@ export function useCadAssets({
     };
   }, [buildAssemblyPreviewMeshState, entryHasMesh, restoreCompletedPackage, resources]);
 
-  const getCachedUrdfState = useCallback((entry) => {
-    const kind = String(entry?.kind || "").trim().toLowerCase();
-    if (!["urdf", "srdf", "sdf"].includes(kind)) {
-      return null;
-    }
-    const primaryAssetKey = kind === "sdf" ? "sdf" : "urdf";
-    if (!entryAssetUrl(entry, primaryAssetKey)) {
-      return null;
-    }
-    const srdfPayload = kind === "srdf"
-      ? peekRenderSrdf(entryAssetUrl(entry, "srdf"), { resources, urdfUrl: entryAssetUrl(entry, "urdf") })
-      : null;
-    const urdfData = kind === "srdf"
-      ? srdfPayload?.urdfData
-      : kind === "sdf"
-        ? peekRenderSdf(entryAssetUrl(entry, "sdf"), { resources })
-        : peekRenderUrdf(entryAssetUrl(entry, "urdf"), { resources });
-    if (!urdfData) {
-      return null;
-    }
-    const meshUrls = urdfMeshUrls(urdfData);
-    const meshes = meshUrls.map((meshUrl) => peekRenderMeshByUrl(meshUrl, { resources, fallback: RENDER_FORMAT.STL })).filter(Boolean);
-    if (meshes.length !== meshUrls.length) {
-      return null;
-    }
-    const meshesByUrl = new Map(meshUrls.map((meshUrl, index) => [meshUrl, meshes[index]]));
-    return {
-      file: entry.file,
-      kind: entry.kind,
-      urdfHash: entryUrdfAssetHash(entry),
-      urdfData,
-      meshesByUrl
-    };
-  }, [resources]);
-
   // FileViewer remounts file-owned controls. Restore immutable warm assets on
   // the first render, as main's in-place tab activation did, without retaining
   // inactive scenes or copying component buffers.
@@ -373,15 +300,6 @@ export function useCadAssets({
   const [meshLoadProgress, setMeshLoadProgress] = useState(null);
   const [status, setStatus] = useState(ASSET_STATUS.READY);
   const [error, setError] = useState("");
-  const [urdfState, setUrdfState] = useState(() => getCachedUrdfState(initialEntry));
-  const [urdfStatus, setUrdfStatus] = useState(urdfState ? ASSET_STATUS.READY : ASSET_STATUS.PENDING);
-  const [urdfError, setUrdfError] = useState("");
-  const [urdfLoadStage, setUrdfLoadStage] = useState("");
-  // The same stage, as data rather than a sentence. The loader has always COUNTED the
-  // meshes it fetches; flattening that count into a string meant the one indicator the
-  // user actually watches — the overlay — could only show a generic "Loading". Both are
-  // set from the same call sites so they cannot disagree.
-  const [urdfLoadProgress, setUrdfLoadProgress] = useState(null);
   const referenceState = meshEnvelope.reference;
   const setReferenceState = useCallback(update => {
     setMeshEnvelope(previous => updateLodReferenceState(previous, update));
@@ -397,11 +315,9 @@ export function useCadAssets({
   const [displayEdgeLoadStage, setDisplayEdgeLoadStage] = useState("");
 
   const requestIdRef = useRef(0);
-  const urdfRequestIdRef = useRef(0);
   const referenceRequestIdRef = useRef(0);
   const displayEdgeRequestIdRef = useRef(0);
   const meshAbortControllerRef = useRef(null);
-  const urdfAbortControllerRef = useRef(null);
   const referenceAbortControllerRef = useRef(null);
   const displayEdgeAbortControllerRef = useRef(null);
 
@@ -792,13 +708,6 @@ export function useCadAssets({
     setMeshLoadTargetHash("");
     setMeshLoadProgress(null);
   }, [buildLodPackageSummary, resources]);
-
-  const cancelUrdfLoad = useCallback(() => {
-    urdfRequestIdRef.current += 1;
-    abortLoad(urdfAbortControllerRef);
-    setUrdfLoadStage("");
-    setUrdfLoadProgress(null);
-  }, [resources]);
 
   const cancelReferenceLoad = useCallback(() => {
     referenceRequestIdRef.current += 1;
@@ -1480,7 +1389,7 @@ export function useCadAssets({
         const tessellationForLevel = lodTessellationForLevel;
         await mapWithConcurrency(
           neededCids,
-          robotMeshLoadConcurrency(),
+          componentSurfaceLoadConcurrency(),
           async (cid) => {
             const component = (packageDescriptor.components || {})[cid];
             if (!component) {
@@ -1736,116 +1645,8 @@ export function useCadAssets({
     }
   }, [buildDisplayEdgeState, cancelDisplayEdgeLoad, entryHasDisplayEdges, getCachedDisplayEdgeState, resources]);
 
-  const loadUrdfForEntry = useCallback(async (entry) => {
-    cancelUrdfLoad();
-    const requestId = urdfRequestIdRef.current;
-
-    const kind = String(entry?.kind || "").trim().toLowerCase();
-    if (!["urdf", "srdf", "sdf"].includes(kind)) {
-      setUrdfState(null);
-      setUrdfStatus(ASSET_STATUS.PENDING);
-      setUrdfError("");
-      return;
-    }
-    const primaryAssetKey = kind === "sdf" ? "sdf" : "urdf";
-    if (!entryAssetUrl(entry, primaryAssetKey)) {
-      setUrdfState(null);
-      setUrdfStatus(ASSET_STATUS.PENDING);
-      setUrdfError("");
-      return;
-    }
-
-    const cachedUrdfState = getCachedUrdfState(entry);
-    if (cachedUrdfState) {
-      setUrdfState(cachedUrdfState);
-      setUrdfStatus(ASSET_STATUS.READY);
-      setUrdfError("");
-      return;
-    }
-
-    const controller = new AbortController();
-    urdfAbortControllerRef.current = controller;
-    setUrdfStatus(ASSET_STATUS.LOADING);
-    setUrdfError("");
-    const robotLabel = kind === "sdf" ? "Loading SDF" : kind === "srdf" ? "Loading SRDF" : "Loading URDF";
-    setUrdfLoadStage(kind === "sdf" ? "loading SDF" : kind === "srdf" ? "loading SRDF" : "loading URDF");
-    setUrdfLoadProgress({ phase: "robot", label: robotLabel, determinate: false });
-
-    try {
-      const payload = kind === "srdf"
-        ? await loadRenderSrdf(entryAssetUrl(entry, "srdf"), {
-            resources,
-            signal: controller.signal,
-            urdfUrl: entryAssetUrl(entry, "urdf")
-          })
-        : kind === "sdf"
-          ? { urdfData: await loadRenderSdf(entryAssetUrl(entry, "sdf"), { resources, signal: controller.signal }) }
-          : { urdfData: await loadRenderUrdf(entryAssetUrl(entry, "urdf"), { resources, signal: controller.signal }) };
-      const urdfData = payload.urdfData;
-      const meshUrls = urdfMeshUrls(urdfData);
-      setUrdfLoadStage(meshUrls.length ? "loading meshes" : "building robot");
-      setUrdfLoadProgress({
-        phase: meshUrls.length ? "meshes" : "robot",
-        label: meshUrls.length ? "Loading meshes" : "Building robot",
-        done: 0,
-        total: meshUrls.length || null,
-        determinate: meshUrls.length > 0
-      });
-      // The robot is published ONCE, complete. Drawing links as they arrive was tried and
-      // rejected: a half-built robot on screen with the loading card already gone gives no
-      // sign whether more is coming, so it reads as a broken model rather than a loading
-      // one. The counted stage below is the progress signal instead.
-      const meshes = await loadRenderRobotMeshes(meshUrls, {
-        resources,
-        signal: controller.signal,
-        onProgress: (completed, total) => {
-          if (requestId === urdfRequestIdRef.current && total > 0) {
-            setUrdfLoadStage(`loading meshes ${completed}/${total}`);
-            setUrdfLoadProgress({
-              phase: "meshes",
-              label: "Loading meshes",
-              done: completed,
-              total,
-              determinate: true
-            });
-          }
-        }
-      });
-      if (requestId !== urdfRequestIdRef.current) {
-        return;
-      }
-      setUrdfLoadStage("building robot");
-      setUrdfLoadProgress({ phase: "robot", label: "Building robot", determinate: false });
-      const meshesByUrl = new Map(meshUrls.map((meshUrl, index) => [meshUrl, meshes[index]]));
-      setUrdfState({
-        file: entry.file,
-        kind: entry.kind,
-        urdfHash: entryUrdfAssetHash(entry),
-        urdfData,
-        meshesByUrl,
-        complete: true
-      });
-      setUrdfStatus(ASSET_STATUS.READY);
-    } catch (err) {
-      if (requestId !== urdfRequestIdRef.current || isAbortError(err) || controller.signal.aborted) {
-        return;
-      }
-      setUrdfStatus(ASSET_STATUS.ERROR);
-      setUrdfError(err instanceof Error ? err.message : String(err));
-    } finally {
-      if (urdfAbortControllerRef.current === controller) {
-        urdfAbortControllerRef.current = null;
-      }
-      if (requestId === urdfRequestIdRef.current) {
-        setUrdfLoadStage("");
-        setUrdfLoadProgress(null);
-      }
-    }
-  }, [cancelUrdfLoad, getCachedUrdfState, resources]);
-
   useEffect(() => () => {
     abortLoad(meshAbortControllerRef);
-    abortLoad(urdfAbortControllerRef);
     abortLoad(referenceAbortControllerRef);
     abortLoad(displayEdgeAbortControllerRef);
     const displayed = displayedLodPackageRef.current;
@@ -1869,14 +1670,6 @@ export function useCadAssets({
     setStatus,
     error,
     setError,
-    urdfState,
-    setUrdfState,
-    urdfStatus,
-    setUrdfStatus,
-    urdfError,
-    setUrdfError,
-    urdfLoadStage,
-    urdfLoadProgress,
     referenceState,
     setReferenceState,
     referenceStatus,
@@ -1894,13 +1687,10 @@ export function useCadAssets({
     getCachedMeshState,
     getCachedReferenceState,
     getCachedDisplayEdgeState,
-    getCachedUrdfState,
     cancelMeshLoad,
-    cancelUrdfLoad,
     cancelReferenceLoad,
     cancelDisplayEdgeLoad,
     loadMeshForEntry,
-    loadUrdfForEntry,
     loadReferencesForEntry,
     loadDisplayEdgesForEntry
   };

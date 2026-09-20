@@ -1,7 +1,8 @@
 /**
- * What the Pose tool can take hold of, for the two formats that have joints.
+ * What the Pose tool can take hold of in a STEP with kinematics. (A robot
+ * description has its own adapter, in its own renderer.)
  *
- * Each adapter turns a description and its CURRENT pose into the same plain
+ * The adapter turns a definition and its CURRENT pose into the kit's plain
  * list, in the space the model's parts are in:
  *
  *   { id, label, kind: "revolute" | "continuous" | "prismatic", pivot, axis,
@@ -10,21 +11,12 @@
  * `pivot` rides the moving part (a slider's pivot is where its child now is),
  * `toward` is a point on the child that gives a turning joint's arm its
  * direction, and `onChange` is the Kinematics tab's own change handler, so
- * limits, mimic followers, couplings and persistence are decided in one place.
- * The viewer consumes the list and knows nothing about either format.
+ * limits, couplings and persistence are decided in one place. The viewer
+ * consumes the list and knows nothing about the format.
  */
 
 import { effectiveDofValues, kinematicsDofs, kinematicsMates } from "@hardcore/core/common/kinematicsRuntime.js";
-import {
-  axisAngleTransform,
-  clampJointValueDeg,
-  invertRigidTransform,
-  mergeBounds,
-  multiplyTransforms,
-  transformBounds,
-  transformPoint,
-  translationTransform
-} from "@hardcore/core/lib/urdf/kinematics.js";
+import { axisAngleTransform, multiplyTransforms, transformPoint, translationTransform } from "@hardcore/core/lib/urdf/kinematics.js";
 
 import {
   add,
@@ -34,77 +26,14 @@ import {
   normalize,
   rotateAboutAxis,
   scale,
-  subtract,
-  wrapTurn
+  subtract
 } from "../../kit/tools/pose/jointHandleMath.js";
 import { poseControlWrite, poseDrivenDofs } from "./poseDrivenControls.js";
 
-const URDF_HANDLE_KINDS = new Set(["revolute", "continuous", "prismatic"]);
 const STEP_HANDLE_KIND_BY_DOF_KIND = { revolute: "revolute", slider: "prismatic" };
 
 function transformDirection(transform, direction) {
   return subtract(transformPoint(transform, direction), transformPoint(transform, [0, 0, 0]));
-}
-
-function boundsCenter(bounds) {
-  return scale(add(bounds.min, bounds.max), 0.5);
-}
-
-/** The joints of a robot description a person can drive: not fixed, not a mimic follower. */
-export function urdfPosableJoints(urdfData) {
-  return (Array.isArray(urdfData?.joints) ? urdfData.joints : [])
-    .filter((joint) => URDF_HANDLE_KINDS.has(String(joint?.type || "")) && !joint?.mimic && String(joint?.name || ""));
-}
-
-/** Each link's geometry centre in its own frame, from the robot's mesh parts. Links without geometry are absent. */
-export function urdfLinkCentres(parts) {
-  const boundsByLink = new Map();
-  for (const part of Array.isArray(parts) ? parts : []) {
-    const linkName = String(part?.linkName || "");
-    if (!linkName || !part?.sourceBounds) continue;
-    boundsByLink.set(linkName, [
-      ...(boundsByLink.get(linkName) || []),
-      transformBounds(part.sourceBounds, part.localTransform)
-    ]);
-  }
-  return new Map([...boundsByLink].map(([linkName, bounds]) => [linkName, boundsCenter(mergeBounds(bounds))]));
-}
-
-/**
- * Handles for a posed robot. `linkWorldTransforms` is the solved pose
- * (`solveUrdfLinkWorldTransforms`), so whatever moved the robot moved these.
- */
-export function urdfJointHandles({ urdfData, jointValues, linkWorldTransforms, linkCentres, onJointValueChange }) {
-  const handles = [];
-  for (const joint of urdfPosableJoints(urdfData)) {
-    const childWorld = linkWorldTransforms?.get?.(String(joint.childLink || ""));
-    const axis = normalize(Array.isArray(joint.axis) ? joint.axis.map(Number) : []);
-    if (!childWorld || !axis) continue;
-    // The joint frame AFTER its motion: the child's frame, less an SDF joint's
-    // static child offset. Its origin is on the axis and it carries the child.
-    const childOffset = joint.postMotionTransform || null;
-    const movedJointWorld = childOffset ? multiplyTransforms(childWorld, invertRigidTransform(childOffset)) : childWorld;
-    const childCentre = linkCentres?.get?.(String(joint.childLink || ""));
-    const centre = childCentre && childOffset ? transformPoint(childOffset, childCentre) : childCentre;
-    const prismatic = joint.type === "prismatic";
-    const limited = joint.type !== "continuous";
-    handles.push({
-      id: joint.name,
-      label: joint.name,
-      kind: joint.type,
-      pivot: transformPoint(movedJointWorld, [0, 0, 0]),
-      axis: normalize(transformDirection(movedJointWorld, axis)),
-      toward: prismatic ? null : transformPoint(movedJointWorld, armOffset(axis, centre)),
-      // As the solver reads it, so the label agrees with the pose on screen.
-      value: clampJointValueDeg(joint, jointValues?.[joint.name]),
-      min: limited && Number.isFinite(Number(joint.minValueDeg)) ? Number(joint.minValueDeg) : null,
-      max: limited && Number.isFinite(Number(joint.maxValueDeg)) ? Number(joint.maxValueDeg) : null,
-      unit: prismatic ? "m" : "deg",
-      // The Kinematics tab's slider path: clamped, written at once, the group state released.
-      onChange: (value) => onJointValueChange(joint, limited ? value : wrapTurn(value))
-    });
-  }
-  return handles;
 }
 
 function stepKinematicsBlock(definition) {

@@ -10,7 +10,6 @@ import {
   fileStatusHasWarningsOrErrors,
   formatFileStatusItemForAgent,
   mostIntenseFileStatusLevel,
-  sdfFileStatusItems,
   stepFileStatusItems,
   viewerAlertFileStatusItem
 } from "./fileStatusItems.js";
@@ -179,14 +178,6 @@ test("stepFileStatusItems trims obsolete regeneration prompts from artifact mess
 
   assert.equal(items.length, 1);
   assert.equal(items[0].message, "Generated GLB topology metadata is unsupported.");
-});
-
-test("parser warnings normalize to status items", () => {
-  assert.equal(sdfFileStatusItems({
-    staticMetadata: {
-      warnings: ["Unsupported geometry was skipped."]
-    }
-  })[0].title, "SDF warning");
 });
 
 test("viewer alerts normalize to status items", () => {

@@ -14,7 +14,7 @@ export function loadingProgress(progress, { finding = false, preparing = false }
     : preparing ? "Preparing view"
     : /catalog|metadata|finding/.test(hint) ? "Finding file"
     : /geometry|component|mesh|surface|tessellat/.test(hint) && !/building geometry/.test(hint) ? "Loading geometry"
-    : /view|finaliz|writing|saving|saved|module|building assembly|building robot/.test(hint) ? "Preparing view"
+    : /view|finaliz|writing|saving|saved|module|building assembly/.test(hint) ? "Preparing view"
     : "Reading model";
   const frame = stageFraction(progress);
   return {

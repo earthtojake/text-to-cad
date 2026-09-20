@@ -14,9 +14,9 @@ function stableCameraKey(camera, values) {
   return key;
 }
 
-export function lodSceneMayMove({ robot = false, drawing = false, kinematics = null,
+export function lodSceneMayMove({ drawing = false, kinematics = null,
   kinematicsLoading = false, animation = null, exploded = false } = {}) {
-  return Boolean(robot || drawing || kinematics || kinematicsLoading || animation || exploded);
+  return Boolean(drawing || kinematics || kinematicsLoading || animation || exploded);
 }
 
 export function resampleLodAfterViewportResize(runtime, { syncFraming, syncZoom, emitPerspective, resample }) {

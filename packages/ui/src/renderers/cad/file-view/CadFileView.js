@@ -8,9 +8,6 @@ import { stepGeometryContextText, stepGeometryPromptText } from "../workbench/st
 import { filterSelectionReferences, toggleReferenceGroupSelection, connectedReferenceIds } from "../workbench/selectionFilter.js";
 import { buildTangentFaceGraph } from "../workbench/tangentFaceSelection.js";
 
-import { buildRobotComponentGeometry, robotComponents } from "../workbench/robotComponents.js";
-import { useRobotComponentSelection } from "../workbench/useRobotComponentSelection.js";
-
 import * as THREE from "three";
 import { startTransition, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Box, Camera, FileText, Square } from "lucide-react";
@@ -58,7 +55,6 @@ import { restoreMotionAnimation, restoreMotionParameters } from "../workbench/mo
 import { useStepMotionControls } from "../workbench/useStepMotionControls.js";
 import { ZoomControl } from "../../kit/camera/ZoomControl.js";
 import StatusToast from "../../kit/status/StatusToast.js";
-import UrdfFileSheet from "../components/workbench/UrdfFileSheet.js";
 import ViewerAlertDialog from "../../kit/status/ViewerAlertDialog.js";
 import ViewerLoadingOverlay from "../../kit/status/ViewerLoadingOverlay.js";
 import {
@@ -108,8 +104,7 @@ import {
 } from "../workbench/fileSheetSections.js";
 import {
   entrySourceFormat,
-  fileSheetKindForEntry,
-  isRobotRenderFormat
+  fileSheetKindForEntry
 } from "@hardcore/core/lib/fileFormats.js";
 import {
   assetKindForRenderFormat,
@@ -119,10 +114,8 @@ import {
   renderCapabilities,
   renderFormatLabel,
   supportsTool,
-  viewportContentKind,
   ASSET_KIND,
-  PARAMETER_SOURCE,
-  VIEWPORT_CONTENT
+  PARAMETER_SOURCE
 } from "@hardcore/core/lib/renderCapabilities.js";
 import {
   buildViewerAnnotationAlert,
@@ -157,10 +150,8 @@ import {
   entryHasDxf,
   entryHasMesh,
   entryHasReferences,
-  entryHasUrdf,
   entryMeshAssetSignature,
-  entryPoseUrl,
-  entryUrdfAssetHash
+  entryPoseUrl
 } from "@hardcore/core/lib/entryAssets.js";
 import {
   hasStepGlbByteCost,
@@ -169,7 +160,7 @@ import {
 } from "@hardcore/core/lib/render/meshCost.js";
 import { cloneTabSnapshot, createTabRecord, tabSnapshotEqual } from "../workbench/state.js";
 import { createFileSessionSnapshot, normalizeFileSessionState } from "../workbench/fileSessionState.js";
-import { shallowObjectValuesEqual, toFiniteNumber } from "../workbench/valueUtils.js";
+import { shallowObjectValuesEqual } from "../workbench/valueUtils.js";
 import {
   createRenderSessionState,
   renderCameraSnapshot
@@ -191,13 +182,6 @@ import {
   clearMeasureRulerMeasurements,
   measureRulerStateForChange
 } from "../workbench/measureRulerState.js";
-import {
-  buildUrdfJointAnglesCopyText,
-  cloneJointValueMap,
-  findBestMatchingJointValueState,
-  srdfHomeGroupStateJointValuesToDisplay,
-  srdfGroupStateJointValuesToDisplay
-} from "../workbench/robotMotionControls.js";
 import { CAD_WORKSPACE_LAYOUT_MODE } from "../workbench/breakpoints.js";
 import { cadFileParamForEntry, cadPathForEntry, fileKey, sidebarLabelForEntry } from "../workbench/entryPaths.js";
 import { buildCadRefToken, isNativeCadSelector } from "@hardcore/core/lib/cadRefs.js";
@@ -206,18 +190,7 @@ import {
   stepModuleTopologyOccurrenceIds
 } from "../workbench/topologyCapabilities.js";
 import { shortestUniquePathSuffixes } from "@hardcore/core/lib/filePathSuffix.js";
-import {
-  applyUrdfPoseToMeshData,
-  buildDefaultUrdfJointValues,
-  buildUrdfMeshGeometry,
-  clampJointValueDeg,
-  linkOriginInFrame,
-  rootPointInFrame
-} from "@hardcore/core/lib/urdf/kinematics.js";
-import { URDF_JOINT_VALUE_EPSILON } from "@hardcore/core/lib/urdf/jointValues.js";
-import { srdfGroupNamesByLink } from "@hardcore/core/lib/urdf/parseSrdf.js";
-import { stepJointHandles, stepPosableDofs, urdfJointHandles, urdfLinkCentres, urdfPosableJoints } from "../workbench/jointHandles.js";
-import { resolveLocalAssetFileRef } from "@hardcore/core/lib/urdf/meshAssetUrl.js";
+import { stepJointHandles, stepPosableDofs } from "../workbench/jointHandles.js";
 import {
   FILE_STATUS_LEVELS,
   buildFileStatusItems,
@@ -277,7 +250,7 @@ function scopedWorkspacePerspective(snapshot, modelKey, entry) {
  const normalized = clonePerspectiveSnapshot(snapshot);
  if (!normalized) return null;
  const sceneScaleMode = renderCapabilities(entrySourceFormat(entry)).sceneScale;
- return annotatePerspectiveSnapshot(normalized, { modelKey, sceneScaleMode, coordinateSystem: sceneScaleMode === "urdf" ? "cad-z-up-robot-framing-v2" : "cad-z-up-v1" });
+ return annotatePerspectiveSnapshot(normalized, { modelKey, sceneScaleMode, coordinateSystem: "cad-z-up-v1" });
 }
 
 import {
@@ -286,7 +259,6 @@ import {
   DESKTOP_TAB_TOOLS_MAX_WIDTH,
   DESKTOP_TAB_TOOLS_MIN_WIDTH,
   EMPTY_LIST,
-  capitalizeFirst,
   entryWithoutRenderAssets,
   normalizeLargeFileState,
   readViewerLayoutMode,
@@ -466,8 +438,6 @@ function CadFileViewSurface({
   useEffect(() => { onChromeVisibilityChange?.(!previewMode); }, [onChromeVisibilityChange, previewMode]);
   const tabToolsWidth = 365;
   const [tabToolMode, setTabToolMode] = useState(TAB_TOOL_MODE.REFERENCES);
-  const [jointValuesByFileRef, setJointValuesByFileRef] = useState({});
-  const [selectedUrdfGroupStateIdByFileRef, setSelectedUrdfGroupStateIdByFileRef] = useState({});
   const [stepModuleLoadState, setStepModuleLoadState] = useState({
     url: "",
     status: "idle",
@@ -518,13 +488,6 @@ function CadFileViewSurface({
     setStatus,
     error,
     setError,
-    urdfState,
-    setUrdfState,
-    urdfStatus,
-    setUrdfStatus,
-    urdfError,
-    setUrdfError,
-    urdfLoadProgress,
     referenceState,
     setReferenceState,
     referenceStatus,
@@ -539,13 +502,10 @@ function CadFileViewSurface({
     setDisplayEdgeError,
     getCachedMeshState,
     getCachedReferenceState,
-    getCachedUrdfState,
     cancelMeshLoad,
-    cancelUrdfLoad,
     cancelReferenceLoad,
     cancelDisplayEdgeLoad,
     loadMeshForEntry,
-    loadUrdfForEntry,
     loadReferencesForEntry,
     loadDisplayEdgesForEntry
   } = useCadAssets({
@@ -644,8 +604,7 @@ function CadFileViewSurface({
     : null;
   const selectedEntrySourceFormat = entrySourceFormat(selectedEntry);
   // Every entry now renders from its own source format: a DXF's geometry is parsed and
-  // meshed client-side, a robot is assembled from its link meshes, and nothing is baked
-  // into a package under a different format.
+  // meshed client-side, and nothing is baked into a package under a different format.
   const selectedEntryRenderAssetFormat = selectedEntrySourceFormat;
   const selectedFileSheetKind = fileSheetKindForEntry(selectedEntry);
   // Hide the file-sheet toggle when the kind has no sections.
@@ -665,10 +624,9 @@ function CadFileViewSurface({
   // `isStepView` used to stand in for all four of these at once, which is why adding a
   // format meant auditing every one of its ~15 uses to work out which sense was meant.
   // They are separate capabilities; the table is the source of truth.
-  const selectedEntryContentKind = viewportContentKind(selectedEntrySourceFormat);
   const supportsParts = hasCapability(selectedEntrySourceFormat, "parts");
   const supportsTopology = hasCapability(selectedEntrySourceFormat, "topology");
-  // CAD edges are topology. A file without it (a mesh, a robot, a drawing) resolves with
+  // CAD edges are topology. A file without it (a drawing) resolves with
   // its edges off and without the presets made of them, and the View tab shows neither.
   // What this file's view opts into: a B-rep model takes every Display section, preset and surface
   // style; every other format the set without edges, Clip or Explode.
@@ -678,7 +636,6 @@ function CadFileViewSurface({
   const supportsSidecarParams =
     parameterSourceKind(selectedEntrySourceFormat) === PARAMETER_SOURCE.SIDECAR;
   const isAssemblyView = selectedEntry?.kind === "assembly";
-  const isUrdfView = selectedEntryContentKind === VIEWPORT_CONTENT.ROBOT;
   const selectedStepModuleUrl = selectedEntry?.editingPreview && selectedEntry.previewKinematics
     ? `preview:${selectedEntry.hash}` : supportsSidecarParams ? entryPoseUrl(selectedEntry) : "";
   const selectedStepModuleCadPath = selectedStepModuleUrl ? cadPathForEntry(selectedEntry) : "";
@@ -706,7 +663,6 @@ function CadFileViewSurface({
     : "";
   const selectedStepModuleLoading = Boolean(selectedStepModuleUrl && selectedStepModuleStatus === "loading");
   const selectedEntryHasMesh = entryHasMesh(selectedEntry);
-  const selectedEntryHasUrdf = entryHasUrdf(selectedEntry);
   const selectedEntryHasReferences = entryHasReferences(selectedEntry);
   const selectedEntryHasDisplayEdges = entryHasDisplayEdges(selectedEntry);
   const selectedEntryHasDxf = entryHasDxf(selectedEntry);
@@ -753,80 +709,6 @@ function CadFileViewSurface({
     selectedEntry?.kind === "assembly" &&
     !!meshState?.assemblyBackgroundError &&
     (selectedMeshMatches || !!retainedPreviousStepMeshError);
-  const selectedUrdfMatches =
-    !!urdfState &&
-    !!selectedEntry &&
-    urdfState.file === fileKey(selectedEntry) &&
-    urdfState.urdfHash === entryUrdfAssetHash(selectedEntry);
-  const selectedUrdfData = selectedUrdfMatches ? urdfState.urdfData : null;
-  const selectedUrdfMeshes = selectedUrdfMatches ? urdfState.meshesByUrl : null;
-  const selectedUrdfFileRef = selectedEntryContentKind === VIEWPORT_CONTENT.ROBOT
-    ? fileKey(selectedEntry)
-    : "";
-  const defaultSelectedUrdfJointValues = useMemo(
-    () => ({
-      ...buildDefaultUrdfJointValues(selectedUrdfData),
-      ...srdfHomeGroupStateJointValuesToDisplay(selectedUrdfData)
-    }),
-    [selectedUrdfData]
-  );
-  const storedSelectedUrdfJointValues = useMemo(() => {
-    if (!selectedUrdfFileRef) {
-      return {};
-    }
-    const storedValues = jointValuesByFileRef?.[selectedUrdfFileRef];
-    return storedValues && typeof storedValues === "object" ? storedValues : {};
-  }, [jointValuesByFileRef, selectedUrdfFileRef]);
-  const selectedUrdfJointValues = useMemo(
-    () => ({ ...defaultSelectedUrdfJointValues, ...storedSelectedUrdfJointValues }),
-    [defaultSelectedUrdfJointValues, storedSelectedUrdfJointValues]
-  );
-  const selectedUrdfGroupStates = useMemo(() => {
-    const groupStates = Array.isArray(selectedUrdfData?.srdf?.groupStates)
-      ? selectedUrdfData.srdf.groupStates
-      : Array.isArray(selectedUrdfData?.motion?.groupStates)
-        ? selectedUrdfData.motion.groupStates
-        : [];
-    const names = groupStates.map((state) => String(state?.name || "").trim()).filter(Boolean);
-    const nameCounts = names.reduce((counts, name) => counts.set(name, (counts.get(name) || 0) + 1), new Map());
-    return groupStates.map((state) => {
-      const name = String(state?.name || "").trim();
-      const group = String(state?.group || "").trim();
-      if (!name || !group) {
-        return null;
-      }
-      const jointValuesByName = srdfGroupStateJointValuesToDisplay(
-        selectedUrdfData,
-        state?.jointValuesByName || state?.jointValuesByNameRad
-      );
-      return {
-        ...state,
-        id: `${group}/${name}`,
-        label: nameCounts.get(name) > 1 ? `${name} (${group})` : name,
-        jointValuesByName
-      };
-    }).filter(Boolean);
-  }, [selectedUrdfData]);
-  const matchedSelectedUrdfGroupStateId = useMemo(
-    () => (
-      findBestMatchingJointValueState(
-        selectedUrdfGroupStates,
-        selectedUrdfJointValues,
-        defaultSelectedUrdfJointValues
-      )?.id || ""
-    ),
-    [defaultSelectedUrdfJointValues, selectedUrdfJointValues, selectedUrdfGroupStates]
-  );
-  const trackedSelectedUrdfGroupStateId = selectedUrdfFileRef
-    ? String(selectedUrdfGroupStateIdByFileRef?.[selectedUrdfFileRef] || "").trim()
-    : "";
-  const activeSelectedUrdfGroupStateId = useMemo(() => {
-    if (trackedSelectedUrdfGroupStateId && selectedUrdfGroupStates.some((state) => String(state?.id || "").trim() === trackedSelectedUrdfGroupStateId)) {
-      return trackedSelectedUrdfGroupStateId;
-    }
-    return matchedSelectedUrdfGroupStateId;
-  }, [matchedSelectedUrdfGroupStateId, selectedUrdfGroupStates, trackedSelectedUrdfGroupStateId]);
-
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
@@ -985,104 +867,7 @@ function CadFileViewSurface({
     };
   }, [fileSessionNamespace, selectedAnimationSourceKey, selectedEntry, selectedSourceAnimation]);
 
-  const selectedUrdfLinkMeshGeometryResult = useMemo(() => {
-    if (!selectedUrdfData || !selectedUrdfMeshes) {
-      return {
-        meshData: null,
-        error: ""
-      };
-    }
-    try {
-      return {
-        meshData: buildUrdfMeshGeometry(selectedUrdfData, selectedUrdfMeshes, { lightweight: true }),
-        error: ""
-      };
-    } catch (error) {
-      return {
-        meshData: null,
-        error: error instanceof Error ? error.message : String(error)
-      };
-    }
-  }, [selectedUrdfData, selectedUrdfMeshes]);
-  // Named-object splitting serves component selection in every display style.
-  // Keep geometry memoized independently of lighting changes.
-  const selectedUrdfMeshGeometryResult = useMemo(() => {
-    if (!selectedUrdfLinkMeshGeometryResult.meshData) {
-      return selectedUrdfLinkMeshGeometryResult;
-    }
-    try {
-      return {
-        meshData: buildRobotComponentGeometry(selectedUrdfLinkMeshGeometryResult.meshData),
-        error: ""
-      };
-    } catch (error) {
-      // The split is an enhancement: a failure in it costs the components, never the robot.
-      console.warn("Failed to split robot mesh objects into components", error);
-      return selectedUrdfLinkMeshGeometryResult;
-    }
-  }, [selectedUrdfLinkMeshGeometryResult]);
-  const selectedUrdfComponents = useMemo(
-    () => robotComponents(selectedUrdfMeshGeometryResult.meshData),
-    [selectedUrdfMeshGeometryResult.meshData]
-  );
-  const robotSelection = useRobotComponentSelection(
-    selectedUrdfComponents, selectedUrdfMeshGeometryResult.meshData, selectedUrdfFileRef
-  );
-  // Robot parts keep the same picking, hover and activation across styles. Every mesh
-  // part names its link, so a robot with no named objects is still picked by link.
-  const selectedUrdfParts = selectedUrdfMeshGeometryResult.meshData?.parts || EMPTY_LIST;
-  const robotComponentsActive =
-    selectedEntryContentKind === VIEWPORT_CONTENT.ROBOT &&
-    selectedUrdfParts.length > 0;
-  const selectedUrdfGroupNamesByLink = useMemo(
-    () => (selectedUrdfData?.srdf ? srdfGroupNamesByLink(selectedUrdfData) : null),
-    [selectedUrdfData]
-  );
-  const movableUrdfJoints = useMemo(
-    () => (
-      Array.isArray(selectedUrdfData?.joints)
-        ? selectedUrdfData.joints.filter((joint) => String(joint?.type || "") !== "fixed" && !joint?.mimic)
-        : []
-    ),
-    [selectedUrdfData]
-  );
-  const selectedUrdfPreview = useMemo(() => {
-    if (!selectedUrdfData || !selectedUrdfMeshGeometryResult.meshData) {
-      return {
-        meshData: null,
-        error: selectedUrdfMeshGeometryResult.error,
-        linkWorldTransforms: new Map()
-      };
-    }
-    try {
-      const posedPreview = applyUrdfPoseToMeshData(
-        selectedUrdfData,
-        selectedUrdfMeshGeometryResult.meshData,
-        selectedUrdfJointValues
-      );
-      return {
-        ...posedPreview,
-        error: ""
-      };
-    } catch (error) {
-      return {
-        meshData: null,
-        error: error instanceof Error ? error.message : String(error),
-        linkWorldTransforms: new Map()
-      };
-    }
-  }, [
-    defaultSelectedUrdfJointValues,
-    rendering,
-    selectedUrdfData,
-    selectedUrdfJointValues,
-    selectedUrdfMeshGeometryResult
-  ]);
-  const selectedMeshData = selectedEntryContentKind === VIEWPORT_CONTENT.ROBOT
-    ? selectedUrdfPreview.meshData
-    : (selectedMeshMatches || retainingPreviousStepMesh)
-      ? meshState.meshData
-      : null;
+  const selectedMeshData = (selectedMeshMatches || retainingPreviousStepMesh) ? meshState.meshData : null;
   const selectedSourceAppearance = selectedEntry?.editingPreview
     ? selectedEntry.previewAppearance || null
     : selectedEntry?.sourceSidecar
@@ -1467,15 +1252,7 @@ function CadFileViewSurface({
     hiddenPartIds,
     renderPartIdsForAssemblySelection
   ]);
-  const selectedUrdfPreviewError = selectedUrdfPreview.error;
   const effectiveRenderFormat = selectedEntrySourceFormat;
-  // A robot is loading until EVERY link mesh has landed. It is published once, complete,
-  // so this stays true for the whole fetch and the card keeps reporting "loading meshes
-  // 7/13" — a partially-drawn robot with no card gives no sign whether more is coming.
-  const urdfViewerLoading =
-    !!selectedEntry &&
-    urdfStatus !== ASSET_STATUS.ERROR &&
-    (!selectedUrdfMatches || urdfStatus === ASSET_STATUS.LOADING);
   // A fatal render-artifact error (not building) stops the loading spinner so the error
   // surfaces. Every artifact-managed format, not just STEP: a DXF build that failed would
   // otherwise spin forever behind its own error.
@@ -1491,15 +1268,9 @@ function CadFileViewSurface({
     status !== ASSET_STATUS.ERROR &&
     ((!selectedMeshMatches && !retainedPreviousStepMeshError) ||
       status === ASSET_STATUS.LOADING || selectedStepModuleLoading);
-  // DXF has no arm -- it renders its baked preview through the mesh path like everything
-  // else.
-  const viewerLoading = {
-    [ASSET_KIND.ROBOT]: urdfViewerLoading,
-    [ASSET_KIND.MESH]: meshViewerLoading,
-    // A DXF loads a drawing but RENDERS the drawing package's baked preview through the
-    // mesh path, so its readiness is the mesh loader's.
-    [ASSET_KIND.DRAWING]: meshViewerLoading
-  }[assetKindForRenderFormat(effectiveRenderFormat)];
+  // A DXF loads a drawing but RENDERS the drawing package's baked preview through the
+  // mesh path, so its readiness is the mesh loader's, like everything else's.
+  const viewerLoading = meshViewerLoading;
   const effectiveViewerLoading = viewerLoading || selectedArtifactGenerating || selectedCatalogPending || (fileParamSelectionPending && !editingPreview.entry);
   // The file explorer spins the entry the viewer is actually working on. Artifact
   // generation is only half of that -- a built package still has to be fetched and
@@ -1513,7 +1284,7 @@ function CadFileViewSurface({
     !selectedAssemblyHydrationFailed;
   const activeMeshLoadProgress = meshLoadInProgress && meshLoadTargetFile === fileKey(selectedEntry)
     ? meshLoadProgress : null;
-  const selectedLoadProgress = selectedArtifactProgress || activeMeshLoadProgress || urdfLoadProgress || null;
+  const selectedLoadProgress = selectedArtifactProgress || activeMeshLoadProgress || null;
   const presentationKey = selectedKey ? `${selectedKey}:${selectedMeshData ? meshState?.meshHash || selectedMeshHash : selectedMeshHash}:${selectedMeshPartial ? "partial" : "complete"}` : "";
   const [presentationState, setPresentationState] = useState(null);
   const handlePresentationChange = useCallback((next) => {
@@ -1573,13 +1344,6 @@ function CadFileViewSurface({
     if (!selectedEntry || viewerLoading || selectedArtifactGenerating) {
       return null;
     }
-    if (isRobotRenderFormat(effectiveRenderFormat)) {
-      return buildViewerMeshAlert(
-        selectedEntry,
-        !!selectedMeshData,
-        urdfStatus === ASSET_STATUS.ERROR ? urdfError : selectedUrdfPreviewError
-      ) || viewerRuntimeAlert || artifactWarningAlert;
-    }
     const meshAlert = buildViewerMeshAlert(
       selectedEntry,
       !!selectedMeshData,
@@ -1609,10 +1373,7 @@ function CadFileViewSurface({
     selectedArtifactGenerating,
     selectedMeshPartial,
     selectedMeshData,
-    selectedUrdfPreviewError,
     status,
-    urdfError,
-    urdfStatus,
     viewerLoading,
     viewerRuntimeAlert
   ]);
@@ -1665,7 +1426,7 @@ function CadFileViewSurface({
     componentLodNeedsSelectors,
     // Capability, not just the current pose: a paused/disabled module can move
     // an offscreen part without a camera event when re-enabled.
-    dynamicScene: lodSceneMayMove({ robot: isUrdfView, drawing: selectedEntryIsDrawing,
+    dynamicScene: lodSceneMayMove({ drawing: selectedEntryIsDrawing,
       kinematics: selectedStepModuleDefinition, kinematicsLoading: selectedStepModuleLoading,
       animation: selectedSourceAnimation, exploded: resolvedScene.display?.exploded?.enabled })
   });
@@ -1882,7 +1643,6 @@ function CadFileViewSurface({
         entry: selectedEntry,
         fileSheetKind: selectedFileSheetKind,
         stepSourceStatus: selectedStepSourceStatus,
-        urdfData: selectedUrdfData,
         viewerAlert,
         stepArtifactGenerationAvailable,
         activeGenerationFiles: activeStepArtifactGenerationFiles,
@@ -1897,7 +1657,6 @@ function CadFileViewSurface({
     selectedArtifactGenerating,
     stepArtifactGenerationAvailable,
     selectedStepSourceStatus,
-    selectedUrdfData,
     viewerAlert,
     viewerServerInfo
   ]);
@@ -1919,9 +1678,7 @@ function CadFileViewSurface({
     hasStepAnimationPanel: false,
     hasDxfBendsPanel: selectedFileSheetKind === "dxf" && drawingBends.length > 0,
     hasDxfLayersPanel: selectedFileSheetKind === "dxf" && drawingLayers.length > 1,
-    renderMode: rendering,
-    isSdf: selectedFileSheetKind === "sdf",
-    showJoints: selectedFileSheetKind === "urdf" || selectedFileSheetKind === "srdf" || selectedFileSheetKind === "sdf"
+    renderMode: rendering
   }), [
     selectedAnimationClipList,
     selectedAnimationError,
@@ -1993,28 +1750,6 @@ function CadFileViewSurface({
     setFileSheetOpenSectionIds(normalizedSectionIds);
   }, [fileSheetOpenSectionIds, renderedCadFileSheetSectionIds]);
 
-  // A selection exists only while Select is the tool, for a robot as for a STEP model:
-  // choosing a link or an object under another tool returns to Select first.
-  const revealRobotSelection = useCallback(() => {
-    setTabToolMode(current => current === TAB_TOOL_MODE.REFERENCES ? current : TAB_TOOL_MODE.REFERENCES);
-    if (isWideLayout) setTabToolsOpen(true);
-    // Components carries the reference at its foot, so revealing it is the whole jump.
-    setFileSheetOpenSectionIds([FILE_SHEET_SECTION_IDS.ROBOT_LINKS]);
-  }, [isWideLayout]);
-  const selectRobotComponent = useCallback((id, options) => {
-    robotSelection.select(id, options);
-    // A part that is not a named object selects its link, so any part of the robot reveals.
-    if (selectedUrdfParts.some((part) => part.id === id)) revealRobotSelection();
-  }, [robotSelection.select, selectedUrdfParts, revealRobotSelection]);
-  const selectRobotLink = useCallback((linkName) => {
-    robotSelection.selectLink(linkName);
-    if (linkName) revealRobotSelection();
-  }, [robotSelection.selectLink, revealRobotSelection]);
-  const clearRobotSelection = robotSelection.select;
-  useEffect(() => {
-    if (tabToolMode !== TAB_TOOL_MODE.REFERENCES) clearRobotSelection("");
-  }, [tabToolMode, clearRobotSelection]);
-
   const buildActiveTabSnapshot = useCallback(() => {
     return cloneTabSnapshot({
       referenceQuery,
@@ -2046,9 +1781,6 @@ function CadFileViewSurface({
   const buildActiveFileSessionSnapshot = useCallback((entry) => {
     const targetEntry = entry || selectedEntry;
     const targetFileKey = fileKey(targetEntry);
-    const targetUrdfJointValues = targetFileKey && jointValuesByFileRef?.[targetFileKey]
-      ? jointValuesByFileRef[targetFileKey]
-      : {};
     // While a clip plays the authoritative time is the clock store's, not React
     // state's — the loop only writes back when playback stops.
     const snapshotAnimationElapsedSec = animationState.playing
@@ -2076,9 +1808,6 @@ function CadFileViewSurface({
           speed: animationState.speed,
           loopEnabled: animationState.loopEnabled
         },
-        urdf: {
-          jointValues: targetUrdfJointValues,
-        },
         largeFile: {
           selectableTopologyEnabled: largeFileState.selectableTopologyEnabled
         }
@@ -2088,7 +1817,6 @@ function CadFileViewSurface({
     animationState,
     buildActiveTabSnapshot,
     displaySettings,
-    jointValuesByFileRef,
     largeFileState,
     renderSession,
     resolvedScene.camera.projection,
@@ -2181,23 +1909,6 @@ function CadFileViewSurface({
       animationStateRef.current = restoredAnimationState;
       setAnimationState(restoredAnimationState);
       setAnimationClock(restoredAnimationState.elapsedSec);
-    }
-
-    const urdfSlice = sessionState?.slices?.urdf || null;
-    if (urdfSlice) {
-      setJointValuesByFileRef((current) => ({
-        ...current,
-        [normalizedKey]: urdfSlice.jointValues || {}
-      }));
-    } else {
-      setJointValuesByFileRef((current) => {
-        if (!current?.[normalizedKey]) {
-          return current;
-        }
-        const next = { ...current };
-        delete next[normalizedKey];
-        return next;
-      });
     }
   }, [
     animationLoadState,
@@ -2408,42 +2119,6 @@ function CadFileViewSurface({
     selectedAssemblyInteractionReady,
     selectedEntry,
     selectedMeshMatches
-  ]);
-
-
-  useEffect(() => {
-    if (!selectedEntry) {
-      cancelUrdfLoad();
-      return;
-    }
-    if (!isRobotRenderFormat(effectiveRenderFormat)) {
-      cancelUrdfLoad();
-      return;
-    }
-    if (!selectedEntryHasUrdf) {
-      cancelUrdfLoad();
-      setUrdfState(null);
-      setUrdfStatus(ASSET_STATUS.PENDING);
-      setUrdfError("");
-      return;
-    }
-    if (selectedUrdfMatches) {
-      return;
-    }
-    loadUrdfForEntry(selectedEntry).catch((err) => {
-      setUrdfStatus(ASSET_STATUS.ERROR);
-      setUrdfError(err instanceof Error ? err.message : String(err));
-    });
-  }, [
-    cancelUrdfLoad,
-    effectiveRenderFormat,
-    loadUrdfForEntry,
-    selectedEntry,
-    selectedEntryHasUrdf,
-    selectedUrdfMatches,
-    setUrdfError,
-    setUrdfState,
-    setUrdfStatus
   ]);
 
   // Stable key over the expanded tree nodes whose topology should be loaded. An assembly's
@@ -3151,106 +2826,6 @@ function CadFileViewSurface({
     selectedAssemblyInteractionReady
   ]);
 
-  const clearTrackedUrdfGroupStateForFile = useCallback((fileRef) => {
-    const normalizedFileRef = String(fileRef || "").trim();
-    if (!normalizedFileRef) {
-      return;
-    }
-    setSelectedUrdfGroupStateIdByFileRef((current) => {
-      if (!current?.[normalizedFileRef]) {
-        return current;
-      }
-      const next = { ...current };
-      delete next[normalizedFileRef];
-      return next;
-    });
-  }, []);
-
-  // The one place a robot's joint values are written, and every write is where
-  // the robot IS from this frame on: a slider, a typed number, a Pose knob, a group
-  // state and Reset alike. Motion over time belongs to the Animate tool.
-  const writeUrdfJointValues = useCallback((fileRef, jointValues) => {
-    const normalizedFileRef = String(fileRef || "").trim();
-    if (!normalizedFileRef) {
-      return;
-    }
-    const nextValues = cloneJointValueMap(jointValues);
-    setJointValuesByFileRef((current) => ({
-      ...current,
-      [normalizedFileRef]: nextValues
-    }));
-  }, []);
-
-  const handleUrdfJointValueChange = useCallback((joint, nextValueDeg) => {
-    const jointName = String(joint?.name || "").trim();
-    if (!selectedUrdfFileRef || !jointName) {
-      return;
-    }
-    const clampedValueDeg = clampJointValueDeg(joint, nextValueDeg);
-    const currentValueDeg = toFiniteNumber(selectedUrdfJointValues?.[jointName], joint?.defaultValueDeg ?? 0);
-    if (Math.abs(clampedValueDeg - currentValueDeg) <= URDF_JOINT_VALUE_EPSILON) {
-      return;
-    }
-    writeUrdfJointValues(selectedUrdfFileRef, { ...selectedUrdfJointValues, [jointName]: clampedValueDeg });
-    clearTrackedUrdfGroupStateForFile(selectedUrdfFileRef);
-  }, [
-    writeUrdfJointValues,
-    clearTrackedUrdfGroupStateForFile,
-    selectedUrdfFileRef,
-    selectedUrdfJointValues,
-  ]);
-  const handleResetUrdfPose = useCallback(() => {
-    if (!selectedUrdfFileRef) {
-      return;
-    }
-    clearTrackedUrdfGroupStateForFile(selectedUrdfFileRef);
-    writeUrdfJointValues(selectedUrdfFileRef, defaultSelectedUrdfJointValues);
-  }, [
-    writeUrdfJointValues,
-    clearTrackedUrdfGroupStateForFile,
-    defaultSelectedUrdfJointValues,
-    selectedUrdfFileRef,
-  ]);
-  const handleSelectUrdfGroupState = useCallback((groupState) => {
-    if (!selectedUrdfFileRef || !groupState?.jointValuesByName || typeof groupState.jointValuesByName !== "object") {
-      return;
-    }
-    const groupStateJointValues = cloneJointValueMap(groupState.jointValuesByName);
-    if (!Object.keys(groupStateJointValues).length) {
-      return;
-    }
-    const nextJointValues = {
-      ...selectedUrdfJointValues,
-      ...groupStateJointValues
-    };
-    const groupStateId = String(groupState?.id || "").trim();
-    if (groupStateId) {
-      setSelectedUrdfGroupStateIdByFileRef((current) => ({
-        ...current,
-        [selectedUrdfFileRef]: groupStateId
-      }));
-    }
-    writeUrdfJointValues(selectedUrdfFileRef, nextJointValues);
-  }, [
-    writeUrdfJointValues,
-    selectedUrdfFileRef,
-    selectedUrdfJointValues,
-  ]);
-
-
-  const handleCopyUrdfJointAngles = useCallback(async () => {
-    setScreenshotStatus("");
-    if (!movableUrdfJoints.length) {
-      setCopyStatus("No movable joints are available");
-      return;
-    }
-    try {
-      await host.clipboard.writeText(buildUrdfJointAnglesCopyText(movableUrdfJoints, selectedUrdfJointValues));
-      setCopyStatus(selectedEntrySourceFormat === RENDER_FORMAT.SDF ? "Copied joint values" : "Copied joint angles");
-    } catch (error) {
-      setCopyStatus(error instanceof Error ? error.message : "Clipboard write failed");
-    }
-  }, [movableUrdfJoints, selectedEntrySourceFormat, selectedUrdfJointValues]);
   const copySelectionPayload = useMemo(() => {
     const selectedReferencesForCopy = selectedReferenceIds
       .map((id) => (
@@ -4865,14 +4440,6 @@ function CadFileViewSurface({
     }
   }, [toggleStepTreeNode]);
 
-  // A mesh the description names, as the path the host opens. It resolves against the
-  // opened file exactly as the mesh loader does (an SRDF's URDF is always beside it); a
-  // `package://` reference, or one that leaves the served root, has no path here.
-  const robotMeshPath = useCallback((filename) => {
-    const path = resolveLocalAssetFileRef(cadFileParamForEntry(selectedEntry), filename);
-    return path && !path.startsWith("/") && !path.startsWith("../") ? path : "";
-  }, [selectedEntry]);
-
   const handleSelectEntry = useCallback((key) => {
     const next = entryMap.get(key);
     onOpenFile?.(next ? cadFileParamForEntry(next) : key);
@@ -4919,10 +4486,6 @@ function CadFileViewSurface({
   // Display groups (including Custom overrides and projection) stay untouched.
   const handleModelReset = useCallback(() => {
     resetStepMotion();
-    if (selectedUrdfFileRef) {
-      clearTrackedUrdfGroupStateForFile(selectedUrdfFileRef);
-      writeUrdfJointValues(selectedUrdfFileRef, defaultSelectedUrdfJointValues);
-    }
     if (selectedEntryIsDrawing) {
       handleDrawingBendsReset();
       handleDrawingOrientationReset();
@@ -4933,14 +4496,10 @@ function CadFileViewSurface({
     setIsolatedAssemblyNodeIds([]);
     viewSettingsStore.resetModelTools();
     handleViewerZoomReset();
-  }, [resetStepMotion,
-    selectedUrdfFileRef,
-    clearTrackedUrdfGroupStateForFile, writeUrdfJointValues,
-    defaultSelectedUrdfJointValues, selectedEntryIsDrawing, handleDrawingBendsReset,
+  }, [resetStepMotion, selectedEntryIsDrawing, handleDrawingBendsReset,
     handleDrawingOrientationReset, viewSettingsStore, handleViewerZoomReset]);
 
-  const zoomSelectionPartIds = robotComponentsActive ? robotSelection.selectedIds
-    : inspectionHighlight ? inspectionHighlight.partIds || [] : viewerSelectedPartIds;
+  const zoomSelectionPartIds = inspectionHighlight ? inspectionHighlight.partIds || [] : viewerSelectedPartIds;
   const zoomSelectionReferenceIds = inspectionHighlight ? inspectionHighlight.faceIds || [] : selectedReferenceIds;
   const zoomHeader = <ZoomControl zoomPercent={viewerZoomPercent}
     disabled={viewerLoading || stepInteractionBlocked || !selectedViewportContent}
@@ -5011,7 +4570,7 @@ function CadFileViewSurface({
         resource: { ...displayedResource }, revision: String(displayedResource.revision || ''),
         loading: Boolean(viewerLoading || stepInteractionBlocked),
         selection: references,
-        selectedPartIds: [...(robotComponentsActive ? robotSelection.selectedIds : inspectionHighlight ? inspectionHighlight.partIds || [] : viewerSelectedPartIds)],
+        selectedPartIds: [...(inspectionHighlight ? inspectionHighlight.partIds || [] : viewerSelectedPartIds)],
         selectedReferenceIds: [...(inspectionHighlight ? inspectionHighlight.faceIds || [] : selectedReferenceIdsRef.current)],
         hiddenPartIds: [...hiddenPartIds], isolatedPartIds: [...isolatedAssemblyNodeIds],
         camera: clonePerspectiveSnapshot(viewerRef.current?.getPerspective?.() || activePerspectiveRef.current),
@@ -5048,7 +4607,6 @@ function CadFileViewSurface({
       setSelectedRenderPartIdByAssemblyPartId({});
       clearReferenceSelection();
       setInspectionHighlight(null);
-      robotSelection.select('');
     },
     setCamera(camera) {
       const validVector = vector => Array.isArray(vector) && vector.length === 3 && vector.every(Number.isFinite);
@@ -5240,24 +4798,14 @@ function CadFileViewSurface({
   }, [animateModeActive, animationOwnsPose, releaseAnimation]);
 
   // Pose: drag the joints by their handles. Present only where something can be
-  // driven (a robot's movable joints, a STEP's mate DOFs), and the tool a robot
-  // opens in (`createTabRecord`). The handles are rebuilt from the pose on screen,
+  // driven (a STEP's mate DOFs). The handles are rebuilt from the pose on screen,
   // so sliders, presets, Reset and a handle up the chain all carry them along.
   const stepPoseDefinition = selectedFileSheetKind === "step" ? selectedStepParameterRuntime?.definition || null : null;
-  const poseAvailable = isUrdfView
-    ? urdfPosableJoints(selectedUrdfData).length > 0
-    : stepPosableDofs(stepPoseDefinition).length > 0;
+  const poseAvailable = stepPosableDofs(stepPoseDefinition).length > 0;
   const poseToolActive = !previewMode && poseAvailable && tabToolMode === TAB_TOOL_MODE.POSE;
-  // A robot restores into Pose before it has loaded; only a LOADED description
-  // without joints sends the tab back to Select.
-  const poseUnavailable = !poseAvailable && (isUrdfView ? Boolean(selectedUrdfData) : true);
   useEffect(() => {
-    if (poseUnavailable) setTabToolMode(current => current === TAB_TOOL_MODE.POSE ? TAB_TOOL_MODE.REFERENCES : current);
-  }, [poseUnavailable]);
-  const urdfLinkCentresByName = useMemo(
-    () => urdfLinkCentres(selectedUrdfMeshGeometryResult.meshData?.parts),
-    [selectedUrdfMeshGeometryResult]
-  );
+    if (!poseAvailable) setTabToolMode(current => current === TAB_TOOL_MODE.POSE ? TAB_TOOL_MODE.REFERENCES : current);
+  }, [poseAvailable]);
   // A mated child's label names its parts, and the mesh here is the model at
   // rest (the viewer poses display records, never this data): the child's centre.
   const stepPoseSelectorRuntime = selectedStepParameterRuntime?.selectorRuntime || null;
@@ -5266,24 +4814,13 @@ function CadFileViewSurface({
     : null), [stepPoseDefinition, poseToolActive, selectedMeshData, stepPoseSelectorRuntime]);
   const jointHandles = useMemo(() => {
     if (!poseToolActive) return null;
-    return isUrdfView
-      ? urdfJointHandles({
-        urdfData: selectedUrdfData,
-        jointValues: selectedUrdfJointValues,
-        linkWorldTransforms: selectedUrdfPreview.linkWorldTransforms,
-        linkCentres: urdfLinkCentresByName,
-        onJointValueChange: handleUrdfJointValueChange
-      })
-      : stepJointHandles({
-        definition: stepPoseDefinition,
-        parameterValues: selectedStepParameterRuntime.parameterValues,
-        features: stepPoseFeatures,
-        onParameterChange: handleStepModuleParameterChange
-      });
-  }, [
-    poseToolActive, isUrdfView, selectedUrdfData, selectedUrdfJointValues, selectedUrdfPreview, urdfLinkCentresByName,
-    handleUrdfJointValueChange, stepPoseDefinition, selectedStepParameterRuntime, stepPoseFeatures, handleStepModuleParameterChange
-  ]);
+    return stepJointHandles({
+      definition: stepPoseDefinition,
+      parameterValues: selectedStepParameterRuntime.parameterValues,
+      features: stepPoseFeatures,
+      onParameterChange: handleStepModuleParameterChange
+    });
+  }, [poseToolActive, stepPoseDefinition, selectedStepParameterRuntime, stepPoseFeatures, handleStepModuleParameterChange]);
 
   return (
     <HostPanelSlotContext.Provider value={hostPanelSlot}>
@@ -5364,7 +4901,7 @@ function CadFileViewSurface({
                 onLodCameraChange={onLodCameraMoved}
                 onMeshSourceAdoption={handleDisplayMeshAdoption}
                 renderPartsIndividually={
-            isUrdfView || Boolean(selectedStepParameterRuntime) || Boolean(selectedAnimationRuntime) ||
+            Boolean(selectedStepParameterRuntime) || Boolean(selectedAnimationRuntime) ||
             Boolean(Object.keys(selectedDisplayMeshData?.appearance?.materials || {}).length)
           }
                 stepParameters={selectedStepParameterRuntime}
@@ -5397,13 +4934,12 @@ function CadFileViewSurface({
                 referenceSelectionPending={referenceSelectionPending}
                 referenceSelectionUnavailable={referenceSelectionUnavailable}
                 referenceSelectionDeferred={selectedTopologyDeferredByCost}
-                viewerMode={robotComponentsActive ? "assembly" : viewerMode}
-                robotComponentPicking={robotComponentsActive}
-                assemblyPickingActive={robotComponentsActive || viewerInAssemblyMode}
-                assemblyParts={robotComponentsActive ? (selectedUrdfPreview.meshData?.parts || EMPTY_LIST) : viewerAssemblyRenderParts}
+                viewerMode={viewerMode}
+                assemblyPickingActive={viewerInAssemblyMode}
+                assemblyParts={viewerAssemblyRenderParts}
                 hiddenPartIds={viewerHiddenPartIds}
-                selectedPartIds={robotComponentsActive ? robotSelection.selectedIds : inspectionHighlight ? inspectionHighlight.partIds || [] : viewerSelectedPartIds}
-                hoveredPartId={robotComponentsActive ? robotSelection.hoveredId : viewerHoveredPartIds}
+                selectedPartIds={inspectionHighlight ? inspectionHighlight.partIds || [] : viewerSelectedPartIds}
+                hoveredPartId={viewerHoveredPartIds}
                 hoveredReferenceId={effectiveHoveredReferenceId}
                 selectedReferenceIds={inspectionHighlight ? inspectionHighlight.faceIds : selectedReferenceIds}
                 selectorRuntime={effectiveSelectorRuntime}
@@ -5417,10 +4953,10 @@ function CadFileViewSurface({
                 drawing={drawing}
                 handleScreenshotCopy={handleCapture}
                 handlePerspectiveChange={handlePerspectiveChange}
-                handleModelHoverChange={robotComponentsActive ? robotSelection.hover : handleModelHoverChange}
-                handleModelReferenceActivate={robotComponentsActive ? selectRobotComponent : handleModelReferenceActivate}
-                handleModelReferenceDoubleActivate={robotComponentsActive ? undefined : handleModelReferenceDoubleActivate}
-                handleModelReferenceContext={robotComponentsActive ? undefined : handleModelReferenceContext}
+                handleModelHoverChange={handleModelHoverChange}
+                handleModelReferenceActivate={handleModelReferenceActivate}
+                handleModelReferenceDoubleActivate={handleModelReferenceDoubleActivate}
+                handleModelReferenceContext={handleModelReferenceContext}
                 onMeasurePick={handleMeasurePick}
                 onMeasureHoverPoint={handleMeasureHoverPoint}
                 activeMeasurementId={inspectionHighlight?.measurement?.id || activeMeasureId}
@@ -5504,7 +5040,6 @@ function CadFileViewSurface({
                 animateToolActive={animateToolActive}
                 poseAvailable={poseAvailable}
                 poseToolActive={poseToolActive}
-                poseLeads={isUrdfView}
                 handleSelectTabToolMode={handleSelectTabToolMode}
                 viewerLoading={viewerLoading}
                 selectedMeshData={selectedMeshData}
@@ -5596,47 +5131,6 @@ function CadFileViewSurface({
                 viewerServerInfo={viewerServerInfo}
                 suppressDynamicMetadataStatus={selectedArtifactGenerating}
                 statusItems={selectedFileStatusItems}
-                renderMode={rendering}
-                settingsTabs={settingsTabs}
-                openSectionIds={effectiveFileSheetOpenSectionIds}
-                onOpenSectionIdsChange={handleFileSheetOpenSectionIdsChange}
-              />
-            ) : null}
-
-            {selectedFileSheetKind === "urdf" || selectedFileSheetKind === "srdf" || selectedFileSheetKind === "sdf" ? (
-              <UrdfFileSheet
-                headerActions={zoomHeader}
-                key={`${selectedFileSheetKind}:${selectedKey}`}
-                open={fileSheetOpen}
-                title={selectedFileSheetKind === "srdf" ? "SRDF" : selectedFileSheetKind === "sdf" ? "SDF" : "URDF"}
-                sourceFormat={selectedFileSheetKind}
-                showJoints={selectedFileSheetKind === "urdf" || selectedFileSheetKind === "srdf" || selectedFileSheetKind === "sdf"}
-                showMotion={selectedFileSheetKind === "srdf"}
-                isDesktop={isWideLayout}
-                width={activeSheetWidth || tabToolsWidth}
-                selectedEntry={selectedEntry}
-                onOpenChange={setTabToolsOpen}
-                onStartResize={fileSheetResizeHandler}
-                joints={movableUrdfJoints}
-                components={selectedUrdfComponents}
-                componentSelection={{ ...robotSelection, select: selectRobotComponent, selectLink: selectRobotLink }}
-                robotDescription={selectedUrdfData}
-                robotParts={selectedUrdfParts}
-                robotGroupNamesByLink={selectedUrdfGroupNamesByLink}
-                robotMeshPath={robotMeshPath}
-                onOpenFile={onOpenFile}
-                groupStates={selectedUrdfGroupStates}
-                activeGroupStateId={activeSelectedUrdfGroupStateId}
-                jointValues={selectedUrdfJointValues}
-                onJointValueChange={handleUrdfJointValueChange}
-                onGroupStateSelect={handleSelectUrdfGroupState}
-                onCopyJointAngles={handleCopyUrdfJointAngles}
-                onResetPose={handleResetUrdfPose}
-                sdf={selectedFileSheetKind === "sdf" ? {
-                  info: selectedUrdfData?.sdf || null
-                } : null}
-                viewerServerInfo={viewerServerInfo}
-                suppressDynamicMetadataStatus={selectedArtifactGenerating}
                 renderMode={rendering}
                 settingsTabs={settingsTabs}
                 openSectionIds={effectiveFileSheetOpenSectionIds}

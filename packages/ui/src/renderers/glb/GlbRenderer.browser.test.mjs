@@ -283,6 +283,19 @@ test('an animated GLB adds Animate, rightmost: one scene whether or not a clip p
   await page.evaluate(() => window.cadHarness.fullscreen(false));
   await pane.locator('[data-animation-transport]').waitFor({ state: 'detached' });
   assert.deepEqual(await toolNames(pane), [['Orbit', 'true'], ['Draw', 'false'], ['Animate', 'false']]);
+
+  // In Render the studio's floor is sized from the rest placement: a clip at 0 is the rest picture, and a playing one never resizes it.
+  await page.evaluate(() => window.cadHarness.a.controller.setRenderMode(true));
+  await page.waitForFunction(() => window.__cadStage()?.studioGround);
+  const floor = await page.evaluate(() => window.__cadStage().studioGround);
+  const renderedRest = await capture(page);
+  await pane.getByRole('button', { name: 'Animate', exact: true }).click();
+  await pane.locator('[data-animation-transport]').waitFor();
+  assert.equal(differingPixels(renderedRest, await capture(page)), 0, 'Render at rest and Animate paused at 0 are the same picture');
+  await pane.getByRole('button', { name: 'Play animation', exact: true }).click();
+  await page.waitForFunction(() => Number(document.querySelector('[data-testid="one"] [role="slider"][aria-label="Animation time"]')?.getAttribute('aria-valuenow')) > 0.25);
+  await pane.getByRole('button', { name: 'Pause animation', exact: true }).click();
+  assert.deepEqual(await page.evaluate(() => window.__cadStage().studioGround), floor);
   assert.deepEqual(errors, []);
 });
 

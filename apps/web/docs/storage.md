@@ -103,7 +103,6 @@ Existing slice intent:
 - `stepModule`: kinematic parameter values.
 - `animation`: embedded clip, playback and elapsed-time state.
 - `render`: independent photographic mode, settings, camera and quality.
-- `urdf`: joint values and motion-planning controls.
 - `largeFile`: large-file decisions such as selectable topology opt-in.
 
 Material appearance comes from the model and its sidecar, never session

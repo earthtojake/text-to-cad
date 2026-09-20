@@ -15,12 +15,6 @@ export const MESH_RENDER_FORMATS = Object.freeze([
   RENDER_FORMAT.GLB
 ]);
 
-export const ROBOT_RENDER_FORMATS = Object.freeze([
-  RENDER_FORMAT.URDF,
-  RENDER_FORMAT.SRDF,
-  RENDER_FORMAT.SDF
-]);
-
 export function normalizeFormat(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -80,10 +74,6 @@ export function entrySourceFormat(entry) {
 
 export function isMeshRenderFormat(format) {
   return MESH_RENDER_FORMATS.includes(normalizeFormat(format));
-}
-
-export function isRobotRenderFormat(format) {
-  return ROBOT_RENDER_FORMATS.includes(normalizeFormat(format));
 }
 
 export function meshAssetKeyForFormat(format) {

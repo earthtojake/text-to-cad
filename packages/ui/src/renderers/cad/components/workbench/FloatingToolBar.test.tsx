@@ -169,7 +169,7 @@ it('Animate is the rightmost tool, and exists only in a file that has routines',
   expect(screen.getByRole('button', { name: 'Animate', exact: true }).getAttribute('aria-pressed')).toBe('true');
 });
 
-it('Pose exists only in a file with joints to drag: it leads a robot\'s tools and sits left of Animate in a STEP', async () => {
+it('Pose exists only in a file with joints to drag, and sits left of Animate', async () => {
   const handleSelectTabToolMode = vi.fn();
   const user = userEvent.setup();
   const step = { selectedEntry: { file: 'part.step' }, renderFormat: 'step', selectedMeshData: {}, measureSupported: true, handleSelectTabToolMode };
@@ -183,13 +183,7 @@ it('Pose exists only in a file with joints to drag: it leads a robot\'s tools an
   expect(tools()).toEqual(['Select', 'Measure', 'Draw', 'Pose']);
   await user.click(screen.getByRole('button', { name: 'Pose', exact: true }));
   expect(handleSelectTabToolMode.mock.calls).toEqual([['pose']]);
-
-  const robot = { ...step, selectedEntry: { file: 'arm.urdf' }, renderFormat: 'urdf', measureSupported: false };
-  view.rerender(<FloatingToolBar {...robot} poseAvailable poseLeads poseToolActive selectionToolActive={false} />);
-  expect(tools()).toEqual(['Pose', 'Select', 'Draw']);
+  view.rerender(<FloatingToolBar {...step} poseAvailable poseToolActive selectionToolActive={false} />);
   expect(screen.getByRole('button', { name: 'Pose', exact: true }).getAttribute('aria-pressed')).toBe('true');
   expect(screen.getByRole('button', { name: 'Select', exact: true }).getAttribute('aria-pressed')).toBe('false');
-  // A robot without a movable joint has no Pose to lead with.
-  view.rerender(<FloatingToolBar {...robot} poseLeads selectionToolActive />);
-  expect(tools()).toEqual(['Select', 'Draw']);
 });

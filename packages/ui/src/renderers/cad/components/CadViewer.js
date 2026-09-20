@@ -246,7 +246,6 @@ import { useViewportCamera } from "../../kit/camera/useViewportCamera.js";
 
 const EXPLODED_VIEW_ANIMATION_DURATION_MS = 1000;
 const CAD_COORDINATE_SYSTEM = "cad-z-up-v1";
-const ROBOT_COORDINATE_SYSTEM = "cad-z-up-robot-framing-v2";
 const VIEW_PLANE_CONTROL_SIZE = "6rem";
 const CAD_EDGE_OPACITY = 0.84;
 const BEND_GUIDE_COLOR = "#f59e0b";
@@ -374,10 +373,8 @@ function applyExplodedViewRuntimeProgress(runtime, layout, progress) {
   runtime.requestRender?.();
 }
 
-function coordinateSystemForSceneScale(sceneScaleMode) {
-  return normalizeSceneScaleMode(sceneScaleMode) === VIEWER_SCENE_SCALE.URDF
-    ? ROBOT_COORDINATE_SYSTEM
-    : CAD_COORDINATE_SYSTEM;
+function coordinateSystemForSceneScale() {
+  return CAD_COORDINATE_SYSTEM;
 }
 
 // Which coordinate system a stored camera belongs to is this renderer's knowledge;
@@ -2739,8 +2736,8 @@ const CadViewer = forwardRef(function CadViewer({
     runtime.cadScene = cadScene;
     // The rows this build/adoption placed. A later placement pass compares it
     // (sceneSourceAlreadyPlaced) so it repeats the per-occurrence loop only for
-    // rows this effect did NOT place -- a posed robot publishes new rows over
-    // the same wrapper and the same geometry source.
+    // rows this effect did NOT place -- a wrapper may publish new rows over the
+    // same geometry source.
     runtime.placedSourceParts = Array.isArray(meshData?.parts) ? meshData.parts : null;
     runtime.displayRecords = cadScene.displayRecords;
     runtime.syncScreenSpaceLineMaterials?.();
@@ -2797,8 +2794,7 @@ const CadViewer = forwardRef(function CadViewer({
     // TWO boxes, and the split is the point. displayBounds is the model in the
     // pose it is in right now -- what lighting, shadows, the floor height and
     // clipping must follow (the grid and stage keep the rest pose's SIZE). zeroPoseBounds is the model at its authored
-    // placement: a robot at its joint defaults, a STEP assembly before its mates
-    // moved anything, a mesh as loaded. The CAMERA is grounded on that one, so
+    // placement: a STEP assembly before its mates moved anything, a drawing as loaded. The CAMERA is grounded on that one, so
     // driving a joint, picking a group state or scrubbing an animation never
     // re-frames the model, and 100% keeps meaning "framed at the zero pose".
     const zeroPoseBounds = mergeBoundsList([cadScene.restBounds || meshData.bounds]);
@@ -3208,9 +3204,9 @@ const CadViewer = forwardRef(function CadViewer({
     // cadScene.update in the scene-sync effect above. That adoption applied
     // the changed record transforms and the same effect refreshed bounds,
     // lighting, floor and stage. Repeating this loop touched every occurrence
-    // after an otherwise selective update. Posed wrappers (URDF/SDF) retain a
-    // stable geometrySource, so their scene-sync effect does not run and their
-    // distinct meshData wrapper still reaches the placement path below.
+    // after an otherwise selective update. A wrapper that re-places a stable
+    // geometrySource does not run the scene-sync effect, and its distinct
+    // meshData wrapper still reaches the placement path below.
     if (sceneSourceAlreadyPlaced(runtime, meshData)) {
       return;
     }

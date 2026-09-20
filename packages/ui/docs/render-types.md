@@ -31,7 +31,7 @@ format. Pure data: no behaviour, no imports beyond the format enum.
 
 | Capability | Meaning |
 |---|---|
-| `content` | Which loaded object is the viewport's content: `mesh`, `robot`. Resolved once into `selectedViewportContent`. |
+| `content` | Which loaded object is the viewport's content: `mesh`, `robot` (a robot row is read by the headless renderer only; the viewer's robot renderer consults no table). Resolved once into `selectedViewportContent`. |
 | `assetKind` | Which asset the viewer LOADS: `mesh`, `drawing`, `robot`. Not the same question as `content` — a DXF loads a drawing and renders it through the mesh viewport, so it shares the viewport but not the loader. |
 | `iconKind` | The file-list glyph. |
 | `sheetKind` | Which file-sheet section set mounts. |
