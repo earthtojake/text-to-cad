@@ -942,7 +942,6 @@ def resolve_render_job(
     reference_root = reference_root_for_input(input_path, resolved_cwd)
     kind = input_kind(input_path)
     source_path = input_path
-    validate_display_for_kind(display, kind=kind, input_label=input_path.name)
     if kind == "python":
         # Scripts are RUN, never rendered: `python <script>` writes the
         # document, and snapshot renders the document.
@@ -956,6 +955,9 @@ def resolve_render_job(
         raise SnapshotError(
             f"snapshot cannot render {input_path.suffix or 'that file'} inputs: {input_path}"
         )
+    # After the refusals above: a script or a foreign file is told what IT is,
+    # not what its display settings would have meant.
+    validate_display_for_kind(display, kind=kind, input_label=input_path.name)
     return resolver(
         job,
         kind=kind,

@@ -141,6 +141,8 @@ export function robotTreeAncestorIds(tree, nodeId) {
 }
 
 const numbers = value => Array.isArray(value) && value.length === 3 && value.every(Number.isFinite) ? value : null;
+const finite = value => (Number.isFinite(value) ? value : null);
+const origin = value => (value && numbers(value.xyz) && numbers(value.rpy) ? value : null);
 
 /**
  * What the description says about one link, for the details pane. Only facts the
@@ -151,10 +153,25 @@ export function robotLinkFacts(description, linkName, { groupNamesByLink = null 
   const link = (Array.isArray(description?.links) ? description.links : []).find(candidate => text(candidate?.name) === name) || null;
   const joints = Array.isArray(description?.joints) ? description.joints : [];
   const parentJoint = joints.find(joint => text(joint?.childLink) === name) || null;
-  const geometry = entries => (Array.isArray(entries) ? entries : []).map(entry => ({
-    type: text(entry?.type) || (entry?.primitive ? text(entry.primitive.type) : entry?.meshUrl ? "mesh" : "unknown"),
-    filename: text(entry?.filename) || (entry?.meshUrl ? text(entry.label) : ""),
-  }));
+  // A visual carries what it says under `description` (beside what rendering uses); a
+  // collision IS its description. A model that records neither still names its geometry.
+  const geometry = entries => (Array.isArray(entries) ? entries : []).map(entry => {
+    const said = entry?.description || entry;
+    const primitive = entry?.primitive || null;
+    return {
+      name: text(said?.name),
+      type: text(said?.type) || (primitive ? text(primitive.type) : entry?.meshUrl ? "mesh" : "unknown"),
+      filename: text(said?.filename) || (entry?.meshUrl ? text(entry.label) : ""),
+      scale: numbers(said?.scale),
+      size: numbers(said?.size ?? primitive?.size),
+      radius: finite(said?.radius ?? primitive?.radius),
+      length: finite(said?.length ?? primitive?.length),
+      origin: origin(said?.origin),
+      color: text(entry?.color),
+      materialName: text(said?.materialName),
+    };
+  });
+  const inertial = link?.inertial || null;
   const endEffectors = (Array.isArray(description?.srdf?.endEffectors) ? description.srdf.endEffectors : [])
     .filter(endEffector => text(endEffector?.parentLink) === name || text(endEffector?.link) === name)
     .map(endEffector => text(endEffector.name)).filter(Boolean);
@@ -166,12 +183,14 @@ export function robotLinkFacts(description, linkName, { groupNamesByLink = null 
       // A fixed joint has no axis; the parser's placeholder is not something the description says.
       axis: text(parentJoint.type) === "fixed" ? null : numbers(parentJoint.axis),
       limit: parentJoint.limit && Object.keys(parentJoint.limit).length ? parentJoint.limit : null,
-      origin: parentJoint.origin && numbers(parentJoint.origin.xyz) && numbers(parentJoint.origin.rpy) ? parentJoint.origin : null,
+      origin: origin(parentJoint.origin),
       mimic: parentJoint.mimic || null,
     } : null,
     childJoints: joints.filter(joint => text(joint?.parentLink) === name)
       .map(joint => ({ name: text(joint.name), type: text(joint.type), childLink: text(joint.childLink) })),
-    mass: Number.isFinite(link?.inertial?.mass) ? link.inertial.mass : null,
+    mass: finite(inertial?.mass),
+    centerOfMass: origin(inertial?.origin),
+    inertia: inertial?.inertia || null,
     visuals: geometry(link?.visuals),
     // `null` when the model does not record collisions at all, `[]` when the link declares none.
     collisions: Array.isArray(link?.collisions) ? geometry(link.collisions) : null,

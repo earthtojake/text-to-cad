@@ -14,8 +14,15 @@ const description = {
   robotName: 'arm', rootLink: 'base_footprint',
   links: [
     { name: 'base_footprint', visuals: [], collisions: [], inertial: null },
-    { name: 'base_link', inertial: { mass: 2.5 }, collisions: [{ type: 'mesh', filename: 'meshes/base_collision.stl' }],
-      visuals: [{ id: 'base_link:v1', filename: 'meshes/base.3mf', label: 'base.3mf', meshUrl: '/meshes/base.3mf' }] },
+    { name: 'base_link',
+      inertial: { mass: 2.5, origin: { xyz: [0, 0, 0.05], rpy: [0, 0, 0] }, inertia: { ixx: 0.01, ixy: 0, ixz: 0, iyy: 0.02, iyz: 0, izz: 0.03 } },
+      collisions: [
+        { type: 'mesh', filename: 'meshes/base_collision.stl', origin: { xyz: [0, 0, 0], rpy: [0, 0, 0] } },
+        { type: 'box', filename: '', size: [0.1, 0.2, 0.3], origin: { xyz: [0, 0, 0.5], rpy: [0, 0, 0] } },
+        { type: 'mesh', filename: 'package://arm/meshes/far.stl', origin: { xyz: [0, 0, 0], rpy: [0, 0, 0] } },
+      ],
+      visuals: [{ id: 'base_link:v1', filename: 'meshes/base.3mf', label: 'base.3mf', meshUrl: '/meshes/base.3mf', color: '#336699',
+        description: { name: '', type: 'mesh', filename: 'meshes/base.3mf', scale: [0.001, 0.001, 0.001], origin: { xyz: [0, 0, 0], rpy: [0, 0, 0] }, materialName: 'blue' } }] },
     { name: 'shoulder_link', visuals: [], collisions: [], inertial: { mass: 1.25 } },
     { name: 'elbow_link', visuals: [], collisions: [], inertial: null },
     { name: 'wrist_link', visuals: [], collisions: [], inertial: null },
@@ -40,7 +47,9 @@ const components = [
 ];
 const geometry = { parts };
 
-function Harness({ spy = {} as Record<string, (...args: any[]) => void>, groupNamesByLink = null as Map<string, string[]> | null }) {
+// The host's resolver: a description-relative mesh has a path, a package:// one does not.
+const meshPath = (filename: string) => (filename.includes(':') ? '' : `robots/arm/${filename}`);
+function Harness({ spy = {} as Record<string, (...args: any[]) => void>, groupNamesByLink = null as Map<string, string[]> | null, onOpenFile = undefined as ((path: string) => void) | undefined }) {
   const selection = useRobotComponentSelection(components, geometry, 'arm.urdf');
   const observed = {
     ...selection,
@@ -49,7 +58,7 @@ function Harness({ spy = {} as Record<string, (...args: any[]) => void>, groupNa
     hoverLink: (name: string) => { spy.hoverLink?.(name); selection.hoverLink(name); },
   };
   return <div>
-    <RobotComponentsSection description={description} components={components} parts={parts} selection={observed} groupNamesByLink={groupNamesByLink}/>
+    <RobotComponentsSection description={description} components={components} parts={parts} selection={observed} groupNamesByLink={groupNamesByLink} meshPath={meshPath} onOpenFile={onOpenFile}/>
     <output aria-label="Viewport selection">{JSON.stringify(selection.selectedIds)}</output>
     <output aria-label="Viewport hover">{JSON.stringify(selection.hoveredId)}</output>
   </div>;
@@ -112,6 +121,37 @@ it('selects a link as all of its viewport parts and reads the description back',
   fireEvent.click(details.getByRole('button', { name: 'Clear selection' }));
   expect(screen.queryByRole('region', { name: 'Reference details' })).toBeNull();
   expect(screen.getByRole('button', { name: 'Select shoulder_link' }).getAttribute('aria-pressed')).toBe('false');
+});
+
+it('reads a link’s inertial and geometry back, opens the mesh files it names and follows its parent and children', () => {
+  const onOpenFile = vi.fn();
+  render(<Harness onOpenFile={onOpenFile}/>);
+  fireEvent.click(screen.getByRole('button', { name: 'Select base_link' }));
+  let details = within(screen.getByRole('region', { name: 'Reference details' }));
+  const inertial = details.getByLabelText('Inertial').textContent!;
+  expect(inertial).toContain('2.5 kg');
+  expect(inertial).toContain('Z0.05');
+  for (const term of ['0.01', '0.02', '0.03']) expect(inertial).toContain(term);
+  // Only what the description bothered to say: a scale that is not 1, an origin that is not zero.
+  const geometry = details.getByLabelText('Geometry').textContent!;
+  expect(geometry).toContain('scale 0.001  0.001  0.001');
+  expect(geometry).toContain('0.1 × 0.2 × 0.3 m');
+  expect(geometry).toContain('xyz 0  0  0.5');
+  expect(geometry).not.toContain('rpy');
+
+  fireEvent.click(details.getByRole('button', { name: 'meshes/base.3mf' }));
+  fireEvent.click(details.getByRole('button', { name: 'meshes/base_collision.stl' }));
+  expect(onOpenFile.mock.calls).toEqual([['robots/arm/meshes/base.3mf'], ['robots/arm/meshes/base_collision.stl']]);
+  // A reference with no path here is text, not a link that leads nowhere.
+  expect(details.getByText('package://arm/meshes/far.stl').closest('button')).toBeNull();
+
+  // Parent and children are the same tree: pressing one selects it there and in the viewport.
+  fireEvent.click(within(details.getByLabelText('Child joints')).getByRole('button', { name: 'shoulder_link' }));
+  expect(screen.getByRole('button', { name: 'Select shoulder_link' }).getAttribute('aria-pressed')).toBe('true');
+  details = within(screen.getByRole('region', { name: 'Reference details' }));
+  fireEvent.click(within(details.getByLabelText('Parent joint')).getByRole('button', { name: 'base_link' }));
+  expect(screen.getByRole('button', { name: 'Select base_link' }).getAttribute('aria-pressed')).toBe('true');
+  expect(screen.getByLabelText('Viewport selection').textContent).toBe('["base_link:v1"]');
 });
 
 it('filters to a flat ranked list by link, joint or object name without expanding anything', () => {

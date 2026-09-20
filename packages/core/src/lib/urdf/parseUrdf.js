@@ -258,13 +258,45 @@ function describeLimit(limitElement) {
   return limit;
 }
 
+// Lenient on purpose: these describe what the file says for a person reading it.
+// A malformed value is left out rather than failing a robot that renders fine.
+function optionalNumber(element, name) {
+  const textValue = element?.getAttribute(name);
+  const value = typeof textValue === "string" && textValue.trim() ? Number(textValue) : NaN;
+  return Number.isFinite(value) ? value : null;
+}
+
 function describeGeometry(geometryElement) {
   const meshElement = geometryElement ? childElementsByTag(geometryElement, "mesh")[0] : null;
   if (meshElement) {
-    return { type: "mesh", filename: String(meshElement.getAttribute("filename") || "").trim() };
+    return {
+      type: "mesh",
+      filename: String(meshElement.getAttribute("filename") || "").trim(),
+      scale: optionalNumberList(meshElement.getAttribute("scale"), 3)
+    };
   }
-  const primitive = ["box", "cylinder", "sphere"].find((tagName) => geometryElement && childElementsByTag(geometryElement, tagName)[0]);
-  return { type: primitive || "unknown", filename: "" };
+  const boxElement = geometryElement ? childElementsByTag(geometryElement, "box")[0] : null;
+  if (boxElement) {
+    return { type: "box", filename: "", size: optionalNumberList(boxElement.getAttribute("size"), 3) };
+  }
+  const cylinderElement = geometryElement ? childElementsByTag(geometryElement, "cylinder")[0] : null;
+  if (cylinderElement) {
+    return { type: "cylinder", filename: "", radius: optionalNumber(cylinderElement, "radius"), length: optionalNumber(cylinderElement, "length") };
+  }
+  const sphereElement = geometryElement ? childElementsByTag(geometryElement, "sphere")[0] : null;
+  if (sphereElement) {
+    return { type: "sphere", filename: "", radius: optionalNumber(sphereElement, "radius") };
+  }
+  return { type: "unknown", filename: "" };
+}
+
+// A visual or collision as written: its geometry, and its origin in the link frame.
+function describeShape(shapeElement) {
+  return {
+    name: String(shapeElement.getAttribute("name") || "").trim(),
+    ...describeGeometry(childElementsByTag(shapeElement, "geometry")[0]),
+    origin: describeOrigin(childElementsByTag(shapeElement, "origin")[0])
+  };
 }
 
 function describeInertial(linkElement) {
@@ -272,9 +304,20 @@ function describeInertial(linkElement) {
   if (!inertialElement) {
     return null;
   }
-  const massText = childElementsByTag(inertialElement, "mass")[0]?.getAttribute("value");
-  const mass = typeof massText === "string" && massText.trim() ? Number(massText) : NaN;
-  return { mass: Number.isFinite(mass) ? mass : null };
+  const inertiaElement = childElementsByTag(inertialElement, "inertia")[0];
+  const inertia = {};
+  for (const name of ["ixx", "ixy", "ixz", "iyy", "iyz", "izz"]) {
+    const value = optionalNumber(inertiaElement, name);
+    if (value !== null) {
+      inertia[name] = value;
+    }
+  }
+  return {
+    mass: optionalNumber(childElementsByTag(inertialElement, "mass")[0], "value"),
+    // The centre of mass and the inertia frame, in the link frame.
+    origin: describeOrigin(childElementsByTag(inertialElement, "origin")[0]),
+    inertia: Object.keys(inertia).length === 6 ? inertia : null
+  };
 }
 
 function parseJointMimic(jointElement, jointName) {
@@ -450,6 +493,11 @@ export function parseUrdf(xmlText, { sourceUrl, resolveResource } = {}) {
       const meshElement = geometryElement ? childElementsByTag(geometryElement, "mesh")[0] : null;
       const visualBase = {
         id: `${name}:v${index + 1}`,
+        // As written, for inspection; `localTransform` below is what rendering uses.
+        description: {
+          ...describeShape(visualElement),
+          materialName: String(childElementsByTag(visualElement, "material")[0]?.getAttribute("name") || "").trim()
+        },
         color: resolveVisualColor(visualElement, namedMaterialColors, {
           linkName: name,
           visualIndex: index + 1
@@ -489,8 +537,7 @@ export function parseUrdf(xmlText, { sourceUrl, resolveResource } = {}) {
       name,
       visuals,
       // Described, never rendered: collision geometry and mass are facts for inspection.
-      collisions: childElementsByTag(linkElement, "collision")
-        .map((collisionElement) => describeGeometry(childElementsByTag(collisionElement, "geometry")[0])),
+      collisions: childElementsByTag(linkElement, "collision").map(describeShape),
       inertial: describeInertial(linkElement)
     };
   });

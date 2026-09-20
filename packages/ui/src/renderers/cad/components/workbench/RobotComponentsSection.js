@@ -95,8 +95,10 @@ function RobotSearchRow({ match, highlighted, cursor, selection }) {
  * @param {object} props.selection `useRobotComponentSelection`, with `select`/`selectLink` routed through the Select tool.
  * @param {Map<string, string[]> | null} [props.groupNamesByLink] SRDF planning groups per link.
  * @param {boolean} [props.active] Whether the tab is showing; a hidden tree does not scroll to a selection.
+ * @param {(filename: string) => string} [props.meshPath] The host path of a mesh the description names, or "" when it has none here.
+ * @param {(path: string) => void} [props.onOpenFile] Opens a file the description names.
  */
-export default function RobotComponentsSection({ description = null, components = EMPTY, parts = EMPTY, selection, groupNamesByLink = null, active = true }) {
+export default function RobotComponentsSection({ description = null, components = EMPTY, parts = EMPTY, selection, groupNamesByLink = null, active = true, meshPath = null, onOpenFile = null }) {
   const tree = useMemo(() => buildRobotTree(description, { components, parts }), [description, components, parts]);
   const [userExpanded, setUserExpanded] = useState(null);
   const defaultExpanded = useMemo(() => initialExpansion(tree), [tree]);
@@ -159,7 +161,7 @@ export default function RobotComponentsSection({ description = null, components 
   const linkFacts = useMemo(() => (selection.selectedLinkName && tree.nodesById.has(robotLinkNodeId(selection.selectedLinkName))
     ? robotLinkFacts(description, selection.selectedLinkName, { groupNamesByLink }) : null),
   [selection.selectedLinkName, tree, description, groupNamesByLink]);
-  const details = linkFacts ? <RobotLinkDetails facts={linkFacts}/>
+  const details = linkFacts ? <RobotLinkDetails facts={linkFacts} meshPath={meshPath} onOpenFile={onOpenFile} onSelectLink={selection.selectLink}/>
     : selection.selectedComponentIds.length ? <RobotComponentDetails components={components} selectedIds={selection.selectedComponentIds}/> : null;
   const clearSelection = () => selection.select("");
 

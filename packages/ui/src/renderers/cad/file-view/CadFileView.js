@@ -225,6 +225,7 @@ import {
   URDF_JOINT_ANIMATION_FOLLOW_MS
 } from "@hardcore/core/lib/urdf/jointAnimation.js";
 import { srdfGroupNamesByLink } from "@hardcore/core/lib/urdf/parseSrdf.js";
+import { resolveLocalAssetFileRef } from "@hardcore/core/lib/urdf/meshAssetUrl.js";
 import {
   FILE_STATUS_LEVELS,
   buildFileStatusItems,
@@ -5154,6 +5155,14 @@ function CadFileViewSurface({
     }
   }, [toggleStepTreeNode]);
 
+  // A mesh the description names, as the path the host opens. It resolves against the
+  // opened file exactly as the mesh loader does (an SRDF's URDF is always beside it); a
+  // `package://` reference, or one that leaves the served root, has no path here.
+  const robotMeshPath = useCallback((filename) => {
+    const path = resolveLocalAssetFileRef(cadFileParamForEntry(selectedEntry), filename);
+    return path && !path.startsWith("/") && !path.startsWith("../") ? path : "";
+  }, [selectedEntry]);
+
   const handleSelectEntry = useCallback((key) => {
     const next = entryMap.get(key);
     onOpenFile?.(next ? cadFileParamForEntry(next) : key);
@@ -5862,6 +5871,8 @@ function CadFileViewSurface({
                 robotDescription={selectedUrdfData}
                 robotParts={selectedUrdfParts}
                 robotGroupNamesByLink={selectedUrdfGroupNamesByLink}
+                robotMeshPath={robotMeshPath}
+                onOpenFile={onOpenFile}
                 groupStates={selectedUrdfGroupStates}
                 activeGroupStateId={activeSelectedUrdfGroupStateId}
                 jointValues={selectedUrdfJointValues}

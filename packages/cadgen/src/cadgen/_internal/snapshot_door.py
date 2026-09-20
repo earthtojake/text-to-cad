@@ -276,9 +276,11 @@ def mesh_snapshot_verb(door: str):
         camera: a normal-CAD preset, an "azimuth:elevation" pair, or camera JSON;
             orthographicHalfHeight preserves an orthographic view's scale.
             Projection and focalLength (20..200 mm) belong in display.camera.
-        display: solid (default), render, xray, hidden-line or wireframe, grouped display
-            JSON, or a JSON file path. Omitted groups inherit the preset;
-            appearance defaults to light. Projection belongs in display.camera.
+        display: solid (default) or render, grouped display JSON, or a JSON file
+            path. Omitted groups inherit the preset; appearance defaults to
+            light. Projection belongs in display.camera. edges, clip, exploded,
+            the xray, hidden-line and wireframe modes and the hidden/off surface
+            styles describe a STEP model and are refused here.
         width: output width in pixels, overriding the size profile.
         height: output height in pixels, overriding the size profile.
         size_profile: simple, diagnostic, labeled, assembly, presentation,
@@ -335,9 +337,11 @@ def robot_snapshot_verb(door: str):
         camera: a normal-CAD preset, an "azimuth:elevation" pair, or camera JSON;
             orthographicHalfHeight preserves an orthographic view's scale.
             Projection and focalLength (20..200 mm) belong in display.camera.
-        display: solid (default), render, xray, hidden-line or wireframe, grouped display
-            JSON, or a JSON file path. Omitted groups inherit the preset;
-            appearance defaults to light. Projection belongs in display.camera.
+        display: solid (default) or render, grouped display JSON, or a JSON file
+            path. Omitted groups inherit the preset; appearance defaults to
+            light. Projection belongs in display.camera. edges, clip, exploded,
+            the xray, hidden-line and wireframe modes and the hidden/off surface
+            styles describe a STEP model and are refused here.
         width: output width in pixels, overriding the size profile.
         height: output height in pixels, overriding the size profile.
         size_profile: simple, diagnostic, labeled, assembly, presentation,
@@ -399,8 +403,9 @@ def polymorphic_snapshot_verb():
             Projection and focalLength (20..200 mm) belong in display.camera.
         display: solid (default), render, xray, hidden-line or wireframe, grouped
             display JSON, or a JSON file path. appearance defaults to light.
-            Omitted groups inherit the preset. Exploded views require STEP
-            assembly occurrences; meshes derive their own display edges.
+            Omitted groups inherit the preset. edges, clip, exploded, the xray,
+            hidden-line and wireframe modes and the hidden/off surface styles
+            describe a STEP model; every other input takes solid or render.
         kinematics: pose values for a STEP model's kinematics — a preset
             name or {dof: value} JSON; available in every display mode.
         animation: one still frame of a STEP model's clip — the clip name
