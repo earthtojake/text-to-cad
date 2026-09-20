@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { resolveFileStatus } from "./fileStatus.js";
-import { buildViewerMeshAlert, resolveFileStatusAlert } from "./viewerAlerts.js";
+import { failureAlert, resolveFileStatusAlert } from "./loadAlerts.js";
 
 const ready = { hasFile: true, hasGeometry: true };
 
@@ -61,7 +61,7 @@ test("updates stay busy only until the current preview is displayed", () => {
 
 test("failure tooltips explain the visible version and keep diagnostics in the dialog", () => {
   const diagnostic = "Invalid file header\nfull parser trace";
-  const error = buildViewerMeshAlert({ file: "part.step", kind: "part" }, false, diagnostic);
+  const error = failureAlert("part.step", diagnostic);
   const opening = resolveFileStatus({ hasFile: true, error });
   assert.equal(opening.label, "Open failed");
   assert.doesNotMatch(opening.title, /parser trace|previous version/);
@@ -76,6 +76,7 @@ test("a failed save explains that the updated model remains visible", () => {
   assert.deepEqual(resolveFileStatus({
     ...ready,
     showingPreview: true,
+    savedAs: "STEP file",
     editingState: {
       state: "failed",
       error: "Disk full",

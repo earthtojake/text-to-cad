@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { checkKitBoundaries, KIT_ROOT } from './check-kit-boundaries.mjs';
+import { checkKitBoundaries, checkRendererSlices, KIT_ROOT, RENDERERS_ROOT } from './check-kit-boundaries.mjs';
 
 function fixture(files, run, allowlist = []) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hardcore-kit-boundaries-'));
@@ -49,3 +49,30 @@ test('an allowlist entry excuses exactly its line and goes stale when the line l
   [kit('camera/control.js')]: "const label = 'Perspective selector';\n",
 }, result => assert.deepEqual(result.errors, ['stale kit allowlist entry: camera/gone.js "selector"']),
 [['camera/control.js', 'Perspective selector', 'a UI word'], ['camera/gone.js', 'selector', 'left over']]));
+
+function sliceFixture(files, run) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hardcore-renderer-slices-'));
+  for (const [name, code] of Object.entries(files)) {
+    const file = path.join(root, RENDERERS_ROOT, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, code);
+  }
+  try { run(checkRendererSlices(root, { slices: ['glb'] })); } finally { fs.rmSync(root, { recursive: true, force: true }); }
+}
+
+test('a renderer slice imports the kit, the workspace module, shared UI and core', () => sliceFixture({
+  'glb/index.ts': "import { defineFileRenderer } from '../../file-viewer/registry.js';\nimport { prepareWorkspaceEntry } from '../workspace/index.js';\nimport Shell from '../kit/shell/RendererShell.jsx';\nimport { x } from '@hardcore/core/lib/entryAssets.js';\nimport { scene } from './glbScene.js';\nconst load = () => import('./GlbRenderer.jsx');\n",
+}, result => assert.deepEqual(result.errors, [])));
+
+test('a renderer slice never imports another renderer; its tests are not scanned', () => sliceFixture({
+  'glb/a.js': "import view from '../cad/file-view/CadFileView.js';\n",
+  'glb/b.js': "const load = () => import('@hardcore/ui/renderers/cad');\n",
+  'glb/c.test.js': "import '../cad/live.js';\n",
+}, result => {
+  assert.equal(result.errors.length, 2);
+  assert.ok(result.errors.every(error => error.includes('imports the "cad" renderer')));
+}));
+
+test('a listed slice that does not exist fails rather than passing silently', () => sliceFixture({
+  'mesh/index.ts': "export {};\n",
+}, result => assert.match(result.errors[0], /does not exist/)));

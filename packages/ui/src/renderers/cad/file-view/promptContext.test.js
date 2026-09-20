@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createCadPromptContext, promptDeliveryMessage } from './promptContext.js';
+import { createCadPromptContext } from './promptContext.js';
+import { promptDeliveryMessage } from '../../kit/shell/promptContext.js';
 test('capture context freezes revision and selected topology before encoding', async () => {
   const resource = { kind: 'workspace-file', workspaceId: 'one', path: 'parts/widget.step', revision: 'v1' };
   let resolve;

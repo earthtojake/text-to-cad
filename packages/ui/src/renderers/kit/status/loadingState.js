@@ -1,6 +1,11 @@
-import { formatArtifactProgress } from "./artifactProgress.js";
+export { prolongedLoadingMessage } from "./loadingMessage.js";
 
-export { prolongedLoadingMessage } from "../../kit/status/loadingMessage.js";
+// A stage reports a real fraction (`done`/`total`, flagged `determinate`) or nothing.
+function stageFraction(progress) {
+  const determinate = Boolean(progress?.determinate) && progress.total > 0;
+  return { determinate, counts: determinate ? `${progress.done}/${progress.total}` : "",
+    percent: determinate ? Math.round((progress.done / progress.total) * 100) : null };
+}
 
 // Internal phases stay diagnostic data. The screen describes the user's wait.
 export function loadingProgress(progress, { finding = false, preparing = false } = {}) {
@@ -11,12 +16,12 @@ export function loadingProgress(progress, { finding = false, preparing = false }
     : /geometry|component|mesh|surface|tessellat/.test(hint) && !/building geometry/.test(hint) ? "Loading geometry"
     : /view|finaliz|writing|saving|saved|module|building assembly|building robot/.test(hint) ? "Preparing view"
     : "Reading model";
-  const frame = formatArtifactProgress(progress);
+  const frame = stageFraction(progress);
   return {
     label,
     detail: String(progress?.detail || ""),
-    counts: !finding && !preparing ? frame?.counts || "" : "",
-    percent: !finding && !preparing && frame?.determinate ? frame.percent : null,
+    counts: !finding && !preparing ? frame.counts : "",
+    percent: !finding && !preparing && frame.determinate ? frame.percent : null,
     connectionLost: progress?.connectionLost || null,
   };
 }

@@ -154,9 +154,10 @@ the build — detection only; it keeps serving.
 ## Shared interface
 
 This app exports no components. Other hosts use `@hardcore/ui/file-viewer` with
-registered renderers and explicit services. CAD content is registered through
-`@hardcore/ui/renderers/cad`; all loading, selection, inspector and tool behavior
-is shared. Public declarations, styles and worker assets are built in that
+registered renderers and explicit services. Viewer content is registered through
+`@hardcore/ui/renderers/cad` and, for `.glb`, `@hardcore/ui/renderers/glb`
+(`App.tsx` registers both with the same client and preferences); all loading,
+selection, inspector and tool behavior is shared. Public declarations, styles and worker assets are built in that
 package. See `docs/shell.md` for the host boundary and `docs/storage.md` for
 browser persistence. CAD control guidance lives with the UI package.
 
@@ -201,7 +202,9 @@ the UI package's asset documentation for asset provenance and regeneration.
 The shared top-right toolbar contains Select, Measure (STEP only) and Draw, plus Pose (drag
 joints by viewport handles; the tool a robot opens in) and Animate where a file
 has joints or routines. Pressing
-Select again opens its selection-filter dropdown. Buttons wrap inside the pill
+Select again opens its selection-filter dropdown. A GLB (its own renderer) has
+nothing to select: it opens in Orbit, a plain view tool, followed by Draw and,
+when the file has clips, Animate. Buttons wrap inside the pill
 when the Inspector or a narrow host reduces the scene width. Snapshot is a
 direct action beside the Inspector and file-tree toggles in the file navbar;
 the web prompt adapter copies the viewport image and references to the clipboard.

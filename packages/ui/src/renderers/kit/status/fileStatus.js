@@ -1,4 +1,4 @@
-import { artifactWarningItems } from "../../kit/status/artifactWarnings.js";
+import { artifactWarningItems } from "./artifactWarnings.js";
 
 function status(label, title, tone = "neutral", busy = false) {
   return { label, title, tone, busy };
@@ -14,7 +14,7 @@ function previewIsCurrent(editingState) {
   return Boolean(revision && previewRevision === revision);
 }
 
-function failureStatus(error, { hasGeometry, editingState, showingPreview }) {
+function failureStatus(error, { hasGeometry, editingState, showingPreview, savedAs }) {
   const editState = text(editingState?.state).toLowerCase();
   const editError = text(editingState?.error);
   const explicitEditFailure = editState === "failed" && editError;
@@ -38,7 +38,7 @@ function failureStatus(error, { hasGeometry, editingState, showingPreview }) {
   const label = usableModelVisible ? "Update failed" : "Open failed";
   // Dialogs retain full diagnostics; a tooltip explains the view, never a trace.
   if (updatedModelVisible && explicitEditFailure) {
-    return status(label, "The new geometry is visible, but it was not written to the STEP file.", "error");
+    return status(label, `The new geometry is visible, but it was not written to the ${savedAs}.`, "error");
   }
   const explanation = text(record.tooltip) || (usableModelVisible
     ? "The latest update couldn’t be loaded."
@@ -94,7 +94,9 @@ export function resolveFileStatus({
   showingPreview = false,
   qualityStatus = null,
   hasGeometry = false,
-  reloading = false
+  reloading = false,
+  // What a live edit is saved as, in the words of whoever offers editing.
+  savedAs = "file"
 } = {}) {
   if (!hasFile) {
     return null;
@@ -109,12 +111,12 @@ export function resolveFileStatus({
     );
   }
 
-  const failure = failureStatus(error, { hasGeometry, editingState, showingPreview });
+  const failure = failureStatus(error, { hasGeometry, editingState, showingPreview, savedAs });
   if (failure) {
     return failure;
   }
 
-  // A current preview is the result of the update. Its STEP save and any
+  // A current preview is the result of the update. Its save to disk and any
   // remaining background preparation do not keep the filename busy.
   if (updating) {
     if (!showingPreview) {

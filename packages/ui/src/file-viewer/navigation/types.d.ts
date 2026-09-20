@@ -107,7 +107,7 @@ export const SOURCE_PANEL: string;
 export const CAD_PANEL: { readonly fileSheet: string };
 
 /** The CAD Inspector — both apps draw it. */
-export function cadPanels(ready: boolean, file?: { path?: string }): FilePanel[];
+export function inspectorPanels(ready: boolean, options?: { defaultOpen?: boolean }): FilePanel[];
 /** The desktop's markdown source view, declared in the same vocabulary. */
 export function markdownPanels(open: string): FilePanel[];
 export function treePanel(open: string): FilePanel;

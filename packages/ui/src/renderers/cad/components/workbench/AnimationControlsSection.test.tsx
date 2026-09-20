@@ -4,19 +4,18 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ViewportAnimationBar, animationControlsHaveContent } from '../../../../../dist/renderers/cad/components/workbench/AnimationControlsSection.js';
 import { AnimationClockProvider, createAnimationClock } from '../../../../../dist/renderers/cad/workbench/animationClockStore.js';
-import { EmbeddedGlbAnimationClockProvider } from '../../../../../dist/renderers/cad/workbench/embeddedGlbAnimationClockStore.js';
 
 beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
-const clocks = () => ({ step: createAnimationClock(), glb: createAnimationClock() });
-const bar = ({ step, glb }: ReturnType<typeof clocks>, runtime: any, props = {}) => <AnimationClockProvider value={step}>
-  <EmbeddedGlbAnimationClockProvider value={glb}><ViewportAnimationBar runtime={runtime} {...props}/></EmbeddedGlbAnimationClockProvider>
+const clocks = () => ({ step: createAnimationClock() });
+const bar = ({ step }: ReturnType<typeof clocks>, runtime: any, props = {}) => <AnimationClockProvider value={step}>
+  <ViewportAnimationBar runtime={runtime} {...props}/>
 </AnimationClockProvider>;
 const routine = (patch = {}) => ({ clips: [{ id: 'turn', label: 'Turn', duration: 8 }], activeClipId: 'turn', elapsedSec: 2, playing: false,
   speed: 1, loopEnabled: true, onPlayToggle: vi.fn(), onScrub: vi.fn(), onSpeedChange: vi.fn(), onLoopToggle: vi.fn(), onClipSelect: vi.fn(), ...patch });
 
-it.each(['step', 'embedded-glb'])('plays, scrubs and follows the live %s clock, with no restart button', clockKind => {
-  const store = clocks(), runtime = routine({ clockKind });
+it('plays, scrubs and follows the renderer\'s live clock, with no restart button', () => {
+  const store = clocks(), runtime = routine();
   const { rerender } = render(bar(store, runtime));
   const time = screen.getByRole('slider', { name: 'Animation time' });
   expect(time.getAttribute('aria-valuetext')).toBe('2.00s of 8.00s');
@@ -27,8 +26,8 @@ it.each(['step', 'embedded-glb'])('plays, scrubs and follows the live %s clock, 
   // Dragging the scrubber to the start is the restart.
   expect(screen.queryByRole('button', { name: 'Restart animation' })).toBeNull();
   rerender(bar(store, { ...runtime, playing: true }));
-  act(() => { store.step.setAnimationClock(3); store.glb.setAnimationClock(4); });
-  expect(time.getAttribute('aria-valuenow')).toBe(clockKind === 'step' ? '3' : '4');
+  act(() => { store.step.setAnimationClock(3); });
+  expect(time.getAttribute('aria-valuenow')).toBe('3');
   expect(screen.getByRole('button', { name: 'Pause animation' })).toBeTruthy();
 });
 

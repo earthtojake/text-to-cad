@@ -5,8 +5,7 @@ import {
   buildGlbDocumentFromBuffer,
   detachGlbDocumentScene,
   disposeGlbDocument,
-  isPlayableGlbAnimationClip,
-  shouldUseNativeGlbScene
+  isPlayableGlbAnimationClip
 } from "./glbMeshData.js";
 import { writeGlb } from "../glb/writeGlb.js";
 import { createGlbAnimationRuntime, disposeGlbAnimationRuntime, setGlbAnimationTime } from "./glbAnimationRuntime.js";
@@ -104,11 +103,11 @@ test("interactive GLB parsing retains the native animated hierarchy and CAD-spac
   assert.ok(retainedMesh, "native mesh hierarchy is retained");
   assert.equal(retainedMesh.position.x, 0, "bounds sampling restores the authored rest pose");
   assert.ok(document.animatedBounds.max[0] > document.restBounds.max[0]);
-  assert.deepEqual(document.meshData.bounds, document.animatedBounds);
+  assert.equal(document.meshData, undefined, "the viewer's document is the native scene, never a flattened mesh");
   disposeGlbDocument(document);
 });
 
-test("interactive GLB parsing retains a static native hierarchy for Render only", async () => {
+test("interactive GLB parsing retains a static native hierarchy with its authored finish", async () => {
   const bytes = writeGlb({
     primitives: [{
       name: "finished-part",
@@ -120,9 +119,8 @@ test("interactive GLB parsing retains a static native hierarchy for Render only"
   const document = await buildGlbDocumentFromBuffer(buffer);
   assert.equal(document.clips.length, 0);
   assert.ok(document.scene, "static native hierarchy remains document-owned");
-  assert.equal(shouldUseNativeGlbScene(document), false);
-  assert.equal(shouldUseNativeGlbScene(document, { renderMode: true }), true);
-  assert.equal(shouldUseNativeGlbScene(document, { clip: {} }), true);
+  assert.deepEqual(document.restBounds.max.map(Math.round), [1000, 0, 1000], "rest bounds are in CAD space: millimetres, Z up");
+  assert.equal(document.animatedBounds, null);
   let material = null;
   document.scene.traverse((object) => { if (object.isMesh) material = object.material; });
   assert.equal(material.roughness, 0.18);
@@ -130,7 +128,7 @@ test("interactive GLB parsing retains a static native hierarchy for Render only"
   disposeGlbDocument(document);
 });
 
-test("static native GLB resources survive Render to Inspect to Render and dispose once", () => {
+test("detaching a native GLB scene is not disposal: resources survive re-hosting and dispose once", () => {
   const scene = new THREE.Group();
   const geometry = new THREE.BufferGeometry();
   const texture = new THREE.Texture();
@@ -143,15 +141,10 @@ test("static native GLB resources survive Render to Inspect to Render and dispos
   material.dispose = () => { released.material += 1; };
   texture.dispose = () => { released.texture += 1; };
 
-  const present = (renderMode) => {
-    detachGlbDocumentScene(document);
-    if (shouldUseNativeGlbScene(document, { renderMode })) host.add(scene);
-  };
-  present(true);
-  assert.equal(scene.parent, host);
-  present(false);
+  host.add(scene);
+  detachGlbDocumentScene(document);
   assert.equal(scene.parent, null);
-  present(true);
+  host.add(scene);
   assert.equal(scene.parent, host);
   assert.deepEqual(released, { geometry: 0, material: 0, texture: 0 });
 

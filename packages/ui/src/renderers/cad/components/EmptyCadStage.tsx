@@ -4,8 +4,8 @@ import { resolveSceneSettings } from '@hardcore/core/common/sceneSettings.js';
 import { VIEWER_PICK_MODE } from '@hardcore/core/lib/viewer/constants.js';
 import type { EmptyCadBackdropProps } from '../empty.js';
 import type { CadStateObject } from '../state.js';
-import { useChromeBackdropColor } from '../file-view/cadTheme.js';
-import { sceneBackdropEdgeColor } from '../file-view/chromeBackdrop.js';
+import { useChromeBackdropColor } from '../../kit/look/useChromeBackdropColor.js';
+import { sceneBackdropEdgeColor } from '../../kit/look/chromeBackdrop.js';
 import CadViewer from './CadViewer.js';
 
 const Viewer = CadViewer as unknown as ComponentType<{

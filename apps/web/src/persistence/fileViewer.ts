@@ -39,11 +39,12 @@ export function writeViewState(rootId: string, viewer: FileViewerState, storage:
     storage.setItem(keyFor(rootId), JSON.stringify(next));
   } catch { /* Storage failure does not prevent viewing. */ }
 }
-/** Old web sessions used this origin's sessionStorage, with the default namespace. */
+/** Old web sessions used this origin's sessionStorage, with the default namespace. Only the `cad` renderer's files had one. */
 export function restoreCadFileStates(state: FileViewerState, entries: CadEntry[], storage: Storage = sessionStorage): FileViewerState {
   const renderers = { ...state.renderers };
   let changed = false;
   for (const entry of entries) {
+    if (/\.glb$/i.test(entry.file)) continue;
     const key = JSON.stringify([entry.rootRelativeFile || entry.file, 'cad']);
     if (key in renderers) continue;
     const session = readFileSessionState('', entry.file, entry, { storage });

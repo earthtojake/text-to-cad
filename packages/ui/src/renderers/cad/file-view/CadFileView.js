@@ -73,12 +73,12 @@ import { useEditingPreview } from "../components/workbench/hooks/useEditingPrevi
 import { useViewportQualityStatus } from "../components/workbench/hooks/useViewportQualityStatus.js";
 import { previewGeometryChanged } from "../workbench/editingPreview.js";
 import { buildArtifactWarningAlert } from "../../kit/status/artifactWarnings.js";
-import { resolveFileStatus } from "../workbench/fileStatus.js";
+import { resolveFileStatus } from "../../kit/status/fileStatus.js";
 import { useFileActivityReport } from "../../kit/status/useFileActivityReport.js";
 import MeasurePanel from "../components/workbench/MeasurePanel.jsx";
 import { useDrawingSession } from "../../../drawing/session.js";
 import { CAD_DRAWING_DEFAULTS } from "../../kit/tools/draw/DrawingOverlay.jsx";
-import { viewerLoadingState } from "../workbench/viewerLoading.js";
+import { viewerLoadingState } from "../../kit/status/loadingState.js";
 import { useCadWorkspaceSelection } from "../components/workbench/hooks/useCadWorkspaceSelection.js";
 import { useCadWorkspaceSelectors } from "../components/workbench/hooks/useCadWorkspaceSelectors.js";
 import { useCadWorkspaceShortcuts } from "../components/workbench/hooks/useCadWorkspaceShortcuts.js";
@@ -106,7 +106,6 @@ import {
   renderedFileSheetSectionIds,
   shouldOpenFileSheetForSelectionReveal
 } from "../workbench/fileSheetSections.js";
-import { useEmbeddedGlbAnimation } from "../workbench/useEmbeddedGlbAnimation.js";
 import {
   entrySourceFormat,
   fileSheetKindForEntry,
@@ -128,10 +127,9 @@ import {
 import {
   buildViewerAnnotationAlert,
   buildViewerMeshAlert,
-  buildViewerEditAlert,
-  fileStatusAlertKey,
-  resolveFileStatusAlert
+  buildViewerEditAlert
 } from "../workbench/viewerAlerts.js";
+import { fileStatusAlertKey, resolveFileStatusAlert } from "../../kit/status/loadAlerts.js";
 import {
   buildParameterValuesCopyText,
   parseParameterValuesPasteText
@@ -183,7 +181,6 @@ import {
   findAnimationClip,
   shouldPublishAnimationFrame
 } from "@hardcore/core/common/animationClock.js";
-import { createEmbeddedGlbAnimationClock, EmbeddedGlbAnimationClockProvider } from "../workbench/embeddedGlbAnimationClockStore.js";
 import { createAnimationClock, AnimationClockProvider, useAnimationClockStore } from "../workbench/animationClockStore.js";
 import { resolveStepModuleLoad } from "../workbench/stepModuleLoad.js";
 import {
@@ -269,7 +266,8 @@ import {
 import { validateSourceSidecar } from "@hardcore/core/common/sourceSidecar.js";
 import { loadSourceAnimation, validateAnimationClips } from "@hardcore/core/common/renderModule.js";
 import { ViewerElementContext, useViewerHost, usePromptDestination } from "../../../host/context.js";
-import { createCadPromptContext, promptDeliveryMessage } from "./promptContext.js";
+import { createCadPromptContext } from "./promptContext.js";
+import { promptDeliveryMessage } from "../../kit/shell/promptContext.js";
 import { HostReferenceContext, referenceLabel, referencesFromCopyText, resolveSelectorSelection } from "./hostReference.js";
 import { applySourceAppearanceToMeshData, sourceAppearanceGeometry } from "@hardcore/core/common/sourceSidecar.js";
 const EMPTY_MATERIAL_OVERRIDES = Object.freeze({});
@@ -295,8 +293,8 @@ import {
   readViewerViewportWidth,
   statusOnlyFileSheetTitle
 } from "./fileViewState.js";
-import { sceneBackdropEdgeColor } from "./chromeBackdrop.js";
-import { useChromeBackdropColor } from "./cadTheme.js";
+import { sceneBackdropEdgeColor } from "../../kit/look/chromeBackdrop.js";
+import { useChromeBackdropColor } from "../../kit/look/useChromeBackdropColor.js";
 import {
   addReferenceLookupKeys,
   buildStepTreeCopyReferenceMap,
@@ -321,8 +319,7 @@ import {
 // panel placement and persistence; the connection owns catalog subscriptions.
 export default function CadFileView(props) {
   const clock = useMemo(() => createAnimationClock(), []);
-  const glbClock = useMemo(() => createEmbeddedGlbAnimationClock(), []);
-  return <AnimationClockProvider value={clock}><EmbeddedGlbAnimationClockProvider value={glbClock}><CadFileViewSurface {...props} /></EmbeddedGlbAnimationClockProvider></AnimationClockProvider>;
+  return <AnimationClockProvider value={clock}><CadFileViewSurface {...props} /></AnimationClockProvider>;
 }
 
 
@@ -1100,11 +1097,6 @@ function CadFileViewSurface({
   }, [selectedMeshData, selectedSourceAppearance]);
   const handleDisplayMeshAdoption = useCallback((source, ok, detail) =>
     onMeshSourceAdoption(sourceAppearanceGeometry(source), ok, detail), [onMeshSourceAdoption]);
-  const selectedGlbDocument = selectedMeshMatches ? meshState?.glbDocument || null : null;
-  const embeddedGlbAnimationRuntime = useEmbeddedGlbAnimation(selectedGlbDocument);
-  // Animated direct GLBs render their live hierarchy. Flattened triangle picks
-  // describe only the rest pose, so exposing them would create stale rulers.
-  const effectiveSupportsMeasure = supportsMeasure && !embeddedGlbAnimationRuntime;
   const selectedAnimationClipList = useMemo(
     () => animationClipList(selectedAnimationClips),
     [selectedAnimationClips]
@@ -1926,7 +1918,6 @@ function CadFileViewSurface({
     ),
     // Animation is the Animate tool and its playbar, never an Inspector section.
     hasStepAnimationPanel: false,
-    hasEmbeddedGlbAnimationPanel: false,
     hasDxfBendsPanel: selectedFileSheetKind === "dxf" && drawingBends.length > 0,
     hasDxfLayersPanel: selectedFileSheetKind === "dxf" && drawingLayers.length > 1,
     renderMode: rendering,
@@ -1936,8 +1927,7 @@ function CadFileViewSurface({
     selectedAnimationClipList,
     selectedAnimationError,
     selectedAnimationStatus,
-    embeddedGlbAnimationRuntime,
-    effectiveSupportsMeasure,
+    supportsMeasure,
     selectedFileSheetKind,
     selectedStepModuleDefinition,
     selectedStepModuleError,
@@ -2921,7 +2911,7 @@ function CadFileViewSurface({
   );
   // Measuring needs a mesh to hit. Topology, when loaded, upgrades STEP hits
   // from free points to edge and face snaps.
-  const measureModeActive = effectiveSupportsMeasure &&
+  const measureModeActive = supportsMeasure &&
     tabToolMode === TAB_TOOL_MODE.MEASURE &&
     Boolean(selectedMeshData) &&
     !stepInteractionBlocked &&
@@ -3052,6 +3042,7 @@ function CadFileViewSurface({
     loadingProgress: loading.progress,
     renderMode: rendering,
     editingState: editingAvailable ? editingPreview.state : null,
+    savedAs: "STEP file",
     showingPreview: currentPreviewVisible,
     qualityStatus: viewportQualityStatus,
     hasGeometry: Boolean((selectedMeshData && !selectedMeshPartial) || selectedEntryIsDrawingDocument),
@@ -4929,7 +4920,6 @@ function CadFileViewSurface({
   // Display groups (including Custom overrides and projection) stay untouched.
   const handleModelReset = useCallback(() => {
     resetStepMotion();
-    embeddedGlbAnimationRuntime?.resetModel();
     if (selectedUrdfFileRef) {
       clearTrackedUrdfGroupStateForFile(selectedUrdfFileRef);
       writeUrdfJointValues(selectedUrdfFileRef, defaultSelectedUrdfJointValues);
@@ -4945,7 +4935,7 @@ function CadFileViewSurface({
     viewSettingsStore.resetModelTools();
     handleViewerZoomReset();
   }, [resetStepMotion,
-    embeddedGlbAnimationRuntime, selectedUrdfFileRef,
+    selectedUrdfFileRef,
     clearTrackedUrdfGroupStateForFile, writeUrdfJointValues,
     defaultSelectedUrdfJointValues, selectedEntryIsDrawing, handleDrawingBendsReset,
     handleDrawingOrientationReset, viewSettingsStore, handleViewerZoomReset]);
@@ -5229,7 +5219,8 @@ function CadFileViewSurface({
     onLoopToggle: handleAnimationLoopToggle,
     resetModel: resetStepMotion
   };
-  const viewportAnimation = selectedFileSheetKind === "step" ? stepAnimationControls : embeddedGlbAnimationRuntime;
+  // Only a STEP carries routines here; every other format this renderer shows has none.
+  const viewportAnimation = selectedFileSheetKind === "step" ? stepAnimationControls : null;
   // Animate is one mode with two ways in: the tool, and fullscreen, which is that
   // tool with the rest of the viewer put away (or no tool, without animation).
   const animationAvailable = animationControlsHaveContent(viewportAnimation);
@@ -5243,7 +5234,7 @@ function CadFileViewSurface({
   // topology and Position never meet an animated model and need no special case
   // for one. Nothing of the playback survives: coming back starts from the start,
   // and a restored session that was mid-routine is released the same way.
-  const releaseAnimation = selectedFileSheetKind === "step" ? releaseStepAnimation : embeddedGlbAnimationRuntime?.resetModel;
+  const releaseAnimation = selectedFileSheetKind === "step" ? releaseStepAnimation : null;
   const animationOwnsPose = animationAvailable && viewportAnimation?.enabled !== false;
   useEffect(() => {
     if (!animateModeActive && animationOwnsPose) releaseAnimation?.();
@@ -5325,7 +5316,7 @@ function CadFileViewSurface({
                 on the next frame, and one frame of the chrome's background
                 showing above a dark stage is a visible band. It is also the
                 only place outside the renderer where the chosen backdrop can
-                be read (chromeBackdrop.js). */}
+                be read (kit/look/chromeBackdrop.js). */}
             <div
               className="@container/cad-viewport pointer-events-none relative min-w-0 flex-1 overflow-hidden"
               data-cad-scene-backdrop={sceneBackdrop}
@@ -5379,8 +5370,6 @@ function CadFileViewSurface({
           }
                 stepParameters={selectedStepParameterRuntime}
                 stepAnimation={selectedAnimationRuntime}
-                glbDocument={selectedGlbDocument}
-                embeddedGlbAnimation={embeddedGlbAnimationRuntime?.render || null}
                 selectedMeshData={selectedDisplayMeshData}
                 selectedKey={selectedKey}
                 missingFileRef={editingPreview.entry ? "" : missingFileRef}
@@ -5506,11 +5495,11 @@ function CadFileViewSurface({
                   setMeasureSelectionFilter(value); handleMeasureCancelDraft();
                   if (topologyTarget) loadFilterTopology(topologyTarget);
                 }}
-                measurementPanel={effectiveSupportsMeasure ? <MeasurePanel
+                measurementPanel={supportsMeasure ? <MeasurePanel
                   measurements={measureMeasurements} activeId={activeMeasureId}
                   onActivate={setActiveMeasureId} onDelete={handleMeasureDelete} onClear={handleMeasureClear}
                 /> : null}
-                measureSupported={effectiveSupportsMeasure}
+                measureSupported={supportsMeasure}
                 measureDisabled={measureToolDisabled}
                 animateAvailable={animationAvailable}
                 animateToolActive={animateToolActive}
@@ -5722,7 +5711,6 @@ function CadFileViewSurface({
                 suppressDynamicMetadataStatus={selectedArtifactGenerating}
                 renderMode={rendering}
                 settingsTabs={settingsTabs}
-                animationRuntime={embeddedGlbAnimationRuntime}
                 openSectionIds={effectiveFileSheetOpenSectionIds}
                 onOpenSectionIdsChange={handleFileSheetOpenSectionIdsChange}
               />

@@ -4,6 +4,7 @@ import type { ViewerHost } from '@hardcore/ui/host';
 import { EmptyState } from '@hardcore/ui/navigation';
 import { FileText } from 'lucide-react';
 import { createCadRenderer } from '@hardcore/ui/renderers/cad';
+import { createGlbRenderer } from '@hardcore/ui/renderers/glb';
 import { MissingFileAlert, StatusToast, ViewerLoadingOverlay } from '@hardcore/ui/renderers/cad/presentation';
 import { useViewerAutoReload } from './host/useViewerAutoReload.js';
 import { EmptyCadBackdrop } from '@hardcore/ui/renderers/cad/empty';
@@ -40,7 +41,8 @@ function RootView({ client, server }: { client: CadClient; server: CadServerInfo
   const fileActions = useMemo(() => createWebFileActions(client, server, { promptContext, clipboard: browserClipboard, onCopyStatus: setCopyStatus }), [client, server, promptContext]);
   const preferences = useMemo(createWebCadPreferences, []);
   useEffect(() => preferences.connect(), [preferences]);
-  const renderers = useMemo(() => [createCadRenderer({ client, preferences })], [client, preferences]);
+  // One renderer per file family; each lazy-loads only its own code.
+  const renderers = useMemo(() => [createCadRenderer({ client, preferences }), createGlbRenderer({ client, preferences })], [client, preferences]);
   const catalog = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot);
   const [file, setFile] = useState(() => readCadParam() || readDefaultCadParam() || '');
   const selectedEntry = useMemo(() => findEntryByUrlPath(catalog.entries, file), [catalog.entries, file]);

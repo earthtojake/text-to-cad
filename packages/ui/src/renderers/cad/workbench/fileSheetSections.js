@@ -69,7 +69,7 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
       ];
     case "mesh":
       // A mesh has nothing to inspect but how it is shown. Measurements belong to the
-      // Measure tool's panel under the toolbar, and an embedded GLB clip to the Animate tool.
+      // Measure tool's panel under the toolbar.
       return [FILE_SHEET_SECTION_IDS.DISPLAY];
     default:
       return [];

@@ -3,7 +3,7 @@ import type { FileActivity, FileNavigationAction, FileRendererProps, JsonValue }
 import type { CadWorkspaceService, CadEntry, CadRenderSession, CadServerInfo } from '@hardcore/core/client';
 import type { CadCommands, CadCommandSource, CadLiveBinding, CadRendererSlots, PreparedCadDocument } from './index.js';
 import type { ResourceRef } from '@hardcore/core/prompt';
-import type { CadPreferences } from './preferences.js';
+import type { CadPreferences } from '../workspace/index.js';
 import CadFileView from './file-view/CadFileView.js';
 
 const emptyCommands: CadCommands = Object.freeze({});

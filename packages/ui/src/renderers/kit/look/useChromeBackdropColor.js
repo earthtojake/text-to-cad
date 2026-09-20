@@ -4,7 +4,7 @@ import { readChromeBackgroundToken, resolveChromeBackdropColor } from "./chromeB
 /**
  * The chrome's own background colour, live.
  *
- * The frame around the CAD scene follows it (chromeBackdrop.js), so it has
+ * The frame around the scene follows it (chromeBackdrop.js), so it has
  * to survive the app switching light and dark — and the app that owns the
  * `--background` token is not this surface. A host toggles `.dark` on the
  * document in an effect of its own, and effects run child-first, so reading

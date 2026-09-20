@@ -4,9 +4,8 @@ import {
   buildViewerAnnotationAlert,
   buildViewerEditAlert,
   buildViewerMeshAlert,
-  fileStatusAlertKey,
-  resolveFileStatusAlert
 } from "./viewerAlerts.js";
+import { fileStatusAlertKey, resolveFileStatusAlert } from "../../kit/status/loadAlerts.js";
 
 const step = { file: "STEP/moonwatch.step", kind: "part" };
 
