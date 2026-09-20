@@ -1,5 +1,7 @@
 import { formatArtifactProgress } from "./artifactProgress.js";
 
+export { prolongedLoadingMessage } from "../../kit/status/loadingMessage.js";
+
 // Internal phases stay diagnostic data. The screen describes the user's wait.
 export function loadingProgress(progress, { finding = false, preparing = false } = {}) {
   const hint = `${progress?.phase || ""} ${progress?.label || ""}`.toLowerCase();
@@ -32,11 +34,4 @@ export function viewerLoadingState({
     busy: active,
     progress: loadingProgress(progress, { finding, preparing }),
   };
-}
-
-export function prolongedLoadingMessage(elapsedMs, connectionLost = null) {
-  if (connectionLost) return "Waiting for a response. Retrying…";
-  if (elapsedMs < 10_000) return "";
-  const seconds = Math.floor(elapsedMs / 1000);
-  return `${seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`} elapsed`;
 }

@@ -7,6 +7,10 @@ const EmbeddedGlbAnimationClockContext = createContext(null);
 export function EmbeddedGlbAnimationClockProvider({ value, children }) {
   return createElement(EmbeddedGlbAnimationClockContext.Provider, { value }, children);
 }
+/** The clock when a provider is mounted, else null: for callers that only hand it on. */
+export function useOptionalEmbeddedGlbAnimationClockStore() {
+  return useContext(EmbeddedGlbAnimationClockContext);
+}
 export function useEmbeddedGlbAnimationClockStore() {
   const clock = useContext(EmbeddedGlbAnimationClockContext);
   if (!clock) throw new Error("GLB playback requires its renderer's animation clock.");

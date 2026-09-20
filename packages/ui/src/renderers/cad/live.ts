@@ -1,7 +1,7 @@
 import type { PromptReference, ResourceRef } from '@hardcore/core/prompt';
 import type { JsonValue } from '../../file-viewer/types.js';
 import { normalizeViewSettings } from '@hardcore/core/common/viewSettings.js';
-import { mergeViewerDisplaySettings } from './workbench/viewerDisplaySettings.js';
+import { mergeViewerDisplaySettings } from '../kit/view-settings/viewerDisplaySettings.js';
 
 export interface CadCameraSnapshot {
   position: [number, number, number];

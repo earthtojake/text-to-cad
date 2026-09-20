@@ -182,6 +182,9 @@ npm test --workspace @hardcore/ui
 npm run check:boundaries
 ```
 
+`check:boundaries` also holds `src/renderers/kit` format-blind: it imports no renderer
+and names no file format ([Kit](docs/cad-renderer.md#kit)).
+
 Rebuild shared packages after editing them; hosts resolve `dist`, never `src`.
 Install the npm Playwright browser even if Python's snapshot browser is already
 installed; they may require different Chromium revisions. On Linux, add

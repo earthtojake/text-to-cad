@@ -31,7 +31,7 @@ its defaults.
 
 ## State and updates
 
-`workbench/viewSettingsStore.js` owns one canonical, sparse display state per
+`kit/view-settings/viewSettingsStore.js` owns one canonical, sparse display state per
 mounted file. `useViewSettings` subscribes React to that store. UI controls and
 live agent commands use the same explicit operations: `patch`, `setEnabled`,
 `selectPreset`, `reset`. Session restoration uses `restore` once on mount;

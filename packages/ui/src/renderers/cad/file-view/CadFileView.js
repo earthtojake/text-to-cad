@@ -1,5 +1,5 @@
 import { attachCadLiveBinding } from "../live.js";
-import { normalizeOrbit } from "../workbench/orbitPreferences.js";
+import { normalizeOrbit } from "../../kit/tools/fullscreen/orbitPreferences.js";
 import { buildEdgeChainGraph } from "../workbench/edgeChainSelection.js";
 "use client";
 
@@ -20,8 +20,10 @@ import CadRenderPane from "../components/workbench/CadRenderPane.js";
 import { useViewportLod } from "../render/useViewportLod.js";
 import { lodSceneMayMove } from "../render/lodCameraSample.js";
 import { registerLodDisplaySource } from "../render/lodSceneAdoption.js";
-import { buildDisplaySettingsTab } from "../components/workbench/DisplaySettingsTab.js";
-import { prefetchRenderStudio } from "../render/renderStudioChunk.js";
+import { buildDisplaySettingsTab } from "../../kit/view-settings/DisplaySettingsTab.js";
+import { ALL_VIEW_FEATURES, EDGELESS_VIEW_FEATURES } from "@hardcore/core/common/viewSettings.js";
+import { explodablePartCount } from "../workbench/explodableParts.js";
+import { prefetchRenderStudio } from "../../kit/look/renderStudioChunk.js";
 import MeshFileSheet from "../components/workbench/MeshFileSheet.js";
 import { DXF_PREVIEW_REFERENCE_THICKNESS_MM } from "@hardcore/core/lib/dxf/previewGlb.js";
 import { dxfDataIsDocument } from "@hardcore/core/lib/dxf/parseDxf.js";
@@ -51,14 +53,14 @@ import {
 } from "../components/workbench/DxfSettingsSection.js";
 import { buildDxfLayersTab } from "../components/workbench/DxfLayersSection.js";
 import StepFileSheet from "../components/workbench/StepFileSheet.js";
-import { FileSheetPortalContext, HostPanelSlotContext } from "../components/workbench/FileSheet.js";
+import { FileSheetPortalContext, HostPanelSlotContext } from "../../kit/inspector/FileSheet.js";
 import { restoreMotionAnimation, restoreMotionParameters } from "../workbench/motionRestore.js";
 import { useStepMotionControls } from "../workbench/useStepMotionControls.js";
-import { ZoomControl } from "../components/viewer/ZoomControl.js";
-import StatusToast from "../components/workbench/StatusToast.js";
+import { ZoomControl } from "../../kit/camera/ZoomControl.js";
+import StatusToast from "../../kit/status/StatusToast.js";
 import UrdfFileSheet from "../components/workbench/UrdfFileSheet.js";
-import ViewerAlertDialog from "../components/workbench/ViewerAlertDialog.js";
-import ViewerLoadingOverlay from "../components/workbench/ViewerLoadingOverlay.js";
+import ViewerAlertDialog from "../../kit/status/ViewerAlertDialog.js";
+import ViewerLoadingOverlay from "../../kit/status/ViewerLoadingOverlay.js";
 import {
   ARTIFACT_PROGRESS_POLL_MS
 } from "../workbench/artifactProgress.js";
@@ -70,28 +72,29 @@ import { resolveDesktopPanelWidth } from "./fileViewState.js";
 import { useEditingPreview } from "../components/workbench/hooks/useEditingPreview.js";
 import { useViewportQualityStatus } from "../components/workbench/hooks/useViewportQualityStatus.js";
 import { previewGeometryChanged } from "../workbench/editingPreview.js";
-import { buildArtifactWarningAlert } from "../workbench/artifactWarnings.js";
+import { buildArtifactWarningAlert } from "../../kit/status/artifactWarnings.js";
 import { resolveFileStatus } from "../workbench/fileStatus.js";
-import { useFileActivityReport } from "../workbench/useFileActivityReport.js";
+import { useFileActivityReport } from "../../kit/status/useFileActivityReport.js";
 import MeasurePanel from "../components/workbench/MeasurePanel.jsx";
 import { useDrawingSession } from "../../../drawing/session.js";
-import { CAD_DRAWING_DEFAULTS } from "../components/viewer/DrawingOverlay.jsx";
+import { CAD_DRAWING_DEFAULTS } from "../../kit/tools/draw/DrawingOverlay.jsx";
 import { viewerLoadingState } from "../workbench/viewerLoading.js";
 import { useCadWorkspaceSelection } from "../components/workbench/hooks/useCadWorkspaceSelection.js";
 import { useCadWorkspaceSelectors } from "../components/workbench/hooks/useCadWorkspaceSelectors.js";
 import { useCadWorkspaceShortcuts } from "../components/workbench/hooks/useCadWorkspaceShortcuts.js";
 import {
   cameraForViewSettings, normalizeViewerDisplaySettings, viewerDisplaySettingsForCamera
-} from "../workbench/viewerDisplaySettings.js";
-import { useAppliedViewSettings } from "../workbench/useAppliedViewSettings.js";
-import { ViewUpdateStatus } from "../components/viewer/ViewUpdateStatus.jsx";
-import { useViewSettings } from "../workbench/useViewSettings.js";
+} from "../../kit/view-settings/viewerDisplaySettings.js";
+import { useAppliedViewSettings } from "../../kit/view-settings/useAppliedViewSettings.js";
+import { ViewUpdateStatus } from "../../kit/status/ViewUpdateStatus.jsx";
+import { useViewSettings } from "../../kit/view-settings/useViewSettings.js";
 import {
   annotatePerspectiveSnapshot,
   clonePerspectiveSnapshot
 } from "@hardcore/core/lib/perspective.js";
 import {
   ASSET_STATUS,
+  CAD_TOOL_MODES,
   RENDER_FORMAT,
   REFERENCE_STATUS,
   TAB_TOOL_MODE
@@ -671,7 +674,10 @@ function CadFileViewSurface({
   const supportsTopology = hasCapability(selectedEntrySourceFormat, "topology");
   // CAD edges are topology. A file without it (a mesh, a robot, a drawing) resolves with
   // its edges off and without the presets made of them, and the View tab shows neither.
-  useLayoutEffect(() => { viewSettingsStore.configure({ cadModel: supportsTopology }); }, [viewSettingsStore, supportsTopology]);
+  // What this file's view opts into: a B-rep model takes every Display section, preset and surface
+  // style; every other format the set without edges, Clip or Explode.
+  const viewFeatures = supportsTopology ? ALL_VIEW_FEATURES : EDGELESS_VIEW_FEATURES;
+  useLayoutEffect(() => { viewSettingsStore.configure({ features: viewFeatures }); }, [viewSettingsStore, viewFeatures]);
   const supportsMeasure = hasCapability(selectedEntrySourceFormat, "measure");
   const supportsSidecarParams =
     parameterSourceKind(selectedEntrySourceFormat) === PARAMETER_SOURCE.SIDECAR;
@@ -4886,12 +4892,10 @@ function CadFileViewSurface({
     setViewerAlertOpen(false);
     // Anything unrecognized falls back to selection rather than sticking the
     // viewer in a mode with no tool behind it.
-    const normalizedMode = mode === TAB_TOOL_MODE.DRAW || mode === TAB_TOOL_MODE.MEASURE || mode === TAB_TOOL_MODE.ANIMATE || mode === TAB_TOOL_MODE.POSE
-      ? mode
-      : TAB_TOOL_MODE.REFERENCES;
+    const normalizedMode = CAD_TOOL_MODES.normalize(mode);
     // Measure and Draw are sessions: asking for the active one again ends it. (The Measure
     // button itself spends its second press on the snap menu; see FloatingToolBar.js.)
-    setTabToolMode(current => (normalizedMode === TAB_TOOL_MODE.MEASURE || normalizedMode === TAB_TOOL_MODE.DRAW) && current === normalizedMode ? TAB_TOOL_MODE.REFERENCES : normalizedMode);
+    setTabToolMode(current => CAD_TOOL_MODES.next(current, normalizedMode));
     if (
       selectedEntry &&
       selectedEntryHasReferences &&
@@ -5175,7 +5179,7 @@ function CadFileViewSurface({
   // Every CAD format shares the View settings and camera contract.
   const renderDisplaySettings = resolvedScene.display;
   const settingsTabs = [buildDisplaySettingsTab({
-    cadModel: supportsTopology,
+    features: viewFeatures,
     viewSettings: displaySettings,
     hostAppearance: resolvedColorSchemeMode,
     lightingQuality: "preview",
@@ -5185,7 +5189,7 @@ function CadFileViewSurface({
     onModeChange: handleViewModeChange,
     onViewReset: handleDisplayReset,
     clipBounds: selectedMeshData?.bounds || null,
-    explodeMeshData: selectedMeshData || null,
+    explodeDisabled: Boolean(selectedMeshData) && explodablePartCount(selectedMeshData) <= 1,
     edgeStatus: displayEdgeStatus,
     edgeError: displayEdgeError,
   })];

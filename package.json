@@ -19,7 +19,7 @@
     "dev:desktop": "npm run build:packages && npm run native:rebuild -w hardcore && npm run dev -w hardcore",
     "dev:docs": "npm run build -w @hardcore/core && npm run dev -w cad-skills-docs",
     "test": "scripts/test/test-js.sh",
-    "check:boundaries": "node scripts/test/check-dependencies.mjs"
+    "check:boundaries": "node scripts/test/check-dependencies.mjs && node scripts/test/check-kit-boundaries.mjs"
   },
   "overrides": {
     "postcss": "^8.5.14"

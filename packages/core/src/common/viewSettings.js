@@ -157,26 +157,59 @@ function defaults(appearance, lightingQuality) {
   };
 }
 
-// The presets a file without CAD edges can show. X-ray, Hidden line and Wireframe are
-// made of CAD edges; a mesh or a robot has triangles, and would show its tessellation.
-export const EDGELESS_VIEW_PRESET_VALUES = Object.freeze(["solid", "render"]);
-// The surface styles such a file can show. "hidden" and "off" exist to let edges carry
-// the picture; without edges they draw an empty one.
-export const EDGELESS_SURFACE_STYLE_VALUES = Object.freeze(["shaded", "flat"]);
+// What a view offers is declared by whoever shows it, as explicit opt-in lists:
+// the Display sections it mounts, the presets it lists and the surface styles it
+// lists. Nothing here knows who opts in to what.
+export const VIEW_SECTION_IDS = Object.freeze(["mode", "camera", "surfaces", "edges", "lighting", "background", "floor", "grid", "axes", "clip", "exploded"]);
 
 /**
- * `cadModel: false` resolves a file that is not a CAD model (a mesh, a robot, a
- * drawing): it has no topology to draw edges from, no parts to explode and no
- * solid to section. Its edges, Explode and Clip are off whatever was saved, and a
- * saved preset made of edges resolves as Solid. The saved settings themselves are
- * left alone, so the same settings still mean X-ray, or a section, on the next
- * STEP file.
- *
- * @param {unknown} input @param {ViewDefaults & { cadModel?: boolean }} options @returns {ResolvedViewSettings}
+ * @typedef {object} ViewFeatures
+ * @property {readonly string[]} sections  Display sections the view opts into (`VIEW_SECTION_IDS`).
+ * @property {readonly string[]} modes  Presets it lists (`VIEW_PRESET_VALUES`).
+ * @property {readonly string[]} surfaceStyles  Surface styles it lists (`VIEW_SURFACE_STYLE_VALUES`).
  */
-export function resolveViewSettings(input = {}, { appearance = "light", lightingQuality = "final", cadModel = true } = {}) {
+
+/** Every section, preset and surface style. @type {ViewFeatures} */
+export const ALL_VIEW_FEATURES = Object.freeze({
+  sections: VIEW_SECTION_IDS,
+  modes: VIEW_PRESET_VALUES,
+  surfaceStyles: VIEW_SURFACE_STYLE_VALUES
+});
+
+// A view without edges. X-ray, Hidden line and Wireframe are made of edges; drawn
+// from triangles alone they would show the tessellation. "hidden" and "off" exist
+// to let edges carry the picture; without edges they draw an empty one. Clip and
+// Explode section solids and move parts, which such a view does not have either.
+/** @type {ViewFeatures} */
+export const EDGELESS_VIEW_FEATURES = Object.freeze({
+  sections: Object.freeze(VIEW_SECTION_IDS.filter(id => !["edges", "clip", "exploded"].includes(id))),
+  modes: Object.freeze(["solid", "render"]),
+  surfaceStyles: Object.freeze(["shaded", "flat"])
+});
+
+/** A caller's lists, with the full set standing in for any it left out. @returns {ViewFeatures} */
+export function normalizeViewFeatures(features = null) {
+  return {
+    sections: Array.isArray(features?.sections) ? features.sections : ALL_VIEW_FEATURES.sections,
+    modes: Array.isArray(features?.modes) ? features.modes : ALL_VIEW_FEATURES.modes,
+    surfaceStyles: Array.isArray(features?.surfaceStyles) ? features.surfaceStyles : ALL_VIEW_FEATURES.surfaceStyles
+  };
+}
+
+/**
+ * `features` resolves a view that did not opt into everything. A section it left
+ * out is off whatever was saved, a saved preset it does not list resolves as
+ * Solid, and a surface style it does not list resolves as the neutral one. The
+ * saved settings themselves are left alone, so the same settings still mean
+ * X-ray, or a section, in the next view that offers them.
+ *
+ * @param {unknown} input @param {ViewDefaults & { features?: ViewFeatures }} options @returns {ResolvedViewSettings}
+ */
+export function resolveViewSettings(input = {}, { appearance = "light", lightingQuality = "final", features = ALL_VIEW_FEATURES } = {}) {
+  const offered = normalizeViewFeatures(features);
+  const offers = section => offered.sections.includes(section);
   const saved = normalizeViewSettings(input);
-  const source = cadModel || EDGELESS_VIEW_PRESET_VALUES.includes(saved.mode) ? saved : { ...saved, mode: "solid" };
+  const source = offered.modes.includes(saved.mode) ? saved : { ...saved, mode: "solid" };
   const resolvedAppearance = source.appearance ?? (appearance === "dark" ? "dark" : "light");
   const neutral = defaults(resolvedAppearance, choice(lightingQuality, ["preview", "final"], "lightingQuality"));
   const result = { mode: source.mode, appearance: resolvedAppearance, ...structuredClone(neutral) };
@@ -200,12 +233,10 @@ export function resolveViewSettings(input = {}, { appearance = "light", lighting
       result[name] = { ...neutral[name], enabled: false };
     }
   }
-  if (!cadModel) {
-    result.edges = { ...neutral.edges, enabled: false };
-    if (!EDGELESS_SURFACE_STYLE_VALUES.includes(result.surfaces.style)) result.surfaces = { ...result.surfaces, style: neutral.surfaces.style };
-  }
-  result.clip = normalizeStepClipSettings(cadModel ? source.clip ?? DEFAULT_STEP_CLIP_SETTINGS : DEFAULT_STEP_CLIP_SETTINGS);
-  result.exploded = normalizeExplodedViewSettings(cadModel ? source.exploded : null);
+  if (!offers("edges")) result.edges = { ...neutral.edges, enabled: false };
+  if (!offered.surfaceStyles.includes(result.surfaces.style)) result.surfaces = { ...result.surfaces, style: neutral.surfaces.style };
+  result.clip = normalizeStepClipSettings(offers("clip") ? source.clip ?? DEFAULT_STEP_CLIP_SETTINGS : DEFAULT_STEP_CLIP_SETTINGS);
+  result.exploded = normalizeExplodedViewSettings(offers("exploded") ? source.exploded : null);
   return result;
 }
 

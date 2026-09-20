@@ -1,14 +1,15 @@
-import { createStudioEnvironmentCache } from "../render/studioEnvironmentCache.js";
-import { createViewUpdateGate } from "../render/viewUpdateGate.js";
+import { createStudioEnvironmentCache } from "../../kit/look/studioEnvironmentCache.js";
+import { createViewUpdateGate } from "../../kit/view-settings/viewUpdateGate.js";
 import { createInspectEnvironmentResource, hasAuthoredMaterials, INSPECT_ENVIRONMENT_ID } from "@hardcore/core/common/inspectEnvironment.js";
 "use client";
 
-import LoadingIndicator from "./workbench/LoadingIndicator.js";
+import LoadingIndicator from "../../kit/status/LoadingIndicator.js";
 import { disposeViewerCadScene } from "../render/lodSceneCleanup.js";
+import { disposeSectionCaps } from "@hardcore/core/lib/viewer/sectionCaps.js";
+import { applySurfaceFinish, resolveSurfaceFinish } from "@hardcore/core/lib/viewer/surfaceFinish.js";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { LoaderCircle, Minus, Plus, RotateCcw } from "lucide-react";
-import { viewerTransitionBackdrop } from "./viewer/framePresentation.js";
+import { viewerTransitionBackdrop } from "../../kit/viewport/framePresentation.js";
 import {
   dxfBendGuideSegments,
   dxfFlatPatternExtents,
@@ -21,9 +22,7 @@ import { buildDxfPreviewMeshData, extractDxfScorePolylines } from "@hardcore/cor
 import { buildDxfDrawingLineGroups, drawingLineBounds } from "@hardcore/core/lib/dxf/buildDrawingLines.js";
 import { STEP_TREE_TOPOLOGY_NODE_PREFIX } from "@hardcore/core/lib/step/stepTree.js";
 import {
-  annotatePerspectiveSnapshot,
   CAMERA_PROJECTION,
-  clonePerspectiveSnapshot,
   normalizeCameraProjection,
   perspectiveSnapshotEqual,
   perspectiveSnapshotMatchesScene,
@@ -63,13 +62,10 @@ import { resolveDisplayMaterialSettings } from "@hardcore/core/common/sceneSetti
 // framePresentation then keeps the canvas covered with the destination
 // backdrop, so a half-configured photographic scene is never presented. The
 // rig's material constants are plain data and stay in the initial chunk.
-import { loadStudioScene, studioScene } from "../render/renderStudioChunk.js";
+import { loadStudioScene, studioScene } from "../../kit/look/renderStudioChunk.js";
 import { PHOTOGRAPHIC_STUDIO_MATERIAL_SETTINGS } from "@hardcore/core/common/photographicStudioRig.js";
 import {
-  clampSceneModelRadius,
   defaultSceneGridRadius,
-  getLightingScopeRadius,
-  getProportionalLightingScopeRadius,
   getSceneScaleSettings,
   normalizeSceneScaleMode,
   VIEWER_SCENE_SCALE
@@ -77,20 +73,11 @@ import {
 import {
   applySceneBackground,
   BASE_VIEWER_THEME,
-  createStageFloorGlowPlane,
-  createStageFloorPlane,
-  createStageShadowPlane,
   disposeTexture,
-  getViewerThemeNumber,
   getViewerThemeValue,
-  getStageFloorSize,
   normalizeFloorMode,
   updateSpotLightTarget
 } from "@hardcore/core/lib/viewer/stageTheme.js";
-import {
-  updateGridHelper as updateStageGridHelper,
-  updateOriginAxis as updateStageOriginAxis
-} from "@hardcore/core/lib/viewer/stageGrid.js";
 import {
   displayRecordsBounds,
   mergeBoundsList
@@ -159,23 +146,23 @@ import { hasCapability } from "@hardcore/core/lib/renderCapabilities.js";
 import {
   THEME_FLOOR_MODES
 } from "@hardcore/core/lib/themeSettings.js";
-import ViewPlaneControl from "./viewer/ViewPlaneControl.js";
-import DrawingOverlay from "./viewer/DrawingOverlay.jsx";
-import JointHandleOverlay from "./viewer/JointHandleOverlay.jsx";
-import { usePlaybackFrames } from "./viewer/hooks/usePlaybackFrames.js";
+import ViewPlaneControl from "../../kit/camera/ViewPlaneControl.js";
+import DrawingOverlay from "../../kit/tools/draw/DrawingOverlay.jsx";
+import JointHandleOverlay from "../../kit/tools/pose/JointHandleOverlay.jsx";
+import { usePlaybackFrames } from "../../kit/tools/playbar/usePlaybackFrames.js";
+import { useDrawingViewLock } from "../../kit/tools/draw/useDrawingViewLock.js";
+import { usePlanMode } from "../../kit/camera/usePlanMode.js";
 import { useAnimationClockStore } from "../workbench/animationClockStore.js";
 import { useEmbeddedGlbAnimationClockStore } from "../workbench/embeddedGlbAnimationClockStore.js";
-import { applyDrawingViewLock, captureDrawingViewLock } from "./viewer/drawingViewLock.js";
-import { originalModelCameraFrame, interactiveCameraFrameForBounds, interactiveViewportFitScale } from "./viewer/viewportCameraFit.js";
 import { useViewerMeasureOverlay } from "./viewer/hooks/useViewerMeasureOverlay.js";
 import { useViewerPicking } from "./viewer/hooks/useViewerPicking.js";
-import { useViewerRuntime } from "./viewer/hooks/useViewerRuntime.js";
-import { PREVIEW_AUTO_ROTATE_SPEED } from "./viewer/orbitControls.js";
+import { useViewerRuntime } from "../../kit/viewport/useViewerRuntime.js";
+import { PREVIEW_AUTO_ROTATE_SPEED } from "../../kit/camera/orbitControls.js";
 import {
   CAD_DEFAULT_VERTICAL_FOV_DEGREES,
   explicitViewerFocalLength,
   perspectiveDistanceScale
-} from "./viewer/cameraLens.js";
+} from "../../kit/camera/cameraLens.js";
 import {
   applyOrbitDelta,
   cameraMatchesViewPreset,
@@ -183,7 +170,6 @@ import {
   clearKeyboardOrbitState,
   DEFAULT_VIEW_DIRECTION,
   DEFAULT_VIEW_PLANE_ORIENTATION,
-  easeInOutCubic,
   getActiveViewPlaneFaceId,
   getKeyboardOrbitAxes,
   getKeyboardOrbitCommand,
@@ -199,13 +185,10 @@ import {
   VIEW_PLANE_DEFAULT_PRESET,
   VIEW_PLANE_FACE_BY_ID,
   VIEW_PLANE_FACES,
-  VIEW_PLANE_TRANSITION_MS,
-  viewPlaneCameraBasis,
   viewPlaneOrientationEqual,
-  viewportFitScale,
   WORLD_UP
-} from "./viewer/viewportCameraKit.js";
-import { createViewerRenderStateResolver } from "./viewer/renderState.js";
+} from "../../kit/camera/viewportCameraKit.js";
+import { createViewerRenderStateResolver } from "../../kit/view-settings/renderState.js";
 import { buildModel } from "@hardcore/core/common/cadScene.js";
 import {
   resolveTopologyDisplayEdgeRuntimes,
@@ -227,52 +210,57 @@ import {
   resetStepModuleRecordEffects
 } from "@hardcore/core/common/stepModuleEffects.js";
 import { applySceneState } from "@hardcore/core/common/applySceneState.js";
+import {
+  DEFAULT_DAMPING_FACTOR,
+  readOrthographicHalfHeight,
+  boundsModelRadius,
+  resetRuntimeZoomBaseline,
+  readRuntimeZoomPercent,
+  setRuntimeZoomPercent,
+  syncRuntimeCameraClipPlanes,
+  captureRuntimeViewportFitScale,
+  syncRuntimeViewportFraming,
+  syncRuntimeCameraProjection,
+  readPerspectiveSnapshot,
+  setRuntimePerspectiveFocalLength,
+  cancelCameraTransition,
+  applyPerspectiveSnapshot,
+  transitionCameraToPerspectiveSnapshot,
+  recenterRuntimeTarget,
+  zoomRuntimeToBounds,
+  stepCameraTransition,
+  transitionCameraToViewPreset,
+  readScopedPerspectiveSnapshot
+} from "../../kit/camera/runtimeCamera.js";
+import {
+  IDLE_PIXEL_RATIO_CAP,
+  INTERACTION_PIXEL_RATIO_CAP,
+  INTERACTION_IDLE_DELAY_MS,
+  getPixelRatioCap
+} from "../../kit/viewport/pixelRatio.js";
+import {
+  disposeSceneObject
+} from "../../kit/viewport/sceneObjects.js";
+import {
+  DEFAULT_ZOOM_SPEED,
+  COARSE_POINTER_ZOOM_SPEED,
+  ACCELERATED_WHEEL_ZOOM_SPEED,
+  TRACKPAD_PINCH_ZOOM_SPEED,
+  COARSE_POINTER_PINCH_ZOOM_SPEED
+} from "../../kit/camera/zoomSpeeds.js";
+import {
+  DEFAULT_LIGHTING,
+  syncRuntimeScaledLightingAndShadow,
+  updateStageEffects,
+  updateGridHelper
+} from "../../kit/look/stageEffects.js";
+import { useViewportCamera } from "../../kit/camera/useViewportCamera.js";
 
-const IDLE_PIXEL_RATIO_CAP = 2;
-const INTERACTION_PIXEL_RATIO_CAP = 1.25;
-const INTERACTION_IDLE_DELAY_MS = 140;
-const DEFAULT_DAMPING_FACTOR = 0.14;
-// Wheel zoom speeds are exponents, not multipliers: OrbitControls r161+ scales the camera
-// distance by 0.95 ^ (zoomSpeed * |deltaY| / 100), with deltaY already normalized for
-// deltaMode. A standard mouse notch is |deltaY| = 100, so a speed of N means one notch moves
-// the camera by 0.95^N -- 2.5 is about -12%. Before r161 the same expression also divided by
-// floor(devicePixelRatio), which made every one of these numbers mean something different on
-// a 1x display than on a Retina one; that division is gone, so they are display-independent.
-const DEFAULT_ZOOM_SPEED = 4.5;
-const COARSE_POINTER_ZOOM_SPEED = 1.6;
 const EXPLODED_VIEW_ANIMATION_DURATION_MS = 1000;
-// 5.0, not 2.5. The r161 upgrade removed OrbitControls' divide-by-devicePixelRatio, and I
-// retuned this against a single mouse notch without checking what else runs through it. A
-// trackpad flick does: isTrackpadLikeWheelEvent only claims deltas under 20, and momentum
-// carries an ordinary two-finger scroll well past that, so most of a gesture lands here.
-// 2.5 halved it. 5.0 restores exactly what a Retina Mac had before r161 -- 0.95^(5*d/100) is
-// the same curve as the old 0.95^(10*d/200) -- and every display now gets that same curve
-// instead of only the 2x ones.
-const ACCELERATED_WHEEL_ZOOM_SPEED = 5.0;
-const TRACKPAD_PINCH_ZOOM_SPEED = 7;
-const COARSE_POINTER_PINCH_ZOOM_SPEED = 2.4;
-const CAMERA_TRANSITION_EASING = Object.freeze({
-  EASE_IN_OUT_CUBIC: "ease-in-out-cubic",
-  EASE_IN_OUT_SINE: "ease-in-out-sine"
-});
 const CAD_COORDINATE_SYSTEM = "cad-z-up-v1";
 const ROBOT_COORDINATE_SYSTEM = "cad-z-up-robot-framing-v2";
 const VIEW_PLANE_CONTROL_SIZE = "6rem";
-const ZOOM_CONTROL_MIN_PERCENT = 10;
-const ZOOM_CONTROL_MAX_PERCENT = 800;
 const CAD_EDGE_OPACITY = 0.84;
-const DEFAULT_LIGHTING = {
-  toneMappingExposure: 1.08,
-  hemisphereSky: "#d3dde6",
-  hemisphereGround: "#090c16",
-  hemisphereIntensity: 1.62,
-  keyLightColor: "#d6e0ea",
-  keyLightIntensity: 0.82,
-  fillLightColor: "#6b7f95",
-  fillLightIntensity: 0.46,
-  rimLightColor: "#6db6e8",
-  rimLightIntensity: 0.04
-};
 const BEND_GUIDE_COLOR = "#f59e0b";
 const BEND_GUIDE_WIDTH_MULTIPLIER = 1.35;
 
@@ -382,161 +370,6 @@ function displayRecordExplodedViewTranslation(THREE, record) {
   );
 }
 
-function normalizeZoomPercent(value, fallback = 100) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return fallback;
-  }
-  return clamp(numeric, ZOOM_CONTROL_MIN_PERCENT, ZOOM_CONTROL_MAX_PERCENT);
-}
-
-function formatZoomPercent(value) {
-  return `${Math.round(normalizeZoomPercent(value))}%`;
-}
-
-function readCameraTargetDistance(runtime) {
-  if (!runtime?.camera?.position || !runtime?.controls?.target) {
-    return null;
-  }
-  const distance = runtime.camera.position.distanceTo(runtime.controls.target);
-  return Number.isFinite(distance) && distance > 1e-6 ? distance : null;
-}
-
-function readOrthographicHalfHeight(runtime) {
-  const camera = runtime?.camera?.isOrthographicCamera
-    ? runtime.camera
-    : runtime?.orthographicCamera;
-  if (!camera?.isOrthographicCamera) {
-    return null;
-  }
-  const storedHalfHeight = Number(camera.userData?.cadHalfHeight);
-  if (Number.isFinite(storedHalfHeight) && storedHalfHeight > 1e-6) {
-    return storedHalfHeight;
-  }
-  const derivedHalfHeight = Math.abs((Number(camera.top) || 0) - (Number(camera.bottom) || 0)) / 2;
-  return Number.isFinite(derivedHalfHeight) && derivedHalfHeight > 1e-6 ? derivedHalfHeight : null;
-}
-
-// Radius of a bounds box, matching applyRuntimeModelBounds so the base and posed
-// radii are directly comparable.
-function boundsModelRadius(THREE, bounds, sceneScaleMode) {
-  const min = Array.isArray(bounds?.min) ? bounds.min : null;
-  const max = Array.isArray(bounds?.max) ? bounds.max : null;
-  if (!THREE || !min || !max) {
-    return 0;
-  }
-  return clampSceneModelRadius(
-    new THREE.Vector3(
-      toNumber(max[0]) - toNumber(min[0]),
-      toNumber(max[1]) - toNumber(min[1]),
-      toNumber(max[2]) - toNumber(min[2])
-    ).length() / 2,
-    sceneScaleMode
-  );
-}
-
-// Recompute from authored geometry, never from the camera being reset. Both
-// projections have their own baseline, independent of pose and scene effects.
-function resetRuntimeZoomBaseline(runtime) {
-  const bounds = runtimeFramingBounds(runtime);
-  if (!runtime?.camera || !runtime?.THREE || !bounds) return null;
-  const frame = originalModelCameraFrame(runtime.THREE, {
-    camera: runtime.camera, bounds, frameAspect: getViewportMetrics(runtime).aspect,
-    minRadius: getSceneScaleSettings(runtime.sceneScaleMode).minModelRadius,
-  });
-  if (!frame) return null;
-  runtime.zoomBaseHalfHeight = frame.halfHeight;
-  runtime.zoomBaseDistance = frame.distance;
-  return runtime.camera.isOrthographicCamera ? frame.halfHeight : frame.distance;
-}
-
-function readRuntimeZoomPercent(runtime) {
-  const camera = runtime?.camera;
-  if (!camera) {
-    return 100;
-  }
-  resetRuntimeZoomBaseline(runtime);
-  const cameraZoom = Number.isFinite(Number(camera.zoom)) && Number(camera.zoom) > 0
-    ? Number(camera.zoom)
-    : 1;
-  if (camera.isOrthographicCamera) {
-    const halfHeight = readOrthographicHalfHeight(runtime);
-    if (!halfHeight) {
-      return normalizeZoomPercent(cameraZoom * 100);
-    }
-    const baseHalfHeight = Number(runtime.zoomBaseHalfHeight);
-    const normalizedBaseHalfHeight = Number.isFinite(baseHalfHeight) && baseHalfHeight > 1e-6
-      ? baseHalfHeight
-      : resetRuntimeZoomBaseline(runtime) || halfHeight;
-    return normalizeZoomPercent((normalizedBaseHalfHeight / halfHeight) * cameraZoom * 100);
-  }
-  const distance = readCameraTargetDistance(runtime);
-  if (!distance) {
-    return normalizeZoomPercent(cameraZoom * 100);
-  }
-  const baseDistance = Number(runtime.zoomBaseDistance);
-  const normalizedBaseDistance = Number.isFinite(baseDistance) && baseDistance > 1e-6
-    ? baseDistance
-    : resetRuntimeZoomBaseline(runtime) || distance;
-  return normalizeZoomPercent((normalizedBaseDistance / distance) * cameraZoom * 100);
-}
-
-function setRuntimeZoomPercent(runtime, percent) {
-  if (!runtime?.THREE || !runtime?.camera || !runtime?.controls?.target) {
-    return false;
-  }
-  resetRuntimeZoomBaseline(runtime);
-  const nextZoom = normalizeZoomPercent(percent) / 100;
-  const camera = runtime.camera;
-  cancelCameraTransition(runtime, { scheduleIdle: false });
-  clearKeyboardOrbitState(runtime.keyboardOrbitState);
-  if (camera.isOrthographicCamera) {
-    const halfHeight = readOrthographicHalfHeight(runtime) || 1;
-    const baseHalfHeight = Number(runtime.zoomBaseHalfHeight);
-    const normalizedBaseHalfHeight = Number.isFinite(baseHalfHeight) && baseHalfHeight > 1e-6
-      ? baseHalfHeight
-      : halfHeight;
-    runtime.zoomBaseHalfHeight = normalizedBaseHalfHeight;
-    camera.zoom = nextZoom * (halfHeight / normalizedBaseHalfHeight);
-    camera.updateProjectionMatrix?.();
-  } else {
-    const target = runtime.controls.target;
-    const offset = camera.position.clone().sub(target);
-    const direction = offset.lengthSq() > 1e-8
-      ? offset.normalize()
-      : new runtime.THREE.Vector3(...DEFAULT_VIEW_DIRECTION).normalize();
-    const distance = readCameraTargetDistance(runtime) || direction.length() || 1;
-    const baseDistance = Number(runtime.zoomBaseDistance);
-    const normalizedBaseDistance = Number.isFinite(baseDistance) && baseDistance > 1e-6
-      ? baseDistance
-      : distance;
-    runtime.zoomBaseDistance = normalizedBaseDistance;
-    const minDistance = Number.isFinite(Number(runtime.controls.minDistance))
-      ? Number(runtime.controls.minDistance)
-      : 0.01;
-    const maxDistance = Number.isFinite(Number(runtime.controls.maxDistance)) && Number(runtime.controls.maxDistance) > 0
-      ? Number(runtime.controls.maxDistance)
-      : Number.POSITIVE_INFINITY;
-    const nextDistance = clamp(normalizedBaseDistance / nextZoom, minDistance, maxDistance);
-    camera.position.copy(target.clone().add(direction.multiplyScalar(nextDistance)));
-    camera.zoom = 1;
-    camera.updateProjectionMatrix?.();
-  }
-  camera.lookAt(runtime.controls.target);
-  runtime.controls.update?.();
-  runtime.scheduleIdleQuality?.();
-  runtime.requestRender?.();
-  return true;
-}
-
-function cssLength(value, fallback = "0px") {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return `${value}px`;
-  }
-  const text = String(value || "").trim();
-  return text || fallback;
-}
-
 function applyExplodedViewRuntimeProgress(runtime, layout, progress) {
   if (!runtime?.THREE || !Array.isArray(runtime.displayRecords)) {
     return;
@@ -553,482 +386,15 @@ function applyExplodedViewRuntimeProgress(runtime, layout, progress) {
   runtime.requestRender?.();
 }
 
-function getPixelRatioCap(cap) {
-  if (typeof window === "undefined") {
-    return 1;
-  }
-  return Math.min(window.devicePixelRatio || 1, cap);
-}
-
-function getStageEffectRadius(radius, sceneScaleMode = VIEWER_SCENE_SCALE.CAD) {
-  return getProportionalLightingScopeRadius(radius, sceneScaleMode);
-}
-
-function getStageEffectScale(radius, sceneScaleMode = VIEWER_SCENE_SCALE.CAD) {
-  const referenceRadius = Math.max(
-    getLightingScopeRadius(sceneScaleMode),
-    getSceneScaleSettings(sceneScaleMode).minModelRadius
-  );
-  return getStageEffectRadius(radius, sceneScaleMode) / referenceRadius;
-}
-
-function setScaledLightPosition(light, position = {}, scale = 1) {
-  light?.position?.set?.(
-    (Number(position.x) || 0) * scale,
-    (Number(position.y) || 0) * scale,
-    (Number(position.z) || 0) * scale
-  );
-}
-
-function scaledLightDistance(distance, scale = 1) {
-  const numericDistance = Number(distance);
-  return Number.isFinite(numericDistance) && numericDistance > 0
-    ? numericDistance * scale
-    : 0;
-}
-
-function syncRuntimeScaledLighting(runtime, lightingSettings = {}, radius, sceneScaleMode = VIEWER_SCENE_SCALE.CAD) {
-  const scale = getStageEffectScale(radius, sceneScaleMode);
-  setScaledLightPosition(runtime?.keyLight, lightingSettings.directional?.position, scale);
-  if (lightingSettings.fill?.position) {
-    setScaledLightPosition(runtime?.fillLight, lightingSettings.fill.position, scale);
-  }
-  if (lightingSettings.rim?.position) {
-    setScaledLightPosition(runtime?.rimLight, lightingSettings.rim.position, scale);
-  }
-  setScaledLightPosition(runtime?.spotLight, lightingSettings.spot?.position, scale);
-  setScaledLightPosition(runtime?.pointLight, lightingSettings.point?.position, scale);
-  if (runtime?.spotLight) {
-    runtime.spotLight.distance = scaledLightDistance(lightingSettings.spot?.distance, scale);
-  }
-  if (runtime?.pointLight) {
-    runtime.pointLight.distance = scaledLightDistance(lightingSettings.point?.distance, scale);
-  }
-}
-
-function syncRuntimeScaledLightingAndShadow(
-  THREE,
-  runtime,
-  lightingSettings = {},
-  radius,
-  bounds,
-  sceneScaleMode = VIEWER_SCENE_SCALE.CAD,
-  shadowMapSize = 2048
-) {
-  syncRuntimeScaledLighting(runtime, lightingSettings, radius, sceneScaleMode);
-  if (THREE && bounds && runtime?.keyLight?.shadow?.camera) {
-    applyRuntimeModelBounds(THREE, runtime, bounds, sceneScaleMode, { shadowMapSize });
-  }
-}
-
-function updateStageEffects(runtime, viewerTheme, themeSettings, radius, floorZ = 0, floorMode = THEME_FLOOR_MODES.STAGE, sceneScaleMode = VIEWER_SCENE_SCALE.CAD) {
-  if (!runtime?.THREE || !runtime?.stageGroup) {
-    return;
-  }
-
-  clearSceneGroup(runtime.stageGroup);
-
-  if (floorMode !== THEME_FLOOR_MODES.STAGE) {
-    return;
-  }
-
-  const stageScaleMode = sceneScaleMode;
-  const floorSize = getStageFloorSize(radius, stageScaleMode);
-  const lightingScopeRadius = getStageEffectRadius(radius, stageScaleMode);
-  runtime.stageGroup.add(createStageFloorPlane(runtime.THREE, viewerTheme, themeSettings, floorSize, floorZ, 0));
-  const glowPlane = createStageFloorGlowPlane(
-    runtime.THREE,
-    themeSettings,
-    lightingScopeRadius,
-    floorSize,
-    floorZ,
-    stageScaleMode
-  );
-  if (glowPlane) {
-    runtime.stageGroup.add(glowPlane);
-  }
-  const shadowPlane = createStageShadowPlane(runtime.THREE, themeSettings, floorSize, floorZ);
-  if (shadowPlane) {
-    runtime.stageGroup.add(shadowPlane);
-  }
-}
-
-// The canvas IS the viewport: it fills the box between the sidebar and the
-// sheet and nothing else, so the camera frames and centres in the whole of it.
-function getViewportMetrics(runtime) {
-  const canvas = runtime?.renderer?.domElement;
-  const width = Math.max(1, canvas?.clientWidth || canvas?.parentElement?.clientWidth || 1);
-  const height = Math.max(1, canvas?.clientHeight || canvas?.parentElement?.clientHeight || 1);
-  return { width, height, aspect: width / height };
-}
-
-function runtimeCameraProjection(runtime) {
-  return normalizeCameraProjection(
-    runtime?.projection || (runtime?.camera?.isOrthographicCamera ? CAMERA_PROJECTION.ORTHOGRAPHIC : CAMERA_PROJECTION.PERSPECTIVE)
-  );
-}
-
-function syncRuntimeCameraClipPlanes(runtime, near, far) {
-  for (const camera of [runtime?.perspectiveCamera, runtime?.orthographicCamera].filter(Boolean)) {
-    camera.near = near;
-    camera.far = far;
-    camera.updateProjectionMatrix?.();
-  }
-}
-
-function setOrthographicCameraHalfHeight(runtime, halfHeight, frameMetrics = null) {
-  const camera = runtime?.orthographicCamera;
-  if (!camera?.isOrthographicCamera) {
-    return false;
-  }
-  const metrics = frameMetrics || getViewportMetrics(runtime);
-  const nextHalfHeight = Math.max(Number(halfHeight) || 0, 1e-3);
-  const previousHalfHeight = Number(camera.userData?.cadHalfHeight);
-  const previousLeft = Number(camera.left);
-  const previousRight = Number(camera.right);
-  const previousTop = Number(camera.top);
-  const previousBottom = Number(camera.bottom);
-  camera.userData.cadHalfHeight = nextHalfHeight;
-  runtime.syncCameraViewport?.(camera, metrics.width, metrics.height);
-  return (
-    Math.abs((Number.isFinite(previousHalfHeight) ? previousHalfHeight : 0) - nextHalfHeight) > 1e-6 ||
-    Math.abs((Number.isFinite(previousLeft) ? previousLeft : 0) - Number(camera.left)) > 1e-6 ||
-    Math.abs((Number.isFinite(previousRight) ? previousRight : 0) - Number(camera.right)) > 1e-6 ||
-    Math.abs((Number.isFinite(previousTop) ? previousTop : 0) - Number(camera.top)) > 1e-6 ||
-    Math.abs((Number.isFinite(previousBottom) ? previousBottom : 0) - Number(camera.bottom)) > 1e-6
-  );
-}
-
-function runtimeViewportFitScale(runtime, frameMetrics) {
-  const camera = runtime?.camera;
-  const fitCamera = camera?.isPerspectiveCamera ? camera : runtime?.perspectiveCamera || camera;
-  const projected = interactiveViewportFitScale(runtime.THREE, {
-    camera, framing: runtime.interactiveFraming, aspect: frameMetrics?.aspect,
-  });
-  if (Number.isFinite(projected) && projected > 0) return projected;
-  return viewportFitScale({
-    orthographic: camera?.isOrthographicCamera === true,
-    fov: Number(fitCamera?.fov) || 48,
-    aspect: frameMetrics?.aspect
-  });
-}
-
-// Record the viewport the camera is currently framed for. Anything that fits the
-// camera afresh is by definition fitted to the viewport it ran in, so this is the
-// reference the next viewport change measures against.
-function captureRuntimeViewportFitScale(runtime, frameMetrics = null) {
-  if (!runtime?.camera) {
-    return;
-  }
-  const metrics = frameMetrics || getViewportMetrics(runtime);
-  runtime.viewportFitScale = runtimeViewportFitScale(runtime, metrics);
-}
-
-// A viewport change -- the window resizing, or a side sheet opening, closing or
-// being dragged wider and resizing the canvas beside it -- leaves the camera
-// framed for the viewport it no longer has. The vertical field of view is fixed and the orthographic half-height is
-// held constant across an aspect change, so a narrowing viewport crops a wide
-// model instead of shrinking it. Rescale the camera by the change in fit scale so
-// the model keeps its share of the framed area.
-//
-// The zoom ruler is recalculated from the authored box in the new viewport.
-// It cannot inherit a selection fit or the bounds of a moving assembly.
-function syncRuntimeViewportFraming(runtime, frameMetrics = null) {
-  if (!runtime?.camera) {
-    return false;
-  }
-  const metrics = frameMetrics || getViewportMetrics(runtime);
-  const previousFitScale = Number(runtime.viewportFitScale);
-  const nextFitScale = runtimeViewportFitScale(runtime, metrics);
-  // Claim the new viewport up front, including on the paths that bail below: the
-  // first call has no reference yet, and the rest only bail when the camera is in
-  // no state to be reframed. Carrying a stale reference forward would just save
-  // the move up for whichever later resize does find a usable camera.
-  runtime.viewportFitScale = nextFitScale;
-  if (
-    !Number.isFinite(previousFitScale) || previousFitScale <= 1e-6 ||
-    !Number.isFinite(nextFitScale) || nextFitScale <= 1e-6
-  ) {
-    return false;
-  }
-  const requestedRatio = nextFitScale / previousFitScale;
-  if (Math.abs(requestedRatio - 1) < 1e-6) {
-    return false;
-  }
-  const camera = runtime.camera;
-  let appliedRatio = requestedRatio;
-  if (camera.isOrthographicCamera) {
-    const halfHeight = readOrthographicHalfHeight(runtime);
-    if (!halfHeight) {
-      return false;
-    }
-    const nextHalfHeight = Math.max(halfHeight * requestedRatio, 1e-3);
-    appliedRatio = nextHalfHeight / halfHeight;
-    setOrthographicCameraHalfHeight(runtime, nextHalfHeight, metrics);
-  } else {
-    const target = runtime.controls?.target;
-    const distance = readCameraTargetDistance(runtime);
-    if (!target || !distance) {
-      return false;
-    }
-    const minDistance = Number.isFinite(Number(runtime.controls?.minDistance))
-      ? Number(runtime.controls.minDistance)
-      : 0.01;
-    const maxDistance = Number.isFinite(Number(runtime.controls?.maxDistance)) && Number(runtime.controls.maxDistance) > 0
-      ? Number(runtime.controls.maxDistance)
-      : Number.POSITIVE_INFINITY;
-    const nextDistance = clamp(distance * requestedRatio, minDistance, maxDistance);
-    appliedRatio = nextDistance / distance;
-    if (Math.abs(appliedRatio - 1) < 1e-6) {
-      return false;
-    }
-    // Scaling the target->camera offset moves the camera along the view ray, so
-    // the orientation and the pivot are untouched -- only the distance changes.
-    camera.position.copy(target.clone().add(camera.position.clone().sub(target).multiplyScalar(appliedRatio)));
-    camera.lookAt(target);
-  }
-  resetRuntimeZoomBaseline(runtime);
-  // Bare controls.update() ticks OrbitControls' auto-rotate branch, so a resize
-  // during a preview orbit would nudge the camera an extra step.
-  if (runtime.controls) {
-    const autoRotateBeforeResize = runtime.controls.autoRotate;
-    runtime.controls.autoRotate = false;
-    runtime.controls.update?.();
-    runtime.controls.autoRotate = autoRotateBeforeResize;
-  }
-  runtime.requestRender?.();
-  return true;
-}
-
-function syncRuntimeCameraProjection(runtime, projection, { scheduleIdle = true, requestRender = true } = {}) {
-  if (!runtime?.camera || !runtime?.controls) {
-    return false;
-  }
-  const nextProjection = normalizeCameraProjection(projection);
-  const nextCamera = nextProjection === CAMERA_PROJECTION.ORTHOGRAPHIC
-    ? runtime.orthographicCamera
-    : runtime.perspectiveCamera;
-  if (!nextCamera) {
-    return false;
-  }
-  const previousCamera = runtime.camera;
-  const previousPerspectiveHalfHeight = previousCamera?.isPerspectiveCamera && runtime.controls?.target
-    ? (
-        previousCamera.position.distanceTo(runtime.controls.target) *
-        Math.tan((Math.max(Number(previousCamera.fov) || 48, 1e-3) * Math.PI) / 360) /
-        Math.max(Number(previousCamera.zoom) || 1, 1e-3)
-      )
-    : null;
-  if (previousCamera !== nextCamera) {
-    nextCamera.position.copy(previousCamera.position);
-    nextCamera.up.copy(previousCamera.up);
-    nextCamera.near = previousCamera.near;
-    nextCamera.far = previousCamera.far;
-    nextCamera.zoom = Number.isFinite(previousCamera.zoom) && previousCamera.zoom > 0 ? previousCamera.zoom : 1;
-    runtime.camera = nextCamera;
-    runtime.controls.object = nextCamera;
-  }
-  runtime.projection = nextProjection;
-  const frameMetrics = getViewportMetrics(runtime);
-  if (nextCamera.isOrthographicCamera && previousCamera !== nextCamera) {
-    const previousOrthographicHalfHeight = Number(previousCamera?.userData?.cadHalfHeight);
-    const preservedHalfHeight = Number.isFinite(previousPerspectiveHalfHeight) && previousPerspectiveHalfHeight > 0
-      ? previousPerspectiveHalfHeight
-      : previousOrthographicHalfHeight;
-    if (Number.isFinite(preservedHalfHeight) && preservedHalfHeight > 0) {
-      setOrthographicCameraHalfHeight(runtime, preservedHalfHeight, frameMetrics);
-    } else {
-      runtime.syncCameraViewport?.(nextCamera, frameMetrics.width, frameMetrics.height);
-    }
-  } else {
-    runtime.syncCameraViewport?.(nextCamera, frameMetrics.width, frameMetrics.height);
-  }
-  // The switch preserves the framing rather than re-fitting, but perspective and
-  // orthographic measure the viewport differently, so the reference a later
-  // resize compares against has to be re-read in the new projection's terms.
-  captureRuntimeViewportFitScale(runtime, frameMetrics);
-  // Recompute camera matrices without advancing auto-rotate. A bare controls.update()
-  // ticks OrbitControls' frame-rate-dependent auto-rotation branch, so any projection
-  // sync that fires during a preview orbit would nudge the camera forward an extra step.
-  const autoRotateBeforeProjectionSync = runtime.controls.autoRotate;
-  runtime.controls.autoRotate = false;
-  runtime.controls.update?.();
-  runtime.controls.autoRotate = autoRotateBeforeProjectionSync;
-  if (scheduleIdle) {
-    runtime.scheduleIdleQuality?.();
-  }
-  if (requestRender) {
-    runtime.requestRender?.();
-  }
-  return true;
-}
-
-function easeInOutSine(t) {
-  if (t <= 0) {
-    return 0;
-  }
-  if (t >= 1) {
-    return 1;
-  }
-  return -(Math.cos(Math.PI * t) - 1) / 2;
-}
-
-function easeCameraTransitionProgress(t, easing = CAMERA_TRANSITION_EASING.EASE_IN_OUT_CUBIC) {
-  return easing === CAMERA_TRANSITION_EASING.EASE_IN_OUT_SINE
-    ? easeInOutSine(t)
-    : easeInOutCubic(t);
-}
-
-function readPerspectiveSnapshot(runtime) {
-  if (!runtime?.camera || !runtime?.controls) {
-    return null;
-  }
-  const orthographicHalfHeight = readOrthographicHalfHeight(runtime);
-  return {
-    position: [runtime.camera.position.x, runtime.camera.position.y, runtime.camera.position.z],
-    target: [runtime.controls.target.x, runtime.controls.target.y, runtime.controls.target.z],
-    up: [runtime.camera.up.x, runtime.camera.up.y, runtime.camera.up.z],
-    zoom: runtime.camera.zoom,
-    projection: runtimeCameraProjection(runtime),
-    ...(Number.isFinite(runtime.perspectiveCamera?.getFocalLength?.())
-      ? { focalLength: runtime.perspectiveCamera.getFocalLength() }
-      : {}),
-    ...(orthographicHalfHeight ? { orthographicHalfHeight } : {})
-  };
-}
-
-function setRuntimePerspectiveFocalLength(runtime, focalLength) {
-  const camera = runtime?.perspectiveCamera;
-  const next = Number(focalLength);
-  if (!camera?.setFocalLength || !Number.isFinite(next) || next <= 0) {
-    return false;
-  }
-  camera.setFocalLength(next);
-  camera.userData.cadFocalLength = next;
-  return true;
-}
-
-function readScopedPerspectiveSnapshot(runtime, { modelKey = "", sceneScaleMode = "" } = {}) {
-  return annotatePerspectiveSnapshot(readPerspectiveSnapshot(runtime), {
-    modelKey,
-    sceneScaleMode,
-    coordinateSystem: coordinateSystemForSceneScale(sceneScaleMode)
-  });
-}
-
 function coordinateSystemForSceneScale(sceneScaleMode) {
   return normalizeSceneScaleMode(sceneScaleMode) === VIEWER_SCENE_SCALE.URDF
     ? ROBOT_COORDINATE_SYSTEM
     : CAD_COORDINATE_SYSTEM;
 }
 
-function cancelCameraTransition(runtime, { scheduleIdle = true } = {}) {
-  if (!runtime?.cameraTransition) {
-    return;
-  }
-  runtime.cameraTransition = null;
-  if (runtime.controls) {
-    runtime.controls.enableDamping = true;
-    runtime.controls.dampingFactor = DEFAULT_DAMPING_FACTOR;
-  }
-  if (scheduleIdle) {
-    runtime.scheduleIdleQuality?.();
-  }
-}
-
-function applyPerspectiveSnapshot(runtime, perspective, { scheduleIdle = true } = {}) {
-  const nextPerspective = clonePerspectiveSnapshot(perspective);
-  if (!runtime?.camera || !runtime?.controls || !nextPerspective) {
-    return false;
-  }
-  cancelCameraTransition(runtime, { scheduleIdle: false });
-  clearKeyboardOrbitState(runtime.keyboardOrbitState);
-  if (Object.prototype.hasOwnProperty.call(nextPerspective, "projection")) {
-    syncRuntimeCameraProjection(runtime, nextPerspective.projection, { scheduleIdle: false });
-  }
-  if (Number.isFinite(nextPerspective.focalLength) && nextPerspective.focalLength > 0) {
-    setRuntimePerspectiveFocalLength(runtime, nextPerspective.focalLength);
-  }
-  runtime.camera.position.set(...nextPerspective.position);
-  runtime.controls.target.set(...nextPerspective.target);
-  runtime.camera.up.set(...nextPerspective.up);
-  if (
-    Number.isFinite(nextPerspective.orthographicHalfHeight) &&
-    nextPerspective.orthographicHalfHeight > 0
-  ) {
-    setOrthographicCameraHalfHeight(runtime, nextPerspective.orthographicHalfHeight);
-  }
-  if (Number.isFinite(nextPerspective.zoom) && nextPerspective.zoom > 0) {
-    runtime.camera.zoom = nextPerspective.zoom;
-    runtime.camera.updateProjectionMatrix?.();
-  }
-  runtime.camera.lookAt(runtime.controls.target);
-  runtime.controls.update();
-  if (scheduleIdle) {
-    runtime.scheduleIdleQuality?.();
-  }
-  runtime.requestRender?.();
-  return true;
-}
-
-function transitionCameraToPerspectiveSnapshot(runtime, perspective, {
-  durationMs = VIEW_PLANE_TRANSITION_MS,
-  easing = CAMERA_TRANSITION_EASING.EASE_IN_OUT_CUBIC,
-  orthographicHalfHeight = undefined,
-  resetZoomBaselineOnComplete = false
-} = {}) {
-  const nextPerspective = clonePerspectiveSnapshot(perspective);
-  if (!runtime?.THREE || !runtime?.camera || !runtime?.controls || !nextPerspective) {
-    return false;
-  }
-  cancelCameraTransition(runtime, { scheduleIdle: false });
-  clearKeyboardOrbitState(runtime.keyboardOrbitState);
-  if (Object.prototype.hasOwnProperty.call(nextPerspective, "projection")) {
-    syncRuntimeCameraProjection(runtime, nextPerspective.projection, { scheduleIdle: false });
-  }
-  if (Number.isFinite(nextPerspective.focalLength) && nextPerspective.focalLength > 0) {
-    setRuntimePerspectiveFocalLength(runtime, nextPerspective.focalLength);
-  }
-  const endPosition = new runtime.THREE.Vector3(...nextPerspective.position);
-  const endTarget = new runtime.THREE.Vector3(...nextPerspective.target);
-  const endUp = new runtime.THREE.Vector3(...nextPerspective.up);
-  const endZoom = Number.isFinite(nextPerspective.zoom) && nextPerspective.zoom > 0
-    ? nextPerspective.zoom
-    : runtime.camera.zoom;
-  const startOrthographicHalfHeight = runtime.camera?.isOrthographicCamera
-    ? Number(runtime.camera.userData?.cadHalfHeight)
-    : null;
-  const endOrthographicHalfHeight = runtime.camera?.isOrthographicCamera
-    ? Number(orthographicHalfHeight ?? nextPerspective.orthographicHalfHeight)
-    : null;
-  if (
-    ![endPosition.x, endPosition.y, endPosition.z, endTarget.x, endTarget.y, endTarget.z, endUp.x, endUp.y, endUp.z, endZoom]
-      .every(Number.isFinite) ||
-    endUp.lengthSq() <= 1e-6
-  ) {
-    return false;
-  }
-  runtime.cameraTransition = {
-    startTime: performance.now(),
-    durationMs,
-    startPosition: runtime.camera.position.clone(),
-    endPosition,
-    startTarget: runtime.controls.target.clone(),
-    endTarget,
-    startUp: runtime.camera.up.clone(),
-    endUp: endUp.normalize(),
-    startZoom: runtime.camera.zoom,
-    endZoom,
-    startOrthographicHalfHeight,
-    endOrthographicHalfHeight,
-    resetZoomBaselineOnComplete,
-    easing
-  };
-  runtime.controls.enableDamping = false;
-  runtime.beginInteraction?.();
-  runtime.requestRender?.();
-  return true;
-}
+// Which coordinate system a stored camera belongs to is this renderer's knowledge;
+// the kit's camera hook is handed the rule.
+const coordinateSystemFor = coordinateSystemForSceneScale;
 
 function pointBounds(center) {
   if (!Array.isArray(center) && !ArrayBuffer.isView(center)) {
@@ -1084,36 +450,6 @@ function currentDisplayRecordTranslationByRecord(THREE, records = []) {
   return translations;
 }
 
-// Aim the controls back at the model centre without touching orientation or
-// distance. The model renders at its authored world coordinates (no bounds
-// re-centering), so the target is the model's world bounds centre — the same
-// target the initial framing uses — not the origin.
-function recenterRuntimeTarget(runtime) {
-  const controls = runtime?.controls;
-  const camera = runtime?.camera;
-  if (!controls?.target || !camera || !runtime?.THREE) {
-    return false;
-  }
-  const THREE = runtime.THREE;
-  const bounds = runtimeFramingBounds(runtime);
-  const boundsMin = Array.isArray(bounds?.min) ? bounds.min : [0, 0, 0];
-  const boundsMax = Array.isArray(bounds?.max) ? bounds.max : [0, 0, 0];
-  const worldCenter = new THREE.Vector3(
-    (toNumber(boundsMin[0]) + toNumber(boundsMax[0])) / 2,
-    (toNumber(boundsMin[1]) + toNumber(boundsMax[1])) / 2,
-    (toNumber(boundsMin[2]) + toNumber(boundsMax[2])) / 2
-  );
-  if (runtime.modelGroup?.position) {
-    worldCenter.add(runtime.modelGroup.position);
-  }
-  const offset = new THREE.Vector3().copy(camera.position).sub(controls.target);
-  controls.target.copy(worldCenter);
-  camera.position.copy(worldCenter).add(offset);
-  camera.lookAt(controls.target);
-  controls.update?.();
-  return true;
-}
-
 function displayRecordBoundsForPartIds(runtime, partIds = []) {
   const normalizedPartIds = normalizePartIdList(partIds);
   if (!normalizedPartIds.length || !Array.isArray(runtime?.displayRecords)) {
@@ -1123,210 +459,6 @@ function displayRecordBoundsForPartIds(runtime, partIds = []) {
     partIds: new Set(normalizedPartIds),
     translationByRecord: currentDisplayRecordTranslationByRecord(runtime?.THREE, runtime.displayRecords)
   });
-}
-
-function zoomRuntimeToBounds(runtime, bounds, sceneScaleMode, {
-  animate = true,
-  modelOffset = null,
-  resetZoomBaseline = false,
-  viewDirection = null,
-  viewUp = null
-} = {}) {
-  if (!runtime?.THREE || !runtime?.camera || !runtime?.controls) {
-    return false;
-  }
-  const normalizedBounds = mergeBoundsList([bounds]);
-  if (!normalizedBounds) {
-    return false;
-  }
-  const frameMetrics = getViewportMetrics(runtime);
-  // Render adjusts its clipping range to the current pose every frame. A fit
-  // must use the model's base range, or resetting after zooming out would fit
-  // behind the old distant near plane instead of returning to the default view.
-  // A physical lens changes vertical FOV with aspect. Fit using the destination
-  // viewport before installing the pose, not the outgoing inspector's aspect.
-  runtime.syncCameraViewport?.(runtime.camera, frameMetrics.width, frameMetrics.height);
-  const fitNearClip = Math.max(boundsModelRadius(runtime.THREE, normalizedBounds, sceneScaleMode) / 1200, 0.01);
-  const frame = interactiveCameraFrameForBounds(runtime.THREE, {
-    camera: runtime.camera,
-    controls: runtime.controls,
-    bounds: normalizedBounds,
-    modelOffset,
-    frameAspect: frameMetrics.aspect,
-    minRadius: getSceneScaleSettings(sceneScaleMode).minModelRadius,
-    nearClip: fitNearClip,
-    viewDirection,
-    viewUp: viewUp || runtime.camera.up?.toArray?.() || WORLD_UP
-  });
-  if (!frame) {
-    return false;
-  }
-  runtime.interactiveFraming = {
-    bounds: normalizedBounds, direction: frame.direction.toArray(), up: frame.up.toArray(),
-    minRadius: getSceneScaleSettings(sceneScaleMode).minModelRadius,
-    nearClip: fitNearClip,
-  };
-  captureRuntimeViewportFitScale(runtime, frameMetrics);
-  const snapshot = {
-    position: frame.position.toArray(),
-    target: frame.target.toArray(),
-    up: frame.up.toArray(),
-    zoom: 1,
-    projection: runtimeCameraProjection(runtime)
-  };
-  const orthographicHalfHeight = runtime.camera.isOrthographicCamera ? frame.halfHeight : null;
-
-  if (animate) {
-    return transitionCameraToPerspectiveSnapshot(runtime, snapshot, {
-      durationMs: VIEW_PLANE_TRANSITION_MS,
-      easing: CAMERA_TRANSITION_EASING.EASE_IN_OUT_CUBIC,
-      orthographicHalfHeight,
-      resetZoomBaselineOnComplete: resetZoomBaseline
-    });
-  }
-
-  if (runtime.camera.isOrthographicCamera && orthographicHalfHeight) {
-    setOrthographicCameraHalfHeight(runtime, orthographicHalfHeight, frameMetrics);
-  }
-  const applied = applyPerspectiveSnapshot(runtime, snapshot);
-  if (applied) {
-    if (resetZoomBaseline) {
-      resetRuntimeZoomBaseline(runtime);
-    }
-    runtime.onZoomChange?.(runtime);
-  }
-  return applied;
-}
-
-function stepCameraTransition(runtime, timestamp) {
-  const transition = runtime?.cameraTransition;
-  if (!transition || !runtime?.THREE || !runtime?.camera || !runtime?.controls) {
-    return false;
-  }
-
-  const durationMs = Math.max(transition.durationMs, 1);
-  const progress = clamp((timestamp - transition.startTime) / durationMs, 0, 1);
-  const eased = easeCameraTransitionProgress(progress, transition.easing);
-  const position = new runtime.THREE.Vector3().lerpVectors(
-    transition.startPosition,
-    transition.endPosition,
-    eased
-  );
-  const target = new runtime.THREE.Vector3().lerpVectors(
-    transition.startTarget,
-    transition.endTarget,
-    eased
-  );
-  const up = new runtime.THREE.Vector3().lerpVectors(
-    transition.startUp,
-    transition.endUp,
-    eased
-  );
-  runtime.camera.position.copy(position);
-  runtime.controls.target.copy(target);
-  if (up.lengthSq() > 1e-6) {
-    runtime.camera.up.copy(up.normalize());
-  }
-  const startOrthographicHalfHeight = Number(transition.startOrthographicHalfHeight);
-  const endOrthographicHalfHeight = Number(transition.endOrthographicHalfHeight);
-  if (
-    runtime.camera?.isOrthographicCamera &&
-    Number.isFinite(startOrthographicHalfHeight) &&
-    Number.isFinite(endOrthographicHalfHeight) &&
-    endOrthographicHalfHeight > 0
-  ) {
-    const nextHalfHeight = startOrthographicHalfHeight + ((endOrthographicHalfHeight - startOrthographicHalfHeight) * eased);
-    setOrthographicCameraHalfHeight(runtime, nextHalfHeight);
-  }
-  if (Number.isFinite(transition.startZoom) && Number.isFinite(transition.endZoom)) {
-    runtime.camera.zoom = transition.startZoom + ((transition.endZoom - transition.startZoom) * eased);
-    runtime.camera.updateProjectionMatrix?.();
-  }
-  runtime.camera.lookAt(target);
-
-  if (progress >= 1) {
-    if (transition.resetZoomBaselineOnComplete) {
-      resetRuntimeZoomBaseline(runtime);
-    }
-    runtime.onZoomChange?.(runtime);
-    runtime.cameraTransition = null;
-    runtime.controls.enableDamping = true;
-    runtime.controls.dampingFactor = DEFAULT_DAMPING_FACTOR;
-    runtime.scheduleIdleQuality?.();
-    return false;
-  }
-  return true;
-}
-
-function transitionCameraToViewPreset(runtime, preset) {
-  if (
-    !runtime?.THREE ||
-    !runtime?.camera ||
-    !runtime?.controls ||
-    !preset ||
-    !Array.isArray(preset.direction) ||
-    preset.direction.length !== 3 ||
-    !Array.isArray(preset.up) ||
-    preset.up.length !== 3
-  ) {
-    return false;
-  }
-
-  const currentTarget = runtime.controls.target.clone();
-  const currentOffset = new runtime.THREE.Vector3().copy(runtime.camera.position).sub(currentTarget);
-  const fallbackDistance = Math.max(runtime.controls.minDistance || 1, 1);
-  const currentDistance = currentOffset.length();
-  const distance = clamp(
-    Number.isFinite(currentDistance) && currentDistance > 1e-6 ? currentDistance : fallbackDistance,
-    runtime.controls.minDistance || 0.01,
-    runtime.controls.maxDistance || Infinity
-  );
-  // The basis maths lives in viewportCameraKit so the "up is always world up" invariant is
-  // testable without mounting a viewer. It returns world up for EVERY preset, so the orbit
-  // axis is the same from any view.
-  const basis = viewPlaneCameraBasis(preset, WORLD_UP);
-  if (!basis) {
-    return false;
-  }
-  const nextDirection = new runtime.THREE.Vector3(...basis.direction);
-  const nextUp = new runtime.THREE.Vector3(...basis.up);
-  runtime.cameraTransition = {
-    startTime: performance.now(),
-    durationMs: VIEW_PLANE_TRANSITION_MS,
-    startPosition: runtime.camera.position.clone(),
-    endPosition: currentTarget.clone().add(nextDirection.multiplyScalar(distance)),
-    startTarget: currentTarget.clone(),
-    endTarget: currentTarget.clone(),
-    startUp: runtime.camera.up.clone(),
-    endUp: nextUp
-  };
-  runtime.controls.enableDamping = false;
-  runtime.beginInteraction?.();
-  runtime.requestRender?.();
-  return true;
-}
-
-function disposeSceneObject(object) {
-  if (!object) {
-    return;
-  }
-  while (object.children?.length) {
-    disposeSceneObject(object.children[0]);
-  }
-  if (typeof object.userData?.beforeDispose === "function") {
-    object.userData.beforeDispose(object);
-    delete object.userData.beforeDispose;
-  }
-  if (object.geometry?.userData?.cadSceneCachedGeometry !== true) {
-    object.geometry?.dispose?.();
-  }
-  const materials = Array.isArray(object.material) ? object.material : [object.material];
-  for (const material of materials) {
-    material?.map?.dispose?.();
-    material?.alphaMap?.dispose?.();
-    material?.dispose?.();
-  }
-  object.parent?.remove(object);
 }
 
 // Read-only debug/test seam (like __cadModelPlacement): how long each scene
@@ -1404,13 +536,7 @@ function nativeGlbBounds(THREE, root) {
 function buildNativeGlbCadScene(THREE, document, source, receiveShadows, { renderMode = false, theme = null } = {}) {
   // The same surface finish the normalized mesh wears in Inspect, so entering Animate
   // does not re-shade the model (`applyGlbDocumentFinish`).
-  applyGlbDocumentFinish(document, {
-    renderMode,
-    finish: {
-      roughness: Number(theme?.surfaceRoughness ?? 0.92), metalness: Number(theme?.surfaceMetalness ?? 0.03),
-      clearcoat: Number(theme?.surfaceClearcoat ?? 0)
-    }
-  });
+  applyGlbDocumentFinish(document, { renderMode, finish: resolveSurfaceFinish(theme) });
   const modelGroup = new THREE.Group();
   modelGroup.matrix.fromArray(document.cadRootMatrix);
   modelGroup.matrixAutoUpdate = false;
@@ -1449,6 +575,13 @@ function buildNativeGlbCadScene(THREE, document, source, receiveShadows, { rende
     },
     update() {},
     syncSurfaceInstances() {},
+    // The kit's scene contract (`kit/scene.js`).
+    get object3D() {
+      return modelGroup;
+    },
+    setSurfaceFinish(finish) {
+      applySurfaceFinish(document.scene, finish);
+    },
     dispose() {
       // The document owns its native resources across renderer/theme rebuilds.
       // Detach it before the generic scene cleanup recursively disposes children.
@@ -1480,19 +613,6 @@ function getHighlightEdgeOpacity(edgeSettings = null) {
 
 function getHighlightEdgeColor(edgeSettings = null) {
   return String(edgeSettings?.highlightColor || REFERENCE_SELECTED_COLOR).trim() || REFERENCE_SELECTED_COLOR;
-}
-
-function isPointerInsideElement(event, element) {
-  if (!event || !element || !Number.isFinite(Number(event.clientX)) || !Number.isFinite(Number(event.clientY))) {
-    return false;
-  }
-  const rect = element.getBoundingClientRect();
-  return (
-    event.clientX >= rect.left &&
-    event.clientX <= rect.right &&
-    event.clientY >= rect.top &&
-    event.clientY <= rect.bottom
-  );
 }
 
 function disposeOverlayChild(runtime, child) {
@@ -1533,28 +653,18 @@ function clearOverlayGroup(runtime, group) {
   }
 }
 
-function updateGridHelper(
-  runtime,
-  viewerTheme,
-  radius,
-  floorZ = 0,
-  sceneScaleMode = VIEWER_SCENE_SCALE.CAD,
-  floorMode = THEME_FLOOR_MODES.STAGE,
-  floorSettings = {}
-) {
-  // Inspection guides live on the authored world plane. The physical Render
-  // floor may follow the model, but that placement belongs to stage effects.
-  updateStageOriginAxis(runtime, viewerTheme, radius, 0, {
-    disposeSceneObject,
-    floorSettings
-  });
-  const result = updateStageGridHelper(runtime, viewerTheme, radius, 0, sceneScaleMode, floorMode, {
-    disposeSceneObject,
-    floorSettings
-  });
-  runtime.gridFloorZ = floorZ;
-  runtime.floorMode = floorMode;
-  return result;
+// What the viewport releases at teardown is this renderer's: its section caps and
+// its scene (naming the released source), then the studio. The studio lives in
+// Render's lazy chunk. A runtime can only be holding studio resources if that chunk
+// loaded, so teardown asks the boundary rather than importing it. Inspect's small
+// reflection fill owns its own disposable texture.
+function disposeRuntimeCadScene(runtime) {
+  disposeSectionCaps(runtime);
+  return disposeViewerCadScene(runtime, { clearSceneGroup });
+}
+
+function disposeRuntimeStudio(runtime) {
+  studioScene()?.disposePhotographicStudio(runtime);
 }
 
 const CadViewer = forwardRef(function CadViewer({
@@ -2141,148 +1251,45 @@ const CadViewer = forwardRef(function CadViewer({
       suppressPerspectiveEventsRef.current = Math.max(0, suppressPerspectiveEventsRef.current - 1);
     }
   };
-  const syncCameraZoomPercent = useCallback((runtime = runtimeRef.current) => {
-    if (!runtime?.camera) {
-      setCameraZoomPercent((current) => (current === 100 ? current : 100));
-      return;
-    }
-    const nextZoomPercent = Math.round(readRuntimeZoomPercent(runtime));
-    setCameraZoomPercent((current) => (
-      Math.abs(current - nextZoomPercent) < 0.5 ? current : nextZoomPercent
-    ));
-  }, []);
-  // The zoom pill lives in the workspace's top-right toolbar row now, so the live percent
-  // has to travel up — the viewer keeps the camera math, the toolbar keeps the control.
-  const onCameraZoomPercentChangeRef = useRef(onCameraZoomPercentChange);
-  onCameraZoomPercentChangeRef.current = onCameraZoomPercentChange;
-  useEffect(() => {
-    onCameraZoomPercentChangeRef.current?.(cameraZoomPercent);
-  }, [cameraZoomPercent]);
-  const emitPerspectiveChange = (runtime = runtimeRef.current) => {
-    const currentModelKey = modelKeyRef.current;
-    if (!runtimeModelKeyMatches(runtime, currentModelKey)) {
-      return;
-    }
-    const nextPerspective = readScopedPerspectiveSnapshot(runtime, {
-      modelKey: currentModelKey,
-      sceneScaleMode: sceneScaleModeRef.current
-    });
-    if (!nextPerspective) {
-      return;
-    }
-    syncCameraZoomPercent(runtime);
-    if (previewModeRef.current || fullscreenCameraRef.current) {
-      // LOD still follows the presentation camera, but session persistence does not.
-      lodCameraChangeRef.current?.();
-      return;
-    }
-    if (suppressPerspectiveEventsRef.current > 0) {
-      lastEmittedPerspectiveRef.current = nextPerspective;
-      return;
-    }
-    if (perspectiveSnapshotEqual(lastEmittedPerspectiveRef.current, nextPerspective)) {
-      return;
-    }
-    lastEmittedPerspectiveRef.current = nextPerspective;
-    perspectiveChangeRef.current?.(nextPerspective);
-  };
-  const syncDefaultPerspectiveState = (runtime = runtimeRef.current) => {
-    if (defaultPerspectiveResettingRef.current) {
-      if (runtime?.cameraTransition) {
-        setDefaultPerspectiveDetached(false);
-        return;
-      }
-      defaultPerspectiveResettingRef.current = false;
-    }
-    const nextDetached = runtime?.THREE
-      ? !cameraMatchesViewPreset(runtime, VIEW_PLANE_DEFAULT_PRESET)
-      : false;
-    setDefaultPerspectiveDetached((current) => (
-      current === nextDetached ? current : nextDetached
-    ));
-  };
-  const syncViewPlaneOrientation = (runtime = runtimeRef.current) => {
-    const nextOrientation = readViewPlaneOrientation(runtime);
-    if (!nextOrientation) {
-      return;
-    }
-    setViewPlaneOrientation((current) => (
-      viewPlaneOrientationEqual(current, nextOrientation) ? current : nextOrientation
-    ));
-    syncDefaultPerspectiveState(runtime);
-  };
-  const applyInitialPerspective = useCallback((runtime = runtimeRef.current) => {
-    if (previewModeRef.current) return false;
-    const nextPerspective = resolvePerspectiveSnapshot(
-      perspectiveRef ? perspectiveRef.current : undefined,
-      perspectivePropRef.current
-    );
-    if (!perspectiveSnapshotMatchesScene(nextPerspective, {
-      modelKey: modelKeyRef.current,
-      sceneScaleMode: sceneScaleModeRef.current,
-      coordinateSystem: coordinateSystemForSceneScale(sceneScaleModeRef.current),
-      requireModelKey: true,
-      requireSceneScaleMode: true,
-      requireCoordinateSystem: true
-    })) {
-      return false;
-    }
-    return runWithoutPerspectiveEvents(() => applyPerspectiveSnapshot(runtime, nextPerspective, { scheduleIdle: false }));
-  }, [perspectiveRef]);
-  const syncFullscreenCamera = (runtime = runtimeRef.current) => {
-    if (!runtimeModelKeyMatches(runtime, modelKeyRef.current) || !runtimeFramingBounds(runtime)) return;
-    let saved = fullscreenCameraRef.current;
-    if (saved && saved.modelKey !== modelKeyRef.current) {
-      fullscreenCameraRef.current = null;
-      saved = null;
-    }
-    const entering = previewModeRef.current;
-    if (entering ? saved?.runtime === runtime : !saved) return;
-    const controls = runtime.controls;
-    // Drain pending OrbitControls damping before either snapshot is installed;
-    // otherwise the next frame applies the outgoing camera's remaining drag.
-    runWithoutPerspectiveEvents(() => {
-      cancelCameraTransition(runtime, { scheduleIdle: false });
-      clearKeyboardOrbitState(runtime.keyboardOrbitState);
-      controls.autoRotate = false;
-      controls.enableDamping = false;
-      if (entering && !saved) {
-        saved = { modelKey: modelKeyRef.current, runtime,
-          camera: readPerspectiveSnapshot(runtime),
-          interactiveFraming: runtime.interactiveFraming,
-          viewportFitScale: runtime.viewportFitScale,
-          userMovedCamera: runtime.userMovedCamera };
-        fullscreenCameraRef.current = saved;
-      }
-      controls.update();
-      if (entering) {
-        saved.runtime = runtime;
-        runtime.userMovedCamera = false;
-        zoomRuntimeToBounds(runtime, runtimeFramingBounds(runtime), sceneScaleModeRef.current, {
-          animate: false, modelOffset: modelTransformRef.current.offset,
-          viewDirection: DEFAULT_VIEW_DIRECTION, viewUp: WORLD_UP,
-        });
-      } else {
-        applyPerspectiveSnapshot(runtime, saved.camera, { scheduleIdle: false });
-        runtime.interactiveFraming = saved.interactiveFraming;
-        runtime.viewportFitScale = saved.viewportFitScale;
-        runtime.userMovedCamera = saved.userMovedCamera;
-        syncRuntimeViewportFraming(runtime);
-        fullscreenCameraRef.current = null;
-      }
-      controls.enableDamping = true;
-      controls.autoRotate = entering && previewOrbitSpeed > 0;
-      captureRuntimeViewportFitScale(runtime);
-      syncCameraZoomPercent(runtime);
-      syncViewPlaneOrientation(runtime);
-      runtime.requestRender?.();
-    });
-  };
-  useLayoutEffect(() => {
-    previewModeRef.current = previewMode;
-    syncFullscreenCamera();
-    // Entry/exit must precede ResizeObserver and the next presented frame.
-  }, [previewMode, modelKey, viewerReadyTick]);
+  const {
+    activateDefaultViewPlane,
+    activateViewPlaneFace,
+    applyInitialPerspective,
+    applyZoomPercent,
+    emitPerspectiveChange,
+    resetZoomAndPan,
+    syncCameraZoomPercent,
+    syncFullscreenCamera,
+    syncViewPlaneOrientation
+  } = useViewportCamera({
+    coordinateSystemFor,
+    activeViewPlaneFaceRef,
+    cameraZoomPercent,
+    defaultPerspectiveResettingRef,
+    fullscreenCameraRef,
+    lastEmittedPerspectiveRef,
+    cameraMovedRef: lodCameraChangeRef,
+    modelBounds: meshData?.bounds,
+    modelKey,
+    modelKeyRef,
+    modelTransformRef,
+    onCameraZoomPercentChange,
+    perspectiveChangeRef,
+    perspectivePropRef,
+    perspectiveRef,
+    previewMode,
+    previewModeRef,
+    previewOrbitSpeed,
+    runWithoutPerspectiveEvents,
+    runtimeRef,
+    sceneScaleModeRef,
+    setActiveViewPlaneFace,
+    setCameraZoomPercent,
+    setDefaultPerspectiveDetached,
+    setViewPlaneOrientation,
+    suppressPerspectiveEventsRef,
+    viewerReadyTick
+  });
   const handleViewportResize = useCallback(() => {
     const runtime = runtimeRef.current;
     resampleLodAfterViewportResize(runtime, {
@@ -2290,201 +1297,17 @@ const CadViewer = forwardRef(function CadViewer({
       emitPerspective: emitPerspectiveChange, resample: () => lodCameraChangeRef.current?.()
     });
   }, [syncCameraZoomPercent]);
-  const applyZoomPercent = useCallback((nextZoomPercent) => {
-    const runtime = runtimeRef.current;
-    if (!setRuntimeZoomPercent(runtime, nextZoomPercent)) {
-      return;
-    }
-    syncCameraZoomPercent(runtime);
-    emitPerspectiveChange(runtime);
-    syncViewPlaneOrientation(runtime);
-  }, [
-    syncCameraZoomPercent,
-    syncViewPlaneOrientation
-  ]);
-  const resetZoomAndPan = useCallback(({ animate = true } = {}) => {
-    const runtime = runtimeRef.current;
-    const reset = zoomRuntimeToBounds(
-      runtime,
-      runtimeFramingBounds(runtime, meshData?.bounds),
-      sceneScaleModeRef.current,
-      {
-        animate,
-        modelOffset: modelTransformRef.current.offset,
-        resetZoomBaseline: true
-      }
-    );
-    if (reset && !animate) {
-      syncCameraZoomPercent(runtime);
-      emitPerspectiveChange(runtime);
-      syncViewPlaneOrientation(runtime);
-    }
-    if (reset) {
-      return true;
-    }
-    // Fallback for when the refit bails — no usable bounds yet, so there is
-    // nothing to frame. It still has to undo the pan: resetting only the zoom
-    // leaves the controls aimed wherever the user dragged to, and the caller's
-    // orientation tween carries that target through, so the view snaps back in
-    // zoom and angle while staying panned off-centre.
-    recenterRuntimeTarget(runtime);
-    if (!setRuntimeZoomPercent(runtime, 100)) {
-      return false;
-    }
-    syncCameraZoomPercent(runtime);
-    emitPerspectiveChange(runtime);
-    syncViewPlaneOrientation(runtime);
-    return true;
-  }, [
-    meshData?.bounds,
-    syncCameraZoomPercent,
-    syncViewPlaneOrientation
-  ]);
-  // Stable, and built only from refs and setters: the view cube is memoized, so a viewer
-  // render that changed nothing of the cube's (every animation frame) does not redraw it.
-  const activateViewPlaneFace = useCallback((faceId) => {
-    const runtime = runtimeRef.current;
-    const face = VIEW_PLANE_FACE_BY_ID[faceId];
-    if (!runtime || !face) {
-      return false;
-    }
-    activeViewPlaneFaceRef.current = face.id;
-    setActiveViewPlaneFace(face.id);
-    const transitioned = transitionCameraToViewPreset(runtime, face);
-    if (transitioned) {
-      defaultPerspectiveResettingRef.current = false;
-      setDefaultPerspectiveDetached(true);
-    }
-    return transitioned;
-  }, []);
-  const activateDefaultViewPlane = useCallback(() => {
-    const runtime = runtimeRef.current;
-    if (!runtime) {
-      return false;
-    }
-    activeViewPlaneFaceRef.current = "";
-    setActiveViewPlaneFace("");
-    const transitioned = transitionCameraToViewPreset(runtime, VIEW_PLANE_DEFAULT_PRESET);
-    if (transitioned) {
-      defaultPerspectiveResettingRef.current = true;
-      setDefaultPerspectiveDetached(false);
-    }
-    return transitioned;
-  }, []);
-
+  
   // DRAW MODE: the view direction is locked and the drawing editor owns pan and
   // zoom; the camera follows it so ink and model stay one picture. Orbit input
   // never reaches the controls (the editor covers the viewport), and everything
   // else that could turn or reframe the camera is switched off for the duration.
   const drawingOverlayActive = drawingEnabled && !previewMode && hasViewportContent;
-  const drawingControllerRef = useRef(null);
-  const drawingViewRef = useRef(null);
-  const drawingViewportRef = useRef({ scrollX: 0, scrollY: 0, zoom: 1 });
-  const drawingHasInkRef = useRef(false);
-  const followDrawingViewport = useCallback((viewport, { lock = false } = {}) => {
-    const view = drawingViewRef.current, runtime = runtimeRef.current, host = mountRef.current;
-    if (!view || !runtime?.camera || !runtime?.controls || !host) return;
-    const frame = { camera: runtime.camera, controls: runtime.controls, width: host.clientWidth, height: host.clientHeight };
-    // The lock is taken when there is first something to keep aligned — ink, or a
-    // pan — against the viewport the camera is still showing. Until then the
-    // camera is nobody's but the viewer's: a resize or a restored view stands.
-    if (viewport || lock) view.lock ??= captureDrawingViewLock(THREE, frame, view.viewport);
-    if (viewport) view.viewport = drawingViewportRef.current = viewport;
-    if (!view.lock) return;
-    if (!applyDrawingViewLock(THREE, view.lock, frame, view.viewport)) return;
-    runtime.userMovedCamera = true;
-    runtime.controls.dispatchEvent?.({ type: "change" });
-    runtime.requestRender?.();
-  }, []);
-  useEffect(() => {
-    const runtime = runtimeRef.current, controls = runtime?.controls, host = mountRef.current;
-    if (!drawingOverlayActive || !controls || !host) return undefined;
-    cancelCameraTransition(runtime);
-    clearKeyboardOrbitState(runtime.keyboardOrbitState);
-    const previous = { enabled: controls.enabled, enableDamping: controls.enableDamping };
-    controls.enabled = false;
-    // Residual orbit inertia would keep turning the model under the first stroke.
-    controls.enableDamping = false;
-    controls.update?.();
-    // A runtime replaced mid-sketch re-locks against the viewport the editor is still showing.
-    drawingViewRef.current = { lock: null, viewport: drawingViewportRef.current };
-    if (drawingHasInkRef.current) followDrawingViewport(null, { lock: true });
-    // The runtime refits its projection to a resized viewport first; then the ink's mapping is restored.
-    let frame = 0;
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => {
-      clearTimeout(frame);
-      frame = setTimeout(() => followDrawingViewport(), 0);
-    });
-    observer?.observe(host);
-    return () => {
-      observer?.disconnect();
-      clearTimeout(frame);
-      drawingViewRef.current = null;
-      const active = runtimeRef.current?.controls;
-      if (active) { active.enabled = previous.enabled; active.enableDamping = previous.enableDamping; active.update?.(); }
-      runtimeRef.current?.requestRender?.();
-    };
-  }, [drawingOverlayActive, followDrawingViewport, viewerReadyTick]);
-  // A new sketch starts from the editor's own origin; only a runtime swap inherits a viewport.
-  useEffect(() => { if (!drawingOverlayActive) { drawingViewportRef.current = { scrollX: 0, scrollY: 0, zoom: 1 }; drawingHasInkRef.current = false; } }, [drawingOverlayActive]);
-  const handleDrawingContent = useCallback((hasContent) => {
-    const hadInk = drawingHasInkRef.current;
-    drawingHasInkRef.current = hasContent;
-    if (hasContent && !hadInk) followDrawingViewport(null, { lock: true });
-    drawing?.onContentChange(hasContent);
-  }, [drawing?.onContentChange, followDrawingViewport]);
-  const handleDrawingReady = useCallback((controller) => {
-    drawingControllerRef.current = controller;
-    drawing?.onReady(controller);
-  }, [drawing?.onReady]);
+  const { drawingControllerRef, handleDrawingContent, handleDrawingReady, followDrawingViewport } = useDrawingViewLock({
+    active: drawingOverlayActive, drawing, runtimeRef, mountRef, viewerReadyTick
+  });
 
-  // PLAN MODE: a generic top-down camera lock, reusable by any model, not a DXF feature.
-  //
-  // Rotation is what makes a view 3D. Disabling it (and moving the left button onto pan) is
-  // the whole mode: the camera keeps looking straight down, dragging slides the model, and
-  // wheel-zoom still works. Everything else that reads as three-dimensional -- the view cube,
-  // the vertical origin axis -- is hidden by the caller through `planMode`, so the viewport
-  // stops advertising an axis you cannot turn towards.
-  useEffect(() => {
-    const runtime = runtimeRef.current;
-    const controls = runtime?.controls;
-    if (!controls) {
-      return undefined;
-    }
-    const previousRotate = controls.enableRotate;
-    const previousButtons = controls.mouseButtons ? { ...controls.mouseButtons } : null;
-    if (planMode) {
-      controls.enableRotate = false;
-      if (controls.mouseButtons) {
-        // Left-drag pans instead of orbiting; a locked view whose primary drag does nothing
-        // reads as broken rather than as locked.
-        controls.mouseButtons = { ...controls.mouseButtons, LEFT: THREE.MOUSE.PAN };
-      }
-    }
-    const axis = runtime.originAxis;
-    const previousAxisVisible = axis ? axis.visible : null;
-    if (axis && planMode) {
-      axis.visible = false;
-    }
-    controls.update?.();
-    runtime.requestRender?.();
-    return () => {
-      const activeControls = runtimeRef.current?.controls;
-      if (!activeControls) {
-        return;
-      }
-      activeControls.enableRotate = previousRotate;
-      if (previousButtons) {
-        activeControls.mouseButtons = previousButtons;
-      }
-      const activeAxis = runtimeRef.current?.originAxis;
-      if (activeAxis && previousAxisVisible !== null) {
-        activeAxis.visible = previousAxisVisible;
-      }
-      activeControls.update?.();
-      runtimeRef.current?.requestRender?.();
-    };
-  }, [planMode, viewerReadyTick]);
+  usePlanMode({ planMode, runtimeRef, viewerReadyTick });
 
   // DRAWING TRANSFORM: thickness and fold, one vertex rewrite, math from
   // @hardcore/core/lib/dxf/foldPreview (node-tested; the snapshot runtime shares it by construction).
@@ -3184,7 +2007,8 @@ const CadViewer = forwardRef(function CadViewer({
     getPerspective() {
       return readScopedPerspectiveSnapshot(runtimeRef.current, {
         modelKey,
-        sceneScaleMode: normalizedSceneScaleMode
+        sceneScaleMode: normalizedSceneScaleMode,
+        coordinateSystem: coordinateSystemFor(normalizedSceneScaleMode)
       });
     },
     setPerspective(perspective, options = {}) {
@@ -3366,6 +2190,8 @@ const CadViewer = forwardRef(function CadViewer({
     applyInitialPerspective,
     updateGridHelper: updateActiveGridHelper,
     clearSceneGroup,
+    disposeScene: disposeRuntimeCadScene,
+    disposeStudio: disposeRuntimeStudio,
     onSceneDisposed: (source, { handoff = false } = {}) => meshSourceAdoptionRef.current?.(source, false,
       { disposed: true, terminal: !handoff, handoff }),
     disposeSceneObject,

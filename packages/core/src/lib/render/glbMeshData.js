@@ -3,6 +3,7 @@
 // bundle that reaches this module -- which includes the GLB and surf WORKERS,
 // where nothing else needs three at all. Three classes are all this file uses.
 import { AnimationMixer, LoadingManager, Box3, Group, LoopOnce, Matrix3, Matrix4, Vector3 } from "three";
+import { applySurfaceFinish } from "../viewer/surfaceFinish.js";
 
 const GLB_CAD_UNIT_SCALE = 1000;
 const GENERATED_STEP_DEFAULT_BASE_COLOR = Object.freeze([0.72, 0.72, 0.72, 1]);
@@ -689,8 +690,6 @@ export function shouldUseNativeGlbScene(document, { renderMode = false, clip = n
   return Boolean(document?.scene && (renderMode || clip));
 }
 
-const AUTHORED_FINISH_KEYS = ["roughness", "metalness", "clearcoat", "clearcoatRoughness", "envMapIntensity"];
-
 /**
  * Dress a native GLB scene for the mode it is shown in.
  *
@@ -704,20 +703,7 @@ const AUTHORED_FINISH_KEYS = ["roughness", "metalness", "clearcoat", "clearcoatR
  * kept on the material and this is safe to call on every scene build.
  */
 export function applyGlbDocumentFinish(document, { renderMode = false, finish = null } = {}) {
-  const materials = new Set();
-  document?.scene?.traverse?.((object) => {
-    for (const material of Array.isArray(object?.material) ? object.material : [object?.material]) {
-      if (material?.isMeshStandardMaterial) materials.add(material);
-    }
-  });
-  for (const material of materials) {
-    const authored = material.userData.authoredFinish ||= Object.fromEntries(
-      AUTHORED_FINISH_KEYS.filter((key) => key in material).map((key) => [key, material[key]])
-    );
-    const values = renderMode || !finish ? authored : { ...authored, ...finish };
-    for (const key of Object.keys(authored)) material[key] = values[key];
-    material.needsUpdate = true;
-  }
+  applySurfaceFinish(document?.scene, renderMode ? null : finish);
 }
 
 // Scene hosts detach native GLBs when changing presentation. Detachment is not

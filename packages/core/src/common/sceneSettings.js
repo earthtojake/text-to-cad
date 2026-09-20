@@ -489,10 +489,10 @@ export function resolveSceneSettings({
 /** Public grouped preset policy; historical display modes are draw details. */
 export function resolveViewSceneSettings({
   display = {}, appearance = "light", prefersDark = false, camera = null, quality = null,
-  lightingQuality = "final", cadModel = true
+  lightingQuality = "final", features = undefined
 } = {}) {
   const view = resolveViewSettings(display ?? {}, {
-    appearance: normalizeSceneAppearance(appearance, { prefersDark }), lightingQuality, cadModel
+    appearance: normalizeSceneAppearance(appearance, { prefersDark }), lightingQuality, features
   });
   const surface = view.surfaces;
   const mode = surface.style === "off" ? CAD_DISPLAY_MODE.WIREFRAME

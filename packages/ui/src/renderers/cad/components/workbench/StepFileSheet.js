@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { STEP_MODEL_ROOT_ID } from '@hardcore/core/lib/step/stepTree.js';
-import FileSheet from './FileSheet.js';
-import FileSheetTabbedSurface from './FileSheetTabbedSurface.js';
+import FileSheet from '../../../kit/inspector/FileSheet.js';
+import FileSheetTabbedSurface from '../../../kit/inspector/FileSheetTabbedSurface.js';
 import { buildFileStatusTab } from './FileStatusSection.js';
 import { buildMotionControlsTab } from './MotionControlsSection.js';
 import { StepReferenceSection } from './StepReferenceSection.js';

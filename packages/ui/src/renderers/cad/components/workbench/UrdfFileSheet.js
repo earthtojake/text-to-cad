@@ -23,8 +23,8 @@ import FileSheet, {
   FileSheetStaticSection,
   FileSheetValueField,
   parseFileSheetNumberInput
-} from "./FileSheet.js";
-import FileSheetTabbedSurface from "./FileSheetTabbedSurface.js";
+} from "../../../kit/inspector/FileSheet.js";
+import FileSheetTabbedSurface from "../../../kit/inspector/FileSheetTabbedSurface.js";
 import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections.js";
 import RobotComponentsSection from "./RobotComponentsSection.js";
 import {

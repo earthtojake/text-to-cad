@@ -110,7 +110,8 @@ function unboundReferences(filePath) {
 }
 
 test("every identifier the CAD renderer reads is bound", () => {
-  const files = clientSourceFiles(CLIENT_ROOT);
+  // The format-blind kit the renderer composes is part of the same client tree.
+  const files = [...clientSourceFiles(CLIENT_ROOT), ...clientSourceFiles(path.join(CLIENT_ROOT, "../kit"))];
   assert.ok(files.length > 50, `expected the client tree at ${CLIENT_ROOT}, found ${files.length} files`);
 
   const offenders = files.flatMap((file) => unboundReferences(file));

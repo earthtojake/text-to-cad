@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { isEditableTarget } from "../../../ui/dom.js";
+import { isEditableTarget } from "../../../../kit/viewport/dom.js";
 import { TAB_TOOL_MODE } from "../../../workbench/constants.js";
 
 export function useCadWorkspaceShortcuts({

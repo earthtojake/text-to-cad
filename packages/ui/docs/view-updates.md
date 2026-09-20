@@ -5,8 +5,8 @@ store is the only settings authority. A mode is a preset batch; the renderer
 never branches on its name. Rendering completion cannot rewrite controls,
 persistence, feature gates, or the Custom label.
 
-`render/viewUpdateCoordinator.js` owns one active operation and one replaceable
-requested scene recipe. `workbench/useAppliedViewSettings.js` binds it to React.
+`kit/view-settings/viewUpdateCoordinator.js` owns one active operation and one replaceable
+requested scene recipe. `kit/view-settings/useAppliedViewSettings.js` binds it to React.
 Rapid edits replace pending work; they do not accumulate in a queue. Preparation
 is cancellable. Once scene reconciliation starts it finishes serially, but a
 superseded result is not presented. File changes/unmount cancel work and reject
@@ -14,7 +14,7 @@ outstanding captures. Errors leave controls editable and expose Retry.
 
 ## Cost policy
 
-`render/viewUpdatePlan.js` is the single classification point. Compare resource
+`kit/view-settings/viewUpdatePlan.js` is the single classification point. Compare resource
 boundaries, never preset names:
 
 | Preparation | Live update |
@@ -38,7 +38,7 @@ outside mode presets.
 
 ## Renderer and resources
 
-`render/studioEnvironmentCache.js` keeps at most three reflection maps per
+`kit/look/studioEnvironmentCache.js` keeps at most three reflection maps per
 viewport. `studioEnvironment.worker.js` generates PMREM in worker WebGL and
 transfers half-float pixels; model geometry stays on the main renderer. Rotation
 and exposure reuse the map. Superseded work terminates the worker; completed
@@ -47,7 +47,7 @@ retain extra WebGL contexts. Disposal releases textures and any pending worker. 
 without OffscreenCanvas/Worker use a synchronous compatibility path after the
 controls paint; the full responsiveness benefit requires worker WebGL.
 
-`render/viewUpdateGate.js` preserves the previous canvas framebuffer while the
+`kit/view-settings/viewUpdateGate.js` preserves the previous canvas framebuffer while the
 scene is reconciled and Three's `compileAsync` prepares its programs. The
 renderer/context and cached geometry stay mounted. `viewportBuffer.js` queues
 canvas resolution changes and flushes them inside the next actual draw callback.
@@ -65,7 +65,7 @@ outside FileViewer retain their own scene setup lifecycle.
 
 ## Status placement
 
-`components/viewer/ViewUpdateStatus.jsx` only takes `status`, `onRetry`, and
+`kit/status/ViewUpdateStatus.jsx` only takes `status`, `onRetry`, and
 `className`. It has no scene/store knowledge. The FileViewer currently places it
 at the viewport's bottom left. Move that invocation or reuse the component
 without changing scheduling. It appears after 150ms with “Updating view…” (or

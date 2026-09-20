@@ -4,9 +4,9 @@ import test from 'node:test';
 import { parse } from '@babel/parser';
 import traverseModule from '@babel/traverse';
 import { clonePerspectiveSnapshot } from '@hardcore/core/lib/perspective.js';
-import { cameraForViewSettings, viewerDisplaySettingsForCamera } from '../workbench/viewerDisplaySettings.js';
+import { cameraForViewSettings, viewerDisplaySettingsForCamera } from '../../kit/view-settings/viewerDisplaySettings.js';
 import { createRenderSessionState } from '../workbench/renderSessionState.js';
-import { createViewSettingsStore } from '../workbench/viewSettingsStore.js';
+import { createViewSettingsStore } from '../../kit/view-settings/viewSettingsStore.js';
 
 const traverse = traverseModule.default || traverseModule;
 const source = fs.readFileSync(new URL('./CadFileView.js', import.meta.url), 'utf8');

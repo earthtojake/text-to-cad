@@ -67,6 +67,7 @@ import {
   resolveDisplayMaterialSettings,
   resolveViewSceneSettings
 } from "./sceneSettings.js";
+import { ALL_VIEW_FEATURES, EDGELESS_VIEW_FEATURES } from "./viewSettings.js";
 import {
   createEnvironmentResource,
   disposeEnvironmentResource
@@ -802,7 +803,7 @@ export function renderJobContext(meshData, job = {}) {
     camera: job.camera || null,
     display: job.display ?? {},
     // The viewer's rule: only a CAD model has edges to draw, parts to explode or solids to section.
-    cadModel: stepDisplayEnabled
+    features: stepDisplayEnabled ? ALL_VIEW_FEATURES : EDGELESS_VIEW_FEATURES
   });
   // Neutral CAD lights remain available when only the background/floor is on.
   const theme = sceneSettings.theme;

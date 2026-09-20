@@ -2559,6 +2559,10 @@ export function buildModel(THREE, source, settings = {}) {
     root,
     modelGroup,
     edgesGroup,
+    // The object a viewport adopts: the scene contract's name for `modelGroup`.
+    get object3D() {
+      return modelGroup;
+    },
     syncSurfaceInstances,
     get displayRecords() {
       return runtime.displayRecords;

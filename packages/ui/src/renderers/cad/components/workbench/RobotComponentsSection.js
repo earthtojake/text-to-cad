@@ -4,9 +4,9 @@ import { Button } from "@hardcore/ui/primitives/button";
 import { TreeRowSurface, TreeRowChevron, TreeRowLabel } from "@hardcore/ui/primitives/tree-row";
 import { TreeFilterHighlight, TreeFilterInput } from "@hardcore/ui/primitives/tree-filter";
 import { cn } from "@hardcore/ui/utils";
-import InspectorSplit from "./InspectorSplit.jsx";
+import InspectorSplit from "../../../kit/inspector/InspectorSplit.jsx";
 import RobotComponentDetails, { RobotLinkDetails } from "./RobotComponentDetails.js";
-import { buildModelTreeSearchIndex, searchModelTree } from "../../workbench/modelTreeSearch.js";
+import { buildModelTreeSearchIndex, searchModelTree } from "../../../kit/inspector/modelTreeSearch.js";
 import { buildRobotTree, robotComponentNodeId, robotLinkFacts, robotLinkNodeId, robotTreeAncestorIds } from "../../workbench/robotTree.js";
 
 // The robot's kinematic tree, drawn with the Model tree's rows, filter and Reference

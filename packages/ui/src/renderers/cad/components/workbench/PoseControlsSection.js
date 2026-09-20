@@ -25,7 +25,7 @@ import {
   FileSheetCheckboxRow,
   FileSheetValueInput,
   parseFileSheetNumberInput
-} from "./FileSheet.js";
+} from "../../../kit/inspector/FileSheet.js";
 
 // The host coordinates pose ownership with Animation; these rows stay editable.
 

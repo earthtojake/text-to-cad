@@ -3,7 +3,7 @@ import test from 'node:test';
 import { buildMotionControlsTab, MotionResetButton } from './MotionControlsSection.js';
 import PoseControlsSection from './PoseControlsSection.js';
 import { KinematicsPoseRow, NO_PRESET_VALUE } from './KinematicsControls.js';
-import { FileSheetStaticSection, FileSheetSliderField } from './FileSheet.js';
+import { FileSheetStaticSection, FileSheetSliderField } from '../../../kit/inspector/FileSheet.js';
 import { elements } from '../../../../../scripts/reactHarness.mjs';
 
 const definition = { parameters: [{ id: 'hinge', label: 'Hinge', type: 'number' }],

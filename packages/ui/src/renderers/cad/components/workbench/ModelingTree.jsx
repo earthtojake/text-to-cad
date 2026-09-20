@@ -7,10 +7,10 @@ import { cn } from '@hardcore/ui/utils';
 import ModelPartMenu from './ModelPartMenu.jsx';
 import ModelPartActions from './ModelPartActions.jsx';
 import { modelingSelectionPaths } from '../../workbench/modelingSelection.js';
-import InspectorSplit from './InspectorSplit.jsx';
+import InspectorSplit from '../../../kit/inspector/InspectorSplit.jsx';
 import { modelingReferenceIds } from '../../workbench/modelingTree.js';
 import { implicitModelingRoots, presentModelingAssembly } from '../../workbench/modelingPresentation.js';
-import { buildModelTreeSearchIndex, modelTreeSearchChain, searchModelTree } from '../../workbench/modelTreeSearch.js';
+import { buildModelTreeSearchIndex, modelTreeSearchChain, searchModelTree } from '../../../kit/inspector/modelTreeSearch.js';
 
 const EMPTY = [];
 const NO_MATCHES = {matches:EMPTY,total:0};

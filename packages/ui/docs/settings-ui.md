@@ -2,8 +2,8 @@
 
 This is the binding contract for settings in shared file-viewer tabs, including
 Display and Kinematics. Use the primitives in
-[`FileSheet.js`](../src/renderers/cad/components/workbench/FileSheet.js), and the
-fixed strip in [`FileSheetTabbedSurface.js`](../src/renderers/cad/components/workbench/FileSheetTabbedSurface.js).
+[`FileSheet.js`](../src/renderers/kit/inspector/FileSheet.js), and the
+fixed strip in [`FileSheetTabbedSurface.js`](../src/renderers/kit/inspector/FileSheetTabbedSurface.js).
 Extend a shared primitive when a new control shape is needed. Do not recreate
 rows or section behavior inside each renderer. Environmental effects belong to
 the host, per [viewer-host.md](viewer-host.md); these controls work in either app.
@@ -121,7 +121,8 @@ Explode, Clip and Edges are for CAD models (STEP). A mesh, a robot or a drawing 
 no parts to separate, no solid to section and no topology to draw edges from: those
 three sections are not rendered for it, they resolve disabled whatever was saved,
 and the presets made of edges (X-ray, Hidden line, Wireframe) are not offered
-(`cadModel` in `resolveViewSettings`). The snapshot CLI applies the same rule.
+(the `features` lists of `resolveViewSettings`: a STEP view passes `ALL_VIEW_FEATURES`,
+every other `EDGELESS_VIEW_FEATURES`). The snapshot CLI applies the same rule.
 
 Solid's basic display groups precede the effects disabled by default in Solid.
 Presets are batches of settings; controls do not branch on the mode name. An

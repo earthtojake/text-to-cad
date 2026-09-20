@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { applyPhotographicStudio, disposePhotographicStudio } from '@hardcore/core/common/photographicStudio.js';
 import { parse } from '@babel/parser';
 import traverseModule from '@babel/traverse';
-import { createFramePresentation } from './framePresentation.js';
+import { createFramePresentation } from '../../../kit/viewport/framePresentation.js';
 
 const traverse = traverseModule.default || traverseModule;
 
