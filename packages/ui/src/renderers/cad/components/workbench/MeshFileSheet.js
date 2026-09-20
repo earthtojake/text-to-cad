@@ -1,14 +1,11 @@
 import FileSheet from "./FileSheet.js";
 import FileSheetTabbedSurface from "./FileSheetTabbedSurface.js";
-import StepMeasurementsSection from "./StepMeasurementsSection.js";
-import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections.js";
 import { buildMotionControlsTab } from "./MotionControlsSection.js";
 
-const EMPTY_MEASUREMENTS = [];
-
-// For kind="mesh", the Measure tab. DXF reuses this sheet with extra
-// settingsTabs and does not pass measurements.
+// The mesh Inspector: View, plus whatever settings tabs the caller adds (DXF reuses
+// this sheet). Measurements are the Measure tool's panel, not an Inspector tab.
 export default function MeshFileSheet({
+  headerActions = null,
   open,
   kind = "mesh",
   title = "Mesh",
@@ -21,36 +18,12 @@ export default function MeshFileSheet({
   suppressDynamicMetadataStatus = false,
   settingsTabs = [],
   animationRuntime = null,
-  measurementAvailable = true,
   openSectionIds = [],
-  onOpenSectionIdsChange,
-  measurements = EMPTY_MEASUREMENTS,
-  activeMeasurementId = "",
-  measureModeActive = false,
-  onMeasurementActivate = null,
-  onMeasurementDelete = null,
-  onMeasurementsClear = null
+  onOpenSectionIdsChange
 }) {
   const motionTab = buildMotionControlsTab({ animationRuntime });
-  const measureTab = kind === "mesh" && measurementAvailable
-    ? {
-      id: FILE_SHEET_SECTION_IDS.STEP_MEASUREMENTS,
-      title: "Measure",
-      content: (
-        <StepMeasurementsSection
-          measurements={measurements}
-          activeId={activeMeasurementId}
-          measureModeActive={measureModeActive}
-          onActivate={onMeasurementActivate}
-          onDelete={onMeasurementDelete}
-          onClear={onMeasurementsClear}
-        />
-      )
-    }
-    : null;
   const sections = [
     ...(motionTab ? [motionTab] : []),
-    ...(measureTab ? [measureTab] : []),
     ...settingsTabs
   ];
 
@@ -64,7 +37,7 @@ export default function MeshFileSheet({
       onStartResize={onStartResize}
       scrollBody={false}
     >
-      <FileSheetTabbedSurface
+      <FileSheetTabbedSurface headerActions={headerActions}
         sections={sections}
         openSectionIds={openSectionIds}
         onOpenSectionIdsChange={onOpenSectionIdsChange}

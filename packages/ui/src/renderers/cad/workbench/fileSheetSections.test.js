@@ -15,11 +15,14 @@ test("STEP shares Model, optional Motion, and View across both viewing modes", (
 test("format-specific tabs remain available in both viewing modes", () => {
   for (const renderMode of [false, true]) {
     assert.deepEqual(renderedFileSheetSectionIds("dxf", { renderMode, hasDxfBendsPanel: true, hasDxfLayersPanel: true }), ["material", "bends", "dxfLayers", "view"]);
-    assert.deepEqual(renderedFileSheetSectionIds("urdf", { renderMode, hasRobotComponents: true }), ["motion", "components", "view"]);
-    assert.deepEqual(renderedFileSheetSectionIds("sdf", { renderMode }), ["sdf", "motion", "view"]);
-    assert.deepEqual(renderedFileSheetSectionIds("srdf", { renderMode, showJoints: false, hasRobotComponents: true }), ["components", "view"]);
-    assert.deepEqual(renderedFileSheetSectionIds("mesh", { renderMode }), ["measurements", "view"]);
-    assert.deepEqual(renderedFileSheetSectionIds("mesh", { renderMode, hasEmbeddedGlbAnimationPanel: true, measurementAvailable: false }), ["motion", "view"]);
+    // Components is the robot's link tree: always there, second after Motion, whatever the meshes name.
+    assert.deepEqual(renderedFileSheetSectionIds("urdf", { renderMode }), ["motion", "components", "view"]);
+    assert.deepEqual(renderedFileSheetSectionIds("srdf", { renderMode }), ["motion", "components", "view"]);
+    assert.deepEqual(renderedFileSheetSectionIds("sdf", { renderMode }), ["sdf", "motion", "components", "view"]);
+    assert.deepEqual(renderedFileSheetSectionIds("srdf", { renderMode, showJoints: false }), ["components", "view"]);
+    // A mesh has only View: measurements are the Measure tool's panel, a GLB clip the Animate tool's bar.
+    assert.deepEqual(renderedFileSheetSectionIds("mesh", { renderMode }), ["view"]);
+    assert.deepEqual(renderedFileSheetSectionIds("mesh", { renderMode, hasEmbeddedGlbAnimationPanel: true }), ["view"]);
   }
 });
 
@@ -28,8 +31,10 @@ test("defaults retain useful format-specific selections", () => {
   assert.deepEqual(defaultOpenFileSheetSectionIds("step", { hasFileStatus: true }), ["status", "tree"]);
   assert.deepEqual(defaultOpenFileSheetSectionIds("sdf"), ["sdf", "motion"]);
   assert.deepEqual(defaultOpenFileSheetSectionIds("srdf"), ["motion"]);
-  assert.deepEqual(defaultOpenFileSheetSectionIds("mesh", { hasEmbeddedGlbAnimationPanel: true }), ["motion"]);
-  assert.deepEqual(defaultOpenFileSheetSectionIds("mesh", { measurementAvailable: false }), []);
+  // Motion stays the tab a robot lands on; Components is never the default.
+  assert.deepEqual(defaultOpenFileSheetSectionIds("urdf"), ["motion"]);
+  assert.deepEqual(defaultOpenFileSheetSectionIds("mesh", { hasEmbeddedGlbAnimationPanel: true }), []);
+  assert.deepEqual(defaultOpenFileSheetSectionIds("mesh"), []);
 });
 
 test("legacy open selections migrate without losing the most recent tab", () => {

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createTabRecord, cadWorkspaceDefaultFileSheetWidthForViewport, CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH, CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH } from './state.js';
+import { cloneTabSnapshot, createTabRecord, cadWorkspaceDefaultFileSheetWidthForViewport, CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH, CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH } from './state.js';
+import { TAB_TOOL_MODE } from './constants.js';
 import { resolveDesktopPanelWidth } from '../file-view/fileViewState.js';
 import { ENTRY_ICON_KIND, entryIconKind } from '../../../file-viewer/navigation/entryIconKind.js';
 import { CAD_WORKSPACE_LAYOUT_MODE, CAD_WORKSPACE_DESKTOP_BREAKPOINT_PX, CAD_WORKSPACE_FILE_VIEWER_DEFAULT_OPEN_BREAKPOINT_PX, CAD_WORKSPACE_FILE_SHEET_COMPACT_BREAKPOINT_PX, CAD_WORKSPACE_MOBILE_BREAKPOINT_PX, getCadWorkspaceLayoutMode, isCadWorkspaceCompactFileSheetViewport, isCadWorkspaceDesktopViewport, isCadWorkspaceMobileViewport, shouldCadWorkspaceDefaultFileViewerOpen, shouldCadWorkspaceDefaultFileSettingsOpen } from './breakpoints.js';
@@ -146,6 +147,19 @@ test("workspace tab records restore old expanded assembly inspection state", () 
 
   assert.equal(record.inspectedAssemblyNodeId, "leaf");
   assert.deepEqual(record.expandedAssemblyPartIds, ["module", "leaf"]);
+});
+
+test("a tab record never holds Draw: the sketch it would restore no longer exists", () => {
+  // Draw is live-only. Its drawing is discarded with the editor, so a restored
+  // tab must come back selecting, not with the camera locked under an empty sketch.
+  assert.equal(TAB_TOOL_MODE.DRAW, "draw");
+  assert.equal(createTabRecord("parts/a.step", { tabToolMode: "draw" }).tabToolMode, TAB_TOOL_MODE.REFERENCES);
+  assert.equal(cloneTabSnapshot({ tabToolMode: TAB_TOOL_MODE.DRAW }).tabToolMode, TAB_TOOL_MODE.REFERENCES);
+  // The modes that carry no discarded state still round-trip.
+  assert.equal(createTabRecord("parts/a.step", { tabToolMode: "measure" }).tabToolMode, TAB_TOOL_MODE.MEASURE);
+  assert.equal(createTabRecord("parts/a.step", { tabToolMode: "pan" }).tabToolMode, TAB_TOOL_MODE.PAN);
+  assert.equal(createTabRecord("parts/a.step", { tabToolMode: "nonsense" }).tabToolMode, TAB_TOOL_MODE.REFERENCES);
+  assert.equal(createTabRecord("parts/a.step", {}).tabToolMode, TAB_TOOL_MODE.REFERENCES);
 });
 
 test("workspace manual panel widths can open below the model viewport reserve", () => {

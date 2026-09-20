@@ -1,3 +1,5 @@
+import { useRef } from "react";
+
 /**
  * The file surface's panel column: the one frame every panel is drawn in.
  *
@@ -24,9 +26,10 @@
  * them, and the `aria-valuemin`/`max` on the handle below are the real
  * numbers rather than a second opinion.
  */
-export const PANEL_MIN_WIDTH = 180;
+// Fits Features / Motion / View and the zoom readout without scrolling.
+export const PANEL_MIN_WIDTH = 256;
 export const PANEL_MAX_WIDTH = 480;
-export const PANEL_DEFAULT_WIDTH = 248;
+export const PANEL_DEFAULT_WIDTH = 320;
 
 /** Whatever a caller has, clamped into the column's range. */
 export function clampPanelWidth(width) {
@@ -43,9 +46,19 @@ export function clampPanelWidth(width) {
  * @param {string} props.label Names the column for the accessibility tree: the toggle's own label.
  * @param {number} props.width
  * @param {(width: number) => void} props.onWidthChange
+ * @param {() => void} [props.onCollapse]
  * @param {import("react").ReactNode} props.children
  */
-export function FilePanelColumn({ id, label, width, onWidthChange, children }) {
+export function FilePanelColumn({ id, label, width, onWidthChange, onCollapse, children }) {
+  const drag = useRef(null);
+  const resize = (nextWidth) => {
+    if (nextWidth < PANEL_MIN_WIDTH && onCollapse) {
+      drag.current = null;
+      onCollapse();
+    } else {
+      onWidthChange(clampPanelWidth(nextWidth));
+    }
+  };
   /**
    * The handle drags the column's left border, so the width is measured from
    * the surface's RIGHT edge — the column is anchored there and the content
@@ -53,22 +66,15 @@ export function FilePanelColumn({ id, label, width, onWidthChange, children }) {
    * is that edge; a fragment has no box of its own to measure.
    */
   const onPointerDown = (event) => {
+    if (event.button !== 0) return;
     event.preventDefault();
     const surface = event.currentTarget.parentElement;
-    let dragging = true;
-    const onMove = (move) => {
-      if (!dragging || !surface) {
-        return;
-      }
-      onWidthChange(surface.getBoundingClientRect().right - move.clientX);
-    };
-    const onUp = () => {
-      dragging = false;
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
+    drag.current = { right: surface.getBoundingClientRect().right, pointerId: event.pointerId };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const stopDrag = (event) => {
+    drag.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
 
   return (
@@ -79,18 +85,26 @@ export function FilePanelColumn({ id, label, width, onWidthChange, children }) {
         aria-valuemax={PANEL_MAX_WIDTH}
         aria-valuemin={PANEL_MIN_WIDTH}
         aria-valuenow={width}
-        className="w-px shrink-0 cursor-col-resize bg-border transition-colors hover:bg-ring data-[dragging=true]:bg-ring"
+        className="relative w-px shrink-0 touch-none cursor-col-resize bg-border transition-colors hover:bg-ring focus-visible:bg-ring focus-visible:outline-none before:absolute before:inset-y-0 before:-left-1 before:w-2"
         onPointerDown={onPointerDown}
+        onPointerMove={(event) => { if (drag.current?.pointerId === event.pointerId) resize(drag.current.right - event.clientX); }}
+        onPointerUp={stopDrag}
+        onPointerCancel={stopDrag}
+        onLostPointerCapture={() => { drag.current = null; }}
+        onKeyDown={(event) => {
+          const nextWidth = { ArrowLeft: width + 16, ArrowRight: width - 16, Home: PANEL_MIN_WIDTH, End: PANEL_MAX_WIDTH }[event.key];
+          if (nextWidth === undefined) return;
+          event.preventDefault();
+          resize(nextWidth);
+        }}
         role="separator"
-        // A 1px border is the right *look* and a terrible target, so the hit
-        // area is widened outward without moving the line.
-        style={{ boxShadow: "0 0 0 3px transparent" }}
+        tabIndex={0}
       />
       <aside
         aria-label={label}
         className="shrink-0 overflow-hidden border-l bg-background"
         data-file-panel-container={id}
-        style={{ width }}
+        style={{ width, minWidth: PANEL_MIN_WIDTH }}
       >
         {children}
       </aside>

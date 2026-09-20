@@ -93,3 +93,21 @@ test("a mutable PBR edit remains authoritative across a later source reuse", () 
     scene.dispose();
   }
 });
+
+test("surface opacity edits remain mutable across source reuse", () => {
+  const source = { vertices: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+    normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]), indices: new Uint32Array([0, 1, 2]),
+    bounds: { min: [0, 0, 0], max: [1, 1, 0] }, parts: [{ id: 'surface', vertexCount: 3, triangleCount: 1 }] };
+  const before = { ...STRUCTURAL_SETTINGS, surfaceSettings: { enabled: true, style: 'shaded', opacity: 0.7 } };
+  const after = { ...before, surfaceSettings: { ...before.surfaceSettings, opacity: 0.3 } };
+  assert.equal(sceneBuildStructuralKey(before), sceneBuildStructuralKey(after));
+  const scene = buildModel(THREE, source, { ...before, parameterSetup: false });
+  try {
+    const record = scene.displayRecords[0];
+    scene.update({ surfaceSettings: after.surfaceSettings });
+    assert.equal(scene.displayRecords[0], record);
+    assert.equal(record.material.opacity, 0.3);
+    scene.update({ source: { ...source }, surfaceSettings: after.surfaceSettings });
+    assert.equal(scene.displayRecords[0].material.opacity, 0.3);
+  } finally { scene.dispose(); }
+});

@@ -47,7 +47,7 @@ function assertClose(actual, expected, epsilon = 1e-6) {
   assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} !== ${expected}`);
 }
 
-function groundHitAtNdc(camera, x, y, groundZ) {
+function groundHitAtNdc(camera, x, y, groundZ, includeBehind = false) {
   camera.updateMatrixWorld(true);
   const cameraPosition = new THREE.Vector3();
   const origin = new THREE.Vector3();
@@ -63,7 +63,7 @@ function groundHitAtNdc(camera, x, y, groundZ) {
   if (Math.abs(direction.z) <= 1e-12) return null;
   const hit = origin.addScaledVector(direction, (groundZ - origin.z) / direction.z);
   const depth = -hit.clone().applyMatrix4(camera.matrixWorldInverse).z;
-  return depth > 0 ? { hit, depth } : null;
+  return depth > 0 || includeBehind ? { hit, depth } : null;
 }
 
 test("shared render options preserve explicit caller-owned values without defaults", () => {
@@ -82,8 +82,10 @@ test("shared render options preserve explicit caller-owned values without defaul
 
 test("render display snapshots use ordinary depth for studio shadows", () => {
   assert.equal(snapshotUsesLogarithmicDepthBuffer({}), true);
-  assert.equal(snapshotUsesLogarithmicDepthBuffer({ display: { mode: "shaded" } }), true);
+  assert.equal(snapshotUsesLogarithmicDepthBuffer({ display: { mode: "solid" } }), true);
   assert.equal(snapshotUsesLogarithmicDepthBuffer({ display: { mode: "render" } }), false);
+  assert.equal(snapshotUsesLogarithmicDepthBuffer({ display: { mode: "solid", lighting: {} } }), false);
+  assert.equal(snapshotUsesLogarithmicDepthBuffer({ display: { mode: "render", lighting: { enabled: false } } }), true);
 });
 
 test("view presets and azimuth/elevation camera parsing remain stable", () => {
@@ -436,7 +438,7 @@ test("supersampled PNG capture resamples the complete drawing buffer to the requ
     "the full supersampled frame must cover the full requested output, without crop");
 });
 
-test("inspection grid uses fixed ink and shared Viewer spacing", () => {
+test("inspection grid uses explicit appearance and shared Viewer spacing", () => {
   const scene = new THREE.Scene();
   addFloor(
     scene,
@@ -446,14 +448,14 @@ test("inspection grid uses fixed ink and shared Viewer spacing", () => {
     }),
     RENDER_SCENE_SCALE.CAD,
     SCALE_SETTINGS,
-    { grid: { enabled: true, centerColor: "#123456", cellColor: "#abcdef", opacity: 0.37, density: 2 } }
+    { grid: { enabled: true, color: "#123456", opacity: 0.37 } }
   );
 
   const grid = scene.children[0];
   const materials = Array.isArray(grid.material) ? grid.material : [grid.material];
   assert.equal(grid.type, "GridHelper");
-  assert.equal(grid.geometry.getAttribute("position").count, 4 * (28 + 1));
-  assert.equal(materials[0].opacity, 0.16);
+  assert.equal(grid.geometry.getAttribute("position").count, 4 * (112 + 1));
+  assert.equal(materials[0].opacity, 0.37);
   assert.equal(materials[0].transparent, true);
   assert.equal(materials[0].depthWrite, false);
 });
@@ -475,7 +477,7 @@ test("display guides render independently from the studio stage floor", () => {
     }),
     RENDER_SCENE_SCALE.CAD,
     SCALE_SETTINGS,
-    { grid: { enabled: true, centerColor: "#123456", cellColor: "#abcdef", opacity: 0.37, density: 2 } }
+    { grid: { enabled: true, color: "#123456", opacity: 0.37 } }
   );
 
   const grid = scene.children.find((child) => child.type === "GridHelper");
@@ -486,7 +488,7 @@ test("display guides render independently from the studio stage floor", () => {
   assert.ok(grid);
   assert.ok(plane);
   assert.ok(shadow);
-  assert.equal(gridMaterials[0].opacity, 0.16);
+  assert.equal(gridMaterials[0].opacity, 0.37);
   assert.equal(grid.position.z, 0);
   assert.equal(plane.material.color.getHexString(), "ddeeff");
   assert.equal(plane.material.roughness, 0.36);
@@ -518,4 +520,79 @@ test("snapshot lights scale to model bounds and fit the directional shadow camer
   assert.equal(lights.directional.shadow.camera.left, -1064);
   assert.equal(lights.directional.shadow.camera.right, 1064);
   assert.ok(lights.directional.shadow.camera.far >= lights.directional.position.length());
+});
+
+
+test("floor depth fitting uses the selected elevation above and below the model", () => {
+  for (const scale of [0.001, 1, 1000]) {
+    const bounds = { min: [-20, -10, -30].map((v) => v * scale), max: [20, 10, -22].map((v) => v * scale) };
+    for (const groundZ of [0, -30 * scale]) {
+      for (const side of [-1, 1]) {
+        for (const projection of ["orthographic", "perspective"]) {
+          const camera = projection === "orthographic"
+            ? new THREE.OrthographicCamera(-30 * scale, 30 * scale, 18 * scale, -18 * scale, 1e-7, 1e9)
+            : new THREE.PerspectiveCamera(50, 16 / 9, 1e-7, 1e9);
+          camera.position.set(0, -55 * scale, groundZ + side * 6 * scale);
+          camera.lookAt(0, 0, groundZ + side * 4 * scale);
+          camera.updateProjectionMatrix();
+          camera.updateMatrixWorld(true);
+          const hits = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
+            .map(([x, y]) => groundHitAtNdc(camera, x, y, groundZ, camera.isOrthographicCamera)).filter(Boolean);
+          assert.ok(hits.length);
+          fitCameraDepthToBounds(camera, bounds, { groundZ });
+          for (const { hit } of hits) {
+            const z = hit.clone().project(camera).z;
+            assert.ok(z > -1 && z < 1, `${projection} floor at ${groundZ} from side ${side} stays visible: ${z}`);
+          }
+        }
+      }
+    }
+  }
+});
+
+test("orthographic floor crossing the eye plane preserves foreground samples", () => {
+  const camera = new THREE.OrthographicCamera(-30, 30, 18, -18, 0.001, 10000);
+  camera.position.set(0, -55, 6);
+  camera.lookAt(0, 0, 4);
+  camera.updateProjectionMatrix();
+  camera.updateMatrixWorld(true);
+  const bounds = { min: [-20, -10, -30], max: [20, 10, -22] };
+  fitCameraDepthToBounds(camera, bounds, { groundZ: 0 });
+  const crossingNear = camera.near;
+  assert.ok(crossingNear < 0, "orthographic foreground behind the eye needs a signed near plane");
+  for (const [x, y] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    const { hit } = groundHitAtNdc(camera, x, y, 0, true);
+    const depth = hit.project(camera).z;
+    assert.ok(depth > -1 && depth < 1, "all floor corners remain inside the depth range");
+  }
+  fitCameraDepthToBounds(camera, bounds, { groundZ: null });
+  assert.ok(camera.near > 1, "disabled floor restores the subject-fitted positive near plane");
+});
+
+test("an independent grid keeps its foreground and distant lines inside camera depth", () => {
+  for (const scale of [0.001, 1, 1000]) {
+    for (const projection of ["orthographic", "perspective"]) {
+      const camera = projection === "orthographic"
+        ? new THREE.OrthographicCamera(-30 * scale, 30 * scale, 18 * scale, -18 * scale, 1e-7, 1e9)
+        : new THREE.PerspectiveCamera(50, 16 / 9, 1e-7, 1e9);
+      camera.position.set(0, -55 * scale, 6 * scale);
+      camera.lookAt(0, 0, 4 * scale);
+      camera.updateProjectionMatrix(); camera.updateMatrixWorld(true);
+      const bounds = { min: [-20, -10, -30].map(v => v * scale), max: [20, 10, -22].map(v => v * scale) };
+      const gridBounds = { min: [-4000 * scale, -4000 * scale, 0], max: [4000 * scale, 4000 * scale, 0] };
+      const hits = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
+        .map(([x, y]) => groundHitAtNdc(camera, x, y, 0, camera.isOrthographicCamera)).filter(Boolean);
+      fitCameraDepthToBounds(camera, bounds, { groundZ: null });
+      assert.ok(hits.some(({ hit }) => hit.clone().project(camera).z < -1), "subject-only depth cuts foreground grid lines");
+      fitCameraDepthToBounds(camera, bounds, { groundZ: null, gridBounds });
+      for (const { hit } of hits) {
+        const depth = hit.clone().project(camera).z;
+        assert.ok(depth > -1 && depth < 1, `${projection}/${scale}: grid remains visible without Floor`);
+      }
+      for (const corner of boundsCorners(gridBounds)) {
+        if (camera.isPerspectiveCamera && corner.clone().applyMatrix4(camera.matrixWorldInverse).z >= 0) continue;
+        assert.ok(corner.project(camera).z < 1, "far plane includes the actual grid extent");
+      }
+    }
+  }
 });

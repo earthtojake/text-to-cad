@@ -1,8 +1,4 @@
 import {
-  displaySettingsEqual,
-  normalizeDisplaySettings
-} from "@hardcore/core/lib/displaySettings.js";
-import {
   entryAssetHash,
   entryUrdfAssetHash
 } from "@hardcore/core/lib/entryAssets.js";
@@ -14,6 +10,9 @@ import {
   createRenderSessionState,
   renderSessionStateEqual
 } from "./renderSessionState.js";
+import {
+  migrateViewerDisplaySettings
+} from "./viewerDisplaySettings.js";
 
 export const FILE_SESSION_STORAGE_VERSION = 4;
 export const FILE_SESSION_STORAGE_KEY_PREFIX = "cad-viewer:file-session";
@@ -219,7 +218,7 @@ function normalizeDisplaySlice(value) {
   if (!isPlainObject(value)) {
     return null;
   }
-  return normalizeDisplaySettings(value);
+  return migrateViewerDisplaySettings(value);
 }
 
 // The POSE slice: DOF values and whether the mate graph is driving at all.
@@ -285,7 +284,7 @@ function normalizeLargeFileSlice(value) {
 const FILE_SESSION_SLICE_SCHEMA = Object.freeze({
   display: {
     normalize: normalizeDisplaySlice,
-    equals: displaySettingsEqual,
+    equals: storageValuesEqual,
     signatureKey: null
   },
   render: {
@@ -335,6 +334,9 @@ function sliceSignatureMatches(sliceName, signatures, currentSignatures, options
 function normalizeFileSessionSlices(rawSlices, options = {}) {
   if (!isPlainObject(rawSlices)) {
     return {};
+  }
+  if (isPlainObject(rawSlices.display) || isPlainObject(rawSlices.render)) {
+    rawSlices = { ...rawSlices, display: migrateViewerDisplaySettings(rawSlices.display, rawSlices.render) };
   }
   const currentSignatures = options.currentSignatures || {};
   const signatures = options.signatures || {};

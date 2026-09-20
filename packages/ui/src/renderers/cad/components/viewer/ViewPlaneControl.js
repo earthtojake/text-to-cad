@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 
 const ORIENTATION_FALLBACK = Object.freeze({
   x: [1, 0, 0],
@@ -155,7 +155,7 @@ function axisLabelPosition(axisId, x, y, radius) {
   };
 }
 
-export default function ViewPlaneControl({
+function ViewPlaneControl({
   showViewPlane,
   previewMode,
   isLoading,
@@ -362,6 +362,19 @@ export default function ViewPlaneControl({
             />
           ))}
           {backNodes.map((node) => renderNode(node))}
+          {frontNodes.map((node) => (
+            <line
+              key={`${node.id}-stem-front`}
+              x1="50"
+              y1="50"
+              x2={node.x}
+              y2={node.y}
+              stroke={node.stem}
+              strokeWidth={1.6 + node.depth * 0.8}
+              strokeLinecap="round"
+              pointerEvents="none"
+            />
+          ))}
           <g
             role="button"
             tabIndex={0}
@@ -429,24 +442,11 @@ export default function ViewPlaneControl({
                 transformBox: "fill-box",
                 transformOrigin: "center"
               }}
-              fill={rgbToCss(palette.center.fill, 0.95)}
+              fill={rgbToCss(palette.center.fill, 1)}
               stroke={rgbToCss(palette.center.stroke, 0.72)}
               strokeWidth="1.05"
             />
           </g>
-          {frontNodes.map((node) => (
-            <line
-              key={`${node.id}-stem-front`}
-              x1="50"
-              y1="50"
-              x2={node.x}
-              y2={node.y}
-              stroke={node.stem}
-              strokeWidth={1.6 + node.depth * 0.8}
-              strokeLinecap="round"
-              pointerEvents="none"
-            />
-          ))}
           {frontNodes.map((node) => renderNode(node))}
           {projectedNodes.filter((node) => node.label).map((node) => (
             <text
@@ -469,3 +469,7 @@ export default function ViewPlaneControl({
     </div>
   );
 }
+
+// Its props change with the camera and the theme, never with the model's pose: a viewer that
+// re-renders per animation frame must not rebuild the cube's faces with it.
+export default memo(ViewPlaneControl);

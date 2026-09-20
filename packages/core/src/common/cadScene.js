@@ -680,7 +680,7 @@ function getEdgeThickness(edgeSettings = null, baseTheme = null) {
 
 function createDefaultEdgeObject(THREE, geometry, baseTheme, edgeSettings, partId, displayMode) {
   const wireframeMode = displayModeIsWireframe(displayMode);
-  const depthTest = edgeSettings?.depthTest === false ? false : !wireframeMode;
+  const depthTest = typeof edgeSettings?.depthTest === "boolean" ? edgeSettings.depthTest : !wireframeMode;
   const material = new THREE.LineBasicMaterial({
     color: edgeSettings?.color || baseTheme?.edge || DEFAULT_THEME.edge,
     transparent: true,
@@ -800,7 +800,8 @@ function safeColor(THREE, value, fallback = null) {
 export function applyMaterialSettingsToRecord(THREE, record, materialSettings, {
   baseTheme = DEFAULT_THEME,
   displayMode = CAD_DISPLAY_MODE.SHADED_EDGES,
-  materialOverrides = null
+  materialOverrides = null,
+  surfaceSettings = null
 } = {}) {
   if (record?.instanced) {
     // Instanced buckets carry per-instance color (occurrence override) on the
@@ -813,6 +814,8 @@ export function applyMaterialSettingsToRecord(THREE, record, materialSettings, {
   }
   const previousVertexColors = record.material.vertexColors;
   const previousTransparent = record.material.transparent;
+  record.surfaceSettings = surfaceSettings;
+  record.material.colorWrite = !surfaceSettings || !["hidden", "off"].includes(surfaceSettings.style);
   const wireframeMode = displayModeIsWireframe(displayMode);
   const forceFill = materialSettings.overrideSourceColors === true || wireframeMode;
   const hasVertexColors = !forceFill && !!record.hasVertexColors;
@@ -832,10 +835,11 @@ export function applyMaterialSettingsToRecord(THREE, record, materialSettings, {
     if (record.material.color && record.baseColor) {
       record.material.color.copy(record.baseColor);
     }
-    record.baseOpacity = displayModeSurfaceOpacity(displayMode, 0.035);
+    record.baseOpacity = surfaceSettings?.style === "off" ? 0 : displayModeSurfaceOpacity(displayMode, 0.035);
     record.material.opacity = record.baseOpacity;
     record.material.transparent = true;
     record.material.depthWrite = false;
+    record.baseDepthWrite = false;
     if (previousVertexColors !== record.material.vertexColors || previousTransparent !== record.material.transparent) {
       record.material.needsUpdate = true;
     }
@@ -867,7 +871,8 @@ export function applyMaterialSettingsToRecord(THREE, record, materialSettings, {
   const sourceOpacity = Number.isFinite(Number(record.sourceOpacity))
     ? clamp(Number(record.sourceOpacity), 0, 1)
     : 1;
-  record.baseOpacity = clamp(displayModeSurfaceOpacity(displayMode, materialSettings.opacity) * sourceOpacity, 0, 1);
+  record.baseOpacity = surfaceSettings?.style === "hidden" ? 1
+    : clamp((surfaceSettings ? surfaceSettings.opacity : displayModeSurfaceOpacity(displayMode, materialSettings.opacity)) * sourceOpacity, 0, 1);
   record.material.opacity = record.baseOpacity;
   record.material.transparent = record.baseOpacity < 0.999;
   // `hidden_lines_removed` is the one mode whose near-invisible surfaces exist to be a
@@ -880,6 +885,7 @@ export function applyMaterialSettingsToRecord(THREE, record, materialSettings, {
   record.material.depthWrite = displayMode === CAD_DISPLAY_MODE.TRANSPARENT
     ? false
     : displayMode === CAD_DISPLAY_MODE.HIDDEN_LINES_REMOVED || record.baseOpacity >= 0.999;
+  record.baseDepthWrite = record.material.depthWrite;
   record.material.envMapIntensity = Math.max(Number(materialSettings.envMapIntensity) || 0, 0);
   if (record.material.color && record.baseColor) {
     record.material.color.copy(record.baseColor);
@@ -1332,6 +1338,11 @@ export function buildStepClipPlane(THREE, clip, bounds, modelOffset = null) {
   if (!normalized.enabled || !bounds) {
     return null;
   }
+  // The tool can be open at its neutral boundary without cutting any geometry.
+  // Avoid activating clipping shaders and stencil caps until the plane moves
+  // into the model. Flipping the opposite boundary has the same neutral state.
+  if ((!normalized.invert && normalized.offset === 1) ||
+      (normalized.invert && normalized.offset === 0)) return null;
   const index = axisIndex(normalized.axis);
   const boundsMin = Array.isArray(bounds?.min) ? bounds.min : [0, 0, 0];
   const boundsMax = Array.isArray(bounds?.max) ? bounds.max : boundsMin;
@@ -1345,7 +1356,9 @@ export function buildStepClipPlane(THREE, clip, bounds, modelOffset = null) {
     index === 1 ? 1 : 0,
     index === 2 ? 1 : 0
   );
-  if (normalized.invert) {
+  // Keep the lower-coordinate half by default, exposing the cut toward the
+  // default camera. Flip reverses that side without moving the section plane.
+  if (!normalized.invert) {
     normal.multiplyScalar(-1);
   }
   const point = modelOffset?.clone ? modelOffset.clone() : new THREE.Vector3(0, 0, 0);
@@ -2001,7 +2014,7 @@ function createDisplayRecord(THREE, runtime, meshData, settings, {
     }
   }
 
-  if (settings.selection?.showEdges !== false && (edgeSettings.enabled || wireframeMode)) {
+  if (settings.selection?.showEdges !== false && (edgeSettings.enabled || (wireframeMode && !settings.surfaceSettings))) {
     if (cadEdges) {
       attachCadEdgeInstance(THREE, runtime, record, cadEdges);
     } else {
@@ -2018,7 +2031,8 @@ function createDisplayRecord(THREE, runtime, meshData, settings, {
   applyMaterialSettingsToRecord(THREE, record, materialSettings, {
     baseTheme,
     displayMode,
-    materialOverrides: runtime.materialOverrides
+    materialOverrides: runtime.materialOverrides,
+    surfaceSettings: runtime.surfaceSettings
   });
   applyDisplayRecordTransform(THREE, record);
   return record;
@@ -2203,6 +2217,7 @@ function staticMutableStateKey(settings) {
       appearance: settings.appearance || settings.theme?.colorMode,
       materialSettings: settings.materialSettings,
       materialOverrides: settings.materialOverrides,
+      surfaceSettings: settings.surfaceSettings,
       baseTheme: settings.baseTheme,
       scale: settings.scale,
       selection: settings.selection,
@@ -2238,12 +2253,13 @@ function renderPartsKey(meshData, theme, settings) {
 
 function normalizeSettings(settings = {}) {
   const displayMode = normalizeDisplayMode(settings.displayMode);
+  const surfaceSettings = settings.surfaceSettings ?? settings.display?.surfaces ?? null;
   const sourceTheme = settings.theme || settings.themeSettings || settings.settings || undefined;
   const normalizedTheme = normalizeThemeSettings(sourceTheme);
   const displayEdgeSettings = resolveCadEdgeSettings(
     settings.edgeSettings || settings.display?.edges
   );
-  const applyDisplayModeEdgePolicy = settings.applyDisplayModeEdgePolicy !== false;
+  const applyDisplayModeEdgePolicy = settings.applyDisplayModeEdgePolicy !== false && !surfaceSettings;
   const edgeSettings = applyDisplayModeEdgePolicy
     ? {
         ...displayEdgeSettings,
@@ -2261,6 +2277,7 @@ function normalizeSettings(settings = {}) {
     theme,
     edgeSettings,
     displayMode,
+    surfaceSettings,
     scale,
     callbacks,
     baseTheme,
@@ -2282,16 +2299,18 @@ function normalizeSettings(settings = {}) {
 function setRuntimeTheme(runtime, settings) {
   runtime.theme = settings.theme;
   runtime.displayMode = settings.displayMode;
+  runtime.surfaceSettings = settings.surfaceSettings;
   runtime.scale = settings.scale;
   runtime.baseTheme = settings.baseTheme;
   runtime.edgeSettings = {
     ...settings.edgeSettings,
-    depthTest: displayModeShowsThroughEdges(settings.displayMode)
+    depthTest: !settings.surfaceSettings && displayModeShowsThroughEdges(settings.displayMode)
       ? false
       : settings.edgeSettings.depthTest
   };
-  if (runtime.cadInkColorMode !== (settings.appearance || settings.theme.colorMode)) {
-    runtime.cadInkColorMode = settings.appearance || settings.theme.colorMode;
+  const inkKey = JSON.stringify([settings.appearance || settings.theme.colorMode, settings.edgeSettings.color]);
+  if (runtime.cadInkColorMode !== inkKey) {
+    runtime.cadInkColorMode = inkKey;
     for (const set of runtime.cadEdgeInstanceSets) {
       set.setClassStyles(drawnCadEdgeClasses(runtime.THREE, runtime, set.cadEdges).drawn.map(({ style }) => style));
     }
@@ -2473,7 +2492,8 @@ export function buildModel(THREE, source, settings = {}) {
       applyMaterialSettingsToRecord(THREE, record, runtime.materialSettings, {
         baseTheme: runtime.baseTheme,
         displayMode: runtime.displayMode,
-        materialOverrides: runtime.materialOverrides
+        materialOverrides: runtime.materialOverrides,
+        surfaceSettings: runtime.surfaceSettings
       });
     }
     const nextParameterSetup = nextSettings.parameterSetup !== false;
@@ -2514,7 +2534,8 @@ export function buildModel(THREE, source, settings = {}) {
       applyMaterialSettingsToRecord(THREE, record, runtime.materialSettings, {
         baseTheme: runtime.baseTheme,
         displayMode: runtime.displayMode,
-        materialOverrides: runtime.materialOverrides
+        materialOverrides: runtime.materialOverrides,
+        surfaceSettings: runtime.surfaceSettings
       });
       applyDisplayRecordTransform(THREE, record);
     }

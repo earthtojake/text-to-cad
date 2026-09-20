@@ -21,7 +21,7 @@
  *
  * Pure but for its lucide glyphs, so `node --test` loads it with no bundler.
  */
-import { Code2, Eye, FolderTree, SlidersHorizontal } from "lucide-react";
+import { Code2, Eye, Folders, PanelLeft } from "lucide-react";
 
 /**
  * Where a panel's content comes from — which is who draws it.
@@ -95,7 +95,7 @@ export function cadPanels(ready) {
       {
         id: CAD_PANEL.fileSheet,
         label: "Inspector",
-        icon: SlidersHorizontal,
+        icon: PanelLeft,
         content: "slot",
         defaultOpen: true
       }
@@ -125,11 +125,8 @@ export function markdownPanels(open) {
 /**
  * The file tree, as the last entry in every panel list.
  *
- * A folder-tree glyph rather than a panel one: the button is named by what
- * comes back, not by the fact that a panel slides — a panel icon in a row of
- * file actions reads as a layout control and was skipped over. Last and never
- * moving, so it is the one control in the surface a person can always find in
- * the same place.
+ * The folders glyph is always the rightmost navigation action. Inspector
+ * uses PanelLeft; document actions precede the pair.
  *
  * @param {string} open
  * @returns {FilePanel}
@@ -138,7 +135,7 @@ export function treePanel(open) {
   return {
     id: FILE_PANEL_TREE,
     label: open === FILE_PANEL_TREE ? "Hide files" : "Show files",
-    icon: FolderTree,
+    icon: Folders,
     content: "tree",
     defaultOpen: true
   };

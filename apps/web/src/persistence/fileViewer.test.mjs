@@ -10,7 +10,7 @@ const temporary = await mkdtemp(join(tmpdir(), 'hardcore-web-host-'));
 const output = join(temporary, 'host.mjs');
 await build({
   stdin: { contents: `export * from './persistence/fileViewer.ts'; export * from './persistence/cadPreferences.ts'; export * from './adapters/fileSource.ts';`, resolveDir: fileURLToPath(new URL('../', import.meta.url)) },
-  bundle: true, platform: 'node', format: 'esm', outfile: output, loader: { '.webp': 'dataurl' },
+  bundle: true, platform: 'node', conditions: ['production'], format: 'esm', outfile: output, loader: { '.webp': 'dataurl', '.css': 'empty' },
 });
 const { readViewState, writeViewState, createWebCadPreferences, createWebFileSource, createWebFileActions } = await import(pathToFileURL(output).href);
 after(() => rm(temporary, { recursive: true, force: true }));
@@ -90,6 +90,32 @@ test('web CAD preferences ignore legacy custom themes and retired tutorial state
     assert.equal(local.getItem('cad-viewer:theme'), legacy);
     disconnect();
     assert.equal(listeners.size, 0);
+  } finally {
+    globalThis.window = previousWindow;
+    if (previousStorage) Object.defineProperty(globalThis, 'localStorage', previousStorage);
+    else delete globalThis.localStorage;
+  }
+});
+
+test('global orbit preference survives host recreation and synchronizes other windows', () => {
+  const previousWindow = globalThis.window;
+  const previousStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  const local = storage();
+  const listeners = new Map();
+  globalThis.window = { addEventListener: (type, listener) => listeners.set(type, listener), removeEventListener: type => listeners.delete(type) };
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: local });
+  try {
+    const source = createWebCadPreferences();
+    const disconnect = source.connect();
+    source.update({ orbit: { speed: 1.37 } });
+    assert.deepEqual(createWebCadPreferences().getSnapshot().orbit, { speed: 1.37 });
+    local.setItem('cad-viewer:orbit:v1', JSON.stringify({ speed: 0 }));
+    listeners.get('storage')({ key: 'cad-viewer:orbit:v1' });
+    assert.deepEqual(source.getSnapshot().orbit, { speed: 0 });
+    local.removeItem('cad-viewer:orbit:v1');
+    listeners.get('storage')({ key: null });
+    assert.deepEqual(source.getSnapshot().orbit, { speed: 1 });
+    disconnect();
   } finally {
     globalThis.window = previousWindow;
     if (previousStorage) Object.defineProperty(globalThis, 'localStorage', previousStorage);

@@ -128,6 +128,7 @@ export const FilePanelColumn: ComponentType<{
   label: string;
   width: number;
   onWidthChange: (width: number) => void;
+  onCollapse?: () => void;
   children: ReactNode;
 }>;
 

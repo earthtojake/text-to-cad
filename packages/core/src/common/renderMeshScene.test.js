@@ -237,17 +237,17 @@ test("snapshot scene policy composes display Render quality with technical quali
   assert.equal(normal.sceneSettings.render.enabled, false);
   assert.equal(normal.quality.id, "interactive");
   assert.equal(normal.sharedRenderOptions.renderScale, 1);
-  assert.equal(normal.displaySettings.guides.grid.enabled, false, "snapshot adapter disables normal guides");
+  assert.equal(normal.displaySettings.guides.grid.enabled, true, "snapshot inherits the Solid preset");
 
   const rendered = renderJobContext(twoPartMeshData(), { display: { mode: "render" } });
   assert.equal(rendered.sceneSettings.render.enabled, true);
   assert.equal(rendered.quality.id, "high");
-  assert.equal(rendered.projection, "orthographic");
-  assert.equal(rendered.displayMode, "render");
+  assert.equal(rendered.projection, "perspective");
+  assert.equal(rendered.displayMode, "shaded");
   assert.equal(rendered.sharedRenderOptions.renderScale, 2);
 
   const explicitScale = renderJobContext(twoPartMeshData(), {
-    display: { mode: "render", render: { quality: "preview" } },
+    display: { mode: "render", lighting: { quality: "preview" } },
     output: { renderScale: 3 }
   });
   assert.equal(explicitScale.quality.id, "standard");
@@ -478,12 +478,14 @@ test("photographic Render applies a non-rest kinematics transform", () => {
 
 test("render display accepts common camera, selection, clipping, and quality controls", () => {
   const context = renderJobContext(twoPartMeshData(), {
-    camera: { projection: "orthographic", preset: "front" },
+    kind: "step",
+    camera: { preset: "front" },
     display: {
       mode: "render",
+      camera: { projection: "orthographic" },
       clip: { enabled: true, axis: "x", offsets: { x: 0.5 } },
       exploded: { enabled: true, amount: 0.5 },
-      partColor: { mode: "single", color: "#123456" }
+      surfaces: { colorMode: "single", color: "#123456" }
     },
     selection: { hiddenPartIds: ["right"], selectedPartIds: ["left"] },
     quality: { tessellation: { chordTolerance: 0.001 } }
@@ -494,6 +496,20 @@ test("render display accepts common camera, selection, clipping, and quality con
   assert.deepEqual(options.selection.hiddenPartIds, ["right"]);
   assert.equal(options.materialSettings.overrideSourceColors, true);
   assert.equal(options.materialSettings.defaultColor, "#123456");
+});
+
+test("only a STEP job has edges, a section or an exploded view; every other kind renders Solid without them", () => {
+  const display = { mode: "wireframe", clip: { enabled: true, axis: "x" }, exploded: { enabled: true, amount: 0.5 } };
+  const step = renderJobContext(twoPartMeshData(), { kind: "step", display });
+  assert.equal(step.sceneSettings.view.mode, "wireframe");
+  assert.equal(step.sharedRenderOptions.clip.enabled, true);
+  for (const kind of ["stl", "3mf", "glb", "dxf", "urdf", "srdf", "sdf"]) {
+    const context = renderJobContext(twoPartMeshData(), { kind, display });
+    assert.equal(context.sceneSettings.view.mode, "solid", kind);
+    assert.equal(context.sceneSettings.view.edges.enabled, false, kind);
+    assert.equal(context.sharedRenderOptions.clip.enabled, false, kind);
+    assert.equal(context.displaySettings.exploded.enabled, false, kind);
+  }
 });
 
 // A stub renderer: captureModel does everything except produce pixels, and the

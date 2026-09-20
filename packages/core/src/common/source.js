@@ -8,6 +8,7 @@ import { parseSurf } from "../lib/surf/container.js";
 import { tessellateComponent } from "../lib/surf/tessellate.js";
 import { lodTessellationForLevel } from "../lib/surf/lodPolicy.js";
 import { validateSnapshotRenderJob } from "./snapshotJobValidation.js";
+import { resolveViewSettings } from "./viewSettings.js";
 import {
   SCENE_QUALITY,
   resolveSceneQuality,
@@ -237,9 +238,9 @@ export function tessellationForSnapshotQuality(input = {}) {
   if (explicit != null) {
     return normalizeRenderTessellation(explicit);
   }
-  const renderDisplay = String(input.display?.mode || "").trim().toLowerCase() === "render";
-  const quality = renderDisplay
-    ? resolveRenderQuality(input.display?.render?.quality)
+  const view = resolveViewSettings(input.display ?? {});
+  const quality = view.lighting.enabled
+    ? resolveRenderQuality(view.lighting.quality)
     : resolveSceneQuality(SCENE_QUALITY.INTERACTIVE);
   // Final uses the existing finest bounded rung. Preview and CAD inspection
   // retain the canonical L1 cache request.

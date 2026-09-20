@@ -385,6 +385,21 @@ class StaticDistAndSpa(HttpLayerTestCase):
         self.assertEqual(headers["content-type"], "text/plain; charset=utf-8")
         self.assertEqual(body, b"Not found")
 
+    def test_a_drawing_font_the_bundle_leaves_out_is_404_not_html(self):
+        # The web bundle ships the drawing editor's fonts without the CJK
+        # family; a font loader handed index.html at 200 fails to decode it
+        # instead of falling back to a system font.
+        status, headers, body = self.fixture.request("GET", "/excalidraw/fonts/Xiaolai/Xiaolai-Regular.woff2")
+        self.assertEqual(status, 404)
+        self.assertEqual(headers["content-type"], "text/plain; charset=utf-8")
+        self.assertEqual(body, b"Not found")
+
+    def test_drawing_fonts_and_their_notices_are_typed(self):
+        from cadgen.viewer.content_types import content_type_for_static_asset
+        self.assertEqual(content_type_for_static_asset("excalidraw/fonts/Excalifont/a.woff2"), "font/woff2")
+        self.assertEqual(content_type_for_static_asset("excalidraw/fonts/Liberation/LiberationSans-Regular.ttf"), "font/ttf")
+        self.assertEqual(content_type_for_static_asset("excalidraw/licenses/NOTICE.txt"), "text/plain; charset=utf-8")
+
     def test_unknown_extension_gets_no_content_type_at_all(self):
         status, headers, _ = self.fixture.request("GET", "/weird.xyz")
         self.assertEqual(status, 200)

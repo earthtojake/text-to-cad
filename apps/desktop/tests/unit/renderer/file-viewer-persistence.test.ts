@@ -7,7 +7,7 @@ describe("FileViewer persisted CAD state migration", () => {
     const retiredTheme = JSON.stringify({ version: 13, themeId: "cinematic", custom: { exposure: 1.2 } });
     localStorage.setItem("cad-viewer:theme", retiredTheme);
     localStorage.setItem("cad-viewer:tutorial-tips:v1", JSON.stringify({ version: 1, seen: ["copyReference", 5] }));
-    expect(migrateCadPreferences(localStorage)).toEqual({ poseTransition: { animate: true, speed: 1 } });
+    expect(migrateCadPreferences(localStorage)).toEqual({ poseTransition: { animate: true, speed: 1 }, orbit: { speed: 1 } });
     expect(localStorage.getItem("cad-viewer:theme")).toBe(retiredTheme);
     localStorage.setItem("cad-viewer:tutorial-tips:v1", JSON.stringify({ version: 0, seen: ["copyReference"] }));
     expect(migrateCadPreferences(localStorage)).not.toHaveProperty("seenTips");

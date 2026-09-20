@@ -306,14 +306,62 @@ test("file session state stores display settings", () => {
   assert.deepEqual(restored.slices.display.clip, {
     enabled: true,
     axis: "z",
-    offset: 0.4,
-    offsets: {
-      x: 0,
-      y: 0,
-      z: 0.4
-    },
-    invert: false
+    offsets: { z: 0.4 }
   });
+});
+
+test("file session state migrates retired viewer modes and preserves sibling display settings", () => {
+  const entry = stepEntry("parts/legacy-display.step");
+  const expectedModes = new Map([
+    ["shaded", "solid"],
+    ["unshaded", "solid"],
+    ["hidden_edges", "xray"]
+  ]);
+
+  for (const [storedMode, expectedMode] of expectedModes) {
+    const restored = normalizeFileSessionState({
+      version: FILE_SESSION_STORAGE_VERSION,
+      fileKey: entry.file,
+      signatures: {},
+      slices: {
+        display: {
+          mode: storedMode,
+          clip: { enabled: true, axis: "y", offsets: { y: 0.35 } },
+          exploded: { enabled: true, amount: 0.4 },
+          guides: { grid: { enabled: false } },
+          partColor: { mode: "single", color: "#123456" }
+        }
+      }
+    }, { fileKey: entry.file, skipSignatureCheck: true });
+
+    assert.equal(restored.slices.display.mode, expectedMode, storedMode);
+    assert.equal(restored.slices.display.clip.offsets.y, 0.35, storedMode);
+    assert.equal(restored.slices.display.exploded.amount, 0.4, storedMode);
+    assert.equal(restored.slices.display.grid.enabled, false, storedMode);
+    assert.equal(restored.slices.display.surfaces.color, "#123456", storedMode);
+  }
+});
+
+test("file session state falls back a corrupt viewer mode without discarding valid display settings", () => {
+  const entry = stepEntry("parts/corrupt-display.step");
+  const restored = normalizeFileSessionState({
+    version: FILE_SESSION_STORAGE_VERSION,
+    fileKey: entry.file,
+    signatures: {},
+    slices: {
+      display: {
+        mode: "definitely_not_a_mode",
+        clip: { enabled: true, axis: "x", offsets: { x: 0.6 } },
+        guides: { axis: { enabled: false } },
+        partColor: { mode: "by_part", colors: ["#abcdef", "#fedcba"] }
+      }
+    }
+  }, { fileKey: entry.file, skipSignatureCheck: true });
+
+  assert.equal(restored.slices.display.mode, "solid");
+  assert.equal(restored.slices.display.clip.offsets.x, 0.6);
+  assert.equal(restored.slices.display.axes.enabled, false);
+  assert.deepEqual(restored.slices.display.surfaces.colors, ["#abcdef", "#fedcba"]);
 });
 
 test("file session tab state ignores global file sheet width", () => {
@@ -385,11 +433,11 @@ test("display and Render setup survive ordinary geometry revisions", () => {
 
   const restored = readFileSessionState("models", nextEntry.file, nextEntry, { storage });
   assert.equal(restored.slices.tab, undefined);
-  assert.equal(restored.slices.display.mode, "wireframe");
-  assert.equal(restored.slices.render.enabled, true);
-  assert.equal(restored.slices.render.payload.quality, "preview");
-  assert.equal(restored.slices.render.payload.exposure, 0.75);
-  assert.equal(restored.slices.render.payload.lighting.size, 1.4);
+  assert.equal(restored.slices.display.mode, "render");
+  assert.deepEqual(restored.slices.render, { cadCamera: null });
+  assert.equal(restored.slices.display.lighting.quality, "preview");
+  assert.equal(restored.slices.display.lighting.exposure, 0.75);
+  assert.equal(restored.slices.display.lighting.size, 1.4);
 });
 
 test("A to B to A restores per-file common cameras and migrates a legacy Render camera", () => {
@@ -426,9 +474,9 @@ test("A to B to A restores per-file common cameras and migrates a legacy Render 
   const restoredAAgain = readFileSessionState("models", entryA.file, entryA, { storage }).slices.render;
 
   assert.deepEqual(restoredA.cadCamera, renderA);
-  assert.equal(Object.hasOwn(restoredA.payload, "camera"), false);
+  assert.equal(Object.hasOwn(restoredA, "payload"), false);
   assert.deepEqual(restoredB.cadCamera, cadB);
-  assert.equal(Object.hasOwn(restoredB.payload, "camera"), false);
+  assert.equal(Object.hasOwn(restoredB, "payload"), false);
   assert.deepEqual(restoredAAgain, restoredA);
 });
 

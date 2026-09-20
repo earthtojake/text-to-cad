@@ -51,7 +51,7 @@ test("normalizes STEP clip settings with safe defaults", () => {
     axis: "z",
     offsets: { z: 0 }
   }), {
-    enabled: false,
+    enabled: true,
     axis: "z",
     offset: 0,
     offsets: { x: 0, y: 0, z: 0 },
@@ -72,6 +72,37 @@ test("resolves clip axis bounds and normalized position", () => {
   assert.equal(clipAxisPosition(bounds, { axis: "z", offsets: { z: 0.25 } }), 125);
 });
 
+test("scalar offset is the selected-axis fallback, including zero and inversion", () => {
+  const scalar = normalizeStepClipSettings({ axis: "z", offset: 0.25, offsets: { x: 0.6 }, invert: true });
+  assert.deepEqual(scalar, {
+    enabled: true, axis: "z", offset: 0.25,
+    offsets: { x: 0.6, y: 0, z: 0.25 }, invert: true
+  });
+  assert.equal(clipAxisPosition(bounds, scalar), 125);
+  assert.deepEqual(normalizeStepClipSettings(scalar), scalar, "normalization remains idempotent");
+  const explicitZero = normalizeStepClipSettings({ enabled: true, axis: "y", offset: 0, invert: true });
+  assert.equal(explicitZero.enabled, true);
+  assert.equal(explicitZero.invert, true);
+  assert.equal(clipAxisPosition(bounds, explicitZero), 2);
+  assert.equal(normalizeStepClipSettings({ axis: "z", offset: 0.75, offsets: { z: 0 } }).offset, 0,
+    "a present per-axis zero wins over the scalar fallback");
+  assert.equal(normalizeStepClipSettings({ offset: 0.5 }).offsets.x, 0.5, "omitted axis defaults to X");
+});
+
+test("scalar clip patches update their selected axis without erasing other axes", () => {
+  const current = { axis: "x", offsets: { x: 0.5, z: 0.3 } };
+  const patched = buildStepClipPatch(current, { axis: "z", offset: 0.7, invert: true });
+  assert.deepEqual(patched, {
+    enabled: true, axis: "z", offset: 0.7,
+    offsets: { x: 0.5, y: 0, z: 0.7 }, invert: true
+  });
+  const cleared = buildStepClipPatch(patched, { offset: 0 });
+  assert.equal(cleared.offset, 0);
+  assert.equal(cleared.enabled, false);
+  assert.equal(cleared.offsets.x, 0.5);
+  assert.equal(buildStepClipPatch(current, { offset: 0.7, offsets: { x: 0 } }).offset, 0);
+});
+
 test("clip plane point visibility matches the side rendered by Three.js clipping", () => {
   const clipPlane = {
     distanceToPoint(point) {
@@ -90,7 +121,7 @@ test("builds normalized clip patches", () => {
   assert.deepEqual(
     buildStepClipPatch({ axis: "x", offsets: { x: 0.5 } }, { enabled: true, axis: "z" }),
     {
-      enabled: false,
+      enabled: true,
       axis: "z",
       offset: 0,
       offsets: { x: 0.5, y: 0, z: 0 },
@@ -106,7 +137,7 @@ test("builds normalized clip patches", () => {
     invert: false
   });
   assert.deepEqual(buildStepClipPatch(withZOffset, { axis: "x" }), {
-    enabled: false,
+    enabled: true,
     axis: "x",
     offset: 0,
     offsets: { x: 0, y: 0, z: 0.25 },
@@ -129,4 +160,11 @@ test("compares clip settings after normalization", () => {
     ),
     false
   );
+});
+
+test('explicitly enabling Clip starts at the center unless coordinates were supplied', () => {
+  assert.equal(normalizeStepClipSettings({ enabled: true }).offset, 0.5);
+  assert.deepEqual(normalizeStepClipSettings({ enabled: true, axis: 'z' }).offsets, { x: 0, y: 0, z: 0.5 });
+  assert.equal(normalizeStepClipSettings({ enabled: true, offset: 0 }).offset, 0);
+  assert.equal(normalizeStepClipSettings({ enabled: false }).offset, 0);
 });

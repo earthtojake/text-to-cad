@@ -3,6 +3,20 @@ import { unique } from './modelingGeometry.js';
 
 const folders = {boss:'Bosses',pocket:'Pockets',hole:'Bores',cut:'Cuts',round:'Edge blends'};
 
+// Structural wrappers add no choice when there is only one. Keep them in the
+// logical tree (and the host's expansion frontier), but show their children.
+// Never flatten a feature/group: its disclosure controls face/edge selection.
+export function implicitModelingRoots(tree) {
+  const roots=[];
+  let nodes=tree;
+  while(nodes.length === 1 && ['assembly','part','body'].includes(nodes[0].kind)
+    && (nodes[0].children?.length || nodes[0].recognitionPending)) {
+    roots.push(nodes[0]);
+    nodes=nodes[0].children || [];
+  }
+  return roots;
+}
+
 // Presentation grouping only. Repeated geometry is not evidence of a CAD pattern.
 export function presentModelingTree(tree) {
   return tree.map(body=>{

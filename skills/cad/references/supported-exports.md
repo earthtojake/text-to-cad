@@ -126,13 +126,15 @@ cadgen 3mf snapshot 3MF/bracket.3mf tmp/bracket_3mf.png
 cadgen glb snapshot meshes/bracket.glb tmp/bracket_glb.png
 ```
 
-A mesh carries no CAD topology. Its snapshot door accepts `--display` for the
-format-neutral `shaded`, `wireframe`, `transparent`, and `unshaded` modes, plus
-`--display render` for the photographic view. Inline JSON and JSON files use
-the unified display object, with studio-only settings nested under `render`.
+A mesh carries no CAD topology. Its snapshot door accepts `--display solid`
+(the default) and `--display render` for the photographic view. Inline JSON and
+JSON files use the grouped display object (`camera`, `surfaces`, `lighting`,
+`background`, `floor`, `grid`, `axes`). Omitted groups inherit the preset.
+`edges`, `clip`, `exploded`, the `xray`, `hidden-line` and `wireframe` presets
+and the `hidden`/`off` surface styles are STEP-only and are refused by name.
 Mesh doors do not have
 `--focus`/`--hide`, `--kinematics`, or `--animation`/`--time`, and reject
-`--mode section`; meshes have no canonical CAD occurrences, edges, kinematics,
+`--mode section`; meshes have no canonical CAD occurrences, kinematics,
 or render-module clips for those controls to act on. `cadgen step snapshot`
 refuses a mesh input and names the door that takes it.
 

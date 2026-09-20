@@ -268,7 +268,6 @@ export function useViewerPicking({
   runtimeRef,
   mountRef,
   sceneMountRef = null,
-  drawingCanvasRef = null,
   previewMode,
   pickMode,
   selectorRuntime,
@@ -342,7 +341,7 @@ export function useViewerPicking({
   // hover tick means the select pointer lingers until the mouse happens to move.
   useEffect(() => {
     const container = mountRef.current;
-    if (!container || pickMode !== VIEWER_PICK_MODE.MEASURE) {
+    if (!container || previewMode || pickMode !== VIEWER_PICK_MODE.MEASURE) {
       return undefined;
     }
     container.style.cursor = "crosshair";
@@ -360,7 +359,6 @@ export function useViewerPicking({
 
     const container = mountRef.current;
     const sceneMount = sceneMountRef?.current || null;
-    const drawingCanvas = drawingCanvasRef?.current || null;
     const coarsePointerQuery = typeof window.matchMedia === "function"
       ? window.matchMedia("(pointer: coarse)")
       : null;
@@ -921,7 +919,10 @@ export function useViewerPicking({
     }
 
     function pickReferenceAtPosition(clientX, clientY, { hover = false, preferTopology = false } = {}) {
-      if (suppressTopologyPicking) {
+      // Every press and release asks for a pick. With picking off that was still a full
+      // model raycast per orbit gesture, which can materialize deformation buffers and
+      // enqueue a BVH build for an answer that is always "nothing".
+      if (suppressTopologyPicking || pickModeRef.current === VIEWER_PICK_MODE.NONE) {
         return null;
       }
       setPointerFromPosition(clientX, clientY);
@@ -976,13 +977,7 @@ export function useViewerPicking({
       if (!(target instanceof Node)) {
         return false;
       }
-      if (sceneMount?.contains(target)) {
-        return true;
-      }
-      if (drawingCanvas && (target === drawingCanvas || drawingCanvas.contains?.(target))) {
-        return true;
-      }
-      return false;
+      return Boolean(sceneMount?.contains(target));
     }
 
     function isSceneEvent(event) {
@@ -1413,7 +1408,6 @@ export function useViewerPicking({
       container.style.cursor = "";
     };
   }, [
-    drawingCanvasRef,
     mountRef,
     previewMode,
     runtimeRef,

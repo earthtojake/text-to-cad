@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { buildModelingTree } from './modelingTree.js';
 import { boreFeatures } from './modelingBores.js';
 import { localPrismaticFeatures } from './modelingLocalFeatures.js';
-import { presentModelingTree, presentModelingAssembly } from './modelingPresentation.js';
+import { presentModelingTree, presentModelingAssembly, implicitModelingRoots } from './modelingPresentation.js';
 const fixture=name=>JSON.parse(fs.readFileSync(new URL(`./__tests__/fixtures/${name}.json`,import.meta.url)));
 const maps=i=>[i.faces,new Map(i.faces.map(f=>[f.ord,f])),new Map(i.edges.map(e=>[e.ord,e]))];
 
@@ -98,11 +98,24 @@ test('STEP document assembly wrapper is flattened without flattening nested asse
  assert.equal(root.children[0].id,'o1.1');
 });
 
-test('single STEP part keeps its selectable root and unrecognized disclosure',()=>{
+test('single STEP part retains its canonical logical owner before recognition',()=>{
  const root={id:'__step_model__',nodeType:'part',name:'Case',leafPartIds:['__model__'],children:[]};
  const descriptor={components:{c:{}},occurrences:[{id:'o1',component:'c',name:'Case'}]};
  const presented=presentModelingAssembly(descriptor,{},root);
  assert.equal(presented.length,1);
  assert.equal(presented[0].selectionId,'__step_model__');
  assert.equal(presented[0].recognitionPending,true);
+});
+
+
+test('implicit roots stop at meaningful choices and never flatten feature groups',()=>{
+ const group={id:'g',kind:'group',children:[{id:'f',kind:'hole',children:[]}]};
+ const body={id:'b',kind:'body',children:[group]};
+ const part={id:'p',kind:'part',occurrenceId:'o1',children:[body]};
+ const assembly={id:'a',kind:'assembly',children:[part]};
+ assert.deepEqual(implicitModelingRoots([assembly]),[assembly,part,body]);
+ assert.deepEqual(implicitModelingRoots([part,{...part,id:'p2'}]),[]);
+ assert.deepEqual(implicitModelingRoots([{...part,children:[],recognitionPending:true}]).map(n=>n.id),['p']);
+ assert.deepEqual(implicitModelingRoots([{...part,children:[],recognitionPending:false}]),[]);
+ assert.deepEqual(implicitModelingRoots([group]),[]);
 });

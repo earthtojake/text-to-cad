@@ -11,7 +11,7 @@ export function createFramePresentation({ canvas, renderMode, onPresent }) {
       const key = String(request?.key || "");
       const ready = request?.ready === true;
       const hasVisibleContent = Boolean(runtime?.hasVisibleModel || runtime?.hasDrawingDocument);
-      const environmentReady = !renderMode || runtime?.environmentReady === true;
+      const environmentReady = !(runtime?.renderMode ?? renderMode) || runtime?.environmentReady === true;
       if (!canvasPresented && (!ready || !key || !hasVisibleContent || !environmentReady)) return false;
       drawFrame();
       if (!canvasPresented) {

@@ -32,8 +32,9 @@ the shared CAD, Markdown, code, image, PDF and fallback renderers. The whole
 file-tab interface is shared with web. Projects, sessions, browser/terminal/
 review tabs, agent integrations and native services remain in this app.
 Neither shared package imports app source, and desktop imports no web source.
-The host keeps pose-transition preferences in one window-wide store backed by
-the existing global storage key. Active and newly opened roots share that
+The host keeps pose-transition and fullscreen orbit preferences in one
+window-wide store backed by their global storage keys (`cad-viewer:pose-transition:v1`
+and `cad-viewer:orbit:v1`). Active and newly opened roots share that
 preference; document state, inspector selection and panel state remain scoped
 to their root or tab. Retired tutorial and inspector tab-layout records are
 ignored. Inspector tabs cannot be dragged, reordered or split.
@@ -927,8 +928,9 @@ embedding or scene-editing MCP tool. The `drawings` integration provides
 continues to show its source text.
 
 The shared editor is `@hardcore/ui/drawing`; desktop owns its temporary
-lifetime and prompt port. Fonts are bundled for offline use and the editor
-loads only on opening a Drawing tab. Read [the drawing contract](../../packages/ui/docs/drawing.md)
+lifetime and prompt port. Fonts are bundled for offline use by the shared
+`@hardcore/ui/drawing-assets` Vite plugin (desktop ships the full set) and the
+editor loads only on opening a Drawing tab. Read [the drawing contract](../../packages/ui/docs/drawing.md)
 for limits, asset licensing and the reuse boundary for future CAD overlays.
 
 ### Live files and terminals
@@ -1078,18 +1080,24 @@ default; other saved panel choices remain unchanged.
 
 ### Inspect and Render
 
-CAD controls are shared with web: the top **Interaction tools** group contains
-Select, Pan, Measure and Draw; **View and actions** contains selection filters,
-navigation and capture. The horizontal groups wrap in a
-narrow explorer pane. Zoom buttons, a static percentage readout and Reset view
-sit above the bottom-right orientation axes; X/Y/Z labels sit outside the
-endpoints. Camera behavior and per-file state are unchanged.
+CAD controls are shared with web: the top-right toolbar contains Select, Pan,
+Measure and Draw. Pressing Select again opens its selection-filter dropdown.
+Buttons wrap inside the pill in a narrow explorer pane. The file navbar has a
+direct snapshot action before Inspector (`PanelLeft`) and file tree (`Folders`).
+Snapshot attaches the viewport PNG and references to this tab's owning session
+draft through the prompt-context adapter; it does not send a message. Playback
+lives in Motion. A small muted percentage beside the Inspector tabs opens
+zoom/fit controls, Reset camera and Reset model. Reset model clears motion and
+spatial tools while retaining display settings; View Reset instead restores
+the selected preset and disables Clip/Explode. X/Y/Z labels stay outside the
+bottom-right axis endpoints, with the yellow center above their stems.
+The web header's fullscreen action is owned by that app.
 
-The shared STEP Inspector uses **Model | Motion | View**. Motion appears when
+The shared STEP Inspector uses **Features | Motion | View**. Motion appears when
 position controls or animation clips exist, with Animation above Position.
 Playback and position retain independent runtimes, enable state and actions;
 preset-transition preferences are ordinary Position rows above Reset/Copy.
-Robots also use Motion for their joints and preserve Components/SDF tabs;
+Robots also use Motion for their joints, then Components (the link tree), and keep the SDF tab;
 drawings and mesh files retain their format-specific controls.
 
 View contains the single Mode dropdown for shaded, edge, wire and photographic

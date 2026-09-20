@@ -5,7 +5,7 @@ import { animationClipOptions } from "./animationClipOptions.js";
 
 test("the picker lists the model's authored clips and nothing else", () => {
   // The built-in "No clip" entry is gone: the transport's idle state is the
-  // Animation section's gate switch, not a row in a list of clips. With one
+  // Play/Pause transport, not a row in a list of clips. With one
   // kind of thing in the list there is nothing to separate it from, so the
   // "Clips" group heading went with it.
   assert.deepEqual(

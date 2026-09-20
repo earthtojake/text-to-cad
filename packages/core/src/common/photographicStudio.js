@@ -46,11 +46,13 @@ function resolvedConfiguration(configuration = {}) {
   return {
     exposure: clamp(finiteOr(configuration.exposure, 0), -5, 5),
     lighting: {
+      enabled: lighting.enabled !== false,
       rotation: clamp(finiteOr(lighting.rotation, DEFAULT_RENDER_LIGHTING.rotation), -180, 180),
       size: clamp(finiteOr(lighting.size, DEFAULT_RENDER_LIGHTING.size), 0.25, 3),
       fill: clamp(finiteOr(lighting.fill, DEFAULT_RENDER_LIGHTING.fill), 0, 1)
     },
     backdrop: {
+      ...(Object.hasOwn(backdrop, "opacity") ? { opacity: clamp(finiteOr(backdrop.opacity, 1), 0, 1) } : {}),
       color: typeof backdrop.color === "string" ? backdrop.color : "#e7e7e5",
       transparent: typeof backdrop.transparent === "boolean"
         ? backdrop.transparent
@@ -58,7 +60,9 @@ function resolvedConfiguration(configuration = {}) {
       ground: typeof backdrop.ground === "boolean"
         ? backdrop.ground
         : DEFAULT_RENDER_BACKDROP.ground,
-      groundPlacement: backdrop.groundPlacement ?? DEFAULT_RENDER_BACKDROP.groundPlacement
+      groundPlacement: backdrop.groundPlacement ?? DEFAULT_RENDER_BACKDROP.groundPlacement,
+      groundColor: backdrop.groundColor ?? backdrop.color ?? "#e7e7e5",
+      groundOpacity: clamp(finiteOr(backdrop.groundOpacity, DEFAULT_RENDER_BACKDROP.groundOpacity), 0, 1)
     }
   };
 }
@@ -137,7 +141,9 @@ function updateGround(THREE, state, configuration, bounds, sceneScale) {
     disposeGround(state);
     return;
   }
-  const kind = configuration.backdrop.transparent ? "shadow" : "physical";
+  // Grouped floor is independent of background alpha. Preserve the historical
+  // shadow-catcher behavior only for callers of the legacy studio recipe.
+  const kind = configuration.backdrop.transparent && !Object.hasOwn(configuration.backdrop, "opacity") ? "shadow" : "physical";
   if (!state.ground || state.groundKind !== kind) {
     disposeGround(state);
     const material = kind === "shadow"
@@ -150,11 +156,15 @@ function updateGround(THREE, state, configuration, bounds, sceneScale) {
         metalness: 0,
         envMapIntensity: 0.22,
         transparent: true,
-        opacity: 0.3
+        opacity: configuration.backdrop.groundOpacity
       });
     // Keep both the physical floor and transparent-background shadow catcher
     // from hiding geometry or fighting coplanar faces at the exact ground Z.
     material.depthWrite = false;
+    // One translucent surface from either side. A closed blended box would
+    // stack entry/exit opacity and expose extra boundaries during orbiting.
+    material.side = THREE.DoubleSide;
+    material.forceSinglePass = true;
     material.polygonOffset = true;
     material.polygonOffsetFactor = 1;
     material.polygonOffsetUnits = 1;
@@ -168,8 +178,9 @@ function updateGround(THREE, state, configuration, bounds, sceneScale) {
   }
 
   if (state.groundKind === "physical") {
-    updatePhysicalGroundColor(state.ground.material, configuration.backdrop.color);
+    updatePhysicalGroundColor(state.ground.material, configuration.backdrop.groundColor);
   }
+  state.ground.material.opacity = configuration.backdrop.groundOpacity;
   const minimumSize = sceneScale === "urdf" ? 0.5 : 100;
   const spanX = bounds.max[0] - bounds.min[0];
   const spanY = bounds.max[1] - bounds.min[1];
@@ -180,8 +191,8 @@ function updateGround(THREE, state, configuration, bounds, sceneScale) {
     minimumSize
   );
   // Geometry keeps its authored coordinates: the PLANE moves, never the model.
-  // It sits at the model's lowest point by default, so nothing is ever hidden
-  // under the floor; "origin" pins it to the document's own Z=0 instead.
+  // The default pins the floor to the document's Z=0; "lowest" follows the
+  // current bounds. Neither placement clips the model.
   const groundZ = configuration.backdrop.groundPlacement === "origin" ? 0 : bounds.min[2];
   state.ground.scale.set(stageSize, stageSize, 1);
   state.ground.position.set(bounds.center[0], bounds.center[1], groundZ);
@@ -235,25 +246,30 @@ function updateRendererAndScene(THREE, runtime, state, configuration) {
   const { renderer, scene } = runtime;
   // Product rendering needs authored paint colors and bright whites to remain
   // distinct. Filmic compression made ordinary CAD albedos look pastel/gray.
-  renderer.toneMapping = THREE.NeutralToneMapping;
-  renderer.toneMappingExposure = 2 ** configuration.exposure;
+  renderer.toneMapping = configuration.lighting.enabled ? THREE.NeutralToneMapping : state.original.toneMapping;
+  renderer.toneMappingExposure = configuration.lighting.enabled ? 2 ** configuration.exposure : state.original.toneMappingExposure;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   if (renderer.shadowMap) {
-    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.enabled = configuration.lighting.enabled;
     renderer.shadowMap.type = THREE.PCFShadowMap;
   }
 
-  scene.environmentIntensity = 1;
-  scene.environmentRotation?.set?.(0, 0, THREE.MathUtils.degToRad(configuration.lighting.rotation));
-  if (configuration.backdrop.transparent) {
-    scene.background = null;
-    renderer.setClearColor?.(new THREE.Color(configuration.backdrop.color), 0);
+  if (configuration.lighting.enabled) {
+    scene.environmentIntensity = 1;
+    scene.environmentRotation?.set?.(0, 0, THREE.MathUtils.degToRad(configuration.lighting.rotation));
   } else {
-    const color = new THREE.Color(configuration.backdrop.color);
-    scene.background = color;
-    renderer.setClearColor?.(color, 1);
+    // The neutral scene owns its reflection fill. Its intensity can change
+    // after the studio was created (for example when authored materials load),
+    // so a background/floor update must not restore that stale initial value.
+    if (state.original.environmentRotation) scene.environmentRotation?.copy?.(state.original.environmentRotation);
   }
-  state.keyLight.visible = true;
+  const alpha = configuration.backdrop.opacity ?? (configuration.backdrop.transparent ? 0 : 1);
+  const color = new THREE.Color(configuration.backdrop.color);
+  // A Scene.background Color is always opaque; clear alpha owns fractional
+  // canvas alpha so the viewer checkerboard and PNG export agree exactly.
+  scene.background = alpha < 1 ? null : color;
+  renderer.setClearColor?.(color, alpha);
+  state.keyLight.visible = configuration.lighting.enabled;
 }
 
 /**
@@ -270,7 +286,7 @@ export function applyPhotographicStudio(THREE, runtime, configuration = {}, {
   if (!THREE || !runtime?.scene || !runtime?.renderer) {
     throw new Error("applyPhotographicStudio requires THREE and a runtime with scene and renderer");
   }
-  if (runtime.renderer.capabilities?.logarithmicDepthBuffer === true) {
+  if (configuration.lighting?.enabled !== false && runtime.renderer.capabilities?.logarithmicDepthBuffer === true) {
     throw new Error("Photographic Render requires a renderer created without logarithmicDepthBuffer so contact shadows remain visible");
   }
   const resolved = resolvedConfiguration(configuration);
@@ -279,7 +295,7 @@ export function applyPhotographicStudio(THREE, runtime, configuration = {}, {
   const resolvedBounds = resolveBounds(bounds, runtime.modelRadius);
 
   updateRendererAndScene(THREE, runtime, state, resolved);
-  updateKeyLight(
+  if (resolved.lighting.enabled) updateKeyLight(
     THREE,
     state,
     resolved,

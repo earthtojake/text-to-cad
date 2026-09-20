@@ -13,15 +13,16 @@
 import faviconUrl from "../../assets/favicon.ico";
 
 import ViewerLinks from "./ViewerLinks";
-import { Monitor, Moon, Sun } from "lucide-react";
+import { Maximize2, Monitor, Moon, Sun } from "lucide-react";
 import { Button } from "@hardcore/ui/primitives/button";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@hardcore/ui/primitives/dropdown-menu";
 import { COLOR_SCHEMES } from "../../ui/colorScheme.js";
 
-/** @param {{ colorSchemePreference?: string, resolvedColorSchemeMode?: 'light' | 'dark', onColorSchemePreferenceChange?: (value: string) => void }} props */
-export default function ViewerTopBar({ colorSchemePreference = "system", resolvedColorSchemeMode = "light", onColorSchemePreferenceChange = undefined }) {
+/** @param {{ colorSchemePreference?: string, resolvedColorSchemeMode?: 'light' | 'dark', onColorSchemePreferenceChange?: (value: string) => void, fullscreen?: boolean, fullscreenAvailable?: boolean, onFullscreenChange?: (value: boolean) => void }} props */
+export default function ViewerTopBar({ colorSchemePreference = "system", resolvedColorSchemeMode = "light", onColorSchemePreferenceChange = undefined, fullscreen = false, fullscreenAvailable = false, onFullscreenChange = undefined }) {
   const AppearanceIcon = resolvedColorSchemeMode === "dark" ? Moon : Sun;
   const label = `Appearance: ${COLOR_SCHEMES.find(option => option.id === colorSchemePreference)?.label || "System"}`;
+  if (fullscreen) return null;
   return (
     <header className="flex h-9 shrink-0 items-center gap-2 border-b border-border bg-background px-2 text-foreground">
       <img alt="" aria-hidden className="size-4 shrink-0 rounded-[3px]" src={faviconUrl} />
@@ -36,7 +37,7 @@ export default function ViewerTopBar({ colorSchemePreference = "system", resolve
               {COLOR_SCHEMES.map(option => {
                 const Icon = option.id === "light" ? Sun : option.id === "dark" ? Moon : Monitor;
                 return (
-                  <DropdownMenuRadioItem key={option.id} value={option.id} className="text-xs">
+                  <DropdownMenuRadioItem key={option.id} value={option.id}>
                     <Icon className="size-3.5" aria-hidden="true" />
                     {option.label}
                   </DropdownMenuRadioItem>
@@ -45,6 +46,7 @@ export default function ViewerTopBar({ colorSchemePreference = "system", resolve
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>
+        <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:text-foreground" aria-label="Fullscreen" title="Fullscreen" disabled={!fullscreenAvailable} onClick={() => onFullscreenChange?.(true)}><Maximize2 className="size-3.5" aria-hidden="true" /></Button>
       </div>
     </header>
   );

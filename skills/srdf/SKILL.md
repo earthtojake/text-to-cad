@@ -94,12 +94,14 @@ joints you do not name staying at the rest pose (the `"jointValues"` job field i
 thing in a packet). Robots are authored in metres and are framed on the robot scene scale
 automatically.
 
-A normal snapshot uses deterministic light CAD lighting and hides grid and axis guides.
+A normal snapshot uses the Solid preset and Light appearance; omitted groups inherit preset defaults.
 Pass `--display render` for the shared photographic scene. Inline display JSON and
-JSON files may set `render.studio` to `light` or `dark` and the other studio-only
-controls. Top-level `--camera` and `--joint-values` remain active in every display
-mode. Robot link meshes have no CAD-edge or exploded assembly
-topology, so those display combinations are rejected clearly.
+JSON files use grouped settings such as `lighting`, `background`, and `floor`;
+`appearance` is `light` (default) or `dark`. Projection and focal length belong
+in `display.camera`. Top-level `--camera` and `--joint-values` remain active in every display
+mode. The display modes are `solid` and `render`: `edges`, `clip`, `exploded`, the
+`xray`, `hidden-line` and `wireframe` modes and the `hidden`/`off` surface styles
+describe a STEP model's CAD edges, parts and solids, and are refused by name here.
 
 Link meshes are resolved relative to the description, so they must be present: an
 unhydrated Git LFS pointer fails as "No link mesh loaded for robot". Run

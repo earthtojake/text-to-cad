@@ -1,18 +1,12 @@
-import {
-  FILE_SHEET_FIELD_LABEL_CLASSES,
-  FileSheetFieldGrid,
-  FileSheetStatusText,
-  FileSheetSubsection,
-  FileSheetValueField
-} from "./FileSheet.js";
+import { CoordValue, InfoRow, MonoValue } from "./StepReferenceSection.js";
 
-// What the selected object IS, at the foot of the Components tab.
+// The Reference pane at the foot of the Components tab: what the selection IS.
 //
-// This replaced a locator string with a copy button. The locator named the object in a
-// grammar no CLI and no skill parses, so copying it led nowhere; these are facts a
-// person reads to decide whether they picked the right thing. The colour is first
-// because a cadgen mesh export groups an object BY colour, so it is the attribute that
-// tells two rows of one link apart.
+// A link reads back what the description says about it (its parent joint, limits,
+// origin, mass, geometry files); a named mesh object reads back the mesh facts a
+// person uses to tell two objects of one link apart. There is no copy button: robot
+// formats have no reference grammar a CLI or a skill parses, so a copied locator
+// would lead nowhere.
 
 function formatCount(value) {
   return Number(value || 0).toLocaleString();
@@ -28,48 +22,91 @@ function formatMillimetres(value) {
   return size.toFixed(2);
 }
 
-// Full width: three numbers and two separators do not fit half a sidebar, and a
-// truncated size ("89.2 x 31.3 x 4...") is worse than no size at all.
-function SizeField({ sizeMillimetres }) {
-  if (!sizeMillimetres) return null;
-  const [x, y, z] = sizeMillimetres.map(formatMillimetres);
-  return (
-    <div className="col-span-2 min-w-0">
-      <FileSheetValueField label="Size (mm)" value={`${x} × ${y} × ${z}`} mono />
-    </div>
-  );
+// As written, without the noise of a float: 1.5707963 stays readable, 0 stays 0.
+function formatValue(value, digits = 4) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "—";
+  const rounded = Number(number.toFixed(digits));
+  return String(Object.is(rounded, -0) ? 0 : rounded);
 }
 
-function ColorField({ color }) {
-  if (!color) return null;
-  return (
-    <div className="block min-w-0">
-      <span className={FILE_SHEET_FIELD_LABEL_CLASSES}>Colour</span>
-      <div className="mt-1 flex min-h-7 min-w-0 items-center gap-2 rounded-md border border-border/70 bg-muted/25 px-2 py-1">
-        <span
-          className="size-3.5 shrink-0 rounded-sm border border-border/70"
-          style={{ backgroundColor: color }}
-          aria-hidden="true"
-        />
-        <span className="truncate font-mono text-[11px] font-medium leading-4 tabular-nums text-foreground">{color}</span>
-      </div>
-    </div>
-  );
+const ANGULAR = new Set(["revolute", "continuous"]);
+const degrees = radians => `${formatValue((radians * 180) / Math.PI, 1)}°`;
+
+function Section({ label, children }) {
+  return <div className="mt-2 border-t border-sidebar-border/60 pt-2" aria-label={label}>{children}</div>;
+}
+
+function GeometryRows({ label, entries }) {
+  if (!entries) return null;
+  const files = entries.map(entry => entry.filename || entry.type).filter(Boolean);
+  return <InfoRow label={label}>
+    <MonoValue>{entries.length}</MonoValue>
+    {files.length > 0 && <span className="block text-muted-foreground">{files.map((file, index) => <span key={`${file}:${index}`} className="block">{file}</span>)}</span>}
+  </InfoRow>;
+}
+
+function LimitRows({ joint }) {
+  const limit = joint.limit;
+  if (!limit) return null;
+  const angular = ANGULAR.has(joint.type);
+  const unit = angular ? "rad" : "m";
+  const range = Number.isFinite(limit.lower) || Number.isFinite(limit.upper);
+  return <>
+    {range && <InfoRow label="Limits" title={`Lower and upper position limits, in ${angular ? "radians" : "metres"} as the description writes them`}>
+      <MonoValue>{`${formatValue(limit.lower)} … ${formatValue(limit.upper)} ${unit}`}</MonoValue>
+      {angular && Number.isFinite(limit.lower) && Number.isFinite(limit.upper) &&
+        <span className="block text-muted-foreground">{`${degrees(limit.lower)} … ${degrees(limit.upper)}`}</span>}
+    </InfoRow>}
+    {Number.isFinite(limit.effort) && <InfoRow label="Effort"><MonoValue>{`${formatValue(limit.effort)} ${angular ? "N·m" : "N"}`}</MonoValue></InfoRow>}
+    {Number.isFinite(limit.velocity) && <InfoRow label="Velocity"><MonoValue>{`${formatValue(limit.velocity)} ${angular ? "rad/s" : "m/s"}`}</MonoValue></InfoRow>}
+  </>;
+}
+
+export function RobotLinkDetails({ facts }) {
+  const joint = facts.parentJoint;
+  return <div className="flex min-w-0 flex-col text-tiny font-normal" aria-label="Link details">
+    <InfoRow label="Name">{facts.name}</InfoRow>
+    <InfoRow label="Type">{facts.isRoot ? "Root link" : "Link"}</InfoRow>
+    {Number.isFinite(facts.mass) && <InfoRow label="Mass"><MonoValue>{`${formatValue(facts.mass, 3)} kg`}</MonoValue></InfoRow>}
+    <GeometryRows label="Visuals" entries={facts.visuals}/>
+    <GeometryRows label="Collisions" entries={facts.collisions}/>
+    {facts.groups.length > 0 && <InfoRow label="Groups" title="SRDF planning groups this link belongs to">{facts.groups.join(", ")}</InfoRow>}
+    {facts.endEffectors.length > 0 && <InfoRow label="End effector">{facts.endEffectors.join(", ")}</InfoRow>}
+    {joint && <Section label="Parent joint">
+      <InfoRow label="Joint">{joint.name}</InfoRow>
+      <InfoRow label="Joint type">{joint.type}</InfoRow>
+      <InfoRow label="Parent">{joint.parentLink}</InfoRow>
+      {joint.axis && <InfoRow label="Axis"><CoordValue vector={joint.axis} digits={4}/></InfoRow>}
+      <LimitRows joint={joint}/>
+      {joint.mimic && <InfoRow label="Mimic"><MonoValue>{`${joint.mimic.joint} × ${formatValue(joint.mimic.multiplier)} + ${formatValue(joint.mimic.offset)}`}</MonoValue></InfoRow>}
+      {joint.origin && <>
+        <InfoRow label="Origin xyz" title="Joint origin in the parent link frame, metres"><CoordValue vector={joint.origin.xyz} digits={4}/></InfoRow>
+        <InfoRow label="Origin rpy" title="Joint origin roll, pitch and yaw, radians"><MonoValue>{joint.origin.rpy.map(value => formatValue(value)).join("  ")}</MonoValue></InfoRow>
+      </>}
+    </Section>}
+    {facts.childJoints.length > 0 && <Section label="Child joints">
+      <InfoRow label="Children"><span className="flex flex-col">
+        {facts.childJoints.map(child => <span key={child.name}>{child.childLink}<span className="text-muted-foreground">{` · ${child.name} · ${child.type}`}</span></span>)}
+      </span></InfoRow>
+    </Section>}
+  </div>;
 }
 
 function ComponentDetails({ component }) {
-  return (
-    <FileSheetSubsection title={component.name}>
-      <FileSheetFieldGrid columns={2}>
-        <FileSheetValueField label="Link" value={component.linkName} />
-        <ColorField color={component.color} />
-        <div className="col-span-2 min-w-0">
-          <FileSheetValueField label="Triangles" value={formatCount(component.triangleCount)} mono />
-        </div>
-        <SizeField sizeMillimetres={component.sizeMillimetres} />
-      </FileSheetFieldGrid>
-    </FileSheetSubsection>
-  );
+  const size = component.sizeMillimetres;
+  return <div className="flex min-w-0 flex-col text-tiny font-normal" aria-label="Component details">
+    <InfoRow label="Name">{component.name}</InfoRow>
+    <InfoRow label="Type">Mesh object</InfoRow>
+    <InfoRow label="Link">{component.linkName}</InfoRow>
+    {/* A cadgen mesh export groups an object BY colour, so it tells two rows of one link apart. */}
+    {component.color && <InfoRow label="Colour"><span className="inline-flex items-center gap-1.5">
+      <span className="size-3 shrink-0 rounded-sm border border-border/70" style={{ backgroundColor: component.color }} aria-hidden="true"/>
+      <MonoValue>{component.color}</MonoValue>
+    </span></InfoRow>}
+    <InfoRow label="Triangles"><MonoValue>{formatCount(component.triangleCount)}</MonoValue></InfoRow>
+    {size && <InfoRow label="Size" title="Bounding size of the object on the robot, millimetres"><MonoValue>{`${size.map(formatMillimetres).join(" × ")} mm`}</MonoValue></InfoRow>}
+  </div>;
 }
 
 export default function RobotComponentDetails({ components, selectedIds }) {
@@ -77,18 +114,11 @@ export default function RobotComponentDetails({ components, selectedIds }) {
   if (!selected.length) return null;
   if (selected.length > 1) {
     const triangles = selected.reduce((total, component) => total + component.triangleCount, 0);
-    return (
-      <FileSheetSubsection title={`${selected.length} components selected`}>
-        <FileSheetFieldGrid columns={2}>
-          <FileSheetValueField
-            label="Links"
-            value={[...new Set(selected.map((component) => component.linkName))].join(", ")}
-          />
-          <FileSheetValueField label="Triangles" value={formatCount(triangles)} mono />
-        </FileSheetFieldGrid>
-        <FileSheetStatusText>Select one component to see its size and colour.</FileSheetStatusText>
-      </FileSheetSubsection>
-    );
+    return <div className="flex min-w-0 flex-col text-tiny font-normal" aria-label="Component details">
+      <p className="py-1 text-micro text-muted-foreground">Selection · {selected.length} components</p>
+      <InfoRow label="Links">{[...new Set(selected.map((component) => component.linkName))].join(", ")}</InfoRow>
+      <InfoRow label="Triangles"><MonoValue>{formatCount(triangles)}</MonoValue></InfoRow>
+    </div>;
   }
   return <ComponentDetails component={selected[0]} />;
 }

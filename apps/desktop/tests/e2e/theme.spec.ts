@@ -267,22 +267,12 @@ test("stays dark through display mode and render settings edits", async () => {
   const displayMode = page.getByRole("tabpanel", { name: "View", exact: true }).getByRole("combobox", { name: "Mode" });
   await displayMode.click();
   await page.getByRole("option", { name: "Render", exact: true }).click();
-  const studio = page.locator("[data-cad-render-settings-section]");
+  await page.getByRole("button", { name: "Lighting", exact: true }).click();
+  const studio = page.locator("[data-cad-render-settings-section=rendering]");
   await expect(studio).toBeVisible();
   await expectNeverMoved(page, "dark", "entering Render");
 
-  // Studio sliders modify photographic presentation, not app appearance.
-  const sliders = studio.locator("[role=slider]");
-  const dragged = Math.min(await sliders.count(), 4);
-  expect(dragged, "Studio has sliders to drag").toBeGreaterThan(0);
-  for (let index = 0; index < dragged; index += 1) {
-    const box = await sliders.nth(index).boundingBox();
-    if (!box) continue;
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2 + 32, box.y + box.height / 2, { steps: 6 });
-    await page.mouse.up();
-  }
+  // Compact numeric fields modify photographic presentation, not app appearance.
   const exposure = studio.getByLabel("Exposure value", { exact: true });
   await exposure.fill("1.5");
   await exposure.press("Enter");
@@ -293,7 +283,7 @@ test("stays dark through display mode and render settings edits", async () => {
   await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
 
   await displayMode.click();
-  await page.getByRole("option", { name: "Shaded with edges", exact: true }).click();
+  await page.getByRole("option", { name: "Solid", exact: true }).click();
   await page.getByRole("tab", { name: "Model", exact: true }).click();
   await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible();
   await expectNeverMoved(page, "dark", "returning to Inspect");

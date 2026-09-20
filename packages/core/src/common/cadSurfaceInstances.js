@@ -28,6 +28,7 @@ function materialPassKey(material) {
   const side = material?.side;
   const depthTest = material?.depthTest !== false;
   const depthWrite = material?.depthWrite !== false;
+  const colorWrite = material?.colorWrite !== false;
   const polygonOffset = material?.polygonOffset === true;
   const polygonOffsetFactor = Number(material?.polygonOffsetFactor) || 0;
   const polygonOffsetUnits = Number(material?.polygonOffsetUnits) || 0;
@@ -38,7 +39,7 @@ function materialPassKey(material) {
     && Object.is(previous.clearcoat, clearcoat) && Object.is(previous.clearcoatRoughness, clearcoatRoughness)
     && Object.is(previous.emissiveIntensity, emissiveIntensity) && previous.emissionEnabled === emissionEnabled
     && Object.is(previous.envMapIntensity, envMapIntensity) && Object.is(previous.side, side)
-    && previous.depthTest === depthTest && previous.depthWrite === depthWrite
+    && previous.depthTest === depthTest && previous.depthWrite === depthWrite && previous.colorWrite === colorWrite
     && previous.polygonOffset === polygonOffset && Object.is(previous.polygonOffsetFactor, polygonOffsetFactor)
     && Object.is(previous.polygonOffsetUnits, polygonOffsetUnits)) return previous.key;
   const values = {
@@ -46,8 +47,8 @@ function materialPassKey(material) {
     emissiveIntensity, emissionEnabled, envMapIntensity, side, depthTest,
     depthWrite, polygonOffset, polygonOffsetFactor, polygonOffsetUnits,
   };
-  const key = JSON.stringify(values);
-  if (cacheable) materialPassKeys.set(material, { ...values, key });
+  const key = JSON.stringify({ ...values, ...(!colorWrite ? { colorWrite: false } : {}) });
+  if (cacheable) materialPassKeys.set(material, { ...values, colorWrite, key });
   return key;
 }
 

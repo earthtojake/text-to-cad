@@ -1,7 +1,7 @@
-import { Search, X } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@hardcore/ui/primitives/context-menu";
+import { TreeFilterHighlight, TreeFilterInput } from "@hardcore/ui/primitives/tree-filter";
 import { TREE_ROW_HEIGHT, TreeRowSurface, TreeRowChevron, TreeRowLabel } from "@hardcore/ui/primitives/tree-row";
 
 import { EntryMenuItems, useEntryMenuFocusGuard } from "./EntryMenu.jsx";
@@ -515,30 +515,13 @@ export function FileTree({ source, activePath, reveal = null, edit = null, onOpe
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-sidebar/40">
-      <div className="flex h-9 shrink-0 items-center gap-1 border-b px-2">
-        <div className="relative flex min-w-0 flex-1 items-center">
-          <Search className="pointer-events-none absolute left-2 size-3 text-muted-foreground" />
-          <input
-            aria-label="Filter files"
-            className="h-6 w-full min-w-0 rounded-md bg-transparent pr-5 pl-6.5 text-[12px] outline-none placeholder:text-muted-foreground focus:bg-background/70"
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder="Filter files…"
-            spellCheck={false}
-            value={query}
-          />
-          {query !== "" ? (
-            <button
-              aria-label="Clear filter"
-              className="absolute right-1 flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent"
-              onClick={() => setQuery("")}
-              type="button"
-            >
-              <X className="size-2.5" />
-            </button>
-          ) : null}
-        </div>
-      </div>
+      <TreeFilterInput
+        label="Filter files"
+        onChange={setQuery}
+        onKeyDown={onKeyDown}
+        placeholder="Filter files…"
+        value={query}
+      />
 
       <ContextMenu modal={false}>
         <ContextMenuTrigger asChild>
@@ -694,26 +677,8 @@ function FilterRow({ path, indices, active, cursor, onOpen }) {
       <FileIcon className="size-3.5 shrink-0 text-muted-foreground" path={path} />
       <TreeRowLabel>
         {directory ? <span className="text-muted-foreground">{directory}</span> : null}
-        <Highlight from={directory.length} indices={indices} text={path.slice(directory.length)} />
+        <TreeFilterHighlight from={directory.length} indices={indices} text={path.slice(directory.length)} />
       </TreeRowLabel>
     </TreeRowSurface>
-  );
-}
-
-/** Matched characters use the primary text color without changing weight. */
-function Highlight({ text, indices, from }) {
-  const hits = new Set(indices.map((index) => index - from));
-  return (
-    <>
-      {[...text].map((character, index) =>
-        hits.has(index) ? (
-          <span className="text-foreground" key={index}>
-            {character}
-          </span>
-        ) : (
-          <span key={index}>{character}</span>
-        )
-      )}
-    </>
   );
 }

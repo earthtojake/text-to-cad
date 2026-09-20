@@ -1,17 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { STEP_MODEL_ROOT_ID } from '@hardcore/core/lib/step/stepTree.js';
 import FileSheet from './FileSheet.js';
 import FileSheetTabbedSurface from './FileSheetTabbedSurface.js';
 import { buildFileStatusTab } from './FileStatusSection.js';
 import { buildMotionControlsTab } from './MotionControlsSection.js';
-import { buildStepReferenceTab } from './StepReferenceSection.js';
+import { StepReferenceSection } from './StepReferenceSection.js';
 import ModelingTree from './ModelingTree.jsx';
-import StepGeometryProperties from './StepGeometryProperties.jsx';
 import { useStepModeling } from '../../workbench/useStepModeling.js';
-import { stepGeometryMeasurements, stepGeometryDimension } from '../../workbench/stepGeometryMeasurements.js';
+import { stepGeometryMeasurements } from '../../workbench/stepGeometryMeasurements.js';
 const EMPTY = [];
 
 export default function StepFileSheet({
+  headerActions = null,
   client, open, isDesktop, width, onOpenChange, onStartResize, selectedEntry, viewerLoading,
   geometryInspection = null, stepTreeRoot, isAssemblyView = false,
   selectedMeshData = null, selectedSourceAppearance = null,
@@ -33,10 +33,8 @@ export default function StepFileSheet({
       ? current : { key: recognitionKey, ids }
   )), [recognitionKey]);
   const modeling = useStepModeling(selectedEntry, open && !treeSelectionDisabled && !viewerLoading, { client, requestedOccurrenceIds });
-  const [inspection, setInspection] = useState(null);
   const modelReferences = geometryInspection?.references || EMPTY;
   const modelParts = geometryInspection?.parts || EMPTY;
-  const highlight = geometryInspection?.onHighlight;
   const measuredSelection = useMemo(() => ({
     faceIds: selectedReferences.filter(ref => ref.selectorType === 'face').map(ref => ref.id),
     partIds: [...new Set([
@@ -45,32 +43,12 @@ export default function StepFileSheet({
     ])],
   }), [selectedReferences, selectedPartIds, modelParts]);
   const measurements = useMemo(() => stepGeometryMeasurements(measuredSelection, modelReferences, modelParts), [measuredSelection, modelReferences, modelParts]);
-  const selectionKey = [...selectedReferenceIds, ...measuredSelection.partIds].join('|');
-  useEffect(() => setInspection(null), [selectionKey]);
-  useEffect(() => {
-    if (!inspection) return;
-    const selection = inspection.kind === 'axis'
-      ? { ...measuredSelection, measurement: stepGeometryDimension(measuredSelection, modelReferences, modelParts, inspection.value) }
-      : { partIds: [], faceIds: modelReferences.filter(ref => measuredSelection.faceIds.includes(ref.id) && ['cylinder', 'sphere'].includes(ref.pickData?.surfaceType || ref.pickData?.params?.kind) && Number.isFinite(ref.pickData?.params?.radius) && Number(ref.pickData.params.radius.toPrecision(10)) === inspection.value).map(ref => ref.id) };
-    highlight?.(selection, 'Selected geometry', {file: selectedEntry?.file, label: 'Selected geometry', measurements, inspection});
-    return () => highlight?.(null);
-  }, [inspection, measuredSelection, modelReferences, modelParts, highlight, selectedEntry?.file, measurements]);
-  const inspect = (kind, value) => setInspection(current => current?.kind === kind && current.value === value ? null : {kind, value});
-
   if (!selectedEntry) return null;
-  const selectionDetails = selectedReferences.length || measuredSelection.partIds.length ? <>
-    {selectedReferences.length > 0 && buildStepReferenceTab({
-      references: selectedReferences,
-      meshData: selectedMeshData,
-      sourceAppearance: selectedSourceAppearance,
-    }).content}
-    {(measurements.size || measurements.radii.length > 0) && <details className="mt-1">
-      <summary className="cursor-pointer px-2 py-1 text-tiny text-muted-foreground">Dimension previews</summary>
-      <StepGeometryProperties measurements={{...measurements,area:null}} inspection={inspection} inspect={inspect} />
-    </details>}
-  </> : null;
+  const selectionDetails = selectedReferences.length || measuredSelection.partIds.length ? <StepReferenceSection
+    references={selectedReferences} meshData={selectedMeshData} sourceAppearance={selectedSourceAppearance} measurements={measurements}
+  /> : null;
   const sections = [{
-    id: 'tree', title: 'Model', keepMounted: true, scrollsContent: true,
+    id: 'tree', title: 'Features', keepMounted: true, scrollsContent: true,
     titleAttr: treeSelectionDisabled ? treeSelectionDisabledReason : undefined,
     content: active => <ModelingTree key={`${selectedEntry.file}:${geometryInspection?.revision}`}
       modeling={modeling} stepRoot={stepTreeRoot} active={active && open}
@@ -86,11 +64,11 @@ export default function StepFileSheet({
     />,
   }, buildMotionControlsTab({
     poseRuntime: stepModule, animationRuntime: stepAnimation,
-    poseProps: { loadingLabel: 'Loading kinematics...', noParametersLabel: 'No pose controls.', resetTitle: 'Reset pose' },
+    poseProps: { loadingLabel: 'Loading kinematics...', noParametersLabel: 'No pose controls.' },
   }), ...settingsTabs, buildFileStatusTab(statusItems)].filter(Boolean);
   return <FileSheet open={open} title="STEP" isDesktop={isDesktop} width={width}
     onOpenChange={onOpenChange} onStartResize={onStartResize} scrollBody={false}>
-    <FileSheetTabbedSurface sections={sections} openSectionIds={openSectionIds}
+    <FileSheetTabbedSurface headerActions={headerActions} sections={sections} openSectionIds={openSectionIds}
       onOpenSectionIdsChange={onOpenSectionIdsChange} />
   </FileSheet>;
 }

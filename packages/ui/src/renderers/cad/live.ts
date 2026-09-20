@@ -1,5 +1,7 @@
 import type { PromptReference, ResourceRef } from '@hardcore/core/prompt';
 import type { JsonValue } from '../../file-viewer/types.js';
+import { normalizeViewSettings } from '@hardcore/core/common/viewSettings.js';
+import { mergeViewerDisplaySettings } from './workbench/viewerDisplaySettings.js';
 
 export interface CadCameraSnapshot {
   position: [number, number, number];
@@ -24,6 +26,7 @@ export interface CadLiveState {
   hiddenPartIds: readonly string[];
   isolatedPartIds: readonly string[];
   camera: CadCameraSnapshot | null;
+  /** Canonical sparse grouped View configuration; clip/exploded are independent tools. */
   display: { [key: string]: JsonValue };
   renderMode: 'inspect' | 'render';
 }
@@ -95,8 +98,23 @@ export function attachCadLiveBinding(binding: CadLiveBinding, readRuntime: () =>
     clearSelection: () => mutate(runtime => runtime.clearSelection()),
     setCamera: snapshot => mutate(runtime => runtime.setCamera(snapshot)),
     resetCamera: () => mutate(runtime => runtime.resetCamera()),
-    setDisplaySettings: patch => mutate(runtime => runtime.setDisplaySettings(patch),
-      state => patch.mode == null || state.display.mode === patch.mode),
+    setDisplaySettings: async patch => {
+      const normalized = normalizeViewSettings(patch);
+      const canonicalPatch = Object.hasOwn(patch, 'mode') ? normalized
+        : Object.fromEntries(Object.entries(normalized).filter(([key]) => key !== 'mode'));
+      const containsPatch = (actual: unknown, expected: unknown): boolean => {
+        if (!expected || typeof expected !== 'object' || Array.isArray(expected)) {
+          return JSON.stringify(actual) === JSON.stringify(expected);
+        }
+        return Boolean(actual && typeof actual === 'object') && Object.entries(expected).every(
+          ([key, value]) => containsPatch((actual as Record<string, unknown>)[key], value));
+      };
+      let expectedDisplay: ReturnType<typeof mergeViewerDisplaySettings>;
+      return mutate(runtime => {
+        expectedDisplay = mergeViewerDisplaySettings(runtime.readState().display, canonicalPatch);
+        runtime.setDisplaySettings(canonicalPatch);
+      }, state => containsPatch(state.display, expectedDisplay));
+    },
     setRenderMode: enabled => mutate(runtime => runtime.setRenderMode(enabled),
       state => state.renderMode === (enabled ? 'render' : 'inspect')),
     async capture() {

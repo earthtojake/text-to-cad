@@ -53,13 +53,53 @@ For example, a four-view comparison can use one JSON job:
 Use only the views relevant to the design. Opposed isometric views reveal more
 exterior faces, but neither they nor orthographic views reveal all occluded geometry.
 
-Set `input` to the primary STEP/STP artifact using a relative or absolute path (documents only — a `.py` model script is refused: run it first, then snapshot the STEP it wrote). The snapshot CLI derives its internal render root from that input path. With no explicit display mode it uses deterministic light CAD lighting, an orthographic isometric camera and normal shaded-with-edges display, with grid and axis guides disabled for still evidence. Labeled/section views default to 1600x1200 when dimensions are omitted. Use `output.sizeProfile: "assembly"` or `"assembly-large"` for complex assemblies that need 1800x1200 or 1920x1440. For CAD review packets, use still-image render modes `view` and `section`; set `display.mode` to `shaded_edges`, `transparent`, `hidden_edges`, `hidden_lines_removed`, or `wireframe` when the visual check benefits from explicit CAD linework. For shaded surfaces with no CAD linework set `display.mode: "shaded"` (or `"unshaded"`). `display.edges` carries the viewer's edge styling settings for modes that draw linework.
+Set `input` to the saved STEP/STP artifact using a relative or absolute path
+(documents only: run a `.py` model first). With no explicit display settings,
+snapshots use the `solid` preset, Light appearance and an orthographic isometric
+camera. Labeled/section views default to 1600x1200; `output.sizeProfile` accepts
+`assembly` or `assembly-large` for 1800x1200 or 1920x1440. Job `mode` remains
+`view`, `section`, or `list`; display presets are a separate choice.
 
-Set `display.mode` to `render` to use photographic lighting in `view` mode. `--display render` is the compact CLI form; inline JSON and JSON files use the same unified display object as the Viewer. Studio-only settings live at `display.render`: `{"mode":"render","render":{"studio":...,"quality":...,"exposure":...,"lighting":...,"backdrop":...}}`. Studio is `light` or `dark`; the CLI uses Light when omitted. Quality is `preview` or `final` and defaults to final. Exposure is a finite number from -5 to 5. Lighting accepts `rotation` (-180..180 degrees), `size` (0.25..3 relative softbox scale), and `fill` (0..1 ratio). Backdrop accepts a hex `color`, boolean `transparent` and `ground` controls, and `groundPlacement` — `lowest` (the default: the floor sits at the model minimum, so geometry below the document origin is not veiled by it) or `origin` (pin the plane to the document's own Z=0), moving neither geometry nor lighting. `display.render` is legal only when the display mode is `render`.
+`--display` accepts a preset name, inline JSON, or a JSON file path. The five
+presets are `solid` (default), `render`, `xray`, `hidden-line`, and `wireframe`.
+Render starts with perspective projection and photographic lighting; the other
+presets start with orthographic projection. `appearance` is `light` (the CLI
+default) or `dark`. The Viewer and CLI accept the same grouped display object:
 
-Camera remains the common top-level `camera` setting, so Render preserves perspective or orthographic projection, focal length and orthographic scale. The other display fields remain active too: clipping, explode, guides, part color, visibility and selection compose with the studio recipe.
+```bash
+cadgen step snapshot STEP/part.step tmp/review.png --display render
+cadgen step snapshot STEP/part.step tmp/review.png --display '{"mode":"render","floor":{"enabled":false},"background":{"opacity":0.5}}'
+cadgen step snapshot STEP/part.step tmp/review.png --display display.json --camera front
+```
 
-Use `--focus '#o1.2' ...` to emphasize specific part or subassembly occurrence refs — in `view` renders the focused refs keep full opacity while the rest of the assembly is ghosted in place (framing and context are preserved); in `section` mode focus isolates the refs entirely. Use `--hide '#o1.2' ...` to omit parts. Do not combine focus and hide in the same snapshot command or job. These filters accept occurrence refs only, not face, edge, vertex, or shape selectors. Focus, hide, kinematics, robot joint values, animation frames and animation sequences all compose with `display.mode: "render"` where the source format supports them.
+Omitted groups inherit the chosen preset. A supplied group merges its parameters
+with those defaults and implies `enabled: true`, unless `enabled: false` is
+explicit. Every group below supports boolean `enabled`; opacity is 0 for fully
+transparent and 1 for opaque.
+
+| Group | Parameters |
+| --- | --- |
+| `camera` | `projection`: `orthographic` or `perspective`; `focalLength`: 20–200 mm |
+| `surfaces` | `style`: `shaded`, `flat`, `hidden`, `off`; `colorMode`: `original`, `single`, `by-part`; hex `color`; 1–50 hex `colors`; `opacity`: 0–1 |
+| `edges` | `visibility`: `visible` or `all`; hex `color` |
+| `lighting` | `quality`: `preview` or `final`; `exposure`: -5–5; `rotation`: -180–180 degrees; `size`: 0.25–3; `fill`: 0–1 |
+| `background` | hex `color`; `opacity`: 0–1, including partial PNG alpha |
+| `floor` | `placement`: `lowest` or `origin`; hex `color`; `opacity`: 0–1 |
+| `grid`, `axes` | hex `color`; `opacity`: 0–1 |
+
+Render's floor defaults to the document's Z=0 plane. `placement: "lowest"` moves
+it to the model's minimum Z, moving neither geometry nor lighting. `--camera` or a top-level/output
+`camera` controls pose and framing (`preset`, `position`, `target`, `up`,
+`direction`, `zoom`, `orthographicHalfHeight`); projection and focal length belong
+only in `display.camera`. `clip` and `exploded` remain independent inspection tools
+under `display`. Selection, kinematics, robot joint values, animation frames and
+video compose with every display preset where the source format supports them.
+`edges`, `clip`, `exploded`, the `xray`, `hidden-line` and `wireframe` presets and
+the `hidden`/`off` surface styles are STEP/STP-only: a mesh, drawing or robot
+description has no CAD edges, parts to explode or solids to section, and its
+snapshot door refuses them by name. Those inputs take `solid` or `render`.
+The old `display.render`, `guides` and `partColor` fields and old display-mode
+names are rejected. Use the group table above when updating a saved JSON file.
 
 For close macro views in normal CAD, a JSON job can set `quality.tessellation` to
 `{"chordTolerance": 0.0005, "angleTolerance": 0.10}`. Chord tolerance is
@@ -73,11 +113,11 @@ that exhausts the renderer instead of improving the image, and the job is
 refused. The largest named still profile is `presentation-large` (2800×1800).
 Existing mesh documents cannot be retessellated this way. The explicit top-level
 sampling request works in every display mode. When it is omitted,
-`display.render.quality` selects the photographic preview or final LOD.
+`display.lighting.quality` selects the photographic preview or final LOD.
 
 Scene setup, output capture and geometric sampling are separate closed objects.
-`display` carries the common display state and its nested Render studio settings.
-`camera` carries the common projection and view. `output` supports `sizeProfile`,
+`display` carries the grouped view settings.
+`camera` carries the common pose and framing. `output` supports `sizeProfile`,
 `padding`, `paddingPercent`, `viewLabels`, `tightFrame`, `transparent`, and
 `renderScale`. Top-level `quality` supports exact-surface tessellation. Scene units use the top-level
 `scale` (`cad` or `urdf`). Unknown keys are refused, so a misspelling cannot
@@ -147,12 +187,11 @@ Add views only when the brief or a failure mode calls for them:
 
 - reference-image reproduction: one snapshot from the reference image's viewpoint for side-by-side comparison
 - `section`: shell, bore, internal cavity, passage, blind hole, enclosure, or wall/floor relationship
-- `display.mode: "shaded_edges"`: shaded CAD view with explicit edge linework
-- `display.mode: "shaded"`: shaded material view without edge overlay
-- `display.mode: "transparent"`: overlap, collision, enclosure readability, or hidden contact checks when transparency adds information and wireframe is too noisy
-- `display.mode: "hidden_edges"`: opaque shaded context with hidden/occluded CAD edges visible through solids
-- `display.mode: "hidden_lines_removed"`: line-focused review where hidden/occluded edges should be suppressed
-- `display.mode: "wireframe"`: internal overlap, hidden interference, or assembly collision suspicion when full triangle wire is useful
+- `display.mode: "solid"`: shaded CAD view with visible edge linework
+- `display.edges.enabled: false`: shaded surfaces without the edge overlay
+- `display.mode: "xray"`: translucent surfaces with hidden/occluded edges visible
+- `display.mode: "hidden-line"`: line-focused review with occluded edges suppressed
+- `display.mode: "wireframe"`: edge-only review for internal overlap or interference
 - labeled or annotated review: use supported CAD Viewer refs, selections, screenshots, or GUI review links
 
 Exploded or labeled review is an intent, not a render mode. Satisfy it through supported CAD Viewer mechanisms, supported JSON job settings, or the GUI link.

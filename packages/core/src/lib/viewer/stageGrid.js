@@ -14,8 +14,10 @@ import {
 } from "../themeSettings.js";
 import { DEFAULT_AUTO_ZOOM_PADDING } from "./autoZoom.js";
 
-export const DEFAULT_GRID_DIVISIONS = 28;
-export const GRID_TARGET_VISIBLE_CELLS = 1.25;
+// Five cells across the default framing, with enough reach for orbiting/panning.
+// Keep the overall span independent of the cell density.
+export const DEFAULT_GRID_DIVISIONS = 112;
+export const GRID_TARGET_VISIBLE_CELLS = 5;
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);

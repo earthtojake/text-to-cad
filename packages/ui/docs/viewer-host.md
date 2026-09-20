@@ -43,6 +43,36 @@ browser lifetimes; [desktop README](../../../apps/desktop/README.md) documents
 native IPC, draft delivery and project persistence. Shared component tests can
 use the [explicit fake host](../src/host/testing/host.ts).
 
+## Host fullscreen and renderer navigation actions
+
+`FileViewer.fullscreen` is transient host-owned presentation state, never a file
+preference. It hides the shared navbar and panel frame and passes the flag to
+the renderer. CAD also hides viewport controls and suspends tools/shortcuts.
+Keep the viewport mounted; preserve the selected panel, tool and document state.
+The app owns its header, fullscreen entry and Escape listener, and supplies
+`FileViewer.onExitFullscreen`, forwarded unchanged as
+`RendererViewProps.onExitFullscreen`. CAD renders its own fullscreen playback and exit controls
+and invokes that callback for Exit. The host Escape listener must honor
+`event.defaultPrevented`; Escape first closes an open renderer menu/overlay.
+Control visibility and the fullscreen camera are transient. CAD captures the
+regular camera on entry, fits the authored model at the default angle, and restores
+the saved regular camera on exit. Presentation camera events never persist into
+the file session. Picking listeners, drawing and measurement are suspended;
+ordinary camera dragging remains available. Orbit speed is a global
+`CadPreferences.orbit` preference persisted by each host adapter. Motion controls
+reuse the same per-file runtime as the inspector.
+
+A renderer can publish `FileNavigationAction[]` through
+`RendererViewProps.onNavigationActionsChange`. The shared navbar shows these
+before its panel toggles. Each action declares its icon, accessible label,
+disabled state and invocation callback. Registration belongs to the mounted
+file generation: publish an empty list on cleanup; departing renderers cannot
+replace a new file's actions. Publish only when action metadata changes; stable
+commands should read the current viewport through a ref, avoiding parent/child
+render loops. These actions use existing host capabilities for effects. For
+example, CAD's snapshot delivers through `host.promptContext`, which binds the
+destination before waiting for the image. It never detects the platform.
+
 ## Adding a shared feature
 
 1. Implement reusable interaction and presentation in UI, with cross-consumer
@@ -136,10 +166,25 @@ own the binding registry and any IPC/tool transport;
 shared UI does not infer view state from a backend catalog or stored tab state.
 
 The controller selects available selectors, clears selection, applies a camera,
-resets framing, changes Inspect display settings, switches Inspect/Render and
-captures a PNG. Unavailable selectors fail explicitly; topology is not silently
+resets framing, applies grouped View settings, selects presets and captures a PNG.
+`readState().display` and `setDisplaySettings(patch)` use the same sparse grouped
+schema as snapshots: `mode` selects `solid`, `render`, `xray`, `hidden-line`, or
+`wireframe`; camera, surfaces, edges, lighting, background, floor, grid and axes
+are independent groups. Patches merge fields within a group. A mode patch
+reapplies that preset before its explicit group overrides; clipping and exploded
+view remain independent tools. Custom is derived from the effective overrides,
+not a sixth mode. `setRenderMode(true/false)` selects Render/Solid through that
+same state. Grouped camera projection/lens changes preserve the viewport's pose
+and zoom. View Reset restores the selected preset and disables both tools.
+The Inspector zoom menu's Reset model instead clears spatial/motion changes
+and resets the camera while retaining the exact display settings.
+
+Persisted pre-grouped file sessions migrate once at the state boundary: their
+old display and photographic payload become this display record; the render
+session slice retains only the camera snapshot. Live commands reject retired
+field names rather than maintaining a second display authority. Unavailable selectors fail explicitly; topology is not silently
 loaded. Mutations return a view snapshot after the React frame; a mode switch
-waits for its lazy UI to commit the requested mode, with a ten-second bound.
+waits for the requested settings to commit, with a ten-second bound.
 Loading views
 reject commands, and an operation whose resource/revision changes or viewport
 unmounts before completion rejects its late result. On unmount, the controller

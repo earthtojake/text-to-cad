@@ -67,3 +67,15 @@ export function interactiveViewportFitScale(THREE, { camera, framing, aspect, mi
   });
   return frame ? camera.isOrthographicCamera ? frame.halfHeight : frame.distance : null;
 }
+
+/** The zoom ruler is always the authored box at the default orientation.
+ * Never derive 100% from a live pose, selection fit, near plane, or saved camera.
+ */
+export function originalModelCameraFrame(THREE, { camera, bounds, frameAspect, minRadius = 0, modelOffset = null }) {
+  const radius = boundsCenterAndRadius(THREE, bounds)?.radius || minRadius;
+  return interactiveCameraFrameForBounds(THREE, {
+    camera, controls: { target: new THREE.Vector3() }, bounds, frameAspect, minRadius, modelOffset,
+    viewDirection: DEFAULT_VIEW_DIRECTION, viewUp: WORLD_UP,
+    nearClip: Math.max(radius / 1200, 0.01),
+  });
+}

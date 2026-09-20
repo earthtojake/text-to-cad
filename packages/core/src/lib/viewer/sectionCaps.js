@@ -35,28 +35,7 @@ export function syncSectionCaps(runtime, clipPlane) {
     return;
   }
   let caps = runtime.sectionCaps;
-  if (caps && (caps.records.length !== records.length || records.some((record,i) => record.mesh !== caps.records[i]))) {
-    disposeSectionCaps(runtime);
-    caps = null;
-  }
   if (!caps) {
-    const stencils = [];
-    for (const record of records) {
-      for (const [side, operation] of [[THREE.BackSide, THREE.IncrementWrapStencilOp], [THREE.FrontSide, THREE.DecrementWrapStencilOp]]) {
-        const material = new THREE.MeshBasicMaterial({
-          side, colorWrite: false, depthWrite: false, depthTest: false,
-          stencilWrite: true, stencilFunc: THREE.AlwaysStencilFunc,
-          stencilFail: operation, stencilZFail: operation, stencilZPass: operation,
-          clippingPlanes: [clipPlane],
-        });
-        const mesh = new THREE.Mesh(record.mesh.geometry, material);
-        mesh.name = 'Section stencil';
-        mesh.renderOrder = 1000;
-        mesh.raycast = () => {};
-        record.mesh.add(mesh); // follows the part's transforms and visibility
-        stencils.push(mesh);
-      }
-    }
     const material = new THREE.MeshBasicMaterial({
       color: 0xe9a451, side: THREE.DoubleSide,
       stencilWrite: true, stencilRef: 0, stencilFunc: THREE.NotEqualStencilFunc,
@@ -70,8 +49,36 @@ export function syncSectionCaps(runtime, clipPlane) {
     plane.raycast = () => {};
     plane.onAfterRender = renderer => renderer.clearStencil();
     parent.add(plane);
-    caps = runtime.sectionCaps = { records: records.map(record => record.mesh), stencils, plane };
+    caps = runtime.sectionCaps = { records: [], stencils: [], plane };
   }
+  // Retain existing stencil materials as parts enter/leave the cut. Geometry
+  // remains borrowed from display meshes and nothing survives disabling Clip.
+  const active = new Set(records.map(record => record.mesh));
+  caps.stencils = caps.stencils.filter(mesh => {
+    if (active.has(mesh.parent) && mesh.geometry === mesh.parent.geometry) return true;
+    mesh.removeFromParent();
+    mesh.material.dispose();
+    return false;
+  });
+  const retained = new Set(caps.stencils.map(mesh => mesh.parent));
+  for (const record of records) {
+    if (retained.has(record.mesh)) continue;
+    for (const [side, operation] of [[THREE.BackSide, THREE.IncrementWrapStencilOp], [THREE.FrontSide, THREE.DecrementWrapStencilOp]]) {
+      const material = new THREE.MeshBasicMaterial({
+        side, colorWrite: false, depthWrite: false, depthTest: false,
+        stencilWrite: true, stencilFunc: THREE.AlwaysStencilFunc,
+        stencilFail: operation, stencilZFail: operation, stencilZPass: operation,
+        clippingPlanes: [clipPlane],
+      });
+      const mesh = new THREE.Mesh(record.mesh.geometry, material);
+      mesh.name = 'Section stencil';
+      mesh.renderOrder = 1000;
+      mesh.raycast = () => {};
+      record.mesh.add(mesh);
+      caps.stencils.push(mesh);
+    }
+  }
+  caps.records = [...active];
   for (const mesh of caps.stencils) mesh.material.clippingPlanes = [clipPlane];
   const size = Math.max(1, Number(runtime.modelRadius || 1) * 4);
   caps.plane.scale.set(size,size,1);

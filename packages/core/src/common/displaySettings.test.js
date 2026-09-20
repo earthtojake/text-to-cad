@@ -47,14 +47,15 @@ test("display settings own CAD presentation fields while camera owns projection"
   });
 });
 
-test("display settings keep edge visibility and reject custom ink", () => {
+test("internal display settings keep edge color and visibility while widths stay renderer owned", () => {
   assert.deepEqual(normalizeDisplayEdgeSettings({ enabled: false, silhouette: true }), {
     enabled: false, silhouette: true
   });
-  for (const key of ["color", "thickness", "classes", "highlightColor", "highlightOpacity", "highlightThickness", "silhouetteScale", "depthTest"]) {
+  assert.equal(normalizeDisplayEdgeSettings({ color: "#f00", visibility: "all" }).color, "#ff0000");
+  for (const key of ["thickness", "classes", "highlightColor", "highlightOpacity", "highlightThickness", "silhouetteScale", "depthTest"]) {
     assert.throws(() => validateDisplaySettings({ edges: { [key]: 1 } }), /Unsupported display.edges fields/);
   }
-  for (const key of ["centerColor", "cellColor", "opacity", "density"]) {
+  for (const key of ["centerColor", "cellColor", "density"]) {
     assert.throws(() => validateDisplaySettings({ guides: { grid: { [key]: 1 } } }), /Unsupported display.guides.grid fields/);
   }
 });
@@ -161,4 +162,27 @@ test("display settings compare after normalization", () => {
     { partColor: { mode: "single", color: "#111111" } },
     { partColor: { mode: "single", color: "#222222" } }
   ), false);
+});
+
+
+test("grid color and opacity stay optional and validate at the shared display boundary", () => {
+  const guides = { grid: { enabled: true, color: "#ABC", opacity: 0 } };
+  validateDisplaySettings({ guides });
+  assert.deepEqual(normalizeDisplaySettings({ guides }).guides.grid, {
+    enabled: true, color: "#aabbcc", opacity: 0
+  });
+  assert.deepEqual(normalizeDisplaySettings({ guides: { grid: { enabled: false } } }).guides.grid,
+    { enabled: false });
+  for (const grid of [{ color: "red" }, { opacity: -0.1 }, { opacity: 1.1 }, { opacity: true }]) {
+    assert.throws(() => validateDisplaySettings({ guides: { grid } }), /display.guides.grid/);
+  }
+  for (const backdrop of [{ groundColor: "red" }, { groundOpacity: -0.1 }, { groundOpacity: true }]) {
+    assert.throws(() => validateDisplaySettings({ mode: "render", render: { backdrop } }), /display.render.backdrop/);
+  }
+});
+
+test('Explode starts halfway on enable but preserves an explicit zero', () => {
+  assert.deepEqual(normalizeExplodedViewSettings({ enabled: true }), { enabled: true, amount: 0.5 });
+  assert.deepEqual(normalizeExplodedViewSettings({ enabled: true, amount: 0 }), { enabled: true, amount: 0 });
+  assert.deepEqual(normalizeExplodedViewSettings({ enabled: false }), { enabled: false, amount: 0 });
 });

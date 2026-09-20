@@ -35,71 +35,56 @@
   font-size: var(--text-ui, 0.8125rem);
 }
 .hardcore-drawing-editor .excalidraw button,
-.hardcore-drawing-editor .excalidraw select,
-.hardcore-drawing-editor .excalidraw .dropdown-menu-item,
-.hardcore-drawing-editor .excalidraw .App-menu__left {
+.hardcore-drawing-editor .excalidraw .dropdown-menu-item {
   font-family: var(--ui-font);
   font-size: var(--text-ui, 0.8125rem);
 }
-.hardcore-drawing-editor .excalidraw .main-menu-trigger { padding: 0.375rem; }
-.hardcore-drawing-editor .excalidraw .App-menu__left h3 {
-  font-size: 0.6875rem;
-  font-weight: 400;
-}
-/* The SDK has no props to remove library/diagram generation or footer help.
-   This scratchpad keeps ink, shapes, text and images with a clear-only menu. */
-.hardcore-drawing-editor .sidebar-trigger__label-element:has(.default-sidebar-trigger),
-.hardcore-drawing-editor .App-toolbar__extra-tools-trigger,
-.hardcore-drawing-editor .default-sidebar,
-.hardcore-drawing-editor .help-icon { display: none; }
 .hardcore-drawing-editor[data-drawing-mode="overlay"] .excalidraw { background: transparent; }
+/* The SDK paints its default white page until the given scene is in place. */
+.hardcore-drawing-editor[data-drawing-mode="overlay"]:not([data-drawing-ready]) .excalidraw { visibility: hidden; }
 
-/* Keep the SDK's native actions/shortcuts, but put persistent controls at the
-   top in both responsive layouts. The second row wraps under the drawing tools. */
-.hardcore-drawing-editor .excalidraw label:has(input[data-testid="toolbar-lock"]),
-.hardcore-drawing-editor .excalidraw .ToolIcon__lock,
-.hardcore-drawing-editor .excalidraw .HintViewer,
-.hardcore-drawing-editor .excalidraw .App-toolbar__divider { display: none; }
-.hardcore-drawing-editor .excalidraw .mobile-misc-tools-container {
-  position: static;
-  flex-direction: row;
-  order: -1;
-  border: 0;
-  border-radius: 0.375rem;
-  flex-shrink: 0;
-}
-.hardcore-drawing-editor .excalidraw .mobile-misc-tools-container .ToolIcon__icon {
-  width: var(--default-button-size);
-  height: var(--default-button-size);
-  border-radius: 0.375rem;
-}
-.hardcore-drawing-editor .excalidraw .App-toolbar-container {
-  gap: 0;
-  padding: 4px;
-  border-radius: 0.375rem;
-  background: #fff;
-  box-shadow: var(--shadow-island);
-  max-width: 100%;
-}
-.hardcore-drawing-editor .excalidraw .App-toolbar-container > .Island {
-  box-shadow: none;
-  padding: 0;
-}
-.hardcore-drawing-editor .excalidraw .App-bottom-bar {
-  top: 52px;
-  bottom: auto;
+/* `DrawingToolbar` is the editor's only control surface, here or placed by the
+   host. The canvases, the in-place text editor and the context menu stay;
+   every SDK control goes. These selectors follow the SDK's pinned DOM. */
+.hardcore-drawing-editor .layer-ui__wrapper,
+.hardcore-drawing-editor .App-top-bar,
+.hardcore-drawing-editor .App-bottom-bar,
+.hardcore-drawing-editor .FixedSideContainer { display: none; }
+
+.hardcore-drawing-editor { position: relative; }
+.hardcore-drawing-editor__toolbar {
+  position: absolute;
+  top: 0.75rem;
   left: 50%;
-  right: auto;
-  transform: translateX(-50%);
+  z-index: 3;
   width: max-content;
-  max-width: calc(100% - 24px);
-  margin: 0 !important;
-  padding: 0;
-  align-items: flex-start;
-  max-height: calc(100% - 64px);
+  max-width: calc(100% - 1.5rem);
+  transform: translateX(-50%);
+  align-items: center;
+  pointer-events: none;
 }
-.hardcore-drawing-editor .excalidraw .App-bottom-bar > .Island { flex-direction: column-reverse; }
-.hardcore-drawing-editor .excalidraw .App-toolbar-content { padding: 4px; gap: 4px; justify-content: center; }
-.hardcore-drawing-editor .excalidraw .App-toolbar-content .dropdown-menu--mobile { top: 36px; bottom: auto; }
-.hardcore-drawing-editor .excalidraw .App-menu_bottom { top: 52px; bottom: auto; }
-.hardcore-drawing-editor .excalidraw .App-mobile-menu { margin: 0; }
+/* The editor is always light, whatever the application around it is. */
+.hardcore-drawing-editor .hardcore-drawing-toolbar {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --border: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  color: var(--foreground);
+}
+/* The SDK's toast is the editor's only message surface (a fill with nothing to
+   fill, a rejected image). Under the toolbar, clear of a host's bottom action. */
+.hardcore-drawing-editor .excalidraw .Toast {
+  top: 3.25rem;
+  bottom: auto;
+  font-family: var(--ui-font);
+  font-size: var(--text-ui, 0.8125rem);
+}
+.hardcore-drawing-editor[data-drawing-mode="overlay"] .excalidraw .Toast { top: 5.5rem; }

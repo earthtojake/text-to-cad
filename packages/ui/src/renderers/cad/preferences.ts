@@ -1,6 +1,7 @@
 
 export interface CadPreferences {
   poseTransition?: { animate: boolean; speed: number };
+  orbit?: { speed: number };
 }
 export interface CadPreferenceSource {
   getSnapshot(): CadPreferences;

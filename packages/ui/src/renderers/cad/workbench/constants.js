@@ -23,17 +23,8 @@ export const TAB_TOOL_MODE = {
   REFERENCES: "references",
   DRAW: "draw",
   MEASURE: "measure",
-  PAN: "pan"
+  PAN: "pan",
+  // A session, like Draw: never persisted or restored (`state.js`).
+  ANIMATE: "animate"
 };
 
-export const DRAWING_TOOL = {
-  FREEHAND: "freehand",
-  LINE: "line",
-  SURFACE_LINE: "surface-line",
-  ARROW: "arrow",
-  DOUBLE_ARROW: "double-arrow",
-  RECTANGLE: "rectangle",
-  CIRCLE: "circle",
-  FILL: "fill",
-  ERASE: "erase"
-};

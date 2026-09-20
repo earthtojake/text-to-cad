@@ -14,6 +14,7 @@ import {
   cloneThemePresetSettings,
   normalizeThemeSettings
 } from "./themeSettings.js";
+import { resolveViewSettings } from "./viewSettings.js";
 
 const SCENE_APPEARANCE = Object.freeze({
   SYSTEM: "system",
@@ -108,7 +109,9 @@ export const RENDER_BACKDROP_KEYS = Object.freeze([
   "color",
   "transparent",
   "ground",
-  "groundPlacement"
+  "groundPlacement",
+  "groundColor",
+  "groundOpacity"
 ]);
 
 const RENDER_STUDIO_IDS = new Set(RENDER_STUDIO_PRESETS.map((preset) => preset.id));
@@ -121,16 +124,13 @@ export const DEFAULT_RENDER_LIGHTING = Object.freeze({
   fill: 0.25
 });
 
-// The floor sits under the model, not through it. A document whose geometry
-// reaches below its own origin -- a URDF whose base link is above the clamp it
-// stands on, a part modelled about its centre -- would be cut off at the
-// bottom by a Z=0 plane, which reads as a broken render rather than a
-// presentation choice. "origin" stays selectable for models authored on their
-// floor, where the two agree anyway.
+// Keep the authored origin as the default reference; opacity lets geometry
+// below that plane remain visible. "lowest" follows the current model bounds.
 export const DEFAULT_RENDER_BACKDROP = Object.freeze({
   transparent: false,
   ground: true,
-  groundPlacement: "lowest"
+  groundPlacement: "origin",
+  groundOpacity: 0.6
 });
 
 const STUDIO_BACKDROP_COLORS = Object.freeze({
@@ -200,6 +200,8 @@ function validateRenderBackdrop(value) {
   }
   validateKeys(value, RENDER_BACKDROP_KEYS, "render.backdrop");
   if (Object.hasOwn(value, "color")) validateColor(value.color, "render.backdrop.color");
+  if (Object.hasOwn(value, "groundColor")) validateColor(value.groundColor, "render.backdrop.groundColor");
+  if (Object.hasOwn(value, "groundOpacity")) validateNumber(value.groundOpacity, "render.backdrop.groundOpacity", 0, 1);
   if (Object.hasOwn(value, "transparent")) validateBoolean(value.transparent, "render.backdrop.transparent");
   if (Object.hasOwn(value, "ground")) validateBoolean(value.ground, "render.backdrop.ground");
   if (Object.hasOwn(value, "groundPlacement") && !["origin", "lowest"].includes(value.groundPlacement)) {
@@ -301,7 +303,9 @@ function resolveRenderConfiguration(render = {}, appearance = SCENE_APPEARANCE.L
       color: payload.backdrop?.color || STUDIO_BACKDROP_COLORS[studio],
       transparent: payload.backdrop?.transparent ?? DEFAULT_RENDER_BACKDROP.transparent,
       ground: payload.backdrop?.ground ?? DEFAULT_RENDER_BACKDROP.ground,
-      groundPlacement: payload.backdrop?.groundPlacement ?? DEFAULT_RENDER_BACKDROP.groundPlacement
+      groundPlacement: payload.backdrop?.groundPlacement ?? DEFAULT_RENDER_BACKDROP.groundPlacement,
+      groundColor: payload.backdrop?.groundColor || payload.backdrop?.color || STUDIO_BACKDROP_COLORS[studio],
+      groundOpacity: payload.backdrop?.groundOpacity ?? DEFAULT_RENDER_BACKDROP.groundOpacity
     }
   };
 }
@@ -477,6 +481,64 @@ export function resolveSceneSettings({
     theme: null,
     materialOverrides: null,
     quality: resolveRenderQuality(configuration.quality),
+    camera: cameraSettings,
+    display: resolvedDisplay
+  };
+}
+
+/** Public grouped preset policy; historical display modes are draw details. */
+export function resolveViewSceneSettings({
+  display = {}, appearance = "light", prefersDark = false, camera = null, quality = null,
+  lightingQuality = "final", cadModel = true
+} = {}) {
+  const view = resolveViewSettings(display ?? {}, {
+    appearance: normalizeSceneAppearance(appearance, { prefersDark }), lightingQuality, cadModel
+  });
+  const surface = view.surfaces;
+  const mode = surface.style === "off" ? CAD_DISPLAY_MODE.WIREFRAME
+    : surface.style === "hidden" ? CAD_DISPLAY_MODE.HIDDEN_LINES_REMOVED
+      : surface.style === "flat" ? CAD_DISPLAY_MODE.UNSHADED
+        : surface.opacity < 1 ? CAD_DISPLAY_MODE.TRANSPARENT
+          : view.edges.enabled ? CAD_DISPLAY_MODE.SHADED_EDGES : CAD_DISPLAY_MODE.SHADED;
+  const partColor = { mode: surface.colorMode.replace("-", "_"), color: surface.color, colors: surface.colors };
+  const resolvedDisplay = normalizeDisplaySettings({
+    mode, clip: view.clip, exploded: view.exploded,
+    edges: { enabled: view.edges.enabled, visibility: view.edges.visibility, color: view.edges.color },
+    guides: { grid: view.grid, axis: view.axes }, partColor,
+    surfaces: surface
+  });
+  const neutralTheme = applyPartColor(cadSceneSettings(view.appearance), partColor);
+  neutralTheme.floor.enabled = false;
+  const cameraSettings = resolveCamera(DEFAULT_NORMAL_CAMERA, camera, {
+    projection: view.camera.projection, focalLength: view.camera.focalLength
+  });
+  const enabled = view.lighting.enabled || view.background.enabled || view.floor.enabled;
+  const configuration = enabled ? {
+    studio: view.appearance,
+    quality: view.lighting.quality,
+    exposure: view.lighting.enabled ? view.lighting.exposure : 0,
+    lighting: { ...view.lighting },
+    backdrop: {
+      enabled: view.background.enabled,
+      color: view.background.enabled ? view.background.color : neutralTheme.background.solidColor,
+      opacity: view.background.enabled ? view.background.opacity : 1,
+      transparent: view.background.enabled && view.background.opacity === 0,
+      ground: view.floor.enabled,
+      groundPlacement: view.floor.placement,
+      groundColor: view.floor.color,
+      groundOpacity: view.floor.opacity
+    },
+    camera: cameraSettings
+  } : null;
+  return {
+    view,
+    appearance: view.appearance,
+    render: { enabled, configuration, payload: null },
+    // A floor or custom background does not opt the model into studio lighting.
+    theme: view.lighting.enabled ? null : neutralTheme,
+    materialOverrides: null,
+    quality: view.lighting.enabled ? resolveRenderQuality(view.lighting.quality)
+      : resolveSceneQuality(quality, { fallback: SCENE_QUALITY.INTERACTIVE }),
     camera: cameraSettings,
     display: resolvedDisplay
   };

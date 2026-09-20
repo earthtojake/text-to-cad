@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { drawingAssetsPlugin } from "@hardcore/ui/drawing-assets";
 
 import { resolveDirectoryRoot as resolveViewerDirectoryRoot } from "./scripts/directoryRoot.mjs";
 import { resolveServerFsAllow } from "./scripts/serverFsAllow.mjs";
@@ -188,6 +189,12 @@ export default defineConfig(async ({ command }) => ({
   root: viewerAppRoot,
   envPrefix: "VIEWER_",
   plugins: [
+    // Excalidraw's fonts, served in dev and emitted into dist/excalidraw, with
+    // the SDK's CDN fallback pointed back at this origin: the Viewer ships in a
+    // wheel and never fetches a font from the network. The 12 MB Xiaolai CJK
+    // family is left out of the wheel on purpose; a CJK glyph is then a local
+    // miss and a system font, not a request.
+    drawingAssetsPlugin({ exclude: [/\/fonts\/Xiaolai\//] }),
     react(),
     serverLifetimePlugin(),
   ],

@@ -29,6 +29,12 @@ it('keeps X/Y/Z outside the endpoint bubbles while preserving snapping, keyboard
   expect(activate).toHaveBeenLastCalledWith('xNeg');
   fireEvent.keyDown(screen.getByRole('button', { name: 'Reset to default isometric view' }), { key: ' ' });
   expect(reset).toHaveBeenCalledOnce();
+  const center = screen.getByRole('button', { name: 'Reset to default isometric view' });
+  for (const stem of container.querySelectorAll('svg > line')) {
+    expect(stem.compareDocumentPosition(center) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  }
+  expect(center.querySelector('circle:last-child')?.getAttribute('fill')).toMatch(/, 1\)$/);
+
   rerender(<ViewPlaneControl {...props} viewerTheme={{ viewPlanePalette: { axis: {
     x: { front: [250, 250, 250], back: [250, 250, 250] },
     y: { front: [10, 10, 10], back: [10, 10, 10] },

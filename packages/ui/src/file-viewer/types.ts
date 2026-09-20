@@ -1,5 +1,5 @@
 import type { ResourceRef } from "@hardcore/core/prompt";
-import type { ComponentType, ReactNode } from "react";
+import type { ComponentType, ElementType, ReactNode } from "react";
 import type { EntryAction, FilePanel, Platform } from "./navigation/index.js";
 import type { ViewerHost } from "../host/types.js";
 
@@ -91,7 +91,21 @@ export interface PrepareContext {
 }
 export interface PreparedDocument<T> { data: T; text?: TextDocument; dispose?: () => void }
 export interface FileActivity { loading: boolean; label?: string; title?: string; tone?: "neutral" | "info" | "warning" | "error"; onActivate?: () => void }
+/** Renderer-owned actions shown before the common panel buttons. Never persisted. */
+export interface FileNavigationAction {
+  id: string;
+  label: string;
+  icon: ElementType;
+  disabled?: boolean;
+  active?: boolean;
+  onInvoke: () => void | Promise<void>;
+}
 export interface RendererViewProps {
+  /** Host-controlled presentation; disables editing/picking tools, not document state. */
+  fullscreen?: boolean;
+  /** Ask the host to leave fullscreen from renderer-owned presentation controls. */
+  onExitFullscreen?: () => void;
+  onNavigationActionsChange?: (actions: readonly FileNavigationAction[]) => void;
   file: FileMetadata;
   source: FileSource;
   document: DocumentSession | null;
@@ -134,6 +148,9 @@ export interface RendererRegistration {
   prepare: (context: PrepareContext) => Promise<PreparedRenderer>;
 }
 export interface FileViewerProps {
+  /** The app owns fullscreen state and its surrounding chrome. */
+  fullscreen?: boolean;
+  onExitFullscreen?: () => void;
   file: string | FileMetadata | null;
   host: ViewerHost;
   renderers: readonly RendererRegistration[];

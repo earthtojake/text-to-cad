@@ -633,13 +633,13 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   const viewPanel = page.getByRole("tabpanel", { name: "View", exact: true });
   const mode = viewPanel.getByRole("combobox", { name: "Mode" });
   await mode.click();
-  await page.getByRole("option", { name: "Wire", exact: true }).click();
+  await page.getByRole("option", { name: "Wireframe", exact: true }).click();
   await model.click();
   await expect(viewPanel).toBeHidden();
   await view.click();
-  await expect(mode).toContainText("Wire");
+  await expect(mode).toContainText("Wireframe");
   await mode.click();
-  await page.getByRole("option", { name: "Shaded with edges", exact: true }).click();
+  await page.getByRole("option", { name: "Solid", exact: true }).click();
   await expect(page.getByRole("listbox")).toHaveCount(0);
   await expect(mode).toBeFocused();
   await model.click();
@@ -649,12 +649,17 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   const measure = page.getByRole("button", { name: "Measure", exact: true });
   await measure.click();
   await expect(measure).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByText("Select two points, edges, or faces to measure", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Finish measuring" })).toBeVisible();
-  await shoot("file-cad-measure.png", true);
+  // No panel until something is measured; a second press offers what measurements snap to.
+  const measurements = page.getByRole("region", { name: "Measurements" });
+  await expect(measurements).toHaveCount(0);
   await measure.click();
+  await expect(page.getByRole("menuitemradio", { name: /Any geometry/ })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(measure).toHaveAttribute("aria-pressed", "true");
+  await shoot("file-cad-measure.png", true);
+  await page.getByRole("button", { name: "Select", exact: true }).click();
   await expect(measure).toHaveAttribute("aria-pressed", "false");
-  await expect(page.getByRole("button", { name: "Finish measuring" })).toHaveCount(0);
+  await expect(measurements).toHaveCount(0);
   await expect(tree).toBeVisible();
 
   // CAD declares the Inspector; the file tree shares its single panel column.

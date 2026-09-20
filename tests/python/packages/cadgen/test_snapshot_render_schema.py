@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import re
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -13,10 +14,10 @@ add_repo_path("packages/cadgen/src")
 
 from cadgen.snapshot_core import (  # noqa: E402
     MIN_RENDER_TESSELLATION,
-    RENDER_BACKDROP_KEYS,
-    RENDER_LIGHTING_KEYS,
+    DISPLAY_APPEARANCES,
+    DISPLAY_GROUP_KEYS,
+    DISPLAY_MODES,
     RENDER_QUALITY_IDS,
-    RENDER_STUDIO_IDS,
     SUPPORTED_OUTPUT_SETTINGS_KEYS,
     SUPPORTED_QUALITY_KEYS,
     SnapshotError,
@@ -36,54 +37,74 @@ def normalize(**settings: object) -> dict[str, object]:
 
 
 class RenderDisplaySchemaTest(unittest.TestCase):
-    def test_render_ids_are_closed_and_render_shortcut_is_a_display_mode(self):
-        self.assertEqual({"light", "dark"}, set(RENDER_STUDIO_IDS))
+    def test_presets_and_appearance_are_closed(self):
+        self.assertEqual({"solid", "render", "xray", "hidden-line", "wireframe"}, set(DISPLAY_MODES))
+        self.assertEqual({"light", "dark"}, set(DISPLAY_APPEARANCES))
         self.assertEqual({"preview", "final"}, set(RENDER_QUALITY_IDS))
-        self.assertEqual({"mode": "render"}, load_display_option("render", cwd=Path(".")))
-        for invalid in ("unknown", None, True, [], {}):
-            with self.subTest(studio=invalid), self.assertRaisesRegex(
-                SnapshotError, "display.render.studio must be light or dark"
-            ):
-                load_display_option({"mode": "render", "render": {"studio": invalid}}, cwd=Path("."))
-        for invalid in ("unknown", None, False, [], {}):
-            with self.subTest(quality=invalid), self.assertRaisesRegex(
-                SnapshotError, "display.render.quality must be preview or final"
-            ):
-                load_display_option({"mode": "render", "render": {"quality": invalid}}, cwd=Path("."))
+        for mode in DISPLAY_MODES:
+            self.assertEqual({"mode": mode}, load_display_option(mode, cwd=Path(".")))
+        for invalid in ("shaded", "transparent", "hidden_edges", "unshaded", None, True, [], {}):
+            with self.subTest(mode=invalid), self.assertRaises(SnapshotError):
+                load_display_option({"mode": invalid}, cwd=Path("."))
+        for invalid in ("system", "LIGHT", None, False, [], {}):
+            with self.subTest(appearance=invalid), self.assertRaises(SnapshotError):
+                load_display_option({"appearance": invalid}, cwd=Path("."))
 
-    def test_render_values_are_strict_and_sparse(self):
-        render = {
-            "studio": "dark",
-            "quality": "preview",
-            "exposure": -1.25,
-            "lighting": {"rotation": 180, "size": 0.25, "fill": 1},
-            "backdrop": {"color": "#123456", "transparent": True, "ground": False, "groundPlacement": "lowest"},
+    def test_preset_names_do_not_depend_on_existing_output_directories(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "render").mkdir()
+            self.assertEqual({"mode": "render"}, load_display_option("render", cwd=root))
+
+    def test_groups_are_strict_sparse_overrides_in_every_mode(self):
+        display = {
+            "mode": "solid", "appearance": "dark",
+            "camera": {"projection": "perspective", "focalLength": 85},
+            "surfaces": {"style": "flat", "colorMode": "by-part", "colors": ["#abc"], "opacity": 0.5},
+            "edges": {"visibility": "all", "color": "#123456"},
+            "lighting": {"quality": "preview", "exposure": -1.25, "rotation": 180, "size": 0.25, "fill": 1},
+            "background": {"color": "#abc", "opacity": 0.4},
+            "floor": {"enabled": False, "placement": "origin", "opacity": 0.6},
+            "grid": {}, "axes": {"enabled": False},
+            "clip": {"enabled": True, "axis": "z", "offsets": {"z": 0.5}},
+            "exploded": {"enabled": True, "amount": 0.5},
         }
-        display = load_display_option({"mode": "render", "render": render}, cwd=Path("."))
-        self.assertEqual(render, display["render"])
-        self.assertEqual({"rotation", "size", "fill"}, set(RENDER_LIGHTING_KEYS))
-        self.assertEqual({"color", "transparent", "ground", "groundPlacement"}, set(RENDER_BACKDROP_KEYS))
+        self.assertEqual(display, load_display_option(display, cwd=Path(".")))
+        for name in DISPLAY_GROUP_KEYS:
+            self.assertEqual({name: {}}, load_display_option({name: {}}, cwd=Path(".")))
+            for invalid in (None, True, [], "off", {"typo": True}, {"enabled": 1}):
+                with self.subTest(group=name, invalid=invalid), self.assertRaises(SnapshotError):
+                    load_display_option({name: invalid}, cwd=Path("."))
 
+    def test_group_numbers_and_values_are_strict(self):
         invalid = (
-            {"exposure": True}, {"exposure": "0"}, {"exposure": -5.01}, {"exposure": 5.01},
-            {"lighting": []}, {"lighting": {"rotation": float("inf")}},
+            {"lighting": {"exposure": True}}, {"lighting": {"exposure": "0"}},
+            {"lighting": {"exposure": -5.01}}, {"lighting": {"rotation": float("inf")}},
             {"lighting": {"rotation": -180.01}}, {"lighting": {"size": 0.24}},
             {"lighting": {"size": 3.01}}, {"lighting": {"fill": -0.01}},
-            {"lighting": {"fill": 1.01}}, {"lighting": {"fill": False}},
-            {"lighting": {"key": 1}}, {"backdrop": []},
-            {"backdrop": {"color": "white"}}, {"backdrop": {"transparent": 1}},
-            {"backdrop": {"ground": "true"}}, {"backdrop": {"floor": True}},
-            {"backdrop": {"groundPlacement": "auto"}},
+            {"lighting": {"fill": 1.01}}, {"lighting": {"quality": "high"}},
+            {"background": {"color": "white"}}, {"background": {"opacity": True}},
+            {"background": {"opacity": -0.1}}, {"background": {"opacity": 1.1}},
+            {"floor": {"placement": "auto"}}, {"floor": {"color": "blue"}},
+            {"camera": {"focalLength": 19.9}}, {"camera": {"focalLength": 200.1}},
+            {"camera": {"projection": "ortho"}}, {"surfaces": {"style": "smooth"}},
+            {"surfaces": {"colorMode": "by_part"}}, {"surfaces": {"colors": []}},
+            {"surfaces": {"colors": ["white"]}}, {"edges": {"visibility": "hidden"}},
         )
-        for render_value in invalid:
-            with self.subTest(render=render_value), self.assertRaises(SnapshotError):
-                load_display_option({"mode": "render", "render": render_value}, cwd=Path("."))
+        for display in invalid:
+            with self.subTest(display=display), self.assertRaises(SnapshotError):
+                load_display_option(display, cwd=Path("."))
 
-    def test_camera_is_top_level_and_render_settings_require_render_mode(self):
-        with self.assertRaisesRegex(SnapshotError, r"display.render has unknown key\(s\): camera"):
-            load_display_option({"mode": "render", "render": {"camera": {"preset": "front"}}}, cwd=Path("."))
-        with self.assertRaisesRegex(SnapshotError, "requires display.mode 'render'"):
-            load_display_option({"mode": "shaded", "render": {}}, cwd=Path("."))
+    def test_old_nested_surfaces_are_rejected(self):
+        for key in ("render", "guides", "partColor"):
+            with self.subTest(key=key), self.assertRaises(SnapshotError):
+                load_display_option({key: {}}, cwd=Path("."))
+
+    def test_default_job_is_light_solid_without_overriding_groups(self):
+        self.assertEqual({"mode": "solid", "appearance": "light"}, normalize()["display"])
+        self.assertEqual({"mode": "render", "appearance": "light"}, normalize(display={"mode": "render"})["display"])
+        self.assertEqual({"mode": "solid", "appearance": "dark", "background": {"opacity": 0.3}},
+                         normalize(display={"appearance": "dark", "background": {"opacity": 0.3}})["display"])
 
     def test_animation_and_output_capture_controls_remain_composable(self):
         job = normalize(

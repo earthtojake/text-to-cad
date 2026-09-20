@@ -48,3 +48,23 @@ test('only intersected parts receive stencil passes and moving the plane release
   assert.equal(runtime.sectionCaps,null);
   assert.equal(far.children.length,0);
 });
+
+test('entering another part retains stencil meshes and materials for existing cuts', () => {
+  const scene = new THREE.Scene();
+  const tall = new THREE.Mesh(new THREE.BoxGeometry(2,2,10),new THREE.MeshBasicMaterial());
+  const short = new THREE.Mesh(new THREE.BoxGeometry(2,2,2),new THREE.MeshBasicMaterial());
+  short.position.set(5,0,3);
+  scene.add(tall,short);
+  const runtime = { THREE, scene, displayRecords:[{mesh:tall},{mesh:short}], modelRadius:10 };
+  syncSectionCaps(runtime,new THREE.Plane(new THREE.Vector3(0,0,1),0));
+  const existing = [...runtime.sectionCaps.stencils];
+  const plane = runtime.sectionCaps.plane;
+  syncSectionCaps(runtime,new THREE.Plane(new THREE.Vector3(0,0,1),-3));
+  assert.equal(runtime.sectionCaps.stencils.length,4);
+  assert.equal(runtime.sectionCaps.plane,plane);
+  assert.deepEqual(runtime.sectionCaps.stencils.slice(0,2),existing);
+  syncSectionCaps(runtime,new THREE.Plane(new THREE.Vector3(0,0,1),0));
+  assert.deepEqual(runtime.sectionCaps.stencils,existing);
+  assert.equal(short.children.length,0);
+  disposeSectionCaps(runtime);
+});

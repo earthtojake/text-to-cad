@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { motionFromSrdf, parseSrdf } from "./parseSrdf.js";
+import { motionFromSrdf, parseSrdf, srdfGroupNamesByLink } from "./parseSrdf.js";
 
 
 class FakeElement {
@@ -100,6 +100,21 @@ test("parseSrdf reads MoveIt2 semantics directly from SRDF XML", () => {
   assert.equal(srdfData.groupStates[0].jointValuesByNameRad.arm_to_wrist, 0.25);
   assert.equal(srdfData.disabledCollisionPairs[0].reason, "Adjacent");
   assert.equal(srdfData.disabledCollisionPairs[0].source, "adjacent");
+});
+
+test("srdfGroupNamesByLink names the planning groups each link belongs to", () => {
+  const srdf = {
+    planningGroups: [
+      { name: "manipulator", jointNames: [], linkNames: [], chains: [{ baseLink: "base_link", tipLink: "wrist_link" }], subgroups: [] },
+      { name: "gripper_group", jointNames: [], linkNames: ["tool_link"], chains: [], subgroups: [] },
+      { name: "whole_arm", jointNames: [], linkNames: [], chains: [], subgroups: ["manipulator", "gripper_group"] }
+    ]
+  };
+  const groups = srdfGroupNamesByLink(sampleUrdfData(), srdf);
+  assert.deepEqual(groups.get("wrist_link"), ["manipulator", "whole_arm"]);
+  assert.deepEqual(groups.get("tool_link"), ["gripper_group", "whole_arm"]);
+  assert.equal(groups.has("base_link"), false);
+  assert.equal(srdfGroupNamesByLink(sampleUrdfData(), null).size, 0);
 });
 
 test("motionFromSrdf converts direct SRDF data into CAD Viewer controls", () => {

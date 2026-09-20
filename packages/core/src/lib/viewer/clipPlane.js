@@ -38,7 +38,11 @@ export function normalizeStepClipSettings(value = null) {
     STEP_CLIP_AXES.map((clipAxis) => [
       clipAxis,
       clamp(
-        normalizeNumber(sourceOffsets[clipAxis], DEFAULT_STEP_CLIP_OFFSETS[clipAxis]),
+        normalizeNumber(
+          Object.hasOwn(sourceOffsets, clipAxis) ? sourceOffsets[clipAxis]
+            : clipAxis === axis ? source.offset : undefined,
+          source.enabled === true && clipAxis === axis ? 0.5 : DEFAULT_STEP_CLIP_OFFSETS[clipAxis]
+        ),
         0,
         1
       )
@@ -52,7 +56,8 @@ export function normalizeStepClipSettings(value = null) {
       ? false
       : offsetEnabled;
   return {
-    enabled: requestedEnabled && offsetEnabled,
+    // Explicit enablement is the tool gate, even at the bounds boundary.
+    enabled: requestedEnabled,
     axis,
     offset: activeOffset,
     offsets,
@@ -101,13 +106,16 @@ export function buildStepClipPatch(settings, patch) {
   const current = normalizeStepClipSettings(settings);
   const rawPatch = patch && typeof patch === "object" ? patch : {};
   const hasExplicitEnabled = Object.prototype.hasOwnProperty.call(rawPatch, "enabled");
-  const hasOffsetPatch = Boolean(rawPatch.offsets && typeof rawPatch.offsets === "object");
+  const hasOffsetsPatch = Boolean(rawPatch.offsets && typeof rawPatch.offsets === "object");
+  const hasScalarOffsetPatch = Object.hasOwn(rawPatch, "offset");
+  const hasOffsetPatch = hasOffsetsPatch || hasScalarOffsetPatch;
   const patchedAxis = STEP_CLIP_AXES.includes(String(rawPatch.axis || "").toLowerCase())
     ? String(rawPatch.axis).toLowerCase()
     : current.axis;
   const offsets = {
     ...current.offsets,
-    ...(hasOffsetPatch ? rawPatch.offsets : {})
+    ...(hasScalarOffsetPatch ? { [patchedAxis]: rawPatch.offset } : {}),
+    ...(hasOffsetsPatch ? rawPatch.offsets : {})
   };
   const activeOffset = clamp(normalizeNumber(offsets[patchedAxis], 0), 0, 1);
   return normalizeStepClipSettings({

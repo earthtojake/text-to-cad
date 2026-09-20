@@ -200,10 +200,12 @@ def step_snapshot_verb(door: str):
             a missing job file raises FileNotFoundError.
         mode: view (default), section, or list.
         camera: a preset, an "azimuth:elevation" pair, or camera JSON;
-            focalLength is 20..200 mm and orthographicHalfHeight preserves an
-            orthographic view's scale.
-        display: viewer display settings, a display mode name, or JSON. Mode
-            render unlocks optional studio settings under display.render.
+            orthographicHalfHeight preserves an orthographic view's scale.
+            Projection and focalLength (20..200 mm) belong in display.camera.
+        display: a preset name, grouped display JSON, or JSON file path. Presets
+            are solid (default), render, xray, hidden-line and wireframe.
+            Omitted groups inherit the preset; group objects imply enabled unless
+            explicitly false. appearance is light (default) or dark.
         kinematics: pose values — a declared preset name or {dof: value}
             JSON, validated against the model's kinematics declaration;
             available in every display mode.
@@ -272,10 +274,11 @@ def mesh_snapshot_verb(door: str):
             {"jobs": [...]}. When given it wins: target/out are ignored.
         mode: view (default) or list.
         camera: a normal-CAD preset, an "azimuth:elevation" pair, or camera JSON;
-            focalLength is 20..200 mm and orthographicHalfHeight preserves an
-            orthographic view's scale.
-        display: viewer display settings for this input kind; mode render
-            unlocks optional studio settings under display.render.
+            orthographicHalfHeight preserves an orthographic view's scale.
+            Projection and focalLength (20..200 mm) belong in display.camera.
+        display: solid (default), render, xray, hidden-line or wireframe, grouped display
+            JSON, or a JSON file path. Omitted groups inherit the preset;
+            appearance defaults to light. Projection belongs in display.camera.
         width: output width in pixels, overriding the size profile.
         height: output height in pixels, overriding the size profile.
         size_profile: simple, diagnostic, labeled, assembly, presentation,
@@ -330,10 +333,11 @@ def robot_snapshot_verb(door: str):
         joint_values: {joint: degrees} JSON posing the robot; joints not
             named stay at the rest pose.
         camera: a normal-CAD preset, an "azimuth:elevation" pair, or camera JSON;
-            focalLength is 20..200 mm and orthographicHalfHeight preserves an
-            orthographic view's scale.
-        display: viewer display settings for this robot input; mode render
-            unlocks optional studio settings under display.render.
+            orthographicHalfHeight preserves an orthographic view's scale.
+            Projection and focalLength (20..200 mm) belong in display.camera.
+        display: solid (default), render, xray, hidden-line or wireframe, grouped display
+            JSON, or a JSON file path. Omitted groups inherit the preset;
+            appearance defaults to light. Projection belongs in display.camera.
         width: output width in pixels, overriding the size profile.
         height: output height in pixels, overriding the size profile.
         size_profile: simple, diagnostic, labeled, assembly, presentation,
@@ -391,11 +395,12 @@ def polymorphic_snapshot_verb():
             {"jobs": [...]}; jobs may mix formats. When given it wins.
         mode: view (default), section (STEP only), or list.
         camera: a normal-CAD preset, an "azimuth:elevation" pair, or camera JSON;
-            focalLength is 20..200 mm and orthographicHalfHeight preserves an
-            orthographic view's scale.
-        display: viewer display settings; mode render unlocks optional studio
-            settings under display.render. CAD-edge and
-            exploded modes require STEP topology.
+            orthographicHalfHeight preserves an orthographic view's scale.
+            Projection and focalLength (20..200 mm) belong in display.camera.
+        display: solid (default), render, xray, hidden-line or wireframe, grouped
+            display JSON, or a JSON file path. appearance defaults to light.
+            Omitted groups inherit the preset. Exploded views require STEP
+            assembly occurrences; meshes derive their own display edges.
         kinematics: pose values for a STEP model's kinematics — a preset
             name or {dof: value} JSON; available in every display mode.
         animation: one still frame of a STEP model's clip — the clip name

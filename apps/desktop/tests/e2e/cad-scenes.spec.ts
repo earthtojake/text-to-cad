@@ -189,7 +189,7 @@ async function expectCadReady(file: string, componentCount = 1) {
   }
 }
 
-test("View preserves display and render settings without a Materials editor", async () => {
+test("View presets preserve authored materials and independent tools without a Materials editor", async () => {
   test.setTimeout(150_000);
   await openFile("part.step");
   await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible({ timeout: 90_000 });
@@ -220,18 +220,41 @@ test("View preserves display and render settings without a Materials editor", as
   const view = page.getByRole("tabpanel", { name: "View", exact: true });
   const mode = view.getByRole("combobox", { name: "Mode" });
   await viewTab.click();
+  const displaySettings = view.getByRole("button", { name: "Surfaces", exact: true });
+  await expect(displaySettings).toHaveAttribute("aria-expanded", "true");
+  await expect(displaySettings.locator("svg")).toHaveCount(0);
+  expect((await displaySettings.boundingBox())?.height).toBe(28);
+  expect(await displaySettings.evaluate(element => element.ownerDocument.defaultView!.getComputedStyle(element).fontSize)).toBe("12px");
+  await expect(view.getByRole("button", { name: "View", exact: true })).toHaveCount(0);
+  await expect(view.getByRole("combobox", { name: "Projection", exact: true })).toBeVisible();
+  const restingBackground = await displaySettings.evaluate(element => element.ownerDocument.defaultView!.getComputedStyle(element.parentElement!.parentElement!).backgroundColor);
+  await displaySettings.hover();
+  await expect.poll(() => displaySettings.evaluate(element => element.ownerDocument.defaultView!.getComputedStyle(element).textDecorationLine)).not.toContain("underline");
+  await expect.poll(() => displaySettings.evaluate(element => element.ownerDocument.defaultView!.getComputedStyle(element.parentElement!.parentElement!).backgroundColor)).not.toBe(restingBackground);
+  await view.getByRole("button", { name: "Clip", exact: true }).click();
+  await expect(view.getByLabel("Clip X position", { exact: true })).toBeVisible();
+  await expect(view.getByLabel("Amount value", { exact: true })).toBeVisible();
   await mode.click();
-  await page.getByRole("option", { name: "Wire", exact: true }).click();
-  await expect(mode).toContainText("Wire");
+  await page.getByRole("option", { name: "Wireframe", exact: true }).click();
+  await expect(mode).toContainText("Wireframe");
   await expect(page.getByRole("tab", { name: "Materials", exact: true })).toHaveCount(0);
 
   await mode.click();
   await page.getByRole("option", { name: "Render", exact: true }).click();
   await expect(viewTab).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
-  const studio = page.locator("[data-cad-render-settings-section]");
-  await expect(studio).toBeVisible();
-  const exposure = studio.getByLabel("Exposure value", { exact: true });
+  const renderingSettings = view.getByRole("button", { name: "Lighting", exact: true });
+  await expect(renderingSettings).toHaveAttribute("aria-expanded", "true");
+  const exposure = view.getByLabel("Exposure value", { exact: true });
+  await expect(view.getByRole("combobox", { name: "Quality", exact: true })).toContainText("Preview");
+  await exposure.fill("1.5");
+  await exposure.press("Enter");
+  await expect(mode).toContainText("Custom");
+  await view.getByRole("button", { name: "Disable Lighting", exact: true }).click();
+  await expect(exposure).toHaveCount(0);
+  await expect(mode).toBeVisible();
+  await renderingSettings.click();
+  await expect(exposure).toHaveValue("0.0 EV");
   await exposure.fill("1.5");
   await exposure.press("Enter");
   await expect(page.getByRole("tab", { name: "Materials", exact: true })).toHaveCount(0);
@@ -240,15 +263,17 @@ test("View preserves display and render settings without a Materials editor", as
   await page.screenshot({ path: test.info().outputPath("render-view.png"), animations: "disabled" });
 
   await mode.click();
-  await page.getByRole("option", { name: "Wire", exact: true }).click();
+  await page.getByRole("option", { name: "Wireframe", exact: true }).click();
   await expect(viewTab).toHaveAttribute("aria-selected", "true");
-  await expect(studio).toHaveCount(0);
+  await expect(renderingSettings).toHaveAttribute("aria-expanded", "false");
+  await expect(exposure).toHaveCount(0);
+  await expect(view.getByLabel("Clip X position", { exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Studio", exact: true })).toHaveCount(0);
   await mode.click();
   await page.getByRole("option", { name: "Render", exact: true }).click();
-  await expect(exposure).toHaveValue("1.5 EV");
+  await expect(exposure).toHaveValue("0.0 EV");
   await mode.click();
-  await page.getByRole("option", { name: "Shaded with edges", exact: true }).click();
+  await page.getByRole("option", { name: "Solid", exact: true }).click();
   await page.getByRole("tab", { name: "Model", exact: true }).click();
   await page.getByRole("list", { name: "Model", exact: true })
     .getByRole("button", { name: "Select part.step", exact: true }).click();
@@ -516,14 +541,7 @@ test("prompt actions preserve the draft, native clipboard and captured selection
     await expect(draft).toBeFocused();
     expect(await app.evaluate(({ clipboard }) => clipboard.readText())).toBe(copiedReference);
 
-    await page.getByRole("button", { name: "Capture", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Copy screenshot", exact: true }).click();
-    await expect.poll(() => app.evaluate(({ clipboard }) => {
-      const image = clipboard.readImage();
-      return !image.isEmpty() && image.getSize().width > 0 && image.getSize().height > 0;
-    })).toBe(true);
-    await page.getByRole("button", { name: "Capture", exact: true }).click();
-    await page.getByTestId("capture-to-chat").click();
+    await page.getByRole("button", { name: "Take snapshot", exact: true }).click();
     await expect(page.locator("[data-composer]").getByText("part-view.png", { exact: true })).toHaveCount(1);
     await expect(chips).toHaveCount(1);
     await expect(chips).toHaveAttribute("data-selector", selector!);

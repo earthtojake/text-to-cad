@@ -160,6 +160,13 @@ is shared. Public declarations, styles and worker assets are built in that
 package. See `docs/shell.md` for the host boundary and `docs/storage.md` for
 browser persistence. CAD control guidance lives with the UI package.
 
+`vite.config.mjs` adds the shared `@hardcore/ui/drawing-assets` plugin so the
+Excalidraw editor in `@hardcore/ui/drawing` never fetches a font from a CDN:
+`drawing-assets.js` and `excalidraw/` are served in dev and emitted into
+`dist/`. The 12 MB Xiaolai CJK family is excluded from this build to keep the
+wheel small; CJK text falls back to a system font. See
+[drawing](../../packages/ui/docs/drawing.md#offline-assets-and-upgrades).
+
 ## Testing
 
 ```bash
@@ -191,26 +198,48 @@ the UI package's asset documentation for asset provenance and regeneration.
 
 ### Narrow CAD panes
 
-The shared floating controls separate **Interaction tools** (Select, Pan, Measure,
-Draw) from **View and actions** (selection filters, navigation and capture). The compact horizontal groups wrap within the scene
-when the Inspector or a narrow host reduces the available width. Their actions
-and disabled states are the same at every width; Orbit retains Exit and playback.
-Zoom out, a read-only percentage, Zoom in and Reset view sit at the bottom-right
-above the orientation axes. The percentage tracks the live camera; it is not an
-input. X/Y/Z labels remain visible outside the axis endpoints as the view rotates.
+The shared top-right toolbar contains Select, Pan, Measure and Draw. Pressing
+Select again opens its selection-filter dropdown. Buttons wrap inside the pill
+when the Inspector or a narrow host reduces the scene width. Snapshot is a
+direct action beside the Inspector and file-tree toggles in the file navbar;
+the web prompt adapter copies the viewport image and references to the clipboard.
+The small muted percentage beside the Inspector tabs opens zoom/fit controls,
+Reset camera and Reset model. Reset model clears motion, Clip/Explode and
+hide/isolate state, restores the original camera, and preserves display settings.
+X/Y/Z labels remain visible outside the bottom-right axis endpoints.
+
+Fullscreen (`Maximize2`) sits beside appearance in the web header. The app owns
+this transient state and passes it to FileViewer. It hides all chrome, sidebars
+and viewport tools. Shared CAD fullscreen controls show a transparent centered
+bottom animation bar and Settings/X at top-right. Settings opens a floating,
+content-height panel capped by the viewport, with permanent Animation (when
+available) and Orbit sections. Routine selection, speed and loop reuse Motion's
+controls; Orbit uses a slider and numeric input (0 stops rotation). The animation bar has plain play/pause,
+scrub and restart, and is absent without animation. Position stays in the inspector.
+Both control areas fade after two seconds idle; an open settings panel and active
+slider/keyboard interaction keep them visible.
+The app supplies `onExitFullscreen` and honors prevented Escape events so nested
+pickers and settings close before fullscreen exits. X or Escape restores the
+panel, active tool and original camera without reloading the scene. Each entry
+starts at the default camera. Orbit speed persists globally through the host
+preference adapter; animation shares the inspector's per-file state and clocks.
 
 ## Current viewer behavior
 
-The STEP inspector uses **Model | Motion | View**. Motion appears when supported,
+The STEP inspector uses **Features | Motion | View**. Motion appears when supported,
 with Animation above Position and pose-transition preferences inside Position.
 The two systems keep their independent playback, preset and value state. Robot
-position controls also live in Motion; authored mesh components retain their
-Components tab, and DXF/mesh files retain their format-specific controls.
+position controls also live in Motion, followed by a Components tab that always
+shows the robot's link tree, and DXF/mesh files retain their format-specific controls.
 
-View owns a single Mode dropdown for shaded, edge, wire and Render presentation.
-All modes share the camera, projection and general display controls. Selecting
-Render adds photographic lighting, backdrop and Preview/Final settings in View;
-it does not refit the camera, replace tabs or change app appearance. Inspector
+View owns a single Mode dropdown: Solid, Render, X-ray, Hidden line and Wireframe.
+Modes are presets over one grouped display schema, and all settings groups are
+available in every preset. Render defaults to perspective; others to orthographic.
+Changing a view setting shows Custom. View Reset restores its base preset and
+disables Clip/Explode; preset selection preserves those tools. Neither operation
+changes camera viewpoint/zoom, selection, Motion or app appearance.
+Expanded settings groups are enabled; the minus disables and restores neutral
+behavior. See [View presets](../../packages/ui/docs/render-mode.md). Inspector
 tabs occupy one fixed row in canonical order, without dragging, reordering or
 splitting. Active selection is saved per file and preserved across mode changes.
 Old global tab layouts are ignored; a legacy split restores its last available

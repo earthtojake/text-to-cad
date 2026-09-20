@@ -55,7 +55,9 @@ function configuration(overrides = {}) {
       color: overrides.color ?? "#e7e7e5",
       transparent: overrides.transparent ?? false,
       ground: overrides.ground ?? true,
-      groundPlacement: overrides.groundPlacement ?? "origin"
+      groundPlacement: overrides.groundPlacement ?? "origin",
+      ...(overrides.groundColor != null ? { groundColor: overrides.groundColor } : {}),
+      ...(overrides.groundOpacity != null ? { groundOpacity: overrides.groundOpacity } : {})
     }
   };
 }
@@ -107,19 +109,20 @@ test("photographic studio applies one scale-stable key, Neutral exposure, and or
   assert.equal(value.requestCount, 1);
 });
 
-test("ground sits at the model's lowest point by default, and at Z=0 only when asked", () => {
+test("floor defaults to the model origin and can follow the lowest point", () => {
   const value = runtime();
   for (const minZ of [-40, 0, 40]) {
     value.modelBounds = { min: [-10, -10, minZ], max: [10, 10, minZ + 20] };
     const originalBounds = structuredClone(value.modelBounds);
-    // The default: the floor is under the model, so a below-origin model is
-    // never cut off by its own ground plane.
+    // Origin placement changes neither authored geometry nor illumination.
     const state = applyPhotographicStudio(THREE, value, {});
     const keyPosition = state.keyLight.position.clone();
     const keyIntensity = state.keyLight.intensity;
-    assert.equal(state.ground.position.z, minZ);
+    assert.equal(state.ground.position.z, 0);
     assert.equal(state.ground.material.transparent, true);
-    assert.ok(state.ground.material.opacity > 0 && state.ground.material.opacity < 1);
+    assert.equal(state.ground.material.opacity, 0.6);
+    assert.equal(state.ground.material.side, THREE.DoubleSide);
+    assert.equal(state.ground.material.forceSinglePass, true);
     assert.equal(state.ground.material.depthWrite, false);
 
     const authored = applyPhotographicStudio(THREE, value, configuration({ groundPlacement: "origin" }));
@@ -138,7 +141,7 @@ test("ground sits at the model's lowest point by default, and at Z=0 only when a
     assert.equal(state.ground.material.depthWrite, false);
     assert.equal(state.ground.material.polygonOffset, true);
     applyPhotographicStudio(THREE, value, {});
-    assert.equal(state.ground.position.z, minZ);
+    assert.equal(state.ground.position.z, 0);
   }
   disposePhotographicStudio(value);
 });
@@ -252,6 +255,32 @@ test("transparent backdrops use a shadow catcher and ground can be removed live"
   assert.equal(state.ground, null);
 });
 
+test("grouped backdrop alpha and floor work independently with neutral lighting", () => {
+  const value = runtime();
+  value.renderer.capabilities = { logarithmicDepthBuffer: true };
+  value.renderer.toneMappingExposure = 1.16;
+  const neutralLight = new THREE.DirectionalLight(0xffffff, 2);
+  value.scene.add(neutralLight);
+  const recipe = configuration({ groundColor: "#ff8800" });
+  recipe.lighting.enabled = false;
+  recipe.backdrop.opacity = 0.35;
+  const state = applyPhotographicStudio(THREE, value, recipe);
+  assert.equal(state.keyLight.visible, false);
+  assert.equal(state.shadowMapSize, null, "no shadow storage is configured for a backdrop");
+  assert.equal(neutralLight.visible, true);
+  assert.equal(value.renderer.toneMapping, THREE.NoToneMapping);
+  assert.equal(value.renderer.toneMappingExposure, 1.16);
+  assert.equal(value.renderer.shadowMap.enabled, false);
+  assert.equal(value.scene.background, null);
+  assert.equal(value.renderer.clearState().alpha, 0.35);
+  assert.equal(state.ground.material.isMeshStandardMaterial, true);
+  applyPhotographicStudio(THREE, value, { ...recipe, backdrop: { ...recipe.backdrop, opacity: 0, transparent: true } });
+  assert.equal(state.ground.material.isMeshStandardMaterial, true, "transparent canvas does not replace the independently colored floor");
+  assert.equal(value.renderer.clearState().alpha, 0);
+  disposePhotographicStudio(value);
+  assert.equal(value.scene.children.includes(neutralLight), true);
+});
+
 test("disposing the studio removes only owned objects and restores renderer state", () => {
   const value = runtime();
   const unowned = new THREE.Object3D();
@@ -266,4 +295,55 @@ test("disposing the studio removes only owned objects and restores renderer stat
   assert.equal(value.renderer.toneMappingExposure, 1);
   assert.equal(value.renderer.shadowMap.enabled, false);
   assert.deepEqual(value.renderer.clearState(), { color: "334455", alpha: 1 });
+});
+
+
+test("floor color and opacity update independently while both sides remain visible", () => {
+  const value = runtime();
+  const state = applyPhotographicStudio(THREE, value, configuration({
+    color: "#123456", groundColor: "#ff8800", groundOpacity: 0.8
+  }));
+  const floor = state.ground;
+  const material = floor.material;
+  assert.equal(value.scene.background.getHexString(), "123456");
+  assert.deepEqual(material.color.toArray(), new THREE.Color("#ff8800")
+    .multiplyScalar(PHOTOGRAPHIC_STUDIO_GROUND_DIFFUSE_WEIGHT).toArray());
+  assert.equal(material.opacity, 0.8);
+  for (const direction of [-1, 1]) {
+    const raycaster = new THREE.Raycaster(
+      new THREE.Vector3(0, 0, -direction * 20), new THREE.Vector3(0, 0, direction)
+    );
+    assert.ok(raycaster.intersectObject(floor).length, "floor visible above and below origin");
+  }
+  for (const groundOpacity of [0, 1, 0.6]) {
+    applyPhotographicStudio(THREE, value, configuration({ groundOpacity }));
+    assert.equal(state.ground, floor);
+    assert.equal(state.ground.material, material);
+    assert.equal(material.opacity, groundOpacity);
+    assert.equal(material.depthWrite, false);
+  }
+  applyPhotographicStudio(THREE, value, configuration({ transparent: true, groundOpacity: 0.4 }));
+  assert.equal(state.ground.material.isShadowMaterial, true);
+  assert.equal(state.ground.material.opacity, 0.4);
+  assert.equal(state.ground.material.forceSinglePass, true);
+  disposePhotographicStudio(value);
+});
+
+
+test("background and floor updates retain the neutral owner's current reflection intensity", () => {
+  const value = runtime();
+  value.scene.environmentIntensity = 0;
+  const recipe = configuration();
+  recipe.lighting.enabled = false;
+  try {
+    applyPhotographicStudio(THREE, value, recipe);
+    value.scene.environmentIntensity = 1;
+    applyPhotographicStudio(THREE, value, recipe);
+    assert.equal(value.photographicStudio.original.environmentIntensity, 0);
+    assert.equal(value.scene.environmentIntensity, 1);
+    assert.equal(value.photographicStudio.keyLight.visible, false);
+    value.scene.environmentIntensity = 0.5;
+    applyPhotographicStudio(THREE, value, recipe);
+    assert.equal(value.scene.environmentIntensity, 0.5);
+  } finally { disposePhotographicStudio(value); }
 });

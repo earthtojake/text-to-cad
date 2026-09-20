@@ -12,7 +12,7 @@ import {
   drawingAssetFiles,
   drawingAssetsPlugin,
   localizeDrawingFontFallback,
-} from "../../../scripts/drawing-assets.mjs";
+} from "@hardcore/ui/drawing-assets";
 
 const require = createRequire(import.meta.url);
 const packageRoot = path.resolve(path.dirname(require.resolve("@excalidraw/excalidraw")), "../..");
@@ -69,6 +69,19 @@ describe("offline desktop drawing assets", () => {
     }
   });
 
+  it("drops only the files an exclude pattern names, for hosts that ship a subset", () => {
+    const all = drawingAssetFiles();
+    const exclude = [/\/fonts\/Xiaolai\//g];
+    const subset = drawingAssetFiles({ exclude });
+    expect(subset.some(file => file.fileName.includes("/fonts/Xiaolai/"))).toBe(false);
+    expect(subset.map(file => file.fileName)).toEqual(
+      all.map(file => file.fileName).filter(name => !name.includes("/fonts/Xiaolai/")),
+    );
+    expect(subset.length).toBeLessThan(all.length);
+    expect(subset.some(file => file.fileName === "excalidraw/licenses/Xiaolai-OFL.txt")).toBe(true);
+    expect(() => drawingAssetFiles({ exclude: ["Xiaolai"] as never })).toThrow("array of RegExp");
+  });
+
   it.each(["dev", "prod"])("replaces the installed %s SDK's CDN fallback without modifying node_modules", async flavor => {
     const chunks = fontChunks(flavor);
     expect(chunks).toHaveLength(1);
@@ -121,5 +134,16 @@ describe("offline desktop drawing assets", () => {
     expect(output).not.toContain("https://esm.sh/");
     expect(output).toContain("./fonts/Liberation/LiberationSans-Regular.ttf");
     expect(output).toContain('new URL("./excalidraw/", document.baseURI).href');
+  });
+
+  it("gives a Rolldown optimizer a native plugin instead of the deprecated esbuild option", () => {
+    const options = drawingAssetsPlugin().config.call({ meta: { rolldownVersion: "1.0.0" } } as never);
+    expect(options.optimizeDeps.esbuildOptions).toBeUndefined();
+    const plugins = options.optimizeDeps.rolldownOptions?.plugins ?? [];
+    expect(plugins).toHaveLength(1);
+    const chunk = fontChunks("prod")[0]!;
+    expect(plugins[0]!.transform.filter.id.test(chunk.id)).toBe(true);
+    expect(plugins[0]!.transform.handler(chunk.code)).toEqual({ code: localizeDrawingFontFallback(chunk.code), map: null });
+    expect(plugins[0]!.transform.handler("export const unrelated = true")).toBeNull();
   });
 });

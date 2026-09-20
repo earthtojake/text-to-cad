@@ -1,5 +1,5 @@
 import { useSyncExternalStore, type ComponentType } from 'react';
-import type { FileActivity, FileRendererProps, JsonValue } from '../../file-viewer/types.js';
+import type { FileActivity, FileNavigationAction, FileRendererProps, JsonValue } from '../../file-viewer/types.js';
 import type { CadWorkspaceService, CadEntry, CadRenderSession, CadServerInfo } from '@hardcore/core/client';
 import type { CadCommands, CadCommandSource, CadLiveBinding, CadRendererSlots, PreparedCadDocument } from './index.js';
 import type { ResourceRef } from '@hardcore/core/prompt';
@@ -10,6 +10,9 @@ const emptyCommands: CadCommands = Object.freeze({});
 const emptySubscribe = () => () => {};
 const getEmptyCommands = () => emptyCommands;
 interface CadSurfaceProps {
+  fullscreen?: boolean;
+  onExitFullscreen?: () => void;
+  onNavigationActionsChange?: (actions: readonly FileNavigationAction[]) => void;
   preferences: CadPreferences;
   onPreferenceChange(patch: Partial<CadPreferences>): void;
   client: CadWorkspaceService;
@@ -58,6 +61,9 @@ export default function CadRenderer(props: FileRendererProps<PreparedCadDocument
     onPanelOpen={props.onPanelOpen}
     onChromeVisibilityChange={props.onChromeVisibilityChange}
     onActivityChange={props.onActivityChange}
+    fullscreen={props.fullscreen}
+    onExitFullscreen={props.onExitFullscreen}
+    onNavigationActionsChange={props.onNavigationActionsChange}
     onReload={props.reload}
     state={props.state}
     onStateChange={props.onStateChange}

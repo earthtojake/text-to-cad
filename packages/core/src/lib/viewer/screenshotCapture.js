@@ -149,19 +149,29 @@ export function paintScreenshotImageData(context, imageData, width, height, {
     context.putImageData(imageData, 0, 0);
   }
 
-  if (overlayCanvas) {
-    context.drawImage(
-      overlayCanvas,
-      cropRect.x,
-      cropRect.y,
-      cropRect.width,
-      cropRect.height,
-      0,
-      0,
-      cropRect.width,
-      cropRect.height
-    );
+  paintScreenshotOverlay(context, overlayCanvas, width, height, cropRect);
+}
+
+// An overlay covers the same viewport as the frame but keeps its own pixel
+// ratio (the drawing editor renders at the display's, the viewport at a capped
+// one), so the crop is mapped into the overlay's pixels rather than copied 1:1.
+function paintScreenshotOverlay(context, overlayCanvas, width, height, cropRect) {
+  if (!overlayCanvas || !(overlayCanvas.width > 0) || !(overlayCanvas.height > 0)) {
+    return;
   }
+  const scaleX = overlayCanvas.width / width;
+  const scaleY = overlayCanvas.height / height;
+  context.drawImage(
+    overlayCanvas,
+    cropRect.x * scaleX,
+    cropRect.y * scaleY,
+    cropRect.width * scaleX,
+    cropRect.height * scaleY,
+    0,
+    0,
+    cropRect.width,
+    cropRect.height
+  );
 }
 
 export function paintScreenshotSourceCanvas(context, sourceCanvas, width, height, {
@@ -194,19 +204,7 @@ export function paintScreenshotSourceCanvas(context, sourceCanvas, width, height
   );
   context.fillStyle = previousFillStyle;
 
-  if (overlayCanvas) {
-    context.drawImage(
-      overlayCanvas,
-      cropRect.x,
-      cropRect.y,
-      cropRect.width,
-      cropRect.height,
-      0,
-      0,
-      cropRect.width,
-      cropRect.height
-    );
-  }
+  paintScreenshotOverlay(context, overlayCanvas, width, height, cropRect);
 }
 
 // Render the live framebuffer once and immediately copy it into a 2D export

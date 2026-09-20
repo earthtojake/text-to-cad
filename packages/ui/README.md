@@ -38,6 +38,12 @@ for ordinary interface text, navigation and tabs. Settings sheets retain their
 explicit compact scale: 12px section headings, 11px labels and control values,
 and 10px metadata (see [settings UI](docs/settings-ui.md)). Document headings
 and code retain their content styles.
+Dropdown, select-popup and context-menu primitives default to the same 11px
+compact text (`text-tiny`, 16px line height), including checkbox/radio items
+and submenus. Menu shortcuts use 10px metadata. These defaults belong to the
+primitives, including desktop's app-level equivalents; consumers do not add
+per-menu font-size overrides. Portals set their own compact text size rather
+than inheriting the trigger or host body's size.
 The token uses rems so desktop UI scaling still works without changing the
 normal 16px root or shrinking layout spacing.
 
@@ -45,6 +51,10 @@ File-tab chrome uses normal-weight type. Breadcrumbs, file and model rows, and
 filter matches use muted/primary text color for emphasis, never bold weight.
 Both tree lists inset row backgrounds 4px from their horizontal edges, including
 selected, hovered and filtered rows; nesting adds indentation inside that gutter.
+The explorer and inspector share a 256px minimum panel width. Resizing below it
+closes the panel; reopening restores 320px. Inspector tabs never scroll sideways,
+and their zoom readout uses the muted 10px metadata size. Motion uses one compact
+play/scrub/restart row; position labels truncate to preserve sliders and inputs.
 
 React, ReactDOM, Three.js and Lucide are host-supplied peers. React 18 and 19
 are supported: web and desktop use React 19.3.0. Each
@@ -190,9 +200,10 @@ The shared CAD renderer consumes the artifact, its schema-9 `.step.json`
 sidecar and immutable store views. Embedded animation, authored appearance and
 kinematics travel in the sidecar; an adjacent `.step.js` is a retired input.
 The scene uses progressive component loading and demand-driven exact surfaces.
-The Model tree shares the file tree's row primitive. Its visible expansion
+The Model tree shares the file tree's row and filter primitives. Its visible expansion
 controls viewport selection, exact topology and optional feature recognition;
-collapsed parts do not trigger whole-assembly analysis. Contextual measurements
+collapsed parts do not trigger whole-assembly analysis, and neither does its
+filter, which searches names without expanding anything. Contextual measurements
 remain available in Render too. See [model tree and recognition](docs/cad-renderer.md#step-inspector-layout)
 for selection, isolation, demand and cache ownership.
 
@@ -202,16 +213,41 @@ and versioned, bounded memory cache; it adds no persistent store. Read
 [feature detection](docs/feature-detection.md) before changing inference rules,
 cache identity, cancellation or recognition limits.
 
-The Model, Motion and View tabs use one fixed row in canonical order. Tabs cannot
+Robot descriptions (URDF, SRDF, SDF) use Motion, Components and View. Components is
+the description's link tree, with the Model tree's rows, filter and Reference pane;
+see [robot components](docs/cad-renderer.md#robot-components).
+
+The Features, Motion and View tabs use one fixed row in canonical order. Tabs cannot
 be dragged, reordered or split; only the active selection is saved per file.
 Visited Model trees stay mounted when hidden, preserving disclosure and scroll.
-View groups scene/camera/grid settings, followed by Clip and Explode. Render is
-its second Mode option, adding photographic controls at the bottom; changing
-style preserves projection (including orthographic), camera, zoom, motion,
-selection and common display settings. Interaction tools work in every style.
-Ordinary styles use the app's fixed light/dark workbench basis; Render uses a
-lazy photographic rig and defaults to Preview quality. Legacy CAD theme
-preferences are not consumed.
+The View tab uses a compact properties panel with 28px headers/controls, no extra
+header-to-content padding, 4px row gaps and 8px section bottoms. Mode contains equal-width Mode and
+Projection dropdowns; Explode is a separate section. Surfaces stays expanded,
+and perspective uses the standard lens without a separate Camera section. Optional settings sections are
+feature gates: title/plus click enables, only the trailing minus disables, and
+gray/collapsed means neutral/off. Reopening resets values to defaults, including
+Clip offsets/Flip and Explode's amount (50%). Explode stays open when its slider
+returns to 0%; only the minus collapses it. The fixed section order is Mode,
+Explode, Clip, Surfaces, Edges, Grid, Axes, Lighting, Background, Floor: tools,
+Solid's enabled settings, then Solid's disabled settings. Grid and Axes are
+separate, with matching default colors.
+Floor and Background have no redundant enable/transparency checkboxes; opacity
+lives in color pickers with checkerboard previews.
+Hover only highlights controls; it never writes settings. One per-file settings store serves controls, agent
+commands and persistence, and retains unchanged renderer inputs across edits;
+see [View state and updates](docs/render-mode.md#state-and-updates).
+Expensive settings use [staged viewport updates](docs/view-updates.md): controls
+remain authoritative, preparation is replaceable, and captures await presentation.
+
+Solid, Render, X-ray, Hidden line and Wireframe are presets over one grouped
+settings schema. Every preset exposes the same groups. Render defaults to
+perspective; others to orthographic. Changed view values show Custom; Reset
+restores the base preset. Clip/Explode are tools outside presets and Custom,
+preserved along with camera viewpoint/zoom, motion and selection. The viewer
+inherits host light/dark appearance and defaults to Preview lighting quality;
+snapshots default to Light and Final. Explicit grouped values override these
+context defaults. Retired saved states migrate on restore; new commands use the
+closed grouped schema. See [View presets](docs/render-mode.md).
 
 Authored material color, finish and opacity are read-only in every style; the
 Model reference section shows their properties. There is no Materials editor or

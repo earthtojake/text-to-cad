@@ -145,3 +145,7 @@ Pose transition animation and speed use the existing
 `cad-viewer:pose-transition:v1` preference. The web adapter reads, writes and
 synchronizes that key through `CadPreferences`; the shared renderer discovers no
 browser storage.
+
+Fullscreen orbit speed uses `cad-viewer:orbit:v1` through the same host-owned
+preference source. It is global across files and synchronized across windows.
+Fullscreen camera changes are transient and never enter file-session snapshots.

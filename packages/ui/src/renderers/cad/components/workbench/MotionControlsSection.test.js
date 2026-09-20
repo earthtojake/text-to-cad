@@ -1,58 +1,51 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildMotionControlsTab } from './MotionControlsSection.js';
-import AnimationControlsSection from './AnimationControlsSection.js';
+import { buildMotionControlsTab, MotionResetButton } from './MotionControlsSection.js';
 import PoseControlsSection from './PoseControlsSection.js';
-import { KinematicsTransitionRows } from './KinematicsControls.js';
-import { FileSheetSubsection } from './FileSheet.js';
+import { KinematicsPoseRow, NO_PRESET_VALUE } from './KinematicsControls.js';
+import { FileSheetStaticSection, FileSheetSliderField } from './FileSheet.js';
 import { elements } from '../../../../../scripts/reactHarness.mjs';
 
-const definition = { parameters: [], defaultParameterValues: {}, manifest: { poses: { rest: {} } } };
+const definition = { parameters: [{ id: 'hinge', label: 'Hinge', type: 'number' }],
+  defaultParameterValues: { hinge: 0 }, manifest: { poses: { rest: { hinge: 0 } } } };
 const animation = { clips: [{ id: 'turn', duration: 3 }], activeClipId: 'turn' };
 
-test('Motion is absent without controls and independently includes either system', () => {
+test('Motion is Position: animation is the Animate tool, so routines alone make no Motion tab', () => {
   assert.equal(buildMotionControlsTab(), null);
-  for (const props of [{ poseRuntime: { definition } }, { animationRuntime: animation }, { animationRuntime: { status: 'loading' } }, { poseRuntime: { error: 'Invalid joints' } }]) {
+  for (const props of [{ animationRuntime: animation }, { animationRuntime: { status: 'loading' } }]) assert.equal(buildMotionControlsTab(props), null);
+  for (const props of [{ poseRuntime: { definition } }, { poseRuntime: { error: 'Invalid joints' } }, { poseRuntime: { definition }, animationRuntime: animation }]) {
     const tab = buildMotionControlsTab(props);
     assert.equal(tab.id, 'motion');
-    assert.equal(tab.title, 'Motion');
-    assert.equal(elements(tab.content).filter(node => [AnimationControlsSection, PoseControlsSection].includes(node.type)).length, 1);
+    assert.deepEqual(elements(tab.content).filter(node => node.type === PoseControlsSection).length, 1);
   }
 });
 
-test('Animation precedes Position while each retains its own runtime and actions', () => {
+test('one global Reset calls the coordinated host command', () => {
   const calls = [];
-  const pose = { definition, onResetParameters: () => calls.push('position') };
-  const playback = { ...animation, onRestart: () => calls.push('animation') };
+  const pose = { definition, onResetMotion: () => calls.push('both'), onResetParameters: () => calls.push('wrong') };
+  const playback = { ...animation, resetModel: () => calls.push('wrong') };
   const tab = buildMotionControlsTab({ poseRuntime: pose, animationRuntime: playback });
-  const children = elements(tab.content).filter(node => [AnimationControlsSection, PoseControlsSection].includes(node.type));
-  assert.deepEqual(children.map(node => node.type), [AnimationControlsSection, PoseControlsSection]);
-  assert.equal(children[0].props.runtime, playback);
-  assert.equal(children[1].props.runtime, pose);
-  const animationControls = AnimationControlsSection(children[0].props);
-  elements(animationControls).find(node => node.props['aria-label'] === 'Restart animation').props.onClick();
-  assert.deepEqual(calls, ['animation']);
-  const positionControls = PoseControlsSection(children[1].props);
-  elements(positionControls).find(node => node.props.onReset).props.onReset();
-  assert.deepEqual(calls, ['animation', 'position']);
+  const children = elements(tab.content).filter(node => [PoseControlsSection, MotionResetButton].includes(node.type));
+  assert.deepEqual(children.map(node => node.type), [PoseControlsSection, MotionResetButton]);
+  const reset = MotionResetButton(children[1].props);
+  elements(reset).find(node => node.props.onClick).props.onClick();
+  assert.deepEqual(calls, ['both']);
+  assert.equal(elements(PoseControlsSection({ runtime: pose })).some(node => node.props.onReset || node.props.onCopy || node.props.transition), false);
 });
 
-test('transition preferences live inside Position with no nested Transition section', () => {
-  const transition = { animate: true, speed: 1 };
-  const content = PoseControlsSection({ runtime: { definition, transition } });
-  const position = elements(content).find(node => node.type === FileSheetSubsection);
-  assert.equal(position.props.title, 'Position');
-  const rows = elements(position).find(node => node.type === KinematicsTransitionRows);
-  assert.equal(rows.props.transition, transition);
-  assert.equal(elements(KinematicsTransitionRows(rows.props)).some(node => node.type === FileSheetSubsection), false);
-  assert.equal(elements(content).filter(node => node.type === FileSheetSubsection).length, 1);
+test('Position and Parameters are separate permanent sections; either can exist independently', () => {
+  const titles = def => elements(PoseControlsSection({ runtime: { definition: def }, hideWhenEmpty: true }))
+    .filter(node => node.type === FileSheetStaticSection).map(node => node.props.title);
+  assert.deepEqual(titles(definition), ['Position', 'Parameters']);
+  assert.deepEqual(titles({ ...definition, parameters: [] }), ['Position']);
+  assert.deepEqual(titles({ ...definition, manifest: {} }), ['Parameters']);
 });
 
-test('animation gate does not disable independent Position controls', () => {
-  const tab = buildMotionControlsTab({ animationRuntime: { ...animation, enabled: false }, poseRuntime: { definition } });
-  const children = elements(tab.content).filter(node => [AnimationControlsSection, PoseControlsSection].includes(node.type));
-  const controls = elements(AnimationControlsSection(children[0].props));
-  assert.equal(controls.find(node => node.props['aria-label'] === 'Restart animation').props.disabled, true);
-  assert.equal(controls.find(node => node.props['aria-label'] === 'Play animation').props.disabled, undefined);
-  assert.equal(children[1].props.runtime.definition, definition);
+test('animation-owned authored values do not claim a named position, and parameters stay editable', () => {
+  const onParameterChange = () => {};
+  const content = PoseControlsSection({ runtime: { definition, parameterValues: { hinge: 0 }, positionActive: false, onParameterChange } });
+  const nodes = elements(content);
+  assert.equal(nodes.find(node => node.type === KinematicsPoseRow).props.activeValue, NO_PRESET_VALUE);
+  assert.equal(nodes.find(node => node.type === FileSheetSliderField).props.disabled, undefined);
+  assert.equal(nodes.some(node => node.props.title === 'Transition'), false);
 });

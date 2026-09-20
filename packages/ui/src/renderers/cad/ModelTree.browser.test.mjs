@@ -118,5 +118,29 @@ createRoot(document.getElementById('root')).render(<App/>);
   await model.getByRole('button', { name: 'Collapse Subassembly', exact: true }).click();
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   assert.equal(await scrollPosition(), 0, 'other expansion changes must not repeat the reveal');
+
+  // The Model search box: a flat ranked view sharing row sizing and insets with
+  // the tree, whose hits can reach into a still-collapsed subassembly (Part 1 is
+  // one of Subassembly's children, and Subassembly is collapsed from the step above).
+  await model.getByRole('textbox', { name: 'Filter model' }).fill('part 1');
+  const searchResults = model.locator('[aria-label="Model search results"]');
+  await searchResults.waitFor();
+  const firstRow = searchResults.locator('li[data-search-row]').first();
+  const firstHit = firstRow.getByRole('button', { name: /^Select / });
+  assert.equal(await firstHit.getAttribute('aria-label'), 'Select Part 1', 'query "part 1" must rank the nested Part 1 first');
+  assert.equal((await firstHit.boundingBox()).height, 28);
+  const searchInsets = await firstHit.evaluate(node => {
+    const row = node.parentElement.getBoundingClientRect();
+    const list = node.closest('[aria-label="Model search results"]').parentElement;
+    const bounds = list.getBoundingClientRect();
+    return {left:row.left-bounds.left,right:bounds.left+list.clientWidth-row.right};
+  });
+  assert.deepEqual(searchInsets, modelInsets, 'search result rows retain the same horizontal inset as tree rows');
+  await firstHit.click();
+  assert.equal((await page.evaluate(() => window.treeTest.events.selected)).at(-1), 'o1');
+  await model.getByRole('button', { name: 'Clear filter' }).click();
+  await model.getByRole('button', { name: 'Collapse Subassembly', exact: true }).waitFor();
+  assert.equal(await model.getByRole('button', { name: 'Select Part 1', exact: true }).getAttribute('aria-pressed'), 'true');
+
   assert.deepEqual(errors, []);
 });

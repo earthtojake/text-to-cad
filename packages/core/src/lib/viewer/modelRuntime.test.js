@@ -123,7 +123,6 @@ test("model runtime helpers build and sync STEP clip planes", () => {
     facePickGroup: new THREE.Group(),
     edgePickGroup: new THREE.Group(),
     vertexPickGroup: new THREE.Group(),
-    surfaceLineGroup: new THREE.Group(),
     topologyDisplayEdgeLine: null
   };
   runtime.modelGroup.position.set(2, 0, 0);
@@ -134,8 +133,8 @@ test("model runtime helpers build and sync STEP clip planes", () => {
     axis: "x",
     offsets: { x: 0.5 }
   }, runtime.modelBounds, runtime.modelGroup.position);
-  assertNear(directPlane.normal.x, 1, "direct plane normal");
-  assertNear(directPlane.constant, -7, "direct plane constant");
+  assertNear(directPlane.normal.x, -1, "default section exposes the opposite side");
+  assertNear(directPlane.constant, 7, "direct plane constant");
 
   syncRuntimeStepClipPlane(runtime, {
     enabled: true,
@@ -157,6 +156,17 @@ test("model runtime helpers build and sync STEP clip planes", () => {
   assert.equal(edgeMaterial.clippingPlanes, null);
   assert.equal(overlayMaterial.clippingPlanes, null);
   assert.equal(material.userData.cadClipPlaneEnabled, false);
+
+  // With no section before or now there is nothing to reconcile: a posed animation frame
+  // asks for this sync every time, and must not walk every material to clear nothing.
+  material.clippingPlanes = "untouched";
+  syncRuntimeStepClipPlane(runtime, { enabled: false });
+  assert.equal(material.clippingPlanes, "untouched");
+  // A section switched on again is applied, and switching it off clears once more.
+  syncRuntimeStepClipPlane(runtime, { enabled: true, axis: "x", offsets: { x: 0.5 } });
+  assert.equal(material.clippingPlanes.length, 1);
+  syncRuntimeStepClipPlane(runtime, { enabled: false });
+  assert.equal(material.clippingPlanes, null);
 });
 
 test("clip-only changes update live instance materials without reconciling membership", () => {
@@ -193,7 +203,7 @@ test("clip-only changes update live instance materials without reconciling membe
   try {
     for (const offset of [0.25, 0.75]) {
       syncRuntimeStepClipPlane(runtime, { enabled: true, axis: "x", offsets: { x: offset } });
-      assertNear(drawMaterial.clippingPlanes[0].constant, -(2 + 10 * offset));
+      assertNear(drawMaterial.clippingPlanes[0].constant, 2 + 10 * offset);
       assert.equal(drawMaterial.clippingPlanes, records[0].material.clippingPlanes);
       assert.equal(directMaterial.clippingPlanes, drawMaterial.clippingPlanes);
       assert.equal(disposedMaterial.clippingPlanes, null);
@@ -210,7 +220,7 @@ test("clip-only changes update live instance materials without reconciling membe
     // The ordinary sync may refresh its prior material recipe afterward. It
     // must retain the current clip values and leave instance attributes alone.
     records.forEach(syncCadSurfaceInstanceRecord);
-    assertNear(drawMaterial.clippingPlanes[0].constant, -9.5);
+    assertNear(drawMaterial.clippingPlanes[0].constant, 9.5);
     syncRuntimeStepClipPlane(runtime, { enabled: false });
     assert.equal(drawMaterial.clippingPlanes, null);
     assert.equal(directMaterial.clippingPlanes, null);
@@ -265,4 +275,13 @@ test("stable clip state preserves userData while live planes and shader transiti
   assert.equal(material.clippingPlanes, null);
   assert.equal(material.version, version + 3);
   material.dispose();
+});
+
+test("opening Clip at a neutral boundary does not activate shader clipping", () => {
+  const bounds = { min: [0,0,0], max: [10,10,10] };
+  assert.equal(buildStepClipPlane(THREE, { enabled: true, offsets: { x: 1 } }, bounds), null);
+  assert.equal(buildStepClipPlane(THREE, { enabled: true, offsets: { x: 0 }, invert: true }, bounds), null);
+  assert.ok(buildStepClipPlane(THREE, { enabled: true, offsets: { x: 1 }, invert: true }, bounds));
+  assert.ok(buildStepClipPlane(THREE, { enabled: true, offsets: { x: 0 } }, bounds));
+  assert.ok(buildStepClipPlane(THREE, { enabled: true, offsets: { x: 0.5 } }, bounds));
 });

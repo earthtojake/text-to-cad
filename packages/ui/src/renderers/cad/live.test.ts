@@ -5,7 +5,7 @@ import type { CadLiveController, CadLiveState } from './live';
 const state = (): Omit<CadLiveState, 'active'> => ({
   resource: { kind: 'workspace-file', workspaceId: 'root', path: 'model.step', revision: 'r1' },
   revision: 'r1', loading: false, selection: [], selectedPartIds: [], selectedReferenceIds: [],
-  hiddenPartIds: [], isolatedPartIds: [], camera: null, display: { mode: 'shaded_edges' }, renderMode: 'inspect',
+  hiddenPartIds: [], isolatedPartIds: [], camera: null, display: { mode: 'solid' }, renderMode: 'inspect',
 });
 function harness(settle = () => Promise.resolve()) {
   let current = state();
@@ -59,6 +59,31 @@ describe('live CAD viewer binding', () => {
     });
     expect((await view.controller.setDisplaySettings({ mode: 'render' })).display.mode).toBe('render');
     expect(frames).toBe(3);
+  });
+  it('rejects retired public display schema before dispatch', async () => {
+    const view = harness();
+    await expect(view.controller.setDisplaySettings({ mode: 'shaded_edges' })).rejects.toThrow('display.mode');
+    await expect(view.controller.setDisplaySettings({ render: { exposure: 1 } })).rejects.toThrow('Unsupported');
+    expect(view.commands.setDisplaySettings).not.toHaveBeenCalled();
+  });
+  it('waits for a grouped edit to commit without resetting the selected mode', async () => {
+    let frames = 0;
+    const view = harness(async () => {
+      if (++frames === 3) view.update({ ...state(), display: { mode: 'render', lighting: { exposure: 1 } } });
+    });
+    view.update({ ...state(), display: { mode: 'render' } });
+    expect((await view.controller.setDisplaySettings({ lighting: { exposure: 1 } })).display.mode).toBe('render');
+    expect(view.commands.setDisplaySettings).toHaveBeenCalledExactlyOnceWith({ lighting: { exposure: 1 } });
+    expect(frames).toBe(3);
+  });
+  it('waits for normalized clip precedence rather than an overridden scalar offset', async () => {
+    const view = harness();
+    view.update({ ...state(), display: { mode: 'solid', clip: { axis: 'x', offsets: { x: 0.2 } } } });
+    view.commands.setDisplaySettings.mockImplementation(() => view.update({ ...state(), display: {
+      mode: 'solid', clip: { enabled: true, axis: 'y', offset: 0.7, offsets: { x: 0.2, y: 0.7, z: 0 }, invert: false }
+    } }));
+    const result = await view.controller.setDisplaySettings({ clip: { axis: 'y', offset: 0.3, offsets: { y: 0.7 } } });
+    expect(result.display.clip).toMatchObject({ axis: 'y', offset: 0.7 });
   });
   it('bounds a render-mode command that never commits', async () => {
     const now = vi.spyOn(Date, 'now').mockReturnValueOnce(0).mockReturnValue(10_001);

@@ -83,23 +83,28 @@ test("real canvas ink attaches a PNG without submitting, survives tab switches, 
   const box = (await canvas.boundingBox())!;
   expect(box.width).toBeGreaterThan(350);
   expect(box.height).toBeGreaterThan(250);
+  // The shared DrawingToolbar is the editor's only control surface; every SDK control is hidden.
   await expect(editor.locator('label:has(input[data-testid="toolbar-lock"])')).toBeHidden();
-  const pan = editor.locator('label:has(input[data-testid="toolbar-hand"])');
+  await expect(editor.getByTestId('main-menu-trigger')).toBeHidden();
+  const tools = editor.getByRole('group', { name: 'Drawing tools' });
+  const pan = tools.getByRole('button', { name: 'Pan view', exact: true });
   await expect(pan).toBeVisible();
-  for (const control of [pan, editor.getByRole('button', { name: 'Undo', exact: true }), editor.getByTestId('main-menu-trigger')]) {
+  for (const control of [pan, tools.getByRole('button', { name: 'Undo', exact: true }), tools.getByRole('button', { name: 'Color', exact: true })]) {
     const controlBox = (await control.boundingBox())!;
     expect(controlBox.y - box.y).toBeLessThan(100);
     expect(controlBox.x).toBeGreaterThanOrEqual(box.x);
     expect(controlBox.x + controlBox.width).toBeLessThanOrEqual(box.x + box.width);
   }
-  await editor.locator('label:has(input[data-testid="toolbar-rectangle"])').click();
+  await tools.getByRole('button', { name: 'Rectangle', exact: true }).click();
   const x = box.x + box.width * 0.55;
   const y = box.y + box.height * 0.45;
   await page.mouse.move(x, y);
   await page.mouse.down();
   await page.mouse.move(x + 90, y + 65, { steps: 12 });
   await page.mouse.up();
-  await editor.locator('label:has(input[data-testid="toolbar-freedraw"])').click();
+  // Tools are sticky: the rectangle tool is still chosen after its shape.
+  await expect(tools.getByRole('button', { name: 'Rectangle', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await tools.getByRole('button', { name: 'Pen', exact: true }).click();
   await page.mouse.move(x - 40, y + 120);
   await page.mouse.down();
   await page.mouse.move(x + 20, y + 90, { steps: 8 });
@@ -129,11 +134,11 @@ test("real canvas ink attaches a PNG without submitting, survives tab switches, 
   await expect(surface.getByRole('button', { name: 'Open drawing file' })).toHaveCount(0);
   await expect(surface.getByRole('button', { name: 'Save drawing copy' })).toHaveCount(0);
   await expect(editor.locator('.help-icon')).toBeHidden();
-  await expect(editor.getByRole('button', { name: 'Undo', exact: true })).toBeVisible();
-  await expect(editor.getByRole('button', { name: 'Redo', exact: true })).toBeVisible();
+  await expect(tools.getByRole('button', { name: 'Undo', exact: true })).toBeVisible();
+  await expect(tools.getByRole('button', { name: 'Redo', exact: true })).toBeVisible();
   await expect(editor.locator('.default-sidebar-trigger')).toBeHidden();
-  await editor.getByTestId('main-menu-trigger').click();
-  await expect(editor.getByRole('button', { name: 'Reset the canvas', exact: true })).toBeVisible();
+  // The SDK's main menu is gone with the rest of its controls; clearing is the toolbar's.
+  await expect(tools.getByRole('button', { name: 'Clear drawing', exact: true })).toBeEnabled();
   await expect(editor.getByText('Help', { exact: true })).toHaveCount(0);
   await expect(editor.getByText('Open', { exact: true })).toHaveCount(0);
   await expect(editor.getByText('Save to...', { exact: true })).toHaveCount(0);
@@ -143,7 +148,7 @@ test("real canvas ink attaches a PNG without submitting, survives tab switches, 
     dialog.showSaveDialog = async () => { throw new Error('Drawing attempted to open a save dialog'); };
     dialog.showOpenDialog = async () => { throw new Error('Drawing attempted to open a load dialog'); };
   });
-  await editor.locator('label:has(input[data-testid="toolbar-selection"])').click();
+  await editor.getByRole('group', { name: 'Drawing tools' }).getByRole('button', { name: 'Select and move drawings', exact: true }).click();
   await canvas.click({ position: { x: box.width * 0.8, y: box.height * 0.6 } });
   await page.keyboard.press('ControlOrMeta+Shift+S');
   await page.keyboard.press('ControlOrMeta+O');
@@ -196,7 +201,8 @@ test("close discards ink and same-profile reload restores only persistent tabs",
   const editor = page.locator('.hardcore-drawing-editor');
   await expect(editor.locator('.excalidraw')).not.toHaveClass(/excalidraw--mobile/);
   const canvas = (await editor.locator('canvas.excalidraw__canvas.interactive').boundingBox())!;
-  for (const control of [editor.locator('label:has(input[data-testid="toolbar-hand"])'), editor.getByRole('button', { name: 'Undo', exact: true })]) {
+  const wideTools = editor.getByRole('group', { name: 'Drawing tools' });
+  for (const control of [wideTools.getByRole('button', { name: 'Pan view', exact: true }), wideTools.getByRole('button', { name: 'Undo', exact: true })]) {
     const bounds = (await control.boundingBox())!;
     expect(bounds.y - canvas.y).toBeLessThan(100);
   }
