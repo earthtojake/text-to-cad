@@ -47,14 +47,18 @@ function layoutJointHandles(runtime, handles, width, height) {
     const pixelsPerUnit = Math.hypot(probePx[0] - pivotPx[0], probePx[1] - pivotPx[1]) / probe;
     if (!(pixelsPerUnit > 0)) continue;
     const reach = JOINT_HANDLE_ARM_PX / pixelsPerUnit;
-    const knob = add(pivot, scale(direction, reach));
+    // A slider's knob is a thumb on its track: where the joint is, on the axis it moves along.
+    const slider = handle.kind === "prismatic";
+    const knob = slider ? pivot : add(pivot, scale(direction, reach));
     if (!inFront(knob)) continue;
     const limited = Number.isFinite(handle.min) && Number.isFinite(handle.max);
     let guide = [];
     let guideClosed = false;
     if (handle.kind === "prismatic") {
-      // The knob's own travel: the limit range, carried out to the end of the arm.
-      guide = limited ? [handle.min, handle.max].map((value) => add(knob, scale(axis, value - handle.value))) : [];
+      // The track is the line the joint slides on: its limit range through the knob, or a
+      // short stretch either way when the description sets no limits.
+      guide = (limited ? [handle.min - handle.value, handle.max - handle.value] : [-reach, reach])
+        .map((offset) => add(pivot, scale(axis, offset)));
     } else {
       guideClosed = !limited || handle.max - handle.min >= 360;
       guide = arcPoints({
@@ -67,7 +71,7 @@ function layoutJointHandles(runtime, handles, width, height) {
       id: handle.id, handle, pivot, axis, reach, pivotPx,
       knobPx: project(knob),
       guidePx: guide.map((point) => (inFront(point) ? project(point) : null)),
-      guideClosed
+      guideClosed, slider
     });
   }
   return { layouts, project };
@@ -109,8 +113,10 @@ export function useJointHandles({ handles, runtimeRef, hostRef, canvasRef, label
       layout = layoutJointHandles(runtimeRef.current, handlesRef.current, width, height);
       return layout;
     };
-    layoutSeamRef.current = () => relayout().layouts.map(({ id, knobPx, pivotPx, handle }) => (
-      { id, x: knobPx[0], y: knobPx[1], pivotX: pivotPx[0], pivotY: pivotPx[1], value: handle.value }
+    // `travel` is the drawn travel in CSS pixels (a slider's track, a turning joint's arc):
+    // a slider's thumb sits on its pivot, so the track is what says which way it goes.
+    layoutSeamRef.current = () => relayout().layouts.map(({ id, knobPx, pivotPx, guidePx, handle }) => (
+      { id, x: knobPx[0], y: knobPx[1], pivotX: pivotPx[0], pivotY: pivotPx[1], value: handle.value, travel: guidePx.filter(Boolean) }
     ));
 
     const paint = () => {

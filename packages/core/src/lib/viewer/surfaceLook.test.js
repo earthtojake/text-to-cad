@@ -70,6 +70,15 @@ test("colour modes: a single colour and a per-mesh palette override source colou
   assert.equal(a.material.map, texture);
 });
 
+test("a mesh that names its place in the palette takes that colour, whatever the traversal order", () => {
+  const { root, a, b, c } = scene();
+  [a, b, c].forEach((mesh, index) => { mesh.userData.cadFillIndex = 2 - index; });
+  const look = createSurfaceLook(THREE, root);
+  const palette = { ...INSPECT, overrideSourceColors: true, cycleColors: true, defaultColor: "#ff0000", fillColors: ["#ff0000", "#00ff00", "#0000ff"] };
+  look.apply({ materialSettings: palette, authored: false, surface: { style: "shaded", opacity: 1 } });
+  assert.deepEqual([a.material, b.material, c.material[0]].map(material => material.color.getHexString()), ["0000ff", "00ff00", "ff0000"]);
+});
+
 test("a material that carries no source colour takes the viewer's surface colour in Inspect only", () => {
   const { root, a, shared } = scene();
   shared.userData.cadSourceColor = false;

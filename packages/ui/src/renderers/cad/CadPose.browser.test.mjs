@@ -131,7 +131,10 @@ test('a robot opens in Pose: knobs drag joints, the camera keeps every other pre
   const { lift } = await handles();
   await page.mouse.move(...at(lift.x, lift.y));
   await page.mouse.down();
-  await page.mouse.move(...at(lift.x + (lift.x - lift.pivotX) * 12, lift.y + (lift.y - lift.pivotY) * 12), { steps: 10 });
+  // Its thumb sits ON its track (no arm), so the track's far end is the way to drag it.
+  assert.deepEqual([lift.x, lift.y], [lift.pivotX, lift.pivotY]);
+  const end = lift.travel.at(-1);
+  await page.mouse.move(...at(lift.x + (end[0] - lift.x) * 3, lift.y + (end[1] - lift.y) * 3), { steps: 10 });
   await page.mouse.up();
   await page.waitForFunction(() => window.__cadJointHandles().find(handle => handle.id === 'lift').value === 0.3);
 

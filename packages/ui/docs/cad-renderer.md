@@ -16,9 +16,10 @@ the shared `FileViewer`; they do not import another application's source.
 
 `src/renderers/kit` is the format-blind half of the viewer: small modules a
 renderer composes, none of which asks what it is showing. There is one renderer
-per file family, each a vertical slice over the kit: `src/renderers/glb` (the
-first one split out, see [GLB renderer](#glb-renderer)) and `src/renderers/cad`
-(every other format, until its families are split out in turn). The kit imports itself, shared UI
+per file family, each a vertical slice over the kit: `src/renderers/glb`
+([GLB renderer](#glb-renderer)), `src/renderers/mesh` (STL and 3MF,
+[Mesh renderer](#mesh-renderer)) and `src/renderers/cad` (STEP, DXF and robot
+descriptions, until those families are split out in turn). The kit imports itself, shared UI
 (`primitives`, `lib`, `drawing`) and the format-blind half of `@hardcore/core`
 (`lib/viewer/*`, `lib/perspective.js`, `common/viewSettings.js`,
 `common/sceneSettings.js`, the Render studio); a renderer imports the kit, never
@@ -42,9 +43,10 @@ lists, `features: { sections, modes, surfaceStyles }` (`ViewFeatures` in
 out resolves off whatever was saved, and the saved settings are never rewritten.
 Core names two lists, `ALL_VIEW_FEATURES` and `EDGELESS_VIEW_FEATURES` (no Edges,
 Clip or Explode; Solid and Render; Shaded and Flat). The CAD renderer passes the
-first for a STEP and the second for every other format, in three places that
+first for a STEP and the second for every other format it shows, in three places that
 must agree: the view-settings store (`configure({ features })`), the Display tab,
-and the headless renderer (`renderMeshScene.js`).
+and the headless renderer (`renderMeshScene.js`). The GLB and mesh renderers pass the
+second to the shell, which configures the store and the tab from the one list.
 
 **Tools.** The strip draws the list it is handed: `{ id, label, icon, active,
 disabled, onSelect, description?, menu?, secondPressOpensMenu?, subToolbar? }`.
@@ -63,7 +65,10 @@ and hands over the surface look the Display tab resolved
 (`{ materialSettings, authored, surface: { style, opacity } }`); it only ever
 detaches a scene, whose owner disposes it. `buildModel`
 (`@hardcore/core/common/cadScene.js`) exposes `object3D`, `bounds`, `restBounds`
-and `dispose()`; the GLB renderer's scene implements the whole contract.
+and `dispose()`; the GLB and mesh renderers' scenes implement the whole contract.
+A mesh names where "Color by part" deals it a palette colour in
+`userData.cadFillIndex` (otherwise meshes take the palette in traversal order),
+and a material with no source colour says so with `userData.cadSourceColor = false`.
 
 **The rule and its check.** Kit code names no file format, no file-kind switch
 and no STEP-assembly concept (topology, selectors, display records, explode,
@@ -74,8 +79,9 @@ of a renderer or of a file-family core module and for those words, against a
 short allowlist that carries a reason per line and fails when an entry goes
 stale. The same script holds every split-out renderer to its slice
 (`RENDERER_SLICES`): a renderer imports the kit, `renderers/workspace` (the
-backend connection a file is prepared against, and the host's viewer
-preferences), shared UI and core, and never another renderer. The
+backend connection a file is prepared against, the host's viewer preferences and
+command types, and `useWorkspaceDocument`), shared UI and core, and never another
+renderer. The
 unbound-identifier test covers the kit and the split-out renderers with the CAD
 renderer.
 
@@ -93,6 +99,7 @@ calls one hook; the shell owns the rest.
 | `shellState.js` | The per-file record `{ version, camera, display, inspectorTab, tool, renderer }`, read forgivingly and written exactly. The host keys it `[file path, renderer id]`. |
 | `liveBinding.ts` | `attachLiveBinding`: the live command surface. Base commands (`readState`, `setCamera`, `resetCamera`, `setDisplaySettings`, `setRenderMode`, `capture`) mean the same for every renderer; a renderer ADDS commands by name and DECLINES the known host commands (`HOST_LIVE_COMMANDS`) that make no sense for it with the sentence the caller reads. Binding fails when a renderer does neither. |
 | `promptContext.js` | `createViewPromptContext` (a snapshot and what it depicts) and `promptDeliveryMessage`. |
+| `viewTools.js` | `createViewToolModes({ animate })`: the tool modes of a file with nothing to pick. `shell.tools.orbit` is the plain view tool (the default, the one a saved tab records), then Draw, then Animate for a family that can carry routines. |
 | `useViewerShortcuts.js` | Which mounted viewer an Escape belongs to; the renderer says what Escape means. |
 | `ViewportBottomAction.jsx`, `ViewportContextMenu.jsx` | The active tool's one bottom button (Draw: the view with its ink, to the prompt or clipboard); the canvas's camera menu (Reset Zoom, Zoom To Fit). |
 
@@ -112,6 +119,22 @@ const shell = useRendererShell({
 const tools = [shell.tools.own({ id, label, icon }), shell.tools.draw, shell.tools.animate].filter(Boolean);
 return <RendererShell shell={shell} tools={tools} inspector={{ title, tabs: [...own, shell.displayTab] }} />;
 ```
+
+The workspace half of a renderer's surface is one hook too
+(`renderers/workspace/useWorkspaceDocument.js`): `useWorkspaceDocument({ view, data })`
+returns the live catalog entry of the prepared file, the prompt `resource`, the
+`services` object the shell takes and the host's commands;
+`workspaceLoadAlert` turns a catalog or loader failure into `load.alert`; and
+`useDeclinedSelectReference` consumes a host's request to select a reference in
+a file that has none and answers it in the status toast. A renderer is then its
+scene hook, its tool list and its tabs (`glb/GlbRenderer.jsx`,
+`mesh/MeshRenderer.jsx`).
+
+The shell's behaviour has one real-browser test,
+`kit/shell/RendererShell.browser.test.mjs` (deferred files, warm reopen, isolated
+per-pane state, fullscreen's camera, gated Display sections, settings that never
+replace the canvas), and Draw has one scenario (`harness/drawScenario.mjs`)
+run under the shell and under the CAD renderer's own frame.
 
 The CAD renderer still carries its own copy of the frame, the viewport
 orchestration and the session record inside `CadFileView.js`, `CadRenderPane.js`
@@ -156,6 +179,44 @@ CAD renderer does not match `.glb`.
   declined with a sentence, and a `selectReference` host request is consumed and
   answered in the status toast.
 - **State**: the shell record under `[path, "glb"]`. Records written under
+  `[path, "cad"]` are not migrated.
+
+## Mesh renderer
+
+`createMeshRenderer` (`@hardcore/ui/renderers/mesh`, id `mesh`) shows an `.stl`
+or a `.3mf` as what it is: triangles, and in a 3MF a colour per object. The CAD
+renderer does not match either.
+
+- **Scene** (`mesh/meshScene.js`): one `Mesh` per object of the file (an STL is
+  one; a 3MF has one per object and material) and nothing else: no part table,
+  display records, edges, clip planes, explode matrices or selectors. Geometries
+  come from `@hardcore/core/lib/render/meshObjects.js` (`buildMeshObjects`): views
+  over the arrays core decoded, never copies, with the display normals of
+  `meshNormals.js` (creased at 30° up to `CREASED_NORMAL_MAX_TRIANGLES`, plain
+  vertex normals above it) and a 3MF's build transforms baked in.
+- **Loading** (`mesh/useMeshScene.js`): core's `loadRenderMeshByUrl`, so an STL is
+  parsed in the STL worker where there is one, a 3MF that three's loader rejects
+  falls back to the package reader, and the decode is cached per file revision:
+  reopening a file fetches and parses nothing. Progress reads "Reading model",
+  then "Loading geometry 0/1". A new revision replaces the scene when it is ready.
+- **Look**: a mesh authors no finish, so Solid wears the viewer's surface and
+  Render the studio's, over the same colours (`setSurfaceLook` never keeps an
+  "authored" finish). Original keeps each object's source colour; an object
+  without one takes the viewer's surface colour, and once one object of a 3MF is
+  coloured the rest keep the colour their material carried. Flat is unlit,
+  Single colour and Color by part override source colours (the palette is dealt
+  in the order it always was, `paletteIndex`), opacity applies to every object.
+- **Display**: `EDGELESS_VIEW_FEATURES` (Solid and Render; no Edges, Clip or Explode).
+- **Tools**: **Orbit** (the default), then **Draw**. No Select, Measure, Pose or
+  Animate. Fullscreen has no tool, only its orbit settings.
+- **Inspector**: the single Display tab, titled `STL` or `3MF`; the panel starts shut.
+- **Alerts**: a file that fails to parse raises the load alert ("Couldn’t load
+  the model", with the loader's error in Details); one that parses to no
+  triangles raises "No geometry to display".
+- **Host commands**: the base live commands; `select` and `clearSelection` are
+  declined with a sentence, and a `selectReference` host request is consumed and
+  answered in the status toast.
+- **State**: the shell record under `[path, "mesh"]`. Records written under
   `[path, "cad"]` are not migrated.
 
 ## Host integration
@@ -558,15 +619,19 @@ are decided in one place and stay in step; the drag itself never clamps. A
 continuous joint's drag winds freely and is stored as one turn, (-180, 180],
 which is what its slider spans.
 
-A handle is a thin arm from the joint's pivot to a small round knob, with the
-joint's travel drawn faintly through the knob: the limit arc (the full circle
-for a continuous joint or a range of a turn or more) or a slider's limit track.
+A turning joint's handle is a thin arm from the joint's pivot to a small round
+knob, with its travel drawn faintly through the knob: the limit arc, or the full
+circle for a continuous joint or a range of a turn or more. A sliding joint's
+handle is a thumb on a track: the track is the line the joint travels (its limit
+range along the axis, with a stop at each end; a short stretch either way when
+the description sets no limits), and the knob sits on it where the joint now is.
+It has no arm: any arm off the axis has to choose its direction from the camera,
+and a handle that re-chooses as the view turns is a handle that jumps.
 A turning joint's arm lies in its rotation plane toward the child's geometry,
 so the knob sits on the moving part and turns with it; a child centred on its
 own axis (a wheel, a roll joint, a turntable) takes a perpendicular fixed in the
 child's frame instead, and concentric STEP members fan their arms round the
-shared axis, decided at rest. A slider's arm runs along its axis from where the
-child now is. Above twelve handles a model rests as knobs alone and the arm and
+shared axis, decided at rest. Above twelve handles a model rests as knobs alone and the arm and
 travel appear with the pointer. Hovering or holding a knob shows its name and
 value (`shoulder  42.0°`, `lift  0.120 m`).
 
@@ -678,7 +743,7 @@ the frame; selection handles are not included), plus the selected references.
 
 The file navbar holds a direct snapshot action, Inspector (`SlidersHorizontal`) and file
 tree (`Folders`). The Inspector opens by default, except over a file whose
-Inspector is only Display (STL, 3MF, and a GLB under its own renderer): there the
+Inspector is only Display (an STL, a 3MF and a GLB, each under its own renderer): there the
 model gets the room until a person opens it. Each renderer says so in its own
 `panels()` (`inspectorPanels(ready, { defaultOpen })`). Snapshot uses the host prompt-context port: desktop attaches
 the viewport image and references to the owning session's draft; web copies
@@ -752,8 +817,8 @@ recognition regression checks, without a runtime interpreter or export path.
 STEP models place **Features | Kinematics | Display** in one fixed top tab strip.
 Kinematics appears only when the sidecar declares it; animation is the Animate
 tool, not an Inspector section, so a file with routines and no kinematics has
-no Kinematics tab. A mesh (STL, 3MF) has only Display, as a GLB has under its
-own renderer. An Inspector with a single section draws it as
+no Kinematics tab. A mesh (STL, 3MF) and a GLB have only Display, under their
+own renderers. An Inspector with a single section draws it as
 a single selected tab, so every Inspector reads the same way.
 Each section requires its own sidecar block and stays expanded, without a gate.
 Every pose write is a jump: a slider drag, a typed number, a Pose knob, a named

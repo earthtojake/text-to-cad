@@ -113,16 +113,21 @@ it('restores all 317 STEP components after remount without a descriptor, SURF or
   } finally { owner.dispose(); }
 });
 
-it('publishes the cached mesh on the first render after A → B → A without a fetch', async () => {
-  const fetch = vi.fn(async () => new Response(triangle));
+// The one model this hook still loads as a single file is a drawing's prism: a
+// triangle mesh and a GLB have their own renderers and never reach it.
+const plate = ['0', 'SECTION', '2', 'ENTITIES', '0', 'LWPOLYLINE', '8', 'CUT', '90', '4', '70', '1',
+  '10', '0', '20', '0', '10', '10', '20', '0', '10', '10', '20', '10', '10', '0', '20', '10', '0', 'ENDSEC', '0', 'EOF', ''].join('\n');
+
+it('publishes the cached drawing mesh on the first render after A → B → A without a fetch', async () => {
+  const fetch = vi.fn(async () => new Response(plate));
   vi.stubGlobal('fetch', fetch);
-  const first = entry('warm-a');
-  const second = entry('warm-b');
+  const first = entry('warm-a', 'dxf');
+  const second = entry('warm-b', 'dxf');
   const a = renderHook(() => assets(first));
   expect(a.result.current.meshState).toBeNull();
   await act(() => a.result.current.loadMeshForEntry(first));
   const mesh = a.result.current.meshState.meshData;
-  expect(mesh.vertices.length).toBe(9);
+  expect(mesh.vertices.length).toBeGreaterThan(0);
   a.unmount();
   const b = renderHook(() => assets(second));
   await act(() => b.result.current.loadMeshForEntry(second));

@@ -91,6 +91,7 @@ import {
 import {
   applyDisplayRecordTransform,
   applyRuntimeModelBounds,
+  sceneRadiusForBounds,
   readBoundsCenter,
   resolveRuntimeModelFloorZ,
   runtimeModelKeyMatches,
@@ -2794,8 +2795,8 @@ const CadViewer = forwardRef(function CadViewer({
 
     const displayBounds = cadScene.bounds || meshData.bounds;
     // TWO boxes, and the split is the point. displayBounds is the model in the
-    // pose it is in right now -- what lighting, shadows, the floor, the grid and
-    // clipping must follow. zeroPoseBounds is the model at its authored
+    // pose it is in right now -- what lighting, shadows, the floor height and
+    // clipping must follow (the grid and stage keep the rest pose's SIZE). zeroPoseBounds is the model at its authored
     // placement: a robot at its joint defaults, a STEP assembly before its mates
     // moved anything, a mesh as loaded. The CAMERA is grounded on that one, so
     // driving a joint, picking a group state or scrubbing an animation never
@@ -2866,17 +2867,20 @@ const CadViewer = forwardRef(function CadViewer({
         renderShadowMapSizeRef.current
       );
     }
+    // The grid and the stage are the ground the model stands on, sized once from its REST
+    // pose: posing a joint moves the model, never the scale of the floor under it.
+    const groundRadius = sceneRadiusForBounds(THREE, cadScene.restBounds || meshData.restBounds || displayBounds, normalizedSceneScaleMode);
     updateActiveGridHelper(
       runtime,
       viewerTheme,
-      radius,
+      groundRadius,
       floorZ,
       normalizedSceneScaleMode,
       resolvedFloorMode
     );
     if (!renderMode) {
       updateSpotLightTarget(runtime);
-      updateStageEffects(runtime, viewerTheme, normalizedThemeSettings, radius, runtime.gridFloorZ ?? 0, resolvedFloorMode, normalizedSceneScaleMode);
+      updateStageEffects(runtime, viewerTheme, normalizedThemeSettings, groundRadius, runtime.gridFloorZ ?? 0, resolvedFloorMode, normalizedSceneScaleMode);
     }
 
     const modelGroupPlacementChanged = !modelGroup.position.equals(modelOffset);
@@ -3258,17 +3262,19 @@ const CadViewer = forwardRef(function CadViewer({
         normalizedSceneScaleMode,
         { followModel: floorFollowsModel }
       );
+    // As in the scene sync: the ground keeps the size the rest pose gave it.
+    const groundRadius = sceneRadiusForBounds(runtime.THREE, meshData.restBounds || meshData.bounds, normalizedSceneScaleMode);
     updateActiveGridHelper(
       runtime,
       viewerTheme,
-      radius,
+      groundRadius,
       floorZ,
       normalizedSceneScaleMode,
       resolvedFloorMode
     );
     if (!renderMode) {
       updateSpotLightTarget(runtime);
-      updateStageEffects(runtime, viewerTheme, normalizedThemeSettings, radius, runtime.gridFloorZ ?? 0, resolvedFloorMode, normalizedSceneScaleMode);
+      updateStageEffects(runtime, viewerTheme, normalizedThemeSettings, groundRadius, runtime.gridFloorZ ?? 0, resolvedFloorMode, normalizedSceneScaleMode);
     }
     runtime.requestRender();
   }, [

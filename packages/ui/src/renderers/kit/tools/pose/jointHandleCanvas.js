@@ -56,16 +56,32 @@ function fillCircle(context, [x, y], radius) {
   context.fill();
 }
 
+/** A short tick across each end of a slider's track, in screen space: where the travel stops. */
+function trackStops(guidePx, half = 4) {
+  const [from, to] = guidePx;
+  if (!from || !to) return [];
+  const length = Math.hypot(to[0] - from[0], to[1] - from[1]);
+  if (!(length > 1)) return [];
+  const across = [(-(to[1] - from[1]) / length) * half, ((to[0] - from[0]) / length) * half];
+  return [from, to].map((end) => [[end[0] - across[0], end[1] - across[1]], [end[0] + across[0], end[1] + across[1]]]);
+}
+
 function drawHandle(context, layout, { active, quiet }) {
   context.lineCap = "round";
   context.lineJoin = "round";
   // A crowded model rests as knobs alone; the arm and the travel appear with the pointer.
   if (active || !quiet) {
-    strokeWithHalo(context, layout.guidePx, { width: active ? 1.5 : 1, alpha: active ? 0.8 : 0.4, closed: layout.guideClosed });
-    strokeWithHalo(context, [layout.pivotPx, layout.knobPx], { width: active ? 2 : 1.25, alpha: active ? 1 : 0.7 });
-    context.globalAlpha = active ? 1 : 0.7;
-    context.fillStyle = COLOR;
-    fillCircle(context, layout.pivotPx, active ? 2.5 : 2);
+    if (layout.slider) {
+      // The track IS the handle's shape, so it is drawn as firmly as an arm, with a stop at each end.
+      strokeWithHalo(context, layout.guidePx, { width: active ? 2 : 1.25, alpha: active ? 1 : 0.7 });
+      for (const stop of trackStops(layout.guidePx)) strokeWithHalo(context, stop, { width: active ? 2 : 1.25, alpha: active ? 1 : 0.7 });
+    } else {
+      strokeWithHalo(context, layout.guidePx, { width: active ? 1.5 : 1, alpha: active ? 0.8 : 0.4, closed: layout.guideClosed });
+      strokeWithHalo(context, [layout.pivotPx, layout.knobPx], { width: active ? 2 : 1.25, alpha: active ? 1 : 0.7 });
+      context.globalAlpha = active ? 1 : 0.7;
+      context.fillStyle = COLOR;
+      fillCircle(context, layout.pivotPx, active ? 2.5 : 2);
+    }
   }
   context.globalAlpha = active ? 1 : 0.85;
   context.fillStyle = HALO;

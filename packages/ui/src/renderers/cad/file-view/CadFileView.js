@@ -24,7 +24,7 @@ import { buildDisplaySettingsTab } from "../../kit/view-settings/DisplaySettings
 import { ALL_VIEW_FEATURES, EDGELESS_VIEW_FEATURES } from "@hardcore/core/common/viewSettings.js";
 import { explodablePartCount } from "../workbench/explodableParts.js";
 import { prefetchRenderStudio } from "../../kit/look/renderStudioChunk.js";
-import MeshFileSheet from "../components/workbench/MeshFileSheet.js";
+import DxfFileSheet from "../components/workbench/DxfFileSheet.js";
 import { DXF_PREVIEW_REFERENCE_THICKNESS_MM } from "@hardcore/core/lib/dxf/previewGlb.js";
 import { dxfDataIsDocument } from "@hardcore/core/lib/dxf/parseDxf.js";
 import { loadRenderDxf } from "@hardcore/core/lib/renderAssetClient.js";
@@ -290,8 +290,7 @@ import {
   entryWithoutRenderAssets,
   normalizeLargeFileState,
   readViewerLayoutMode,
-  readViewerViewportWidth,
-  statusOnlyFileSheetTitle
+  readViewerViewportWidth
 } from "./fileViewState.js";
 import { sceneBackdropEdgeColor } from "../../kit/look/chromeBackdrop.js";
 import { useChromeBackdropColor } from "../../kit/look/useChromeBackdropColor.js";
@@ -5646,20 +5645,14 @@ function CadFileViewSurface({
             ) : null}
 
             {selectedFileSheetKind === "dxf" ? (
-              <MeshFileSheet
+              <DxfFileSheet
                 headerActions={zoomHeader}
                 key={`dxf:${selectedKey}`}
                 open={fileSheetOpen}
-                kind="dxf"
-                title="DXF"
                 isDesktop={isWideLayout}
                 width={activeSheetWidth || tabToolsWidth}
-                selectedEntry={selectedEntry}
                 onOpenChange={setTabToolsOpen}
                 onStartResize={fileSheetResizeHandler}
-                viewerServerInfo={viewerServerInfo}
-                suppressDynamicMetadataStatus={selectedArtifactGenerating}
-                renderMode={rendering}
                 settingsTabs={[
                   buildDxfMaterialTab({
                     thicknessMm: drawingThicknessMm,
@@ -5691,26 +5684,6 @@ function CadFileViewSurface({
                   })] : []),
                   ...settingsTabs
                 ]}
-                openSectionIds={effectiveFileSheetOpenSectionIds}
-                onOpenSectionIdsChange={handleFileSheetOpenSectionIdsChange}
-              />
-            ) : null}
-
-            {selectedFileSheetKind === "mesh" ? (
-              <MeshFileSheet
-                headerActions={zoomHeader}
-                key={`mesh:${selectedKey}`}
-                open={fileSheetOpen}
-                title={statusOnlyFileSheetTitle(selectedEntrySourceFormat)}
-                isDesktop={isWideLayout}
-                width={activeSheetWidth || tabToolsWidth}
-                selectedEntry={selectedEntry}
-                onOpenChange={setTabToolsOpen}
-                onStartResize={fileSheetResizeHandler}
-                viewerServerInfo={viewerServerInfo}
-                suppressDynamicMetadataStatus={selectedArtifactGenerating}
-                renderMode={rendering}
-                settingsTabs={settingsTabs}
                 openSectionIds={effectiveFileSheetOpenSectionIds}
                 onOpenSectionIdsChange={handleFileSheetOpenSectionIdsChange}
               />

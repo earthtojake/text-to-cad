@@ -198,8 +198,6 @@ function entryTabSignature(entry) {
     entryAssetHash(entry, "selectorTopology"),
     entryAssetHash(entry, "topology"),
     entryAssetHash(entry, "glb"),
-    entryAssetHash(entry, "stl"),
-    entryAssetHash(entry, "3mf"),
     entryAssetHash(entry, "dxf"),
     entryUrdfSignature(entry)
   ].filter(Boolean).join(":") || normalizeString(entry?.file);

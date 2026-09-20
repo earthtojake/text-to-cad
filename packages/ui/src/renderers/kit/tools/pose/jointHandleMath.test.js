@@ -144,7 +144,7 @@ test("the fallbacks take over at their limits and agree with the exact mapping t
   assert.deepEqual(modes, ["axis", "screen"]);
 });
 
-test("a handle's arm: along a slider's axis, toward the child in a turning joint's plane", () => {
+test("a handle's arm: toward the child in a turning joint's plane; a slider has none and keeps its axis", () => {
   assert.deepEqual(handleArmDirection({ kind: "prismatic", pivot: [0, 0, 0], axis: [0, 0, 2] }), [0, 0, 1]);
   const arm = handleArmDirection({ kind: "revolute", pivot: [1, 0, 0], axis: [0, 0, 1], toward: [1, 3, 9] });
   assert.deepEqual(arm.map((value) => Math.round(value * 1e9) / 1e9), [0, 1, 0]);

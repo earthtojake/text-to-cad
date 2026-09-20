@@ -72,10 +72,11 @@ export function signedAngleAbout(axis, from, to) {
 }
 
 /**
- * The unit direction a handle's arm leaves the pivot in. A slider's arm is its
- * axis. A turning joint's arm lies in the rotation plane, toward `toward` (a
- * point that moves with the child, so the knob rides the moving part); `null`
- * when `toward` is on the axis and gives the plane no direction.
+ * The unit direction a turning joint's arm leaves the pivot in: in the rotation
+ * plane, toward `toward` (a point that moves with the child, so the knob rides
+ * the moving part); `null` when `toward` is on the axis and gives the plane no
+ * direction. A slider has no arm: its knob is a thumb ON its track, the axis it
+ * travels, which is the one placement that cannot move as the camera does.
  */
 export function handleArmDirection({ kind, pivot, axis, toward = null }) {
   const unitAxis = normalize(axis);

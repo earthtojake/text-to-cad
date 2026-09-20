@@ -28,8 +28,8 @@ controls keep their appearance; the shared file viewer keeps the viewer's.
 `features/explorer/FileTab.tsx` is a thin host of `@hardcore/ui/file-viewer`.
 Its adapters translate IPC file access, source capabilities, root identity,
 persistence and CAD commands into package contracts. `renderers.tsx` registers
-the shared viewer renderers (CAD, and GLB as its own renderer; both get the tab's
-backend connection, preferences, host commands and live binding), Markdown, code,
+the shared viewer renderers (CAD, and GLB and triangle meshes (STL, 3MF) as their own
+renderers; all get the tab's backend connection, preferences, host commands and live binding), Markdown, code,
 image, PDF and fallback renderers. The whole
 file-tab interface is shared with web. Projects, sessions, browser/terminal/
 review tabs, agent integrations and native services remain in this app.
@@ -1084,8 +1084,8 @@ default; other saved panel choices remain unchanged.
 CAD controls are shared with web: the top-right toolbar contains Select,
 Measure (STEP only) and Draw, plus Pose (drag joints by viewport handles; the tool a robot
 opens in) and Animate where a file has joints or routines. Pressing Select again opens its selection-filter dropdown.
-A GLB has nothing to select: its first tool is Orbit (the default, which only leaves the camera to the pointer),
-then Draw, then Animate when the file has clips. An agent's select command on a GLB fails with a sentence saying so.
+A GLB, an STL and a 3MF have nothing to select: their first tool is Orbit (the default, which only leaves the camera to the pointer),
+then Draw, then, for a GLB with clips, Animate. An agent's select command on one of them fails with a sentence saying so.
 Buttons wrap inside the pill in a narrow explorer pane. The file navbar has a
 direct snapshot action before Inspector (`SlidersHorizontal`) and file tree (`Folders`).
 Snapshot attaches the viewport PNG and references to this tab's owning session

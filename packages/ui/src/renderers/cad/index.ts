@@ -39,10 +39,8 @@ export interface PreparedCadDocument extends PreparedWorkspaceEntry {
   services: Omit<CadRendererOptions, 'client'>;
 }
 
-// A native glTF scene has its own renderer (`renderers/glb`).
-const OTHER_RENDERERS_FILE = /\.glb$/i;
-// The formats whose Inspector is the Display tab alone open with the column shut.
-const DISPLAY_ONLY_FILE = /\.(stl|3mf)$/i;
+// A native glTF scene and a triangle mesh have their own renderers (`renderers/glb`, `renderers/mesh`).
+const OTHER_RENDERERS_FILE = /\.(?:glb|stl|3mf)$/i;
 
 /** Registers CAD without loading Three.js, a viewport, or a backend connection. */
 export function createCadRenderer({ client, ...services }: CadRendererOptions) {
@@ -51,7 +49,7 @@ export function createCadRenderer({ client, ...services }: CadRendererOptions) {
     id: 'cad',
     priority: 100,
     matches: (file) => !OTHER_RENDERERS_FILE.test(file.path) && (file.mediaType === 'cad' || Boolean(isCadFile(file.path))),
-    panels: ({ ready, file }) => inspectorPanels(ready, { defaultOpen: !DISPLAY_ONLY_FILE.test(file.path) }),
+    panels: ({ ready }) => inspectorPanels(ready),
     async prepare(context) {
       const prepared = await prepareWorkspaceEntry(client, context);
       return { data: { ...prepared.data, services }, dispose: prepared.dispose };

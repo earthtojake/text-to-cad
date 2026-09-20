@@ -17,8 +17,9 @@ import { resolveMaterialFillBaseColor, shapeSourceColor } from "./surfaceMateria
 //     surface: { style: "shaded" | "flat", opacity } }
 //
 // Colour modes are the material settings' own: `overrideSourceColors` paints every
-// part with a fill (one colour, or the palette cycled per mesh in traversal
-// order); otherwise a source colour is kept and only a material marked
+// part with a fill (one colour, or the palette cycled per mesh: in traversal
+// order, or at the place a mesh names in `userData.cadFillIndex`); otherwise a
+// source colour is kept and only a material marked
 // `userData.cadSourceColor === false` takes the fill.
 
 const clamp01 = (value, fallback = 0) => {
@@ -71,7 +72,8 @@ export function createSurfaceLook(THREE, root) {
   let meshIndex = 0;
   root?.traverse?.((object) => {
     if (!object?.isMesh) return;
-    const fillIndex = meshIndex;
+    const ownIndex = object.userData?.cadFillIndex;
+    const fillIndex = Number.isInteger(ownIndex) && ownIndex >= 0 ? ownIndex : meshIndex;
     meshIndex += 1;
     const list = Array.isArray(object.material) ? object.material : [object.material];
     list.forEach((material, slot) => {

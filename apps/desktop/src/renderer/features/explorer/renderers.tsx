@@ -2,6 +2,7 @@ import { desktopCadLive } from "@renderer/state/live-cad";
 import type { PrepareContext, RendererRegistration } from "@hardcore/ui/file-viewer";
 import { createCadRenderer } from "@hardcore/ui/renderers/cad";
 import { createGlbRenderer } from "@hardcore/ui/renderers/glb";
+import { createMeshRenderer } from "@hardcore/ui/renderers/mesh";
 import { codeRenderer } from "@hardcore/ui/renderers/code";
 import { imageRenderer } from "@hardcore/ui/renderers/image";
 import { markdownRenderer } from "@hardcore/ui/renderers/markdown";
@@ -37,6 +38,6 @@ export function createDesktopRenderers(projectId: string, root: ExplorerRoot, ta
       }
     },
   });
-  const viewers = [createCadRenderer(services), createGlbRenderer(services)].map(withRuntimeFailure);
+  const viewers = [createCadRenderer(services), createGlbRenderer(services), createMeshRenderer(services)].map(withRuntimeFailure);
   return { renderers: [markdownRenderer, codeRenderer, ...viewers, imageRenderer, pdfRenderer, unsupportedRenderer], dispose: () => ownedConnection?.dispose() };
 }
