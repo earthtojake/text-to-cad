@@ -3,7 +3,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { Button } from "@hardcore/ui/primitives/button";
 import { cn } from "@hardcore/ui/utils";
 import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections.js";
-import { FileSheetSectionBody, FileSheetStatusText } from "./FileSheet.js";
+import { FileSheetSectionBody, FileSheetStatusText } from "../../../kit/inspector/FileSheet.js";
 
 /**
  * The DXF Layers tab — the drawing analogue of STEP's Tree. A DXF's layers ARE its

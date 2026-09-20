@@ -17,6 +17,8 @@ export const REFERENCE_STATUS = {
   ERROR: "error"
 };
 
+import { createToolModes } from "../../kit/tools/toolModes.js";
+
 export { RENDER_FORMAT } from "@hardcore/core/lib/fileFormats.js";
 
 export const TAB_TOOL_MODE = {
@@ -29,3 +31,17 @@ export const TAB_TOOL_MODE = {
   POSE: "pose"
 };
 
+
+// This renderer's tool modes for the kit's state machine (`kit/tools/toolModes.js`).
+// Measure and Draw are sessions that end when their tool is asked for again; a saved
+// tab records only Select, Measure and Pose.
+export const CAD_TOOL_MODES = createToolModes({
+  defaultMode: TAB_TOOL_MODE.REFERENCES,
+  modes: {
+    [TAB_TOOL_MODE.REFERENCES]: { persists: true },
+    [TAB_TOOL_MODE.MEASURE]: { toggles: true, persists: true },
+    [TAB_TOOL_MODE.DRAW]: { toggles: true },
+    [TAB_TOOL_MODE.ANIMATE]: {},
+    [TAB_TOOL_MODE.POSE]: { persists: true }
+  }
+});

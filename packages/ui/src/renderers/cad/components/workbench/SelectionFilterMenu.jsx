@@ -2,7 +2,7 @@ import { ChevronDown, ListFilter } from 'lucide-react';
 import { Fragment, useContext } from 'react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuLabel, DropdownMenuSeparator } from '@hardcore/ui/primitives/dropdown-menu';
 import { SELECTION_FILTERS } from '../../workbench/selectionFilter.js';
-import { FileSheetPortalContext } from './FileSheet.js';
+import { FileSheetPortalContext } from '../../../kit/inspector/FileSheet.js';
 
 export default function SelectionFilterMenu({ value, onChange, disabled, compact, fullWidth, options = SELECTION_FILTERS, menuLabel = 'Selection filter', hint = 'Shift-click adds or removes from selection.', triggerIcon: TriggerIcon = ListFilter, trigger = null }) {
   const boundary = useContext(FileSheetPortalContext);

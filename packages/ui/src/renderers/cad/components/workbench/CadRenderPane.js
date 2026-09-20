@@ -2,7 +2,7 @@ import { useHostReference } from "../../file-view/hostReference.js";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import CadViewer from "../CadViewer.js";
 import { CircleAlert, X } from "lucide-react";
-import MissingFileAlert from "./MissingFileAlert.js";
+import MissingFileAlert from "../../../kit/status/MissingFileAlert.js";
 import { Alert } from "@hardcore/ui/primitives/alert";
 import { Button } from "@hardcore/ui/primitives/button";
 import {
@@ -14,7 +14,7 @@ import {
 } from "@hardcore/ui/primitives/dropdown-menu";
 import AssemblyContextMenuItems from "./AssemblyContextMenuItems.js";
 import { PromptContextAction } from "../../../../host/PromptContextAction.js";
-import ViewerAlertBody from "./ViewerAlertBody.js";
+import ViewerAlertBody from "../../../kit/status/ViewerAlertBody.js";
 import { cn } from "@hardcore/ui/utils";
 import { RENDER_FORMAT } from "../../workbench/constants.js";
 import {

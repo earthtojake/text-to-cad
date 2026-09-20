@@ -36,7 +36,7 @@ import {
   scale,
   stablePerpendicular,
   subtract
-} from "../components/viewer/jointHandleMath.js";
+} from "../../kit/tools/pose/jointHandleMath.js";
 import { poseControlWrite, poseDrivenDofs } from "./poseDrivenControls.js";
 
 const URDF_HANDLE_KINDS = new Set(["revolute", "continuous", "prismatic"]);

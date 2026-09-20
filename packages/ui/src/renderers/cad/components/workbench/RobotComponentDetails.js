@@ -1,4 +1,4 @@
-import { CoordValue, InfoRow, MonoValue } from "./StepReferenceSection.js";
+import { CoordValue, InfoRow, MonoValue } from "../../../kit/inspector/referenceRows.jsx";
 
 // The Reference pane at the foot of the Links tab: what the selection IS.
 //

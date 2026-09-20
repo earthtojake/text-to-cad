@@ -1,4 +1,4 @@
-import { FileSheetSelectRow } from "./FileSheet.js";
+import { FileSheetSelectRow } from "../../../kit/inspector/FileSheet.js";
 
 // Shared named-position dropdown for STEP presets and robot group states.
 // None describes custom/default values without adding a selectable reset option.

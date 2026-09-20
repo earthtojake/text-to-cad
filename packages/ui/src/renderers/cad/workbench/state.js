@@ -1,7 +1,7 @@
 import { clonePerspectiveSnapshot, perspectiveSnapshotEqual } from "@hardcore/core/lib/perspective.js";
 import { isRobotRenderFormat, normalizeRenderFormat, renderFormatFromPath } from "@hardcore/core/lib/fileFormats.js";
 import { isCadWorkspaceCompactFileSheetViewport } from "./breakpoints.js";
-import { RENDER_FORMAT, TAB_TOOL_MODE } from "./constants.js";
+import { CAD_TOOL_MODES, RENDER_FORMAT, TAB_TOOL_MODE } from "./constants.js";
 
 export const CAD_DIRECTORY_SESSION_STORAGE_VERSION = 1;
 export const CAD_DIRECTORY_SESSION_STORAGE_KEY = `cad-viewer:directory-session:v${CAD_DIRECTORY_SESSION_STORAGE_VERSION}`;
@@ -110,19 +110,16 @@ function normalizeTabCameraSnapshot(value) {
 // Draw. A restored tab would otherwise come back with the camera locked under
 // an empty sketch.
 function normalizeTabToolMode(value) {
-  const normalized = normalizeString(value || TAB_TOOL_MODE.REFERENCES);
-  return normalized === TAB_TOOL_MODE.MEASURE || normalized === TAB_TOOL_MODE.POSE ? normalized : TAB_TOOL_MODE.REFERENCES;
+  return CAD_TOOL_MODES.persisted(value);
 }
 
 // The tool a file opens in is a rule of its kind, not a saved preference: a
 // robot opens in Pose until its tab records another tool, and nothing else ever
 // restores into Pose (a STEP with kinematics offers the tool; it opens in Select).
 function tabToolModeForFile(key, recorded) {
-  const mode = normalizeTabToolMode(recorded);
-  if (!isRobotRenderFormat(renderFormatFromPath(key))) {
-    return mode === TAB_TOOL_MODE.POSE ? TAB_TOOL_MODE.REFERENCES : mode;
-  }
-  return normalizeString(recorded) ? mode : TAB_TOOL_MODE.POSE;
+  return isRobotRenderFormat(renderFormatFromPath(key))
+    ? CAD_TOOL_MODES.restore(recorded, { opensIn: TAB_TOOL_MODE.POSE })
+    : CAD_TOOL_MODES.restore(recorded, { never: [TAB_TOOL_MODE.POSE] });
 }
 
 const TAB_STATE_SCHEMA = [

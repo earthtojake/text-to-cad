@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, expect, it, vi } from 'vitest';
 import RobotComponentsSection from '../../../../../dist/renderers/cad/components/workbench/RobotComponentsSection.js';
 import UrdfFileSheet from '../../../../../dist/renderers/cad/components/workbench/UrdfFileSheet.js';
-import { HostPanelSlotContext } from '../../../../../dist/renderers/cad/components/workbench/FileSheet.js';
+import { HostPanelSlotContext } from '../../../../../dist/renderers/kit/inspector/FileSheet.js';
 import { useRobotComponentSelection } from '../../../../../dist/renderers/cad/workbench/useRobotComponentSelection.js';
 
 Object.assign(globalThis, { React });

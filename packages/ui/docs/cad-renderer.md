@@ -12,6 +12,62 @@ The implementation is under `src/renderers/cad`. `CadFileView` and `CadViewer`
 are private implementation components. Applications use the registration and
 the shared `FileViewer`; they do not import another application's source.
 
+## Kit
+
+`src/renderers/kit` is the format-blind half of the viewer: small modules a
+renderer composes, none of which asks what it is showing. The CAD renderer
+(`src/renderers/cad`) is a consumer of it. The kit imports itself, shared UI
+(`primitives`, `lib`, `drawing`) and the format-blind half of `@hardcore/core`
+(`lib/viewer/*`, `lib/perspective.js`, `common/viewSettings.js`,
+`common/sceneSettings.js`, the Render studio); a renderer imports the kit, never
+the reverse.
+
+| folder | what it is |
+| --- | --- |
+| `viewport/` | `useViewerRuntime` (three.js renderer lifecycle, on-demand render loop and `requestRender`, resize and device-pixel-ratio caps, context loss, keyboard orbit, teardown), `framePresentation`, `viewportBuffer`, `renderDepthPolicy`, `sceneObjects` (`disposeSceneObject`), DOM helpers. The scene in the viewport is its owner's: teardown calls the injected `disposeScene(runtime)` and `disposeStudio(runtime)`. |
+| `camera/` | `runtimeCamera` (zoom percent against the authored framing, projection and lens sync, perspective snapshots, eased transitions, fit-to-bounds, recentre), `useViewportCamera` (that behaviour bound to a mounted viewport: live zoom, the perspective a session stores, the fullscreen camera swap and its restore, view-cube presets), `usePlanMode`, `viewportCameraKit` and `viewportCameraFit`, `orbitControls`, `zoomPivotReanchor`, `zoomSpeeds`, `cameraLens`, `ViewPlaneControl` (view cube), `ZoomControl`. |
+| `look/` | `stageEffects` (lighting rig scaled to the model, floor, glow and shadow catcher, grid and origin axes), the Render studio boundary (`renderStudioChunk`, `studioEnvironmentCache` and its worker). The surface FINISH is data in core: `lib/viewer/surfaceFinish.js` (`resolveSurfaceFinish(theme)`, `applySurfaceFinish(root, finish)`); a scene applies it to its own materials. |
+| `view-settings/` | The settings model and store (`viewSettingsStore`, `useViewSettings`, `viewerDisplaySettings`, `renderState`), applying a change to a viewport (`useAppliedViewSettings`, `viewUpdateCoordinator`, `viewUpdateGate`, `viewUpdatePlan`), and the Display tab (`DisplaySettingsTab`, `DisplayModeOptions`). |
+| `tools/` | `FloatingToolBar` (the dumb strip), `toolModes` (the tool-mode state machine), `ToolbarButton`, and the format-blind tools: `draw/` (overlay, view lock, `useDrawingViewLock`), `fullscreen/` (controls and the orbit preference), `playbar/` (`ViewportAnimationBar`, `animationClock`, `usePlaybackFrames`), `pose/` (the handle overlay, canvas, drag mathematics). Screenshot capture is `@hardcore/core/lib/viewer/screenshotCapture.js`. |
+| `inspector/` | `FileSheet` and its row primitives, `FileSheetTabbedSurface`, `activeSection`, `InspectorSplit`, `modelTreeSearch`, `referenceRows` (`InfoRow`, `MonoValue`, `CoordValue`). The tree row and filter box are `primitives/tree-row` and `primitives/tree-filter`. |
+| `status/` | `LoadingIndicator` and `ViewerLoadingOverlay`, `ViewerAlertDialog` and `ViewerAlertBody`, `MissingFileAlert`, `StatusToast`, `ViewUpdateStatus`, `useFileActivityReport`, `artifactWarnings`. |
+
+**What a view opts into.** The Display tab and `resolveViewSettings` take explicit
+lists, `features: { sections, modes, surfaceStyles }` (`ViewFeatures` in
+`@hardcore/core/common/viewSettings.js`): the sections the tab mounts
+(`VIEW_SECTION_IDS`), the presets and the surface styles it lists. A section left
+out resolves off whatever was saved, and the saved settings are never rewritten.
+Core names two lists, `ALL_VIEW_FEATURES` and `EDGELESS_VIEW_FEATURES` (no Edges,
+Clip or Explode; Solid and Render; Shaded and Flat). The CAD renderer passes the
+first for a STEP and the second for every other format, in three places that
+must agree: the view-settings store (`configure({ features })`), the Display tab,
+and the headless renderer (`renderMeshScene.js`).
+
+**Tools.** The strip draws the list it is handed: `{ id, label, icon, active,
+disabled, onSelect, description?, menu?, secondPressOpensMenu?, subToolbar? }`.
+`cadInteractionTools` in `cad/components/workbench/FloatingToolBar.js` builds
+this renderer's list per format. `createToolModes({ defaultMode, modes })`
+answers what a press does (`next`), what a saved tab may record (`persisted`) and
+which tool a file opens in (`restore`); this renderer's declaration is
+`CAD_TOOL_MODES` in `workbench/constants.js`. The playbar follows the clock on
+the runtime it is handed (`runtime.clock`, an `AnimationClock`); the Pose overlay
+takes a plain handle list.
+
+**The scene contract** (`kit/scene.js`, a JSDoc typedef): `{ object3D, bounds,
+restBounds?, dispose(), setSurfaceFinish?(finish), pick?(ray) }`. `buildModel`
+(`@hardcore/core/common/cadScene.js`) and the native glTF scene
+(`buildNativeGlbCadScene`) both expose `object3D`, `bounds`, `restBounds` and
+`dispose()`; the native glTF scene also exposes `setSurfaceFinish`.
+
+**The rule and its check.** Kit code names no file format, no file-kind switch
+and no STEP-assembly concept (topology, selectors, display records, explode,
+section clipping), in code or in comments; only `view-settings/` may name the
+Clip and Explode sections a view opts into. `npm run check:boundaries` runs
+`scripts/test/check-kit-boundaries.mjs`, which scans every kit source for imports
+of a renderer or of a file-family core module and for those words, against a
+short allowlist that carries a reason per line and fails when an entry goes
+stale. The unbound-identifier test covers the kit with the renderer.
+
 ## Host integration
 
 ```tsx
@@ -424,7 +480,7 @@ child now is. Above twelve handles a model rests as knobs alone and the arm and
 travel appear with the pointer. Hovering or holding a knob shows its name and
 value (`shoulder  42.0°`, `lift  0.120 m`).
 
-The handles are drawn on a 2D canvas over the viewport (`JointHandleOverlay.jsx`,
+The handles are drawn on a 2D canvas over the viewport (`kit/tools/pose/JointHandleOverlay.jsx`,
 `jointHandleCanvas.js`), like the measurement rulers, not as scene objects: the
 arm is 44 CSS pixels at every zoom and under either projection, always on top,
 and nothing of it reaches captures, render mode, bounds, shadows or picking.
@@ -512,7 +568,7 @@ keyboard orbit and the view cube are off, and the editor covers the viewport so
 no drag reaches them. Pan and zoom belong to the editor (the Pan view tool,
 scroll or two-finger pan, space-drag, middle-drag, pinch or modified wheel) and
 the camera follows it
-so model and ink stay one picture. `drawingViewLock.js` derives every camera
+so model and ink stay one picture. `kit/tools/draw/drawingViewLock.js` derives every camera
 pose from the pose Draw started with and the editor's absolute scroll/zoom,
 never from the previous frame, so a long pan cannot drift, and re-derives it
 after a viewport resize. A viewport runtime replaced mid-sketch re-locks against
@@ -646,7 +702,7 @@ in which case every link is kept. An SRDF shows its paired URDF's tree.
 
 The tab reuses the Features tree's pieces rather than cloning them: the 28px
 row primitive, `Filter links…` (`primitives/tree-filter`), the ranked flat
-search of `modelTreeSearch.js`, and `InspectorSplit` for the Reference pane
+search of `kit/inspector/modelTreeSearch.js`, and `InspectorSplit` for the Reference pane
 (it opens at a third of the tab, never below a readable minimum on a short
 screen, and never so tall that the tree loses its own — the same split the
 Features tree uses). The search index also reads a row's `searchAliases`, so a
@@ -737,5 +793,5 @@ orientation. Explode, clipping, animation, kinematics, visibility, floor and
 other scene effects never redefine 100%. Perspective and orthographic derive
 their own baseline from that same box and the current viewport dimensions.
 Selection fit may move the camera but cannot make that new framing become 100%.
-`viewportCameraFit.js` owns the fit calculation; live posed bounds remain useful
+`kit/camera/viewportCameraFit.js` owns the fit calculation; live posed bounds remain useful
 for clipping, lighting and picking. Zoom controls live in the Inspector header percentage menu.

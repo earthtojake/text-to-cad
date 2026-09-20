@@ -43,4 +43,4 @@ export const fileSheetWidthPxForSessionState = state.fileSheetWidthPxForSessionS
 export { CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH, CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH } from './workbench/state.js';
 export { FILE_SESSION_STORAGE_VERSION } from './workbench/fileSessionState.js';
 
-export { ORBIT_STORAGE_KEY, readOrbit, writeOrbit, normalizeOrbit } from "./workbench/orbitPreferences.js";
+export { ORBIT_STORAGE_KEY, readOrbit, writeOrbit, normalizeOrbit } from "../kit/tools/fullscreen/orbitPreferences.js";

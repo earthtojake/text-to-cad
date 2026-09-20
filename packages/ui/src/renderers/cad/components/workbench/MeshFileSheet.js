@@ -1,5 +1,5 @@
-import FileSheet from "./FileSheet.js";
-import FileSheetTabbedSurface from "./FileSheetTabbedSurface.js";
+import FileSheet from "../../../kit/inspector/FileSheet.js";
+import FileSheetTabbedSurface from "../../../kit/inspector/FileSheetTabbedSurface.js";
 import { buildMotionControlsTab } from "./MotionControlsSection.js";
 
 // The mesh Inspector: View, plus whatever settings tabs the caller adds (DXF reuses

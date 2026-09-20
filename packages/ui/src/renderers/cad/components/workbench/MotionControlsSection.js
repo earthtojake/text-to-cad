@@ -1,6 +1,6 @@
 import { RotateCcw } from "lucide-react";
 import { Button } from "@hardcore/ui/primitives/button";
-import { FILE_SHEET_COMPACT_BUTTON_CLASSES } from "./FileSheet.js";
+import { FILE_SHEET_COMPACT_BUTTON_CLASSES } from "../../../kit/inspector/FileSheet.js";
 import PoseControlsSection, { poseControlsHaveContent } from "./PoseControlsSection.js";
 import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections.js";
 

@@ -15,7 +15,7 @@ import {
   FileSheetSliderField,
   FileSheetSubsection,
   FileSheetValueInput
-} from "./FileSheet.js";
+} from "../../../kit/inspector/FileSheet.js";
 import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections.js";
 
 /**

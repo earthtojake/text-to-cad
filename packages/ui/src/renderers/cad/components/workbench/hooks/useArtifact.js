@@ -19,7 +19,7 @@ import {
   artifactAdvisoryFor,
   reconcileArtifactRun
 } from "../../../workbench/artifactResolution.js";
-import { artifactWarningItems } from "../../../workbench/artifactWarnings.js";
+import { artifactWarningItems } from "../../../../kit/status/artifactWarnings.js";
 
 // useArtifact — the client half of the render-artifact pipeline.
 //

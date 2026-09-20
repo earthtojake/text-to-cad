@@ -1,4 +1,4 @@
-import { artifactWarningItems } from "./artifactWarnings.js";
+import { artifactWarningItems } from "../../kit/status/artifactWarnings.js";
 
 function status(label, title, tone = "neutral", busy = false) {
   return { label, title, tone, busy };

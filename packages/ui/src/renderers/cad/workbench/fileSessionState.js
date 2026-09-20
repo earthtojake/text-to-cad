@@ -12,7 +12,7 @@ import {
 } from "./renderSessionState.js";
 import {
   migrateViewerDisplaySettings
-} from "./viewerDisplaySettings.js";
+} from "../../kit/view-settings/viewerDisplaySettings.js";
 
 export const FILE_SESSION_STORAGE_VERSION = 4;
 export const FILE_SESSION_STORAGE_KEY_PREFIX = "cad-viewer:file-session";

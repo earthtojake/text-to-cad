@@ -6,7 +6,7 @@ import { resolveCadEdgeSettings } from "./cadInk.js";
 import { applyMaterialSettingsToRecord as applyViewerMaterialSettings } from "../lib/viewer/surfaceMaterials.js";
 import { resolveViewSceneSettings } from "./sceneSettings.js";
 import { renderJobContext, modelOptionsForRenderJob } from "./renderMeshScene.js";
-import { normalizeViewSettings, resolveViewSettings, resetViewSettings, viewSettingsAreCustom, VIEW_PRESET_VALUES } from "./viewSettings.js";
+import { ALL_VIEW_FEATURES, EDGELESS_VIEW_FEATURES, normalizeViewSettings, resolveViewSettings, resetViewSettings, viewSettingsAreCustom, VIEW_PRESET_VALUES } from "./viewSettings.js";
 
 test("grouped input stays sparse, canonicalizes colors and rejects old fields", () => {
   assert.deepEqual(normalizeViewSettings(), { mode: "solid" });
@@ -149,10 +149,10 @@ test("hidden-line uses a depth-only surface; wireframe off and edges disabled dr
 test("a file that is not a CAD model has no edges, explode or section, and shows an edge-made preset as Solid, without rewriting what was saved", () => {
   const saved = { mode: "wireframe", edges: { enabled: true, visibility: "all", color: "#ff0000" },
     clip: { enabled: true, axis: "x" }, exploded: { enabled: true, amount: 0.8 } };
-  const step = resolveViewSettings(saved, { cadModel: true });
+  const step = resolveViewSettings(saved, { features: ALL_VIEW_FEATURES });
   assert.equal(step.mode, "wireframe");
   assert.equal(step.edges.enabled, true);
-  const mesh = resolveViewSettings(saved, { cadModel: false });
+  const mesh = resolveViewSettings(saved, { features: EDGELESS_VIEW_FEATURES });
   assert.equal(mesh.mode, "solid");
   assert.equal(mesh.surfaces.style, resolveViewSettings({ mode: "solid" }).surfaces.style);
   assert.equal(mesh.edges.enabled, false);
@@ -162,12 +162,26 @@ test("a file that is not a CAD model has no edges, explode or section, and shows
   assert.equal(mesh.exploded.enabled, false);
   // Surfaces hidden or off leave a STEP model its edges; a mesh would be left with nothing.
   for (const style of ["hidden", "off"]) {
-    assert.equal(resolveViewSettings({ mode: "solid", surfaces: { style } }, { cadModel: true }).surfaces.style, style);
-    assert.equal(resolveViewSettings({ mode: "solid", surfaces: { style } }, { cadModel: false }).surfaces.style, "shaded");
+    assert.equal(resolveViewSettings({ mode: "solid", surfaces: { style } }, { features: ALL_VIEW_FEATURES }).surfaces.style, style);
+    assert.equal(resolveViewSettings({ mode: "solid", surfaces: { style } }, { features: EDGELESS_VIEW_FEATURES }).surfaces.style, "shaded");
   }
-  assert.equal(resolveViewSettings({ mode: "solid", surfaces: { style: "flat" } }, { cadModel: false }).surfaces.style, "flat");
+  assert.equal(resolveViewSettings({ mode: "solid", surfaces: { style: "flat" } }, { features: EDGELESS_VIEW_FEATURES }).surfaces.style, "flat");
   // Render is not made of edges, and stays available.
-  assert.equal(resolveViewSettings({ mode: "render" }, { cadModel: false }).mode, "render");
-  for (const mode of ["xray", "hidden-line"]) assert.equal(resolveViewSettings({ mode }, { cadModel: false }).mode, "solid");
+  assert.equal(resolveViewSettings({ mode: "render" }, { features: EDGELESS_VIEW_FEATURES }).mode, "render");
+  for (const mode of ["xray", "hidden-line"]) assert.equal(resolveViewSettings({ mode }, { features: EDGELESS_VIEW_FEATURES }).mode, "solid");
   assert.equal(normalizeViewSettings(saved).mode, "wireframe", "the saved settings still mean Wireframe on the next STEP file");
+});
+
+test("a view is resolved from the lists it opts into, one feature at a time", () => {
+  const saved = { mode: "xray", edges: { enabled: true, visibility: "all" }, clip: { enabled: true, axis: "x" }, exploded: { enabled: true, amount: 0.5 } };
+  const everything = resolveViewSettings(saved);
+  assert.deepEqual(resolveViewSettings(saved, { features: ALL_VIEW_FEATURES }), everything);
+  assert.deepEqual(resolveViewSettings(saved, { features: {} }), everything, "a list left out stands for the full set");
+  const noClip = resolveViewSettings(saved, { features: { sections: ALL_VIEW_FEATURES.sections.filter(id => id !== "clip") } });
+  assert.equal(noClip.clip.enabled, false);
+  assert.equal(noClip.exploded.enabled, true);
+  assert.equal(noClip.edges.enabled, true);
+  assert.equal(noClip.mode, "xray");
+  assert.equal(resolveViewSettings(saved, { features: { modes: ["solid", "render"] } }).mode, "solid");
+  assert.deepEqual(EDGELESS_VIEW_FEATURES.sections, ["mode", "camera", "surfaces", "lighting", "background", "floor", "grid", "axes"]);
 });

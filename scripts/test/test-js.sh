@@ -25,6 +25,8 @@ else
 fi
 node --test scripts/test/check-dependencies.test.mjs
 node scripts/test/check-dependencies.mjs
+node --test scripts/test/check-kit-boundaries.test.mjs
+node scripts/test/check-kit-boundaries.mjs
 if [ "$SELECT" = core ] || [ "$SELECT" = all ]; then
   section "@hardcore/core tests"
   npm --prefix packages/core test
