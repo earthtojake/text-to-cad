@@ -84,13 +84,16 @@ function layoutJointHandles(runtime, handles, width, height) {
  * `handles` is the adapters' list for the CURRENT pose; the hook lives exactly as
  * long as the tool. Nothing here is React state: the list lands in a ref, a frame loop
  * repaints when the camera, the list or the pointer changed, and the label is
- * written straight into its element. A press on a knob is taken before
+ * written straight into its element. An owner that poses its model outside React
+ * passes `handlesRef` instead and replaces `handlesRef.current` with a NEW list per
+ * pose: the frame loop notices the identity, and no component renders for it. A press on a knob is taken before
  * OrbitControls sees it (capture phase, above the WebGL canvas) and the controls
  * are switched off for as long as the knob is held; any other press is left alone.
  */
-export function useJointHandles({ handles, runtimeRef, hostRef, canvasRef, labelRef, layoutSeamRef, viewerReadyTick }) {
-  const handlesRef = useRef(handles);
-  handlesRef.current = handles;
+export function useJointHandles({ handles = null, handlesRef: ownerHandlesRef = null, runtimeRef, hostRef, canvasRef, labelRef, layoutSeamRef, viewerReadyTick }) {
+  const renderedHandlesRef = useRef(handles);
+  renderedHandlesRef.current = handles;
+  const handlesRef = ownerHandlesRef || renderedHandlesRef;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -107,7 +110,14 @@ export function useJointHandles({ handles, runtimeRef, hostRef, canvasRef, label
     let drag = null;
     let layout = { layouts: [], project: () => [0, 0] };
 
-    const size = () => ({ width: host.clientWidth || 1, height: host.clientHeight || 1 });
+    // Measured when the box changes, not per frame: reading a client size in the frame
+    // loop forces a layout whenever anything else on the page moved (a slider following the drag).
+    let measured = { width: host.clientWidth || 1, height: host.clientHeight || 1 };
+    const resizeObserver = typeof ResizeObserver === "function" ? new ResizeObserver(() => {
+      measured = { width: host.clientWidth || 1, height: host.clientHeight || 1 };
+    }) : null;
+    resizeObserver?.observe(host);
+    const size = () => (resizeObserver ? measured : { width: host.clientWidth || 1, height: host.clientHeight || 1 });
     const relayout = () => {
       const { width, height } = size();
       layout = layoutJointHandles(runtimeRef.current, handlesRef.current, width, height);
@@ -242,6 +252,7 @@ export function useJointHandles({ handles, runtimeRef, hostRef, canvasRef, label
     return () => {
       // Leaving the tool with a knob held must hand the camera back.
       endDrag();
+      resizeObserver?.disconnect();
       window.cancelAnimationFrame(frameId);
       host.removeEventListener("pointerdown", handlePointerDown, true);
       host.removeEventListener("pointermove", handlePointerMove, true);
@@ -254,5 +265,5 @@ export function useJointHandles({ handles, runtimeRef, hostRef, canvasRef, label
       canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
       layoutSeamRef.current = null;
     };
-  }, [runtimeRef, hostRef, canvasRef, labelRef, layoutSeamRef, viewerReadyTick]);
+  }, [runtimeRef, hostRef, canvasRef, labelRef, layoutSeamRef, handlesRef, viewerReadyTick]);
 }

@@ -99,19 +99,20 @@ import { FileViewer } from '@hardcore/ui/file-viewer';
 import { createCadRenderer } from '@hardcore/ui/renderers/cad';
 import { createGlbRenderer } from '@hardcore/ui/renderers/glb';
 import { createMeshRenderer } from '@hardcore/ui/renderers/mesh';
+import { createRobotRenderer } from '@hardcore/ui/renderers/robot';
 import '@hardcore/ui/tokens.css';
 import '@hardcore/ui/styles.css';
 
 // One viewer renderer per file family, sharing one client and one preference source.
 const renderers = [createCadRenderer({ client, preferences }), createGlbRenderer({ client, preferences }),
-  createMeshRenderer({ client, preferences })];
+  createMeshRenderer({ client, preferences }), createRobotRenderer({ client, preferences })];
 // The host supplies storage, actions, navigation and environmental ports.
 <FileViewer file={selectedFile} host={host} renderers={renderers}
   state={state} onStateChange={setState} />;
 ```
 
 Public entry points include `/host`, `/file-viewer`, `/navigation`, `/renderers/cad`,
-`/renderers/glb`, `/renderers/mesh`, `/renderers/workspace`, `/renderers/cad/state`, `/renderers/cad/presentation`, `/renderers/cad/empty`,
+`/renderers/glb`, `/renderers/mesh`, `/renderers/robot`, `/renderers/workspace`, `/renderers/cad/state`, `/renderers/cad/presentation`, `/renderers/cad/empty`,
 `/renderers/markdown`, `/renderers/code`, `/renderers/code/editor`,
 `/renderers/image`, `/renderers/pdf`, `/renderers/unsupported`, `/loading-icon`,
 `/utils`, `/primitives/*`, `/tokens.css`, and `/styles.css`.

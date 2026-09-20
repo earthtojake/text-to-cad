@@ -1,6 +1,4 @@
-import { RotateCcw } from "lucide-react";
-import { Button } from "@hardcore/ui/primitives/button";
-import { FILE_SHEET_COMPACT_BUTTON_CLASSES } from "../../../kit/inspector/FileSheet.js";
+import { MotionResetButton } from "../../../kit/inspector/kinematicsControls.jsx";
 import PoseControlsSection, { poseControlsHaveContent } from "./PoseControlsSection.js";
 import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections.js";
 
@@ -21,14 +19,4 @@ export function buildMotionControlsTab({ poseRuntime = null, animationRuntime = 
       </div>
     ),
   };
-}
-
-export function MotionResetButton({ onReset }) {
-  if (!onReset) return null;
-  return <div className="px-2 py-2">
-    <Button variant="outline" size="sm" className={`${FILE_SHEET_COMPACT_BUTTON_CLASSES} w-full justify-center`}
-      onClick={onReset} title="Reset animation and position">
-      <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />Reset
-    </Button>
-  </div>;
 }

@@ -231,26 +231,35 @@ function translationAlongAxisTransform(axis, distance) {
   ];
 }
 
-export function posedJointLocalTransform(joint, valueDeg) {
+/**
+ * A joint's motion alone, in its own frame: the turn about its axis or the slide
+ * along it at `valueDeg` (degrees, or metres for a prismatic joint), clamped as the
+ * solver clamps it. A fixed joint does not move. This is the one factor of a joint's
+ * local transform a pose changes, so a scene graph writes it and nothing else.
+ */
+export function jointMotionTransform(joint, valueDeg) {
   const jointType = String(joint?.type || "fixed");
+  if (jointType === "fixed") {
+    return [...IDENTITY_TRANSFORM];
+  }
+  const axis = toVector3(joint?.axis ?? joint?.axisInJointFrame ?? joint?.axisInParentFrame, [0, 0, 1]);
+  if (jointType === "prismatic") {
+    return translationAlongAxisTransform(axis, clampJointValueDeg(joint, valueDeg));
+  }
+  // URDF axes are defined in the joint frame; SDF axes are converted into the
+  // joint frame at parse time. In both cases the static parent-to-joint transform
+  // applies before the animated axis motion.
+  return axisAngleTransform(axis, (clampJointValueDeg(joint, valueDeg) * Math.PI) / 180);
+}
+
+export function posedJointLocalTransform(joint, valueDeg) {
   const originTransform = toTransformArray(joint?.originTransform);
   const preMotionTransform = toTransformArray(joint?.preMotionTransform, originTransform);
   const postMotionTransform = toTransformArray(joint?.postMotionTransform);
-  if (jointType === "fixed") {
+  if (String(joint?.type || "fixed") === "fixed") {
     return multiplyTransforms(preMotionTransform, postMotionTransform);
   }
-  const axis = toVector3(joint?.axis ?? joint?.axisInJointFrame ?? joint?.axisInParentFrame, [0, 0, 1]);
-  let motionTransform;
-  if (jointType === "prismatic") {
-    motionTransform = translationAlongAxisTransform(axis, clampJointValueDeg(joint, valueDeg));
-  } else {
-    const angleRad = (clampJointValueDeg(joint, valueDeg) * Math.PI) / 180;
-    // URDF axes are defined in the joint frame; SDF axes are converted into the
-    // joint frame at parse time. In both cases, apply the static parent-to-joint
-    // transform before the animated axis motion.
-    motionTransform = axisAngleTransform(axis, angleRad);
-  }
-  return multiplyTransforms(multiplyTransforms(preMotionTransform, motionTransform), postMotionTransform);
+  return multiplyTransforms(multiplyTransforms(preMotionTransform, jointMotionTransform(joint, valueDeg)), postMotionTransform);
 }
 
 function resolveJointValue(joint, jointByName, jointValuesByName, resolving = new Set()) {
@@ -273,6 +282,18 @@ function resolveJointValue(joint, jointByName, jointValuesByName, resolving = ne
   const multiplier = Number.isFinite(Number(mimic.multiplier)) ? Number(mimic.multiplier) : 1;
   const offset = Number.isFinite(Number(mimic.offset)) ? Number(mimic.offset) : 0;
   return clampJointValueDeg(joint, nativeToJointValue(joint, (multiplier * masterNativeValue) + offset));
+}
+
+/**
+ * The value every joint is posed at for `jointValuesByName`: driven joints clamped to
+ * their limits, mimic followers solved from their master. One entry per named joint.
+ *
+ * @returns {Map<string, number>}  Degrees, or metres for a prismatic joint.
+ */
+export function resolveUrdfJointValues(urdfData, jointValuesByName = {}) {
+  const joints = Array.isArray(urdfData?.joints) ? urdfData.joints : [];
+  const jointByName = new Map(joints.map((joint) => [String(joint?.name || ""), joint]).filter(([name]) => name));
+  return new Map([...jointByName].map(([name, joint]) => [name, resolveJointValue(joint, jointByName, jointValuesByName)]));
 }
 
 export function solveUrdfLinkWorldTransforms(urdfData, jointValuesByName = {}) {

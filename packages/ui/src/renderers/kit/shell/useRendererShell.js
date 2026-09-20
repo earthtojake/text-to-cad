@@ -30,6 +30,7 @@ import { useViewerShortcuts } from "./useViewerShortcuts.js";
 export const SHELL_TOOL = Object.freeze({ ORBIT: "orbit", DRAW: "draw", ANIMATE: "animate" });
 
 const SESSION_SAVE_DELAY_MS = 180;
+const INSPECTOR_REVEAL_MIN_WIDTH_PX = 520;
 const EMPTY = Object.freeze({});
 
 /**
@@ -73,14 +74,23 @@ const EMPTY = Object.freeze({});
  *   resets model tools and the camera).
  * @param {{ active?: boolean, handle?: () => boolean }} [options.escape]  Escape, innermost first: `handle` returns
  *   true when it spent the key; otherwise the shell closes the alert dialog and the Inspector.
- * @param {object} [options.rendererState]  The renderer's own slice of the per-file record.
+ * @param {object | (() => object)} [options.rendererState]  The renderer's own slice of the per-file record. A
+ *   FUNCTION is read when the record is written, never at render: state a renderer keeps outside React (a pose
+ *   written per frame) is saved as it is at that moment, its last change before unmount included. Such a
+ *   renderer calls `shell.scheduleStateSave()` when that state changes.
+ * @param {{ opensIn?: string, never?: string[] }} [options.toolRestore]  How this FILE restores its tool
+ *   (`toolModes.restore`): `opensIn` is the tool a file with nothing recorded opens in, while the tool modes'
+ *   default stays what a session falls back to; `never` lists recorded tools this file does not come back in.
+ * @param {{ available: boolean, bounds: () => import("../scene.js").SceneBounds | null }} [options.selection]  What
+ *   "Zoom to selection" frames. Without it the menu item is off.
  * @param {object} [options.displayTabProps]  Extra Display tab props for sections the renderer's FEATURES opt into.
  * @param {string} [options.sceneScaleMode]
  */
 export function useRendererShell({
   view, services, resource, modelKey, revisionKey = "", features, toolModes, scene, load,
   animation = null, live = EMPTY, promptReferences = null, navigationActions = null, onResetModel = null,
-  escape = EMPTY, rendererState = EMPTY, displayTabProps = EMPTY, sceneScaleMode = VIEWER_SCENE_SCALE.CAD
+  escape = EMPTY, rendererState = EMPTY, toolRestore = EMPTY, selection = null, displayTabProps = EMPTY,
+  sceneScaleMode = VIEWER_SCENE_SCALE.CAD
 }) {
   const host = useViewerHost();
   const viewerElement = useContext(ViewerElementContext);
@@ -113,14 +123,14 @@ export function useRendererShell({
     return scoped;
   });
   const [inspectorTab, setInspectorTab] = useState(restored.inspectorTab);
-  const [toolMode, setToolMode] = useState(() => toolModes.restore(restored.tool));
+  const [toolMode, setToolMode] = useState(() => toolModes.restore(restored.tool, toolRestore));
   const recordRef = useRef(null);
   const onStateChangeRef = useRef(onStateChange);
   onStateChangeRef.current = onStateChange;
   const latestRecord = useRef(null);
   latestRecord.current = () => writeShellState({
     camera: activePerspectiveRef.current, display: viewSettingsStore.getSnapshot().display,
-    inspectorTab, tool: toolModes.persisted(toolMode), renderer: rendererState
+    inspectorTab, tool: toolModes.persisted(toolMode), renderer: typeof rendererState === "function" ? rendererState() : rendererState
   });
   const saveTimer = useRef(0);
   const flushSession = useCallback(() => {
@@ -156,6 +166,11 @@ export function useRendererShell({
     const next = typeof value === "function" ? value(current) : value;
     if (next !== current) panelRef.current.onPanelOpen?.(next ? CAD_PANEL.fileSheet : "");
   }, []);
+  const revealInspectorTab = useCallback((tab) => {
+    // Below this width the panel covers the model it was asked about, so it stays the person's to open.
+    if (window.matchMedia?.(`(min-width: ${INSPECTOR_REVEAL_MIN_WIDTH_PX}px)`)?.matches ?? true) setInspectorOpen(true);
+    setInspectorTab(String(tab || ""));
+  }, [setInspectorOpen]);
   const chromeBackdropColor = useChromeBackdropColor(colorScheme === "dark");
   const sceneBackdrop = useMemo(
     () => resolvedScene.view.background.enabled && resolvedScene.view.background.opacity === 1
@@ -283,10 +298,16 @@ export function useRendererShell({
   }, [releaseAnimation, onResetModel, viewSettingsStore]);
   const zoomToFit = useCallback(() => { if (!viewerRef.current?.zoomToFit?.()) setCopyStatus("The viewer camera is not ready"); }, []);
   const resetZoom = useCallback(() => { if (!viewerRef.current?.resetZoom?.()) setCopyStatus("The viewer camera is not ready"); }, []);
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
+  const zoomToSelection = useCallback(() => {
+    if (!viewerRef.current?.zoomToBounds?.(selectionRef.current?.bounds?.() || null)) setCopyStatus("The selection has nothing to frame");
+  }, []);
   const zoomHeader = <ZoomControl zoomPercent={zoomPercent} disabled={idle}
     onZoomPercentChange={value => viewerRef.current?.applyZoomPercent?.(value)}
     onZoomReset={() => viewerRef.current?.resetView?.()}
-    onZoomFit={zoomToFit} selectionAvailable={false} onModelReset={resetModel} />;
+    onZoomFit={zoomToFit} selectionAvailable={Boolean(selection?.available)} onZoomSelection={zoomToSelection}
+    onModelReset={resetModel} />;
 
   // ---- shortcuts ------------------------------------------------------------
   const escapeRef = useRef(escape.handle);
@@ -386,6 +407,14 @@ export function useRendererShell({
     // Renderer-facing.
     toolMode, selectTool, tools, displayTab, idle, previewMode, rendering, resolvedScene, viewerRef,
     setCopyStatus, setScreenshotStatus, capture, requestRender: () => viewerRef.current?.requestRender?.(),
+    // The scene moved its own bounds: lighting, shadows and the floor follow, with no React render.
+    syncSceneBounds: () => viewerRef.current?.syncSceneBounds?.(),
+    // State the renderer keeps outside React changed: write the record soon (and on unmount).
+    scheduleStateSave: scheduleSessionSave,
+    // The Inspector is the host's panel. `reveal(tab)` is for something in the viewport that
+    // has details to show (a pick): it turns to the tab, and opens the panel where there
+    // is room for it beside the model.
+    inspector: { open: inspectorOpen, setOpen: setInspectorOpen, tab: inspectorTab, setTab: setInspectorTab, reveal: revealInspectorTab },
     // Frame-facing (RendererShell).
     frame: {
       view, hostRef, hostElement, viewerElement, sceneBackdrop, colorScheme, modelKey, presentationKey, sceneScaleMode, scene,

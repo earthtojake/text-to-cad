@@ -39,8 +39,9 @@ export interface PreparedCadDocument extends PreparedWorkspaceEntry {
   services: Omit<CadRendererOptions, 'client'>;
 }
 
-// A native glTF scene and a triangle mesh have their own renderers (`renderers/glb`, `renderers/mesh`).
-const OTHER_RENDERERS_FILE = /\.(?:glb|stl|3mf)$/i;
+// A native glTF scene, a triangle mesh and a robot description have their own renderers
+// (`renderers/glb`, `renderers/mesh`, `renderers/robot`).
+const OTHER_RENDERERS_FILE = /\.(?:glb|stl|3mf|urdf|srdf|sdf)$/i;
 
 /** Registers CAD without loading Three.js, a viewport, or a backend connection. */
 export function createCadRenderer({ client, ...services }: CadRendererOptions) {

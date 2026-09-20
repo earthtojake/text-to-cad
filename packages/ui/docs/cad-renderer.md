@@ -18,8 +18,9 @@ the shared `FileViewer`; they do not import another application's source.
 renderer composes, none of which asks what it is showing. There is one renderer
 per file family, each a vertical slice over the kit: `src/renderers/glb`
 ([GLB renderer](#glb-renderer)), `src/renderers/mesh` (STL and 3MF,
-[Mesh renderer](#mesh-renderer)) and `src/renderers/cad` (STEP, DXF and robot
-descriptions, until those families are split out in turn). The kit imports itself, shared UI
+[Mesh renderer](#mesh-renderer)), `src/renderers/robot` (URDF, SRDF and SDF,
+[Robot renderer](#robot-renderer)) and `src/renderers/cad` (STEP and DXF, until
+those families are split out in turn). The kit imports itself, shared UI
 (`primitives`, `lib`, `drawing`) and the format-blind half of `@hardcore/core`
 (`lib/viewer/*`, `lib/perspective.js`, `common/viewSettings.js`,
 `common/sceneSettings.js`, the Render studio); a renderer imports the kit, never
@@ -31,8 +32,8 @@ the reverse.
 | `camera/` | `runtimeCamera` (zoom percent against the authored framing, projection and lens sync, perspective snapshots, eased transitions, fit-to-bounds, recentre), `useViewportCamera` (that behaviour bound to a mounted viewport: live zoom, the perspective a session stores, the fullscreen camera swap and its restore, view-cube presets), `usePlanMode`, `viewportCameraKit` and `viewportCameraFit`, `orbitControls`, `zoomPivotReanchor`, `zoomSpeeds`, `cameraLens`, `ViewPlaneControl` (view cube), `ZoomControl`. |
 | `look/` | `stageEffects` (lighting rig scaled to the model, floor, glow and shadow catcher, grid and origin axes), the Render studio boundary (`renderStudioChunk`, `studioEnvironmentCache` and its worker). `chromeBackdrop` and `useChromeBackdropColor` (the frame colour around a scene). The surface LOOK is data the viewport resolves and a scene applies to its own materials: `@hardcore/core/lib/viewer/surfaceLook.js` (`createSurfaceLook(THREE, root).apply(look)`) does it for any authored material tree. |
 | `view-settings/` | The settings model and store (`viewSettingsStore`, `useViewSettings`, `viewerDisplaySettings`, `renderState`), applying a change to a viewport (`useAppliedViewSettings`, `viewUpdateCoordinator`, `viewUpdateGate`, `viewUpdatePlan`), and the Display tab (`DisplaySettingsTab`, `DisplayModeOptions`). |
-| `tools/` | `FloatingToolBar` (the dumb strip), `toolModes` (the tool-mode state machine), `ToolbarButton`, and the format-blind tools: `draw/` (overlay, view lock, `useDrawingViewLock`), `fullscreen/` (controls and the orbit preference), `playbar/` (`ViewportAnimationBar`, `animationClock`, `usePlaybackFrames`), `pose/` (the handle overlay, canvas, drag mathematics). Screenshot capture is `@hardcore/core/lib/viewer/screenshotCapture.js`. |
-| `inspector/` | `FileSheet` and its row primitives, `FileSheetTabbedSurface`, `activeSection`, `InspectorSplit`, `modelTreeSearch`, `referenceRows` (`InfoRow`, `MonoValue`, `CoordValue`). The tree row and filter box are `primitives/tree-row` and `primitives/tree-filter`. |
+| `tools/` | `FloatingToolBar` (the dumb strip), `toolModes` (the tool-mode state machine), `ToolbarButton`, and the format-blind tools: `draw/` (overlay, view lock, `useDrawingViewLock`), `fullscreen/` (controls and the orbit preference), `playbar/` (`ViewportAnimationBar`, `animationClock`, `usePlaybackFrames`), `pose/` (the handle overlay, canvas, drag mathematics), `select/` (`usePointerPick`: taps and hover through a scene's own `pick`). Screenshot capture is `@hardcore/core/lib/viewer/screenshotCapture.js`. |
+| `inspector/` | `FileSheet` and its row primitives, `FileSheetTabbedSurface`, `activeSection`, `InspectorSplit`, `modelTreeSearch`, `referenceRows` (`InfoRow`, `MonoValue`, `CoordValue`), `kinematicsControls` (the named-position dropdown and the Reset button every Kinematics tab ends with). The tree row and filter box are `primitives/tree-row` and `primitives/tree-filter`. |
 | `status/` | `LoadingIndicator` and `ViewerLoadingOverlay`, `ViewerAlertDialog` and `ViewerAlertBody`, `BlockingViewerAlert`, `MissingFileAlert`, `StatusToast`, `ViewUpdateStatus`, `useFileActivityReport`, `artifactWarnings`, `loadingState` (`viewerLoadingState`), `fileStatus` (`resolveFileStatus`, the chip beside the filename), `loadAlerts` (`failureAlert`, `noGeometryAlert`, `resolveFileStatusAlert`). |
 | `shell/` | The host glue every renderer needs that is not about its scene: see [Shell](#shell). |
 
@@ -45,8 +46,8 @@ Core names two lists, `ALL_VIEW_FEATURES` and `EDGELESS_VIEW_FEATURES` (no Edges
 Clip or Explode; Solid and Render; Shaded and Flat). The CAD renderer passes the
 first for a STEP and the second for every other format it shows, in three places that
 must agree: the view-settings store (`configure({ features })`), the Display tab,
-and the headless renderer (`renderMeshScene.js`). The GLB and mesh renderers pass the
-second to the shell, which configures the store and the tab from the one list.
+and the headless renderer (`renderMeshScene.js`). The GLB, mesh and robot renderers
+pass the second to the shell, which configures the store and the tab from the one list.
 
 **Tools.** The strip draws the list it is handed: `{ id, label, icon, active,
 disabled, onSelect, description?, menu?, secondPressOpensMenu?, subToolbar? }`.
@@ -56,7 +57,8 @@ answers what a press does (`next`), what a saved tab may record (`persisted`) an
 which tool a file opens in (`restore`); this renderer's declaration is
 `CAD_TOOL_MODES` in `workbench/constants.js`. The playbar follows the clock on
 the runtime it is handed (`runtime.clock`, an `AnimationClock`); the Pose overlay
-takes a plain handle list.
+takes a plain handle list, as a prop or (for an owner that poses its model
+outside React) as a ref whose list it replaces per pose.
 
 **The scene contract** (`kit/scene.js`, a JSDoc typedef): `{ object3D, bounds,
 restBounds?, dispose(), setSurfaceLook?(look), keepsAuthoredFinish?, pick?(ray) }`.
@@ -65,7 +67,11 @@ and hands over the surface look the Display tab resolved
 (`{ materialSettings, authored, surface: { style, opacity } }`); it only ever
 detaches a scene, whose owner disposes it. `buildModel`
 (`@hardcore/core/common/cadScene.js`) exposes `object3D`, `bounds`, `restBounds`
-and `dispose()`; the GLB and mesh renderers' scenes implement the whole contract.
+and `dispose()`; the GLB and mesh renderers' scenes implement all of it but `pick`,
+and the robot renderer's all of it. `pick(ray)` is what `usePointerPick` calls: the
+hook owns the pointer (which press is a tap, one hover pick per frame, the
+cursor), the scene says what is under the ray, and its renderer says what a hit
+means. A tap acts at once: nothing waits to tell it from a double-click.
 A mesh names where "Color by part" deals it a palette colour in
 `userData.cadFillIndex` (otherwise meshes take the palette in traversal order),
 and a material with no source colour says so with `userData.cadSourceColor = false`.
@@ -93,9 +99,9 @@ calls one hook; the shell owns the rest.
 
 | module | what it is |
 | --- | --- |
-| `useRendererShell.js` | The hook. Per-file state through the host, the Display settings store and tab, tool modes with Draw and Animate, the Inspector panel, navbar actions, prompt snapshots, the clipboard screenshot, fullscreen, file activity, alerts, shortcuts and the live command surface. |
+| `useRendererShell.js` | The hook. Per-file state through the host, the Display settings store and tab, tool modes with Draw and Animate, the Inspector panel (and its control by the renderer), zoom with "Zoom to selection", navbar actions, prompt snapshots, the clipboard screenshot, fullscreen, file activity, alerts, shortcuts and the live command surface. |
 | `RendererShell.jsx` | The frame: viewport box, tool strip, bottom action, playbar, fullscreen controls, loading/update/alert overlays, status toast and the Inspector portaled into the host's panel column. One DOM structure (`data-slot="cad-file-view"`, `data-cad-surface`, `data-cad-scene-backdrop`, `data-cad-toolbar`, `data-file-sheet`) for every renderer. |
-| `ShellViewport.jsx` | The three.js viewport around ONE kit scene: `useViewerRuntime`, `useViewportCamera`, the look (rig or studio, environment, background, floor, grid, axes), the Draw overlay and view lock, the view cube, frame presentation and the queued view-settings handshake. |
+| `ShellViewport.jsx` | The three.js viewport around ONE kit scene: `useViewerRuntime`, `useViewportCamera`, the look (rig or studio, environment, background, floor, grid, axes), the Draw overlay and view lock, the view cube, frame presentation and the queued view-settings handshake. Its children may be a function of the viewport (`{ runtimeRef, hostRef, viewerReadyTick }`), which is how a renderer mounts its own overlay or pointer pick. `syncSceneBounds()` re-fits lighting, shadows and the floor to a scene that moved its own bounds, with no React render and no reframe; `zoomToBounds(bounds)` frames part of the scene. Read-only test seams: `window.__cadCamera()` (the live camera) and `window.__cadStage()` (the ground's radius, the bounds the stage is fitted to, the floor's height). |
 | `shellState.js` | The per-file record `{ version, camera, display, inspectorTab, tool, renderer }`, read forgivingly and written exactly. The host keys it `[file path, renderer id]`. |
 | `liveBinding.ts` | `attachLiveBinding`: the live command surface. Base commands (`readState`, `setCamera`, `resetCamera`, `setDisplaySettings`, `setRenderMode`, `capture`) mean the same for every renderer; a renderer ADDS commands by name and DECLINES the known host commands (`HOST_LIVE_COMMANDS`) that make no sense for it with the sentence the caller reads. Binding fails when a renderer does neither. |
 | `promptContext.js` | `createViewPromptContext` (a snapshot and what it depicts) and `promptDeliveryMessage`. |
@@ -114,11 +120,26 @@ const shell = useRendererShell({
   load,                 // { busy, updating?, progress?, alert? }: the renderer's document load
   animation,            // playbar runtime with its own `clock` and `resetModel`, or null
   live,                 // { commands?, declined?, state? }
-  // optional: promptReferences, navigationActions, onResetModel, escape, rendererState, displayTabProps, sceneScaleMode
+  // optional: promptReferences, navigationActions, onResetModel, escape, displayTabProps, sceneScaleMode,
+  //   rendererState   the renderer's slot of the record: an object, or a FUNCTION read when the record is written
+  //   toolRestore     { opensIn, never }: the tool THIS file opens in, while the tool modes' default stays the fallback
+  //   selection       { available, bounds() }: what "Zoom to selection" frames
 });
+// Renderer-facing, beside `tools`, `displayTab`, `toolMode`, `selectTool`, `requestRender`:
+shell.inspector.reveal(tabId);   // turn to a tab, opening the panel where there is room beside the model
+shell.inspector.setOpen(open); shell.inspector.setTab(tabId);   // and { open, tab }
+shell.syncSceneBounds();         // the scene moved its bounds (a pose): the stage follows, no render
+shell.scheduleStateSave();       // state kept outside React changed: write the record soon, and on unmount
 const tools = [shell.tools.own({ id, label, icon }), shell.tools.draw, shell.tools.animate].filter(Boolean);
-return <RendererShell shell={shell} tools={tools} inspector={{ title, tabs: [...own, shell.displayTab] }} />;
+return <RendererShell shell={shell} tools={tools} inspector={{ title, tabs: [...own, shell.displayTab] }}
+  viewportOverlay={viewport => <PointerPick viewport={viewport} scene={scene} enabled={selecting} onPick={pick} onHover={hover} />} />;
 ```
+
+A renderer whose model moves outside React (a robot's pose) keeps that state in
+its own store: `rendererState` as a function is read at the moment the record is
+written, so the last write before unmount is saved; `shell.scheduleStateSave()`
+says it changed; `shell.syncSceneBounds()` carries the moved bounds to the stage.
+None of them renders a component.
 
 The workspace half of a renderer's surface is one hook too
 (`renderers/workspace/useWorkspaceDocument.js`): `useWorkspaceDocument({ view, data })`
@@ -128,7 +149,7 @@ returns the live catalog entry of the prepared file, the prompt `resource`, the
 `useDeclinedSelectReference` consumes a host's request to select a reference in
 a file that has none and answers it in the status toast. A renderer is then its
 scene hook, its tool list and its tabs (`glb/GlbRenderer.jsx`,
-`mesh/MeshRenderer.jsx`).
+`mesh/MeshRenderer.jsx`, `robot/RobotRenderer.jsx`).
 
 The shell's behaviour has one real-browser test,
 `kit/shell/RendererShell.browser.test.mjs` (deferred files, warm reopen, isolated
@@ -219,6 +240,91 @@ renderer does not match either.
 - **State**: the shell record under `[path, "mesh"]`. Records written under
   `[path, "cad"]` are not migrated.
 
+## Robot renderer
+
+`createRobotRenderer` (`@hardcore/ui/renderers/robot`, id `robot`) shows a
+`.urdf`, `.srdf` or `.sdf` as its kinematic tree. One renderer, three parsers:
+an SRDF is its paired URDF with the SRDF's semantics on it (group states, end
+effectors, planning groups), an SDF a robot with one more tab. Nothing below the
+loader asks which it is. The CAD renderer matches none of them.
+
+- **Scene** (`robot/robotScene.js`, no React, no DOM): a scene GRAPH. One `Group`
+  per link, a link's meshes attached to it once, and each joint as three nested
+  frames: the static parent-to-joint frame, ONE motion group, then the child link
+  (at an SDF joint's static child offset, else identity). A pose writes the
+  motion matrices of the joints that changed (the joint and its mimic followers;
+  `jointMotionTransform`, values resolved by `resolveUrdfJointValues`, both in
+  core's `urdf/kinematics.js`) and nothing else: no geometry, no material, no
+  part list, no React state. Core transforms are row-major, so matrices are
+  written with `Matrix4.set`. Every link group is where the description solver
+  (`solveUrdfLinkWorldTransforms`) puts that link; the unit test holds the graph
+  to it for random poses. `bounds` follows the pose (only the moved subtree is
+  re-measured); `restBounds` is every joint at its declared default, whatever
+  pose the file opens in, and is what the camera frames and the ground is sized
+  from. Picking raycasts the link meshes (each geometry's BVH is built in idle
+  time once a ray reaches it, core's `raycastBvh.js`) and walks up to the link
+  group; a named object of a link's mesh is itself.
+- **Parts** (`robot/robotParts.js`): built once per load. One part per visual, or
+  per NAMED object of a visual's mesh (`head:v1/object/0`), with its link, local
+  transform, source mesh and palette place. Geometries wrap the loader's arrays
+  and are shared by visuals that name one mesh.
+- **Loading** (`robot/useRobotDocument.js`): core's `loadRenderUrdf`, `loadRenderSrdf`
+  or `loadRenderSdf`, then every distinct link mesh (`loadRenderMeshByUrl`, at most
+  eight at a time). Progress reads "Loading URDF", "Loading meshes 3/13",
+  "Building robot". The robot is published once, whole. A missing link mesh fails
+  the load. A warm file is on screen on the first render; a new revision loads
+  behind the robot on screen and keeps the pose it was left in. An SRDF with no
+  URDF paired (the catalog pairs the ONE `.urdf` in the same folder whose
+  `<robot name>` matches) raises an alert that names what was looked for.
+- **Look**: a robot authors no finish, so Solid wears the viewer's surface and
+  Render the studio's. Colour, in order: the colour the description gives the
+  visual; else the colours the mesh brought (per vertex, graded as a material
+  colour is); else the named object's own; else the viewer's surface colour.
+  Materials are double-sided, so a mirrored `<mesh scale>` cannot turn a link
+  inside out. "Color by part" deals the palette in the order parts always took it.
+- **Display**: `EDGELESS_VIEW_FEATURES` (Solid and Render; no Edges, Clip or Explode).
+- **Tools**, left to right: **Pose** (only with a joint to drag; the tool a robot
+  OPENS in: `toolRestore: { opensIn: "pose" }`), **Select** (picks LINKS, under
+  its own icon), **Draw**. No Measure, no Animate. Select is the tool a session
+  falls back to: ending Draw lands in it, and so does a loaded robot with nothing
+  to pose. Fullscreen has no tool and no knobs.
+- **Pose** (`robot/poseStore.js`): joint values live in a store outside React
+  (degrees; metres for a prismatic joint), with one write path. A write is clamped,
+  ignored under `URDF_JOINT_VALUE_EPSILON`, releases the tracked named pose and is
+  heard synchronously: the scene poses itself, the handle list is re-read from the
+  motion groups' world matrices (`robot/jointHandles.js`), one frame is requested,
+  and the stage follows once per frame (`shell.syncSceneBounds`). Only the control
+  that shows the value that changed is subscribed to it, so a pose step renders one
+  slider row and no other component. On `juno.urdf` (28 links) a knob step cost
+  about 270 ms of script when a pose was React state and a re-placed part list; it
+  costs about 3 ms with the Inspector shut and about 6 ms with Kinematics open
+  (a development React build), which is what a frame costs. The opening pose is
+  every joint's default, then the SRDF group state(s) named `home`.
+- **Select**: a selection is ONE link or any number of named objects (Shift in
+  the viewport; Shift, Ctrl or Cmd on a row). It exists only while Select is the
+  tool: choosing a row under another tool returns to Select first, and leaving
+  Select clears it. A viewport pick opens the Inspector on Links
+  (`shell.inspector.reveal`). Escape clears the selection before it shuts the
+  Inspector. Hover and selection are drawn by the scene (`setHighlight`), with
+  the highlight ink a STEP part wears; hover is not React state. "Zoom to
+  selection" frames what the selection occupies now.
+- **Inspector**: titled `URDF`, `SRDF` or `SDF`; opens by default, on
+  **Kinematics** ("Pose": named poses, only with group states; "Joints": a slider
+  per driven joint; Reset; "No movable joints." when there are none). Then
+  **Links** ([Robot links](#robot-links)), **SDF** for an `.sdf`, **Display**.
+- **Host commands**: the base live commands; `clearSelection` clears the link
+  selection; `select` is declined with a sentence (a robot description has no
+  reference grammar), and a `selectReference` host request is consumed and
+  answered in the status toast. Live state adds `selectedLinks` and `selectedPartIds`.
+- **State**: the shell record under `[path, "robot"]`; its own slot is
+  `{ jointValues, signature }`, restored only when `signature`
+  (`entryUrdfAssetHash`) still matches. The tracked named pose, the selection and
+  the tree's disclosure are not stored. Records written under `[path, "cad"]` are
+  not migrated.
+- **Test seams** (read-only): `window.__cadJointHandles()` (knobs in CSS pixels,
+  with values and drawn travel), `window.__robotLinks()` (every link group's frame)
+  and `window.__robotPoseStats()` (matrices written per pose, renders of the surface).
+
 ## Host integration
 
 ```tsx
@@ -293,7 +399,8 @@ Per-file state belongs to `FileViewerState.renderers`, keyed by
 `[file.path, renderer.id]` within a host's stable source/root state. CAD stores
 the existing versioned file-session slices: display settings, selections,
 camera, drawing history, file-sheet sections, kinematic parameters, clip/time
-preferences, robot joint values and large-file opt-in. Asset signatures retain
+preferences and large-file opt-in. (A robot's joint values are in the robot
+renderer's own record, `[path, "robot"]`.) Asset signatures retain
 the original invalidation rules. DXF render settings remain session state and
 do not modify the generated package. Playback time is saved when stopped or
 unmounted, and opening a file does not resume playback automatically.
@@ -590,19 +697,20 @@ something can be driven: a robot (URDF, SRDF, SDF) with a revolute, continuous
 or prismatic joint that is not a mimic follower, and a STEP whose sidecar
 kinematics declare a revolute, slider or cylindrical mate. It is the tool a
 robot OPENS in; that default is a rule of the file's kind, not a saved
-preference (`createTabRecord` in `workbench/state.js`): a robot tab with no
-recorded tool opens in Pose, one last left in Select comes back in Select, and
-nothing else ever restores into Pose, so a STEP always opens in Select. It is
-absent in fullscreen. While it is active the model picks nothing, hovers
+preference (the robot renderer's `toolRestore: { opensIn: "pose" }`): a robot
+with no recorded tool opens in Pose, one last left in Select comes back in
+Select, and a STEP always opens in Select. It is absent in fullscreen. While it is active the model picks nothing, hovers
 nothing and casts no model ray (`pickMode` NONE, as in Animate); the camera
 orbits, pans and zooms exactly as under every other tool, and the knobs are the
 only interactive things. Leaving keeps the pose.
 
-One handle system serves both formats. `workbench/jointHandles.js` holds two
-adapters that turn a description and its CURRENT pose into one plain list, in
-model space: `{ id, label, kind, pivot, axis, toward, value, min, max, unit,
-onChange }`. A robot's joint frame is the solved child link frame (less an SDF
-joint's static child offset); a STEP mate's world-at-rest axis is carried by the
+One handle system serves both formats. Two adapters turn a description and its
+CURRENT pose into one plain list, in model space: `{ id, label, kind, pivot,
+axis, toward, value, min, max, unit, onChange }` (`robot/jointHandles.js`, and
+the CAD renderer's `workbench/jointHandles.js` for a STEP). A robot's joint
+frame is READ, not solved: it is the world matrix of the joint's motion group in
+the scene graph, which already sits before an SDF joint's static child offset; a
+STEP mate's world-at-rest axis is carried by the
 accumulated delta of its child, the composition `kinematicsDeltas` uses, so a
 handle rides a mate chain of any depth. A fixed joint, a fastened mate and a
 mimic follower have no handle. A STEP DOF that a coupling drives KEEPS its
@@ -612,10 +720,10 @@ is geared would otherwise have none. The list is rebuilt from the pose on screen
 so sliders, presets, Reset and a handle further up the chain all carry the
 knobs along.
 
-`onChange` is the Kinematics tab's own change handler
-(`handleUrdfJointValueChange`, `handleStepModuleParameterChange`), so limits,
-mimic followers, couplings, the SRDF group state, persistence and the sliders
-are decided in one place and stay in step; the drag itself never clamps. A
+`onChange` is the Kinematics tab's own change path (the robot pose store's
+`write`, `handleStepModuleParameterChange`), so limits, mimic followers,
+couplings, the SRDF group state, persistence and the sliders are decided in one
+place and stay in step; the drag itself never clamps. A
 continuous joint's drag winds freely and is stored as one turn, (-180, 180],
 which is what its slider spans.
 
@@ -639,9 +747,11 @@ The handles are drawn on a 2D canvas over the viewport (`kit/tools/pose/JointHan
 `jointHandleCanvas.js`), like the measurement rulers, not as scene objects: the
 arm is 44 CSS pixels at every zoom and under either projection, always on top,
 and nothing of it reaches captures, render mode, bounds, shadows or picking.
-`useJointHandles.js` keeps no React state: the list lands in a ref, a frame loop
+`useJointHandles.js` keeps no React state: the list lands in a ref (the owner's
+own ref, for a robot, whose pose never renders a component), a frame loop
 repaints only when the camera, the list or the pointer changed, and the label
-is written into its element. A press within 12 px of a knob (22 px for touch)
+is written into its element. The overlay's size is measured when its box
+changes, never per frame. A press within 12 px of a knob (22 px for touch)
 is taken in the capture phase above the WebGL canvas, captures the pointer and
 disables OrbitControls until release, cancel or leaving the tool; every other
 press, a modified one (Shift/Ctrl/Cmd is the camera's pan) included, is left
@@ -744,7 +854,8 @@ the frame; selection handles are not included), plus the selected references.
 The file navbar holds a direct snapshot action, Inspector (`SlidersHorizontal`) and file
 tree (`Folders`). The Inspector opens by default, except over a file whose
 Inspector is only Display (an STL, a 3MF and a GLB, each under its own renderer): there the
-model gets the room until a person opens it. Each renderer says so in its own
+model gets the room until a person opens it (a robot's Inspector opens, on
+Kinematics). Each renderer says so in its own
 `panels()` (`inspectorPanels(ready, { defaultOpen })`). Snapshot uses the host prompt-context port: desktop attaches
 the viewport image and references to the owning session's draft; web copies
 through its clipboard adapter. DXF also contributes its 2D/3D projection action.
@@ -817,16 +928,16 @@ recognition regression checks, without a runtime interpreter or export path.
 STEP models place **Features | Kinematics | Display** in one fixed top tab strip.
 Kinematics appears only when the sidecar declares it; animation is the Animate
 tool, not an Inspector section, so a file with routines and no kinematics has
-no Kinematics tab. A mesh (STL, 3MF) and a GLB have only Display, under their
-own renderers. An Inspector with a single section draws it as
+no Kinematics tab. A mesh (STL, 3MF) and a GLB have only Display, and a robot
+has Kinematics, Links and Display, each under its own renderer. An Inspector with a single section draws it as
 a single selected tab, so every Inspector reads the same way.
 Each section requires its own sidecar block and stays expanded, without a gate.
 Every pose write is a jump: a slider drag, a typed number, a Pose knob, a named
 pose (a STEP sidecar's pose, an SRDF group state) and Reset all put the model
 where it IS from that frame on, for robots and STEP alike. There is no eased
 pose transition and no preference for one; motion over time is the Animate
-tool's. Each format has one write path (`writeUrdfJointValues` in
-`CadFileView.js`; `writeParameters` in `useStepMotionControls.js`).
+tool's. Each format has one write path (`write` in `robot/poseStore.js`;
+`writeParameters` in `useStepMotionControls.js`).
 Switching display mode leaves every tab and the active selection intact.
 Tab order follows the format's section descriptors and cannot be customized.
 The retired split/reorder preference is ignored in both hosts. A stored section
@@ -839,14 +950,16 @@ Robot Kinematics uses the same preset and value controls.
 
 ### Robot links
 
-URDF, SRDF and SDF place **Kinematics | Links | Display** in the tab strip.
+URDF, SRDF and SDF place **Kinematics | Links | Display** in the tab strip
+(the [robot renderer](#robot-renderer)'s `KinematicsTab`, `LinksTab`, `SdfTab`).
 Kinematics is always the leftmost tab and the one the sheet lands on (an SDF's
-metadata tab follows Links; an SRDF without joint controls has no Kinematics).
+metadata tab follows Links; a description with nothing to drive reads "No
+movable joints.").
 Links is always present: it is the description's kinematic tree, not an
-inventory of mesh names. `workbench/robotTree.js` builds it as plain data.
+inventory of mesh names. `robot/robotTree.js` builds it as plain data.
 Links are the rows, carrying no icon; a child link sits under its parent link
 and shows the joint between them as muted text (`shoulder_pan · revolute`); the
-named objects inside a link's meshes (`robotComponents`) are leaves under that
+named objects inside a link's meshes (`robotComponents` in `robot/robotParts.js`) are leaves under that
 link, after its child links. Built-in primitives and unnamed mesh objects
 contribute no leaves. Every link appears once: a cycle, a second parent or a
 missing parent cannot hang the builder or drop a link, and orphans become
@@ -868,13 +981,14 @@ children, that root is pinned: no chevron and no indent, so its children start
 at the tree's own left edge. Selecting a hit opens its owners at once and
 scrolls to it when the search ends.
 
-Selection reuses mesh-part picking. Every robot mesh part names its link, so a
-link is hovered and selected in the viewport as all of its parts, and a viewport
-pick of a part that is not a named object selects its link; a named object
-still selects itself (Shift/Ctrl/Cmd add). A link with no geometry selects its
-row and details only. As for STEP, a robot selection exists only while Select
-is the tool: choosing a row or a part under another tool returns to Select, and
-leaving Select clears it.
+Selection is the scene graph's. A link is hovered and selected in the viewport
+as the meshes of its group, and a viewport pick of a surface that is not a named
+object walks up to its link; a named object still selects itself (Shift in the
+viewport, Shift/Ctrl/Cmd on a row add). A link with no geometry selects its row
+and details only. As for STEP, a robot selection exists only while Select is the
+tool: choosing a row under another tool returns to Select, leaving Select clears
+it, and Escape clears it before it shuts the Inspector. A click acts at once: a
+robot has no double-click to wait for.
 
 The Reference pane reads back what the description says about the link, in
 sections: its SRDF planning groups (`srdfGroupNamesByLink`) and end effectors;
@@ -892,7 +1006,7 @@ reports only what its parser records. A named object shows its link, colour,
 triangles and size.
 
 What names something else can be followed. A mesh path is a link that opens
-that file through the host's `onOpenFile`: `CadFileView` resolves it against the
+that file through the host's `onOpenFile`: the renderer resolves it against the
 opened file with the mesh loader's own `resolveLocalAssetFileRef` (an SRDF's
 URDF is always beside it). A `package://` reference, or one that leaves the
 served root, has no path here and stays plain text. A parent or child link name

@@ -35,7 +35,8 @@ are for reading and maintaining the contracts.
 | `CadPreferenceSource` | [Viewer preferences](../src/renderers/workspace/preferences.ts) | `@hardcore/ui/renderers/cad` (also `@hardcore/ui/renderers/workspace`) |
 | `GlbRendererOptions`, `LiveViewBinding`, `LiveViewController` | [GLB registration](../src/renderers/glb/index.ts), [live binding](../src/renderers/kit/shell/liveBinding.ts) | `@hardcore/ui/renderers/glb` |
 | `MeshRendererOptions` (STL, 3MF), `LiveViewBinding`, `LiveViewController` | [Mesh registration](../src/renderers/mesh/index.ts) | `@hardcore/ui/renderers/mesh` |
-| `ViewerCommands`, `ViewerCommandSource` (the host requests the GLB and mesh renderers take) | [Viewer commands](../src/renderers/workspace/commands.ts) | `@hardcore/ui/renderers/workspace` |
+| `RobotRendererOptions` (URDF, SRDF, SDF), `RobotLiveController`, `RobotLiveState` (`selectedLinks`, `selectedPartIds`) | [Robot registration](../src/renderers/robot/index.ts) | `@hardcore/ui/renderers/robot` |
+| `ViewerCommands`, `ViewerCommandSource` (the host requests the GLB, mesh and robot renderers take) | [Viewer commands](../src/renderers/workspace/commands.ts) | `@hardcore/ui/renderers/workspace` |
 | CAD snapshot validation and versioning | [CAD state](../src/renderers/cad/state.ts) | `@hardcore/ui/renderers/cad/state` |
 
 Start with the actual composition in [web App](../../../apps/web/src/App.tsx)

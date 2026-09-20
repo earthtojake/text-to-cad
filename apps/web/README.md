@@ -155,8 +155,9 @@ the build — detection only; it keeps serving.
 
 This app exports no components. Other hosts use `@hardcore/ui/file-viewer` with
 registered renderers and explicit services. Viewer content is registered through
-`@hardcore/ui/renderers/cad`, for `.glb` `@hardcore/ui/renderers/glb`, and for
-`.stl` and `.3mf` `@hardcore/ui/renderers/mesh` (`App.tsx` registers all three with the
+`@hardcore/ui/renderers/cad`, for `.glb` `@hardcore/ui/renderers/glb`, for
+`.stl` and `.3mf` `@hardcore/ui/renderers/mesh`, and for `.urdf`, `.srdf` and `.sdf`
+`@hardcore/ui/renderers/robot` (`App.tsx` registers all four with the
 same client and preferences); all loading,
 selection, inspector and tool behavior is shared. Public declarations, styles and worker assets are built in that
 package. See `docs/shell.md` for the host boundary and `docs/storage.md` for
@@ -201,9 +202,10 @@ the UI package's asset documentation for asset provenance and regeneration.
 ### Narrow CAD panes
 
 The shared top-right toolbar contains Select, Measure (STEP only) and Draw, plus Pose (drag
-joints by viewport handles; the tool a robot opens in) and Animate where a file
+joints by viewport handles) and Animate where a file
 has joints or routines. Pressing
-Select again opens its selection-filter dropdown. A GLB, an STL and a 3MF (their own
+Select again opens its selection-filter dropdown. A robot description (its own renderer)
+opens in Pose, which leads its tools, followed by a Select that picks whole links, and Draw. A GLB, an STL and a 3MF (their own
 renderers) have nothing to select: they open in Orbit, a plain view tool, followed by
 Draw and, for a GLB with clips, Animate. Buttons wrap inside the pill
 when the Inspector or a narrow host reduces the scene width. Snapshot is a

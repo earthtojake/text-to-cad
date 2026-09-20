@@ -3,13 +3,15 @@ import test from "node:test";
 import * as THREE from "three";
 
 import {
-  PRISMATIC_HEAD_ON_LIMIT,
-  REVOLUTE_EDGE_ON_LIMIT,
   advanceJointDrag,
   arcPoints,
+  armOffset,
   beginJointDrag,
   handleArmDirection,
-  stablePerpendicular
+  PRISMATIC_HEAD_ON_LIMIT,
+  REVOLUTE_EDGE_ON_LIMIT,
+  stablePerpendicular,
+  wrapTurn
 } from "./jointHandleMath.js";
 
 /** The Pose tool's drags: a pointer ray in, a joint value out. Limits are the handlers' business. */
@@ -159,4 +161,17 @@ test("a travel arc runs from limit to limit about the axis, through the arm", ()
   assert.deepEqual(round(points[0]), [0, -2, 1]);
   assert.deepEqual(round(points.at(-1)), round([Math.SQRT2, Math.SQRT2, 1]));
   assert.ok(points.length > 20);
+});
+
+test("an arm follows the child's centre off the axis, and takes a fixed perpendicular when the child sits on it", () => {
+  const axis = [0, 0, 1];
+  assert.deepEqual(armOffset(axis, [3, 0, 5]), [1, 0, 0], "the centre's part in the rotation plane, as a direction");
+  // A wheel, a roll joint: nothing off the axis to point at, so any perpendicular, the same one every time.
+  const wheel = armOffset(axis, [0.001, 0, 5]);
+  assert.deepEqual(wheel, armOffset(axis, null));
+  assert.ok(Math.abs(wheel[2]) < 1e-12 && Math.abs(Math.hypot(...wheel) - 1) < 1e-12);
+});
+
+test("a continuous joint's value is one turn, in (-180, 180]", () => {
+  assert.deepEqual([0, 90, 180, 181, 725, -190, -180, -540].map(wrapTurn), [0, 90, 180, -179, 5, 170, 180, 180]);
 });

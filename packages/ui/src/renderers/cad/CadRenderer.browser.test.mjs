@@ -10,14 +10,13 @@ import { chromium } from 'playwright';
 
 // What is this renderer's own, in its own frame, until it moves onto the shell
 // (the shared behaviour is tested there: kit/shell/RendererShell.browser.test.mjs).
-// The fixture is the smallest file it opens without a backend: a robot of two boxes.
-const urdf = `<?xml version="1.0"?>
-<robot name="pair">
-  <link name="base"><visual><geometry><box size="0.4 0.4 0.1"/></geometry></visual></link>
-  <link name="arm"><visual><origin xyz="0.25 0 0"/><geometry><box size="0.5 0.08 0.08"/></geometry></visual></link>
-  <joint name="shoulder" type="revolute"><parent link="base"/><child link="arm"/><origin xyz="0 0 0.2"/><axis xyz="0 1 0"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
-</robot>
-`;
+// The fixture is the smallest file it opens without a backend: a plate with one hole.
+const dxf = [
+  '0', 'SECTION', '2', 'HEADER', '0', 'ENDSEC', '0', 'SECTION', '2', 'ENTITIES',
+  '0', 'LWPOLYLINE', '8', 'CUT', '90', '4', '70', '1', '10', '0', '20', '0', '10', '40', '20', '0', '10', '40', '20', '20', '10', '0', '20', '20',
+  '0', 'CIRCLE', '8', 'CUT', '10', '20', '20', '10', '40', '4',
+  '0', 'ENDSEC', '0', 'EOF', ''
+].join('\n');
 
 test('a file that is not a STEP keeps STEP-only view tools off, saves them as written, and records its session under [path, "cad"]', async (t) => {
   const temporary = await mkdtemp(join(tmpdir(), 'hardcore-cad-browser-'));
@@ -33,10 +32,10 @@ test('a file that is not a STEP keeps STEP-only view tools off, saves them as wr
     else if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(compiledCss); }
     else if (url.pathname.endsWith('/__cad/catalog')) {
       response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify({ rootId: root, entries: [{ kind: 'urdf', file: 'pair.urdf', rootRelativeFile: 'pair.urdf', url: '/pair.urdf', hash: `${root}-urdf`, bytes: urdf.length }] }));
+      response.end(JSON.stringify({ rootId: root, entries: [{ kind: 'dxf', file: 'plate.dxf', rootRelativeFile: 'plate.dxf', url: '/plate.dxf', hash: `${root}-dxf`, bytes: dxf.length }] }));
     } else if (url.pathname.endsWith('/__cad/server')) {
       response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ rootId: root, rootPath: '/models', backend: 'cadgen' }));
-    } else if (url.pathname.endsWith('/pair.urdf')) { response.end(urdf); }
+    } else if (url.pathname.endsWith('/plate.dxf')) { response.end(dxf); }
     else { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css"></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>'); }
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
@@ -53,13 +52,13 @@ test('a file that is not a STEP keeps STEP-only view tools off, saves them as wr
       Object.defineProperty(window, name, { get() { throw new Error(`Renderer accessed ${name}`); } });
     }
   });
-  await page.goto(`http://127.0.0.1:${server.address().port}/?file=pair.urdf`);
+  await page.goto(`http://127.0.0.1:${server.address().port}/?file=plate.dxf`);
   const first = page.getByTestId('one');
   await first.locator('[aria-busy="false"] canvas').first().waitFor();
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
   // The session record is debounced; it lands under this renderer's own key.
   await page.waitForFunction(() => Object.keys(window.cadHarness.state.renderers || {}).length > 0);
-  assert.deepEqual(await page.evaluate(() => Object.keys(window.cadHarness.state.renderers)), [JSON.stringify(['pair.urdf', 'cad'])]);
+  assert.deepEqual(await page.evaluate(() => Object.keys(window.cadHarness.state.renderers)), [JSON.stringify(['plate.dxf', 'cad'])]);
 
   // A command's tools are saved as written (the same settings still section the
   // next STEP file), but this file resolves them off: nothing is cut, no section appears.

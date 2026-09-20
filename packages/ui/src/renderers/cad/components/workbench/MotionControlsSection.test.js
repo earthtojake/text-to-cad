@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildMotionControlsTab, MotionResetButton } from './MotionControlsSection.js';
+import { buildMotionControlsTab } from './MotionControlsSection.js';
 import PoseControlsSection from './PoseControlsSection.js';
-import { KinematicsPoseRow, NO_PRESET_VALUE } from './KinematicsControls.js';
+import { KinematicsPoseRow, MotionResetButton, NO_PRESET_VALUE } from '../../../kit/inspector/kinematicsControls.jsx';
 import { FileSheetStaticSection, FileSheetSliderField } from '../../../kit/inspector/FileSheet.js';
 import { elements } from '../../../../../scripts/reactHarness.mjs';
 

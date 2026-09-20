@@ -7,9 +7,12 @@ import {
   buildUrdfMeshGeometry,
   buildUrdfMeshData,
   clampJointValueDeg,
+  jointMotionTransform,
   linkOriginInFrame,
+  multiplyTransforms,
   poseUrdfMeshData,
   posedJointLocalTransform,
+  resolveUrdfJointValues,
   rootPointInFrame,
   solveUrdfLinkWorldTransforms,
   transformPoint
@@ -317,6 +320,43 @@ test("joint origin rotation reorients the motion axis from joint frame into pare
   const transformedPoint = transformPoint(posedJointLocalTransform(joint, 90), [0, 0, 1]).map((value) => Math.round(value * 1000) / 1000);
 
   assert.deepEqual(transformedPoint, [0, 1, 0]);
+});
+
+test("a joint's local transform is its static frame, then its motion alone, then its child offset", () => {
+  // A scene graph poses by writing the MOTION factor and nothing else, so the three
+  // factors must compose to exactly what the solver multiplies through.
+  const revolute = {
+    type: "revolute", originTransform: rotationZTransform(90), preMotionTransform: translationTransform(0, 0, 0.2),
+    postMotionTransform: translationTransform(0.05, 0, 0), axis: [0, 1, 0], defaultValueDeg: 0, minValueDeg: -60, maxValueDeg: 60
+  };
+  for (const value of [0, 25, -200]) {
+    assert.deepEqual(
+      posedJointLocalTransform(revolute, value),
+      multiplyTransforms(multiplyTransforms(revolute.preMotionTransform, jointMotionTransform(revolute, value)), revolute.postMotionTransform)
+    );
+  }
+  assert.deepEqual(jointMotionTransform(revolute, -200), jointMotionTransform(revolute, -60), "clamped as the solver clamps it");
+  const slider = { type: "prismatic", axis: [0, 0, 2], defaultValueDeg: 0, minValueDeg: 0, maxValueDeg: 0.3 };
+  assert.deepEqual(rounded(transformPoint(jointMotionTransform(slider, 0.25), [0, 0, 0])), [0, 0, 0.25]);
+  assert.deepEqual(jointMotionTransform({ type: "fixed" }, 40), translationTransform(0, 0, 0), "a fixed joint does not move");
+});
+
+test("resolved joint values clamp driven joints and solve mimic followers from their master", () => {
+  const urdf = {
+    joints: [
+      { name: "driver", type: "revolute", defaultValueDeg: 0, minValueDeg: -90, maxValueDeg: 90 },
+      { name: "follower", type: "prismatic", defaultValueDeg: 0, minValueDeg: 0, maxValueDeg: 0.01, mimic: { joint: "driver", multiplier: 0.01, offset: 0 } },
+      { name: "spin", type: "continuous", defaultValueDeg: 0 },
+      { name: "weld", type: "fixed", defaultValueDeg: 0 }
+    ]
+  };
+  const resolved = resolveUrdfJointValues(urdf, { driver: 400, follower: 99, spin: 725, weld: 12 });
+  assert.deepEqual([...resolved.keys()], ["driver", "follower", "spin", "weld"]);
+  assert.equal(resolved.get("driver"), 90);
+  assert.equal(resolved.get("follower"), 0.01, "from its master, then to its own limit; a value written for it is ignored");
+  assert.equal(resolved.get("spin"), 725);
+  assert.equal(resolved.get("weld"), 0);
+  assert.equal(resolveUrdfJointValues(urdf).get("driver"), 0, "no value is the declared default");
 });
 
 test("posed mesh bounds update after joint motion", () => {

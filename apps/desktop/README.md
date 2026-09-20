@@ -28,8 +28,8 @@ controls keep their appearance; the shared file viewer keeps the viewer's.
 `features/explorer/FileTab.tsx` is a thin host of `@hardcore/ui/file-viewer`.
 Its adapters translate IPC file access, source capabilities, root identity,
 persistence and CAD commands into package contracts. `renderers.tsx` registers
-the shared viewer renderers (CAD, and GLB and triangle meshes (STL, 3MF) as their own
-renderers; all get the tab's backend connection, preferences, host commands and live binding), Markdown, code,
+the shared viewer renderers (CAD, and GLB, triangle meshes (STL, 3MF) and robot descriptions
+(URDF, SRDF, SDF) as their own renderers; all get the tab's backend connection, preferences, host commands and live binding), Markdown, code,
 image, PDF and fallback renderers. The whole
 file-tab interface is shared with web. Projects, sessions, browser/terminal/
 review tabs, agent integrations and native services remain in this app.
@@ -1082,8 +1082,8 @@ default; other saved panel choices remain unchanged.
 ### Inspect and Render
 
 CAD controls are shared with web: the top-right toolbar contains Select,
-Measure (STEP only) and Draw, plus Pose (drag joints by viewport handles; the tool a robot
-opens in) and Animate where a file has joints or routines. Pressing Select again opens its selection-filter dropdown.
+Measure (STEP only) and Draw, plus Pose (drag joints by viewport handles) and Animate where a file has joints or routines. Pressing Select again opens its selection-filter dropdown.
+A robot description opens in Pose, which leads its tools, followed by a Select that picks whole links, and Draw. An agent's select command on one fails with a sentence saying so; its clearSelection clears the link selection.
 A GLB, an STL and a 3MF have nothing to select: their first tool is Orbit (the default, which only leaves the camera to the pointer),
 then Draw, then, for a GLB with clips, Animate. An agent's select command on one of them fails with a sentence saying so.
 Buttons wrap inside the pill in a narrow explorer pane. The file navbar has a

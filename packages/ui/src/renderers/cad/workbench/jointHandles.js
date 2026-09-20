@@ -28,29 +28,19 @@ import {
 
 import {
   add,
+  armOffset,
   dot,
   length,
   normalize,
-  rejectFromAxis,
   rotateAboutAxis,
   scale,
-  stablePerpendicular,
-  subtract
+  subtract,
+  wrapTurn
 } from "../../kit/tools/pose/jointHandleMath.js";
 import { poseControlWrite, poseDrivenDofs } from "./poseDrivenControls.js";
 
 const URDF_HANDLE_KINDS = new Set(["revolute", "continuous", "prismatic"]);
 const STEP_HANDLE_KIND_BY_DOF_KIND = { revolute: "revolute", slider: "prismatic" };
-// A child whose centre is this close to the axis (against its own reach from the
-// pivot) gives the arm no direction worth following: a wheel, a roll joint.
-const ON_AXIS_RATIO = 0.05;
-
-// A continuous joint is an angle, not a count of turns: the sliders span one turn
-// and the pose transitions already take the short way round, so a drag that has
-// wound past it is stored as the same angle inside (-180, 180].
-function wrapTurn(valueDeg) {
-  return 180 - ((((180 - valueDeg) % 360) + 360) % 360);
-}
 
 function transformDirection(transform, direction) {
   return subtract(transformPoint(transform, direction), transformPoint(transform, [0, 0, 0]));
@@ -58,14 +48,6 @@ function transformDirection(transform, direction) {
 
 function boundsCenter(bounds) {
   return scale(add(bounds.min, bounds.max), 0.5);
-}
-
-// The arm's direction in a frame whose origin is on the axis: toward the child's
-// centre where that is off the axis, else any perpendicular. It is a direction in
-// the CHILD's frame either way, so it turns with the joint.
-function armOffset(axis, centre) {
-  const offset = centre ? rejectFromAxis(centre, axis) : null;
-  return offset && length(offset) > ON_AXIS_RATIO * length(centre) ? normalize(offset) : stablePerpendicular(axis);
 }
 
 /** The joints of a robot description a person can drive: not fixed, not a mimic follower. */
