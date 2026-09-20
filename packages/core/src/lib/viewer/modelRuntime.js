@@ -55,12 +55,11 @@ export function resolveRuntimeModelFloorZ(bounds, modelPosition, sceneScaleMode,
   return Math.min(baseZ, baseZ + boundsMinZ);
 }
 
-export function applyRuntimeModelBounds(THREE, runtime, bounds, sceneScaleMode, {
-  shadowMapSize = 2048
-} = {}) {
+/** Half the bounds' diagonal, clamped for the scene scale: the size every scaled effect is sized from. */
+export function sceneRadiusForBounds(THREE, bounds, sceneScaleMode) {
   const boundsMin = Array.isArray(bounds?.min) ? bounds.min : [0, 0, 0];
   const boundsMax = Array.isArray(bounds?.max) ? bounds.max : [0, 0, 0];
-  const radius = clampSceneModelRadius(
+  return clampSceneModelRadius(
     new THREE.Vector3(
       toNumber(boundsMax[0]) - toNumber(boundsMin[0]),
       toNumber(boundsMax[1]) - toNumber(boundsMin[1]),
@@ -68,6 +67,14 @@ export function applyRuntimeModelBounds(THREE, runtime, bounds, sceneScaleMode, 
     ).length() / 2,
     sceneScaleMode
   );
+}
+
+export function applyRuntimeModelBounds(THREE, runtime, bounds, sceneScaleMode, {
+  shadowMapSize = 2048
+} = {}) {
+  const boundsMin = Array.isArray(bounds?.min) ? bounds.min : [0, 0, 0];
+  const boundsMax = Array.isArray(bounds?.max) ? bounds.max : [0, 0, 0];
+  const radius = sceneRadiusForBounds(THREE, bounds, sceneScaleMode);
   runtime.modelBounds = {
     min: boundsMin,
     max: boundsMax

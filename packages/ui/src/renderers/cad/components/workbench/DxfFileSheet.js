@@ -1,20 +1,16 @@
 import FileSheet from "../../../kit/inspector/FileSheet.js";
 import FileSheetTabbedSurface from "../../../kit/inspector/FileSheetTabbedSurface.js";
 
-// The mesh Inspector: Display, plus whatever settings tabs the caller adds (DXF reuses
-// this sheet). Measurements are the Measure tool's panel, not an Inspector tab.
-export default function MeshFileSheet({
+// A drawing's Inspector: the tabs its caller builds (Material, Bends, Layers, Display),
+// in the one tab strip every Inspector has.
+export default function DxfFileSheet({
   headerActions = null,
   open,
-  kind = "mesh",
-  title = "Mesh",
+  title = "DXF",
   isDesktop,
   width,
-  selectedEntry = null,
   onOpenChange,
   onStartResize,
-  viewerServerInfo = null,
-  suppressDynamicMetadataStatus = false,
   settingsTabs = [],
   openSectionIds = [],
   onOpenSectionIdsChange

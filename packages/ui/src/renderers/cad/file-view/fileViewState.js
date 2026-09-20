@@ -2,14 +2,6 @@
 import {
   getCadWorkspaceLayoutMode
 } from "../workbench/breakpoints.js";
-import { renderFormatLabel } from "@hardcore/core/lib/renderCapabilities.js";
-
-// The title over a file sheet whose only tab is status: a mesh never had
-// file-specific controls, and DXF lost its when the geometry moved into a baked
-// render package, whose settings the producer owns.
-export function statusOnlyFileSheetTitle(sourceFormat) {
-  return renderFormatLabel(sourceFormat) || "STL";
-}
 
 // Single user-facing label for "the viewer is (re)generating the render artifacts a STEP model
 // needs before it can render" — used for both the filename status chip and its tooltip across every

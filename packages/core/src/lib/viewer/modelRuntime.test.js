@@ -10,7 +10,8 @@ import {
   resolveRuntimeModelFloorZ,
   syncMaterialClipPlanes,
   syncRuntimeStepClipPlane,
-  toNumber
+  toNumber,
+  sceneRadiusForBounds
 } from "./modelRuntime.js";
 import { VIEWER_SCENE_SCALE } from "./sceneScale.js";
 import {
@@ -284,4 +285,16 @@ test("opening Clip at a neutral boundary does not activate shader clipping", () 
   assert.ok(buildStepClipPlane(THREE, { enabled: true, offsets: { x: 1 }, invert: true }, bounds));
   assert.ok(buildStepClipPlane(THREE, { enabled: true, offsets: { x: 0 } }, bounds));
   assert.ok(buildStepClipPlane(THREE, { enabled: true, offsets: { x: 0.5 } }, bounds));
+});
+
+test("the ground is sized from the bounds it is given, so a viewer can hand it the REST pose", () => {
+  // The grid and stage take this radius. A robot posed far out has bigger bounds than at rest;
+  // sizing the floor from the rest box is what keeps it from rescaling under a moving model.
+  const rest = { min: [-1, -1, 0], max: [1, 1, 2] };
+  const posed = { min: [-1, -1, 0], max: [4, 1, 2] };
+  const restRadius = sceneRadiusForBounds(THREE, rest, VIEWER_SCENE_SCALE.CAD);
+  assert.ok(Math.abs(restRadius - Math.hypot(2, 2, 2) / 2) < 1e-9);
+  assert.ok(sceneRadiusForBounds(THREE, posed, VIEWER_SCENE_SCALE.CAD) > restRadius);
+  const runtime = {};
+  assert.equal(applyRuntimeModelBounds(THREE, runtime, rest, VIEWER_SCENE_SCALE.CAD).radius, restRadius);
 });

@@ -20,8 +20,8 @@ test("format-specific tabs remain available in both viewing modes", () => {
     assert.deepEqual(renderedFileSheetSectionIds("srdf", { renderMode }), ["kinematics", "links", "display"]);
     assert.deepEqual(renderedFileSheetSectionIds("sdf", { renderMode }), ["kinematics", "links", "sdf", "display"]);
     assert.deepEqual(renderedFileSheetSectionIds("srdf", { renderMode, showJoints: false }), ["links", "display"]);
-    // A mesh has only Display: measurements are the Measure tool's panel.
-    assert.deepEqual(renderedFileSheetSectionIds("mesh", { renderMode }), ["display"]);
+    // A triangle mesh and a GLB have their own renderers: this one holds no sheet for them.
+    assert.deepEqual(renderedFileSheetSectionIds("mesh", { renderMode }), []);
   }
 });
 
@@ -33,7 +33,6 @@ test("defaults retain useful format-specific selections", () => {
   assert.deepEqual(defaultOpenFileSheetSectionIds("srdf"), ["kinematics"]);
   // Motion stays the tab a robot lands on; Components is never the default.
   assert.deepEqual(defaultOpenFileSheetSectionIds("urdf"), ["kinematics"]);
-  assert.deepEqual(defaultOpenFileSheetSectionIds("mesh"), []);
 });
 
 test("an open selection is the last id this format still has; a retired id is simply not open", () => {

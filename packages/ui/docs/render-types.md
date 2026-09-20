@@ -14,6 +14,15 @@ workspace handler bail, the pane's `previewMode={dxfMode ? false : ...}`, and an
 that force-exited DXF from preview). Another format grew an entire parallel export path to
 an endpoint the server does not implement.
 
+## Scope
+
+This is the rule inside the CAD renderer (`src/renderers/cad`), which shows STEP, DXF
+and robot descriptions. A GLB and a triangle mesh (STL, 3MF) have renderers of their own
+(`src/renderers/glb`, `src/renderers/mesh`; see [CAD renderer](cad-renderer.md#kit)): a
+vertical slice owns its tools, tabs and scene outright and consults no capability table.
+The `glb`, `stl` and `3mf` rows below remain for what is not a renderer: the file list's
+icon and label, and the headless snapshot renderer.
+
 ## The capability registry
 
 `packages/core/src/lib/renderCapabilities.js` — one frozen table, keyed by render

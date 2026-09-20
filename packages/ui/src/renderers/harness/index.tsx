@@ -5,6 +5,7 @@ import type { FileSource, FileViewerState } from '@hardcore/ui/file-viewer';
 import { createCadClient } from '@hardcore/core/client';
 import { createCadPreferences, createCadRenderer } from '@hardcore/ui/renderers/cad';
 import { createGlbRenderer } from '@hardcore/ui/renderers/glb';
+import { createMeshRenderer } from '@hardcore/ui/renderers/mesh';
 import type { ViewerHost } from '@hardcore/ui/host';
 import type { CadLiveController, CadCommands } from '@hardcore/ui/renderers/cad';
 
@@ -24,7 +25,9 @@ function workspace(id: string) {
     },
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
   };
-  const capture = () => { snapshot = { captureRequest: { key: Date.now() } }; for (const listener of listeners) listener(); };
+  const request = (next: CadCommands) => { snapshot = next; for (const listener of listeners) listener(); };
+  const capture = () => request({ captureRequest: { key: Date.now() } });
+  const selectReference = (selector: string) => request({ selectReference: { selector, key: Date.now() } });
   const client = createCadClient({ origin: `${location.origin}/${id}`, workspaceId: id, pollIntervalMs: 0 });
   const source: FileSource = {
     id, rootName: id,
@@ -43,8 +46,9 @@ function workspace(id: string) {
   let controller: CadLiveController | null = null;
   const live = { bind(next: CadLiveController) { controller = next; return () => { controller = null; }; } };
   // One live binding per pane: whichever renderer the file selects binds the mounted view.
-  const renderers = [createCadRenderer({ client, preferences, commands, live }), createGlbRenderer({ client, preferences, commands, live })];
-  return { client, source, host, renderers, capture, get controller() { return controller; } };
+  const services = { client, preferences, commands, live };
+  const renderers = [createCadRenderer(services), createGlbRenderer(services), createMeshRenderer(services)];
+  return { client, source, host, renderers, commands, capture, selectReference, get controller() { return controller; } };
 }
 const a = workspace('one'), b = workspace('two');
 // Directory navigation hydrates before a renderer mounts. Large workspaces
@@ -56,7 +60,7 @@ function App() {
   const [second, setSecond] = useState(false);
   const [mounted, setMounted] = useState(true);
   const [fullscreen, setFullscreen] = useState(false);
-  Object.assign(window, { cadHarness: { a, b, state, otherState, preferences, captures, capture: a.capture, second: setSecond, mounted: setMounted, fullscreen: setFullscreen } });
+  Object.assign(window, { cadHarness: { a, b, state, otherState, preferences, captures, capture: a.capture, selectReference: a.selectReference, second: setSecond, mounted: setMounted, fullscreen: setFullscreen } });
   return <div style={{ display: 'flex', width: '1200px', height: '720px' }}>
     <section data-testid="one" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       {mounted && <FileViewer fullscreen={fullscreen} onExitFullscreen={() => setFullscreen(false)} file={file} host={a.host} renderers={a.renderers} state={state} onStateChange={setState} />}

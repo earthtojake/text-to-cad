@@ -67,10 +67,6 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
         ...(isSdf ? [FILE_SHEET_SECTION_IDS.ROBOT_SDF] : []),
         FILE_SHEET_SECTION_IDS.DISPLAY
       ];
-    case "mesh":
-      // A mesh has nothing to inspect but how it is shown. Measurements belong to the
-      // Measure tool's panel under the toolbar.
-      return [FILE_SHEET_SECTION_IDS.DISPLAY];
     default:
       return [];
   }
@@ -93,8 +89,6 @@ export function defaultOpenFileSheetSectionIds(kind, options = {}) {
     case "srdf":
     case "sdf":
       return showJoints ? [FILE_SHEET_SECTION_IDS.KINEMATICS] : [];
-    case "mesh":
-      return [];
     default:
       return [];
   }

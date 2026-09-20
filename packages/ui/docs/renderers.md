@@ -1,5 +1,8 @@
 # File renderers
 
+The viewer renderers, `cad` (STEP, DXF, robot descriptions), `glb` and `mesh` (STL, 3MF), and
+the kit and shell they are built on are in [CAD renderer](cad-renderer.md).
+
 The non-CAD renderers share Hardcore's desktop file-tab implementation. They preserve the existing Markdown document and source views, Monaco configuration and save behavior, image fit and actual-size controls, PDF presentation, and unsupported-file fallback.
 
 Hosts register `markdownRenderer`, `codeRenderer`, `imageRenderer`, `pdfRenderer`, and `unsupportedRenderer` from their corresponding `@hardcore/ui/renderers/*` entry points. Text preparation uses `FileSource.readText`; image and PDF preparation use `FileSource.readAsset`. Every acquired asset URL carries a release lease, and FileViewer releases it when the request is cancelled, the file changes, or the view unmounts.

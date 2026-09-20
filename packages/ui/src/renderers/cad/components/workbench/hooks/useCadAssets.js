@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import {
   isAbortError,
   loadRenderDisplayEdgeBundle,
+  loadRenderDxfMesh,
   loadRenderGlb,
   loadRenderSurf,
   loadRenderSelectorBundle,
@@ -10,6 +11,7 @@ import {
   loadRenderSrdf,
   loadRenderUrdf,
   peekRenderDisplayEdgeBundle,
+  peekRenderDxfMesh,
   peekRenderGlb,
   peekRenderSelectorBundle,
   peekRenderSdf,
@@ -72,7 +74,7 @@ import {
   peekRenderMeshByUrl
 } from "@hardcore/core/lib/render/meshLoaders.js";
 import { reclaimIdleSurfWorkers } from "@hardcore/core/lib/renderAssetClient.js";
-import { estimateMeshRenderCost, shouldUseGlbMeshWorkerForEntry } from "@hardcore/core/lib/render/meshCost.js";
+import { estimateMeshRenderCost } from "@hardcore/core/lib/render/meshCost.js";
 import { RENDER_FORMAT, entrySourceFormat } from "@hardcore/core/lib/fileFormats.js";
 import { buildDisplayEdgeRuntime, buildSelectorRuntime } from "@hardcore/core/lib/selectors/runtime.js";
 import {
@@ -221,19 +223,15 @@ async function loadRenderRobotMeshes(meshUrls, { signal, resources, onProgress }
   });
 }
 
+// The one single-file model this renderer still loads whole is a drawing's prism:
+// every STEP is a package, a robot is its links, and a triangle mesh or a GLB has
+// its own renderer.
 function peekRenderMeshForEntry(entry, resources) {
-  return peekRenderMeshByUrl(entryMeshAssetUrl(entry), {
-    resources,
-    fallback: meshAssetKeyForEntry(entry)
-  });
+  return peekRenderDxfMesh(entryMeshAssetUrl(entry), { resources });
 }
 
 function loadRenderMeshForEntry(entry, options) {
-  return loadRenderMeshByUrl(entryMeshAssetUrl(entry), {
-    ...options,
-    fallback: meshAssetKeyForEntry(entry),
-    preferWorker: shouldUseGlbMeshWorkerForEntry(entry)
-  });
+  return loadRenderDxfMesh(entryMeshAssetUrl(entry), options);
 }
 
 function createAssemblyPreviewMeshData(meshData, topologyManifest = null) {
@@ -902,8 +900,8 @@ export function useCadAssets({
 
     try {
       // Every STEP entry is a component-GLB package (a single-component part is just a
-      // package with one occurrence); compose it the same way. Only non-STEP meshes
-      // (STL/3MF/OBJ) fall through to the monolithic single-file loader below.
+      // package with one occurrence); compose it the same way. Only a drawing's prism
+      // falls through to the single-file loader below.
       if (entrySourceFormat(entry) === RENDER_FORMAT.STEP) {
         setMeshLoadProgress({
           phase: "read",

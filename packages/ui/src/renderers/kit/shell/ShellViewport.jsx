@@ -8,7 +8,7 @@ import {
   CAMERA_PROJECTION, normalizeCameraProjection, perspectiveSnapshotMatchesScene, resolvePerspectiveSnapshot
 } from "@hardcore/core/lib/perspective.js";
 import { mergeBoundsList } from "@hardcore/core/lib/viewer/autoZoom.js";
-import { applyRuntimeModelBounds, resolveRuntimeModelFloorZ } from "@hardcore/core/lib/viewer/modelRuntime.js";
+import { applyRuntimeModelBounds, resolveRuntimeModelFloorZ, sceneRadiusForBounds } from "@hardcore/core/lib/viewer/modelRuntime.js";
 import { defaultSceneGridRadius, getSceneScaleSettings, normalizeSceneScaleMode, VIEWER_SCENE_SCALE } from "@hardcore/core/lib/viewer/sceneScale.js";
 import { buildCompositeScreenshotBlob, resolveElementBackgroundColor } from "@hardcore/core/lib/viewer/screenshotCapture.js";
 import {
@@ -472,6 +472,8 @@ const ShellViewport = forwardRef(function ShellViewport({
     if (!runtime || !scene) return;
     scene.setSurfaceLook?.(surfaceLook);
     scene.object3D.traverse((object) => { if (object.isMesh) object.receiveShadow = receiveShadows; });
+    // Read-only test seam: how often a scene was dressed. A guide's or the stage's paint must never be one.
+    (window.__viewerSurfaceLooks ||= { count: 0 }).count += 1;
     runtime.requestRender();
   }, [scene, surfaceLook, receiveShadows, viewerReadyTick]);
 
@@ -679,10 +681,12 @@ const ShellViewport = forwardRef(function ShellViewport({
     if (renderMode) applyActivePhotographicStudio(runtime, displayBounds);
     else syncRuntimeScaledLightingAndShadow(THREE, runtime, normalizedThemeSettings.lighting, radius, displayBounds,
       normalizedSceneScaleMode, renderShadowMapSizeRef.current);
-    updateActiveGridHelper(runtime, viewerTheme, radius, floorZ, normalizedSceneScaleMode, resolvedFloorMode);
+    // The ground is sized from the REST pose: animating or posing the scene never rescales the floor under it.
+    const groundRadius = sceneRadiusForBounds(THREE, framingBounds, normalizedSceneScaleMode);
+    updateActiveGridHelper(runtime, viewerTheme, groundRadius, floorZ, normalizedSceneScaleMode, resolvedFloorMode);
     if (!renderMode) {
       updateSpotLightTarget(runtime);
-      updateStageEffects(runtime, viewerTheme, normalizedThemeSettings, radius, runtime.gridFloorZ ?? 0, resolvedFloorMode, normalizedSceneScaleMode);
+      updateStageEffects(runtime, viewerTheme, normalizedThemeSettings, groundRadius, runtime.gridFloorZ ?? 0, resolvedFloorMode, normalizedSceneScaleMode);
     }
     modelGroup.position.copy(modelOffset);
     modelGroup.updateMatrixWorld(true);

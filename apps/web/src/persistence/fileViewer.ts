@@ -44,7 +44,8 @@ export function restoreCadFileStates(state: FileViewerState, entries: CadEntry[]
   const renderers = { ...state.renderers };
   let changed = false;
   for (const entry of entries) {
-    if (/\.glb$/i.test(entry.file)) continue;
+    // A GLB and a triangle mesh have their own renderers and records; an old `cad` session is not theirs.
+    if (/\.(?:glb|stl|3mf)$/i.test(entry.file)) continue;
     const key = JSON.stringify([entry.rootRelativeFile || entry.file, 'cad']);
     if (key in renderers) continue;
     const session = readFileSessionState('', entry.file, entry, { storage });
