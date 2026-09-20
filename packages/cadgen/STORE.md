@@ -455,7 +455,12 @@ of:
 5. **A declared output does not match `outputs`.** Protects against a deleted,
    hand-edited or foreign `.step`/sidecar/mesh file beside the model.
 
-Mesh tolerances and argv flags are not inputs. Imported STEPs are inputs (a
+Mesh tolerances and argv flags are not inputs. A model run's
+`--mesh-tolerance` / `--mesh-angular-tolerance` override every declared mesh's
+tolerance for that run (flag > declaration > `@step` > default): each mesh's
+ledger entry records the pair the file was written at, so the declared meshes
+are re-cut from the current tree — the model is never rebuilt for it — and the
+next run without the flags restores them, once. Imported STEPs are inputs (a
 `read_step` file is in the closure), not models. `--force` rebuilds the named
 model only; its children go through the gate as usual. `cadgen store forget
 <model.py>` drops the record instead, so the next run — not this one — rebuilds

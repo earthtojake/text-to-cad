@@ -71,8 +71,6 @@ class ColdCompileCleanupTest(unittest.TestCase):
         return build_step_artifact(repo_root=self.root, step=document, **kwargs)
 
     def test_document_compile_never_discovers_unrelated_sources(self):
-        from cadgen import step_artifact_cli as artifact
-
         document = self.document()
         unrelated = self.root / "unrelated-source"
         unrelated.mkdir()
@@ -96,9 +94,9 @@ class ColdCompileCleanupTest(unittest.TestCase):
 
         sys.addaudithook(audit)
         try:
-            with mock.patch.object(artifact, "iter_cad_sources", wraps=artifact.iter_cad_sources) as discovered:
-                result = self.compile(document)
-            discovered.assert_not_called()
+            # The compile engine has no source discovery left to call; the audit hook
+            # is the proof that nothing reached the unrelated source tree anyway.
+            result = self.compile(document)
             self.assertEqual(attempts, [])  # An internal catch must not hide attempted reads.
             self.assertTrue(result["ok"])
         finally:
@@ -197,7 +195,7 @@ class ColdCompileCleanupTest(unittest.TestCase):
             with self.subTest(source=source, kind=kind, reemit=reemit):
                 scene = load_step_scene_exact(document)
                 scene.source_kind, scene.reemit_source_hash = kind, reemit
-                spec = replace(artifact._build_entry_spec(self.root, document, scene), source=source)
+                spec = replace(artifact._build_entry_spec(self.root, document), source=source)
                 with mock.patch.object(generation, "_selector_options_for_part", side_effect=Reached) as classified:
                     with self.assertRaises(Reached):
                         generation._generate_part_outputs(spec, entries_by_step_path={}, preloaded_scene=scene, force=True)

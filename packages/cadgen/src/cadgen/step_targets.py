@@ -6,8 +6,7 @@ from pathlib import Path
 from cadgen.cad_ref_syntax import normalize_cad_path, parse_cad_tokens
 from cadgen.selector_types import SelectorBundle
 
-
-STEP_SUFFIXES = (".step", ".stp")
+from cadgen._internal.doors import STEP_SUFFIXES
 
 
 class CadRefError(RuntimeError):

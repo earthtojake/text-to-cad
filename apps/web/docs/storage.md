@@ -141,11 +141,9 @@ the active file when its panel is switched. Appearance uses a host cookie across
 viewer ports, with `cad-viewer:color-scheme` as its localStorage fallback; neither
 changes the per-file Render recipe. Legacy CAD theme preferences are ignored.
 
-Pose transition animation and speed use the existing
-`cad-viewer:pose-transition:v1` preference. The web adapter reads, writes and
-synchronizes that key through `CadPreferences`; the shared renderer discovers no
-browser storage.
-
-Fullscreen orbit speed uses `cad-viewer:orbit:v1` through the same host-owned
-preference source. It is global across files and synchronized across windows.
+Fullscreen orbit speed uses `cad-viewer:orbit:v1`. The web adapter reads, writes
+and synchronizes that key through `CadPreferences`; the shared renderer discovers
+no browser storage. It is global across files and synchronized across windows.
+A stored `cad-viewer:pose-transition:v1` from an older viewer is ignored: pose
+writes no longer ease.
 Fullscreen camera changes are transient and never enter file-session snapshots.

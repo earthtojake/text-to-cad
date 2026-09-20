@@ -1,10 +1,11 @@
-"""Warm-process daemon supervisor for the CAD skill CLIs.
+"""Warm-process daemon supervisor for cadgen's build doors.
 
 The supervisor owns a socket and a pool of warm workers (``cadgen.daemon.pool``),
 each a subprocess that imported cadgen / OCP / build123d once. It services
-directly-run @step/@dxf model scripts ("run") plus ``cadgen step build`` /
-``cadgen stl|3mf|glb build`` / ``cadgen snapshot``
-invocations over a per-install unix socket (named pipe on Windows), so every
+directly-run @step/@dxf model scripts ("run") plus ``cadgen step build|compile``
+and ``cadgen stl|3mf|glb build`` invocations (snapshot orchestration stays in its
+caller; only its document compiles and surface derivations are pool jobs)
+over a per-install unix socket (named pipe on Windows), so every
 call skips the multi-second interpreter+OCP startup. The supervisor itself never
 imports OCP: no amount of model badness can take it down.
 
@@ -59,20 +60,17 @@ WORKER_SILENCE_TIMEOUT_SECONDS = 3600.0
 # Parser modules are imported by the WORKERS, never by this process. They are ordinary
 # cadgen modules, so a worker imports them from the same distribution this file was
 # loaded from.
+from cadgen.cli import daemon_tool_modules  # noqa: E402 - stdlib-light; never the kernel
+
 _TOOL_IMPORTS = {
     # "run" is the @step/@dxf decorator's warm-dispatch target (a directly
     # executed model script hands its argv here) — internal, not a user CLI.
     # DXF models are safe to serve warm because their bytes are a function of
     # the drawing's geometry, not of the process that wrote them.
     "run": "cadgen.cli._run_model",
-    "step-build": "cadgen.cli.step_build",
-    "step-compile": "cadgen.cli.step_compile",
-    # One warm tool per mesh door. `step export` served all three formats from a
-    # single spawn; three doors are three spawns, which is exactly the cost the
-    # warm workers exist to remove.
-    "stl-build": "cadgen.cli.stl_build",
-    "3mf-build": "cadgen.cli.threemf_build",
-    "glb-build": "cadgen.cli.glb_build",
+    # One warm tool per door the front door hands off (`cadgen.cli._DAEMON_TOOLS`),
+    # DERIVED from that table so the two sides cannot name different doors.
+    **daemon_tool_modules(),
 }
 
 from cadgen.daemon import broker as broker_mod  # noqa: E402
@@ -688,10 +686,11 @@ def serve() -> int:
 USAGE = """\
 cadgen-daemon takes no arguments.
 
-It is the warm-process server, started for you by cadgen.daemon.client when
-CADGEN_DAEMON=1 -- not a command to run by hand. It sits in scripts/ beside the
-CLIs you probably meant: python <model>.py, cadgen step build, cadgen stl build,
-cadgen step snapshot, cadgen snapshot. Each of those takes --help.\
+It is the warm-process server, started for you by the first build that needs it
+(set CADGEN_DAEMON=0 to build without it) -- not a command to run by hand.
+`cadgen daemon status` shows what it is doing. The commands you probably meant:
+python <model>.py, cadgen step build, cadgen stl build, cadgen snapshot. Each of
+those takes --help.\
 """
 
 

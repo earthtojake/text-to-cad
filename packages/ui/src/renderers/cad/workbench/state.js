@@ -1,5 +1,5 @@
 import { clonePerspectiveSnapshot, perspectiveSnapshotEqual } from "@hardcore/core/lib/perspective.js";
-import { normalizeRenderFormat } from "@hardcore/core/lib/fileFormats.js";
+import { isRobotRenderFormat, normalizeRenderFormat, renderFormatFromPath } from "@hardcore/core/lib/fileFormats.js";
 import { isCadWorkspaceCompactFileSheetViewport } from "./breakpoints.js";
 import { RENDER_FORMAT, TAB_TOOL_MODE } from "./constants.js";
 
@@ -111,13 +111,18 @@ function normalizeTabCameraSnapshot(value) {
 // an empty sketch.
 function normalizeTabToolMode(value) {
   const normalized = normalizeString(value || TAB_TOOL_MODE.REFERENCES);
-  if (
-    normalized === TAB_TOOL_MODE.MEASURE ||
-    normalized === TAB_TOOL_MODE.PAN
-  ) {
-    return normalized;
+  return normalized === TAB_TOOL_MODE.MEASURE || normalized === TAB_TOOL_MODE.POSE ? normalized : TAB_TOOL_MODE.REFERENCES;
+}
+
+// The tool a file opens in is a rule of its kind, not a saved preference: a
+// robot opens in Pose until its tab records another tool, and nothing else ever
+// restores into Pose (a STEP with kinematics offers the tool; it opens in Select).
+function tabToolModeForFile(key, recorded) {
+  const mode = normalizeTabToolMode(recorded);
+  if (!isRobotRenderFormat(renderFormatFromPath(key))) {
+    return mode === TAB_TOOL_MODE.POSE ? TAB_TOOL_MODE.REFERENCES : mode;
   }
-  return TAB_TOOL_MODE.REFERENCES;
+  return normalizeString(recorded) ? mode : TAB_TOOL_MODE.POSE;
 }
 
 const TAB_STATE_SCHEMA = [
@@ -263,6 +268,7 @@ export function createTabRecord(key, overrides = {}) {
   }
   return {
     key: normalizeTabKey(key),
-    ...snapshot
+    ...snapshot,
+    tabToolMode: tabToolModeForFile(key, overrides?.tabToolMode)
   };
 }

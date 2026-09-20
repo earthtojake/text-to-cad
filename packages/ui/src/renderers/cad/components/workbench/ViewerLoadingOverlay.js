@@ -6,7 +6,7 @@ export default function ViewerLoadingOverlay({ loading, previewMode, operationKe
     <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
       <div className="cad-loading-overlay absolute inset-0" />
       <div className="absolute inset-0 flex items-center justify-center px-4 text-popover-foreground">
-        <LoadingIndicator headline={loading.headline} progress={loading.progress} operationKey={operationKey} />
+        <LoadingIndicator progress={loading.progress} operationKey={operationKey} />
       </div>
     </div>
   );

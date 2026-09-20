@@ -126,7 +126,7 @@ class RenderDisplaySchemaTest(unittest.TestCase):
 
     def test_output_and_quality_are_closed(self):
         output = {
-            "sizeProfile": "diagnostic", "padding": 0.1, "paddingPercent": 0.1,
+            "sizeProfile": "diagnostic", "padding": 0.1,
             "viewLabels": True, "tightFrame": True, "transparent": True, "renderScale": 2,
         }
         self.assertEqual(set(output), set(SUPPORTED_OUTPUT_SETTINGS_KEYS))
@@ -134,6 +134,9 @@ class RenderDisplaySchemaTest(unittest.TestCase):
         normalize(output=output, quality={"tessellation": {"chordTolerance": 0.001}})
         with self.assertRaisesRegex(SnapshotError, "output has unknown key"):
             normalize(output={"pixels": 2})
+        # One name per setting: the old second spelling of `padding` names its replacement.
+        with self.assertRaisesRegex(SnapshotError, r"output\.paddingPercent was removed; use output\.padding"):
+            normalize(output={"paddingPercent": 0.1})
 
 
 class RenderTessellationLimitsTest(unittest.TestCase):

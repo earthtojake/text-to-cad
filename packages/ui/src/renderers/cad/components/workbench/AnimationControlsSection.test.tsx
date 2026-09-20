@@ -61,7 +61,7 @@ it('has a player\'s settings menu: Speed opens the list of speeds, Loop toggles 
   await user.click(speed);
   const speeds = (await screen.findAllByRole('menuitemradio')).map(item => item.textContent);
   // An authored speed the presets lack is listed, so the menu never shows nothing checked.
-  expect(speeds).toEqual(['0.25×', '0.5×', '0.75×', 'Normal', '1.25×', '1.5×', '2×', '3×']);
+  expect(speeds).toEqual(['0.25×', '0.5×', '0.75×', '1×', '1.25×', '1.5×', '2×', '3×']);
   // jsdom has no geometry for the submenu's pointer grace area; the keyboard path is the same handler.
   screen.getByRole('menuitemradio', { name: '2×' }).focus();
   await user.keyboard('{Enter}');

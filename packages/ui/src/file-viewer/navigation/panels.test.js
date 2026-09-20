@@ -35,6 +35,18 @@ test("a CAD surface declares only its Inspector", () => {
   assert.deepEqual(cadPanels(false), []);
 });
 
+test("the Inspector opens by default, except over a file that has only View settings", () => {
+  for (const path of ["part.step", "arm.urdf", "arm.srdf", "world.sdf", "plate.dxf", undefined]) {
+    assert.equal(resolveOpenPanel(cadPanels(true, path ? { path } : undefined), null)?.id, "cad-file-sheet", String(path));
+  }
+  for (const path of ["part.stl", "models/Part.3MF", "scene.glb"]) {
+    const panels = cadPanels(true, { path });
+    assert.equal(resolveOpenPanel(panels, null), null, path);
+    // A default only: a person who opened it keeps it.
+    assert.equal(resolveOpenPanel(panels, "cad-file-sheet")?.id, "cad-file-sheet", path);
+  }
+});
+
 test("markdown's one panel is named by what pressing it does", () => {
   assert.deepEqual(
     markdownPanels("").map((panel) => [panel.id, panel.label, panel.content]),

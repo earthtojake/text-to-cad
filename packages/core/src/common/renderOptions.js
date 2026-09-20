@@ -444,8 +444,7 @@ export function boundsCorners(bounds) {
 }
 
 export function framePadding(job = {}) {
-  const rawPadding = job.output?.padding ?? job.output?.paddingPercent;
-  return clamp(toFiniteNumber(rawPadding, 0.04), 0, 0.15);
+  return clamp(toFiniteNumber(job.output?.padding, 0.04), 0, 0.15);
 }
 
 export function frameHalfHeightForView(view, bounds, width, height, padding, sceneScale, settingsByScale) {

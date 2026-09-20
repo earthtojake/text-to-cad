@@ -1,6 +1,6 @@
 import SelectionFilterMenu from "./SelectionFilterMenu.jsx";
 import { MEASURE_SELECTION_FILTERS, SELECTION_FILTERS } from "../../workbench/selectionFilter.js";
-import { CirclePlay, Hand, MousePointer2, PenTool, Ruler } from "lucide-react";
+import { CirclePlay, MousePointer2, PenTool, Rotate3d, Ruler } from "lucide-react";
 import { renderCapabilities, supportsTool } from "@hardcore/core/lib/renderCapabilities.js";
 import { TooltipProvider } from "@hardcore/ui/primitives/tooltip";
 import { DrawingToolbar } from "../../../../drawing/toolbar.jsx";
@@ -14,7 +14,8 @@ function InteractionToolBar({
   referenceSelectionUnavailable = false, referenceSelectionDeferred = false,
   drawToolActive, measureModeActive = false, measurementPanel = null,
   measureDisabled = false, measureSupported = null, measureSnapFilter = null, onMeasureSnapFilterChange,
-  panToolActive, animateAvailable = false, animateToolActive = false, handleSelectTabToolMode,
+  animateAvailable = false, animateToolActive = false,
+  poseAvailable = false, poseToolActive = false, poseLeads = false, handleSelectTabToolMode,
   viewerLoading, selectedMeshData, drawing,
 }) {
   const canMeasure = measureSupported ?? renderCapabilities(renderFormat).measure;
@@ -47,16 +48,20 @@ function InteractionToolBar({
     onClick={() => { if (!measureModeActive || measureSnapFilter === null) handleSelectTabToolMode("measure"); }}>
     <Ruler className="size-3" strokeWidth={2} aria-hidden="true" />
   </ToolbarButton>;
+  // Only in a file with joints to drag (never a disabled button). A robot is posed
+  // before it is inspected, so there Pose leads the tools; a STEP's Pose sits with
+  // Animate, the other tool that moves the model.
+  const poseTool = poseAvailable ? <ToolbarButton label="Pose" active={poseToolActive} onClick={() => handleSelectTabToolMode("pose")}
+    disabled={viewerLoading || !selectedMeshData} aria-pressed={poseToolActive}>
+    <Rotate3d className="size-3" strokeWidth={2} aria-hidden="true" />
+  </ToolbarButton> : null;
   return (<div className="absolute z-20 flex max-w-[calc(100%-28px)] flex-col items-end gap-1"
     data-cad-toolbar="tools" style={floatingCadToolbarPosition}>
     <TooltipProvider delayDuration={250}>
       <div role="group" aria-label="Interaction tools" className={`pointer-events-auto inline-flex min-h-8 max-w-full flex-wrap items-center gap-0.5 rounded-md p-1 ${FLOATING_TOOL_BAR_SURFACE_CLASS}`}>
+        {poseLeads && poseTool}
         {supportsTool(renderFormat, "select") && (selectionFilter !== null
           ? <SelectionFilterMenu value={selectionFilter} onChange={onSelectionFilterChange} trigger={selectTool} /> : selectTool)}
-        {supportsTool(renderFormat, "pan") && <ToolbarButton label="Pan" active={panToolActive} onClick={() => handleSelectTabToolMode("pan")}
-          disabled={viewerLoading || !selectedMeshData} aria-pressed={panToolActive}>
-          <Hand className="size-3" strokeWidth={2} aria-hidden="true" />
-        </ToolbarButton>}
         {canMeasure && (measureSnapFilter !== null
           ? <SelectionFilterMenu options={MEASURE_SELECTION_FILTERS} menuLabel="Snap to" hint="" value={measureSnapFilter}
             onChange={onMeasureSnapFilterChange} trigger={measureTool} /> : measureTool)}
@@ -64,6 +69,7 @@ function InteractionToolBar({
           disabled={viewerLoading || !selectedMeshData} aria-pressed={drawToolActive}>
           <PenTool className="size-3" strokeWidth={2} aria-hidden="true" />
         </ToolbarButton>}
+        {!poseLeads && poseTool}
         {/* Rightmost, and only in a file that has routines: no routines, no button (never a disabled one). Its controls are the playbar, the bottom action while it is active. */}
         {animateAvailable && <ToolbarButton label="Animate" active={animateToolActive} onClick={() => handleSelectTabToolMode("animate")}
           disabled={viewerLoading || !selectedMeshData} aria-pressed={animateToolActive}>

@@ -289,7 +289,7 @@ Common settings:
 - `materialOverrides`: sparse explicit PBR overrides; authored PBR otherwise
   wins over studio material fallbacks.
 - `scale`/`sceneScale`: CAD or robot scene scale.
-- `selection`: internal selection/filtering state. `focus`, `refs`, and `hide`
+- `selection`: internal selection/filtering state. `focus` and `hide`
   filter rendered parts before records are built. Viewer-only fields such as
   `selectedPartIds`, `hiddenPartIds`, and `showEdges` affect visual state.
 - `clip`: normalized clip-plane settings.

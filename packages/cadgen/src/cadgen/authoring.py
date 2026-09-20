@@ -34,9 +34,11 @@ Semantics:
   returns the shape (or drawing) — this is how an assembly uses its children.
   A model called from inside another model's build is a CHILD: it is built (or
   loaded from the store when current) and its tree is linked into the parent.
-- **One model per file.** Entry identity (refs, packages, closures) is keyed
-  by the source file everywhere in the pipeline, so a file defines exactly one
-  ``@step`` or ``@dxf`` model.
+- **A model is ``script::function``.** A file may hold several models; each is
+  its own record, output and job (``cadgen.store.index.model_ref``), and they
+  share the file's closure. ``__main__`` builds the ones it calls -- there is no
+  flag that selects a model. A file's sole model writes ``<file>.<fmt>``; models
+  sharing a file each write ``<function>.<fmt>``.
 
 Per-run flags ride ``sys.argv`` of the top-level call: ``--force``,
 ``--verbose``, ``--json``, ``--mesh-tolerance``,
@@ -411,9 +413,12 @@ class _Declaring:
             # hook below prints it as that script's one-line failure.
             exc.__cadgen_declaration__ = True  # type: ignore[attr-defined]
             return False
-        from cadgen._internal.cli_errors import report_cli_error
+        from cadgen._internal.cli_from_function import report_failure
 
-        report_cli_error(exc, tool=f"python {self.script.name}", verbose="--verbose" in sys.argv[1:])
+        report_failure(
+            exc, prog=f"python {self.script.name}",
+            as_json="--json" in sys.argv[1:], verbose="--verbose" in sys.argv[1:],
+        )
         raise SystemExit(1)
 
 
@@ -425,9 +430,9 @@ def _report_uncaught_declaration(exc_type, exc, tb) -> None:
     main = sys.modules.get("__main__")
     file = getattr(main, "__file__", None) if main is not None else None
     if getattr(exc, "__cadgen_declaration__", False) and file and "--verbose" not in sys.argv[1:]:
-        from cadgen._internal.cli_errors import report_cli_error
+        from cadgen._internal.cli_from_function import report_failure
 
-        report_cli_error(exc, tool=f"python {Path(file).name}", verbose=False)
+        report_failure(exc, prog=f"python {Path(file).name}", as_json="--json" in sys.argv[1:])
         return
     _PREVIOUS_EXCEPTHOOK(exc_type, exc, tb)
 
@@ -840,7 +845,16 @@ def _frames() -> list[BuildFrame]:
 
 def _build(defn: ModelDef) -> int:
     """Run the pipeline for a top-level call of a model and return its exit code."""
-    argv = sys.argv[1:]
+    # The user's flags are parsed HERE, in the process they started, before any
+    # handoff: `--help` and a usage error end the run now (exit 0 / exit 2) on the
+    # warm path exactly as on the cold one. Handed to the daemon unparsed, `--help`
+    # came back as a job that exited 0 having built nothing, and the wait for its
+    # source result raised. The parser is argparse over stdlib -- no CAD import.
+    from cadgen.cli._run_model import check_user_flags
+
+    argv = check_user_flags(
+        sys.argv[1:], prog=f"python {defn.script_path.name}", called=defn.name
+    )
     _maybe_hint_eager_imports(defn)
 
     # This process is the ROOT of a build tree: it owns the terminal and renders the

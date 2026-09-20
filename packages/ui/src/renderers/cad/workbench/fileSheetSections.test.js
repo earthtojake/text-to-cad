@@ -4,9 +4,9 @@ import { defaultOpenFileSheetSectionIds, renderedFileSheetSectionIds, normalizeF
 
 test("STEP shares Model, optional Motion, and View across both viewing modes", () => {
   for (const renderMode of [false, true]) {
-    assert.deepEqual(renderedFileSheetSectionIds("step", { renderMode }), ["tree", "view"]);
+    assert.deepEqual(renderedFileSheetSectionIds("step", { renderMode }), ["tree", "display"]);
     for (const options of [{ hasStepPosePanel: true }, { hasStepAnimationPanel: true }, { hasStepPosePanel: true, hasStepAnimationPanel: true }]) {
-      assert.deepEqual(renderedFileSheetSectionIds("step", { ...options, renderMode }), ["tree", "motion", "view"]);
+      assert.deepEqual(renderedFileSheetSectionIds("step", { ...options, renderMode }), ["tree", "kinematics", "display"]);
       assert.deepEqual(defaultOpenFileSheetSectionIds("step", { ...options, renderMode }), ["tree"]);
     }
   }
@@ -14,32 +14,35 @@ test("STEP shares Model, optional Motion, and View across both viewing modes", (
 
 test("format-specific tabs remain available in both viewing modes", () => {
   for (const renderMode of [false, true]) {
-    assert.deepEqual(renderedFileSheetSectionIds("dxf", { renderMode, hasDxfBendsPanel: true, hasDxfLayersPanel: true }), ["material", "bends", "dxfLayers", "view"]);
+    assert.deepEqual(renderedFileSheetSectionIds("dxf", { renderMode, hasDxfBendsPanel: true, hasDxfLayersPanel: true }), ["material", "bends", "dxfLayers", "display"]);
     // Components is the robot's link tree: always there, second after Motion, whatever the meshes name.
-    assert.deepEqual(renderedFileSheetSectionIds("urdf", { renderMode }), ["motion", "components", "view"]);
-    assert.deepEqual(renderedFileSheetSectionIds("srdf", { renderMode }), ["motion", "components", "view"]);
-    assert.deepEqual(renderedFileSheetSectionIds("sdf", { renderMode }), ["sdf", "motion", "components", "view"]);
-    assert.deepEqual(renderedFileSheetSectionIds("srdf", { renderMode, showJoints: false }), ["components", "view"]);
+    assert.deepEqual(renderedFileSheetSectionIds("urdf", { renderMode }), ["kinematics", "links", "display"]);
+    assert.deepEqual(renderedFileSheetSectionIds("srdf", { renderMode }), ["kinematics", "links", "display"]);
+    assert.deepEqual(renderedFileSheetSectionIds("sdf", { renderMode }), ["kinematics", "links", "sdf", "display"]);
+    assert.deepEqual(renderedFileSheetSectionIds("srdf", { renderMode, showJoints: false }), ["links", "display"]);
     // A mesh has only View: measurements are the Measure tool's panel, a GLB clip the Animate tool's bar.
-    assert.deepEqual(renderedFileSheetSectionIds("mesh", { renderMode }), ["view"]);
-    assert.deepEqual(renderedFileSheetSectionIds("mesh", { renderMode, hasEmbeddedGlbAnimationPanel: true }), ["view"]);
+    assert.deepEqual(renderedFileSheetSectionIds("mesh", { renderMode }), ["display"]);
+    assert.deepEqual(renderedFileSheetSectionIds("mesh", { renderMode, hasEmbeddedGlbAnimationPanel: true }), ["display"]);
   }
 });
 
 test("defaults retain useful format-specific selections", () => {
   assert.deepEqual(defaultOpenFileSheetSectionIds("dxf"), []);
   assert.deepEqual(defaultOpenFileSheetSectionIds("step", { hasFileStatus: true }), ["status", "tree"]);
-  assert.deepEqual(defaultOpenFileSheetSectionIds("sdf"), ["sdf", "motion"]);
-  assert.deepEqual(defaultOpenFileSheetSectionIds("srdf"), ["motion"]);
+  // Motion is the tab every robot lands on; an SDF's metadata tab follows it.
+  assert.deepEqual(defaultOpenFileSheetSectionIds("sdf"), ["kinematics"]);
+  assert.deepEqual(defaultOpenFileSheetSectionIds("srdf"), ["kinematics"]);
   // Motion stays the tab a robot lands on; Components is never the default.
-  assert.deepEqual(defaultOpenFileSheetSectionIds("urdf"), ["motion"]);
+  assert.deepEqual(defaultOpenFileSheetSectionIds("urdf"), ["kinematics"]);
   assert.deepEqual(defaultOpenFileSheetSectionIds("mesh", { hasEmbeddedGlbAnimationPanel: true }), []);
   assert.deepEqual(defaultOpenFileSheetSectionIds("mesh"), []);
 });
 
-test("legacy open selections migrate without losing the most recent tab", () => {
-  assert.deepEqual(normalizeFileSheetOpenSectionIds(["tree", "pose", "display", "animation"], ["tree", "motion", "view"]), ["motion"]);
-  assert.deepEqual(normalizeFileSheetOpenSectionIds(["joints", "render", "materials"], ["motion", "view"]), ["view"]);
+test("an open selection is the last id this format still has; a retired id is simply not open", () => {
+  assert.deepEqual(normalizeFileSheetOpenSectionIds(["tree", "kinematics", "display"], ["tree", "kinematics", "display"]), ["display"]);
+  // No table of old names: "view", "motion", "pose", "render" mean nothing now.
+  assert.deepEqual(normalizeFileSheetOpenSectionIds(["tree", "pose", "view", "motion"], ["tree", "kinematics", "display"]), ["tree"]);
+  assert.deepEqual(normalizeFileSheetOpenSectionIds(["joints", "render", "materials"], ["kinematics", "display"]), []);
   assert.deepEqual(normalizeFileSheetOpenSectionIds(null, ["tree"]), []);
 });
 
@@ -49,12 +52,12 @@ test("selection reveals keep the host's existing behavior", () => {
   assert.equal(shouldOpenFileSheetForSelectionReveal({ isDesktop: false, source: "tree" }), true);
 });
 
-test("a single active tab restores legacy split selections without rearranging sections", () => {
-  const tabs = ["tree", "motion", "view"];
-  assert.equal(resolveActiveFileSheetSectionId(["tree", "pose", "display", "animation"], tabs), "motion");
-  assert.equal(resolveActiveFileSheetSectionId(["tree", "render"], tabs), "view");
-  assert.equal(resolveActiveFileSheetSectionId(["retired", "motion"], ["tree", "view"]), "tree");
-  assert.equal(resolveActiveFileSheetSectionId([], ["material", "bends", "dxfLayers", "view"]), "material");
+test("one tab is active: the last selected one that exists, else the format's first", () => {
+  const tabs = ["tree", "kinematics", "display"];
+  assert.equal(resolveActiveFileSheetSectionId(["tree", "display", "kinematics"], tabs), "kinematics");
+  assert.equal(resolveActiveFileSheetSectionId(["tree", "render"], tabs), "tree");
+  assert.equal(resolveActiveFileSheetSectionId(["retired", "kinematics"], ["tree", "display"]), "tree");
+  assert.equal(resolveActiveFileSheetSectionId([], ["material", "bends", "dxfLayers", "display"]), "material");
   assert.equal(resolveActiveFileSheetSectionId(null, []), "");
-  assert.deepEqual(tabs, ["tree", "motion", "view"]);
+  assert.deepEqual(tabs, ["tree", "kinematics", "display"]);
 });

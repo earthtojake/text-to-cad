@@ -134,7 +134,7 @@ export default function PoseControlsSection({
       {definition ? (
         <>
           {poseNames.length ? (
-            <FileSheetStaticSection title="Position">
+            <FileSheetStaticSection title="Pose">
             <KinematicsPoseRow compact
               poses={poseNames.map((poseName) => ({ value: poseName, label: poseName }))}
               activeValue={activePose}
@@ -142,7 +142,7 @@ export default function PoseControlsSection({
             />
             </FileSheetStaticSection>
           ) : null}
-          {parameters.length ? <FileSheetStaticSection title="Parameters">
+          {parameters.length ? <FileSheetStaticSection title="Joints">
           {parameters.map((parameter) => {
             const driver = drivenDofs[parameter.id] || null;
             const currentValue = poseControlDisplayValue({

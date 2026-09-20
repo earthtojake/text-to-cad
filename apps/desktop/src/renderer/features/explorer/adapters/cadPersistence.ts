@@ -1,7 +1,7 @@
-import { CAD_LEGACY_PREFERENCE_KEYS, createCadPreferences } from "@hardcore/ui/renderers/cad";
+import { createCadPreferences } from "@hardcore/ui/renderers/cad";
 import type { CadPreferences, CadPreferenceSource } from "@hardcore/ui/renderers/cad";
 import type { FileViewerState, JsonValue } from "@hardcore/ui/file-viewer";
-import { readPoseTransition, writePoseTransition, readOrbit, writeOrbit, ORBIT_STORAGE_KEY } from "@hardcore/ui/renderers/cad/state";
+import { readOrbit, writeOrbit, ORBIT_STORAGE_KEY } from "@hardcore/ui/renderers/cad/state";
 
 const MIGRATION_KEY = "hardcore.cadMigration.v1";
 type JsonObject = { [key: string]: JsonValue };
@@ -15,7 +15,6 @@ function write(storage: Storage, key: string, value: JsonObject) { try { storage
 /** Global motion preferences apply to every desktop root. */
 export function migrateCadPreferences(storage: Storage): CadPreferences {
   return {
-    poseTransition: readPoseTransition(storage),
     orbit: readOrbit(storage),
   };
 }
@@ -29,7 +28,6 @@ export function desktopCadPreferences(): CadPreferenceSource {
     let baseline = snapshot();
     const source = createCadPreferences({ initial: baseline, onChange: (preferences) => {
       if (!syncing) {
-        if (preferences.poseTransition && JSON.stringify(preferences.poseTransition) !== JSON.stringify(baseline.poseTransition)) writePoseTransition(localStorage, preferences.poseTransition);
         if (preferences.orbit && JSON.stringify(preferences.orbit) !== JSON.stringify(baseline.orbit)) writeOrbit(localStorage, preferences.orbit);
       }
       baseline = preferences;
@@ -37,7 +35,7 @@ export function desktopCadPreferences(): CadPreferenceSource {
     // Browser storage events carry updates from another Hardcore window. This
     // host-owned store has the lifetime of the window, independent of its roots.
     window.addEventListener("storage", event => {
-      if (event.key !== null && event.key !== CAD_LEGACY_PREFERENCE_KEYS.poseTransition && event.key !== ORBIT_STORAGE_KEY) return;
+      if (event.key !== null && event.key !== ORBIT_STORAGE_KEY) return;
       syncing = true;
       try { source.update(snapshot()); } finally { syncing = false; }
     });

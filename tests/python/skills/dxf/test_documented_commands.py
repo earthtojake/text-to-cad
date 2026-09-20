@@ -287,14 +287,14 @@ class DocumentedCommandForms(_DrawingHarness):
     def test_there_is_no_dxf_build_door(self) -> None:
         """A drawing has no derived state a door must materialize — the viewer
         parses the file directly and snapshot meshes it on demand — so `dxf
-        build` is simply not a command, and the dispatcher says so with the
-        command list."""
+        build` is simply not a command, and the dispatcher says so by naming the
+        verbs `dxf` does have (the noun is right; only the verb is unknown)."""
         completed = subprocess.run(
             [sys.executable, "-m", "cadgen.cli", "dxf", "build", "gasket.py"],
             cwd=str(self.project), env=self.environment, capture_output=True, text=True, timeout=600,
         )
         self.assertEqual(2, completed.returncode)
-        self.assertIn("unknown command", completed.stderr)
+        self.assertIn("unknown dxf command 'build'", completed.stderr)
         self.assertIn("dxf snapshot", completed.stderr)
 
     def test_no_undocumented_or_missing_flags(self) -> None:

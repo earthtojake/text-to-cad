@@ -53,8 +53,8 @@ Both tree lists inset row backgrounds 4px from their horizontal edges, including
 selected, hovered and filtered rows; nesting adds indentation inside that gutter.
 The explorer and inspector share a 256px minimum panel width. Resizing below it
 closes the panel; reopening restores 320px. Inspector tabs never scroll sideways,
-and their zoom readout uses the muted 10px metadata size. Motion uses one compact
-play/scrub/restart row; position labels truncate to preserve sliders and inputs.
+and their zoom readout uses the muted 10px metadata size. Kinematics keeps its
+Pose and Joints rows compact; labels truncate to preserve sliders and inputs.
 
 React, ReactDOM, Three.js and Lucide are host-supplied peers. React 18 and 19
 are supported: web and desktop use React 19.3.0. Each
@@ -213,14 +213,15 @@ and versioned, bounded memory cache; it adds no persistent store. Read
 [feature detection](docs/feature-detection.md) before changing inference rules,
 cache identity, cancellation or recognition limits.
 
-Robot descriptions (URDF, SRDF, SDF) use Motion, Components and View. Components is
+Robot descriptions (URDF, SRDF, SDF) use Kinematics, Links and Display (SDF
+adds its own SDF tab). Links is
 the description's link tree, with the Model tree's rows, filter and Reference pane;
-see [robot components](docs/cad-renderer.md#robot-components).
+see [robot links](docs/cad-renderer.md#robot-links).
 
-The Features, Motion and View tabs use one fixed row in canonical order. Tabs cannot
+The Features, Kinematics and Display tabs use one fixed row in canonical order. Tabs cannot
 be dragged, reordered or split; only the active selection is saved per file.
 Visited Model trees stay mounted when hidden, preserving disclosure and scroll.
-The View tab uses a compact properties panel with 28px headers/controls, no extra
+The Display tab uses a compact properties panel with 28px headers/controls, no extra
 header-to-content padding, 4px row gaps and 8px section bottoms. Mode contains equal-width Mode and
 Projection dropdowns; Explode is a separate section. Surfaces stays expanded,
 and perspective uses the standard lens without a separate Camera section. Optional settings sections are

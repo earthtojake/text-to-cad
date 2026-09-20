@@ -627,10 +627,10 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
 
   // View owns display settings; returning to Model preserves its controls and tree.
   await expect(page.getByRole("tab", { name: "Display", exact: true })).toHaveCount(0);
-  const view = page.getByRole("tab", { name: "View", exact: true });
+  const view = page.getByRole("tab", { name: "Display", exact: true });
   const model = page.getByRole("tab", { name: "Model", exact: true });
   await view.click();
-  const viewPanel = page.getByRole("tabpanel", { name: "View", exact: true });
+  const viewPanel = page.getByRole("tabpanel", { name: "Display", exact: true });
   const mode = viewPanel.getByRole("combobox", { name: "Mode" });
   await mode.click();
   await page.getByRole("option", { name: "Wireframe", exact: true }).click();
@@ -702,7 +702,7 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   const panelDark = await paint();
   await expect(page.locator("html")).toHaveClass(/\bdark\b/);
   await expect.poll(sceneBackdrop).toBe("51,51,51");
-  await expect(page.getByRole("tab", { name: "View", exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Display", exact: true })).toBeVisible();
 
   await page.evaluate(() => window.hardcore.settings.set({ theme: "light" }));
   await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);

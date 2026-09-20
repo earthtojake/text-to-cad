@@ -157,13 +157,6 @@ test("viewer pick mode measures in assemblies, with or without loaded topology",
   );
 });
 
-test("viewer pick mode still yields to the pan tool while measuring", () => {
-  assert.equal(
-    viewerPickModeForRenderPane({ measureMode: true, panToolActive: true }),
-    VIEWER_PICK_MODE.NONE
-  );
-});
-
 test("viewer pick mode blocks measure picking while topology assets are pending", () => {
   assert.equal(
     viewerPickModeForRenderPane({ measureMode: true, topologyPickingActive: true, topologySelectionPending: true }),
@@ -184,5 +177,4 @@ test('explicit filters never use the automatic part fallback', () => {
   }
   assert.equal(viewerPickModeForRenderPane({selectionFilter:'parts',topologySelectionPending:true}),VIEWER_PICK_MODE.PARTS);
   assert.equal(viewerPickModeForRenderPane({selectionFilter:'edges',measureMode:true}),VIEWER_PICK_MODE.MEASURE);
-  assert.equal(viewerPickModeForRenderPane({selectionFilter:'parts',panToolActive:true}),VIEWER_PICK_MODE.NONE);
 });

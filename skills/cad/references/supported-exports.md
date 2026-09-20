@@ -162,9 +162,18 @@ Use these flags when the default mesh density is wrong for the part:
 On a document export command, these flags select the tolerances for that export;
 omitting them uses the defaults above. The command does not inherit the source
 model's mesh declarations. On a model-script run, the same flags temporarily
-override its declared tolerances. Use tighter values for curved-surface fidelity
-and looser values when a coarser mesh meets the requirements. Linear tolerance
-is relative, not an absolute deflection in millimetres.
+override its declared tolerances — every declaration's, including one that sets
+its own (flag > declaration > `@step` > default): the declared meshes are re-cut
+at the flag's values for that run, and the next run without the flags restores
+them. Use tighter values for curved-surface fidelity and looser values when a
+coarser mesh meets the requirements. `--json` results report the effective pair,
+the defaults included.
+
+Linear tolerance is relative, not an absolute deflection in millimetres, and is
+refused above `0.05` (a twentieth of the bounding diagonal — past that the mesh
+no longer follows the part). For an absolute chord deviation of X mm on a part
+whose bounding diagonal is D mm, pass X/D: 0.1 mm on a 200 mm part is `5e-4`.
+The same bound applies to `mesh_tolerance=` on a decorator.
 
 ## Workflow
 

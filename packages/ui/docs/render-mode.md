@@ -49,7 +49,7 @@ Camera pose remains viewport-owned, separate from preset settings.
 Selecting a preset replaces visual overrides, including projection/lens. **Reset**
 restores that selected preset and disables Clip/Explode. Selecting a preset
 preserves those tools. Neither action changes camera viewpoint/zoom, selection,
-visibility, active inspector tab or Motion state.
+visibility, active inspector tab or Kinematics state.
 Projection remains editable in every preset, including orthographic Render.
 
 ## Groups and enablement
@@ -81,7 +81,7 @@ actual canvas and PNG, not just the preview.
 amount and reopening starts at 50%; editing back to 0% does not auto-collapse.
 Clip follows the
 same gate rule: disabling discards its offsets and Flip; re-enabling restores
-the default X center cut. Preset selection preserves Clip/Explode; View Reset
+the default X center cut. Preset selection preserves Clip/Explode; Display Reset
 and the zoom menu's Reset model disable both tools. Grid and Axes are independent sections.
 The fixed panel order is Mode, Surfaces, Explode, Clip, Edges, Grid, Axes,
 Lighting, Background, Floor: tools first, then Solid's enabled display groups,
@@ -112,7 +112,7 @@ framing and snapshots, but is not a routine viewer control.
   values. The UI removes those values when disabling; a CLI payload may contain
   disabled values but they have no effect.
 - `clip` and `exploded` remain tool groups outside Custom and preset selection.
-  View Reset and Reset model disable them.
+  Display Reset and Reset model disable them.
 - Viewer appearance inherits its host; snapshots default to `light`.
   Explicit `appearance: "light" | "dark"` overrides that baseline.
 - Interactive lighting defaults to Preview; snapshots to Final. Core takes this
@@ -170,9 +170,11 @@ state republished unchanged after a runtime replacement does not.
 
 ## Inspector structure
 
-STEP uses **Features | Motion | View**, with Motion only when supported. Animation
-precedes Position; each is independently present only for its motion block and
-is permanently expanded without an enable switch. Transitions belong to Position. Tabs stay in canonical order,
-without drag/split behavior. Visited Model trees keep disclosure and scroll.
-The floating interaction toolbar owns Select/Pan/Measure/Draw; view actions and
-capture remain separate. Format-specific controls retain their own tabs.
+STEP uses **Features | Kinematics | Display**, with Kinematics only when the
+sidecar declares it. Pose precedes Joints; each is independently present only
+when its content exists and is permanently expanded without an enable switch.
+Tabs stay in canonical order, without drag/split behavior. Visited Model trees
+keep disclosure and scroll. The floating interaction toolbar owns
+Select/Measure (STEP only)/Draw, plus Pose and Animate where a file has joints
+or routines; view actions and capture remain separate. Format-specific
+controls retain their own tabs.

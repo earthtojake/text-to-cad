@@ -148,13 +148,8 @@ def options_from_argv(argv, entry=None):
 def job_from_argv(argv, entry=None):
     """One documented invocation, all the way to the render job it becomes."""
     return load_job_from_options(
-        options_from_argv(argv, entry), stdin=_TtyStringIO(), cwd=Path.cwd()
+        options_from_argv(argv, entry), cwd=Path.cwd()
     )
-
-
-class _TtyStringIO(io.StringIO):
-    def isatty(self) -> bool:
-        return True
 
 
 def _selector_artifact(*occurrence_ids: str) -> SimpleNamespace:
@@ -331,7 +326,7 @@ class SnapshotCliTests(unittest.TestCase):
                 self._display_job(json.dumps({"camera": {"focalLength": invalid}}))
 
     def test_display_json_rejects_bad_mode_value(self) -> None:
-        with self.assertRaisesRegex(SnapshotError, "--display mode must be one of"):
+        with self.assertRaisesRegex(SnapshotError, "display.mode must be one of"):
             self._display_job('{"mode":"shadedd"}')
 
     def test_step_only_display_settings_are_refused_for_other_inputs_by_name(self) -> None:
@@ -1169,7 +1164,7 @@ class SnapshotCliTests(unittest.TestCase):
     def test_render_job_rejects_selection_for_mesh_input(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = self._mesh_job_env(temporary_directory, "widget.glb", b"glTF")
-            with self.assertRaisesRegex(SnapshotError, "selection focus/hide/refs require STEP topology"):
+            with self.assertRaisesRegex(SnapshotError, "selection focus/hide require STEP topology"):
                 resolve_render_job_packet(
                     {
                         "input": "models/widget.glb",
@@ -1631,7 +1626,7 @@ class SnapshotCliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = self._mesh_job_env(temporary_directory, "arm.urdf", b"<robot name='arm'/>\n")
             base = {"input": "models/arm.urdf", "outputs": [{"path": "tmp/iso.png"}]}
-            with self.assertRaisesRegex(SnapshotError, "selection focus/hide/refs require STEP topology"):
+            with self.assertRaisesRegex(SnapshotError, "selection focus/hide require STEP topology"):
                 resolve_render_job_packet({**base, "selection": {"focus": ["#o1"]}}, cwd=root)
             # A robot IS parametric, just not by STEP sidecar — the error says which key to use.
             with self.assertRaisesRegex(SnapshotError, "pose a URDF robot with jointValues"):
@@ -1859,7 +1854,7 @@ class SnapshotCliTests(unittest.TestCase):
                     "o1.2",
                     "o1.3",
                 )
-                with self.assertRaisesRegex(SnapshotError, "selection.focus/refs and selection.hide cannot be used"):
+                with self.assertRaisesRegex(SnapshotError, "selection.focus and selection.hide cannot be used"):
                     resolve_render_job_packet(
                         {
                             "input": "models/assembly.step",
@@ -2071,7 +2066,7 @@ class RenderDisplayOptionResolutionTests(unittest.TestCase):
             input="models/part.step", output="tmp/iso.png",
             display=value, display_specified=True,
         )
-        return load_job_from_options(options, stdin=_TtyStringIO(), cwd=root)
+        return load_job_from_options(options, cwd=root)
 
     def test_display_file_path_is_loaded_with_photographic_settings(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2412,7 +2407,7 @@ class StepAnimationFrameTests(unittest.TestCase):
         options = options_from_argv(
             ["--job", str(job_file), "--animation", "spin", "--time", "1"]
         )
-        payload = load_job_from_options(options, stdin=_TtyStringIO(), cwd=self.root)
+        payload = load_job_from_options(options, cwd=self.root)
         self.assertEqual({"clip": "spin", "time": 1.0}, payload["animation"])
 
     def test_time_without_animation_is_refused(self) -> None:
@@ -2708,7 +2703,7 @@ class ExactOutputContractTests(unittest.TestCase):
         )
         code = emit(
             lambda: snapshot_main.run_snapshot(
-                options, kinds=STEP_KINDS, cwd=self.root, stdin=_TtyStringIO()
+                options, kinds=STEP_KINDS, cwd=self.root
             ),
             prog="cadgen step snapshot",
             as_json=False,

@@ -1,7 +1,7 @@
 # File-viewer settings design system
 
 This is the binding contract for settings in shared file-viewer tabs, including
-View and Motion. Use the primitives in
+Display and Kinematics. Use the primitives in
 [`FileSheet.js`](../src/renderers/cad/components/workbench/FileSheet.js), and the
 fixed strip in [`FileSheetTabbedSurface.js`](../src/renderers/cad/components/workbench/FileSheetTabbedSurface.js).
 Extend a shared primitive when a new control shape is needed. Do not recreate
@@ -15,12 +15,12 @@ put the display groups inside another “Display settings” accordion.
 
 | Kind | Primitive | Behavior | Examples |
 | --- | --- | --- | --- |
-| Always available | `FileSheetStaticSection` | Always open; no plus/minus, hover treatment, or enable switch | Mode, Surfaces, Animation, Position, Parameters |
+| Always available | `FileSheetStaticSection` | Always open; no plus/minus, hover treatment, or enable switch | Mode, Surfaces, Pose, Joints |
 | Optional feature | `FileSheetGatedSection` | Expanded means enabled; collapsed means disabled | Explode, Clip, Edges, Grid, Axes, Lighting, Background, Floor |
 
 A section is gated only when its entire feature has a meaningful disabled state.
 Surfaces stays open because the group configures the model's basic presentation;
-its style picker can still explicitly select Off. Animation and Position are
+its style picker can still explicitly select Off. Pose and Joints are
 controls over authored motion, not optional display effects: neither collapses.
 
 For an optional feature:
@@ -60,7 +60,7 @@ The shared inspector/file-explorer column has a 256px minimum width so the full
 tab strip and zoom value fit without scrolling. Dragging narrower collapses the
 panel; reopening starts at 320px. Both panels use the same resize frame and rule.
 If the containing file view itself becomes narrower than the minimum, collapse
-the column as well. Collapsing never resets file, motion, or display state.
+the column as well. Collapsing never resets file, kinematics, or display state.
 
 Section headers are at least 28px high with regular 12px text. Controls follow
 the header directly, without extra top padding; expanded headers have no hover
@@ -100,7 +100,7 @@ specific projection icons and complementary Solid/Render icons. Color opacity
 uses the checkerboard preview; 0% is transparent and 100% is opaque. Do not add a
 separate transparency toggle or duplicate opacity slider.
 
-## View
+## Display
 
 Keep this order in every preset; enabling a feature never moves it:
 
@@ -127,7 +127,7 @@ Solid's basic display groups precede the effects disabled by default in Solid.
 Presets are batches of settings; controls do not branch on the mode name. An
 edit makes the selected value read muted **Custom**, which is not a menu option.
 **Reset** restores the currently selected preset's display defaults and disables
-Clip and Explode. It leaves Motion and camera pose unchanged. See
+Clip and Explode. It leaves Kinematics and camera pose unchanged. See
 [render-mode.md](render-mode.md) for the grouped settings/CLI contract.
 
 The desired settings update immediately. Expensive changes can take longer to
@@ -148,84 +148,67 @@ Do not advertise keyboard shortcuts that the viewer does not implement.
 | Action | Scope |
 | --- | --- |
 | Reset camera | Original authored bounds and default camera pose; current projection remains |
-| Reset model | Stop/reset animation and position, cancel active pose transitions, disable Clip/Explode, reveal hidden/isolated geometry, restore original camera framing; keep the exact display settings, including Custom and projection |
-| View → Reset | Restore selected preset defaults and disable Clip/Explode; keep Motion and camera pose |
+| Reset model | Stop/reset animation and pose, disable Clip/Explode, reveal hidden/isolated geometry, restore original camera framing; keep the exact display settings, including Custom and projection |
+| Display → Reset | Restore selected preset defaults and disable Clip/Explode; keep Kinematics and camera pose |
 
-A model reset must stop clocks/transitions before writing authored pose values,
+A model reset must stop clocks before writing authored pose values,
 so a queued frame cannot undo it. Embedded GLB returns to its authored rest
 transforms, not the possibly displaced first frame of an animation clip. Robot
 joints and drawing fold/orientation controls follow the same spatial reset rule.
 
-## Motion
+## Kinematics
 
-The standard STEP strip is **Features | Motion | View**. Include Motion only
-when the file has motion content. Detect Animation and Position independently
-from their respective sidecar blocks (or embedded clips for GLB), not from the
-file extension or the existence of the other block. Loading/error status for a
-requested block can be shown; absence of a block does not create empty controls.
+The standard STEP strip is **Features | Kinematics | Display**. Include
+Kinematics only when the sidecar declares it. Detect Pose and Joints
+independently from their respective sidecar blocks (or the SRDF's group
+states), not from the file extension or the existence of the other block.
+Loading/error status for a requested block can be shown; absence of a block
+does not create empty controls. Animation has no section here: it is the
+Animate tool's own playbar, entirely outside this tab (see
+[Fullscreen presentation controls](#fullscreen-presentation-controls) for its
+transport, which the tool also shows at the bottom of the regular viewport).
 
-**Animation** comes first and is permanently open when clips exist. Show the
-clip dropdown only for multiple clips. Use one transport row: icon-only
-Play/Pause, a flexible time scrubber, then Restart on the right, with time/duration
-in the scrubber's tooltip and accessible value, not a seconds input. Keep Speed
-compact (64px) beside the content-sized Loop checkbox, both aligned left in a
-row above the transport. No enable switch. Pause holds
-the current frame; Restart returns to zero. Selecting/scrubbing a clip takes
-animation ownership of the pose. Editing Position returns ownership to
-kinematics and resets the animation (stopped, time zero, default routine/speed/loop).
-Any animation control edit resets parameter values to the authored defaults and
-clears the selected position. The controls remain editable. All entry points,
-including viewport/fullscreen transport and parameter paste, use the same motion
-commands (`useStepMotionControls.js`). Cancel in-flight pose transitions before
-changing ownership, and publish state refs before the clock so queued frames
-cannot revive the previous owner. Session restoration enforces the same rule.
+**Pose** is a permanent section containing only the named-pose dropdown,
+present only if named poses exist (a STEP sidecar's poses, an SRDF's group
+states). **Joints** is a separate permanent section below it, present only if
+joint values exist. Keep each DOF's label and unit: these are not
+self-explanatory icons. Numeric DOFs use compact slider/value rows with 4px
+gaps and a label column capped at 96px; longer labels truncate to preserve
+slider space. Do not include a Copy button. Every pose write lands in the same
+frame — a named pose, a slider drag, a typed number, a Pose-tool knob and
+Reset — and none of them ease; motion over time is the Animate tool's, never
+this tab's.
 
-While animation is playing in the regular viewer, also show the shared compact
-transport at the bottom center of the canvas. Reserve the bottom-right XYZ
-control's space: shrink and shift the bar left on narrow canvases, and move it
-above the XYZ control on very narrow canvases, wrapping the scrubber below the
-buttons if needed. This overlay uses the same
-callbacks and clock as Motion. Reveal it on playback and retain it while paused
-or scrubbing, so the controls do not disappear during a gesture. A different
-file/routine starts fresh; returning ownership to Position hides it.
-
-**Position** is a permanent section containing only the named-position dropdown,
-present only if named positions exist. **Parameters** is a separate permanent
-section below it, present only if parameters exist. Keep each DOF's label and
-unit: these are not self-explanatory icons. Numeric DOFs use compact slider/value
-rows with 4px gaps and a label column capped at 96px; longer labels truncate to
-preserve slider space. Do not include Transition controls or a Copy button.
-
-Place one **Reset** at the bottom of Motion. It stops playback, resets the clock,
-routine, speed and loop, cancels pending pose transitions and restores authored
-parameters. Neither animation nor a named position owns a modified pose after
-reset. View settings and camera remain unchanged. Animation's transport Restart
-only returns its clip to time zero; it is not this global motion reset.
+Place one **Reset** at the bottom of Kinematics. It restores authored joint
+values and, if a routine owns the pose, also stops playback and hands the pose
+back to Kinematics, so animation and a modified pose never disagree about
+which one is in control after a reset. Display settings and camera remain
+unchanged.
 
 ## Fullscreen presentation controls
 
-`FullscreenToolbar` places an animation-only transparent play bar at the bottom
-center, with Settings and X at the top-right. Use shared 24px buttons and 12px
-icons without a toolbar background, border or shadow. Reuse `AnimationTransport`
-from Motion: a plain Play/Pause button, live scrubber and Restart. Play/Pause
-never opens a picker. Without animation, omit the bottom bar entirely.
+`FullscreenToolbar` places the Animate tool's playbar (`ViewportAnimationBar`,
+the same transparent bar the regular viewport shows at bottom center while a
+routine plays) at the bottom center, with an Orbit-settings button and X at
+the top-right. Use shared 24px buttons and 12px icons without a toolbar
+background, border or shadow. Play/Pause never opens a picker. Without
+animation, omit the bottom bar entirely.
 
-Settings opens a floating, content-height panel aligned to the top-right.
-Clamp its width and height to the viewport and scroll its contents when needed.
-Use permanent `FileSheetStaticSection` sections: **Animation** (when clips exist)
-and **Orbit**. Animation reuses `AnimationClipControl` for the routine picker
-(only for multiple clips) and `AnimationPlaybackSettings` for speed and loop.
-Orbit uses a compact speed slider plus numeric input (0–5×, slider steps of
-0.05; 0 stops rotation). Persist this global preference through `CadPreferences`;
-animation choices stay in the per-file runtime. Settings never changes the inspector's tab
-or opens its panel, and closing it does not disable either feature.
+The corner button, unlike the neighboring Exit button, carries no tooltip; it
+opens a floating, content-height panel aligned to the top-right. Clamp its
+width and height to the viewport and scroll its contents when needed. It holds
+one permanent `FileSheetStaticSection`, **Orbit**: a compact speed slider,
+also untooltipped, plus numeric input (0–5×, slider steps of 0.05; 0 stops
+rotation). Persist this global preference through `CadPreferences`. Settings
+never changes the inspector's tab or opens its panel, and closing it does not
+disable animation.
 
 Both control areas fade together after two seconds without pointer/wheel/keyboard
 activity. An open settings panel, a scrub gesture or keyboard focus keeps them
-visible. Motion clock ticks do not reset the idle timer. Hidden controls are
+visible. The animation clock's ticks do not reset the idle timer. Hidden controls are
 inert and do not intercept viewport input. Escape closes a nested picker, then
-the settings panel, then fullscreen. Fullscreen and Motion use the same callbacks
-and renderer-scoped STEP/GLB clocks; do not duplicate animation state.
+the settings panel, then fullscreen. Fullscreen and the regular viewport's playbar use
+the same callbacks and renderer-scoped STEP/GLB clocks; do not duplicate animation state.
 
 ## State, input, and verification
 
@@ -235,7 +218,7 @@ boundary. Do not mirror props into effects that write them back to the owner.
 Native sliders and editable number fields must share one update path.
 
 New behavior must work with mouse and keyboard. Verify disabled/enabled
-semantics, preset stability, independently available motion blocks, empty and
+semantics, preset stability, independently available kinematics blocks, empty and
 error states, and narrow panels. Test state transitions rather than exact class
-strings. The View/Animation/Position components are the reference consumers;
+strings. The Display/Pose/Joints components are the reference consumers;
 legacy subsection primitives elsewhere are not the pattern for new settings.

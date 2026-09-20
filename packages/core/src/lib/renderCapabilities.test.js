@@ -100,18 +100,17 @@ test("a plain mesh is the minimal row", () => {
     const row = renderCapabilities(format);
     assert.equal(row.parts, false);
     assert.equal(row.topology, false);
-    assert.equal(row.measure, true);
+    assert.equal(row.measure, false);
     assert.equal(row.params, null);
     assert.equal(row.artifactManaged, false);
   }
 });
 
-test("measure does not imply topology", () => {
-  // Mesh Measure snaps to triangle vertices. It must not light up STEP
-  // face/edge references, the tree, or exploded view.
-  for (const format of [RENDER_FORMAT.STL, RENDER_FORMAT.THREE_MF, RENDER_FORMAT.GLB]) {
-    assert.equal(hasCapability(format, "measure"), true, `${format} should measure`);
-    assert.equal(hasCapability(format, "topology"), false, `${format} must not claim topology`);
+test("Measure is a STEP tool", () => {
+  // It snaps to B-rep faces, edges and vertices. A mesh offers only triangle corners,
+  // which measured little anyone wanted, so no other format has the tool.
+  for (const format of Object.values(RENDER_FORMAT)) {
+    assert.equal(hasCapability(format, "measure"), format === RENDER_FORMAT.STEP, format);
   }
   assert.equal(hasCapability(RENDER_FORMAT.STEP, "measure"), true);
   assert.equal(hasCapability(RENDER_FORMAT.URDF, "measure"), false);
@@ -127,17 +126,17 @@ test("artifact-managed formats are exactly STEP and DXF", () => {
 });
 
 test("every format gets the whole toolbar: the tools act on the viewport, not the geometry", () => {
-  // Select, pan and draw were off for plain meshes and for robots, so opening an STL lost
-  // three buttons that have nothing to do with what the file contains. Select is inert
+  // Select and draw were off for plain meshes and for robots, so opening an STL lost
+  // buttons that have nothing to do with what the file contains. Select is inert
   // without `topology` — it stays visible so the toolbar keeps one shape.
   for (const format of Object.values(RENDER_FORMAT)) {
-    for (const tool of ["select", "pan", "draw", "orbit", "screenshot"]) {
+    for (const tool of ["select", "draw", "orbit", "screenshot"]) {
       assert.equal(supportsTool(format, tool), true, `${format} is missing the ${tool} tool`);
     }
   }
   // An unrecognised format still gets the viewport tools: they cannot misbehave without
   // geometry-level capabilities behind them.
-  assert.equal(supportsTool("totally-unknown", "pan"), true);
+  assert.equal(supportsTool("totally-unknown", "draw"), true);
 });
 
 test("only DXF offers the plan view today", () => {

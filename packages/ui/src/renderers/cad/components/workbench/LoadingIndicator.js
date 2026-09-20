@@ -4,7 +4,9 @@ import { Progress } from "@hardcore/ui/primitives/progress";
 import { prolongedLoadingMessage } from "../../workbench/viewerLoading.js";
 
 // Shared by file opening and graphics initialization. Time is elapsed, never an ETA.
-export default function LoadingIndicator({ headline, progress, operationKey = "" }) {
+// There is no headline: that a model is opening is plain from the mark, and the step
+// line under it says what is actually happening.
+export default function LoadingIndicator({ progress, operationKey = "" }) {
   const [timing, setTiming] = useState(() => ({ key: operationKey, started: Date.now(), elapsed: 0 }));
   useEffect(() => {
     const started = Date.now();
@@ -18,7 +20,6 @@ export default function LoadingIndicator({ headline, progress, operationKey = ""
   return (
     <div className="flex w-[22rem] max-w-[90vw] flex-col gap-3" role="status" aria-live="polite" data-viewer-loading="true">
       <LoadingIcon size={80} active={!waiting} className="self-center" />
-      <div className="text-sm font-medium">{headline}</div>
       <div className="flex items-baseline justify-between gap-4 text-xs opacity-75">
         <span className="truncate">{waiting ? `Last step: ${progress?.label || "Reading model"}` : progress?.label || "Preparing view"}</span>
         <span className="shrink-0 tabular-nums">{progress?.counts || ""}</span>

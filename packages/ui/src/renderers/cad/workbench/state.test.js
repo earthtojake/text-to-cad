@@ -157,9 +157,26 @@ test("a tab record never holds Draw: the sketch it would restore no longer exist
   assert.equal(cloneTabSnapshot({ tabToolMode: TAB_TOOL_MODE.DRAW }).tabToolMode, TAB_TOOL_MODE.REFERENCES);
   // The modes that carry no discarded state still round-trip.
   assert.equal(createTabRecord("parts/a.step", { tabToolMode: "measure" }).tabToolMode, TAB_TOOL_MODE.MEASURE);
-  assert.equal(createTabRecord("parts/a.step", { tabToolMode: "pan" }).tabToolMode, TAB_TOOL_MODE.PAN);
+  // Pan was a tool once; the camera pans by right-drag, Shift-drag or two fingers, under every tool.
+  assert.equal(createTabRecord("parts/a.step", { tabToolMode: "pan" }).tabToolMode, TAB_TOOL_MODE.REFERENCES);
   assert.equal(createTabRecord("parts/a.step", { tabToolMode: "nonsense" }).tabToolMode, TAB_TOOL_MODE.REFERENCES);
   assert.equal(createTabRecord("parts/a.step", {}).tabToolMode, TAB_TOOL_MODE.REFERENCES);
+});
+
+test("a robot opens in Pose until its tab records another tool; nothing else restores into Pose", () => {
+  // The default is a rule of the file's kind, so a tab that was never saved has no opinion.
+  for (const file of ["robots/arm.urdf", "robots/arm.srdf", "worlds/arm.sdf"]) {
+    assert.equal(createTabRecord(file, {}).tabToolMode, TAB_TOOL_MODE.POSE);
+    assert.equal(createTabRecord(file, { tabToolMode: "pose" }).tabToolMode, TAB_TOOL_MODE.POSE);
+    // Last in Select (or in a session that ended there): it comes back in Select.
+    assert.equal(createTabRecord(file, { tabToolMode: "references" }).tabToolMode, TAB_TOOL_MODE.REFERENCES);
+    assert.equal(createTabRecord(file, { tabToolMode: "draw" }).tabToolMode, TAB_TOOL_MODE.REFERENCES);
+  }
+  // A STEP with kinematics offers Pose but always opens in Select.
+  assert.equal(createTabRecord("parts/a.step", { tabToolMode: "pose" }).tabToolMode, TAB_TOOL_MODE.REFERENCES);
+  assert.equal(createTabRecord("parts/a.glb", { tabToolMode: "pose" }).tabToolMode, TAB_TOOL_MODE.REFERENCES);
+  // The live snapshot carries the mode as it is; the rule is applied where a file's tab is made.
+  assert.equal(cloneTabSnapshot({ tabToolMode: TAB_TOOL_MODE.POSE }).tabToolMode, TAB_TOOL_MODE.POSE);
 });
 
 test("workspace manual panel widths can open below the model viewport reserve", () => {

@@ -59,8 +59,8 @@ regular camera on entry, fits the authored model at the default angle, and resto
 the saved regular camera on exit. Presentation camera events never persist into
 the file session. Picking listeners, drawing and measurement are suspended;
 ordinary camera dragging remains available. Orbit speed is a global
-`CadPreferences.orbit` preference persisted by each host adapter. Motion controls
-reuse the same per-file runtime as the inspector.
+`CadPreferences.orbit` preference persisted by each host adapter. The fullscreen
+playbar reuses the same per-file animation runtime as the inspector.
 
 A renderer can publish `FileNavigationAction[]` through
 `RendererViewProps.onNavigationActionsChange`. The shared navbar shows these
@@ -175,7 +175,7 @@ reapplies that preset before its explicit group overrides; clipping and exploded
 view remain independent tools. Custom is derived from the effective overrides,
 not a sixth mode. `setRenderMode(true/false)` selects Render/Solid through that
 same state. Grouped camera projection/lens changes preserve the viewport's pose
-and zoom. View Reset restores the selected preset and disables both tools.
+and zoom. Display Reset restores the selected preset and disables both tools.
 The Inspector zoom menu's Reset model instead clears spatial/motion changes
 and resets the camera while retaining the exact display settings.
 

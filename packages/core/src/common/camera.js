@@ -21,6 +21,8 @@ export function normalizeCameraProjection(value, fallback = CAMERA_PROJECTION.PE
 export const WORLD_UP = Object.freeze([0, 0, 1]);
 export const TOP_VIEW_UP = Object.freeze([0, 1, 0]);
 
+// One name per view. Mirrored as CAMERA_PRESETS in cadgen's snapshot_core.py,
+// which refuses an unknown name before a browser starts (the parity is tested).
 export const RENDER_CAMERA_PRESETS = Object.freeze({
   front: Object.freeze({ name: "front", direction: Object.freeze([0, -1, 0]), up: WORLD_UP }),
   back: Object.freeze({ name: "back", direction: Object.freeze([0, 1, 0]), up: WORLD_UP }),
@@ -28,10 +30,11 @@ export const RENDER_CAMERA_PRESETS = Object.freeze({
   left: Object.freeze({ name: "left", direction: Object.freeze([-1, 0, 0]), up: WORLD_UP }),
   top: Object.freeze({ name: "top", direction: Object.freeze([0, 0, 1]), up: TOP_VIEW_UP }),
   bottom: Object.freeze({ name: "bottom", direction: Object.freeze([0, 0, -1]), up: TOP_VIEW_UP }),
-  iso: Object.freeze({ name: "iso", direction: Object.freeze([1, -1, 0.8]), up: WORLD_UP }),
-  isometric: Object.freeze({ name: "iso", direction: Object.freeze([1, -1, 0.8]), up: WORLD_UP }),
-  side: Object.freeze({ name: "side", direction: Object.freeze([1, 0, 0]), up: WORLD_UP })
+  iso: Object.freeze({ name: "iso", direction: Object.freeze([1, -1, 0.8]), up: WORLD_UP })
 });
+
+// Names that used to be accepted for the same views, and the name that replaced each.
+export const RETIRED_CAMERA_PRESETS = Object.freeze({ isometric: "iso", side: "right" });
 
 export const RENDER_VIEW_PRESETS = RENDER_CAMERA_PRESETS;
 
@@ -179,8 +182,9 @@ function cameraPresetByName(name, {
   if (presets[raw]) {
     return clonePreset(presets[raw]);
   }
-  const parts = raw.split(":").map((entry) => Number(entry));
-  if (parts.length >= 2 && parts.every(Number.isFinite)) {
+  // An angle pair is exactly azimuth:elevation; a third number is not a distance.
+  const parts = raw.split(":").map((entry) => (entry.trim() === "" ? NaN : Number(entry)));
+  if (parts.length === 2 && parts.every(Number.isFinite)) {
     const azimuth = (parts[0] * Math.PI) / 180;
     const elevation = (parts[1] * Math.PI) / 180;
     const cosElevation = Math.cos(elevation);
@@ -195,7 +199,9 @@ function cameraPresetByName(name, {
     };
   }
   if (strict) {
-    throw new Error(`Unknown camera preset: ${name}`);
+    throw new Error(RETIRED_CAMERA_PRESETS[raw]
+      ? `camera preset '${name}' was removed; use '${RETIRED_CAMERA_PRESETS[raw]}'`
+      : `Unknown camera preset: ${name}`);
   }
   return clonePreset(presets[DEFAULT_CAMERA_PRESET]);
 }

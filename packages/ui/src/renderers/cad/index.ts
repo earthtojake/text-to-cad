@@ -52,7 +52,7 @@ export function createCadRenderer({ client, ...services }: CadRendererOptions) {
     id: 'cad',
     priority: 100,
     matches: (file) => file.mediaType === 'cad' || Boolean(isCadFile(file.path)),
-    panels: ({ ready }) => cadPanels(ready),
+    panels: ({ ready, file }) => cadPanels(ready, file),
     async prepare(context) {
       const connection = typeof client === 'function' ? await client(context) : client;
       context.signal.throwIfAborted();

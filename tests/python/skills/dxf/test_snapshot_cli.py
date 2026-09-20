@@ -50,7 +50,7 @@ class DxfSnapshotCliTests(unittest.TestCase):
                 )
 
             with mock.patch("subprocess.run", side_effect=fake_run):
-                resolved = snapshot.drawing_mesh_path(dxf, force=False)
+                resolved = snapshot.drawing_mesh_path(dxf)
             self.assertTrue(str(resolved).endswith(".glb"))
             self.assertTrue(resolved.is_file())
 
@@ -65,7 +65,7 @@ class DxfSnapshotCliTests(unittest.TestCase):
             py = Path(tmp) / "x.py"
             py.write_text("def drawing():\n    raise NotImplementedError\n")
             with self.assertRaisesRegex(snapshot.SnapshotError, "must be a .dxf document"):
-                snapshot.drawing_mesh_path(py, force=True)
+                snapshot.drawing_mesh_path(py)
 
     def test_a_mesh_failure_is_an_error_not_a_blank_image(self) -> None:
         # The one-shot's error (a drawing with nothing renderable at all —
@@ -79,18 +79,18 @@ class DxfSnapshotCliTests(unittest.TestCase):
             failed = mock.Mock(returncode=1, stdout='{"ok": false, "error": "no cut geometry"}', stderr="")
             with mock.patch("subprocess.run", return_value=failed):
                 with self.assertRaisesRegex(snapshot.SnapshotError, "no cut geometry"):
-                    snapshot.drawing_mesh_path(dxf, force=False)
+                    snapshot.drawing_mesh_path(dxf)
 
     def test_rejects_a_non_drawing_input(self) -> None:
         with self.assertRaises(snapshot.SnapshotError):
-            snapshot.drawing_mesh_path(Path("/models/part.step"), force=False)
+            snapshot.drawing_mesh_path(Path("/models/part.step"))
 
     def test_reports_a_missing_input(self) -> None:
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(snapshot.SnapshotError):
-                snapshot.drawing_mesh_path(Path(tmp) / "definitely-absent.dxf", force=False)
+                snapshot.drawing_mesh_path(Path(tmp) / "definitely-absent.dxf")
 
     def test_section_mode_is_rejected_for_a_drawing(self) -> None:
         # Drawings have no CAD topology, so section has nothing to work with.

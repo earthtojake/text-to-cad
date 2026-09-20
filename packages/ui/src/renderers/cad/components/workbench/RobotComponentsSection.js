@@ -1,8 +1,9 @@
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Box, Boxes, X } from "lucide-react";
+import { X } from "lucide-react";
 import { Button } from "@hardcore/ui/primitives/button";
 import { TreeRowSurface, TreeRowChevron, TreeRowLabel } from "@hardcore/ui/primitives/tree-row";
 import { TreeFilterHighlight, TreeFilterInput } from "@hardcore/ui/primitives/tree-filter";
+import { cn } from "@hardcore/ui/utils";
 import InspectorSplit from "./InspectorSplit.jsx";
 import RobotComponentDetails, { RobotLinkDetails } from "./RobotComponentDetails.js";
 import { buildModelTreeSearchIndex, searchModelTree } from "../../workbench/modelTreeSearch.js";
@@ -19,7 +20,6 @@ import { buildRobotTree, robotComponentNodeId, robotLinkFacts, robotLinkNodeId, 
 
 const EMPTY = Object.freeze([]);
 const NO_MATCHES = Object.freeze({ matches: EMPTY, total: 0 });
-const ICONS = { link: Boxes, component: Box };
 
 function initialExpansion(tree) {
   const expanded = new Set();
@@ -43,26 +43,31 @@ function rowHandlers(node, selection) {
   };
 }
 
-function RobotRow({ node, depth = 0, highlighted, expanded, toggle, selection, rowRefs }) {
-  const Icon = ICONS[node.kind] || Box;
-  const open = expanded.has(node.id), branch = node.children.length > 0;
+// Rows carry no icon: every row is a link (a named mesh object is the rare leaf, and
+// its place under a link already says what it is), so an icon told nobody anything.
+//
+// `pinned` is the robot's one root: there is nothing to collapse it into, so it has no
+// chevron and takes no indent level — its children start at the tree's left edge, and
+// their chevron column is what sets them under it. It is still a row: the root is a
+// real link, selectable, and often the one with the base geometry and mass.
+function RobotRow({ node, depth = 0, pinned = false, highlighted, expanded, toggle, selection, rowRefs }) {
+  const open = pinned || expanded.has(node.id), branch = node.children.length > 0;
   const { choose, enter, leave } = rowHandlers(node, selection);
   return <li className="min-w-0" ref={element => { if (element) rowRefs.current.set(node.id, element); else rowRefs.current.delete(node.id); }}>
     <TreeRowSurface active={highlighted.has(node.id)} className="gap-0 pr-0" style={{ paddingLeft: depth * 14 }}
       onMouseEnter={enter} onMouseLeave={leave}>
-      {branch ? <button type="button" aria-label={`${open ? "Collapse" : "Expand"} ${node.label}`} aria-expanded={open}
+      {pinned ? null : branch ? <button type="button" aria-label={`${open ? "Collapse" : "Expand"} ${node.label}`} aria-expanded={open}
         className="grid size-7 shrink-0 place-items-center rounded focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => toggle(node)}><TreeRowChevron expanded={open}/></button> : <span className="w-7 shrink-0"/>}
       <button type="button" aria-label={`Select ${node.label}`} aria-pressed={highlighted.has(node.id)}
         onClick={choose} onFocus={enter} onBlur={leave}
-        className="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-        <Icon className="size-3.5 shrink-0 text-muted-foreground"/>
+        className={cn("flex h-full min-w-0 flex-1 items-center gap-1.5 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", pinned && "pl-2")}>
         {/* Name first: in a narrow inspector the joint takes the truncation, never the link. */}
         <TreeRowLabel className="max-w-full shrink-0">{node.label}</TreeRowLabel>
         {node.detail && <TreeRowLabel className="flex-1 text-micro text-muted-foreground">{node.detail}</TreeRowLabel>}
       </button>
     </TreeRowSurface>
-    {branch && open && <ul>{node.children.map(child => <RobotRow key={child.id} {...{ node: child, depth: depth + 1, highlighted, expanded, toggle, selection, rowRefs }}/>)}</ul>}
+    {branch && open && <ul>{node.children.map(child => <RobotRow key={child.id} {...{ node: child, depth: pinned ? depth : depth + 1, highlighted, expanded, toggle, selection, rowRefs }}/>)}</ul>}
   </li>;
 }
 
@@ -70,14 +75,12 @@ function RobotRow({ node, depth = 0, highlighted, expanded, toggle, selection, r
 // or, when the query found the link by its joint, that joint.
 function RobotSearchRow({ match, highlighted, cursor, selection }) {
   const { entry, indices, alias } = match, { node } = entry;
-  const Icon = ICONS[node.kind] || Box;
   const { choose, enter, leave } = rowHandlers(node, selection);
   const owners = entry.prefix.slice(0, -1);
   return <li className="min-w-0" data-search-row={node.id}>
     <TreeRowSurface active={highlighted.has(node.id)} cursor={cursor} className="gap-0 pr-0" onMouseEnter={enter} onMouseLeave={leave}>
       <button type="button" aria-label={`Select ${node.label}`} aria-pressed={highlighted.has(node.id)} onClick={choose}
         className="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded pl-2 pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-        <Icon className="size-3.5 shrink-0 text-muted-foreground"/>
         <TreeRowLabel className="max-w-full shrink-0"><TreeFilterHighlight indices={indices} text={entry.label}/></TreeRowLabel>
         {alias
           ? <TreeRowLabel className="flex-1 text-micro text-muted-foreground"><TreeFilterHighlight indices={alias.indices} text={alias.text}/>{node.joint?.type ? ` · ${node.joint.type}` : ""}</TreeRowLabel>
@@ -161,22 +164,22 @@ export default function RobotComponentsSection({ description = null, components 
   const linkFacts = useMemo(() => (selection.selectedLinkName && tree.nodesById.has(robotLinkNodeId(selection.selectedLinkName))
     ? robotLinkFacts(description, selection.selectedLinkName, { groupNamesByLink }) : null),
   [selection.selectedLinkName, tree, description, groupNamesByLink]);
-  const details = linkFacts ? <RobotLinkDetails facts={linkFacts} meshPath={meshPath} onOpenFile={onOpenFile} onSelectLink={selection.selectLink}/>
+  const details = linkFacts ? <RobotLinkDetails facts={linkFacts} meshPath={meshPath} onOpenFile={onOpenFile} onSelectLink={selection.selectLink} hasLinkRow={name => tree.nodesById.has(robotLinkNodeId(name))}/>
     : selection.selectedComponentIds.length ? <RobotComponentDetails components={components} selectedIds={selection.selectedComponentIds}/> : null;
   const clearSelection = () => selection.select("");
 
-  return <div className="flex h-full min-h-0 flex-col text-xs" aria-label="Robot components">
-    <TreeFilterInput label="Filter components" placeholder="Filter components…" value={query} onChange={changeQuery} onKeyDown={onSearchKeyDown}/>
+  return <div className="flex h-full min-h-0 flex-col text-xs" aria-label="Robot links tab">
+    <TreeFilterInput label="Filter links" placeholder="Filter links…" value={query} onChange={changeQuery} onKeyDown={onSearchKeyDown}/>
     <InspectorSplit title="Reference" label="Reference details" details={details}
       actions={<Button type="button" variant="ghost" size="icon-xs" aria-label="Clear selection" title="Clear selection" onClick={clearSelection}><X className="size-3.5" aria-hidden="true"/></Button>}>
       <div ref={listRef} className="min-h-0 flex-1 overflow-auto px-1 py-1" aria-label="Robot tree area"
         onClick={event => { if (!event.target.closest("li,button,input")) clearSelection(); }}>
         {searching && <p role="status" className="px-2 py-1 text-micro text-muted-foreground">{found.total > found.matches.length ? `First ${found.matches.length} of ${found.total.toLocaleString()} matches` : `${found.total} ${found.total === 1 ? "match" : "matches"}`}</p>}
         {searching ? found.matches.length
-          ? <ul aria-label="Component search results">{found.matches.map(match => <RobotSearchRow key={match.entry.node.id} {...{ match, highlighted, cursor: match.entry.node.id === cursorId, selection }}/>)}</ul>
-          : deferredQuery.trim() && <p className="px-3 py-6 text-center text-xs text-muted-foreground">{`No link or component matches “${deferredQuery.trim()}”`}</p>
+          ? <ul aria-label="Link search results">{found.matches.map(match => <RobotSearchRow key={match.entry.node.id} {...{ match, highlighted, cursor: match.entry.node.id === cursorId, selection }}/>)}</ul>
+          : deferredQuery.trim() && <p className="px-3 py-6 text-center text-xs text-muted-foreground">{`No link matches “${deferredQuery.trim()}”`}</p>
         : tree.roots.length
-          ? <ul aria-label="Robot links">{tree.roots.map(node => <RobotRow key={node.id} {...{ node, highlighted, expanded, toggle, selection, rowRefs }}/>)}</ul>
+          ? <ul aria-label="Robot links">{tree.roots.map(node => <RobotRow key={node.id} pinned={tree.roots.length === 1 && node.children.length > 0} {...{ node, highlighted, expanded, toggle, selection, rowRefs }}/>)}</ul>
           : <p role="status" className="p-2 text-tiny text-muted-foreground">{description ? "This description has no links." : "Loading links…"}</p>}
       </div>
     </InspectorSplit>

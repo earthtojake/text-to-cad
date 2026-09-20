@@ -270,8 +270,8 @@ test('the shared CAD renderer resolves deferred files, reuses warm assets and re
     observer.observe(pane, { subtree: true, childList: true, attributes: true, attributeFilter: ['style'], attributeOldValue: true });
   });
   await ensureInspector(first);
-  // A mesh Inspector is View alone, shown without a redundant tab strip.
-  assert.equal(await first.getByRole('tab').count(), 0);
+  // A mesh Inspector is Display alone, drawn as the one selected tab every Inspector has.
+  assert.deepEqual(await first.getByRole('tab').evaluateAll(tabs => tabs.map(tab => [tab.textContent, tab.getAttribute('aria-selected')])), [['Display', 'true']]);
   const modeRegion = first.getByRole('region', { name: 'Mode', exact: true });
   assert.equal(await modeRegion.getByRole('slider').count(), 0);
   // The fixture is a mesh: no parts to explode, no solid to section and no CAD edges, so

@@ -101,8 +101,8 @@ test('live CAD commands observe and control the mounted tiny STEP viewport witho
   expect(renderedState.renderMode).toBe('render');
   expect(renderedState.display.mode).toBe('render');
   expect(renderedState.camera?.projection).toBe('perspective');
-  await page.getByRole('tab', { name: 'View', exact: true }).click();
-  const displayMode = page.getByRole('tabpanel', { name: 'View', exact: true }).getByRole('combobox', { name: 'Mode' });
+  await page.getByRole('tab', { name: 'Display', exact: true }).click();
+  const displayMode = page.getByRole('tabpanel', { name: 'Display', exact: true }).getByRole('combobox', { name: 'Mode' });
   await expect(displayMode).toContainText('Render');
   const solidState = await command('cad-render-mode', tabId, { mode: 'inspect' }) as CadLiveState;
   expect(solidState.display.mode).toBe('solid');

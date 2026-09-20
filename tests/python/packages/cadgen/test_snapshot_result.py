@@ -146,6 +146,18 @@ class ResultShape(unittest.TestCase):
         self.assertEqual(result.files, ())
         self.assertEqual(result.parts[0]["ref"], "#o1.1")
 
+    def test_debug_without_json_prints_one_line_per_input_after_the_saved_paths(self) -> None:
+        # `--debug` alone used to compute the diagnostics and print nothing.
+        result = SnapshotResult(
+            ok=True, files=(SnapshotFile(path=Path("/tmp/a.png"), kind="png"),), warnings=("low light",),
+            debug=({"input": "part.step", "stageTimings": {"renderMs": 12}},),
+        )
+        self.assertEqual(result.human_lines(), [
+            "saved snapshot: /tmp/a.png",
+            "warning: low light",
+            'debug: {"input":"part.step","stageTimings":{"renderMs":12}}',
+        ])
+
     def test_an_empty_inventory_still_prints_itself(self) -> None:
         # List mode with zero parts answers `[]`, not silence.
         listing = {"ok": True, "mode": "list", "parts": []}

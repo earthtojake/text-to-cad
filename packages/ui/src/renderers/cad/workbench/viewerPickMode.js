@@ -38,7 +38,6 @@ export function viewerHiddenPartIdsForRenderPane({
 // This helper stays format-agnostic.
 export function viewerPickModeForRenderPane({
   selectionFilter = "all",
-  panToolActive = false,
   topologySelectionPending = false,
   topologySelectionUnavailable = false,
   topologySelectionDeferred = false,
@@ -48,11 +47,6 @@ export function viewerPickModeForRenderPane({
   focusedPartIds = "",
   measureMode = false
 } = {}) {
-  // While panning, a drag is a camera move — picking on release would select
-  // whatever the drag happened to finish over.
-  if (panToolActive) {
-    return VIEWER_PICK_MODE.NONE;
-  }
   if (!measureMode && selectionFilter === "parts") return VIEWER_PICK_MODE.PARTS;
   if (topologySelectionPending || topologySelectionUnavailable || topologySelectionDeferred) {
     return VIEWER_PICK_MODE.NONE;

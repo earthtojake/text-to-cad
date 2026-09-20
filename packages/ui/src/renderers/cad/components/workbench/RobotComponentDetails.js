@@ -1,6 +1,6 @@
 import { CoordValue, InfoRow, MonoValue } from "./StepReferenceSection.js";
 
-// The Reference pane at the foot of the Components tab: what the selection IS.
+// The Reference pane at the foot of the Links tab: what the selection IS.
 //
 // A link reads back what the description says about it (its inertial properties, its
 // visual and collision geometry, its parent joint with limits and origin); a named
@@ -44,8 +44,8 @@ const isUnit = vector => vector.every(value => Math.abs(value - 1) < 1e-12);
 const vectorText = (vector, digits = 4) => vector.map(value => formatValue(value, digits)).join("  ");
 
 /** Another link of the same robot: pressing it selects that link in the tree and the viewport. */
-function LinkName({ name, onSelect }) {
-  if (!onSelect) return name;
+function LinkName({ name, onSelect, selectable = true }) {
+  if (!onSelect || !selectable) return name;
   return <button type="button" className={LINK_CLASS} onClick={() => onSelect(name)} title={`Select ${name}`}>{name}</button>;
 }
 
@@ -117,7 +117,7 @@ function LimitRows({ joint }) {
   </>;
 }
 
-export function RobotLinkDetails({ facts, meshPath, onOpenFile, onSelectLink }) {
+export function RobotLinkDetails({ facts, meshPath, onOpenFile, onSelectLink, hasLinkRow = () => true }) {
   const joint = facts.parentJoint;
   return <div className="flex min-w-0 flex-col text-tiny font-normal" aria-label="Link details">
     <InfoRow label="Name">{facts.name}</InfoRow>
@@ -136,7 +136,7 @@ export function RobotLinkDetails({ facts, meshPath, onOpenFile, onSelectLink }) 
     {joint && <Section label="Parent joint">
       <InfoRow label="Joint">{joint.name}</InfoRow>
       <InfoRow label="Joint type">{joint.type}</InfoRow>
-      <InfoRow label="Parent"><LinkName name={joint.parentLink} onSelect={onSelectLink}/></InfoRow>
+      <InfoRow label="Parent">{/* A frame-only root has no row to go to; it is still named. */}<LinkName name={joint.parentLink} onSelect={onSelectLink} selectable={hasLinkRow(joint.parentLink)}/></InfoRow>
       {joint.axis && <InfoRow label="Axis"><CoordValue vector={joint.axis} digits={4}/></InfoRow>}
       <LimitRows joint={joint}/>
       {joint.mimic && <InfoRow label="Mimic"><MonoValue>{`${joint.mimic.joint} × ${formatValue(joint.mimic.multiplier)} + ${formatValue(joint.mimic.offset)}`}</MonoValue></InfoRow>}

@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+from cadgen._internal.doors import STEP_SUFFIXES
 from cadgen.store import store_root
 from cadgen.store.gate import stale
 from cadgen.store.index import iter_entries
@@ -82,7 +83,7 @@ def _resolve_models(target: str) -> list[str]:
         script, function = split_model_ref(target)
         return [model_ref(script, function)]
     path = Path(target).expanduser()
-    if path.suffix.lower() in {".step", ".stp"}:
+    if path.suffix.lower() in STEP_SUFFIXES:
         return [source_for_document(path)]
     resolved = path.resolve()
     if resolved.suffix.lower() == ".py":

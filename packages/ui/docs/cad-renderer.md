@@ -73,7 +73,7 @@ assets, which remain inside `@hardcore/core`.
 `CadPreferenceSource` exposes `getSnapshot`, `subscribe` and `update`.
 `createCadPreferences` provides an in-memory implementation and an optional
 host persistence callback. A host can share one source across its CAD panes.
-It contains the shared pose transition preference. Inspector tabs use one
+It contains the global fullscreen orbit preference. Inspector tabs use one
 fixed row in each format's canonical order; active selection belongs to the
 file, not global preferences. Shared code never reads browser storage on
 import or construction.
@@ -96,21 +96,22 @@ Hosts preserve these existing preference keys and precedence when migrating:
 | Data | Existing storage key / rule |
 | --- | --- |
 | Directory layout | `cad-viewer:directory-session:v1` (legacy theme fields ignored) |
-| Pose transition preference | `cad-viewer:pose-transition:v1` |
 | Global fullscreen orbit speed | `cad-viewer:orbit:v1` |
 | Per-file CAD session | `cad-viewer:file-session:v1:<namespace>:<file>` |
 
 `@hardcore/ui/renderers/cad/state` exports the existing tab/file
 normalizers and width defaults for migration. `readFileSessionState` requires
 an explicit `{ storage }` supplied by the host. `CAD_LEGACY_PREFERENCE_KEYS`
-exports the directory and pose-transition key names. Retired
-`cad-viewer:file-sheet-tab-layout:v5`, `:v6` and `:v7` records are left untouched
-and ignored: hosts no longer read, write or subscribe to tab arrangements.
-Legacy per-file lists from a split view select their last available tab;
-Kinematics/Animation IDs map to Motion, and Display/Studio IDs map to View.
-New interactions save only one active ID. Visited Model trees remain mounted
-while hidden so disclosure and scroll survive tab changes. Origins are transport
-locations, not persistence namespaces for new state.
+exports the directory key name. Retired
+`cad-viewer:file-sheet-tab-layout:v5`, `:v6` and `:v7` records, and a stored
+`cad-viewer:pose-transition:v1` preference, are left untouched and ignored:
+hosts no longer read, write or subscribe to them.
+Legacy per-file lists from a split view select their last available tab; a
+stored section ID the current format does not have is simply not open, and the
+sheet lands on the format's first tab — there is no table of retired IDs to
+keep alive. New interactions save only one active ID. Visited Model trees
+remain mounted while hidden so disclosure and scroll survive tab changes.
+Origins are transport locations, not persistence namespaces for new state.
 
 ## Prompt references, captures and extensions
 
@@ -356,20 +357,96 @@ gutter, an 80px label column and 11px text, with thin separators between totals,
 reference facts and material. There are no copy or dimension-preview buttons;
 reference delivery stays in the tree/viewport context actions and measurement
 previews in the Measure tool. There is no separate Surfaces tab or source
-feature view. View contains per-file display controls and photographic settings.
+feature view. Display contains per-file display controls and photographic settings.
 
-The top-right **Interaction tools** toolbar holds Select, Pan, Measure and Draw,
-and Animate, rightmost, in a file that has animation routines (it is absent
-otherwise, never disabled). Press Select to activate selection; press it again
+The top-right **Interaction tools** toolbar holds Select, Measure (STEP only:
+it snaps to B-rep topology, so no other format offers it) and Draw (there is
+no Pan tool: the camera pans under every tool by right-drag, Shift-drag or two
+fingers), Pose in a file with joints to drag, and Animate, rightmost, in a file
+that has animation routines (each is absent otherwise, never disabled). A
+robot's Pose leads the toolbar, ahead of Select; a STEP's sits immediately
+left of Animate. Press Select to activate selection; press it again
 while active to open its selection-filter dropdown. The buttons wrap inside
-their pill when the scene is narrow. The View tab owns display settings and
-Motion owns Position. The active tool owns the bottom action: Select the prompt
-references, Draw the drawing capture, Animate the playbar.
+their pill when the scene is narrow. The Display tab owns display settings and
+Kinematics owns Pose. The active tool owns the bottom action: Select the prompt
+references, Draw the drawing capture, Animate the playbar. Pose has none.
 
 A selection exists only while Select is the tool. Leaving Select for any other
 tool drops the selection, in the viewport and the Model tree alike; choosing a
 row in the Model tree (or a host `selectReference`) under another tool returns
 to Select first. No other tool ever sees a selection, so none needs a rule for one.
+
+### Pose
+
+Pose drags a model's joints by handles in the viewport. It exists where
+something can be driven: a robot (URDF, SRDF, SDF) with a revolute, continuous
+or prismatic joint that is not a mimic follower, and a STEP whose sidecar
+kinematics declare a revolute, slider or cylindrical mate. It is the tool a
+robot OPENS in; that default is a rule of the file's kind, not a saved
+preference (`createTabRecord` in `workbench/state.js`): a robot tab with no
+recorded tool opens in Pose, one last left in Select comes back in Select, and
+nothing else ever restores into Pose, so a STEP always opens in Select. It is
+absent in fullscreen. While it is active the model picks nothing, hovers
+nothing and casts no model ray (`pickMode` NONE, as in Animate); the camera
+orbits, pans and zooms exactly as under every other tool, and the knobs are the
+only interactive things. Leaving keeps the pose.
+
+One handle system serves both formats. `workbench/jointHandles.js` holds two
+adapters that turn a description and its CURRENT pose into one plain list, in
+model space: `{ id, label, kind, pivot, axis, toward, value, min, max, unit,
+onChange }`. A robot's joint frame is the solved child link frame (less an SDF
+joint's static child offset); a STEP mate's world-at-rest axis is carried by the
+accumulated delta of its child, the composition `kinematicsDeltas` uses, so a
+handle rides a mate chain of any depth. A fixed joint, a fastened mate and a
+mimic follower have no handle. A STEP DOF that a coupling drives KEEPS its
+handle and writes through the coupling (`poseControlWrite`), as its slider does:
+a coupling has no axis to hang a handle on, and a gear train whose every member
+is geared would otherwise have none. The list is rebuilt from the pose on screen,
+so sliders, presets, Reset and a handle further up the chain all carry the
+knobs along.
+
+`onChange` is the Kinematics tab's own change handler
+(`handleUrdfJointValueChange`, `handleStepModuleParameterChange`), so limits,
+mimic followers, couplings, the SRDF group state, persistence and the sliders
+are decided in one place and stay in step; the drag itself never clamps. A
+continuous joint's drag winds freely and is stored as one turn, (-180, 180],
+which is what its slider spans.
+
+A handle is a thin arm from the joint's pivot to a small round knob, with the
+joint's travel drawn faintly through the knob: the limit arc (the full circle
+for a continuous joint or a range of a turn or more) or a slider's limit track.
+A turning joint's arm lies in its rotation plane toward the child's geometry,
+so the knob sits on the moving part and turns with it; a child centred on its
+own axis (a wheel, a roll joint, a turntable) takes a perpendicular fixed in the
+child's frame instead, and concentric STEP members fan their arms round the
+shared axis, decided at rest. A slider's arm runs along its axis from where the
+child now is. Above twelve handles a model rests as knobs alone and the arm and
+travel appear with the pointer. Hovering or holding a knob shows its name and
+value (`shoulder  42.0°`, `lift  0.120 m`).
+
+The handles are drawn on a 2D canvas over the viewport (`JointHandleOverlay.jsx`,
+`jointHandleCanvas.js`), like the measurement rulers, not as scene objects: the
+arm is 44 CSS pixels at every zoom and under either projection, always on top,
+and nothing of it reaches captures, render mode, bounds, shadows or picking.
+`useJointHandles.js` keeps no React state: the list lands in a ref, a frame loop
+repaints only when the camera, the list or the pointer changed, and the label
+is written into its element. A press within 12 px of a knob (22 px for touch)
+is taken in the capture phase above the WebGL canvas, captures the pointer and
+disables OrbitControls until release, cancel or leaving the tool; every other
+press, a modified one (Shift/Ctrl/Cmd is the camera's pan) included, is left
+untouched. Writes are throttled to one per animation frame.
+
+The drag mathematics is pure (`jointHandleMath.js`: plain vectors, a pointer ray
+and a `project` function in, a value out). A turning joint intersects the ray
+with the plane through the pivot normal to the axis and accumulates the signed
+angle sample to sample; a slider takes the point of its axis closest to the ray.
+A drag picks its mapping once, at the grab (the camera cannot move while a knob
+is held). When the rotation plane is within about 12° of edge-on the drag
+becomes screen distance along the near side of the ring, one arm length to the
+radian; when a slider's axis is within about 15° of the view direction it
+becomes pixels at the pivot's depth, right or up being positive.
+`window.__cadJointHandles()` is a read-only test seam: each knob's and pivot's
+position in CSS pixels and its joint's value.
 
 ### Animate
 
@@ -384,8 +461,8 @@ whose check sits on the right and which toggles without closing the menu.
 There is no Restart; the scrubber's start is the restart.
 
 A routine owns the model's pose only inside the mode. Outside it the clip is
-released — stopped, rewound, the pose handed back to Position — so selection,
-topology and Position never meet an animated model. Nothing of the playback
+released — stopped, rewound, the pose handed back to Kinematics — so selection,
+topology and Kinematics never meet an animated model. Nothing of the playback
 survives leaving: returning starts from the start, and a restored session that
 was mid-routine is released the same way. A routine that failed to load has no
 Animate tool to say so on; it is reported beside the filename with the file's
@@ -453,8 +530,10 @@ the viewport capture with the editor's committed ink composited over it
 viewport-aligned (the ink canvas keeps its own pixel ratio and is scaled into
 the frame; selection handles are not included), plus the selected references.
 
-The file navbar holds a direct snapshot action, Inspector (`PanelLeft`) and file
-tree (`Folders`). Snapshot uses the host prompt-context port: desktop attaches
+The file navbar holds a direct snapshot action, Inspector (`SlidersHorizontal`) and file
+tree (`Folders`). The Inspector opens by default, except over a file whose
+Inspector is only Display (STL, 3MF, GLB): there the model gets the room until a
+person opens it (`cadPanels(ready, file)`). Snapshot uses the host prompt-context port: desktop attaches
 the viewport image and references to the owning session's draft; web copies
 through its clipboard adapter. DXF also contributes its 2D/3D projection action.
 The shared FileViewer renders these registered actions without importing CAD.
@@ -470,7 +549,7 @@ active, shared `FullscreenToolbar` places a transparent animation play bar at
 bottom center and Settings/X at top-right. Both areas fade after two seconds
 without pointer, wheel or keyboard activity, except during scrubbing, keyboard
 focus, or while settings is open. Movement reveals them again. There are no
-fullscreen Position controls, and no bottom bar when the file has no animation.
+fullscreen Kinematics controls, and no bottom bar when the file has no animation.
 
 Fullscreen is the Animate tool with the rest of the viewer put away: a file with
 routines shows the same playbar, mounted from the same component over the same
@@ -523,45 +602,60 @@ GIF/video export are isolated on `amy/step-reconstruction-playback`. They are
 not shipped in the shared app. Pure numerical recipe helpers remain as
 recognition regression checks, without a runtime interpreter or export path.
 
-STEP models place **Features | Motion | View** in one fixed top tab strip.
-Motion appears when position controls exist; animation is the Animate tool, not
-an Inspector section, so a file with routines and no joints has no Motion tab.
-A mesh (STL, 3MF, GLB) has only View: its measurements are the Measure tool's
-panel under the toolbar, as for STEP, and an embedded GLB clip is the Animate
-tool's. An Inspector with a single section shows that section's title in place
-of a tab strip.
+STEP models place **Features | Kinematics | Display** in one fixed top tab strip.
+Kinematics appears only when the sidecar declares it; animation is the Animate
+tool, not an Inspector section, so a file with routines and no kinematics has
+no Kinematics tab. A mesh (STL, 3MF, GLB) has only Display: its measurements
+are the Measure tool's panel under the toolbar, as for STEP, and an embedded
+GLB clip is the Animate tool's. An Inspector with a single section draws it as
+a single selected tab, so every Inspector reads the same way.
 Each section requires its own sidecar block and stays expanded, without a gate.
-Preset transitions stay in Position with the DOF values, above Reset/Copy.
+Every pose write is a jump: a slider drag, a typed number, a Pose knob, a named
+pose (a STEP sidecar's pose, an SRDF group state) and Reset all put the model
+where it IS from that frame on, for robots and STEP alike. There is no eased
+pose transition and no preference for one; motion over time is the Animate
+tool's. Each format has one write path (`writeUrdfJointValues` in
+`CadFileView.js`; `writeParameters` in `useStepMotionControls.js`).
 Switching display mode leaves every tab and the active selection intact.
 Tab order follows the format's section descriptors and cannot be customized.
-The retired split/reorder preference is ignored in both hosts. Saved per-file
-`pose`, `animation` and `joints` selections map to `motion`, and `display`/`render`
-map to `view`; a legacy list selects its last available tab. New selections and
-viewport-driven reveals store one active section ID.
+The retired split/reorder preference is ignored in both hosts. A stored section
+ID the current format does not have is simply not open, and the sheet lands on
+the format's first tab — there is no table of retired IDs to keep alive. A
+legacy list selects its last available tab. New selections and viewport-driven
+reveals store one active section ID.
 
-Robot Motion uses the same preset, value and inline transition controls.
+Robot Kinematics uses the same preset and value controls.
 
-### Robot components
+### Robot links
 
-URDF, SRDF and SDF place **Motion | Components | View** in the tab strip (an SDF
-leads with its SDF tab; an SRDF without joint controls has no Motion). Components
-is always present: it is the description's kinematic tree, not an inventory of
-mesh names. `workbench/robotTree.js` builds it as plain data. Links are the
-rows; a child link sits under its parent link and shows the joint between them
-as muted text (`shoulder_pan · revolute`); the named objects inside a link's
-meshes (`robotComponents`) are leaves under that link, after its child links.
-Built-in primitives and unnamed mesh objects contribute no leaves. Every link
-appears once: a cycle, a second parent or a missing parent cannot hang the
-builder or drop a link, and orphans become roots. An SRDF shows its paired
-URDF's tree.
+URDF, SRDF and SDF place **Kinematics | Links | Display** in the tab strip.
+Kinematics is always the leftmost tab and the one the sheet lands on (an SDF's
+metadata tab follows Links; an SRDF without joint controls has no Kinematics).
+Links is always present: it is the description's kinematic tree, not an
+inventory of mesh names. `workbench/robotTree.js` builds it as plain data.
+Links are the rows, carrying no icon; a child link sits under its parent link
+and shows the joint between them as muted text (`shoulder_pan · revolute`); the
+named objects inside a link's meshes (`robotComponents`) are leaves under that
+link, after its child links. Built-in primitives and unnamed mesh objects
+contribute no leaves. Every link appears once: a cycle, a second parent or a
+missing parent cannot hang the builder or drop a link, and orphans become
+roots. A root that is only a frame — no geometry, no mass, and one child
+attached by a fixed joint (`base_footprint`) — gets no row of its own; its
+child leads the tree instead, unless the description has no content anywhere,
+in which case every link is kept. An SRDF shows its paired URDF's tree.
 
 The tab reuses the Features tree's pieces rather than cloning them: the 28px
-row primitive, `Filter components…` (`primitives/tree-filter`), the ranked flat
-search of `modelTreeSearch.js`, and `InspectorSplit` for the Reference pane. The
-search index also reads a row's `searchAliases`, so a link is found by its joint
-name and the hit shows that joint in place of its owners. The root opens, along
-with a chain of single child links below it; everything else starts collapsed.
-Selecting a hit opens its owners at once and scrolls to it when the search ends.
+row primitive, `Filter links…` (`primitives/tree-filter`), the ranked flat
+search of `modelTreeSearch.js`, and `InspectorSplit` for the Reference pane
+(it opens at a third of the tab, never below a readable minimum on a short
+screen, and never so tall that the tree loses its own — the same split the
+Features tree uses). The search index also reads a row's `searchAliases`, so a
+link is found by its joint name and the hit shows that joint in place of its
+owners. The root opens, along with a chain of single child links below it;
+everything else starts collapsed. When the tree has exactly one root with
+children, that root is pinned: no chevron and no indent, so its children start
+at the tree's own left edge. Selecting a hit opens its owners at once and
+scrolls to it when the search ends.
 
 Selection reuses mesh-part picking. Every robot mesh part names its link, so a
 link is hovered and selected in the viewport as all of its parts, and a viewport
@@ -597,11 +691,10 @@ There is no copy action: robot formats have no reference grammar to deliver.
 
 ### Inspector tabs and dark surfaces
 
-The inspector uses the shared shadcn Tabs primitives for Model, Motion and
-View, with standard small UI typography and native keyboard navigation.
+The inspector uses the shared shadcn Tabs primitives for Model, Kinematics and
+Display, with standard small UI typography and native keyboard navigation.
 The single top row scrolls horizontally when needed; it has no drag handles,
-drop zones, split panes or divider. A single section shows its content directly
-without a redundant tab strip. Visited Model trees remain mounted while hidden,
+drop zones, split panes or divider. A single section is a single tab. Visited Model trees remain mounted while hidden,
 so disclosure and scroll survive tab changes.
 
 The shared dark UI uses neutral charcoal tokens. Inspect's fixed dark workbench
@@ -617,11 +710,11 @@ hash must match the saved artifact before those annotations apply. Active build
 previews carry immutable geometry revisions and never initiate a source build.
 A complete previous revision stays visible until its replacement is ready.
 
-View's Mode dropdown selects Solid, Render, X-ray, Hidden line or Wireframe
+Display's Mode dropdown selects Solid, Render, X-ray, Hidden line or Wireframe
 presets over the same grouped settings. Render defaults to perspective; the
 others to orthographic. Changing values shows Custom. Reset restores the base
 preset and disables Clip/Explode, preserving camera viewpoint/zoom, selection
-and Motion.
+and Kinematics.
 The groups and gate behavior are specified in [View presets](render-mode.md).
 Photographic lighting and stage code stay lazy; the lightweight grouped settings
 panel is always available. Authored materials remain read-only in the Model

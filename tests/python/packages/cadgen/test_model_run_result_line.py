@@ -3,7 +3,8 @@
 Two contracts that only show up when a script is run as a script:
 
 *The result line names a document.* `outcome document` is the whole stdout of a
-model run, and `--json` carries the same path in `document`. A mesh-only model
+model run (the path shown relative to the cwd), and `--json` carries the same
+document in `document` as an ABSOLUTE path -- the convention of every door's JSON. A mesh-only model
 declares no STEP, so it names the mesh it wrote -- a path the caller can open.
 The tree hash is not a document: it names nothing on disk.
 
@@ -119,18 +120,18 @@ class ModelRunResultLineTest(_ModelRunCase):
         # hash it must not be confused with.
         payload = json.loads(self._run("spacer.py", "--json").stdout.strip())
         self.assertEqual(payload["outcome"], "current")
-        self.assertEqual(payload["document"], "spacer.stl")
+        self.assertEqual(payload["document"], str(self.project / "spacer.stl"))
         self.assertNotEqual(payload["document"], payload["tree"])
 
         # Several mesh formats: the FIRST declared one, at the path it declared.
         payload = json.loads(self._run("multi.py", "--json").stdout.strip())
-        self.assertEqual(payload["document"], "STL/multi.stl")
+        self.assertEqual(payload["document"], str(self.project / "STL" / "multi.stl"))
         self.assertTrue((self.project / "STL/multi.stl").is_file())
         self.assertTrue((self.project / "multi.glb").is_file())
 
         # A STEP beside meshes: the STEP is the document.
         payload = json.loads(self._run("withstep.py", "--json").stdout.strip())
-        self.assertEqual(payload["document"], "withstep.step")
+        self.assertEqual(payload["document"], str(self.project / "withstep.step"))
 
 
 class SeveralModelsInOneFileTest(_ModelRunCase):

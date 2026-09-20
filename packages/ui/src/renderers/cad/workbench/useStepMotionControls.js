@@ -5,17 +5,15 @@ import { advanceAnimationElapsed, animationClipDuration, animationNowMs, buildDe
 import { normalizeParameterValue, normalizeParameterValues } from "@hardcore/core/common/parameters.js";
 import { poseValuesForPreset } from "../components/workbench/PoseControlsSection.js";
 import { useAnimationClockStore } from "./animationClockStore.js";
-import { usePoseValueAnimation } from "./poseTransition.js";
 
 // Single command boundary for STEP motion. Refs are published synchronously so
-// queued playback/tween callbacks cannot resurrect the previous motion owner.
+// queued playback callbacks cannot resurrect the previous motion owner.
 export function useStepMotionControls({
-  fileKey, selectedStepModuleDefinition, selectedAnimationClips, selectedActiveAnimationClip,
+  selectedStepModuleDefinition, selectedAnimationClips, selectedActiveAnimationClip,
   animationState, animationStateRef, setAnimationState, stepModuleParameterValuesRef,
-  setStepModuleParameterValues, setAppliedStepPoseName, motionRevisionRef, transitionDurationMs
+  setStepModuleParameterValues, setAppliedStepPoseName, motionRevisionRef
 }) {
   const { getAnimationClock, setAnimationClock, resetAnimationClock } = useAnimationClockStore();
-  const stepPoseAnimation = usePoseValueAnimation();
   const writeParameters = useCallback((values) => {
     const current = stepModuleParameterValuesRef.current;
     // Scrubbing/speed edits must not reapply the kinematics tree on every event
@@ -26,19 +24,17 @@ export function useStepMotionControls({
     setStepModuleParameterValues(values);
   }, [stepModuleParameterValuesRef, setStepModuleParameterValues]);
   const resetPosition = useCallback(() => {
-    stepPoseAnimation.cancel();
     setAppliedStepPoseName("");
     writeParameters(normalizeParameterValues(selectedStepModuleDefinition,
       selectedStepModuleDefinition?.defaultParameterValues || {}));
-  }, [stepPoseAnimation.cancel, selectedStepModuleDefinition, setAppliedStepPoseName, writeParameters]);
+  }, [selectedStepModuleDefinition, setAppliedStepPoseName, writeParameters]);
   const activatePositionControls = useCallback(() => {
-    stepPoseAnimation.cancel();
     motionRevisionRef.current += 1;
     const next = { ...buildDefaultAnimationState(selectedAnimationClips), enabled: false };
     animationStateRef.current = next;
     setAnimationState(next);
     resetAnimationClock();
-  }, [stepPoseAnimation.cancel, selectedAnimationClips, resetAnimationClock]);
+  }, [selectedAnimationClips, resetAnimationClock]);
   const activateAnimationControls = useCallback(() => {
     motionRevisionRef.current += 1;
     resetPosition();
@@ -47,9 +43,6 @@ export function useStepMotionControls({
     activatePositionControls();
     resetPosition();
   }, [activatePositionControls, resetPosition]);
-  // Cancel a departing file's pose producer, including queued callbacks.
-  useEffect(() => stepPoseAnimation.cancel, [fileKey, stepPoseAnimation.cancel]);
-
   const handleStepModuleParameterChange = useCallback((parameterId, value) => {
     const id = String(parameterId || "").trim();
     const parameter = selectedStepModuleDefinition?.parameterMap?.[id];
@@ -82,19 +75,10 @@ export function useStepMotionControls({
       poseValuesForPreset(selectedStepModuleDefinition, poseName)
     );
     setAppliedStepPoseName(String(poseName || ""));
-    // A pose is a place the mechanism GOES, so it travels there: the same tween the
-    // robot sheet has always used, at the duration this viewer is set to. With
-    // animation off the duration is 0 and the values are written in this frame.
-    stepPoseAnimation.run({
-      start: stepModuleParameterValuesRef.current || {},
-      target: nextParameterValues,
-      durationMs: transitionDurationMs,
-      onFrame: (frameValues) => {
-        stepModuleParameterValuesRef.current = frameValues;
-        setStepModuleParameterValues(frameValues);
-      }
-    });
-  }, [activatePositionControls, transitionDurationMs, selectedStepModuleDefinition, stepPoseAnimation]);
+    // A pose is written like any other value: where the mechanism is from this
+    // frame on. Motion over time belongs to the Animate tool.
+    writeParameters(nextParameterValues);
+  }, [activatePositionControls, selectedStepModuleDefinition, setAppliedStepPoseName, writeParameters]);
 
   // Every animation command claims ownership before publishing its frame.
   const handleAnimationClipSelect = useCallback((clipId) => {

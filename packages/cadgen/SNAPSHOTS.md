@@ -29,13 +29,60 @@ its parts and its solids. They apply to STEP/STP inputs only. Every other input
 `flat` surface style and the remaining groups, and refuses the rest by name
 before anything is rendered.
 
+## Requests and OUT
+
+A request is accepted or refused before anything is built or deleted. Every
+refusal that can be decided from the request, the input's kind and the files
+beside it — unknown keys and values, a setting the input's kind cannot take, the
+wrong door, conflicting options, an SRDF with no single paired URDF, an unknown
+pose, clip or joint name — leaves an existing OUT untouched, for every job in a
+packet. Only then is OUT cleared, so a failed build or render leaves no file
+rather than the previous one. Occurrence refs are the one request check that
+needs the built tree, so they are checked after the clear.
+
+OUT's extension decides the encoding, and no job key does: view mode writes
+`.png`, section mode `.png` or `.svg`, a video `.mp4` or `.gif`. Any other
+extension is refused.
+
+A job comes from `--job FILE` or from `TARGET OUT` and the flags; there is no
+stdin form. With `--job`, each flag given overrides that setting in every job of
+the packet, and `--width`/`--height` size every output.
+
+## Section planes
+
+`--mode section` draws the outline a plane cuts through a STEP model.
+`--section PLANE[:OFFSET]` (job key `"section": {"plane", "offset"}`) places it:
+`PLANE` is `XY` (the default), `XZ` or `YZ`, and `OFFSET` moves it along its own
+normal in model units, defaulting to 0.
+
+```bash
+cadgen step snapshot part.step cut.svg --mode section --section XZ:12.5
+```
+
+Those are the only two keys, a `section` outside section mode is refused, and a
+plane that misses the model returns an empty drawing with a warning.
+
+## Sizes
+
+An output is sized by `--size-profile` (`output.sizeProfile`) — `simple`
+1200x900, `simple-square` 1024x1024, `diagnostic` 1600x1200 (the default),
+`labeled` 1600x1200, `assembly` 1800x1200, `assembly-large` 1920x1440,
+`presentation` 2400x1600, `presentation-large` 2800x1800, `contact-sheet`
+2400x1600 — or by `--width`/`--height`, whole pixels from 1 to 8192. An unknown
+profile or a size outside that range is refused, never clamped.
+`output.padding` is 0–0.15, `output.renderScale` 1–3, and `timeoutSeconds` a
+positive number, checked when the job is resolved.
+
 ## Diagnostics
 
 `cadgen step snapshot part.step review.png --debug --json` adds diagnostics to
-`SnapshotResult.debug`. The same flag is available on the other snapshot doors
+`SnapshotResult.debug`; without `--json` each entry prints as one `debug: {…}` line
+after the saved paths. The same flag is available on the other snapshot doors
 and as `debug=True` in Python. Every diagnostic entry identifies its input;
-existing artifact-resolution information remains alongside `stageTimings`.
-Normal results keep their file, warning and aggregate timing fields.
+artifact-resolution information remains alongside `stageTimings`: a STEP entry's
+`stepArtifact` names the `documentHash`, `tree` and store `view` it rendered,
+their `componentCount` and `occurrenceCount`, and whether a `selectorIndex` was
+composed. Normal results keep their file, warning and aggregate timing fields.
 
 Still view renders report these measured browser durations in milliseconds:
 

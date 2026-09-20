@@ -55,7 +55,6 @@ import { FileSheetPortalContext, HostPanelSlotContext } from "../components/work
 import { restoreMotionAnimation, restoreMotionParameters } from "../workbench/motionRestore.js";
 import { useStepMotionControls } from "../workbench/useStepMotionControls.js";
 import { ZoomControl } from "../components/viewer/ZoomControl.js";
-import { usePoseTransition } from "../workbench/poseTransition.js";
 import StatusToast from "../components/workbench/StatusToast.js";
 import UrdfFileSheet from "../components/workbench/UrdfFileSheet.js";
 import ViewerAlertDialog from "../components/workbench/ViewerAlertDialog.js";
@@ -176,7 +175,6 @@ import {
 } from "../workbench/renderSessionState.js";
 import {
   animationClipList,
-  animationNowMs,
   animationRenderFrame,
   buildDefaultAnimationState,
   findAnimationClip,
@@ -197,7 +195,6 @@ import {
   buildUrdfJointAnglesCopyText,
   cloneJointValueMap,
   findBestMatchingJointValueState,
-  interpolateTrajectoryJointValues,
   srdfHomeGroupStateJointValuesToDisplay,
   srdfGroupStateJointValuesToDisplay
 } from "../workbench/robotMotionControls.js";
@@ -217,14 +214,9 @@ import {
   linkOriginInFrame,
   rootPointInFrame
 } from "@hardcore/core/lib/urdf/kinematics.js";
-import {
-  advanceUrdfJointValues,
-  interpolateUrdfJointValues,
-  jointValueMapsClose,
-  URDF_JOINT_ANIMATION_EPSILON,
-  URDF_JOINT_ANIMATION_FOLLOW_MS
-} from "@hardcore/core/lib/urdf/jointAnimation.js";
+import { URDF_JOINT_VALUE_EPSILON } from "@hardcore/core/lib/urdf/jointValues.js";
 import { srdfGroupNamesByLink } from "@hardcore/core/lib/urdf/parseSrdf.js";
+import { stepJointHandles, stepPosableDofs, urdfJointHandles, urdfLinkCentres, urdfPosableJoints } from "../workbench/jointHandles.js";
 import { resolveLocalAssetFileRef } from "@hardcore/core/lib/urdf/meshAssetUrl.js";
 import {
   FILE_STATUS_LEVELS,
@@ -257,7 +249,8 @@ import {
   STEP_MODEL_RENDER_PART_ID
 } from "@hardcore/core/lib/step/stepTree.js";
 import {
-  normalizeStepModuleParameterValues
+  normalizeStepModuleParameterValues,
+  resolveStepModuleFeatures
 } from "@hardcore/core/common/stepModule.js";
 import {
   meshStateIsComplete,
@@ -498,20 +491,6 @@ function CadFileViewSurface({
   const animationStateRef = useRef(animationState);
   const motionRevisionRef = useRef(0);
   const lastPersistenceFailureKeyRef = useRef("");
-  const urdfTrajectoryPlaybackRef = useRef({
-    frameId: 0,
-    token: 0
-  });
-  const urdfJointAnimationRef = useRef({
-    frameId: 0,
-    token: 0,
-    mode: "",
-    fileRef: "",
-    currentValues: null,
-    targetValues: null,
-    smoothingMs: URDF_JOINT_ANIMATION_FOLLOW_MS,
-    lastTimestampMs: 0
-  });
   const handlePersistenceWriteError = useCallback(({ key }) => {
     const failureKey = String(key || "browser-storage");
     if (lastPersistenceFailureKeyRef.current === failureKey) {
@@ -698,13 +677,6 @@ function CadFileViewSurface({
     parameterSourceKind(selectedEntrySourceFormat) === PARAMETER_SOURCE.SIDECAR;
   const isAssemblyView = selectedEntry?.kind === "assembly";
   const isUrdfView = selectedEntryContentKind === VIEWPORT_CONTENT.ROBOT;
-  const robotBoundsAnimationActive = Boolean(
-    isUrdfView &&
-    (
-      urdfJointAnimationRef.current?.frameId ||
-      urdfTrajectoryPlaybackRef.current?.frameId
-    )
-  );
   const selectedStepModuleUrl = selectedEntry?.editingPreview && selectedEntry.previewKinematics
     ? `preview:${selectedEntry.hash}` : supportsSidecarParams ? entryPoseUrl(selectedEntry) : "";
   const selectedStepModuleCadPath = selectedStepModuleUrl ? cadPathForEntry(selectedEntry) : "";
@@ -833,15 +805,6 @@ function CadFileViewSurface({
       };
     }).filter(Boolean);
   }, [selectedUrdfData]);
-  const selectedUrdfContinuousJointNames = useMemo(
-    () => new Set(
-      (Array.isArray(selectedUrdfData?.joints) ? selectedUrdfData.joints : [])
-        .filter((joint) => String(joint?.type || "").trim() === "continuous")
-        .map((joint) => String(joint?.name || "").trim())
-        .filter(Boolean)
-    ),
-    [selectedUrdfData]
-  );
   const matchedSelectedUrdfGroupStateId = useMemo(
     () => (
       findBestMatchingJointValueState(
@@ -1188,23 +1151,15 @@ function CadFileViewSurface({
   // A named pose is a full configuration, not a patch: every DOF the preset
   // does not mention returns to 0 (the artifact as written), so two presets in
   // a row can never leave a joint behind from the first.
-  // One preference for every sheet that has poses; see workbench/poseTransition.js.
-  const updatePoseTransition = useCallback((poseTransition) => onPreferenceChange({ poseTransition }), [onPreferenceChange]);
-  const poseTransition = usePoseTransition(preferences.poseTransition, updatePoseTransition);
-  // Read at call time, not closed over: the robot tween is a useCallback with the joint
-  // state in its dependencies, and changing the speed must not rebuild it mid-drag.
-  const poseTransitionDurationMsRef = useRef(poseTransition.durationMs);
-  poseTransitionDurationMsRef.current = poseTransition.durationMs;
-
   const {
     handleStepModuleParameterChange, applyStepModuleParameterValues, handleResetStepModuleParameters,
     handleApplyPose, handleAnimationClipSelect, handleAnimationPlayToggle, handleAnimationRestart,
     handleAnimationScrub, handleAnimationSpeedChange, handleAnimationLoopToggle, resetMotion: resetStepMotion,
     releaseAnimation: releaseStepAnimation
   } = useStepMotionControls({
-    fileKey: selectedKey, selectedStepModuleDefinition, selectedAnimationClips, selectedActiveAnimationClip,
+    selectedStepModuleDefinition, selectedAnimationClips, selectedActiveAnimationClip,
     animationState, animationStateRef, setAnimationState, stepModuleParameterValuesRef,
-    setStepModuleParameterValues, setAppliedStepPoseName, motionRevisionRef, transitionDurationMs: poseTransition.durationMs
+    setStepModuleParameterValues, setAppliedStepPoseName, motionRevisionRef
   });
 
   // Embedded animation clips are checked against the compiled tree once it is
@@ -1680,7 +1635,6 @@ function CadFileViewSurface({
   const drawModeActive = supportsTool(selectedEntrySourceFormat, "draw") &&
     tabToolMode === TAB_TOOL_MODE.DRAW;
   const drawing = useDrawingSession(drawModeActive, CAD_DRAWING_DEFAULTS);
-  const panToolActive = tabToolMode === TAB_TOOL_MODE.PAN;
   const selectionCountBase = selectedPartIds.length + selectedReferenceIds.length;
 
   const selectedReferenceIdsRef = useRef(selectedReferenceIds);
@@ -2050,7 +2004,7 @@ function CadFileViewSurface({
     setTabToolMode(current => current === TAB_TOOL_MODE.REFERENCES ? current : TAB_TOOL_MODE.REFERENCES);
     if (isWideLayout) setTabToolsOpen(true);
     // Components carries the reference at its foot, so revealing it is the whole jump.
-    setFileSheetOpenSectionIds([FILE_SHEET_SECTION_IDS.ROBOT_COMPONENTS]);
+    setFileSheetOpenSectionIds([FILE_SHEET_SECTION_IDS.ROBOT_LINKS]);
   }, [isWideLayout]);
   const selectRobotComponent = useCallback((id, options) => {
     robotSelection.select(id, options);
@@ -3066,7 +3020,6 @@ function CadFileViewSurface({
     previousView: completedViewFile.current === selectedKey && Boolean(selectedMeshData || selectedEntryIsDrawingDocument),
     currentPreview: currentPreviewVisible,
     error: viewerAlert || (!selectedMeshData && catalogError) || missingFileRef,
-    renderMode: rendering,
     progress: selectedLoadProgress || (editingPreview.state.phase ? { phase: editingPreview.state.phase, detail: editingPreview.state.detail } : null),
     finding: !catalogHydrated || selectedCatalogPending || fileParamSelectionPending,
     preparing: presentationPending && !effectiveViewerLoading && !selectedMeshPartial,
@@ -3217,270 +3170,36 @@ function CadFileViewSurface({
     });
   }, []);
 
-  const cancelUrdfTrajectoryOnly = useCallback(() => {
-    const playback = urdfTrajectoryPlaybackRef.current;
-    playback.token += 1;
-    if (playback.frameId && typeof cancelAnimationFrame === "function") {
-      cancelAnimationFrame(playback.frameId);
+  // The one place a robot's joint values are written, and every write is where
+  // the robot IS from this frame on: a slider, a typed number, a Pose knob, a group
+  // state and Reset alike. Motion over time belongs to the Animate tool.
+  const writeUrdfJointValues = useCallback((fileRef, jointValues) => {
+    const normalizedFileRef = String(fileRef || "").trim();
+    if (!normalizedFileRef) {
+      return;
     }
-    playback.frameId = 0;
+    const nextValues = cloneJointValueMap(jointValues);
+    setJointValuesByFileRef((current) => ({
+      ...current,
+      [normalizedFileRef]: nextValues
+    }));
   }, []);
 
-  const cancelUrdfJointAnimation = useCallback(() => {
-    const jointAnimation = urdfJointAnimationRef.current;
-    jointAnimation.token += 1;
-    if (jointAnimation.frameId && typeof cancelAnimationFrame === "function") {
-      cancelAnimationFrame(jointAnimation.frameId);
-    }
-    jointAnimation.frameId = 0;
-    jointAnimation.mode = "";
-    jointAnimation.fileRef = "";
-    jointAnimation.targetValues = null;
-    jointAnimation.currentValues = null;
-    jointAnimation.lastTimestampMs = 0;
-  }, []);
-
-  const cancelUrdfTrajectoryPlayback = useCallback(() => {
-    cancelUrdfTrajectoryOnly();
-    cancelUrdfJointAnimation();
-  }, [cancelUrdfJointAnimation, cancelUrdfTrajectoryOnly]);
-
-  const animateUrdfJointValues = useCallback((fileRef, startJointValues, targetJointValues, options = {}) => {
-    const normalizedFileRef = String(fileRef || "").trim();
-    if (!normalizedFileRef) {
-      return;
-    }
-    const startValues = cloneJointValueMap(startJointValues);
-    const finalValues = cloneJointValueMap(targetJointValues);
-    cancelUrdfTrajectoryPlayback();
-    // Animation off writes the target in this frame, exactly as an unchanged pose does.
-    if (
-      typeof requestAnimationFrame !== "function" ||
-      toFiniteNumber(options?.durationMs, poseTransitionDurationMsRef.current) <= 0 ||
-      jointValueMapsClose(startValues, finalValues)
-    ) {
-      setJointValuesByFileRef((current) => ({
-        ...current,
-        [normalizedFileRef]: finalValues
-      }));
-      return;
-    }
-    const playback = urdfJointAnimationRef.current;
-    const token = playback.token + 1;
-    playback.token = token;
-    const startedAtMs = animationNowMs();
-    const durationMs = Math.max(toFiniteNumber(options?.durationMs, poseTransitionDurationMsRef.current), 1);
-    const step = (timestamp) => {
-      if (urdfJointAnimationRef.current.token !== token) {
-        return;
-      }
-      const elapsedMs = Math.max(toFiniteNumber(timestamp, animationNowMs()) - startedAtMs, 0);
-      const progress = Math.min(elapsedMs / durationMs, 1);
-      const interpolation = interpolateUrdfJointValues(
-        startValues,
-        finalValues,
-        progress,
-        undefined,
-        selectedUrdfContinuousJointNames
-      );
-      const nextValues = interpolation.done || progress >= 1
-        ? finalValues
-        : {
-          ...startValues,
-          ...interpolation.values
-        };
-      setJointValuesByFileRef((current) => ({
-        ...current,
-        [normalizedFileRef]: nextValues
-      }));
-      if (interpolation.done || progress >= 1) {
-        urdfJointAnimationRef.current.frameId = 0;
-        return;
-      }
-      urdfJointAnimationRef.current.frameId = requestAnimationFrame(step);
-    };
-    playback.frameId = requestAnimationFrame(step);
-  }, [
-    cancelUrdfTrajectoryPlayback,
-    selectedUrdfContinuousJointNames
-  ]);
-
-  const followUrdfJointValues = useCallback((fileRef, currentJointValues, targetJointValues, options = {}) => {
-    const normalizedFileRef = String(fileRef || "").trim();
-    if (!normalizedFileRef) {
-      return;
-    }
-    const currentValues = cloneJointValueMap(currentJointValues);
-    const finalValues = cloneJointValueMap(targetJointValues);
-    const smoothingMs = Math.max(toFiniteNumber(options?.durationMs, URDF_JOINT_ANIMATION_FOLLOW_MS), 1);
-
-    cancelUrdfTrajectoryOnly();
-    if (
-      typeof requestAnimationFrame !== "function" ||
-      jointValueMapsClose(currentValues, finalValues)
-    ) {
-      cancelUrdfJointAnimation();
-      setJointValuesByFileRef((current) => ({
-        ...current,
-        [normalizedFileRef]: finalValues
-      }));
-      return;
-    }
-
-    const activeAnimation = urdfJointAnimationRef.current;
-    if (
-      activeAnimation.frameId &&
-      activeAnimation.mode === "follow" &&
-      activeAnimation.fileRef === normalizedFileRef
-    ) {
-      activeAnimation.targetValues = finalValues;
-      activeAnimation.smoothingMs = smoothingMs;
-      return;
-    }
-
-    cancelUrdfJointAnimation();
-    const playback = urdfJointAnimationRef.current;
-    const token = playback.token + 1;
-    playback.token = token;
-    playback.mode = "follow";
-    playback.fileRef = normalizedFileRef;
-    playback.currentValues = currentValues;
-    playback.targetValues = finalValues;
-    playback.smoothingMs = smoothingMs;
-    playback.lastTimestampMs = animationNowMs();
-
-    const step = (timestamp) => {
-      const animation = urdfJointAnimationRef.current;
-      if (animation.token !== token) {
-        return;
-      }
-      const timeMs = toFiniteNumber(timestamp, animationNowMs());
-      const deltaMs = Math.max(timeMs - toFiniteNumber(animation.lastTimestampMs, timeMs), 0);
-      animation.lastTimestampMs = timeMs;
-      const baseValues = cloneJointValueMap(animation.currentValues);
-      const targetValues = cloneJointValueMap(animation.targetValues);
-      const advanced = advanceUrdfJointValues(
-        baseValues,
-        targetValues,
-        deltaMs,
-        animation.smoothingMs,
-        undefined,
-        selectedUrdfContinuousJointNames
-      );
-      const nextValues = advanced.done
-        ? targetValues
-        : {
-          ...baseValues,
-          ...advanced.values
-        };
-      animation.currentValues = nextValues;
-      setJointValuesByFileRef((current) => ({
-        ...current,
-        [normalizedFileRef]: nextValues
-      }));
-      if (advanced.done || jointValueMapsClose(nextValues, targetValues)) {
-        animation.frameId = 0;
-        animation.mode = "";
-        animation.fileRef = "";
-        animation.currentValues = null;
-        animation.targetValues = null;
-        animation.lastTimestampMs = 0;
-        return;
-      }
-      animation.frameId = requestAnimationFrame(step);
-    };
-
-    playback.frameId = requestAnimationFrame(step);
-  }, [
-    cancelUrdfJointAnimation,
-    cancelUrdfTrajectoryOnly,
-    selectedUrdfContinuousJointNames
-  ]);
-
-  const playUrdfTrajectory = useCallback((fileRef, baseJointValues, trajectory, finalJointValues) => {
-    const normalizedFileRef = String(fileRef || "").trim();
-    if (!normalizedFileRef) {
-      return;
-    }
-    cancelUrdfTrajectoryPlayback();
-    const points = Array.isArray(trajectory?.points) ? trajectory.points : [];
-    const durationSec = points.length
-      ? toFiniteNumber(points[points.length - 1].timeFromStartSec, 0)
-      : 0;
-    if (!points.length || durationSec <= 0 || typeof requestAnimationFrame !== "function") {
-      setJointValuesByFileRef((current) => ({
-        ...current,
-        [normalizedFileRef]: cloneJointValueMap(finalJointValues)
-      }));
-      return;
-    }
-    const playback = urdfTrajectoryPlaybackRef.current;
-    const token = playback.token + 1;
-    playback.token = token;
-    const baseValues = cloneJointValueMap(baseJointValues);
-    const finalValues = cloneJointValueMap(finalJointValues);
-    const startedAtMs = animationNowMs();
-    const step = (timestamp) => {
-      if (urdfTrajectoryPlaybackRef.current.token !== token) {
-        return;
-      }
-      const elapsedSec = Math.max((toFiniteNumber(timestamp, animationNowMs()) - startedAtMs) / 1000, 0);
-      const done = elapsedSec >= durationSec;
-      const nextValues = done
-        ? finalValues
-        : interpolateTrajectoryJointValues(trajectory, elapsedSec, baseValues);
-      setJointValuesByFileRef((current) => ({
-        ...current,
-        [normalizedFileRef]: nextValues
-      }));
-      if (done) {
-        urdfTrajectoryPlaybackRef.current.frameId = 0;
-        return;
-      }
-      urdfTrajectoryPlaybackRef.current.frameId = requestAnimationFrame(step);
-    };
-    playback.frameId = requestAnimationFrame(step);
-  }, [cancelUrdfTrajectoryPlayback]);
-
-  useEffect(() => () => {
-    cancelUrdfTrajectoryPlayback();
-  }, [cancelUrdfTrajectoryPlayback]);
-
-
-  const handleUrdfJointValueChange = useCallback((joint, nextValueDeg, options = {}) => {
+  const handleUrdfJointValueChange = useCallback((joint, nextValueDeg) => {
     const jointName = String(joint?.name || "").trim();
     if (!selectedUrdfFileRef || !jointName) {
       return;
     }
     const clampedValueDeg = clampJointValueDeg(joint, nextValueDeg);
     const currentValueDeg = toFiniteNumber(selectedUrdfJointValues?.[jointName], joint?.defaultValueDeg ?? 0);
-    if (Math.abs(clampedValueDeg - currentValueDeg) <= URDF_JOINT_ANIMATION_EPSILON) {
+    if (Math.abs(clampedValueDeg - currentValueDeg) <= URDF_JOINT_VALUE_EPSILON) {
       return;
     }
-    const nextJointValues = {
-      ...selectedUrdfJointValues,
-      [jointName]: clampedValueDeg
-    };
-    if (options?.scrub) {
-      followUrdfJointValues(
-        selectedUrdfFileRef,
-        selectedUrdfJointValues,
-        nextJointValues,
-        { durationMs: URDF_JOINT_ANIMATION_FOLLOW_MS }
-      );
-    } else {
-      animateUrdfJointValues(
-        selectedUrdfFileRef,
-        selectedUrdfJointValues,
-        nextJointValues,
-        { durationMs: URDF_JOINT_ANIMATION_FOLLOW_MS }
-      );
-    }
+    writeUrdfJointValues(selectedUrdfFileRef, { ...selectedUrdfJointValues, [jointName]: clampedValueDeg });
     clearTrackedUrdfGroupStateForFile(selectedUrdfFileRef);
   }, [
-    animateUrdfJointValues,
+    writeUrdfJointValues,
     clearTrackedUrdfGroupStateForFile,
-    followUrdfJointValues,
     selectedUrdfFileRef,
     selectedUrdfJointValues,
   ]);
@@ -3488,22 +3207,18 @@ function CadFileViewSurface({
     if (!selectedUrdfFileRef) {
       return;
     }
-    cancelUrdfTrajectoryPlayback();
     clearTrackedUrdfGroupStateForFile(selectedUrdfFileRef);
-    animateUrdfJointValues(selectedUrdfFileRef, selectedUrdfJointValues, defaultSelectedUrdfJointValues);
+    writeUrdfJointValues(selectedUrdfFileRef, defaultSelectedUrdfJointValues);
   }, [
-    animateUrdfJointValues,
-    cancelUrdfTrajectoryPlayback,
+    writeUrdfJointValues,
     clearTrackedUrdfGroupStateForFile,
     defaultSelectedUrdfJointValues,
     selectedUrdfFileRef,
-    selectedUrdfJointValues,
   ]);
   const handleSelectUrdfGroupState = useCallback((groupState) => {
     if (!selectedUrdfFileRef || !groupState?.jointValuesByName || typeof groupState.jointValuesByName !== "object") {
       return;
     }
-    cancelUrdfTrajectoryPlayback();
     const groupStateJointValues = cloneJointValueMap(groupState.jointValuesByName);
     if (!Object.keys(groupStateJointValues).length) {
       return;
@@ -3519,10 +3234,9 @@ function CadFileViewSurface({
         [selectedUrdfFileRef]: groupStateId
       }));
     }
-    animateUrdfJointValues(selectedUrdfFileRef, selectedUrdfJointValues, nextJointValues);
+    writeUrdfJointValues(selectedUrdfFileRef, nextJointValues);
   }, [
-    animateUrdfJointValues,
-    cancelUrdfTrajectoryPlayback,
+    writeUrdfJointValues,
     selectedUrdfFileRef,
     selectedUrdfJointValues,
   ]);
@@ -5172,7 +4886,7 @@ function CadFileViewSurface({
     setViewerAlertOpen(false);
     // Anything unrecognized falls back to selection rather than sticking the
     // viewer in a mode with no tool behind it.
-    const normalizedMode = mode === TAB_TOOL_MODE.DRAW || mode === TAB_TOOL_MODE.MEASURE || mode === TAB_TOOL_MODE.PAN || mode === TAB_TOOL_MODE.ANIMATE
+    const normalizedMode = mode === TAB_TOOL_MODE.DRAW || mode === TAB_TOOL_MODE.MEASURE || mode === TAB_TOOL_MODE.ANIMATE || mode === TAB_TOOL_MODE.POSE
       ? mode
       : TAB_TOOL_MODE.REFERENCES;
     // Measure and Draw are sessions: asking for the active one again ends it. (The Measure
@@ -5207,15 +4921,14 @@ function CadFileViewSurface({
   const handleDisplayReset = viewSettingsStore.reset;
 
   // Restore authored geometry in one user action. Stop every producer first:
-  // an in-flight pose tween or playback frame must not undo the reset later.
+  // a playback frame must not undo the reset later.
   // Display groups (including Custom overrides and projection) stay untouched.
   const handleModelReset = useCallback(() => {
     resetStepMotion();
     embeddedGlbAnimationRuntime?.resetModel();
-    cancelUrdfTrajectoryPlayback();
     if (selectedUrdfFileRef) {
       clearTrackedUrdfGroupStateForFile(selectedUrdfFileRef);
-      animateUrdfJointValues(selectedUrdfFileRef, selectedUrdfJointValues, defaultSelectedUrdfJointValues, { durationMs: 0 });
+      writeUrdfJointValues(selectedUrdfFileRef, defaultSelectedUrdfJointValues);
     }
     if (selectedEntryIsDrawing) {
       handleDrawingBendsReset();
@@ -5228,8 +4941,8 @@ function CadFileViewSurface({
     viewSettingsStore.resetModelTools();
     handleViewerZoomReset();
   }, [resetStepMotion,
-    embeddedGlbAnimationRuntime, cancelUrdfTrajectoryPlayback, selectedUrdfFileRef,
-    clearTrackedUrdfGroupStateForFile, animateUrdfJointValues, selectedUrdfJointValues,
+    embeddedGlbAnimationRuntime, selectedUrdfFileRef,
+    clearTrackedUrdfGroupStateForFile, writeUrdfJointValues,
     defaultSelectedUrdfJointValues, selectedEntryIsDrawing, handleDrawingBendsReset,
     handleDrawingOrientationReset, viewSettingsStore, handleViewerZoomReset]);
 
@@ -5532,6 +5245,52 @@ function CadFileViewSurface({
     if (!animateModeActive && animationOwnsPose) releaseAnimation?.();
   }, [animateModeActive, animationOwnsPose, releaseAnimation]);
 
+  // Pose: drag the joints by their handles. Present only where something can be
+  // driven (a robot's movable joints, a STEP's mate DOFs), and the tool a robot
+  // opens in (`createTabRecord`). The handles are rebuilt from the pose on screen,
+  // so sliders, presets, Reset and a handle up the chain all carry them along.
+  const stepPoseDefinition = selectedFileSheetKind === "step" ? selectedStepParameterRuntime?.definition || null : null;
+  const poseAvailable = isUrdfView
+    ? urdfPosableJoints(selectedUrdfData).length > 0
+    : stepPosableDofs(stepPoseDefinition).length > 0;
+  const poseToolActive = !previewMode && poseAvailable && tabToolMode === TAB_TOOL_MODE.POSE;
+  // A robot restores into Pose before it has loaded; only a LOADED description
+  // without joints sends the tab back to Select.
+  const poseUnavailable = !poseAvailable && (isUrdfView ? Boolean(selectedUrdfData) : true);
+  useEffect(() => {
+    if (poseUnavailable) setTabToolMode(current => current === TAB_TOOL_MODE.POSE ? TAB_TOOL_MODE.REFERENCES : current);
+  }, [poseUnavailable]);
+  const urdfLinkCentresByName = useMemo(
+    () => urdfLinkCentres(selectedUrdfMeshGeometryResult.meshData?.parts),
+    [selectedUrdfMeshGeometryResult]
+  );
+  // A mated child's label names its parts, and the mesh here is the model at
+  // rest (the viewer poses display records, never this data): the child's centre.
+  const stepPoseSelectorRuntime = selectedStepParameterRuntime?.selectorRuntime || null;
+  const stepPoseFeatures = useMemo(() => (stepPoseDefinition && poseToolActive
+    ? resolveStepModuleFeatures(stepPoseDefinition, { meshData: selectedMeshData, selectorRuntime: stepPoseSelectorRuntime })
+    : null), [stepPoseDefinition, poseToolActive, selectedMeshData, stepPoseSelectorRuntime]);
+  const jointHandles = useMemo(() => {
+    if (!poseToolActive) return null;
+    return isUrdfView
+      ? urdfJointHandles({
+        urdfData: selectedUrdfData,
+        jointValues: selectedUrdfJointValues,
+        linkWorldTransforms: selectedUrdfPreview.linkWorldTransforms,
+        linkCentres: urdfLinkCentresByName,
+        onJointValueChange: handleUrdfJointValueChange
+      })
+      : stepJointHandles({
+        definition: stepPoseDefinition,
+        parameterValues: selectedStepParameterRuntime.parameterValues,
+        features: stepPoseFeatures,
+        onParameterChange: handleStepModuleParameterChange
+      });
+  }, [
+    poseToolActive, isUrdfView, selectedUrdfData, selectedUrdfJointValues, selectedUrdfPreview, urdfLinkCentresByName,
+    handleUrdfJointValueChange, stepPoseDefinition, selectedStepParameterRuntime, stepPoseFeatures, handleStepModuleParameterChange
+  ]);
+
   return (
     <HostPanelSlotContext.Provider value={hostPanelSlot}>
     <FileSheetPortalContext.Provider value={hostElement}>
@@ -5661,7 +5420,6 @@ function CadFileViewSurface({
                 pickableEdges={measureModeActive ? (["all", "edges"].includes(measureSelectionFilter) ? viewerPickableEdges : EMPTY_LIST) : filteredViewerEdges}
                 pickableVertices={(measureModeActive ? ["all", "points"].includes(measureSelectionFilter) : selectionFilter === "all") ? viewerPickableVertices : EMPTY_LIST}
                 focusedPartIds={viewerFocusedPartIds}
-                boundsAnimationActive={robotBoundsAnimationActive}
                 drawToolActive={drawToolActive}
                 measureModeActive={measureModeActive}
                 drawing={drawing}
@@ -5696,8 +5454,8 @@ function CadFileViewSurface({
                 selectionCount={selectionCount}
                 copyButtonLabel={copyButtonLabel}
                 copyButtonCountLabel={copyButtonCountLabel}
-                panToolActive={panToolActive}
                 animateToolActive={animateToolActive}
+                jointHandles={jointHandles}
                 handleCopySelection={handleCopySelection}
                 selectionFilter={selectionFilter}
                 createPromptContext={createSelectionPromptContext}
@@ -5750,9 +5508,11 @@ function CadFileViewSurface({
                 /> : null}
                 measureSupported={effectiveSupportsMeasure}
                 measureDisabled={measureToolDisabled}
-                panToolActive={panToolActive}
                 animateAvailable={animationAvailable}
                 animateToolActive={animateToolActive}
+                poseAvailable={poseAvailable}
+                poseToolActive={poseToolActive}
+                poseLeads={isUrdfView}
                 handleSelectTabToolMode={handleSelectTabToolMode}
                 viewerLoading={viewerLoading}
                 selectedMeshData={selectedMeshData}
@@ -5878,7 +5638,6 @@ function CadFileViewSurface({
                 jointValues={selectedUrdfJointValues}
                 onJointValueChange={handleUrdfJointValueChange}
                 onGroupStateSelect={handleSelectUrdfGroupState}
-                poseTransition={poseTransition}
                 onCopyJointAngles={handleCopyUrdfJointAngles}
                 onResetPose={handleResetUrdfPose}
                 sdf={selectedFileSheetKind === "sdf" ? {

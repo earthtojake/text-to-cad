@@ -32,6 +32,9 @@ native geometry; see [inspection](inspection-and-validation.md).
   kept its name and changed meaning — chord tolerance is a fraction of the
   component's bounding diagonal, not an absolute length — so a value carried
   across from an older project is wrong in proportion to the part's own size.
+  A carried-over value above `0.05` is refused outright with the conversion
+  (X mm on a part whose diagonal is D mm is X/D); a smaller one is accepted, so
+  check it against the part's size.
 
 A migrated source may still have incompatible saved outputs. Rebuild or
 re-annotate the affected document as the error directs; preserve imported

@@ -376,8 +376,10 @@ test("output sizing and padding helpers preserve snapshot fallback semantics", (
   assert.equal(framePadding({ output: { padding: 0 } }), 0);
   assert.equal(framePadding({ output: { padding: 0.02 } }), 0.02);
   assert.equal(framePadding({ output: { padding: -0.02 } }), 0);
-  assert.equal(framePadding({ output: { paddingPercent: 0.25 } }), 0.15);
-  assert.equal(framePadding({ output: { paddingPercent: 0.13 } }), 0.13);
+  assert.equal(framePadding({ output: { padding: 0.25 } }), 0.15);
+  assert.equal(framePadding({ output: { padding: 0.13 } }), 0.13);
+  // One name: the retired `paddingPercent` is refused by the CLI and means nothing here.
+  assert.equal(framePadding({ output: { paddingPercent: 0.13 } }), 0.04);
 });
 
 test("supersampled PNG capture resamples the complete drawing buffer to the requested output pixels", (t) => {
