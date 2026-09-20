@@ -58,15 +58,6 @@ function dxfEntry(file = "drawings/bracket.dxf", hash = "dxf-a") {
   };
 }
 
-function urdfEntry(file = "robots/arm.urdf", hash = "urdf-a") {
-  return {
-    file,
-    kind: "urdf",
-    url: `/assets/${file.split("/").pop()}`,
-    hash
-  };
-}
-
 test("file session state stores per-file records in isolated namespaces", () => {
   const storage = createMemoryStorage();
   const entry = dxfEntry();
@@ -581,25 +572,4 @@ test("file session state stores large-file settings with topology signatures", (
     selectableTopologyEnabled: true
   });
   assert.equal(readFileSessionState("models", oldEntry.file, staleEntry, { storage }).slices.largeFile, undefined);
-});
-
-test("file session state restores urdf slices only when robot assets match", () => {
-  const storage = createMemoryStorage();
-  const oldEntry = urdfEntry("robots/arm.urdf", "old-urdf");
-  const matchingEntry = urdfEntry("robots/arm.urdf", "old-urdf");
-  const staleEntry = urdfEntry("robots/arm.urdf", "new-urdf");
-
-  writeFileSessionState("models", oldEntry.file, createFileSessionSnapshot({
-    entry: oldEntry,
-    slices: {
-      urdf: {
-        jointValues: { shoulder: 12.5 }
-      }
-    }
-  }), { storage });
-
-  assert.deepEqual(readFileSessionState("models", oldEntry.file, matchingEntry, { storage }).slices.urdf, {
-    jointValues: { shoulder: 12.5 }
-  });
-  assert.equal(readFileSessionState("models", oldEntry.file, staleEntry, { storage }).slices.urdf, undefined);
 });

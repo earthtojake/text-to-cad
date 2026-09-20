@@ -407,7 +407,7 @@ test('Select picks links at once; a selection lives only under Select; Links sho
   assert.deepEqual(robot.errors, []);
 });
 
-test('posing a joint far past the rest box never resizes the grid and never moves the camera, while the floor follows the robot', async (t) => {
+test('posing a joint far past the rest box never resizes the grid or the studio floor and never moves the camera, while the floor\'s height follows the robot', async (t) => {
   const robot = await open(t, 'mast.urdf');
   const { page } = robot;
   await page.waitForFunction(() => window.__cadJointHandles?.().length === 1);
@@ -448,11 +448,26 @@ test('posing a joint far past the rest box never resizes the grid and never move
   await page.evaluate(() => window.cadHarness.a.controller.setDisplaySettings({ floor: { enabled: true, placement: 'lowest' } }));
   await robot.type('hoist', 0, 'm');
   await page.waitForFunction(() => window.__cadStage().studioGroundZ === 0);
+  const studioFloor = (await stage()).studioGround;
+  assert.ok(studioFloor.size > 1);
   const renders = (await robot.stats()).surfaceRenders;
   await robot.type('hoist', -0.8, 'm');
   await page.waitForFunction(() => Math.abs(window.__cadStage().studioGroundZ + 0.35) < 1e-9);
   assert.equal((await stage()).gridRadius, restStage.gridRadius);
   assert.ok((await robot.stats()).surfaceRenders - renders <= 1, 'the bounds reach the stage without a render of the renderer');
+  // The studio's floor is a plane with edges: like the grid it keeps the size and the centre the REST
+  // pose gave it, however far a joint travels, in Solid with a floor and in Render alike.
+  assert.deepEqual((await stage()).studioGround, studioFloor);
+  await robot.type('hoist', 3, 'm');
+  await page.waitForFunction(() => window.__cadStage().bounds.max[2] === 3.55);
+  assert.deepEqual((await stage()).studioGround, studioFloor, 'a carriage 3 m up does not rescale the floor');
+  await page.evaluate(() => window.cadHarness.a.controller.setRenderMode(true));
+  await page.waitForFunction(() => window.__cadStage().studioGround);
+  const renderFloor = (await stage()).studioGround;
+  await robot.type('hoist', 0, 'm');
+  await page.waitForFunction(() => window.__cadStage().bounds.max[2] === 1);
+  assert.deepEqual((await stage()).studioGround, renderFloor, 'nor does posing in Render');
+  assert.deepEqual([renderFloor.size, renderFloor.center], [studioFloor.size, studioFloor.center]);
   assert.deepEqual(robot.errors, []);
 });
 

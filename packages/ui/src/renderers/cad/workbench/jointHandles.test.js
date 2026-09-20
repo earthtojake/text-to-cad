@@ -3,99 +3,12 @@ import test from "node:test";
 import * as THREE from "three";
 
 import { kinematicsDeltas } from "@hardcore/core/common/kinematicsRuntime.js";
-import { poseTransformFromXyzRpy, solveUrdfLinkWorldTransforms } from "@hardcore/core/lib/urdf/kinematics.js";
 
-import { stepJointHandles, stepPosableDofs, urdfJointHandles, urdfLinkCentres, urdfPosableJoints } from "./jointHandles.js";
+import { stepJointHandles, stepPosableDofs } from "./jointHandles.js";
 
-/** Which joints the Pose tool offers, and where their handles are for a posed chain. */
+/** Which mate DOFs the Pose tool offers in a STEP, and where their handles are for a posed chain. */
 
 const round = (values) => values.map((value) => Math.round(value * 1e6) / 1e6 || 0);
-
-function joint(name, type, parentLink, childLink, xyz, axis, extra = {}) {
-  return {
-    name, type, parentLink, childLink, axis, originTransform: poseTransformFromXyzRpy([...xyz, 0, 0, 0]),
-    defaultValueDeg: 0, minValueDeg: type === "continuous" ? -180 : -90, maxValueDeg: type === "continuous" ? 180 : 90, ...extra
-  };
-}
-
-// base -(yaw, Z)-> turret -(pitch, Y, 1 m up)-> arm -(lift, Z slider, 1 m along the arm's X)-> tool,
-// plus a fixed camera, a mimic finger and a wheel whose geometry sits on its own axis.
-const robot = {
-  rootLink: "base",
-  joints: [
-    joint("yaw", "continuous", "base", "turret", [0, 0, 0], [0, 0, 1]),
-    joint("pitch", "revolute", "turret", "arm", [0, 0, 1], [0, 1, 0]),
-    joint("lift", "prismatic", "arm", "tool", [1, 0, 0], [0, 0, 1], { minValueDeg: 0, maxValueDeg: 0.5 }),
-    joint("camera_mount", "fixed", "turret", "camera", [0, 0, 2], [0, 0, 1]),
-    joint("finger", "prismatic", "tool", "finger_link", [0, 0, 0], [0, 1, 0]),
-    joint("finger_mirror", "prismatic", "tool", "finger_mirror_link", [0, 0, 0], [0, 1, 0], { mimic: { joint: "finger", multiplier: -1 } }),
-    joint("wheel", "continuous", "base", "wheel_link", [0, 2, 0], [0, 1, 0])
-  ]
-};
-const parts = [
-  // The arm's box reaches out along its own X, so its centre is off the pitch axis.
-  { linkName: "arm", sourceBounds: { min: [0, -0.1, -0.1], max: [1, 0.1, 0.1] }, localTransform: null },
-  { linkName: "wheel_link", sourceBounds: { min: [-0.3, -0.05, -0.3], max: [0.3, 0.05, 0.3] }, localTransform: null }
-];
-
-function robotHandles(jointValues, onJointValueChange = () => {}) {
-  return urdfJointHandles({
-    urdfData: robot,
-    jointValues,
-    linkWorldTransforms: solveUrdfLinkWorldTransforms(robot, jointValues),
-    linkCentres: urdfLinkCentres(parts),
-    onJointValueChange
-  });
-}
-
-test("a robot's handles are its drivable joints: no fixed joint, no mimic follower", () => {
-  assert.deepEqual(urdfPosableJoints(robot).map(({ name }) => name), ["yaw", "pitch", "lift", "finger", "wheel"]);
-  assert.deepEqual(robotHandles({}).map(({ id, kind, unit }) => `${id}:${kind}:${unit}`),
-    ["yaw:continuous:deg", "pitch:revolute:deg", "lift:prismatic:m", "finger:prismatic:m", "wheel:continuous:deg"]);
-  assert.deepEqual(urdfPosableJoints({ joints: [joint("weld", "fixed", "a", "b", [0, 0, 0], [0, 0, 1])] }), []);
-});
-
-test("a robot's handles are in the world of the posed chain", () => {
-  const handles = Object.fromEntries(robotHandles({ yaw: 90, pitch: -90, lift: 0.25 }).map((handle) => [handle.id, handle]));
-  // Yawed a quarter turn, the pitch axis (the turret's Y) points along world -X.
-  assert.deepEqual(round(handles.pitch.pivot), [0, 0, 1]);
-  assert.deepEqual(round(handles.pitch.axis), [-1, 0, 0]);
-  // Pitched -90 the arm stands straight up, and its handle reaches up with it.
-  assert.deepEqual(round(handles.pitch.toward), [0, 0, 2]);
-  // The slider's pivot is where its child now is: 1 m up the arm, then 0.25 m out
-  // along the arm's own Z, which the pose has laid along world -Y.
-  assert.deepEqual(round(handles.lift.pivot), [0, -0.25, 2]);
-  assert.deepEqual(round(handles.lift.axis), [0, -1, 0]);
-  assert.equal(handles.lift.toward, null);
-  assert.deepEqual([handles.lift.value, handles.lift.min, handles.lift.max], [0.25, 0, 0.5]);
-  assert.deepEqual([handles.yaw.min, handles.yaw.max], [null, null]);
-});
-
-test("a child centred on its axis still gets an arm, and the arm turns with the joint", () => {
-  const armAt = (deg) => {
-    const wheel = robotHandles({ wheel: deg }).find(({ id }) => id === "wheel");
-    return round(wheel.toward.map((value, index) => value - wheel.pivot[index]));
-  };
-  const rest = armAt(0);
-  assert.equal(Math.round(Math.hypot(...rest) * 1e6) / 1e6, 1);
-  assert.equal(rest[1], 0);
-  // A quarter turn about +Y carries (x, 0, z) to (z, 0, -x).
-  assert.deepEqual(armAt(90), round([rest[2], 0, -rest[0]]));
-});
-
-test("a robot handle writes through the slider's handler, and a continuous joint stays one turn", () => {
-  const writes = [];
-  const handles = robotHandles({}, (changed, value) => writes.push([changed.name, value]));
-  handles.find(({ id }) => id === "pitch").onChange(400);
-  handles.find(({ id }) => id === "yaw").onChange(725);
-  handles.find(({ id }) => id === "yaw").onChange(-190);
-  assert.deepEqual(writes, [
-    // Unclamped: the handler owns the limits.
-    ["pitch", 400],
-    ["yaw", 5],
-    ["yaw", 170]
-  ]);
-});
 
 // ring -(carrier, Z)-> carrier -(planet, Z at x=40)-> planet -(probe, X slider)-> probe; a coupling gears
 // carrier and planet; a cylindrical mate contributes a turn and a travel; a fastened mate contributes nothing.

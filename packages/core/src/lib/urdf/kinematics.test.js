@@ -5,7 +5,6 @@ import {
   applyUrdfPoseToMeshData,
   buildDefaultUrdfJointValues,
   buildUrdfMeshGeometry,
-  buildUrdfMeshData,
   clampJointValueDeg,
   jointMotionTransform,
   linkOriginInFrame,
@@ -13,7 +12,6 @@ import {
   poseUrdfMeshData,
   posedJointLocalTransform,
   resolveUrdfJointValues,
-  rootPointInFrame,
   solveUrdfLinkWorldTransforms,
   transformPoint
 } from "./kinematics.js";
@@ -222,19 +220,6 @@ test("link origin can be expressed in another link frame", () => {
   );
 });
 
-test("root-frame points can be expressed in another link frame", () => {
-  const urdf = sampleUrdf();
-
-  assert.deepEqual(
-    rounded(rootPointInFrame(urdf, { base_to_arm: 0 }, [10, 6, 0], "arm_link")),
-    [0, 6, 0]
-  );
-  assert.deepEqual(
-    rounded(rootPointInFrame(urdf, { base_to_arm: 90 }, [5, 0, 0], "arm_link")),
-    [0, 5, 0]
-  );
-});
-
 test("fixed joints do not create default controls or motion", () => {
   const defaults = buildDefaultUrdfJointValues(sampleUrdf());
 
@@ -359,9 +344,14 @@ test("resolved joint values clamp driven joints and solve mimic followers from t
   assert.equal(resolveUrdfJointValues(urdf).get("driver"), 0, "no value is the declared default");
 });
 
+// The merged geometry of the sample robot, posed: what the headless renderer draws.
+function posedMeshData(jointValues) {
+  return poseUrdfMeshData(sampleUrdf(), buildUrdfMeshGeometry(sampleUrdf(), PART_MESHES), jointValues);
+}
+
 test("posed mesh bounds update after joint motion", () => {
-  const zeroPose = buildUrdfMeshData(sampleUrdf(), PART_MESHES, { base_to_arm: 0 });
-  const rotatedPose = buildUrdfMeshData(sampleUrdf(), PART_MESHES, { base_to_arm: 90 });
+  const zeroPose = posedMeshData({ base_to_arm: 0 });
+  const rotatedPose = posedMeshData({ base_to_arm: 90 });
 
   assert.notDeepEqual(zeroPose.meshData.bounds, rotatedPose.meshData.bounds);
   assert.equal(zeroPose.meshData.parts.length, 3);
@@ -445,7 +435,7 @@ test("posed URDF mesh data can override link world transforms", () => {
 });
 
 test("posed URDF mesh data preserves resolved visual colors", () => {
-  const posed = buildUrdfMeshData(sampleUrdf(), PART_MESHES, { base_to_arm: 0 });
+  const posed = posedMeshData({ base_to_arm: 0 });
 
   assert.deepEqual(
     posed.meshData.parts.map((part) => part.color),

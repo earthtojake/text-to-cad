@@ -27,7 +27,7 @@ export const TAB_TOOL_MODE = {
   MEASURE: "measure",
   // A session, like Draw: never persisted or restored (`state.js`).
   ANIMATE: "animate",
-  // Drag a model's joints by their handles. The tool a robot opens in (`state.js`).
+  // Drag a model's joints by their handles. Offered, never restored into (`state.js`).
   POSE: "pose"
 };
 

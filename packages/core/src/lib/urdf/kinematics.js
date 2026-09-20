@@ -352,19 +352,6 @@ export function linkOriginInFrame(urdfData, jointValuesByName, linkName, frameLi
   );
 }
 
-export function rootPointInFrame(urdfData, jointValuesByName, point, frameLinkName) {
-  const normalizedFrameLinkName = String(frameLinkName || "").trim();
-  if (!normalizedFrameLinkName) {
-    return null;
-  }
-  const linkWorldTransforms = solveUrdfLinkWorldTransforms(urdfData, jointValuesByName);
-  const frameWorldTransform = linkWorldTransforms.get(normalizedFrameLinkName);
-  if (!frameWorldTransform) {
-    return null;
-  }
-  return transformPoint(invertRigidTransform(frameWorldTransform), point);
-}
-
 function resolveVisualMesh(meshesByUrl, meshUrl, partFileRef) {
   const lookupKey = meshUrl || partFileRef;
   if (!lookupKey) {
@@ -807,12 +794,4 @@ export function applyUrdfPoseToMeshData(urdfData, meshData, jointValuesByName = 
     ...posed,
     meshData
   };
-}
-
-export function buildUrdfMeshData(urdfData, meshesByUrl, jointValuesByName = {}) {
-  return poseUrdfMeshData(
-    urdfData,
-    buildUrdfMeshGeometry(urdfData, meshesByUrl),
-    jointValuesByName
-  );
 }

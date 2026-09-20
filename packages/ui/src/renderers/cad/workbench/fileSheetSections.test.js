@@ -15,24 +15,15 @@ test("STEP shares Model, optional Motion, and View across both viewing modes", (
 test("format-specific tabs remain available in both viewing modes", () => {
   for (const renderMode of [false, true]) {
     assert.deepEqual(renderedFileSheetSectionIds("dxf", { renderMode, hasDxfBendsPanel: true, hasDxfLayersPanel: true }), ["material", "bends", "dxfLayers", "display"]);
-    // Components is the robot's link tree: always there, second after Motion, whatever the meshes name.
-    assert.deepEqual(renderedFileSheetSectionIds("urdf", { renderMode }), ["kinematics", "links", "display"]);
-    assert.deepEqual(renderedFileSheetSectionIds("srdf", { renderMode }), ["kinematics", "links", "display"]);
-    assert.deepEqual(renderedFileSheetSectionIds("sdf", { renderMode }), ["kinematics", "links", "sdf", "display"]);
-    assert.deepEqual(renderedFileSheetSectionIds("srdf", { renderMode, showJoints: false }), ["links", "display"]);
-    // A triangle mesh and a GLB have their own renderers: this one holds no sheet for them.
-    assert.deepEqual(renderedFileSheetSectionIds("mesh", { renderMode }), []);
+    // A triangle mesh, a GLB and a robot description have their own renderers: this one holds no sheet for them.
+    for (const kind of ["mesh", "urdf", "srdf", "sdf"]) assert.deepEqual(renderedFileSheetSectionIds(kind, { renderMode }), []);
   }
 });
 
 test("defaults retain useful format-specific selections", () => {
   assert.deepEqual(defaultOpenFileSheetSectionIds("dxf"), []);
   assert.deepEqual(defaultOpenFileSheetSectionIds("step", { hasFileStatus: true }), ["status", "tree"]);
-  // Motion is the tab every robot lands on; an SDF's metadata tab follows it.
-  assert.deepEqual(defaultOpenFileSheetSectionIds("sdf"), ["kinematics"]);
-  assert.deepEqual(defaultOpenFileSheetSectionIds("srdf"), ["kinematics"]);
-  // Motion stays the tab a robot lands on; Components is never the default.
-  assert.deepEqual(defaultOpenFileSheetSectionIds("urdf"), ["kinematics"]);
+  assert.deepEqual(defaultOpenFileSheetSectionIds("urdf"), []);
 });
 
 test("an open selection is the last id this format still has; a retired id is simply not open", () => {

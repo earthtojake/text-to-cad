@@ -317,21 +317,6 @@ export function formatFileStatusItemForAgent(item) {
   return lines.join("\n");
 }
 
-export function sdfFileStatusItems(sdfInfo = null) {
-  const staticMetadata = sdfInfo?.staticMetadata && typeof sdfInfo.staticMetadata === "object"
-    ? sdfInfo.staticMetadata
-    : {};
-  const warnings = Array.isArray(staticMetadata.warnings) ? staticMetadata.warnings : [];
-  return normalizeFileStatusItems(warnings.map((warning, index) => ({
-    id: `sdf-warning:${index}`,
-    level: FILE_STATUS_LEVELS.WARNING,
-    source: "sdf-parser",
-    code: "sdf_warning",
-    title: "SDF warning",
-    message: warning
-  })));
-}
-
 // The advisory flag a `ready` artifact status may carry (FEEDBACK #17): `busy`
 // says another process currently holds the model's generator (INFO — purely
 // transient). It never blocks rendering.
@@ -383,7 +368,6 @@ export function buildFileStatusItems({
   stepArtifactGenerationAvailable = true,
   stepArtifactGenerationState = null,
   activeGenerationFiles = [],
-  urdfData = null,
   viewerAlert = null,
   viewerServerInfo = null,
   artifactAdvisory = null,
@@ -405,9 +389,6 @@ export function buildFileStatusItems({
       activeGenerationFiles,
       viewerServerInfo
     }));
-  }
-  if (kind === "sdf") {
-    items.push(...sdfFileStatusItems(urdfData?.sdf || urdfData));
   }
 
   const viewerAlertItem = viewerAlertFileStatusItem(viewerAlert);

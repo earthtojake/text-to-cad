@@ -14,8 +14,6 @@ export const FILE_SHEET_SECTION_IDS = Object.freeze({
   STEP_REFERENCE: "reference",
   KINEMATICS: "kinematics",
   DISPLAY: DISPLAY_SECTION_ID,
-  ROBOT_SDF: "sdf",
-  ROBOT_LINKS: "links",
   DXF_MATERIAL: "material",
   DXF_BENDS: "bends",
   DXF_LAYERS: "dxfLayers",
@@ -28,8 +26,6 @@ function normalizeString(value) {
 
 export function renderedFileSheetSectionIds(kind, options = {}) {
   const normalizedKind = normalizeString(kind);
-  const isSdf = options.isSdf === true || normalizedKind === "sdf";
-  const showJoints = options.showJoints !== false;
   switch (normalizedKind) {
     // A drawing HAS controls of its own. Thickness (and, where the drawing declares
     // them, bends) are render-time parameters applied to the cached prism rather than bake
@@ -51,22 +47,6 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
         ...(options.hasStepPosePanel || options.hasStepAnimationPanel ? [FILE_SHEET_SECTION_IDS.KINEMATICS] : []),
         FILE_SHEET_SECTION_IDS.DISPLAY
       ];
-    case "urdf":
-    case "srdf":
-    case "sdf":
-      // Robots retain their format-specific document inspector.
-      return [
-        // Kinematics is always the leftmost tab and the one the sheet lands on: posing the
-        // robot is what a description is opened for. Links is the robot's link tree
-        // beside it: every description has links, so the tab never depends on what the
-        // meshes name, and it carries its own Reference at its foot rather than owning a
-        // second tab that stands empty until something is selected. An SDF's own
-        // metadata follows them.
-        ...(showJoints ? [FILE_SHEET_SECTION_IDS.KINEMATICS] : []),
-        FILE_SHEET_SECTION_IDS.ROBOT_LINKS,
-        ...(isSdf ? [FILE_SHEET_SECTION_IDS.ROBOT_SDF] : []),
-        FILE_SHEET_SECTION_IDS.DISPLAY
-      ];
     default:
       return [];
   }
@@ -74,8 +54,6 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
 
 export function defaultOpenFileSheetSectionIds(kind, options = {}) {
   const normalizedKind = normalizeString(kind);
-  const isSdf = options.isSdf === true || normalizedKind === "sdf";
-  const showJoints = options.showJoints !== false;
   switch (normalizedKind) {
     case "dxf":
       return [];
@@ -85,10 +63,6 @@ export function defaultOpenFileSheetSectionIds(kind, options = {}) {
         ...(options.hasFileStatus ? [FILE_SHEET_SECTION_IDS.FILE_STATUS] : []),
         FILE_SHEET_SECTION_IDS.STEP_TREE
       ];
-    case "urdf":
-    case "srdf":
-    case "sdf":
-      return showJoints ? [FILE_SHEET_SECTION_IDS.KINEMATICS] : [];
     default:
       return [];
   }

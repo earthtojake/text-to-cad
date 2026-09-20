@@ -43,7 +43,6 @@ export const KIT_WORD_ALLOWLIST = [
   ['camera/ViewPlaneControl.js', 'view selector', 'user-visible aria label of the same control ("2D view selector" / "Perspective selector")'],
   ['viewport/useViewerRuntime.js', 'displayRecords: []', 'runtime slot the current scene builders fill; it leaves with the STEP scene (renderer-split phase 5)'],
   ['viewport/renderDepthPolicy.js', 'displayRecords: runtime?.displayRecords', 'passes that same slot to the depth fit; leaves with it'],
-  ['status/loadingState.js', 'building robot', "a loader's own progress label, matched as text to bucket it under \"Preparing view\"; it leaves when that loader reports a stage instead (renderer-split phase 3)"],
   ['view-settings/viewerDisplaySettings.js', 'buildStepClipPatch', "core's clip-settings API carries STEP in its names; the settings model only passes the Clip section through"],
   ['view-settings/DisplaySettingsTab.js', 'DEFAULT_STEP_CLIP_SETTINGS', 'same core API, read by the opt-in Clip section'],
   ['view-settings/DisplaySettingsTab.js', 'normalizeStepClipSettings', 'same core API, read by the opt-in Clip section'],

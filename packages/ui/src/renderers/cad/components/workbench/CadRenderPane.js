@@ -17,7 +17,6 @@ import { cn } from "@hardcore/ui/utils";
 import { RENDER_FORMAT } from "../../workbench/constants.js";
 import {
   PARAMETER_SOURCE,
-  VIEWPORT_CONTENT,
   renderCapabilities,
   supportsTool
 } from "@hardcore/core/lib/renderCapabilities.js";
@@ -25,7 +24,6 @@ import {
   CAMERA_PROJECTION,
   normalizeCameraProjection
 } from "@hardcore/core/lib/displaySettings.js";
-import { VIEWER_SCENE_SCALE } from "@hardcore/core/lib/viewer/sceneScale.js";
 import { VIEWER_PICK_MODE } from "@hardcore/core/lib/viewer/constants.js";
 import { viewerHiddenPartIdsForRenderPane, viewerPickModeForRenderPane, viewerSelectedPartIdsForRenderPane, viewerSelectorRuntimeForRenderPane } from "../../workbench/viewerPickMode.js";
 import { viewerBendGuidesForRenderPane } from "../../workbench/renderPaneDrawing.js";
@@ -282,7 +280,6 @@ export default function CadRenderPane({
   onMeshSourceAdoption = null,
   viewerMode,
   assemblyPickingActive = false,
-  robotComponentPicking = false,
   assemblyParts,
   hiddenPartIds,
   selectedPartIds,
@@ -351,7 +348,7 @@ export default function CadRenderPane({
   const drawEnabled = supportsTool(renderFormat, "draw");
   // Formats with no per-part topology to select, annotate or explode: a plain mesh has
   // no parts, so it gets the stripped-down prop set.
-  const hasParts = capabilities.parts || (capabilities.content === VIEWPORT_CONTENT.ROBOT && robotComponentPicking);
+  const hasParts = capabilities.parts;
   const hasTopology = capabilities.topology;
   const inspectionEnabled = true;
   const drawingGuides = viewerBendGuidesForRenderPane({ renderMode, bendAxisX, drawingBendLines });
@@ -471,7 +468,6 @@ export default function CadRenderPane({
         previewMode={previewMode}
         previewOrbitSpeed={previewOrbitSpeed}
         showViewPlane={!previewMode}
-        scale={capabilities.sceneScale === "urdf" ? VIEWER_SCENE_SCALE.URDF : VIEWER_SCENE_SCALE.CAD}
         viewPlaneOffsetBottom="1rem"
         compactViewPlane={false}
         isLoading={viewerLoading && !retainingPreviousStepMesh}
@@ -493,10 +489,8 @@ export default function CadRenderPane({
             focusedPartIds,
             measureMode: measureModeActive
           })}
-        renderPartsIndividually={capabilities.sceneScale === "urdf"
-          ? true
-          : ((renderPartsIndividually || Boolean(stepParameters?.definition))
-            || Boolean(stepAnimation?.clip))}
+        renderPartsIndividually={(renderPartsIndividually || Boolean(stepParameters?.definition))
+          || Boolean(stepAnimation?.clip)}
         pickableParts={inspectionEnabled && hasParts && !retainingPreviousStepMesh ? assemblyParts : EMPTY_LIST}
         hiddenPartIds={viewerHiddenPartIdsForRenderPane({ inspectionEnabled, hasParts, hiddenPartIds })}
         selectedPartIds={previewMode ? EMPTY_LIST : viewerSelectedPartIdsForRenderPane({ renderMode, hasParts, selectedPartIds })}

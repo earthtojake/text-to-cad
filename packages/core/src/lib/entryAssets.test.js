@@ -9,7 +9,6 @@ import {
   entryHasDisplayEdges,
   entryHasMesh,
   entryHasReferences,
-  entryHasUrdf,
   entryMeshAssetBytes,
   entryMeshAssetHash,
   entryMeshAssetSignature,
@@ -101,8 +100,6 @@ test("entry availability helpers preserve existing viewer gates", () => {
   assert.equal(entryHasDisplayEdges(stepEntry({ hash: "" })), false);
   assert.equal(entryHasReferences(stepEntry({ hash: "" })), false);
   assert.equal(entryHasDxf({ kind: "dxf", url: "/plate.dxf", hash: "dxf-hash" }), true);
-  assert.equal(entryHasUrdf({ kind: "urdf", url: "/robot.urdf", hash: "urdf-hash" }), true);
-  assert.equal(entryHasUrdf({ kind: "sdf", url: "/robot.sdf", hash: "sdf-hash" }), true);
 });
 
 test("robot and reference signatures match persisted session expectations", () => {

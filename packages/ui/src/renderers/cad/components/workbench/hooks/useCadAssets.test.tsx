@@ -142,19 +142,3 @@ it('publishes the cached drawing mesh on the first render after A → B → A wi
   expect(changed.result.current.meshState).toBeNull();
   expect(fetch).toHaveBeenCalledTimes(2);
 });
-
-it('restores a complete cached robot before any loading effect runs', async () => {
-  const robot = entry('warm-robot', 'urdf');
-  const fetch = vi.fn(async (url: string) => new Response(url.endsWith('.stl') ? triangle :
-    '<robot name="warm"><link name="base"><visual><geometry><mesh filename="warm-robot-link.stl"/></geometry></visual></link></robot>'));
-  vi.stubGlobal('fetch', fetch);
-  const first = renderHook(() => assets(robot));
-  await act(() => first.result.current.loadUrdfForEntry(robot));
-  const data = first.result.current.urdfState.urdfData;
-  first.unmount();
-  const reopen = renderHook(() => assets(robot));
-  expect(reopen.result.current.urdfState.urdfData).toBe(data);
-  expect(reopen.result.current.urdfState.meshesByUrl.size).toBe(1);
-  expect(reopen.result.current.urdfLoadProgress).toBeNull();
-  expect(fetch).toHaveBeenCalledTimes(2);
-});

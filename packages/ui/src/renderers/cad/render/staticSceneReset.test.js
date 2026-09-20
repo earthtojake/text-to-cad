@@ -83,9 +83,9 @@ test("placement follow-up skips an exact adopted package but keeps posed wrapper
   assert.equal(sceneSourceAlreadyPlaced(null, adopted), false);
 });
 
-test("a robot pose published on the adopted wrapper still reaches placement", () => {
-  // A URDF/SDF pose rewrites `parts` on the wrapper the scene already owns, so
-  // the wrapper identity alone cannot say whether these rows were placed.
+test("new rows published on the adopted wrapper still reach placement", () => {
+  // A pose may rewrite `parts` on the wrapper the scene already owns, so the
+  // wrapper identity alone cannot say whether these rows were placed.
   const rest = [{ id: "arm:v1", transform: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] }];
   const posedWrapper = { partTransformsBaked: false, parts: rest };
   const runtime = { cadScene: { source: posedWrapper }, placedSourceParts: rest };

@@ -146,6 +146,24 @@ test("floor defaults to the model origin and can follow the lowest point", () =>
   disposePhotographicStudio(value);
 });
 
+test("a floor sized from the rest placement neither grows nor slides when the model moves; only its height follows", () => {
+  const value = runtime();
+  const rest = { min: [-10, -10, 0], max: [10, 10, 40] };
+  const still = applyPhotographicStudio(THREE, value, configuration({ groundPlacement: "lowest" }), { bounds: rest, groundBounds: rest });
+  const size = still.ground.scale.x;
+  const center = still.ground.position.toArray();
+  // An arm swung far out to one side, and a foot below the floor.
+  const posed = { min: [-10, -10, -6], max: [90, 10, 40] };
+  applyPhotographicStudio(THREE, value, configuration({ groundPlacement: "lowest" }), { bounds: posed, groundBounds: rest });
+  assert.equal(still.ground.scale.x, size);
+  assert.deepEqual(still.ground.position.toArray(), [center[0], center[1], -6]);
+  // Without a rest placement the floor is fitted to the bounds it was given, as before.
+  applyPhotographicStudio(THREE, value, configuration({ groundPlacement: "lowest" }), { bounds: posed });
+  assert.ok(still.ground.scale.x > size);
+  assert.equal(still.ground.position.x, 40);
+  disposePhotographicStudio(value);
+});
+
 test("valid metre-scale bounds do not inherit CAD's one-unit minimum radius", () => {
   const value = runtime();
   value.modelBounds = { min: [-0.01, -0.01, 0], max: [0.01, 0.01, 0.01] };

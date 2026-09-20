@@ -134,14 +134,6 @@ export function entryHasMesh(entry) {
   return Boolean(entryAssetUrl(entry, meshKey) && entryAssetHash(entry, meshKey));
 }
 
-export function entryHasUrdf(entry) {
-  const kind = normalizeString(entry?.kind).toLowerCase();
-  if (kind === RENDER_FORMAT.SDF) {
-    return Boolean(entryAssetUrl(entry, "sdf") && entryAssetHash(entry, "sdf"));
-  }
-  return Boolean(entryAssetUrl(entry, "urdf") && entryAssetHash(entry, "urdf"));
-}
-
 export function entryHasReferences(entry) {
   return Boolean(
     entrySourceFormat(entry) === RENDER_FORMAT.STEP &&

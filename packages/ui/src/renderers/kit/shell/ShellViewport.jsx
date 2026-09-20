@@ -232,8 +232,11 @@ const ShellViewport = forwardRef(function ShellViewport({
     const configuration = renderConfigurationRef.current;
     const studio = studioScene();
     if (!renderMode || !configuration || !runtime?.THREE || !studio) return;
+    // The studio floor is sized and centred from the REST placement, as the grid is: a pose or a
+    // routine never rescales the ground under the model. Its lights and its height follow the model.
     const studioState = studio.applyPhotographicStudio(runtime.THREE, runtime, configuration, {
-      bounds, sceneScale: normalizedSceneScaleMode, shadowMapSize: renderShadowMapSizeRef.current
+      bounds, groundBounds: runtime.zeroPoseBounds || null,
+      sceneScale: normalizedSceneScaleMode, shadowMapSize: renderShadowMapSizeRef.current
     });
     runtime.photographicGroundZ = Number.isFinite(Number(studioState?.ground?.position?.z))
       ? Number(studioState.ground.position.z) : null;
@@ -382,8 +385,10 @@ const ShellViewport = forwardRef(function ShellViewport({
     // must not change under a pose; the bounds lighting is fitted to and the floor's height do.
     const stage = () => {
       const active = runtimeRef.current;
+      const ground = active?.photographicStudio?.ground || null;
       return active ? { gridRadius: active.gridRadius ?? null, bounds: active.modelBounds || null,
-        floorZ: active.modelFloorZBelowModel ?? null, studioGroundZ: active.photographicGroundZ ?? null } : null;
+        floorZ: active.modelFloorZBelowModel ?? null, studioGroundZ: active.photographicGroundZ ?? null,
+        studioGround: ground ? { size: ground.scale.x, center: [ground.position.x, ground.position.y] } : null } : null;
     };
     Object.assign(window, { __cadCamera: read, __cadStage: stage });
     return () => {

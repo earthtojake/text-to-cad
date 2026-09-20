@@ -6,7 +6,6 @@ import {
   fileExtensionFromPath,
   fileSheetKindForEntry,
   isMeshRenderFormat,
-  isRobotRenderFormat,
   meshAssetKeyForEntry,
   normalizeRenderFormat,
   renderFormatFromPath,
@@ -38,14 +37,12 @@ test("fileSheetKindForEntry preserves specialized sheet routing", () => {
   assert.equal(fileSheetKindForEntry({ kind: "dxf" }), "dxf");
 });
 
-test("mesh and robot format predicates stay narrow", () => {
+test("the mesh format predicate stays narrow", () => {
   assert.equal(isMeshRenderFormat(RENDER_FORMAT.STL), true);
   assert.equal(isMeshRenderFormat(RENDER_FORMAT.THREE_MF), true);
   assert.equal(isMeshRenderFormat(RENDER_FORMAT.GLB), true);
   assert.equal(isMeshRenderFormat(RENDER_FORMAT.STEP), false);
-  assert.equal(isRobotRenderFormat(RENDER_FORMAT.URDF), true);
-  assert.equal(isRobotRenderFormat(RENDER_FORMAT.SRDF), true);
-  assert.equal(isRobotRenderFormat(RENDER_FORMAT.SDF), true);
+  assert.equal(isMeshRenderFormat(RENDER_FORMAT.URDF), false);
 });
 
 test("normalizeRenderFormat preserves tab-state format aliases and defaults", () => {

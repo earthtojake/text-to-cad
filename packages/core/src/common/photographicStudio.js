@@ -136,7 +136,7 @@ function createState(THREE, runtime) {
   };
 }
 
-function updateGround(THREE, state, configuration, bounds, sceneScale) {
+function updateGround(THREE, state, configuration, bounds, sceneScale, extentBounds = bounds) {
   if (!configuration.backdrop.ground) {
     disposeGround(state);
     return;
@@ -182,12 +182,15 @@ function updateGround(THREE, state, configuration, bounds, sceneScale) {
   }
   state.ground.material.opacity = configuration.backdrop.groundOpacity;
   const minimumSize = sceneScale === "urdf" ? 0.5 : 100;
-  const spanX = bounds.max[0] - bounds.min[0];
-  const spanY = bounds.max[1] - bounds.min[1];
+  // The plane's SIZE and where it is centred come from `extentBounds`: a caller whose
+  // model moves hands over its rest placement, so posing or playing never rescales
+  // or slides the floor under it. Only the plane's height follows the model.
+  const spanX = extentBounds.max[0] - extentBounds.min[0];
+  const spanY = extentBounds.max[1] - extentBounds.min[1];
   const stageSize = Math.max(
     spanX,
     spanY,
-    bounds.radius * PHOTOGRAPHIC_STUDIO_STAGE_RADIUS_MULTIPLIER,
+    extentBounds.radius * PHOTOGRAPHIC_STUDIO_STAGE_RADIUS_MULTIPLIER,
     minimumSize
   );
   // Geometry keeps its authored coordinates: the PLANE moves, never the model.
@@ -195,7 +198,7 @@ function updateGround(THREE, state, configuration, bounds, sceneScale) {
   // current bounds. Neither placement clips the model.
   const groundZ = configuration.backdrop.groundPlacement === "origin" ? 0 : bounds.min[2];
   state.ground.scale.set(stageSize, stageSize, 1);
-  state.ground.position.set(bounds.center[0], bounds.center[1], groundZ);
+  state.ground.position.set(extentBounds.center[0], extentBounds.center[1], groundZ);
   state.ground.updateMatrixWorld(true);
 }
 
@@ -277,9 +280,14 @@ function updateRendererAndScene(THREE, runtime, state, configuration) {
  * The caller separately owns the PMREM returned by createEnvironmentResource.
  * Repeated calls update the existing objects, so exposure, rotation, framing,
  * and backdrop edits do not rebuild model geometry or scene state.
+ *
+ * `bounds` is the model as it is now: the key light, its shadow and a floor kept at
+ * the lowest point follow it. `groundBounds` (default: `bounds`) is what the floor's
+ * size and centre are taken from; a viewer passes the model's REST placement.
  */
 export function applyPhotographicStudio(THREE, runtime, configuration = {}, {
   bounds = runtime?.modelBounds,
+  groundBounds = null,
   sceneScale = "cad",
   shadowMapSize = 2048
 } = {}) {
@@ -303,7 +311,8 @@ export function applyPhotographicStudio(THREE, runtime, configuration = {}, {
     shadowMapSize,
     runtime.softwareRendering === true
   );
-  updateGround(THREE, state, resolved, resolvedBounds, sceneScale);
+  updateGround(THREE, state, resolved, resolvedBounds, sceneScale,
+    groundBounds ? resolveBounds(groundBounds, runtime.modelRadius) : resolvedBounds);
 
   runtime.invalidateShadows?.();
   runtime.requestRender?.();

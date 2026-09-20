@@ -8,13 +8,6 @@ import {
 // artifact-generation trigger (first build, stale rebuild, source-changed regen). Browser-side
 // asset-load/parse stages ("loading mesh", reference "loading topology", etc.) are a different
 // concept and keep their own wording.
-// The URDF loader reports its stage in lower case ("loading meshes 7/13") because the
-// file-list chip reads that way; the viewport card is a sentence and needs a capital.
-export function capitalizeFirst(value) {
-  const text = String(value || "").trim();
-  return text ? `${text.slice(0, 1).toUpperCase()}${text.slice(1)}` : "";
-}
-
 export const ARTIFACT_GENERATING_LABEL = "Generating artifacts";
 export const EMPTY_LIST = Object.freeze([]);
 // There is no left sidebar and so no width for one: the panel column is the
