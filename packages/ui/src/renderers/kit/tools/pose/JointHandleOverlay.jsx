@@ -7,10 +7,10 @@ import { useJointHandles } from "./useJointHandles.js";
  * and the label beside the hovered or held knob. Neither takes the pointer; the
  * knobs are hit-tested from the viewer's own element (`useJointHandles`).
  */
-export default function JointHandleOverlay({ handles, runtimeRef, hostRef, layoutSeamRef, viewerReadyTick }) {
+export default function JointHandleOverlay({ handles = null, handlesRef = null, runtimeRef, hostRef, layoutSeamRef, viewerReadyTick }) {
   const canvasRef = useRef(null);
   const labelRef = useRef(null);
-  useJointHandles({ handles, runtimeRef, hostRef, canvasRef, labelRef, layoutSeamRef, viewerReadyTick });
+  useJointHandles({ handles, handlesRef, runtimeRef, hostRef, canvasRef, labelRef, layoutSeamRef, viewerReadyTick });
   return (
     <>
       <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 z-10 h-full w-full" aria-hidden="true" data-cad-joint-handles="" />

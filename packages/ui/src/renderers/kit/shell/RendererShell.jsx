@@ -28,10 +28,15 @@ const INSPECTOR_WIDTH = 365;
  *   tools: import("../tools/FloatingToolBar.js").ViewportTool[],
  *   inspector: { title: string, tabs: object[] },
  *   bottomAction?: { label: string, title?: string, disabled?: boolean, onInvoke(): void } | null,
- *   sceneRevision?: number, viewportOverlay?: import("react").ReactNode, className?: string }} props
+ *   sceneRevision?: number, className?: string,
+ *   viewportOverlay?: import("react").ReactNode | ((viewport: { runtimeRef: object, hostRef: object, viewerReadyTick: number }) => import("react").ReactNode) }} props
  *   `tools`: left to right, from `shell.tools`. `inspector.tabs`: tab descriptors
  *   (`{ id, title, content }`), usually ending with `shell.displayTab`. `bottomAction`
  *   replaces Draw's (copy the view with its ink) while the renderer's own tool is active.
+ *   `viewportOverlay`: the renderer's own layer over the canvas; as a function it is given
+ *   the viewport (its live runtime, the element its pointer events arrive on, and a tick
+ *   that changes when the runtime is replaced), which is what a handle overlay or a
+ *   pointer pick (`kit/tools/select/usePointerPick.js`) needs.
  */
 export default function RendererShell({ shell, tools, inspector, bottomAction = null, sceneRevision = 0, viewportOverlay = null, className = "" }) {
   const frame = shell.frame;

@@ -16,12 +16,13 @@ an endpoint the server does not implement.
 
 ## Scope
 
-This is the rule inside the CAD renderer (`src/renderers/cad`), which shows STEP, DXF
-and robot descriptions. A GLB and a triangle mesh (STL, 3MF) have renderers of their own
-(`src/renderers/glb`, `src/renderers/mesh`; see [CAD renderer](cad-renderer.md#kit)): a
-vertical slice owns its tools, tabs and scene outright and consults no capability table.
-The `glb`, `stl` and `3mf` rows below remain for what is not a renderer: the file list's
-icon and label, and the headless snapshot renderer.
+This is the rule inside the CAD renderer (`src/renderers/cad`), which shows STEP and DXF.
+A GLB, a triangle mesh (STL, 3MF) and a robot description (URDF, SRDF, SDF) have renderers
+of their own (`src/renderers/glb`, `src/renderers/mesh`, `src/renderers/robot`; see
+[CAD renderer](cad-renderer.md#kit)): a vertical slice owns its tools, tabs and scene
+outright and consults no capability table. The `glb`, `stl`, `3mf`, `urdf`, `srdf` and
+`sdf` rows below remain for what is not a renderer: the file list's icon and label, and
+the headless snapshot renderer.
 
 ## The capability registry
 

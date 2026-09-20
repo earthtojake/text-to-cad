@@ -1,6 +1,6 @@
 # File renderers
 
-The viewer renderers, `cad` (STEP, DXF, robot descriptions), `glb` and `mesh` (STL, 3MF), and
+The viewer renderers, `cad` (STEP, DXF), `glb`, `mesh` (STL, 3MF) and `robot` (URDF, SRDF, SDF), and
 the kit and shell they are built on are in [CAD renderer](cad-renderer.md).
 
 The non-CAD renderers share Hardcore's desktop file-tab implementation. They preserve the existing Markdown document and source views, Monaco configuration and save behavior, image fit and actual-size controls, PDF presentation, and unsupported-file fallback.

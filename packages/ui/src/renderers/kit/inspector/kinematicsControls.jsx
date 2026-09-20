@@ -1,7 +1,10 @@
-import { FileSheetSelectRow } from "../../../kit/inspector/FileSheet.js";
+import { RotateCcw } from "lucide-react";
+import { Button } from "@hardcore/ui/primitives/button";
+import { FILE_SHEET_COMPACT_BUTTON_CLASSES, FileSheetSelectRow } from "./FileSheet.js";
 
-// Shared named-position dropdown for STEP presets and robot group states.
-// None describes custom/default values without adding a selectable reset option.
+// The Kinematics tab's two controls every posable file shares: the named-position
+// dropdown and the Reset button. None describes custom/default values without adding
+// a selectable reset option.
 export const NO_PRESET_VALUE = "__none__";
 
 export function KinematicsPoseRow({
@@ -38,4 +41,15 @@ export function KinematicsPoseRow({
       options={poses.map((pose) => ({ value: pose.value, label: pose.label }))}
     />
   );
+}
+
+/** The tab's last row: every driven value back to where the file puts it. */
+export function MotionResetButton({ onReset }) {
+  if (!onReset) return null;
+  return <div className="px-2 py-2">
+    <Button variant="outline" size="sm" className={`${FILE_SHEET_COMPACT_BUTTON_CLASSES} w-full justify-center`}
+      onClick={onReset} title="Reset animation and position">
+      <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />Reset
+    </Button>
+  </div>;
 }

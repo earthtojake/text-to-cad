@@ -24,7 +24,8 @@ function paletteKey(range, index) {
     String(index).padStart(8, "0")].join("\u0000");
 }
 
-function paletteIndices(ranges) {
+/** Each range's place (by its position in `ranges`) when a palette is cycled over them. */
+export function paletteIndices(ranges) {
   const places = new Array(ranges.length);
   ranges.map((range, index) => ({ index, key: paletteKey(range, index) }))
     .sort((left, right) => left.key.localeCompare(right.key))

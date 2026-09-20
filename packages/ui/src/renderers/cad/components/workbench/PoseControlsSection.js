@@ -11,7 +11,7 @@ import { Slider } from "@hardcore/ui/primitives/slider";
 import {
   NO_PRESET_VALUE,
   KinematicsPoseRow
-} from "./KinematicsControls.js";
+} from "../../../kit/inspector/kinematicsControls.jsx";
 import {
   FILE_SHEET_COMPACT_BUTTON_CLASSES,
   FILE_SHEET_PRECISION_SLIDER_CLASSES,

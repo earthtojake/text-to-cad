@@ -1,4 +1,3 @@
-import { MotionResetButton } from "./MotionControlsSection.js";
 import { memo, useEffect, useRef, useState } from "react";
 import { cn } from "@hardcore/ui/utils";
 import { Input } from "@hardcore/ui/primitives/input";
@@ -27,10 +26,7 @@ import FileSheet, {
 import FileSheetTabbedSurface from "../../../kit/inspector/FileSheetTabbedSurface.js";
 import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections.js";
 import RobotComponentsSection from "./RobotComponentsSection.js";
-import {
-  NO_PRESET_VALUE,
-  KinematicsPoseRow,
-} from "./KinematicsControls.js";
+import { KinematicsPoseRow, MotionResetButton, NO_PRESET_VALUE } from "../../../kit/inspector/kinematicsControls.jsx";
 
 const compactNumericInputClasses = FILE_SHEET_COMPACT_NUMERIC_INPUT_CLASSES;
 const JOINT_CONTROL_SYNC_EPSILON = 0.001;

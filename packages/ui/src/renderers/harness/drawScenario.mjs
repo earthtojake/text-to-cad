@@ -101,7 +101,8 @@ export async function runDrawScenario(t, { file, entries, assets }) {
   const direction = state => state.position.map((value, index) => value - state.target[index]);
   assert.ok(Math.hypot(...panned.target.map((value, index) => value - locked.target[index])) > 1e-3, 'the model moved with the ink');
   direction(panned).forEach((value, index) => assert.ok(Math.abs(value - direction(locked)[index]) < 1e-6, 'the view direction did not change'));
-  assert.equal(panned.zoom, locked.zoom);
+  // The lock re-derives the camera from the editor's scroll and zoom: the zoom comes back to within rounding, as the direction does.
+  assert.ok(Math.abs(panned.zoom - locked.zoom) < 1e-9, `a pan is not a zoom: ${locked.zoom} -> ${panned.zoom}`);
 
   // The Pan view tool drags the same picture.
   await tool('Pan view').click();

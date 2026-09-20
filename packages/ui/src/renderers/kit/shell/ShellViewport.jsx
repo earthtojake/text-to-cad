@@ -21,7 +21,7 @@ import { CAD_DEFAULT_VERTICAL_FOV_DEGREES, explicitViewerFocalLength, perspectiv
 import { PREVIEW_AUTO_ROTATE_SPEED } from "../camera/orbitControls.js";
 import {
   DEFAULT_DAMPING_FACTOR, applyPerspectiveSnapshot, boundsModelRadius, cancelCameraTransition, captureRuntimeViewportFitScale,
-  readScopedPerspectiveSnapshot, resetRuntimeZoomBaseline, setRuntimePerspectiveFocalLength, stepCameraTransition,
+  readOrthographicHalfHeight, readRuntimeZoomPercent, readScopedPerspectiveSnapshot, resetRuntimeZoomBaseline, setRuntimePerspectiveFocalLength, stepCameraTransition,
   syncRuntimeCameraClipPlanes, syncRuntimeCameraProjection, syncRuntimeViewportFraming, transitionCameraToPerspectiveSnapshot,
   zoomRuntimeToBounds
 } from "../camera/runtimeCamera.js";
@@ -96,6 +96,9 @@ const ShellViewport = forwardRef(function ShellViewport({
   onCameraZoomPercentChange = null,
   onPresentationChange = null,
   onViewerAlertChange = null,
+  // A renderer's own layer over the canvas: a node, or `(viewport) => node` for one that
+  // needs the viewport itself ({ runtimeRef, hostRef, viewerReadyTick }: the live runtime,
+  // the element pointer events arrive on, and a tick that changes when the runtime does).
   children = null
 }, ref) {
   if (scene && !isKitScene(scene)) {
@@ -333,6 +336,22 @@ const ShellViewport = forwardRef(function ShellViewport({
       return applied;
     },
     resetZoom() { return resetZoomAndPan({ animate: true }); },
+    // The scene moved its own bounds (a pose, a frame of a routine): lighting, shadows and
+    // the floor follow it NOW, with no React render, no re-adoption and no reframe.
+    syncSceneBounds() {
+      const runtime = runtimeRef.current;
+      if (!runtime?.kitScene || runtime.kitScene !== scene) return false;
+      fitStageToSceneRef.current(runtime, scene);
+      runtime.invalidateShadows?.();
+      runtime.requestRender?.();
+      return true;
+    },
+    // Frame part of the scene (a selection). The camera moves; 100% keeps meaning the rest framing.
+    zoomToBounds(bounds, { animate = true } = {}) {
+      const runtime = runtimeRef.current;
+      if (!bounds || !runtime) return false;
+      return zoomRuntimeToBounds(runtime, bounds, sceneScaleModeRef.current, { animate, modelOffset: modelTransformRef.current.offset });
+    },
     zoomToFit({ animate = true } = {}) {
       const runtime = runtimeRef.current;
       const fitted = zoomRuntimeToBounds(runtime, runtimeFramingBounds(runtime, scene?.restBounds || scene?.bounds),
@@ -345,6 +364,33 @@ const ShellViewport = forwardRef(function ShellViewport({
     }
   }), [modelKey, normalizedSceneScaleMode, resetZoomAndPan, scene, syncCameraZoomPercent, syncViewPlaneOrientation]);
 
+  // Read-only debug/test seam: the LIVE camera of the viewport that mounted last, so a
+  // browser test can assert that moving a model leaves the framing exactly where it was.
+  useEffect(() => {
+    const read = () => {
+      const active = runtimeRef.current;
+      const camera = active?.camera;
+      if (!camera) return null;
+      return {
+        projection: camera.isOrthographicCamera ? "orthographic" : "perspective",
+        position: camera.position.toArray(), target: active.controls?.target?.toArray?.() || null, up: camera.up.toArray(),
+        zoom: Number(camera.zoom), halfHeight: readOrthographicHalfHeight(active), zoomPercent: readRuntimeZoomPercent(active),
+        originalBounds: active.zeroPoseBounds
+      };
+    };
+    // Beside it: where the STAGE stands. The ground's size comes from the rest placement and
+    // must not change under a pose; the bounds lighting is fitted to and the floor's height do.
+    const stage = () => {
+      const active = runtimeRef.current;
+      return active ? { gridRadius: active.gridRadius ?? null, bounds: active.modelBounds || null,
+        floorZ: active.modelFloorZBelowModel ?? null, studioGroundZ: active.photographicGroundZ ?? null } : null;
+    };
+    Object.assign(window, { __cadCamera: read, __cadStage: stage });
+    return () => {
+      if (window.__cadCamera === read) delete window.__cadCamera;
+      if (window.__cadStage === stage) delete window.__cadStage;
+    };
+  }, []);
   useEffect(() => { perspectiveChangeRef.current = onPerspectiveChange; }, [onPerspectiveChange]);
   useEffect(() => {
     const runtime = runtimeRef.current;
@@ -643,6 +689,33 @@ const ShellViewport = forwardRef(function ShellViewport({
     runtime.requestRender();
   }, [previewMode, previewOrbitSpeed, viewerReadyTick]);
 
+  // Everything that follows where the scene IS, and nothing that frames it: lighting and
+  // shadow reach and the floor's height. The ground's SIZE comes from the rest
+  // placement, so animating or posing the scene never rescales the floor under it.
+  const fitStageToScene = useCallback((runtime, fitted) => {
+    const displayBounds = fitted.bounds;
+    const modelOffset = modelTransformRef.current.offset;
+    runtime.modelFloorZBase = Number(resolveRuntimeModelFloorZ(displayBounds, modelOffset, normalizedSceneScaleMode));
+    runtime.modelFloorZBelowModel = Number(resolveRuntimeModelFloorZ(displayBounds, modelOffset, normalizedSceneScaleMode, { followModel: true }));
+    const floorZ = floorFollowsModel ? runtime.modelFloorZBelowModel : runtime.modelFloorZBase;
+    const { radius } = applyRuntimeModelBounds(THREE, runtime, displayBounds, normalizedSceneScaleMode, {
+      shadowMapSize: renderShadowMapSizeRef.current
+    });
+    if (renderMode) applyActivePhotographicStudio(runtime, displayBounds);
+    else syncRuntimeScaledLightingAndShadow(THREE, runtime, normalizedThemeSettings.lighting, radius, displayBounds,
+      normalizedSceneScaleMode, renderShadowMapSizeRef.current);
+    const groundRadius = sceneRadiusForBounds(THREE, mergeBoundsList([fitted.restBounds || fitted.bounds]), normalizedSceneScaleMode);
+    updateActiveGridHelper(runtime, viewerTheme, groundRadius, floorZ, normalizedSceneScaleMode, resolvedFloorMode);
+    if (!renderMode) {
+      updateSpotLightTarget(runtime);
+      updateStageEffects(runtime, viewerTheme, normalizedThemeSettings, groundRadius, runtime.gridFloorZ ?? 0, resolvedFloorMode, normalizedSceneScaleMode);
+    }
+    return radius;
+  }, [applyActivePhotographicStudio, floorFollowsModel, normalizedSceneScaleMode, normalizedThemeSettings, renderMode,
+    resolvedFloorMode, updateActiveGridHelper, viewerTheme]);
+  const fitStageToSceneRef = useRef(fitStageToScene);
+  fitStageToSceneRef.current = fitStageToScene;
+
   // Scene adoption: place the scene under the model group, fit lighting, floor and
   // depth to where it is now, and frame the camera on its rest placement.
   useEffect(() => {
@@ -664,7 +737,6 @@ const ShellViewport = forwardRef(function ShellViewport({
     }
     runtime.hasVisibleModel = true;
     runtime.activeModelKey = modelKey || "";
-    const displayBounds = scene.bounds;
     // TWO boxes: `bounds` is the scene as posed now, which lighting, shadows and the
     // floor follow; the camera is grounded on the rest placement, so a playing
     // routine never re-frames the model and 100% keeps meaning "framed at rest".
@@ -672,22 +744,7 @@ const ShellViewport = forwardRef(function ShellViewport({
     runtime.zeroPoseBounds = framingBounds;
     const framingRadius = boundsModelRadius(THREE, framingBounds, normalizedSceneScaleMode);
     const modelOffset = modelTransformRef.current.offset;
-    runtime.modelFloorZBase = Number(resolveRuntimeModelFloorZ(displayBounds, modelOffset, normalizedSceneScaleMode));
-    runtime.modelFloorZBelowModel = Number(resolveRuntimeModelFloorZ(displayBounds, modelOffset, normalizedSceneScaleMode, { followModel: true }));
-    const floorZ = floorFollowsModel ? runtime.modelFloorZBelowModel : runtime.modelFloorZBase;
-    const { radius } = applyRuntimeModelBounds(THREE, runtime, displayBounds, normalizedSceneScaleMode, {
-      shadowMapSize: renderShadowMapSizeRef.current
-    });
-    if (renderMode) applyActivePhotographicStudio(runtime, displayBounds);
-    else syncRuntimeScaledLightingAndShadow(THREE, runtime, normalizedThemeSettings.lighting, radius, displayBounds,
-      normalizedSceneScaleMode, renderShadowMapSizeRef.current);
-    // The ground is sized from the REST pose: animating or posing the scene never rescales the floor under it.
-    const groundRadius = sceneRadiusForBounds(THREE, framingBounds, normalizedSceneScaleMode);
-    updateActiveGridHelper(runtime, viewerTheme, groundRadius, floorZ, normalizedSceneScaleMode, resolvedFloorMode);
-    if (!renderMode) {
-      updateSpotLightTarget(runtime);
-      updateStageEffects(runtime, viewerTheme, normalizedThemeSettings, groundRadius, runtime.gridFloorZ ?? 0, resolvedFloorMode, normalizedSceneScaleMode);
-    }
+    const radius = fitStageToSceneRef.current(runtime, scene);
     modelGroup.position.copy(modelOffset);
     modelGroup.updateMatrixWorld(true);
     syncRuntimeCameraClipPlanes(runtime, Math.max(radius / 1200, 0.01), Math.max(radius * 600, 2000));
@@ -774,6 +831,7 @@ const ShellViewport = forwardRef(function ShellViewport({
     return () => { cancelled = true; };
   }, [viewUpdate?.revision, viewUpdate?.binding, viewerReadyTick]);
 
+  const viewportContext = useMemo(() => ({ runtimeRef, hostRef: interactionHostRef, viewerReadyTick }), [viewerReadyTick]);
   const preparingFrame = Boolean(resolvedPresentationKey) &&
     (presentedEpoch !== presentationEpoch || presentedKey !== resolvedPresentationKey) && !error;
   const coveringModeTransition = presentedEpoch !== presentationEpoch && !error && hasViewportContent;
@@ -804,7 +862,7 @@ const ShellViewport = forwardRef(function ShellViewport({
         </div>
       ) : null}
       {drawingOverlayActive ? <DrawingOverlay drawing={drawing} onReady={handleDrawingReady} onContentChange={handleDrawingContent} onViewportChange={followDrawingViewport} /> : null}
-      {children}
+      {typeof children === "function" ? children(viewportContext) : children}
       <ViewPlaneControl
         showViewPlane={!previewMode && !drawingOverlayActive}
         previewMode={previewMode}

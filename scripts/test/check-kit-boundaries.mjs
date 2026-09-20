@@ -98,7 +98,7 @@ export function checkKitBoundaries(repo, { allowlist = KIT_WORD_ALLOWLIST } = {}
 // lazy-loaded and deleted alone. A slice joins this list when it is split out of
 // the legacy `cad` renderer; `workspace` is held to the same rule.
 export const RENDERERS_ROOT = 'packages/ui/src/renderers';
-export const RENDERER_SLICES = ['glb', 'mesh', 'workspace'];
+export const RENDERER_SLICES = ['glb', 'mesh', 'robot', 'workspace'];
 const SLICE_SHARED = ['kit', 'workspace'];
 
 export function checkRendererSlices(repo, { slices = RENDERER_SLICES } = {}) {
