@@ -309,6 +309,8 @@ export default function UrdfFileSheet({
   robotDescription = null,
   robotParts = [],
   robotGroupNamesByLink = null,
+  robotMeshPath = null,
+  onOpenFile = null,
   components = [],
   componentSelection,
   groupStates,
@@ -427,6 +429,8 @@ export default function UrdfFileSheet({
           parts={robotParts}
           selection={componentSelection}
           groupNamesByLink={robotGroupNamesByLink}
+          meshPath={robotMeshPath}
+          onOpenFile={onOpenFile}
         />
       )
     },

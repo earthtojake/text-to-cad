@@ -571,15 +571,27 @@ row and details only. As for STEP, a robot selection exists only while Select
 is the tool: choosing a row or a part under another tool returns to Select, and
 leaving Select clears it.
 
-The Reference pane reads back what the description says: link name, mass,
-visual and collision geometry with mesh filenames, the parent joint (name,
-type, parent link, axis, lower/upper limits as written plus degrees, effort,
-velocity, mimic, origin xyz/rpy) and the child joints. `parseUrdf` keeps those
-facts (`joint.origin`, `joint.limit`, `link.inertial`, `link.collisions`,
-`visual.filename`) beside the transforms it renders from; an SDF model reports
-only what its parser records. With an SRDF, the link's planning groups
-(`srdfGroupNamesByLink`) and end effectors are listed as secondary facts; there
-is no second tree. A named object shows its link, colour, triangles and size.
+The Reference pane reads back what the description says about the link, in
+sections: its SRDF planning groups (`srdfGroupNamesByLink`) and end effectors;
+**Inertial** (mass, centre of mass in the link frame, and the six inertia terms
+laid out as the symmetric tensor); **Geometry** (each visual and collision as
+its mesh path or its primitive with dimensions, plus only what the description
+bothered to say: a scale that is not 1, an origin that is not zero, the visual's
+colour); the **Parent joint** (name, type, parent link, axis, lower/upper limits
+as written plus degrees, effort, velocity, mimic, origin); and the **Child
+joints**. `parseUrdf` keeps those facts as written (`joint.origin`,
+`joint.limit`, `link.inertial` with `origin` and `inertia`, `link.collisions`,
+`visual.description`) beside the transforms it renders from, leniently: a
+malformed inspection value is left out, never a load failure. An SDF model
+reports only what its parser records. A named object shows its link, colour,
+triangles and size.
+
+What names something else can be followed. A mesh path is a link that opens
+that file through the host's `onOpenFile`: `CadFileView` resolves it against the
+opened file with the mesh loader's own `resolveLocalAssetFileRef` (an SRDF's
+URDF is always beside it). A `package://` reference, or one that leaves the
+served root, has no path here and stays plain text. A parent or child link name
+selects that link in the tree and the viewport.
 There is no copy action: robot formats have no reference grammar to deliver.
 
 

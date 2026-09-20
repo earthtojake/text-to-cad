@@ -358,6 +358,20 @@ class SnapshotCliTests(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, r"part\.stl has no CAD edges.*'solid' and 'render'"):
             validate({"mode": "hidden-line"}, kind="stl", input_label="part.stl")
 
+    def test_a_script_or_foreign_input_is_told_what_it_is_before_its_display_is_judged(self) -> None:
+        # The STEP-only display rule speaks about documents. A model script or a file no
+        # door renders must get its own refusal, not "model.py has no CAD edges".
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = self._mesh_job_env(temporary_directory, "model.py", b"print('hi')\n")
+            (Path(root) / "models" / "notes.txt").write_text("notes\n", encoding="utf-8")
+            for name in ("model.py", "notes.txt"):
+                with self.subTest(name=name), self.assertRaises(SnapshotError) as refusal:
+                    resolve_render_job_packet(
+                        {"input": f"models/{name}", "outputs": [{"path": "tmp/iso.png"}], "display": {"mode": "wireframe"}},
+                        cwd=root,
+                    )
+                self.assertNotIn("applies to STEP models only", str(refusal.exception))
+
     def test_display_json_rejects_retired_exploded_keys(self) -> None:
         # The exploded view is enabled + amount only; retired step-document/auto-hint
         # fields would silently no-op in the renderer, so the CLI rejects them loudly.

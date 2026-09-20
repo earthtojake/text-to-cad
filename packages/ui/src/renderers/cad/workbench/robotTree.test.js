@@ -125,8 +125,22 @@ test("link facts report what the description says and nothing it does not", () =
   assert.equal(base.isRoot, true);
   assert.equal(base.parentJoint, null);
   assert.equal(base.mass, 2.5);
-  assert.deepEqual(base.visuals, [{ type: "mesh", filename: "meshes/base.stl" }]);
-  assert.deepEqual(base.collisions, [{ type: "box", filename: "" }]);
+  // A model that records only the file and the kind says only that; nothing is invented.
+  const bare = { name: "", filename: "", scale: null, size: null, radius: null, length: null, origin: null, color: "", materialName: "" };
+  assert.deepEqual(base.visuals, [{ ...bare, type: "mesh", filename: "meshes/base.stl" }]);
+  assert.deepEqual(base.collisions, [{ ...bare, type: "box", filename: "" }]);
+  assert.equal(base.centerOfMass, null);
+  assert.equal(base.inertia, null);
+
+  // What the description writes is carried as written: a visual under `description`, a collision as itself.
+  const origin = { xyz: [0, 0, 0.1], rpy: [0, 0, 0] };
+  const inertia = { ixx: 1, ixy: 0, ixz: 0, iyy: 2, iyz: 0, izz: 3 };
+  const said = robotLinkFacts({ joints: [], links: [{ name: "l", inertial: { mass: 1, origin, inertia },
+    visuals: [{ color: "#112233", description: { name: "shell", type: "mesh", filename: "m.stl", scale: [2, 2, 2], origin, materialName: "grey" } }],
+    collisions: [{ name: "", type: "cylinder", filename: "", radius: 0.05, length: 0.2, origin }] }] }, "l");
+  assert.deepEqual(said.visuals, [{ ...bare, name: "shell", type: "mesh", filename: "m.stl", scale: [2, 2, 2], origin, color: "#112233", materialName: "grey" }]);
+  assert.deepEqual(said.collisions, [{ ...bare, type: "cylinder", radius: 0.05, length: 0.2, origin }]);
+  assert.deepEqual([said.mass, said.centerOfMass, said.inertia], [1, origin, inertia]);
   assert.deepEqual(base.childJoints.map(child => child.name), ["shoulder", "camera_mount"]);
 
   // A fixed joint's axis is the parser's placeholder, not a fact.

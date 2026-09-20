@@ -195,15 +195,25 @@ test("parseUrdf accepts prismatic mimic joints", () => {
 test("parseUrdf keeps what the description says about joints and links", () => {
   const robot = new FakeElement("robot", { name: "described_robot" }, [
     new FakeElement("link", { name: "base_link" }, [
-      new FakeElement("inertial", {}, [new FakeElement("mass", { value: "2.5" })]),
-      new FakeElement("visual", {}, [
-        new FakeElement("geometry", {}, [new FakeElement("mesh", { filename: "package://robot/meshes/base.stl" })])
+      new FakeElement("inertial", {}, [
+        new FakeElement("mass", { value: "2.5" }),
+        new FakeElement("origin", { xyz: "0 0 0.05" }),
+        new FakeElement("inertia", { ixx: "0.01", ixy: "0", ixz: "0", iyy: "0.02", iyz: "0", izz: "0.03" })
+      ]),
+      new FakeElement("visual", { name: "shell" }, [
+        new FakeElement("origin", { xyz: "0 0 0.1" }),
+        new FakeElement("geometry", {}, [new FakeElement("mesh", { filename: "package://robot/meshes/base.stl", scale: "0.001 0.001 0.001" })]),
+        new FakeElement("material", { name: "grey" })
       ]),
       new FakeElement("collision", {}, [
         new FakeElement("geometry", {}, [new FakeElement("mesh", { filename: "meshes/base_collision.stl" })])
       ]),
       new FakeElement("collision", {}, [
-        new FakeElement("geometry", {}, [new FakeElement("box", { size: "1 1 1" })])
+        new FakeElement("origin", { xyz: "0 0 0.5", rpy: "0 1.5708 0" }),
+        new FakeElement("geometry", {}, [new FakeElement("box", { size: "1 2 3" })])
+      ]),
+      new FakeElement("collision", {}, [
+        new FakeElement("geometry", {}, [new FakeElement("cylinder", { radius: "0.05", length: "0.2" })])
       ])
     ]),
     new FakeElement("link", { name: "arm_link" }),
@@ -220,11 +230,20 @@ test("parseUrdf keeps what the description says about joints and links", () => {
 
   assert.deepEqual(urdfData.joints[0].origin, { xyz: [0, 0.1, 0.25], rpy: [0, 0, 1.5708] });
   assert.deepEqual(urdfData.joints[0].limit, { lower: -1.57, upper: 1.57, effort: 12, velocity: 3.5 });
-  assert.deepEqual(urdfData.links[0].inertial, { mass: 2.5 });
+  const zero = { xyz: [0, 0, 0], rpy: [0, 0, 0] };
+  assert.deepEqual(urdfData.links[0].inertial, {
+    mass: 2.5, origin: { xyz: [0, 0, 0.05], rpy: [0, 0, 0] },
+    inertia: { ixx: 0.01, ixy: 0, ixz: 0, iyy: 0.02, iyz: 0, izz: 0.03 }
+  });
   assert.equal(urdfData.links[0].visuals[0].filename, "package://robot/meshes/base.stl");
+  assert.deepEqual(urdfData.links[0].visuals[0].description, {
+    name: "shell", type: "mesh", filename: "package://robot/meshes/base.stl", scale: [0.001, 0.001, 0.001],
+    origin: { xyz: [0, 0, 0.1], rpy: [0, 0, 0] }, materialName: "grey"
+  });
   assert.deepEqual(urdfData.links[0].collisions, [
-    { type: "mesh", filename: "meshes/base_collision.stl" },
-    { type: "box", filename: "" }
+    { name: "", type: "mesh", filename: "meshes/base_collision.stl", scale: null, origin: zero },
+    { name: "", type: "box", filename: "", size: [1, 2, 3], origin: { xyz: [0, 0, 0.5], rpy: [0, 1.5708, 0] } },
+    { name: "", type: "cylinder", filename: "", radius: 0.05, length: 0.2, origin: zero }
   ]);
   // A link that declares none of it says so, rather than reporting zeros.
   assert.equal(urdfData.links[1].inertial, null);
