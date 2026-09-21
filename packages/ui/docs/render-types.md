@@ -25,7 +25,10 @@ tools, tabs and scene outright and consults no capability table. The `dxf`, `glb
 list's icon and label, and the headless snapshot renderer.
 
 The DXF slice does not even have a scene: it is a canvas painted from
-`GET /__cad/drawing`, so none of the viewport capabilities below describes it.
+`GET /__cad/drawing`, so none of the viewport capabilities below describes it — and its
+row says so, with `content: drawing` and no tools. `cadgen dxf snapshot` paints the same
+payload with the same code (`@hardcore/core/lib/drawing2d`), so the CLI cannot produce a
+picture the pane could not.
 
 ## The capability registry
 
@@ -34,13 +37,13 @@ format. Pure data: no behaviour, no imports beyond the format enum.
 
 | Capability | Meaning |
 |---|---|
-| `content` | Which loaded object is the viewport's content: `mesh`, `robot` (a robot row is read by the headless renderer only; the viewer's robot renderer consults no table). Resolved once into `selectedViewportContent`. |
+| `content` | Which loaded object is the viewport's content: `mesh`, `robot`, or `drawing` for the one format that has no viewport at all (a robot row is read by the headless renderer only; the viewer's robot renderer consults no table). Resolved once into `selectedViewportContent`. |
 | `assetKind` | Which asset the headless renderer LOADS: `mesh`, `drawing`, `robot`. Not the same question as `content`. |
 | `iconKind` | The file-list glyph. |
 | `sheetKind` | Which file-sheet section set mounts. |
 | `label` | User-facing format name (status chips, sheet titles, loading labels). |
 | `sceneScale` | `cad` or `urdf`; picks the scene-scale profile. |
-| `tools` | `select`, `pan`, `draw`, `orbit`, `screenshot`. Orbit and screenshot are true for everything — they act on the viewport, not the geometry. |
+| `tools` | `select`, `pan`, `draw`, `orbit`, `screenshot`. Orbit and screenshot are true for every format WITH a viewport — they act on the viewport, not the geometry. `dxf` claims none of them: its pane is a canvas with no toolbar over it. |
 | `parts` | Per-part selection, hiding, isolate, assembly tree. |
 | `topology` | Face/edge/vertex references. Implies `parts`. |
 | `exploded`, `displayModes`, `clip` | STEP-tier display transforms. |

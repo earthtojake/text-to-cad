@@ -14,6 +14,12 @@ import {
   viewportContentKind
 } from "./renderCapabilities.js";
 
+// Every format drawn in a 3D viewport. DXF is the one that is not: its pane is a 2D
+// canvas with no scene and no toolbar, so the viewport rules below do not reach it.
+const VIEWPORT_FORMATS = Object.values(RENDER_FORMAT).filter(
+  (format) => format !== RENDER_FORMAT.DXF
+);
+
 test("every render format has a capability row", () => {
   for (const format of Object.values(RENDER_FORMAT)) {
     assert.ok(RENDER_CAPABILITIES[format], `missing capability row for ${format}`);
@@ -53,6 +59,9 @@ test("viewport content kinds are known", () => {
   }
   assert.equal(viewportContentKind(RENDER_FORMAT.STL), VIEWPORT_CONTENT.MESH);
   assert.equal(viewportContentKind(RENDER_FORMAT.URDF), VIEWPORT_CONTENT.ROBOT);
+  // A drawing is not a mesh and never was one: the row said MESH while a DXF was
+  // rendered as a 3D flat pattern, and that pattern is gone.
+  assert.equal(viewportContentKind(RENDER_FORMAT.DXF), VIEWPORT_CONTENT.DRAWING);
 });
 
 test("camera framing uses the format's declared scene scale", () => {
@@ -65,10 +74,11 @@ test("camera framing uses the format's declared scene scale", () => {
   }
 });
 
-test("orbit and screenshot are available to every format", () => {
+test("orbit and screenshot are available to every format with a viewport", () => {
   // These act on the viewport, not the geometry. Gating them per format is what
-  // produced the same dead-button bug for two formats independently.
-  for (const format of Object.values(RENDER_FORMAT)) {
+  // produced the same dead-button bug for two formats independently. DXF is not an
+  // exception to that rule, it is outside it: a drawing has no viewport to act on.
+  for (const format of VIEWPORT_FORMATS) {
     assert.equal(supportsTool(format, "orbit"), true, `${format} lost orbit`);
     assert.equal(supportsTool(format, "screenshot"), true, `${format} lost screenshot`);
   }
@@ -126,14 +136,19 @@ test("STEP is the only artifact-managed format", () => {
   assert.deepEqual(managed, [RENDER_FORMAT.STEP]);
 });
 
-test("every format gets the whole toolbar: the tools act on the viewport, not the geometry", () => {
+test("every viewport format gets the whole toolbar: the tools act on the viewport, not the geometry", () => {
   // Select and draw were off for plain meshes and for robots, so opening an STL lost
   // buttons that have nothing to do with what the file contains. Select is inert
   // without `topology` — it stays visible so the toolbar keeps one shape.
-  for (const format of Object.values(RENDER_FORMAT)) {
+  for (const format of VIEWPORT_FORMATS) {
     for (const tool of ["select", "draw", "orbit", "screenshot"]) {
       assert.equal(supportsTool(format, tool), true, `${format} is missing the ${tool} tool`);
     }
+  }
+  // ...and the one format that is not a viewport claims none of them, rather than
+  // advertising four buttons its pane does not have.
+  for (const tool of ["select", "draw", "orbit", "screenshot"]) {
+    assert.equal(supportsTool(RENDER_FORMAT.DXF, tool), false, `DXF still claims ${tool}`);
   }
   // An unrecognised format still gets the viewport tools: they cannot misbehave without
   // geometry-level capabilities behind them.

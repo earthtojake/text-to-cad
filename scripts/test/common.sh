@@ -25,7 +25,7 @@ fi
 ensure_packaged_runtime() {
   local runtime="$REPO_ROOT/packages/cadgen/src/cadgen/_runtime"
   local name
-  for name in node/dxf-mesh.mjs node/mesh-export.mjs browser/snapshot-render.js browser/render.html; do
+  for name in node/mesh-export.mjs browser/snapshot-render.js browser/render.html; do
     if [ ! -f "$runtime/$name" ]; then
       section "Building cadgen's packaged runtime (missing $name)"
       "$REPO_ROOT/scripts/bundle/cadgen-runtime.sh" --node --browser

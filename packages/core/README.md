@@ -156,7 +156,7 @@ src/
                    #   export/ (packageMeshExport), cadRefs (grammar,
                    #   parity-tested against cad_ref_syntax.py)
 bin/               # node builders the bundler ships into _runtime/node:
-                   #   mesh-export.mjs (the ONE mesh path), dxf-mesh.mjs
+                   #   mesh-export.mjs (the ONE mesh path)
 docs/              # subsystem docs (the map below)
 ```
 

@@ -197,6 +197,11 @@ the viewer was inventing from the file; a drawing is not that.
   / `panTransform` (one uniform scale and a translation; the y flip lives in the
   transform, not in the geometry), `prepareDrawing(payload)` (paths built ONCE, per
   colour for strokes and per primitive for fills) and `drawDrawing(ctx, drawable, …)`.
+  That bundle IS `cadgen dxf snapshot`: cadgen resolves a `.dxf` to the same
+  `cadgen.drawing_payload` this route answers with and the page fits and paints it
+  (`common/headlessDrawingRender.js`), so a CLI render cannot show what this pane
+  cannot. The CLI's option surface was cut to match — no camera, no display, no
+  render mode, `--appearance light|dark` and a size.
 - **Hairlines, always.** Strokes are 1.25 CSS px at every zoom, as AutoCAD draws with
   LWDISPLAY off: paths are in MODEL space and the context carries the view, so one
   `lineWidth = 1.25 / scale` per frame rebuilds no geometry. Model-space lineweights
@@ -205,7 +210,9 @@ the viewer was inventing from the file; a drawing is not that.
   background"), resolved at DRAW time against the app's `--foreground` on its
   `--background` — the same pair the 3D viewers' chrome uses. One payload therefore
   serves both themes: flipping `.dark` repaints, it does not refetch. The tokens are
-  read off the pane, and a mutation on `<html>` schedules a frame.
+  read off the pane, and a mutation on `<html>` schedules a frame. When they cannot be
+  read — and in the snapshot bundle, which has no stylesheet at all — the pair comes
+  from `@hardcore/core/lib/appTheme.js`, the one place both colours are written down.
 - **Fills are even-odd, and each one is filled on its own.** A `filled-paths`
   primitive's inner rings are its holes; merging two overlapping regions of one colour
   into a single path would turn their overlap into a hole as well. Fills go down

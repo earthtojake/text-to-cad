@@ -8,11 +8,16 @@
 //
 // Plain functions, no `@/` imports and no React, so `node --test` loads this
 // file directly; `document` arrives as an argument for the same reason.
+import { APP_THEME_COLORS } from "@hardcore/core/lib/appTheme.js";
 
-/** The `--background` pair, written out: what the tokens resolve to. */
+/** The `--background` pair, written out: what the tokens resolve to.
+ *
+ * Taken from the app's surface pair rather than spelled again here. Renderers
+ * and the headless snapshot bundle paint on this same background, and a second
+ * copy of the number is the one that drifts. */
 export const CHROME_BACKDROP_FALLBACK = Object.freeze({
-  light: "#ffffff",
-  dark: "#292929"
+  light: APP_THEME_COLORS.light.background,
+  dark: APP_THEME_COLORS.dark.background
 });
 
 /** The custom property defining the app's background. */

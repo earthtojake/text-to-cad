@@ -3,8 +3,8 @@ set -euo pipefail
 
 # Build cadgen's non-Python runtime INTO THE PACKAGE (packages/cadgen/src/cadgen/_runtime).
 #
-# cadgen executes three things it does not write in Python: Node builders (the DXF mesh
-# and the mesh exports are baked by a JS child), a headless browser bundle (the snapshot
+# cadgen executes three things it does not write in Python: Node builders (the mesh
+# exports are baked by a JS child), a headless browser bundle (the snapshot
 # CLI drives it in a page), and the CAD Viewer's built client (`cadgen viewer` serves
 # it). cadgen.assets resolves all three inside the distribution, so there is one copy
 # and one builder of that copy: this script. scripts/bundle/bundle.sh is the entry point
@@ -49,11 +49,10 @@ SNAPSHOT_BUILD_DEPS_DIR="${CADGEN_SNAPSHOT_BUILD_DEPS_DIR:-$REPO_ROOT/tmp/cadgen
 # What each stage owes, checked after a --check build. A stage that emits nothing, or
 # emits one file and silently drops another, is the failure this catches before a wheel
 # carries the hole to a user.
-NODE_OUTPUTS=(dxf-mesh.mjs mesh-export.mjs package.json THIRD_PARTY_LICENSES.txt)
+NODE_OUTPUTS=(mesh-export.mjs package.json THIRD_PARTY_LICENSES.txt)
 BROWSER_OUTPUTS=(snapshot-render.js render.html THIRD_PARTY_LICENSES.txt)
 
 BUILDER_ENTRIES=(
-  "$REPO_ROOT/packages/core/bin/dxf-mesh.mjs"
   "$REPO_ROOT/packages/core/bin/mesh-export.mjs"
 )
 

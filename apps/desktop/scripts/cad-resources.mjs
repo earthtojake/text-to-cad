@@ -53,7 +53,6 @@ function run(file, args, options = {}) {
 }
 
 const REQUIRED_CADGEN_RUNTIME = [
-  "node/dxf-mesh.mjs",
   "node/mesh-export.mjs",
   "browser/render.html",
   "browser/snapshot-render.js",

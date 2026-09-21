@@ -1,39 +1,40 @@
-"""The Viewer must render every entity kind the DXF engine can write.
+"""What the DXF engine writes is what the Viewer and the CLI can draw.
 
-Two halves of one product, in two languages: `cadgen._internal.dxf_emit` writes
-drawings through build123d's `ExportDXF`, and `packages/core/src/lib/dxf/
-parseDxf.js` is what the Viewer and the snapshot renderer read them back with.
-An entity the engine emits and the parser does not know simply vanishes from the
-render — a hole that is cut but not shown, which is the worst kind of silence in
-a cut file.
+Two halves of one product: ``cadgen._internal.dxf_emit`` writes drawings through
+build123d's ``ExportDXF``, and ``cadgen.drawing_payload`` is what both readers
+get them back through — `GET /__cad/drawing` for the Viewer's DXF pane, and the
+resolved job for `cadgen dxf snapshot`. An entity the engine emits and the
+payload does not carry simply vanishes from the picture: a hole that is cut but
+not shown, which is the worst kind of silence in a cut file.
 
 The engine's set is not restated here as a constant; it is MEASURED, by building
-a drawing that exercises every converter `ExportDXF` has (line, circle, arc,
+a drawing that exercises every converter ``ExportDXF`` has (line, circle, arc,
 ellipse, spline) and reading back what came out. So an upstream change that
 starts emitting something new fails this test rather than the user's part.
+
+This used to compare that set against a JavaScript DXF parser's entity dispatch.
+There is no such parser any more — flattening is ezdxf's, on the server, once —
+so the question is answered where it is now decided: every layer the drawing
+declares must reach the payload with primitives on it.
 """
 
 from __future__ import annotations
 
 import collections
-import re
+import tempfile
 import unittest
+from pathlib import Path
 
-from tests.python.support.paths import add_repo_path, repo_path
+from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cadgen/src")
 
-PARSER = repo_path("packages/core/src/lib/dxf/parseDxf.js")
-# `if (entityType === "SPLINE") {` — the parser's dispatch, plus the explicit
-# list of types it knowingly ignores.
-_DISPATCH = re.compile(r'entityType === "([A-Z0-9_]+)"')
+# One layer per converter family, so a layer missing from the payload names the
+# geometry that vanished rather than "something".
+EXPECTED_LAYERS = ("CUT", "CUT_HOLES", "ENGRAVE")
 
 
-def _parser_entity_types() -> set[str]:
-    return set(_DISPATCH.findall(PARSER.read_text(encoding="utf-8")))
-
-
-def _emitted_entity_types() -> collections.Counter:
+def _emitted_document():
     import build123d as bd
 
     from cadgen._internal.dxf_emit import emit_dxf
@@ -54,7 +55,23 @@ def _emitted_entity_types() -> collections.Counter:
         "ENGRAVE": mark.sketch,
     }
     _, document = emit_dxf(drawing, label="viewer-coverage")
-    return collections.Counter(entity.dxftype() for entity in document.modelspace())
+    return document
+
+
+def _emitted_entity_types() -> collections.Counter:
+    return collections.Counter(entity.dxftype() for entity in _emitted_document().modelspace())
+
+
+def _payload_for_emitted_drawing() -> dict:
+    from cadgen.drawing_payload import build_drawing_payload
+
+    document = _emitted_document()
+    # A fresh temp directory of its own: the payload is read from a FILE, which
+    # is the door both the route and the snapshot resolver use.
+    with tempfile.TemporaryDirectory(prefix="cadgen-emitted-dxf-") as tmp:
+        path = Path(tmp) / "coverage.dxf"
+        document.saveas(path)
+        return build_drawing_payload(path)
 
 
 class ViewerRendersEmittedDxfTest(unittest.TestCase):
@@ -64,15 +81,35 @@ class ViewerRendersEmittedDxfTest(unittest.TestCase):
         for kind in ("LINE", "CIRCLE", "ARC", "ELLIPSE", "SPLINE"):
             self.assertIn(kind, emitted, f"the rig no longer produces a {kind}")
 
-    def test_the_viewer_parser_handles_every_emitted_kind(self) -> None:
-        supported = _parser_entity_types()
-        missing = sorted(set(_emitted_entity_types()) - supported)
+    def test_the_drawing_payload_carries_every_emitted_layer(self) -> None:
+        payload = _payload_for_emitted_drawing()
+        self.assertTrue(payload["primitives"], "the emitted drawing flattened to nothing at all")
+        self.assertIsNotNone(payload["bounds"], "a drawing with geometry must have bounds to fit")
+        drawn = {str(layer["name"]): int(layer["count"]) for layer in payload["layers"]}
+        for layer in EXPECTED_LAYERS:
+            with self.subTest(layer=layer):
+                self.assertIn(
+                    layer,
+                    drawn,
+                    f"nothing on layer {layer!r} reached the drawing payload, so the Viewer "
+                    "and `cadgen dxf snapshot` would both draw that geometry as nothing. "
+                    f"Layers with primitives: {sorted(drawn)}",
+                )
+                self.assertGreater(drawn[layer], 0)
+
+    def test_every_primitive_is_a_shape_the_shared_drawing_code_knows(self) -> None:
+        # The client half (packages/core/src/lib/drawing2d) THROWS on a primitive
+        # type it does not know rather than dropping it, so a new shape here is a
+        # drawing that refuses to open. Pinned against the same five names.
+        known = {"point", "lines", "path", "filled-paths", "filled-polygon"}
+        payload = _payload_for_emitted_drawing()
+        unknown = sorted({str(primitive["type"]) for primitive in payload["primitives"]} - known)
         self.assertEqual(
             [],
-            missing,
-            f"{PARSER.name} does not handle {missing}, which the DXF engine emits. "
-            "Add support in packages/core and regenerate the bundles, or the "
-            "Viewer will silently drop that geometry.",
+            unknown,
+            f"the emitted drawing produced primitive type(s) {unknown}; teach "
+            "packages/core/src/lib/drawing2d/drawing.js about them, or the viewer and the "
+            "snapshot both refuse the drawing.",
         )
 
 

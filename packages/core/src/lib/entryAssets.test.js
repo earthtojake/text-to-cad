@@ -5,7 +5,6 @@ import {
   entryAssetHash,
   entryAssetBytes,
   entryAssetUrl,
-  entryHasDxf,
   entryHasDisplayEdges,
   entryHasMesh,
   entryHasReferences,
@@ -99,7 +98,6 @@ test("entry availability helpers preserve existing viewer gates", () => {
   assert.equal(entryHasDisplayEdges(stepEntry({ artifact: { ok: false } })), true);
   assert.equal(entryHasDisplayEdges(stepEntry({ hash: "" })), false);
   assert.equal(entryHasReferences(stepEntry({ hash: "" })), false);
-  assert.equal(entryHasDxf({ kind: "dxf", url: "/plate.dxf", hash: "dxf-hash" }), true);
 });
 
 test("robot and reference signatures match persisted session expectations", () => {
@@ -119,11 +117,10 @@ test("robot and reference signatures match persisted session expectations", () =
   }), "sdf-hash");
 });
 
-test("a DXF entry's mesh asset is its own file", () => {
-  // The client parses and meshes the .dxf itself (design/standalone-viewer.md
-  // Phase A): the entry's url IS the render asset, no glb relation exists, and
-  // the document-vs-layout profile is decided from the PARSED data
-  // (parseDxf.dxfDataIsDocument), not from the entry.
+test("a DXF entry's render asset is its own file", () => {
+  // Nothing bakes a drawing: the entry's url IS the asset, and no glb relation
+  // exists for it. What the DXF pane and `cadgen dxf snapshot` actually draw is
+  // the server's flattened payload for that same file (GET /__cad/drawing).
   const dxf = { file: "parts/bracket.dxf", kind: "dxf", url: "/__cad/asset?file=%2Fx%2Fbracket.dxf&v=1", hash: "h1" };
   assert.equal(entryMeshAssetUrl(dxf), dxf.url);
   assert.equal(entryMeshAssetHash(dxf), "h1");

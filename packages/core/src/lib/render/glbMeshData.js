@@ -174,10 +174,10 @@ function authoredGlbNameForObject(object) {
  * into `userData`), so a cadgen-written GLB says outright whether its positions are glTF
  * Y-up or already CAD Z-up. That replaces an inference that was not merely weak but FALSE:
  * the old test was "does any node carry a cadOccurrenceId", and both writer presets stamp
- * that id on every node they write, in BOTH spaces — packageMeshExport writes Y-up, and
- * bin/dxf-mesh.mjs writes Z-up. So the proxy answered "already CAD space" for every file
- * cadgen produced, the Y-up correction was skipped, and models rendered at the right size
- * rotated -90 degrees about X — on their side.
+ * that id on every node they write, whichever space those positions are in. So the proxy
+ * answered "already CAD space" for every file cadgen produced, the Y-up correction was
+ * skipped, and models rendered at the right size rotated -90 degrees about X — on their
+ * side.
  *
  * Returns the first declaration found; a GLB mixing spaces across nodes is not a thing any
  * writer produces, and the alternative (per-node spaces) would have to be plumbed through

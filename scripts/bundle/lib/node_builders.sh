@@ -2,7 +2,7 @@
 # Shared helpers for bundling cadgen's Node builders into the packaged runtime
 # (packages/cadgen/src/cadgen/_runtime/node). Sourced by scripts/bundle/cadgen-runtime.sh.
 #
-# cadgen bakes the DXF mesh and the mesh exports by spawning a Node child
+# cadgen bakes the mesh exports by spawning a Node child
 # (packages/cadgen/src/cadgen/_internal/node_runtime.py). The builders live in
 # packages/core/bin and import three and meshoptimizer -- a dependency GRAPH, not just
 # a file -- and the wheel ships no node_modules, so each builder is esbuild-bundled into ONE

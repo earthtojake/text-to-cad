@@ -134,7 +134,7 @@ def dev_node_modules_missing(builders_dir: Path) -> Path | None:
 
 
 def node_builders_dir() -> Path:
-    """Directory holding the esbuilt Node builders (``dxf-mesh.mjs`` and friends).
+    """Directory holding the esbuilt Node builders (``mesh-export.mjs`` and friends).
 
     ``CADGEN_NODE_BUILDERS_DIR`` names it directly. Otherwise use live compiled
     core builders in a checkout, then the packaged copy.
