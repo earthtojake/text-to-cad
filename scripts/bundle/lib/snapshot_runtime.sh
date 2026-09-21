@@ -14,19 +14,23 @@ SNAPSHOT_RUNTIME_ESBUILD_VERSION="${CAD_SNAPSHOT_ESBUILD_VERSION:-0.27.7}"
 
 # three and meshoptimizer are read from packages/cadgen-js/package-lock.json, the one
 # place their exact versions are already pinned, so a dependency bump cannot silently change
-# what ships without also changing the committed bundle. This matches node_builders.sh.
+# what ships without also changing the lockfile. This matches node_builders.sh.
 # Resolved lazily: BUNDLE_REPO_ROOT is set before the first call, not necessarily before
 # sourcing.
 snapshot_runtime_locked_version() {
   local name="$1"
+  # The lockfile path travels as an ARGUMENT, not inside the script text: on
+  # Windows, Git Bash rewrites POSIX-style paths in arguments to native ones
+  # (`/d/a/x` -> `D:/a/x`), but not inside a quoted string, and Node cannot
+  # open `/d/a/x`.
   node -p "
-    const lock = require('$BUNDLE_REPO_ROOT/packages/cadgen-js/package-lock.json');
+    const lock = require(process.argv[1]);
     const entry = lock.packages && lock.packages['node_modules/$name'];
     if (!entry || !entry.version) {
       throw new Error('packages/cadgen-js/package-lock.json has no pinned $name');
     }
     entry.version;
-  "
+  " "$BUNDLE_REPO_ROOT/packages/cadgen-js/package-lock.json"
 }
 
 # The lockfile version, unless the matching CAD_SNAPSHOT_* env var overrides it.
@@ -157,30 +161,4 @@ build_snapshot_runtime() {
     --legal-comments=none \
     --alias:three="$deps_dir/node_modules/three" \
     --outfile="$target_dir/snapshot-render.js"
-}
-
-# check_snapshot_runtime <runtime_dir> <check_dir> <repo_relative_label> <fix_hint>
-check_snapshot_runtime() {
-  local runtime_dir="$1"
-  local check_dir="$2"
-  local label="$3"
-  local fix_hint="$4"
-  local stale=0
-  for file in render.html snapshot-render.js; do
-    if [ ! -f "$runtime_dir/$file" ]; then
-      echo "Missing generated runtime file: $label/$file" >&2
-      stale=1
-      continue
-    fi
-    if ! cmp -s "$check_dir/$file" "$runtime_dir/$file"; then
-      echo "Stale generated runtime file: $label/$file" >&2
-      stale=1
-    fi
-  done
-  if [ "$stale" -ne 0 ]; then
-    echo "" >&2
-    echo "$fix_hint" >&2
-    return 1
-  fi
-  return 0
 }

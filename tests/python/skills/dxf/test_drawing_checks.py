@@ -87,6 +87,23 @@ class DrawingChecksTests(unittest.TestCase):
 
         self.assertIn("open_cut_profile", _codes(validate_drawing_document(document)))
 
+    def test_closure_survives_a_rounding_boundary_tie(self) -> None:
+        # Two lines sharing both endpoints, but each endpoint independently computed
+        # (e.g. via analytic bend allowances) so it lands a fraction of a micron on
+        # either side of the 6-decimal rounding boundary -- reproduces the tom-cad
+        # report of a single valid closed face reading as `open_cut_profile` with
+        # endpoints like (-5.5, -68.150754) vs (-5.5, -68.150753), under 1e-6 mm apart.
+        document = _new_document()
+        modelspace = document.modelspace()
+        y = -68.1507535532376
+        start_a, start_b = (-5.5, y), (-5.5, y + 4e-7)
+        end_a, end_b = (10.0, 20.0), (10.0, 20.0 - 3e-7)
+        modelspace.add_line(start_a, end_a, dxfattribs={"layer": "CUT"})
+        modelspace.add_line(end_b, start_b, dxfattribs={"layer": "CUT"})
+
+        codes = _codes(validate_drawing_document(document))
+        self.assertNotIn("open_cut_profile", codes)
+
     def test_zero_length_and_duplicate_entities_are_errors(self) -> None:
         document = _new_document()
         modelspace = document.modelspace()

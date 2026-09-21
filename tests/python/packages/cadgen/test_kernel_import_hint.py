@@ -31,15 +31,6 @@ def _posix_slashes(text: str) -> str:
     return text.replace("\\", "/")
 
 
-class NormalizerTest(unittest.TestCase):
-    def test_a_windows_hint_path_is_normalized(self) -> None:
-        """Pinned from any host: on macOS the replace is a no-op either way, so
-        only a synthetic Windows hint tells the two needles apart."""
-        hint = r"hint: the CAD kernel was imported at lib\geo.py:3 (CENTER3 = ...)"
-        self.assertIn("lib/geo.py:3", _posix_slashes(hint))
-        self.assertNotIn("lib/geo.py:3", hint.replace("\\\\", "/"))
-
-
 class KernelImportHintTest(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory(prefix="cadgen-kernel-hint-")
@@ -94,6 +85,62 @@ class KernelImportHintTest(unittest.TestCase):
         self.assertIn("lib/geo.py:3", _posix_slashes(hint))
         self.assertIn("bd.Align.CENTER", hint)
         self.assertNotIn("imported the CAD kernel at module top", hint)
+
+    def test_a_cadgen_internal_import_site_is_skipped_for_the_causal_project_line(self) -> None:
+        """A model's own import can reach the kernel through a cadgen-internal
+        module (e.g. ``cadgen._internal.step_scene``, which imports OCP at its
+        own top level) rather than through the ``bd`` proxy. The hint must
+        still name the project's import, not the internal module that
+        happened to do the actual `import OCP` (tom-cad report, 2026-09-10:
+        the hint pointed at `cadgen/_internal/step_scene.py:16` with no trace
+        of the causal project import)."""
+        (self.project / "hinted3.py").write_text(
+            textwrap.dedent('''
+            from cadgen import step
+            import cadgen._internal.step_scene  # noqa: F401 -- reaches OCP at cadgen's own top level
+
+            @step(out="hinted3.step")
+            def hinted3():
+                from cadgen import build123d as bd
+                return bd.Box(5, 5, 5)
+
+
+            if __name__ == "__main__":
+                hinted3()
+            '''),
+            encoding="utf-8",
+        )
+        stderr = self._run("hinted3")
+        hint = next((line for line in stderr.splitlines() if line.startswith("hint:")), "")
+        self.assertIn("hinted3.py", _posix_slashes(hint))
+        self.assertNotIn("step_scene.py", hint)
+
+    def test_a_kernel_import_sorted_above_cadgen_is_still_named(self) -> None:
+        """The recorder is installed by cadgen's package body, so a model that
+        imports the kernel FIRST -- exactly what an import sorter writes, since
+        `import build123d` sorts above `from cadgen import step` -- was already
+        past it and got a hint with no file, line or statement in it. The file
+        that was importing cadgen is parsed for the statement instead."""
+        (self.project / "sorted_first.py").write_text(
+            textwrap.dedent('''
+            import build123d
+            from cadgen import step
+
+            BOX = build123d.Box(5, 5, 5)
+
+            @step(out="sorted_first.step")
+            def sorted_first():
+                return BOX
+
+
+            if __name__ == "__main__":
+                sorted_first()
+            '''),
+            encoding="utf-8",
+        )
+        hint = next((line for line in self._run("sorted_first").splitlines() if line.startswith("hint:")), "")
+        self.assertIn("sorted_first.py:2", _posix_slashes(hint))
+        self.assertIn("import build123d", hint)
 
     def test_a_kernel_free_module_body_gets_no_hint(self) -> None:
         (self.project / "clean.py").write_text(

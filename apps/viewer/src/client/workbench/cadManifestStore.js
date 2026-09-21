@@ -1,3 +1,5 @@
+import { requestViewerJson } from "./viewerRequest.js";
+
 const CAD_CATALOG_REFRESH_INTERVAL_MS = 2_000;
 const CAD_CATALOG_FETCH_TIMEOUT_MS = 10_000;
 const CAD_FILE_QUERY_PARAM = "file";
@@ -27,6 +29,7 @@ let currentSnapshot = {
 };
 let refreshRequestId = 0;
 let refreshInFlight = null;
+let refreshInFlightUrl = "";
 let refreshLoopStarted = false;
 
 currentManifestSignature = JSON.stringify(currentSnapshot.manifest);
@@ -150,21 +153,32 @@ async function fetchWithTimeout(url, options, timeoutMs, timeoutMessage) {
   }
 }
 
-export async function refreshCadCatalog({ markRefreshing = !currentSnapshot.catalogHydrated } = {}) {
+export async function refreshCadCatalog({
+  markRefreshing = !currentSnapshot.catalogHydrated,
+  fileRef = readSearchParam(CAD_FILE_QUERY_PARAM),
+} = {}) {
   if (typeof window === "undefined") {
     return;
   }
+  const url = cadApiUrl("/__cad/catalog", { params: { file: fileRef } });
   if (refreshInFlight) {
-    return refreshInFlight;
+    if (refreshInFlightUrl === url) {
+      return refreshInFlight;
+    }
+    // A file selection must hydrate that file even if the previous selection's
+    // catalog is still loading. Keep one request in flight and then prioritize it.
+    await refreshInFlight.catch(() => {});
+    return refreshCadCatalog({ markRefreshing, fileRef });
   }
   const requestId = ++refreshRequestId;
+  refreshInFlightUrl = url;
   if (markRefreshing) {
     publishCadRefreshState({ refreshing: true, error: "" });
   }
   refreshInFlight = (async () => {
     try {
       const response = await fetchWithTimeout(
-        cadApiUrl("/__cad/catalog", { includeFile: true }),
+        url,
         { cache: "no-store" },
         CAD_CATALOG_FETCH_TIMEOUT_MS,
         `Timed out loading CAD catalog after ${CAD_CATALOG_FETCH_TIMEOUT_MS / 1000}s`
@@ -191,16 +205,17 @@ export async function refreshCadCatalog({ markRefreshing = !currentSnapshot.cata
     } finally {
       if (requestId === refreshRequestId) {
         refreshInFlight = null;
+        refreshInFlightUrl = "";
       }
     }
   })();
   return refreshInFlight;
 }
 
-// Unified render-artifact client API. GET reports compile state ({ state: "rendered" | "not-compiled" |
-// "compiling" | "failed", ... }); a direct-render entry is always "rendered". (Replaced the STEP-specific
+// Unified geometry-artifact client API. GET reports compile state ({ state: "compiled" | "not-compiled" |
+// "compiling" | "failed", ... }); a direct-render entry is always "compiled". (Replaced the STEP-specific
 // requestStepSourceStatus + requestStepArtifactGeneration.)
-export async function requestArtifactStatus(fileRef, { signal } = {}) {
+export async function requestArtifactStatus(fileRef, { signal, timeoutMs = 0 } = {}) {
   if (typeof window === "undefined") {
     return null;
   }
@@ -208,24 +223,13 @@ export async function requestArtifactStatus(fileRef, { signal } = {}) {
   if (!normalizedFileRef) {
     throw new Error("Missing file");
   }
-  const response = await fetch(cadApiUrl("/__cad/artifact", {
+  return requestViewerJson(cadApiUrl("/__cad/artifact", {
     params: { file: normalizedFileRef },
-  }), {
-    method: "GET",
-    cache: "no-store",
-    signal,
-  });
-  if (!response.ok) {
-    throw new Error(await readJsonError(
-      response,
-      `Failed to check render artifact: ${response.status} ${response.statusText}`
-    ));
-  }
-  return response.json();
+  }), { method: "GET", cache: "no-store", signal }, "checking display assets", { timeoutMs });
 }
 
 // POST (re)builds the artifact and publishes the refreshed catalog; resolves to
-// { ok, state: "rendered" | "failed", ... }.
+// { ok, state: "compiled" | "failed", ... }.
 export async function requestArtifact(fileRef, { force = false, signal } = {}) {
   if (typeof window === "undefined") {
     return null;
@@ -234,7 +238,7 @@ export async function requestArtifact(fileRef, { force = false, signal } = {}) {
   if (!normalizedFileRef) {
     throw new Error("Missing file");
   }
-  const response = await fetch(cadApiUrl("/__cad/artifact", {
+  const payload = await requestViewerJson(cadApiUrl("/__cad/artifact", {
     params: { file: normalizedFileRef, ...(force ? { force: "1" } : {}) },
   }), {
     method: "POST",
@@ -243,14 +247,7 @@ export async function requestArtifact(fileRef, { force = false, signal } = {}) {
     // Custom header => a cross-origin caller must preflight, and the backend answers
     // no CORS, so a hostile page can never trigger a build (which runs the generator).
     headers: { "x-cadgen-viewer": "1" },
-  });
-  if (!response.ok) {
-    throw new Error(await readJsonError(
-      response,
-      `Failed to generate render artifact: ${response.status} ${response.statusText}`
-    ));
-  }
-  const payload = await response.json();
+  }, "preparing display assets");
   if (payload?.catalog) {
     publishCadManifest(payload.catalog);
   }

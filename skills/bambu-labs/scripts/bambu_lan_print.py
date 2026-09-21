@@ -1544,7 +1544,19 @@ def add_config_parser(subparsers: argparse._SubParsersAction) -> None:
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="Printer config JSON path.")
     config_subparsers = parser.add_subparsers(dest="config_command", required=True)
 
-    set_parser = config_subparsers.add_parser("set", help="Create or update a configured printer.")
+    # `config` is the only two-level command, and --config names the same file
+    # here that it names on `send`, `status` and the rest -- where it sits on the
+    # command itself. Accept both placements so the flag reads the same
+    # everywhere. SUPPRESS is what keeps them from fighting: an omitted leaf
+    # --config sets nothing, so `config --config X set` keeps X.
+    config_path = argparse.ArgumentParser(add_help=False)
+    config_path.add_argument(
+        "--config", default=argparse.SUPPRESS, help="Printer config JSON path."
+    )
+
+    set_parser = config_subparsers.add_parser(
+        "set", parents=[config_path], help="Create or update a configured printer."
+    )
     set_parser.add_argument("--printer", required=True, help="Local printer id, for example a1-mini.")
     set_parser.add_argument("--host", help="Printer LAN IP or hostname.")
     set_parser.add_argument("--access-code", help="Printer LAN access code.")
@@ -1562,10 +1574,16 @@ def add_config_parser(subparsers: argparse._SubParsersAction) -> None:
     )
     set_parser.set_defaults(func=config_set_main)
 
-    list_parser = config_subparsers.add_parser("list", help="List configured printers.")
+    list_parser = config_subparsers.add_parser(
+        "list", parents=[config_path], help="List configured printers."
+    )
     list_parser.set_defaults(func=config_list_main)
 
-    show_parser = config_subparsers.add_parser("show", help="Show one configured printer without printing the access code.")
+    show_parser = config_subparsers.add_parser(
+        "show",
+        parents=[config_path],
+        help="Show one configured printer without printing the access code.",
+    )
     show_parser.add_argument("--printer", required=True)
     show_parser.set_defaults(func=config_show_main)
 

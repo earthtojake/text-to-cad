@@ -11,9 +11,10 @@ that interface.
 
 Use query params only for shareable state that should survive copying a URL:
 
-- `file`: active catalog entry, always relative to the directory in the URL path.
-  The path itself is the directory the Viewer scans — there is no `dir` param on
-  the page URL (`dir` survives only inside `/__cad/asset` request URLs).
+- `file`: the active catalog entry, relative to the served root. The page is
+  always the bare origin: an instance serves ONE directory, fixed when it was
+  launched, so no URL anywhere names a directory — there is no `dir` param on
+  the page URL and none on a `/__cad` request either.
 - `resetTips`: debug-only. Clears the record of seen one-shot tutorial tips so
   they fire again. It applies once during bootstrap and is then stripped from
   the address bar, so it is a reset action rather than a persistent mode.
@@ -28,14 +29,18 @@ unrelated CAD Viewer sessions, so it should only hold global preferences.
 
 Current intended use:
 
-- `cad-viewer:theme`: the active theme id (`system`, a built-in preset id, or
-  `custom`) plus the single custom settings blob, if the user has edited one.
-  Presets are read-only and are never stored — only named. The key is absent
-  while the theme is `system` with no custom slot.
+- `cad-viewer:color-scheme`: a same-origin mirror of the global System / Light /
+  Dark app appearance. The host-scoped `cad-viewer-appearance` cookie is the
+  canonical cross-port value; the mirror supports storage events and acts as a
+  fallback when cookies are blocked.
 - `cad-viewer:tutorial-tips:v1`: ids of the one-shot tutorial tips the user has
   dismissed. A tip is recorded only when its close button is pressed — clicking
   away, Escape, and reloads all leave it unrecorded, so it comes back on the next
   chance until it is actually acknowledged. Cleared by `?resetTips=1`.
+- `cad-viewer:file-sheet-tab-layout:v6`: the draggable per-kind CAD tab order,
+  split assignment, and split ratio. Render starts with a separate single-row
+  Studio-first arrangement on every entry; its temporary drag/split changes are
+  never written to this store.
 
 Avoid adding file-specific state to `localStorage`. If the value depends on the
 selected file, the active root directory, a generated asset hash, or a tab
@@ -66,10 +71,6 @@ Current `cad-viewer:directory-session:v1` fields:
 - `fileSheetOpen`: app-wide file sheet open/closed state.
 - `fileSheetWidthPx`: app-wide custom file sheet width, stored only when it
   differs from the default.
-- `theme`: a directory-level theme override for the current tab, in the same
-  `{themeId, custom}` shape as the global key. The global theme itself belongs
-  to `localStorage`.
-
 Do not put selected-file state, model controls, drawing state, or
 generated-asset decisions in directory session state. Those belong in per-file
 session state.
@@ -84,8 +85,8 @@ keys.
 Per-file state is namespaced by the active root directory and keyed by file:
 
 ```text
-cad-viewer:file-session:v1:<namespace>:<fileKey>
-cad-viewer:file-session:index:v1:<namespace>
+cad-viewer:file-session:v3:<namespace>:<fileKey>
+cad-viewer:file-session:index:v3:<namespace>
 ```
 
 Per-file session state is intentionally tab-local. Do not sync these keys from
@@ -94,10 +95,24 @@ camera, display, tool, and sheet settings.
 
 Existing slice intent:
 
+The slice set is closed — it is the frozen `FILE_SESSION_SLICE_SCHEMA` in
+`fileSessionState.js`, and a slice with a `signatureKey` is dropped when the
+artifact it was read from changes:
+
 - `tab`: file sheet section expansion, reference selection, part visibility,
   camera, tools, and drawing history.
-- `dxf`: DXF preview thickness and bend settings.
-- `stepModule`: STEP module enablement, parameter values, and animation state.
+- `display`: normal CAD display controls for the model.
+- `render`: Render mode, its active Studio/Animation tab, sparse photographic
+  configuration, and separate CAD/Render camera state. Studio defaults follow
+  global app appearance; the session does not store a studio choice. The slice
+  accepts exposure, softbox, backdrop, lens, and Preview/Final quality values.
+  Display stays in the CAD slice and never enters the Render payload.
+- `stepModule`: STEP pose enablement and DOF values.
+- `animation`: the selected clip, whether it drives the model, and its clock.
+  It shares the `stepModule` signature because both are read out of the one
+  sidecar, so a rebuilt sidecar invalidates both.
+- `materials`: the tab-local material definitions and their part assignments,
+  invalidated by an authored revision.
 - `urdf`: joint values and motion-planning controls.
 - `largeFile`: large-file decisions such as selectable topology opt-in.
 

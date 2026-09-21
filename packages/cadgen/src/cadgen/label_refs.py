@@ -17,7 +17,6 @@ render the wrong wheel and look like it worked.
 
 from __future__ import annotations
 
-import re
 from typing import Any, Iterable, Mapping, Sequence
 
 from cadgen.cad_ref_syntax import LABEL_SELECTOR_RE, parse_selector
@@ -115,15 +114,25 @@ def build_label_aliases(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
 
 
 def attach_label_aliases(index: Any) -> Any:
-    """Return ``index`` with its label aliases computed from its final occurrence rows.
+    """Return ``index`` with its label aliases computed from its final occurrence rows
+    AND the instance tree's interior nodes.
 
     Called from ``assembly_lookup.index_with_assembly_occurrences``, which is the one place both
     index construction sites funnel through -- attaching anywhere else reopens the two-site gap
     that PR #277 closed.
+
+    Groups are in here because a subassembly is a labelled thing in exactly the sense a part is:
+    the author wrote ``camera_assembly`` on a Compound, a kinematics mate fastens to that name
+    (``_internal.kinematics_resolve._instance_tree_ids`` walks the same tree), and ``#o1.8``
+    already inspects it. Indexing leaves only made the document answer to one of those names and
+    not the other -- tom-cad FEEDBACK issue 5. A group and a leaf that share a name become
+    numbered aliases like any other duplicate, because "the group or the part?" is a question
+    only the author can answer.
     """
     if index is None:
         return index
-    rows = getattr(index, "occurrences", None)
+    rows = list(getattr(index, "occurrences", None) or [])
+    rows.extend((getattr(index, "group_nodes", None) or {}).values())
     if not rows:
         return index
     built = build_label_aliases(rows)

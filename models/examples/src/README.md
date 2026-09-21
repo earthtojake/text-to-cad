@@ -4,8 +4,7 @@ Standalone demo parts as one cad-project: every script directly under
 `src/` is a runnable part model and its artifact lands in a format folder at
 the project root (`STEP/`, `STL/`, `3MF/`, `GLB/`). Assemblies live in the
 sibling `models/assemblies/` project (one group per assembly) and 2D drawings
-in `models/drawings/`. Nothing here is committed except this `src/` tree and
-`imported/` — build what you need.
+in `models/drawings/`. The `src/` tree is committed; build the outputs you need.
 
 ```bash
 python models/examples/src/mounting_plate.py     # one model
@@ -20,9 +19,6 @@ no path setup.
 
 A handful of models declare mesh exports so the STL/3MF/GLB doors have real
 fixtures to work against.
-
-`imported/import-smoke.step` is a committed SOURCE file (the viewer launch
-test's fixture), not an output.
 
 ### Parts
 
@@ -57,4 +53,3 @@ test's fixture), not an output.
 | `t_slot_slider_block.py` | `STEP/t_slot_slider_block.step` | T-slot slider block with central channel, side relief cuts, and mounting holes |
 
 Build: `python src/<script>` per row; unchanged models are no-ops.
-Imported sources: `imported/import-smoke.step` (committed, no script).

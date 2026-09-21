@@ -34,6 +34,8 @@ class GeneratorMetadata:
     # False for a MESH-ONLY model (mesh decorators, no @step): a model like any
     # other whose .step is not among its outputs and is never written.
     step_output: bool = True
+    materials: object | None = None
+    animation: object | None = None
 
 
 @dataclass(frozen=True)
@@ -100,6 +102,47 @@ def resolve_model_output_path(
 
 _MESH_DECORATOR_NAMES = ("stl", "glb", "threemf")
 _MESH_DECORATOR_FMT = {"stl": "stl", "glb": "glb", "threemf": "3mf"}
+_MESH_SUFFIX = {"stl": ".stl", "3mf": ".3mf", "glb": ".glb"}
+
+
+def declared_output_paths(script_path: Path | str, *, function: str | None = None) -> list[Path]:
+    """Every file the models in ``script_path`` declare they will write.
+
+    The primary document (``out=``, else the sibling ``<stem>.<fmt>``) plus each
+    declared mesh export, resolved exactly as the build resolves them. A
+    mesh-only model contributes its meshes and no ``.step``. ``function`` narrows
+    it to one model in a file that holds several. Never raises: a script that
+    cannot be parsed declares nothing.
+    """
+    try:
+        script = Path(script_path).resolve()
+        models = (
+            (parse_generator_metadata(script, function=function),)
+            if function
+            else parse_all_generator_metadata(script)
+        )
+        outputs: list[Path] = []
+        for metadata in models:
+            if metadata is None:
+                continue
+            fmt = "dxf" if str(getattr(metadata, "format", "step") or "step") == "dxf" else "step"
+            primary = resolve_model_output_path(
+                script, fmt=fmt, explicit_out=metadata.out_target, function=metadata.entry_function
+            )
+            if fmt == "dxf" or getattr(metadata, "step_output", True):
+                outputs.append(primary)
+            for decl in getattr(metadata, "mesh_exports", ()) or ():
+                if decl.out is not None:
+                    outputs.append(
+                        resolve_model_output_path(
+                            script, fmt=decl.fmt, explicit_out=decl.out, function=metadata.entry_function
+                        )
+                    )
+                else:
+                    outputs.append(primary.with_suffix(_MESH_SUFFIX.get(decl.fmt, f".{decl.fmt}")))
+        return list(dict.fromkeys(outputs))
+    except Exception:  # noqa: BLE001 - declarations are best-effort; a build still runs
+        return []
 
 
 def _cadgen_decorator_aliases(tree: ast.Module) -> tuple[dict[str, str], set[str]]:
@@ -291,6 +334,8 @@ def parse_generator_metadata(script_path: Path, function: str | None = None) -> 
         is_decorated=True,
         mesh_exports=tuple(defn.mesh_exports),
         step_output=bool(defn.step_output),
+        materials=defn.materials,
+        animation=defn.animation,
     )
 
 
@@ -305,20 +350,26 @@ def _script_stamp(script_path: Path) -> tuple[int, int] | None:
 def imported_model(script_path: Path, function: str):
     """The ModelDef ``function`` registered when ``script_path`` was imported.
 
-    The registry entry is reused when it was made from the bytes now on disk
-    (same mtime and size); otherwise the module is imported by path -- under a
-    loader name, so its ``__main__`` block does not run -- and read again. The
-    module top must stay kernel-free, as the cad skill requires: this import is
-    what every door pays to learn a model's declarations."""
-    from cadgen.authoring import registered_model
+    The registry entry is reused when it was made from the bytes now on disk --
+    the script's (same mtime and size) AND every file its import executed, since
+    the declarations are evaluated from what the script imports; otherwise the
+    module is imported by path -- under a loader name, so its ``__main__`` block
+    does not run -- and read again. The module top must stay kernel-free, as the
+    cad skill requires: this import is what every door pays to learn a model's
+    declarations."""
+    from cadgen.authoring import import_closure_current, registered_model
 
     resolved = Path(script_path).resolve()
     stamp = _script_stamp(resolved)
     defn = registered_model(resolved, function)
-    if defn is None or getattr(defn, "stamp", None) != stamp:
+    if defn is None or getattr(defn, "stamp", None) != stamp or not import_closure_current(resolved):
         from cadgen._internal.generation_runner import _load_generator_module, _without_bytecode_writes
+        from cadgen._internal.source_hash import evict_first_party_modules
 
-        # Like the build's own load: no .pyc for the model or its helpers.
+        # Like the build's own load: from a clean first-party module space (a helper a
+        # warm worker still holds would feed the reload its OLD values) and with no
+        # .pyc for the model or its helpers.
+        evict_first_party_modules()
         with _without_bytecode_writes():
             _load_generator_module(resolved)
         defn = registered_model(resolved, function)
@@ -396,6 +447,5 @@ def _is_multi_item_sequence_expression(
     if isinstance(expression, (ast.List, ast.Tuple, ast.Set)):
         return len(expression.elts) > 1
     return False
-
 
 

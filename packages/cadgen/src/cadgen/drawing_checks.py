@@ -16,6 +16,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterable
 
 # Layer intent is decided by WHOLE tokens of the layer name (split on
 # non-alphanumerics), never substrings — "PREFORM" must not match "ref".
@@ -277,6 +278,51 @@ def _zero_length_finding(entity) -> DrawingFinding | None:
     return None
 
 
+def _clustered_representatives(
+    points: Iterable[tuple[float, float]], tolerance: float
+) -> dict[tuple[float, float], tuple[float, float]]:
+    """Union-find points within ``tolerance`` of each other.
+
+    Endpoints are already rounded to 6 decimals by ``_point_key`` before they
+    reach here, which fixes the coordinates but not a tie: two independently
+    computed edges that nominally share a point can land the point on
+    opposite sides of a rounding boundary (``-68.150754`` vs ``-68.150753``,
+    under a micron apart) and come out as two distinct dict keys. Without this
+    merge step those look like two separate dangling ends instead of one
+    shared, closed vertex.
+
+    Comparing raw float distances against ``tolerance`` reintroduces the exact
+    problem this is meant to fix: a pair sitting one rounding step apart can
+    land a hair on either side of ``<= tolerance`` too, depending on binary
+    float representation. Instead, snap each already-rounded coordinate to an
+    integer bucket at ``tolerance``'s scale and merge points whose buckets are
+    the same or adjacent (Chebyshev distance <= 1) — an integer comparison,
+    so there is no boundary left to land on.
+    """
+    unique = sorted(set(points))
+    parent = {point: point for point in unique}
+
+    def find(point: tuple[float, float]) -> tuple[float, float]:
+        while parent[point] != point:
+            parent[point] = parent[parent[point]]
+            point = parent[point]
+        return point
+
+    scale = 1.0 / tolerance
+    buckets = {point: (round(point[0] * scale), round(point[1] * scale)) for point in unique}
+    for i, a in enumerate(unique):
+        bucket_a = buckets[a]
+        for b in unique[i + 1 :]:
+            bucket_b = buckets[b]
+            if bucket_b[0] - bucket_a[0] > 1:
+                break  # sorted by x first: bucket x only grows from here
+            if abs(bucket_a[0] - bucket_b[0]) <= 1 and abs(bucket_a[1] - bucket_b[1]) <= 1:
+                root_a, root_b = find(a), find(b)
+                if root_a != root_b:
+                    parent[root_b] = root_a
+    return {point: find(point) for point in unique}
+
+
 def _open_chain_findings(open_curves_by_layer: dict[str, list]) -> list[DrawingFinding]:
     """LINE/ARC/SPLINE segments on cut layers must chain into closed loops:
     every endpoint must be shared by an even number of segment ends."""
@@ -286,7 +332,14 @@ def _open_chain_findings(open_curves_by_layer: dict[str, list]) -> list[DrawingF
         for start, end in endpoint_pairs:
             endpoint_counts[start] = endpoint_counts.get(start, 0) + 1
             endpoint_counts[end] = endpoint_counts.get(end, 0) + 1
-        dangling = [point for point, count in endpoint_counts.items() if count % 2 == 1]
+
+        representatives = _clustered_representatives(endpoint_counts, _COORDINATE_TOLERANCE)
+        merged_counts: dict[tuple[float, float], int] = {}
+        for point, count in endpoint_counts.items():
+            representative = representatives[point]
+            merged_counts[representative] = merged_counts.get(representative, 0) + count
+
+        dangling = [point for point, count in merged_counts.items() if count % 2 == 1]
         if dangling:
             sample = ", ".join(str(point) for point in sorted(dangling)[:3])
             findings.append(

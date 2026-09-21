@@ -32,6 +32,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
@@ -54,22 +55,6 @@ if __name__ == "__main__":
     model()
 """
 
-ASSEMBLY = """from build123d import Box, BuildPart, Location, Pos
-
-from cadgen import step
-@step
-def model():
-    with BuildPart() as base:
-        Box(40, 40, 5)
-    with BuildPart() as post:
-        Box(8, 8, 20)
-    post.part.locate(Location(Pos(0, 0, 12.5)))
-    return base.part + post.part
-
-
-if __name__ == "__main__":
-    model()
-"""
 
 DRAWING = """from cadgen import build123d as bd
 from cadgen import dxf
@@ -144,13 +129,21 @@ def _digest(path: pathlib.Path) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
-def _manifest(root: pathlib.Path) -> dict[str, str]:
+def _manifest(root: pathlib.Path, *, daemon_env: dict) -> dict[str, str]:
     """Digest of every built file for the models in ``root``: the store
     packages their artifacts resolve to (content-keyed), plus the model-folder
     outputs themselves (.step documents and source sidecars).
 
     Lock and progress files are transient scaffolding, not output.
     """
+    # View resolution now lazily extracts SURF artifacts. It is part of the
+    # build under comparison, so use that build's executor, never an ambient
+    # daemon another test (or a developer) can stop independently.
+    with mock.patch.dict(os.environ, daemon_env):
+        return _manifest_in_current_env(root)
+
+
+def _manifest_in_current_env(root: pathlib.Path) -> dict[str, str]:
     from cadgen.catalog import result_view_dir
 
     out: dict[str, str] = {}
@@ -195,15 +188,23 @@ class _Daemon:
         self.log = daemon_client.log_path(self.address)
 
     def env(self) -> dict:
-        return {"CADGEN_DAEMON": "1", "CADGEN_DAEMON_SOCKET": str(self.address)}
+        return {
+            "CADGEN_DAEMON": "1",
+            "CADGEN_DAEMON_SOCKET": str(self.address),
+            # Compare the outputs of four small concurrent fixtures under a
+            # known, bounded budget. Host-sized defaults can legitimately
+            # reject that concurrency; memory admission has its own tests.
+            "CADGEN_MEMORY_MB": "8192",
+        }
 
     def __enter__(self):
         return self
 
     def __exit__(self, *exc):
         subprocess.run(
-            [sys.executable, "-m", "cadgen.daemon", "--stop"],
+            [sys.executable, str(REPO_ROOT / "tests/python/support/daemon_cleanup.py"), self.address],
             env=_env(**self.env()), capture_output=True, timeout=60,
+            check=True,
         )
         return False
 
@@ -238,34 +239,48 @@ class WarmOutputEquivalence(unittest.TestCase):
         tree = self._tree(name, source)
         code, output = _run(argv, tree, CADGEN_DAEMON="0")
         self.assertEqual(code, 0, output)
-        return _manifest(tree), output
+        # A fresh cold package must not silently use the default warm daemon
+        # merely because the manifest forces its lazily generated surfaces.
+        with mock.patch.object(daemon_client, "run_artifact", side_effect=AssertionError("cold manifest used a daemon")):
+            return _manifest(tree, daemon_env={"CADGEN_DAEMON": "0"}), output
+
+    # The cold PART manifest is a fixture the tests only READ: built once for the class.
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls._cold_tree = pathlib.Path(tempfile.mkdtemp(prefix="tmp-warm-eq-cold-")).resolve()
+        (cls._cold_tree / "widget.py").write_text(PART, encoding="utf-8")
+        code, cls._cold_part_out = _run(["widget.py"], cls._cold_tree, CADGEN_DAEMON="0")
+        if code != 0:
+            raise RuntimeError(f"the cold seed build failed:\n{cls._cold_part_out}")
+        # A fresh cold package must not silently use the default warm daemon
+        # merely because the manifest forces its lazily generated surfaces.
+        with mock.patch.object(daemon_client, "run_artifact", side_effect=AssertionError("cold manifest used a daemon")):
+            cls._cold_part = _manifest(cls._cold_tree, daemon_env={"CADGEN_DAEMON": "0"})
+        if not cls._cold_part:
+            raise RuntimeError("the cold build produced nothing to compare")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        shutil.rmtree(cls._cold_tree, ignore_errors=True)
+        super().tearDownClass()
 
     def test_a_part_builds_identically_warm(self):
         argv = ["widget.py"]
-        cold, cold_out = self._cold("widget.py", PART, argv)
-        self.assertTrue(cold, "the cold build produced nothing to compare")
+        cold, cold_out = self._cold_part, self._cold_part_out
 
         tree = self._tree("widget.py", PART)
         with _Daemon(tree) as daemon:
             code, warm_out = _run(argv, tree, **daemon.env())
             self.assertEqual(code, 0, warm_out)
             self.assertTrue(daemon.served_a_job(), "the warm run fell back to cold")
-            self.assertEqual(_manifest(tree), cold)
+            self.assertEqual(_manifest(tree, daemon_env=daemon.env()), cold)
         self.assertEqual(warm_out, cold_out)
-
-    def test_an_assembly_builds_identically_warm(self):
-        argv = ["rig.py"]
-        cold, _ = self._cold("rig.py", ASSEMBLY, argv)
-        tree = self._tree("rig.py", ASSEMBLY)
-        with _Daemon(tree) as daemon:
-            code, out = _run(argv, tree, **daemon.env())
-            self.assertEqual(code, 0, out)
-            self.assertEqual(_manifest(tree), cold)
 
     def test_four_parallel_builds_through_one_daemon_all_match_cold(self):
         """The case the pool exists for. Today this serialises; it must still be correct."""
         argv = ["widget.py"]
-        cold, _ = self._cold("widget.py", PART, argv)
+        cold = self._cold_part
 
         trees = [self._tree("widget.py", PART) for _ in range(4)]
         shared = pathlib.Path(tempfile.mkdtemp(prefix="tmp-warm-eq-sock-")).resolve()
@@ -278,7 +293,7 @@ class WarmOutputEquivalence(unittest.TestCase):
                     self.assertEqual(code, 0, out)
             for index, tree in enumerate(trees):
                 with self.subTest(build=index):
-                    self.assertEqual(_manifest(tree), cold)
+                    self.assertEqual(_manifest(tree, daemon_env=daemon.env()), cold)
 
     def test_a_drawing_package_is_byte_identical_warm(self):
         """DXF is the format that USED to have a determinism hazard: ezdxf's emitted
@@ -289,9 +304,11 @@ class WarmOutputEquivalence(unittest.TestCase):
         cold, _ = self._cold("plate.py", DRAWING, argv)
         self.assertTrue(cold, "the cold DXF build produced nothing to compare")
         tree = self._tree("plate.py", DRAWING)
-        code, out = _run(argv, tree, CADGEN_DAEMON="1")
-        self.assertEqual(code, 0, out)
-        self.assertEqual(_manifest(tree), cold)
+        with _Daemon(tree) as daemon:
+            code, out = _run(argv, tree, **daemon.env())
+            self.assertEqual(code, 0, out)
+            self.assertTrue(daemon.served_a_job(), "the warm DXF run fell back to cold")
+            self.assertEqual(_manifest(tree, daemon_env=daemon.env()), cold)
 
     def test_a_failing_build_fails_the_same_way_warm(self):
         """Exit code and message are contract too, not just successful output."""

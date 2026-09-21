@@ -2,9 +2,9 @@
 //
 // Extracted so it can be tested directly: the rules below are where the client decides
 // whether to START a build or WATCH someone else's, and getting that wrong is expensive
-// (a duplicate multi-minute OCP build) but invisible in a rendered component.
+// (a duplicate multi-minute OCP build) but invisible in compiled geometry.
 
-export const ARTIFACT_ACTION_READY = "rendered";
+export const ARTIFACT_ACTION_READY = "compiled";
 export const ARTIFACT_ACTION_ERROR = "failed";
 export const ARTIFACT_ACTION_ATTACH = "attach";
 export const ARTIFACT_ACTION_BUILD = "build";
@@ -20,7 +20,7 @@ export const ARTIFACT_ACTION_BUILD = "build";
  * running: attach rather than POST a second one.
  */
 export function artifactActionFor(status) {
-  const state = String(status?.state || "rendered");
+  const state = String(status?.state || "compiled");
   if (state === ARTIFACT_ACTION_READY) {
     return ARTIFACT_ACTION_READY;
   }
@@ -34,9 +34,9 @@ export function artifactActionFor(status) {
 }
 
 /**
- * The advisory flag a `rendered` status may carry: `busy`, when another process
+ * The advisory flag a `compiled` status may carry: `busy`, when another process
  * currently holds the model's generator. It changes nothing about what the
- * client DOES — the model renders — it is an honest badge for the file sheet.
+ * client does with the complete geometry — it is an honest badge for the file sheet.
  * (The old `stale` advisory died with content keying: an edited file resolves
  * to a different package key, so a stale-but-rendering package cannot exist.)
  * Returns null when there is nothing to surface, so `advisory` is falsy in

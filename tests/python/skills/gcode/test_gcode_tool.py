@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import contextlib
 import io
 import json
@@ -479,6 +480,42 @@ class GCodeToolTests(unittest.TestCase):
 
         self.assertTrue(result["ok"])
         self.assertTrue(any("M999" in warning for warning in result["warnings"]))
+
+    def test_validate_reads_the_gcode_when_the_native_config_is_absent(self) -> None:
+        """Static validation needs no slicer, so it must not need the slicer's config.
+
+        A profile written on the machine that sliced the job names a native config
+        by absolute path. Validating that job anywhere else -- CI, a reviewer's
+        laptop -- must still read the G-code and answer about it.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile_path = write_profile(root)
+            data = json.loads(profile_path.read_text(encoding="utf-8"))
+            data["native_config"] = str(root / "not-on-this-machine.ini")
+            profile_path.write_text(json.dumps(data), encoding="utf-8")
+
+            toolpath = root / "job.gcode"
+            toolpath.write_text("M104 S220\nM140 S65\nG90\nG1 X10 Y10 Z0.2 E0.4\n", encoding="utf-8")
+
+            # Slicing still refuses: the config is a real input to a slicer run.
+            with self.assertRaisesRegex(gcode.GCodeToolError, "native_config does not exist"):
+                gcode.load_profile(profile_path)
+
+            args = argparse.Namespace(gcode=str(toolpath), profile=str(profile_path), json=True)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                code = gcode.validate_main(args)
+            payload = json.loads(buf.getvalue())
+
+        self.assertEqual(code, 0)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["errors"], [])
+        self.assertGreaterEqual(payload["stats"]["extrusion_moves"], 1)
+        self.assertTrue(
+            any("not-on-this-machine.ini" in warning for warning in payload["warnings"]),
+            payload["warnings"],
+        )
 
 
 if __name__ == "__main__":

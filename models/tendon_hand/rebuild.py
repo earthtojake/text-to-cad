@@ -128,11 +128,15 @@ def commands(include_video: bool = False) -> list[tuple[str, list[str]]]:
     python = sys.executable
     step_file = ROOT / "STEP/hand_mechanical_candidate_r13.step"
     result = [
-        ("Build R13 once to write the body-frame manifest", [python, str(ROOT / "src/hand_mechanical_candidate_r13.py")]),
+        ("Test the generated animation module's runtime", ["node", "--test", str(ROOT / "validation/showcase_runtime.test.mjs")]),
+        # The model reads src/<name>_animation.js through lib.embedded_animation, so a
+        # module has to exist before the build that writes the frames the real one needs.
+        ("Seed the placeholder animation module", [python, str(ROOT / "validation/write_showcase_presentation.py"), "--placeholder"]),
+        ("Build R13 once to write the body-frame manifest", [python, str(ROOT / "src/hand_mechanical_candidate_r13.py"), "--force"]),
+        ("Regenerate the animation module from those frames", [python, str(ROOT / "validation/write_showcase_presentation.py")]),
         ("Regenerate the indexed capstan overlay from those frames", [python, str(ROOT / "src/capstan_index_overlay.py")]),
         ("Rebuild final R13 with the regenerated overlay", [python, str(ROOT / "src/hand_mechanical_candidate_r13.py")]),
         ("Validate every final STEP placement", [cadgen(), "step", "inspect", "validate", str(step_file), "--every-placement"]),
-        ("Generate the ignored animation render module", [python, str(ROOT / "validation/write_showcase_presentation.py")]),
     ]
     animation = lambda clip: json.dumps(
         {"clip": clip, "fps": 30, "deform": "morph", "deformTolerance": 1.0, "drop": ["visible"]},

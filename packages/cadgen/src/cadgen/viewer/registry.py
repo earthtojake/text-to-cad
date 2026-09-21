@@ -76,11 +76,11 @@ def entry_path(pid) -> str:
 def register(*, host, port, root: str = "", viewer_version: str = "", token: str = "", started_at=None) -> str:
     """Announce this process. Returns the entry path, or ``""`` on any failure.
 
-    ``token`` is the launcher's reuse identity (version salted with the app
-    files' newest mtime — ``identity_token`` in http_app.py), recorded at
-    START time so a later reuse probe compares against the code this instance
-    is actually running. ``version`` stays alongside it for the human `list`
-    printout.
+    ``token`` is the launcher's reuse identity (version plus the Python runtime
+    and selected client digest — ``identity_token`` in http_app.py), recorded
+    at START time so a later reuse probe compares against the code this
+    instance is actually running. ``version`` stays alongside it for the human
+    `list` printout.
     """
     import time
 

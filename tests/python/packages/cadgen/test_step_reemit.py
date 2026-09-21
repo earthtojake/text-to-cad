@@ -17,8 +17,11 @@ re-emitting.
 from __future__ import annotations
 
 import json
+import os
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 from tests.python.support.cad_test_roots import IsolatedCadRoots
@@ -59,33 +62,52 @@ ANIM_JS = "export const clips = { demo: { duration: 2, update(t, m) {} } };\n"
 
 
 class StepReemitTests(unittest.TestCase):
+    # The document being re-emitted is an INPUT here, not a subject: every test starts
+    # from `vendor.step` as a file some other tool wrote, and none of them asks anything
+    # about the run that produced it. Producing it once for the class and copying the
+    # bytes into each test's own root keeps every test's store, roots and freshness
+    # state as private as they were, and stops the class paying fourteen kernel boots
+    # for one box and one arm.
+    _vendor_bytes: bytes | None = None
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        from cadgen.catalog import StepImportOptions
+        from cadgen.generation import generate_step_targets
+
+        # IsolatedCadRoots registers its cwd and CADGEN_CACHE_DIR restores as cleanups on a
+        # TestCase; this seed build is not one, so it borrows a bare case and runs them itself.
+        seed = unittest.TestCase()
+        with mock.patch.dict(os.environ, {"CADGEN_DAEMON": "0"}):
+            roots = IsolatedCadRoots(seed, prefix="cadreemit-seed-")
+            tempdir = roots.temporary_cad_directory(prefix="tmp-cadreemit-seed-")
+            try:
+                script = Path(tempdir.name) / "hinge.py"
+                script.write_text(MODEL, encoding="utf-8")
+                if generate_step_targets(
+                    [str(script)], step_options=StepImportOptions(), force=True, verbose=False
+                ):
+                    raise RuntimeError("the seed document could not be built")
+                cls._vendor_bytes = (Path(tempdir.name) / "hinge.step").read_bytes()
+            finally:
+                tempdir.cleanup()
+                seed.doCleanups()
+
     def setUp(self) -> None:
+        offline = mock.patch.dict(os.environ, {"CADGEN_DAEMON": "0"})
+        offline.start()
+        self.addCleanup(offline.stop)
         self._roots = IsolatedCadRoots(self, prefix="cadreemit-")
         self._tempdir = self._roots.temporary_cad_directory(prefix="tmp-cadreemit-")
         self.root = Path(self._tempdir.name)
-        # A real document to re-emit, produced the way every document is: by
-        # running a model script.
-        script = self.root / "hinge.py"
-        script.write_text(MODEL, encoding="utf-8")
-        self._run_script(script)
+        # The script is written too: one test asks the door to refuse it by name.
+        (self.root / "hinge.py").write_text(MODEL, encoding="utf-8")
         self.vendor = self.root / "vendor.step"
-        self.vendor.write_bytes((self.root / "hinge.step").read_bytes())
+        self.vendor.write_bytes(self._vendor_bytes)
         self.out = self.root / "annotated.step"
 
     def tearDown(self) -> None:
         self._tempdir.cleanup()
-
-    def _run_script(self, script: Path) -> None:
-        from cadgen.catalog import StepImportOptions
-        from cadgen.generation import generate_step_targets
-
-        code = generate_step_targets(
-            [str(script)],
-            step_options=StepImportOptions(),
-            force=True,
-            verbose=False,
-        )
-        self.assertEqual(0, code)
 
     def _build(self, **kwargs):
         from cadgen import step as step_namespace
@@ -116,7 +138,7 @@ class StepReemitTests(unittest.TestCase):
         self.assertFalse(result.skipped)
 
         sidecar = self._sidecar()
-        self.assertEqual(6, sidecar["schemaVersion"])
+        self.assertEqual(9, sidecar["schemaVersion"])
         # Declarations only: no source tie of any kind in the file
         # beside the artifact. The freshness identity — sourceKind "step", the
         # INPUT's content hash — lives in the provenance RECORD.
@@ -133,28 +155,21 @@ class StepReemitTests(unittest.TestCase):
         self.assertEqual("o1.1", mate["parentId"])
         self.assertEqual("o1.2", mate["childId"])
         self.assertEqual({"value": [0.0, 90.0]}, mate["limits"])
-        # Choreography is not an annotation: the render module beside OUT is
-        # the viewer's, and the sidecar carries kinematics only.
+        # This build declares kinematics only.
         self.assertNotIn("animation", sidecar)
 
-    def test_the_output_is_ours_and_byte_deterministic(self) -> None:
-        self._build(kinematics=json.dumps(KINEMATICS))
-        first = self.out.read_bytes()
-        self.assertTrue(first.startswith(b"ISO-10303-21"))
-        self._build(kinematics=json.dumps(KINEMATICS), force=True)
-        self.assertEqual(first, self.out.read_bytes())
-
-    def test_rerunning_is_a_no_op(self) -> None:
+    def test_a_kinematics_only_edit_refreshes_the_sidecar_and_nothing_else(self) -> None:
+        # One document, four builds: the first writes it, a plain rerun is a no-op,
+        # a kinematics-only edit rewrites the sidecar alone, and --force reproduces
+        # the bytes. (The rerun and force halves are also pinned for step.build in
+        # test_native_document_doors; here they ride on the build this test needs.)
         self._build(kinematics=json.dumps(KINEMATICS))
         before = self.out.read_bytes()
+        self.assertTrue(before.startswith(b"ISO-10303-21"))
         again = self._build(kinematics=json.dumps(KINEMATICS))
         self.assertTrue(again.skipped)
         self.assertFalse(again.sidecar_only)
         self.assertEqual(before, self.out.read_bytes())
-
-    def test_a_kinematics_only_edit_refreshes_the_sidecar_and_nothing_else(self) -> None:
-        self._build(kinematics=json.dumps(KINEMATICS))
-        before = self.out.read_bytes()
 
         widened = json.loads(json.dumps(KINEMATICS))
         widened["mates"][0]["limits"] = [0, 120]
@@ -166,12 +181,137 @@ class StepReemitTests(unittest.TestCase):
         sidecar = self._sidecar()
         self.assertEqual({"value": [0.0, 120.0]}, sidecar["kinematics"]["mates"][0]["limits"])
         self.assertIn("wide", sidecar["kinematics"]["poses"])
+        from cadgen.store.gate import stale
+
+        self.assertFalse(stale(self.out).stale, "the rewritten sidecar hash must land in the record")
+        self._build(kinematics=json.dumps(widened), force=True)
+        self.assertEqual(before, self.out.read_bytes(), "a forced re-emit writes the same bytes")
+
+    def test_a_missing_or_corrupt_output_sidecar_is_rebuilt_not_reported_current(self) -> None:
+        from cadgen._internal.source_sidecar import source_sidecar_path
+        from cadgen.store.gate import stale
+
+        self._build(kinematics=json.dumps(KINEMATICS))
+        sidecar = source_sidecar_path(self.out)
+        for damage in ("missing", "corrupt"):
+            if damage == "missing":
+                sidecar.unlink()
+            else:
+                sidecar.write_text('{"schemaVersion": 8, "documentHash": "wrong"}', encoding="utf-8")
+            self.assertTrue(stale(self.out).stale)
+            result = self._build(kinematics=json.dumps(KINEMATICS))
+            self.assertFalse(result.skipped)
+            self.assertEqual("swing", self._sidecar()["kinematics"]["mates"][0]["name"])
+            self.assertFalse(stale(self.out).stale)
+
+    def test_removing_the_last_annotation_removes_its_recorded_output(self) -> None:
+        from cadgen._internal.source_sidecar import source_sidecar_path
+        from cadgen.store.gate import stale
+        from cadgen.store.records import read_record
+
+        materials = {"definitions": {"paint": {"baseColor": "#336699"}},
+                     "assignments": [{"targets": ["#arm"], "material": "paint"}]}
+        self._build(kinematics=json.dumps(KINEMATICS), materials=materials, animation=ANIM_JS)
+        before = self.out.read_bytes()
+        materials["definitions"]["paint"]["baseColor"] = "#996633"
+        with mock.patch("cadgen._internal.step_reemit._emit", side_effect=AssertionError("annotation edit emitted STEP")):
+            updated = self._build(kinematics=json.dumps(KINEMATICS), materials=materials, animation=ANIM_JS.replace("demo", "swing"))
+            self.assertTrue(updated.sidecar_only)
+            self.assertEqual("#996633", self._sidecar()["appearance"]["materials"]["paint"]["baseColor"])
+            self.assertIn("swing", self._sidecar()["animation"]["source"])
+            result = self._build()
+        self.assertEqual(before, self.out.read_bytes())
+        sidecar = source_sidecar_path(self.out).resolve()
+        self.assertTrue(result.sidecar_only)
+        self.assertFalse(sidecar.exists())
+        self.assertNotIn(str(sidecar), (read_record(self.out) or {}).get("outputs", {}))
+        self.assertFalse(stale(self.out).stale)
+
+    def test_an_unrecorded_output_sidecar_is_not_accepted_as_current(self) -> None:
+        from cadgen._internal.source_sidecar import source_sidecar_path, write_source_sidecar
+
+        self._build()
+        sidecar = source_sidecar_path(self.out)
+        write_source_sidecar(
+            self.out,
+            {"appearance": {"materials": {"finish": {"name": "Finish", "roughness": 0.2}}, "assignments": {"unexpected": "finish"}}},
+        )
+        self.assertTrue(sidecar.is_file())
+        result = self._build()
+        self.assertFalse(result.skipped)
+        self.assertFalse(sidecar.exists())
+
+    def test_a_kinematics_only_edit_preserves_output_mapped_appearance(self) -> None:
+        from cadgen.catalog import artifact_file_hash, result_descriptor_for
+        from cadgen._internal.source_sidecar import read_source_sidecar, source_sidecar_path, write_source_sidecar
+        from cadgen.store.records import read_record, write_record
+
+        from cadgen import step as step_namespace
+
+        # Alone among these tests, this one reads the INPUT's tree before re-emitting,
+        # so the input has to be in the store: ask the compile door for it by name
+        # rather than leaning on some earlier build having warmed it.
+        step_namespace.compile(self.vendor)
+        input_leaf = (result_descriptor_for(self.vendor) or {})["occurrences"][0]["id"]
+        material = {"name": "Finish", "roughness": 0.2, "metalness": 0.7, "opacity": 0.8}
+        write_source_sidecar(
+            self.vendor,
+            {"appearance": {"materials": {"finish": material}, "assignments": {input_leaf: "finish"}}},
+        )
+        self._build(kinematics=json.dumps(KINEMATICS))
+
+        # Model the legitimate case where re-emission changed product paths:
+        # the output sidecar's appearance is already mapped to OUT's canonical
+        # IDs, while inputAppearance in the record still gates on IN's block.
+        output_leaves = [item["id"] for item in (result_descriptor_for(self.out) or {})["occurrences"]]
+        output_leaf = next(item for item in output_leaves if item != input_leaf)
+        current = read_source_sidecar(self.out) or {}
+        write_source_sidecar(
+            self.out,
+            {
+                "kinematics": current["kinematics"],
+                "appearance": {"materials": {"finish": material}, "assignments": {output_leaf: "finish"}},
+            },
+        )
+        record = read_record(self.out) or {}
+        outputs = dict(record["outputs"])
+        output_sidecar = source_sidecar_path(self.out).resolve()
+        outputs[str(output_sidecar)] = {"sha256": artifact_file_hash(output_sidecar)}
+        record["outputs"] = outputs
+        record["intrinsicAppearance"] = {"materials": {"finish": material}, "assignments": {output_leaf: "finish"}}
+        write_record(self.out, record)
+
+        widened = json.loads(json.dumps(KINEMATICS))
+        widened["mates"][0]["limits"] = [0, 120]
+        result = self._build(kinematics=json.dumps(widened))
+        self.assertTrue(result.sidecar_only)
+        self.assertEqual(
+            {"materials": {"finish": material}, "assignments": {output_leaf: "finish"}},
+            (read_source_sidecar(self.out) or {})["appearance"],
+        )
+
+    def test_reemit_refuses_when_the_parsed_snapshot_is_not_the_hashed_input(self) -> None:
+        self._build(kinematics=json.dumps(KINEMATICS))
+        before = self.out.read_bytes()
+        replacement = SimpleNamespace(step_hash="0" * 64)
+        with mock.patch(
+            "cadgen._internal.step_scene_package.load_step_scene_exact",
+            return_value=replacement,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "changed while it was being read"):
+                self._build(kinematics=json.dumps(KINEMATICS), force=True)
+        self.assertEqual(before, self.out.read_bytes())
 
     def test_the_json_and_python_kinematics_spellings_agree(self) -> None:
         import cadgen
 
-        self._build(kinematics=json.dumps(KINEMATICS))
+        # Three spellings, two builds: the first takes the JSON as a FILE PATH (the
+        # string form is what every other test here passes), the second Python objects.
+        spec = self.root / "hinge.kinematics.json"
+        spec.write_text(json.dumps(KINEMATICS), encoding="utf-8")
+        self._build(kinematics=str(spec))
         from_json = self._sidecar()["kinematics"]
+        self.assertEqual("swing", from_json["mates"][0]["name"])
 
         self.out.unlink()
         from cadgen._internal.source_sidecar import remove_source_sidecar
@@ -188,15 +328,13 @@ class StepReemitTests(unittest.TestCase):
         )
         self.assertEqual(from_json, self._sidecar()["kinematics"])
 
-    def test_a_kinematics_file_path_is_accepted(self) -> None:
-        spec = self.root / "hinge.kinematics.json"
-        spec.write_text(json.dumps(KINEMATICS), encoding="utf-8")
-        self._build(kinematics=str(spec))
-        self.assertEqual("swing", self._sidecar()["kinematics"]["mates"][0]["name"])
-
-    def test_animation_is_not_a_build_argument(self) -> None:
-        with self.assertRaisesRegex(TypeError, "unexpected keyword argument 'animation'"):
-            self._build(animation=self.root / "nope.anim.js")
+    def test_animation_file_is_embedded_without_a_path_dependency(self) -> None:
+        module = self.root / "source.js"
+        module.write_text(ANIM_JS, encoding="utf-8")
+        self._build(animation=str(module))
+        self.assertEqual({"language": "javascript", "source": ANIM_JS}, self._sidecar()["animation"])
+        module.unlink()
+        self.assertEqual(ANIM_JS, self._sidecar()["animation"]["source"])
 
 
 if __name__ == "__main__":

@@ -14,10 +14,9 @@ from lib import materials
 from lib import mvt_keyless as K
 
 
-@step(out="../STEP/keyless_works.step")
+@step(out="../STEP/keyless_works.step", materials=materials.materials_for_model("keyless_works"))
 def keyless_works():
     compound = bd.Compound(children=K.build_keyless(), label="keyless_works")
-    materials.apply(compound)
     return compound
 
 

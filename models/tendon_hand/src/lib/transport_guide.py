@@ -28,7 +28,6 @@ def make_tendon(path,label='transport_tendon'):
     result=bd.sweep(profile,path=path_wire(path),is_frenet=False)
     result.label=label
     result.color=srgb('#C99850')
-    result.cad_material={'metalness':.15,'roughness':.42}
     if len(result.solids())!=1 or not result.is_valid:
         raise ValueError(f'{label}: invalid swept tendon')
     return result
@@ -53,7 +52,6 @@ def make_guide(segment,label='open_transport_guide'):
     result=bd.sweep(profile,path=path_wire([segment]),is_frenet=False)
     result.label=label
     result.color=srgb('#BAC8CE')
-    result.cad_material={'metalness':.82,'roughness':.28}
     if len(result.solids())!=1 or not result.is_valid:
         raise ValueError(f'{label}: invalid swept open guide')
     return result

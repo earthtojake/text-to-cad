@@ -71,7 +71,9 @@ class _Tree:
         if not write_payloads:
             from cadgen.store.objects import object_path
 
-            object_path(hashlib.sha256(b"SURF\x00").hexdigest()).unlink()
+            from cadgen.store.trees import get_tree
+            component = next(iter(get_tree(tree)["components"].values()))
+            object_path(component["brep"]).unlink()
         return tree
 
 class ArtifactStatusTestCase(unittest.TestCase):
@@ -159,7 +161,7 @@ class Verdicts(ArtifactStatusTestCase):
     def test_a_fresh_package_is_ready(self):
         step = self.tree.step()
         self.tree.package(step)
-        self.assertEqual(artifact_status(step, str(self.tree.root)), {"state": "rendered"})
+        self.assertEqual(artifact_status(step, str(self.tree.root)), {"state": "compiled"})
 
     def test_editing_the_file_unresolves_the_package(self):
         step = self.tree.step()
@@ -177,7 +179,7 @@ class Verdicts(ArtifactStatusTestCase):
         self.tree.package(step)
         Path(step).write_bytes(STEP_BYTES + b"\n")
         Path(step).write_bytes(STEP_BYTES)
-        self.assertEqual(artifact_status(step, str(self.tree.root)), {"state": "rendered"})
+        self.assertEqual(artifact_status(step, str(self.tree.root)), {"state": "compiled"})
 
     def test_a_missing_candidate_is_an_error_naming_the_raw_ref(self):
         self.assertEqual(
@@ -198,15 +200,15 @@ class Verdicts(ArtifactStatusTestCase):
         self.assertEqual(artifact_status(step, str(self.tree.root))["reason"], "missing_glb")
 
         self.tree.package(step, components=())
-        self.assertEqual(artifact_status(step, str(self.tree.root))["reason"], "missing_glb")
+        self.assertEqual(artifact_status(step, str(self.tree.root))["reason"], "missing_step_topology")
 
         self.tree.package(step)
-        self.assertEqual(artifact_status(step, str(self.tree.root)), {"state": "rendered"})
+        self.assertEqual(artifact_status(step, str(self.tree.root)), {"state": "compiled"})
 
-    def test_a_component_whose_surf_payload_is_absent_is_missing_glb(self):
+    def test_a_component_whose_native_payload_is_absent_is_missing_glb(self):
         step = self.tree.step()
         self.tree.package(step, write_payloads=False)
-        self.assertEqual(artifact_status(step, str(self.tree.root))["reason"], "missing_glb")
+        self.assertEqual(artifact_status(step, str(self.tree.root))["reason"], "missing_step_topology")
 
 
 class SnapshotShapes(ArtifactStatusTestCase):
@@ -239,7 +241,7 @@ class SnapshotShapes(ArtifactStatusTestCase):
             str(self.tree.root),
             snapshot={"writing": False, "busy": True, "runId": "r2", "progress": None},
         )
-        self.assertEqual(status, {"state": "rendered", "busy": True, "runId": "r2"})
+        self.assertEqual(status, {"state": "compiled", "busy": True, "runId": "r2"})
 
     def test_busy_over_an_unbuilt_package_is_needs_build_plus_blocked(self):
         step = self.tree.step()
@@ -325,6 +327,45 @@ class InvalidUtf8(ArtifactStatusTestCase):
             [],
             "a backend reader of a shared text file must pass errors='replace', as Node did",
         )
+
+
+class RetiredRenderModule(ArtifactStatusTestCase):
+    """A leftover ``<name>.step.js`` warns; it never refuses the document.
+
+    Animation moved into ``@step(animation=...)`` and travels in the sidecar,
+    so the companion file is read by nothing. A door never refuses a document
+    (law 1), so the viewer says so and renders anyway -- the build is where
+    the same file is a hard error.
+    """
+
+    def _status(self, name="model.step", *, companion=True, package=True):
+        step_path = self.tree.step(name)
+        if companion:
+            Path(step_path + ".js").write_text("export const clips = {};", encoding="utf-8")
+        if package:
+            self.tree.package(step_path)
+        return artifact_status(name, str(self.tree.root))
+
+    def test_a_rendered_document_still_renders_and_names_the_replacement(self):
+        status = self._status()
+        self.assertEqual(status["state"], "compiled")
+        (warning,) = status["warnings"]
+        # The viewer's actionable triple, split here rather than in the client:
+        # the UI renders the fields it is handed and never parses the sentences.
+        self.assertEqual(sorted(warning), ["heading", "message", "recovery"])
+        self.assertIn("model.step.js", warning["heading"])
+        self.assertIn("@step(animation=...)", warning["message"])
+        self.assertIn("sidecar", warning["message"])
+        self.assertIn("model.step.js", warning["recovery"])
+
+    def test_an_uncompiled_document_carries_it_too(self):
+        status = self._status(package=False)
+        self.assertEqual(status["state"], "not-compiled")
+        self.assertEqual(len(status["warnings"]), 1)
+
+    def test_a_stp_document_is_covered_and_a_clean_one_is_silent(self):
+        self.assertIn("model.stp.js", self._status("model.stp")["warnings"][0]["heading"])
+        self.assertNotIn("warnings", self._status("clean.step", companion=False))
 
 
 if __name__ == "__main__":

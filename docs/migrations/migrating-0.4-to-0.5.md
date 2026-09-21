@@ -25,6 +25,43 @@ script converted to `@step` whose stale v0.4 sidecar is still on disk fails at
 the sidecar, not at the script. Do the deletion step (step 5) before you start
 debugging anything.
 
+## Since 0.5.1: the render module moved into the decorator
+
+This guide was written against 0.5.0, where animation was a companion ES
+module discovered **by name** beside the document (`STEP/<name>.step.js`).
+That file is retired. Animation is declared on the model now, exactly as
+kinematics is:
+
+```python
+ANIMATION = """
+export const clips = { demo: { duration: 8, update(t, m) { /* ... */ } } };
+"""
+
+@step(out="../STEP/arm.step", kinematics=KINEMATICS, animation=ANIMATION)
+def arm():
+    ...
+```
+
+The module text is the same JavaScript; only where it lives changed. The build
+embeds it in the document's sidecar (`<name>.step.json`), which is what the
+viewer, snapshots and mesh exports read — so the module travels with the
+document instead of being found beside it. Every mention of `<name>.step.js`
+below refers to the retired arrangement and should be read through this
+section:
+
+- Where a step says to write `STEP/<name>.step.js`, put the module text in
+  `animation=` instead and write no file. The `.gitignore` whitelist for
+  `/STEP/*.step.js` in step 5 is no longer needed either.
+- **A leftover `<name>.step.js` is read by nothing.** Building the model
+  **fails**, naming `@step(animation=...)`; the CAD Viewer warns on the entry
+  and renders it anyway. Delete the file.
+- For a document with no model script, `cadgen step build IN OUT` takes
+  `--animation` beside `--kinematics`.
+- Animation stays outside the geometry: changing `animation=` rewrites the
+  sidecar and leaves the STEP bytes and component identities untouched.
+- `cadgen step snapshot --animation` on a document whose sidecar carries no
+  animation says so, and names the decorator.
+
 ### The one-paragraph summary
 
 A v0.5 **model** is a plain `.py` file that decorates one **parameterless**
@@ -80,7 +117,8 @@ Do these in order. Later steps assume earlier ones.
 - [ ] 1. Rewrite imports
 - [ ] 2. Convert the generator into a model
 - [ ] 3. Convert composition: children are models you call
-- [ ] 4. Move articulation to kinematics + the render module (`<name>.step.js`)
+- [ ] 4. Move articulation to kinematics + `animation=` (0.5.0 wrote a
+      `<name>.step.js`; see "Since 0.5.1" above)
 - [ ] 5. Reshape the project layout, then delete v0.4 leftovers
 - [ ] 6. Rebuild
 - [ ] 7. Verify
@@ -427,7 +465,11 @@ if __name__ == "__main__":
   through them leaves a stale result reading as current. A configuration is a
   factory argument; another configuration is another model.
 
-### 4. Move articulation to kinematics + the render module (`<name>.step.js`)
+### 4. Move articulation to kinematics + the animation module
+
+> Read "Since 0.5.1: the render module moved into the decorator" first: the
+> `<name>.step.js` file this step describes is retired, and its module text
+> is now `animation=` on the decorator.
 
 v0.4's `.params.js` sidecar — FK scripts, pose functions, demo modes — is gone,
 and so is GIF export. v0.5 splits what `.params.js` conflated into three
@@ -437,12 +479,11 @@ systems with different lifecycles:
 | --- | --- | --- |
 | Geometry | The model function's body and the factories it calls | Changing one rebuilds the model |
 | Kinematics | `kinematics=` on the decorator, pure data | Drives viewer sliders and posed exports; a kinematics edit rewrites the sidecar, never the geometry |
-| Animation | `STEP/<name>.step.js`, a plain ES module beside the document | Loaded by the viewer by name; no build reads it — an edit is a reload |
+| Animation | `animation=` on the decorator, an ES module as a string (0.5.0: `STEP/<name>.step.js` beside the document) | Embedded in the sidecar by the build; an animation edit rewrites the sidecar, never the geometry |
 
-A note on the name: v0.4 also had a `<name>.step.js`, the JS *declarations
-sidecar*. That file and that meaning are gone. In v0.5 `<name>.step.js` is the
-**render module**: authored JavaScript the renderer loads beside the document
-(today: animation clips). Delete every v0.4 `.step.js` before creating one.
+A note on the name: v0.4 had a `<name>.step.js` too, the JS *declarations
+sidecar*, and 0.5.0 reused the name for the render module. Both are gone.
+Delete every `.step.js` in the project; nothing reads one.
 
 #### Typed mates
 
@@ -503,13 +544,14 @@ Rules that catch v0.4 conversions:
 - **Mates stay with the model that declares them.** A parent that links an
   articulated child gets its geometry, not its mates (step 3).
 
-#### The render module: `STEP/<name>.step.js`
+#### The animation module: `animation=`
 
-Choreography moves out of Python entirely — and out of the build. It is a plain
-ES module beside the **document** (not the script), named after it:
+Choreography is a plain ES module. 0.5.0 put it beside the **document**, named
+after it; since 0.5.1 the same text is the decorator's `animation=` argument
+and the build embeds it in the sidecar. The module itself is unchanged:
 
 ```js
-// STEP/arm.step.js — beside STEP/arm.step
+// the value of animation=, as a Python string
 export const clips = {
   demo: {
     label: "Demo",
@@ -533,16 +575,14 @@ export const clips = {
   function of `t`, so scrub, loop and seek are free. No wall-clock, no state.
 - Animation is deliberately ignorant of mates. That independence is what
   guarantees a choreography edit can never invalidate a build.
-- Nothing declares the file and no build reads it: drop it beside the
-  document and the viewer's Animation tab appears; the only export the
-  renderer understands today is `clips`, and an export it does not know is a
-  load error shown in the Status tab. Targets are checked at load against
-  the compiled tree.
-- It is **authored**, so it is **committed**: the project `.gitignore`
-  whitelists it (`!/STEP/*.step.js`, step 5).
-- Coming from a v0.4 `.params.js` demo mode or an early-0.5 `.anim.js`: move
-  the file to `STEP/<name>.step.js`, keep the `clips` export, and delete the
-  `animation=` argument — it is an unknown argument now.
+- The only export the renderer understands today is `clips`, and an export it
+  does not know is a load error shown in the Status tab. Targets are checked
+  at load against the compiled tree.
+- It rides the sidecar, so it needs no `.gitignore` whitelist of its own: the
+  module is authored in the model script, which is committed like any source.
+- Coming from a v0.4 `.params.js` demo mode, an early-0.5 `.anim.js`, or a
+  0.5.0 `STEP/<name>.step.js`: keep the `clips` export, move the module text
+  into `animation=`, and delete the file.
 
 **GIF export is deleted.** Snapshot writes PNG stills only, and a `.gif` output
 path is refused. Motion review is interactive in the CAD Viewer. For still
@@ -557,8 +597,9 @@ cadgen step snapshot STEP/arm.step tmp/open.png --kinematics open   # a declared
 
 A document with no model script gets kinematics from `cadgen step build IN OUT`,
 whose `--kinematics` takes the whole space as inline JSON or a `.json` path.
-`OUT` is required and is never `IN`. Choreography needs no verb: put
-`OUT.js` beside `OUT` (`STEP/vendor.step.js` beside `STEP/vendor.step`). To make an import a first-class model instead, wrap
+`OUT` is required and is never `IN`. Choreography rides the same verb:
+`--animation` takes the module as inline text or a `.js` path, and the build
+embeds it in `OUT`'s sidecar. To make an import a first-class model instead, wrap
 it: a `@step` whose body is `return read_step(...)` gives the vendor file a
 record, a tree and a place in your assemblies.
 
@@ -577,10 +618,9 @@ convention below is what the tooling's examples assume.
     lib/
       __init__.py         #   a regular package, never a namespace one
       holes.py            #   helpers, factories, shared constants
-  STEP/                   # raw outputs only (plus source sidecars) — and the render module
+  STEP/                   # raw outputs only, plus their source sidecars
     plate.step
-    plate.step.json
-    plate.step.js         #   choreography beside its document: authored, committed
+    plate.step.json       #   kinematics, appearance and animation — written by the build
     imported/             #   vendor files keep their upstream names
   DXF/  STL/  GLB/  3MF/  # same shape: outputs + imported/
   tmp/                    # scratch
@@ -631,8 +671,9 @@ produce failures that point at the wrong thing.
    find . -type d -name __cadgen__ -prune -exec rm -rf {} +
    ```
 
-2. **v0.4 sidecars.** Delete `<name>.step.js` / `<name>.stp.js` step-module
-   sidecars, every `<name>.params.js`, and any `<name>.step.source.json` left
+2. **Stale sidecars and modules.** Delete every `<name>.step.js` /
+   `<name>.stp.js` — the v0.4 declarations sidecar and the 0.5.0 render module
+   alike — every `<name>.params.js`, and any `<name>.step.source.json` left
    over from an intermediate 0.5 snapshot. v0.5 writes exactly one sidecar
    shape, `<name>.step.json` at schema 5, and refuses anything else at that
    name (see the schema section below).
@@ -942,7 +983,7 @@ them.
 | Children | Inline geometry, `lib/` helpers, `compose.memo` | Sibling models, called; the parent's tree **links** their trees |
 | Declarations sidecar | `<name>.step.js` (a JS module) | `<name>.step.json`, schema 6, JSON |
 | Pose/FK script | `<name>.params.js` | `kinematics=` on the decorator (data, in the sidecar) |
-| Animation | `.params.js` demo modes; GIF export | `<name>.step.js` beside the document — the render module, loaded by the viewer, read by no build; PNG stills only |
+| Animation | `.params.js` demo modes; GIF export | `animation=` on the decorator, embedded in the sidecar by the build; PNG stills only |
 | Mesh outputs | `scripts/export --stl/--3mf/--glb` | `@stl`/`@threemf`/`@glb` decorators, or the format doors |
 
 ### The sidecar: `<name>.step.json`, schema 6
@@ -954,8 +995,8 @@ kinematics deletes the stale one. What a model declares about its outputs
 (`@stl`/`@glb`/`@threemf`) lives in its store record; the `meshExports`
 section that once copied it beside the STEP is gone (a mesh door tessellates
 the document's tree and writes the file it was asked for, no lookup).
-Choreography is not in it either: that is the render module beside the
-document (`<name>.step.js`, step 4).
+Choreography IS in it: `animation=` on the decorator puts the module text in
+the sidecar's animation section (step 4).
 
 ```
 schemaVersion   6
@@ -1035,9 +1076,9 @@ A v0.4 sidecar (or an intermediate `.step.source.json`) is still sitting next to
 the artifact. → Delete it and rebuild. Step 5.
 
 **Unexpected keyword argument on a decorator, or "out= must be a non-empty path string"**
-You passed a retired name — `write=` instead of `out=`, `pose=`, `animation=`
-on any decorator (choreography is the render module beside the document),
-`kinematics=` on `@dxf` — or a value of the wrong kind. → The decorator table
+You passed a retired name — `write=` instead of `out=`, `pose=`, or
+`kinematics=` on `@dxf` — or a value of the wrong kind. (`animation=` on
+`@step` is current; it was the 0.5.0 spelling that had no such argument.) → The decorator table
 in step 2.
 
 **"kinematics has unknown key(s) … the vocabulary is closed"**
@@ -1089,8 +1130,8 @@ it from its bytes.
 - [ ] Every assembly imports and calls its part models; mirrored parts are their
       own models; placement uses `Pos/Rot/Location *` or `.moved()`.
 - [ ] No `__cadgen__` directory, `.step.js`, `.params.js`, or
-      `.step.source.json` remains anywhere in the project; the old cache root
-      is gone.
+      `.step.source.json` remains anywhere in the project; animation is
+      `animation=` on the decorator; the old cache root is gone.
 - [ ] Every model script runs clean, a second run prints `current`, and
       `cadgen store why` agrees.
 - [ ] `cadgen step inspect validate` passes on each STEP you author. Purchased

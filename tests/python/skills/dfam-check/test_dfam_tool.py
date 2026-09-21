@@ -174,13 +174,18 @@ class DegenerateMeshTest(unittest.TestCase):
         self.assertIn("degenerate", facts["note"])
 
 
-def _run_cli(argv: list[str]) -> dict:
-    """Invoke the CLI the way a skill run does and parse what it prints."""
+def _run_cli_status(argv: list[str]) -> tuple[int, dict]:
+    """Invoke the CLI the way a skill run does: its exit code and its JSON."""
     buf = io.StringIO()
     with mock.patch.object(sys, "argv", ["dfam_tool.py", *argv]):
         with contextlib.redirect_stdout(buf):
-            dfam_tool.main()
-    return json.loads(buf.getvalue())
+            code = dfam_tool.main()
+    return code, json.loads(buf.getvalue())
+
+
+def _run_cli(argv: list[str]) -> dict:
+    """Invoke the CLI the way a skill run does and parse what it prints."""
+    return _run_cli_status(argv)[1]
 
 
 class CliTest(unittest.TestCase):
@@ -297,11 +302,27 @@ class ResilienceTest(unittest.TestCase):
                 faces=[[0, 1, 2]],
                 process=False,
             ).export(str(path))
-            payload = _run_cli(["measure", str(path)])
+            code, payload = _run_cli_status(["measure", str(path)])
 
         self.assertIn("error", payload["support_volume"])
         self.assertNotIn("error", payload["overhangs"])
         self.assertNotIn("error", payload["mesh"])
+
+        # A degraded report is not a clean one. Without these, a report missing
+        # wall thickness because a dependency is absent reads exactly like a
+        # report from a part that has no thin walls.
+        self.assertTrue(payload["partial"])
+        self.assertIn("support_volume", payload["partial_sections"])
+        self.assertEqual(code, 2)
+
+    def test_a_complete_report_is_not_partial(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            path = _stl(Box(20, 20, 15), Path(td), "box")
+            code, payload = _run_cli_status(["measure", path])
+
+        self.assertFalse(payload["partial"])
+        self.assertNotIn("partial_sections", payload)
+        self.assertEqual(code, 0)
 
 
 class ScaleHintTest(unittest.TestCase):

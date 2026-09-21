@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cadgen"
-version = "0.5.1"
+version = "0.6.5"
 description = "STEP-first CAD artifact generation runtime: build123d STEP/GLB/topology generation, validation, and inspection for CAD agent skills."
 readme = "README.md"
 license = "MIT"
@@ -39,8 +39,19 @@ classifiers = [
 # OCC operations now, with shapely only the fallback for the degenerate unions
 # OCC refuses -- but a fallback that is not installed is not a fallback.
 dependencies = [
-  "build123d",
-  "cadquery-ocp",
+  # Bounded above on purpose. cadgen does not merely CALL build123d, it
+  # reaches into it: the op memo replaces `Shape.is_same`/`__eq__`/`__hash__`
+  # and the topology-layer op entry points, and the lazy store replaces
+  # `Compound.__init__` and reads its arguments BY POSITION. A minor release
+  # is free to reorder that signature or rename those choke points, and the
+  # failure mode is silent: a patch that no longer matches simply stops
+  # applying. Raise the ceiling deliberately, after re-running the suite
+  # against the new minor.
+  "build123d>=0.11.1,<0.12",
+  # cadgen imports OCP directly for STEP/XCAF, topology and BREP work.  Match
+  # build123d's non-VTK provider: cadgen does not import VTK or cadquery, and
+  # this keeps the optional visualization stack out of every CAD install.
+  "cadquery-ocp-novtk>=7.9,<8",
   "ezdxf",
   "shapely",
 ]

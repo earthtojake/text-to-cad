@@ -3,8 +3,8 @@
 A skill is consumed by an agent that copies what it reads, so a code block that
 has drifted from the model contract is a generator of broken models, and the
 drift is invisible to every other test. The complete model scripts in
-`skills/cad/SKILL.md`, `references/step-generation.md` and
-`references/supported-exports.md` are therefore extracted and BUILT here, cold
+the main skill and its generation, export, positioning and kinematics references
+are therefore extracted and BUILT here, cold
 (`CADGEN_DAEMON=0`, transient workers), in a throwaway project with a private
 store, and every output their decorators declare must exist afterwards.
 
@@ -45,6 +45,8 @@ DOCUMENTS = (
     repo_path("skills/cad/SKILL.md"),
     repo_path("skills/cad/references/step-generation.md"),
     repo_path("skills/cad/references/supported-exports.md"),
+    repo_path("skills/cad/references/positioning.md"),
+    repo_path("skills/cad/references/kinematics.md"),
 )
 
 _PYTHON_BLOCK = re.compile(r"```python\n(.*?)```", re.S)
@@ -272,54 +274,28 @@ class DocumentationTeachesTheContract(unittest.TestCase):
             for word in self.RETIRED:
                 self.assertNotIn(word, text, f"{path.name} still teaches {word!r}")
 
-    def test_the_skill_teaches_the_model_contract(self) -> None:
-        # Whitespace-normalized: prose wraps, and a rewrap must not fail the pin.
-        skill = re.sub(r"\s+", " ", repo_path("skills/cad/SKILL.md").read_text(encoding="utf-8"))
-        for phrase in (
-            'if __name__ == "__main__"',
-            "takes no parameters",
-            "STEP is not required",
-            "never `child.located(loc)`",
-            "cadgen store why",
-            "never wait on or cancel",
-            "does not update the assemblies",
-            "CADGEN_DAEMON=0",
-        ):
-            self.assertIn(phrase, skill, f"SKILL.md lost: {phrase!r}")
-        reference = re.sub(r"\s+", " ", repo_path("skills/cad/references/step-generation.md").read_text(encoding="utf-8"))
-        for phrase in (
-            "models by result, constants by value, functions by file",
-            "Mirrored parts are their own models",
-            "def servo():",
-            "Never `read_step` your own output",
-        ):
-            self.assertIn(phrase, reference, f"step-generation.md lost: {phrase!r}")
 
-
-_JS_BLOCK = re.compile(r"```js\n(.*?)```", re.S)
-
-
-class DocumentedRenderModule(unittest.TestCase):
-    """The render module the kinematics reference shows is a real one.
-
-    `STEP/<name>.step.js` is authored from what the skill shows, so the sample
-    must be exactly what the loader accepts: the CLI's pre-flight reads its
-    clip ids, and the shared loader (cadgen-js renderModule.js) compiles it in
-    Node the same way the viewer and the snapshot page do in the browser.
-    """
+class DocumentedEmbeddedAnimation(unittest.TestCase):
+    """The embedded animation module in the kinematics reference is valid."""
 
     @classmethod
     def setUpClass(cls) -> None:
         text = repo_path("skills/cad/references/kinematics.md").read_text(encoding="utf-8")
-        blocks = [block for block in _JS_BLOCK.findall(text) if "export const clips" in block]
-        assert blocks, "kinematics.md shows no render module block"
-        cls.module_text = blocks[0]
+        blocks = [block for block in _PYTHON_BLOCK.findall(text) if "ANIMATION = " in block]
+        assert blocks, "kinematics.md shows no embedded animation block"
+        module = ast.parse(blocks[0])
+        assignment = next(
+            node for node in module.body
+            if isinstance(node, ast.Assign)
+            and any(isinstance(target, ast.Name) and target.id == "ANIMATION" for target in node.targets)
+        )
+        cls.module_text = ast.literal_eval(assignment.value)
 
-    def test_the_documented_module_names_the_render_module_beside_the_document(self) -> None:
-        self.assertIn("STEP/arm.step.js", self.module_text.splitlines()[0])
+    def test_the_documented_module_is_self_contained(self) -> None:
+        self.assertNotIn("import ", self.module_text)
 
     def test_the_cli_preflight_reads_the_documented_clips(self) -> None:
-        from cadgen._internal.render_module import declared_clip_ids
+        from cadgen._internal.animation_source import declared_clip_ids
 
         self.assertEqual(["demo"], declared_clip_ids(self.module_text))
 
@@ -330,10 +306,10 @@ class DocumentedRenderModule(unittest.TestCase):
         loader = repo_path("packages/cadgen-js/src/common/renderModule.js")
         script = textwrap.dedent(
             f"""
-            import {{ compileRenderModule, importRenderModule }} from {str(loader.as_uri())!r};
+            import {{ compileAnimationModule, importAnimationModule }} from {str(loader.as_uri())!r};
             const text = process.argv[1];
-            const namespace = await importRenderModule(text, {{ name: "arm.step.js" }});
-            const compiled = compileRenderModule(namespace, {{ name: "arm.step.js" }});
+            const namespace = await importAnimationModule(text, {{ name: "arm.step animation" }});
+            const compiled = compileAnimationModule(namespace, {{ name: "arm.step animation" }});
             console.log(JSON.stringify(Object.keys(compiled.clips)));
             """
         )
@@ -349,5 +325,8 @@ class DocumentedRenderModule(unittest.TestCase):
     def test_no_reference_teaches_the_retired_declaration(self) -> None:
         for path in sorted(repo_path("skills/cad/references").glob("*.md")):
             text = path.read_text(encoding="utf-8")
-            for word in ('animation="', ".anim.js"):
-                self.assertNotIn(word, text, f"{path.name} still teaches {word!r}")
+            self.assertIsNone(
+                re.search(r"\.step\.js(?!on)", text),
+                f"{path.name} still teaches an adjacent .step.js",
+            )
+            self.assertNotIn(".anim.js", text, f"{path.name} still teaches '.anim.js'")

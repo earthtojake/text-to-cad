@@ -5,13 +5,8 @@ avoids rebuilding several thousand accepted parts when a small subsystem moves.
 """
 from pathlib import Path
 import json,hashlib,shutil
-from cadgen import read_step,srgb
+from cadgen import read_step
 from lib.assembly import Body
-# Nearest-colour material inference for imported bodies runs over the
-# HARDWARE languages only; the cord hues are assigned by name in
-# lib.palette, never guessed from an imported colour.
-from lib.palette import HARDWARE_FINISHES as FINISHES
-
 ROOT=Path(__file__).resolve().parents[2]
 MARKER='/models/tendon_hand/'
 
@@ -28,10 +23,6 @@ def rooted(path):
     text=str(path).replace('\\','/')
     return ROOT/text.split(MARKER,1)[1] if MARKER in text else Path(path)
 
-def appearance(shape,record):
-    if 'color' in record:shape.color=tuple(record['color'])
-    if 'material' in record:shape.cad_material=dict(record['material'])
-
 def leaves(node):
     return [leaf for child in node.children for leaf in leaves(child)] if node.children else [node]
 
@@ -42,14 +33,12 @@ def frozen_bodies(include_variable=True):
     assert hashlib.sha256(source.read_bytes()).hexdigest()==report['step_sha256']
     assert hashlib.sha256(meta.read_bytes()).hexdigest()==report['metadata_sha256']
     mapping={r['name']:r for r in json.loads(meta.read_text())}
-    styles=json.loads((ROOT/'validation/integration_native_base_appearance.json').read_text())['occurrences']
     native=leaves(read_step(source))
     assert len(native)==len(mapping)==report['body_count']
     bodies=[]
     for shape in native:
         row=mapping[shape.label]
         if not include_variable and row['frame']=='variable':continue
-        appearance(shape,styles[shape.label])
         body=Body(shape,row['frame'],row['system'],row['kind'])
         body.source_sha256=report['step_sha256'];body.source_path=str(source)
         bodies.append(body)
@@ -66,20 +55,18 @@ def overlay(bodies,step_path,records,expected_sha=None,replace=False):
     archive.parent.mkdir(exist_ok=True)
     if not archive.exists():archive.write_bytes(payload)
     assert hashlib.sha256(archive.read_bytes()).hexdigest()==actual_sha
-    style_file=ROOT/'validation/native_overlay_appearance.json'
-    styles=json.loads(style_file.read_text()).get(expected_sha,{}) if style_file.exists() else {}
     native=leaves(read_step(archive));mapping={r['name']:r for r in records}
     assert len(native)==len(mapping)
+    # Some legacy single-solid STEP documents carry only an OCCT entry label.
+    # Their one manifest record is unambiguous and remains digest-bound above.
+    if len(native)==1 and str(native[0].label).startswith('=>[') and native[0].label not in mapping:
+        native[0].label=next(iter(mapping))
     assert {s.label for s in native}==set(mapping)
     existing={b.name:b for b in bodies}
     if replace:assert set(mapping)<=set(existing)
     else:assert not set(mapping)&set(existing)
     for shape in native:
         row=mapping[shape.label]
-        color=tuple(shape.color)[:3] if shape.color is not None else tuple(srgb(FINISHES['aluminum'][0]))[:3]
-        language=min(FINISHES,key=lambda key:sum((a-b)**2 for a,b in zip(color,tuple(srgb(FINISHES[key][0]))[:3])))
-        shape.cad_material=dict(FINISHES[language][1])
-        if shape.label in styles:appearance(shape,styles[shape.label])
         body=Body(shape,row['frame'],row['system'],row['kind'])
         body.source_sha256=actual_sha
         body.source_path=str(archive)

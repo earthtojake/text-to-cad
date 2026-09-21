@@ -1,11 +1,17 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import {
+  Clapperboard,
+  Box,
   Check,
+  CircleAlert,
   CircleCheck,
-  Contrast,
   Copy,
   Folder,
   LoaderCircle,
+  Monitor,
+  Moon,
+  Sun,
+  TriangleAlert,
   SlidersHorizontal
 } from "lucide-react";
 import EntryIcon from "./EntryIcon";
@@ -33,6 +39,9 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -47,8 +56,12 @@ import {
   TooltipTrigger
 } from "@/components/ui/tooltip";
 import { cn } from "@/ui/utils";
+import { COLOR_SCHEMES } from "@/ui/colorScheme";
 import { copyTextToClipboard } from "@/ui/clipboard";
 import { entryIconStatus } from "@/workbench/entryIconStatus";
+// Render is a lazy chunk; reaching its menu is the earliest honest signal that
+// someone may want it, and a warm chunk is what makes the switch look instant.
+import { prefetchRenderStudio } from "@/render/renderStudioChunk";
 import FileAccessContextMenu from "./FileAccessContextMenu";
 import {
   fileKey,
@@ -79,6 +92,44 @@ function fileSheetLabel(fileSheetKind) {
     return "STEP sheet";
   }
   return "file sheet";
+}
+
+function FileStatusBadge({ status, onClick }) {
+  if (!status) {
+    return null;
+  }
+  return (
+    <TooltipProvider delayDuration={250}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={onClick}
+            role={onClick ? undefined : "status"}
+            aria-label={onClick ? `${status.label}: show details` : undefined}
+            aria-live="polite"
+            data-file-status={status.label}
+            className={cn(
+              "inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              status.tone === "error" ? "border-destructive/30 bg-destructive/10 text-destructive dark:text-red-300"
+                : status.tone === "warning" ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                  : "border-border bg-muted/40 text-muted-foreground"
+            )}
+          >
+            {status.busy ? <LoaderCircle className="size-3 animate-spin" aria-hidden="true" />
+              : status.tone === "error" ? <CircleAlert className="size-3" aria-hidden="true" />
+                : status.tone === "warning" ? <TriangleAlert className="size-3" aria-hidden="true" />
+                  : null}
+            {status.label}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="max-w-80 text-xs leading-relaxed">
+          <p>{status.title}</p>
+          {onClick ? <p className="mt-1">Click for details and next steps.</p> : null}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 function sourceFormatForEntry(entry, entrySourceFormat) {
@@ -315,8 +366,7 @@ function BreadcrumbNodeDropdown({
   selectedStepSourceStatus = null,
   canCopyFileAssetPaths = false,
   onRevealInExplorerView,
-  onCopyFileAssetReference,
-  filenameLoadActivity
+  onCopyFileAssetReference
 }) {
   const label = String(node?.label || "");
   const title = String(node?.title || label);
@@ -324,7 +374,6 @@ function BreadcrumbNodeDropdown({
     ? node?.menuDirectory || null
     : null;
   const canBrowse = !!menuDirectory && listSidebarItems(menuDirectory).length > 0;
-
   if (!canBrowse) {
     const labelNode = (
       <span
@@ -334,9 +383,6 @@ function BreadcrumbNodeDropdown({
         )}
         title={title}
       >
-        {current && node?.type === "entry" ? (
-          <FilenameLoadStatus activity={filenameLoadActivity} />
-        ) : null}
         <span className="block min-w-0 truncate">{label}</span>
       </span>
     );
@@ -376,9 +422,6 @@ function BreadcrumbNodeDropdown({
         }
       }}
     >
-      {current && node?.type === "entry" ? (
-        <FilenameLoadStatus activity={filenameLoadActivity} />
-      ) : null}
       <span className="block min-w-0 truncate">{label}</span>
     </button>
   );
@@ -509,30 +552,6 @@ function BreadcrumbEllipsisDropdown({
         </DropdownMenuScrollArea>
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-}
-
-/**
- * A bare spinner, left of the filename. No chip, no text, no percent.
- *
- * The overlay already carries the words and the number; repeating them in the breadcrumb
- * gave the same state two competing readouts that could disagree mid-poll. This says only
- * "this file is busy" and leaves the detail to the one place that owns it. The label still
- * rides on `title` and the screen-reader text, so nothing is lost for a11y or hover.
- */
-function FilenameLoadStatus({ activity }) {
-  if (!activity?.loading) {
-    return null;
-  }
-
-  const label = String(activity?.label || "").trim();
-  const title = String(activity?.title || label || "Loading").trim();
-
-  return (
-    <span role="status" aria-live="polite" title={title} className="inline-flex shrink-0 items-center">
-      <LoaderCircle className="size-3 shrink-0 animate-spin text-muted-foreground" aria-hidden="true" />
-      <span className="sr-only">{title}</span>
-    </span>
   );
 }
 
@@ -864,7 +883,7 @@ function VersionReleaseLink({ version, releaseUrl, releaseCheck = emptyLatestRel
       <TooltipContent
         side="bottom"
         sideOffset={6}
-        className="cad-glass-popover w-fit max-w-[calc(100vw-1rem)] border border-border bg-popover p-2 text-left text-popover-foreground shadow-lg shadow-black/10"
+        className="w-fit max-w-[calc(100vw-1rem)] border border-border bg-popover p-2 text-left text-popover-foreground shadow-lg shadow-black/10"
         arrowClassName="bg-popover fill-popover"
       >
         <div className="inline-flex max-w-full flex-col gap-3">
@@ -969,6 +988,10 @@ function VersionReleaseLink({ version, releaseUrl, releaseCheck = emptyLatestRel
 
 export default function CadWorkspaceTopBar({
   previewMode,
+  fileStatus = null,
+  onFileStatusClick,
+  renderMode = false,
+  onRenderModeChange,
   sidebarLabelForEntry,
   directoryTree = null,
   selectedKey = "",
@@ -980,7 +1003,6 @@ export default function CadWorkspaceTopBar({
   entryHasUrdf,
   activeStepArtifactGenerationFile = "",
   stepArtifactGenerationAvailable = true,
-  filenameLoadActivity = null,
   selectedStepSourceStatus = null,
   canCopyFileAssetPaths = false,
   onRevealInExplorerView,
@@ -988,8 +1010,9 @@ export default function CadWorkspaceTopBar({
   fileSheetKind = "",
   fileSheetOpen = false,
   onToggleFileSheet,
-  themeEditing = false,
-  onToggleThemeEditor,
+  colorSchemePreference = "system",
+  resolvedColorSchemeMode = "light",
+  onColorSchemePreferenceChange,
   navigationAvailable = true
 }) {
   const viewerVersion = String(viewerPackage.version || "").trim();
@@ -1036,11 +1059,14 @@ export default function CadWorkspaceTopBar({
   const fileSheetToggleLabel = fileSheetOpen
     ? `Collapse ${fileSheetLabel(fileSheetKind)}`
     : `Expand ${fileSheetLabel(fileSheetKind)}`;
-  const themeToggleLabel = themeEditing ? "Close theme settings" : "Open theme settings";
+  const appearanceLabel = "Appearance";
+  const AppearanceIcon = resolvedColorSchemeMode === "dark" ? Moon : Sun;
+  const viewingModeLabel = renderMode ? "Render" : "Inspect";
+  const ViewingModeIcon = renderMode ? Clapperboard : Box;
 
   return (
     <header
-      className="cad-glass-surface pointer-events-auto flex h-11 shrink-0 items-center gap-2 border-b border-sidebar-border px-2 text-sidebar-foreground"
+      className="bg-sidebar pointer-events-auto flex h-11 shrink-0 items-center gap-2 border-b border-sidebar-border px-2 text-sidebar-foreground"
     >
       {navigationAvailable ? (
         <SidebarTrigger
@@ -1077,7 +1103,6 @@ export default function CadWorkspaceTopBar({
                   canCopyFileAssetPaths={canCopyFileAssetPaths}
                   onRevealInExplorerView={onRevealInExplorerView}
                   onCopyFileAssetReference={onCopyFileAssetReference}
-                  filenameLoadActivity={filenameLoadActivity}
                 />
               </BreadcrumbItem>
             </BreadcrumbList>
@@ -1119,7 +1144,6 @@ export default function CadWorkspaceTopBar({
                       canCopyFileAssetPaths={canCopyFileAssetPaths}
                       onRevealInExplorerView={onRevealInExplorerView}
                       onCopyFileAssetReference={onCopyFileAssetReference}
-                      filenameLoadActivity={filenameLoadActivity}
                     />
                   )}
                 </BreadcrumbItem>
@@ -1134,11 +1158,13 @@ export default function CadWorkspaceTopBar({
       ) : (
         <div className="min-w-0" />
       )}
+      <FileStatusBadge status={fileStatus} onClick={onFileStatusClick} />
 
       <div className="min-w-0 flex-1" />
 
       <TooltipProvider delayDuration={250}>
         <div className="flex shrink-0 items-center gap-1.5">
+          <div className="hidden sm:contents">
           <VersionReleaseLink
             version={viewerVersion}
             releaseUrl={releaseUrl}
@@ -1171,21 +1197,73 @@ export default function CadWorkspaceTopBar({
             </Button>
           ) : null}
 
-          {/* A plain toggle for the theme sidebar, matching the file-sheet
-              button beside it. Theme selection lives inside the sidebar. */}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label={themeToggleLabel}
-            title={themeToggleLabel}
-            aria-pressed={themeEditing}
-            onClick={onToggleThemeEditor}
-            className={`${topBarIconButtonClasses} ${themeEditing ? activeIconButtonClasses : ""}`}
-          >
-            <Contrast className={topBarIconClasses} strokeWidth={2} aria-hidden="true" />
-            <span className="sr-only">{themeToggleLabel}</span>
-          </Button>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label={appearanceLabel}
+                title={appearanceLabel}
+                className={topBarIconButtonClasses}
+              >
+                <AppearanceIcon className={topBarIconClasses} strokeWidth={2} aria-hidden="true" />
+                <span className="sr-only">{appearanceLabel}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-36">
+              <DropdownMenuRadioGroup
+                value={colorSchemePreference}
+                onValueChange={(value) => onColorSchemePreferenceChange?.(value)}
+              >
+                {COLOR_SCHEMES.map((option) => {
+                  const OptionIcon = option.id === "light" ? Sun : option.id === "dark" ? Moon : Monitor;
+                  return (
+                    <DropdownMenuRadioItem key={option.id} value={option.id} className="text-xs">
+                      <OptionIcon className="size-3.5" strokeWidth={2} aria-hidden="true" />
+                      {option.label}
+                    </DropdownMenuRadioItem>
+                  );
+                })}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {selectedEntry && typeof onRenderModeChange === "function" ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Viewing mode: ${viewingModeLabel}`}
+                  title={`Viewing mode: ${viewingModeLabel}`}
+                  className={topBarIconButtonClasses}
+                  onPointerEnter={prefetchRenderStudio}
+                  onFocus={prefetchRenderStudio}
+                >
+                  <ViewingModeIcon className={topBarIconClasses} strokeWidth={2} aria-hidden="true" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-40">
+                <DropdownMenuLabel className="text-xs">Viewing mode</DropdownMenuLabel>
+                <DropdownMenuRadioGroup
+                  value={renderMode ? "render" : "inspect"}
+                  onValueChange={(value) => onRenderModeChange(value === "render")}
+                >
+                  <DropdownMenuRadioItem value="inspect" className="text-xs">
+                    <Box className="size-3.5" strokeWidth={2} aria-hidden="true" />
+                    Inspect
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="render" className="text-xs">
+                    <Clapperboard className="size-3.5" strokeWidth={2} aria-hidden="true" />
+                    Render
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
 
           {showFileSheetToggle ? (
             <Button
@@ -1194,9 +1272,9 @@ export default function CadWorkspaceTopBar({
               size="icon"
               aria-label={fileSheetToggleLabel}
               title={fileSheetToggleLabel}
-              aria-pressed={fileSheetOpen && !themeEditing}
+              aria-pressed={fileSheetOpen}
               onClick={onToggleFileSheet}
-              className={`${topBarIconButtonClasses} ${fileSheetOpen && !themeEditing ? activeIconButtonClasses : ""}`}
+              className={`${topBarIconButtonClasses} ${fileSheetOpen ? activeIconButtonClasses : ""}`}
             >
               <SlidersHorizontal className={topBarIconClasses} />
               <span className="sr-only">{fileSheetToggleLabel}</span>

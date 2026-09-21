@@ -59,7 +59,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable
 
 if TYPE_CHECKING:  # pragma: no cover - typing only; this module must not import OCP eagerly
-    from build123d import Edge, Shape
+    from build123d import Edge
 
 # The layer a bare shape lands on. Layers are CAM operations (CUT / ENGRAVE /
 # SCORE); a drawing that has only one does not need to name it.

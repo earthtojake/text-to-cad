@@ -15,11 +15,16 @@ Python mirror in cadgen/_internal/tessellation.py.
 from __future__ import annotations
 
 import os
+import json
 import re
 import subprocess
 import unittest
 from pathlib import Path
 from unittest import mock
+
+from tests.python.support.paths import add_repo_path
+
+add_repo_path("packages/cadgen/src")
 
 from cadgen._internal import cache_paths
 
@@ -69,6 +74,8 @@ class CacheRootSyncTest(unittest.TestCase):
                 )
 
     def test_tessellator_version_matches_between_python_and_js(self) -> None:
+        from cadgen.store.meshes import TESSELLATOR_VERSION
+
         match = re.search(r"^export const TESSELLATION_VERSION = (\d+);", TESSELLATE_JS.read_text(encoding="utf-8"), re.MULTILINE)
         assert match, "TESSELLATION_VERSION not found in tessellate.js"
         self.assertEqual(
@@ -78,6 +85,8 @@ class CacheRootSyncTest(unittest.TestCase):
             "bump TESSELLATION_VERSION (tessellate.js) and MESH_TESSELLATION_VERSION "
             "(cache_paths.py) together",
         )
+        self.assertEqual(TESSELLATOR_VERSION, cache_paths.MESH_TESSELLATION_VERSION,
+                         "Python TESS payload admission must use the same algorithm version")
 
     def test_tessellator_default_tolerances_match_between_python_and_js(self) -> None:
         # The tessellator lives in JS; the Python constants are a MIRROR the
@@ -110,6 +119,23 @@ class CacheRootSyncTest(unittest.TestCase):
         # JS-side refactor cannot drop it without failing a Python-side gate.
         cache_js = (ROOT / "packages" / "cadgen-js" / "src" / "lib" / "surf" / "tessellationCache.js").read_text(encoding="utf-8")
         self.assertIn("-t${TESSELLATION_VERSION}-", cache_js)
+
+    def test_complete_tessellation_keys_match_between_python_and_js(self) -> None:
+        from cadgen._internal.node_runtime import cad_node_executable
+        from cadgen.store.meshes import tessellation_key
+
+        module = ROOT / "packages/cadgen-js/src/lib/surf/tessellationCache.js"
+        cases = [("a" * 64, 0.0015, 0.005), ("b" * 64, 0.00001, 0.013),
+                 ("a" * 64, 0.0015000000000000002, 0.005)]
+        script = f'''
+import fs from "node:fs";
+import {{ tessellationCacheKey }} from {json.dumps(module.as_uri())};
+console.log(JSON.stringify(JSON.parse(fs.readFileSync(0,"utf8")).map(([surfaceInput, chordTolerance, angleTolerance]) =>
+  tessellationCacheKey(surfaceInput, {{chordTolerance, angleTolerance}}))));
+'''
+        result = subprocess.run([str(cad_node_executable()), "--input-type=module", "-e", script],
+                                input=json.dumps(cases), text=True, capture_output=True, check=True)
+        self.assertEqual([tessellation_key(*case) for case in cases], json.loads(result.stdout))
 
 
 if __name__ == "__main__":

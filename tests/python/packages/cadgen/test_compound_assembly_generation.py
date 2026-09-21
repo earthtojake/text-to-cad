@@ -9,7 +9,7 @@ from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cadgen/src")
 
-from cadgen._internal import generation
+from cadgen._internal import generation_runner
 from cadgen.metadata import parse_generator_metadata
 from cadgen.step_export import _create_bin_xcaf_doc, export_build123d_step_scene
 from cadgen._internal.step_scene import _bbox_from_shape, scene_leaf_occurrences, scene_occurrence_shape
@@ -37,11 +37,11 @@ class CompoundAssemblyGenerationTests(unittest.TestCase):
         ):
             with self.subTest(payload=sorted(payload)):
                 with self.assertRaisesRegex(TypeError, r"returned a dict.*@stl/@threemf/@glb.*mesh_tolerance"):
-                    generation._normalize_step_payload(payload, script_path=Path("part.py"))
+                    generation_runner._normalize_step_payload(payload, script_path=Path("part.py"))
 
     def test_step_payload_rejects_non_shapes(self) -> None:
         with self.assertRaisesRegex(TypeError, r"must return a build123d Shape, got NoneType"):
-            generation._normalize_step_payload(None, script_path=Path("part.py"))
+            generation_runner._normalize_step_payload(None, script_path=Path("part.py"))
 
     def test_static_metadata_rejects_a_dict_return(self) -> None:
         # The static parser refuses the same thing before a build starts, with

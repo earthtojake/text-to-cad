@@ -12,10 +12,9 @@ from lib import materials
 from lib import mvt_base as M
 
 
-@step(out="../STEP/movement_base.step")
+@step(out="../STEP/movement_base.step", materials=materials.materials_for_model("movement_base"))
 def movement_base():
     compound = bd.Compound(children=M.build_base(), label="movement_base")
-    materials.apply(compound)
     return compound
 
 

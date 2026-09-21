@@ -157,11 +157,14 @@ Copy the full template for the applicable workflow from
    model script and call it, which is tracked by result and never touches an
    artifact.
 
-One model per file: a source declaring both a `@step` and a `@dxf` model is
-rejected — a drawing gets its own script. A drawing composes models, never the
-reverse: calling a `@dxf` function from a `@step` body is just its 2D geometry
-and links nothing. The viewer catalog is artifacts-only: scripts never list;
-the `.dxf` the run writes is the entry the viewer renders.
+One model per file is the recommendation, and a drawing gets its own script:
+a file MAY declare several models — two `@dxf` drawings, or a `@dxf` beside a
+`@step` — and each is its own record, output and job (a sole model writes
+`<file>.dxf`; models sharing a file write `<function>.dxf`), but they share the
+file's closure, so editing one rebuilds them all. A drawing composes models,
+never the reverse: calling a `@dxf` function from a `@step` body is just its 2D
+geometry and links nothing. The viewer catalog is artifacts-only: scripts never
+list; the `.dxf` the run writes is the entry the viewer renders.
 
 ## Use this skill when
 
@@ -248,27 +251,27 @@ It takes the `.dxf` document only — a model script is refused by name (run
 `python <drawing>.py`, then snapshot the drawing it wrote). The command meshes
 the flat pattern on demand through the bundled Node one-shot and
 renders it through the shared snapshot CLI (`cadgen.snapshot_cli`) and the same
-headless browser runtime every rendering skill uses — so geometry and materials
-render identically to the CAD Viewer; the default `snapshot` theme differs from the
-viewport only by dropping the grid, origin axis and shadows.
+headless browser runtime every rendering skill uses. A normal snapshot uses
+deterministic light CAD lighting and hides grid and axis guides.
 
 OUT — the second positional — is written exactly as given, with a relative path resolved against the
 current working directory. The target is deleted before the render starts and the
 finished image is written atomically, so: reuse one name while iterating (every read
 is provably the render you just ran), name the iterations when you genuinely need to
-compare two, and treat a missing file as the failure signal — there is never an older
-image at the path to mistake for output. A directory (`tmp/` as OUT) is the
+compare two. Invalid request combinations fail before touching OUT; after a request is
+accepted, OUT is cleared first so a later failure leaves a missing file instead of
+a stale image. A directory (`tmp/` as OUT) is the
 don't-care case and gets a generated timestamped name inside it, printed on the
 `saved snapshot:` line.
 
 Grammar: `cadgen dxf snapshot TARGET [OUT] [flags]`. Flags: `--mode view|list`,
-`--camera`, `--theme`, `--size-profile`, `--width`/`--height`, `--job`,
-`--view-labels`, `--debug`, `--json`. Theme settings live under one `--theme`,
-mirroring the viewer's Theme tab; the default theme is `snapshot`, Workbench Light
-without the ground grid, origin axis or shadows. The command has no `--display`,
-and no selector, kinematics, section or exploded options at all — they are absent
-from `--help` rather than refused at runtime, because a drawing carries no CAD
-topology and display settings are CAD topology settings.
+`--camera`, `--render`, `--display`, `--size-profile`, `--width`/`--height`,
+`--job`, `--view-labels`, `--debug`, `--json`. `--render` opts into the photographic
+scene and accepts `light`, `dark`, compact Render JSON, or a file path.
+Set the photographic camera inside Render JSON. Top-level `--camera` and `--display`
+control normal drawing snapshots and cannot be combined with Render.
+A drawing has no selectors, kinematics, section mode, exploded assembly structure,
+or CAD-edge topology, and those combinations are absent or rejected clearly.
 
 No CLI inspects an existing `.dxf`. For entity/layer checks read it with `ezdxf`
 directly (it arrives with build123d), and `validate_dxf_file` for the drawing checks;

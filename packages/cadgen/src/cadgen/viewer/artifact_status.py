@@ -4,26 +4,14 @@ What this module deliberately does NOT decide is "is a build in flight". The
 caller supplies a snapshot (``build_progress.py``: the daemon's job ledger,
 matched to the document by declared output path) and this module reads it.
 
-Nothing here imports cadgen. Status is answered for a directory of models by an
-interpreter that may have no kernel installed at all, and every read degrades to
-"no" rather than raising: a badge is not a render. The ONE exception is
-containment — an out-of-root ``?file=`` ref raises before anything is read,
-because that is a refusal rather than a missing file.
+The server answers status without loading the CAD kernel. Missing or damaged
+required geometry means not compiled. Complete native geometry means compiled;
+SURF derivation and browser pixels have separate lifecycles. Containment errors
+still raise before any store read.
 
-Freshness semantics:
-
-* a tree must exist, parse, declare the exact kind, and have every component
-  payload on disk;
-* nothing else is gated. The tree KEY is ``<sha256(document)>-v<schema>``, so
-  a tree that resolved at all has the right schema and belongs to exactly
-  these bytes — the old schema, bake, and per-poll digest gates all collapsed
-  into content keying, and that digest re-hash was the one full-file read every
-  status poll used to pay;
-* generated outputs are DETACHED from their source code: no source checks, ever;
-* the viewer never learns whether a document was generated. Nothing here opens a
-  record, a script or a closure (STORE.md §2, the law): status is artifact-side —
-  not compiled / compiling / rendered / failed — and "is this document behind its
-  source" is ``cadgen store why``'s question.
+The document's byte digest resolves through index/document to one immutable
+geometry tree. Its complete required closure must verify. Saved documents never
+consult source scripts, model records or source currency.
 """
 
 from __future__ import annotations
@@ -33,16 +21,18 @@ import os
 import re
 
 from .backend import require_contained
-from .store_paths import component_object_present, result_descriptor, result_tree
+from .store_paths import result_descriptor, result_tree
 
 __all__ = [
     "ARTIFACT_STATE",
     "BUILDABLE_CODES",
+    "RETIRED_RENDER_MODULE_WARNING",
     "artifact_status",
     "owns_artifact_path",
     "owns_dxf_path",
     "owns_step_path",
     "resolve_artifact_verdict",
+    "retired_render_module_warnings",
 ]
 
 STEP_PACKAGE_KIND = "assembly-package"
@@ -62,22 +52,20 @@ _STEP_ENTRY_RE = re.compile(r"\.(step|stp)\Z", re.IGNORECASE)
 
 
 class ARTIFACT_STATE:  # noqa: N801 - a namespace of wire constants, not a class
-    RENDERED = "rendered"
+    COMPILED = "compiled"
     COMPILING = "compiling"
     NOT_COMPILED = "not-compiled"
     FAILED = "failed"
 
 
-# Codes the client may build on. ``missing_source_path`` and
-# ``missing_dxf_output`` are unreachable from ``_validate_step`` today; the set
-# stays literal so a future code lands in the right branch rather than falling
-# through to the error arm.
+# Codes the client may build on. ``missing_dxf_output`` is unreachable from
+# ``_validate_step`` today; the set stays literal so a future code lands in the
+# right branch rather than falling through to the error arm.
 BUILDABLE_CODES = frozenset(
     {
         "missing_glb",
         "missing_step_topology",
         "unsupported_step_topology",
-        "missing_source_path",
         "missing_dxf_output",
     }
 )
@@ -105,6 +93,48 @@ def _read_json(file_path):
     except (OSError, ValueError):
         return None
     return parsed if isinstance(parsed, dict) else None
+
+
+# A door never refuses a document (law 1), so a leftover ``<name>.step.js``
+# cannot fail here the way it fails a build. It is still read by nothing --
+# animation rides the document's sidecar, put there by ``@step(animation=...)``
+# -- and a model that silently renders inert is the failure law 10 forbids. So
+# the entry carries a warning that names the replacement, and renders.
+#
+# Every warning is the viewer's actionable triple -- a heading, an explanation,
+# and the recovery step -- because that is the shape its alerts render (see the
+# "Actionable errors" law in ``apps/viewer/README.md``). Sending one prose blob
+# instead would leave the client splitting sentences to find the recovery step,
+# so the split is made HERE, where the sentences are written. The client renders
+# the three fields it is handed and knows nothing about render modules: a new
+# warning below reaches the UI with no client change.
+RETIRED_RENDER_MODULE_WARNING = {
+    "heading": "{name} is a retired render module",
+    "message": (
+        "It is read by nothing. Animation is declared with @step(animation=...), "
+        "which embeds the module in this document's .json sidecar."
+    ),
+    "recovery": "Move its clips into the decorator and delete {name}.",
+}
+
+
+def retired_render_module_warnings(step_path) -> list[dict]:
+    """``[warning]`` when a stale companion module sits beside ``step_path``.
+
+    One ``os.path.exists`` on a path this module already resolved: no read, no
+    parse, and every failure degrades to "no warning" like every other read here.
+    """
+    if not step_path:
+        return []
+    candidate = f"{step_path}.js"
+    try:
+        present = os.path.isfile(candidate)
+    except (OSError, ValueError):
+        return []
+    if not present:
+        return []
+    name = os.path.basename(candidate)
+    return [{key: value.format(name=name) for key, value in RETIRED_RENDER_MODULE_WARNING.items()}]
 
 
 def owns_step_path(file_path) -> bool:
@@ -200,15 +230,9 @@ def _validate_step(step_path: str) -> dict:
             "tree": tree,
             "descriptor": descriptor,
         }
-    for component in components:
-        surf = str((component or {}).get("surfObject") or "") if isinstance(component, dict) else ""
-        if not surf or not component_object_present(surf):
-            return {
-                "ok": False,
-                "code": "missing_glb",
-                "tree": tree,
-                "descriptor": descriptor,
-            }
+    # result_descriptor captured the full required geometry closure. Optional
+    # SURF/TESS availability is a separate runtime capability and cannot make
+    # this document need another compile.
     return {"ok": True, "tree": tree, "descriptor": descriptor}
 
 
@@ -240,6 +264,15 @@ def artifact_status(file_ref, root_dir, *, snapshot=None, verdict=None) -> dict:
     if verdict.get("error"):
         return {"state": ARTIFACT_STATE.FAILED, "error": verdict["error"]}
 
+    # Advisory, and never a state: warnings describe the document's NEIGHBOURS,
+    # so they ride every state this function can return.
+    warnings = retired_render_module_warnings(verdict.get("candidate"))
+
+    def answer(status: dict) -> dict:
+        if warnings:
+            status["warnings"] = [dict(warning) for warning in warnings]
+        return status
+
     snapshot = snapshot or {}
     # Checked BEFORE verdict.ok, so a build in flight over a currently
     # resolvable package reports compiling rather than rendered.
@@ -249,11 +282,11 @@ def artifact_status(file_ref, root_dir, *, snapshot=None, verdict=None) -> dict:
             status["runId"] = snapshot["runId"]
         if snapshot.get("progress") is not None:
             status["progress"] = snapshot["progress"]
-        return status
+        return answer(status)
 
     failed = snapshot.get("failed")
     if verdict.get("ok"):
-        status = {"state": ARTIFACT_STATE.RENDERED}
+        status = {"state": ARTIFACT_STATE.COMPILED}
         if isinstance(failed, dict):
             # The tree renders; the latest build of this document failed. Both
             # facts, the render first.
@@ -264,24 +297,24 @@ def artifact_status(file_ref, root_dir, *, snapshot=None, verdict=None) -> dict:
                 status["runId"] = snapshot["runId"]
             if snapshot.get("progress") is not None:
                 status["progress"] = snapshot["progress"]
-        return status
+        return answer(status)
 
     code = verdict.get("code")
     if isinstance(failed, dict):
         # No tree for these bytes and the latest job for the document failed.
         # The reason is the job's own last word (the ledger keeps it); the
         # generic sentence is only for a ledger that has none.
-        return {
+        return answer({
             "state": ARTIFACT_STATE.FAILED,
             "reason": "build_failed",
             "error": str(failed.get("error") or "").strip() or "The last compile of this document failed.",
             "failed": failed,
-        }
+        })
     if code in BUILDABLE_CODES:
         status = {"state": ARTIFACT_STATE.NOT_COMPILED, "reason": code}
         if snapshot.get("busy"):
             status["blocked"] = True
-        return status
+        return answer(status)
 
     # error and reason carry the same bare code string.
-    return {"state": ARTIFACT_STATE.FAILED, "reason": code, "error": code}
+    return answer({"state": ARTIFACT_STATE.FAILED, "reason": code, "error": code})

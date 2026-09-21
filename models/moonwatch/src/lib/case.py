@@ -346,30 +346,15 @@ def build_case_middle():
 
 
 # ---------------------------------------------------------------------------
-# Polished ribbon overlays — SEPARATE material zones over the brushed body.
-#
-# The case middle is ONE solid, so its twisted lug bevel facets inherit the
-# body's BRUSHED material no matter how the geometry reads. Exactly like the
-# movement's anglage ribbons (`_mvt_base._cap`/`_add_anglage`), thin
-# skins hover POLISH_GAP off each polished facet and carry a true mirror PBR
-# set inline on the part: the `case_polish:*` labels deliberately match NO
-# `_materials.RULES` pattern (fnmatch-verified), so `M.apply` leaves the
-# inline `cad_material` untouched.
+# Polished ribbon overlays are assigned the named case_mirror_polish finish.
 # ---------------------------------------------------------------------------
 
 POLISH_GAP = 0.02           # hover off the facet — no z-fighting
 POLISH_THICKNESS = 0.05
 POLISH_EDGE_INSET = 0.04    # stay just inside the facet's crease lines
-# Mirror-polish PBR (same channel values as _materials.ANGLAGE_MIRROR,
-# restated inline: these zones must not depend on a rule-table match).
-_POLISH_MATERIAL = {"roughness": 0.08, "metalness": 0.95,
-                    "clearcoat": 0.3, "clearcoatRoughness": 0.05}
-
-
 def _polish_part(sol, label):
     sol.label = label
     sol.color = S.STEEL_BRIGHT
-    sol.cad_material = dict(_POLISH_MATERIAL)
     return sol
 
 

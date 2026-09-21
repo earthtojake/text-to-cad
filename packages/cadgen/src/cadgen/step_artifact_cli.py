@@ -1,34 +1,42 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import replace
+from dataclasses import dataclass, replace
 import json
 from pathlib import Path
 from typing import Callable
 
 from cadgen.cli_logging import CliLogger
+from cadgen.cli_progress import cli_progress_line
 from cadgen._internal.generation import (
     EntrySpec,
-    cli_progress_line,
     _assembly_glb_package_current,
     _existing_topology_artifact_matches_spec_without_scene,
     _entry_spec_from_source,
     _generate_part_outputs,
     _generated_assembly_glb_closure_current,
+    _manifest_records_edge_visibility_classes,
     _produce_declared_mesh_exports,
     run_script_generator,
 )
 from cadgen.coordination import PHASE_GENERATE, STEP_PACKAGE, ProgressEvent, artifact_build
 from cadgen.metadata import normalize_mesh_numeric
-from cadgen.catalog import build_scope, result_view_dir
+from cadgen.catalog import build_scope
 from cadgen.render import relative_to_cwd
-from cadgen._internal.step_scene import LoadedStepScene, load_step_scene, step_file_hash
+from cadgen._internal.step_scene import LoadedStepScene, step_file_hash
+from cadgen._internal.step_scene_package import load_step_scene_exact
 from cadgen.catalog import iter_cad_sources, source_from_path
 from cadgen.step_targets import (
-    ResolvedStepTarget,
     StepTopologyArtifact,
-    StepTopologyArtifactError,
 )
+
+
+@dataclass(frozen=True, kw_only=True)
+class _ImportedArtifactSnapshot(StepTopologyArtifact):
+    """One verified imported selection, owned only by this currency check."""
+
+    document_hash: str
+    tree: str
 
 
 def _relative_to_base(repo_root: Path, path: Path) -> str:
@@ -129,16 +137,34 @@ def _generated_result_payload(spec: EntrySpec, scene: LoadedStepScene, stats: di
     )
 
 
-def _existing_result_payload(spec: EntrySpec, artifact: StepTopologyArtifact) -> dict[str, object]:
+def _existing_result_payload(spec: EntrySpec, artifact: StepTopologyArtifact) -> dict[str, object] | None:
     from cadgen._internal.source_sidecar import read_source_sidecar
 
-    sidecar = read_source_sidecar(spec.entry_path) or {}
+    # Bind declarations to the bytes beside the sidecar, not the topology
+    # manifest's remembered digest. The document may have been replaced after
+    # that artifact was produced.
+    step_hash = step_file_hash(spec.step_path)
+    if isinstance(artifact, _ImportedArtifactSnapshot) and step_hash != artifact.document_hash:
+        return None
+    sidecar = read_source_sidecar(spec.step_path, document_hash=step_hash) or {}
     source_kind = "python" if sidecar else "step"
-    step_hash = str(artifact.manifest.get("stepHash") or "")
     source_hash = str(sidecar.get("sourceHash") or "")
-    if source_kind != "python" and not step_hash:
-        step_hash = step_file_hash(spec.step_path)
     stats = artifact.manifest.get("stats")
+    if isinstance(artifact, _ImportedArtifactSnapshot):
+        # capture_tree already classified this exact root before flattening.
+        # Do not select a newer document index or reopen the tree for its kind.
+        payload: dict[str, object] = {
+            "ok": True,
+            "document": relative_to_cwd(spec.step_path),
+            "tree": artifact.tree,
+            "entryKind": artifact.kind,
+            "sourceKind": source_kind,
+            "stats": stats if isinstance(stats, dict) else {},
+            "skipped": True,
+        }
+        if source_hash:
+            payload["sourceHash"] = source_hash
+        return payload
     return _result_payload(
         spec,
         source_kind=source_kind,
@@ -150,43 +176,58 @@ def _existing_result_payload(spec: EntrySpec, artifact: StepTopologyArtifact) ->
 
 
 def _current_artifact_for_spec(spec: EntrySpec) -> StepTopologyArtifact | None:
-    if not _existing_topology_artifact_matches_spec_without_scene(spec):
-        return None
-    package_dir = result_view_dir(spec.entry_path)
-    # A tree is a DIRECTORY, and validate_step_topology_artifact() gates on
-    # `.is_file()` (step_targets.py) -- so routing a tree through it always raised
-    # missing_glb, this whole fast path returned None, and EVERY build re-ran the generator.
-    # The assembly.json comparison above (_package_descriptor_matches_spec) IS the tree's
-    # freshness gate; there is nothing further to validate. Packages carry no whole-assembly
-    # selector topology either -- it is extracted on demand -- so require_selector cannot be
-    # satisfied from the tree and must not be asked of it.
-    from cadgen._internal.component_package import is_assembly_package, read_package_descriptor
+    if spec.source == "imported":
+        from cadgen.catalog import result_snapshot_for
+        from cadgen.store.objects import object_path
+        from cadgen.store.trees import capture_tree
 
-    if is_assembly_package(package_dir):
-        # _package_descriptor_matches_spec (above) compares kind/stepHash/mesh options but
-        # NOT the generator's source closure, so it alone would serve a stale package after
-        # an edited generator. These are the same two predicates the CLI's currency gate
-        # uses (generation.py's "is current; not rebuilt" path), so the two entry
-        # points cannot disagree about what "current" means:
-        #   closure  -- generated models re-hash the recorded import reach; imported ones
-        #               return True and rely on the stepHash gate above.
-        #   package  -- the assembly.json's referenced components are all present on disk.
-        if not (
-            _generated_assembly_glb_closure_current(spec) and _assembly_glb_package_current(spec)
-        ):
+        if spec.step_path is None or not spec.step_path.is_file():
             return None
-        manifest = read_package_descriptor(package_dir)
-        if not isinstance(manifest, dict):
+        snapshot = result_snapshot_for(spec.entry_path)
+        if snapshot is None:
             return None
-        return StepTopologyArtifact(
+        try:
+            manifest, _ = capture_tree(snapshot[1], retain_payloads=False)
+        except (OSError, ValueError):
+            return None
+        if not _manifest_records_edge_visibility_classes(manifest):
+            return None
+        return _ImportedArtifactSnapshot(
             cad_path=spec.cad_ref,
             source_path=spec.source_path,
             step_path=spec.step_path,
-            artifact_path=package_dir,
+            artifact_path=object_path(snapshot[1]),
             manifest=manifest,
+            document_hash=snapshot[0],
+            tree=snapshot[1],
         )
-    # No view directory -> nothing current (the tree IS the only artifact form).
-    return None
+
+    # A compile completes when its native geometry is available. Display
+    # derivations belong to their consumers and must never run in this gate.
+    if not (
+        _existing_topology_artifact_matches_spec_without_scene(spec)
+        and _generated_assembly_glb_closure_current(spec)
+        and _assembly_glb_package_current(spec)
+    ):
+        return None
+    from cadgen.catalog import result_snapshot_for
+    from cadgen.store.objects import object_path
+    from cadgen.store.trees import capture_tree
+
+    snapshot = result_snapshot_for(spec.entry_path)
+    if snapshot is None:
+        return None
+    try:
+        manifest, _ = capture_tree(snapshot[1])
+    except (OSError, ValueError):
+        return None
+    return StepTopologyArtifact(
+        cad_path=spec.cad_ref,
+        source_path=spec.source_path,
+        step_path=spec.step_path,
+        artifact_path=object_path(snapshot[1]),
+        manifest=manifest,
+    )
 
 
 def _with_declared_exports(
@@ -337,21 +378,12 @@ def build_step_artifact(
     if not force:
         existing_artifact = _current_artifact_for_spec(existing_spec)
         if existing_artifact is not None:
-            return _with_declared_exports(
-                _existing_result_payload(existing_spec, existing_artifact),
-                existing_spec,
-                logger=logger,
-            )
+            payload = _existing_result_payload(existing_spec, existing_artifact)
+            if payload is not None:
+                return _with_declared_exports(payload, existing_spec, logger=logger)
 
-    # The progress record covers the WHOLE build, not just the generator run: the
-    # meshing is the long part, and a viewer polling during it must see a build.
-    #
-    # Progress keys by the MODEL PATH, never by the content-keyed view directory. A rebuild
-    # changes the document's content key mid-build, and no reader could know the new key
-    # in advance: the viewer's progress reader derives its record from the model path it
-    # is polling (cadgen.viewer.store_paths.build_scope). `package_dir` stays because the
-    # RESULT payloads name the tree; only the progress identity is path-keyed.
-    package_dir = result_view_dir(existing_spec.entry_path) if existing_spec.entry_path else None
+    # Progress covers generation and declared outputs. Its scope is the model
+    # path, which remains stable while a rebuild changes the result's tree.
     scope = build_scope(existing_spec.entry_path) if existing_spec.entry_path else None
     # This builds exactly what a model-script run builds, and reported nothing while doing it:
     # the sidecar went to the viewer and a terminal caller watched a silent process.
@@ -371,11 +403,9 @@ def build_step_artifact(
         if progress.skipped:
             artifact = _current_artifact_for_spec(existing_spec)
             if artifact is not None:
-                return _with_declared_exports(
-                    _existing_result_payload(existing_spec, artifact),
-                    existing_spec,
-                    logger=logger,
-                )
+                payload = _existing_result_payload(existing_spec, artifact)
+                if payload is not None:
+                    return _with_declared_exports(payload, existing_spec, logger=logger)
         import contextlib
 
         with contextlib.ExitStack() as slot:
@@ -427,7 +457,7 @@ def build_step_artifact(
                 # here the scene is preloaded, so the parse would otherwise go unreported.
                 progress.phase(PHASE_GENERATE)
                 with logger.timed(f"load STEP {relative_to_cwd(step_path)}"):
-                    scene = load_step_scene(step_path)
+                    scene = load_step_scene_exact(step_path)
                 spec = _build_entry_spec(
                     repo_root,
                     step_path,
@@ -437,7 +467,13 @@ def build_step_artifact(
                 )
             result = _generate_part_outputs(
                 spec,
-                entries_by_step_path=_entries_by_step_path_for_repo(repo_root, spec),
+                # A document compile has no source dependencies to discover.
+                # Its requested spec is sufficient; generation currently uses
+                # this map only as invocation bookkeeping.
+                entries_by_step_path=(
+                    _entries_by_step_path_for_repo(repo_root, spec)
+                    if from_generator else {spec.step_path.resolve(): spec}
+                ),
                 preloaded_scene=scene,
                 require_step_file=not from_generator,
                 force=force,

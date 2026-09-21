@@ -166,8 +166,8 @@ def _scope(candidate: str) -> str:
 class OpsWiring(CompileTestCase):
     def test_an_unowned_entry_is_ready_without_a_job(self):
         ops = self.ops()
-        self.assertEqual(ops.artifact_status("model.stl"), {"state": "rendered"})
-        self.assertEqual(ops.build_artifact("model.stl"), {"ok": True, "state": "rendered"})
+        self.assertEqual(ops.artifact_status("model.stl"), {"state": "compiled"})
+        self.assertEqual(ops.build_artifact("model.stl"), {"ok": True, "state": "compiled"})
         self.assertEqual(self.submit.calls, [])
 
     def test_a_document_with_no_tree_is_offered_a_compile_with_exactly_three_keys(self):
@@ -186,7 +186,7 @@ class OpsWiring(CompileTestCase):
         result = ops.build_artifact("ok.step")
         self.assertEqual(
             result,
-            {"ok": True, "state": "rendered", "compiled": True, "document": str(Path(candidate).resolve())},
+            {"ok": True, "state": "compiled", "compiled": True, "document": str(Path(candidate).resolve())},
         )
         self.assertNotIn("contended", result)
 

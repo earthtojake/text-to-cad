@@ -16,9 +16,12 @@ modules, choreography generator, and standalone HTML presentation.
 
 - `src/` contains runnable CAD models, render-job JSON, design reports, and
   shared factories in `src/lib/`.
-- `STEP/` is the generated geometry folder. Its small committed `.step.js`
-  files are authored render modules; the R13 showcase module is generated and
-  ignored because its solved keyframes are roughly 12 MB.
+- `STEP/` is the generated geometry folder. Each owning model embeds its
+  animation through `@step(animation=...)`; for the two models whose
+  choreography is SOLVED rather than authored, that string is read at build
+  time from a generated, ignored `src/<model>_animation.js` sibling (see
+  `src/lib/embedded_animation.py`). Regenerate the sibling before building the
+  model — a missing one is a build error naming the generator.
 - `validation/` contains validation and regeneration programs. Its `.gitignore`
   keeps generated reports, checkpoints, logs, and NumPy data local.
 - `website/` contains the standalone HTML presentation and its behavior test.
@@ -90,6 +93,14 @@ receipt binding the installed files to the manifest:
 ./.venv/bin/python models/tendon_hand/rebuild.py check
 ```
 
+`check` is a bootstrap preflight. The checkpoint supplies the initial
+`capstan_index_overlay.step` needed to break the body-frame/overlay dependency;
+stage 2 of the recipe deliberately replaces that file with a freshly generated
+overlay. A post-run `check` therefore rejects the changed file. Before repeating
+the complete recipe, run `import-checkpoint` again to restore and verify the
+bootstrap inputs. The runner forces its first R13 build so the body-frame
+manifest is rewritten even when cadgen already has a current model record.
+
 For another machine, copy that legacy `models/assemblies` directory or a bundle
 with the same layout, then pass its path to `--from`. The importer rejects a
 missing, changed, or incomplete bundle before loading CAD.
@@ -109,15 +120,18 @@ optional MP4 is not needed:
 
 The runner performs these stages in order:
 
-1. verifies the complete checkpoint and its import receipt;
-2. builds R13 once to write its body-frame manifest;
-3. regenerates the indexed capstan overlay from those frames;
-4. rebuilds the final R13 STEP with that fresh overlay;
-5. validates every STEP placement;
-6. generates the ignored R13 render module;
-7. exports the five website GLBs (`fist`, `wave`, `pinch`, `signs`, `drive`);
-8. optionally renders `tmp/showcase.mp4`; and
-9. runs the HTML behavior test.
+1. verifies the complete bootstrap checkpoint and its import receipt;
+2. tests the generated module's runtime (`showcase_runtime.test.mjs`);
+3. seeds the placeholder `src/hand_mechanical_candidate_r13_animation.js`, so
+   the manifest build has a module to read;
+4. force-builds R13 once to write its body-frame manifest;
+5. regenerates the animation module from those frames;
+6. regenerates the indexed capstan overlay from those frames;
+7. rebuilds the final R13 STEP with that fresh overlay;
+8. validates every STEP placement;
+9. exports the five website GLBs (`fist`, `wave`, `pinch`, `signs`, `drive`);
+10. optionally renders `tmp/showcase.mp4`; and
+11. runs the HTML behavior test.
 
 The equivalent root-model command, after checkpoint import, is:
 
@@ -155,13 +169,36 @@ example:
 
 ## Rebuild animation and website assets
 
-After the R13 STEP and its frame manifest exist, generate its render module.
+After the R13 STEP and its frame manifest exist, generate its animation module.
 The generator solves the common timeline, tendon routes, payout, moving guide
-frames, and actuator transforms, then writes the ignored
-`STEP/hand_mechanical_candidate_r13.step.js`:
+frames, and actuator transforms, and writes megabytes of JavaScript to the
+ignored `src/hand_mechanical_candidate_r13_animation.js`. The tracked model
+stays small: it reads that sibling through `lib.embedded_animation` and hands
+the string to `@step(animation=...)`.
 
 ```sh
 ./.venv/bin/python models/tendon_hand/validation/write_showcase_presentation.py
+```
+
+The first build of a fresh checkout has no module to read yet, and the loader
+refuses to build without one. Seed the empty placeholder, build R13 once to
+write the frame manifest the generator needs, then run the generator for real:
+
+```sh
+./.venv/bin/python models/tendon_hand/validation/write_showcase_presentation.py --placeholder
+```
+
+`validation/write_progress_presentation.py` does the same for
+`src/hand_progress_review.py`, writing its static braid presentation to
+`src/hand_progress_review_animation.js`. It needs no CAD build first.
+
+The runtime preserves identical interpolation endpoints exactly, so a held
+pose reuses the viewer's existing tendon paths and display buffers. Moving
+endpoints retain the original linear interpolation. The focused runtime check
+needs no generated assets or CAD dependencies:
+
+```sh
+node --test models/tendon_hand/validation/showcase_runtime.test.mjs
 ```
 
 Export the five GLBs expected by `website/index.html`. The animation request

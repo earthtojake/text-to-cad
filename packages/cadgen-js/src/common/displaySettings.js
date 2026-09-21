@@ -12,8 +12,8 @@ export { CAMERA_PROJECTION, normalizeCameraProjection };
 export const CAD_DISPLAY_MODE = Object.freeze({
   HIDDEN_EDGES: "hidden_edges",
   HIDDEN_LINES_REMOVED: "hidden_lines_removed",
-  RENDERED: "rendered",
-  SOLID: "solid",
+  SHADED: "shaded",
+  SHADED_EDGES: "shaded_edges",
   TRANSPARENT: "transparent",
   UNSHADED: "unshaded",
   WIREFRAME: "wireframe"
@@ -27,44 +27,62 @@ export const CAD_EDGE_COLOR = "#132232";
 export const CAD_EDGE_HIGHLIGHT_COLOR = "#8dc5ff";
 export const CAD_EDGE_CLASS_IDS = Object.freeze(["feature", "tangent", "seam", "degenerate"]);
 
-export const DEFAULT_DISPLAY_EDGE_CLASS_SETTINGS = Object.freeze({
-  feature: Object.freeze({
-    color: CAD_EDGE_COLOR,
-    opacity: 1,
-    thickness: 1.15
-  }),
-  tangent: Object.freeze({
-    color: CAD_EDGE_COLOR,
-    opacity: 0.5,
-    thickness: 1.15
-  }),
-  seam: Object.freeze({
-    color: CAD_EDGE_COLOR,
-    opacity: 0.85,
-    thickness: 1.15
-  }),
-  degenerate: Object.freeze({
-    color: CAD_EDGE_COLOR,
-    opacity: 1,
-    thickness: 0
-  })
-});
-
+// Persist only CAD visibility choices; ink is a renderer policy.
 export const DEFAULT_DISPLAY_EDGE_SETTINGS = Object.freeze({
   enabled: true,
-  color: CAD_EDGE_COLOR,
-  thickness: 1,
-  classes: DEFAULT_DISPLAY_EDGE_CLASS_SETTINGS,
-  highlightColor: CAD_EDGE_HIGHLIGHT_COLOR,
-  highlightOpacity: 1,
-  highlightThickness: 3,
-  silhouette: false,
-  silhouetteScale: 0
+  silhouette: false
 });
 
 export const DISABLED_DISPLAY_EDGE_SETTINGS = Object.freeze({
   ...DEFAULT_DISPLAY_EDGE_SETTINGS,
   enabled: false
+});
+
+export const CAD_PART_COLOR_MODE = Object.freeze({
+  ORIGINAL: "original",
+  SINGLE: "single",
+  BY_PART: "by_part"
+});
+
+export const CAD_PART_COLOR_MODE_VALUES = Object.freeze(Object.values(CAD_PART_COLOR_MODE));
+
+export const DEFAULT_DISPLAY_GUIDE_SETTINGS = Object.freeze({
+  grid: Object.freeze({
+    enabled: true
+  }),
+  axis: Object.freeze({
+    enabled: true,
+    color: "#6b7280",
+    opacity: 0.28
+  })
+});
+
+export const DISABLED_DISPLAY_GUIDE_SETTINGS = Object.freeze({
+  grid: Object.freeze({
+    ...DEFAULT_DISPLAY_GUIDE_SETTINGS.grid,
+    enabled: false
+  }),
+  axis: Object.freeze({
+    ...DEFAULT_DISPLAY_GUIDE_SETTINGS.axis,
+    enabled: false
+  })
+});
+
+export const DEFAULT_PART_COLOR_SETTINGS = Object.freeze({
+  mode: CAD_PART_COLOR_MODE.ORIGINAL,
+  color: "#b6c4ce",
+  colors: Object.freeze([
+    "#b6c4ce",
+    "#f4a7a7",
+    "#f8c77e",
+    "#f7e38d",
+    "#b9e88f",
+    "#8fe3c0",
+    "#92d7f5",
+    "#a9b8ff",
+    "#c7a8ff",
+    "#f2a7d9"
+  ])
 });
 
 // The exploded view is a single slider: `amount` is the 0..1 spread and 0
@@ -77,11 +95,30 @@ export const DEFAULT_EXPLODED_VIEW_SETTINGS = Object.freeze({
 });
 
 export const DEFAULT_DISPLAY_SETTINGS = Object.freeze({
-  mode: CAD_DISPLAY_MODE.SOLID,
+  mode: CAD_DISPLAY_MODE.SHADED_EDGES,
   clip: DEFAULT_STEP_CLIP_SETTINGS,
   exploded: DEFAULT_EXPLODED_VIEW_SETTINGS,
-  edges: DEFAULT_DISPLAY_EDGE_SETTINGS
+  edges: DEFAULT_DISPLAY_EDGE_SETTINGS,
+  guides: DEFAULT_DISPLAY_GUIDE_SETTINGS,
+  partColor: DEFAULT_PART_COLOR_SETTINGS
 });
+
+export const DISPLAY_SETTINGS_KEYS = Object.freeze([
+  "mode",
+  "clip",
+  "exploded",
+  "edges",
+  "guides",
+  "partColor"
+]);
+
+export const DISPLAY_EDGE_SETTINGS_KEYS = Object.freeze(["enabled", "silhouette"]);
+export const DISPLAY_GUIDE_SETTINGS_KEYS = Object.freeze(["grid", "axis"]);
+export const DISPLAY_GRID_GUIDE_SETTINGS_KEYS = Object.freeze(["enabled"]);
+export const DISPLAY_AXIS_GUIDE_SETTINGS_KEYS = Object.freeze(["enabled", "color", "opacity"]);
+export const DISPLAY_PART_COLOR_SETTINGS_KEYS = Object.freeze(["mode", "color", "colors"]);
+export const DISPLAY_EXPLODED_SETTINGS_KEYS = Object.freeze(["enabled", "amount"]);
+export const DISPLAY_CLIP_SETTINGS_KEYS = Object.freeze(["enabled", "axis", "offset", "offsets", "invert"]);
 
 function isObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -113,124 +150,202 @@ function normalizeBoolean(value, fallback = false) {
   return typeof value === "boolean" ? value : fallback;
 }
 
-export function normalizeDisplayEdgeClassSettings(
-  value = {},
-  fallback = DEFAULT_DISPLAY_EDGE_CLASS_SETTINGS,
-  colorFallback = CAD_EDGE_COLOR
-) {
-  const source = isObject(value) ? value : {};
-  const fallbackColor = normalizeColor(colorFallback, CAD_EDGE_COLOR);
-  return Object.fromEntries(CAD_EDGE_CLASS_IDS.map((classId) => {
-    const classSource = isObject(source[classId]) ? source[classId] : {};
-    const classFallback = fallback?.[classId] || DEFAULT_DISPLAY_EDGE_CLASS_SETTINGS[classId];
-    return [classId, {
-      color: normalizeColor(classSource.color, fallbackColor),
-      opacity: normalizeNumber(classSource.opacity, classFallback.opacity, 0, 1),
-      thickness: normalizeNumber(classSource.thickness, classFallback.thickness, 0, 6)
-    }];
-  }));
-}
-
 export function normalizeDisplayEdgeSettings(value = null, fallback = DEFAULT_DISPLAY_EDGE_SETTINGS) {
   const source = isObject(value) ? value : {};
-  const color = normalizeColor(source.color, fallback.color);
-  const normalized = {
+  return {
     enabled: normalizeBoolean(source.enabled, fallback.enabled),
-    color,
-    thickness: normalizeNumber(source.thickness, fallback.thickness, 0.5, 6),
-    classes: normalizeDisplayEdgeClassSettings(source.classes, fallback.classes, color),
-    highlightColor: normalizeColor(source.highlightColor, fallback.highlightColor || CAD_EDGE_HIGHLIGHT_COLOR),
-    highlightOpacity: normalizeNumber(source.highlightOpacity, fallback.highlightOpacity || 1, 0, 1),
-    highlightThickness: normalizeNumber(source.highlightThickness, fallback.highlightThickness || 3, 0.5, 6),
-    silhouette: normalizeBoolean(source.silhouette, fallback.silhouette || false),
-    silhouetteScale: normalizeNumber(source.silhouetteScale, fallback.silhouetteScale || 0, 0, 0.04)
+    silhouette: normalizeBoolean(source.silhouette, fallback.silhouette || false)
   };
-  if (typeof source.depthTest === "boolean") {
-    normalized.depthTest = source.depthTest;
-  }
-  return normalized;
 }
 
 function normalizeModeText(value) {
   return String(value || "").trim().toLowerCase().replace(/\s+/g, "_").replace(/-/g, "_");
 }
 
-export function normalizeDisplayMode(value) {
+export function normalizeDisplayMode(value, { fallback = CAD_DISPLAY_MODE.SHADED_EDGES } = {}) {
   const normalized = normalizeModeText(value);
   if (!normalized) {
-    return CAD_DISPLAY_MODE.SOLID;
+    return fallback;
   }
-  if (normalized === "wire" || normalized === "wire_frame") {
-    return CAD_DISPLAY_MODE.WIREFRAME;
+  if (normalized === "rendered") {
+    throw new Error("Display mode 'rendered' was removed; use 'shaded'.");
   }
-  if (
-    normalized === "edges" ||
-    normalized === "edge" ||
-    normalized === "shaded_edges" ||
-    normalized === "shaded_with_edges" ||
-    normalized === "with_edges"
-  ) {
-    return CAD_DISPLAY_MODE.SOLID;
+  if (normalized === "solid") {
+    throw new Error("Display mode 'solid' was removed; use 'shaded_edges'.");
   }
-  if (
-    normalized === "shaded" ||
-    normalized === "shaded_without_edges" ||
-    normalized === "without_edges"
-  ) {
-    return CAD_DISPLAY_MODE.RENDERED;
+  if (!CAD_DISPLAY_MODE_VALUES.includes(normalized)) {
+    throw new Error(`Unknown display mode '${value}'. Expected one of: ${CAD_DISPLAY_MODE_VALUES.join(", ")}`);
   }
-  if (
-    normalized === "translucent" ||
-    normalized === "xray" ||
-    normalized === "x_ray" ||
-    normalized === "see_through"
-  ) {
-    return CAD_DISPLAY_MODE.TRANSPARENT;
-  }
-  if (
-    normalized === "hidden_edge" ||
-    normalized === "hidden_edges_visible" ||
-    normalized === "hidden_edge_display" ||
-    normalized === "shaded_hidden_edges"
-  ) {
-    return CAD_DISPLAY_MODE.HIDDEN_EDGES;
-  }
-  if (
-    normalized === "visible_edges" ||
-    normalized === "visible_edges_only" ||
-    normalized === "hidden_lines" ||
-    normalized === "hidden_line_removed" ||
-    normalized === "hidden_lines_removed" ||
-    normalized === "hidden_edges_removed"
-  ) {
-    return CAD_DISPLAY_MODE.HIDDEN_LINES_REMOVED;
-  }
-  if (normalized === "flat") {
-    return CAD_DISPLAY_MODE.UNSHADED;
-  }
-  if (normalized === "theme" || normalized === "material" || normalized === "materials") {
-    return CAD_DISPLAY_MODE.RENDERED;
-  }
-  return CAD_DISPLAY_MODE_VALUES.includes(normalized)
-    ? normalized
-    : CAD_DISPLAY_MODE.SOLID;
+  return normalized;
 }
 
-export function normalizeExplodedViewSettings(value = null) {
+export function normalizeExplodedViewSettings(value = null, fallback = DEFAULT_EXPLODED_VIEW_SETTINGS) {
   const source = isObject(value) ? value : {};
   return {
-    enabled: Boolean(source.enabled),
-    amount: normalizeNumber(source.amount, DEFAULT_EXPLODED_VIEW_SETTINGS.amount, 0, 1)
+    enabled: normalizeBoolean(source.enabled, fallback.enabled),
+    amount: normalizeNumber(source.amount, fallback.amount, 0, 1)
   };
 }
 
-export function normalizeDisplaySettings(value = null) {
+function validateObjectKeys(source, allowedKeys, fieldName) {
+  const unknownKeys = Object.keys(source).filter((key) => !allowedKeys.includes(key));
+  if (unknownKeys.length) {
+    throw new Error(`Unsupported ${fieldName} fields: ${unknownKeys.join(", ")}`);
+  }
+}
+
+function validateStrictObject(value, fieldName) {
+  if (!isObject(value)) {
+    throw new Error(`${fieldName} must be an object`);
+  }
+  return value;
+}
+
+function validateStrictBoolean(value, fieldName) {
+  if (typeof value !== "boolean") {
+    throw new Error(`${fieldName} must be a boolean`);
+  }
+}
+
+function validateStrictNumber(value, fieldName, min, max) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) {
+    throw new Error(`${fieldName} must be a finite number between ${min} and ${max}`);
+  }
+}
+
+function validateStrictColor(value, fieldName) {
+  if (typeof value !== "string" || !HEX_COLOR_PATTERN.test(value.trim())) {
+    throw new Error(`${fieldName} must be a hex color`);
+  }
+}
+
+function validatePresent(source, keys, validator, prefix) {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      validator(source[key], `${prefix}.${key}`);
+    }
+  }
+}
+
+export function validateDisplaySettings(value) {
+  const source = validateStrictObject(value, "display");
+  validateObjectKeys(source, DISPLAY_SETTINGS_KEYS, "display");
+  if (Object.prototype.hasOwnProperty.call(source, "mode")) {
+    if (typeof source.mode !== "string" || !source.mode.trim()) {
+      throw new Error("display.mode must be a non-empty string");
+    }
+    normalizeDisplayMode(source.mode);
+  }
+  if (Object.prototype.hasOwnProperty.call(source, "clip")) {
+    const clip = validateStrictObject(source.clip, "display.clip");
+    validateObjectKeys(clip, DISPLAY_CLIP_SETTINGS_KEYS, "display.clip");
+    validatePresent(clip, ["enabled", "invert"], validateStrictBoolean, "display.clip");
+    if (Object.prototype.hasOwnProperty.call(clip, "axis") && !["x", "y", "z"].includes(clip.axis)) {
+      throw new Error("display.clip.axis must be 'x', 'y', or 'z'");
+    }
+    if (Object.prototype.hasOwnProperty.call(clip, "offset")) {
+      validateStrictNumber(clip.offset, "display.clip.offset", 0, 1);
+    }
+    if (Object.prototype.hasOwnProperty.call(clip, "offsets")) {
+      const offsets = validateStrictObject(clip.offsets, "display.clip.offsets");
+      validateObjectKeys(offsets, ["x", "y", "z"], "display.clip.offsets");
+      validatePresent(offsets, ["x", "y", "z"],
+        (entry, fieldName) => validateStrictNumber(entry, fieldName, 0, 1), "display.clip.offsets");
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(source, "exploded")) {
+    const exploded = validateStrictObject(source.exploded, "display.exploded");
+    validateObjectKeys(exploded, DISPLAY_EXPLODED_SETTINGS_KEYS, "display.exploded");
+    validatePresent(exploded, ["enabled"], validateStrictBoolean, "display.exploded");
+    validatePresent(exploded, ["amount"],
+      (entry, fieldName) => validateStrictNumber(entry, fieldName, 0, 1), "display.exploded");
+  }
+  if (Object.prototype.hasOwnProperty.call(source, "edges")) {
+    const edges = validateStrictObject(source.edges, "display.edges");
+    validateObjectKeys(edges, DISPLAY_EDGE_SETTINGS_KEYS, "display.edges");
+    validatePresent(edges, ["enabled", "silhouette"], validateStrictBoolean, "display.edges");
+  }
+  if (Object.prototype.hasOwnProperty.call(source, "guides")) {
+    const guides = validateStrictObject(source.guides, "display.guides");
+    validateObjectKeys(guides, DISPLAY_GUIDE_SETTINGS_KEYS, "display.guides");
+    if (Object.prototype.hasOwnProperty.call(guides, "grid")) {
+      const grid = validateStrictObject(guides.grid, "display.guides.grid");
+      validateObjectKeys(grid, DISPLAY_GRID_GUIDE_SETTINGS_KEYS, "display.guides.grid");
+      validatePresent(grid, ["enabled"], validateStrictBoolean, "display.guides.grid");
+    }
+    if (Object.prototype.hasOwnProperty.call(guides, "axis")) {
+      const axis = validateStrictObject(guides.axis, "display.guides.axis");
+      validateObjectKeys(axis, DISPLAY_AXIS_GUIDE_SETTINGS_KEYS, "display.guides.axis");
+      validatePresent(axis, ["enabled"], validateStrictBoolean, "display.guides.axis");
+      validatePresent(axis, ["color"], validateStrictColor, "display.guides.axis");
+      validatePresent(axis, ["opacity"],
+        (entry, fieldName) => validateStrictNumber(entry, fieldName, 0, 1), "display.guides.axis");
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(source, "partColor")) {
+    const partColor = validateStrictObject(source.partColor, "display.partColor");
+    validateObjectKeys(partColor, DISPLAY_PART_COLOR_SETTINGS_KEYS, "display.partColor");
+    validatePresent(partColor, ["color"], validateStrictColor, "display.partColor");
+    if (Object.prototype.hasOwnProperty.call(partColor, "colors")) {
+      if (!Array.isArray(partColor.colors) || partColor.colors.length < 1 || partColor.colors.length > 50) {
+        throw new Error("display.partColor.colors must contain 1 to 50 hex colors");
+      }
+      partColor.colors.forEach((color, index) => validateStrictColor(color, `display.partColor.colors[${index}]`));
+    }
+    normalizePartColorSettings(partColor);
+  }
+  return true;
+}
+
+export function normalizeDisplayGuideSettings(value = null, fallback = DEFAULT_DISPLAY_GUIDE_SETTINGS) {
   const source = isObject(value) ? value : {};
+  validateObjectKeys(source, ["grid", "axis"], "display.guides");
+  const grid = isObject(source.grid) ? source.grid : {};
+  const axis = isObject(source.axis) ? source.axis : {};
+  validateObjectKeys(grid, DISPLAY_GRID_GUIDE_SETTINGS_KEYS, "display.guides.grid");
+  validateObjectKeys(axis, ["enabled", "color", "opacity"], "display.guides.axis");
   return {
-    mode: normalizeDisplayMode(source.mode),
-    clip: normalizeStepClipSettings(source.clip),
-    exploded: normalizeExplodedViewSettings(source.exploded),
-    edges: normalizeDisplayEdgeSettings(source.edges)
+    grid: {
+      enabled: normalizeBoolean(grid.enabled, fallback.grid.enabled)
+    },
+    axis: {
+      enabled: normalizeBoolean(axis.enabled, fallback.axis.enabled),
+      color: normalizeColor(axis.color, fallback.axis.color),
+      opacity: normalizeNumber(axis.opacity, fallback.axis.opacity, 0, 1)
+    }
+  };
+}
+
+export function normalizePartColorSettings(value = null, fallback = DEFAULT_PART_COLOR_SETTINGS) {
+  const source = typeof value === "string"
+    ? { mode: value }
+    : isObject(value) ? value : {};
+  validateObjectKeys(source, ["mode", "color", "colors"], "display.partColor");
+  const mode = String(source.mode || fallback.mode).trim().toLowerCase().replace(/-/g, "_");
+  if (!CAD_PART_COLOR_MODE_VALUES.includes(mode)) {
+    throw new Error(`Unknown display part color mode '${source.mode}'. Expected one of: ${CAD_PART_COLOR_MODE_VALUES.join(", ")}`);
+  }
+  const colors = (Array.isArray(source.colors) ? source.colors : fallback.colors)
+    .map((entry) => normalizeColor(entry, ""))
+    .filter(Boolean)
+    .slice(0, 50);
+  return {
+    mode,
+    color: normalizeColor(source.color, fallback.color),
+    colors: colors.length ? colors : [...DEFAULT_PART_COLOR_SETTINGS.colors]
+  };
+}
+
+export function normalizeDisplaySettings(value = null, { fallback = DEFAULT_DISPLAY_SETTINGS } = {}) {
+  const source = isObject(value) ? value : {};
+  validateObjectKeys(source, DISPLAY_SETTINGS_KEYS, "display");
+  return {
+    mode: normalizeDisplayMode(source.mode, { fallback: fallback.mode }),
+    clip: normalizeStepClipSettings(source.clip ?? fallback.clip),
+    exploded: normalizeExplodedViewSettings(source.exploded, fallback.exploded),
+    edges: normalizeDisplayEdgeSettings(source.edges, fallback.edges),
+    guides: normalizeDisplayGuideSettings(source.guides, fallback.guides),
+    partColor: normalizePartColorSettings(source.partColor, fallback.partColor)
   };
 }
 
@@ -244,7 +359,9 @@ export function displaySettingsEqual(left, right) {
   return a.mode === b.mode &&
     stepClipSettingsEqual(a.clip, b.clip) &&
     JSON.stringify(a.exploded) === JSON.stringify(b.exploded) &&
-    JSON.stringify(a.edges) === JSON.stringify(b.edges);
+    JSON.stringify(a.edges) === JSON.stringify(b.edges) &&
+    JSON.stringify(a.guides) === JSON.stringify(b.guides) &&
+    JSON.stringify(a.partColor) === JSON.stringify(b.partColor);
 }
 
 export function resolveDisplayMode(displaySettings) {
@@ -261,7 +378,7 @@ export function displayModeIsWireframe(value) {
 
 export function displayModeForcesEdges(value) {
   return [
-    CAD_DISPLAY_MODE.SOLID,
+    CAD_DISPLAY_MODE.SHADED_EDGES,
     CAD_DISPLAY_MODE.TRANSPARENT,
     CAD_DISPLAY_MODE.HIDDEN_EDGES,
     CAD_DISPLAY_MODE.HIDDEN_LINES_REMOVED
@@ -270,12 +387,17 @@ export function displayModeForcesEdges(value) {
 
 export function displayModeAllowsEdges(value) {
   return ![
-    CAD_DISPLAY_MODE.RENDERED,
+    CAD_DISPLAY_MODE.SHADED,
     CAD_DISPLAY_MODE.UNSHADED
   ].includes(normalizeDisplayMode(value));
 }
 
-export function displayModeShowsEdges(value, edgeSettings = null) {
+// The MODE decides whether CAD linework is drawn at all, and nothing else does:
+// `shaded_edges` is shaded-with-edges (so is `transparent`, `hidden_edges`,
+// `hidden_lines_removed`), `wireframe` is linework only, and `shaded`/`unshaded`
+// draw none. This took an `edgeSettings` argument it never read, which read as a
+// bug at every call site; `edges` styles the linework the mode has decided to draw.
+export function displayModeShowsEdges(value) {
   const mode = normalizeDisplayMode(value);
   return mode === CAD_DISPLAY_MODE.WIREFRAME ||
     displayModeForcesEdges(mode);

@@ -10,8 +10,12 @@ import {
   cloneTabSnapshot,
   tabSnapshotEqual
 } from "./persistence.js";
+import {
+  createRenderSessionState,
+  renderSessionStateEqual
+} from "./renderSessionState.js";
 
-export const FILE_SESSION_STORAGE_VERSION = 1;
+export const FILE_SESSION_STORAGE_VERSION = 4;
 export const FILE_SESSION_STORAGE_KEY_PREFIX = "cad-viewer:file-session";
 const FILE_SESSION_INDEX_KEY_PREFIX = "cad-viewer:file-session:index";
 const DEFAULT_FILE_SESSION_NAMESPACE = "__root__";
@@ -177,6 +181,10 @@ function entryStepModuleSignature(entry) {
   ].filter(Boolean).join(":");
 }
 
+function entryMaterialsSignature(entry) {
+  return normalizeString(entry?.appearanceHash || entry?.documentHash || entry?.hash);
+}
+
 function entryLargeFileSignature(entry) {
   return [
     normalizeString(entry?.kind).toLowerCase(),
@@ -207,7 +215,8 @@ export function fileSessionSignaturesForEntry(entry) {
     tab: entryTabSignature(entry),
     stepModule: entryStepModuleSignature(entry),
     urdf: entryUrdfSignature(entry),
-    largeFile: entryLargeFileSignature(entry)
+    largeFile: entryLargeFileSignature(entry),
+    materials: entryMaterialsSignature(entry)
   };
 }
 
@@ -278,11 +287,25 @@ function normalizeLargeFileSlice(value) {
   };
 }
 
+function normalizeMaterialsSlice(value) {
+  if (!isPlainObject(value)) return null;
+  const materials = isPlainObject(value.materials) ? cloneSerializable(value.materials) : {};
+  const assignments = isPlainObject(value.assignments) ? cloneSerializable(value.assignments) : {};
+  return Object.keys(materials).length || Object.keys(assignments).length
+    ? { materials, assignments }
+    : null;
+}
+
 const FILE_SESSION_SLICE_SCHEMA = Object.freeze({
   display: {
     normalize: normalizeDisplaySlice,
     equals: displaySettingsEqual,
-    signatureKey: "tab"
+    signatureKey: null
+  },
+  render: {
+    normalize: createRenderSessionState,
+    equals: renderSessionStateEqual,
+    signatureKey: null
   },
   tab: {
     normalize: cloneTabSnapshot,
@@ -300,6 +323,11 @@ const FILE_SESSION_SLICE_SCHEMA = Object.freeze({
     normalize: normalizeAnimationSlice,
     equals: storageValuesEqual,
     signatureKey: "stepModule"
+  },
+  materials: {
+    normalize: normalizeMaterialsSlice,
+    equals: storageValuesEqual,
+    signatureKey: "materials"
   },
   urdf: {
     normalize: normalizeUrdfSlice,

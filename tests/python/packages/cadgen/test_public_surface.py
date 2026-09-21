@@ -37,7 +37,7 @@ from cadgen._internal.cli_from_function import (
 
 # The manifest: format namespace -> exactly the verbs it exports.
 PUBLIC_SURFACE: dict[str, tuple[str, ...]] = {
-    "cadgen.step": ("build", "compile", "inspect", "snapshot"),
+    "cadgen.step": ("build", "compile", "snapshot"),
     "cadgen.stl": ("build", "snapshot"),
     "cadgen.threemf": ("build", "snapshot"),
     "cadgen.glb": ("build", "snapshot"),
@@ -83,31 +83,15 @@ MIRRORS: dict[str, tuple[str, str]] = {
 }
 
 # Commands with a HAND-WRITTEN parser, and the option surface each one owns. An
-# adapter has no generated parser to compare against a signature — inspect's
-# subcommand tree is exactly what disqualifies it from mirror status — so the
+# adapter has no generated parser to compare against a signature, so the
 # declaration IS the contract, and a flag or subcommand that appears without
 # being declared here fails.
 #
-# For a parser with subcommands the surface is its top-level options plus the
-# subcommand names: pinning every leaf flag of `step inspect` would be a copy of
-# the CLI in a test file, which is churn rather than a guard.
 ADAPTERS: dict[str, frozenset[str]] = {
     # The one validator that cannot be a mirror: `--packages NAME=PATH` is
     # repeatable, and a repeatable key/value map is outside the derivable set.
     "urdf validate": frozenset({"path", "strict", "packages", "verbose"}),
-    "step inspect": frozenset(
-        {
-            "verbose",
-            "command",
-            "refs",
-            "diff",
-            "frame",
-            "measure",
-            "align",
-            "interfere",
-            "validate",
-        }
-    ),
+
 }
 
 # Commands not yet re-homed under the schema. This set only shrinks.
@@ -259,7 +243,7 @@ class ImportBudget(unittest.TestCase):
     """Run in a subprocess: this one has the CAD stack loaded already."""
 
     def test_public_namespaces_import_without_the_cad_stack(self):
-        imports = "; ".join(f"import {name}" for name in PUBLIC_SURFACE)
+        imports = "; ".join(f"import {name}" for name in (*PUBLIC_SURFACE, "cadgen.geometry", "cadgen.step_scene"))
         code = (
             f"import sys; {imports};"
             f"print('HEAVY:' + ','.join(m for m in {HEAVY!r} if m in sys.modules))"

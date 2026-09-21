@@ -59,7 +59,7 @@ Read this whole file before touching a module. Then read `src/lib/spec.py`
 ## Kinematics are sacred
 
 - Anything that moves is positioned by `lib/kin.py` at θ = 0 and animated by
-  `w16.step.js`. Do not change a moving part's frame, size envelope where it
+  the `ANIMATION_JS` literal in `src/w16.py`. Do not change a moving part's frame, size envelope where it
   meets another moving part, or label scheme. If a visual change you want
   would move a moving part, STOP and report it instead.
 - New static geometry must not intrude into any moving part's swept volume:

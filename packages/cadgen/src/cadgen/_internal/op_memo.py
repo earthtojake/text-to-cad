@@ -18,8 +18,13 @@ Scope and placement:
 - The cache lives in this module, which survives the generation runner's
   first-party module eviction (cadgen and site-packages are never evicted), so
   a warm daemon worker keeps its cache across requests.
-- Keys hash input shapes by their BinTools BREP bytes: location-stripped bytes
-  memoized per TShape, combined with the shape's location matrix. Fresh
+  Computed results and disk hits share the same least-recently-used RAM limit.
+  Evicting a RAM entry neither deletes its disk entry nor changes an owned result.
+- Keys hash current input shapes by their BinTools BREP bytes: bytes stripped
+  of location, orientation and triangulation, combined with the shape's own
+  location matrix and orientation. A native edit can change a TShape without
+  changing its pointer, so input digests are recomputed -- see
+  ``_tshape_digest``. Fresh
   rebuilds of identical geometry serialize byte-identically (verified in the
   design doc's Phase 0 spike), so keys hit across full re-executions.
 - Every consumer — the missing caller, a warm in-memory hit, a disk hit —
@@ -34,8 +39,40 @@ Scope and placement:
   wrapper while a miss preserved the live one made geometry depend on cache
   state (the juno shin chamfered on a disk hit and not on a cold run).
 
+Sub-shape identity is by CONTENT while the memo is installed. Canonical
+reconstruction has a price: every op result is a fresh read-back, so a
+sub-shape the op did not touch still comes out with a new TShape, and
+build123d's identity is the TShape pointer (``Shape.is_same`` is OCCT
+``IsSame``; ``__eq__`` routes through it; ``__hash__`` is the pointer hash).
+Model code that holds a sub-shape across an op and re-selects it afterwards --
+``edge.is_same(candidate)``, ``edge in shape.edges()``, a ``set`` of edges, a
+sequential fillet loop that re-finds each junction edge in the current solid --
+silently found nothing (twelve junction edges, plain build123d filleted six,
+under the memo one). So ``install()`` also patches ``Shape.is_same``,
+``__eq__`` and ``__hash__``: the TShape+location check stays the fast path, and
+on a mismatch the two shapes compare by a GEOMETRIC SIGNATURE -- shape type,
+sub-shape counts, and the world-space vertex points plus one sample point per
+face (or per edge, below faces), rounded to 1e-6 (``_signature``). Not the
+BREP bytes the memo keys with: those are a function of how a shape's location
+chain is SPLIT between its TShape and its ``Location()``, and neither
+``BRepBuilderAPI_Copy`` (input protection) nor a BinTools round trip
+(reconstruction) preserves that split for located sub-shapes -- on a 236
+sub-shape test part, Copy kept 114 sub-shapes byte-identical and a second
+round trip 219 -- so bytes tell one edge apart from itself. World geometry
+is what survives every re-expression, and rounding absorbs the ULP noise a
+re-composed rotation leaves. Orientation is not in the signature, matching
+``IsSame``. Hashing uses a subset of that signature, so sets and dicts agree
+with ``==`` without sampling every curve and surface on insertion.
+Two coincident, identical sub-shapes (an edge fused onto itself, two faces
+sharing one plane and outline) therefore compare equal, where the pointer
+check told them apart; that is the semantics a model sees under the memo.
+Hashing uses only the signature's type and rounded vertex points. Equal full
+signatures necessarily hash equally; curves/surfaces sharing those vertices
+are distinguished by full equality when hashes collide.
+
 Kill switch: ``CADGEN_OP_MEMO=0`` (and ``CADGEN_OP_MEMO_DISK=0`` for just the
-disk tier).
+disk tier). It disables the identity shims too: without the memo every op
+returns its live result and pointer identity holds on its own.
 
 Anything unkeyable — an argument type the normalizer does not understand, a
 shape that fails to serialize — falls through to the original call, uncached.
@@ -50,29 +87,17 @@ import os
 import struct
 import threading
 from collections import OrderedDict
+from functools import lru_cache
 
-from cadgen._internal.atomic_replace import replace_atomic
 
 # Salt: bump _OP_MEMO_VERSION whenever keying or hit semantics change.
-_OP_MEMO_VERSION = 3
+_OP_MEMO_VERSION = 7
 
 _lock = threading.RLock()
 _cache: OrderedDict[tuple, object] = OrderedDict()
-# Digest per TShape, so a shape that is an input to several ops serializes once.
-# BOUNDED and LRU, not "clear when huge": the keys are strong references to
-# OCCT TShapes, so every entry keeps a whole solid alive. Unbounded (it cleared
-# only past 4x the result cache, 131072 entries) it pinned every intermediate
-# boolean result of a 1400-part engine for the run's lifetime -- one input to
-# a process the OS killed at 200+ GB. Recent shapes are the ones re-hashed; a
-# miss costs one BinTools write.
-_TSHAPE_DIGEST_CAPACITY = 2048
-_tshape_bytes_memo: OrderedDict[object, str] = OrderedDict()
-# NOTE: an earlier revision stamped op-result TShapes with their producing
-# key so chained inputs could key without serialization. It destabilized
-# keys on movement-class models (1444 re-misses per warm run vs ~25
-# without): stamps assume a result's content never changes after return,
-# and real pipelines violate that. Digest keying keys the actual
-# first-seen content of every TShape, which is what stays stable.
+# Retain only canonical result bytes and recipes. In particular, a TShape
+# pointer is not an input digest: native geometry/descendants can mutate while
+# the pointer remains unchanged, and retaining pointer keys also pins topology.
 _stats = {"hits": 0, "misses": 0, "disk_hits": 0, "unkeyable": 0,
           "unstorable": 0, "evicted": 0, "errors": 0}
 _installed = False
@@ -98,22 +123,64 @@ def _capacity() -> int:
 
 
 def _tshape_digest(wrapped) -> str:
-    """Location-stripped BREP digest of a TopoDS_Shape, memoized per TShape."""
-    from OCP.BinTools import BinTools
-    from OCP.TopLoc import TopLoc_Location
+    """Digest the TShape's current content without retaining mutable topology.
 
-    tshape = wrapped.TShape()
-    cached = _tshape_bytes_memo.get(tshape)
-    if cached is not None:
-        _tshape_bytes_memo.move_to_end(tshape)
-        return cached
+    The first-seen digest of a TShape is not reusable: native vertex, curve,
+    surface or descendant edits need not replace its pointer. Recompute from
+    the actual bytes on every call. Normalizing handle-only properties keeps
+    placement/orientation expressions independent of encounter order.
+
+    The geometry-independent properties normalized here are:
+
+    - **Location.** Stripped, and folded back in separately by
+      :func:`_location_key`, so moved copies share the content digest.
+    - **Orientation.** Forced FORWARD. A reversed shape SHARES its TShape with
+      the forward one, so writing ``wrapped`` as it came in baked whichever
+      orientation arrived first into the shared digest: hashing the forward
+      solid first gave one digest for both, hashing the reversed one first gave
+      a different digest for both. Orientation is not lost -- ``_shape_key``
+      carries ``wrapped.Orientation()`` as its own key part, which is where a
+      distinction that must not alias belongs.
+    - **Triangulation and normals.** Written off. The two-argument
+      ``BinTools.Write_s`` alias writes triangulation data, so a shape acquired
+      a different digest the moment anything meshed it (a bounding box, a
+      tessellation, an STL pass) -- and, memoized per TShape, whether that had
+      happened yet was the run's history rather than the model's geometry. The
+      explicit form matches the canonical bytes :func:`_write_brep` and the
+      component store already write.
+
+    - **Free and Checked bookkeeping.** Attaching a shape to a container can
+      clear Free, and meshing clears Checked. Neither changes geometry. Copy
+      the topology without copying its geometry or mesh, then normalize only
+      these flags on that private topology. No caller-owned flag or geometry
+      is changed and no live shape is retained by key construction.
+    """
+    from OCP.BinTools import BinTools, BinTools_FormatVersion
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_Copy
+    from OCP.TopAbs import TopAbs_Orientation
+    from OCP.TopExp import TopExp
+    from OCP.TopLoc import TopLoc_Location
+    from OCP.TopTools import TopTools_IndexedMapOfShape
+
+    private = BRepBuilderAPI_Copy(
+        wrapped.Located(TopLoc_Location()).Oriented(TopAbs_Orientation.TopAbs_FORWARD),
+        False, False,
+    ).Shape()
+    shapes = TopTools_IndexedMapOfShape()
+    TopExp.MapShapes_s(private, shapes)
+    for index in range(1, shapes.Extent() + 1):
+        shape = shapes.FindKey(index)
+        shape.Free(False)
+        shape.Checked(False)
     stream = io.BytesIO()
-    BinTools.Write_s(wrapped.Located(TopLoc_Location()), stream)
-    digest = hashlib.sha256(stream.getvalue()).hexdigest()
-    _tshape_bytes_memo[tshape] = digest
-    while len(_tshape_bytes_memo) > _TSHAPE_DIGEST_CAPACITY:
-        _tshape_bytes_memo.popitem(last=False)
-    return digest
+    BinTools.Write_s(
+        private,
+        stream,
+        False,  # theWithTriangles
+        False,  # theWithNormals
+        BinTools_FormatVersion.BinTools_FormatVersion_CURRENT,
+    )
+    return hashlib.sha256(stream.getvalue()).hexdigest()
 
 
 def _location_key(wrapped) -> tuple:
@@ -228,13 +295,19 @@ def _build_key(op_name: str, args: tuple, kwargs: dict) -> tuple:
     return (_OP_MEMO_VERSION, op_name, tuple(key_parts), tuple(kw_parts))
 
 
-def _store(key: tuple, result: object) -> None:
+def _remember(key: tuple, result: object) -> None:
+    """Apply the same RAM limit to computed results and persistent-cache hits."""
     with _lock:
         _cache[key] = result
         _cache.move_to_end(key)
         capacity = _capacity()
         while len(_cache) > capacity:
             _cache.popitem(last=False)
+            _stats["evicted"] += 1
+
+
+def _store(key: tuple, result: object) -> None:
+    _remember(key, result)
     _disk_put(key, result)
 
 
@@ -245,9 +318,7 @@ def _lookup(key: tuple):
             return _cache[key]
     stored = _disk_get(key)
     if stored is not None:
-        with _lock:
-            _cache[key] = stored
-            _cache.move_to_end(key)
+        _remember(key, stored)
         _stats["disk_hits"] += 1
     return stored
 
@@ -265,13 +336,41 @@ def _disk_enabled() -> bool:
     return os.environ.get("CADGEN_OP_MEMO_DISK", "1") != "0"
 
 
-def _op_index_key(key: tuple) -> str:
-    """The op-memo entry key: the op key plus the memo scheme and the kernel
-    version, so a changed scheme or build123d simply misses (no salted
-    directories to sweep)."""
+@lru_cache(maxsize=1)
+def _runtime_versions() -> tuple[str, str, str]:
+    """Resolve loaded bindings and their distribution only on a kernel path.
+
+    Unknown versions decline the optional disk tier; they must not create a
+    shared persistent namespace for unrelated kernel builds.
+    """
+    from importlib.metadata import PackageNotFoundError, version
+
+    import OCP
     import build123d
 
-    scheme = f"v{_OP_MEMO_VERSION}-b123d{getattr(build123d, '__version__', 'unknown')}"
+    try:
+        distribution = version("cadquery-ocp-novtk")
+    except PackageNotFoundError as error:
+        # OCP imported from some other distribution. That is an unknown
+        # version like any other, so decline the disk tier the same way --
+        # and as a ValueError, because PackageNotFoundError is an ImportError
+        # and callers that mean to decline do not catch those.
+        raise ValueError("op memo requires the cadquery-ocp-novtk distribution "
+                         "for persistent reuse") from error
+
+    versions = (getattr(build123d, "__version__", None),
+                getattr(OCP, "__version__", None), distribution)
+    if any(not isinstance(value, str) or not value.strip() or "unknown" in value.lower()
+           for value in versions):
+        raise ValueError("op memo requires known build123d and OCP versions for persistent reuse")
+    return versions
+
+
+def _op_index_key(key: tuple) -> str:
+    """Bind disk entries to the operation, scheme, loaded OCP and distribution."""
+    build123d_version, ocp_version, distribution_version = _runtime_versions()
+    scheme = (f"v{_OP_MEMO_VERSION}-b123d{build123d_version}"
+              f"-ocp{ocp_version}-cadquery-ocp-novtk{distribution_version}")
     return hashlib.sha256((scheme + "\0" + repr(key)).encode("utf-8")).hexdigest()
 
 
@@ -323,6 +422,97 @@ def _disk_get(key: tuple):
         _resolve_shape_class(entry["cls"])
         return _StoredShape(entry["cls"], read_object(digest), entry["recipe"])
     except Exception:
+        _stats["errors"] += 1
+        return None
+
+
+# --- pure VALUES over the same tiers -----------------------------------------
+#
+# Not every memoizable kernel result is a shape. A measurement of a placed
+# shape -- a bounding box, an area -- is a pure function of the same inputs an
+# op patch keys on, and it wants the same two tiers: the memory cache a warm
+# worker keeps and the disk entry a cold process reads. Values ride the ``op``
+# index as ``{"value": ...}`` rather than an object reference, because they are
+# smaller than the digest that would point at them.
+#
+# Keying is the op patches' own: ``_build_key`` through ``_normalize``, so the
+# key parts must be normalizable (numbers, strings, bytes, sequences, maps,
+# build123d value types, shapes). Callers keying on a PLACED shape want
+# ``placed_shape_key``. An op_name identifies the FUNCTION, so a caller that
+# changes what it computes must change its op_name (or _OP_MEMO_VERSION moves
+# every key at once).
+
+
+def placed_shape_key(wrapped) -> tuple:
+    """Key parts for a placed ``TopoDS_Shape``: the location-stripped content
+    digest plus the location matrix -- the same two an op patch keys a shape
+    input by, minus orientation, which no measurement depends on."""
+    return (_tshape_digest(wrapped), _location_key(wrapped))
+
+
+def memoized_value(op_name: str, key_args: tuple, compute):
+    """``compute()``, memoized on ``key_args`` in memory and on disk.
+
+    ``compute`` must be pure and return something JSON-round-trippable (the
+    disk tier is a JSON entry); it takes no arguments, so its shape inputs stay
+    out of the key and the caller states the key exactly. Anything unkeyable,
+    or a disabled memo, calls straight through -- correctness never depends on
+    a hit.
+    """
+    if not _enabled():
+        return compute()
+    try:
+        key = _build_key(op_name, tuple(key_args), {})
+    except _Unkeyable:
+        _stats["unkeyable"] += 1
+        return compute()
+    except Exception:  # noqa: BLE001 - an unkeyable call is still a correct call
+        _stats["errors"] += 1
+        return compute()
+
+    with _lock:
+        if key in _cache:
+            _cache.move_to_end(key)
+            _stats["hits"] += 1
+            return _cache[key]
+    from_disk = _value_disk_get(key)
+    if from_disk is not None:
+        value = from_disk[0]
+        _remember(key, value)
+        _stats["disk_hits"] += 1
+        _stats["hits"] += 1
+        return value
+
+    value = compute()
+    _stats["misses"] += 1
+    _remember(key, value)
+    _value_disk_put(key, value)
+    return value
+
+
+def _value_disk_put(key: tuple, value) -> None:
+    if not _disk_enabled():
+        return
+    try:
+        from cadgen.store.index import write_entry
+
+        write_entry("op", _op_index_key(key), {"value": value})
+    except Exception:  # noqa: BLE001 - a store that cannot be written still computes
+        _stats["errors"] += 1
+
+
+def _value_disk_get(key: tuple):
+    """``(value,)`` on a hit, None on a miss -- so a stored ``None`` is a hit."""
+    if not _disk_enabled():
+        return None
+    try:
+        from cadgen.store.index import read_entry
+
+        entry = read_entry("op", _op_index_key(key))
+        if not entry or "value" not in entry:
+            return None
+        return (entry["value"],)
+    except Exception:  # noqa: BLE001
         _stats["errors"] += 1
         return None
 
@@ -418,9 +608,11 @@ def _class_path(cls) -> str:
 
 
 def _is_shape(value) -> bool:
-    # A build123d Shape: has a TopoDS under `wrapped`. Vector/Axis/Location also
-    # carry a `wrapped` (gp_*), and must not count — they have no `_wrapped`.
-    return hasattr(value, "_wrapped") and getattr(value, "_wrapped", None) is not None
+    # Geometry values can also own `_wrapped` (Vector now stores a gp_Vec
+    # there). Only topology Shapes participate in protection and recipes.
+    from build123d.topology import Shape
+
+    return isinstance(value, Shape) and value._wrapped is not None
 
 
 def _shape_args(key_args: tuple, kwargs: dict) -> list:
@@ -566,16 +758,51 @@ def _freeze_result(result, shape_args: list):
     """Convert an op result into its stored form, verifying its bytes read
     back and its attributes are expressible. Raises _Unkeyable when the result
     cannot be cached."""
+    return _freeze_result_for_first_consumer(result, shape_args)[0]
+
+
+def _thaw_stored_shape(stored: _StoredShape, shape_args: list, reconstruction=None):
+    """Replay one stored shape, optionally using its just-verified BREP read."""
+    cls = _resolve_shape_class(stored.cls_path)
+    wrapped = reconstruction if reconstruction is not None else _read_brep(stored.brep)
+    clone = cls(_downcast(wrapped))
+    _apply_attrs(clone, stored.recipe["attrs"], shape_args)
+    specs = stored.recipe.get("children")
+    if specs:
+        from build123d.topology.shape_core import get_top_level_topods_shapes
+
+        tops = get_top_level_topods_shapes(clone.wrapped)
+        if len(tops) != len(specs):
+            raise ValueError("reconstruction has a different top-level shape count")
+        children = []
+        for spec, top in zip(specs, tops):
+            child = _resolve_shape_class(spec["cls"])(_downcast(top))
+            _apply_attrs(child, spec["attrs"], shape_args)
+            children.append(child)
+        clone.children = children
+    return clone
+
+
+def _freeze_result_for_first_consumer(result, shape_args: list):
+    """Stored bytes plus the miss caller's already-verified reconstruction.
+
+    Only canonical bytes and the attribute recipe enter either cache. The
+    ephemeral value avoids reading those bytes a second time on a miss; later
+    RAM and disk hits still reconstruct independently.
+    """
     if isinstance(result, (tuple, list)):
-        return ("seq", type(result), tuple(_freeze_result(r, shape_args) for r in result))
+        pairs = [_freeze_result_for_first_consumer(item, shape_args) for item in result]
+        stored = ("seq", type(result), tuple(pair[0] for pair in pairs))
+        first = type(result)(pair[1] for pair in pairs)
+        return stored, first
     if _is_shape(result):
         data = _write_brep(result.wrapped)
-        # Prove the bytes read back before anything is stored.
         reconstruction = _read_brep(data)
         recipe = _attribute_recipe(result, shape_args, reconstruction)
-        return _StoredShape(_class_path(type(result)), data, recipe)
+        stored = _StoredShape(_class_path(type(result)), data, recipe)
+        return stored, _thaw_stored_shape(stored, shape_args, reconstruction)
     if result is None or isinstance(result, (bool, int, float, str, bytes)):
-        return result
+        return result, result
     raise _Unkeyable(f"unstorable result type: {type(result).__name__}")
 
 
@@ -586,23 +813,7 @@ def _thaw_result(stored, shape_args: list):
         _, seq_type, items = stored
         return seq_type(_thaw_result(item, shape_args) for item in items)
     if isinstance(stored, _StoredShape):
-        cls = _resolve_shape_class(stored.cls_path)
-        clone = cls(_downcast(_read_brep(stored.brep)))
-        _apply_attrs(clone, stored.recipe["attrs"], shape_args)
-        specs = stored.recipe.get("children")
-        if specs:
-            from build123d.topology.shape_core import get_top_level_topods_shapes
-
-            tops = get_top_level_topods_shapes(clone.wrapped)
-            if len(tops) != len(specs):
-                raise ValueError("reconstruction has a different top-level shape count")
-            children = []
-            for spec, top in zip(specs, tops):
-                child = _resolve_shape_class(spec["cls"])(_downcast(top))
-                _apply_attrs(child, spec["attrs"], shape_args)
-                children.append(child)
-            clone.children = children
-        return clone
+        return _thaw_stored_shape(stored, shape_args)
     return stored
 
 
@@ -733,7 +944,7 @@ def _memoized(op_name: str, fn, *, is_classmethod: bool):
         result = fn(*run_args, **run_kwargs)
         _stats["misses"] += 1
         try:
-            stored = _freeze_result(result, shape_args)
+            stored, first_value = _freeze_result_for_first_consumer(result, shape_args)
         except _Unkeyable:
             _stats["unstorable"] += 1
             return result
@@ -742,12 +953,9 @@ def _memoized(op_name: str, fn, *, is_classmethod: bool):
             return result
         _store(key, stored)
         # The caller gets the same canonical reconstruction a future hit
-        # would: package output must not depend on cache state.
-        try:
-            return _thaw_result(stored, shape_args)
-        except Exception:
-            _stats["errors"] += 1
-            return result
+        # would. It is the ephemeral BREP read already verified while freezing;
+        # no live object enters either cache.
+        return first_value
 
     wrapper.__op_memo__ = True
     return wrapper
@@ -785,6 +993,234 @@ _CLASSMETHOD_TARGETS = (
 )
 
 
+# --- sub-shape identity ------------------------------------------------------
+#
+# The memo's reconstructions give untouched sub-shapes new TShapes, so the
+# pointer identity build123d compares by no longer survives an op (module
+# docstring). These replace ``Shape.is_same``/``__eq__``/``__hash__`` with
+# geometric identity: the pointer check first, the signature on a mismatch.
+# Vertex keeps determinism.py's hash, which calls the same live signature hash
+# below so native edits and nearly coincident vertices agree with ``__eq__``.
+
+_SIGNATURE_DECIMALS = 6
+
+
+@lru_cache(maxsize=8192)
+def _rounded_coordinate_bytes(bits: bytes) -> tuple[float, float, float]:
+    """Bounded pure numeric work; keys contain no shape, pointer or signature."""
+    x, y, z = struct.unpack("<ddd", bits)
+    return round(x, _SIGNATURE_DECIMALS), round(y, _SIGNATURE_DECIMALS), round(z, _SIGNATURE_DECIMALS)
+
+
+def _rounded_coordinates(coordinates: tuple) -> tuple[float, float, float]:
+    """Round freshly read coordinates, preserving signed zero and NaNs.
+
+    Native vertices/surfaces are always read again. Only rounding their exact
+    immutable IEEE754 values is memoized. Packed keys distinguish +0 and -0;
+    NaNs bypass the cache so tuple identity cannot change NaN equality.
+    """
+    x, y, z = coordinates
+    if type(x) is not float or type(y) is not float or type(z) is not float:
+        # A numeric subclass may implement __round__ differently from its
+        # conversion to IEEE754. Preserve those callbacks on the ordinary path.
+        return round(x, _SIGNATURE_DECIMALS), round(y, _SIGNATURE_DECIMALS), round(z, _SIGNATURE_DECIMALS)
+    if x != x or y != y or z != z:
+        return round(x, _SIGNATURE_DECIMALS), round(y, _SIGNATURE_DECIMALS), round(z, _SIGNATURE_DECIMALS)
+    return _rounded_coordinate_bytes(struct.pack("<ddd", x, y, z))
+
+
+def _signature(wrapped) -> tuple:
+    """World-space geometric signature of a TopoDS_Shape (module docstring).
+
+    ``(shape type, (vertices, edges, faces), sorted vertex points, sorted
+    sample points)``, every coordinate rounded to ``_SIGNATURE_DECIMALS``. The
+    samples are the mid-parameter point of each face's surface, or of each
+    edge's curve when the shape has no faces: the vertices fix a shape's
+    corners, the samples fix what runs between them (an arc and its chord,
+    a plane and a bulge share vertices and nothing else). ``BRepAdaptor``
+    evaluates in world coordinates, location applied, so two expressions of
+    the same geometry sign identically however their locations are split.
+
+    Only immutable OCCT callables are reused. A signature is always computed
+    from the shape's current geometry: a TShape can change between the
+    builder's pre/post selections, even within one ``_add_to_context`` call.
+    """
+    return _signature_evaluator()(wrapped)
+
+
+def _signature_hash(wrapped) -> int:
+    """A cheap hash consistent with full geometric equality.
+
+    Equal signatures necessarily have the same type and rounded vertex points.
+    Hashing those fields avoids evaluating every curve/surface merely to put a
+    shape in a builder's set. An arc and its chord may collide here; ``is_same``
+    still compares their complete signatures, so a collision cannot substitute
+    geometry. Read current vertices on every call: no mutable shape is memoized.
+    """
+    return _signature_hash_evaluator()(wrapped)
+
+
+@lru_cache(maxsize=1)
+def _signature_hash_evaluator():
+    from OCP.BRep import BRep_Tool
+    from OCP.TopAbs import TopAbs_ShapeEnum
+    from OCP.TopExp import TopExp
+    from OCP.TopoDS import TopoDS
+    from OCP.TopTools import TopTools_IndexedMapOfShape
+
+    vertex_kind = TopAbs_ShapeEnum.TopAbs_VERTEX
+    vertex_point, as_vertex = BRep_Tool.Pnt_s, TopoDS.Vertex_s
+    map_shapes = TopExp.MapShapes_s
+    def rounded(vertex):
+        return _rounded_coordinates(vertex_point(as_vertex(vertex)).Coord())
+
+    def signature_hash(wrapped):
+        kind = wrapped.ShapeType()
+        if kind == vertex_kind:
+            points = (rounded(wrapped),)
+        else:
+            vertices = TopTools_IndexedMapOfShape()
+            map_shapes(wrapped, vertex_kind, vertices)
+            points = tuple(sorted(rounded(vertices.FindKey(i)) for i in range(1, vertices.Extent() + 1)))
+        return hash((int(kind), points))
+
+    return signature_hash
+
+
+@lru_cache(maxsize=1)
+def _signature_evaluator():
+    """Bind the kernel lazily, without retaining any shape or signature.
+
+    OCCT's topology hierarchy fixes the trivial searches: a vertex contains
+    itself; an edge contains itself and vertices; a wire contains edges; a
+    face contains itself, wires, edges and vertices. Skipping the impossible
+    descendants and singleton maps preserves the full signature, including
+    unique vertices/edges on seams, closed curves and degenerate edges. The
+    larger containers still use OCCT's maps rather than assuming manifold
+    topology or a fixed number of descendants.
+    """
+    from OCP.BRep import BRep_Tool
+    from OCP.BRepAdaptor import BRepAdaptor_Curve, BRepAdaptor_Surface
+    from OCP.TopAbs import TopAbs_ShapeEnum
+    from OCP.TopExp import TopExp
+    from OCP.TopoDS import TopoDS
+    from OCP.TopTools import TopTools_IndexedMapOfShape
+
+    vertex_kind = TopAbs_ShapeEnum.TopAbs_VERTEX
+    edge_kind = TopAbs_ShapeEnum.TopAbs_EDGE
+    wire_kind = TopAbs_ShapeEnum.TopAbs_WIRE
+    face_kind = TopAbs_ShapeEnum.TopAbs_FACE
+    map_shapes = TopExp.MapShapes_s
+    vertex_point = BRep_Tool.Pnt_s
+    is_degenerate = BRep_Tool.Degenerated_s
+    as_vertex = TopoDS.Vertex_s
+    as_edge = TopoDS.Edge_s
+    as_face = TopoDS.Face_s
+    def rounded(point) -> tuple:
+        return _rounded_coordinates(point.Coord())
+
+    def sub_shapes(wrapped, kind):
+        found = TopTools_IndexedMapOfShape()
+        map_shapes(wrapped, kind, found)
+        return found
+
+    def signature(wrapped) -> tuple:
+        kind = wrapped.ShapeType()
+        if kind == vertex_kind:
+            return (int(kind), (1, 0, 0), (rounded(vertex_point(as_vertex(wrapped))),), ())
+
+        vertices = sub_shapes(wrapped, vertex_kind)
+        vertex_count = vertices.Extent()
+        points = sorted(
+            rounded(vertex_point(as_vertex(vertices.FindKey(i))))
+            for i in range(1, vertex_count + 1)
+        )
+
+        if kind == edge_kind:
+            edge_count, faces = 1, ()
+        else:
+            edges = sub_shapes(wrapped, edge_kind)
+            edge_count = edges.Extent()
+            if kind == wire_kind:
+                faces = ()
+            elif kind == face_kind:
+                faces = (wrapped,)
+            else:
+                face_map = sub_shapes(wrapped, face_kind)
+                faces = tuple(face_map.FindKey(i) for i in range(1, face_map.Extent() + 1))
+
+        samples = []
+        if faces:
+            for face in faces:
+                surface = BRepAdaptor_Surface(as_face(face))
+                samples.append(rounded(surface.Value(
+                    (surface.FirstUParameter() + surface.LastUParameter()) / 2,
+                    (surface.FirstVParameter() + surface.LastVParameter()) / 2,
+                )))
+        else:
+            sample_edges = (wrapped,) if kind == edge_kind else (
+                edges.FindKey(i) for i in range(1, edge_count + 1)
+            )
+            for edge in sample_edges:
+                edge = as_edge(edge)
+                if is_degenerate(edge):
+                    continue
+                curve = BRepAdaptor_Curve(edge)
+                samples.append(rounded(curve.Value(
+                    (curve.FirstParameter() + curve.LastParameter()) / 2
+                )))
+        return (int(kind), (vertex_count, edge_count, len(faces)), tuple(points), tuple(sorted(samples)))
+
+    return signature
+
+
+def _identity(attr: str, original):
+    """One identity method, passing through to build123d's when disabled."""
+    import functools
+
+    def is_same(self, other) -> bool:
+        if not _enabled():
+            return original(self, other)
+        if self._wrapped is None or not other:
+            return False
+        mine, theirs = self.wrapped, other.wrapped
+        if mine.IsSame(theirs):
+            return True
+        if mine.ShapeType() != theirs.ShapeType():
+            return False
+        try:
+            return _signature(mine) == _signature(theirs)
+        except Exception:  # a shape that will not evaluate is only itself
+            return False
+
+    def eq(self, other):
+        if not _enabled():
+            return original(self, other)
+        from build123d.topology import Shape
+
+        if isinstance(other, Shape):
+            return self.is_same(other)
+        return NotImplemented
+
+    def hash_(self) -> int:
+        if self._wrapped is None:
+            return 0
+        if not _enabled():
+            return original(self)
+        try:
+            return _signature_hash(self.wrapped)
+        except Exception:
+            return hash(self.wrapped)
+
+    method = {"is_same": is_same, "__eq__": eq, "__hash__": hash_}[attr]
+    functools.update_wrapper(method, original)
+    method.__op_memo__ = True
+    return method
+
+
+_IDENTITY_TARGETS = ("is_same", "__eq__", "__hash__")
+
+
 def install() -> bool:
     """Idempotently patch the build123d choke points. Returns installed-now."""
     global _installed
@@ -815,7 +1251,42 @@ def install() -> bool:
                 continue
             setattr(cls, attr, classmethod(_memoized(label, fn, is_classmethod=True)))
 
+        for attr in _IDENTITY_TARGETS:
+            fn = inspect.getattr_static(topology.Shape, attr, None)
+            if fn is None or getattr(fn, "__op_memo__", False):
+                continue
+            setattr(topology.Shape, attr, _identity(attr, fn))
+
         _installed = True
+        return True
+
+
+def uninstall() -> bool:
+    """Restore every build123d attribute ``install()`` replaced. Returns
+    uninstalled-now. The caches are left alone (``clear()`` empties them)."""
+    global _installed
+    with _lock:
+        if not _installed:
+            return False
+        import inspect
+
+        from build123d import topology
+
+        for cls_name, attr, _label in _INSTANCE_TARGETS + _CLASSMETHOD_TARGETS:
+            cls = getattr(topology, cls_name, None)
+            static = None if cls is None else inspect.getattr_static(cls, attr, None)
+            fn = static.__func__ if isinstance(static, classmethod) else static
+            if fn is None or not getattr(fn, "__op_memo__", False):
+                continue
+            original = fn.__wrapped__
+            setattr(cls, attr, classmethod(original) if isinstance(static, classmethod) else original)
+
+        for attr in _IDENTITY_TARGETS:
+            fn = inspect.getattr_static(topology.Shape, attr, None)
+            if fn is not None and getattr(fn, "__op_memo__", False):
+                setattr(topology.Shape, attr, fn.__wrapped__)
+
+        _installed = False
         return True
 
 
@@ -827,5 +1298,4 @@ def stats() -> dict:
 def clear() -> None:
     with _lock:
         _cache.clear()
-        _tshape_bytes_memo.clear()
-
+        _rounded_coordinate_bytes.cache_clear()

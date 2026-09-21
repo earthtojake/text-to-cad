@@ -21,19 +21,24 @@ preflight fail. Do not add them.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import stat
 import threading
 import time
 from pathlib import Path
 
+from . import reload as dev_reload
 from .backend import ForbiddenAssetError, LocalAssetBackend
 from .cadgen_ops import create_cadgen_ops
 from .content_types import content_type_for_static_asset
 from .encoding import UriError, strict_decode_uri_component
-from .scanner import path_relative
 from .store_paths import virtual_store_asset
-from .tess_cache import read_tess_cache_batch, read_tess_cache_entry, write_tess_cache_entry
+from .tess_cache import (
+    TESS_CACHE_METADATA_MAX_BYTES, parse_tess_cache_admission,
+    read_tess_cache_batch, read_tess_cache_entry, read_tess_cache_probe, write_tess_cache_entry,
+)
 
 __all__ = [
     "CadApp",
@@ -54,6 +59,16 @@ _LOOPBACK_NAMES = frozenset({"127.0.0.1", "localhost", "::1"})
 
 TESS_CACHE_ROUTE_PREFIX = "/__tess_cache/"
 TESS_CACHE_BATCH_PATH = "/__tess_cache/batch"
+TESS_CACHE_PROBE_PATH = "/__tess_cache/probe"
+
+# Routes that do NOT hold the development auto-reload back (``reload.py``).
+# `/__cad/server` is what the browser's own reload watcher polls — counting it
+# would let that watcher defer the very restart it is waiting for — and the
+# other two PARK, waiting on the daemon's ledger or a pooled derivation rather
+# than doing work. Interrupting a parked poll costs the client one re-poll
+# after it reloads; interrupting a compile would cost a build, which is why
+# every other route, `POST /__cad/artifact` above all, is counted.
+_UNCOUNTED_ROUTES = frozenset({"/__cad/server", "/__cad/preview", "/__cad/surfaces", "/__cad/surfaces/cancel"})
 
 _PACKAGE_DIR = str(Path(__file__).resolve().parent)
 
@@ -95,7 +110,7 @@ def read_viewer_version() -> str:
     imported anything heavy, and ``.dist-info`` is what an installed wheel
     carries. ``""`` is a source tree on ``PYTHONPATH`` with no install behind
     it, which is how this repo's own test runners supply cadgen -- there the
-    mtime salt does all the work.
+    runtime digest does all the work.
     """
     from importlib.metadata import PackageNotFoundError, version
 
@@ -128,38 +143,66 @@ def newest_mtime_ns(base_dir, *, suffix: str = "") -> int:
     return newest
 
 
-def identity_token() -> str:
-    """This code's identity: the cadgen version SALTED with its files' newest mtime.
+def _identity_files(base_dir, suffix: str) -> tuple[str, list[str]]:
+    base = os.path.realpath(os.fspath(base_dir))
+    files = []
+    for dirpath, dirnames, filenames in os.walk(base):
+        dirnames[:] = sorted(name for name in dirnames if name != "__pycache__")
+        for filename in filenames:
+            if not suffix or filename.endswith(suffix):
+                files.append(os.path.join(dirpath, filename))
+    return base, sorted(files)
 
-    The daemon's shape (``compute_version_token`` in cadgen/daemon/client.py):
-    ``<version>:<newest mtime_ns>``, over BOTH halves of the viewer — this
-    package's ``.py`` files and the built client at its DEFAULT location
-    (``cadgen.assets.viewer_dist_dir()``, never a ``--dist`` override: both
-    sides of a reuse comparison must salt with the same directory, and the
-    relauncher does not know what the resident was pointed at). The version
-    alone is frozen between releases, so in a checkout it made reuse
-    source-blind: a ``git pull`` followed by a launch reused a resident server
-    running last week's code. The mtime salt ends that — a pull or rebuild
-    changes the token, the resident's recorded token no longer matches, and a
-    fresh instance starts. In an installed wheel the files never change after
-    install, so the token is constant and behavior is exactly version-keyed
-    reuse.
 
-    Computed identically at announce time (``/__cad/server``), registry write,
-    and the reuse probe — but the running server ANSWERS with the token it
-    computed at its own start (held on ``CadApp``), never a re-read: a re-read
-    would let a stale resident claim freshness after a pull.
+def _update_identity_digest(digest, base_dir, *, suffix: str = "") -> None:
+    """Add one runtime tree's path, names and bytes to ``digest``."""
+    base, files = _identity_files(base_dir, suffix)
+    digest.update(os.fsencode(base))
+    digest.update(b"\0")
+    for file_path in files:
+        digest.update(os.fsencode(os.path.relpath(file_path, base)))
+        digest.update(b"\0")
+        try:
+            with open(file_path, "rb") as handle:
+                while chunk := handle.read(64 * 1024):
+                    digest.update(chunk)
+        except OSError as error:
+            # A tree changing under the walk must not accidentally match a
+            # resident. The next stable launch computes the stable identity.
+            digest.update(f"!{type(error).__name__}:{error.errno}".encode("ascii"))
+        digest.update(b"\0")
 
-    The walk covers ~20 server files and ~25 dist files: well under a
-    millisecond, paid once per launch.
+
+def identity_token(dist_dir: str) -> str:
+    """Identity of the Python runtime and exact built client this server uses.
+
+    Computed ONCE per launch, on both sides of the launcher's reuse comparison,
+    and never re-read by a running server. Whether a running server's code has
+    since changed is a separate question with a separate answer — and it is
+    asked only in a source checkout, by ``reload.py``.
+
+    The Viewer imports cadgen runtime modules outside ``cadgen.viewer`` — in
+    particular the daemon client, transport and store. Fingerprinting only the
+    viewer package let an old resident survive changes to those modules while
+    serving a newly rebuilt browser client. The token therefore covers every
+    Python file in the installed cadgen package, the Viewer's data table, and
+    the exact dist directory selected by this launch (including its realpath).
+
+    Content, rather than the newest mtime, is the identity. This catches any
+    changed member even when another file has a later timestamp, and does not
+    restart a correct server after a byte-identical rebuild.
     """
-    from cadgen import assets
-
-    newest = max(
-        newest_mtime_ns(Path(__file__).resolve().parent, suffix=".py"),
-        newest_mtime_ns(assets.viewer_dist_dir()),
-    )
-    return f"{read_viewer_version()}:{newest}"
+    package_dir = Path(__file__).resolve().parents[1]
+    digest = hashlib.sha256()
+    _update_identity_digest(digest, package_dir, suffix=".py")
+    collation = package_dir / "viewer" / "collation.json"
+    if collation.is_file():
+        _update_identity_digest(digest, collation.parent, suffix=".json")
+    if dist_dir:
+        _update_identity_digest(digest, dist_dir)
+    else:
+        digest.update(b"no-client\0")
+    return f"{read_viewer_version()}:{digest.hexdigest()}"
 
 
 def _is_ascii_digits(value: str) -> bool:
@@ -179,6 +222,9 @@ class CadApp:
     """
 
     def __init__(self, *, root: str, host: str, port: int, dist_dir: str = ""):
+        from .surfaces import SurfaceSubscribers
+
+        self.surface_subscribers = SurfaceSubscribers()
         self.backend = LocalAssetBackend(root)
         root_path = self.backend.root_path
         self.root_path = root_path
@@ -191,10 +237,27 @@ class CadApp:
         self.viewer_version = read_viewer_version()
         # Computed ONCE, at start: the identity this instance announces and
         # registers is the identity of the code it is actually running.
-        self.identity_token = identity_token()
+        self.identity_token = identity_token(self.dist_dir)
+        # The single development predicate (reload.py). In an installed wheel
+        # this is False and the whole mechanism is absent: nothing is watched,
+        # no request is counted, and the browser never polls for a restart.
+        self.auto_reload = dev_reload.running_from_source_checkout()
+        self._request_lock = threading.Lock()
+        self._busy_requests = 0
         self.started_at = time.time()
         self.lock = threading.Lock()
         self.ops = create_cadgen_ops(root_path)
+
+    # --- development auto-reload accounting -------------------------------
+
+    def busy_requests(self) -> int:
+        """Requests in flight that a restart would interrupt (see ``_UNCOUNTED_ROUTES``)."""
+        with self._request_lock:
+            return self._busy_requests
+
+    def restart_is_safe(self) -> bool:
+        """``SourceReloader``'s idle gate: nothing this restart would destroy."""
+        return self.busy_requests() == 0
 
     # --- server info ------------------------------------------------------
 
@@ -204,8 +267,13 @@ class CadApp:
             "viewerVersion": self.viewer_version,
             # The start-time token, NOT identity_token() re-evaluated: a
             # resident answering a reuse probe must report the code it runs,
-            # not the code now on disk.
+            # not the code now on disk. It is also what the browser's
+            # development reload watcher compares against to notice that this
+            # server has become a NEW process on the same port.
             "identityToken": self.identity_token,
+            # Whether this server watches its own code and restarts itself.
+            # False in every installed wheel; the client polls only when true.
+            "autoReload": self.auto_reload,
             "serverMode": "serve",
             "serverFeatures": LOCAL_SERVER_FEATURES,
             "backend": "local-fs",
@@ -307,6 +375,24 @@ class CadApp:
     # --- dispatch ---------------------------------------------------------
 
     def handle(self, request, response) -> None:
+        """Count the request, then dispatch it.
+
+        The counting exists only for the development auto-reload, so an
+        installed wheel takes no lock and keeps no counter: ``auto_reload`` is
+        False there and this is a straight call.
+        """
+        if not self.auto_reload or request.path in _UNCOUNTED_ROUTES:
+            self._dispatch(request, response)
+            return
+        with self._request_lock:
+            self._busy_requests += 1
+        try:
+            self._dispatch(request, response)
+        finally:
+            with self._request_lock:
+                self._busy_requests -= 1
+
+    def _dispatch(self, request, response) -> None:
         method = request.method
         pathname = request.path
         query = request.query
@@ -332,6 +418,12 @@ class CadApp:
                     self._handle_catalog(request, response)
                 elif pathname == "/__cad/artifact":
                     self._handle_artifact_status(request, response, query)
+                elif pathname == "/__cad/preview":
+                    from .preview import preview_update
+
+                    response.send_json(200, preview_update(
+                        self.backend.root_path, query.get("file") or "", after=query.get("after")
+                    ))
                 elif pathname == "/__cad/store":
                     self._handle_store_asset(request, response, query)
                 elif pathname == "/__cad/asset":
@@ -358,6 +450,22 @@ class CadApp:
             try:
                 if pathname == "/__cad/artifact":
                     self._handle_artifact_build(request, response, query)
+                elif pathname == "/__cad/surfaces":
+                    if int(request.headers.get("content-length") or 0) > 128 * 1024:
+                        response.send_empty(413, [("connection", "close")])
+                        return
+                    response.send_json(200, self.surface_subscribers.resolve(request.body()))
+                elif pathname == "/__cad/surfaces/cancel":
+                    if int(request.headers.get("content-length") or 0) > 128 * 1024:
+                        response.send_empty(413, [("connection", "close")])
+                        return
+                    payload = json.loads(request.body())
+                    if type(payload) is not dict or set(payload) != {"job"} or type(payload["job"]) is not str:
+                        raise ValueError("surface cancellation requires a subscriber token")
+                    self.surface_subscribers.cancel(payload["job"])
+                    response.send_empty(204)
+                elif pathname == TESS_CACHE_PROBE_PATH:
+                    self._handle_tess_probe(request, response)
                 elif pathname == TESS_CACHE_BATCH_PATH:
                     # Matched BEFORE the prefix branch: /__tess_cache/batch
                     # matches both.
@@ -381,7 +489,7 @@ class CadApp:
     # --- placeholders filled by later steps of the port -------------------
 
     def _handle_catalog(self, request, response):
-        response.send_json(200, self.backend.read_catalog())
+        response.send_json(200, self.backend.read_catalog(request.query.get("file")))
 
     def _entry_ref_for_status(self, file_ref, catalog=None) -> str:
         """The catalog URL for this ref, or ``""``.
@@ -451,7 +559,16 @@ class CadApp:
         ``file=/<tree>/components/<object>.surf``.
         """
         rel = str(query.get("file") or "").replace("\\", "/").lstrip("/")
-        payload, content_type = virtual_store_asset(rel)
+        if query.get("surfaceInput") is not None or query.get("object") is not None:
+            from .surfaces import pinned_surface_object
+
+            payload = pinned_surface_object(query.get("tree"), query.get("surfaceInput"), query.get("object"))
+            content_type = "application/octet-stream"
+        else:
+            producer = json.loads(query.get("surfaceProducer")) if query.get("surfaceProducer") else None
+            payload, content_type = virtual_store_asset(
+                rel, producer=producer, document_hash=query.get("documentHash"),
+            )
         if payload is None:
             response.send_json(404, {"error": "Not found"})
             return
@@ -485,7 +602,13 @@ class CadApp:
         The non-200 answers carry ONLY content-length: 0 — no content-type and
         no cache-control. A miss is an ordinary outcome here, not an error page.
         """
-        status, body = read_tess_cache_entry(request.path)
+        query = request.query
+        try:
+            digest, limit = parse_tess_cache_admission(query.get("object"), query.get("maxBytes"))
+        except (TypeError, ValueError):
+            response.send_empty(400)
+            return
+        status, body = read_tess_cache_entry(request.path, expected_object=digest, max_bytes=limit)
         if status != 200:
             response.send_empty(status)
             return
@@ -493,6 +616,16 @@ class CadApp:
 
     def _handle_tess_post(self, request, response):
         response.send_empty(write_tess_cache_entry(request.path, request.body()))
+
+    def _handle_tess_probe(self, request, response):
+        if int(request.headers.get("content-length") or 0) > TESS_CACHE_METADATA_MAX_BYTES:
+            response.send_empty(413, [("connection", "close")])
+            return
+        result = read_tess_cache_probe(request.body())
+        if result is None:
+            response.send_json(400, {"error": "bad tessellation probe request"})
+            return
+        response.send_json(200, result)
 
     def _handle_tess_batch(self, request, response):
         """One round trip for a whole assembly's hit set.
@@ -502,6 +635,9 @@ class CadApp:
         clean 400 and everything else must be a valid container — misses
         included, which ride as zero-length entries rather than errors.
         """
+        if int(request.headers.get("content-length") or 0) > TESS_CACHE_METADATA_MAX_BYTES:
+            response.send_empty(413, [("connection", "close")])
+            return
         container = read_tess_cache_batch(request.body())
         if container is None:
             response.send_json(400, {"error": "bad batch request"})

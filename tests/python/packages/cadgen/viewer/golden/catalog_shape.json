@@ -85,7 +85,7 @@
  [
   "d_root_string.step",
   "part",
-  "hash",
+  "",
   "",
   "",
   "",
@@ -691,14 +691,14 @@
   "hash",
   "sourceUrl",
   "",
-  "",
+  "animationHash",
   []
  ],
  [
   "g_array.step",
   "part",
   "hash",
-  "sourceUrl",
+  "",
   "",
   "",
   []
@@ -920,9 +920,9 @@
   "r_render_module.step",
   "part",
   "hash",
+  "sourceUrl",
   "",
-  "",
-  "renderModuleUrl",
+  "animationHash",
   []
  ],
  [

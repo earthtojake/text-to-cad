@@ -5,7 +5,11 @@
 /STEP/**/*.3mf
 /STEP/**/*.glb
 /STEP/**/*.json
-/STEP/hand_mechanical_candidate_r13.step.js
+
+# Generated animation modules. The choreography is solved by
+# validation/write_showcase_presentation.py and validation/write_progress_presentation.py;
+# the models read the sibling back through lib.embedded_animation at build time.
+/src/*_animation.js
 
 # Generated presentation assets. The HTML and its behavior test are source.
 /website/*.glb

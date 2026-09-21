@@ -160,7 +160,11 @@ def parser_dests(parser: argparse.ArgumentParser) -> tuple[str, ...]:
 def cli_from_function(func: Callable[..., Any], *, prog: str) -> argparse.ArgumentParser:
     """The argparse parser this function's signature implies."""
     summary, param_help = parse_docstring(func.__doc__)
-    parser = argparse.ArgumentParser(prog=prog, description=summary)
+    # Generated commands have one exact signature-derived vocabulary. Prefix
+    # abbreviations would parse successfully but are not part of that surface,
+    # and make it impossible to tell which canonical keyword was supplied
+    # without reimplementing argparse's matching rules.
+    parser = argparse.ArgumentParser(prog=prog, description=summary, allow_abbrev=False)
     hints = _type_hints(func)
     where = func.__qualname__
     for name, parameter in inspect.signature(func).parameters.items():
@@ -222,11 +226,20 @@ def cli_from_function(func: Callable[..., Any], *, prog: str) -> argparse.Argume
 
 
 def _call_arguments(
-    func: Callable[..., Any], namespace: argparse.Namespace
+    func: Callable[..., Any],
+    namespace: argparse.Namespace,
+    *,
+    explicit_keywords: set[str] | None = None,
 ) -> tuple[list[Any], dict[str, Any]]:
     positional: list[Any] = []
     keywords: dict[str, Any] = {}
     for name, parameter in inspect.signature(func).parameters.items():
+        if (
+            parameter.kind is parameter.KEYWORD_ONLY
+            and explicit_keywords is not None
+            and name not in explicit_keywords
+        ):
+            continue
         value = getattr(namespace, name)
         if parameter.default == () and isinstance(parameter.default, tuple):
             # Repeatable flag: argparse appends into a list (None = never given).
@@ -236,6 +249,28 @@ def _call_arguments(
         else:
             positional.append(value)
     return positional, keywords
+
+
+def _explicit_option_dests(
+    parser: argparse.ArgumentParser, tokens: Sequence[str]
+) -> set[str]:
+    """Destinations whose option strings actually appeared in ``tokens``.
+
+    Parsing still exposes ordinary argparse defaults to parser consumers. Only
+    the generated invocation omits absent keyword arguments, which lets the
+    public function distinguish omission from an explicitly supplied default.
+    The mirror subset has no ambiguous short-option clusters: every generated
+    function option is one long ``--kebab-case`` spelling.
+    """
+    explicit: set[str] = set()
+    for token in tokens:
+        if token == "--":
+            break
+        option = token.split("=", 1)[0]
+        action = parser._option_string_actions.get(option)  # noqa: SLF001
+        if action is not None:
+            explicit.add(action.dest)
+    return explicit
 
 
 def _plain(value: Any) -> Any:
@@ -272,6 +307,7 @@ def emit(
     prog: str,
     as_json: bool,
     verbose: bool = False,
+    verbose_hint: bool = True,
     stdout: Any | None = None,
     stderr: Any | None = None,
 ) -> int:
@@ -291,7 +327,9 @@ def emit(
             return 1
         from cadgen._internal.cli_errors import report_cli_error
 
-        return report_cli_error(exc, tool=prog, verbose=verbose, stream=stderr)
+        return report_cli_error(
+            exc, tool=prog, verbose=verbose, verbose_hint=verbose_hint, stream=stderr
+        )
     if as_json:
         print(json.dumps(result_payload(result), separators=(",", ":")), file=out)
     else:
@@ -307,6 +345,7 @@ def call_verb(
     prog: str,
     as_json: bool,
     verbose: bool = False,
+    verbose_hint: bool = True,
     stdout: Any | None = None,
 ) -> int:
     """:func:`emit` for an adapter: it passes its own arguments to the verb."""
@@ -315,6 +354,7 @@ def call_verb(
         prog=prog,
         as_json=as_json,
         verbose=verbose,
+        verbose_hint=verbose_hint,
         stdout=stdout,
     )
 
@@ -330,12 +370,20 @@ def run_cli(
     tokens = list(argv) if argv is not None else sys.argv[1:]
     parser = cli_from_function(func, prog=prog)
     args = parser.parse_args(tokens)
-    positional, keywords = _call_arguments(func, args)
+    positional, keywords = _call_arguments(
+        func,
+        args,
+        explicit_keywords=_explicit_option_dests(parser, tokens),
+    )
     return emit(
         lambda: func(*positional, **keywords),
         prog=prog,
         as_json=bool(getattr(args, JSON_FLAG_DEST)),
         verbose=bool(getattr(args, "verbose", False)),
+        # The verb's signature decides whether `--verbose` exists at all (only a
+        # `verbose` parameter generates it), so the failure hint follows the same
+        # source of truth instead of promising a flag this door does not have.
+        verbose_hint=hasattr(args, "verbose"),
         stdout=stdout,
     )
 

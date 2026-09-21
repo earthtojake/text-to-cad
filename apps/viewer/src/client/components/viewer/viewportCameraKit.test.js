@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  reframeReason,
+  runtimeFramingBounds,
+  sameZeroPoseBounds,
+  VIEWING_MODE,
   VIEW_PLANE_FACES,
   viewPlaneCameraBasis,
   viewportFitScale
@@ -125,4 +129,104 @@ test("a malformed preset is refused rather than producing a broken camera", () =
   assert.equal(viewPlaneCameraBasis(null, WORLD_UP_AXIS), null);
   assert.equal(viewPlaneCameraBasis({ direction: [0, 0, 0], up: [0, 1, 0] }, WORLD_UP_AXIS), null);
   assert.equal(viewPlaneCameraBasis({ direction: [0, 0, 1], up: [0, 0, 0] }, WORLD_UP_AXIS), null);
+});
+
+// Reset and fit are grounded on the model's zero pose. `modelBounds` is the live
+// pose -- what lighting, the floor and clipping follow -- and framing against it
+// is what made the zoom move when the kinematics did.
+const ZERO_POSE = { min: [0, 0, 0], max: [10, 4, 2] };
+const POSED = { min: [-6, 0, 0], max: [10, 4, 30] };
+
+test("reset and fit frame the zero pose, never the pose on screen", () => {
+  assert.deepEqual(
+    runtimeFramingBounds({ zeroPoseBounds: ZERO_POSE, modelBounds: POSED }),
+    ZERO_POSE
+  );
+});
+
+test("a runtime with no zero pose yet falls back to the live bounds, then to the caller's", () => {
+  const fallback = { min: [1, 1, 1], max: [2, 2, 2] };
+  assert.deepEqual(runtimeFramingBounds({ modelBounds: POSED }, fallback), POSED);
+  assert.deepEqual(runtimeFramingBounds({}, fallback), fallback);
+  assert.equal(runtimeFramingBounds(null), null);
+});
+
+// A model is framed once per viewing mode, on its zero pose. These are the only
+// four things that reopen that decision, and a pose is never one of them.
+const SMALL = { min: [0, 0, 0], max: [10, 4, 2] };
+const GREW = { min: [0, 0, 0], max: [40, 4, 2] };
+const FRAMED = {
+  modelKey: "hinge.step",
+  framedModelKey: "hinge.step",
+  framedCompleteModelKey: "hinge.step",
+  mode: VIEWING_MODE.INSPECT,
+  framedMode: VIEWING_MODE.INSPECT,
+  modelComplete: true,
+  zeroPoseBounds: SMALL,
+  framedZeroPoseBounds: SMALL
+};
+
+test("a different model always fits, even over a camera the user took", () => {
+  assert.equal(reframeReason({ ...FRAMED, modelKey: "other.step", userMovedCamera: true }), "model");
+  assert.equal(reframeReason({ modelKey: "hinge.step" }), "model", "nothing framed yet is a new model");
+});
+
+test("a progressive load fits again when the last component lands, once", () => {
+  const loading = { ...FRAMED, framedCompleteModelKey: "", modelComplete: false };
+  assert.equal(reframeReason(loading), "", "a partial publish keeps the first frame");
+  assert.equal(reframeReason({ ...loading, modelComplete: true }), "complete");
+  assert.equal(reframeReason(FRAMED), "", "and not on every publish after that");
+});
+
+test("a rebuild whose zero pose changed fits again; another publish of the same one does not", () => {
+  assert.equal(reframeReason({ ...FRAMED, zeroPoseBounds: GREW }), "revision");
+  assert.equal(reframeReason({ ...FRAMED, zeroPoseBounds: SMALL }), "");
+});
+
+test("a pose is never a reason to re-fit", () => {
+  // Posing leaves zeroPoseBounds alone by construction (cadScene.restBounds), so
+  // the live box can be anywhere and the decision must not notice.
+  assert.equal(reframeReason({ ...FRAMED, zeroPoseBounds: { ...SMALL } }), "",
+    "an equal box published as a new object is the same zero pose");
+});
+
+test("the user's own camera stands through a completion and a rebuild", () => {
+  assert.equal(reframeReason({ ...FRAMED, framedCompleteModelKey: "", userMovedCamera: true }), "");
+  assert.equal(reframeReason({ ...FRAMED, zeroPoseBounds: GREW, userMovedCamera: true }), "");
+});
+
+test("entering a viewing mode fits that mode's own camera, over one the user took", () => {
+  const entered = { ...FRAMED, mode: VIEWING_MODE.RENDER };
+  assert.equal(reframeReason(entered), "mode", "Render does not inherit Inspect's framing");
+  assert.equal(reframeReason({ ...entered, userMovedCamera: true }), "mode",
+    "a hand-framed Inspect view does not follow the model into Render");
+  assert.equal(
+    reframeReason({ ...FRAMED, mode: VIEWING_MODE.INSPECT, framedMode: VIEWING_MODE.RENDER }),
+    "mode",
+    "and back again"
+  );
+});
+
+test("staying in a mode is not a reason to re-fit", () => {
+  assert.equal(reframeReason(FRAMED), "");
+  assert.equal(reframeReason({ ...FRAMED, mode: VIEWING_MODE.RENDER, framedMode: VIEWING_MODE.RENDER }), "");
+  assert.equal(
+    reframeReason({ ...FRAMED, mode: VIEWING_MODE.RENDER, framedMode: VIEWING_MODE.RENDER, zeroPoseBounds: GREW, userMovedCamera: true }),
+    "",
+    "an in-mode revision still stands down for the camera the user took"
+  );
+});
+
+test("a different model opened in another mode is the model's own fit", () => {
+  assert.equal(
+    reframeReason({ ...FRAMED, modelKey: "other.step", mode: VIEWING_MODE.RENDER, userMovedCamera: true }),
+    "model"
+  );
+});
+
+test("a detail swap's float-level drift is the same zero pose, a millimetre is not", () => {
+  const drifted = { min: [0, 0, 0], max: [10 + 1e-7, 4, 2] };
+  assert.equal(sameZeroPoseBounds(drifted, SMALL), true);
+  assert.equal(sameZeroPoseBounds({ min: [0, 0, 0], max: [10.01, 4, 2] }, SMALL), false);
+  assert.equal(sameZeroPoseBounds(null, SMALL), false, "no box is not the same box");
 });

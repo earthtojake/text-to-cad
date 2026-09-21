@@ -148,7 +148,7 @@ class DaemonExecutor(unittest.TestCase):
             if cls.server.poll() is not None:
                 raise RuntimeError(f"daemon exited during startup:\n{cls.log_path.read_text(encoding='utf-8')}")
             try:
-                key = transport.read_authkey(daemon_client.daemon_identity())
+                key = transport.read_authkey(cls.address)
                 if key:
                     transport.connect(cls.address, key).close()
                     break

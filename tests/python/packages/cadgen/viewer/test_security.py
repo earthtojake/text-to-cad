@@ -83,8 +83,14 @@ class AttackFixture:
 
         # A real result in the store: the tree hash is what the store route serves.
         self.package_name = seed_result(
-            Path(self.root, "part.step"), {"kind": "assembly-package", "components": {"c0": {}}}, surf=b"SURF\x00\x01\x02"
+            Path(self.root, "part.step"), {"kind": "assembly-package", "components": {"c0": {}}}
         )
+        from cadgen.store.trees import get_tree
+        from cadgen.store.objects import read_verified_object
+        from tests.python.support.store_fixtures import FIXTURE_SURFACE_PRODUCER
+        self.component_name, component = next(iter(get_tree(self.package_name)["components"].items()))
+        self.component_payload = read_verified_object(component["brep"])
+        self.store_binding = "&surfaceProducer=" + quote(json.dumps(FIXTURE_SURFACE_PRODUCER))
         Path(self.cache, "packages-evil-marker").write_text(SECRET, encoding="utf-8")
 
         self.dist = os.path.join(self.base, "dist")
@@ -171,10 +177,10 @@ class ControlCases(SecurityTestCase):
 
     def test_the_store_route_serves_a_component(self):
         status, headers, body = self.fixture.request(
-            "GET", f"/__cad/store?file={self.fixture.package_name}/components/c0.surf"
+            "GET", f"/__cad/store?file={self.fixture.package_name}/components/{self.fixture.component_name}.brep"
         )
         self.assertEqual(status, 200)
-        self.assertEqual(body, b"SURF\x00\x01\x02")
+        self.assertEqual(body, self.fixture.component_payload)
         self.assertEqual(headers["content-type"], "application/octet-stream")
         self.assertNotIn("content-disposition", {k.lower() for k in headers})
 
@@ -409,7 +415,7 @@ class I_TheTwoGatesCoverTheAssetRoutes(SecurityTestCase):
         targets = [
             "/__cad/catalog",
             f"/__cad/asset?file={ref}",
-            f"/__cad/store?file={self.fixture.package_name}/assembly.json",
+            f"/__cad/store?file={self.fixture.package_name}/assembly.json{self.fixture.store_binding}",
         ]
         for target in targets:
             with self.subTest(target=target):
@@ -435,7 +441,7 @@ class I_TheTwoGatesCoverTheAssetRoutes(SecurityTestCase):
             "/__cad/asset?file=/etc/passwd.step",
             "/__cad/asset?file=/etc/passwd",
             "/__cad/nope",
-            f"/__cad/store?file={self.fixture.package_name}/assembly.json",
+            f"/__cad/store?file={self.fixture.package_name}/assembly.json{self.fixture.store_binding}",
         ]
         for target in targets:
             with self.subTest(target=target):
@@ -624,7 +630,7 @@ class L_ArtifactRouteContainment(SecurityTestCase):
         status, _, body = self.artifact(os.path.join(self.fixture.root, "ok.step") + "\n")
         self.assertEqual(status, 200, body[:400])
         payload = json.loads(body)
-        self.assertEqual(payload["state"], "rendered")
+        self.assertEqual(payload["state"], "compiled")
         self.assertNotIn("compile", payload)
 
 
@@ -641,28 +647,28 @@ class StoreRouteConfinement(SecurityTestCase):
     def test_leading_slashes_are_stripped_so_the_client_form_works(self):
         # resolvePackageAssetUrl emits file=/<key>/components/c0.surf.
         status, _, body = self.fixture.request(
-            "GET", f"/__cad/store?file=/{self.fixture.package_name}/components/c0.surf"
+            "GET", f"/__cad/store?file=/{self.fixture.package_name}/components/{self.fixture.component_name}.brep"
         )
         self.assertEqual(status, 200)
-        self.assertEqual(body, b"SURF\x00\x01\x02")
+        self.assertEqual(body, self.fixture.component_payload)
 
     def test_backslashes_are_converted(self):
         status, _, _ = self.fixture.request(
             "GET",
-            f"/__cad/store?file={self.fixture.package_name}\\components\\c0.surf",
+            f"/__cad/store?file={self.fixture.package_name}\\components\\{self.fixture.component_name}.brep",
         )
         self.assertEqual(status, 200)
 
     def test_the_v_param_is_accepted_and_ignored(self):
         status, _, _ = self.fixture.request(
-            "GET", f"/__cad/store?file={self.fixture.package_name}/assembly.json&v=zzz"
+            "GET", f"/__cad/store?file={self.fixture.package_name}/assembly.json{self.fixture.store_binding}&v=zzz"
         )
         self.assertEqual(status, 200)
 
 
 class CatalogOverHttp(SecurityTestCase):
     def test_the_catalog_is_absolutized_and_compact(self):
-        status, headers, body = self.fixture.request("GET", "/__cad/catalog")
+        status, headers, body = self.fixture.request("GET", "/__cad/catalog?file=ok.stl")
         self.assertEqual(status, 200)
         self.assertEqual(headers["content-type"], "application/json; charset=utf-8")
         self.assertEqual(headers["cache-control"], "no-store")
@@ -680,14 +686,18 @@ class CatalogOverHttp(SecurityTestCase):
             list(mesh), ["file", "kind", "url", "hash", "bytes", "rootRelativeFile", "assetFile"]
         )
 
-        # A store URL is already in its served form and is left untouched — no
-        # rewrite and, deliberately, no assetFile sibling.
-        step = by_ref["ok.step"]
+        # A selected store URL is already in its served form and is left
+        # untouched — no rewrite and, deliberately, no assetFile sibling.
+        _, _, step_body = self.fixture.request("GET", "/__cad/catalog?file=ok.step")
+        step = next(
+            entry for entry in json.loads(step_body)["entries"]
+            if entry["rootRelativeFile"] == "ok.step"
+        )
         self.assertTrue(step["url"].startswith("/__cad/store?file="))
         self.assertNotIn("assetFile", step)
 
     def test_a_catalog_url_round_trips_through_the_asset_route(self):
-        _, _, body = self.fixture.request("GET", "/__cad/catalog")
+        _, _, body = self.fixture.request("GET", "/__cad/catalog?file=ok.stl")
         entry = next(
             e for e in json.loads(body)["entries"] if e["rootRelativeFile"] == "ok.stl"
         )

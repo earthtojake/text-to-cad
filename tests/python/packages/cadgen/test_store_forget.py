@@ -18,7 +18,7 @@ import unittest
 from pathlib import Path
 
 from tests.python.support.paths import REPO_ROOT
-from tests.python.support.tmp_root import temporary_directory
+from tests.python.support.tmp_root import generated_cad_directory
 
 PIN = """
     from cadgen import step
@@ -50,11 +50,14 @@ def _run(*argv: str, cwd: Path, cache: Path) -> subprocess.CompletedProcess:
 
 class StoreForget(unittest.TestCase):
     def setUp(self) -> None:
-        self._tmp = temporary_directory(prefix="store-forget-")
+        self._tmp = generated_cad_directory(prefix="store-forget-")
         self.root = Path(self._tmp.name) / "proj"
         (self.root / "src").mkdir(parents=True)
         self.cache = Path(self._tmp.name) / "store"
         (self.root / "src" / "pin.py").write_text(textwrap.dedent(PIN).lstrip(), encoding="utf-8")
+
+    def _build(self) -> None:
+        # The tests that forget something need the build; the unknown-target test does not.
         result = _run("src/pin.py", cwd=self.root, cache=self.cache)
         assert result.returncode == 0, result.stderr
 
@@ -65,6 +68,7 @@ class StoreForget(unittest.TestCase):
         return _run("-m", "cadgen.cli", "store", *argv, cwd=self.root, cache=self.cache)
 
     def test_forgetting_a_model_drops_its_record_only(self) -> None:
+        self._build()
         self.assertIn("verdict current", self._store("why", "src/pin.py").stdout)
         dry = self._store("forget", "src/pin.py", "--dry-run")
         self.assertEqual(0, dry.returncode, dry.stderr)
@@ -86,6 +90,7 @@ class StoreForget(unittest.TestCase):
         self.assertIn("verdict current", self._store("why", "src/pin.py").stdout)
 
     def test_forgetting_a_document_makes_the_next_door_call_compile_it(self) -> None:
+        self._build()
         result = self._store("forget", "src/pin.step", "--json")
         self.assertEqual(0, result.returncode, result.stderr)
         payload = json.loads(result.stdout.strip())
@@ -94,13 +99,12 @@ class StoreForget(unittest.TestCase):
         self.assertFalse(any((self.cache / "index" / "document").iterdir()))
         # The door compiles the bytes again and answers in one call.
         inspect = _run(
-            "-m", "cadgen.cli", "step", "inspect", "refs", "src/pin.step", "--facts",
+            "-c", "from cadgen import read_scene; import json; s = read_scene('src/pin.step'); print(json.dumps({'leaves': len(list(s.leaves()))}))",
             cwd=self.root, cache=self.cache,
         )
         self.assertEqual(0, inspect.returncode, inspect.stdout + inspect.stderr)
         answer = json.loads(inspect.stdout.strip())
-        self.assertTrue(answer["ok"], answer)
-        self.assertEqual("part", answer["tokens"][0]["summary"]["kind"])
+        self.assertEqual(answer["leaves"], 1)
         self.assertTrue(any((self.cache / "index" / "document").iterdir()))
 
     def test_an_unknown_target_is_nothing_to_forget(self) -> None:

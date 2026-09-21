@@ -1,286 +1,137 @@
-# Positioning logic, joints, and mating
+# Assembly positioning and mating
 
-Read this file when geometry has mating interfaces, repeated features, assembly children, axes, datums, motion, or user-specified alignment. This is the authoritative reference for assembly positioning, part-local origins, build123d joints, explicit `Location` transforms, CLI `inspect align`, and positioning report content.
+Read this file when placing assembly parts, defining mating datums or checking
+alignment. Author placements in the model source, then check the saved geometry.
+Choose explicit transforms or native build123d joints according to which makes
+the intended relationship easiest to express and maintain. Neither requires a
+particular assembly size or complexity.
 
-## Core rule
+## Transforms and local frames
 
-Positioning is authored in source and validated after generation. Do not position parts by visually dragging or by editing exported STEP geometry. Use build123d parameters, local coordinate systems, `Location` transforms, `Plane`/`Axis` datums, `cadgen.assembly.AssemblyHelper` relationships, source-level `Joint` objects when useful, and labeled assembly children.
-
-## Terminology
-
-Use these terms carefully:
-
-- **AssemblyHelper** is the preferred generated-script wrapper from `cadgen.assembly`. It records semantic relationships such as `face_to_face`, `coaxial`, `revolute`, and `linear`, then realizes them with native build123d joints.
-- **build123d joints** are source-level objects such as `RigidJoint`, `RevoluteJoint`, `LinearJoint`, `CylindricalJoint`, and `BallJoint`. They are attached to `Solid` or `Compound` objects and can reposition parts with `connect_to()`.
-- **CLI `inspect align`** is a selector-pair validation tool. It computes a read-only translation delta between selected local refs in a STEP/CAD entry. It does not edit source code, patch exported STEP files, or represent an authored mate feature. This is the one place that distinction is defined; the rest of the skill assumes it.
-- **Mating intent** is the design relationship: flush, centered, coaxial, offset, hinge-like, slider-like, or otherwise datum-driven.
-
-Use `AssemblyHelper` and build123d joints to express and compute source assembly placement where appropriate, then use CLI inspection to validate the generated STEP.
-
-## Preferred assembly structure
-
-For assemblies, prefer a mate/joint-driven structure over arbitrary transforms:
-
-```text
-root component
-→ part-local coordinate systems
-→ named datums / joint locations
-→ AssemblyHelper semantic relationships backed by native build123d joints
-→ labeled Compound assembly with verbose native labels
-→ refs/measure/frame/align validation
-```
-
-A numeric `Location(...)` should usually correspond to a stated datum, offset, clearance, screw axis, face contact, or joint relationship.
-
-Place a shape with `Pos(...) * shape`, `Rot(...) * shape`, `Location(...) * shape`, or `shape.moved(loc)` — these move the shape and keep its geometry shared. Avoid `shape.located(loc)`: it deep-copies the geometry, which is slower and, for a child model placed in an assembly, breaks the cache's ability to reference the child instead of copying it.
-
-Group a functional unit — a bearing, a gearbox stage, a fastener set — into a sub-assembly node with `asm.add_module(name, children)` when it is placed, reasoned about, or repeated as a unit; nested occurrence refs such as `#o1.12.1` then stay meaningful.
-
-## Part-local positioning
-
-For each part, define a local coordinate convention before modeling:
-
-```text
-- Origin: center, base datum, mounting interface, or functional axis.
-- XY plane: main sketch/base plane unless another datum is dominant.
-- +Z: extrusion/up direction.
-- Named dimensions: offsets, hole spacing, boss spacing, clearances.
-- Datum features: mating faces, screw axes, centerlines, locating tabs, rails.
-```
-
-Good defaults:
-
-- Symmetric standalone parts: origin at body center.
-- Plates: origin at footprint center; thickness along Z.
-- Enclosures: origin at footprint center; base/lid mating surfaces controlled by Z parameters.
-- Shaft/knob/axisymmetric parts: origin on rotational axis.
-- Mating adapter plates: origin on the primary mounting datum or center of the bolt pattern.
-
-## Feature placement inside a part
-
-Use named parameters and local coordinates:
+Use functional datums and explicit dimensions for placements. A part's origin
+might be its mounting interface, symmetry center or rotational axis; use the
+convention that fits the design. Record it when another part depends on it.
 
 ```python
-hole_offset_x = 30
-hole_offset_y = 17.5
-hole_positions = [
-    (-hole_offset_x, -hole_offset_y),
-    ( hole_offset_x, -hole_offset_y),
-    (-hole_offset_x,  hole_offset_y),
-    ( hole_offset_x,  hole_offset_y),
-]
-
-with Locations(*hole_positions):
-    Hole(radius=hole_diameter / 2)
+# Inside an assembly model:
+left = bd.Pos(-pitch / 2, 0, height) * spacer()
+left.label = "spacer_left"
+right = bd.Pos(pitch / 2, 0, height) * spacer()
+right.label = "spacer_right"
+assembly = bd.Compound(children=[left, right], label="spacer_pair")
 ```
 
-Avoid untraceable placement constants inside geometry calls. Put all meaningful offsets into parameters.
+Place child models with `.moved()` or `Pos/Rot/Location * child` to preserve
+shared geometry. `.located()` replaces the existing placement and copies the
+geometry; it loses the cached child link. Labels identify roles and repeated
+occurrences, such as `m3_screw:front_left`. A functional group can be a nested
+labeled `Compound` when the design benefits from that hierarchy.
 
-## AssemblyHelper pattern
+Mirroring changes geometry, so an inline mirrored child belongs to the parent
+rather than linking to the original child's tree. It remains cached with that
+parent. A separate mirrored model is useful for independent outputs or reuse,
+not a requirement; see [mirroring and caching](step-generation.md#mirrored-geometry-and-reusable-models).
 
-Use `AssemblyHelper` for generated assembly scripts. It keeps the LLM-facing code intent-focused while still using native build123d labels, `Joint` objects, and `Compound` assemblies.
+## Native joints
+
+Joints can express a relationship between reusable datums without hand-solving
+its placement. They perform source-level placement; they are not persistent
+STEP constraints or a replacement for the separate [kinematics](kinematics.md)
+interface. Call `connect_to()` on the fixed joint with the moving joint as its
+argument.
+
+For example, `src/enclosure.py` places a lid above a base with a specified gap:
 
 ```python
 from cadgen import build123d as bd, step
-from cadgen.assembly import AssemblyHelper
 
-base_height = 30.0
-lid_thickness = 3.0
-gasket_gap = 0.5
-
-asm = AssemblyHelper("enclosure")
-base = asm.add(make_base(), "base")
-lid = asm.add(make_lid(), "lid")
-
-base_seat = asm.rigid_frame(
-    base,
-    "lid_seat",
-    bd.Location((0, 0, base_height / 2)),
-)
-lid_underside = asm.rigid_frame(
-    lid,
-    "underside",
-    bd.Location((0, 0, -lid_thickness / 2)),
-)
-
-asm.face_to_face(base_seat, lid_underside, offset=gasket_gap)
+BASE_HEIGHT = 30.0
+LID_THICKNESS = 3.0
+GASKET_GAP = 0.5
 
 
-@step
-def model():
-    return asm.build()
+@step(out="../STEP/enclosure.step")
+def enclosure():
+    base = bd.Box(80, 50, BASE_HEIGHT)
+    lid = bd.Box(80, 50, LID_THICKNESS)
+    base.label, lid.label = "base", "lid"
+    bd.RigidJoint(
+        "lid_target", to_part=base,
+        joint_location=bd.Location((0, 0, BASE_HEIGHT / 2 + GASKET_GAP)),
+    )
+    bd.RigidJoint(
+        "underside", to_part=lid,
+        joint_location=bd.Location((0, 0, -LID_THICKNESS / 2)),
+    )
+    base.joints["lid_target"].connect_to(lid.joints["underside"])
+    return bd.Compound(children=[base, lid], label="enclosure")
+
+
+if __name__ == "__main__":
+    enclosure()
 ```
 
-The fixed target is listed first and the moving target second. In the example above, the base stays fixed and the lid moves. The helper is a positioning tool: it calls native build123d `connect_to()` under the hood and its whole output is the placed geometry — nothing about the relationship is recorded or exported. The STEP contains the resolved static placement and native assembly labels, not persistent constraints. Motion that should persist (joints the viewer animates, pose presets) is declared with `kinematics=` on the decorator (`references/kinematics.md`), not with the positioning helper.
+Native joint options include `RigidJoint` for fixed placement, `RevoluteJoint`
+for rotation, `LinearJoint` for translation, `CylindricalJoint` for combined
+rotation/translation and `BallJoint` for spherical orientation. Use `Location`
+for rigid/ball joint frames and `Axis` for revolute/linear/cylindrical joints.
 
-Use helper labels intentionally:
+Creating joints reads the child's placement and may materialize it earlier
+than a deferred transform. Cached child models return geometry, labels,
+appearance and placements; do not rely on Python joint objects surviving a
+child's cache round trip. Define the joints needed by the parent in its source.
 
-```python
-standoff = asm.feature(Cylinder(radius=3.0, height=12.0), "m3_standoff", "front_left")
-hinge_axis = asm.rigid_frame(lid, "hinge_axis", Location((0, -25, 0)))
-```
+## Child models and imported components
 
-Assembly labels name the root occurrence. `asm.add()` labels child component occurrences and their exported shape context. For repeated hardware or library parts, use role/location labels such as `front_left` and `rear_right` so STEP topology and viewer selections remain traceable after export.
+Call a project model to compose it. Use `cadgen.read_step` for a vendor document
+or an explicitly decoupled export; that records the file as a build input.
+See the [model contract](step-generation.md) for dependency tracking.
 
-Feature labels survive best when the labeled geometry remains a child shape in a `Compound`. Labels on boolean-subtracted or fused feature history are not reliable STEP feature history.
-
-Use the frame method that matches native build123d joint inputs: `rigid_frame()` and `ball_frame()` take a `Location`; `revolute_frame()`, `linear_frame()`, and `cylindrical_frame()` take an `Axis` plus optional native range/reference arguments.
-
-## Child dependencies
-
-A child part is wired in one of two modes — a **CHILD** (a model in this
-project: import its function and call it; the default) or an **INPUT** (a
-document read via `cadgen.read_step`: imported parts, or a generated part the
-user explicitly asked to decouple). The modes, what a rebuild tracks, and the
-code live in "Composing on other parts" in `step-generation.md`.
-Positioning-wise the two are identical: a child is a shape; place it with the
-same frames and mates as authored geometry.
-
-**Place a child with `Pos/Rot/Location * child` or `child.moved(loc)` — never
-`child.located(loc)`.** `located()` deep-copies the geometry, so the parent
-owns a duplicate component instead of linking to the child's tree, and it
-also discards any rotation the shape already carried (`build123d-modeling.md`).
-`AssemblyHelper` and build123d joints place through `connect_to()` and keep
-the link. A mirrored placement is not a placement at all — STEP cannot express
-a reflection — so a right-hand part is its own model built from the shared
-factory (`step-generation.md`, "Mirrored parts are their own models").
-
-## Imported components
-
-For purchased or downloaded parts (see `$step-parts`), read the STEP file
-with `cadgen.read_step` (never `build123d.import_step` — the whys are in
-"Composing on other parts" in `step-generation.md`) and add it like any
-authored part.
-
-```python
-from cadgen import read_step
-
-servo = asm.add(read_step("models/parts/sg90_servo.step"), "servo")
-```
-
-Imported geometry was not authored here, so do not assume its origin or orientation. Derive mating frames from inspected geometry: run `refs --facts --planes --positioning` and `measure` against the imported part, then define `asm.rigid_frame(...)` locations from the measured faces, axes, and bolt patterns. Validate the resulting mate exactly like an authored one.
-
-## When to use build123d joints
-
-Use `AssemblyHelper`/build123d joints when assembly intent is clearer as a relationship between part datums than as a raw transform:
-
-- lid-to-base, cover-to-frame, bracket-to-rail, flange-to-pipe, pin-to-hole, shaft-to-bearing
-- hinge, slider, screw-like, cylindrical, ball/gimbal, or other motion-positioned assemblies
-- repeated or library components that already expose joints
-- source assemblies where a change to one dimension should recompute part placement
-
-Direct `Location(...)` transforms are acceptable for simple static layouts when they are parameterized and documented, such as a row of identical spacers or a visual exploded view.
-
-Raw build123d joints are acceptable for advanced cases not covered by `AssemblyHelper`, but preserve the same fixed-first directionality: call `connect_to()` on the fixed/root joint and pass the moving part's joint as `other`. `connect_to()` is a source-generation operation. It repositions the moving part for the generated model; it is not a persistent external constraint in the exported STEP file.
-
-## Joint type selection
-
-Use the simplest joint that expresses the source-level relationship:
-
-- `RigidJoint` / `asm.rigid_frame()`: fixed placement, face-to-face seating, mounting datums, imported components with known interfaces.
-- `RevoluteJoint` / `asm.revolute_frame()`: hinge or rotational pose; define with an `Axis` and drive with an angle parameter for a static STEP pose.
-- `LinearJoint` / `asm.linear_frame()`: slider, latch, telescoping component; define with an `Axis` and drive with a position parameter.
-- `CylindricalJoint` / `asm.cylindrical_frame()`: combined axial translation and rotation, such as screw-like or pin-in-slot relationships.
-- `BallJoint` / `asm.ball_frame()`: gimbal or spherical orientation relationship; define with a `Location` and angular ranges.
-
-When only final static placement matters and no meaningful joint datum exists, use explicit `Location` transforms and validate them.
-
-## Assembly positioning workflow
-
-1. Choose the fixed/root component.
-2. Define part-local frames and datums before modeling child placement.
-3. Identify functional datums such as mating faces, screw axes, hinge axes, sliding axes, locating tabs, gasket offsets, or contact planes.
-4. Name source-level joints or mating datums on each child with `asm.rigid_frame()`, `asm.revolute_frame()`, `asm.linear_frame()`, or another helper frame method.
-5. Use `AssemblyHelper` relationship methods where they improve source clarity, otherwise use parameterized `Location` transforms.
-6. Build a labeled `Compound` assembly with `asm.build()`.
-7. Generate the assembly through the Python source, not by re-importing the generated STEP (see `step-generation.md`):
+For imported geometry, inspect its existing origin, orientation and functional
+features with `read_scene` before choosing datums. Express measured offsets
+or joint frames in the source, then validate the placed result. Anchor model
+input paths on `__file__` when they must work from any working directory.
 
 ```bash
 python path/to/assembly.py
-cadgen step inspect refs path/to/assembly.step --facts --planes --positioning
+python tmp/check_assembly.py
 ```
 
-## CLI alignment validation
+## Alignment and measurement checks
 
-After generation, select moving and target refs from the local selector refs returned by `refs --positioning` and compute deltas:
+Select the actual mating features from `read_scene`, then express the intended
+relationship in Python. There is no generic alignment mode that guesses which
+points or axes the design means. See `inspection-and-validation.md` for the
+reader and native measurement interfaces.
 
-```bash
-cadgen step inspect align path/to/assembly.step \
-  --moving '#moving_selector' \
-  --target '#target_selector' \
-  --mode flush \
-  --axis z
+For example, for two planar mating faces (with their refs already identified):
+
+```python
+from cadgen import read_scene
+
+scene = read_scene("STEP/assembly.step")
+moving = scene.resolve("#moving.f1").shape()
+fixed = scene.resolve("#fixed.f2").shape()
+n = fixed.normal_at().normalized()
+m = moving.normal_at().normalized()
+signed_gap_mm = (moving.center() - fixed.center()).dot(n)
+parallel_error_deg = min(n.get_angle(m), n.get_angle(-m))
+print(signed_gap_mm, parallel_error_deg)
+assert abs(signed_gap_mm) < 0.01
+assert parallel_error_deg < 0.1
 ```
 
-Use `--mode flush` for coplanar face alignment. Use `--mode center` for centerline, plane-center, or symmetrical alignment where supported by the selected references. If the returned delta is outside tolerance, apply a source-level correction (see below), regenerate, and rerun inspection.
+These thresholds are illustrative; use the task's tolerances. The plane gap
+and parallelism test does not establish lateral alignment or overlapping face
+footprints. Check those when required. For opposed normals, assert the signed
+orientation explicitly instead of accepting either parallel direction.
 
-## Frame validation
+For a screw-pattern dimension, compare the analytic centers of the selected
+circular edges. For clear space between bodies use `closest_points`.
+`shape.bounding_box().size` measures the world-aligned envelope. Use explicit
+vectors and datums for orientation, signed offsets and center spacing.
+Update source placements, regenerate, and rerun the relevant checks.
 
-Use `frame` to inspect an occurrence or selector's world frame:
-
-```bash
-cadgen step inspect frame path/to/assembly.step '#selector'
-```
-
-Use this when:
-
-- a child appears in the wrong orientation
-- a mating face is offset in world coordinates
-- an axis is expected to align with X/Y/Z
-- repeated parts should share orientation
-- a downstream task needs a stable coordinate frame
-
-## Measurement validation
-
-Use `measure` for scalar checks:
-
-```bash
-cadgen step inspect measure path/to/assembly.step \
-  --from '#selector_a' \
-  --to '#selector_b' \
-  --axis z
-```
-
-Examples:
-
-- lid bottom face to base top face should be 0 mm for flush contact
-- two screw axes should have matching X/Y positions
-- bracket mounting face should sit a specified distance from a datum plane
-- spacer height should equal requested offset
-
-## Source-level positioning corrections
-
-When a positioning check fails, fix one of these in source:
-
-- child `Location` translation
-- child `Location` rotation
-- `AssemblyHelper` relationship fixed/moving order or offset
-- build123d joint location or axis
-- part-local origin convention
-- feature offset parameter
-- sketch plane
-- workplane selection
-- assembly hierarchy
-- symmetric placement signs
-
-Then regenerate. Do not patch the exported STEP directly.
-
-## Reporting positioning
-
-In the final response, report only checks that were run:
-
-```text
-Positioning/joints:
-- source used RigidJoint lid_seat → underside
-- base/lid Z mate flush, delta 0.00 mm
-- screw boss axis alignment: checked in XY by measurement
-- lid occurrence frame: +Z up, origin at assembly centerline
-```
-
-If no positioning-sensitive features exist, say:
-
-```text
-Positioning: not applicable beyond centered part-local origin.
-```
-
-If a mate or alignment was intended but not checked, say `not checked`; do not imply success.
+Correct failed positioning in the model source, then regenerate and rerun the
+relevant checks. Report measured relationships and any intended alignment left
+unchecked; no positioning report is needed when positioning is irrelevant.

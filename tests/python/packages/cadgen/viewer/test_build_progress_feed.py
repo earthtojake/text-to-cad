@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -29,10 +30,10 @@ from tests.python.support.store_fixtures import seed_result  # noqa: E402
 STEP_BYTES = b"ISO-10303-21;\nHEADER;\nENDSEC;\nDATA;\nENDSEC;\nEND-ISO-10303-21;\n"
 
 
-def job(subject, outputs, state, *, id="job-1", phase=None, done=None, total=None, exit=None, tool="run", started=1.0):
+def job(subject, outputs, state, *, id="job-1", phase=None, detail="", done=None, total=None, exit=None, tool="run", started=1.0):
     return {
         "id": id, "tool": tool, "subject": subject, "outputs": outputs, "argv": [], "state": state,
-        "phase": phase, "done": done, "total": total, "startedAt": started, "updatedAt": started,
+        "phase": phase, "detail": detail, "done": done, "total": total, "startedAt": started, "updatedAt": started,
         "finishedAt": None if state in ("submitted", "queued", "building") else started + 1, "exit": exit,
     }
 
@@ -62,20 +63,21 @@ class ProgressFeed(unittest.TestCase):
         self.document.write_bytes(STEP_BYTES)
         self.script = str(self.root / "src" / "widget.py")
         self.jobs: list[dict] = []
-        feed = mock.patch.object(build_progress, "_daemon_jobs", side_effect=lambda now: list(self.jobs))
-        feed.start()
-        self.addCleanup(feed.stop)
+        self.feed = mock.patch.object(build_progress, "_daemon_jobs", side_effect=lambda now: list(self.jobs))
+        self.feed.start()
+        self.addCleanup(self.feed.stop)
         self.ops = CadgenOps(str(self.root), client=_NeverCompiles())
 
     def status(self) -> dict:
         return self.ops.artifact_status("STEP/widget.step")
 
     def test_a_cli_build_started_outside_the_viewer_shows_as_compiling_with_its_phase(self):
-        self.jobs = [job(self.script, [str(self.document)], "building", phase="Meshing components", done=3, total=9)]
+        self.jobs = [job(self.script, [str(self.document)], "building", phase="Meshing components", detail="finger linkage", done=3, total=9)]
         status = self.status()
         self.assertEqual("compiling", status["state"])
         self.assertEqual("job-1", status["runId"])
         self.assertEqual(("Meshing components", 3, 9, True), (status["progress"]["phase"], status["progress"]["done"], status["progress"]["total"], status["progress"]["determinate"]))
+        self.assertEqual("finger linkage", status["progress"]["detail"])
 
     def test_a_parents_child_build_is_matched_by_the_childs_output_path(self):
         rig = str(self.root / "src" / "rig.py")
@@ -96,7 +98,7 @@ class ProgressFeed(unittest.TestCase):
     def test_a_published_tree_is_ready_even_with_an_older_finished_job_listed(self):
         seed_result(self.document)
         self.jobs = [job(self.script, [str(self.document)], "done", exit=0)]
-        self.assertEqual({"state": "rendered"}, self.status())
+        self.assertEqual({"state": "compiled"}, self.status())
 
     def test_a_failed_job_with_no_tree_is_failed(self):
         self.jobs = [job(self.script, [str(self.document)], "failed", exit=1)]
@@ -121,7 +123,7 @@ class ProgressFeed(unittest.TestCase):
         seed_result(self.document)
         self.jobs = [job(self.script, [str(self.document)], "failed", exit=1)]
         status = self.status()
-        self.assertEqual("rendered", status["state"])
+        self.assertEqual("compiled", status["state"])
         self.assertEqual(1, status["failed"]["exit"])
 
     def test_a_later_success_clears_an_earlier_failure(self):
@@ -130,7 +132,7 @@ class ProgressFeed(unittest.TestCase):
             job(self.script, [str(self.document)], "failed", id="job-1", exit=1, started=1.0),
             job(self.script, [str(self.document)], "done", id="job-2", exit=0, started=2.0),
         ]
-        self.assertEqual({"state": "rendered"}, self.status())
+        self.assertEqual({"state": "compiled"}, self.status())
 
     def test_a_job_for_another_document_is_not_this_documents_build(self):
         self.jobs = [job(str(self.root / "src" / "other.py"), [str(self.root / "STEP" / "other.step")], "building")]
@@ -141,6 +143,41 @@ class ProgressFeed(unittest.TestCase):
             build_progress._cache = (0.0, [])
             self.assertEqual([], build_progress._daemon_jobs(now=10.0))
         self.assertIsNone(build_progress.build_progress_snapshot(self.document, jobs=[]))
+
+    def test_a_slow_older_poll_cannot_replace_a_newer_cached_ledger(self):
+        self.feed.stop()
+        older = job(self.script, [str(self.document)], "building", id="older")
+        newer = job(self.script, [str(self.document)], "done", id="newer", started=2.0)
+        first_started = threading.Event()
+        release_first = threading.Event()
+        calls = 0
+
+        def status():
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                first_started.set()
+                self.assertTrue(release_first.wait(3))
+                return {"jobs": [older]}
+            if calls == 2:
+                return {"jobs": [newer]}
+            raise AssertionError("the protected newer cache should satisfy this read")
+
+        build_progress._cache = (0.0, [])
+        with mock.patch("cadgen.daemon.client.status", side_effect=status):
+            slow_result = []
+            thread = threading.Thread(
+                target=lambda: slow_result.extend(build_progress._daemon_jobs(10.0, max_age=0.0))
+            )
+            thread.start()
+            self.assertTrue(first_started.wait(3))
+            self.assertEqual([newer], build_progress._daemon_jobs(10.0, max_age=0.0))
+            release_first.set()
+            thread.join(3)
+            self.assertFalse(thread.is_alive())
+            self.assertEqual([older], slow_result)
+            self.assertEqual([newer], build_progress._daemon_jobs(10.1, max_age=1.0))
+        self.assertEqual(2, calls)
 
     def test_the_snapshot_shape_the_status_machine_reads(self):
         running = build_progress.build_progress_snapshot(

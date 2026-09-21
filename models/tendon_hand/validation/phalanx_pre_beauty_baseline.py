@@ -153,7 +153,6 @@ def make_phalanx(length=45., width=18., distal=False, label='skeletal_proximal_p
         raise ValueError(f'{label}: D-bore entry rim fillet failed: {exc}') from exc
     shape.label=label
     shape.color=srgb('#a9b7c1')
-    shape.cad_material={'roughness':.34,'metalness':.86,'clearcoat':.12}
     if not shape.is_valid or shape.volume <=0:
         raise ValueError(f'{label}: invalid or nonpositive frame')
     return shape

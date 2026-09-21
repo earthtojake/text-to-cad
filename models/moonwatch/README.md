@@ -15,8 +15,7 @@ moonwatch/
     README.md     the model catalog + shared-code and articulation notes
     *.py          one @step model per file (9 of them)
     lib/          shared builders and the dimensional spec (never models)
-  STEP/           generated artifacts + their .step.json sidecars (gitignored)
-    moonwatch.step.js   the render module beside moonwatch.step: choreography (authored, committed)
+  STEP/           generated artifacts + their embedded-metadata .step.json sidecars (gitignored)
   render/         committed presentation JSON (themes + snapshot job template)
   tmp/            snapshots and scratch (gitignored)
 ```

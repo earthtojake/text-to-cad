@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import itertools
 import os
 import subprocess
 import sys
@@ -38,15 +39,19 @@ from typing import Any, Callable
 
 
 class Job:
-    """A submitted build: ``wait()`` for its exit code, ``output()`` for what it said."""
+    """One submitted build's immutable source result and eventual output completion."""
 
     def __init__(self, model: Path | str) -> None:
         from cadgen.store.index import split_model_ref
 
         # The model's identity (``script::fn``); the script it lives in; the function.
-        self.model = str(model)
+        from cadgen.store.index import resolve_model_ref
+
+        self.model = resolve_model_ref(model)
         self.script, self.function = split_model_ref(self.model)
         self._done = threading.Event()
+        self._result_ready = threading.Event()
+        self._tree: str | None = None
         self._code: int | None = None
         self._chunks: list[str] = []
         self._lock = threading.Lock()
@@ -59,6 +64,34 @@ class Job:
     def _finish(self, code: int) -> None:
         self._code = int(code)
         self._done.set()
+        # A failed/superseded worker may never have produced geometry.
+        self._result_ready.set()
+
+    def _observe(self, event: dict) -> None:
+        result = event.get("sourceResult")
+        if not isinstance(result, dict) or result.get("model") != self.model:
+            return
+        tree = result.get("tree")
+        if not isinstance(tree, str) or not tree:
+            return
+        with self._lock:
+            if self._tree is None and not self.done:
+                self._tree = tree
+                self._result_ready.set()
+
+    @property
+    def result_ready(self) -> bool:
+        return self._result_ready.is_set()
+
+    def wait_result(self, timeout: float | None = None) -> str:
+        """Return THIS job's final authored tree, without waiting for file exports."""
+        if not self._result_ready.wait(timeout):
+            raise TimeoutError(f"build of {self.script.name} produced no source result in {timeout}s")
+        with self._lock:
+            tree = self._tree
+        if tree is None:
+            raise RuntimeError(f"build of {self.script.name} finished without a source result:\n{self.output().rstrip()}")
+        return tree
 
     def wait(self, timeout: float | None = None) -> int:
         if not self._done.wait(timeout):
@@ -88,6 +121,30 @@ class Job:
 
 _EVENT_SINK: Callable[[dict], None] | None = None
 _EVENT_LOCK = threading.Lock()
+_EVENT_SEQUENCE = itertools.count(1)
+_RESULT_CAPTURE = threading.local()
+
+
+@contextlib.contextmanager
+def capture_source_result(model: Path | str):
+    """Internal exact-call capture, independent of the optional reporting sink."""
+    job = Job(model)
+    previous = getattr(_RESULT_CAPTURE, "jobs", ())
+    _RESULT_CAPTURE.jobs = (*previous, job)
+    try:
+        yield job
+    finally:
+        _RESULT_CAPTURE.jobs = previous
+
+
+def emit_source_result(model: Path | str, tree: str) -> None:
+    from cadgen.store.index import resolve_model_ref
+    from cadgen.store.trees import tree_complete
+
+    if not tree or not tree_complete(tree):
+        raise RuntimeError("source result geometry disappeared before publication")
+    emit_event(model_event(model, "building", phase="Source ready",
+                           sourceResult={"model": resolve_model_ref(model), "tree": tree}))
 
 
 def set_event_sink(sink: Callable[[dict], None] | None) -> None:
@@ -107,10 +164,16 @@ def emit_event(event: dict) -> None:
     """Hand one model transition to the sink. Tags it with the root request's id
     (``CADGEN_ROOT_ID``, inherited by every job of one top-level build) so the root's
     renderer can tell its own tree from a stranger's."""
+    for capture in getattr(_RESULT_CAPTURE, "jobs", ()):
+        capture._observe(event)
     with _EVENT_LOCK:
         sink = _EVENT_SINK
     if sink is None:
         return
+    if "job" not in event:
+        producer = os.environ.get("CADGEN_JOB_ID")
+        if producer:
+            event = {**event, "job": producer, "sequence": next(_EVENT_SEQUENCE)}
     if "root" not in event:
         root = os.environ.get("CADGEN_ROOT_ID")
         if root:
@@ -296,11 +359,11 @@ def _submit_transient(
 ) -> None:
     from cadgen.daemon import broker
 
-    ticket = broker.claim_inflight(str(job.model), closure) if closure else None
+    ticket = broker.claim_inflight(str(job.model), closure, store_root=str(store_root)) if closure else None
     if ticket is not None and ticket[0] == "attached":
         # Identical source already building for this root: ride that job.
         def follow() -> None:
-            job._finish(broker.wait_attached(ticket[1]))
+            job._finish(broker.wait_attached(ticket[1], on_event=job._observe))
 
         threading.Thread(target=follow, name=f"cadgen-attach-{job.script.stem}", daemon=True).start()
         return
@@ -337,6 +400,10 @@ def _submit_transient(
         for line in process.stderr:
             event = _event_line(line)
             if event is not None:
+                job._observe(event)
+                result = event.get("sourceResult")
+                if claim is not None and isinstance(result, dict) and result.get("model") == job.model:
+                    broker.report_result(claim, event)
                 emit_event(event)
             else:
                 job._say(line)
@@ -353,6 +420,10 @@ def _submit_transient(
         code = process.wait()
         for reader in readers:
             reader.join(timeout=5.0)
+        if not any(reader.is_alive() for reader in readers):
+            for stream in (process.stdout, process.stderr):
+                if stream is not None:
+                    stream.close()
         if code != 0:
             emit_event(model_event(job.model, "failed", exit=code))
         if claim is not None:
@@ -402,6 +473,10 @@ def _submit_daemon(
         fallback = [sys.executable, "-m", f"cadgen.cli.{tool.replace('-', '_')}", *argv]
 
     def run() -> None:
+        def observe(event: dict) -> None:
+            job._observe(event)
+            emit_event(event)
+
         code = client.run_nested(
             tool,
             argv,
@@ -411,7 +486,7 @@ def _submit_daemon(
             root_id=root_id,
             closure=closure,
             on_stream=job._say,
-            on_event=emit_event,
+            on_event=observe,
         )
         if code is None:
             # The daemon could not take the job (spawn failure, unsupported

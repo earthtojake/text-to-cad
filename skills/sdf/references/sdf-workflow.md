@@ -65,7 +65,7 @@ For plugins and sensors, record:
 
 Do not invent plugin parameters. Incorrect plugin XML can pass lightweight validation and still fail at simulator load time.
 
-CAD Viewer reviews SDF files as static model/world structure through `$cad-viewer` links. Do not add Explorer-only motion plugins; use simulator-native controllers, plugins, or test harnesses for simulator behavior.
+CAD Viewer reviews SDF files as static model/world structure through `$cad-viewer` links. Do not add a `cad-viewer-input-motion` plugin to get motion out of it — the Viewer recognizes that plugin only to report that it is ignored. Use simulator-native controllers, plugins, or test harnesses for simulator behavior.
 
 ## Existing SDF inspection
 

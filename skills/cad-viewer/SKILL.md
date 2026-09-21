@@ -32,9 +32,10 @@ the version this skill was published against.
 Launching is unconditional: the command below always ends with the URL of a
 live Viewer for the launch directory. If one is already running for that
 directory with the same Viewer code on disk (the reuse key is
-realpath(directory) x an identity token — the cadgen version salted with the
-Viewer files' newest mtime, so an upgraded Viewer never hands back a stale
-instance), its URL is returned (`"action": "reused"`);
+realpath(directory) x an identity token — the cadgen version plus a content
+digest of its Python runtime and exact built client, so an upgraded Viewer or a
+different `--dist` never hands back a stale instance), its URL is returned
+(`"action": "reused"`);
 otherwise a new server starts on the first free port from `3245` upward
 (`"action": "started"`). Never pick or reason about ports — read the URL the
 command prints. Each instance serves ONE directory — the directory it is

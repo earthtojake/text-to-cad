@@ -102,6 +102,9 @@ test("relation and proxy buffers are consistent", () => {
     }
   }
   assert.equal(bundle.buffers.faceRuns.length, bundle.manifest.faces.length * 5);
-  assert.equal(bundle.buffers.surfaceHalfEdges.length % 7, 0);
+  // The per-corner overlay index is gone; its columns stay for schema parity and read 0.
+  assert.equal(bundle.buffers.surfaceHalfEdges, undefined);
+  const halfEdgeCountIndex = bundle.manifest.tables.edgeColumns.indexOf("surfaceHalfEdgeCount");
+  assert.ok(edgeRows.every((row) => row[halfEdgeCountIndex] === 0));
   assert.equal(bundle.buffers.edgeIds.length * 2, bundle.buffers.edgeIndices.length);
 });

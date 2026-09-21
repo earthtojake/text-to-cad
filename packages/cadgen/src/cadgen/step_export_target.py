@@ -12,17 +12,19 @@ Two callers share this module, and they offer different formats:
   (:data:`MESH_EXPORT_FORMATS`); a model's ``.step`` file is written by ``step.build``
   or the model script (``python <model>.py``) instead.
 
-Both accept an imported ``.step``/``.stp`` or a generated ``@step`` Python source;
-exports can never be stale: a model either passes the canonical freshness gate (closure
-included) and exports from its store tree, or it rebuilds from source.
+Both take a DOCUMENT — an on-disk ``.step``/``.stp``, generated or imported alike —
+and nothing else. No model script is accepted, parsed or run here, and no export
+rebuilds a model: whether a document is behind the script that wrote it is that
+model's record's question, answered by ``cadgen store why`` and never by an export
+(README law 1; law 7: scripts are programs, ``python <model>.py`` is their one door).
 
-Mesh formats tessellate from a tree — the STORE tree when the model is
-current (the fast path: no generator run, no STEP load, no extraction), else a one-shot
-temporary package extracted from the freshly built scene. Geometry is extracted at most
-once per run and one Node invocation serializes every requested format from one
-tessellation, so all formats come from identical geometry. The module writes no
-beside-source artifacts; the one cache effect is that an imported model missing its
-package warms the SHARED store via the same build ``cadgen step build`` runs.
+Mesh formats tessellate from the tree behind the document's BYTES, which already
+holds the exact surf geometry the exporter consumes — no generator run, no STEP
+load, no extraction. A document the store has no tree for is COMPILED from those
+bytes (a job in the build pool), which is also the one cache effect this module
+has. One Node invocation serializes every requested format from one tessellation,
+so all formats come from identical geometry, and nothing is written beside the
+model.
 
 Emits a single final JSON line on stdout: ``{"ok": true, "path": ..., "filename": ...}``
 or ``{"ok": false, "error": ...}`` (the Node spawner parses the last stdout JSON line).
@@ -33,18 +35,13 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
-from dataclasses import replace
 from pathlib import Path
 from typing import NamedTuple
 
-from cadgen.catalog import source_from_path
 from cadgen.cli_logging import CliLogger
-from cadgen._internal.generation import (
-    EntrySpec,
-    _entry_spec_from_source,
-    run_script_generator,
-)
+from cadgen._internal.generation import EntrySpec
 from cadgen.metadata import normalize_mesh_numeric
+from cadgen._internal.mesh_animation import AnimationSnapshot
 from cadgen.step_artifact_cli import _build_entry_spec, _cad_ref_for_step
 from cadgen.step_export import export_build123d_step_file
 from cadgen._internal.step_scene import (
@@ -63,105 +60,30 @@ FORMAT_SUFFIX = {"step": ".step", "stl": ".stl", "3mf": ".3mf", "glb": ".glb"}
 MESH_EXPORT_FORMATS = ("stl", "3mf", "glb")
 
 
-def _apply_mesh_overrides(
-    spec: EntrySpec,
-    mesh_tolerance: float | None,
-    mesh_angular_tolerance: float | None,
-) -> EntrySpec:
-    if mesh_tolerance is None and mesh_angular_tolerance is None:
-        return spec
-    return replace(
-        spec,
-        mesh_tolerance=mesh_tolerance if mesh_tolerance is not None else spec.mesh_tolerance,
-        mesh_angular_tolerance=(
-            mesh_angular_tolerance
-            if mesh_angular_tolerance is not None
-            else spec.mesh_angular_tolerance
-        ),
-    )
-
-
 class ResolvedScene(NamedTuple):
-    """What :func:`_resolve_spec_and_scene` hands back: the spec, the in-memory
-    scene, and whether that scene came from RUNNING THE GENERATOR (``True``) or
-    from loading the document on disk (``False``)."""
+    """What :func:`_resolve_spec_and_scene` hands back: the spec and the
+    in-memory scene, both read from the document on disk."""
 
     spec: EntrySpec
     scene: LoadedStepScene
-    from_source: bool
 
 
 def _resolve_spec_and_scene(
     repo_root: Path,
     step_path: Path | None,
-    source_path: Path | None,
     *,
     mesh_tolerance: float | None,
     mesh_angular_tolerance: float | None,
     logger: CliLogger,
-    door: str,
-    verb: str,
 ) -> ResolvedScene:
-    """Build the entry spec + an in-memory scene for the model.
+    """Build the entry spec + an in-memory scene for the DOCUMENT.
 
-    Imported model (no ``source_path``): load the existing STEP; its tree's kind is
-    read off the tree once built, never classified up front.
-
-    Generated model (``source_path`` given): the DOCUMENT on disk is the truth and is
-    loaded exactly like an import, running no Python at all -- a door never rebuilds
-    a model, current or not (STORE.md §9). Only a MISSING document runs the ``@step``
-    entry in-process (a caller handed the script and there is nothing else to read),
-    and that decision is ANNOUNCED on stderr through
-    :func:`cadgen._internal.doors.announce_rebuild` before the generator starts, naming
-    ``door`` (the command deciding) and ``verb`` (what it will do afterwards).
+    There is one input and one behaviour: load the STEP on disk, and read its
+    tree's kind off the tree once built rather than classifying it up front.
+    Generated and imported documents are the same thing here — a door takes
+    bytes, and whether a script has moved on is that model's business, answered
+    by ``cadgen store why`` and never by this path (README law 1, STORE.md §2).
     """
-    if source_path is not None:
-        from cadgen._internal.doors import announce_rebuild
-
-        source = source_from_path(source_path)
-        if source is None:
-            raise RuntimeError(f"Python generator is not a @step CAD source: {source_path}")
-        spec = _entry_spec_from_source(source)
-        if spec.step_path is None:
-            raise RuntimeError(f"Generator defines no STEP output: {source_path}")
-        # Align the logical STEP path/name when the caller passed an explicit --step that the
-        # generator does not itself resolve to (mirrors cadgen.step_artifact_cli).
-        if step_path is not None and spec.step_path.resolve() != step_path.resolve():
-            spec = replace(
-                spec,
-                cad_ref=_cad_ref_for_step(repo_root, step_path),
-                display_name=step_path.stem,
-                step_path=step_path,
-            )
-        spec = _apply_mesh_overrides(spec, mesh_tolerance, mesh_angular_tolerance)
-        document = spec.step_path
-        if document.is_file():
-            # The document AS WRITTEN is what a door measures (STORE.md §9): no
-            # staleness check, no rebuild -- a source that has moved on is the
-            # model's business. Load it exactly like an import.
-            with logger.timed(f"load STEP {document.name}"):
-                scene = load_step_scene(document)
-            return ResolvedScene(spec, scene, False)
-        # No document at all: nothing to read. Only a caller that handed a SCRIPT
-        # (the viewer's export ABI) reaches this, and it runs the generator, saying so.
-        announce_rebuild(
-            door, document, reason="no document on disk", source=spec.script_path or source_path, verb=verb
-        )
-        # An export runs the generator but writes the tree NOTHING -- its output
-        # is a STEP/STL/3MF/GLB file somewhere else entirely. Reporting it as a build made
-        # a fully-current model show `generating` with an empty bar for the whole length
-        # of the export.
-        scene = run_script_generator(
-            spec,
-            "step",
-            logger=logger,
-            force=True,
-            intent="generate",
-        )
-        if scene is None:
-            raise RuntimeError(f"Generator did not produce a STEP scene: {spec.source_ref}")
-        return ResolvedScene(spec, scene, True)
-
     if step_path is None:
         raise ValueError("step_path is required for imported STEP/STP models")
     if not step_path.is_file():
@@ -175,7 +97,7 @@ def _resolve_spec_and_scene(
         mesh_tolerance=mesh_tolerance,
         mesh_angular_tolerance=mesh_angular_tolerance,
     )
-    return ResolvedScene(spec, scene, False)
+    return ResolvedScene(spec, scene)
 
 
 def _display_name_for(path: Path) -> str:
@@ -223,33 +145,6 @@ def _color_hex(color) -> str | None:
     return f"#{red:02x}{green:02x}{blue:02x}"
 
 
-def _build_export_package_from_scene(
-    spec: EntrySpec,
-    scene: LoadedStepScene,
-    package_dir: Path,
-    *,
-    logger: CliLogger,
-) -> None:
-    """Extract the scene's exact geometry into a tree (surf extraction only —
-    no OCCT meshing) and lay a view of it at ``package_dir``. Run at most ONCE
-    per export run: every requested format tessellates from this one view."""
-    from cadgen.store.build import build_tree_from_compound
-    from cadgen.store.view import export_view
-
-    compound = getattr(scene, "source_compound", None)
-    if compound is None:
-        from cadgen._internal.step_scene_mesh import scene_to_build123d_compound
-
-        compound = scene_to_build123d_compound(scene)
-
-    with logger.timed("extract exact geometry"):
-        tree_hash, _tree, _stats = build_tree_from_compound(
-            compound,
-            root_name=spec.step_path.stem,
-        )
-    export_view(tree_hash, package_dir)
-
-
 def _effective_export_tolerances(
     spec: EntrySpec,
     fmt: str,
@@ -281,27 +176,7 @@ def _effective_export_tolerances(
     return chord, angle
 
 
-def _current_store_package(spec: EntrySpec) -> Path | None:
-    """The store tree for a CURRENT model, or None.
-
-    This is the export fast path: when the canonical freshness gate — the same
-    one `python <model>.py` and the artifact CLI use, closure included — says
-    the model is current, its store package holds exactly the surf geometry the
-    mesh exporter consumes, and extraction is pure waste. A stale or unbuilt
-    model returns None and the caller builds from source, so exports can never
-    serve stale geometry (the #308 class)."""
-    from cadgen.catalog import result_tree_for
-    from cadgen.step_artifact_cli import _current_artifact_for_spec
-
-    if spec.entry_path is None:
-        return None
-    if _current_artifact_for_spec(spec) is None:
-        return None
-    tree = result_tree_for(spec.entry_path)
-    return _view_for_tree(tree) if tree else None
-
-
-def _view_for_tree(tree_hash: str) -> Path:
+def _view_for_tree(tree_hash: str, *, document_hash: str) -> Path:
     """A view directory (assembly.json + components/) of a tree for the Node exporter (the store holds
     no result directories). Temporary; removed at interpreter exit."""
     import atexit
@@ -309,7 +184,16 @@ def _view_for_tree(tree_hash: str) -> Path:
 
     from cadgen.store.view import export_view
 
-    view_dir = export_view(tree_hash)
+    view_dir = export_view(tree_hash, document_hash=document_hash)
+    # This is an owned, temporary export input, not a persistent tree. Carry
+    # the exact document selection with its view; a later path read may name
+    # a different revision and must not rekey this geometry's export ledger.
+    import json
+
+    manifest_path = view_dir / "assembly.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["documentHash"] = document_hash
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
     atexit.register(shutil.rmtree, view_dir, True)
     return view_dir
 
@@ -318,9 +202,10 @@ def _view_for_document(step_path: Path) -> Path:
     """A view of the tree behind a document's BYTES, compiled if the store has
     none (``cadgen._internal.doors.document_tree``: a job in the pool, the one
     door operation that is one; the door itself never runs kernel work)."""
-    from cadgen._internal.doors import document_tree
+    from cadgen._internal.doors import document_snapshot
 
-    return _view_for_tree(document_tree(step_path))
+    document_hash, tree = document_snapshot(step_path)
+    return _view_for_tree(tree, document_hash=document_hash)
 
 
 def _export_scene(
@@ -372,58 +257,16 @@ def _export_scene(
 def _resolve_mesh_package(
     repo_root: Path,
     step_path: Path | None,
-    source_path: Path | None,
     *,
     logger: CliLogger,
-    door: str = "step export",
-    verb: str = "exporting",
-) -> tuple[EntrySpec, Path | None, LoadedStepScene | None]:
-    """Resolve what a mesh export tessellates from: ``(spec, package_dir, scene)``.
+) -> tuple[EntrySpec, Path]:
+    """Resolve what a mesh export tessellates from: ``(spec, package_dir)``.
 
-    A CURRENT model resolves to its store tree — no generator run, no
-    STEP load, no extraction; the tree already holds the exact surf geometry
-    the exporter consumes. An imported model can only miss (content-hash keying
-    cannot go stale), and a miss builds the shared store package via the
-    ``cadgen step build`` path. Only a STALE generated model still pays for source:
-    its generator runs in-memory and the scene comes back for a one-shot
-    temporary package (``package_dir`` None)."""
-    if source_path is not None:
-        source = source_from_path(source_path)
-        if source is None:
-            raise RuntimeError(f"Python generator is not a @step CAD source: {source_path}")
-        spec = _entry_spec_from_source(source)
-        if spec.step_path is None:
-            raise RuntimeError(f"Generator defines no STEP output: {source_path}")
-        if step_path is not None and spec.step_path.resolve() != step_path.resolve():
-            spec = replace(
-                spec,
-                cad_ref=_cad_ref_for_step(repo_root, step_path),
-                display_name=step_path.stem,
-                step_path=step_path,
-            )
-        package_dir = _current_store_package(spec)
-        if package_dir is not None:
-            logger.debug(f"reusing current tree: {package_dir.name}")
-            return spec, package_dir, None
-        # No tree for the document's bytes: a door never runs the script. The
-        # document on disk is compiled from its bytes, like an import (a job in
-        # the pool), and the door reads that tree.
-        if spec.step_path.is_file():
-            return spec, _view_for_document(spec.step_path), None
-        # No document at all: a caller handed the SCRIPT (the export ABI); there is
-        # nothing to read, so the generator runs, saying so. See _resolve_spec_and_scene
-        # on intent: an export must not report as a build.
-        from cadgen._internal.doors import announce_rebuild
-
-        announce_rebuild(
-            door, spec.step_path, reason="no document on disk",
-            source=spec.script_path or source_path, verb=verb,
-        )
-        scene = run_script_generator(spec, "step", logger=logger, force=True, intent="generate")
-        if scene is None:
-            raise RuntimeError(f"Generator did not produce a STEP scene: {spec.source_ref}")
-        return spec, None, scene
-
+    The DOCUMENT's bytes select a tree, and that tree already holds the exact
+    surf geometry the exporter consumes — no generator run, no STEP load, no
+    extraction. A miss is a compile of those bytes (a job in the pool), never a
+    script run: content-hash keying cannot go stale, so there is nothing for
+    source to settle here."""
     if step_path is None:
         raise ValueError("step_path is required for imported STEP/STP models")
     if not step_path.is_file():
@@ -438,23 +281,21 @@ def _resolve_mesh_package(
         source="imported",
         step_path=step_path,
     )
-    package_dir = _view_for_document(step_path)
-    return spec, package_dir, None
+    return spec, _view_for_document(step_path)
 
 
 def _export_mesh_jobs(
     spec: EntrySpec,
     package_dir: Path | None,
-    scene: LoadedStepScene | None,
     jobs: "list[MeshExportJob]",
     *,
     logger: CliLogger,
     force: bool = False,
-) -> "frozenset[Path]":
-    """Export every requested mesh job from ONE package: the store package
-    when the model resolved current, else a one-shot temp package extracted
-    from the scene. OCCT meshes nothing on either path (the GLB is Y-up glTF
-    for external tools: (x, y, z) -> (x, z, -y), mm -> m).
+    animation_source: AnimationSnapshot | None = None,
+) -> "tuple[frozenset[Path], dict[Path, dict]]":
+    """Export every requested mesh job from ONE view of the document's tree.
+    OCCT meshes nothing (the GLB is Y-up glTF for external tools:
+    (x, y, z) -> (x, z, -y), mm -> m).
 
     Jobs against a STORE package are gated and recorded in the shared
     mesh-export ledger — the same one `@stl`/`@glb`/`@threemf` script runs
@@ -463,15 +304,29 @@ def _export_mesh_jobs(
     `step build`'s job (design/format-doors.md, decision 5).
 
     RETURNS the outputs this call actually wrote, so a caller can report which
-    of its jobs the ledger had already satisfied."""
+    of its jobs the ledger had already satisfied, and what the builder BAKED for
+    each of them -- the clip and the sample count of an animated GLB, which is
+    derived (a clip states its own duration) and therefore worth reporting back
+    the way a video reports its frame count."""
     name = spec.step_path.stem
     default_color = _color_hex(spec.color)
     if package_dir is not None:
-        from cadgen.catalog import artifact_file_hash
+        import json
 
-        document_hash = (
-            artifact_file_hash(spec.entry_path) if spec.entry_path is not None else None
-        )
+        manifest = json.loads((package_dir / "assembly.json").read_text(encoding="utf-8"))
+        document_hash = str(manifest.get("documentHash") or "")
+        if len(document_hash) != 64 or any(c not in "0123456789abcdef" for c in document_hash):
+            raise RuntimeError("mesh export view is missing its selected STEP document digest")
+        from cadgen._internal.source_sidecar import appearance_digest, read_source_sidecar
+
+        if animation_source is not None:
+            if animation_source.document_hash != document_hash:
+                raise RuntimeError("STEP changed after its animation was selected; retry the export")
+            appearance = animation_source.appearance
+        else:
+            sidecar = read_source_sidecar(spec.entry_path, document_hash=document_hash) if spec.entry_path is not None else None
+            appearance = (sidecar or {}).get("appearance")
+        appearance_key = appearance_digest(appearance)
         # A script run (`@stl` beside `@step`) ledgers on the MODEL's record; a
         # document at a bare door ledgers on the DOCUMENT's own index entry, by
         # its bytes — never by which script wrote it (STORE.md §2, the law: a
@@ -484,6 +339,12 @@ def _export_mesh_jobs(
             variant = dict(
                 mesh_tolerance=job.mesh_tolerance,
                 mesh_angular_tolerance=job.mesh_angular_tolerance,
+                # An animated GLB is a function of the clip and the render
+                # module as well as the bytes, so it is its own variant: a
+                # static file at the same path can never satisfy it, and an
+                # edited animation source makes the ledgered one a miss.
+                animation_key=job.animation_key,
+                appearance_key=appearance_key,
             )
             by_document = document_mesh_current(job.out, document_hash=document_hash, fmt=job.fmt, **variant)
             if model is None:
@@ -496,11 +357,13 @@ def _export_mesh_jobs(
 
         pending = [job for job in jobs if force or not _current(job)]
         if not pending:
-            return frozenset()
+            return frozenset(), {}
         for job in pending:
             job.out.parent.mkdir(parents=True, exist_ok=True)
-        run_mesh_exporter(
-            package_dir, pending, name=name, default_color=default_color, logger=logger
+        payload = run_mesh_exporter(
+            package_dir, pending, name=name, default_color=default_color, logger=logger,
+            animation_source=animation_source,
+            appearance=appearance,
         )
         if document_hash:
             for job in pending:
@@ -508,6 +371,8 @@ def _export_mesh_jobs(
                     fmt=job.fmt,
                     mesh_tolerance=job.mesh_tolerance,
                     mesh_angular_tolerance=job.mesh_angular_tolerance,
+                    animation_key=job.animation_key,
+                    appearance_key=appearance_key,
                 )
                 # A script run ledgers on its record (which also notes the document
                 # entry); a bare door ledgers on the document entry alone.
@@ -515,22 +380,60 @@ def _export_mesh_jobs(
                     record_mesh_export(job.out, model=model, document_hash=document_hash, **variant)
                 else:
                     record_document_mesh(job.out, document_hash=document_hash, **variant)
-        return frozenset(job.out for job in pending)
-    import tempfile
+        return frozenset(job.out for job in pending), _baked_animations(payload)
+    # A document always resolves to a view (`_view_for_document` compiles a miss),
+    # so there is no second source of geometry to fall back to -- and law 10 says
+    # a door that cannot answer says so rather than inventing one.
+    raise RuntimeError(f"no tree in the store for {name}: nothing to export")
 
-    if scene is None:
-        raise RuntimeError(f"no tree in the store and no scene to extract for {name}")
-    for job in jobs:
-        job.out.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="cadgen-mesh-export-") as tmp:
-        temp_package = Path(tmp) / "package"
-        _build_export_package_from_scene(spec, scene, temp_package, logger=logger)
-        run_mesh_exporter(
-            temp_package, jobs, name=name, default_color=default_color, logger=logger
-        )
-    # A one-shot package has no document identity to key a ledger record on, so
-    # nothing here is gated and everything is written.
-    return frozenset(job.out for job in jobs)
+
+def _baked_animations(payload: dict) -> "dict[Path, dict]":
+    """The builder's per-output ``animation`` block, keyed by the path it wrote.
+
+    Only an animated GLB has one. It arrives WHOLE, warnings included: what the
+    sampling could not carry is the caller's answer, not a log line, and
+    ``export_cad_target`` lifts it out of here into the result so ``--json``
+    hears it too."""
+    baked: dict[Path, dict] = {}
+    for entry in payload.get("files") or []:
+        summary = entry.get("animation")
+        if isinstance(summary, dict):
+            baked[Path(str(entry["path"]))] = dict(summary)
+    return baked
+
+
+def _ledgered_animation(job: "MeshExportJob") -> "dict | None":
+    """What a SKIPPED animated GLB carries, read off the request that wrote it.
+
+    A job the ledger satisfied was never sampled, so the builder's summary does
+    not exist — but the file at that path is the one this request produced, and
+    reporting ``None`` for it would say "static export" (what a null animation
+    means, results.MeshExportFile) about a file with a clip baked into it. The
+    sample and moving counts stay absent because nothing on this side knows
+    them; the clip and the schedule are the request's own."""
+    if job.animation is None:
+        return None
+    return {
+        "clip": job.animation.get("clip"),
+        "fps": job.animation.get("fps"),
+        "samples": None,
+        "seconds": job.animation.get("seconds"),
+        "start": job.animation.get("start"),
+        "channels": None,
+    }
+
+
+def _bakes_effects_static(job: "MeshExportJob") -> bool:
+    """Whether this request told the sampler to FREEZE something — the only case
+    where a skipped export has warnings it is not repeating.
+
+    ``drop`` bakes an effect's value at start; ``deform: "rest"`` ships a moving
+    tube at its rest shape. Both leave named occurrences standing still in a file
+    that otherwise moves. ``deform: "morph"`` freezes nothing — it bakes the
+    deformation as morph targets, which is why it exists — and ``refuse`` never
+    produced a file at all."""
+    request = job.animation or {}
+    return bool(request.get("drop")) or request.get("deform") == "rest"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -539,8 +442,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Export one CAD model to STEP/3MF/STL/GLB at an explicit destination path.",
     )
     parser.add_argument("--repo-root", required=True, help="Repository/workspace root for relative metadata.")
-    parser.add_argument("--step", required=True, help="Logical STEP path (generated) or on-disk STEP/STP (imported).")
-    parser.add_argument("--source-path", help="Python @step model script for a generated model.")
+    parser.add_argument("--step", required=True, help="The on-disk STEP/STP document to export.")
     parser.add_argument("--format", required=True, choices=tuple(FORMAT_SUFFIX), help="Output format.")
     parser.add_argument("--out", required=True, help="Destination file path for the exported model.")
     parser.add_argument(
@@ -563,7 +465,6 @@ def export_model_to_path(
     step: Path,
     fmt: str,
     out: Path,
-    source_path: Path | None = None,
     mesh_tolerance: float | None = None,
     mesh_angular_tolerance: float | None = None,
     logger: CliLogger | None = None,
@@ -576,15 +477,11 @@ def export_model_to_path(
         logger = CliLogger("step-export", verbose=False)
     repo_root = Path(repo_root).expanduser().resolve()
     step_path = Path(step).expanduser().resolve()
-    source_path = Path(source_path).expanduser().resolve() if source_path else None
     out = Path(out).expanduser().resolve()
     mesh_tolerance = normalize_mesh_numeric(mesh_tolerance, field_name="mesh_tolerance")
     mesh_angular_tolerance = normalize_mesh_numeric(mesh_angular_tolerance, field_name="mesh_angular_tolerance")
     if fmt in MESH_EXPORT_FORMATS:
-        spec, package_dir, scene = _resolve_mesh_package(
-            repo_root, step_path, source_path, logger=logger,
-            door="step export", verb=f"exporting {fmt}",
-        )
+        spec, package_dir = _resolve_mesh_package(repo_root, step_path, logger=logger)
         chord, angle = _effective_export_tolerances(
             spec,
             fmt,
@@ -594,20 +491,16 @@ def export_model_to_path(
         _export_mesh_jobs(
             spec,
             package_dir,
-            scene,
             [MeshExportJob(fmt=fmt, out=out, mesh_tolerance=chord, mesh_angular_tolerance=angle)],
             logger=logger,
         )
         return {"ok": True, "path": str(out), "filename": out.name, "format": fmt}
-    spec, scene, from_source = _resolve_spec_and_scene(
+    spec, scene = _resolve_spec_and_scene(
         repo_root,
         step_path,
-        source_path,
         mesh_tolerance=mesh_tolerance,
         mesh_angular_tolerance=mesh_angular_tolerance,
         logger=logger,
-        door="step export",
-        verb=f"exporting {fmt}",
     )
     written = _export_scene(
         fmt,
@@ -617,7 +510,8 @@ def export_model_to_path(
         mesh_tolerance=mesh_tolerance,
         mesh_angular_tolerance=mesh_angular_tolerance,
         logger=logger,
-        from_current_document=not from_source,
+        # The scene is always the document on disk now, which IS this build.
+        from_current_document=True,
     )
     return {"ok": True, "path": str(written), "filename": written.name, "format": fmt}
 
@@ -663,6 +557,7 @@ def export_cad_target(
     repo_root: Path | None = None,
     mesh_tolerance: float | None = None,
     mesh_angular_tolerance: float | None = None,
+    animation: str | dict | None = None,
     force: bool = False,
     verbose: bool = False,
     logger: CliLogger | None = None,
@@ -676,7 +571,9 @@ def export_cad_target(
     format from one tessellation, so all formats come from identical geometry.
     ``outputs`` pairs a format name with an explicit output path, or ``None`` for the
     sibling default beside the document. ``force`` re-exports past the ledger. Nothing here moves geometry: a mesh is the
-    document's tree, tessellated.
+    document's tree, tessellated — with ONE exception, ``animation``, which does
+    not move it either: it writes the clip the document's sidecar animation declares
+    into the GLB as glTF node animation, so a reader moves the geometry itself.
 
     Writes no ``.step`` and no beside-source artifacts; a document missing its render
     package compiles one into the SHARED store (content keyed — the same package every
@@ -693,6 +590,21 @@ def export_cad_target(
                 f"Unsupported export format: {fmt}. "
                 f"Supported formats: {', '.join(MESH_EXPORT_FORMATS)}."
             )
+        # Not a door-level guard duplicated: this is the ENGINE, and a caller
+        # reaching it with a clip and a format that has nowhere to put one must
+        # not have the clip silently dropped on the way to the builder.
+        if animation is not None and fmt != "glb":
+            raise ValueError(
+                f"{fmt} carries no animation: only `cadgen glb build --animation` writes a "
+                "clip into a file — the other mesh formats have nowhere to put one"
+            )
+    # Omitted output is reserved for the static export; a clip needs an explicit
+    # destination because it changes the artifact's structure and initial pose.
+    if animation is not None and any(raw is None for _, raw in outputs):
+        raise ValueError(
+            "an animated export is ad hoc: name an output path. Omitting the output writes "
+            "a static sibling .glb beside the document; choose a destination for the animated file"
+        )
     repo_root = Path(repo_root).expanduser().resolve() if repo_root else Path.cwd()
     target_path = Path(target).expanduser().resolve()
     mesh_tolerance = normalize_mesh_numeric(mesh_tolerance, field_name="mesh_tolerance")
@@ -708,12 +620,21 @@ def export_cad_target(
         raise ValueError(f"Export target must be a .step/.stp document: {target}")
     step_path: Path = target_path
 
-    spec, package_dir, scene = _resolve_mesh_package(
-        repo_root,
-        step_path,
-        None,
-        logger=logger,
-    )
+    # The clip name and embedded animation source are resolved BEFORE any tessellation:
+    # a typo must fail as a clean CLI error naming the clips the model has, not
+    # after a minute of meshing. The token it returns is what keeps an edited
+    # animation source from being served out of the ledger. Carry the
+    # same captured text to Node so edits during preparation cannot rekey it.
+    animation_source: AnimationSnapshot | None = None
+    animation_request: dict[str, object] | None = None
+    animation_key: str | None = None
+    if animation is not None:
+        from cadgen._internal.mesh_animation import parse_animation_option, resolve_animation
+
+        animation_request = parse_animation_option(animation)
+        animation_source, animation_key = resolve_animation(step_path, animation_request)
+
+    spec, package_dir = _resolve_mesh_package(repo_root, step_path, logger=logger)
 
     resolved: list[MeshExportJob] = []
     seen: dict[Path, str] = {}
@@ -733,6 +654,8 @@ def export_cad_target(
                 out=out,
                 mesh_tolerance=chord,
                 mesh_angular_tolerance=angle,
+                animation=animation_request,
+                animation_key=animation_key,
             )
         )
 
@@ -750,19 +673,40 @@ def export_cad_target(
         )
         _add(fmt, out, chord, angle)
 
-    written = _export_mesh_jobs(spec, package_dir, scene, resolved, logger=logger, force=force)
-    files = [
-        {
-            "format": job.fmt,
-            "path": str(job.out),
-            "skipped": job.out not in written,
-            "meshTolerance": job.mesh_tolerance,
-            "meshAngularTolerance": job.mesh_angular_tolerance,
-        }
-        for job in resolved
-    ]
+    written, baked = _export_mesh_jobs(
+        spec, package_dir, resolved, logger=logger, force=force,
+        animation_source=animation_source,
+    )
+    files = []
+    warnings: list[str] = []
+    for job in resolved:
+        skipped = job.out not in written
+        summary = baked.get(job.out)
+        if summary is not None:
+            # The warnings ride OUT of the per-file block and into the run's own,
+            # so one place answers "what did this export not carry" whether the
+            # caller reads human lines or --json.
+            warnings.extend(str(text) for text in (summary.pop("warnings", None) or ()))
+        elif skipped:
+            summary = _ledgered_animation(job)
+            if summary is not None and _bakes_effects_static(job):
+                warnings.append(
+                    f"{job.out.name} is current for clip {summary['clip']}: a skipped export "
+                    "re-samples nothing, so the occurrences its drop/deform froze are not "
+                    "named again — re-run with --force to hear them"
+                )
+        files.append(
+            {
+                "format": job.fmt,
+                "path": str(job.out),
+                "skipped": skipped,
+                "meshTolerance": job.mesh_tolerance,
+                "meshAngularTolerance": job.mesh_angular_tolerance,
+                "animation": summary,
+            }
+        )
     logger.total()
-    return {"ok": True, "files": files}
+    return {"ok": True, "files": files, "warnings": warnings}
 
 
 def run_cli_payload(argv: list[str] | None = None) -> dict[str, object]:
@@ -777,7 +721,6 @@ def run_cli_payload(argv: list[str] | None = None) -> dict[str, object]:
         step=Path(args.step),
         fmt=args.format,
         out=Path(args.out),
-        source_path=Path(args.source_path) if args.source_path else None,
         mesh_tolerance=args.mesh_tolerance,
         mesh_angular_tolerance=args.mesh_angular_tolerance,
         logger=logger,

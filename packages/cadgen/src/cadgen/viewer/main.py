@@ -3,7 +3,7 @@
 Launching is UNCONDITIONAL, Jupyter-style: running ``cadgen viewer`` from a
 directory always ends with the URL of a live, correct Viewer for that directory.
 If an identity-probed instance already serves ``realpath(cwd)`` at this identity
-token (version salted with the code's newest mtime — see ``identity_token``),
+token (version plus the runtime content digest — see ``identity_token``),
 its URL is printed with ``action:"reused"`` and nothing is spawned (``--new``
 skips the lookup); otherwise the server binds the first free port from 3245
 upward and prints ``action:"started"``. An EXPLICIT ``--port`` stays strict — it
@@ -51,7 +51,6 @@ import socket
 import sys
 import threading
 import time
-from pathlib import Path
 
 # --- interpreter floor ---------------------------------------------------
 #
@@ -112,6 +111,7 @@ if _UNSUPPORTED_PYTHON:
 from cadgen import assets  # noqa: E402
 
 from . import registry  # noqa: E402
+from . import reload as dev_reload  # noqa: E402
 from .handler import CadHTTPServer, make_handler_class  # noqa: E402
 from .http_app import create_cad_app, identity_token, newest_mtime_ns  # noqa: E402
 
@@ -354,11 +354,10 @@ def find_reusable(directory: str, token: str) -> dict | None:
     bug, and pid-liveness is the probe's job. Dev instances never register, so
     nothing here can hand back a Vite proxy target.
 
-    The token is the version SALTED with the app files' newest mtime (see
+    The token covers the cadgen Python runtime and exact built client (see
     ``identity_token`` in http_app.py). The entry's token was recorded when
-    that instance STARTED, so an instance running last week's code — the
-    version number is frozen between releases — fails the match after a
-    ``git pull`` or rebuild, and a fresh launch starts fresh instead of
+    that instance STARTED, so an instance running last week's code fails the
+    match after a ``git pull`` or rebuild, and a fresh launch starts instead of
     reusing stale resident code.
     """
     root_real = _realpath_or(directory)
@@ -506,6 +505,30 @@ def _bind(host: str, port: int, args: dict) -> CadHTTPServer:
             port += 1
 
 
+def _harden_streams() -> None:
+    """Degrade an unencodable character to an escape instead of raising.
+
+    The same treatment every other cadgen entry point gets, and for the same
+    reason: Windows hands a process the legacy code page, and under strict
+    error handling a character it cannot represent raises UnicodeEncodeError
+    from the MESSAGE rather than from the work. The viewer's narration carries
+    em dashes (the dist-staleness warning) and, worse, arbitrary user paths.
+
+    Only the error HANDLER changes, never the encoding — switching the viewer's
+    streams to utf-8 would make it emit bytes that no Windows consumer decodes
+    the way the platform says to, which is the experiment
+    ``cli._harden_std_stream_errors`` documents having tried and reverted.
+
+    Reached from BOTH entry points: ``cadgen viewer`` arrives already hardened
+    through ``cadgen.cli.main``, but ``python -m cadgen.viewer`` does not — and
+    neither does the process a development restart re-executes, which is spelled
+    exactly that way.
+    """
+    from cadgen.cli import _harden_std_stream_errors  # noqa: PLC0415
+
+    _harden_std_stream_errors()
+
+
 def main(argv: list[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
     """``python -m cadgen.viewer``: serve, or ``list``/``stop`` when argv[0] says so.
 
@@ -514,6 +537,7 @@ def main(argv: list[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
     through ``cadgen.cli.viewer``, ``viewer_list`` and ``viewer_stop`` instead,
     which call :func:`serve`, :func:`list_command` and :func:`stop_command`.
     """
+    _harden_streams()
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == "list":
         return list_command(argv[1:], prog=f"{prog} list")
@@ -523,6 +547,7 @@ def main(argv: list[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
 
 
 def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
+    _harden_streams()
     # argparse answers --help on stdout with exit 0 and refuses an unknown
     # argument with exit 2, both before anything below runs. A launcher that
     # answered --help by starting a server read as broken.
@@ -537,22 +562,6 @@ def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
         _err(f"CAD Viewer cannot serve the current directory — it no longer exists ({error}).\n")
         return 1
 
-    # Reuse before spawn: a live, identity-probed instance already serving this
-    # realpath(root) at this identity token IS the requested viewer. Explicit
-    # --port opts out (you asked for a port, not a viewer), --new forces fresh.
-    # Ephemeral dev backends never reuse and never register.
-    if not args["fresh"] and not args["port_explicit"] and not args["ephemeral"]:
-        held = find_reusable(directory, identity_token())
-        if held:
-            url = f"http://{held.get('host') or DEFAULT_VIEWER_HOST}:{held['port']}/"
-            _out(f"Reusing CAD Viewer at {url} (serving {held.get('root')}, pid {held['pid']})\n")
-            _out(f"CAD Viewer URL: {url}\n")
-            if args["json"]:
-                _out(f"{_compact_json({'url': url, 'port': held['port'], 'action': 'reused'})}\n")
-            return 0
-
-    # Checked AFTER the reuse lookup, so a reuse succeeds with no client on disk.
-    #
     # --api-only exempts the check because in dev the CLIENT COMES FROM VITE:
     # this process serves only /__cad and /__tess_cache, and requiring a built
     # dist made `npm run dev` fail on any checkout that had not run
@@ -568,6 +577,20 @@ def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
             "(--api-only serves the API alone, for a dev server that supplies its own client.)\n"
         )
         return 1
+
+    # Reuse only the exact runtime requested now. Resolving dist before this
+    # lookup is load-bearing: --dist must never hand back a server that is
+    # serving a different client, and a removed default dist is not a usable
+    # resident merely because its registry entry is still alive.
+    if not args["fresh"] and not args["port_explicit"] and not args["ephemeral"]:
+        held = find_reusable(directory, identity_token(dist_dir))
+        if held:
+            url = f"http://{held.get('host') or DEFAULT_VIEWER_HOST}:{held['port']}/"
+            _out(f"Reusing CAD Viewer at {url} (serving {held.get('root')}, pid {held['pid']})\n")
+            _out(f"CAD Viewer URL: {url}\n")
+            if args["json"]:
+                _out(f"{_compact_json({'url': url, 'port': held['port'], 'action': 'reused'})}\n")
+            return 0
 
     host = args["host"]
     port = args["port"]
@@ -650,14 +673,74 @@ def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
 
+    # Development auto-reload. Only a cadgen running from a source CHECKOUT
+    # watches its own Python and comes back on this same port; an installed
+    # wheel never starts a watcher at all. The whole mechanism, and the one
+    # predicate that gates it, is `reload.py`.
+    reloader = None
+    restart = {"argv": None}
+    if app.auto_reload:
+        def request_restart() -> None:
+            restart["argv"] = dev_reload.restart_argv(argv, port=port)
+            _err(f"code changed; restarting on port {port}\n")
+            # From the watcher thread: shutdown() blocks until serve_forever
+            # returns, and the exec happens below, on the main thread, with the
+            # accept loop already stopped.
+            server.shutdown()
+
+        reloader = dev_reload.SourceReloader(
+            is_idle=app.restart_is_safe, restart=request_restart
+        )
+        reloader.start()
+
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        if reloader is not None:
+            reloader.stop()
+
+    if restart["argv"] is not None:
+        # Returns only when the re-exec itself failed, and then the port is
+        # already given up: say so and exit non-zero rather than pretending to
+        # still serve.
+        _restart_in_place(server, app, restart["argv"], no_registry=args["no_registry"], prog=prog)
         if not args["no_registry"]:
             registry.unregister()
+        return 1
+    if not args["no_registry"]:
+        registry.unregister()
     return 0
+
+
+def _restart_in_place(server, app, argv: list[str], *, no_registry: bool, prog: str) -> None:
+    """Free the port, then become the new code. Returns only if that failed.
+
+    ``serve_forever`` has already stopped accepting, but its handler threads are
+    daemons: the reloader only fires when nothing is counted in flight, and this
+    drain covers the sliver between that check and the close. Then the listening
+    socket is closed BEFORE the new image binds — a clean close-then-bind is
+    enough because the restart pins the port explicitly, so the new process
+    refuses loudly rather than silently landing somewhere else.
+    """
+    deadline = time.monotonic() + 2.0
+    while app.busy_requests() and time.monotonic() < deadline:
+        time.sleep(0.02)
+    server.server_close()
+    if sys.platform.startswith("win") and not no_registry:
+        # Windows gets a NEW pid (see reload.execute_restart), so this entry
+        # would outlive its process; the restarted server registers its own. On
+        # POSIX the pid survives the exec and the entry is still correct, so it
+        # is left in place and simply written over.
+        registry.unregister()
+    try:
+        dev_reload.execute_restart(argv)
+    except OSError as error:
+        _err(
+            f"CAD Viewer could not restart itself ({error}) and has given up its port. "
+            f"Run `{prog}` again to pick up the new code.\n"
+        )
 
 
 if __name__ == "__main__":

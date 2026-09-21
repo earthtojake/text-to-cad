@@ -31,15 +31,15 @@ def build(
     force: bool = False,
     verbose: bool = False,
 ) -> MeshExportResult:
-    """Produce 3MF output(s) for TARGET through the shared mesh engine.
+    """Produce one 3MF output for TARGET through the shared mesh engine.
 
     target: the STEP/STP document to export.
-    out: destination .3mf path. Omitted, the document's declared @threemf
-        variants are produced instead — every one of them.
+    out: destination .3mf path. Omitted, writes one sibling .3mf beside
+        TARGET. Model output declarations are not read.
     mesh_tolerance: chord deflection RELATIVE to each component's bounding
-        diagonal, overriding what the document declares.
+        diagonal (default 1.5e-3), for this export only.
     mesh_angular_tolerance: max normal spread across a triangle edge in
-        radians, overriding what the document declares.
+        radians (default 0.35), for this export only.
     force: re-export even where the ledger says the output is current. Never
         rebuilds the model itself — run `python <script>` for that.
     verbose: show detailed progress and timing on stderr.

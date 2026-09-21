@@ -3,10 +3,12 @@
 // resolution priority the retiring native GLB writer implemented, the
 // occurrence-transform bake (including mirroring), and the format envelopes.
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import test from "node:test";
 import zlib from "node:zlib";
 
 import {
+  MAX_PRIMITIVE_TRIANGLES,
   buildPackageMeshPrimitives,
   packageMeshTo3mf,
   packageMeshToFormat,
@@ -300,3 +302,177 @@ test("packageMeshToFormat maps formats and rejects unknown ones", () => {
 // zlib is imported to keep this suite honest if zipStore ever grows deflate
 // support: stored entries must remain readable without inflation.
 void zlib;
+
+test("a colour run larger than the primitive cap splits into same-colour primitives", () => {
+  // The default cap keeps every primitive's corner count under V8's 2^24 Map
+  // limit, which both the GLB weld and the 3MF vertex table key into.
+  assert.ok(MAX_PRIMITIVE_TRIANGLES * 3 < 2 ** 24);
+  const descriptor = descriptorWith([
+    { id: "o1", component: "c0", transform: IDENTITY },
+    { id: "o2", component: "c0", transform: IDENTITY },
+    { id: "o3", component: "c0", transform: IDENTITY },
+  ]);
+  const tessellations = new Map([["c0", triangleTessellation()]]);
+  const capped = buildPackageMeshPrimitives(descriptor, tessellations, { maxPrimitiveTriangles: 2 });
+  assert.equal(capped.triangleCount, 3);
+  assert.deepEqual(capped.primitives.map((p) => [p.color, p.positions.length / 9]), [["#d4d4d8", 2], ["#d4d4d8", 1]]);
+  // Below the cap the output is exactly what an uncapped build produces (byte determinism).
+  const single = buildPackageMeshPrimitives(descriptor, tessellations);
+  assert.equal(single.primitives.length, 1);
+  assert.deepEqual(packageMeshToStl(capped), packageMeshToStl(single));
+  // Both Map-keyed writers accept the split: two GLB primitives (the writer
+  // keeps its one-material-per-primitive layout), two 3MF objects.
+  const glb = packageMeshToGlb(capped);
+  const jsonLength = new DataView(glb.buffer, glb.byteOffset).getUint32(12, true);
+  const gltf = JSON.parse(new TextDecoder().decode(glb.subarray(20, 20 + jsonLength)));
+  assert.equal(gltf.meshes.flatMap((mesh) => mesh.primitives).length, 2);
+  const xml = new TextDecoder("latin1").decode(packageMeshTo3mf(capped));
+  assert.equal((xml.match(/<object /g) || []).length, 2);
+  assert.match(xml, /object id="3" type="model" pid="1" pindex="1"/);
+});
+
+// --- the authored PBR finish --------------------------------------------------
+//
+// Named sidecar materials resolve onto occurrence PBR channels. Export must
+// preserve the same finish the viewer uses for that document.
+
+const BRUSHED = { roughness: 0.35, metalness: 0.9 };
+const POLISHED = { roughness: 0.08, metalness: 0.9, clearcoat: 0.7, clearcoatRoughness: 0.1 };
+
+function exportGltf(mesh, options = {}) {
+  const bytes = packageMeshToGlb(mesh, options);
+  const jsonLength = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(12, true);
+  return JSON.parse(new TextDecoder().decode(bytes.subarray(20, 20 + jsonLength)));
+}
+
+test("an occurrence's material reaches the GLB's pbrMetallicRoughness and clearcoat", () => {
+  const descriptor = descriptorWith([
+    { id: "o1", component: "c0", transform: IDENTITY, color: [0.5, 0.5, 0.5, 1], material: POLISHED },
+  ]);
+  const mesh = buildPackageMeshPrimitives(descriptor, new Map([["c0", triangleTessellation()]]));
+  assert.deepEqual(mesh.primitives[0].material, POLISHED);
+  const gltf = exportGltf(mesh, { name: "polished" });
+  const material = gltf.materials[0];
+  assert.equal(material.pbrMetallicRoughness.roughnessFactor, 0.08);
+  assert.equal(material.pbrMetallicRoughness.metallicFactor, 0.9);
+  assert.deepEqual(material.extensions.KHR_materials_clearcoat, {
+    clearcoatFactor: 0.7,
+    clearcoatRoughnessFactor: 0.1,
+  });
+  assert.deepEqual(gltf.extensionsUsed, ["KHR_materials_clearcoat"]);
+  assert.equal(gltf.extensionsRequired, undefined);
+});
+
+test("named material opacity multiplies the STEP occurrence alpha", () => {
+  const descriptor = descriptorWith([
+    {
+      id: "o1",
+      component: "c0",
+      transform: IDENTITY,
+      color: [0.5, 0.5, 0.5, 0.4],
+      material: { roughness: 0.42, opacity: 0.5 },
+    },
+  ]);
+  const mesh = buildPackageMeshPrimitives(descriptor, new Map([["c0", triangleTessellation()]]));
+  assert.equal(mesh.primitives[0].material.opacity, 0.2);
+  const gltf = exportGltf(mesh, { name: "alpha" });
+  assert.ok(Math.abs(gltf.materials[0].pbrMetallicRoughness.baseColorFactor[3] - 0.2) < 1e-12);
+  assert.equal(gltf.materials[0].alphaMode, "BLEND");
+});
+
+test("two same-colour bodies with different finishes stay TWO materials", () => {
+  // The grouping key was the colour alone, so a brushed and a polished part sharing a
+  // colour used to weld into one primitive and the file could only show one finish.
+  const descriptor = descriptorWith([
+    { id: "o1", component: "c0", transform: IDENTITY, color: [0.5, 0.5, 0.5, 1], material: BRUSHED },
+    { id: "o2", component: "c0", transform: IDENTITY, color: [0.5, 0.5, 0.5, 1], material: POLISHED },
+    { id: "o3", component: "c0", transform: IDENTITY, color: [0.5, 0.5, 0.5, 1], material: BRUSHED },
+  ]);
+  const mesh = buildPackageMeshPrimitives(descriptor, new Map([["c0", triangleTessellation()]]));
+  // Same colour, two finishes: two primitives, and the two brushed occurrences still
+  // share one of them.
+  assert.equal(mesh.primitives.length, 2);
+  assert.deepEqual(mesh.primitives.map((p) => p.color), [`#${MID_SRGB_HEX.repeat(3)}`, `#${MID_SRGB_HEX.repeat(3)}`]);
+  // Order is the group key's: colour, then the finish's channels in their fixed order,
+  // so the polished pair (roughness 0.08) precedes the brushed one (0.35).
+  assert.deepEqual(mesh.primitives.map((p) => p.positions.length / 9), [1, 2]);
+  assert.deepEqual(mesh.primitives.map((p) => p.material), [POLISHED, BRUSHED]);
+  const gltf = exportGltf(mesh, { name: "finishes" });
+  assert.equal(gltf.materials.length, 2);
+  assert.deepEqual(
+    gltf.materials.map((m) => m.pbrMetallicRoughness.roughnessFactor).sort((a, b) => a - b),
+    [0.08, 0.35],
+  );
+});
+
+test("distinct named materials stay distinct when their current channels match", () => {
+  const descriptor = descriptorWith([
+    {
+      id: "o1",
+      component: "c0",
+      transform: IDENTITY,
+      color: [0.5, 0.5, 0.5, 1],
+      materialId: "brushed-a",
+      materialName: "Brushed A",
+      material: BRUSHED,
+    },
+    {
+      id: "o2",
+      component: "c0",
+      transform: IDENTITY,
+      color: [0.5, 0.5, 0.5, 1],
+      materialId: "brushed-b",
+      materialName: "Brushed B",
+      material: BRUSHED,
+    },
+  ]);
+  const mesh = buildPackageMeshPrimitives(descriptor, new Map([["c0", triangleTessellation()]]));
+  assert.deepEqual(mesh.primitives.map((primitive) => primitive.materialId), ["brushed-a", "brushed-b"]);
+  const gltf = exportGltf(mesh, { name: "named" });
+  assert.deepEqual(gltf.materials.map((material) => material.name), ["Brushed A", "Brushed B"]);
+});
+
+test("an occurrence with no material collapses with its same-colour neighbours as before", () => {
+  const descriptor = descriptorWith([
+    { id: "o1", component: "c0", transform: IDENTITY, color: [0.5, 0.5, 0.5, 1] },
+    { id: "o2", component: "c0", transform: IDENTITY, color: [0.5, 0.5, 0.5, 1] },
+  ]);
+  const mesh = buildPackageMeshPrimitives(descriptor, new Map([["c0", triangleTessellation()]]));
+  assert.equal(mesh.primitives.length, 1);
+  assert.equal("material" in mesh.primitives[0], false);
+});
+
+// Whole-file byte identity, including colour grouping, mirrored geometry, and defaults
+// for an unauthored finish. Linear RGB is serialized at canonical Float32 precision;
+// the previous Float64 pin varied with the JS engine's exponentiation implementation.
+const MATERIALLESS_GLB_SHA256 = "7c81308a9424856f853480176143b3f8b0cb862fd8be8865787fdf391ea6f8f1";
+
+test("a materialless package has canonical deterministic GLB bytes", () => {
+  const tessellation = () => triangleTessellation({
+    positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]),
+    normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0]),
+    indices: new Uint32Array([0, 1, 2, 0, 2, 3]),
+    faceRanges: [
+      { ord: 0, color: null, indexStart: 0, indexCount: 3 },
+      { ord: 1, color: [0.2, 0.4, 0.6, 1], indexStart: 3, indexCount: 3 },
+    ],
+    partColor: [0.8, 0.1, 0.1, 1],
+  });
+  const descriptor = descriptorWith(
+    [
+      { id: "o1", name: "a", component: "c0", transform: IDENTITY },
+      { id: "o2", name: "b", component: "c1", transform: [1, 0, 0, 5, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], color: [0.9, 0.2, 0.1, 1] },
+      { id: "o3", name: "c", component: "c0", transform: [-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] },
+    ],
+    { c0: { color: [0.1, 0.7, 0.3, 1] }, c1: {} },
+  );
+  const mesh = buildPackageMeshPrimitives(
+    descriptor,
+    new Map([["c0", tessellation()], ["c1", tessellation()]]),
+  );
+  const digest = crypto
+    .createHash("sha256")
+    .update(Buffer.from(packageMeshToGlb(mesh, { name: "rig" })))
+    .digest("hex");
+  assert.equal(digest, MATERIALLESS_GLB_SHA256);
+});

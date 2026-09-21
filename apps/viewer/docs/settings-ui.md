@@ -1,7 +1,7 @@
 # Settings UI Guidelines
 
-The contract for every settings surface rendered inside a file sheet tab or the
-theme editor panel: the Theme editor, the per-file Display tab, and the DXF,
+The contract for every settings surface rendered inside a file sheet tab:
+the per-model Studio and Display tabs, and the DXF,
 STEP, URDF/SDF, and mesh sheets. The tab strip, navbar, and
 sheet frame are out of scope — this document governs the *contents* of a tab.
 
@@ -24,7 +24,7 @@ Tab body                    px-0, vertical stack of sections
 - A tab body is a flat list of sections. Sections never nest.
 - **Every section carries a heading, and every row carries a label** — including
   a section that holds a single row, which shows both (`Material` / `Thickness`,
-  `Theme` / `Preset`, `Model` / `Mode`). A heading never stands in for a row's label: a labelless
+  `Setup` / `Quality`, `Model` / `Mode`). A heading never stands in for a row's label: a labelless
   row reads as an orphaned control, and a row whose only name is the heading
   above it cannot be scanned in a list. Name the group and the control
   differently; if the only honest name for both is the same word, the group is
@@ -34,6 +34,8 @@ Tab body                    px-0, vertical stack of sections
 - Everyday settings stay visible. Progressive disclosure is allowed only when a
   gate switch turns a whole feature off (Floor, Grid, Environment, a light):
   the switch stays, the dependent rows unmount.
+- Reset sits at the bottom of the Studio tab. The navbar owns entry into Render,
+  so the Studio tab has no second enable switch or studio preset selector.
 - A gate reaches every row it owns. Whether they unmount (Floor, Grid) or go
   disabled (Kinematics, Animation), the section picks one and applies it to all
   of them: one live control under an off switch reads as a control that still
@@ -189,7 +191,7 @@ glyphs (a DXF bend's `↑`/`↓`). Two words as long as `Orthographic` and
 
 **The stacked exception.** A select is stacked full-width only when it is a
 *primary* control: the first row of its group, whose value reframes everything
-under it. There are exactly four — Theme › `Preset`, Display › `Mode`,
+under it. There are exactly three — Display › `Mode`,
 Joints › `Group state`, and Animation › `Clip`, which reframes the transport
 and the time/speed rows beneath it. Pass `stacked` for those and for nothing
 else; a second stacked select in one group means one of them is not primary.
@@ -277,6 +279,35 @@ Primitives only use theme tokens (`border`, `muted`, `accent`, `primary`,
 `sidebar-*`). Never hard-code a palette color in a sheet; if a primitive needs
 a fixed color pair (e.g. the switch track), it is defined once in
 `FileSheet.js` with its dark variant beside it.
+
+App appearance is global. CAD inspection state and photographic Render state
+are separate per-model session data. The navbar's Viewing mode icon menu offers
+Inspect and Render. The Render file sheet
+starts with Studio active in a single row, followed by Materials for STEP models,
+Kinematics when joints exist, and Animation when clips exist. Kinematics and
+Animation remain available in both modes. CAD measurement and topology picking
+remain in Inspect. Materials may highlight components without enabling picking.
+
+Materials shows one compact parts list with assignment names and swatches.
+Select in the list or viewport, then click an existing material or preset to
+apply immediately. Undo restores the last local change while the panel remains
+mounted; it is discarded after unrelated overlay changes or a file switch.
+Select parts using a material lives in its options menu. Advanced settings reveals
+color and surface sliders, with explicit shared editing and Make unique.
+Part picking is scoped to this tab and never enables face/edge selectors in
+Render. Browser-tab persistence remains separate from source.
+
+The top Setup section contains Quality. Reset sits below the Backdrop section.
+Camera contains Lens and Exposure; Lighting contains Rotation,
+Softbox size, and Fill ratio; Backdrop contains Transparent, Color, Ground, and
+Ground position (visible only with Ground enabled). Ground position defaults to
+Lowest point, which keeps the floor under the model; Model origin (Z=0) is the
+explicit alternative and is listed second.
+Studio defaults follow global app appearance. Customized backdrop settings remain
+in the model session until Reset, which restores defaults for the current
+appearance. Keep material presets in Materials. Do not add settings clipboard,
+grading, arbitrary light, environment-map, or image-export controls to Studio. Authored
+materials provide the reset baseline and image capture stays in the viewer toolbar.
 
 ## Checklist for a new settings row
 

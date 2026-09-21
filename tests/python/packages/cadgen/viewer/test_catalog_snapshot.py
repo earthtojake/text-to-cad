@@ -29,6 +29,7 @@ import hashlib
 import json
 import os
 import shutil
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -73,7 +74,7 @@ def _build_fixture(root: str, cache: str) -> None:
         seed_result(Path(root, rel), descriptor)
 
     valid = {"kind": "assembly-package", "components": {"c0": {"surf": "c0.surf"}}}
-    TWO_OCCURRENCES = [{'id': 'o1.1', 'name': 'a', 'component': 'c0', 'transform': [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]}, {'id': 'o1.2', 'name': 'b', 'component': 'c0', 'transform': [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 10, 0, 0, 1]}]
+    TWO_OCCURRENCES = [{'id': 'o1.1', 'name': 'a', 'component': 'c0', 'transform': [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]}, {'id': 'o1.2', 'name': 'b', 'component': 'c0', 'transform': [1, 0, 0, 10, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]}]
 
     # --- descriptor variants ---------------------------------------------
     write("a_part.step", "part\n")
@@ -83,7 +84,7 @@ def _build_fixture(root: str, cache: str) -> None:
     # two the fixture's assemblies; the descriptor's entryKind text is ignored.
     package("b_assembly.step", {"kind": "assembly-package", "entryKind": "  ASSEMBLY  ", "occurrences": TWO_OCCURRENCES})
     write("c_root.step", "root\n")
-    package("c_root.step", {"kind": "assembly-package", "assembly": {"root": {"x": 1}}, "occurrences": TWO_OCCURRENCES})
+    package("c_root.step", {"kind": "assembly-package", "assembly": {"root": {"id": "o1", "name": "root", "nodeType": "assembly", "children": [{"id": row["id"], "name": row["name"], "nodeType": "part", "children": []} for row in TWO_OCCURRENCES]}}, "occurrences": TWO_OCCURRENCES})
     write("d_root_string.step", "rootstr\n")
     package("d_root_string.step", {"kind": "assembly-package", "assembly": {"root": "x"}})
     write("l_dir_descriptor.step", "dird\n")
@@ -93,15 +94,15 @@ def _build_fixture(root: str, cache: str) -> None:
     write("n_array_descriptor.step", "arrd\n")
     package("n_array_descriptor.step", None, raw="[1,2,3]")
     write("o_no_package.step", "nopkg\n")
-    # The render module beside a document: authored, discovered by name.
+    # Animation is embedded in the document-bound JSON sidecar.
     write("r_render_module.step", "render\n")
-    write("r_render_module.step.js", "export const clips = {};\n")
+    write("r_render_module.step.json", json.dumps({"schemaVersion": 9, "documentHash": hashlib.sha256(b"render\n").hexdigest(), "animation": {"language": "javascript", "source": "export const clips = {};"}}))
     package("r_render_module.step", valid)
 
     # --- sidecar variants -------------------------------------------------
     for name, sidecar in (
-        ("e_kin", json.dumps({"schemaVersion": 5, "kinematics": {"joints": []}})),
-        ("f_anim", json.dumps({"animation": {"text": "x"}})),
+        ("e_kin", json.dumps({"kinematics": {"joints": []}})),
+        ("f_anim", json.dumps({"animation": {"language": "javascript", "source": "export const clips = {};"}})),
         ("g_array", "[1,2]"),
         ("h_empty_kin", json.dumps({"kinematics": {}})),
         ("i_nulls", json.dumps({"kinematics": None, "animation": None})),
@@ -109,6 +110,11 @@ def _build_fixture(root: str, cache: str) -> None:
         ("q_scalar", '"hello"'),
     ):
         write(f"{name}.step", f"{name}\n")
+        if name in {"e_kin", "f_anim", "h_empty_kin", "i_nulls"}:
+            payload = json.loads(sidecar)
+            payload["schemaVersion"] = 9
+            payload["documentHash"] = hashlib.sha256(f"{name}\n".encode()).hexdigest()
+            sidecar = json.dumps(payload)
         write(f"{name}.step.json", sidecar)
         package(f"{name}.step", valid)
     # A sidecar with a WRONG descriptor kind publishes neither url.
@@ -117,7 +123,16 @@ def _build_fixture(root: str, cache: str) -> None:
     package("k_wrong_kind.step", {"kind": "not-a-package"})
     # Uppercase suffix: the sidecar name follows the artifact's whole name.
     write("p_upper.STP", "upper\n")
-    write("p_upper.STP.json", json.dumps({"kinematics": {"j": 1}}))
+    write(
+        "p_upper.STP.json",
+        json.dumps(
+            {
+                "schemaVersion": 9,
+                "documentHash": hashlib.sha256(b"upper\n").hexdigest(),
+                "kinematics": {"j": 1},
+            }
+        ),
+    )
     package("p_upper.STP", valid)
 
     # --- non-STEP assets and non-entries ---------------------------------
@@ -217,7 +232,7 @@ def _shape(entries) -> list:
                 "hash" if entry.get("hash") else "",
                 "sourceUrl" if "sourceUrl" in entry else "",
                 "poseUrl" if "poseUrl" in entry else "",
-                "renderModuleUrl" if "renderModuleUrl" in entry else "",
+                "animationHash" if "animationHash" in entry else "",
                 sorted((entry.get("relations") or {}).keys()),
             ]
         )
@@ -225,6 +240,26 @@ def _shape(entries) -> list:
 
 
 GOLDEN_PATH = Path(__file__).resolve().parent / "golden" / "catalog_shape.json"
+# One row per line, one space per level. The indent is part of the golden: a
+# wholesale reindent rewrites all 1251 lines and hides the handful of rows that
+# actually changed, which is the only thing a reviewer of this file reads.
+GOLDEN_INDENT = 1
+
+
+def _write_golden() -> None:
+    """Recapture the golden: `python -m unittest`'s file, run with --update-golden."""
+    tmp = tempfile.mkdtemp()
+    try:
+        root = os.path.join(tmp, "root")
+        os.makedirs(root)
+        _build_fixture(root, os.path.join(tmp, "cache"))
+        shaped = _shape(scan_cad_directory(root)["entries"])
+        GOLDEN_PATH.write_text(
+            json.dumps(shaped, indent=GOLDEN_INDENT) + "\n", encoding="utf-8"
+        )
+        print(f"wrote {len(shaped)} rows to {GOLDEN_PATH}")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 class CatalogShapeSnapshot(unittest.TestCase):
@@ -287,8 +322,8 @@ class CatalogShapeSnapshot(unittest.TestCase):
         self.assertGreater(len(entries), 100)
         self.assertGreaterEqual(sum(1 for e in entries if e["kind"] == "assembly"), 2)
         self.assertGreaterEqual(sum(1 for e in entries if "poseUrl" in e), 3)
-        self.assertGreaterEqual(sum(1 for e in entries if "renderModuleUrl" in e), 1)
-        self.assertGreaterEqual(sum(1 for e in entries if "sourceUrl" in e), 6)
+        self.assertGreaterEqual(sum(1 for e in entries if "animationHash" in e), 1)
+        self.assertGreaterEqual(sum(1 for e in entries if "sourceUrl" in e), 5)
         self.assertGreaterEqual(sum(1 for e in entries if "relations" in e), 4)
         self.assertGreaterEqual(sum(1 for e in entries if e["hash"] == ""), 4)
         self.assertTrue(any(e["file"].startswith("library/") for e in entries))
@@ -306,4 +341,8 @@ class CatalogShapeSnapshot(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    if "--update-golden" in sys.argv:
+        sys.argv.remove("--update-golden")
+        _write_golden()
+    else:
+        unittest.main()

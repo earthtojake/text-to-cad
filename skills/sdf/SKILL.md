@@ -42,7 +42,7 @@ python -m playwright install chromium
 8. Do not infer spatial transforms from visual impression alone. Derive poses, axes, scale, mass, inertia, and frame names from upstream source data, drawings, simulator documentation, measured values, or explicit assumptions. Never freehand computed numbers — use formulas or a throwaway helper script (inertia tensors, unit conversions).
 9. When the robot already has a URDF, derive the SDF from it instead of re-authoring geometry; see `references/interoperability.md`.
 10. Regenerate upstream geometry, mesh, robot-description, render, topology, or package assets with their owning workflows before editing SDF that references them.
-11. After authoring, run available checks: bundled validation, optional `gz sdf --check`, simulator load, joint motion, and plugin/sensor startup.
+11. After authoring, run available checks: bundled validation (which runs `gz sdf --check` itself whenever `gz` is on PATH), simulator load, joint motion, and plugin/sensor startup.
 12. Report assumptions, skipped checks, unresolved resource paths, and target-specific compatibility risks.
 
 ## Scope
@@ -66,7 +66,7 @@ After completing SDF work that creates or modifies a `.sdf`, you must ALWAYS han
 
 ## Commands
 
-Run with the project or workspace Python environment. Treat `python` in examples as an interpreter placeholder; if bare `python` is unavailable, substitute `python3`, a project virtualenv interpreter, or the configured interpreter path. The validator uses only the Python standard library.
+Run `cadgen` from the Python environment this skill's `requirements.txt` was installed into (`python -m cadgen.cli <verb>` with that interpreter is the PATH-independent equivalent). `cadgen doctor <skill-dir>` verifies the installed cadgen matches this skill's pin — docs drift silently on a mismatched install. Validation itself needs nothing beyond the Python standard library; only snapshots need the browser. Use `cadgen <verb> --help` for the complete current interface.
 
 ```bash
 cadgen sdf validate path/to/model.sdf
@@ -75,17 +75,16 @@ cadgen sdf validate path/to/model.sdf --json
 cadgen sdf snapshot path/to/model.sdf review.png
 ```
 
-The validator checks document shape, name scopes, pose/frame graphs, joints, geometry, mesh URIs, inertials, sensors, and plugins, and prints its findings plus a summary. One run validates ONE file: `--strict` treats warnings as failures and `--json` emits the machine-readable findings document. It exits nonzero if the target fails.
+The validator checks document shape, name scopes, pose/frame graphs, joints, geometry, mesh URIs, inertials, sensors, and plugins, and prints its findings plus a summary. One run validates ONE file: `--strict` treats warnings as failures and `--json` prints one line of `{"ok", "path", "issues": [{"severity", "code", "message", "element", "hint"}], "summary"}`, where `element` is the XML path. It exits nonzero if the target fails.
 
-Optional external checking:
+External checking is on by default:
 
 ```bash
-cadgen sdf validate path/to/model.sdf --gz-check auto
 cadgen sdf validate path/to/model.sdf --gz-check required
 cadgen sdf validate path/to/model.sdf --gz-check never
 ```
 
-`gz sdf --check` is optional target-consumer validation. It should be reported as skipped when unavailable unless explicitly required.
+`gz sdf --check` is target-consumer validation. `--gz-check auto` is the default: it runs when `gz` is on PATH, reporting `gz_check_passed` or the tool's own output as the error `gz_check_failed`, and otherwise notes `info: gz_check_unavailable` and carries on. An absent optional tool says nothing about the file, so it never fails a clean document and `--strict` does not change that. `--gz-check required` makes the tool mandatory — a missing `gz` is then an error — and `--gz-check never` skips it outright.
 
 ## Required report shape
 
@@ -120,10 +119,12 @@ joints you do not name staying at the rest pose (the `"jointValues"` job field i
 thing in a packet). Robots are authored in metres and are framed on the robot scene scale
 automatically.
 
-Theme settings live under one `--theme`, mirroring the viewer's Theme tab. The default
-theme is `snapshot` — Workbench Light with the ground grid, origin axis and shadows
-removed, because in a still image those read as geometry. There is no `--display`: display
-settings (mode, clip, exploded, edges) are CAD topology settings, and a robot carries none.
+A normal snapshot uses deterministic light CAD lighting and hides grid and axis guides.
+Pass `--render light` or `--render dark` (or photographic Render JSON or a file path)
+for the shared Render scene. An envelope with no `studio` resolves Light in the CLI.
+Set its camera inside Render JSON; top-level `--camera`, `--display`, and `--joint-values`
+control normal snapshots and cannot be combined with Render. Robot link meshes have no CAD-edge or exploded assembly
+topology, so those display combinations are rejected clearly.
 
 Link meshes are resolved relative to the description, so they must be present: an
 unhydrated Git LFS pointer fails as "No link mesh loaded for robot". Run

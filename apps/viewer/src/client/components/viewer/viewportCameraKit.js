@@ -4,6 +4,12 @@
 // about how the scene itself is rendered.
 
 export const WORLD_UP = Object.freeze([0, 0, 1]);
+// The two viewing modes, as the camera sees them: Inspect's CAD frustum and
+// Render's photographic lens. Each frames the model itself (see reframeReason).
+export const VIEWING_MODE = Object.freeze({
+  INSPECT: "inspect",
+  RENDER: "render"
+});
 export const KEYBOARD_ORBIT_NUDGE_RAD = Math.PI / 32;
 export const KEYBOARD_ORBIT_SPEED_RAD_PER_SEC = Math.PI * 0.42;
 export const KEYBOARD_POLAR_EPSILON = 0.02;
@@ -144,6 +150,97 @@ export function viewportFitScale({
   const horizontalHalfFov = Math.atan(Math.tan(verticalHalfFov) * safeAspect);
   const limitingHalfFov = Math.max(Math.min(verticalHalfFov, horizontalHalfFov), 1e-3);
   return 1 / Math.sin(limitingHalfFov);
+}
+
+// What "reset" and "fit" frame: the model in its ZERO pose -- the authored
+// placement its camera was fitted to when it opened, whatever a joint, a group
+// state, a parameter or a scrubbed animation has done to it since. Framing the
+// live pose instead made the zoom a function of the kinematics: a reset after
+// moving a joint landed at a different distance and a different pivot, and the
+// percent it reported was no longer the 100% the model opened at.
+// `runtime.modelBounds` tracks whichever pose was applied last, so it is only
+// the fallback for a runtime that has not published a zero pose yet.
+export function runtimeFramingBounds(runtime, fallbackBounds = null) {
+  return runtime?.zeroPoseBounds || runtime?.modelBounds || fallbackBounds;
+}
+
+// How far a zero-pose box has to move before it counts as a DIFFERENT zero pose.
+// It is measured against the box's own size, so it means the same thing on a
+// 3 mm part and a 3 m robot. A detail swap re-tessellates the same geometry and
+// can shift a corner by a float; a source revision that grew the model moves it
+// by orders of magnitude more than this.
+export const ZERO_POSE_REVISION_EPSILON = 1e-4;
+
+export function sameZeroPoseBounds(a, b, epsilon = ZERO_POSE_REVISION_EPSILON) {
+  if (!a || !b || !Array.isArray(a.min) || !Array.isArray(b.min)) {
+    return false;
+  }
+  const scale = Math.max(
+    ...[0, 1, 2].map((axis) => Math.abs(finiteNumber(b.max?.[axis]) - finiteNumber(b.min?.[axis]))),
+    1e-9
+  );
+  for (const key of ["min", "max"]) {
+    for (let axis = 0; axis < 3; axis += 1) {
+      if (Math.abs(finiteNumber(a[key]?.[axis]) - finiteNumber(b[key]?.[axis])) > epsilon * scale) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+// When the camera fits, and why. A model is framed ONCE per viewing mode, on
+// its zero pose, and four things reopen that decision -- none of them a pose:
+//
+// - "model": a different model. Always fits.
+// - "mode": Inspect and Render are two cameras, not one camera with two looks:
+//   an orthographic CAD frustum and a photographic perspective lens. Carrying
+//   one mode's pose and zoom into the other landed the destination at a framing
+//   that was never fitted to anything -- a perspective distance read as an
+//   orthographic half-height, or a close-up taken in Render reopening Inspect
+//   inside the model. The destination mode fits its own camera to the zero pose
+//   on every switch.
+// - "complete": a progressive load frames on its first publish, against the
+//   handful of components that have arrived, and the model then grows well
+//   outside that frame, so it frames again once every component is composed.
+// - "revision": the model was rebuilt from edited source and its ZERO POSE
+//   changed. A new revision is a new zero pose, and the camera is grounded on
+//   the zero pose, so a rebuild that grew the geometry must not leave the new
+//   geometry clipped outside the old frame. A detail swap or another publish of
+//   the SAME geometry is not a revision (see sameZeroPoseBounds), and neither is
+//   a joint, a group state, a mate or an animation frame -- those never move the
+//   zero pose at all.
+//
+// The last two stand down once the user has taken the view: their camera is a
+// deliberate choice about this model and an automatic fit would throw it away on
+// every save. A mode change does NOT stand down -- switching mode is itself the
+// deliberate act, and it carries Reset view's meaning for the mode being
+// entered. Reset view still takes a stood-down camera to the new zero pose.
+export function reframeReason({
+  modelKey = "",
+  framedModelKey = "",
+  framedCompleteModelKey = "",
+  mode = "",
+  framedMode = "",
+  modelComplete = true,
+  zeroPoseBounds = null,
+  framedZeroPoseBounds = null,
+  userMovedCamera = false
+} = {}) {
+  const key = String(modelKey || "");
+  if (String(framedModelKey || "") !== key) {
+    return "model";
+  }
+  if (String(mode || "") !== String(framedMode || "")) {
+    return "mode";
+  }
+  if (!modelComplete || userMovedCamera) {
+    return "";
+  }
+  if (String(framedCompleteModelKey || "") !== key) {
+    return "complete";
+  }
+  return sameZeroPoseBounds(zeroPoseBounds, framedZeroPoseBounds) ? "" : "revision";
 }
 
 export function getKeyboardOrbitCommand(event) {

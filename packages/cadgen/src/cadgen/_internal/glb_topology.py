@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 import json
-import os
 import struct
-from array import array
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from cadgen.selector_types import SelectorBundle
 
 
 STEP_TOPOLOGY_EXTENSION = "STEP_topology"
@@ -195,11 +192,14 @@ def is_displayable_step_edge_surface_class_code(value: object) -> bool:
     return code not in {STEP_EDGE_SURFACE_CLASS_CODES["none"], STEP_EDGE_SURFACE_CLASS_CODES["degenerate"]}
 
 
-def read_step_topology_index_from_glb(glb_path: Path, *, entry_path: Path | None = None) -> dict[str, Any] | None:
-    # A view DIRECTORY carries its topology index as its
-    # assembly.json. The monolith-GLB branch that used to read an
-    # embedded index from a file is gone with the beside-model layout: every
-    # artifact is a store directory.
+def read_step_topology_index_from_glb(glb_path: Path) -> dict[str, Any] | None:
+    """The topology index a view DIRECTORY carries as its assembly.json.
+
+    Artifact side only. The descriptor is STEP-pure and nothing here reaches
+    for source: a reader that wants a model's provenance asks the model's
+    record through ``cadgen store why``, never a tree (README law 1,
+    STORE.md §2, the two-sides law).
+    """
     if not glb_path.is_dir():
         return None
     descriptor_path = glb_path / "assembly.json"
@@ -209,26 +209,11 @@ def read_step_topology_index_from_glb(glb_path: Path, *, entry_path: Path | None
         manifest = json.loads(descriptor_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
-    if not isinstance(manifest, dict):
-        return None
-    # The ONE merge point for the source sidecar: the assembly.json is
-    # STEP-pure (source_sidecar.py), so source-derived state — provenance
-    # the freshness gates read, pose, mates — is attached here under an
-    # internal key every manifest consumer shares. Never written to disk.
-    # The sidecar lives BESIDE THE MODEL, so callers that know the entry
-    # file pass it; store packages themselves carry no source state.
-    if entry_path is not None:
-        from cadgen._internal.source_sidecar import read_source_provenance
-
-        # The records-tier provenance record every generated build writes.
-        sidecar = read_source_provenance(entry_path)
-        if sidecar is not None:
-            manifest["_sourceSidecar"] = sidecar
-    return manifest
+    return manifest if isinstance(manifest, dict) else None
 
 
-def read_step_topology_manifest_from_glb(glb_path: Path, *, entry_path: Path | None = None) -> dict[str, Any] | None:
-    return read_step_topology_index_from_glb(glb_path, entry_path=entry_path)
+def read_step_topology_manifest_from_glb(glb_path: Path) -> dict[str, Any] | None:
+    return read_step_topology_index_from_glb(glb_path)
 
 
 def build_step_topology_index_manifest(
@@ -245,14 +230,15 @@ def build_step_topology_index_manifest(
 
     tables = manifest.get("tables") if isinstance(manifest.get("tables"), Mapping) else {}
     occurrence_columns = tables.get("occurrenceColumns") if isinstance(tables, Mapping) else None
-    # No version field: the store KEY (CACHE_SCHEMA_VERSION salt) is the one
-    # regeneration signal, and nothing inside an artifact records a scheme.
+    # This view contains artifact fields. Compatibility is validated by the
+    # owning index/payload contracts, never by version-salting document keys.
     index: dict[str, Any] = {
         "profile": "index",
         "entryKind": resolved_entry_kind,
     }
-    # STEP-pure keys only: source-derived state rides the source sidecar
-    # (source_sidecar.py), attached by the tree reader as _sourceSidecar.
+    # STEP-pure keys only: source-derived state never enters a descriptor. The
+    # build side attaches its own `_sourceSidecar` in memory (generation.py) and
+    # no reader does.
     for key in (
         "capabilities",
         "stepPath",

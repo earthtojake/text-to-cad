@@ -150,13 +150,38 @@ def entry_summary(index: SelectorIndex) -> dict[str, Any]:
     }
 
 
+def label_resolution_error(raw_selector: str, index: SelectorIndex) -> str | None:
+    """Why a LABEL selector does not resolve here, in the resolver's own words, or None.
+
+    ``canonicalize_selector`` answers "what does this name" and says None for a label it
+    cannot place; this answers "why not". The resolver already computed the useful part --
+    the numbered candidates of a duplicate (``#cast_rim_1 (o1.7.2), ...``), or that the
+    label is unknown and ``snapshot --mode list`` shows the names -- and ``snapshot``
+    prints it. Every error path that would otherwise say "did not resolve" asks here so
+    ``inspect`` says the same thing. None for a numeric or opaque selector, and for a
+    label that resolves.
+    """
+    parsed = syntax.parse_selector(raw_selector)
+    if parsed is None or not parsed.label:
+        return None
+    from cadgen.label_refs import LabelResolutionError, resolve_label_selectors
+
+    try:
+        resolve_label_selectors([raw_selector], getattr(index, "label_aliases", None))
+    except LabelResolutionError as error:
+        return str(error)
+    return None
+
+
 def canonicalize_selector(raw_selector: str, index: SelectorIndex) -> str | None:
     parsed = syntax.parse_selector(raw_selector)
     if parsed is None:
         return None
     if parsed.label:
         # A label names an occurrence; turn it into one before the numeric logic below runs, so
-        # every caller downstream sees the same canonical form it always has.
+        # every caller downstream sees the same canonical form it always has. A label that
+        # does not resolve is None here like any other miss; the reason is
+        # `label_resolution_error`'s to give, where the error message is built.
         from cadgen.label_refs import LabelResolutionError, resolve_label_selectors
 
         try:

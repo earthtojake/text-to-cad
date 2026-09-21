@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import contextlib
 import io
+import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 
@@ -138,13 +140,37 @@ class SdfValidateCliTests(unittest.TestCase):
         self.assertEqual(strict_exit, 1)
         self.assertIn("FAIL", strict_output)
 
-    def test_gz_check_required_fails_when_gz_missing(self) -> None:
+    def _without_gz_on_path(self):
+        """An empty PATH, so `shutil.which("gz")` misses on any machine."""
+        empty = self.temp_root / "empty-bin"
+        empty.mkdir(exist_ok=True)
+        return mock.patch.dict(os.environ, {"PATH": str(empty)})
+
+    def test_auto_gz_check_passes_a_clean_file_without_gz(self) -> None:
+        # `auto` means "run gz if it is here". A machine without Gazebo must not
+        # fail a document that is fine -- the note says the check did not run.
         sdf_path = self._write("model.sdf", VALID_MODEL_SDF)
-        exit_code, combined = self._run(str(sdf_path), "--gz-check", "required")
-        if exit_code == 0:
-            self.skipTest("gz is installed in this environment")
+        with self._without_gz_on_path():
+            exit_code, output = self._run(str(sdf_path))
+        self.assertEqual(exit_code, 0)
+        self.assertIn("OK", output)
+        self.assertIn("info: gz_check_unavailable", output)
+
+    def test_strict_does_not_promote_an_absent_gz(self) -> None:
+        # `--strict` promotes WARNINGS, and an absent optional tool is not one:
+        # it says nothing about the file being validated.
+        sdf_path = self._write("model.sdf", VALID_MODEL_SDF)
+        with self._without_gz_on_path():
+            exit_code, output = self._run(str(sdf_path), "--strict")
+        self.assertEqual(exit_code, 0)
+        self.assertIn("OK", output)
+
+    def test_required_gz_check_is_how_you_demand_the_tool(self) -> None:
+        sdf_path = self._write("model.sdf", VALID_MODEL_SDF)
+        with self._without_gz_on_path():
+            exit_code, output = self._run(str(sdf_path), "--gz-check", "required")
         self.assertEqual(exit_code, 1)
-        self.assertIn("gz", combined)
+        self.assertIn("error: gz_check_unavailable", output)
 
     def test_missing_file_fails(self) -> None:
         exit_code, output = self._run(str(self.temp_root / "absent.sdf"), "--gz-check", "never")

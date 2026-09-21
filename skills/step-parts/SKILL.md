@@ -3,7 +3,7 @@ name: step-parts
 description: Find, evaluate, and download common purchasable CAD parts from step.parts, including named off-the-shelf actuators, servos, motors, electronics boards, connectors, screws, bolts, nuts, washers, bearings, standoffs, and other catalog components. Use when Codex needs to search the hosted step.parts catalog before creating simplified placeholder geometry, resolve fuzzy part names, standards, aliases, or dimensions, choose a matching part, fetch a canonical .step file, verify checksums, or use the step.parts API/OpenAPI/catalog endpoints for standard part discovery.
 ---
 
-# CAD Parts
+# STEP Parts
 
 Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
 Use the installed local skill files as the runtime source of truth; the
@@ -44,11 +44,13 @@ Useful options:
 
 - `--origin`: override `https://api.step.parts` only when the user provides another hosted API origin.
 - `--tag`, `--category`, `--family`, `--standard`: repeatable facet filters.
-- `--out-dir`: override the download directory when the user asks for a specific destination.
+- `--out-dir`: destination directory for downloads. It defaults to the system temp directory, so pass it whenever the file should survive in the project.
+- `--filename`: rename the one downloaded file; rejected together with `--all`.
+- `--limit`, `--page`: search page size (default 10, API cap 500) and 1-based page.
 - `--all`: with `--download`, download every result on the returned page as individual STEP downloads.
-- `--overwrite`: replace an existing output file.
+- `--overwrite`: replace an existing output file. Without it, an existing destination is refused rather than overwritten.
 
-The script prints JSON to stdout. For searches, it prints matched records. For downloads, it prints saved file paths, checksums, and source URLs.
+The script prints JSON to stdout. For searches, it prints matched records. For downloads, it prints saved file paths, checksums, and source URLs. Failures print a one-line plain-text message to stderr and exit 1.
 
 ## API Reference
 

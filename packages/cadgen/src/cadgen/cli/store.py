@@ -64,6 +64,7 @@ def _cmd_info(as_json: bool) -> int:
         "document": "document entries (bytes -> tree)",
         "output": "output entries (path -> model)",
         "component": "component entries",
+        "surface": "surface entries",
         "op": "op-memo entries",
         "mesh": "mesh entries",
     }
@@ -115,7 +116,8 @@ def _why_one(model: str, as_json: bool) -> int:
         if number == 1:
             print(f"  [{mark}] 1 record {'missing' if clause.get('stale') else 'present'}")
         elif number == 2:
-            print(f"  [{mark}] 2 closure {clause.get('why') or f'{clause.get('files', 0)} files unchanged'}")
+            why = clause.get("why") or f"{clause.get('files', 0)} files unchanged"
+            print(f"  [{mark}] 2 closure {why}")
         elif number == 3:
             children = clause.get("children") or []
             print(f"  [{mark}] 3 children ({len(children)})")

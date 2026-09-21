@@ -55,7 +55,7 @@ For complex or parametric models it is reasonable to keep this helper script on 
 Before accepting any inertial block, check:
 
 1. `mass > 0`, all values finite; diagonal `ixx, iyy, izz > 0`.
-2. Triangle inequality: `ixx + iyy ≥ izz`, `ixx + izz ≥ iyy`, `iyy + izz ≥ ixx` (the bundled validator enforces this).
+2. Triangle inequality: `ixx + iyy ≥ izz`, `ixx + izz ≥ iyy`, `iyy + izz ≥ ixx`. The bundled validator reports a violation as the warning `inertia_triangle_inequality`, which `--strict` promotes to blocking; positive-semidefiniteness and positive diagonals are hard errors.
 3. Magnitude plausibility: for a part with characteristic size `d` and mass `m`, diagonal terms should be within roughly an order of magnitude of `m·d²/10`. A 0.5 kg, 10 cm part with `ixx = 2.0` kg·m² is wrong by ~1000×.
 4. COM plausibility: the inertial origin lies inside (or very near) the part's bounding volume.
 5. Off-diagonal terms are small relative to diagonals unless the part is genuinely skewed in the link frame — large `ixy/ixz/iyz` values usually mean the tensor was expressed in the wrong frame.

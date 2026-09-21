@@ -54,6 +54,7 @@ Representative payload:
 ```json
 {
   "print": {
+    "sequence_id": "1789515297609",
     "command": "project_file",
     "param": "Metadata/plate_1.gcode",
     "project_id": "0",
@@ -82,6 +83,7 @@ The plain path uploads `cache/<job>.gcode` and publishes:
 ```json
 {
   "print": {
+    "sequence_id": "1789515309288",
     "command": "gcode_file",
     "param": "cache/job.gcode"
   }
@@ -98,6 +100,22 @@ The optional `bambox-project` path packages plain G-code into `.gcode.3mf` for
 enabled profiles, validates the archive, uploads it to FTPS root, and publishes
 the same `project_file` shape as template projects. Current enabled profile is
 `p1s-0.4`; A1/A1 Mini are disabled until a validated bambox profile exists.
+
+### Print Controls
+
+`pause`, `cancel`, and `clear-error` publish a control request on the same
+request topic and never upload files:
+
+```json
+{"print": {"sequence_id": "1789515309340", "command": "pause"}}
+{"print": {"sequence_id": "1789515309390", "command": "stop", "param": ""}}
+{"print": {"sequence_id": "1789515309441", "command": "clean_print_error"}}
+```
+
+## Sequence Ids
+
+Every published payload carries `sequence_id`. It defaults to the current
+timestamp in milliseconds; `--sequence-id` overrides it.
 
 ## Observed Failure Modes
 

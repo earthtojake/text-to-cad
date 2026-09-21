@@ -12,7 +12,9 @@ set -euo pipefail
 # same shape of bug in JS bundling (an entry tree-shaken to a 20-byte shebang, exit
 # code 0).
 #
-# So: build the wheel, list it, and require the paths to be present. The viewer client
+# So: build in clean scratch, require the paths, and compare every runtime file's bytes
+# with the bundled source. Reusing setuptools' build/lib can retain obsolete hashed
+# viewer chunks even after the source bundle removed them. The viewer client
 # is NOT committed (scripts/bundle/cadgen-runtime.sh --viewer writes it
 # right before the build), so this is the only gate proving it made the wheel.
 
@@ -26,6 +28,8 @@ PYTHON_BIN="${PYTHON_BIN:-}"
 if [ -z "$PYTHON_BIN" ]; then
   if [ -x "$REPO_ROOT/.venv/bin/python" ]; then
     PYTHON_BIN="$REPO_ROOT/.venv/bin/python"
+  elif [ -x "$REPO_ROOT/.venv/Scripts/python.exe" ]; then
+    PYTHON_BIN="$REPO_ROOT/.venv/Scripts/python.exe"
   else
     PYTHON_BIN="python3"
   fi
@@ -82,7 +86,10 @@ REQUIRED=(
 echo "Building cadgen wheel for content check..."
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
-"$PYTHON_BIN" -m build --wheel --outdir "$OUT_DIR" "$PACKAGE_DIR" >"$OUT_DIR/build.log" 2>&1 || {
+BUILD_SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/cadgen-wheel-build.XXXXXX")"
+trap 'rm -rf "$BUILD_SCRATCH"' EXIT
+"$PYTHON_BIN" "$SCRIPT_DIR/wheel_contents.py" stage "$PACKAGE_DIR" "$BUILD_SCRATCH/package"
+"$PYTHON_BIN" -m build --wheel --outdir "$OUT_DIR" "$BUILD_SCRATCH/package" >"$OUT_DIR/build.log" 2>&1 || {
   echo "Wheel build failed:" >&2
   tail -40 "$OUT_DIR/build.log" >&2
   echo "" >&2
@@ -131,6 +138,7 @@ if [ -n "$missing" ]; then
   exit 1
 fi
 
+"$PYTHON_BIN" "$SCRIPT_DIR/wheel_contents.py" verify "$wheel" "$PACKAGE_DIR"
 echo "cadgen wheel carries its runtime assets ($runtime_count entries under cadgen/_runtime)."
 if [ "$KEEP_WHEEL" != "1" ]; then
   rm -rf "$OUT_DIR"

@@ -12,7 +12,7 @@ everything downstream of that:
 It lives in cadgen rather than in the CAD skill because a skill may not import another
 skill's code (AGENTS.md), and the robot resolver alone is needed by three skills at once.
 The split against :mod:`cadgen.snapshot_core` is by ROLE, not by format: the core owns the
-headless browser, the job/theme/display normalisation and output writing; this module owns
+headless browser, the job/render/display normalisation and output writing; this module owns
 the command line and the per-kind resolution that decides what a given input even is.
 
 Every input kind resolves here, and a skill enables a subset. An input the running skill
@@ -26,7 +26,6 @@ import asyncio
 import copy
 import json
 import math
-import os
 import re
 import sys
 from collections.abc import Callable, Mapping, Sequence
@@ -37,22 +36,17 @@ from typing import Any
 import cadgen.cad_ref_syntax as cad_ref_syntax
 import cadgen.lookup as lookup
 from cadgen.assets import browser_runtime_dir
-from cadgen.catalog import result_tree_for, result_view_dir
+from cadgen._internal.doors import document_snapshot
+from cadgen.store.view import view_dir_for
 from cadgen.step_targets import ResolvedStepTarget, StepTopologyArtifact, StepTopologyArtifactError
 
 from cadgen.cli_logging import CliLogger
 from cadgen.coordination import PHASE_BROWSER, SNAPSHOT, ProgressReporter
-# What a GROUP occurrence ref means is shared with `cadgen step inspect`
-# (cadgen.occurrence_groups). Two commands answering "does this document have an o1.4"
-# differently is a bug that reads as a data problem, and the near-miss hint is exactly
-# the sort of text that drifts when it is written twice. Re-exported here because
+# GROUP occurrence refs use cadgen.occurrence_groups so snapshots and scene
+# readers agree on which document occurrences a selector names. Re-exported here because
 # callers of this module have always reached for these names through it.
 from cadgen.occurrence_groups import (
-    OCCURRENCE_NEAR_MISS_LIMIT,
     UnknownOccurrenceSelector,
-    occurrence_group_ids,
-    occurrence_near_miss_hint,
-    occurrence_sort_key,
 )
 from cadgen.occurrence_groups import (
     expand_occurrence_selector as _expand_occurrence_selector,
@@ -60,74 +54,42 @@ from cadgen.occurrence_groups import (
 from cadgen.cli_progress import cli_progress_line
 from cadgen.results import SnapshotResult
 from cadgen.snapshot_core import (
-    THEME_OPTION_KEYS,
-    BatchSnapshotRenderer,
-    COMPLEX_ASSEMBLY_LARGE_RENDER_HEIGHT,
-    COMPLEX_ASSEMBLY_LARGE_RENDER_WIDTH,
-    COMPLEX_ASSEMBLY_RENDER_HEIGHT,
-    COMPLEX_ASSEMBLY_RENDER_WIDTH,
-    CONTACT_SHEET_RENDER_HEIGHT,
-    CONTACT_SHEET_RENDER_WIDTH,
-    DEFAULT_RENDER_THEME_ID,
-    DEFAULT_TIMEOUT_SECONDS,
-    DIAGNOSTIC_RENDER_HEIGHT,
-    DIAGNOSTIC_RENDER_WIDTH,
     DISPLAY_MODE_ALIASES,
     DISPLAY_OPTION_KEYS,
-    MESH_INPUT_KINDS,
     MESH_SUPPORTED_RENDER_MODES,
-    PRESENTATION_LARGE_RENDER_HEIGHT,
-    PRESENTATION_LARGE_RENDER_WIDTH,
-    PRESENTATION_RENDER_HEIGHT,
-    PRESENTATION_RENDER_WIDTH,
-    RENDER_BROWSER_STARTUP_TIMEOUT_MS,
-    RouteFileError,
-    SETTINGS_KEY_HOMES,
-    SIMPLE_RENDER_HEIGHT,
-    SIMPLE_RENDER_WIDTH,
-    SIMPLE_SQUARE_RENDER_HEIGHT,
-    SIMPLE_SQUARE_RENDER_WIDTH,
-    SNAPSHOT_ORIGIN,
-    SNAPSHOT_RENDER_URL,
-    SNAPSHOT_ROUTE_GLOB,
     SUPPORTED_JOB_KEYS,
-    SUPPORTED_OUTPUT_KEYS,
     SUPPORTED_RENDER_MODES,
     SnapshotError,
-    TOPOLOGY_DISPLAY_MODES,
-    WORKBENCH_RENDER_THEME_IDS,
-    theme_id_for_job,
     asset_url_for_path,
     clear_render_output_targets,
-    content_type_for_path,
-    default_render_size,
-    encode_path_param,
-    explicit_size_profile,
+    declared_output_path,
+    effective_display_request,
     is_plain_object,
-    load_theme_option,
+    validate_render_job_compatibility,
+    load_render_option,
     load_display_option,
     load_json_text,
-    max_output_size,
     normalize_common_job,
-    normalize_size_profile,
     normalize_snapshot_job_packet,
     parse_camera_option,
     path_is_inside_or_equal,
-    render_resolved_job_packet,
     render_snapshot,
     resolve_mesh_render_job,
     has_kinematics_render_values,
-    resolve_output_size,
+    validate_output_settings,
+    validate_quality_settings,
+    validate_render_option,
     selection_filter_values,
     selection_value_list,
-    resolve_snapshot_route_file,
-    route_file,
     snapshot_timestamp,
     validate_direct_settings_payload,
     validate_display_settings_values,
-    with_snapshot_timeout,
-    write_output_payload,
-    write_render_outputs,
+)
+from cadgen.snapshot_video import (
+    ffmpeg_binary,
+    normalize_video_request,
+    parse_video_option,
+    video_container_for_path,
 )
 
 
@@ -135,9 +97,8 @@ from cadgen.snapshot_core import (
 # each kind still has to name its own.
 STEP_SUPPORTED_RENDER_MODES = {"view", "section", "list"}
 
-# Imported lazily by ensure_render_job_step_artifact: only a STEP input needs it, and
-# importing it eagerly would drag OCP into a robot or mesh snapshot that never builds
-# anything. Kept module-level so tests can substitute it.
+# Snapshot artifact resolution stays kernel-free. Kept module-level so callers
+# testing request resolution can substitute the artifact boundary.
 ensure_step_topology_artifact = None
 
 
@@ -156,11 +117,12 @@ class SnapshotOptions:
     input: str = ""
     output: str = ""
     mode: str = "view"
-    theme: object = DEFAULT_RENDER_THEME_ID
-    theme_specified: bool = False
+    mode_specified: bool = False
+    render: object = None
+    render_specified: bool = False
     display: object = ""
     display_specified: bool = False
-    camera: object = "iso"
+    camera: object = None
     camera_specified: bool = False
     width: int | None = None
     height: int | None = None
@@ -170,10 +132,14 @@ class SnapshotOptions:
     animation: object = None
     animation_time: object = None
     animation_specified: bool = False
+    video: object = None
+    video_specified: bool = False
     joint_values: object = None
     joint_values_specified: bool = False
     focus: list[str] | None = None
+    focus_specified: bool = False
     hide: list[str] | None = None
+    hide_specified: bool = False
     view_labels: bool = False
     debug: bool = False
 
@@ -220,7 +186,8 @@ def parse_animation_option(raw_animation: object, raw_time: object = None) -> di
     Already an object when it came from a ``<format>.snapshot(animation={...})``
     call; from argv it is one string, told apart by shape the way ``--kinematics``
     is: text that opens with ``{`` is the inline JSON request, anything else is
-    the NAME of a clip the model's ``.anim.js`` declares. ``--time`` is the
+    the NAME of a clip the document's embedded animation source
+    declares. ``--time`` is the
     second half of the same request — the moment, in seconds, defaulting to 0 —
     and is folded in here, so the job carries ONE field either way. Resolving
     the name needs the sidecar, which only the resolver has loaded, so it travels
@@ -285,13 +252,13 @@ def parse_joint_values_option(raw_joint_values: object) -> dict[str, object]:
 
 
 def option_focus_hide_specified(options: SnapshotOptions) -> bool:
-    return bool(options.focus or options.hide)
+    return options.focus_specified or options.hide_specified or bool(options.focus or options.hide)
 
 
 def merge_focus_hide_options(job: dict[str, object], options: SnapshotOptions) -> None:
     if not option_focus_hide_specified(options):
         return
-    if options.focus and options.hide:
+    if options.focus and options.hide and "render" not in job:
         raise SnapshotError("--focus and --hide cannot be used in the same snapshot command")
     selection = dict(job.get("selection") if is_plain_object(job.get("selection")) else {})
     if options.focus:
@@ -314,41 +281,61 @@ def apply_option_overrides_to_job(job: object, options: SnapshotOptions, *, cwd:
         return job
     if not any(
         [
+            options.mode_specified,
             options.view_labels,
             options.debug,
             options.size_profile,
             options.kinematics_specified,
             options.animation_specified,
+            options.video_specified,
             options.joint_values_specified,
             options.display_specified,
-            options.theme_specified,
+            options.render_specified,
             options.camera_specified,
             option_focus_hide_specified(options),
         ]
     ):
         return job
     next_job = copy.deepcopy(job)
-    merge_focus_hide_options(next_job, options)
+    if options.mode_specified:
+        next_job["mode"] = options.mode
     if options.debug:
         next_job["debug"] = True
-    if options.theme_specified:
-        next_job["theme"] = load_theme_option(options.theme, cwd=cwd)
+    if options.render_specified:
+        next_job["render"] = load_render_option(options.render, cwd=cwd)
+    render_enabled = "render" in next_job
+    merge_focus_hide_options(next_job, options)
     if options.kinematics_specified:
-        next_job["kinematics"] = parse_kinematics_option(options.kinematics)
+        next_job["kinematics"] = (
+            options.kinematics
+            if render_enabled
+            else parse_kinematics_option(options.kinematics)
+        )
+    if options.joint_values_specified:
+        next_job["jointValues"] = (
+            options.joint_values
+            if render_enabled
+            else parse_joint_values_option(options.joint_values)
+        )
+    if options.display_specified:
+        next_job["display"] = (
+            options.display if render_enabled else load_display_option(options.display, cwd=cwd)
+        )
+    if options.camera_specified:
+        next_job["camera"] = (
+            options.camera if render_enabled else parse_camera_option(options.camera)
+        )
     if options.animation_specified:
         next_job["animation"] = parse_animation_option(options.animation, options.animation_time)
-    if options.joint_values_specified:
-        next_job["jointValues"] = parse_joint_values_option(options.joint_values)
-    if options.display_specified:
-        next_job["display"] = load_display_option(options.display, cwd=cwd)
-    if options.camera_specified:
-        next_job["camera"] = parse_camera_option(options.camera)
-    render = dict(next_job.get("render") if is_plain_object(next_job.get("render")) else {})
+    if options.video_specified:
+        next_job["video"] = parse_video_option(options.video, cwd=cwd)
+    output_settings = dict(next_job.get("output") if is_plain_object(next_job.get("output")) else {})
     if options.view_labels:
-        render["viewLabels"] = True
+        output_settings["viewLabels"] = True
     if options.size_profile:
-        render["sizeProfile"] = options.size_profile
-    next_job["render"] = render
+        output_settings["sizeProfile"] = options.size_profile
+    if output_settings:
+        next_job["output"] = output_settings
     return next_job
 
 
@@ -391,8 +378,9 @@ def load_job_from_options(
 
     output: dict[str, object] = {
         "path": options.output,
-        "camera": parse_camera_option(options.camera),
     }
+    if options.camera_specified and not options.render_specified:
+        output["camera"] = parse_camera_option(options.camera)
     if options.width:
         output["width"] = options.width
     if options.height:
@@ -402,19 +390,40 @@ def load_job_from_options(
         "input": options.input,
         "mode": options.mode,
         "outputs": [] if options.mode == "list" else [output],
-        "theme": load_theme_option(options.theme, cwd=resolved_cwd),
-        "render": {"viewLabels": options.view_labels},
     }
+    if options.render_specified:
+        job["render"] = load_render_option(options.render, cwd=resolved_cwd)
+        if options.camera_specified:
+            job["camera"] = options.camera
+    output_settings: dict[str, object] = {}
+    if options.view_labels:
+        output_settings["viewLabels"] = True
     if options.size_profile:
-        job["render"]["sizeProfile"] = options.size_profile
+        output_settings["sizeProfile"] = options.size_profile
+    if output_settings:
+        job["output"] = output_settings
     if options.display_specified:
-        job["display"] = load_display_option(options.display, cwd=resolved_cwd)
+        job["display"] = (
+            options.display
+            if options.render_specified
+            else load_display_option(options.display, cwd=resolved_cwd)
+        )
     if options.kinematics_specified:
-        job["kinematics"] = parse_kinematics_option(options.kinematics)
+        job["kinematics"] = (
+            options.kinematics
+            if options.render_specified
+            else parse_kinematics_option(options.kinematics)
+        )
     if options.animation_specified:
         job["animation"] = parse_animation_option(options.animation, options.animation_time)
+    if options.video_specified:
+        job["video"] = parse_video_option(options.video, cwd=resolved_cwd)
     if options.joint_values_specified:
-        job["jointValues"] = parse_joint_values_option(options.joint_values)
+        job["jointValues"] = (
+            options.joint_values
+            if options.render_specified
+            else parse_joint_values_option(options.joint_values)
+        )
     if options.debug:
         job["debug"] = True
     merge_focus_hide_options(job, options)
@@ -477,10 +486,30 @@ def cad_ref_for_step_path(repo_root: Path, step_path: Path) -> str:
 def load_ensure_step_topology_artifact():
     global ensure_step_topology_artifact
     if ensure_step_topology_artifact is None:
-        from cadgen.step_topology_artifact import ensure_step_topology_artifact as imported_ensure
-
-        ensure_step_topology_artifact = imported_ensure
+        ensure_step_topology_artifact = _ensure_snapshot_step_artifact
     return ensure_step_topology_artifact
+
+
+def _ensure_snapshot_step_artifact(target, *, require_selector=False, debug=None):
+    """Resolve saved bytes through the artifact pool, without importing a kernel.
+
+    A snapshot needs the surface view and optional composed selector tables.
+    The legacy topology builder also imports generation and decodes native
+    shapes; compilation and missing surfaces belong to the pool instead.
+    """
+    from cadgen.selector_types import SelectorBundle
+
+    document_hash, tree = document_snapshot(target.step_path)
+    package_dir = view_dir_for(tree, document_hash=document_hash)
+    descriptor = json.loads((package_dir / "assembly.json").read_text(encoding="utf-8"))
+    if debug is not None:
+        debug.update(source="imported", assembly=True, selectorReextracted=False,
+                     composed=bool(require_selector))
+    return StepTopologyArtifact(
+        cad_path=target.cad_path, source_path=target.source_path,
+        step_path=target.step_path, artifact_path=package_dir, manifest=descriptor,
+        selector_bundle=SelectorBundle(manifest=descriptor) if require_selector else None,
+    )
 
 
 
@@ -657,6 +686,90 @@ def normalize_render_job_selection(
     return normalized
 
 
+# The shapes the renderer can draw. Kept beside the door because "renderable" is a RENDERER
+# fact, not a validity one: `cadgen sdf validate` accepts every shape SDFormat defines.
+SDF_RENDERABLE_GEOMETRY = ("box", "cylinder", "mesh", "sphere")
+
+
+def unrenderable_sdf_geometry(input_path: Path) -> list[tuple[str, str]]:
+    """``(link, kind)`` for every VISUAL shape the renderer cannot draw.
+
+    A capsule, plane, ellipsoid, heightmap or polyline has no mesh in the renderer, so the
+    composer drops it and the model renders as EMPTY SPACE at exit 0. The browser parser
+    refuses these too — that is what the Viewer shows — but the door answers first so the
+    CLI fails before starting a browser, and says the same thing.
+
+    COLLISION geometry is deliberately not checked. It is never drawn, so an undrawable one
+    costs the picture nothing, and a ``<plane>`` ground collision is the single most common
+    shape in a real Gazebo world — refusing those would block loading and snapshotting every
+    one of them for no visual gain. The Viewer counts them in its SDF sheet instead; this
+    door has no non-blocking channel of its own (a snapshot's ``warnings`` come back from the
+    renderer, not from job resolution), so it passes over them in silence.
+
+    Returns [] when the file cannot be read: a description this cannot parse is left to the
+    renderer exactly as before, so the check never refuses more than it understands.
+    """
+    import xml.etree.ElementTree as ET
+
+    def local(tag: object) -> str:
+        return str(tag).rsplit("}", 1)[-1]
+
+    try:
+        root = ET.parse(input_path).getroot()
+    except Exception:
+        return []
+    found: list[tuple[str, str]] = []
+    for link in root.iter():
+        if local(link.tag) != "link":
+            continue
+        link_name = link.get("name") or "(unnamed)"
+        for container in link:
+            if local(container.tag) != "visual":
+                continue
+            geometry = next((c for c in container if local(c.tag) == "geometry"), None)
+            shapes = [local(c.tag) for c in geometry] if geometry is not None else []
+            kind = shapes[0] if shapes else "missing"
+            if kind not in SDF_RENDERABLE_GEOMETRY:
+                found.append((link_name, kind))
+    return found
+
+
+def robot_joint_names(kind: str, input_path: Path) -> frozenset[str] | None:
+    """The joint names a pose request may name, or None when they cannot be read.
+
+    The browser is what ASSEMBLES a robot, so this module never had the joint list and a
+    misspelled `--joint-values` name was dropped in silence: the door reported success and
+    rendered the rest pose, which is the one failure a posed review cannot survive. The
+    STEP door already refuses an unknown DOF by name; robots now do the same.
+
+    The answer is only ever used to REFUSE a name that is definitely not in the
+    description. A description this cannot parse returns None and renders exactly as
+    before, so the check can never make the door stricter about geometry than the renderer
+    that has to draw it.
+    """
+    source_path = input_path
+    if kind == "srdf":
+        # An SRDF carries semantics only; its joints are the sibling URDF's.
+        source_path = input_path.with_suffix(".urdf")
+        if not source_path.exists():
+            return None
+    try:
+        if kind == "sdf":
+            from cadgen.sdf_source import read_sdf_source
+
+            return frozenset(joint.name for joint in read_sdf_source(source_path).joints)
+        import warnings
+
+        from cadgen.urdf_source import read_urdf_source
+
+        # The reader doubles as the validator and advises about inertials, materials and
+        # the like. Those belong to `cadgen urdf validate`; a render that only needs the
+        # joint names must not start narrating them over the snapshot's own output.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return frozenset(joint.name for joint in read_urdf_source(source_path).joints)
+    except Exception:
+        return None
 
 
 
@@ -678,6 +791,7 @@ def resolve_robot_render_job(
     The browser assembles the robot: the parser resolves each link mesh against the
     description's own URL, so this hands over one asset URL and the pose, and the shared
     mesh backend renders the result. STEP-only options are rejected up front."""
+    job = validate_render_job_compatibility(job)
     label = kind.upper()
 
     if selection_filter_values(job):
@@ -693,6 +807,10 @@ def resolve_robot_render_job(
         raise SnapshotError(
             f"an animation frame requires a STEP model with a sidecar; {label} robots have no clips"
         )
+    if job.get("video") is not None:
+        raise SnapshotError(
+            f"a video renders an animation clip; {label} robots have no clips to render"
+        )
 
     mode = str(job.get("mode") or "view").strip().lower()
     if mode not in SUPPORTED_RENDER_MODES:
@@ -703,13 +821,13 @@ def resolve_robot_render_job(
             f"{mode} mode requires STEP topology; {label} robots support: {supported}"
         )
 
-    display = job.get("display") if is_plain_object(job.get("display")) else {}
+    display = effective_display_request(job)
     raw_display_mode = re.sub(r"[\s-]+", "_", str(display.get("mode") or "").strip().lower())
     canonical_display_mode = DISPLAY_MODE_ALIASES.get(raw_display_mode, raw_display_mode)
-    if canonical_display_mode and canonical_display_mode != "solid":
+    if canonical_display_mode in {"shaded_edges", "hidden_edges", "hidden_lines_removed"}:
         raise SnapshotError(
             f"{canonical_display_mode} display mode is not supported for {label} robots; "
-            "robots render shaded solid from their link meshes"
+            "robot link meshes have no CAD edge topology"
         )
     exploded = display.get("exploded") if is_plain_object(display.get("exploded")) else None
     if exploded is not None and exploded.get("enabled"):
@@ -718,6 +836,22 @@ def resolve_robot_render_job(
             "cannot be exploded"
         )
 
+    if kind == "sdf":
+        unrenderable = unrenderable_sdf_geometry(input_path)
+        if unrenderable:
+            listed = "; ".join(
+                f"link {name} visual uses <{shape}>" if shape != "missing"
+                else f"link {name} visual has no <geometry>"
+                for name, shape in unrenderable[:4]
+            )
+            more = f" (and {len(unrenderable) - 4} more)" if len(unrenderable) > 4 else ""
+            raise SnapshotError(
+                f"{input_path.name} has visual geometry this renderer cannot draw: {listed}{more}. "
+                f"Supported: {', '.join(SDF_RENDERABLE_GEOMETRY)}. "
+                "Replace the shape or reference a mesh file — rendering it would silently "
+                "leave those links out of the picture."
+            )
+
     joint_values = job.get("jointValues")
     if joint_values is not None and not is_plain_object(joint_values):
         raise SnapshotError("jointValues must be an object of joint name to angle")
@@ -725,6 +859,14 @@ def resolve_robot_render_job(
         for name, value in joint_values.items():
             if not isinstance(value, (int, float)) or isinstance(value, bool):
                 raise SnapshotError(f"jointValues[{name}] must be a number (degrees)")
+        declared = robot_joint_names(kind, input_path)
+        if declared is not None:
+            unknown = sorted(str(name) for name in joint_values if str(name) not in declared)
+            if unknown:
+                raise SnapshotError(
+                    f"Unknown joint(s): {', '.join(unknown)}. "
+                    f"This {label} declares: {', '.join(sorted(declared)) or '(none)'}"
+                )
 
     # Link meshes are referenced relative to the description, so the served root has to
     # contain both. The description's own directory is the natural root and matches how the
@@ -750,8 +892,8 @@ def resolve_robot_render_job(
     # Robots are authored in METRES; the CAD profile assumes millimetres, and its floor,
     # grid and lighting radii are sized accordingly. Default the robot profile so a robot
     # frames like a robot without the caller having to know the unit convention.
-    if not str(job.get("sceneScale") or job.get("scale") or "").strip():
-        job = {**job, "sceneScale": "urdf"}
+    if not str(job.get("scale") or "").strip():
+        job = {**job, "scale": "urdf"}
 
     normalized = normalize_common_job(
         job,
@@ -783,9 +925,19 @@ def resolve_render_job(
     # the key were absent.
     unknown_keys = sorted(set(job) - SUPPORTED_JOB_KEYS)
     if unknown_keys:
+        # --focus/--hide are the one flag pair whose job spelling is not the
+        # bare flag name: they nest under "selection". Name that, or the
+        # generic message sends the author back to a flag list that is right.
+        misplaced = [key for key in unknown_keys if key in {"focus", "hide", "refs"}]
+        hint = (
+            f" ({', '.join(misplaced)} nest under the selection object: "
+            f'"selection": {{"{misplaced[0]}": ["#o1.2"]}})'
+            if misplaced
+            else ""
+        )
         raise SnapshotError(
             f"unknown render job key(s): {', '.join(unknown_keys)}; "
-            f"supported keys: {', '.join(sorted(SUPPORTED_JOB_KEYS))}"
+            f"supported keys: {', '.join(sorted(SUPPORTED_JOB_KEYS))}{hint}"
         )
 
     resolved_cwd = (cwd or Path.cwd()).resolve()
@@ -793,20 +945,57 @@ def resolve_render_job(
     if not raw_input:
         raise SnapshotError("render job is missing input")
 
-    # A job's own `display` string gets the same treatment as the --display
+    # Validate Render and its incompatible top-level CAD controls before any
+    # of them can trigger parsing or a format capability check. Animation
+    # remains composable with the photographic scene.
+    render_enabled = "render" in job
+    if render_enabled:
+        job["render"] = validate_render_option(job["render"], source_label="job render")
+        job = validate_render_job_compatibility(job)
+
+    # A normal job's own `display` string gets the same treatment as the --display
     # flag: a mode name, an inline JSON object, or a path to a display JSON.
     # Without this it fell through to normalize_common_job, which accepts only
-    # a plain object and silently substituted {"mode": "solid"} -- so
-    # "wireframe", a file path, and an outright typo all rendered the default.
+    # a plain object, so a mode name, a file path, or a typo could lose the
+    # requested display policy.
     raw_display = job.get("display")
     if isinstance(raw_display, str) and raw_display.strip():
         job["display"] = load_display_option(raw_display, cwd=resolved_cwd)
 
-    # Closed-set display values are validated for the --display flag path in
-    # load_display_option; a display object embedded in a full JSON job must get
-    # the same guard, or a typo'd projection/mode silently renders the default.
+    raw_camera = job.get("camera")
+    if raw_camera is not None:
+        job["camera"] = parse_camera_option(raw_camera)
+
+    # Validate the new common envelopes before a STEP input can trigger package
+    # compilation. normalize_common_job repeats these guards for callers that
+    # invoke a kind resolver directly.
+    if "output" in job:
+        job["output"] = validate_output_settings(job["output"])
+    if "quality" in job:
+        job["quality"] = validate_quality_settings(job["quality"])
+
+    # A display object embedded in a full JSON job gets the same closed-key and
+    # closed-value guard as --display.
     if is_plain_object(job.get("display")):
+        job["display"] = validate_direct_settings_payload(
+            job["display"],
+            option_name="--display",
+            source_label="job display",
+            allowed_keys=DISPLAY_OPTION_KEYS,
+            setting_label="display settings",
+        )
         validate_display_settings_values(job["display"], source_label="job display")
+
+    # Still evidence omits viewport guides. An explicit Render controls its own
+    # studio display; only normal CAD snapshots receive this sparse base
+    # override, so it cannot cancel a studio's camera or display defaults.
+    if "render" not in job:
+        display = dict(job.get("display") if is_plain_object(job.get("display")) else {})
+        guides = dict(display.get("guides") if is_plain_object(display.get("guides")) else {})
+        guides.setdefault("grid", {"enabled": False})
+        guides.setdefault("axis", {"enabled": False})
+        display["guides"] = guides
+        job["display"] = display
 
     input_path = resolve_input_path(raw_input, cwd=resolved_cwd)
     root_path = input_path.parent.resolve()
@@ -854,14 +1043,46 @@ def resolve_step_render_job(
     job_count: int = 1,
     **_kind_context: object,
 ) -> dict[str, object]:
+    job = validate_render_job_compatibility(job)
     has_param_render = has_kinematics_render_values(job.get("kinematics"))
     # The frame request is validated for SHAPE up front (a packet may carry it
     # directly, so it did not necessarily pass through the flag parser); which
     # clip it names is checked against the sidecar further down.
     animation_request: dict[str, object] | None = None
-    if job.get("animation") is not None:
-        animation_request = normalize_animation_request(job["animation"], where="render job animation")
+    raw_animation = job.get("animation")
+    if raw_animation is not None:
+        animation_request = normalize_animation_request(raw_animation, where="render job animation")
         job["animation"] = animation_request
+    # A video is the SPAN of a clip, so it needs the clip, and it cannot also be
+    # a moment of one. The flag pair is refused at the door (snapshot_door);
+    # this holds the same two rules for a packet that carries the fields
+    # directly, and resolves ffmpeg before anything expensive runs.
+    if job.get("video") is not None:
+        video_request = normalize_video_request(job["video"], where="render job video")
+        if animation_request is None:
+            raise SnapshotError(
+                "video requires animation: name the clip the sequence renders"
+            )
+        # `animation.time` and `video.start` are the same number, and a video
+        # reads only the second. A time of 0 is indistinguishable from an unset
+        # one (the normalizer fills it, and so does the --animation flag), so
+        # only a time that would actually be ignored is refused.
+        if animation_request["time"]:
+            raise SnapshotError(
+                "a video renders a span, not a moment: the animation names time "
+                f"{animation_request['time']}, which a sequence ignores — say where it "
+                "begins with video start instead"
+            )
+        job["video"] = video_request
+        # Both of these are decided before the tree is built, let alone rendered.
+        # `normalize_common_job` checks the container too, for a packet that never
+        # comes past here -- but it runs AFTER the STEP package is compiled, which
+        # is the slowest part of a snapshot, and a typo in a file extension is not
+        # worth minutes. An encoder discovered missing at the end of those same
+        # minutes is the other failure this ordering exists to prevent.
+        for output in job.get("outputs") or []:
+            video_container_for_path(declared_output_path(output))
+        ffmpeg_binary()
     # A render is a READ of the tree behind the document's bytes (compiled from
     # them on demand below when the store has none). Whether the document's
     # source has moved on is its model's business, never a render's.
@@ -883,9 +1104,11 @@ def resolve_step_render_job(
         selector_index=artifact_selector_index(artifact),
     )
 
-    # The document's tree is found by its bytes (index/document → tree) and laid
-    # out as a temporary view directory for the renderer (cadgen.catalog.result_view_dir).
-    package_dir = result_view_dir(source_path)
+    # Select the document digest and tree in one lookup. Materialising by that
+    # tree, rather than resolving the mutable path again, keeps every component
+    # URL and the sidecar binding on the same revision.
+    document_hash, selected_tree = document_snapshot(source_path)
+    package_dir = view_dir_for(selected_tree, document_hash=document_hash)
     if not package_dir.is_dir():
         raise SnapshotError(f"STEP/STP render input has no tree in the store: {package_dir}")
 
@@ -909,12 +1132,20 @@ def resolve_step_render_job(
         "kind": kind,
         # The hash of the tree this job renders: the geometry's identity in the
         # result (cadgen.results.SnapshotFile.tree), never a directory.
-        "tree": result_tree_for(source_path) or "",
+        "tree": selected_tree,
     }
     # tree (the canonical render artifact for every STEP model): inline
     # the assembly.json and pre-resolve one asset URL per unique component GLB so the renderer
     # fetches and composes them in world space.
     descriptor = json.loads((package_dir / "assembly.json").read_text())
+    artifact_manifest = getattr(artifact, "manifest", None)
+    if isinstance(artifact_manifest, Mapping) and artifact_manifest != descriptor:
+        raise SnapshotError(
+            "STEP/STP render input changed while its topology was being resolved; retry the snapshot"
+        )
+    # This is the renderer's private descriptor loaded from the selected view,
+    # never the immutable tree object.
+    descriptor["documentHash"] = document_hash
     from cadgen.snapshot_core import asset_url_for_store_path
 
     component_urls = {
@@ -922,9 +1153,23 @@ def resolve_step_render_job(
         for cid, entry in (descriptor.get("components") or {}).items()
     }
     resolved["package"] = {"descriptor": descriptor, "componentUrls": component_urls}
-    from cadgen._internal.source_sidecar import read_source_sidecar, source_sidecar_path
+    from cadgen._internal.source_sidecar import (
+        read_source_sidecar,
+        source_sidecar_path,
+        validate_appearance_targets,
+    )
 
-    sidecar = read_source_sidecar(source_path) or {}
+    resolved["documentHash"] = document_hash
+    sidecar = read_source_sidecar(source_path, document_hash=document_hash) or {}
+    if sidecar.get("appearance") is not None:
+        # Validate canonical occurrence targets here for a clean CLI error;
+        # the browser repeats the same check before it composes its own copy.
+        validate_appearance_targets(descriptor, sidecar["appearance"])
+    if sidecar:
+        # The shared JS source resolver validates the same document binding and
+        # composes appearance into its private descriptor. Inline data avoids a
+        # second browser fetch and leaves the store descriptor untouched.
+        resolved["sourceSidecar"] = sidecar
     kinematics_block = (
         sidecar.get("kinematics") if isinstance(sidecar.get("kinematics"), dict) else None
     )
@@ -933,14 +1178,9 @@ def resolve_step_render_job(
         # fold through the shared FK evaluator (cadgen-js kinematicsModule),
         # which reads the sidecar's kinematics section.
         resolved["stepParameterUrl"] = asset_url_for_path(source_sidecar_path(source_path), root_path)
-    from cadgen._internal.render_module import read_render_module_text, render_module_path
-
-    # Choreography is the render module beside the document (<name>.step.js),
-    # discovered by name and loaded by the page through the shared loader; no
-    # build wrote it and the sidecar knows nothing of it.
-    render_module_text = read_render_module_text(source_path)
-    if render_module_text is not None:
-        resolved["renderModuleUrl"] = asset_url_for_path(render_module_path(source_path), root_path)
+    # Animation and materials come from the same pinned annotation snapshot.
+    animation_block = sidecar.get("animation")
+    animation_source_text = animation_block["source"] if animation_block is not None else None
     if kinematics_block:
         # A pose NAME and every DOF id are validated HERE, against the
         # declaration the CLI just loaded — a typo must fail as a clean CLI
@@ -976,21 +1216,20 @@ def resolve_step_render_job(
             "see the cad skill's kinematics reference"
         )
     if animation_request is not None:
-        if render_module_text is None:
+        if animation_source_text is None:
             raise SnapshotError(
-                f"{input_path.name} has no render module, so there is no clip frame to "
-                f"render — author {render_module_path(source_path).name} beside the document "
-                "(export const clips = {...}); see the cad skill's kinematics reference"
+                f"{input_path.name} has no animation in its sidecar. "
+                "Declare animation= on @step or pass --animation to cadgen step build."
             )
         # The clip NAME is validated HERE against the module the CLI just read —
         # a typo must fail as a clean CLI error naming the clips the model has,
         # not as a stack trace out of the browser runtime (which repeats the
         # check, with the compiled clips in hand, as the backstop and the
         # authority for a module that builds its clips indirectly).
-        from cadgen._internal.render_module import declared_clip_ids
+        from cadgen._internal.animation_source import declared_clip_ids
 
         clip_name = str(animation_request["clip"])
-        declared_clips = declared_clip_ids(render_module_text)
+        declared_clips = declared_clip_ids(animation_source_text)
         if declared_clips is not None and clip_name not in declared_clips:
             raise SnapshotError(
                 f"Unknown animation clip: {clip_name}. "
@@ -1041,6 +1280,7 @@ def resolve_drawing_render_job(
     renders. Drawings carry no CAD topology, so the STEP-only options are
     rejected the way they are for every other non-STEP kind.
     """
+    job = validate_render_job_compatibility(job)
     if selection_filter_values(job):
         raise SnapshotError(
             "selection focus/hide/refs require STEP topology; drawings have no "
@@ -1052,8 +1292,12 @@ def resolve_drawing_render_job(
         )
     if job.get("animation") is not None:
         raise SnapshotError(
-            "an animation frame requires a STEP document with a render module beside it; "
+            "an animation frame requires a STEP document with embedded animation in its sidecar; "
             "drawings have no clips"
+        )
+    if job.get("video") is not None:
+        raise SnapshotError(
+            "a video renders an animation clip; drawings have no clips to render"
         )
 
     mode = str(job.get("mode") or "view").strip().lower()
@@ -1065,13 +1309,13 @@ def resolve_drawing_render_job(
             f"{mode} mode requires STEP topology; drawings support: {supported}"
         )
 
-    display = job.get("display") if is_plain_object(job.get("display")) else {}
+    display = effective_display_request(job)
     raw_display_mode = re.sub(r"[\s-]+", "_", str(display.get("mode") or "").strip().lower())
     canonical_display_mode = DISPLAY_MODE_ALIASES.get(raw_display_mode, raw_display_mode)
-    if canonical_display_mode and canonical_display_mode != "solid":
+    if canonical_display_mode in {"shaded_edges", "hidden_edges", "hidden_lines_removed"}:
         raise SnapshotError(
             f"{canonical_display_mode} display mode is not supported for drawings; "
-            "a drawing renders its flat pattern shaded solid"
+            "a drawing mesh has no CAD edge topology"
         )
     exploded = display.get("exploded") if is_plain_object(display.get("exploded")) else None
     if exploded is not None and exploded.get("enabled"):
@@ -1284,6 +1528,27 @@ def resolve_render_job_packet(
 
 
 
+def snapshot_narrator(logger: CliLogger) -> Callable[[str], None] | None:
+    """Words for a run the progress line cannot paint, or None when it can.
+
+    `cli_progress_line` disables itself on a non-tty, and `cadgen step snapshot`
+    is served by the warm daemon: the worker's stderr is a frame relay whose
+    `isatty()` is False, so everything the bar would have shown reaches nobody
+    on the door that serves `--video`. These lines fill exactly that gap. Under
+    --verbose the bar stands down for the logger, and lines are what the caller
+    asked for anyway.
+
+    None when the bar IS painting -- the two together smear, because the live
+    line repaints with \\r and a printed line lands on top of it.
+    """
+    if logger.verbose:
+        return logger.info
+    stream = logger.stream if logger.stream is not None else sys.stderr
+    if getattr(stream, "isatty", lambda: False)():
+        return None
+    return logger.info
+
+
 def snapshot_progress_label(packet: object) -> str:
     """The header the progress line commits: what this run is rendering."""
     jobs = packet.get("jobs") if isinstance(packet, dict) else None
@@ -1309,16 +1574,13 @@ async def run_snapshot_async(
     options object. Nothing here prints, so the two cannot report differently.
     """
     enabled = enabled_kinds(kinds)
-    if options.display_specified and "step" not in enabled:
-        # Display settings ARE STEP topology settings: mode, clip, exploded and edges all
-        # need occurrences and CAD edges. Every other kind already rejected all four at
-        # resolve time, so accepting the flag only meant erroring later or doing nothing
-        # at all. renderJobContext gates job.display on the same condition.
-        raise SnapshotError(
-            "--display applies to STEP inputs only: its settings (mode, clip, exploded, "
-            "edges) are CAD topology settings, and this door renders none"
-        )
     raw_payload = load_job_from_options(options, stdin=stdin, cwd=cwd)
+    # Render/CAD incompatibilities are request errors. Refuse them before even
+    # clearing output paths, and well before input resolution can start an
+    # artifact build or load the CAD kernel.
+    for raw_job in normalize_snapshot_job_packet(raw_payload)[1]:
+        if is_plain_object(raw_job):
+            validate_render_job_compatibility(raw_job)
     # Clear the declared outputs FIRST -- before resolution, which is where a bad
     # input actually fails. The path a caller names is the path it gets, and that
     # is only safe to promise if a run that never renders leaves nothing behind for
@@ -1343,7 +1605,10 @@ async def run_snapshot_async(
         )
         progress.phase(PHASE_BROWSER)
         result = await render_snapshot(
-            packet, runtime_dir=browser_runtime_dir(runtime_dir), progress=progress
+            packet,
+            runtime_dir=browser_runtime_dir(runtime_dir),
+            progress=progress,
+            narrate=snapshot_narrator(logger),
         )
         progress.finish()
     return result

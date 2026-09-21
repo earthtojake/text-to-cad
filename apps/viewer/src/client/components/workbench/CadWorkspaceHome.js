@@ -98,7 +98,7 @@ export default function CadWorkspaceHome({
   return (
     <div className="pointer-events-none absolute inset-0 z-20 flex min-w-0 items-center justify-center px-4 py-6">
       <section
-        className="cad-glass-popover pointer-events-auto w-full max-w-2xl overflow-hidden rounded-md border border-sidebar-border text-popover-foreground shadow-xl shadow-black/10"
+        className="bg-popover pointer-events-auto w-full max-w-2xl overflow-hidden rounded-md border border-sidebar-border text-popover-foreground shadow-xl shadow-black/10"
         aria-label="CAD Viewer home"
       >
         <div className="border-b border-sidebar-border px-5 py-4 sm:px-6">
@@ -156,11 +156,11 @@ export default function CadWorkspaceHome({
             );
           }) : catalogErrorMessage ? (
             <p className="break-words px-5 py-5 text-sm text-muted-foreground sm:px-6" role="status">
-              CAD catalog unavailable: {catalogErrorMessage}
+              Couldn’t find files: {catalogErrorMessage}
             </p>
           ) : catalogLoading ? (
             <p className="px-5 py-5 text-sm text-muted-foreground sm:px-6" role="status">
-              Loading CAD catalog...
+              Finding files…
             </p>
           ) : (
             <p className="px-5 py-5 text-sm text-muted-foreground sm:px-6">

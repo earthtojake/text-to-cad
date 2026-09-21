@@ -6,7 +6,6 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Iterator
 
-from cadgen.catalog import source_from_path
 from cadgen.cli_logging import CliLogger
 from cadgen.coordination import (
     PHASE_GENERATE,
@@ -14,13 +13,11 @@ from cadgen.coordination import (
     artifact_build,
     resolve as resolve_progress,
 )
+from cadgen.cli_progress import cli_progress_line
+from cadgen.render import relative_to_cwd
 from cadgen._internal.generation import (
     EntrySpec,
-    _entry_spec_from_source,
-    _existing_topology_artifact_matches_spec_without_scene,
     _generate_part_outputs,
-    cli_progress_line,
-    relative_to_cwd,
 )
 from cadgen.catalog import build_scope, result_view_dir
 from cadgen._internal.step_scene import LoadedStepScene, load_step_scene_cached

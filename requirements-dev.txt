@@ -7,7 +7,13 @@
 # PyPI instead of the checkout -- this file is the development door.
 --editable ./packages/cadgen
 
-# cadgen's own runtime dependencies (build123d, cadquery-ocp, ezdxf, shapely) come with
+# pip installs the Python; it cannot build the JavaScript that ships beside it.
+# packages/cadgen/src/cadgen/_runtime is gitignored and produced by
+# `scripts/bundle/bundle.sh`, so run that once after installing this file --
+# without it, mesh exports, DXF previews, snapshots and the packaged Viewer have
+# no runtime to execute, and cadgen names this command when it finds none.
+
+# cadgen's own runtime dependencies (build123d, cadquery-ocp-novtk, ezdxf, shapely) come with
 # the editable install above. playwright is cadgen's `snapshot` extra, which the skills
 # that render ask for; it is listed here so a checkout gets it without the extra syntax.
 playwright

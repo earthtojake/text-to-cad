@@ -12,15 +12,16 @@ from cadgen import step
 
 from lib import turbos as turbos_lib
 from lib import spec as S
+from lib.palette import material_compound, materials_for_system
 
 
-@step(out="../STEP/turbos.step",
+@step(out="../STEP/turbos.step", materials=materials_for_system("turbos"),
       mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
 def turbos():
     parts = turbos_lib.build(S.SECTIONED)
     if not parts:
         raise RuntimeError("turbos.build() produced no parts")
-    return bd.Compound(children=parts, label="turbos")
+    return material_compound(parts, "turbos")
 
 
 if __name__ == "__main__":

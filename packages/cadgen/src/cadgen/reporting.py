@@ -38,14 +38,21 @@ def entry_summary_payload(
         summary["kind"] = kind
         return summary
     summary = geometry_summary_from_manifest(manifest)
-    return {
+    stats = manifest.get("stats") if isinstance(manifest.get("stats"), dict) else {}
+    payload: dict[str, object] = {
         "kind": kind,
         "occurrenceCount": summary.get("occurrenceCount"),
         "shapeCount": summary.get("shapeCount"),
-        "faceCount": summary.get("faceCount"),
-        "edgeCount": summary.get("edgeCount"),
-        "bounds": summary.get("bbox"),
     }
+    # Without a selector index the manifest carries no face/edge tallies, and
+    # `selector_count` floors a missing tally at 0 for the assertion helpers.
+    # Reporting that 0 said a six-faced box had no faces; an absent count is
+    # unknown, not zero, so leave the key out rather than answer wrongly.
+    for key in ("faceCount", "edgeCount"):
+        if stats.get(key) is not None:
+            payload[key] = summary.get(key)
+    payload["bounds"] = summary.get("bbox")
+    return payload
 
 
 def major_planes_payload(

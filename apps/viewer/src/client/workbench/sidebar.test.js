@@ -23,26 +23,10 @@ import {
   CAD_WORKSPACE_DEFAULT_SIDEBAR_WIDTH,
   CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH,
   CAD_DIRECTORY_SESSION_STORAGE_KEY,
-  createDirectorySessionThemeSlice,
   createTabRecord,
-  isDirectorySessionThemeSlice,
   readCadDirectorySessionState,
-  readCadWorkspaceGlassTone,
-  readThemeSettings,
-  readThemeSettingsState,
-  readDirectoryThemeSettingsState,
-  THEME_STORAGE_KEY,
-  THEME_STORAGE_VERSION,
-  writeCadDirectorySessionState,
-  writeThemeSettings,
-  writeThemeState
+  writeCadDirectorySessionState
 } from "./persistence.js";
-import {
-  cloneThemePresetSettings,
-  CUSTOM_THEME_ID,
-  normalizeThemeSettings,
-  SYSTEM_THEME_ID
-} from "cadgen-js/lib/themeSettings.js";
 import {
   CAD_WORKSPACE_MIN_MODEL_VIEWPORT_WIDTH,
   canFitDesktopPanels,
@@ -227,15 +211,15 @@ test("entryIconStatus marks buildable STEP artifacts as generating in production
 
   assert.deepEqual(
     entryIconStatus({
-      file: "benchmarks/missing-source.step",
+      file: "benchmarks/missing-topology.step",
       kind: "part",
       artifact: {
         ok: false,
-        error: "missing_source_path"
+        error: "missing_step_topology"
       }
     }, {
       sourceFormat: "step",
-      entryKey: "benchmarks/missing-source.step",
+      entryKey: "benchmarks/missing-topology.step",
       hasMesh: true
     }),
     {
@@ -772,10 +756,6 @@ test("directory storage events never sync per-file session state across tabs", (
     cadDirectoryStorageEventAction(COLOR_SCHEME_STORAGE_KEY),
     CAD_DIRECTORY_STORAGE_EVENT_ACTION.COLOR_SCHEME
   );
-  assert.equal(
-    cadDirectoryStorageEventAction(THEME_STORAGE_KEY),
-    CAD_DIRECTORY_STORAGE_EVENT_ACTION.THEME
-  );
 });
 
 test("workspace initial tab records prefer restored file session tab state", () => {
@@ -874,8 +854,7 @@ test("workspace global session state stores global panel open state and only cus
     fileViewerExpandedDirectoryIds: null,
     fileViewerWidthPx: null,
     fileSheetOpen: null,
-    fileSheetWidthPx: null,
-    theme: null
+    fileSheetWidthPx: null
   });
 
   assert.equal(writeCadDirectorySessionState({
@@ -913,8 +892,7 @@ test("workspace global session state stores global panel open state and only cus
     fileViewerExpandedDirectoryIds: null,
     fileViewerWidthPx: null,
     fileSheetOpen: null,
-    fileSheetWidthPx: CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH,
-    theme: null
+    fileSheetWidthPx: CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH
   });
 
   assert.equal(writeCadDirectorySessionState({
@@ -934,8 +912,7 @@ test("workspace global session state stores global panel open state and only cus
     fileViewerExpandedDirectoryIds: null,
     fileViewerWidthPx: customFileViewerWidth,
     fileSheetOpen: null,
-    fileSheetWidthPx: customFileSheetWidth,
-    theme: null
+    fileSheetWidthPx: customFileSheetWidth
   });
 
   assert.equal(writeCadDirectorySessionState({
@@ -959,8 +936,7 @@ test("workspace global session state stores global panel open state and only cus
     fileViewerExpandedDirectoryIds: null,
     fileViewerWidthPx: customFileViewerWidth,
     fileSheetOpen: false,
-    fileSheetWidthPx: customFileSheetWidth,
-    theme: null
+    fileSheetWidthPx: customFileSheetWidth
   });
 
   assert.equal(writeCadDirectorySessionState({
@@ -982,8 +958,7 @@ test("workspace global session state stores global panel open state and only cus
     fileViewerExpandedDirectoryIds: null,
     fileViewerWidthPx: null,
     fileSheetOpen: true,
-    fileSheetWidthPx: null,
-    theme: null
+    fileSheetWidthPx: null
   });
 
   assert.equal(writeCadDirectorySessionState({
@@ -1001,8 +976,7 @@ test("workspace global session state stores global panel open state and only cus
     fileViewerExpandedDirectoryIds: ["assemblies", "parts/servo"],
     fileViewerWidthPx: null,
     fileSheetOpen: null,
-    fileSheetWidthPx: null,
-    theme: null
+    fileSheetWidthPx: null
   });
 
   assert.equal(writeCadDirectorySessionState({
@@ -1020,186 +994,8 @@ test("workspace global session state stores global panel open state and only cus
     fileViewerExpandedDirectoryIds: [],
     fileViewerWidthPx: null,
     fileSheetOpen: null,
-    fileSheetWidthPx: null,
-    theme: null
+    fileSheetWidthPx: null
   });
-});
-
-test("workspace glass tone defaults to inferred light tone", () => {
-  assert.equal(readCadWorkspaceGlassTone(), "light");
-});
-
-// Theme state is one active id plus at most one custom settings blob. Presets
-// are read-only, there is no saved-theme library, and selecting a preset is the
-// only reset.
-function withThemeStorage(run) {
-  const originalWindow = globalThis.window;
-  globalThis.window = {
-    localStorage: createMemoryStorage()
-  };
-  try {
-    return run(globalThis.window.localStorage);
-  } finally {
-    if (originalWindow === undefined) {
-      delete globalThis.window;
-    } else {
-      globalThis.window = originalWindow;
-    }
-  }
-}
-
-function storedTheme(storage) {
-  const raw = storage.getItem(THEME_STORAGE_KEY);
-  return raw ? JSON.parse(raw) : null;
-}
-
-test("selecting a preset stores just the id, with no settings snapshot", () => {
-  withThemeStorage((storage) => {
-    assert.equal(writeThemeState("blue"), true);
-    assert.deepEqual(storedTheme(storage), {
-      version: THEME_STORAGE_VERSION,
-      themeId: "blue",
-      custom: null
-    });
-    assert.deepEqual(readThemeSettings(), cloneThemePresetSettings("blue"));
-    assert.equal(readThemeSettingsState().themeId, "blue");
-  });
-});
-
-test("the default theme is system, and storing it clears the key", () => {
-  withThemeStorage((storage) => {
-    assert.equal(readThemeSettingsState().themeId, SYSTEM_THEME_ID);
-    assert.equal(writeThemeState("blue"), true);
-    assert.notEqual(storage.getItem(THEME_STORAGE_KEY), null);
-    assert.equal(writeThemeState(SYSTEM_THEME_ID), true);
-    assert.equal(storage.getItem(THEME_STORAGE_KEY), null);
-  });
-});
-
-test("system resolves to the light or dark preset from the OS preference", () => {
-  withThemeStorage(() => {
-    assert.deepEqual(
-      readThemeSettingsState({ prefersDark: false }).settings,
-      cloneThemePresetSettings("workbench-light")
-    );
-    assert.deepEqual(
-      readThemeSettingsState({ prefersDark: true }).settings,
-      cloneThemePresetSettings("workbench-dark")
-    );
-  });
-});
-
-test("editing settings moves the active theme into the single custom slot", () => {
-  withThemeStorage((storage) => {
-    writeThemeState("blue");
-    const edited = cloneThemePresetSettings("blue");
-    edited.materials.roughness = 0.9123;
-
-    assert.equal(writeThemeSettings(edited), true);
-    const payload = storedTheme(storage);
-    assert.equal(payload.themeId, CUSTOM_THEME_ID);
-    assert.equal(payload.custom.materials.roughness, 0.9123);
-
-    const state = readThemeSettingsState();
-    assert.equal(state.themeId, CUSTOM_THEME_ID);
-    assert.equal(state.settings.materials.roughness, 0.9123);
-  });
-});
-
-test("there is only one custom theme: a second edit overwrites the first", () => {
-  withThemeStorage((storage) => {
-    const first = cloneThemePresetSettings("blue");
-    first.materials.roughness = 0.11;
-    writeThemeSettings(first);
-
-    const second = cloneThemePresetSettings("clay-sunrise");
-    second.materials.roughness = 0.88;
-    writeThemeSettings(second);
-
-    const payload = storedTheme(storage);
-    assert.equal(payload.themeId, CUSTOM_THEME_ID);
-    assert.equal(payload.custom.materials.roughness, 0.88);
-  });
-});
-
-test("selecting a preset resets the active theme but keeps the custom slot", () => {
-  withThemeStorage((storage) => {
-    const edited = cloneThemePresetSettings("blue");
-    edited.materials.roughness = 0.42;
-    writeThemeSettings(edited);
-
-    // Picking a preset is the reset: settings become the preset's again...
-    assert.equal(writeThemeState("clay-sunrise"), true);
-    assert.deepEqual(readThemeSettings(), cloneThemePresetSettings("clay-sunrise"));
-
-    // ...but the one custom theme survives so it stays selectable.
-    assert.equal(storedTheme(storage).custom.materials.roughness, 0.42);
-    writeThemeState(CUSTOM_THEME_ID);
-    assert.equal(readThemeSettings().materials.roughness, 0.42);
-  });
-});
-
-test("editing back to an exact preset records the preset, not a custom copy", () => {
-  withThemeStorage((storage) => {
-    writeThemeSettings(cloneThemePresetSettings("blue"));
-    assert.equal(storedTheme(storage).themeId, "blue");
-    assert.equal(readThemeSettingsState().themeId, "blue");
-  });
-});
-
-test("custom cannot be active without a custom slot to point at", () => {
-  withThemeStorage((storage) => {
-    assert.equal(writeThemeState(CUSTOM_THEME_ID), true);
-    assert.equal(storage.getItem(THEME_STORAGE_KEY), null);
-    assert.equal(readThemeSettingsState().themeId, SYSTEM_THEME_ID);
-  });
-});
-
-test("theme persistence ignores payloads from older storage versions", () => {
-  withThemeStorage((storage) => {
-    storage.setItem(THEME_STORAGE_KEY, JSON.stringify({
-      version: THEME_STORAGE_VERSION - 1,
-      activeThemeId: "custom:shop-dark",
-      themes: [{ id: "custom:shop-dark", label: "Shop dark", theme: cloneThemePresetSettings("blue") }]
-    }));
-    const state = readThemeSettingsState();
-    assert.equal(state.themeId, SYSTEM_THEME_ID);
-    assert.deepEqual(state.settings, cloneThemePresetSettings("workbench-light"));
-  });
-});
-
-test("a directory session may pin its own theme over the global one", () => {
-  withThemeStorage(() => {
-    globalThis.window.sessionStorage = createMemoryStorage();
-    writeThemeState("blue");
-    assert.equal(readThemeSettingsState().themeId, "blue");
-
-    const slice = createDirectorySessionThemeSlice({ themeId: "terminal", custom: null });
-    assert.deepEqual(slice, { themeId: "terminal", custom: null });
-    assert.equal(isDirectorySessionThemeSlice(slice), true);
-
-    writeCadDirectorySessionState({ theme: slice });
-    assert.equal(readDirectoryThemeSettingsState().themeId, "terminal");
-  });
-});
-
-test("a directory slice that only restates the global theme is not stored", () => {
-  withThemeStorage(() => {
-    writeThemeState("blue");
-    // Same as global: nothing to override.
-    assert.equal(createDirectorySessionThemeSlice({ themeId: "blue", custom: null }), null);
-    // Different from global: a real override.
-    assert.deepEqual(
-      createDirectorySessionThemeSlice({ themeId: "terminal", custom: null }),
-      { themeId: "terminal", custom: null }
-    );
-  });
-});
-
-test("a directory theme slice needs a real id, and custom needs its settings", () => {
-  assert.equal(createDirectorySessionThemeSlice({ themeId: "nope" }), null);
-  assert.equal(createDirectorySessionThemeSlice({ themeId: CUSTOM_THEME_ID, custom: null }), null);
-  assert.equal(isDirectorySessionThemeSlice(null), false);
 });
 
 test("selectedEntryKeyFromUrl restores the selected file query param", () => {

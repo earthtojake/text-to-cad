@@ -235,6 +235,31 @@ class BambuLanPrintTests(unittest.TestCase):
             self.assertEqual(payload["entry"]["host"], "192.168.1.34")
             self.assertNotIn("access_code", payload["entry"])
 
+    def test_config_takes_its_path_flag_on_either_side_of_the_subcommand(self) -> None:
+        """`--config` names the same file wherever it is written.
+
+        It sits on the command itself for `send`, `status`, `serial` and the rest.
+        `config` is the only two-level command here, so both `config --config X
+        set` and `config set --config X` have to reach the same file -- and the
+        leaf must not overwrite a path the parent already took.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "printers.json"
+            for argv in (
+                ["config", "--config", str(config), "set"],
+                ["config", "set", "--config", str(config)],
+            ):
+                with self.subTest(argv=" ".join(argv)):
+                    args = bambu.parse_args([*argv, "--printer", "a1-mini", "--host", "192.168.1.34"])
+                    self.assertEqual(Path(args.config), config)
+
+            for argv in (
+                ["config", "--config", str(config), "list"],
+                ["config", "list", "--config", str(config)],
+            ):
+                with self.subTest(argv=" ".join(argv)):
+                    self.assertEqual(Path(bambu.parse_args(argv).config), config)
+
     def test_send_parser_loads_printer_defaults_from_json_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

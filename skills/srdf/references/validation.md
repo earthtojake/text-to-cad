@@ -4,7 +4,7 @@ Every created or modified `.srdf` runs this recipe before the task is reported c
 
 ## Recipe
 
-1. **Bundled validator** (always): `cadgen srdf validate path/to/robot.srdf`. It collects *all* findings in one pass (severity, code, XML path); fix them and re-run until clean. Use `--strict` to fail on warnings and `--json` for machine-readable output.
+1. **Bundled validator** (always): `cadgen srdf validate path/to/robot.srdf`. It runs in two phases — the SRDF's own structure, then everything cross-checked against the paired URDF — and collects all findings of a phase in one pass (severity, code, XML path). A structural error stops the cross-file phase, so a short first report is not a short list of problems: fix and re-run until clean. Use `--strict` to fail on warnings and `--json` for machine-readable output.
 2. **Viewer review** (whenever `$cad-viewer` is available): load the SRDF, confirm the paired URDF resolves and renders, and exercise named group states.
 3. **MoveIt smoke test** (when a MoveIt environment is available): load the URDF+SRDF pair in MoveIt Setup Assistant or a project launch; solve IK for the primary group; plan to a named state. Report as skipped when unavailable.
 
@@ -13,7 +13,7 @@ Every created or modified `.srdf` runs this recipe before the task is reported c
 Structure and linkage:
 
 - root is `<robot>` with a non-empty name;
-- a paired URDF resolves: exactly one `.urdf` in the same folder declares the SRDF's robot name (`no_paired_urdf` / `ambiguous_paired_urdf` errors otherwise); a leftover `<tcad:urdf>`/`<explorer:urdf>` element warns as deprecated and is ignored;
+- a paired URDF resolves: exactly one `.urdf` in the same folder declares the SRDF's robot name (`no_paired_urdf` / `ambiguous_paired_urdf` errors otherwise), and that URDF is itself valid (`invalid_paired_urdf` otherwise — fix the URDF first). Nothing inside the SRDF names the URDF; namespaced elements are passed through untouched;
 - unique group, end-effector, group-state, and collision-pair identities.
 
 Against the paired URDF:
@@ -28,7 +28,7 @@ Against the paired URDF:
 - group states: group exists, each joint exists and belongs to the group, no fixed/mimic/passive joints, values within URDF revolute/prismatic limits; states that omit group joints warn (MoveIt fills them from the current state);
 - disabled collisions: both links exist, distinct, non-empty reason, no (reversed) duplicates; pairs claiming reason `Adjacent` that are not actually joined by a URDF joint warn; warns when 25+ pairs are manually reasoned;
 - unknown elements under `<robot>` or `<group>` warn — misspelled elements are otherwise silently ignored by MoveIt;
-- a paired URDF that is not a single-rooted tree warns (chain/adjacency checks become unreliable).
+- a paired URDF that is not a single-rooted tree warns (`paired_urdf_not_a_tree`) and **every cross-file check above is skipped** — the SRDF then passes on structure alone, so fix the URDF and re-run before trusting a clean result.
 
 ## What Validation Cannot Prove
 

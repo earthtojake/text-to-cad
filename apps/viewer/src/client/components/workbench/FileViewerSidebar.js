@@ -362,7 +362,7 @@ function FileViewerContents({
               ) : catalogErrorMessage && !hasEntries ? (
                 <p className="px-2 py-1 text-xs text-muted-foreground">CAD catalog unavailable: {catalogErrorMessage}</p>
               ) : catalogLoading ? (
-                <p className="px-2 py-1 text-xs text-muted-foreground">Loading CAD catalog...</p>
+                <p className="px-2 py-1 text-xs text-muted-foreground">Finding files…</p>
               ) : hasEntries ? (
                 <p className="px-2 py-1 text-xs text-muted-foreground">No CAD entries match this filter.</p>
               ) : (
@@ -447,7 +447,7 @@ export default function FileViewerSidebar({
         <SheetContent
           side="left"
           showCloseButton={false}
-          className="cad-glass-surface gap-0 p-0 text-sidebar-foreground"
+          className="bg-sidebar gap-0 p-0 text-sidebar-foreground"
           style={{
             width: MOBILE_FILE_VIEWER_WIDTH,
             maxWidth: DESKTOP_FILE_VIEWER_MAX_WIDTH
@@ -485,7 +485,7 @@ export default function FileViewerSidebar({
   return (
     <aside
       className={cn(
-        "cad-glass-surface pointer-events-auto z-30 flex h-full max-w-[calc(100vw_-_0.75rem)] flex-col border-r border-sidebar-border text-sidebar-foreground",
+        "bg-sidebar pointer-events-auto z-30 flex h-full max-w-[calc(100vw_-_0.75rem)] flex-col border-r border-sidebar-border text-sidebar-foreground",
         isMobile
           ? "absolute inset-y-0 left-0 shadow-xl"
           : "relative shrink-0"

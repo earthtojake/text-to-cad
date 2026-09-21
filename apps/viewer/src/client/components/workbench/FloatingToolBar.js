@@ -3,11 +3,11 @@ import {
   Focus,
   Hand,
   MousePointer2,
-  Orbit,
   Pause,
   Play,
   PenTool,
   Ruler,
+  Maximize2,
   X
 } from "lucide-react";
 import {
@@ -21,7 +21,7 @@ import { ZoomControl } from "../viewer/ZoomControl";
 import { CAD_WORKSPACE_TOOLBAR_DESKTOP_WIDTH_CLASS } from "./ToolbarShell";
 
 const FLOATING_TOOL_BAR_SURFACE_CLASS =
-  "cad-glass-surface border border-sidebar-border text-sidebar-foreground shadow-sm";
+  "bg-sidebar border border-sidebar-border text-sidebar-foreground shadow-sm";
 const PREVIEW_TOOLBAR_HIDE_DELAY_MS = 2500;
 
 // In orbit/preview mode the toolbar stays available but auto-hides: it appears
@@ -103,9 +103,11 @@ function DesktopFloatingToolBar({
   drawingViewMode = "3d",
   onDrawingViewModeChange,
   previewMode = false,
+  renderMode = false,
   toolbarHidden = false,
   onToolbarEnter,
   onToolbarLeave,
+  handleEnterPreviewMode,
   handleExitPreviewMode,
   selectionToolActive,
   referenceSelectionPending = false,
@@ -117,6 +119,7 @@ function DesktopFloatingToolBar({
   handleAnimationPlayToggle,
   drawToolActive,
   measureModeActive = false,
+  measureSupported = false,
   measureDisabled = false,
   panToolActive,
   handleSelectTabToolMode,
@@ -132,7 +135,6 @@ function DesktopFloatingToolBar({
   canUndoDrawing,
   canRedoDrawing,
   drawingStrokes,
-  handleEnterPreviewMode,
   handleScreenshotCopy,
   selectedEntry
 }) {
@@ -189,7 +191,7 @@ function DesktopFloatingToolBar({
   // A drawing's own toolbar, in its own pill to the LEFT of the shared one: 2D and 3D are a
   // property of the drawing being viewed, not a tool that acts on it, so grouping them with
   // select/pan/draw would read as a fourth mode of the same kind.
-  const drawingViewToolbar = drawingViewToggle ? (
+  const drawingViewToolbar = !renderMode && drawingViewToggle ? (
     <div
       className={`${toolbarHidden ? "pointer-events-none" : "pointer-events-auto"} inline-flex h-8 w-fit items-center gap-0.5 rounded-md p-1 ${FLOATING_TOOL_BAR_SURFACE_CLASS}`}
       onPointerEnter={onToolbarEnter}
@@ -243,12 +245,11 @@ function DesktopFloatingToolBar({
           onPointerLeave={onToolbarLeave}
         >
           {previewMode ? (
-            // Orbit mode: only tools that make sense while orbiting, plus an
-            // explicit exit (X). No select/draw/pose/orbit/export here.
+            // Fullscreen keeps playback, capture, and an explicit exit available.
             <>
               {animationButton}
               {screenshotButton}
-              <ToolbarButton label="Exit orbit" onClick={handleExitPreviewMode}>
+              <ToolbarButton label="Exit fullscreen" onClick={handleExitPreviewMode}>
                 <X className="size-3" strokeWidth={2} aria-hidden="true" />
               </ToolbarButton>
             </>
@@ -258,7 +259,7 @@ function DesktopFloatingToolBar({
                   work against any viewport; Select is only meaningful where there is
                   something to pick. Each button asks the capability table, so enabling
                   one for a new format is a data change. */}
-              {showToolCluster ? (
+              {!renderMode && showToolCluster ? (
                 <>
                   <ToolbarButton
                     label={selectLabel}
@@ -280,15 +281,20 @@ function DesktopFloatingToolBar({
                     <Hand className="size-3" strokeWidth={2} aria-hidden="true" />
                   </ToolbarButton>
 
-                  <ToolbarButton
-                    label="Measure"
-                    active={measureModeActive}
-                    onClick={() => handleSelectTabToolMode("measure")}
-                    disabled={measureDisabled}
-                    aria-pressed={measureModeActive}
-                  >
-                    <Ruler className="size-3" strokeWidth={2} aria-hidden="true" />
-                  </ToolbarButton>
+                  {/* A tool the VIEW cannot use is absent, not greyed: a robot has no
+                      measurable topology, so Measure is not offered there at all.
+                      `disabled` is reserved for transient states (loading, no content). */}
+                  {measureSupported ? (
+                    <ToolbarButton
+                      label="Measure"
+                      active={measureModeActive}
+                      onClick={() => handleSelectTabToolMode("measure")}
+                      disabled={measureDisabled}
+                      aria-pressed={measureModeActive}
+                    >
+                      <Ruler className="size-3" strokeWidth={2} aria-hidden="true" />
+                    </ToolbarButton>
+                  ) : null}
 
                   <ToolbarButton
                     label="Draw"
@@ -303,16 +309,21 @@ function DesktopFloatingToolBar({
                   {animationButton}
                 </>
               ) : null}
-
-              <ToolbarButton
-                label="Orbit"
-                onClick={handleEnterPreviewMode}
-                disabled={captureDisabled}
-              >
-                <Orbit className="size-3" strokeWidth={2} aria-hidden="true" />
-              </ToolbarButton>
+              {renderMode ? animationButton : null}
 
               {screenshotButton}
+              {/* Fullscreen is the toolbar's rightmost button: it acts on the viewport
+                  like everything else here, and the pill keeps one shape across modes
+                  because Exit fullscreen takes the same slot. */}
+              {supportsTool(renderFormat, "orbit") && typeof handleEnterPreviewMode === "function" ? (
+                <ToolbarButton
+                  label="Fullscreen"
+                  onClick={handleEnterPreviewMode}
+                  disabled={captureDisabled}
+                >
+                  <Maximize2 className="size-3" strokeWidth={2} aria-hidden="true" />
+                </ToolbarButton>
+              ) : null}
             </>
           )}
         </div>
@@ -320,7 +331,7 @@ function DesktopFloatingToolBar({
       </TooltipProvider>
 
 
-      {!previewMode && supportsTool(renderFormat, "draw") && drawToolActive ? (
+      {!renderMode && !previewMode && supportsTool(renderFormat, "draw") && drawToolActive ? (
         <DrawingToolbar
           className={CAD_WORKSPACE_TOOLBAR_DESKTOP_WIDTH_CLASS}
           drawingToolOptions={drawingToolOptions}

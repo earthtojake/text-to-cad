@@ -278,16 +278,18 @@ def require_number(value: Any, label: str) -> float:
     return number
 
 
-def require_absolute_file(path_value: str, label: str) -> str:
+def require_absolute_file(path_value: str, label: str, *, must_exist: bool = True) -> str:
     profile_path = Path(path_value).expanduser()
     if not profile_path.is_absolute():
         raise GCodeToolError(f"Profile field {label} must be an absolute path.")
-    if not profile_path.is_file():
+    if must_exist and not profile_path.is_file():
         raise GCodeToolError(f"Profile {label} does not exist: {profile_path}")
     return str(profile_path)
 
 
-def optional_path_list(data: dict[str, Any], field: str) -> tuple[str, ...]:
+def optional_path_list(
+    data: dict[str, Any], field: str, *, must_exist: bool = True
+) -> tuple[str, ...]:
     value = data.get(field)
     if value is None:
         return ()
@@ -300,7 +302,7 @@ def optional_path_list(data: dict[str, Any], field: str) -> tuple[str, ...]:
     paths = [item.strip() for item in values if item.strip()]
     if not paths:
         raise GCodeToolError(f"Profile field {field} cannot be empty when provided.")
-    return tuple(require_absolute_file(path, field) for path in paths)
+    return tuple(require_absolute_file(path, field, must_exist=must_exist) for path in paths)
 
 
 def parse_axis_bounds(value: Any, label: str) -> tuple[float, float]:
@@ -317,7 +319,15 @@ def parse_axis_bounds(value: Any, label: str) -> tuple[float, float]:
     return lower, upper
 
 
-def load_profile(path: Path) -> GCodeProfile:
+def load_profile(path: Path, *, native_config_must_exist: bool = True) -> GCodeProfile:
+    """Read a slice profile.
+
+    ``native_config_must_exist`` is the slicer's requirement, not the profile's:
+    the native config is an INPUT TO A SLICER RUN, and validation reads only the
+    ``machine`` and ``filament`` blocks. `validate` therefore loads the profile
+    without it, so a missing native config cannot stop the G-code from being read
+    -- it becomes a warning on the report instead.
+    """
     data = load_json(path)
     backend = str(data.get("backend") or "").strip().lower()
     if backend not in PREFERRED_BACKEND_ORDER:
@@ -326,9 +336,15 @@ def load_profile(path: Path) -> GCodeProfile:
     native_config = str(data.get("native_config") or "").strip()
     if not native_config:
         raise GCodeToolError("Profile field native_config is required.")
-    native_config = require_absolute_file(native_config, "native_config")
-    native_settings = optional_path_list(data, "native_settings") or (native_config,)
-    native_filaments = optional_path_list(data, "native_filaments")
+    native_config = require_absolute_file(
+        native_config, "native_config", must_exist=native_config_must_exist
+    )
+    native_settings = optional_path_list(
+        data, "native_settings", must_exist=native_config_must_exist
+    ) or (native_config,)
+    native_filaments = optional_path_list(
+        data, "native_filaments", must_exist=native_config_must_exist
+    )
 
     machine = data.get("machine")
     if not isinstance(machine, dict):
@@ -742,8 +758,23 @@ def slice_main(args: argparse.Namespace) -> int:
 
 
 def validate_main(args: argparse.Namespace) -> int:
-    profile = load_profile(Path(args.profile).expanduser())
+    # Validation reads the profile's machine and filament blocks; the native
+    # slicer config is only an input to a slicer RUN. Requiring it here made a
+    # profile whose slicer is not installed on THIS machine fail before a byte
+    # of G-code was read -- the one check that needs no slicer at all.
+    profile = load_profile(Path(args.profile).expanduser(), native_config_must_exist=False)
     result = validate_gcode_file(Path(args.gcode), profile)
+    missing = [
+        path
+        for path in (profile.native_config, *profile.native_settings, *profile.native_filaments)
+        if not Path(path).is_file()
+    ]
+    for path in sorted(dict.fromkeys(missing)):
+        result["warnings"].append(
+            f"Profile references a native slicer config that is not on this machine: {path}. "
+            "The G-code was validated against the profile's machine and filament limits; "
+            "slicing with this profile needs the file."
+        )
     if args.json:
         print_json(result)
     else:

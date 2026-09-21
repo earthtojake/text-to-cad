@@ -1,14 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Rows2 } from "lucide-react";
 import { cn } from "@/ui/utils";
 import {
   activateFileSheetTab,
   clampSplitRatio,
+  defaultRenderFileSheetTabArrangement,
   FILE_SHEET_TAB_PANES,
   kindSupportsSplit,
   moveFileSheetTab,
   normalizeFileSheetTabArrangement,
   readFileSheetTabLayoutStore,
+  renderFileSheetTabArrangementForScope,
   resolveFileSheetTabPanes,
   setFileSheetTabRatio,
   writeFileSheetTabLayoutStore
@@ -25,12 +27,15 @@ function localStorageOrNull() {
 
 // Per-kind tab arrangement (pane assignment, order, split, ratio), persisted
 // globally to localStorage. Active tab selection stays per-file via openSectionIds.
-function useFileSheetTabArrangement(kind, sectionIds) {
+function useFileSheetTabArrangement(kind, sectionIds, layoutMode, layoutScope) {
   const sectionKey = sectionIds.join("|");
   const sectionIdsRef = useRef(sectionIds);
   sectionIdsRef.current = sectionIds;
 
   const [store, setStore] = useState(() => ({}));
+  const [renderArrangementState, setRenderArrangementState] = useState(null);
+  const previousLayoutModeRef = useRef(layoutMode);
+  const previousLayoutScopeRef = useRef(layoutScope);
 
   // Hydrate from storage on the client after mount to avoid SSR mismatches.
   useEffect(() => {
@@ -40,13 +45,57 @@ function useFileSheetTabArrangement(kind, sectionIds) {
     }
   }, []);
 
-  const arrangement = useMemo(
+  const cadArrangement = useMemo(
     () => normalizeFileSheetTabArrangement(store[kind], kind, sectionIds),
     // sectionKey captures sectionIds identity.
     [store, kind, sectionKey] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
+  // A new Render visit starts from the canonical single row. useLayoutEffect
+  // resets before paint, so a split made on the previous visit never flashes.
+  useLayoutEffect(() => {
+    const enteredRender = layoutMode === "render" && previousLayoutModeRef.current !== "render";
+    const changedRenderModel = layoutMode === "render" && previousLayoutScopeRef.current !== layoutScope;
+    previousLayoutModeRef.current = layoutMode;
+    previousLayoutScopeRef.current = layoutScope;
+    if (enteredRender || changedRenderModel) {
+      setRenderArrangementState({
+        scope: layoutScope,
+        arrangement: defaultRenderFileSheetTabArrangement(sectionIdsRef.current)
+      });
+    }
+  }, [layoutMode, layoutScope]);
+
+  const arrangement = useMemo(() => {
+    if (layoutMode !== "render") {
+      return cadArrangement;
+    }
+    return renderFileSheetTabArrangementForScope(
+      renderArrangementState,
+      layoutScope,
+      kind,
+      sectionIds
+    );
+  }, [cadArrangement, kind, layoutMode, layoutScope, renderArrangementState, sectionKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const updateArrangement = useCallback((updater) => {
+    if (layoutMode === "render") {
+      setRenderArrangementState((currentState) => {
+        const ids = sectionIdsRef.current;
+        const current = currentState?.scope === layoutScope ? currentState.arrangement : null;
+        const base = normalizeFileSheetTabArrangement(
+          current || defaultRenderFileSheetTabArrangement(ids),
+          kind,
+          ids
+        );
+        const next = typeof updater === "function" ? updater(base) : updater;
+        return {
+          scope: layoutScope,
+          arrangement: normalizeFileSheetTabArrangement(next, kind, ids)
+        };
+      });
+      return;
+    }
     setStore((current) => {
       const ids = sectionIdsRef.current;
       const base = normalizeFileSheetTabArrangement(current[kind], kind, ids);
@@ -56,7 +105,7 @@ function useFileSheetTabArrangement(kind, sectionIds) {
       writeFileSheetTabLayoutStore(localStorageOrNull(), nextStore);
       return nextStore;
     });
-  }, [kind]);
+  }, [kind, layoutMode, layoutScope]);
 
   return [arrangement, updateArrangement];
 }
@@ -194,6 +243,8 @@ function computeDropIndex(stripEl, clientX) {
 
 export default function FileSheetTabbedSurface({
   kind,
+  layoutMode = "cad",
+  layoutScope = "",
   sections,
   openSectionIds = [],
   onOpenSectionIdsChange
@@ -211,7 +262,12 @@ export default function FileSheetTabbedSurface({
     return map;
   }, [visibleSections]);
 
-  const [arrangement, updateArrangement] = useFileSheetTabArrangement(kind, sectionIds);
+  const [arrangement, updateArrangement] = useFileSheetTabArrangement(
+    kind,
+    sectionIds,
+    layoutMode,
+    String(layoutScope || "")
+  );
   const resolved = useMemo(
     () => resolveFileSheetTabPanes(arrangement, kind, openSectionIds),
     [arrangement, kind, openSectionIds]

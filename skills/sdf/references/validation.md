@@ -4,13 +4,13 @@ Every created or modified `.sdf` is validated with `cadgen sdf validate <file.sd
 
 ## Validation model
 
-The validator should produce structured diagnostics with severities:
+The validator writes nothing; it prints structured diagnostics and sets the exit status. Severities:
 
-- `error`: invalid or unsafe enough to block writing output;
-- `warning`: likely problem or unverified simulator behavior; output can be written unless `--strict` is used;
-- `info`: assumption, skipped check, or useful context.
+- `error`: invalid or unsafe; always blocking, so the run exits nonzero;
+- `warning`: likely problem or unverified simulator behavior; non-blocking unless `--strict`;
+- `info`: assumption, skipped check, or useful context; never blocking.
 
-`--strict` treats warnings as failures.
+`--strict` treats warnings as failures. A clean run exits 0 and prints one `OK <file>: ...` summary line.
 
 ## Bundled checks
 
@@ -46,7 +46,7 @@ The validator should check all `<pose>` elements:
 - `rotation_format="quat_xyzw"` has exactly seven finite values;
 - unsupported `rotation_format` is an error;
 - quaternion values are approximately normalized;
-- `degrees="true"` is a warning unless strict mode is enabled;
+- `degrees="true"` always warns (`pose_uses_degrees`), and `--strict` promotes that warning to a blocking finding;
 - nontrivial omitted `relative_to` is a warning;
 - `relative_to` resolves within local scope when possible;
 - nested `::` references have valid syntax and resolve when the local tree is available.
@@ -124,27 +124,21 @@ Plugin filenames and parameters can pass bundled validation and still fail in th
 
 ### CAD Viewer review
 
-CAD Viewer treats SDF plugins, sensors, lights, includes, and nested models as static metadata. The bundled validator checks generic structure only; it does not validate Explorer-only motion contracts or execute simulator plugins.
+CAD Viewer treats SDF plugins, sensors, lights, includes, and nested models as static metadata, and says so per kind in the file's warning list. A plugin named `cad-viewer-input-motion` (or `cad_viewer_input_motion`) is recognized and then ignored: SDF rendering is static unless joints are posed manually. The bundled validator checks generic structure only and never executes a plugin of any kind.
 
 After `.sdf` files are created or modified, hand explicit paths to `$cad-viewer` for live viewer links when available.
 
-This plugin is for CAD Viewer visualization and review. It is not a Gazebo physics/controller plugin and should not be represented as simulator runtime behavior.
-
 ## External checks
 
-When Gazebo tooling is available, run:
+`gz sdf --check` runs as part of every validation: `--gz-check auto` is the default and invokes the tool when it is on PATH. The three modes are:
 
-```bash
-gz sdf --check path/to/file.sdf
-```
+| Mode | `gz` present | `gz` absent |
+|---|---|---|
+| `auto` (default) | `gz_check_passed` info, or `gz_check_failed` **error** with the tool's output | `gz_check_unavailable` info |
+| `required` | same as `auto` | `gz_check_unavailable` **error** |
+| `never` | not run | `gz_check_skipped` info |
 
-The CLI option should be:
-
-```bash
-cadgen sdf validate path/to/file.sdf --gz-check auto
-```
-
-External checks should be recorded in the diagnostics report. A skipped optional check is not a bundled-validation failure unless the user requested `--gz-check required`.
+A tool that is not installed says nothing about the document, so under `auto` its absence is a note and never blocks — including under `--strict`, which promotes warnings about the FILE. Use `required` to demand the external check. Record which mode ran in the diagnostics report.
 
 ## SDF validity vs project policy
 

@@ -110,7 +110,6 @@ def make_palm_frame_bodies(mcp_support_plane=None,thumb_support_plane=None):
     s=s-make_wrist_palm_cradle()
     if not s.is_valid or len(s.solids())!=1:raise ValueError(('frame integrity',s.is_valid,len(s.solids()),[(round(x.volume,8),str(x.bounding_box())) for x in s.solids()]))
     s.label='palm_metacarpal_truss';s.color=srgb('#a9b7c1')
-    s.cad_material={'roughness':.34,'metalness':.86,'clearcoat':.12}
     return [s]
 
 def make_palm_frame(mcp_support_plane=None,thumb_support_plane=None,label='palm_frame_system'):

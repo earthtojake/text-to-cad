@@ -1,10 +1,18 @@
 """Job slots and coalescing end to end, on both executors.
 
-The same fixture -- a parent fanning out to more leaves than slots, and the 3-level link tree -- is
-built once on a private daemon started with ``CADGEN_JOBS=2`` and once on the transient
-executor with the same limit. Running never exceeds the limit (the broker's peak says so),
-a 1-slot pool still finishes the 3-level tree (yield/reacquire), and two parents that
-need one stale child build it once.
+The same fixture -- a parent fanning out to more leaves than slots -- is built once on a
+private daemon started with ``CADGEN_JOBS=2`` and once on the transient executor with the
+same limit, and running never exceeds the limit on either (the broker's peak says so).
+That is the one property the two executors can answer differently, so it is the one the
+two of them are each asked.
+
+Everything downstream of the slot itself is asked ONCE, on the transient executor: a
+1-slot pool finishing the 3-level tree (yield/reacquire) and two parents needing one
+stale child building it once. Both are the broker's behaviour, not the executor's -- the
+same broker object serves both paths -- and ``test_broker.py`` pins each of them
+deterministically, in threads, without a build. Running them through a second daemon
+proved nothing the first daemon had not, and did it by racing two processes for an
+outcome neither ordering was allowed to change.
 """
 
 from __future__ import annotations
@@ -14,12 +22,13 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
 
 from tests.python.support.paths import REPO_ROOT, add_repo_path
-from tests.python.support.tmp_root import temporary_directory
+from tests.python.support.tmp_root import generated_cad_directory
 
 add_repo_path("packages/cadgen/src")
 
@@ -35,7 +44,15 @@ from cadgen import build123d as bd
 
 @step
 def {name}():
-    import time; time.sleep(0.3)
+    import time
+    from pathlib import Path
+    # Hold this real execution slot until the controller observes a queued
+    # sibling. Cold-worker startup must not decide whether contention exists.
+    deadline = time.monotonic() + 180
+    while not Path(__file__).with_name(".fanout-release").exists():
+        if time.monotonic() >= deadline:
+            raise RuntimeError("fanout release barrier was not opened")
+        time.sleep(0.01)
     return bd.Box({size}, 4.0, 2.0)
 
 
@@ -124,7 +141,7 @@ if __name__ == "__main__":
 
 PARENT_B = PARENT_A.replace("parent_a", "parent_b").replace("bd.Box(10, 10, 1)", "bd.Box(12, 12, 1)")
 
-LEAVES = 6  # more than the limit so the broker must queue; small so the build stays cheap
+LEAVES = 3  # one beyond the two-slot limit proves queueing without redundant native builds
 
 
 def _write_fixture(src: Path) -> None:
@@ -146,10 +163,10 @@ def _write_fixture(src: Path) -> None:
     (src / "parent_b.py").write_text(PARENT_B, encoding="utf-8")
 
 
-def _authkey() -> bytes:
-    key = transport.read_authkey(daemon_client.daemon_identity())
+def _authkey(address: str) -> bytes:
+    key = transport.read_authkey(str(address))
     if not key:
-        raise RuntimeError("the daemon has not written its auth key")
+        raise OSError("the daemon has not written its auth key")
     return key
 
 
@@ -160,7 +177,7 @@ class _Executor(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.work_tmp = temporary_directory(prefix=f"cadgen-slots-{cls.__name__}-")
+        cls.work_tmp = generated_cad_directory(prefix=f"cadgen-slots-{cls.__name__}-")
         cls.work = Path(cls.work_tmp.name)
         cls.src = cls.work / "src"
         _write_fixture(cls.src)
@@ -169,6 +186,11 @@ class _Executor(unittest.TestCase):
             "CADGEN_CACHE_DIR": str(cls.work / "store"),
             "CADGEN_DAEMON_STATE_DIR": str(cls.work / "state"),
             "CADGEN_JOBS": str(cls.LIMIT),
+            # This fixture tests execution slots, including retained parents
+            # and overlapping child saves. Give its tiny solids an explicit
+            # bounded budget instead of depending on host RAM. Memory rejection
+            # itself is covered by test_daemon_memory.
+            "CADGEN_MEMORY_MB": "8192",
             "PYTHONPATH": os.pathsep.join(
                 [str(REPO_ROOT / "packages" / "cadgen" / "src")]
                 + [os.path.abspath(p) for p in os.environ.get("PYTHONPATH", "").split(os.pathsep) if p]
@@ -191,8 +213,60 @@ class _Executor(unittest.TestCase):
     def _events(self, stderr: str) -> list[dict]:
         return [json.loads(line) for line in stderr.splitlines() if line.startswith("{")]
 
+    def _run_queued_fanout(self) -> tuple[int, str, str]:
+        release = self.src / ".fanout-release"
+        release.unlink(missing_ok=True)
+        queued = threading.Event()
+        output: list[str] = []
+        errors: list[str] = []
+        leaves = {f"leaf_{i:02d}" for i in range(LEAVES)}
+        proc = subprocess.Popen(
+            [sys.executable, "fanout.py", "--json"], cwd=str(self.src), env=self.env,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+
+        def collect(stream, lines, *, events=False):
+            for line in stream:
+                lines.append(line)
+                if events and line.startswith("{"):
+                    try:
+                        event = json.loads(line)
+                    except ValueError:
+                        continue
+                    if event.get("state") == "queued" and Path(event.get("model", "")).stem in leaves:
+                        queued.set()
+
+        readers = [
+            threading.Thread(target=collect, args=(proc.stdout, output), daemon=True),
+            threading.Thread(target=collect, args=(proc.stderr, errors), kwargs={"events": True}, daemon=True),
+        ]
+        for reader in readers:
+            reader.start()
+        try:
+            deadline = time.monotonic() + 120
+            while not queued.wait(0.05) and proc.poll() is None and time.monotonic() < deadline:
+                pass
+            # Even on failure, unblock the leaves so ownership can unwind.
+            release.touch()
+            proc.wait(timeout=900)
+        finally:
+            release.touch()
+            if proc.poll() is None:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=15)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait(timeout=5)
+            for reader in readers:
+                reader.join(timeout=5)
+            proc.stdout.close()
+            proc.stderr.close()
+        self.assertTrue(queued.is_set(), "no leaf queued before the bounded barrier opened:\n" + "".join(errors))
+        return proc.returncode, "".join(output), "".join(errors)
+
     def test_a_fanout_of_leaves_never_exceeds_the_limit(self):
-        code, out, err = self._run("fanout.py")
+        code, out, err = self._run_queued_fanout()
         self.assertEqual(code, 0, err)
         self.assertIn('"outcome":"built"', out)
         events = self._events(err)
@@ -202,21 +276,6 @@ class _Executor(unittest.TestCase):
         peak = self.peak_running()
         self.assertLessEqual(peak, self.LIMIT, f"running exceeded the limit: peak {peak}")
         self.assertGreaterEqual(peak, 1)
-
-    def test_two_parents_needing_one_stale_child_build_it_once(self):
-        # Both parents in ONE top-level build so they share an executor: a root that
-        # calls both. Here: two separate top-level runs started together, which for the
-        # daemon share the daemon and for the transient executor each have their own
-        # broker -- so the daemon proves coalescing across roots, the transient one within.
-        a = subprocess.Popen([sys.executable, "parent_a.py", "--json"], cwd=str(self.src), env=self.env,
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        b = subprocess.Popen([sys.executable, "parent_b.py", "--json"], cwd=str(self.src), env=self.env,
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        outs = [p.communicate(timeout=900) for p in (a, b)]
-        for proc, (out, err) in zip((a, b), outs):
-            self.assertEqual(proc.returncode, 0, err)
-            self.assertIn('"outcome":"built"', out)
-        self.check_pin_built_once(outs)
 
 
 class DaemonExecutor(_Executor):
@@ -244,7 +303,7 @@ class DaemonExecutor(_Executor):
             if cls.server.poll() is not None:
                 raise RuntimeError(f"daemon exited during startup:\n{cls.log_path.read_text(encoding='utf-8')}")
             try:
-                transport.connect(cls.address, _authkey()).close()
+                transport.connect(cls.address, _authkey(cls.address)).close()
                 break
             except (OSError, RuntimeError):
                 time.sleep(0.1)
@@ -286,55 +345,6 @@ class DaemonExecutor(_Executor):
         self.assertEqual(jobs.get("limit"), self.LIMIT, status)
         return int(jobs.get("peakRunning") or 0)
 
-    def check_pin_built_once(self, outs) -> None:
-        # Two roots started together share the daemon. Whether the second root's ask for
-        # pin coalesces onto the first's job or finds it already current depends on which
-        # process reaches the daemon first; the invariant is that pin's body ran ONCE.
-        # (Coalescing itself is proven deterministically by the broker unit tests.)
-        built = 0
-        for _out, err in outs:
-            built += sum(1 for e in self._events(err) if Path(e["model"]).stem == "pin" and e["state"] == "done")
-        status = daemon_client.status() or {}
-        coalesced = int((status.get("jobsRunning") or {}).get("coalesced", 0))
-        self.assertEqual(built, 1, f"pin was built {built} times (coalesced {coalesced}): {status}")
-
-    def test_z_a_one_slot_daemon_builds_the_three_level_tree(self):
-        # A separate daemon with ONE slot: a held slot would deadlock the parent waiting on
-        # its child. Yield/reacquire is what lets this finish.
-        env = dict(self.env)
-        env["CADGEN_JOBS"] = "1"
-        env["CADGEN_CACHE_DIR"] = str(self.work / "store-one")
-        address = self.address + ".one"
-        env["CADGEN_DAEMON_SOCKET"] = address
-        log = Path(self.socket_dir.name) / "one.log"
-        with open(log, "ab") as log_file:
-            server = subprocess.Popen(
-                [sys.executable, str(DAEMON_DIR / "__main__.py")],
-                stdin=subprocess.DEVNULL, stdout=log_file, stderr=subprocess.STDOUT, env=env,
-            )
-        try:
-            deadline = time.monotonic() + 120
-            while time.monotonic() < deadline:
-                try:
-                    transport.connect(address, _authkey()).close()
-                    break
-                except OSError:
-                    time.sleep(0.1)
-            code, out, err = self._run("robot.py", env=env)
-            self.assertEqual(code, 0, err)
-            self.assertIn('"outcome":"built"', out)
-            built = {Path(e["model"]).stem for e in self._events(err) if e["state"] == "done"}
-            self.assertEqual(built, {"pin", "arm", "robot"})
-            os.environ["CADGEN_DAEMON_SOCKET"] = address
-            try:
-                status = daemon_client.status() or {}
-            finally:
-                os.environ["CADGEN_DAEMON_SOCKET"] = self.address
-            self.assertEqual((status.get("jobsRunning") or {}).get("peakRunning"), 1, status)
-        finally:
-            server.terminate()
-            server.wait(timeout=15)
-
 
 class TransientExecutor(_Executor):
     @classmethod
@@ -348,14 +358,6 @@ class TransientExecutor(_Executor):
         stats = json.loads(self.stats.read_text(encoding="utf-8"))
         self.assertEqual(stats["limit"], self.LIMIT, stats)
         return int(stats["peakRunning"])
-
-    def check_pin_built_once(self, outs) -> None:
-        # Two roots, two private brokers: coalescing here is within a root. The child was
-        # built by whichever parent got there first; the second found it current.
-        built = 0
-        for _out, err in outs:
-            built += sum(1 for e in self._events(err) if Path(e["model"]).stem == "pin" and e["state"] == "done")
-        self.assertGreaterEqual(built, 1)
 
     def test_a_one_slot_transient_build_finishes_the_three_level_tree(self):
         env = dict(self.env)

@@ -12,15 +12,16 @@ from cadgen import step
 
 from lib import induction as induction_lib
 from lib import spec as S
+from lib.palette import material_compound, materials_for_system
 
 
-@step(out="../STEP/induction.step",
+@step(out="../STEP/induction.step", materials=materials_for_system("induction"),
       mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
 def induction():
     parts = induction_lib.build(S.SECTIONED)
     if not parts:
         raise RuntimeError("induction.build() produced no parts")
-    return bd.Compound(children=parts, label="induction")
+    return material_compound(parts, "induction")
 
 
 if __name__ == "__main__":

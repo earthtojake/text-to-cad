@@ -63,17 +63,6 @@ INDEX_CHAMFER = 0.08                    # 45-deg bevel on the frame's outer top 
 INDEX_RIM_BEVEL = 0.05                  # 45-deg inner bevel falling into the lume pocket
 INDEX_LUME_DROP = 0.05                  # lume fill sits this far below the frame rim
 
-# inline PBR override for polished dial furniture (frames + steel hands).
-# These labels deliberately do NOT match any _materials rule so this inline
-# cad_material survives _materials.apply() (rules would otherwise repaint
-# them matte/painted).
-POLISHED_FURNITURE = {
-    "roughness": 0.10,
-    "metalness": 0.95,
-    "clearcoat": 0.2,
-    "clearcoatRoughness": 0.08,
-}
-
 # registers: role -> center in watch frame
 REGISTERS = {
     "minutes30": (S.SUBDIAL_RADIUS, 0.0),    # 3 o'clock, 30-min recorder
@@ -223,7 +212,6 @@ def build_indices():
     frames = (body + cap) - [pocket, rim_bevel]
     frames.label = "index_frame:batons"
     frames.color = bd.Color(*S.STEEL_BRIGHT)
-    frames.cad_material = dict(POLISHED_FURNITURE)
 
     lume_sk = _fuse(lume_in)
     lume = bd.Pos(0, 0, z0) * bd.extrude(

@@ -6,12 +6,28 @@ import test from "node:test";
 
 import {
   LOD_CHORD_LEVELS,
+  LOD_DEFAULT_LEVEL,
+  LOD_TESSELLATION_LEVELS,
   desiredLevel,
+  lodTessellationForLevel,
   nextLevel,
+  normalizeLodLevel,
   pixelsPerUnit,
   planLodWork,
   projectedChordErrorPx,
+  settledLevel,
 } from "./lodPolicy.js";
+
+test("LOD tiers make coarse inputs explicit while preserving the default cache request", () => {
+  assert.equal(LOD_DEFAULT_LEVEL, 1);
+  assert.deepEqual(lodTessellationForLevel(0), { chordTolerance: 2e-3, angleTolerance: 1.4 });
+  assert.equal(lodTessellationForLevel(LOD_DEFAULT_LEVEL), undefined);
+  assert.deepEqual(lodTessellationForLevel(2), { chordTolerance: 5e-4, angleTolerance: 0.35 });
+  assert.deepEqual(LOD_CHORD_LEVELS, LOD_TESSELLATION_LEVELS.map((level) => level.chordTolerance));
+  assert.equal(normalizeLodLevel(undefined), LOD_DEFAULT_LEVEL);
+  assert.equal(normalizeLodLevel(-10), 0);
+  assert.equal(normalizeLodLevel(99), LOD_TESSELLATION_LEVELS.length - 1);
+});
 
 // A 100mm-diagonal part in a 1000px-tall, 45deg viewport.
 function sample(cameraDistance) {
@@ -97,4 +113,44 @@ test("planLodWork ranks upgrades worst-error-first and drops settled components"
   assert.equal(plan[0].cid, "near", "worst projected error first");
   assert.ok(!plan.some((item) => item.cid === "far"), "settled component plans no work");
   assert.ok(plan.every((item) => item.level !== undefined && item.errorPx > 0));
+});
+
+test("settledLevel skips intermediate rungs but preserves starting hysteresis and strict boundaries", () => {
+  const ortho = (scale) => ({ diagonal: 1, cameraDistance: 10,
+    camera: { kind: "orthographic", visibleWorldHeight: 1 }, viewportHeightPx: scale });
+  assert.equal(settledLevel(ortho(3000), 0), 3);
+  assert.equal(settledLevel(ortho(1000), 0), 2);
+  assert.equal(settledLevel(ortho(250), 3), 0);
+  assert.equal(desiredLevel(ortho(500)), 0);
+  assert.deepEqual([0, 1, 2, 3].map(level => settledLevel(ortho(500), level)), [0, 1, 2, 2]);
+  const levels = [1, .5, .125];
+  assert.equal(settledLevel(ortho(1.25), 0, levels), 0);
+  assert.equal(settledLevel(ortho(1.25 + Number.EPSILON), 0, levels), 1);
+  assert.equal(settledLevel(ortho(.6), 1, levels), 1);
+  assert.equal(settledLevel(ortho(.6 - Number.EPSILON), 1, levels), 0);
+});
+
+test("settledLevel matches repeated existing steps over perspective, orthographic and inside-bounds samples", () => {
+  for (const camera of [{ kind: "perspective", fovYDeg: 45 }, { kind: "orthographic", visibleWorldHeight: 1 }]) {
+    for (const diagonal of [.01, 1, 1000]) for (const cameraDistance of [0, .001, .5, 1, 10, 10000]) {
+      for (const viewportHeightPx of [0, 300, 500, 625, 1000, 3000]) {
+        for (const current of [-10, 0, 1, 2, 3, 20, undefined, NaN, Infinity]) {
+          const input = { camera, diagonal, cameraDistance, viewportHeightPx };
+          let expected = Math.max(0, Math.min(LOD_CHORD_LEVELS.length - 1, current | 0));
+          const visited = new Set();
+          while (true) {
+            assert.ok(!visited.has(expected), "existing policy must not cycle");
+            visited.add(expected);
+            const next = nextLevel(input, expected);
+            if (next === expected) break;
+            expected = next;
+          }
+          assert.equal(settledLevel(input, current), expected);
+          assert.equal(nextLevel(input, expected), expected);
+        }
+      }
+    }
+  }
+  assert.equal(settledLevel(sample(52), 99, []), nextLevel(sample(52), 99, []));
+  assert.equal(settledLevel(sample(52), 99, [1]), 0);
 });

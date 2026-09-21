@@ -62,6 +62,5 @@ def make_thumb_metacarpal(label='thumb_metacarpal'):
         shape=shape-(bd.Pos(0,LENGTH,z)*bd.Cylinder(2.53,4.5))
     shape.label=label
     shape.color=srgb('#a9b7c1')
-    shape.cad_material={'roughness':.34,'metalness':.86,'clearcoat':.12}
     if not shape.is_valid or shape.volume<=0:raise ValueError(f'{label}: invalid solid')
     return shape

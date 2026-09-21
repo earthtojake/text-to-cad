@@ -46,8 +46,11 @@ class StepSceneSelectorArtifactTests(unittest.TestCase):
 
             build_step_artifact(repo_root=temp_root, step=step_path)
             with mock.patch(
-                "cadgen._internal.step_scene_package.load_step_scene",
-                side_effect=AssertionError("package miss"),
+                "cadgen._internal.step_scene_package._load_step_scene_text",
+                side_effect=AssertionError("text STEP parse on warm hit"),
+            ), mock.patch(
+                "cadgen.daemon.executors.submit_compile",
+                side_effect=AssertionError("compile submitted on warm hit"),
             ):
                 cached = step_scene.load_step_scene_cached(step_path)
 

@@ -29,14 +29,13 @@ FIDELITY NOTES (each one is a place a "natural" Python spelling diverges)
 * ``path.extname`` is not ``os.path.splitext`` (see ``content_types``).
 * JS ``\\s`` and ``\\w`` are not Python's, so ``_xml_root_name`` spells both
   character classes out.
-* ``typeof x === "object"`` is true for ARRAYS and false for ``null``, and JS
-  ``{}``/``[]`` are TRUTHY where Python's are falsy. A sidecar that parses to
-  ``[1, 2]`` counts as a sidecar and emits ``sourceUrl``; a ``kinematics: {}``
-  emits ``poseUrl``.
+* A ``kinematics: {}`` object is a declaration even though Python considers it
+  falsey, so it still emits ``poseUrl``.
 """
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import os
@@ -44,7 +43,6 @@ import re
 import stat as stat_module
 import threading
 
-from cadgen._internal.render_module import is_render_module_name, render_module_path
 
 from .content_types import extension_of
 from .encoding import encode_uri_component, encode_url_path, file_version
@@ -52,8 +50,9 @@ from .natural_sort import sort_catalog_entries
 from .store_paths import (
     SOURCE_SIDECAR_NAMES,
     artifact_path_key,
+    cadgen_cache_root_dir,
     result_descriptor,
-    result_tree,
+    result_snapshot,
     source_sidecar_path,
 )
 
@@ -63,6 +62,7 @@ __all__ = [
     "SOURCE_EXTENSIONS",
     "VIEWER_SKIPPED_DIRECTORIES",
     "asset_for_path",
+    "catalog_input_fingerprint",
     "is_hidden_name",
     "is_served_cad_asset",
     "path_is_inside",
@@ -219,6 +219,17 @@ _HASH_CACHE: dict[tuple[str, int, int], str] = {}
 _HASH_CACHE_LIMIT = 4096
 _HASH_CACHE_LOCK = threading.Lock()
 
+# A STEP catalog row is derived from immutable geometry plus the document-bound
+# sidecar, including its optional embedded animation. Catalog
+# refreshes still resolve the document digest to its current tree on every
+# scan; only the expensive flattened-tree validation and annotation shaping is
+# reused when all of those inputs are unchanged. Misses build outside the lock;
+# metadata capture has its own per-tree single-flight, and unrelated documents
+# must remain independently readable while one large tree is verified.
+_STEP_ENTRY_CACHE: dict[tuple, dict] = {}
+_STEP_ENTRY_CACHE_LIMIT = 4096
+_STEP_ENTRY_CACHE_LOCK = threading.Lock()
+
 
 def _sha256_file(file_path, stat_result=None) -> str:
     st = stat_result if stat_result is not None else _file_stats(file_path)
@@ -239,6 +250,38 @@ def _sha256_file(file_path, stat_result=None) -> str:
                 _HASH_CACHE.clear()
             _HASH_CACHE[key] = hexdigest
     return hexdigest
+
+
+def _stat_identity(file_path) -> tuple | None:
+    value = _file_stats(file_path)
+    if value is None:
+        return None
+    return (
+        value.st_dev,
+        value.st_ino,
+        value.st_size,
+        value.st_mtime_ns,
+        value.st_ctime_ns,
+    )
+
+
+def catalog_input_fingerprint(source_path) -> tuple:
+    """Cheap mutable inputs behind one catalog row, excluding STEP store state."""
+    source_path = os.path.abspath(str(source_path))
+    extension = extension_of(source_path)
+    related = ()
+    if extension in (".step", ".stp"):
+        related = (
+            _stat_identity(source_sidecar_path(source_path)),
+        )
+    elif extension == ".srdf":
+        directory = os.path.dirname(source_path)
+        try:
+            names = sorted(name for name in os.listdir(directory) if extension_of(name) == ".urdf")
+        except (OSError, ValueError):
+            names = []
+        related = tuple((name, _stat_identity(os.path.join(directory, name))) for name in names)
+    return source_path, _stat_identity(source_path), related
 
 
 def _store_asset_url(tree: str) -> str:
@@ -512,7 +555,7 @@ def _read_json(file_path):
         return None
 
 
-def read_step_catalog_metadata(descriptor, source_path=None) -> dict:
+def read_step_catalog_metadata(descriptor, source_path=None, *, document_hash=None) -> dict:
     """Catalog-facing facts from a document's flattened tree, or ``{}`` when
     there is no valid one.
 
@@ -528,28 +571,94 @@ def read_step_catalog_metadata(descriptor, source_path=None) -> dict:
     # Everything SOURCE-derived rides the model-side sidecar
     # (<name>.step.json); the store assembly.json is STEP-pure.
     sidecar = None
+    annotation_error = None
     if source_path:
-        parsed = _read_json(source_sidecar_path(source_path))
-        sidecar = parsed if _is_js_object(parsed) else None
+        from cadgen._internal.source_sidecar import (
+            SidecarAppearanceError,
+            SidecarBindingError,
+            SidecarSchemaError,
+            validate_appearance_targets,
+            read_source_sidecar,
+        )
+
+        try:
+            sidecar = read_source_sidecar(source_path, document_hash=document_hash)
+            if isinstance(sidecar, dict) and sidecar.get("appearance") is not None:
+                validate_appearance_targets(descriptor, sidecar["appearance"])
+        except (SidecarAppearanceError, SidecarBindingError, SidecarSchemaError) as error:
+            sidecar = None
+            annotation_error = str(error)
     entry_kind = descriptor.get("entryKind")
     kinematics = sidecar.get("kinematics") if isinstance(sidecar, dict) else None
-    return {
+    appearance = sidecar.get("appearance") if isinstance(sidecar, dict) else None
+    result = {
         "topology": {
             "index": descriptor,
             "entryKind": str(entry_kind if entry_kind is not None else "").strip().lower(),
         },
-        # Whether a sidecar EXISTS is the only thing the catalog asks of it: its
-        # declarations are fetched by the client, so the entry has to name the
-        # URL. What produced the document is not a catalog fact.
+        # Publish the validated artifact annotations with this geometry snapshot.
+        # What produced the document is not a catalog fact.
         "hasSourceSidecar": sidecar is not None,
+        "sourceSidecar": sidecar,
         "kinematics": kinematics if _is_js_object(kinematics) else None,
+        "appearance": appearance if isinstance(appearance, dict) else None,
     }
+    if annotation_error:
+        result["annotationError"] = annotation_error
+    return result
 
 
 def _create_step_entry(repo_root, root_path, source_path, extension) -> dict:
-    tree = result_tree(source_path)
+    snapshot = result_snapshot(source_path)
+    if snapshot:
+        document_hash, tree = snapshot
+    else:
+        # An unbuilt document still needs a digest for status/sidecar binding,
+        # but there is no geometry selection it could be mixed with.
+        document_hash, tree = _sha256_file(source_path), None
+    sidecar_path = source_sidecar_path(source_path)
+    sidecar_stat = _file_stats(sidecar_path)
+    sidecar_identity = (
+        sidecar_stat.st_dev,
+        sidecar_stat.st_ino,
+        sidecar_stat.st_size,
+        sidecar_stat.st_mtime_ns,
+        sidecar_stat.st_ctime_ns,
+    ) if sidecar_stat is not None else None
+    cache_key = (
+        cadgen_cache_root_dir(),
+        os.path.abspath(str(repo_root)),
+        root_path,
+        source_path,
+        document_hash,
+        tree,
+        sidecar_identity,
+    )
+    with _STEP_ENTRY_CACHE_LOCK:
+        cached = _STEP_ENTRY_CACHE.get(cache_key)
+    if cached is not None:
+        return copy.deepcopy(cached)
+    entry = _build_step_entry(
+        repo_root, root_path, source_path, extension,
+        document_hash=document_hash, tree=tree,
+    )
+    with _STEP_ENTRY_CACHE_LOCK:
+        cached = _STEP_ENTRY_CACHE.get(cache_key)
+        if cached is not None:
+            return copy.deepcopy(cached)
+        if len(_STEP_ENTRY_CACHE) >= _STEP_ENTRY_CACHE_LIMIT:
+            _STEP_ENTRY_CACHE.clear()
+        _STEP_ENTRY_CACHE[cache_key] = copy.deepcopy(entry)
+    return entry
+
+
+def _build_step_entry(
+    repo_root, root_path, source_path, extension, *, document_hash, tree,
+) -> dict:
     descriptor = result_descriptor(tree) if tree else None
-    metadata = read_step_catalog_metadata(descriptor, source_path)
+    metadata = read_step_catalog_metadata(
+        descriptor, source_path, document_hash=document_hash
+    )
     topology = metadata.get("topology")
     descriptor_body = json.dumps(descriptor) if metadata else ""
     # An EMPTY `kinematics: {}` block still yields a poseUrl (JS truthiness);
@@ -560,25 +669,43 @@ def _create_step_entry(repo_root, root_path, source_path, extension) -> dict:
         "kind": step_kind_from_topology(topology),
         # The tree hash identifies the render; an unbuilt document still gets a
         # deterministic URL the store route answers 404 for.
-        "url": _store_asset_url(tree or f"unbuilt-{artifact_path_key(source_path)}"),
+        "url": _store_asset_url(tree or f"unbuilt-{artifact_path_key(source_path)}") + (
+            f"&documentHash={document_hash}" if document_hash and tree else ""
+        ),
         "hash": tree if metadata else "",
+        "documentHash": document_hash,
         "bytes": len(descriptor_body.encode("utf-8")),
     }
+    if metadata.get("annotationError"):
+        entry["annotationError"] = metadata["annotationError"]
     if metadata.get("hasSourceSidecar"):
-        # The model-side sidecar lives in the root and is served by the ordinary
-        # asset route; the client fetches and merges it. No ?v= token here.
-        entry["sourceUrl"] = _asset_url_for_path(repo_root, source_sidecar_path(source_path))
+        # The model-side sidecar is mutable independently of the STEP bytes.
+        # Its URL therefore carries the ordinary asset version while the STEP
+        # tree URL remains content-addressed.
+        sidecar_asset = asset_for_path(repo_root, source_sidecar_path(source_path))
+        if sidecar_asset:
+            entry["sourceUrl"] = sidecar_asset["url"]
+        # The URL is a mutable file route. Publish the exact validated snapshot
+        # read above so appearance and kinematics cannot observe a later write
+        # under the same path/version token.
+        entry["sourceSidecar"] = metadata["sourceSidecar"]
+    appearance = metadata.get("appearance")
+    if appearance is not None:
+        from cadgen._internal.source_sidecar import appearance_digest
+
+        # Appearance participates in the composed scene identity only. The
+        # immutable STEP tree/hash and component tessellation keys stay pure.
+        entry["appearanceHash"] = appearance_digest(appearance)
     if pose_block is not None:
         # Typed mates, the articulation mechanism the sidecar carries.
         entry["poseUrl"] = entry.get("sourceUrl") or _asset_url_for_path(
             repo_root, source_sidecar_path(source_path)
         )
-    render_module = render_module_path(source_path)
-    if render_module.is_file():
-        # The render module beside the document (<name>.step.js): authored,
-        # discovered by name, loaded by the client. Its presence is the only
-        # thing the catalog says about it.
-        entry["renderModuleUrl"] = _asset_url_for_path(repo_root, render_module)
+    animation = (metadata.get("sourceSidecar") or {}).get("animation")
+    if animation is not None:
+        entry["animationHash"] = hashlib.sha256(
+            json.dumps(animation, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
     return entry
 
 
@@ -593,9 +720,8 @@ def is_served_cad_asset(file_path) -> bool:
     The sidecar test matches the FULL pair of suffixes, never
     ``SOURCE_SIDECAR_SUFFIX`` alone — that is ``.json``, and serving every JSON
     file under the root would hand out configs, secrets and anything else that
-    happens to be there. The same goes for ``.js``: only the render module,
-    matched on its full ``.step.js``/``.stp.js`` pair, is served — a loose
-    script beside a model is not.
+    happens to be there. JavaScript files are not model assets; animation
+    source is embedded in the document-bound JSON sidecar.
     """
     text = str(file_path or "")
     if is_hidden_name(node_basename(text)):
@@ -603,22 +729,32 @@ def is_served_cad_asset(file_path) -> bool:
     lowered = text.lower()
     if any(lowered.endswith(name) for name in SOURCE_SIDECAR_NAMES):
         return True
-    if is_render_module_name(lowered):
-        return True
     return extension_of(text) in SOURCE_EXTENSIONS
 
 
 # --- public scan API ------------------------------------------------------
 
 
-def scan_cad_directory(repo_root) -> dict:
+def scan_cad_directory(repo_root, *, preferred_file=None, defer_unpreferred=False) -> dict:
     """Scan one directory. It is its own root — a viewer serves exactly one."""
     if not repo_root:
         raise ValueError("repoRoot is required")
     root_path = os.path.abspath(repo_root)
     source_files = _collect_cad_source_files(root_path, [])
+    preferred_path = None
+    if preferred_file:
+        preferred_text = str(preferred_file).replace("\\", os.sep)
+        preferred_path = os.path.abspath(
+            preferred_text if os.path.isabs(preferred_text) else os.path.join(root_path, preferred_text)
+        )
     entries = []
     for source_path in source_files:
+        if defer_unpreferred and os.path.abspath(source_path) != preferred_path:
+            entries.append({
+                "file": repo_relative_path(root_path, source_path),
+                "catalogPending": True,
+            })
+            continue
         extension = extension_of(source_path)
         if extension in (".step", ".stp"):
             entries.append(_create_step_entry(repo_root, root_path, source_path, extension))

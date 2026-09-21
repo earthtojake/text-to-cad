@@ -21,11 +21,11 @@ differently:
   no unrelated set in those modules changes behaviour.
 * ``{ve for e in edges for ve in e.vertices() if ve != vertex}`` in
   ``FilletPolyline`` — a set COMPREHENSION compiles to inline bytecode with no
-  ``set`` call to shadow. Instead ``Vertex.__hash__`` becomes coordinate-derived.
-  That is sound: ``__eq__`` is ``is_same`` (same TShape + same location), which
-  implies identical coordinates, so equal vertices still hash equal; distinct
-  vertices that happen to coincide merely share a bucket, exactly as unequal
-  objects with colliding hashes always may.
+  ``set`` call to shadow. Instead ``Vertex.__hash__`` uses the same live native
+  coordinates and rounding as the op memo's geometric identity. With the memo
+  disabled, pointer-distinct vertices may share a bucket; pointer equality
+  still separates them. Reading OCCT again also observes native point and
+  location edits that leave build123d's cached ``X``/``Y``/``Z`` unchanged.
 
 ``CADGEN_DETERMINISM=0`` disables both. ``install()`` is idempotent and never
 raises: build123d is an external dependency, so a version whose shape does not
@@ -142,15 +142,19 @@ def _make_ordered_set(shape_list_cls: type) -> Any:
 
 
 def _vertex_hash(self: Any) -> int:
-    """Coordinate-derived hash for a ``Vertex``.
+    """Hash the current native point at geometric equality's precision.
 
-    Rounded so that the float noise two equal-by-``is_same`` vertices cannot
-    have does not matter, and so nearly-coincident vertices share a bucket
-    (harmless: ``__eq__`` still separates them). ``X``/``Y``/``Z`` are plain
-    instance attributes set at construction, so this costs a tuple hash."""
+    With the op memo enabled, a Vertex and another Shape wrapper of that native
+    vertex agree too. No point or signature is retained between calls.
+    """
     if self._wrapped is None:
         return 0
-    return hash((round(self.X, 9), round(self.Y, 9), round(self.Z, 9)))
+    from cadgen._internal.op_memo import _signature_hash
+
+    try:
+        return _signature_hash(self.wrapped)
+    except Exception:
+        return hash(self.wrapped)
 
 
 def install() -> bool:

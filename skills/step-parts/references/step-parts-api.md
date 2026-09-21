@@ -58,9 +58,10 @@ Use returned URLs when possible. Patterns are:
 
 ```text
 https://www.step.parts/step/{id}.step
-Use the absolute `glbUrl` and `pngUrl` returned by the API record. Preview assets are served from Vercel Blob.
 https://www.step.parts/parts/{id}
 ```
+
+Preview assets have no predictable pattern: use the absolute `glbUrl` and `pngUrl` returned by the API record. They are served from Vercel Blob.
 
 The `/step/{id}.step` route serves local checked-out STEP bytes in local/dev mode and redirects to commit-pinned GitHub LFS media in production.
 

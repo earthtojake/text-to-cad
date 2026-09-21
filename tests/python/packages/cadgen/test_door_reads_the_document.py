@@ -1,6 +1,6 @@
 """A door reads the document as written; it never rebuilds a model.
 
-``inspect validate`` and ``inspect interfere`` need the model's in-memory scene.
+Python geometry checks need the saved document scene.
 They load the document on disk — current or not — and run no Python: a door asks
 one question (does the store have a tree for these bytes?) and a source that has
 moved on since the document was written is the model's business, not the door's
@@ -76,21 +76,14 @@ class DoorReadsTheDocumentTests(unittest.TestCase):
         self.assertTrue(self.document.is_file())
 
     def _validate(self) -> tuple[dict, str]:
-        from cadgen.validity import inspect_validity
-
-        err = io.StringIO()
-        with mock.patch.dict(os.environ, {"CADGEN_VALIDATE_WORKERS": "1"}), \
-                redirect_stdout(io.StringIO()), redirect_stderr(err):
-            report = inspect_validity("part.step")
-        return report, err.getvalue()
-
-    def _interfere(self) -> str:
-        from cadgen.interference import inspect_interference
-
+        from cadgen import read_scene
+        from cadgen.geometry import topology_errors
         err = io.StringIO()
         with redirect_stdout(io.StringIO()), redirect_stderr(err):
-            inspect_interference("part.step")
-        return err.getvalue()
+            scene = read_scene("part.step")
+            body = scene.roots[0].shape()
+            report = {"issues": topology_errors(body), "volume": body.volume}
+        return report, err.getvalue()
 
     def _make_stale(self) -> None:
         # A SEMANTIC change to an imported helper, written after the document.
@@ -105,19 +98,14 @@ class DoorReadsTheDocumentTests(unittest.TestCase):
             side_effect=AssertionError("a door must not run the model's script"),
         )
 
-    def test_a_current_document_is_validated_without_running_python(self):
-        with self._never_runs_the_script():
-            report, err = self._validate()
-        self.assertTrue(report["ok"], report)
-        self.assertNotIn("rebuilding", err)
-
     def test_a_stale_document_is_read_as_written_no_rebuild_no_notice(self):
         # The document's bytes still have their tree in the store (the model wrote
-        # them), so the door reads it. The new WIDTH is the model's to build.
+        # them), so the door reads it. The new WIDTH is the model's to build. (A door
+        # never consults freshness at all, so this covers the current document too.)
         self._make_stale()
         with self._never_runs_the_script():
             report, err = self._validate()
-            interfere_err = self._interfere()
-        self.assertTrue(report["ok"], report)
-        self.assertNotIn("is stale", err + interfere_err)
-        self.assertNotIn("rebuilding", err + interfere_err)
+        self.assertEqual(report["issues"], ())
+        self.assertAlmostEqual(report["volume"], 10 * 8 * 4)
+        self.assertNotIn("is stale", err)
+        self.assertNotIn("rebuilding", err)

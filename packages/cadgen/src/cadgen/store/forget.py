@@ -23,7 +23,7 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-from cadgen.store.index import MODEL_REF_SEP, model_ref, path_key, read_entry, remove_entry, split_model_ref
+from cadgen.store.index import model_ref, path_key, read_entry, remove_entry, split_model_ref
 from cadgen.store.records import read_record, records_for_script, remove_record
 
 

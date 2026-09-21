@@ -1,20 +1,21 @@
-import tempfile
 import unittest
 from pathlib import Path
+
+from tests.python.support.tmp_root import generated_cad_directory
 
 from cadgen.sdf_source import SdfSourceError, parse_sdf_xml, read_sdf_source
 
 
 class SdfSourceTests(unittest.TestCase):
     def setUp(self) -> None:
-        self._tempdir = tempfile.TemporaryDirectory(prefix="tmp-sdf-source-")
+        self._tempdir = generated_cad_directory(prefix="tmp-sdf-source-")
         self.temp_root = Path(self._tempdir.name)
 
     def tearDown(self) -> None:
         self._tempdir.cleanup()
 
-    def _file_ref(self, name: str) -> str:
-        return (self.temp_root / f"{name}.sdf").resolve().as_posix()
+    def _file_ref(self, name: str) -> Path:
+        return (self.temp_root / f"{name}.sdf").resolve()
 
     def _write_mesh(self, name: str) -> Path:
         mesh_path = self.temp_root / "meshes" / name
@@ -41,7 +42,7 @@ class SdfSourceTests(unittest.TestCase):
 
         source = read_sdf_source(source_path)
 
-        self.assertEqual(self._file_ref("robot"), source.file_ref)
+        self.assertEqual(self._file_ref("robot"), Path(source.file_ref).resolve())
         self.assertEqual("1.12", source.version)
         self.assertEqual(("sample",), source.model_names)
         self.assertEqual((), source.world_names)
@@ -63,7 +64,7 @@ class SdfSourceTests(unittest.TestCase):
             base_dir=output_path.parent,
         )
 
-        self.assertEqual(output_path.resolve().as_posix(), source.file_ref)
+        self.assertEqual(output_path.resolve(), Path(source.file_ref).resolve())
         self.assertEqual(("sample",), source.model_names)
         self.assertFalse(output_path.exists())
 

@@ -27,9 +27,9 @@ __all__ = [
     "artifact_file_hash",
     "artifact_path_key",
     "cadgen_cache_root_dir",
-    "component_object_present",
     "build_scope",
     "result_descriptor",
+    "result_snapshot",
     "result_tree",
     "source_sidecar_path",
     "virtual_store_asset",
@@ -73,27 +73,27 @@ def result_tree(file_path) -> str | None:
     return catalog.result_tree_for(Path(str(file_path)))
 
 
+def result_snapshot(file_path) -> tuple[str, str] | None:
+    """The coherent ``(documentHash, tree)`` selected from one file-hash lookup."""
+    return catalog.result_snapshot_for(Path(str(file_path)))
+
+
 def result_descriptor(tree_hash: str) -> dict | None:
-    """The flattened tree in the shape the client reads (component refs spelled
-    ``components/<object>.surf``), or ``None`` for an unknown tree."""
-    from cadgen.store.view import descriptor_for_view
+    """Complete geometry metadata, without initializing a display producer."""
+    from cadgen.store.trees import capture_tree
 
-    return descriptor_for_view(str(tree_hash))
-
-
-def component_object_present(digest: str) -> bool:
-    """Whether a component's object (``surfObject``/``brepObject``) is in the store."""
-    from cadgen.store.objects import has_object, is_object_hash
-
-    return bool(is_object_hash(digest) and has_object(str(digest)))
+    try:
+        return capture_tree(str(tree_hash), retain_payloads=False)[0]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
 
 
-def virtual_store_asset(rel: str):
+def virtual_store_asset(rel: str, *, producer: dict | None = None, document_hash: str | None = None):
     """``(payload, content_type)`` for ``<tree>/assembly.json`` or
     ``<tree>/components/<object>.<suffix>``; ``(None, "")`` for anything else."""
     from cadgen.store.view import virtual_path
 
-    return virtual_path(str(rel or ""))
+    return virtual_path(str(rel or ""), producer=producer, document_hash=document_hash)
 
 
 def source_sidecar_path(entry_path) -> str:

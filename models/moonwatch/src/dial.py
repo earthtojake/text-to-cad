@@ -12,10 +12,9 @@ from lib import dial as D
 from lib import materials as M
 
 
-@step(out="../STEP/dial.step")
+@step(out="../STEP/dial.step", materials=M.materials_for_model("dial"))
 def dial():
     compound = bd.Compound(children=D.build_dial_parts(), label="dial")
-    M.apply(compound)
     return compound
 
 

@@ -6,11 +6,20 @@ import {
   STEP_TOPOLOGY_SCHEMA_VERSION,
   isCurrentStepTopologySchemaVersion
 } from "../common/stepTopology.mjs";
-import { buildMeshDataFromGlbBuffer } from "./render/glbMeshData.js";
+import { buildGlbDocumentFromBuffer, buildMeshDataFromGlbBuffer } from "./render/glbMeshData.js";
 import { buildMeshDataFromStlBuffer } from "./render/stlMeshData.js";
 import { buildMeshDataFrom3MfBuffer } from "./render/threeMfMeshData.js";
 import { loadGlbMeshDataInWorker } from "./render/glbMeshWorkerClient.js";
 import { loadStlMeshDataInWorker } from "./render/stlMeshWorkerClient.js";
+import {
+  reclaimIdleSurfWorkers as reclaimIdleSurfWorkerPool,
+  releaseSurfWorkerPoolWhenIdle,
+  surfWorkerMemoryStats as surfWorkerMemoryStatsFromPool,
+} from "./surf/surfWorkerClient.js";
+import {
+  resolvedTessellationIdentity,
+  tessellationCacheKey,
+} from "./surf/tessellationCache.js";
 import {
   assertAssetSourceScope,
   assetSourceScopeMatches,
@@ -277,15 +286,55 @@ export function peekRenderGlb(url) {
   return peekCached(glbCache, url);
 }
 
-export async function loadRenderSurf(url, { signal } = {}) {
+// Interactive GLB documents are intentionally uncached: their scene graph is
+// mutable animation state and has one viewer owner with an explicit lifetime.
+export async function loadRenderGlbDocument(url, { signal } = {}) {
+  const buffer = await loadRenderArrayBuffer(url, { signal });
+  assertNotGitLfsPointer(buffer, url, "GLB render asset");
+  return buildGlbDocumentFromBuffer(buffer);
+}
+
+export async function loadRenderSurf(url, {
+  signal,
+  tessellation,
+  identity,
+  memoryEstimateBytes,
+} = {}) {
   // Exact-surface component artifact (design/surface-rendering.md): the
-  // .surf is fetched + tessellated in the worker pool into the same
-  // meshData contract a component GLB produced; the selector bundle rides
-  // the same request through loadSurfPayload's cache.
-  const meshData = await loadCached(glbCache, url, async () => {
-    return (await loadSurfPayload(url, { signal })).meshData;
+  // worker builds only the display payload. A compatible shared-cache entry
+  // contains geometry, display edges, bounds and appearance, so this path can
+  // skip both selector construction and the .surf request.
+  const cacheKey = surfTessellationCacheKey(url, tessellation, identity);
+  const meshData = await loadCached(glbCache, cacheKey, async () => {
+    return (await loadSurfPayload(url, {
+      signal,
+      tessellation,
+      identity,
+      memoryEstimateBytes,
+      capabilities: { render: true, selectors: false },
+    })).meshData;
   }, { cachePending: !signal });
-  return finalizeCached(glbCache, url, meshData);
+  finalizeCached(glbCache, cacheKey, meshData);
+  // On the surf leash too: the package's componentMeshDataByCid owns the
+  // displayed arrays, and a pinned entry here kept a previous model's
+  // geometry alive across a file switch.
+  retainSurfEntry(glbCache, cacheKey);
+  return meshData;
+}
+
+// Hand the surf worker pool's isolates back once nothing is loading. The
+// generation-scoped wait prevents an overlapping package/LOD request from
+// leaving its conservative retained-memory estimate charged after it drains.
+export async function releaseSurfWorkers() {
+  return releaseSurfWorkerPoolWhenIdle();
+}
+
+export function reclaimIdleSurfWorkers() {
+  return reclaimIdleSurfWorkerPool();
+}
+
+export function surfWorkerMemoryStats() {
+  return surfWorkerMemoryStatsFromPool();
 }
 
 export async function loadRenderStl(url, { signal } = {}) {
@@ -554,126 +603,342 @@ export function peekRenderDisplayEdgeBundle(glbUrl) {
 // --- Exact-surface topology (design/surface-rendering.md R3) ---------------
 //
 // The .surf carries the same topology the GLB's STEP_TOPOLOGY tables did.
-// One request per component URL produces BOTH consumers' payloads — the
-// render meshData and the selector bundle — from a single tessellation,
-// which runs in the surf WORKER POOL: tessellation is the cost this
-// migration moved from the build to the client, and doing it inline froze
-// the main thread for the whole load of a large assembly. The inline path
-// remains as the no-Worker fallback (node, tests).
+// Worker requests declare whether they need render data, selectors, or both.
+// Initial display uses render only; selection and measurement synthesize the
+// selector bundle on demand. LOD requests both only for already-used topology;
+// later demand must use the displayed level's concrete tessellation key.
 
 const surfPayloadCache = new Map();
 
-// Non-default tessellation levels (viewport LOD) live under level-suffixed
-// keys in the SAME cache but on a bounded LRU leash: a zoom tour of a large
-// assembly must not accumulate a finest-level copy of every component. The
-// default-level entries keep their load-path lifetime. This keying —
-// url + l<chord>-a<angle> — deliberately mirrors the on-disk tessellation
-// cache tier (`<cid>-l<chord>-a<angle>`); when that shared codec lands, this
-// function is the seam where it plugs in.
-const SURF_LOD_CACHE_LIMIT = 8;
-const surfLodKeys = [];
+// Every surf entry — a component's payload at any level, its selector bundle,
+// its display-edge bundle — lives on ONE bounded LRU leash. The consumers own
+// what they keep: the package's componentMeshDataByCid holds every displayed
+// meshData, the reference composition holds the bundles of the occurrences it
+// composed, the LOD working set holds its swapped levels. Retaining a second
+// reference here for the load's lifetime pinned every component's decoded
+// selector bundle (manifest rows + edge polylines) for the whole session; a
+// miss re-decodes from the shared tessellation cache in a worker. Mesh keys
+// include component identity, effective tolerances, tessellator algorithm and
+// payload compatibility; an app-facing LOD label never identifies geometry.
+//
+// The leash is bounded by COUNT and by BYTES. A count alone pinned whatever the
+// entries weighed: the tendon hand's components decode to ~90 MB each, so 24
+// of them held >2 GB of typed arrays here beside the copies the package and
+// the LOD working set already own, and the tab died at load time. The byte
+// ceiling evicts oldest-first until the decoded bytes fit; the count floor
+// keeps a few entries whatever they weigh, so small models behave as before
+// (their whole working set fits under the ceiling anyway).
+const SURF_CACHE_LIMIT = 24;
+const SURF_CACHE_MIN_ENTRIES = 4;
+const SURF_CACHE_MAX_BYTES = 256 * 1024 * 1024;
+const surfLeashConfig = { limit: SURF_CACHE_LIMIT, minEntries: SURF_CACHE_MIN_ENTRIES, maxBytes: SURF_CACHE_MAX_BYTES };
+const surfEntries = [];
 
-export function surfTessellationCacheKey(url, tessellation) {
-  if (!tessellation || typeof tessellation !== "object") {
-    return url;
+// Test seam: lower the ceilings to exercise eviction with small fixtures.
+// Returns the previous configuration so a test can restore it.
+export function configureSurfLeash(next = {}) {
+  const previous = { ...surfLeashConfig };
+  for (const key of ["limit", "minEntries", "maxBytes"]) {
+    if (Number.isFinite(Number(next[key]))) {
+      surfLeashConfig[key] = Number(next[key]);
+    }
   }
-  const chord = Number(tessellation.chordTolerance);
-  const angle = Number(tessellation.angleTolerance);
-  if (!Number.isFinite(chord) && !Number.isFinite(angle)) {
-    return url;
-  }
-  const num = (value, fallback) =>
-    (Number.isFinite(value) ? value : fallback).toExponential(6);
-  return `${url}#l${num(chord, NaN)}-a${num(angle, NaN)}`;
+  return previous;
 }
 
-function retainSurfLodEntry(cacheKey) {
-  const existing = surfLodKeys.indexOf(cacheKey);
+// Decoded typed-array bytes the leash retains, each buffer counted once (a
+// surf payload and its meshData entry share arrays). Pending entries weigh zero.
+function surfLeashBytes() {
+  const seen = new Set();
+  let total = 0;
+  for (const entry of surfEntries) {
+    const value = entry.cache.get(entry.key);
+    if (value && typeof value.then !== "function") {
+      total += typedArrayBytesOf(value, seen);
+    }
+  }
+  return total;
+}
+
+function evictOldestSurfEntry() {
+  const evicted = surfEntries.shift();
+  if (evicted.cache.get(evicted.key)?.then === undefined) {
+    evicted.cache.delete(evicted.key);
+    releaseAssetSourceScope(evicted.cache, evicted.key);
+  }
+}
+
+function retainSurfEntry(cache, key) {
+  const existing = surfEntries.findIndex((entry) => entry.cache === cache && entry.key === key);
   if (existing !== -1) {
-    surfLodKeys.splice(existing, 1);
+    surfEntries.splice(existing, 1);
   }
-  surfLodKeys.push(cacheKey);
-  while (surfLodKeys.length > SURF_LOD_CACHE_LIMIT) {
-    surfPayloadCache.delete(surfLodKeys.shift());
+  surfEntries.push({ cache, key });
+  while (surfEntries.length > surfLeashConfig.limit) {
+    evictOldestSurfEntry();
+  }
+  while (surfEntries.length > surfLeashConfig.minEntries && surfLeashBytes() > surfLeashConfig.maxBytes) {
+    evictOldestSurfEntry();
   }
 }
 
-async function loadSurfPayloadInline(url, { signal, tessellation } = {}) {
+function typedArrayBytesOf(value, seen, visited = new Set()) {
+  if (!value || typeof value !== "object") {
+    return 0;
+  }
+  if (ArrayBuffer.isView(value)) {
+    if (seen.has(value.buffer)) {
+      return 0;
+    }
+    seen.add(value.buffer);
+    // A short view retains its whole backing allocation. TESS cache entries
+    // deliberately decode as disjoint zero-copy views over one packed buffer;
+    // charging the first view's length and suppressing the rest understated
+    // those entries by most of their actual retained bytes.
+    return value.buffer.byteLength;
+  }
+  if (value instanceof ArrayBuffer) {
+    if (seen.has(value)) {
+      return 0;
+    }
+    seen.add(value);
+    return value.byteLength;
+  }
+  if (visited.has(value)) {
+    return 0;
+  }
+  visited.add(value);
+  let total = 0;
+  for (const child of Object.values(value)) {
+    if (child && typeof child === "object") {
+      total += typedArrayBytesOf(child, seen, visited);
+    }
+  }
+  return total;
+}
+
+// Byte attribution of what these caches retain, for the memory harness:
+// typed-array bytes (each buffer counted once) and manifest row counts per
+// cache. Pending entries count as zero.
+export function renderAssetCacheStats({ excludeBuffers = [] } = {}) {
+  const seen = new Set(excludeBuffers);
+  const stats = {};
+  for (const [name, cache] of [
+    ["surfPayload", surfPayloadCache],
+    ["selector", selectorCache],
+    ["displayEdge", displayEdgeCache],
+    ["glb", glbCache],
+  ]) {
+    let typedBytes = 0;
+    let manifestRows = 0;
+    let entries = 0;
+    for (const value of cache.values()) {
+      if (!value || typeof value.then === "function") {
+        continue;
+      }
+      entries += 1;
+      typedBytes += typedArrayBytesOf(value, seen);
+      const manifest = value.manifest || value.bundle?.manifest;
+      for (const rows of [manifest?.faces, manifest?.edges, manifest?.shapes, manifest?.occurrences]) {
+        manifestRows += Array.isArray(rows) ? rows.length : 0;
+      }
+    }
+    stats[name] = { entries, typedBytes, manifestRows };
+  }
+  stats.surfLeash = {
+    entries: surfEntries.length,
+    limit: surfLeashConfig.limit,
+    bytes: surfLeashBytes(),
+    maxBytes: surfLeashConfig.maxBytes,
+    minEntries: surfLeashConfig.minEntries
+  };
+  return stats;
+}
+
+export function surfTessellationCacheKey(_url, tessellation, identity) {
+  return resolvedTessellationIdentity(
+    String(identity?.surfaceInput || ""),
+    String(identity?.surfaceObject || ""),
+    tessellation || {},
+  );
+}
+
+// Drop browser-cache references for an obsolete concrete surf level after its
+// replacement has committed. Scene records and selector compositions own the
+// values they still use, so deleting these Map entries cannot blank a view or
+// invalidate an exact measurement. Persistent tessellation-store records are
+// intentionally untouched.
+export function releaseRenderSurfLevel(url, { tessellation, identity } = {}) {
+  const baseKey = surfTessellationCacheKey(url, tessellation, identity);
+  const targets = [
+    ...[...surfPayloadCache.keys()]
+      .filter((key) => key.startsWith(`${baseKey}#cap=`))
+      .map((key) => [surfPayloadCache, key]),
+    [selectorCache, baseKey],
+    [displayEdgeCache, baseKey],
+    [glbCache, baseKey],
+  ];
+  let released = 0;
+  for (const [cache, key] of targets) {
+    const value = cache.get(key);
+    if (value && typeof value.then === "function") continue;
+    if (cache.delete(key)) {
+      releaseAssetSourceScope(cache, key);
+      released += 1;
+    }
+  }
+  for (let index = surfEntries.length - 1; index >= 0; index -= 1) {
+    const entry = surfEntries[index];
+    if (targets.some(([cache, key]) => cache === entry.cache && key === entry.key)) {
+      surfEntries.splice(index, 1);
+    }
+  }
+  return released;
+}
+
+function capabilityCacheKey(capabilities) {
+  return `${capabilities.render ? "r" : ""}${capabilities.selectors ? "s" : ""}`;
+}
+
+async function loadSurfPayloadInline(url, { signal, tessellation, identity, capabilities } = {}) {
   const [
     { parseSurf },
-    { tessellateComponentCached },
-    { cidFromSurfUrl },
+    {
+      getCachedComponentEntry,
+      surfIndexFromCacheEntry,
+      writeBackComponentEntry,
+    },
+    { tessellateComponent },
     { buildMeshDataFromSurf },
     { buildSelectorBundleFromSurf },
-    buffer,
   ] = await Promise.all([
     import("./surf/container.js"),
     import("./surf/tessellationCache.js"),
-    import("./surf/surfWorkerClient.js"),
+    import("./surf/tessellate.js"),
     import("./surf/surfMeshData.js"),
     import("./surf/surfSelectorBundle.js"),
-    loadRenderArrayBuffer(url, { signal }),
   ]);
+  const surfaceInput = String(identity?.surfaceInput || "");
+  const surfaceObject = String(identity?.surfaceObject || "");
+  const cached = await getCachedComponentEntry(surfaceInput, tessellation || {}, {
+    signal,
+    probe: identity?.tessellationProbe || null,
+    strictProbe: Boolean(identity?.tessellationProbe),
+  });
+  const cachedIndex = surfIndexFromCacheEntry(cached);
+  // Render-only cache hits are complete without the exact-surface container.
+  // Selectors need its topology tables; incomplete older entries do too.
+  if (capabilities.render && !capabilities.selectors && cached && cachedIndex) {
+    return {
+      meshData: buildMeshDataFromSurf(cachedIndex, null, { component: cached.component }),
+    };
+  }
+  if (!url) throw new Error("Exact SURF bytes are not ready for this component");
+  const buffer = await loadRenderArrayBuffer(url, { signal });
   assertNotGitLfsPointer(buffer, url, "SURF render asset");
   const { index, floats } = parseSurf(buffer);
   // Same shared-cache behavior as the worker path: a registered provider
   // turns a content-addressed component into a cache hit (tessellation
   // skipped) or a write-back; no provider tessellates exactly as before.
-  const component = await tessellateComponentCached(index, floats, {
-    cid: cidFromSurfUrl(url),
-    options: tessellation || {},
-  });
+  const component = cached?.component || tessellateComponent(index, floats, tessellation || {});
+  if (!cached || !cachedIndex) {
+    await writeBackComponentEntry(surfaceInput, surfaceObject, tessellation || {}, component, index);
+  }
   return {
-    meshData: buildMeshDataFromSurf(index, floats, { component }),
-    bundle: buildSelectorBundleFromSurf(index, floats, { component }),
+    ...(capabilities.render ? { meshData: buildMeshDataFromSurf(index, floats, { component }) } : {}),
+    ...(capabilities.selectors ? { bundle: buildSelectorBundleFromSurf(index, floats, { component }) } : {}),
   };
 }
 
-async function loadSurfPayload(url, { signal, tessellation } = {}) {
-  const cacheKey = surfTessellationCacheKey(url, tessellation);
+async function loadSurfPayload(url, {
+  signal,
+  tessellation,
+  identity,
+  memoryEstimateBytes,
+  capabilities = { render: true, selectors: true },
+} = {}) {
+  const cacheKey = `${surfTessellationCacheKey(url, tessellation, identity)}#cap=${capabilityCacheKey(capabilities)}`;
   const payload = await loadCached(surfPayloadCache, cacheKey, async () => {
     const { loadSurfComponentInWorker } = await import("./surf/surfWorkerClient.js");
-    const workerPayload = loadSurfComponentInWorker(url, { signal, tessellation });
+    const workerPayload = loadSurfComponentInWorker(url, {
+      signal,
+      tessellation,
+      identity,
+      capabilities,
+      memoryEstimateBytes,
+    });
     if (workerPayload) {
-      try {
-        return await workerPayload;
-      } catch (error) {
-        if (signal?.aborted || isAbortError(error)) {
-          throw error;
-        }
-        // Worker failure degrades to inline tessellation, never to no model.
-      }
+      // Once a worker accepts the job, keep expensive tessellation off the UI
+      // thread even when that job fails. Propagate the failure; inline is only
+      // the compatibility path for environments where Workers never started.
+      return workerPayload;
     }
-    return loadSurfPayloadInline(url, { signal, tessellation });
+    return loadSurfPayloadInline(url, { signal, tessellation, identity, capabilities });
   }, { cachePending: !signal });
-  if (cacheKey !== url) {
-    retainSurfLodEntry(cacheKey);
-  }
-  return finalizeCached(surfPayloadCache, cacheKey, payload);
+  finalizeCached(surfPayloadCache, cacheKey, payload);
+  retainSurfEntry(surfPayloadCache, cacheKey);
+  return payload;
 }
 
 /**
- * Both consumers' payloads — render meshData + selector bundle — for one surf
- * component at an explicit tessellation level. The viewport LOD scheduler's
- * entrypoint: one tessellation feeds rendering, picking, and edges, so a level
- * swap can never leave them disagreeing.
+ * Render data and, when requested, selectors for one concrete tessellation.
+ * A render-only refinement passes selectors:false; the caller reconciles any
+ * topology demanded during that load before publishing new triangles.
  */
-export async function loadRenderSurfPayloadAtLevel(url, { signal, tessellation } = {}) {
-  return loadSurfPayload(url, { signal, tessellation });
+export async function loadRenderSurfPayloadAtLevel(url, {
+  signal,
+  tessellation,
+  identity,
+  memoryEstimateBytes,
+  selectors = true,
+} = {}) {
+  return loadSurfPayload(url, {
+    signal,
+    tessellation,
+    identity,
+    memoryEstimateBytes,
+    capabilities: { render: true, selectors: selectors === true },
+  });
 }
 
-export async function loadRenderSurfSelectorBundle(surfUrl, { signal } = {}) {
-  const bundle = await loadCached(selectorCache, surfUrl, async () => {
-    return (await loadSurfPayload(surfUrl, { signal })).bundle;
+export async function loadRenderSurfSelectorBundle(surfUrl, {
+  signal,
+  tessellation,
+  identity,
+  memoryEstimateBytes,
+} = {}) {
+  const cacheKey = surfTessellationCacheKey(surfUrl, tessellation, identity);
+  const bundle = await loadCached(selectorCache, cacheKey, async () => {
+    return (await loadSurfPayload(surfUrl, {
+      signal,
+      tessellation,
+      identity,
+      memoryEstimateBytes,
+      capabilities: { render: false, selectors: true },
+    })).bundle;
   }, { cachePending: !signal });
-  return finalizeCached(selectorCache, surfUrl, bundle);
+  finalizeCached(selectorCache, cacheKey, bundle);
+  retainSurfEntry(selectorCache, cacheKey);
+  return bundle;
 }
 
-export async function loadRenderSurfDisplayEdgeBundle(surfUrl, { signal } = {}) {
-  // The barycentric overlay IS the edge rendering; the display-edge bundle
-  // for surface-edge components is metadata only (profile "surface-edges").
-  const bundle = await loadCached(displayEdgeCache, surfUrl, async () => {
-    const selector = await loadRenderSurfSelectorBundle(surfUrl, { signal });
+export async function loadRenderSurfDisplayEdgeBundle(surfUrl, {
+  signal,
+  tessellation,
+  identity,
+  memoryEstimateBytes,
+} = {}) {
+  // The render records draw the CAD edges from the meshData's line segments;
+  // the display-edge bundle for surf components is metadata only (profile
+  // "surface-edges").
+  const cacheKey = surfTessellationCacheKey(surfUrl, tessellation, identity);
+  const bundle = await loadCached(displayEdgeCache, cacheKey, async () => {
+    const selector = await loadRenderSurfSelectorBundle(surfUrl, {
+      signal,
+      tessellation,
+      identity,
+      memoryEstimateBytes,
+    });
     return {
       manifest: {
         schemaVersion: selector.manifest.schemaVersion,
@@ -684,7 +949,9 @@ export async function loadRenderSurfDisplayEdgeBundle(surfUrl, { signal } = {}) 
       buffers: {},
     };
   }, { cachePending: !signal });
-  return finalizeCached(displayEdgeCache, surfUrl, bundle);
+  finalizeCached(displayEdgeCache, cacheKey, bundle);
+  retainSurfEntry(displayEdgeCache, cacheKey);
+  return bundle;
 }
 
 const dxfMeshCache = new Map();

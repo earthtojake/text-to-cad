@@ -28,14 +28,13 @@ kernel. Every heavy import lives inside a verb body.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from pathlib import Path
 
 from cadgen._internal.format_namespace import callable_namespace
 from cadgen._internal.snapshot_door import step_snapshot_verb
-from cadgen.results import BuildResult, CompileResult, InspectResult
+from cadgen.results import BuildResult, CompileResult
 
-__all__ = ["build", "compile", "inspect", "snapshot"]
+__all__ = ["build", "compile", "snapshot"]
 
 #: ``cadgen step snapshot``'s verb: render a STEP/STP document. Mesh inputs
 #: belong to their own doors (``cadgen.stl.snapshot`` and friends).
@@ -90,6 +89,8 @@ def build(
     out: Path,
     *,
     kinematics: str | dict | None = None,
+    materials: str | dict | None = None,
+    animation: str | None = None,
     force: bool = False,
     verbose: bool = False,
 ) -> BuildResult:
@@ -103,20 +104,25 @@ def build(
     in a model script. Vendor metadata (PMI, GD&T) does not survive; a model
     that keeps evolving belongs in a script instead.
 
-    Re-running is a no-op. Editing only the kinematics refreshes OUT's sidecar
-    without re-emitting a byte. Choreography is not an annotation: it is the
-    render module beside OUT (``OUT.js``), which the viewer loads by name.
+    Re-running is a no-op. Editing only declared materials, animation or
+    kinematics refreshes OUT's sidecar without re-emitting STEP geometry.
 
     target: the STEP/STP document to read.
     out: the STEP/STP document to write. Required, and never TARGET itself.
     kinematics: the kinematics SPACE this document declares — inline JSON or a
         .json path, with the same {mates, couplings, poses} vocabulary the
         decorator takes.
+    materials: named material definitions and component assignments, as inline
+        JSON or a .json path, using the same vocabulary as @step materials=.
+    animation: a JavaScript file path or self-contained ES module source exporting
+        clips; embedded into OUT's JSON sidecar.
     force: re-emit even when the freshness gate says OUT is current.
     verbose: show detailed progress and timing on stderr.
     """
     from cadgen._internal.step_reemit import (
         load_kinematics_space,
+        load_materials_config,
+        load_animation_source,
         reemit_step_document,
         resolve_output,
     )
@@ -129,6 +135,8 @@ def build(
         document,
         destination,
         kinematics_def=kinematics_def,
+        materials=load_materials_config(materials, where=where),
+        animation=load_animation_source(animation, where=where),
         force=force,
         logger=CliLogger(where, verbose=verbose),
     )
@@ -141,157 +149,10 @@ def build(
     )
 
 
-INSPECTIONS = ("refs", "diff", "frame", "measure", "align", "interfere", "validate")
-
-
-def inspect(
-    target: Path,
-    refs: "Sequence[str] | None" = None,
-    *,
-    inspection: str = "refs",
-    against: Path | None = None,
-    moving: str = "",
-    onto: str = "",
-    align_mode: str = "flush",
-    offset: float = 0.0,
-    axis: str = "",
-    detail: bool = False,
-    facts: bool = False,
-    positioning: bool = False,
-    planes: bool = False,
-    topology: bool = False,
-    plane_coordinate_tolerance: float = 1e-3,
-    plane_min_area_ratio: float = 0.05,
-    plane_limit: int = 12,
-    tolerance: float | None = None,
-    max_pairs: int | None = None,
-    allow_open: bool = False,
-    skip_self_intersection: bool = False,
-    every_placement: bool = False,
-    out: Path | None = None,
-) -> InspectResult:
-    """Answer one geometry question about TARGET, without changing it.
-
-    The parameters are a union across the inspections because the CLI's
-    subcommands are: `cadgen step inspect <inspection>` is this function with
-    the arguments that inspection reads, and the ones it does not read are
-    ignored. Every inspection resolves refs the same way and builds the same
-    package, so they are one verb with a mode rather than seven verbs.
-
-    target: STEP/STP document, or a CAD entry target naming one.
-    refs: selector refs such as `#o1.2` or `#f9`. refs/interfere/validate read
-        the whole list; measure reads the first two as from/to; frame reads the
-        first as the occurrence to report.
-    inspection: refs (default), diff, frame, measure, align, interfere, or
-        validate.
-    against: the right-hand document, for `diff`.
-    moving: the selector being placed, for `align`.
-    onto: the selector it is placed against, for `align`.
-    align_mode: flush, center, or contact — how `align` relates the two.
-    offset: extra distance along the axis, for `align`.
-    axis: x, y or z. Inferred from the selectors when omitted.
-    detail: include full geometry facts for each resolved face/edge ref.
-    facts: include compact geometry facts for whole entries and selectors.
-    positioning: include placement-ready frame, point, plane and axis facts.
-    planes: include grouped major planar faces.
-    topology: include full face/edge selector lists. Expensive on large models.
-    plane_coordinate_tolerance: merge planar groups within this coordinate
-        distance.
-    plane_min_area_ratio: drop planar groups below this fraction of total
-        planar area.
-    plane_limit: maximum number of plane groups to report.
-    tolerance: minimum overlap volume in mm3 that counts, for `interfere`.
-    max_pairs: stop after this many interfering pairs, for `interfere`.
-    allow_open: treat surface/shell geometry as intended, for `validate`.
-    skip_self_intersection: skip the boolean self-intersection test, which
-        dominates runtime on large assemblies, for `validate`.
-    every_placement: for `validate`, run the numeric self-intersection test
-        on every placed copy of a part instead of once at its first placement.
-        Topology, closure and volume are always checked once per unique shape.
-    out: for `validate`, a path that receives the JSON report as it
-        accumulates (`"partial": true` until the last part lands), so a killed
-        run leaves a readable document.
-    """
-    # Every heavy import stays in the body: this module is on a model script's
-    # pre-gate path (see the module docstring).
-    from cadgen._internal.doors import script_target_message
-    from cadgen.cli.step_inspect import inspect as inspection_api
-
-    if str(target).strip().lower().endswith(".py"):
-        # A CadRefError, not a bare ValueError: an unusable target is an ANSWER
-        # here, so the refusal prints as this door's ordinary error report
-        # rather than as a traceback.
-        raise inspection_api.CadRefError(script_target_message(Path(str(target))))
-    if inspection not in INSPECTIONS:
-        raise ValueError(
-            f"unknown inspection {inspection!r}; expected one of: {', '.join(INSPECTIONS)}"
-        )
-    entry = str(target)
-    selectors = [str(ref) for ref in (refs or [])]
-    plane_options = {
-        "planes": planes,
-        "plane_coordinate_tolerance": float(plane_coordinate_tolerance),
-        "plane_min_area_ratio": float(plane_min_area_ratio),
-        "plane_limit": int(plane_limit),
-    }
-    try:
-        if inspection == "refs":
-            report = inspection_api.inspect_cad_refs(
-                entry,
-                # One ref per line is the shape the token parser is fed
-                # everywhere else, including `--input-file`.
-                "\n".join(selectors),
-                detail=detail,
-                include_topology=topology,
-                facts=facts,
-                positioning=positioning,
-                **plane_options,
-            )
-        elif inspection == "diff":
-            if against is None:
-                raise ValueError("diff needs a second document: pass against=")
-            report = inspection_api.diff_entry_targets(entry, str(against), **plane_options)
-        elif inspection == "frame":
-            report = inspection_api.inspect_target_frame(entry, selectors[0] if selectors else "")
-        elif inspection == "measure":
-            if len(selectors) < 2:
-                raise ValueError("measure needs two refs: pass refs=[from, to]")
-            report = inspection_api.measure_targets(
-                entry, selectors[0], selectors[1], axis=axis or None
-            )
-        elif inspection == "align":
-            report = inspection_api.align_targets(
-                entry, moving, onto, mode=align_mode, offset=float(offset), axis=axis or None
-            )
-        elif inspection == "interfere":
-            from cadgen import interference
-
-            report = interference.inspect_interference(
-                entry,
-                refs=selectors,
-                tolerance=(
-                    interference.DEFAULT_TOLERANCE_MM3 if tolerance is None else tolerance
-                ),
-                max_pairs=max_pairs,
-            )
-        else:
-            from cadgen import validity
-
-            report = validity.inspect_validity(
-                entry,
-                refs=selectors,
-                allow_open=allow_open,
-                check_self_intersection=not skip_self_intersection,
-                every_placement=every_placement,
-                out=out,
-            )
-    except inspection_api.CadRefError as exc:
-        # A ref that does not resolve is an ANSWER, not a crash: the report says
-        # which token failed and why, and the CLI prints it like any other.
-        report = {"ok": False, "errors": [inspection_api.cad_ref_error_payload(exc)]}
-    return InspectResult(
-        ok=bool(report.get("ok")), command=inspection, report=dict(report)
-    )
+def __getattr__(name: str):
+    if name in {"inspect", "INSPECTIONS"}:
+        raise ImportError("step.inspect has been removed; use cadgen.read_scene and cadgen.geometry in a Python script")
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 callable_namespace(__name__, "step")

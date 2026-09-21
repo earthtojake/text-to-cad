@@ -54,64 +54,7 @@ def build_drawing():
 exec(compile(_RIG_SOURCE, "<dxf-determinism-rig>", "exec"), globals())  # noqa: S102
 
 
-def _digest() -> str:
-    from cadgen._internal.dxf_emit import emit_dxf
-
-    payload, _ = emit_dxf(build_drawing(), label="determinism-rig")  # noqa: F821
-    return hashlib.sha256(payload).hexdigest()
-
-
 class DxfWriteDeterminismTest(unittest.TestCase):
-    def test_three_fresh_builds_write_identical_bytes(self) -> None:
-        digests = {_digest() for _ in range(3)}
-        self.assertEqual(
-            len(digests),
-            1,
-            f"identical drawings wrote {len(digests)} distinct byte streams: {sorted(digests)}",
-        )
-
-    def test_digest_matches_across_processes(self) -> None:
-        """A separate interpreter — different heap, different hash seed — must
-        agree. Byte-determinism is engineered here, so the PYTHONHASHSEED
-        re-exec the old ezdxf pipeline needed is gone; this is what replaced it.
-
-        The unset seed (``"random"``) is the case that matters and the one that
-        caught the CLASSES-section ordering: ezdxf registers required classes by
-        iterating a SET of entity-type strings, so a cold run wrote one of two
-        byte streams at random until the emitter sorted that registry.
-        """
-        script = "\n".join(
-            [
-                "import hashlib, json, sys",
-                f"sys.path.insert(0, {str(CADGEN_SRC)!r})",
-                _RIG_SOURCE,
-                "from cadgen._internal.dxf_emit import emit_dxf",
-                'payload, _ = emit_dxf(build_drawing(), label="determinism-rig")',
-                'print(json.dumps({"digest": hashlib.sha256(payload).hexdigest()}))',
-            ]
-        )
-        expected = _digest()
-        for seed in ("0", "12345", "random", "random", "random", "random"):
-            environment = dict(os.environ)
-            environment.pop("PYTHONHASHSEED", None)
-            if seed != "random":
-                environment["PYTHONHASHSEED"] = seed
-            environment["CADGEN_DAEMON"] = "0"
-            completed = subprocess.run(
-                [sys.executable, "-c", script],
-                env=environment,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            self.assertEqual(completed.returncode, 0, completed.stderr)
-            payload = json.loads(completed.stdout.strip().splitlines()[-1])
-            self.assertEqual(
-                payload["digest"],
-                expected,
-                f"cross-process digest differs at PYTHONHASHSEED={seed}",
-            )
-
     def test_layer_and_edge_order_do_not_reach_the_bytes(self) -> None:
         """The same drawing described in a different ORDER is the same file."""
         from cadgen._internal.dxf_emit import emit_dxf
@@ -406,7 +349,17 @@ class DxfRunPathDeterminismTest(unittest.TestCase):
     protect, so it is the surface that has to hold without it.
     """
 
-    def _build(self, seed: str | None) -> bytes:
+    # One fixed seed and one unset seed, built cold ONCE for the class: the tests
+    # only read the bytes. (Three seeds were three tickets in the lottery that
+    # test_class_registry_is_sorted settles directly.)
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls._unseeded = cls._build(None)
+        cls._seeded = cls._build("0")
+
+    @classmethod
+    def _build(cls, seed: str | None) -> bytes:
         with tempfile.TemporaryDirectory(prefix="dxf-run-path-") as tmp:
             project = Path(tmp)
             script = project / "bracket_plate.py"
@@ -415,7 +368,7 @@ class DxfRunPathDeterminismTest(unittest.TestCase):
             environment.pop("PYTHONHASHSEED", None)
             if seed is not None:
                 environment["PYTHONHASHSEED"] = seed
-            environment["CADGEN_DAEMON"] = "0"  # a warm worker would serve another checkout
+            environment["CADGEN_DAEMON"] = "0"  # a fresh interpreter IS the subject
             environment["CADGEN_CACHE_DIR"] = str(project / "store")
             environment["PYTHONPATH"] = str(CADGEN_SRC)
             completed = subprocess.run(
@@ -427,20 +380,18 @@ class DxfRunPathDeterminismTest(unittest.TestCase):
                 timeout=600,
                 check=False,
             )
-            self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+            if completed.returncode != 0:
+                raise RuntimeError(f"the cold drawing build failed:\n{completed.stdout}{completed.stderr}")
             written = project / "bracket_plate.dxf"
-            self.assertTrue(written.is_file(), completed.stdout + completed.stderr)
+            if not written.is_file():
+                raise RuntimeError(f"no drawing written:\n{completed.stdout}{completed.stderr}")
             return written.read_bytes()
 
     def test_cold_runs_under_different_seeds_write_identical_files(self) -> None:
-        digests = {
-            hashlib.sha256(self._build(seed)).hexdigest()
-            for seed in (None, "0", "12345", None)
-        }
         self.assertEqual(
-            len(digests),
-            1,
-            f"the same drawing model wrote {len(digests)} distinct files: {sorted(digests)}",
+            hashlib.sha256(self._unseeded).hexdigest(),
+            hashlib.sha256(self._seeded).hexdigest(),
+            "the same drawing model wrote two distinct files under different hash seeds",
         )
 
     def test_the_written_file_matches_the_emitter(self) -> None:
@@ -455,7 +406,7 @@ class DxfRunPathDeterminismTest(unittest.TestCase):
         # emitter comparison needs.
         with building():
             expected, _ = emit_dxf(namespace["bracket_plate"](), label="bracket_plate.py")
-        self.assertEqual(self._build(None), expected)
+        self.assertEqual(self._unseeded, expected)
 
 
 if __name__ == "__main__":

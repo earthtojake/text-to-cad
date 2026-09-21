@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { DRAWING_TOOL } from "../../../workbench/constants";
 
 export function useViewerDrawingOverlay({
@@ -25,6 +25,14 @@ export function useViewerDrawingOverlay({
   drawingMinPointDistancePx,
   drawingMinStrokeLengthPx
 }) {
+  // Camera and loading updates replace these closures while a stroke is in
+  // progress. Refresh them without detaching the pointer handlers or clearing
+  // the draft; only a tool/content/mode change should end the gesture.
+  const callbacksRef = useRef({ renderDrawingOverlay, buildSurfaceLineAnchor, updateSurfaceLineAnchor });
+  useLayoutEffect(() => {
+    callbacksRef.current = { renderDrawingOverlay, buildSurfaceLineAnchor, updateSurfaceLineAnchor };
+  }, [renderDrawingOverlay, buildSurfaceLineAnchor, updateSurfaceLineAnchor]);
+
   useEffect(() => {
     const canvas = drawingCanvasRef.current;
     if (!canvas) {
@@ -33,7 +41,7 @@ export function useViewerDrawingOverlay({
 
     if (!drawingEnabled || previewMode || !meshData) {
       drawingDraftRef.current = null;
-      renderDrawingOverlay();
+      callbacksRef.current.renderDrawingOverlay();
       return undefined;
     }
 
@@ -152,7 +160,7 @@ export function useViewerDrawingOverlay({
         return;
       }
       if (drawingTool === DRAWING_TOOL.SURFACE_LINE) {
-        const anchor = buildSurfaceLineAnchor?.(event, canvas);
+        const anchor = callbacksRef.current.buildSurfaceLineAnchor?.(event, canvas);
         if (!anchor) {
           redrawDrawingCanvas(canvas, drawingStrokesRef.current, null);
           return;
@@ -193,7 +201,7 @@ export function useViewerDrawingOverlay({
         if (!draft?.surfaceLine?.referenceId) {
           return;
         }
-        const nextAnchor = updateSurfaceLineAnchor?.(event, canvas, draft.surfaceLine);
+        const nextAnchor = callbacksRef.current.updateSurfaceLineAnchor?.(event, canvas, draft.surfaceLine);
         if (!nextAnchor) {
           return;
         }
@@ -239,7 +247,6 @@ export function useViewerDrawingOverlay({
   }, [
     buildDrawingPoint,
     buildFillStrokeAtPoint,
-    buildSurfaceLineAnchor,
     distanceToStrokeInPixels,
     drawingCanvasRef,
     drawingChangeRef,
@@ -255,9 +262,7 @@ export function useViewerDrawingOverlay({
     meshData,
     previewMode,
     redrawDrawingCanvas,
-    renderDrawingOverlay,
     strokeLengthInPixels,
-    updateSurfaceLineAnchor,
     viewerReadyTick
   ]);
 }

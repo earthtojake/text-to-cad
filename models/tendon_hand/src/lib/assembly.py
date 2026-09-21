@@ -179,16 +179,6 @@ def integration_bodies(palm_baseline=False):
         add(shape,joint.name,joint.system,kind)
     names=[b.name for b in bodies]
     if len(names)!=len(set(names)):raise ValueError('Assembly occurrence labels must remain unique after guide/frame imports')
-    # STEP carries source colors; restore distinct physical finishes when
-    # an imported occurrence does not carry its original PBR metadata.
-    from cadgen import srgb
-    from lib.finish import FINISHES
-    palette=[(tuple(srgb(color))[:3],material) for color,material in FINISHES.values()]
-    for body in bodies:
-        if not getattr(body.shape,'cad_material',None):
-            color=getattr(body.shape,'color',None)
-            rgb=tuple(color)[:3] if color is not None else palette[0][0]
-            body.shape.cad_material=dict(min(palette,key=lambda entry:sum((a-b)**2 for a,b in zip(rgb,entry[0])))[1])
     return bodies
 
 
@@ -201,10 +191,17 @@ def posed_bodies(bodies,pose):
         shape=bd.Compound.cast(body.shape.wrapped.Moved(matrix_location(fk[body.frame]).wrapped))
         shape.label=body.name
         shape.color=body.shape.color
-        if getattr(body.shape,'cad_material',None):shape.cad_material=body.shape.cad_material
         placed.append(Body(shape,body.frame,body.system,body.kind))
     return placed
 
 
 def compound(bodies,label='tendon_hand_integration_study'):
-    return bd.Compound(label=label,children=[b.shape for b in bodies])
+    from lib.palette import finish_for
+    grouped = {}
+    for body in bodies:
+        bucket, _color, _material, _alpha = finish_for(body.name, body.kind)
+        grouped.setdefault(bucket, []).append(body.shape)
+    return bd.Compound(label=label, children=[
+        bd.Compound(label=f'material_{bucket}', children=grouped[bucket])
+        for bucket in grouped
+    ])

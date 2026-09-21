@@ -12,15 +12,16 @@ from cadgen import step
 
 from lib import ancillaries as ancillaries_lib
 from lib import spec as S
+from lib.palette import material_compound, materials_for_system
 
 
-@step(out="../STEP/ancillaries.step",
+@step(out="../STEP/ancillaries.step", materials=materials_for_system("ancillaries"),
       mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
 def ancillaries():
     parts = ancillaries_lib.build(S.SECTIONED)
     if not parts:
         raise RuntimeError("ancillaries.build() produced no parts")
-    return bd.Compound(children=parts, label="ancillaries")
+    return material_compound(parts, "ancillaries")
 
 
 if __name__ == "__main__":

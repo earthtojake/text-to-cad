@@ -18,6 +18,7 @@ dispatch and of the decorator.
 from __future__ import annotations
 
 import pathlib
+import subprocess
 import sys
 import unittest
 from unittest import mock
@@ -29,6 +30,47 @@ from cadgen import authoring  # noqa: E402
 
 
 class DaemonHandoff(unittest.TestCase):
+    def test_snapshot_resolves_saved_geometry_and_delegates_cold_compile_without_kernel_imports(self):
+        script = r'''
+import json, sys
+from pathlib import Path
+from unittest import mock
+
+class NoKernel:
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split(".")[0] in {"build123d", "OCP", "cadquery"}:
+            raise AssertionError("snapshot imported native kernel: " + fullname)
+sys.meta_path.insert(0, NoKernel())
+from cadgen.snapshot_cli import _ensure_snapshot_step_artifact
+from cadgen.step_targets import ResolvedStepTarget
+
+document = Path("/selected.step").resolve()
+target = ResolvedStepTarget("selected", document, document)
+pin = ("a" * 64, "b" * 64)
+descriptor = {"documentHash": pin[0], "tree": pin[1], "components": {}, "occurrences": []}
+for cold in (False, True):
+    for selectors in (False, True):
+        job = mock.Mock()
+        job.wait.return_value = 0
+        with mock.patch("cadgen.catalog.result_snapshot_for", side_effect=[None, pin] if cold else [pin]), \
+             mock.patch("cadgen.daemon.executors.submit_compile", return_value=job) as compile, \
+             mock.patch("cadgen.snapshot_cli.view_dir_for", return_value=Path("/selected-view")) as view, \
+             mock.patch.object(Path, "read_text", return_value=json.dumps(descriptor)):
+            artifact = _ensure_snapshot_step_artifact(target, require_selector=selectors)
+        assert artifact.manifest == descriptor
+        assert (artifact.selector_bundle is not None) == selectors
+        assert artifact.artifact_path == Path("/selected-view")
+        view.assert_called_once_with(pin[1], document_hash=pin[0])
+        if cold:
+            compile.assert_called_once_with(document)
+            job.wait.assert_called_once()
+        else:
+            compile.assert_not_called()
+assert not any(name.split(".")[0] in {"build123d", "OCP", "cadquery"} for name in sys.modules)
+'''
+        result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_every_routed_command_has_a_tool_the_daemon_knows(self):
         # A command mapped to a name the daemon does not import would fail at runtime
         # with nothing useful; this is the only place the two registries meet. "run"
@@ -49,8 +91,6 @@ class DaemonHandoff(unittest.TestCase):
             {
                 "step build",
                 "step compile",
-                "step inspect",
-                "step snapshot",
                 "stl build",
                 "3mf build",
                 "glb build",
@@ -96,7 +136,7 @@ class DaemonHandoff(unittest.TestCase):
     def test_an_unserved_command_is_never_routed_to_the_daemon(self):
         # The generic snapshot has no warm tool; routing it would import the wrong module
         # in the worker.
-        for command in (["snapshot", "x"], ["doctor"]):
+        for command in (["snapshot", "x"], ["step", "snapshot", "part.step"], ["doctor"]):
             with self.subTest(command=command):
                 with mock.patch.dict("os.environ", {"CADGEN_DAEMON": "1"}, clear=False), \
                         mock.patch("cadgen.daemon.client.run_via_daemon") as daemon, \

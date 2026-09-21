@@ -1,4 +1,4 @@
-"""Complete48 routed-tendon integration study; final acceptance remains separate."""
+"""Complete 48-tendon routed integration study; final acceptance remains separate."""
 from cadgen import step
 from lib.assembly import integration_bodies,Body,compound
 from lib.layout import TENDONS
@@ -6,11 +6,15 @@ from lib.forearm_routing import forearm_route
 from lib.transport_guide import make_tendon
 from lib.bowden_guide import make_bowden_body
 from lib.finish import finish
-from lib.palette import cord_language
+from lib.palette import cord_language,ASSEMBLY_MATERIALS
 from lib.neutral_routes import NEUTRAL_ROUTES
+from lib.embedded_animation import load_animation
 
 
-@step(out='../STEP/hand_progress_review.step')
+ANIMATION_JS = load_animation(__file__, 'write_progress_presentation.py')
+
+
+@step(out='../STEP/hand_progress_review.step', materials=ASSEMBLY_MATERIALS, animation=ANIMATION_JS)
 def hand_progress_review():
     bodies=integration_bodies(palm_baseline=False)
     for route,tendon in zip(NEUTRAL_ROUTES,TENDONS):

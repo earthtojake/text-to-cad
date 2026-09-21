@@ -13,14 +13,15 @@ is the part with a wrong answer that looks plausible.
 
 from __future__ import annotations
 
-from tests.python.support.store_fixtures import build_view
-
+import copy
+import os
 import tempfile
 import unittest
-from unittest import mock
 from pathlib import Path
+from unittest import mock
 
 from tests.python.support.paths import add_repo_path
+from tests.python.support.store_fixtures import build_view
 
 add_repo_path("packages/cadgen/src")
 
@@ -52,6 +53,29 @@ def _demo_compound() -> Compound:
     return assembly
 
 
+def setUpModule() -> None:
+    global _fixture_root, _fixture_package_dir, _fixture_descriptor
+    global _group_package_dir, _group_descriptor
+
+    fixture_tmp = tempfile.TemporaryDirectory(prefix="assembly-refs-")
+    unittest.addModuleCleanup(fixture_tmp.cleanup)
+    _fixture_root = Path(fixture_tmp.name)
+    cache_patch = mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(_fixture_root / "store")})
+    cache_patch.start()
+    unittest.addModuleCleanup(cache_patch.stop)
+    _fixture_package_dir = _fixture_root / "__cadgen__" / "models" / "demo.py"
+    build_view(_demo_compound(), package_dir=_fixture_package_dir, root_name="demo")
+    _fixture_descriptor = component_package.read_package_descriptor(_fixture_package_dir)
+    if not isinstance(_fixture_descriptor, dict):
+        raise AssertionError("fixture package has no descriptor")
+
+    _group_package_dir = _fixture_root / "__cadgen__" / "models" / "nested.py"
+    build_view(_nested_compound(), package_dir=_group_package_dir, root_name="nested")
+    _group_descriptor = component_package.read_package_descriptor(_group_package_dir)
+    if not isinstance(_group_descriptor, dict):
+        raise AssertionError("group fixture package has no descriptor")
+
+
 class _FakeArtifact:
     """Stands in for StepTopologyArtifact: the merge only reads `kind` and `artifact_path`."""
 
@@ -60,16 +84,12 @@ class _FakeArtifact:
         self.artifact_path = artifact_path
 
 
-class AssemblyOccurrenceRefsTest(unittest.TestCase):
+class _AssemblyDisplayFixture:
     def setUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory(prefix="assembly-refs-")
-        self.addCleanup(self._tmp.cleanup)
-        self.root = Path(self._tmp.name)
-        self.package_dir = self.root / "__cadgen__" / "models" / "demo.py"
-        build_view(_demo_compound(), package_dir=self.package_dir, root_name="demo")
-        descriptor = component_package.read_package_descriptor(self.package_dir)
-        self.assertIsInstance(descriptor, dict, "fixture package has no descriptor")
-        self.descriptor = descriptor
+        super().setUp()
+        self.root = _fixture_root
+        self.package_dir = _fixture_package_dir
+        self.descriptor = copy.deepcopy(_fixture_descriptor)
 
     def _flat_index(self) -> lookup.SelectorIndex:
         """A stand-in for the composed-compound sidecar: one occurrence, as the real one has."""
@@ -79,6 +99,9 @@ class AssemblyOccurrenceRefsTest(unittest.TestCase):
             "occurrences": [["o1", "demo.step", None]],
         }
         return lookup.build_selector_index(manifest)
+
+
+class AssemblyOccurrenceRefsTest(_AssemblyDisplayFixture, unittest.TestCase):
 
     def test_every_ref_the_lister_hands_out_resolves(self) -> None:
         """The bug as reported: ids present in assembly.json, absent from the resolver."""
@@ -145,7 +168,7 @@ class AssemblyOccurrenceRefsTest(unittest.TestCase):
         self.assertEqual(len(centres), len(placed), "occurrences collapsed to one position")
 
 
-class AssemblyEntityRefsTest(AssemblyOccurrenceRefsTest):
+class AssemblyEntityRefsTest(_AssemblyDisplayFixture, unittest.TestCase):
     """Phase 2: the refs users actually pick. `#o1.12.f19` is face 19 of that occurrence's
     component, which is the translation they were doing by hand -- and which the flat
     whole-assembly namespace cannot express, since its numbering does not agree with the
@@ -215,7 +238,7 @@ class AssemblyEntityRefsTest(AssemblyOccurrenceRefsTest):
         self.assertEqual(flat.single_occurrence_id, merged.single_occurrence_id)
 
 
-class MergedRowsAreInternallyConsistentTest(AssemblyOccurrenceRefsTest):
+class MergedRowsAreInternallyConsistentTest(_AssemblyDisplayFixture, unittest.TestCase):
     """Every id and every RANGE a merged row carries must point somewhere true.
 
     A component's rows index that component's own tables. Copied across unchanged they all still
@@ -416,7 +439,7 @@ class DormantPathsTest(unittest.TestCase):
         self.assertEqual("x", placed["id"], "non-geometry fields are untouched")
 
 
-class PlacementAgainstAnalyticGeometryTest(AssemblyOccurrenceRefsTest):
+class PlacementAgainstAnalyticGeometryTest(_AssemblyDisplayFixture, unittest.TestCase):
     """Placement checked against geometry we KNOW, not against our own arithmetic.
 
     The other tests here compare what the merge produced with what `transform_point` says it
@@ -602,12 +625,9 @@ class AssemblyGroupNodesTest(unittest.TestCase):
     """
 
     def setUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory(prefix="assembly-groups-")
-        self.addCleanup(self._tmp.cleanup)
-        self.package_dir = Path(self._tmp.name) / "__cadgen__" / "models" / "nested.py"
-        build_view(_nested_compound(), package_dir=self.package_dir, root_name="nested")
-        self.descriptor = component_package.read_package_descriptor(self.package_dir)
-        self.assertIsInstance(self.descriptor, dict, "fixture package has no descriptor")
+        super().setUp()
+        self.package_dir = _group_package_dir
+        self.descriptor = copy.deepcopy(_group_descriptor)
 
     def test_interior_nodes_are_reported_with_their_labels(self) -> None:
         nodes = assembly_lookup.assembly_group_nodes(self.descriptor)

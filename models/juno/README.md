@@ -33,7 +33,6 @@ juno/
     <link>.py     x28      one per URDF link: @step + @threemf
     lib/                   shared part builders + the chain spec
   STEP/  3MF/              generated outputs
-    juno.step.js           the render module beside juno.step: the seven animation clips (authored, committed)
   tmp/                     snapshots and scratch
 ```
 
@@ -87,8 +86,8 @@ Check a pose: `cadgen step snapshot STEP/juno.step tmp/zero.png --kinematics zer
 
 ## Animation
 
-`STEP/juno.step.js`, the render module beside the document, holds the
-choreography; the viewer loads it by name and no build reads it. It knows
+`ANIMATION_JS` in `src/juno.py` holds the choreography and is embedded in the
+model metadata at build time. It knows
 nothing about the mates: it runs its own chain FK each
 frame and applies, per link, the rigid delta from the baked athletic placement
 as one rotation about the model origin plus a translation. Seven clips:

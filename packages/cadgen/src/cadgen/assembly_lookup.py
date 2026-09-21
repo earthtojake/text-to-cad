@@ -109,10 +109,19 @@ def transform_bbox(matrix: list[float], bbox: object) -> dict[str, list[float]] 
 # line carries `origin`/`direction`, and a cylinder's `radius` is a length that a rigid transform
 # does not change. Anything unlisted is carried through untouched, which is right for ordinals,
 # counts, flags and areas -- and is why `params` is transformed key-by-key rather than wholesale.
+#
+# The param key sets are the COMPLETE vocabulary of `step_scene_geometry._curve_params` and
+# `_surface_params`, which is what writes the `params` this places (and the same set
+# `step_scene_geometry._transform_param_dict` classifies). A point is spelled `origin`
+# (plane/cylinder/cone/line) or `center` (circle/ellipse/hyperbola/parabola/sphere/torus),
+# never both, so a list that knows only one spelling silently leaves half the analytic types
+# in component-local coordinates -- which is what sent `inspect measure` between a circular
+# edge and a line 37 mm apart on an axis where they touch (tom-cad FEEDBACK issue 2). Any new
+# analytic type must land in one of these lists or be a scalar; that is the review question.
 _POINT_FIELDS = ("center",)
-_POINT_PARAM_KEYS = ("origin",)
+_POINT_PARAM_KEYS = ("origin", "center", "location")
 _DIRECTION_FIELDS = ("normal",)
-_DIRECTION_PARAM_KEYS = ("axis", "direction")
+_DIRECTION_PARAM_KEYS = ("axis", "direction", "normal")
 
 
 def transform_direction(matrix: list[float], vector: object) -> list[float] | None:

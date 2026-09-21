@@ -12,15 +12,16 @@ from cadgen import step
 
 from lib import pistons as pistons_lib
 from lib import spec as S
+from lib.palette import material_compound, materials_for_system
 
 
-@step(out="../STEP/pistons.step",
+@step(out="../STEP/pistons.step", materials=materials_for_system("pistons"),
       mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
 def pistons():
     parts = pistons_lib.build()
     if not parts:
         raise RuntimeError("pistons.build() produced no parts")
-    return bd.Compound(children=parts, label="pistons")
+    return material_compound(parts, "pistons")
 
 
 if __name__ == "__main__":

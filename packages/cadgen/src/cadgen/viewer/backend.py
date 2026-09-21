@@ -36,11 +36,13 @@ this, and there is exactly one implementation of it to keep them honest.
 from __future__ import annotations
 
 import os
+import threading
 
 from .content_types import content_type_for_path
 from .encoding import UriError, local_asset_url_for_path, strict_decode_uri_component
 from .scanner import (
     CAD_CATALOG_SCHEMA_VERSION,
+    catalog_input_fingerprint,
     is_served_cad_asset,
     node_basename,
     path_is_inside,
@@ -48,6 +50,7 @@ from .scanner import (
     scan_cad_directory,
     to_posix_path,
 )
+from .store_paths import result_snapshot
 from .url_norm import request_pathname, request_query
 
 __all__ = [
@@ -174,7 +177,7 @@ def _absolutize_entry(entry: dict, *, root_path: str, scan_repo_root: str) -> di
         asset_path = _asset_path_from_catalog_url(scan_repo_root, entry["url"])
         nxt["url"] = local_asset_url_for_path(asset_path, _query_value(entry["url"], "v"))
         nxt["assetFile"] = absolute_file_ref(asset_path)
-    for key in ("poseUrl", "sourceUrl", "renderModuleUrl"):
+    for key in ("poseUrl", "sourceUrl"):
         # Store URLs are already in their served form: their file param is
         # store-relative by contract, never a root path to absolutize.
         if entry.get(key) and not _is_store_url(entry[key]):
@@ -221,12 +224,14 @@ class LocalAssetBackend:
         # both report the spelling the operator gave.
         self.root_path = root_path
         self.root_name = node_basename(root_path)
+        self._catalog_guard = threading.Lock()
+        self._catalog_snapshot = None
+        self._catalog_refreshing = False
 
     def resolve_root(self) -> dict:
         return {"rootPath": self.root_path, "rootName": self.root_name}
 
-    def read_catalog(self) -> dict:
-        raw = scan_cad_directory(self.root_path)
+    def _absolutize_catalog(self, raw: dict) -> dict:
         return {
             "schemaVersion": CAD_CATALOG_SCHEMA_VERSION,
             "entries": [
@@ -234,6 +239,101 @@ class LocalAssetBackend:
                 for entry in raw["entries"]
             ],
         }
+
+    def _full_catalog_snapshot(self) -> tuple[dict, dict] | None:
+        discovery = scan_cad_directory(self.root_path, defer_unpreferred=True)
+        before = {
+            entry["file"]: catalog_input_fingerprint(os.path.join(self.root_path, entry["file"]))
+            for entry in discovery["entries"]
+        }
+        raw = scan_cad_directory(self.root_path)
+        if {entry["file"] for entry in raw["entries"]} != set(before):
+            return None
+        after = {
+            entry["file"]: catalog_input_fingerprint(os.path.join(self.root_path, entry["file"]))
+            for entry in raw["entries"]
+        }
+        if before != after:
+            return None
+        step_results = {}
+        for entry in raw["entries"]:
+            if os.path.splitext(entry["file"])[1].lower() not in (".step", ".stp"):
+                continue
+            snapshot = result_snapshot(os.path.join(self.root_path, entry["file"]))
+            expected = (entry.get("documentHash"), entry.get("hash"))
+            if snapshot != expected and not (snapshot is None and not entry.get("hash")):
+                return None
+            step_results[entry["file"]] = snapshot
+        return self._absolutize_catalog(raw), {
+            "inputs": after,
+            "stepResults": step_results,
+        }
+
+    def _hydrate_catalog(self) -> None:
+        try:
+            snapshot = self._full_catalog_snapshot()
+            if snapshot is not None:
+                with self._catalog_guard:
+                    self._catalog_snapshot = snapshot
+        finally:
+            with self._catalog_guard:
+                self._catalog_refreshing = False
+
+    def _start_catalog_hydration(self) -> None:
+        with self._catalog_guard:
+            if self._catalog_refreshing:
+                return
+            self._catalog_refreshing = True
+        threading.Thread(
+            target=self._hydrate_catalog,
+            name="cadgen-viewer-catalog",
+            daemon=True,
+        ).start()
+
+    def _current_catalog_snapshot(self, discovery: dict) -> dict | None:
+        with self._catalog_guard:
+            saved = self._catalog_snapshot
+        if saved is None:
+            return None
+        catalog, metadata = saved
+        current_inputs = {
+            entry["file"]: catalog_input_fingerprint(
+                os.path.join(self.root_path, entry["file"])
+            )
+            for entry in discovery["entries"]
+        }
+        if current_inputs != metadata["inputs"]:
+            return None
+        for relative, expected in metadata["stepResults"].items():
+            if result_snapshot(os.path.join(self.root_path, relative)) != expected:
+                return None
+        # Bind the result lookups to a stable filesystem interval. A sidecar or
+        # non-STEP asset may change while the document indexes are being read.
+        after_discovery = scan_cad_directory(self.root_path, defer_unpreferred=True)
+        after_inputs = {
+            entry["file"]: catalog_input_fingerprint(
+                os.path.join(self.root_path, entry["file"])
+            )
+            for entry in after_discovery["entries"]
+        }
+        if after_inputs != current_inputs:
+            return None
+        return catalog
+
+    def read_catalog(self, preferred_file=None) -> dict:
+        discovery = scan_cad_directory(self.root_path, defer_unpreferred=True)
+        current = self._current_catalog_snapshot(discovery)
+        if current is not None:
+            return current
+        if not preferred_file and discovery["entries"]:
+            preferred_file = discovery["entries"][0]["file"]
+        partial = self._absolutize_catalog(scan_cad_directory(
+            self.root_path,
+            preferred_file=preferred_file,
+            defer_unpreferred=True,
+        ))
+        self._start_catalog_hydration()
+        return partial
 
     # --- containment ------------------------------------------------------
 

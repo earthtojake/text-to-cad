@@ -37,7 +37,6 @@ import contextlib
 import contextvars
 import time
 import uuid
-from pathlib import Path
 from typing import Any, Callable, Iterator
 
 from cadgen.coordination.kinds import (

@@ -12,15 +12,16 @@ from cadgen import step
 
 from lib import covers as covers_lib
 from lib import spec as S
+from lib.palette import material_compound, materials_for_system
 
 
-@step(out="../STEP/covers.step",
+@step(out="../STEP/covers.step", materials=materials_for_system("covers"),
       mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
 def covers():
     parts = covers_lib.build(S.SECTIONED)
     if not parts:
         raise RuntimeError("covers.build() produced no parts")
-    return bd.Compound(children=parts, label="covers")
+    return material_compound(parts, "covers")
 
 
 if __name__ == "__main__":

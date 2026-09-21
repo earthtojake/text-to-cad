@@ -199,9 +199,7 @@ def cad_ref_from_step_path(path: Path) -> str:
         relative = resolved.relative_to(Path.cwd().resolve())
     except ValueError:
         relative = PurePosixPath(resolved.as_posix())
-    name = relative.name
-    suffix = relative.suffix.lower()
-    if suffix in STEP_SUFFIXES:
+    if relative.suffix.lower() in STEP_SUFFIXES:
         return relative.with_suffix("").as_posix()
     raise CadSourceError(f"{_display_path(path)} is not a CAD STEP source")
 
@@ -319,6 +317,18 @@ def seed_artifact_hash(entry_path: Path, digest: str) -> None:
     _remember_artifact_hash(str(resolved), stat.st_mtime_ns, stat.st_size, digest)
 
 
+def result_snapshot_for(entry_path: Path) -> tuple[str, str] | None:
+    """One coherent (document digest, tree) lookup from the same consumed hash."""
+    from cadgen.store.objects import has_object
+    from cadgen.store.records import tree_for_document_hash
+
+    digest = artifact_file_hash(Path(entry_path))
+    if not digest:
+        return None
+    tree = tree_for_document_hash(digest)
+    return (digest, tree) if tree and has_object(tree) else None
+
+
 def result_tree_for(entry_path: Path) -> str | None:
     """The tree behind a CAD artifact on disk, or None — found by the file's BYTES.
 
@@ -329,23 +339,23 @@ def result_tree_for(entry_path: Path) -> str | None:
     hash is memoized by (path, mtime_ns, size), so a status poll does not
     re-read the file. The tree's flattened view (``cadgen.store.trees.flatten``)
     is what every reader that used to open a view directory reads now."""
-    from cadgen.store.objects import has_object
-    from cadgen.store.records import tree_for_document_hash
-
-    digest = artifact_file_hash(Path(entry_path))
-    if not digest:
-        return None
-    tree = tree_for_document_hash(digest)
-    return tree if tree and has_object(tree) else None
+    snapshot = result_snapshot_for(entry_path)
+    return snapshot[1] if snapshot else None
 
 
 def result_descriptor_for(entry_path: Path) -> dict | None:
     """The flattened tree (assembly.json; component refs as object hashes)
     behind a CAD artifact on disk, or None when it has no current tree."""
-    from cadgen.store.trees import flatten
+    from cadgen.store.trees import capture_tree
 
     tree = result_tree_for(entry_path)
-    return flatten(tree) if tree else None
+    if tree is None:
+        return None
+    try:
+        descriptor, _ = capture_tree(tree, retain_payloads=False)
+        return descriptor
+    except (OSError, ValueError):
+        return None
 
 
 def result_view_dir(entry_path: Path) -> Path:
@@ -357,10 +367,10 @@ def result_view_dir(entry_path: Path) -> Path:
     directories (``cadgen.store.view``)."""
     from cadgen.store.view import view_dir_for, views_root
 
-    tree = result_tree_for(entry_path)
-    if tree is None:
+    snapshot = result_snapshot_for(entry_path)
+    if snapshot is None:
         return views_root() / f"unbuilt-{artifact_path_key(entry_path)}"
-    return view_dir_for(tree)
+    return view_dir_for(snapshot[1], document_hash=snapshot[0])
 
 
 def build_scope(entry_path: Path) -> str:

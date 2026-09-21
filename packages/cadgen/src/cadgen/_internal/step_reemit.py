@@ -88,7 +88,38 @@ def load_kinematics_space(raw: object, *, where: str) -> Any | None:
     return normalize_kinematics(parsed, where=where)
 
 
-def annotation_digest(kinematics_def: Any | None) -> str:
+def load_materials_config(raw: object, *, where: str) -> dict | None:
+    """Load the same material definitions/assignments accepted by @step."""
+    from cadgen._internal.source_sidecar import normalize_materials
+
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        text = raw.strip()
+        if not text.startswith("{"):
+            text = Path(text).expanduser().read_text(encoding="utf-8")
+        try:
+            raw = json.loads(text)
+        except ValueError as error:
+            raise _fail(f"{where} --materials is not valid JSON: {error}") from None
+    return normalize_materials(raw, where=f"{where} --materials")
+
+
+def load_animation_source(raw: object, *, where: str) -> dict | None:
+    """Embed a JS input file or inline module source, never its source path."""
+    from cadgen._internal.source_sidecar import normalize_animation
+
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        raise _fail(f"{where} --animation must be a JavaScript file or module source")
+    text = raw.strip()
+    if "\n" not in text and not text.startswith(("export ", "//", "/*", "const ", "let ", "var ", "class ", "async ", "function ")):
+        text = Path(text).expanduser().read_text(encoding="utf-8")
+    return normalize_animation(text, where=f"{where} --animation")
+
+
+def annotation_digest(kinematics_def: Any | None, appearance: object = None, materials: object = None, animation: object = None) -> str:
     """A stable digest of what the author DECLARED for this document.
 
     Digests the pre-resolution block (selector refs and all), so an annotation
@@ -96,9 +127,41 @@ def annotation_digest(kinematics_def: Any | None) -> str:
     """
     payload = {
         "kinematics": None if kinematics_def is None else kinematics_def.block,
+        "materials": materials,
+        "animation": animation,
+        "appearance": appearance,
     }
     body = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+
+def _file_hash(path: Path) -> str | None:
+    digest = hashlib.sha256()
+    try:
+        with open(path, "rb") as handle:
+            for chunk in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(chunk)
+    except OSError:
+        return None
+    return digest.hexdigest()
+
+
+def _recorded_outputs_current(record: dict[str, Any], out: Path) -> bool:
+    """Whether the record still describes every named output byte-for-byte."""
+    from cadgen._internal.source_sidecar import source_sidecar_path
+
+    outputs = record.get("outputs") or {}
+    primary = str(out.expanduser().resolve())
+    if not isinstance(outputs, dict) or primary not in outputs:
+        return False
+    sidecar = source_sidecar_path(out).resolve()
+    if sidecar.exists() != (str(sidecar) in outputs):
+        return False
+    for path, meta in outputs.items():
+        expected = str((meta or {}).get("sha256") or "") if isinstance(meta, dict) else ""
+        if not expected or _file_hash(Path(path)) != expected:
+            return False
+    return True
 
 
 def resolve_output(target: Path, out: Path) -> tuple[Path, Path]:
@@ -130,6 +193,8 @@ def reemit_step_document(
     out: Path,
     *,
     kinematics_def: Any | None,
+    materials: dict | None = None,
+    animation: dict | None = None,
     force: bool,
     logger: CliLogger,
 ) -> dict[str, object]:
@@ -140,22 +205,27 @@ def reemit_step_document(
     or emit.
     """
     from cadgen.catalog import artifact_file_hash, result_tree_for
-    from cadgen._internal.source_sidecar import read_source_provenance, write_source_sidecar
-    from cadgen.store.records import update_record
+    from cadgen._internal.source_sidecar import appearance_digest, read_source_provenance, read_source_sidecar, write_source_sidecar
+    from cadgen.store.records import read_record, write_record
 
     input_hash = artifact_file_hash(document)
     if not input_hash:
         raise _fail(f"could not read {_display(document)}")
-    digest = annotation_digest(kinematics_def)
+    appearance = (read_source_sidecar(document, document_hash=input_hash) or {}).get("appearance")
+    appearance_key = appearance_digest(appearance)
+    digest = annotation_digest(kinematics_def, appearance, materials, animation)
 
     sidecar = read_source_provenance(out) or {}
     tree = result_tree_for(out)
+    record = read_record(out) or {}
     bytes_current = (
         not force
         and out.is_file()
         and tree is not None
+        and _recorded_outputs_current(record, out)
         and str(sidecar.get("sourceKind") or "") == "step"
         and str(sidecar.get("sourceHash") or "") == input_hash
+        and record.get("inputAppearance") == appearance_key
     )
     if bytes_current and str(sidecar.get("annotationHash") or "") == digest:
         return {
@@ -170,6 +240,22 @@ def reemit_step_document(
         # annotation never moves geometry. Re-resolve the declaration against a view of the tree already in
         # the store and rewrite the sidecar — no OCCT, no emit, no new tree.
         payload = dict(sidecar)
+        from cadgen._internal.source_sidecar import resolve_materials
+        from cadgen.store.trees import flatten
+
+        # Reuse the saved geometry and resolve only the new declarations.
+        # Re-emitted intrinsic materials are the baseline; root assignments
+        # are applied afresh so removing an override restores that baseline.
+        inherited = record.get("intrinsicAppearance")
+        if inherited is None:
+            inherited = appearance
+        resolved_appearance = resolve_materials(flatten(tree), materials, inherited=inherited)
+        payload.pop("appearance", None)
+        if resolved_appearance is not None:
+            payload["appearance"] = resolved_appearance
+        payload.pop("animation", None)
+        if animation is not None:
+            payload["animation"] = animation
         payload["annotationHash"] = digest
         payload.pop("kinematics", None)
         if kinematics_def is not None:
@@ -189,8 +275,32 @@ def reemit_step_document(
             finally:
                 shutil.rmtree(view_dir, ignore_errors=True)
             payload["kinematics"] = resolved
-        update_record(out, annotationHash=digest, kinematics=payload.get("kinematics"))
+        if read_record(out) != record or not _recorded_outputs_current(record, out):
+            raise RuntimeError(f"{_display(out)} changed while its annotations were being resolved")
         write_source_sidecar(out, payload)
+        from cadgen._internal.source_sidecar import source_sidecar_path
+        from cadgen.store.records import forget_output, note_output
+
+        sidecar_path = source_sidecar_path(out).resolve()
+        outputs = dict(record.get("outputs") or {})
+        sidecar_hash = _file_hash(sidecar_path)
+        if sidecar_hash is None:
+            outputs.pop(str(sidecar_path), None)
+            forget_output(sidecar_path)
+        else:
+            outputs[str(sidecar_path)] = {"sha256": sidecar_hash}
+            note_output(sidecar_path, str(record.get("model") or out))
+        if read_record(out) != record:
+            raise RuntimeError(f"{_display(out)} record changed while its annotations were being written")
+        updated_record = dict(record)
+        updated_record.update(
+            annotationHash=digest,
+            kinematics=payload.get("kinematics"),
+            appearance=payload.get("appearance"),
+            animation=payload.get("animation"),
+            outputs=outputs,
+        )
+        write_record(out, updated_record)
         return {
             "ok": True,
             "document": out,
@@ -205,6 +315,9 @@ def reemit_step_document(
         input_hash=input_hash,
         digest=digest,
         kinematics_def=kinematics_def,
+        materials=materials,
+        animation=animation,
+        appearance=appearance,
         force=force,
         logger=logger,
     )
@@ -224,19 +337,31 @@ def _emit(
     input_hash: str,
     digest: str,
     kinematics_def: Any | None,
+    materials: dict | None = None,
+    animation: dict | None = None,
+    appearance: object = None,
     force: bool,
     logger: CliLogger,
 ) -> None:
     """Read IN, re-path the scene to OUT, and run the ONE build pipeline."""
     from cadgen._internal.generation import _generate_part_outputs
-    from cadgen._internal.step_scene import load_step_scene
-    from cadgen.step_artifact_cli import (
-        _build_entry_spec,
-        _entries_by_step_path_for_repo,
-    )
+    from cadgen._internal.step_scene_package import load_step_scene_exact
+    from cadgen.step_artifact_cli import _build_entry_spec
 
     with logger.timed(f"load STEP {_display(document)}"):
-        scene = load_step_scene(document)
+        scene = load_step_scene_exact(document)
+    if scene.step_hash != input_hash:
+        raise RuntimeError(
+            f"{_display(document)} changed while it was being read; retry the build"
+        )
+    if appearance is not None:
+        from cadgen.store.build import build_document_tree
+        from cadgen.store.materialize import materialize_descriptor
+        from cadgen.store.trees import flatten
+        from cadgen._internal.source_sidecar import apply_appearance
+
+        canonical_hash, _tree, _stats = build_document_tree(scene)
+        scene.source_compound = materialize_descriptor(apply_appearance(flatten(canonical_hash), appearance))
     # The scene now DESCRIBES the output: the tree is keyed by the bytes we
     # are about to write, and the preloaded-scene contract pins the two paths
     # together. `step_hash` is the INPUT's and would misidentify the output.
@@ -244,7 +369,12 @@ def _emit(
     scene.step_hash = None
     scene.reemit_source_hash = input_hash
     scene.reemit_annotation_hash = digest
+    from cadgen._internal.source_sidecar import appearance_digest
+
+    scene.reemit_appearance_hash = appearance_digest(appearance)
     scene.kinematics = None if kinematics_def is None else dict(kinematics_def.block)
+    scene.materials = materials
+    scene.animation = animation
 
     out.parent.mkdir(parents=True, exist_ok=True)
     spec = _build_entry_spec(Path.cwd().resolve(), scene.step_path, scene)
@@ -273,7 +403,7 @@ def _emit(
     ):
         _generate_part_outputs(
             spec,
-            entries_by_step_path=_entries_by_step_path_for_repo(Path.cwd().resolve(), spec),
+            entries_by_step_path={spec.step_path: spec},
             preloaded_scene=scene,
             require_step_file=False,
             force=force,

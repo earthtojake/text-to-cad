@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cadgen._internal.generation import _load_generator_module
+from cadgen._internal.generation_runner import _load_generator_module
 
 __all__ = ["load_source_module"]
 

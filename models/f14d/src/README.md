@@ -21,16 +21,15 @@ not pick it up until `f14d.py` is rerun. It is a long build cold (the
 airframe skin's structural cuts dominate, ~6 minutes on their own), so let it
 run; every other system is done long before the airframe is.
 
-`STEP/f14d.step.js` is not a model — it is the render module beside the
-document, and the CAD Viewer's Animation tab is its only consumer (clips:
-`teardown`, `explodedHold`). Authored and committed; no build reads it.
+`ANIMATION_JS` in `f14d.py` defines the `teardown` and `explodedHold` clips
+embedded in model metadata for the CAD Viewer.
 
 `lib/` is the shared part library: one module per aircraft system, each
 exporting `build()`, wrapped by the model of the same stem under `src/`.
 Nothing in `lib/` is runnable. The SYSTEMS list in `f14d.py` IS the occurrence
 order (`o1.1` airframe through `o1.10` details); read its docstring before
 adding or removing a system: a new group renumbers every occurrence after it
-and `f14d.step.js` must be renumbered in the same commit. Which skin cutters
+and the embedded animation must be renumbered in the same commit. Which skin cutters
 the airframe applies (and which were dropped as too costly) is decided in
 `src/airframe.py`.
 
@@ -40,5 +39,5 @@ Project tooling lives outside `src/` because it is not model code:
   `inspect interfere`.
 - `../render/` — review-render helpers (`shot.py`, `gauntlet.py`, `part.py`,
   `ab.py`, `subrefs.py`) and the committed presentation theme/display JSON.
-  `subrefs.py` regenerates the act-2 occurrence-id lists in `f14d.step.js`.
+  `subrefs.py` regenerates the act-2 occurrence-id lists for `ANIMATION_JS` in `f14d.py`.
   All of them write to `../tmp/`.

@@ -54,26 +54,59 @@ The rule is total on purpose. :func:`finish_for` raises ``ValueError`` on an
 occurrence kind it has never been told about, so a new part family shows up as
 a failed build rather than as a body that quietly ships the default grey.
 
-``FINISHES`` and :func:`lib.finish.finish` remain the authoring-time surface
+``FINISHES`` and :func:`lib.finish.finish` remain the authoring-time color
 languages used by the procedural factories; ``steel`` still exists there for
 the sub-assembly studies, but the assembled hand no longer uses it -- the
 palette below folds steel into aluminium.
 """
 
 # --- physical surfaces ------------------------------------------------------
-# Roughness/metalness/clearcoat as the CAD Viewer's per-part PBR override.
+# Roughness/metalness/clearcoat used by @step named material definitions.
 
 ALUMINUM = {"roughness": .34, "metalness": .86, "clearcoat": .12}
 ANODIZED = {"roughness": .32, "metalness": .68, "clearcoat": .16}
 STEEL = {"roughness": .12, "metalness": .98, "clearcoat": .25}
 SILICONE = {"roughness": .67, "metalness": .01, "clearcoat": .04}
 CORD = {"roughness": .57, "metalness": .03}
-# `opacity` HERE, not only on the colour. A shape's colour carries alpha, but
-# the GLB exporter converts colour to a hex string on the way into the file and
-# hex has no alpha channel, so a liner declared translucent only through its
-# colour arrives opaque -- 170 near-white tubes running the length of the hand,
-# which is exactly what they looked like. `cad_material` survives that trip.
-LINER = {"roughness": .30, "metalness": .05, "opacity": .28}
+# The liner's STEP source color already carries alpha .28. Material opacity
+# stays at its default 1 so render composition preserves that authored value.
+LINER = {"roughness": .30, "metalness": .05}
+
+MATERIAL_DEFINITIONS = {
+    "aluminum_frame": {"name": "Machined aluminum", **ALUMINUM},
+    "anodized_dark": {"name": "Dark anodized aluminum", **ANODIZED},
+    "steel": {"name": "Polished steel", **STEEL},
+    "silicone_pad": {"name": "Silicone pad", **SILICONE},
+    "silicone_grommet": {"name": "Silicone grommet", **SILICONE},
+    "bowden_liner": {"name": "Translucent Bowden liner", **LINER},
+    "cord_flexion": {"name": "Flexion cord", **CORD},
+    "cord_abduction": {"name": "Abduction cord", **CORD},
+    "cord_pip": {"name": "PIP cord", **CORD},
+    "cord_tip": {"name": "Tip cord", **CORD},
+}
+
+ASSEMBLY_MATERIAL_BUCKETS = (
+    "cord_flexion", "cord_abduction", "cord_pip", "cord_tip",
+    "bowden_liner", "silicone_pad", "silicone_grommet",
+    "anodized_dark", "aluminum_frame",
+)
+RIGID_ASSEMBLY_MATERIAL_BUCKETS = (
+    "aluminum_frame", "anodized_dark",
+    "silicone_pad", "silicone_grommet",
+)
+
+def assembly_materials(*buckets):
+    selected = buckets or ASSEMBLY_MATERIAL_BUCKETS
+    return {
+        "definitions": {key: MATERIAL_DEFINITIONS[key] for key in selected},
+        "assignments": [
+            {"targets": [f"#material_{key}"], "material": key}
+            for key in selected
+        ],
+    }
+
+ASSEMBLY_MATERIALS = assembly_materials()
+RIGID_ASSEMBLY_MATERIALS = assembly_materials(*RIGID_ASSEMBLY_MATERIAL_BUCKETS)
 
 # The structural frame is the SAME anodised black as the actuator pack: one
 # machine, one finish. It keeps the aluminium material (metalness .86) rather
@@ -162,10 +195,9 @@ CORD_FINISHES = {
     for motion, color in CORD_HUES.items() for side in CORD_SIDES
 }
 
-# The hardware surface languages. Kept separate from the cord hues because
-# native_integration.overlay() infers a material for an imported body by
-# nearest colour, and an imported grey must never land on a cord's fibre
-# material just because a cord hue happens to sit nearer in RGB.
+# The hardware surface languages stay separate from the cord hues so factories
+# can author their source colors directly while the owning compound assigns
+# each occurrence to its named physical-material bucket.
 HARDWARE_FINISHES = {
     "aluminum": (FRAME_COLOR, ALUMINUM),
     "dark": (DARK_COLOR, ANODIZED),
@@ -275,15 +307,9 @@ def census(rows):
 
 
 def apply_palette(bodies):
-    """Recolour every :class:`lib.assembly.Body` in place; return the census.
-
-    Runs last, on the shapes the exporter will read ``color`` and
-    ``cad_material`` off, so this is what the written STEP and the store
-    package carry.
-    """
+    """Recolor bodies; the owning @step assigns their named PBR materials."""
     from cadgen import srgb
     for body in bodies:
-        _, color, material, alpha = finish_for(body.name, body.kind)
+        _, color, _material, alpha = finish_for(body.name, body.kind)
         body.shape.color = srgb(color, alpha)
-        body.shape.cad_material = dict(material)
     return census([dict(name=b.name, kind=b.kind) for b in bodies])

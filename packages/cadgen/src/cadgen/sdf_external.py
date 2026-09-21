@@ -21,14 +21,28 @@ def run_gz_sdf_check(xml_text: str, *, output_path: Path, mode: GzCheckMode = "a
 
     gz_path = shutil.which("gz")
     if gz_path is None:
-        severity = "error" if normalized_mode == "required" else "warning"
+        # Under `auto` an absent tool is a note, never a finding against the FILE.
+        # `auto` means "run gz if it is here", so a machine without Gazebo would
+        # otherwise fail every clean document -- and, because `--strict` promotes
+        # warnings, fail it blockingly. Asking for the check with `required` is the
+        # way to say its absence is an error.
+        if normalized_mode == "required":
+            result.add(
+                "error",
+                "gz_check_unavailable",
+                "gz sdf --check could not run: 'gz' is not on PATH",
+            )
+            return result
         result.add(
-            severity,
+            "info",
             "gz_check_unavailable",
             "gz sdf --check skipped because 'gz' is not on PATH",
         )
         return result
 
+    # The scratch copy lives BESIDE the output, not in a temp dir: `gz sdf --check`
+    # resolves relative `<uri>`s (meshes, includes) against the file's own
+    # directory, so a copy elsewhere would report every relative reference missing.
     output_parent = output_path.resolve().parent
     output_parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".sdf", dir=output_parent, delete=False) as handle:

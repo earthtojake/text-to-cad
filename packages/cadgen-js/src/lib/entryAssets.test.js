@@ -19,6 +19,7 @@ import {
   entrySelectorTopologyAssetUrl,
   entryTopologyAssetUrl,
   entryPoseUrl,
+  entrySourceSidecarUrl,
   entryUrdfAssetHash
 } from "./entryAssets.js";
 
@@ -52,6 +53,23 @@ test("entry mesh signatures distinguish assemblies from simple mesh sidecars", (
   assert.equal(entryMeshAssetHash(stepEntry()), "glb-hash");
   assert.equal(entryMeshAssetSignature(stepEntry()), "glb-hash");
   assert.equal(entryMeshAssetSignature(stepEntry({ kind: "assembly" })), "glb-hash");
+  assert.equal(
+    entryMeshAssetSignature(stepEntry({ appearanceHash: "finish-a" })),
+    "glb-hash:finish-a"
+  );
+  assert.notEqual(
+    entryMeshAssetSignature(stepEntry({ file: "a.step", appearanceHash: "finish-a" })),
+    entryMeshAssetSignature(stepEntry({ file: "b.step", appearanceHash: "finish-b" })),
+    "saved files sharing one STEP tree still own distinct composed appearances"
+  );
+  assert.equal(
+    entryMeshAssetSignature({ kind: "stl", url: "/mesh.stl", hash: "stl-hash", appearanceHash: "ignored" }),
+    "stl-hash"
+  );
+  assert.equal(
+    entryMeshAssetSignature(stepEntry({ hash: "preview-tree", appearanceHash: "saved-finish", editingPreview: true })),
+    "preview-tree"
+  );
   assert.equal(entryMeshAssetHash({
     kind: "stl",
     url: "/mesh.stl",
@@ -69,6 +87,8 @@ test("STEP module urls are explicit catalog data instead of guessed sidecars", (
   assert.equal(entryPoseUrl(stepEntry()), "");
   assert.equal(entryPoseUrl(stepEntry({ poseUrl: " /assets/part.step.json " })), "/assets/part.step.json");
   assert.equal(entryPoseUrl({ kind: "stl", poseUrl: "/assets/not-step.json" }), "");
+  assert.equal(entrySourceSidecarUrl(stepEntry({ sourceUrl: " /assets/part.step.json?v=2 " })), "/assets/part.step.json?v=2");
+  assert.equal(entrySourceSidecarUrl({ kind: "stl", sourceUrl: "/assets/not-step.json" }), "");
 });
 
 test("entry availability helpers preserve existing viewer gates", () => {

@@ -201,7 +201,8 @@ jobs:
             if gh api \
               --method PUT \
               "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/merge" \
-              -f merge_method=merge \
+              -f merge_method=squash \
+              -f commit_title="Release $VERSION" \
               -f sha="$head_sha"; then
               merged=true
               break

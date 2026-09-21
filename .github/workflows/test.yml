@@ -1,3 +1,45 @@
+# The repo's test workflow: one job per thing that has to work, each conditional on
+# the changes that can break it. No gates, no shards. A job skipped by its own
+# condition satisfies its required check, so a prose-only pull request runs Version
+# Check and nothing else.
+#
+# WHAT CAN BREAK WHAT (the dependency graph the conditions encode)
+#   packages/cadgen     the Python engine, CLI doors, daemon and the CAD Viewer BACKEND.
+#                       Everything downstream runs it: the skills (thin entrypoints over
+#                       its CLIs), the viewer (served by cadgen.viewer), the docs site
+#                       (documents its commands), the wheel.
+#   packages/cadgen-js  bundled into the runtime cadgen executes (mesh exports,
+#                       snapshots), imported by the viewer client, and by the docs hero.
+#   apps/viewer         the client. Platform-agnostic JS; served by the backend.
+#   skills/             SKILL.md + scripts. Their suites run the cadgen CLIs; the docs
+#                       site mirrors their frontmatter.
+#   apps/docs           the docs site.
+#   scripts/, .github/, version metadata ("infra"): can break any job.
+#   Root *.md, notes/, models/, LICENSE ("prose"): read by no test. Markdown under
+#   skills/ and packages/cadgen/ is NOT prose -- test_documented_commands,
+#   test_skill_requirements and test_package_boundaries read it.
+#
+# WHAT RUNS WHERE
+#   Version Check     ubuntu   always: VERSION, derived metadata, skill pins
+#   cadgen (Linux)    ubuntu   the cadgen package suite, viewer backend included
+#   cadgen (Windows)  windows  the SAME suite. This is the one thing that must be
+#                              proven on Windows: paths, locks, subprocesses, file
+#                              URLs, the daemon, the viewer backend. Nothing else
+#                              runs there -- bundling, packaging, policy and the JS
+#                              suites are properties of the tree or of a browser,
+#                              not of an operating system.
+#   cadgen-js         ubuntu   cadgen-js unit tests (+ the viewer-memory bench helpers)
+#   viewer            ubuntu   the client's unit tests, then the bundled client
+#                              launched through the real backend
+#   skills            ubuntu   the policy gates (tests/python/global) + every skill suite
+#   docs              ubuntu   the docs site check
+#   packaging         ubuntu   bundle from clean, published-tree contract, wheel
+#                              package data, the CLIs pip-installed outside the repo
+#
+# Each job parallelises internally (unittest_files.py --jobs, node --test concurrency).
+# The packaged runtime is gitignored and built by whichever job needs it
+# (scripts/test/common.sh ensure_packaged_runtime, ~13 s).
+#
 name: Test
 
 on:
@@ -16,6 +58,52 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # What changed, as the classes above. Every other job's `if:` reads these.
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      cadgen: ${{ steps.filter.outputs.cadgen }}
+      cadgenjs: ${{ steps.filter.outputs.cadgenjs }}
+      viewer: ${{ steps.filter.outputs.viewer }}
+      skills: ${{ steps.filter.outputs.skills }}
+      docs: ${{ steps.filter.outputs.docs }}
+      infra: ${{ steps.filter.outputs.infra }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            cadgen:
+              - 'packages/cadgen/**'
+              - 'tests/python/packages/**'
+              - 'tests/python/support/**'
+              - 'requirements*.txt'
+            cadgenjs:
+              - 'packages/cadgen-js/**'
+            viewer:
+              - 'apps/viewer/**'
+              - 'tests/browser/**'
+            skills:
+              - 'skills/**'
+              - 'tests/python/skills/**'
+              - 'tests/python/global/**'
+            docs:
+              - 'apps/docs/**'
+            infra:
+              - 'scripts/**'
+              - '.github/**'
+              - 'VERSION'
+              - '.claude-plugin/**'
+              - '.codex-plugin/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.gitattributes'
+              - '.gitignore'
+
   version:
     name: Version Check
     runs-on: ubuntu-latest
@@ -61,11 +149,15 @@ jobs:
               ;;
           esac
 
-  test:
-    name: Test (Linux)
+  # The cadgen package suite, CAD Viewer backend included, on both platforms. cadgen-js
+  # is in the condition because it is bundled into the runtime these tests execute.
+  cadgen-linux:
+    name: cadgen (Linux)
+    needs: changes
+    if: needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.cadgenjs == 'true' || needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
     env:
-      # Four test files at a time: each is a kernel-loading interpreter (~450 MB).
+      # Test files at a time: each is a kernel-loading interpreter (~450 MB).
       CADGEN_TEST_JOBS: "4"
 
     steps:
@@ -74,18 +166,161 @@ jobs:
 
       - name: Set up dependencies
         uses: ./.github/actions/setup-deps
+        with:
+          npm: packages/cadgen-js
 
-      - name: Check generated outputs against sources
-        run: scripts/bundle/bundle.sh --check
+      - name: Run the cadgen package suite
+        run: scripts/test/test-python.sh --select cadgen --print-weights
+
+  # Why Windows runs at all: four of the last five user-reported bugs were Windows-only
+  # (#260, #266, #267, #269) and every one passed CI -- the coverage existed, the runner
+  # did not. The platform risk is file I/O: locks, paths, subprocesses, file URLs, the
+  # daemon, the viewer backend. That is this suite, and only this suite.
+  cadgen-windows:
+    name: cadgen (Windows)
+    needs: changes
+    if: needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.cadgenjs == 'true' || needs.changes.outputs.infra == 'true'
+    runs-on: windows-latest
+    env:
+      # Four, the core count. Six was measured: every file slowed by ~40% and the
+      # run failed on timeouts -- the spawn-bound tail is not idle CPU to fill.
+      CADGEN_TEST_JOBS: "4"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          npm: packages/cadgen-js
+
+      # --keep-going: report every failing suite in one round trip rather than one per
+      # run; the Linux job keeps the fail-fast default.
+      - name: Run the cadgen package suite
+        run: scripts/test/test-python.sh --keep-going --select cadgen --print-weights
+        shell: bash
+
+  cadgen-js:
+    name: cadgen-js
+    needs: changes
+    if: needs.changes.outputs.cadgenjs == 'true' || needs.changes.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          python: "false"
+          playwright: "false"
+          npm: packages/cadgen-js
+
+      - name: Run cadgen-js tests
+        run: npm --prefix packages/cadgen-js test
+
+      - name: Run the viewer-memory bench helper tests
+        run: node --test scripts/bench/viewer-memory/*.test.mjs
+
+  # The client is platform-agnostic JS, so Linux only. It runs on a cadgen change too:
+  # the launch step serves the bundled client through the real backend and draws it in
+  # Playwright's Chromium, which is why this job keeps the Playwright install.
+  viewer:
+    name: viewer
+    needs: changes
+    if: needs.changes.outputs.viewer == 'true' || needs.changes.outputs.cadgenjs == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          npm: packages/cadgen-js apps/viewer
+
+      - name: Run the CAD Viewer client tests
+        run: npm --prefix apps/viewer run test
 
       - name: Bundle production outputs
+        run: scripts/bundle/bundle.sh
+
+      - name: Launch the bundled CAD Viewer through the backend
+        run: scripts/test/test-viewer-launch.sh
+
+  # The policy gates read the repo's markdown and manifests; the skill suites run the
+  # cadgen CLIs. Repository properties, so Linux only.
+  skills:
+    name: skills
+    needs: changes
+    if: needs.changes.outputs.skills == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.cadgenjs == 'true' || needs.changes.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+    env:
+      CADGEN_TEST_JOBS: "4"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          npm: packages/cadgen-js
+
+      - name: Run the policy gates
+        run: scripts/test/test-global.sh
+
+      - name: Run every skill suite
+        run: scripts/test/test-python.sh --select skills --print-weights
+
+  # The docs site mirrors the skills' frontmatter, renders through cadgen-js and
+  # documents cadgen's commands, so it runs on any of those changing.
+  docs:
+    name: docs
+    needs: changes
+    if: needs.changes.outputs.docs == 'true' || needs.changes.outputs.skills == 'true' || needs.changes.outputs.cadgenjs == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          python: "false"
+          playwright: "false"
+          npm: apps/docs
+
+      - name: Run documentation checks
+        run: scripts/test/test-docs.sh
+
+  # The tree as it ships: the production bundle from clean, the published-tree contract,
+  # the wheel's package data, and the CLIs as a user gets them (pip-installed, outside
+  # this repo). Properties of the tree, not of an operating system, so Linux only.
+  packaging:
+    name: packaging
+    needs: changes
+    if: needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.cadgenjs == 'true' || needs.changes.outputs.viewer == 'true' || needs.changes.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          npm: packages/cadgen-js apps/viewer
+
+      - name: Bundle production outputs from clean
         run: scripts/bundle/bundle.sh --clean
 
       - name: Check production bundle layout
         run: scripts/github-workflows/check-builds.sh --skip-bundle-check
-
-      - name: Start the bundled CAD Viewer
-        run: scripts/test/test-viewer-launch.sh
 
       # cadgen ships the JS it executes as package data. A package-data glob that stops
       # matching produces a wheel that imports fine and fails on a user's machine, so the
@@ -95,63 +330,8 @@ jobs:
           python -m pip install build
           scripts/release/check-wheel-contents.sh
 
-      - name: Run documentation checks
-        run: scripts/test/test-docs.sh
-
-      - name: Run code tests
-        run: scripts/test/test.sh
-
-      # Everything above runs against the source tree, where the repo root is importable
-      # and every asset is one directory away. This runs the CLIs the way a user gets
-      # them -- pip-installed, from a directory that is not this repo -- which is the only
-      # place a missing package-data glob or an accidental repo-relative path shows up.
+      # The CLIs the way a user gets them -- pip-installed, from a directory that is not
+      # this repo -- which is the only place a missing package-data glob or an accidental
+      # repo-relative path shows up.
       - name: Run installed-mode checks
         run: scripts/test/test-installed.sh
-
-  # A SEPARATE JOB, never a matrix on `test` above. A matrix renames that job's check to
-  # "Test (ubuntu-latest)", and `Test` is a required status check on main -- it would stop
-  # being reported and every pull request would wait forever for a check that no longer exists.
-  #
-  # Runs the TESTS only, not the hygiene steps the Linux job wraps them in. Bundle freshness
-  # and the published-tree checks are properties of the repository, not of an operating
-  # system; bundling is deterministic, so re-checking it here would buy nothing and cost
-  # minutes. The platform risk is in file I/O -- locks, paths, subprocesses, file
-  # URLs -- which is what the test suites exercise.
-  #
-  # Why this job exists at all: four of the last five user-reported bugs were Windows-only
-  # (#260, #266, #267, #269), and every one of them passed CI. The coverage was mostly already
-  # written -- test_coordination.py's holder test asserts exactly the cross-process sentinel
-  # read that #269 broke -- so what was missing was a runner, not a test.
-  test-windows:
-    name: Test (Windows)
-    runs-on: windows-latest
-    env:
-      # Four test files at a time: each is a kernel-loading interpreter (~450 MB).
-      CADGEN_TEST_JOBS: "4"
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-
-      - name: Set up dependencies
-        uses: ./.github/actions/setup-deps
-
-      # Three steps rather than test.sh, each running even if an earlier one failed, and the
-      # Python runner in --keep-going mode. While Windows is being brought up the failures are
-      # independent POSIX-isms in unrelated suites, and stopping at the first one turns a list
-      # into one ~10 minute round trip per entry. The Linux job keeps the fail-fast default.
-      - name: Run JS tests
-        run: scripts/test/test-js.sh
-        shell: bash
-
-      - name: Run Python tests
-        if: ${{ !cancelled() }}
-        run: scripts/test/test-python.sh --keep-going
-        shell: bash
-
-      # test-global.sh is deliberately absent, for the same reason the bundle step is. It asserts REPOSITORY policy -- that manifests pin the canonical version,
-      # that lockfiles do not reach outside a skill, that the release scripts read the right
-      # VERSION path at a given ref -- by executing the repo's own bash tooling. None of that
-      # is shipped to a Windows user, and none of its answers can differ by operating system;
-      # running it here only asks whether `bash` on a Windows runner behaves like bash, which
-      # it does not (it resolves to the WSL stub and answers in UTF-16).

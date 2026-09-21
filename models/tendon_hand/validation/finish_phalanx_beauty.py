@@ -1,5 +1,5 @@
 """Complete the15-body native gate and full-hand context presentation."""
-import json,subprocess,sys,time,hashlib,shutil
+import json,subprocess,sys,time,hashlib
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[3];HERE=Path(__file__).resolve().parent
 SRC=ROOT/'models/tendon_hand/src';STEP=ROOT/'models/tendon_hand/STEP'
@@ -20,6 +20,5 @@ def run(args,stem):
 run([str(SRC/'phalanx_beauty_review.py')],'phalanx_beauty_build')
 run(['-m','cadgen.cli','step','inspect','validate',str(STEP/'phalanx_beauty_review.step'),'--every-placement','--out',str(HERE/'phalanx_beauty_strict.json')],'phalanx_beauty_strict')
 run([str(SRC/'phalanx_beauty_context.py')],'phalanx_beauty_context_build')
-shutil.copyfile(STEP/'hand_progress_review.step.js',STEP/'phalanx_beauty_context.step.js')
 run(['-m','cadgen.cli','step','snapshot','--job',str(SRC/'phalanx_beauty_render_job.json'),'--json'],'phalanx_beauty_render')
 print('DONE',flush=True)

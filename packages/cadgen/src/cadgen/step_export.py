@@ -127,6 +127,13 @@ def _create_bin_xcaf_doc(to_export: Any) -> Any:
     color_tool = XCAFDoc_DocumentTool.ColorTool_s(doc.Main())
     is_assembly = isinstance(to_export, Compound) and len(to_export.children) > 0
     shape_definitions: dict[int, object] = {}
+    # STEPCAF collapses definitions backed by the same TShape during transfer.
+    # That is normally the desired instance reuse, but it also collapses the
+    # definition style: differently coloured occurrences then all receive the
+    # last colour. Keep one topology representative per intrinsic appearance.
+    # Copying with copyGeom=False detaches only the topological identity; the
+    # canonical package still content-deduplicates the identical BREP.
+    leaf_variants: dict[int, list[tuple[object, dict[object, object]]]] = {}
 
     def set_label_name(label: object, name: str | None) -> None:
         if name and not label.IsNull():
@@ -143,6 +150,72 @@ def _create_bin_xcaf_doc(to_export: Any) -> Any:
             wrapped,
             XCAFDoc_ColorType.XCAFDoc_ColorSurf,
         )
+
+    def color_signature(color: object | None) -> tuple[float, float, float, float] | None:
+        wrapped = quantity_color_rgba_from_color(color)
+        if wrapped is None:
+            return None
+        rgb = wrapped.GetRGB()
+        return (
+            float(rgb.Red()),
+            float(rgb.Green()),
+            float(rgb.Blue()),
+            float(wrapped.Alpha()),
+        )
+
+    def leaf_appearance_signature(shape: object) -> object:
+        face_colors = getattr(shape, "cad_face_ordinal_colors", None)
+        face_signature = ()
+        if face_colors:
+            face_signature = tuple(
+                (int(ordinal), color_signature(color))
+                for ordinal, color in sorted(face_colors.items(), key=lambda item: int(item[0]))
+            )
+        return color_signature(getattr(shape, "color", None)), face_signature
+
+    def leaf_shape_for_appearance(unlocated: object, shape: object) -> object:
+        signature = leaf_appearance_signature(shape)
+        bucket = leaf_variants.setdefault(hash(unlocated), [])
+        for native_shape, variants in bucket:
+            # IsEqual includes orientation (location is already stripped).
+            # IsSame would let a reversed occurrence reuse the forward
+            # representative and silently flip its intended topology.
+            if unlocated.IsEqual(native_shape):
+                representative = variants.get(signature)
+                if representative is not None:
+                    return representative
+                from OCP.BRepBuilderAPI import BRepBuilderAPI_Copy
+
+                representative = BRepBuilderAPI_Copy(
+                    unlocated,
+                    False,  # share geometric surfaces and curves
+                    False,  # never copy triangulation into the STEP document
+                ).Shape()
+                variants[signature] = representative
+                return representative
+        bucket.append((unlocated, {signature: unlocated}))
+        return unlocated
+
+    def set_face_colors(label: object, unlocated: object, shape: object) -> None:
+        """Per-face colours (``cad_face_ordinal_colors``, keyed by MapShapes ordinal
+        on the unlocated shape) as coloured sub-shape labels — the XCAF form
+        the scene loader reads back (``_face_color_map_from_label``). A vendor
+        part composed through ``read_step`` keeps its face colours this way, and
+        the build's tree, re-read from the written STEP, still renders them."""
+        face_colors = getattr(shape, "cad_face_ordinal_colors", None)
+        if not face_colors or label.IsNull():
+            return
+        from OCP.TopExp import TopExp
+        from OCP.TopTools import TopTools_IndexedMapOfShape
+
+        face_map = TopTools_IndexedMapOfShape()
+        TopExp.MapShapes_s(unlocated, ta.TopAbs_FACE, face_map)
+        for ordinal, color in sorted(face_colors.items()):
+            ordinal = int(ordinal)
+            if not 1 <= ordinal <= face_map.Extent():
+                continue
+            sub_label = shape_tool.AddSubShape(label, face_map.FindKey(ordinal))
+            set_label_color(sub_label, color)
 
     def shape_location(shape: object) -> object:
         wrapped = getattr(shape, "wrapped", None)
@@ -168,6 +241,8 @@ def _create_bin_xcaf_doc(to_export: Any) -> Any:
         except Exception:  # noqa: BLE001 - OCP Located() can raise on unusual shapes; keep the unlocated shape
             return wrapped
 
+    root_location = shape_location(to_export)
+
     def shape_definition_for_tree(shape: object) -> object:
         key = id(shape)
         cached = shape_definitions.get(key)
@@ -182,19 +257,28 @@ def _create_bin_xcaf_doc(to_export: Any) -> Any:
             set_label_color(definition_label, getattr(shape, "color", None))
             for child in children:
                 child_definition = shape_definition_for_tree(child)
+                child_location = shape_location(child)
+                if shape is to_export and not root_location.IsIdentity():
+                    # A free assembly definition has no instance placement.
+                    # Carry its frame into the immediate child instances;
+                    # adding a placed root reference would add a STEP group.
+                    child_location = root_location.Multiplied(child_location)
                 child_component = shape_tool.AddComponent(
                     definition_label,
                     child_definition,
-                    shape_location(child),
+                    child_location,
                 )
                 set_label_name(child_component, getattr(child, "label", None))
                 set_label_color(child_component, getattr(child, "color", None))
             return definition_label
 
-        definition_label = shape_tool.AddShape(shape_without_location(shape), False)
+        unlocated = shape_without_location(shape)
+        unlocated = leaf_shape_for_appearance(unlocated, shape)
+        definition_label = shape_tool.AddShape(unlocated, False)
         shape_definitions[key] = definition_label
         set_label_name(definition_label, getattr(shape, "label", None))
         set_label_color(definition_label, getattr(shape, "color", None))
+        set_face_colors(definition_label, unlocated, shape)
         return definition_label
 
     if is_assembly:
@@ -202,7 +286,13 @@ def _create_bin_xcaf_doc(to_export: Any) -> Any:
         shape_tool.UpdateAssemblies()
         return doc
 
-    shape_tool.AddShape(to_export.wrapped, is_assembly)
+    root_label = shape_tool.AddShape(to_export.wrapped, is_assembly)
+    set_face_colors(
+        shape_tool.FindShape(shape_without_location(to_export), findInstance=False)
+        if not root_label.IsNull() else root_label,
+        shape_without_location(to_export),
+        to_export,
+    )
 
     for node in PreOrderIter(to_export):
         if not node.label and node.color is None:
@@ -497,13 +587,19 @@ def _style_tail_scan(model: Any) -> _StyleTailScan | None:
     return scan
 
 
-def _style_tail_order(scan: _StyleTailScan, targets: dict[int, list[int]]) -> list[int] | None:
+def _style_tail_order(
+    scan: _StyleTailScan,
+    targets: dict[int, list[int]],
+    contexts: dict[int, int] | None = None,
+) -> list[int] | None:
     """The canonical order of the tail, as OLD entity numbers: ``result[i]`` is
     the entity that must end up numbered ``tail_start + i``.
 
     MDGPR blocks sort by the styled targets they reference (``targets[m]``: the
     head-entity numbers the block's styled items point at, which ARE stable),
-    ties broken by the MDGPR's own number; each closure is laid out in
+    ties broken by the stable presentation-context number. Definition and
+    occurrence styles can target the same geometry in different contexts;
+    their original tail numbers depend on heap order. Each closure is laid out in
     field-order DFS, the order AddWithRefs traverses, so a closure's internal
     layout is reproduced exactly. Entities shared between closures (deduplicated
     colours) land with the first canonical owner. None when the closures do not
@@ -521,7 +617,11 @@ def _style_tail_order(scan: _StyleTailScan, targets: dict[int, list[int]]) -> li
         for child in children[number]:
             visit(child)
 
-    for mdgpr_num in sorted(scan.mdgpr_nums, key=lambda m: (tuple(sorted(targets[m])), m)):
+    # The scan's coverage-only probe needs no ordering keys; both real
+    # appliers supply contexts verified to refer to the stable model head.
+    for mdgpr_num in sorted(scan.mdgpr_nums, key=lambda m: (
+        tuple(sorted(targets[m])), contexts[m] if contexts is not None else 0, m,
+    )):
         visit(mdgpr_num)
     if len(desired) != scan.size:
         return None
@@ -545,14 +645,19 @@ def _style_tail_plan(model: Any) -> tuple[int, int, list[int]] | None:
     entities = [None] + [model.Entity(index) for index in range(1, scan.total + 1)]
     number_of = {id(ent): index for index, ent in enumerate(entities[1:], start=1)}
     targets: dict[int, list[int]] = {}
+    contexts: dict[int, int] = {}
     for mdgpr_num, items in scan.styled_items.items():
+        context_num = number_of.get(id(entities[mdgpr_num].ContextOfItems()))
+        if context_num is None or not 0 < context_num < scan.tail_start:
+            return None
+        contexts[mdgpr_num] = context_num
         block: list[int] = []
         for _tail_number, item in items:
             target_num = number_of.get(id(item.Item()))
             if target_num is not None and target_num < scan.tail_start:
                 block.append(target_num)
         targets[mdgpr_num] = block
-    old_numbers = _style_tail_order(scan, targets)
+    old_numbers = _style_tail_order(scan, targets, contexts)
     if old_numbers is None:
         return None
     return scan.tail_start, scan.total, old_numbers
@@ -780,7 +885,13 @@ def _canonicalize_style_tail_in_file(path: Path, scan: _StyleTailScan) -> bool:
     bounds = [m.start() for m in headers] + [end_marker + 1]
     records = {int(headers[i].group(1)): suffix[bounds[i]:bounds[i + 1]] for i in range(size)}
     targets: dict[int, list[int]] = {}
+    contexts: dict[int, int] = {}
     for mdgpr_num, items in scan.styled_items.items():
+        fields = _step_record_fields(records[mdgpr_num])
+        context_ref = re.fullmatch(rb"#(\d+)", fields[2]) if len(fields) == 3 else None
+        if context_ref is None or not 0 < int(context_ref.group(1)) < tail_start:
+            return False
+        contexts[mdgpr_num] = int(context_ref.group(1))
         block: list[int] = []
         for tail_number, _item in items:
             target_num = _styled_item_target(records[tail_number])
@@ -789,7 +900,7 @@ def _canonicalize_style_tail_in_file(path: Path, scan: _StyleTailScan) -> bool:
             if target_num is not None and 0 < target_num < tail_start:
                 block.append(target_num)
         targets[mdgpr_num] = block
-    old_numbers = _style_tail_order(scan, targets)
+    old_numbers = _style_tail_order(scan, targets, contexts)
     if old_numbers is None:
         return False
     canonical = _apply_style_tail_plan_in_text(suffix, tail_start, old_numbers)
@@ -800,6 +911,109 @@ def _canonicalize_style_tail_in_file(path: Path, scan: _StyleTailScan) -> bool:
             handle.seek(region_start)
             handle.write(canonical)
             handle.truncate()
+    return True
+
+
+# IEEE-754 has two zeros and OCCT prints both: a coordinate that arrives as
+# -0.0 writes `-0.`, one that arrives as +0.0 writes `0.`. Which one a value
+# lands on depends on the operation path that produced it, not on the geometry
+# — the same solid built through a different (equally valid) sequence of kernel
+# calls flips DIRECTION('',(0.,1.,0.)) to DIRECTION('',(-0.,1.,0.)) — so the
+# two spellings are the same number and must be the same bytes (law 5).
+#
+# A real is matched only when its mantissa is ALL zeros, so a genuinely
+# negative value keeps its sign: `-0.5`, `-1.`, `-0.000000000001` and
+# `-6.123233995737E-17` are all left exactly as written. The leading lookbehind
+# and trailing lookahead make the match a whole token: a `-0.` glued to another
+# number (`1.-0.`, an exponent's `E-0`) is not a real of its own and is not
+# rewritten. A mantissa with no `.` is a STEP INTEGER, never a coordinate, and
+# is left alone — which is also what keeps a name like `rev-0.1` intact if the
+# string alternative below ever failed to cover it.
+_STEP_NEGATIVE_ZERO = re.compile(
+    # A quoted STEP string, consumed whole and returned unchanged: a part name
+    # is not a number, whatever it spells. `''` is an escaped quote.
+    rb"'(?:[^']|'')*'"
+    rb"|(?<![0-9.eE+-])-(?:0+\.0*|0*\.0+)(?:[eE][-+]?[0-9]+)?(?![0-9.eE])"
+)
+
+
+def _normalize_negative_zero_reals(text: bytes) -> bytes:
+    """Rewrite every negative-zero real in STEP text as its positive spelling.
+
+    Pure text over one line-aligned block: a STEP string literal is a single
+    token that never spans a line, so the string alternative above sees every
+    literal whole and no number inside a name is ever touched.
+    """
+
+    # The scan has to consider every string literal to know which `-` it may
+    # not touch, so it runs at a few tens of MB/s. A negative zero starts
+    # `-0` or `-.`, so two memmem passes are a necessary condition for any
+    # match, and text with neither — an already-canonical file among them —
+    # skips the scan.
+    if b"-0" not in text and b"-." not in text:
+        return text
+
+    def replace(match: "re.Match[bytes]") -> bytes:
+        body = match.group(0)
+        if body.startswith(b"'"):
+            return body
+        return body[1:]
+
+    return _STEP_NEGATIVE_ZERO.sub(replace, text)
+
+
+# Read/rewrite granularity for the negative-zero pass. Large enough that a
+# multi-hundred-megabyte STEP costs a handful of iterations, small enough that
+# the pass never holds the whole file (the whole-file style-tail fallback is
+# the one place in this module that does, and only when OCCT wrote a shape the
+# fast path did not recognize).
+_NEGATIVE_ZERO_BLOCK = 8 << 20
+
+
+def _normalize_negative_zero_reals_in_file(path: Path) -> bool:
+    """Apply :func:`_normalize_negative_zero_reals` to a written STEP in place.
+
+    Rewriting `-0.` as `0.` only ever SHORTENS the text, so the rewrite streams
+    through one handle with the write offset trailing the read offset and
+    truncates at the end — no second copy of the file on disk or in memory.
+
+    Runs LAST, after the style-tail canonicalization: that pass addresses the
+    file by byte offsets it computed from the bytes OCCT wrote, and this one
+    moves them.
+
+    Returns True when the file changed.
+    """
+    changed = False
+    with open_with_ladder(path, "r+b") as handle:
+        read_at = 0
+        write_at = 0
+        carry = b""
+        while True:
+            handle.seek(read_at)
+            chunk = handle.read(_NEGATIVE_ZERO_BLOCK)
+            read_at += len(chunk)
+            block = carry + chunk
+            if chunk:
+                # Hand on a partial trailing line rather than splitting a token
+                # (or a string literal) across two blocks.
+                split = block.rfind(b"\n") + 1
+                carry, block = block[split:], block[:split]
+            else:
+                carry = b""
+            if block:
+                normalized = _normalize_negative_zero_reals(block)
+                # Until the first rewrite the bytes are already where they
+                # belong, so an unchanged file is read and never written.
+                if changed or normalized != block:
+                    changed = True
+                    handle.seek(write_at)
+                    handle.write(normalized)
+                write_at += len(normalized)
+            if not chunk:
+                break
+        if not changed:
+            return False
+        handle.truncate(write_at)
     return True
 
 
@@ -947,6 +1161,13 @@ def write_xcaf_doc_step_file(
                         # artifact, and a whole-file `wb` that dies midway leaves a
                         # half-written STEP where the tail rewrite above cannot.
                         write_bytes_atomic(output_path, canonical)
+    # Third and last canonicalization, for the same reason as the other two:
+    # a value OCCT prints as `-0.` is the value it prints as `0.` elsewhere,
+    # and which one a build lands on follows the operation path, not the
+    # geometry. Last because it shifts every byte after it, and the style-tail
+    # applier above addresses the file by offsets.
+    with (logger.timed("normalize negative zero reals") if logger is not None else nullcontext()):
+        _normalize_negative_zero_reals_in_file(output_path)
     replace_atomic(output_path, final_path)
     return step_file_hash(final_path)
 

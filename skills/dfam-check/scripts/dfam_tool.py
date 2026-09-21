@@ -5,11 +5,17 @@ Reports measurements as JSON. It never emits pass/fail, verdicts, or
 readiness statuses; comparisons against process limits belong to the
 skill workflow using `references/process-limits.md`.
 
-Requires: trimesh, numpy, rtree (pip install trimesh numpy rtree)
+Requires the skill's full dependency set (pip install -r requirements.txt).
+Without scipy/networkx the wall-thickness block degrades to an error object
+while the rest of the report still prints.
 
 Usage:
     python dfam_tool.py measure <mesh> [--samples 2000] [--angle-limit 45]
     python dfam_tool.py orientations <mesh> [--angle-limit 45]
+
+Exit codes: 0 a complete report, 2 a PARTIAL one (a fact family failed; the
+report carries `"partial": true` and names the families in `partial_sections`),
+1 the mesh could not be loaded at all.
 
 `--angle-limit` only parameterises which faces are *counted* in the
 support-area aggregates; per-face angles are always reported so the
@@ -305,6 +311,26 @@ def _safe(fn, *args) -> dict:
         return {"error": detail[:300]}
 
 
+def _mark_partial(report: dict) -> bool:
+    """Say, in the report and in the exit code, that a fact family did not compute.
+
+    Degrading one family instead of the whole run is deliberate (`_safe`), but a
+    caller must be able to SEE it: a report missing wall thickness because scipy
+    is not installed reads exactly like one from a part with no thin walls. The
+    families that failed are named in `partial_sections`, and the command exits
+    2, so neither a JSON reader nor a shell caller can take a partial report for
+    a complete one.
+    """
+    failed = sorted(
+        name for name, value in report.items()
+        if isinstance(value, dict) and "error" in value
+    )
+    report["partial"] = bool(failed)
+    if failed:
+        report["partial_sections"] = failed
+    return bool(failed)
+
+
 def _scale_hint(mesh: trimesh.Trimesh) -> dict:
     """Flag meshes whose units are probably not millimetres.
 
@@ -364,8 +390,9 @@ def main() -> int:
             "orientations": _safe(_orientation_facts, mesh, args.angle_limit),
         }
 
+    partial = _mark_partial(report)
     print(json.dumps(report, indent=2))
-    return 0
+    return 2 if partial else 0
 
 
 if __name__ == "__main__":

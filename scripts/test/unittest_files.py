@@ -14,10 +14,13 @@ which `-m unittest` would run silently.
 
     python scripts/test/unittest_files.py --top <repo root> [--jobs N] <test file>...
 
+``--print-weights`` prints this run's measured per-file costs, the first thing to read
+when a run is slow.
+
 With ``--jobs N`` greater than one, each FILE runs in its own interpreter, N at a time,
-with its own fresh ``CADGEN_CACHE_DIR`` (a temporary store, removed afterwards), so
-modules cannot see one another's builds and a module that spawns workers or a daemon
-does not serialize the rest. The per-module output is printed as each finishes and
+with its own fresh store and private daemon endpoint/auth state. Its daemon is retired
+before the temporary directories are removed, so modules cannot see one another's
+builds or stop one another's artifact workers. The per-module output is printed as each finishes and
 the final ``Ran N tests`` / ``OK`` / ``FAILED`` summary aggregates every module, so a
 log reads the same as a single-process run. The loaded test set is identical to
 `python -m unittest <files>` run from --top either way.
@@ -37,6 +40,7 @@ import tempfile
 import time
 import traceback
 import unittest
+import uuid
 
 
 def dotted_name(path: str, top: str) -> str:
@@ -136,10 +140,19 @@ def _counts(output: str) -> dict[str, int]:
     return counts
 
 
-def _run_one_file(path: str, top: str, verbose: bool) -> tuple[str, int, str]:
+def _run_one_file(path: str, top: str, verbose: bool) -> tuple[str, int, str, float]:
+    started = time.perf_counter()
     store = tempfile.mkdtemp(prefix="cadgen-test-store.")
+    # Stores alone do not isolate lazy artifact jobs: a sibling test can stop
+    # the shared daemon while this module is reading its package. Keep auth,
+    # logs and the actual endpoint private too. The short filename avoids the
+    # Unix socket length ceiling; Windows pipe names need explicit uniqueness.
+    state = tempfile.mkdtemp(prefix="cgt-")
     env = dict(os.environ)
     env["CADGEN_CACHE_DIR"] = store
+    env["CADGEN_DAEMON_STATE_DIR"] = state
+    env["CADGEN_DAEMON_SOCKET"] = (rf"\\.\pipe\cadgen-test-{uuid.uuid4().hex}" if os.name == "nt"
+                                  else os.path.join(state, "d.sock"))
     argv = [sys.executable, os.path.abspath(__file__), "--top", top, "--jobs", "1"]
     if verbose:
         argv.append("--verbose")
@@ -147,20 +160,37 @@ def _run_one_file(path: str, top: str, verbose: bool) -> tuple[str, int, str]:
     try:
         completed = subprocess.run(argv, env=env, capture_output=True, text=True, cwd=os.getcwd())
     finally:
-        shutil.rmtree(store, ignore_errors=True)
-    return path, completed.returncode, (completed.stdout or "") + (completed.stderr or "")
+        try:
+            # No key means no daemon could have bound under this private state.
+            if any(name.endswith(".key") for name in os.listdir(state)):
+                cleanup_env = dict(env)
+                cleanup_env["PYTHONPATH"] = os.pathsep.join(filter(None, [
+                    os.path.join(top, "packages", "cadgen", "src"), env.get("PYTHONPATH", "")
+                ]))
+                cleanup = subprocess.run([
+                    sys.executable, os.path.join(top, "tests", "python", "support", "daemon_cleanup.py"),
+                    env["CADGEN_DAEMON_SOCKET"],
+                ], env=cleanup_env, capture_output=True, text=True, timeout=15)
+                if cleanup.returncode:
+                    raise RuntimeError(f"test daemon cleanup failed: {cleanup.stdout}{cleanup.stderr}")
+        finally:
+            shutil.rmtree(store, ignore_errors=True)
+            shutil.rmtree(state, ignore_errors=True)
+    return path, completed.returncode, (completed.stdout or "") + (completed.stderr or ""), time.perf_counter() - started
 
 
-def run_in_parallel(files: list[str], top: str, jobs: int, verbose: bool) -> int:
+def run_in_parallel(files: list[str], top: str, jobs: int, verbose: bool, print_weights: bool = False) -> int:
     top = os.path.realpath(top)
     started = time.perf_counter()
     totals = {"tests": 0, "failures": 0, "errors": 0, "skipped": 0, "expected failures": 0, "unexpected successes": 0}
+    durations: list[tuple[str, float]] = []
     failed_modules: list[str] = []
     unparsed: list[str] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
         futures = [pool.submit(_run_one_file, path, top, verbose) for path in files]
         for future in concurrent.futures.as_completed(futures):
-            path, code, output = future.result()
+            path, code, output, seconds = future.result()
+            durations.append((path, seconds))
             counts = _counts(output)
             if not _RAN.search(output):
                 # The interpreter died before unittest could summarise (a crash, a
@@ -177,6 +207,13 @@ def run_in_parallel(files: list[str], top: str, jobs: int, verbose: bool) -> int
             if body:
                 sys.stderr.write(body + "\n")
     elapsed = time.perf_counter() - started
+    if print_weights:
+        # stdout is free here: every line of a run goes to stderr. One `WEIGHT` line per
+        # slow file, longest first.
+        for name, seconds in sorted(durations, key=lambda entry: (-entry[1], entry[0])):
+            if seconds >= 5.0:
+                sys.stdout.write(f"WEIGHT\t{os.path.relpath(os.path.abspath(name), top)}\t{seconds:.0f}\n")
+        sys.stdout.flush()
     sys.stderr.write(f"\n{'-' * 70}\nRan {totals['tests']} tests in {elapsed:.3f}s\n\n")
     verdict_parts = []
     for key in ("failures", "errors", "skipped", "expected failures", "unexpected successes"):
@@ -203,12 +240,19 @@ def main(argv: list[str] | None = None) -> int:
         default=1,
         help="run each test file in its own interpreter, this many at a time (default 1: one process)",
     )
+    parser.add_argument(
+        "--print-weights",
+        action="store_true",
+        help="print one `WEIGHT<TAB>path<TAB>seconds` line per slow file on stdout",
+    )
     parser.add_argument("files", nargs="+", metavar="TEST_FILE")
     args = parser.parse_args(argv)
 
-    if args.jobs > 1 and len(args.files) > 1:
-        return run_in_parallel(args.files, args.top, args.jobs, args.verbose)
-    return run_in_process(args.files, args.top, args.verbose)
+    files = args.files
+
+    if args.jobs > 1 and len(files) > 1:
+        return run_in_parallel(files, args.top, args.jobs, args.verbose, args.print_weights)
+    return run_in_process(files, args.top, args.verbose)
 
 
 if __name__ == "__main__":

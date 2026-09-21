@@ -1,6 +1,6 @@
 {
   "name": "cadgen-js",
-  "version": "0.5.1",
+  "version": "0.6.5",
   "private": true,
   "type": "module",
   "description": "Reusable CAD render/viewer runtime for docs, CAD Viewer, and generated snapshot browser assets.",
@@ -19,10 +19,10 @@
   ],
   "dependencies": {
     "meshoptimizer": "^1.2.0",
-    "three": "0.185.1",
-    "three-mesh-bvh": "0.9.14"
+    "three": "0.186.0",
+    "three-mesh-bvh": "0.9.15"
   },
   "devDependencies": {
-    "playwright": "^1.52.0"
+    "playwright": "^1.63.0"
   }
 }

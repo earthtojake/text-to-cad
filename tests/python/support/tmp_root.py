@@ -22,6 +22,15 @@ def temporary_directory(*, prefix: str) -> tempfile.TemporaryDirectory[str]:
     return RetryingTemporaryDirectory(prefix=prefix, dir=CAD_TEST_TMP_ROOT)
 
 
+def generated_cad_directory(*, prefix: str) -> tempfile.TemporaryDirectory[str]:
+    """A fresh test scratch directory for generated CAD artifacts.
+
+    Callers create every input they read, and the retrying cleanup retains the
+    normal Windows handle policy.
+    """
+    return temporary_directory(prefix=prefix)
+
+
 def named_tmp_root(name: str) -> Path:
     tmp_root = TMP_ROOT / name
     tmp_root.mkdir(parents=True, exist_ok=True)

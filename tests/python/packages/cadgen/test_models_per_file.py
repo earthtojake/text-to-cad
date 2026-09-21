@@ -17,7 +17,7 @@ import unittest
 from pathlib import Path
 
 from tests.python.support.paths import REPO_ROOT, add_repo_path
-from tests.python.support.tmp_root import temporary_directory
+from tests.python.support.tmp_root import generated_cad_directory
 
 add_repo_path("packages/cadgen/src")
 
@@ -71,7 +71,7 @@ print(type(shape).__name__, round(size.X, 3), round(size.Y, 3), round(size.Z, 3)
 
 class ModelsPerFile(unittest.TestCase):
     def setUp(self) -> None:
-        self._tmp = temporary_directory(prefix="cadgen-models-per-file-")
+        self._tmp = generated_cad_directory(prefix="cadgen-models-per-file-")
         self.root = Path(self._tmp.name)
         self.src = self.root / "src"
         self.src.mkdir()
@@ -117,10 +117,7 @@ class ModelsPerFile(unittest.TestCase):
             models,
             [f"{(self.src / 'family.py').resolve()}::bracket_left", f"{(self.src / 'family.py').resolve()}::bracket_right"],
         )
-        # A second run finds both current.
-        rerun = self.run_py("family.py").stdout
-        self.assertIn("current bracket_left.step", rerun)
-        self.assertIn("current bracket_right.step", rerun)
+        # That a rerun finds both current is what `store why` asserts, below.
 
     def test_store_why_names_every_model_of_the_file_and_accepts_one(self) -> None:
         self.run_py("family.py")

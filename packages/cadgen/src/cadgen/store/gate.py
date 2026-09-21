@@ -36,6 +36,8 @@ class Verdict:
     #: The source's closure hash as it is NOW (the script's own sha when there is no
     #: record to name a closure): what in-flight coalescing keys on.
     closure: str | None = None
+    #: Exact result from the record this verdict checked, never a later lookup.
+    tree: str | None = None
 
     def reason(self) -> str:
         """The first stale clause as a phrase: ``no record``, ``closure changed: <file>``,
@@ -90,6 +92,7 @@ def stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verdi
         verdict.closure = _sha256_file(script)
         return verdict
     clauses.append({"clause": 1, "stale": False})
+    verdict.tree = str(record.get("tree") or "") or None
 
     closure = record.get("closure") or {}
     recorded_hash = str(closure.get("hash") or "")
@@ -129,10 +132,7 @@ def stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verdi
         child_model = str((child or {}).get("model") or "")
         pinned = str((child or {}).get("tree") or "")
         child_verdict = stale(child_model, memo=memo) if child_model else None
-        current_tree = None
-        child_record = read_record(child_model) if child_model else None
-        if child_record is not None:
-            current_tree = str(child_record.get("tree") or "")
+        current_tree = child_verdict.tree if child_verdict is not None else None
         moved = current_tree != pinned
         child_stale = child_verdict is None or child_verdict.stale or moved
         child_clauses.append(

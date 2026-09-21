@@ -1,6 +1,7 @@
 # macOS
 .DS_Store
 .vscode
+/.claude/
 
 # Python
 __pycache__/
@@ -35,6 +36,15 @@ repo-scan*.md
 *-scan-*.md
 *-fix-plan*.md
 
+# Benchmark output is local evidence, not source. Use tmp/ for reports.
+/scripts/bench/**/results/
+/scripts/bench/**/*.json
+/scripts/bench/**/*.log
+/scripts/bench/**/*.gz
+/scripts/bench/**/*.cpuprofile
+/scripts/bench/**/*.heapsnapshot
+/scripts/bench/**/*.png
+
 # Review media rendered next to a fixture. models/ holds CAD/robot sources,
 # generated 3D and fabrication outputs, and docs only; see models/README.md.
 models/**/*.png
@@ -64,10 +74,12 @@ models/**/*.mkv
 # `python -m build` scratch space (scripts/release/check-wheel-contents.sh).
 packages/cadgen/build/
 
-# The CAD Viewer client's place in the cadgen wheel. Written by
-# `scripts/bundle/bundle.sh` (the --viewer stage) right before `python -m build`;
-# never committed, because a checkout serves apps/viewer/dist directly.
-packages/cadgen/src/cadgen/_runtime/viewer/
+# cadgen's packaged runtime: the esbuilt Node builders (node/), the headless
+# snapshot bundle (browser/) and the CAD Viewer's built client (viewer/). All
+# three are BUILT by `scripts/bundle/bundle.sh` and shipped only inside the
+# wheel; none of them is committed. A fresh checkout has no _runtime until the
+# bundler runs, and cadgen says so by name when it needs one that is absent.
+packages/cadgen/src/cadgen/_runtime/
 
 # Design notes are local working files, never committed (user policy 2026-08-29).
 design/

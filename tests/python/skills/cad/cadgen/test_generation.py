@@ -10,11 +10,12 @@ from pathlib import Path
 from unittest import mock
 
 from cadgen._internal import generation as cad_generation
+# Spec discovery lives in generation_spec; the generation module drives it.
+from cadgen._internal.generation_spec import list_entry_specs, selected_entry_specs
 from cadgen import catalog as cad_catalog
 from cadgen._internal import source_hash as cad_source_hash
 from cadgen.catalog import StepImportOptions
 from cadgen._internal.glb_topology import read_step_topology_manifest_from_glb
-from cadgen._internal.cache_schema import CACHE_SCHEMA_VERSION
 from cadgen._internal.glb_topology import STEP_TOPOLOGY_SCHEMA_VERSION
 from cadgen._internal.step_scene import LoadedStepScene, OccurrenceNode, SelectorBundle
 from tests.python.support.cad_test_roots import IsolatedCadRoots
@@ -96,6 +97,38 @@ class CadGenerationTests(unittest.TestCase):
     def _cad_ref(self, name: str) -> str:
         return f"{self.relative_dir}/{name}"
 
+    def _fixture_tree(self, label: str):
+        """A mocked producer publishes a real, complete native result."""
+        from build123d import Solid
+        from cadgen._internal.component_package import prepare_geometry_component
+        from cadgen.store.objects import put_object
+        from cadgen.store.trees import put_tree
+
+        prepared = prepare_geometry_component(Solid.make_box(1, 1, 1))
+        put_object(prepared["payload"])
+        if prepared["surface"] is not None:
+            put_object(prepared["surface"])
+        entry = prepared["entry"]
+        cid = entry["contentHash"][:16]
+        tree = {
+            "label": label, "entryKind": "part", "units": "mm",
+            "components": {cid: entry},
+            "occurrences": [{"id": "o1", "name": label, "component": cid,
+                             "transform": list(IDENTITY_TRANSFORM)}],
+            "links": [],
+            "assembly": {"root": {"id": "o1", "name": label, "nodeType": "part", "children": []}},
+            "stats": {"occurrenceCount": 1, "linkCount": 0},
+        }
+        return put_tree(tree), tree
+
+    def _generated_result(self, spec, scene=None):
+        """A mocked producer still delivers its complete, exact job result."""
+        from cadgen.daemon.executors import emit_source_result
+
+        tree, _ = self._fixture_tree(spec.step_path.stem)
+        emit_source_result(cad_generation._model_for_spec(spec), tree)
+        return cad_generation.GeneratedStepResult(spec=spec, scene=scene, tree=tree)
+
     def _write_step_at(
         self,
         directory: Path,
@@ -127,65 +160,47 @@ class CadGenerationTests(unittest.TestCase):
         return self._write_step_at(self.temp_root, name, suffix=suffix)
 
     def _fake_scene(self, step_path: Path) -> types.SimpleNamespace:
-        """A minimal stand-in scene carrying a sentinel ``source_compound`` so the
-        unified tree emit skips its ``import_step`` fallback (the tree build
-        itself is patched by ``_patch_package_build``)."""
+        """A minimal stand-in for an already-parsed imported STEP scene.
+
+        ``source_compound`` avoids the intermediate mesh-compound fallback;
+        ``_patch_package_build`` replaces canonical document-tree packaging.
+        """
         return types.SimpleNamespace(
             step_path=step_path.expanduser().resolve(),
             source_compound=object(),
         )
 
     def _patch_package_build(self):
-        """Patch the component-package emit to materialize a minimal package
-        directory (``.{model}.step.glb/`` + ``assembly.json``), mirroring the real
-        unified emit without meshing. Returns ``(patcher, calls)`` where ``calls``
-        records each ``build_package_from_compound`` invocation's key arguments."""
+        """Patch canonical imported-document packaging without meshing.
+
+        Returns ``(patcher, calls)`` where ``calls`` records the parsed scene
+        that ``build_document_tree`` receives.
+        """
         calls: list[dict] = []
 
         def _fake(
-            shape,
+            scene,
             *,
-            root_name,
             force=False,
             progress=None,
-            extra=None,
         ):
-            from cadgen.store.build import compound_has_children
-
-            single_component = not compound_has_children(shape)
-            entry_kind = "part" if single_component else "assembly"
-            from cadgen.store.objects import put_object
-            from cadgen.store.trees import put_tree
-
             calls.append(
                 {
-                    "single_component": single_component,
+                    "scene": scene,
                     "force": force,
-                    "provenance": {"entryKind": entry_kind},
-                    "root_name": root_name,
                 }
             )
-            surf = put_object(b"SURF\x00fake")
-            tree = {
-                "label": root_name,
-                "entryKind": entry_kind,
-                "units": "mm",
-                "components": {"c0": {"surf": surf, "brep": surf, "contentHash": "c0"}},
-                "occurrences": [{"id": "o1", "name": root_name, "component": "c0", "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]}],
-                "links": [],
-                "stats": {"occurrenceCount": 1, "linkCount": 0},
-            }
-            tree.update(extra or {})
+            tree_hash, tree = self._fixture_tree(scene.step_path.stem)
             stats = {
                 "occurrences": 1,
                 "unique_components": 1,
                 "components_built": 1,
                 "components_reused": 0,
             }
-            return put_tree(tree), tree, stats
+            return tree_hash, tree, stats
 
         return (
-            mock.patch("cadgen.store.build.build_tree_from_compound", side_effect=_fake),
+            mock.patch("cadgen.store.build.build_document_tree", side_effect=_fake),
             calls,
         )
 
@@ -403,7 +418,7 @@ class CadGenerationTests(unittest.TestCase):
     def test_generated_part_discovery_includes_missing_step_output(self) -> None:
         script_path = self._generator_script("flat")
 
-        specs = [spec for spec in cad_generation.list_entry_specs() if spec.cad_ref == self._cad_ref("flat")]
+        specs = [spec for spec in list_entry_specs() if spec.cad_ref == self._cad_ref("flat")]
 
         self.assertEqual(1, len(specs))
         self.assertIsNotNone(specs[0].step_path)
@@ -416,7 +431,7 @@ class CadGenerationTests(unittest.TestCase):
         dependency_dir.mkdir(parents=True)
         (dependency_dir / "dependency.py").write_bytes(b"\xe9")
 
-        specs = [spec for spec in cad_generation.list_entry_specs() if spec.cad_ref == self._cad_ref("flat")]
+        specs = [spec for spec in list_entry_specs() if spec.cad_ref == self._cad_ref("flat")]
 
         self.assertEqual(1, len(specs))
 
@@ -424,7 +439,7 @@ class CadGenerationTests(unittest.TestCase):
         self._generator_script("flat")
         (self.temp_root / "notes.py").write_bytes(b"\xe9")
 
-        specs = [spec for spec in cad_generation.list_entry_specs() if spec.cad_ref == self._cad_ref("flat")]
+        specs = [spec for spec in list_entry_specs() if spec.cad_ref == self._cad_ref("flat")]
 
         self.assertEqual(1, len(specs))
 
@@ -473,7 +488,7 @@ class CadGenerationTests(unittest.TestCase):
         self._generator_script("flat")
         (self.temp_root / "flat.step").write_text("ISO-10303-21; END-ISO-10303-21;\n", encoding="utf-8")
 
-        specs = [spec for spec in cad_generation.list_entry_specs() if spec.cad_ref == self._cad_ref("flat")]
+        specs = [spec for spec in list_entry_specs() if spec.cad_ref == self._cad_ref("flat")]
 
         self.assertEqual(1, len(specs))
         self.assertEqual("generated", specs[0].source)
@@ -493,7 +508,7 @@ class CadGenerationTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        spec = next(spec for spec in cad_generation.list_entry_specs() if spec.source_path == script_path)
+        spec = next(spec for spec in list_entry_specs() if spec.source_path == script_path)
 
         self.assertEqual(script_path.with_suffix(".step"), spec.step_path)
         self.assertEqual(self._cad_ref("missing_output"), spec.cad_ref)
@@ -505,12 +520,12 @@ class CadGenerationTests(unittest.TestCase):
             with self.subTest(extra=sorted(extra)):
                 self._generator_script("flat", dict_return=extra)
                 with self.assertRaisesRegex(ValueError, r"returns a dict.*@stl/@threemf/@glb"):
-                    cad_generation.list_entry_specs()
+                    list_entry_specs()
 
     def test_generated_dxf_defaults_output_to_sibling_stem(self) -> None:
         script_path = self._dxf_generator_script("flat")
 
-        spec = next(spec for spec in cad_generation.list_entry_specs() if spec.source_path == script_path)
+        spec = next(spec for spec in list_entry_specs() if spec.source_path == script_path)
 
         self.assertIsNotNone(spec.dxf_path)
         self.assertEqual(self.temp_root / "flat_drawing.dxf", spec.dxf_path)
@@ -585,7 +600,7 @@ class CadGenerationTests(unittest.TestCase):
 
         stderr = io.StringIO()
         with contextlib.redirect_stderr(stderr):
-            specs = cad_generation.list_entry_specs()
+            specs = list_entry_specs()
 
         cad_refs = {spec.cad_ref for spec in specs}
         self.assertIn(self._cad_ref("flat"), cad_refs)
@@ -615,7 +630,7 @@ class CadGenerationTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        spec = next(spec for spec in cad_generation.list_entry_specs() if spec.source_path == script_path)
+        spec = next(spec for spec in list_entry_specs() if spec.source_path == script_path)
 
         self.assertEqual(("model",), spec.generator_metadata.generator_names)
 
@@ -640,7 +655,7 @@ class CadGenerationTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        spec = next(spec for spec in cad_generation.list_entry_specs() if spec.source_path == script_path)
+        spec = next(spec for spec in list_entry_specs() if spec.source_path == script_path)
 
         captured_out, captured_err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(captured_out), contextlib.redirect_stderr(captured_err):
@@ -674,7 +689,7 @@ class CadGenerationTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        spec = next(spec for spec in cad_generation.list_entry_specs() if spec.source_path == script_path)
+        spec = next(spec for spec in list_entry_specs() if spec.source_path == script_path)
         scene = cad_generation.run_script_generator(spec, "step")
 
         # A @step run builds the render scene in memory and writes no STEP by default.
@@ -781,7 +796,7 @@ class CadGenerationTests(unittest.TestCase):
     def test_direct_step_is_discovered_as_imported_part(self) -> None:
         self._write_step("loose")
 
-        specs = [spec for spec in cad_generation.list_entry_specs() if spec.cad_ref == self._cad_ref("loose")]
+        specs = [spec for spec in list_entry_specs() if spec.cad_ref == self._cad_ref("loose")]
 
         self.assertEqual(1, len(specs))
         self.assertIsNotNone(specs[0].step_path)
@@ -793,7 +808,7 @@ class CadGenerationTests(unittest.TestCase):
         self._write_step_at(scoped_root, "only")
         self._write_step("outside")
 
-        specs = cad_generation.list_entry_specs(scoped_root)
+        specs = list_entry_specs(scoped_root)
 
         self.assertEqual([f"{self.relative_dir}/scoped/only"], [spec.cad_ref for spec in specs])
 
@@ -813,23 +828,23 @@ class CadGenerationTests(unittest.TestCase):
         )
         all_specs = [
             spec
-            for spec in cad_generation.list_entry_specs()
+            for spec in list_entry_specs()
             if spec.cad_ref.startswith(f"{self.relative_dir}/")
         ]
 
         with self.assertRaisesRegex(ValueError, "At least one CAD target is required"):
-            cad_generation.selected_entry_specs(all_specs, [])
+            selected_entry_specs(all_specs, [])
 
     def test_entry_selection_is_exact_and_ordered(self) -> None:
         self._write_step("first")
         self._write_step("second")
         specs = [
             spec
-            for spec in cad_generation.list_entry_specs()
+            for spec in list_entry_specs()
             if spec.cad_ref.startswith(f"{self.relative_dir}/")
         ]
 
-        selected = cad_generation.selected_entry_specs(
+        selected = selected_entry_specs(
             specs,
             [self._cad_ref("second"), self._cad_ref("first"), self._cad_ref("second")],
         )
@@ -847,6 +862,7 @@ class CadGenerationTests(unittest.TestCase):
         def fake_generate(spec, *, entries_by_step_path, **_extra):
             self.assertIn(spec.step_path.resolve(), entries_by_step_path)
             calls.append(spec.cad_ref)
+            return self._generated_result(spec)
 
         with mock.patch.object(cad_generation, "_generate_step_outputs", side_effect=fake_generate):
             cad_generation.generate_step_targets([str(second_path), str(first_path)])
@@ -865,7 +881,7 @@ class CadGenerationTests(unittest.TestCase):
 
         def fake_outputs(spec, **kwargs):
             calls.append(kwargs)
-            return cad_generation.GeneratedStepResult(spec=spec, scene=scene)
+            return self._generated_result(spec, scene)
 
         with mock.patch.object(cad_generation, "run_script_generator", return_value=scene) as run_generator, mock.patch.object(
             cad_generation,
@@ -883,7 +899,7 @@ class CadGenerationTests(unittest.TestCase):
 
     def test_generated_step_targets_expect_python_backed_topology_artifacts(self) -> None:
         script_path = self._generator_script("generated_kind")
-        generated_spec = next(spec for spec in cad_generation.list_entry_specs() if spec.source_path == script_path)
+        generated_spec = next(spec for spec in list_entry_specs() if spec.source_path == script_path)
         direct_path = self._write_step("direct_kind")
         _, direct_specs = cad_generation._selected_specs_for_targets([str(direct_path)])
 
@@ -935,6 +951,7 @@ class CadGenerationTests(unittest.TestCase):
 
         def fake_generate(spec, *, entries_by_step_path, **_extra):
             calls.append(spec.script_path.resolve())
+            return self._generated_result(spec)
 
         with mock.patch.object(cad_generation, "_generate_step_outputs", side_effect=fake_generate):
             cad_generation.generate_step_targets([str(assembly_path)])
@@ -949,7 +966,7 @@ class CadGenerationTests(unittest.TestCase):
 
     def test_step_generator_does_not_run_sidecars(self) -> None:
         script_path = self._generator_script("flat", with_dxf=True, dxf_before_step=True)
-        spec = next(spec for spec in cad_generation.list_entry_specs() if spec.cad_ref == self._cad_ref("flat"))
+        spec = next(spec for spec in list_entry_specs() if spec.cad_ref == self._cad_ref("flat"))
 
         cad_generation.run_script_generator(spec, "step")
 
@@ -959,7 +976,7 @@ class CadGenerationTests(unittest.TestCase):
 
     def test_generated_step_outputs_reuses_generated_scene(self) -> None:
         script_path = self._generator_script("flat")
-        spec = next(spec for spec in cad_generation.list_entry_specs() if spec.cad_ref == self._cad_ref("flat"))
+        spec = next(spec for spec in list_entry_specs() if spec.cad_ref == self._cad_ref("flat"))
         step_path = script_path.with_suffix(".step")
         observed_scene = None
 
@@ -967,6 +984,7 @@ class CadGenerationTests(unittest.TestCase):
             nonlocal observed_scene
             observed_scene = preloaded_scene
             self.assertIs(spec, spec_arg)
+            return self._generated_result(spec, preloaded_scene)
 
         with mock.patch.object(cad_generation, "_generate_part_outputs", side_effect=fake_outputs):
             cad_generation._generate_step_outputs(spec, entries_by_step_path={spec.step_path.resolve(): spec})
@@ -981,34 +999,27 @@ class CadGenerationTests(unittest.TestCase):
 
     def test_normal_python_generation_reuses_current_package(self) -> None:
         script_path = self._generator_script("flat")
-        spec = next(spec for spec in cad_generation.list_entry_specs() if spec.cad_ref == self._cad_ref("flat"))
-        step_path = script_path.with_suffix(".step")
-        source_identity = cad_generation.python_source_hash(script_path)
-        scene = LoadedStepScene(
-            step_path=step_path.resolve(),
-            roots=[],
-            prototype_shapes={},
-            source_kind="python",
-            source_hash=source_identity.source_hash,
-            source_path=cad_generation.relative_to_cwd(script_path),
-        )
+        spec = next(spec for spec in list_entry_specs() if spec.cad_ref == self._cad_ref("flat"))
+        tree, _ = self._fixture_tree("flat")
 
         # A current model reuses its tree: the topology options match, the tree is
         # complete, and its source closure is unchanged -> no remesh.
         with (
-            mock.patch.object(cad_generation, "_existing_topology_artifact_matches_options", return_value=True),
-            mock.patch.object(cad_generation, "_assembly_glb_package_current", return_value=True),
-            mock.patch.object(cad_generation, "_generated_assembly_glb_closure_current", return_value=True),
+            mock.patch.object(cad_generation, "_checked_source_tree", return_value=tree),
+            mock.patch.object(cad_generation, "_existing_topology_artifact_matches_spec_without_scene", return_value=True),
+            mock.patch.object(cad_generation, "run_script_generator") as run_generator,
+            mock.patch.object(cad_generation, "_generate_part_outputs") as package,
             ):
-            result = cad_generation._generate_part_outputs(
+            result = cad_generation._generate_step_outputs(
                 spec,
                 entries_by_step_path={spec.step_path.resolve(): spec},
-                preloaded_scene=scene,
-                require_step_file=False,
                 force=False,
             )
 
-        self.assertIs(scene, result.scene)
+        run_generator.assert_not_called()
+        package.assert_not_called()
+        self.assertEqual(tree, result.tree)
+        self.assertIsNone(result.scene)
         self.assertIsNone(result.selector_bundle)
 
 
@@ -1029,7 +1040,7 @@ class CadGenerationTests(unittest.TestCase):
 
         cad_refs = {
             spec.cad_ref
-            for spec in cad_generation.list_entry_specs()
+            for spec in list_entry_specs()
             if spec.cad_ref.startswith(f"{self.relative_dir}/")
         }
 
@@ -1060,6 +1071,7 @@ class CadGenerationTests(unittest.TestCase):
 
         def fake_generate(spec, *, entries_by_step_path, **_extra):
             calls.append(spec)
+            return self._generated_result(spec)
 
         with mock.patch.object(cad_generation, "_generate_step_outputs", side_effect=fake_generate):
             cad_generation.generate_step_targets(
@@ -1090,7 +1102,7 @@ class CadGenerationTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(ValueError, "must return a build123d shape"):
-            cad_generation.list_entry_specs()
+            list_entry_specs()
 
     def test_decorated_dxf_scripts_are_first_class_entries(self) -> None:
         # Library-first: any plain .py declaring a @dxf model is a drawing entry
@@ -1109,7 +1121,7 @@ class CadGenerationTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        specs = cad_generation.list_entry_specs()
+        specs = list_entry_specs()
 
         spec = next(spec for spec in specs if spec.source_path == script_path)
         self.assertIsNotNone(spec.dxf_path)
@@ -1118,7 +1130,7 @@ class CadGenerationTests(unittest.TestCase):
     def test_imported_step_defaults_to_part(self) -> None:
         self._write_step("imported")
 
-        specs = [spec for spec in cad_generation.list_entry_specs() if spec.cad_ref == self._cad_ref("imported")]
+        specs = [spec for spec in list_entry_specs() if spec.cad_ref == self._cad_ref("imported")]
 
         self.assertEqual(1, len(specs))
         self.assertIsNotNone(specs[0].step_path)
@@ -1126,7 +1138,7 @@ class CadGenerationTests(unittest.TestCase):
     def test_imported_stp_defaults_to_part(self) -> None:
         self._write_step("imported-stp", suffix=".stp")
 
-        specs = [spec for spec in cad_generation.list_entry_specs() if spec.cad_ref == self._cad_ref("imported-stp")]
+        specs = [spec for spec in list_entry_specs() if spec.cad_ref == self._cad_ref("imported-stp")]
 
         self.assertEqual(1, len(specs))
         self.assertIsNotNone(specs[0].step_path)
@@ -1136,7 +1148,7 @@ class CadGenerationTests(unittest.TestCase):
         # resolver supply the values. There is no default-value sentinel.
         self._write_step("imported-mesh")
 
-        specs = [spec for spec in cad_generation.list_entry_specs() if spec.cad_ref == self._cad_ref("imported-mesh")]
+        specs = [spec for spec in list_entry_specs() if spec.cad_ref == self._cad_ref("imported-mesh")]
 
         self.assertEqual(1, len(specs))
         self.assertIsNone(specs[0].mesh_tolerance)
@@ -1168,10 +1180,11 @@ class CadGenerationTests(unittest.TestCase):
             result = cad_generation._generate_part_outputs(spec, entries_by_step_path={spec.step_path.resolve(): spec})
 
         load_scene.assert_called_once_with(step_path)
-        # A part emits a single-component view directory; the build path returns no
+        # An imported STEP packages the parsed document itself; the build returns no
         # whole-model selector bundle (selectors are extracted on demand by inspect).
         self.assertEqual(1, len(package_calls))
-        self.assertTrue(package_calls[0]["single_component"])
+        self.assertIs(scene, package_calls[0]["scene"])
+        self.assertFalse(package_calls[0]["force"])
         self.assertTrue(cad_catalog.result_view_dir(step_path).is_dir())
         self.assertIsNone(result.selector_bundle)
 
@@ -1198,6 +1211,7 @@ class CadGenerationTests(unittest.TestCase):
 
         load_scene.assert_not_called()
         self.assertEqual(1, len(package_calls))
+        self.assertIs(scene, package_calls[0]["scene"])
         self.assertTrue(cad_catalog.result_view_dir(step_path).is_dir())
 
     # --- Incremental-regen freshness gate (D) --------------------------------

@@ -15,7 +15,7 @@ Treat SendCutSend's ordering guide, catalog JSON, and specs JSON as evidence fee
 
 ## Geometry Inspection
 
-Use the active project Python environment for local geometry inspection code. If the `$cad` skill is available, use it first for STEP/STP/DXF geometry inspection, measurement, and validation workflows, then add any SendCutSend-specific targeted measurements that are still missing. Use `build123d.import_step` for STEP/STP inspection and the `ezdxf` package directly (`import ezdxf`; it installs alongside build123d) for DXF inspection when geometry facts are required. There is no `build123d.ezdxf`. Do not use raw text parsing or alternate geometry backends for geometry facts.
+Use the active project Python environment for local geometry inspection code. If the `$cad` skill is available, use it first for STEP/STP/DXF geometry inspection, measurement, and validation workflows, then add any SendCutSend-specific targeted measurements that are still missing. Use `build123d.import_step` for STEP/STP inspection and the `ezdxf` package directly (`import ezdxf`; it installs alongside build123d) for DXF inspection when geometry facts are required. Import `ezdxf` by its own name — `build123d.ezdxf` resolves only as an incidental namespace leak and is not part of the build123d API. Do not use raw text parsing or alternate geometry backends for geometry facts.
 
 ## CAD Viewer Handoff
 
@@ -23,7 +23,7 @@ After completing SendCutSend work that creates or modifies a `.dxf`, `.step`, or
 
 ## Official Sources
 
-Before each review, fetch and inspect the current SendCutSend source documents directly from the official URLs listed in `references/official-sources.md`:
+Before each review, fetch and inspect the current SendCutSend source documents directly from the official URLs listed in `references/official-sources.md`.
 
 Use the source URL, access date, and JSON `_meta` values in the source bibliography when helpful. If a source cannot be fetched, report that current SendCutSend sources were unavailable and avoid ready verdicts for dependent checks.
 

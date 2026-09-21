@@ -5,9 +5,9 @@ serves, exposed to the client on ``/__tess_cache/`` — GET one entry, POST one
 write-back, POST ``/batch`` for the TESB container (one round trip for a whole
 assembly's hit set).
 
-Entries are OPAQUE here: this module stores and frames bytes. The one codec
-lives in ``packages/cadgen-js/src/lib/surf/tessellationCache.js``, which is also
-the batch format's home, and the framing below is pinned against that decoder.
+The shared v4 identity is validated by ``cadgen.store.meshes``. Metadata probes
+precede admitted, exact-object body reads; batching never downloads an entire
+assembly without a byte bound. The TESB framing is shared with cadgen-js.
 
 The entry I/O here is the route's framing over ``cadgen.store``: a key names an
 index entry, the entry names the object holding the bytes.
@@ -32,9 +32,12 @@ __all__ = [
     "TESS_CACHE_BATCH_MAX_NAMES",
     "TESS_CACHE_BATCH_PATH",
     "TESS_CACHE_BATCH_VERSION",
+    "TESS_CACHE_BATCH_MAX_BYTES",
+    "TESS_CACHE_PROBE_PATH",
     "TESS_CACHE_ROUTE_PREFIX",
     "read_tess_cache_batch",
     "read_tess_cache_entry",
+    "read_tess_cache_probe",
     "tess_cache_key_from_route_path",
     "tessellation_cache_dir",
     "write_tess_cache_entry",
@@ -42,6 +45,7 @@ __all__ = [
 
 TESS_CACHE_ROUTE_PREFIX = "/__tess_cache/"
 TESS_CACHE_BATCH_PATH = "/__tess_cache/batch"
+TESS_CACHE_PROBE_PATH = "/__tess_cache/probe"
 
 # Mirror of the snapshot host's pattern. ``fullmatch`` rather than a ``$``
 # anchor: Python's ``$`` also matches before a trailing newline, so
@@ -50,9 +54,22 @@ _TESS_CACHE_NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9.+_-]*\.tess")
 
 TESS_CACHE_BATCH_MAGIC = 0x42534554  # "TESB" little-endian
 TESS_CACHE_BATCH_VERSION = 1
-TESS_CACHE_BATCH_MAX_NAMES = 4096
+TESS_CACHE_BATCH_MAX_NAMES = 256
+TESS_CACHE_BATCH_MAX_BYTES = 32 * 1024 * 1024
+TESS_CACHE_METADATA_MAX_BYTES = 256 * 1024
 
 _TESS_SUFFIX = ".tess"
+
+
+def parse_tess_cache_admission(digest, raw_limit) -> tuple[str, int]:
+    """HTTP reads require the probed object and an explicit admitted size."""
+    from cadgen.store.meshes import MAX_SAFE_INTEGER
+    if type(digest) is not str or not re.fullmatch(r"[0-9a-f]{64}", digest) or type(raw_limit) is not str or not re.fullmatch(r"[0-9]{1,16}", raw_limit):
+        raise ValueError("cache read requires an exact object and maxBytes")
+    limit = int(raw_limit)
+    if not 0 < limit <= MAX_SAFE_INTEGER:
+        raise ValueError("maxBytes must be a positive safe integer")
+    return digest, limit
 
 
 def _tessellation_cache_enabled() -> bool:
@@ -67,16 +84,13 @@ def tessellation_cache_dir() -> str:
     return str(index_dir("mesh"))
 
 
-def _read_cached_tessellation_bytes(key: str) -> bytes | None:
+def _read_cached_tessellation_bytes(key: str, *, expected_object=None, max_bytes=None) -> bytes | None:
     if not _tessellation_cache_enabled():
         return None
     try:
-        from cadgen.store.index import read_entry
-        from cadgen.store.objects import read_object
+        from cadgen.store.meshes import read
 
-        entry = read_entry("mesh", key)
-        digest = str((entry or {}).get("object") or "")
-        return read_object(digest) if digest else None
+        return read(key, expected_object=expected_object, max_bytes=max_bytes)
     except (OSError, ValueError):
         return None
 
@@ -87,10 +101,9 @@ def _write_cached_tessellation_bytes(key: str, data: bytes) -> None:
     if not _tessellation_cache_enabled():
         return
     try:
-        from cadgen.store.index import write_entry
-        from cadgen.store.objects import put_object
+        from cadgen.store.meshes import write
 
-        write_entry("mesh", key, {"object": put_object(data)})
+        write(key, data)
     except OSError:
         pass
 
@@ -108,12 +121,12 @@ def tess_cache_key_from_route_path(pathname) -> str | None:
     return name[: -len(_TESS_SUFFIX)]
 
 
-def read_tess_cache_entry(pathname) -> tuple[int, bytes | None]:
+def read_tess_cache_entry(pathname, *, expected_object=None, max_bytes=None) -> tuple[int, bytes | None]:
     """``(status, body)``: 403 for a refused name, 404 for a miss, 200 for a hit."""
     key = tess_cache_key_from_route_path(pathname)
     if key is None:
         return 403, None
-    data = _read_cached_tessellation_bytes(key)
+    data = _read_cached_tessellation_bytes(key, expected_object=expected_object, max_bytes=max_bytes)
     return (200, data) if data else (404, None)
 
 
@@ -127,41 +140,68 @@ def write_tess_cache_entry(pathname, body: bytes | None) -> int:
     if key is None:
         return 403
     if body:
-        _write_cached_tessellation_bytes(key, body)
+        from cadgen.store.meshes import MeshConflictError
+
+        try:
+            _write_cached_tessellation_bytes(key, body)
+        except MeshConflictError:
+            return 409
+        except (ValueError, TypeError, KeyError, OverflowError, struct.error):
+            return 400
     return 204
 
 
-def read_tess_cache_batch(body: bytes | None) -> bytes | None:
-    """The TESB container for a JSON ``{"names": [...]}`` request.
-
-    Refused names, non-strings and read failures are per-entry MISSES (zero
-    length), never errors — one bad key in an assembly's hit set must not cost
-    the whole round trip. ``None`` means the REQUEST was malformed, which the
-    route answers 400.
-
-    ``errors="replace"``, matching ``Buffer.from(body).toString("utf8")``. That
-    is the same per-entry-miss rule applied to the bytes: a request carrying one
-    undecodable name still names its other components, and Node answered every
-    one of them. Strict decoding turned the whole batch into a 400, so a single
-    bad byte cost an assembly its entire tessellation round trip. The
-    substituted U+FFFD lands inside a JSON string, which parses, and the name it
-    forms then misses in the store like any other unknown key.
-    """
+def _request_items(body: bytes | None, field: str) -> list | None:
+    # Index facts are small. Refuse oversized metadata requests before JSON
+    # parsing; a caller splits an assembly into bounded probe/body batches.
+    if len(body or b"") > TESS_CACHE_METADATA_MAX_BYTES:
+        return None
     try:
         parsed = json.loads(bytes(body or b"").decode("utf-8", errors="replace"))
-    except ValueError:
+    except (ValueError, RecursionError):
         return None
-    names = parsed.get("names") if isinstance(parsed, dict) else None
-    if not isinstance(names, list) or len(names) > TESS_CACHE_BATCH_MAX_NAMES:
-        return None
+    items = parsed.get(field) if type(parsed) is dict and set(parsed) == {field} else None
+    return items if type(items) is list and len(items) <= TESS_CACHE_BATCH_MAX_NAMES else None
 
+
+def read_tess_cache_probe(body: bytes | None) -> dict | None:
+    """V4 metadata hits keyed by input, without loading any TESS/SURF body."""
+    from cadgen.store.meshes import probe
+
+    inputs = _request_items(body, "tessellationInputs")
+    if inputs is None:
+        return None
+    entries = {}
+    for key in inputs:
+        row = probe(key) if type(key) is str else None
+        if row is not None:
+            entries[key] = row
+    return {"entries": entries}
+
+
+def read_tess_cache_batch(body: bytes | None) -> bytes | None:
+    """Frame already-admitted exact-object reads in an unchanged TESB container.
+
+    Requests contain ``entries: [{tessellationInput, object, maxBytes}]``.
+    Refused/changed/missing objects are per-entry misses. Total response bytes,
+    including framing, cannot exceed 32 MiB; larger single hits use bounded GET.
+    """
+    requests = _request_items(body, "entries")
+    if requests is None:
+        return None
     entries: list[bytes | None] = []
-    for name in names:
-        if not isinstance(name, str):
-            entries.append(None)
-            continue
-        key = tess_cache_key_from_route_path(f"{TESS_CACHE_ROUTE_PREFIX}{name}")
-        entries.append(None if key is None else _read_cached_tessellation_bytes(key))
+    remaining = TESS_CACHE_BATCH_MAX_BYTES - 12 - 4 * len(requests)
+    for request in requests:
+        data = None
+        if type(request) is dict and set(request) == {"tessellationInput", "object", "maxBytes"}:
+            key, digest, limit = request["tessellationInput"], request["object"], request["maxBytes"]
+            if type(key) is str and type(digest) is str and type(limit) is int and limit > 0:
+                data = _read_cached_tessellation_bytes(key, expected_object=digest, max_bytes=min(limit, remaining))
+                if data and len(data) + (-len(data) % 4) > remaining:
+                    data = None
+        entries.append(data)
+        if data:
+            remaining -= len(data) + (-len(data) % 4)
 
     # Little-endian, 4-byte aligned payloads so each entry decodes zero-copy on
     # the client. Padding is emitted only for a non-empty entry.

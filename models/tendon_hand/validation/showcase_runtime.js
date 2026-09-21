@@ -217,10 +217,17 @@ function bracket(t) {
   return { low: KEYFRAMES[low], high: KEYFRAMES[high], alpha: span > 0 ? (clamped - KEYFRAMES[low].t) / span : 0 };
 }
 
+// A held keyframe must retain its exact numbers. The weighted sum can round
+// identical endpoints differently as alpha advances, invalidating tube paths
+// and display buffers even though the mechanism has not moved.
+function interpolate(low, high, alpha) {
+  return low === high ? low : low * (1 - alpha) + high * alpha;
+}
+
 function blendedPose(low, high, alpha) {
   const pose = {};
   for (const key of new Set([...Object.keys(low.pose), ...Object.keys(high.pose)])) {
-    pose[key] = (low.pose[key] || 0) * (1 - alpha) + (high.pose[key] || 0) * alpha;
+    pose[key] = interpolate(low.pose[key] || 0, high.pose[key] || 0, alpha);
   }
   return pose;
 }
@@ -361,7 +368,7 @@ function applyTendons(m, low, high, alpha) {
     const positions = ROPE_VARYING[index];
     const offset = ROPE_OFFSETS[index];
     for (let i = 0; i < positions.length; i += 1) {
-      numbers[positions[i]] = low.v[offset + i] * (1 - alpha) + high.v[offset + i] * alpha;
+      numbers[positions[i]] = interpolate(low.v[offset + i], high.v[offset + i], alpha);
     }
     m.get(ROPE_NAMES[index]).deformTube({
       rest: REST_PATHS[index],
@@ -384,7 +391,7 @@ function applyGuides(m, low, high, alpha) {
     const at = index * 12;
     const blended = new Array(12);
     for (let i = 0; i < 12; i += 1) {
-      blended[i] = low.g[at + i] * (1 - alpha) + high.g[at + i] * alpha;
+      blended[i] = interpolate(low.g[at + i], high.g[at + i], alpha);
     }
     const rows = [blended.slice(0, 3), blended.slice(4, 7), blended.slice(8, 11)];
     // Gram-Schmidt the three rows back onto an orthonormal basis.
@@ -415,7 +422,7 @@ function applyAt(m, t) {
   hideInternals(m);
   const { low, high, alpha } = bracket(t);
   applyPose(m, blendedPose(low, high, alpha));
-  applyActuators(m, low.q.map((value, index) => value * (1 - alpha) + high.q[index] * alpha));
+  applyActuators(m, low.q.map((value, index) => interpolate(value, high.q[index], alpha)));
   applyGuides(m, low, high, alpha);
   applyTendons(m, low, high, alpha);
 }

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from dataclasses import field
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from cadgen._internal.glb_topology import STEP_EDGE_DEFAULT_RENDER_VISIBILITY_CLASSES
 
@@ -33,7 +33,7 @@ class SelectorOptions:
 class LoadedStepScene:
     step_path: Path
     roots: list["OccurrenceNode"]
-    prototype_shapes: dict[int, Any]
+    prototype_shapes: Mapping[int, Any]
     prototype_names: dict[int, str | None] = field(default_factory=dict)
     prototype_colors: dict[int, ColorRGBA] = field(default_factory=dict)
     prototype_face_colors: dict[int, dict[int, ColorRGBA]] = field(default_factory=dict)
@@ -45,6 +45,8 @@ class LoadedStepScene:
     # refs resolved to numbers during the tree build, then written into the
     # model's sidecar).
     kinematics: dict[str, Any] | None = None
+    materials: dict[str, Any] | None = None
+    animation: dict[str, str] | None = None
     source_hash: str | None = None
     source_closure_hash: str | None = None
     source_closure_files: tuple[str, ...] = ()
@@ -147,5 +149,4 @@ def _identity_transform_matrix() -> tuple[float, ...]:
         0.0,
         1.0,
     )
-
 

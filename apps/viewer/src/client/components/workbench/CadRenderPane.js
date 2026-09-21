@@ -12,11 +12,13 @@ import {
 } from "../ui/dropdown-menu";
 import AssemblyContextMenuItems from "./AssemblyContextMenuItems";
 import TutorialTip from "./TutorialTip";
+import ViewerAlertBody from "./ViewerAlertBody";
 import { cn } from "@/ui/utils";
 import { RENDER_FORMAT } from "@/workbench/constants";
 import { TUTORIAL_TIP_IDS } from "@/workbench/persistence";
 import {
   PARAMETER_SOURCE,
+  VIEWPORT_CONTENT,
   renderCapabilities,
   supportsTool
 } from "cadgen-js/lib/renderCapabilities";
@@ -27,33 +29,14 @@ import {
 import { VIEWER_SCENE_SCALE } from "cadgen-js/lib/viewer/sceneScale";
 import { VIEWER_PICK_MODE } from "cadgen-js/lib/viewer/constants";
 import { useAnimationClock } from "@/workbench/animationClockStore";
-import { viewerPickModeForRenderPane } from "@/workbench/viewerPickMode";
+import { useEmbeddedGlbAnimationClock } from "@/workbench/embeddedGlbAnimationClockStore";
+import { viewerHiddenPartIdsForRenderPane, viewerPickModeForRenderPane, viewerSelectedPartIdsForRenderPane, viewerSelectorRuntimeForRenderPane } from "@/workbench/viewerPickMode";
+import { viewerBendGuidesForRenderPane } from "@/workbench/renderPaneDrawing";
 
 const EMPTY_LIST = Object.freeze([]);
-const VIEWPORT_ISSUE_META = Object.freeze({
-  error: {
-    label: "Error",
-    borderClassName: "border-destructive/45",
-    iconClassName: "border-destructive/45 bg-destructive/10 text-destructive dark:text-red-300",
-    labelClassName: "text-destructive dark:text-red-300"
-  },
-  warning: {
-    label: "Warning",
-    borderClassName: "border-amber-500/45",
-    iconClassName: "border-amber-500/55 bg-amber-500/10 text-amber-500 dark:text-amber-300",
-    labelClassName: "text-amber-500 dark:text-amber-300"
-  }
-});
-
 function viewportInsetPx(value) {
   const numericValue = Number(value);
   return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : 0;
-}
-
-function viewportIssueMetaForAlert(alert) {
-  return alert?.severity === "warning"
-    ? VIEWPORT_ISSUE_META.warning
-    : VIEWPORT_ISSUE_META.error;
 }
 
 function viewerContextMenuAnchorStyle(menu, viewportFrameInsets) {
@@ -262,11 +245,23 @@ export default function CadRenderPane({
   viewerServerInfo = null,
   viewerPerspective,
   viewerPerspectiveRef,
+  projection = CAMERA_PROJECTION.ORTHOGRAPHIC,
+  focalLength = null,
   themeSettings,
+  materialOverrides = null,
+  receiveShadows = false,
+  renderMode = false,
+  appearance = "light",
+  renderConfiguration = null,
+  quality = null,
   previewMode,
   viewportFrameInsets,
   viewerLoading,
+  retainingPreviousStepMesh = false,
   viewerAlert,
+  presentationKey,
+  onPresentationChange,
+  loadingPresentation,
   stepUpdateInProgress,
   referenceSelectionPending = false,
   referenceSelectionUnavailable = false,
@@ -287,12 +282,17 @@ export default function CadRenderPane({
   drawingIsDocument = false,
   drawingThicknessMm = 0,
   onCameraZoomPercentChange = null,
+  onLodCameraChange = null,
+  onMeshSourceAdoption = null,
   viewPlaneOffsetRight = 16,
   viewerMode,
   assemblyPickingActive = false,
+  robotComponentPicking = false,
   assemblyParts,
   hiddenPartIds,
   selectedPartIds,
+  materialPickingEnabled = false,
+  onMaterialPartActivate,
   hoveredPartId,
   hoveredReferenceId,
   selectedReferenceIds,
@@ -300,6 +300,8 @@ export default function CadRenderPane({
   displayEdgeRuntime,
   stepParameters = null,
   stepAnimation = null,
+  glbDocument = null,
+  embeddedGlbAnimation = null,
   pickableFaces,
   pickableEdges,
   pickableVertices,
@@ -350,35 +352,39 @@ export default function CadRenderPane({
   // is the only component that re-renders for it: subscribing here (rather than
   // in the workspace) keeps a playing clip off the workspace's render path.
   const liveAnimationElapsedSec = useAnimationClock();
+  const liveEmbeddedGlbElapsedSec = useEmbeddedGlbAnimationClock();
   const resolvedStepAnimation = useMemo(() => {
     if (!stepAnimation?.playing) {
       return stepAnimation;
     }
     return { ...stepAnimation, elapsedSec: liveAnimationElapsedSec };
   }, [stepAnimation, liveAnimationElapsedSec]);
-  const viewerAlertIconLabel = "Viewer error. See the Issues section for details.";
+  const resolvedEmbeddedGlbAnimation = useMemo(() => {
+    if (!embeddedGlbAnimation?.playing) return embeddedGlbAnimation;
+    return { ...embeddedGlbAnimation, elapsedSec: liveEmbeddedGlbElapsedSec };
+  }, [embeddedGlbAnimation, liveEmbeddedGlbElapsedSec]);
   // One capability lookup replaces the per-format mode booleans. Every gate below asks
   // what this format CAN do; none of them ask what it IS.
   const capabilities = renderCapabilities(renderFormat);
   const drawEnabled = supportsTool(renderFormat, "draw");
   // Formats with no per-part topology to select, annotate or explode: a plain mesh has
   // no parts, so it gets the stripped-down prop set.
-  const hasParts = capabilities.parts;
+  const hasParts = capabilities.parts || (capabilities.content === VIEWPORT_CONTENT.ROBOT && robotComponentPicking);
   const hasTopology = capabilities.topology;
-  const displaySettingsActive = capabilities.displayModes && !!displaySettings;
-  // Projection is a THEME trait, honoured by every format that declares it — not a
-  // STEP privilege. Leaving the others pinned to perspective meant the default
-  // workbench theme (which is orthographic) was being ignored by four formats out of
-  // five. A plan view additionally forces orthographic: a top-down lock still
+  const inspectionEnabled = !renderMode;
+  const drawingGuides = viewerBendGuidesForRenderPane({ renderMode, bendAxisX, drawingBendLines });
+  const effectivePlanMode = inspectionEnabled && planMode;
+  // Render supplies one clean presentation display state to every format,
+  // including plain meshes whose Inspect mode has no display-mode panel.
+  const displaySettingsActive = (renderMode || capabilities.displayModes) && !!displaySettings;
+  // A plan view additionally forces orthographic: a top-down lock still
   // foreshortens off-centre under perspective, which is exactly what a plan view must
-  // not do.
-  const cadProjection = planMode
+  // not do. Every other format receives projection from the resolved scene camera.
+  const cadProjection = effectivePlanMode
     ? CAMERA_PROJECTION.ORTHOGRAPHIC
-    : capabilities.themeProjection
-      ? normalizeCameraProjection(themeSettings?.projection)
-      : CAMERA_PROJECTION.PERSPECTIVE;
+    : normalizeCameraProjection(projection, CAMERA_PROJECTION.ORTHOGRAPHIC);
   const cadViewerBoundsAnimationActive = Boolean(
-    boundsAnimationActive || resolvedStepAnimation?.playing
+    boundsAnimationActive || resolvedStepAnimation?.playing || resolvedEmbeddedGlbAnimation?.playing
   );
   const missingFileLabel = String(missingFileRef || "").trim();
   // A Viewer resolves paths against ITS OWN served root. Point one at an
@@ -403,9 +409,9 @@ export default function CadRenderPane({
   // included, since it lost its 2D fallback in phase 3a and now renders its baked preview,
   // so a failed build must read as "nothing renderable" and let the viewer alert block.
   const viewportHasRenderableContent = !!selectedMeshData;
-  const ctaMode = drawEnabled && drawToolActive
+  const ctaMode = inspectionEnabled && drawEnabled && drawToolActive
     ? "screenshot"
-    : (hasParts || hasTopology) && selectionCount > 0
+    : inspectionEnabled && (hasParts || hasTopology) && selectionCount > 0
       ? "selection"
       : "";
   const bottomOverlayStyle = {
@@ -473,7 +479,6 @@ export default function CadRenderPane({
   )
     ? viewerAlert
     : null;
-  const viewportIssueMeta = viewportIssueMetaForAlert(blockingViewerAlert);
   const viewerContextMenuStyle = useMemo(
     () => viewerContextMenuAnchorStyle(viewerContextMenu, viewportFrameInsets),
     [viewerContextMenu, viewportFrameInsets]
@@ -486,11 +491,14 @@ export default function CadRenderPane({
         ref={viewerRef}
         meshData={selectedMeshData}
         modelKey={selectedKey}
+        presentationKey={presentationKey}
+        onPresentationChange={onPresentationChange}
+        loadingPresentation={loadingPresentation}
         renderFormat={renderFormat}
         drawingThicknessScale={drawingThicknessScale}
-        planMode={planMode}
-        bendAxisX={bendAxisX}
-        drawingBendLines={drawingBendLines}
+        planMode={effectivePlanMode}
+        bendAxisX={drawingGuides.bendAxisX}
+        drawingBendLines={drawingGuides.drawingBendLines}
         bendAnglesRad={bendAnglesRad}
         drawingBends={drawingBends}
         drawingBendStyle={drawingBendStyle}
@@ -503,12 +511,21 @@ export default function CadRenderPane({
         drawingIsDocument={drawingIsDocument}
         drawingThicknessMm={drawingThicknessMm}
         onCameraZoomPercentChange={onCameraZoomPercentChange}
+        onLodCameraChange={onLodCameraChange}
+        onMeshSourceAdoption={onMeshSourceAdoption}
         perspective={viewerPerspective}
         projection={cadProjection}
+        focalLength={focalLength}
         perspectiveRef={viewerPerspectiveRef}
         showEdges
         recomputeNormals={false}
         themeSettings={themeSettings}
+        appearance={appearance}
+        materialOverrides={materialOverrides}
+        receiveShadows={receiveShadows}
+        renderMode={renderMode}
+        renderConfiguration={renderConfiguration}
+        quality={quality}
         displaySettings={displaySettingsActive ? displaySettings : null}
         previewMode={previewMode}
         showViewPlane={!previewMode}
@@ -517,8 +534,9 @@ export default function CadRenderPane({
         viewPlaneOffsetBottom="1rem"
         compactViewPlane={false}
         viewportFrameInsets={viewportFrameInsets}
-        isLoading={viewerLoading}
-        pickMode={!hasTopology && !hasParts && !measureModeActive
+        isLoading={viewerLoading && !retainingPreviousStepMesh}
+        materialPickingEnabled={materialPickingEnabled}
+        pickMode={materialPickingEnabled ? VIEWER_PICK_MODE.PARTS : !inspectionEnabled || retainingPreviousStepMesh || (!hasTopology && !hasParts && !measureModeActive)
           ? VIEWER_PICK_MODE.NONE
           : viewerPickModeForRenderPane({
             panToolActive,
@@ -535,46 +553,47 @@ export default function CadRenderPane({
             focusedPartIds,
             measureMode: measureModeActive
           })}
-        panToolActive={panToolActive}
+        panToolActive={inspectionEnabled && panToolActive}
         renderPartsIndividually={capabilities.sceneScale === "urdf"
           ? true
-          : (renderPartsIndividually
-            || Boolean(stepParameters?.definition)
+          : ((renderPartsIndividually || Boolean(stepParameters?.definition))
             || Boolean(resolvedStepAnimation?.clip))}
-        pickableParts={hasParts ? assemblyParts : EMPTY_LIST}
-        hiddenPartIds={hasParts ? hiddenPartIds : []}
-        selectedPartIds={hasParts ? selectedPartIds : []}
-        hoveredPartId={hasParts ? hoveredPartId : ""}
-        hoveredReferenceId={hasTopology ? hoveredReferenceId : ""}
-        selectedReferenceIds={hasTopology ? selectedReferenceIds : []}
-        selectorRuntime={hasTopology ? selectorRuntime : null}
-        displayEdgeRuntime={hasTopology ? displayEdgeRuntime : null}
+        pickableParts={materialPickingEnabled ? selectedMeshData?.parts || EMPTY_LIST : inspectionEnabled && hasParts && !retainingPreviousStepMesh ? assemblyParts : EMPTY_LIST}
+        hiddenPartIds={viewerHiddenPartIdsForRenderPane({ inspectionEnabled, hasParts, hiddenPartIds })}
+        selectedPartIds={viewerSelectedPartIdsForRenderPane({ renderMode, hasParts, selectedPartIds })}
+        hoveredPartId={inspectionEnabled && hasParts ? hoveredPartId : ""}
+        hoveredReferenceId={inspectionEnabled && hasTopology && !retainingPreviousStepMesh ? hoveredReferenceId : ""}
+        selectedReferenceIds={inspectionEnabled && hasTopology && !retainingPreviousStepMesh ? selectedReferenceIds : []}
+        selectorRuntime={viewerSelectorRuntimeForRenderPane({ renderMode, hasTopology, retainingPreviousStepMesh, selectorRuntime })}
+        displayEdgeRuntime={inspectionEnabled && hasTopology && !retainingPreviousStepMesh ? displayEdgeRuntime : null}
         stepParameters={capabilities.params === PARAMETER_SOURCE.SIDECAR ? stepParameters : null}
         stepAnimation={capabilities.params === PARAMETER_SOURCE.SIDECAR ? resolvedStepAnimation : null}
-        pickableFaces={hasTopology ? pickableFaces : []}
-        pickableEdges={hasTopology ? pickableEdges : []}
-        pickableVertices={hasTopology ? pickableVertices : []}
-        focusedPartId={hasParts ? focusedPartIds : ""}
+        glbDocument={glbDocument}
+        embeddedGlbAnimation={resolvedEmbeddedGlbAnimation}
+        pickableFaces={inspectionEnabled && hasTopology && !retainingPreviousStepMesh ? pickableFaces : []}
+        pickableEdges={inspectionEnabled && hasTopology && !retainingPreviousStepMesh ? pickableEdges : []}
+        pickableVertices={inspectionEnabled && hasTopology && !retainingPreviousStepMesh ? pickableVertices : []}
+        focusedPartId={inspectionEnabled && hasParts ? focusedPartIds : ""}
         boundsAnimationActive={cadViewerBoundsAnimationActive}
-        drawingEnabled={drawEnabled && drawToolActive}
+        drawingEnabled={inspectionEnabled && drawEnabled && drawToolActive}
         drawingTool={drawingTool}
-        drawingStrokes={drawEnabled ? drawingStrokes : []}
-        onDrawingStrokesChange={handleDrawingStrokesChange}
+        drawingStrokes={inspectionEnabled && drawEnabled ? drawingStrokes : []}
+        onDrawingStrokesChange={inspectionEnabled ? handleDrawingStrokesChange : null}
         onPerspectiveChange={handlePerspectiveChange}
-        onHoverReferenceChange={handleModelHoverChange}
-        onActivateReference={handleModelReferenceActivate}
-        onDoubleActivateReference={handleModelReferenceDoubleActivate}
-        onContextReference={handleModelReferenceContext}
-        onMeasurePick={onMeasurePick}
-        onMeasureHoverPoint={onMeasureHoverPoint}
+        onHoverReferenceChange={inspectionEnabled ? handleModelHoverChange : null}
+        onActivateReference={materialPickingEnabled ? onMaterialPartActivate : inspectionEnabled ? handleModelReferenceActivate : null}
+        onDoubleActivateReference={inspectionEnabled ? handleModelReferenceDoubleActivate : null}
+        onContextReference={inspectionEnabled ? handleModelReferenceContext : null}
+        onMeasurePick={inspectionEnabled ? onMeasurePick : null}
+        onMeasureHoverPoint={inspectionEnabled ? onMeasureHoverPoint : null}
         activeMeasurementId={activeMeasurementId}
-        measureState={measureState}
-        measureModeActive={measureModeActive}
-        allowMeshVertexSnap={!hasTopology}
+        measureState={inspectionEnabled ? measureState : null}
+        measureModeActive={inspectionEnabled && measureModeActive}
+        allowMeshVertexSnap={inspectionEnabled && !hasTopology}
         onViewerAlertChange={handleViewerAlertChange}
         onStepModuleTransformDetectedChange={handleStepModuleTransformDetectedChange}
       />
-      {!previewMode ? (
+      {!previewMode && inspectionEnabled ? (
         <ViewerContextMenu
           menu={viewerContextMenu}
           positionStyle={viewerContextMenuStyle}
@@ -602,11 +621,8 @@ export default function CadRenderPane({
         >
           <Alert
             variant="destructive"
-            className="cad-glass-popover pointer-events-auto w-full max-w-xl min-w-0 p-4 text-center shadow-lg"
+            className="bg-popover pointer-events-auto w-full max-w-xl min-w-0 p-4 text-center shadow-lg"
           >
-            <p className="col-start-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-destructive">
-              {missingFileOutsideRoot ? "Outside this viewer's root" : "File does not exist"}
-            </p>
             <AlertTitle className="col-start-1 mt-1 line-clamp-none text-lg text-foreground">
               {missingFileOutsideRoot ? "Outside this viewer's root" : "File does not exist"}
             </AlertTitle>
@@ -620,7 +636,9 @@ export default function CadRenderPane({
                   checkout is holding this port. Start one for this workspace on a
                   free port instead.
                 </span>
-              ) : null}
+              ) : (
+                <span className="mt-2 block">The file may have moved or been deleted. Choose another file from the sidebar or check the path in this tab’s address.</span>
+              )}
             </AlertDescription>
           </Alert>
         </div>
@@ -632,56 +650,14 @@ export default function CadRenderPane({
         >
           <div
             role="alert"
-            aria-label={viewerAlertIconLabel}
-            title={viewerAlertIconLabel}
-            className={cn(
-              "cad-glass-popover pointer-events-auto flex w-full max-w-sm min-w-0 flex-col items-center gap-2 rounded-md border px-4 py-3 text-center shadow-md",
-              viewportIssueMeta.borderClassName
-            )}
+            className="bg-popover pointer-events-auto w-full max-w-lg min-w-0 max-h-full overflow-y-auto rounded-lg border p-5 text-left shadow-md"
           >
-            <span className={cn(
-              "flex size-9 shrink-0 items-center justify-center rounded-full border",
-              viewportIssueMeta.iconClassName
-            )}>
-              <CircleAlert className="size-5" strokeWidth={2} aria-hidden="true" />
-            </span>
-            <div className="min-w-0 max-w-full">
-              <span className={cn(
-                "text-[10px] font-medium uppercase tracking-[0.08em]",
-                viewportIssueMeta.labelClassName
-              )}>
-                {viewportIssueMeta.label}
-              </span>
-              <div className="mt-1 line-clamp-2 min-w-0 max-w-full break-words text-sm font-medium leading-5 text-foreground">
-                {viewerAlert.title || viewerAlert.summary || "Viewer issue"}
-              </div>
-              {viewerAlert.message ? (
-                <p className="mt-1 line-clamp-3 min-w-0 max-w-full break-words text-xs leading-5 text-muted-foreground">
-                  {viewerAlert.message}
-                </p>
-              ) : null}
-            </div>
+            <h2 className="mb-3 flex items-start gap-2 text-base font-semibold leading-6 text-foreground">
+              <CircleAlert className={cn("mt-0.5 size-5 shrink-0", blockingViewerAlert.severity === "warning" ? "text-amber-500" : "text-destructive")} aria-hidden="true" />
+              {blockingViewerAlert.title || blockingViewerAlert.summary || "Couldn’t display the model"}
+            </h2>
+            <ViewerAlertBody alert={blockingViewerAlert} />
           </div>
-        </div>
-      ) : null}
-      {!previewMode && stepUpdateInProgress ? (
-        <div className="pointer-events-none absolute z-20 flex justify-center px-4" style={modelViewportBottomOverlayStyle}>
-          <Alert
-            role="status"
-            className="cad-glass-popover w-auto px-3 py-1.5 text-[11px] font-medium text-popover-foreground shadow-sm"
-          >
-            STEP changed. Updating/regenerating references...
-          </Alert>
-        </div>
-      ) : null}
-      {!previewMode && !stepUpdateInProgress && topologySelectionPending ? (
-        <div className="pointer-events-none absolute z-20 flex justify-center px-4" style={modelViewportBottomOverlayStyle}>
-          <Alert
-            role="status"
-            className="cad-glass-popover w-auto px-3 py-1.5 text-[11px] font-medium text-popover-foreground shadow-sm"
-          >
-            Preparing selectable topology...
-          </Alert>
         </div>
       ) : null}
       {!previewMode && ctaMode && !stepUpdateInProgress && !topologySelectionPending && !topologySelectionUnavailable && !topologySelectionDeferred ? (

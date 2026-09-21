@@ -34,7 +34,19 @@ process changes: the aggregate support-area facts are binned against it.
 
 STEP/STP input is boundary-representation CAD, not a mesh. When the `$cad`
 skill is installed, export an STL sidecar with it first, then measure the STL
-here. Report that remediation instead of attempting raw STEP parsing.
+here. Report that remediation instead of attempting raw STEP parsing. `measure`
+on a STEP exits 1 with `{"error": "failed to load mesh: ..."}`; that is the
+wrong-input signal, not a missing dependency — do not install extra mesh
+loaders to work around it.
+
+A fact family that cannot compute returns `{"error": ...}` in its place rather
+than costing the report its other measurements — `wall_thickness` does this when
+the dependency set is incomplete, `support_volume` on geometry with no convex
+hull. That report is PARTIAL: it carries `"partial": true`, names the families
+in `partial_sections`, and the command exits **2** (0 is a complete report, 1 a
+mesh that would not load at all). Treat every such object as an unmeasured fact
+(`❓ need more info`), never as a measurement of zero, and reinstall
+`requirements.txt` before comparing wall limits.
 
 ## Workflow
 
