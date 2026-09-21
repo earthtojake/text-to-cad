@@ -94,6 +94,7 @@ test("a throwing cleanup keeps the object reachable and cannot certify disposed 
   assert.equal(object.parent, null); assert.equal(scene.runtime.ownedGeometries.size, 0);
 });
 
+// The default groups are the renderer's own; a group it is handed is held to the same rule.
 test("failed stage cleanup retains its retired source identity and counts the attached orphan until retry", () => {
   const input = source([mesh(1)]), scene = buildModel(THREE, input, settings);
   const runtime = { cadScene: scene, displayRecords: scene.displayRecords, modelGroup: new THREE.Group(),
@@ -108,11 +109,11 @@ test("failed stage cleanup retains its retired source identity and counts the at
     if (fail) throw new Error("stage cleanup");
     orphan.geometry.dispose(); orphan.material.dispose(); orphan.removeFromParent();
   };
-  assert.throws(() => disposeViewerCadScene(runtime, { clearSceneGroup }), /stage cleanup/);
+  assert.throws(() => disposeViewerCadScene(runtime, { clearSceneGroup, groups: ["stageGroup"] }), /stage cleanup/);
   assert.equal(runtime.cadScene, null); assert.equal(runtime.retiringCadSource, input);
   assert.equal(runtime.sceneCleanupFailed, true); assert.equal(orphan.parent, runtime.stageGroup);
   assert.ok(renderMemoryAccounting(runtime).surfaceBytes >= 1200, "attached orphan is counted outside the installed array");
-  fail = false; assert.equal(disposeViewerCadScene(runtime, { clearSceneGroup }), input);
+  fail = false; assert.equal(disposeViewerCadScene(runtime, { clearSceneGroup, groups: ["stageGroup"] }), input);
   assert.equal(runtime.retiringCadSource, null); assert.equal(runtime.sceneCleanupFailed, false);
   assert.equal(renderMemoryAccounting(runtime).surfaceBytes, 0);
 });

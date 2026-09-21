@@ -5,12 +5,14 @@ import * as THREE from 'three';
 import { applyPhotographicStudio, disposePhotographicStudio } from '@hardcore/core/common/photographicStudio.js';
 import { parse } from '@babel/parser';
 import traverseModule from '@babel/traverse';
-import { createFramePresentation } from '../../../kit/viewport/framePresentation.js';
+import { createFramePresentation } from '../viewport/framePresentation.js';
 
 const traverse = traverseModule.default || traverseModule;
 
+// The reflection environment has ONE owner, the viewport every renderer mounts. This reads that
+// effect out of the component and runs it against a real scene and a real frame presentation.
 function environmentEffect() {
-  const source = fs.readFileSync(new URL('../CadViewer.js', import.meta.url), 'utf8');
+  const source = fs.readFileSync(new URL('./ShellViewport.jsx', import.meta.url), 'utf8');
   const ast = parse(source, { sourceType: 'module', plugins: ['jsx'] });
   let callbackSource;
   traverse(ast, {
@@ -42,10 +44,10 @@ for (const group of ['floor', 'background']) {
     const scope = {
       runtimeRef: { current: runtime }, studioScene: () => null,
       renderMode: true, renderConfiguration: { lighting: { enabled: false }, backdrop: { ground: group === 'floor' } },
-      photographicLighting: false, inspectHasMaterials: true, INSPECT_ENVIRONMENT_ID: 'neutral',
+      photographicLighting: false, scene: { keepsAuthoredFinish: true }, INSPECT_ENVIRONMENT_ID: 'neutral',
       createInspectEnvironmentResource: () => ({ texture }),
       applyActivePhotographicStudio: () => { events.push(group); applyPhotographicStudio(THREE, runtime, scope.renderConfiguration); },
-      applyActiveSceneBackground: () => { throw new Error('the studio owns the configured backdrop'); },
+      applySceneBackground: () => { throw new Error('the studio owns the configured backdrop'); },
       viewerAlertChangeRef: { current: () => {} }, viewerTheme: {}, normalizedThemeSettings: { background: {} }
     };
     const canvas = { style: {} };

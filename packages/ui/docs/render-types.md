@@ -69,9 +69,10 @@ alert blocking all read it, rather than each one re-deriving the answer per form
 
 ## The render-backend contract
 
-`CadViewer` is the shell and owns the camera, `OrbitControls`, the scene stage, frame
-insets, overlays, screenshots and the imperative viewer API. A **backend** owns geometry
-only:
+The kit's viewport (`renderers/kit/shell/ShellViewport.jsx`) is the shell and owns the camera,
+`OrbitControls`, the scene stage, frame presentation, the Draw overlay, screenshots and the
+imperative viewer API. A renderer's **scene** (`renderers/kit/scene.js`; STEP's is
+`renderers/step/scene/stepScene.js`) owns geometry only:
 
 1. **Consume content** for its `content` kind (mesh data, robot).
 2. **Publish bounds** so the shared fit, zoom baseline and zoom-percent work. The mesh
@@ -91,14 +92,15 @@ them, that is a shell feature and belongs in the shell where every format gets i
 ### Adding a format
 
 Declare a registry row, implement a backend, add a fixture to the sweep. Do not touch the
-shell. If you find yourself adding a format check to `FloatingToolBar`, `CadRenderPane` or
-`CadViewer`, the capability you need is missing from the table.
+shell. If you find yourself adding a format check to `FloatingToolBar` or to anything under
+`renderers/step/scene/`, the capability you need is missing from the table.
 
 ## Enforcement
 
 A ratcheting policy test in the repo where this app is developed counts identity
 checks in non-test client code: the number may only go down. It also asserts a
-growing set of files at **zero** — the toolbar, the render pane, `CadViewer`, the alert
+growing set of files at **zero** — the toolbar, every module of the STEP scene
+(`renderers/step/scene/`), the alert
 builder, the file-list icon and status, and the home screen — since those are the surfaces
 every format flows through. Lower the budgets in the same commit that removes checks.
 

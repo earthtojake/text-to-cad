@@ -218,7 +218,10 @@ export function syncTopologyDisplayEdgeLine(runtime, topologyRuntime, {
   dimmedOpacity = 0.035,
   transformByRecord = false,
   displayRecords = [],
-  syncClip = null
+  syncClip = null,
+  // A caller that draws the frame itself once ITS whole pass is done (a pose pass that also
+  // moves the records) says so; the line is then synced without asking for a frame of its own.
+  requestRender = true
 } = {}) {
   if (!runtime?.THREE || !runtime?.edgesGroup) {
     return false;
@@ -243,7 +246,7 @@ export function syncTopologyDisplayEdgeLine(runtime, topologyRuntime, {
     if (changed) {
       applyTopologyDisplayEdgeSurfaceOffset(runtime.displayRecords, edgeSettings);
       syncClip?.(runtime);
-      runtime.requestRender?.();
+      if (requestRender) runtime.requestRender?.();
     }
     return changed;
   }
@@ -256,7 +259,7 @@ export function syncTopologyDisplayEdgeLine(runtime, topologyRuntime, {
 
   if (!sourceRuntime) {
     syncClip?.(runtime);
-    runtime.requestRender?.();
+    if (requestRender) runtime.requestRender?.();
     return true;
   }
 
@@ -280,7 +283,7 @@ export function syncTopologyDisplayEdgeLine(runtime, topologyRuntime, {
       );
   if (!topologyEdgeLine) {
     syncClip?.(runtime);
-    runtime.requestRender?.();
+    if (requestRender) runtime.requestRender?.();
     return true;
   }
 
@@ -294,6 +297,6 @@ export function syncTopologyDisplayEdgeLine(runtime, topologyRuntime, {
   runtime.edgesGroup.updateMatrixWorld?.(true);
   applyTopologyDisplayEdgeSurfaceOffset(runtime.displayRecords, edgeSettings);
   syncClip?.(runtime);
-  runtime.requestRender?.();
+  if (requestRender) runtime.requestRender?.();
   return true;
 }

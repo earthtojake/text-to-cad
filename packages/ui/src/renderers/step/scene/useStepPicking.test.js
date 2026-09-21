@@ -8,10 +8,6 @@ import {
   measurementFromPicks
 } from "@hardcore/core/lib/viewer/measurement.js";
 import {
-  createViewerContextMenuGestureState,
-  VIEWER_CONTEXT_MENU_SUPPRESSION_MS
-} from "./viewerContextMenuGesture.js";
-import {
   measureHitPointFromWorldIntersection,
   measureModelOffsetFromRuntime,
   measureModelPointToWorld,
@@ -19,7 +15,7 @@ import {
   resolveViewerReferencePick,
   measureWorldPointToModel,
   worldTriangleVerticesFromMeshIntersection
-} from "./useViewerPicking.js";
+} from "./useStepPicking.js";
 import { partIdFromIntersection, shouldRaycastRecordForPick } from "./partPicking.js";
 
 test("disabled picking never prepares surface intersections or resolves references", () => {
@@ -111,34 +107,6 @@ test("screenLimitedPickThreshold falls back to the scaled base threshold when sc
     distance: 30
   });
   assert.equal(threshold, 0.45);
-});
-
-test("viewer context menu gesture suppression blocks one menu event", () => {
-  let time = 1000;
-  const gesture = createViewerContextMenuGestureState({
-    now: () => time
-  });
-
-  gesture.suppressNextContextMenu();
-  assert.equal(gesture.isSuppressed(), true);
-  assert.equal(gesture.consumeSuppression(), true);
-  assert.equal(gesture.isSuppressed(), false);
-  assert.equal(gesture.consumeSuppression(), false);
-});
-
-test("viewer context menu gesture suppression expires", () => {
-  let time = 2000;
-  const gesture = createViewerContextMenuGestureState({
-    now: () => time
-  });
-
-  gesture.suppressNextContextMenu();
-  assert.equal(gesture.isSuppressed(), true);
-
-  time += VIEWER_CONTEXT_MENU_SUPPRESSION_MS + 1;
-
-  assert.equal(gesture.isSuppressed(), false);
-  assert.equal(gesture.consumeSuppression(), false);
 });
 
 test("measure hit point stays in world space and never converts through the mesh local frame", () => {

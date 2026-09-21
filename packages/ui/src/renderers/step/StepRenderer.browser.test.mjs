@@ -451,9 +451,9 @@ test('Kinematics drives the mate and repaints, a named pose jumps, the Pose knob
   const posed = await frameWhen(view, shot => differing(rest, shot) > 20_000, 'repainted for the mate the slider drove');
 
   // The grid runs out past the model and is sized from the REST pose, so
-  // swinging the arm cannot rescale it.
-  // TODO(5c): the Render studio floor is still sized from POSED bounds here.
-  // Assert it the way RobotRenderer does once STEP is on the shared shell.
+  // swinging the arm cannot rescale it. (The Render studio's floor is held to
+  // the same rule at the end of this test, where a mode change cannot disturb
+  // the frames compared here.)
   const guides = { x0: 0, x1: Math.floor(rest.width * 0.14) };
   assert.ok(painted(rest, guides) > 500, `the compared strip holds grid lines: ${painted(rest, guides)}`);
   assert.equal(differing(rest, posed, guides), 0, 'the guides beside the model are untouched by a pose');
@@ -500,6 +500,30 @@ test('Kinematics drives the mate and repaints, a named pose jumps, the Pose knob
   await frameWhen(view, shot => differing(rest, shot) > 20_000, 'showed the pose the knob dragged to');
   await view.tab('Kinematics').click();
   assert.equal(Number.parseFloat(await slider.inputValue()), Math.round(held * 10) / 10, 'the Kinematics slider follows the knob');
+
+  // The Render studio's floor is the same ground as the grid: sized and centred
+  // from the REST placement. Entering Render builds the studio against the scene
+  // as it stands, so entering it POSED is the case that used to size the floor
+  // from the swung arm's box. It must be the floor a model at rest gets.
+  const studioFloor = async () => {
+    await page.evaluate(() => window.cadHarness.a.controller.setRenderMode(true));
+    await page.waitForFunction(() => window.__cadStage()?.studioGround && window.cadHarness.a.controller.readState().renderMode === 'render');
+    const stage = await page.evaluate(() => window.__cadStage());
+    await page.evaluate(() => window.cadHarness.a.controller.setRenderMode(false));
+    await page.waitForFunction(() => !window.__cadStage()?.studioGround);
+    return stage;
+  };
+  await slider.fill('60');
+  await slider.press('Enter');
+  await page.waitForFunction(() => Math.abs(window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix[13]) > 1);
+  const posedStage = await studioFloor();
+  await panel.getByRole('button', { name: 'Reset', exact: true }).click();
+  await page.waitForFunction(() => /^0(\.0+)? deg$/.test(document.querySelector('[data-testid="one"] input[aria-label="hinge slider value"]').value));
+  const restStage = await studioFloor();
+  const boxShift = Math.max(...[0, 1, 2].flatMap(axis => [
+    Math.abs(posedStage.bounds.min[axis] - restStage.bounds.min[axis]), Math.abs(posedStage.bounds.max[axis] - restStage.bounds.max[axis])]));
+  assert.ok(boxShift > 1, `the studio was built against a posed box that differs from rest: ${JSON.stringify({ posed: posedStage.bounds, rest: restStage.bounds })}`);
+  assert.deepEqual(posedStage.studioGround, restStage.studioGround, 'a pose never resizes or slides the studio floor');
   assert.deepEqual(errors, []);
 });
 

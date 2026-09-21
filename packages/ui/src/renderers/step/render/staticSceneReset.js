@@ -12,17 +12,6 @@ export function staticSceneResetEligible({ source, renderFormat, parameters, ani
       || record?.effectDeformation || record?.tubeDeformationState?.active || record?.tubeGpuState?.active);
 }
 
-// The scene-sync effect already placed the rows it adopted, so repeating the
-// per-occurrence placement loop over them is pure waste. The receipt names the
-// ROWS, not only the wrapper: a source that keeps a stable geometrySource never
-// re-enters that effect, and applies a pose by publishing a new `parts` array on
-// the wrapper the scene already owns. Testing the wrapper alone matches every one
-// of those poses and skips them all -- which is a joint slider that moves nothing.
-export function sceneSourceAlreadyPlaced(runtime, source) {
-  return Boolean(runtime?.cadScene && runtime.cadScene.source === source
-    && Array.isArray(source?.parts) && runtime.placedSourceParts === source.parts);
-}
-
 export function createStaticSceneReset() {
   let renderToken = null;
   let previousEligible = false;

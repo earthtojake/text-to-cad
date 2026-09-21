@@ -10,8 +10,9 @@ review.
 
 It is no longer one component stack: there is one renderer per file family over
 a shared, format-blind [kit](#kit) and [shell](#shell). The STEP renderer is
-under `src/renderers/step`; `CadFileView` and `CadViewer` are its private
-implementation components. Applications use the registrations and the shared
+under `src/renderers/step`: its scene and everything of it that lives in the
+viewport are on the kit ([STEP scene and viewport](#step-scene-and-viewport));
+`CadFileView` is still its private surface. Applications use the registrations and the shared
 `FileViewer`; they do not import another application's source.
 
 ## Kit
@@ -62,8 +63,8 @@ takes a plain handle list, as a prop or (for an owner that poses its model
 outside React) as a ref whose list it replaces per pose.
 
 **The scene contract** (`kit/scene.js`, a JSDoc typedef): `{ object3D, bounds,
-restBounds?, dispose(), setSurfaceLook?(look), keepsAuthoredFinish?, pick?(ray),
-placedObjects?() }`.
+restBounds?, dispose(), setSurfaceLook?(look), setShadowReception?(receives),
+keepsAuthoredFinish?, complete?, pick?(ray), placedObjects?() }`.
 The viewport adopts `object3D`, frames `restBounds`, lights and floors `bounds`,
 and hands over the surface look the Display tab resolved
 (`{ materialSettings, authored, surface: { style, opacity } }`); it only ever
@@ -77,6 +78,9 @@ means. A tap acts at once: nothing waits to tell it from a double-click.
 `placedObjects()` is for the near/far fit alone: a camera inside a mostly empty
 aggregate box can still be well outside everything visible in it, so a scene that
 placed many things says so and is fitted on them instead of on its whole box.
+Shadow reception is the viewport's for every mesh of a scene, unless the scene
+implements `setShadowReception`: a scene with unlit or see-through surfaces is told
+the setting and applies its own rule (a STEP's watch crystal never takes a shadow).
 A mesh names where "Color by part" deals it a palette colour in
 `userData.cadFillIndex` (otherwise meshes take the palette in traversal order),
 and a material with no source colour says so with `userData.cadSourceColor = false`.
@@ -107,12 +111,13 @@ calls one hook; the shell owns the rest.
 | --- | --- |
 | `useRendererShell.js` | The hook. Per-file state through the host, the Display settings store and tab, tool modes (Draw is the only tool the shell itself owns; `toolModes` is omitted altogether by a renderer with no tools), the Inspector panel (and its control by the renderer), zoom with "Zoom to selection", navbar actions, prompt snapshots, the clipboard screenshot, fullscreen, file activity, alerts, shortcuts, and the live command surface. |
 | `RendererShell.jsx` | The frame: viewport box, tool strip, bottom action, playbar, fullscreen controls, loading/update/alert overlays, status toast and the Inspector portaled into the host's panel column. One DOM structure (`data-slot="cad-file-view"`, `data-cad-surface`, `data-cad-scene-backdrop`, `data-cad-toolbar`, `data-file-sheet`) for every renderer. |
-| `ShellViewport.jsx` | The three.js viewport around ONE kit scene: `useViewerRuntime`, `useViewportCamera`, the look (rig or studio, environment, background, floor, grid, axes), the Draw overlay and view lock, the view cube, frame presentation and the queued view-settings handshake. Its children may be a function of the viewport (`{ runtimeRef, hostRef, viewerReadyTick }`), which is how a renderer mounts its own overlay or pointer pick. `syncSceneBounds()` re-fits lighting, shadows and the floor's height to a scene that moved its own bounds, with no React render and no reframe. What is SIZED stays sized from the rest placement, in Inspect and in Render alike: the grid and stage (`sceneRadiusForBounds` on `restBounds`) and the Render studio's floor plane (`applyPhotographicStudio`'s `groundBounds`), so a pose or a playing routine never rescales or slides the ground under the model; `zoomToBounds(bounds)` frames part of the scene. Read-only test seams: `window.__cadCamera()` (the live camera) and `window.__cadStage()` (the ground's radius, the bounds the stage is fitted to, the floor's height, the studio floor's size and centre). |
+| `ShellViewport.jsx` | The three.js viewport around ONE kit scene: `useViewerRuntime`, `useViewportCamera`, the look (rig or studio, environment, background, floor, grid, axes), the Draw overlay and view lock, the view cube, frame presentation and the queued view-settings handshake. Its children may be a function of the viewport (`{ runtimeRef, hostRef, mountRef, viewerReadyTick, commitScene }`), which is how a renderer mounts its own overlay or pointer pick. A scene that changes IN PLACE (it arrives in pieces, swaps its detail, is rebuilt under one identity) calls `commitScene()` from its own effect: the viewport re-reads what it placed, fits the stage and the depth range and applies the framing rules THEN, because a child's effects run before the viewport's own adoption effect. The one thing a commit never does ahead of the viewport is FRAME under a camera that is about to change: when the same render also changed the lens, the projection or the viewing mode, the stage is adopted at once and the framing follows once the camera has been given those props (a stored camera applied under the old projection and then converted comes out about a sixth smaller). A scene that says `complete: false` is framed on what has arrived and once more when it is whole. `preserveInteractionPixelRatio` keeps the idle pixel ratio while the camera moves (a scene drawn with hairlines), and `runtimeLifecycle` (`onRelease(runtime, { handoff })` while the WebGL renderer is still alive, `onContextLost()`, `onInitializationError(error)`) is for a renderer that hangs its own objects or in-flight work on the runtime. `syncSceneBounds()` re-fits lighting, shadows and the floor's height to a scene that moved its own bounds, with no React render and no reframe. What is SIZED stays sized from the rest placement, in Inspect and in Render alike: the grid and stage (`sceneRadiusForBounds` on `restBounds`) and the Render studio's floor plane (`applyPhotographicStudio`'s `groundBounds`), so a pose or a playing routine never rescales or slides the ground under the model; `zoomToBounds(bounds)` frames part of the scene. Read-only test seams: `window.__cadCamera()` (the live camera) and `window.__cadStage()` (the ground's radius, the bounds the stage is fitted to, the floor's height, the studio floor's size and centre). |
 | `shellState.js` | The per-file record `{ version, camera, display, inspectorTab, tool, renderer }`, read forgivingly and written exactly. The host keys it `[file path, renderer id]`. |
 | `liveBinding.ts` | `attachLiveBinding`: the live command surface. Base commands (`readState`, `setCamera`, `resetCamera`, `setDisplaySettings`, `setRenderMode`, `capture`) mean the same for every renderer; a renderer ADDS commands by name and DECLINES the known host commands (`HOST_LIVE_COMMANDS`) that make no sense for it with the sentence the caller reads. Binding fails when a renderer does neither. |
 | `promptContext.js` | `createViewPromptContext` (a snapshot and what it depicts) and `promptDeliveryMessage`. |
 | `useViewerShortcuts.js` | Which mounted viewer an Escape belongs to; the renderer says what Escape means. |
-| `ViewportBottomAction.jsx` | The active tool's one bottom button (Draw: the view with its ink, to the prompt or clipboard). A renderer on the shell has no viewport context menu at all: framing lives in the zoom menu, and a menu of nothing but framing is a menu with nothing to say. |
+| `ViewportBottomAction.jsx` | The active tool's one bottom button (Draw: the view with its ink, to the prompt or clipboard); `{ label, shortLabel, render }` for a renderer's own, where a label too wide for the button becomes `shortLabel` and `render` draws a control that is not a plain press. |
+| `ViewportContextMenu.jsx` | The viewport's menu on a secondary TAP (a secondary drag pans; primary and secondary together is the pan chord). The gesture, the anchor, the clamping and the dismissal are the shell's; the ITEMS are the renderer's (`contextMenuItems(press)`), asked at the moment of the press, and `onContextMenuOpenChange(open)` says while the menu is up. A renderer that passes no items has no viewport menu at all: framing lives in the zoom menu. |
 
 ```jsx
 const shell = useRendererShell({
@@ -163,20 +168,24 @@ per-pane state, fullscreen's camera, gated Display sections, settings that never
 replace the canvas), and Draw has one scenario (`harness/drawScenario.mjs`)
 run under the shell (`kit/tools/draw/Draw.browser.test.mjs`).
 
-The STEP renderer still carries its own copy of the frame, the viewport
-orchestration and the session record inside `CadFileView.js`, `CadRenderPane.js`
-and `CadViewer.js`; it shares the leaf pieces (`liveBinding`, `loadAlerts`,
-`fileStatus`, `loadingState`, `BlockingViewerAlert`, `useViewerShortcuts`,
-`promptDeliveryMessage`, `chromeBackdrop`). Moving it onto the shell is what is
-left of the split.
+The STEP renderer's scene and viewport are on the kit
+([STEP scene and viewport](#step-scene-and-viewport)); its FRAME, its per-file
+record and its host glue are still `CadFileView.js`'s own copy, which shares the
+leaf pieces (`liveBinding`, `loadAlerts`, `fileStatus`, `loadingState`,
+`BlockingViewerAlert`, `useViewerShortcuts`, `promptDeliveryMessage`,
+`chromeBackdrop`). Moving that surface onto `useRendererShell` is what is left
+of the split.
 
-Its safety net for that move is `step/StepRenderer.browser.test.mjs`, which
-opens a real `.step` in a real browser: a three-part component-SURF package with
-one revolute mate, one named pose and one routine, committed under
-`step/__fixtures__/step/` and served by `harness/stepScenario.mjs` exactly as
-the backend serves one. `kit/tools/draw/Draw.browser.test.mjs` covers the Draw
-scenario under the shell, and each renderer's own browser test asserts that the
-STEP-only Display sections are absent from it.
+Its safety net is `step/StepRenderer.browser.test.mjs`, which opens a real `.step`
+in a real browser: a three-part component-SURF package with one revolute mate, one
+named pose and one routine, committed under `step/__fixtures__/step/` and served by
+`harness/stepScenario.mjs` exactly as the backend serves one.
+`kit/tools/draw/Draw.browser.test.mjs` covers the Draw scenario under the shell,
+and each renderer's own browser test asserts that the STEP-only Display sections
+are absent from it. The shell surfaces only STEP uses so far (the viewport menu and
+its open report, the measured bottom action, the camera-settled report, a scene
+that arrives in place, the pixel ratio kept for hairlines, the runtime lifecycle)
+are driven through `renderers/shell-harness` in `RendererShell.browser.test.mjs`.
 
 ## DXF renderer
 
@@ -529,7 +538,7 @@ References, inspection text and PNG captures produce one `PromptContext` through
 `host.promptContext`. The old `onReference`, `onPromptContext` and `onCapture`
 callbacks are removed. Workspace/path/revision identity and typed targets are
 preserved; a capture names the references it depicts. Ordinary explicit copy
-controls use `host.clipboard`. `CadViewer` only produces screenshot pixels.
+controls use `host.clipboard`. The viewport only produces screenshot pixels.
 The port and app adapters own delivery and return an acknowledged outcome.
 
 `slots.selectionExtras` is the optional app-contributed selection interface.
@@ -645,6 +654,92 @@ See [settings controls](settings-ui.md), [render capabilities](render-types.md)
 and [renderer contracts](renderers.md) for changes inside the shared package.
 
 The optional `@hardcore/ui/file-viewer/empty` entry exports `EmptyCadBackdrop` for the web host’s missing-file presentation. It lazily mounts the same empty CAD viewport with the host’s `colorScheme`, and overlays its `children`. It owns no file access, catalog subscription, or persisted state. This preserves the original grid and camera behind `MissingFileAlert` without loading CAD into the master viewer.
+
+## STEP scene and viewport
+
+`createStepRenderer` (`@hardcore/ui/renderers/step`, id `step`) shows a `.step` or
+`.stp`. Its scene and everything of it that lives in the viewport are on the kit;
+`src/renderers/step/scene` is that half.
+
+- **Scene** (`scene/stepScene.js`): a kit scene around core's `buildModel`
+  (`@hardcore/core/common/cadScene.js`, which is also the headless renderer's and
+  the docs hero's and does not move). ONE identity for as long as a file is
+  mounted: two stable roots (surfaces, and linework for the viewport's edge layer)
+  around whatever build is live. A STEP does not arrive once — a large assembly is
+  published in pieces, each component's detail is swapped as the camera moves, and
+  a display mode that changes how records are BUILT replaces the build — and none
+  of that is a new scene to the viewport. `plan()` decides reuse or rebuild (same
+  model, same structural build key, same viewer theme: the publish is handed to the
+  live build, which reconciles its records, so occurrences on screen keep their
+  meshes, materials, visual and deformation state and BVHs); `complete` is false
+  while components are still to come; `bounds` is the scene as posed when it was
+  last synced and `restBounds` the authored placement; `placedObjects()` is the
+  display records. After every sync the renderer calls `viewport.commitScene()`.
+- **Ownership.** A build owns its records, materials and the geometries it created.
+  Component geometry is shared between builds and scenes through core's owner counts,
+  so releasing a build drops this scene's count and frees a buffer only when nothing
+  else holds it; a rebuild of the SAME model releases with `releaseGpu: false` and
+  keeps its components' GPU buffers and BVHs. Runtime-level teardown
+  (`render/lodSceneCleanup.js`) clears only the groups that hold nothing but STEP's
+  own objects (the edge layer and the three pick groups) — never the model group or
+  the stage, which are the viewport's. The LOD publisher's ownership protocol
+  (`onMeshSourceAdoption`) is answered for every source the scene shows, releases
+  or fails to show, and for every way the WebGL runtime under it can go away
+  (`runtimeLifecycle`).
+- **The ground is sized from REST.** The viewport sizes the grid, the stage and the
+  Render studio's floor from `restBounds`, as it does for every renderer, so posing
+  a mate or playing a routine never rescales or slides the ground — including a
+  Render entered while the model is posed, which used to size the studio floor from
+  the posed box.
+- **Shadows** are per record (core's `syncRecordShadowPolicy`: only an opaque, lit surface
+  takes or casts one), so the scene implements `setShadowReception` and the viewport
+  never sets its meshes itself.
+- **Look.** `setSurfaceLook` is the kit's half; the theme, the app appearance (edge
+  ink), authored-material overrides, the whole Surfaces section and shadow
+  reception are STEP's (`setLookContext`). Both resolve the same settings, so the
+  scene wears a look once: whichever arrives second finds it already on.
+  `keepsAuthoredFinish` is `hasAuthoredMaterials(meshData)`.
+- **Viewport** (`scene/StepViewport.jsx`): a props adapter around the kit's
+  `ShellViewport`. It decides what the viewport may show and pick just now (nothing
+  under Pose, Animate or fullscreen; no topology while a previous mesh is held over
+  an update), mounts the viewport menu and the bottom action from the shell's own
+  pieces, and adds to the kit viewport's handle the two things only a STEP can
+  answer: `sampleLodCamera` and `zoomToFitSelection` (the boxes of the selected
+  references, from the selector runtime as posed, merged with the boxes of the
+  selected parts, from the records on screen).
+- **Layers** (`scene/StepSceneLayers.jsx`), mounted through the viewport's overlay
+  slot, in the order that is their contract: the scene sync makes the records, part
+  state dresses them, the pose pass moves them, the exploded view offsets them, and
+  only then are the pick proxies, the linework and the highlights laid over where
+  they ended up.
+
+  | module | what it owns |
+  | --- | --- |
+  | `useStepViewPolicy.js` | Everything DERIVED from the settings and the selection, touching no scene: the normalized display state, which linework is drawn, the edge styling a mode forces, what is pickable once hidden and isolated parts are out. |
+  | `useStepSceneSync.js` | The scene sync: reuse or rebuild, the LOD ownership protocol, the topology line, pick groups, the raycast-BVH schedule and the section clip over the new records; STEP's half of the look. |
+  | `useStepDisplay.js` | `useStepPartVisualState` (hidden, isolated, hovered, selected parts) and `useStepLinework` (pick proxies, B-rep edges, a highlighted part's brighter edges). |
+  | `useStepPose.js` | The sidecar module's setup and the ONE pose/animation pass (below). |
+  | `useStepExplode.js` | The exploded view: a radial layout eased over a second, snapped by the slider, re-applied to fresh records. |
+  | `useStepHighlights.js` | The reference highlight: boundary lines and fills of selected and hovered faces, edges and vertices. |
+  | `useStepMeasureOverlay.js` | The measure canvas: rulers and the snap indicator. |
+  | `useStepPicking.js` | The pointer: hover, tap, double-click (isolate) and measure picks, with all of the topology raycasting. The viewport menu is NOT here: it asks this hook what is under a press (`pickAtRef`). |
+
+- **One owner of the frame after a pose.** A pose or animation write is drawn because
+  the pose pass asks for a frame, once, as its last act, and nothing else on that
+  path does: the topology line it re-syncs is told not to
+  (`syncTopologyDisplayEdgeLine(..., { requestRender: false })`), a highlight layer
+  asks only when it drew or had drawn something, and part visual state does not
+  re-run for a pose at all (the part-id lists keep their identity while their
+  contents hold, `useStableIds`). `StepRenderer.browser.test.mjs` fails its
+  Kinematics and Animate tests when that one request is removed.
+- **The viewport menu** is the part menu, one list
+  (`assemblyPartMenuEntries` in `components/workbench/AssemblyContextMenuItems.js`)
+  with two presentations: the Features tree renders it into its own context menu,
+  and the viewport hands the same entries to the shell's `ViewportContextMenu`.
+- **Test seams** (read-only): `window.__cadDisplayRecords()`, `__cadJointHandles()`,
+  `__cadRenderMemoryProbe()`, `__cadSceneSync` and `__cadModelPlacement` (a live
+  getter: a render setting that moves the ground shows without a scene sync). The
+  camera and the stage are the viewport's (`__cadCamera()`, `__cadStage()`).
 
 ## STEP and source separation
 
@@ -900,7 +995,7 @@ Animate tool to say so on; it is reported beside the filename with the file's
 other unavailable settings.
 
 Because the mode picks nothing and ends at rest pose, pick-only state stands
-still while it lasts (`animateMode` in `CadViewer.js`): the transformed selector
+still while it lasts (`animateMode` in `step/scene/useStepPose.js`): the transformed selector
 runtime is not rebuilt per posed frame (which as React state used to rebuild pick
 groups, their BVH, the picking listeners and the highlight overlays every
 frame), pickable lists are one shared empty list, presses and releases cast no

@@ -18,9 +18,9 @@ import {
 } from "@hardcore/core/lib/viewer/measurement.js";
 import { projectWorldPointToClient } from "@hardcore/core/lib/viewer/measureRuler.js";
 
-import { measureRulerDraftMeasurement } from "../../../workbench/measureRulerState.js";
+import { measureRulerDraftMeasurement } from "../workbench/measureRulerState.js";
 
-export function useViewerMeasureOverlay({
+export function useStepMeasureOverlay({
   measureCanvasRef,
   measureState,
   activeMeasurementId = "",

@@ -105,9 +105,19 @@ const ShellViewport = forwardRef(function ShellViewport({
   // a part without changing position, target or zoom. The viewport says the camera settled;
   // what that is worth is the renderer's.
   onCameraSettled = null,
+  // A scene drawn with hairlines keeps the idle pixel ratio while the camera moves: dropping
+  // it mid-orbit turns one-pixel linework into a shimmer the surfaces never show.
+  preserveInteractionPixelRatio = false,
+  // What happens to the WebGL runtime UNDER the scene, for a renderer that hangs its own
+  // objects or in-flight work on it: `onRelease(runtime, { handoff })` at teardown, while the
+  // renderer is still alive (`handoff` says a replacement runtime follows: a context recovery,
+  // not an unmount); `onContextLost()`; `onInitializationError(error)`.
+  runtimeLifecycle = null,
   // A renderer's own layer over the canvas: a node, or `(viewport) => node` for one that
-  // needs the viewport itself ({ runtimeRef, hostRef, viewerReadyTick }: the live runtime,
-  // the element pointer events arrive on, and a tick that changes when the runtime does).
+  // needs the viewport itself ({ runtimeRef, hostRef, mountRef, viewerReadyTick, commitScene }:
+  // the live runtime, the element pointer events arrive on, the element the canvas is mounted
+  // in, a tick that changes when the runtime does, and `commitScene()` for a scene that
+  // changed IN PLACE — see `commitScene` below).
   children = null
 }, ref) {
   if (scene && !isKitScene(scene)) {
@@ -181,6 +191,11 @@ const ShellViewport = forwardRef(function ShellViewport({
   const sceneScaleModeRef = useRef(normalizedSceneScaleMode);
   const cameraMovedRef = useRef(null);
   cameraMovedRef.current = onCameraSettled;
+  const runtimeLifecycleRef = useRef(runtimeLifecycle);
+  runtimeLifecycleRef.current = runtimeLifecycle;
+  // Which model was framed once it was WHOLE. A scene that arrives in pieces is framed on its
+  // first piece, so something is on screen at once, and again when the last piece lands.
+  const framedCompleteModelKeyRef = useRef("");
 
   const resolveViewerRenderState = useMemo(() => createViewerRenderStateResolver(), []);
   const renderState = useMemo(() => resolveViewerRenderState({ themeSettings, displaySettings }),
@@ -461,6 +476,7 @@ const ShellViewport = forwardRef(function ShellViewport({
 
   const handleRuntimeContextRestored = useCallback(() => {
     framedModelKeyRef.current = "";
+    framedCompleteModelKeyRef.current = "";
     framedBoundsRef.current = null;
     framedViewingModeRef.current = "";
     lastEmittedPerspectiveRef.current = null;
@@ -470,13 +486,27 @@ const ShellViewport = forwardRef(function ShellViewport({
     setRuntimeResetToken((value) => value + 1);
   }, []);
   const handleRuntimeInitializationError = useCallback((runtimeError) => {
+    runtimeLifecycleRef.current?.onInitializationError?.(runtimeError);
     viewerAlertChangeRef.current?.(buildRuntimeInitializationAlert(runtimeError));
   }, []);
+  const handleRuntimeContextLost = useCallback(() => { runtimeLifecycleRef.current?.onContextLost?.(); }, []);
   // The scene is its renderer's: teardown detaches it and leaves disposal to its owner.
   const detachScene = useCallback((runtime) => {
     runtime?.kitScene?.object3D?.removeFromParent?.();
     if (runtime) { runtime.kitScene = null; runtime.hasVisibleModel = false; }
     return null;
+  }, []);
+  // Teardown: the renderer releases what it hung on the runtime FIRST, while the WebGL
+  // renderer is still alive, then the viewport detaches the scene it never owned.
+  const releasingRuntimeRef = useRef(null);
+  const releaseScene = useCallback((runtime) => {
+    releasingRuntimeRef.current = runtime;
+    return detachScene(runtime);
+  }, [detachScene]);
+  const handleSceneReleased = useCallback((_source, { handoff = false } = {}) => {
+    const runtime = releasingRuntimeRef.current;
+    releasingRuntimeRef.current = null;
+    runtimeLifecycleRef.current?.onRelease?.(runtime, { handoff });
   }, []);
 
   useViewerRuntime({
@@ -485,7 +515,8 @@ const ShellViewport = forwardRef(function ShellViewport({
     cancelCameraTransition, clearKeyboardOrbitState, isTrackpadLikeWheelEvent, isPinchWheelEvent, WHEEL_PINCH_DELTA_BOOST,
     getKeyboardOrbitCommand, getKeyboardOrbitAxes, applyOrbitDelta, getViewerThemeValue, getPixelRatioCap,
     applySceneBackground, onViewportResize: handleViewportResize, applyInitialPerspective,
-    updateGridHelper: updateActiveGridHelper, clearSceneGroup: clearGroup, disposeScene: detachScene,
+    updateGridHelper: updateActiveGridHelper, clearSceneGroup: clearGroup, disposeScene: releaseScene,
+    onSceneDisposed: handleSceneReleased,
     disposeStudio: (runtime) => studioScene()?.disposePhotographicStudio(runtime),
     disposeSceneObject, disposeTexture, syncViewPlaneOrientation, BASE_VIEWER_THEME, DEFAULT_LIGHTING,
     DEFAULT_DAMPING_FACTOR, DEFAULT_ZOOM_SPEED, COARSE_POINTER_ZOOM_SPEED, INTERACTION_PIXEL_RATIO_CAP,
@@ -493,7 +524,8 @@ const ShellViewport = forwardRef(function ShellViewport({
     INTERACTION_IDLE_DELAY_MS, TRACKPAD_PINCH_ZOOM_SPEED, COARSE_POINTER_PINCH_ZOOM_SPEED, ACCELERATED_WHEEL_ZOOM_SPEED,
     KEYBOARD_ORBIT_NUDGE_RAD, defaultGridRadius, sceneScaleMode: normalizedSceneScaleMode, floorMode: resolvedFloorMode,
     renderMode, onInitializationError: handleRuntimeInitializationError, onFramePresented: handleFramePresented,
-    presentationRequestRef, onContextRestored: handleRuntimeContextRestored, runtimeResetToken
+    presentationRequestRef, onContextLost: handleRuntimeContextLost, onContextRestored: handleRuntimeContextRestored,
+    preserveInteractionPixelRatio, runtimeResetToken
   });
 
   // Lens.
@@ -577,7 +609,10 @@ const ShellViewport = forwardRef(function ShellViewport({
     const runtime = runtimeRef.current;
     if (!runtime || !scene) return;
     scene.setSurfaceLook?.(surfaceLook);
-    scene.object3D.traverse((object) => { if (object.isMesh) object.receiveShadow = receiveShadows; });
+    // Every mesh takes shadows or none does -- unless the scene has surfaces that must not (unlit
+    // or see-through ones), in which case it is told the setting and applies its own rule.
+    if (scene.setShadowReception) scene.setShadowReception(receiveShadows);
+    else scene.object3D.traverse((object) => { if (object.isMesh) object.receiveShadow = receiveShadows; });
     // Read-only test seam: how often a scene was dressed. A guide's or the stage's paint must never be one.
     (window.__viewerSurfaceLooks ||= { count: 0 }).count += 1;
     runtime.requestRender();
@@ -781,9 +816,7 @@ const ShellViewport = forwardRef(function ShellViewport({
 
   // Scene adoption: place the scene under the model group, fit lighting, floor and
   // depth to where it is now, and frame the camera on its rest placement.
-  useEffect(() => {
-    const runtime = runtimeRef.current;
-    if (!runtime) return;
+  const adoptScene = (runtime, { frame = true } = {}) => {
     const { modelGroup, controls } = runtime;
     if (isLoading || !scene) {
       cancelCameraTransition(runtime);
@@ -817,12 +850,19 @@ const ShellViewport = forwardRef(function ShellViewport({
     controls.maxDistance = Math.max(radius * 140, 50);
     controls.zoomSpeed = DEFAULT_ZOOM_SPEED;
 
+    // The camera is framed by the pass that runs AFTER this render's lens and projection have
+    // been applied; a commit from a child's effect that lands ahead of them leaves it to that pass.
+    if (!frame) { setError(""); runtime.requestRender(); return; }
     const viewingMode = renderMode ? VIEWING_MODE.RENDER : VIEWING_MODE.INSPECT;
+    // A scene still arriving (`complete: false`) is framed on what has arrived and once more
+    // when it is whole; every other scene is whole from the start.
+    const sceneComplete = scene.complete !== false;
     const reframe = reframeReason({
-      modelKey, framedModelKey: framedModelKeyRef.current, framedCompleteModelKey: framedModelKeyRef.current,
-      mode: viewingMode, framedMode: framedViewingModeRef.current, modelComplete: true,
+      modelKey, framedModelKey: framedModelKeyRef.current, framedCompleteModelKey: framedCompleteModelKeyRef.current,
+      mode: viewingMode, framedMode: framedViewingModeRef.current, modelComplete: sceneComplete,
       zeroPoseBounds: framingBounds, framedZeroPoseBounds: framedBoundsRef.current, userMovedCamera: runtime.userMovedCamera
     });
+    if (sceneComplete) framedCompleteModelKeyRef.current = modelKey || "";
     if (reframe) {
       if (reframe === "model") runtime.userMovedCamera = false;
       const nextPerspective = resolvePerspectiveSnapshot(perspectiveRef ? perspectiveRef.current : undefined, perspective);
@@ -875,6 +915,18 @@ const ShellViewport = forwardRef(function ShellViewport({
     // Also handles opening fullscreen before the first scene arrives.
     syncFullscreenCamera(runtime);
     markPresentationReady(runtime);
+  };
+  const adoptSceneRef = useRef(adoptScene);
+  adoptSceneRef.current = adoptScene;
+  // The lens, projection and viewing mode this render asks for, and the ones the camera has
+  // already been given: the effects above run in order, so by here they are the same.
+  const cameraRequest = `${normalizedProjection}|${explicitViewerFocalLength(focalLength) ?? ""}|${renderMode ? 1 : 0}`;
+  const cameraRequestRef = useRef(cameraRequest);
+  cameraRequestRef.current = cameraRequest;
+  const cameraAppliedRef = useRef("");
+  useEffect(() => { cameraAppliedRef.current = cameraRequest; }, [cameraRequest, viewerReadyTick]);
+  useEffect(() => {
+    if (runtimeRef.current) adoptSceneRef.current(runtimeRef.current);
   }, [
     scene, sceneRevision, markPresentationReady, modelKey, perspective, perspectiveRef, isLoading, viewerReadyTick,
     normalizedSceneScaleMode, resolvedFloorMode, renderMode, floorFollowsModel, viewerTheme, syncCameraZoomPercent,
@@ -900,7 +952,26 @@ const ShellViewport = forwardRef(function ShellViewport({
     return () => { cancelled = true; };
   }, [viewUpdate?.revision, viewUpdate?.binding, viewerReadyTick]);
 
-  const viewportContext = useMemo(() => ({ runtimeRef, hostRef: interactionHostRef, viewerReadyTick }), [viewerReadyTick]);
+  // A scene that changes IN PLACE (it arrives in pieces, swaps its detail, is rebuilt under
+  // the same identity) says so from its own effect, and the viewport adopts it THEN: placed
+  // objects, bounds, stage, depth range and the framing rules, synchronously, so whatever the
+  // renderer does next in that effect pass already sees the fitted stage. A child's effects
+  // run before this component's, so the adoption effect above cannot do that for it.
+  //
+  // The one thing it may not do ahead of the viewport's own effects is FRAME: when the same
+  // render also changed the lens, the projection or the viewing mode, a fit taken now would be
+  // taken under the old camera and then converted, which is not the fit under the new one. The
+  // stage is adopted at once and the framing follows when the camera has been given its props.
+  const commitScene = useCallback(() => {
+    const runtime = runtimeRef.current;
+    if (!runtime) return false;
+    const cameraCurrent = cameraAppliedRef.current === cameraRequestRef.current;
+    adoptSceneRef.current(runtime, { frame: cameraCurrent });
+    if (!cameraCurrent) queueMicrotask(() => { if (runtimeRef.current === runtime) adoptSceneRef.current(runtime); });
+    return true;
+  }, []);
+  const viewportContext = useMemo(() => ({ runtimeRef, hostRef: interactionHostRef, mountRef, viewerReadyTick, commitScene }),
+    [viewerReadyTick, commitScene]);
   const preparingFrame = Boolean(resolvedPresentationKey) &&
     (presentedEpoch !== presentationEpoch || presentedKey !== resolvedPresentationKey) && !error;
   const coveringModeTransition = presentedEpoch !== presentationEpoch && !error && hasViewportContent;

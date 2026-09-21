@@ -21,10 +21,16 @@
  * @property {() => void} dispose  Release everything the scene created.
  * @property {(look: SurfaceLook) => void} [setSurfaceLook]  Wear the look the Display tab
  *   resolved. Called on adoption and whenever it changes; a scene applies it to its own materials.
+ * @property {(receives: boolean) => void} [setShadowReception]  Whether the scene's surfaces take
+ *   shadows just now. A scene WITHOUT it has the viewport set every one of its meshes; a scene whose
+ *   surfaces do not all take shadows (unlit or see-through ones) implements it and applies its own rule.
  * @property {boolean} [keepsAuthoredFinish]  The scene shows authored finishes in Inspect too,
  *   so Inspect gives it a small neutral environment to reflect.
  * @property {(ray: import("three").Ray) => ({ id: string, point: import("three").Vector3 } | null)} [pick]
  *   Only scenes that select.
+ * @property {boolean} [complete]  `false` while the scene is still ARRIVING (a large model published
+ *   in pieces into one scene identity). The viewport frames what has arrived, so something is on
+ *   screen at once, and frames once more when the scene is whole. Absent means whole.
  * @property {() => object[]} [placedObjects]  The things the scene has placed, each with its own
  *   `partBounds` and transforms, for the near/far fit alone (`fitCameraDepthToBounds`): a camera
  *   inside a mostly empty aggregate box can still be well outside everything visible in it. A

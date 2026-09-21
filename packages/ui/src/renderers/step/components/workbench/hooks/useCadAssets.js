@@ -1532,7 +1532,7 @@ export function useCadAssets({
 
     // A STEP model is a component-GLB package: there is no separate display-edge bundle to
     // fetch (the package "glb" asset is a directory, so a fetch would 404). The per-component
-    // edges live in the composed selector runtime, which CadViewer already uses as the display-
+    // edges live in the composed selector runtime, which the STEP scene already uses as the display-
     // edge source via `displayEdgeRuntime || selectorRuntime`. Disable the dedicated load.
     if (entrySourceFormat(entry) === RENDER_FORMAT.STEP) {
       setDisplayEdgeState(null);

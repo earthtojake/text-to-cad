@@ -245,7 +245,7 @@ function occurrenceTranslation(transform) {
 // Load order: the components placed at the model's extreme positions (per-axis
 // min and max occurrence translation, up to six cids) come first, then the rest
 // in descriptor order. The viewer frames the camera ONCE per model, on the
-// first publish (CadViewer's framedModelKeyRef gate), so the first batch must
+// first publish (the viewport's framed-model gate), so the first batch must
 // span the model: without this the first 32 components of a hand could all be
 // one fingertip and the rest of the model would arrive outside the frame. The
 // descriptor carries no component bounds, so the placement is the proxy.

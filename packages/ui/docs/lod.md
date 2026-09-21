@@ -123,6 +123,17 @@ revision, occurrence set and exact payload. Display geometry and demanded
 selectors publish as one matching state pair, with commit receipts fencing
 abandoned or replayed React updates.
 
+Every publication lands in the ONE STEP scene the viewport adopted
+(`renderers/step/scene/stepScene.js`): while the structural build key holds for
+the same model, the live build reconciles its records in place, and the viewport
+is told the scene changed (`viewport.commitScene()`) rather than handed a new
+scene — so a progressive open or a detail swap never re-dresses every material or
+re-adopts anything. The scene is `complete: false` until the last component is
+in, which is what frames the model on its first publish and once more when it is
+whole. The camera sample that drives all of this is taken when the viewport says
+the camera settled (`onCameraSettled`: a move, a fullscreen orbit, or a resize,
+which can expose a part without moving the camera) and when the selection changes.
+
 A static component publication can reuse the main adoption's completed reset
 only in that same React render. Later visual or clipping changes still run
 normally, as do transitions out of modules, animation, drawings or poses.

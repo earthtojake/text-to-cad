@@ -203,7 +203,9 @@ the UI package's asset documentation for asset provenance and regeneration.
 
 A file has a top-right tool strip only where it has tools. A STEP's holds Select,
 Measure, Draw, plus Pose and Animate where the file has joints or routines;
-pressing Select again opens its selection-filter dropdown. A robot description
+pressing Select again opens its selection-filter dropdown. Under Select a
+secondary tap over a STEP opens the part menu (the shell's viewport menu, filled
+by the STEP renderer); under any other tool it opens nothing. A robot description
 (its own renderer) opens in Pose, which leads its tools, followed by a Select
 that picks whole links. Draw is a STEP tool and appears nowhere else. A DXF, a
 GLB, an STL and a 3MF (their own renderers) have NO tools and no strip at all:

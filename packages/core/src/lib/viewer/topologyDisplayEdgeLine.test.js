@@ -112,6 +112,26 @@ test("syncTopologyDisplayEdgeLine updates edge overlays immediately and skips de
   assert.equal(clipSyncCount, 2);
 });
 
+test("syncTopologyDisplayEdgeLine syncs without asking for a frame when its caller draws the frame itself", () => {
+  const runtime = createRuntime();
+  const settings = {
+    visible: true,
+    edgeSettings: { color: "#111111", opacity: 0.8, thickness: 1 },
+    focusedPartIds: [],
+    viewerTheme: { edge: "#111111", edgeOpacity: 0.8, edgeThickness: 1 }
+  };
+  assert.equal(syncTopologyDisplayEdgeLine(runtime, displayEdgeRuntime(0), { ...settings, requestRender: false }), true);
+  assert.equal(runtime.edgesGroup.children.length, 1, "the line is built all the same");
+  assert.equal(runtime.requestCount, 0, "and no frame was asked for");
+  assert.equal(syncTopologyDisplayEdgeLine(runtime, displayEdgeRuntime(5), { ...settings, requestRender: false }), true);
+  assert.equal(instanceStartX(runtime.topologyDisplayEdgeLine), 5);
+  assert.equal(runtime.requestCount, 0);
+  assert.equal(syncTopologyDisplayEdgeLine(runtime, null, { ...settings, visible: false, requestRender: false }), true);
+  assert.equal(runtime.requestCount, 0);
+  assert.equal(syncTopologyDisplayEdgeLine(runtime, displayEdgeRuntime(5), settings), true);
+  assert.equal(runtime.requestCount, 1, "the default still asks");
+});
+
 test("syncTopologyDisplayEdgeLine can move per-record topology edges with solid effect matrices", () => {
   const runtime = createRuntime();
   const sourceRuntime = displayEdgeRuntime(0);

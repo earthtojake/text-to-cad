@@ -19,16 +19,6 @@ export function lodSceneMayMove({ kinematics = null,
   return Boolean(kinematics || kinematicsLoading || animation || exploded);
 }
 
-export function resampleLodAfterViewportResize(runtime, { syncFraming, syncZoom, emitPerspective, resample }) {
-  if (syncFraming(runtime)) {
-    syncZoom(runtime);
-    emitPerspective(runtime);
-  }
-  // Aspect/viewport changes can expose a part without changing persisted
-  // position/target/zoom, so perspective deduplication cannot own this signal.
-  resample?.();
-}
-
 function validBounds(bounds) {
   return bounds?.min?.length === 3 && bounds?.max?.length === 3
     && bounds.min.every(Number.isFinite) && bounds.max.every(Number.isFinite)

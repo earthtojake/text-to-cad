@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
-import { lodSceneMayMove, sampleLodCamera, resampleLodAfterViewportResize } from "./lodCameraSample.js";
+import { lodSceneMayMove, sampleLodCamera } from "./lodCameraSample.js";
 import { createLodScheduler } from "./lodScheduler.js";
 import { desiredLevel } from "@hardcore/core/lib/surf/lodPolicy.js";
 
@@ -193,21 +193,17 @@ test("pressure releases offscreen L3 first, while normal exclusion retains exist
   }
 });
 
-test("resize resamples newly visible parts even with unchanged framing/persisted perspective", () => {
+// A resize can expose a part while every stored camera field stays equal, which is why the
+// viewport reports a resize as a settled camera (`onCameraSettled`, the kit's) and the sample
+// is taken again: the SAME camera pose over a wider frustum sees the part.
+test("a wider viewport exposes a part to the sample with the camera pose unchanged", () => {
   const f = fixture([["side", cube(7)]]);
   assert.equal(sample(f).visibleFor("side"), false);
-  const events = [];
+  const pose = [f.runtime.camera.position.toArray(), f.runtime.camera.quaternion.toArray(), f.runtime.camera.zoom];
   f.runtime.camera.left = -10; f.runtime.camera.right = 10;
   f.runtime.camera.updateProjectionMatrix();
-  let next;
-  const callbacks = { syncFraming: () => false, syncZoom: () => events.push("zoom"),
-    emitPerspective: () => events.push("perspective"), resample: () => { events.push("lod"); next = sample(f); } };
-  resampleLodAfterViewportResize(f.runtime, callbacks);
-  assert.equal(next.visibleFor("side"), true);
-  assert.deepEqual(events, ["lod"]);
-  events.length = 0;
-  resampleLodAfterViewportResize(f.runtime, { ...callbacks, syncFraming: () => true });
-  assert.deepEqual(events, ["zoom", "perspective", "lod"]);
+  assert.equal(sample(f).visibleFor("side"), true);
+  assert.deepEqual([f.runtime.camera.position.toArray(), f.runtime.camera.quaternion.toArray(), f.runtime.camera.zoom], pose);
 });
 
 test("live pose/post-transform order matches the displayed center without mutating bounds or transforms", () => {

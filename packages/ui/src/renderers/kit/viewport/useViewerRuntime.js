@@ -94,7 +94,7 @@ export function useViewerRuntime({
   useLayoutEffect(() => {
     if (runtimeRef.current) runtimeRef.current.renderMode = renderMode;
   }, [renderMode, runtimeRef]);
-  // A dependency change replaces this WebGL runtime while CadViewer remains
+  // A dependency change replaces this WebGL runtime while the viewport component remains
   // mounted. Layout cleanup runs before passive runtime cleanup on a final
   // unmount, so the latter can distinguish a renderer handoff from the last
   // owner going away.

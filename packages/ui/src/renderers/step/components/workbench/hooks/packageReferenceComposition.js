@@ -1,6 +1,6 @@
 // Composition of a component-GLB package's picking runtimes, split out of
 // useCadAssets so it unit-tests in Node (the hook's other imports are
-// Vite-resolved; same pattern as viewer/hooks/partPicking.js).
+// Vite-resolved; same pattern as scene/partPicking.js).
 //
 // THE INVARIANT this module exists to hold (viewport LOD, design/
 // unified-tessellation.md Phase 5): the display mesh and the selector runtime

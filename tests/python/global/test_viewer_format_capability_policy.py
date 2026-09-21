@@ -120,10 +120,15 @@ class ViewerFormatCapabilityPolicyTest(unittest.TestCase):
         """
         for path in (
             CLIENT_ROOT / "components/workbench/FloatingToolBar.js",
-            CLIENT_ROOT / "components/workbench/CadRenderPane.js",
-            # The renderer itself: it draws every format, so a format check here is a
-            # feature one format gets and the others silently do not.
-            CLIENT_ROOT / "components/CadViewer.js",
+            # The STEP scene and everything of it that lives in the kit's viewport
+            # (`CadViewer.js` and `CadRenderPane.js` before the renderer split). They
+            # show ONE family, so there is no format left for them to ask about.
+            *sorted(
+                path
+                for suffix in ("*.js", "*.jsx")
+                for path in (CLIENT_ROOT / "scene").glob(suffix)
+                if not path.name.endswith((".test.js", ".test.jsx"))
+            ),
             # Status, alerts and the file list: every one of these was a per-format
             # cascade, and each cascade was a place a new format inherited the wrong
             # advice, the wrong icon or no spinner at all.
