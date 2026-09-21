@@ -32,6 +32,8 @@ const INSPECTOR_WIDTH = 365;
  *   contextMenuItems?: ((press: { clientX: number, clientY: number, shiftKey: boolean }) => object[] | null) | null,
  *   onContextMenuOpenChange?: ((open: boolean) => void) | null,
  *   sceneRevision?: number, className?: string,
+ *   frameProvider?: ((frame: import("react").ReactNode) => import("react").ReactNode) | null,
+ *   onCanvasPointerDown?: ((event: import("react").PointerEvent) => void) | null,
  *   viewportOverlay?: import("react").ReactNode | ((viewport: { runtimeRef: object, hostRef: object,
  *     mountRef: object, viewerReadyTick: number, commitScene: () => boolean }) => import("react").ReactNode) }} props
  *   `tools`: left to right, from `shell.tools`; an EMPTY list draws no strip at all,
@@ -50,9 +52,16 @@ const INSPECTOR_WIDTH = 365;
  *   pointer pick (`kit/tools/select/usePointerPick.js`) reads the first, second and fourth;
  *   a renderer that draws its own canvas over the model or publishes a scene progressively
  *   needs the other two.
+ *   `frameProvider`: the renderer wraps the WHOLE frame — its own context, above the Inspector's
+ *   portal as well as the viewport, because both halves read it. It is given the frame and returns
+ *   it wrapped; a renderer that passes none is mounted exactly as it is.
+ *   `onCanvasPointerDown`: a press that landed on the canvas, before anything in the viewport sees
+ *   it. The frame focuses itself on such a press whatever the renderer does; this is for a renderer
+ *   that also has something to put down when the person reaches for the model.
  */
 export default function RendererShell({ shell, tools, inspector, bottomAction = null, contextMenuItems = null,
-  onContextMenuOpenChange = null, sceneRevision = 0, viewportOverlay = null, className = "" }) {
+  onContextMenuOpenChange = null, sceneRevision = 0, viewportOverlay = null, className = "",
+  frameProvider = null, onCanvasPointerDown = null }) {
   const frame = shell.frame;
   const { view, resolvedScene, previewMode, viewerLoading, scene } = frame;
   const hasContent = Boolean(scene) && !viewerLoading;
@@ -65,16 +74,16 @@ export default function RendererShell({ shell, tools, inspector, bottomAction = 
     {previewMode || !contextMenuItems ? null : <ViewportContextMenu viewport={viewport} items={contextMenuItems} onOpenChange={onContextMenuOpenChange} />}
     {typeof viewportOverlay === "function" ? viewportOverlay(viewport) : viewportOverlay}
   </>;
-  return (
-    <HostPanelSlotContext.Provider value={view.panelSlot}>
-    <FileSheetPortalContext.Provider value={frame.hostElement}>
+  const body = (
     <div
       className={cn("relative flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground", className)}
       data-slot="cad-file-view"
       data-cad-surface
       tabIndex={-1}
       onPointerDownCapture={event => {
-        if (event.target instanceof Element && event.target.closest("canvas")) event.currentTarget.focus({ preventScroll: true });
+        if (!(event.target instanceof Element) || !event.target.closest("canvas")) return;
+        onCanvasPointerDown?.(event);
+        event.currentTarget.focus({ preventScroll: true });
       }}
       ref={frame.hostRef}
     >
@@ -187,6 +196,11 @@ export default function RendererShell({ shell, tools, inspector, bottomAction = 
         />
       </div>
     </div>
+  );
+  return (
+    <HostPanelSlotContext.Provider value={view.panelSlot}>
+    <FileSheetPortalContext.Provider value={frame.hostElement}>
+      {frameProvider ? frameProvider(body) : body}
     </FileSheetPortalContext.Provider>
     </HostPanelSlotContext.Provider>
   );

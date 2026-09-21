@@ -36,7 +36,6 @@ import FloatingToolBar from "../components/workbench/FloatingToolBar.js";
 import FullscreenToolbar from "../components/workbench/FullscreenToolbar.jsx";
 import { ViewportAnimationBar, animationControlsHaveContent } from "../components/workbench/AnimationControlsSection.js";
 import { useCadAssets } from "../components/workbench/hooks/useCadAssets.js";
-import { resolveDesktopPanelWidth } from "./fileViewState.js";
 import { useEditingPreview } from "../components/workbench/hooks/useEditingPreview.js";
 import { useViewportQualityStatus } from "../components/workbench/hooks/useViewportQualityStatus.js";
 import { previewGeometryChanged } from "../workbench/editingPreview.js";
@@ -151,7 +150,6 @@ import {
   clearMeasureRulerMeasurements,
   measureRulerStateForChange
 } from "../workbench/measureRulerState.js";
-import { CAD_WORKSPACE_LAYOUT_MODE } from "../workbench/breakpoints.js";
 import { cadFileParamForEntry, cadPathForEntry, fileKey, sidebarLabelForEntry } from "../workbench/entryPaths.js";
 import { buildCadRefToken, isNativeCadSelector } from "@hardcore/core/lib/cadRefs.js";
 import {
@@ -225,13 +223,9 @@ function scopedWorkspacePerspective(snapshot, modelKey, entry) {
 import {
   ARTIFACT_GENERATING_LABEL,
   DEFAULT_LARGE_FILE_STATE,
-  DESKTOP_TAB_TOOLS_MAX_WIDTH,
-  DESKTOP_TAB_TOOLS_MIN_WIDTH,
   EMPTY_LIST,
   entryWithoutRenderAssets,
-  normalizeLargeFileState,
-  readViewerLayoutMode,
-  readViewerViewportWidth
+  normalizeLargeFileState
 } from "./fileViewState.js";
 import { sceneBackdropEdgeColor } from "../../kit/look/chromeBackdrop.js";
 import { useChromeBackdropColor } from "../../kit/look/useChromeBackdropColor.js";
@@ -286,10 +280,7 @@ function CadFileViewSurface({
     stateRef.current = next;
     onStateChangeRef.current?.(next);
   }, []);
-  const hostLayoutMode = CAD_WORKSPACE_LAYOUT_MODE.DESKTOP;
-  const hostSheetWidth = null;
   const hostPanelSlot = panelSlot;
-  const drawsOwnPanelColumn = false;
   const tabToolsOpen = openPanel === CAD_PANEL.fileSheet;
   const filesPanelOpen = openPanel === "tree";
   const panelRef = useRef({ openPanel, onPanelOpen });
@@ -315,7 +306,6 @@ function CadFileViewSurface({
   const catalogHydrated = storeSnapshot.hydrated;
   const catalogError = storeSnapshot.error || "";
   const selectedCatalogPending = liveEntry?.catalogPending === true;
-  const viewerReloading = false;
   const viewerServerBackend = String(viewerServerInfo?.backend || "").trim().toLowerCase();
   const [fileSheetOpenSectionIds, setFileSheetOpenSectionIds] = useState(null);
   const [referenceQuery, setReferenceQuery] = useState("");
@@ -358,11 +348,6 @@ function CadFileViewSurface({
   const [copyStatus, setCopyStatus] = useState("");
   const [stepUpdateInProgress, setStepUpdateInProgress] = useState(false);
   const [screenshotStatus, setScreenshotStatus] = useState("");
-  const [persistenceStatus, setPersistenceStatus] = useState("");
-  const [viewerLayoutMode, setViewerLayoutMode] = useState(readViewerLayoutMode);
-  const [layoutViewportWidth, setLayoutViewportWidth] = useState(readViewerViewportWidth);
-  const isWideLayout = hostLayoutMode === CAD_WORKSPACE_LAYOUT_MODE.DESKTOP ||
-    viewerLayoutMode === CAD_WORKSPACE_LAYOUT_MODE.DESKTOP;
   const [viewerAlertOpen, setViewerAlertOpen] = useState(false);
   const [viewerRuntimeAlert, setViewerRuntimeAlert] = useState(null);
   const chromeBackdropColor = useChromeBackdropColor(uiPrefersDark);
@@ -405,15 +390,6 @@ function CadFileViewSurface({
   const stepModuleParameterValuesRef = useRef(stepModuleParameterValues);
   const animationStateRef = useRef(animationState);
   const motionRevisionRef = useRef(0);
-  const lastPersistenceFailureKeyRef = useRef("");
-  const handlePersistenceWriteError = useCallback(({ key }) => {
-    const failureKey = String(key || "browser-storage");
-    if (lastPersistenceFailureKeyRef.current === failureKey) {
-      return;
-    }
-    lastPersistenceFailureKeyRef.current = failureKey;
-    setPersistenceStatus("Browser storage could not save the CAD Viewer session.");
-  }, []);
 
   const entryMap = useMemo(() => new Map([[selectedKey, liveEntry]]), [selectedKey, liveEntry]);
   const fileSessionNamespace = selectedKey;
@@ -465,8 +441,6 @@ function CadFileViewSurface({
   });
 
   const catalogSelectedEntry = liveEntry;
-  const fileParamSelectionPending = false;
-  const missingFileRef = "";
   const catalogSelectedEntrySourceFormat = entrySourceFormat(catalogSelectedEntry);
   // File state uses the host's absolute identity; server requests use the
   // catalog's path relative to this client's served root.
@@ -859,8 +833,6 @@ function CadFileViewSurface({
     selectedPlayableAnimationClip
   ]);
   const handleStepModuleTransformDetectedChange = useCallback(() => {}, []);
-  const stepModuleTreeSelectionDisabled = false;
-  const stepModuleTreeSelectionDisabledReason = "";
 
   // The pose the person PICKED, which the dropdown shows until they move a DOF. Without
   // it the name is re-derived from the values every frame, so a pose read as "None"
@@ -1201,7 +1173,7 @@ function CadFileViewSurface({
     ((!selectedMeshMatches && !retainedPreviousStepMeshError) ||
       status === ASSET_STATUS.LOADING || selectedStepModuleLoading);
   const viewerLoading = meshViewerLoading;
-  const effectiveViewerLoading = viewerLoading || selectedArtifactGenerating || selectedCatalogPending || (fileParamSelectionPending && !editingPreview.entry);
+  const effectiveViewerLoading = viewerLoading || selectedArtifactGenerating || selectedCatalogPending;
   // The file explorer spins the entry the viewer is actually working on. Artifact
   // generation is only half of that -- a built package still has to be fetched and
   // decoded, and an entry sitting un-built is NOT loading (nothing loads in a static
@@ -1349,7 +1321,6 @@ function CadFileViewSurface({
   const activePerspectiveRef = useRef(null);
   const selectedFileSheetKeyRef = useRef("");
 
-  const desktopRightPanelOpen = false;
 
   // Nothing toggles one panel on its own any more: the panel column has one
   // open id, and `handleTogglePanel` below is the single write that moves it.
@@ -1360,7 +1331,6 @@ function CadFileViewSurface({
     setViewerRuntimeAlert(nextAlert || null);
   }, []);
 
-  const fileSheetResizeHandler = null;
 
   const resetSelectionForStepUpdate = useCallback(() => {
     selectedPartIdsRef.current = [];
@@ -2282,7 +2252,7 @@ function CadFileViewSurface({
   ]);
 
   const viewerPickableReferences = useMemo(() => {
-    if (stepInteractionBlocked || stepModuleTreeSelectionDisabled) {
+    if (stepInteractionBlocked) {
       return [];
     }
     if (isAssemblyView) return referencesForExpandedStepTree(
@@ -2297,7 +2267,6 @@ function CadFileViewSurface({
     referencePartId,
     isAssemblyView,
     stepInteractionBlocked,
-    stepModuleTreeSelectionDisabled,
   ]);
   const viewerPickableFaces = useMemo(
     () => viewerPickableReferences.filter((reference) => isFaceReference(reference)),
@@ -2384,7 +2353,7 @@ function CadFileViewSurface({
   const topologySelectionActive =
     (isAssemblyView && requestedStepTreeTopologyNodeIds.length > 0) ||
     topLevelReferenceSelectionActive;
-  const referenceSelectionUnavailable = stepModuleTreeSelectionDisabled || (
+  const referenceSelectionUnavailable = (
     isStepEntry &&
     selectedEntryHasReferences &&
     topologySelectionActive &&
@@ -2420,9 +2389,9 @@ function CadFileViewSurface({
     editPending: ["submitted", "queued", "building"].includes(editingPreview.state?.state) && !editingPreview.state?.saved,
     previousView: completedViewFile.current === selectedKey && Boolean(selectedMeshData),
     currentPreview: currentPreviewVisible,
-    error: viewerAlert || (!selectedMeshData && catalogError) || missingFileRef,
+    error: viewerAlert || (!selectedMeshData && catalogError),
     progress: selectedLoadProgress || (editingPreview.state.phase ? { phase: editingPreview.state.phase, detail: editingPreview.state.detail } : null),
-    finding: !catalogHydrated || selectedCatalogPending || fileParamSelectionPending,
+    finding: !catalogHydrated || selectedCatalogPending,
     preparing: presentationPending && !effectiveViewerLoading && !selectedMeshPartial,
   });
   // A routine that failed to load has no Animate tool to say so on: it is reported
@@ -2437,12 +2406,7 @@ function CadFileViewSurface({
   } : null;
   const fileStatus = resolveFileStatus({
     hasFile: Boolean(selectedEntry || explicitFileParam),
-    error: viewerAlert || (catalogError && !selectedMeshData ? catalogError : null) || (missingFileRef
-      ? {
-        title: "File unavailable", message: "The selected file could not be found.",
-        tooltip: "This file isn’t in the folder served by the viewer. Check the file path or choose another file.",
-      }
-      : null) || annotationAlert,
+    error: viewerAlert || (catalogError && !selectedMeshData ? catalogError : null) || annotationAlert,
     opening: loading.opening,
     updating: loading.updating,
     loadingProgress: loading.progress,
@@ -2451,8 +2415,7 @@ function CadFileViewSurface({
     savedAs: "STEP file",
     showingPreview: currentPreviewVisible,
     qualityStatus: viewportQualityStatus,
-    hasGeometry: Boolean(selectedMeshData && !selectedMeshPartial),
-    reloading: viewerReloading
+    hasGeometry: Boolean(selectedMeshData && !selectedMeshPartial)
   });
   const fileStatusAlert = resolveFileStatusAlert(fileStatus, viewerAlert, annotationAlert);
   const currentFileStatusAlertKey = fileStatusAlertKey(fileKey(selectedEntry), fileStatusAlert);
@@ -2667,14 +2630,13 @@ function CadFileViewSurface({
     }
     setActiveTreeNodeScrollKey(source === "viewer" || source === "reference" ? `${source}:${Date.now()}:${normalizedNodeId}` : "");
     openFileSheetSection(FILE_SHEET_SECTION_IDS.STEP_TREE, {
-      openSheet: shouldOpenFileSheetForSelectionReveal({ isDesktop: isWideLayout, source })
+      openSheet: shouldOpenFileSheetForSelectionReveal({ isDesktop: true, source })
     });
     if (expandAncestors || expandSelf || source === "reference") {
       expandStepTreeAroundNode(normalizedNodeId, { expandSelf });
     }
   }, [
     expandStepTreeAroundNode,
-    isWideLayout,
     openFileSheetSection,
     selectedFileSheetKind
   ]);
@@ -2684,7 +2646,7 @@ function CadFileViewSurface({
   }, []);
 
   const toggleReferenceSelection = useCallback((referenceId, { multiSelect = false, source = "viewer" } = {}) => {
-    if (stepInteractionBlocked || stepModuleTreeSelectionDisabled) {
+    if (stepInteractionBlocked) {
       return;
     }
     ensureSelectTool();
@@ -2697,9 +2659,6 @@ function CadFileViewSurface({
     const next = !multiSelect && selectedPartIdsRef.current.length
       ? (normalizedReferenceId ? [normalizedReferenceId] : [])
       : computeNextSelectionIds(selectedReferenceIdsRef.current, normalizedReferenceId, { multiSelect });
-    if (next.length && !isWideLayout) {
-      setFilesPanelOpen(false);
-    }
     setSelectedWholeEntryCadRefToken("");
     if (!multiSelect && selectedPartIdsRef.current.length) {
       selectedPartIdsRef.current = [];
@@ -2716,27 +2675,16 @@ function CadFileViewSurface({
     displayStepTreeRoot,
     effectiveActiveReferenceMap,
     focusedAssemblyNodeIds,
-    isWideLayout,
     isAssemblyView,
     referencePartId,
     revealStepTreeNode,
     stepInteractionBlocked,
-    stepModuleTreeSelectionDisabled
   ]);
 
   const clearReferenceSelection = useCallback(() => {
     selectedReferenceIdsRef.current = [];
     setSelectedWholeEntryCadRefToken("");
     setSelectedReferenceIds([]);
-    setCopyStatus("");
-  }, []);
-
-  const resetReferenceInteractionState = useCallback(() => {
-    selectedReferenceIdsRef.current = [];
-    setSelectedWholeEntryCadRefToken("");
-    setSelectedReferenceIds([]);
-    setHoveredListReferenceId("");
-    setHoveredModelReferenceId("");
     setCopyStatus("");
   }, []);
 
@@ -2852,7 +2800,7 @@ function CadFileViewSurface({
   }, []);
 
   const togglePartSelection = useCallback((partId, { multiSelect = false, renderPartId = "", source = "viewer" } = {}) => {
-    if (stepInteractionBlocked || stepModuleTreeSelectionDisabled) {
+    if (stepInteractionBlocked) {
       return selectedPartIdsRef.current;
     }
     if (source !== "viewer") {
@@ -2870,9 +2818,6 @@ function CadFileViewSurface({
     const next = !multiSelect && selectedReferenceIdsRef.current.length
       ? (normalizedPartId ? [normalizedPartId] : [])
       : computeNextSelectionIds(selectedPartIdsRef.current, partId, { multiSelect });
-    if (next.length && !isWideLayout) {
-      setFilesPanelOpen(false);
-    }
     setSelectedWholeEntryCadRefToken("");
     if (!multiSelect && selectedReferenceIdsRef.current.length) {
       selectedReferenceIdsRef.current = [];
@@ -2901,7 +2846,6 @@ function CadFileViewSurface({
     });
     return next;
   }, [
-    isWideLayout,
     isAssemblyView,
     focusedAssemblyNodeIds,
     removeSelectedAssemblyNode,
@@ -2910,7 +2854,6 @@ function CadFileViewSurface({
     validAssemblySelectionIdSet,
     viewerSelectableAssemblyNodeIdSet,
     stepInteractionBlocked,
-    stepModuleTreeSelectionDisabled,
   ]);
 
   const selectStepTreeNode = useCallback((nodeId, { multiSelect = false } = {}) => {
@@ -3119,7 +3062,7 @@ function CadFileViewSurface({
   }, [tabToolMode, clearAssemblySelectionForFocus]);
 
   useEffect(() => {
-    if (!stepModuleTreeSelectionDisabled) {
+    {
       return;
     }
     if (
@@ -3129,7 +3072,7 @@ function CadFileViewSurface({
     ) {
       clearAssemblySelection();
     }
-  }, [clearAssemblySelection, selectedWholeEntryCadRefToken, stepModuleTreeSelectionDisabled]);
+  }, [clearAssemblySelection, selectedWholeEntryCadRefToken]);
 
   const clearSelectionForHiddenLeafIds = useCallback((leafIds, nodeId = "") => {
     const hiddenLeafIds = new Set(
@@ -3381,7 +3324,7 @@ function CadFileViewSurface({
   }, []);
 
   const handleModelHoverChange = useCallback((referenceId) => {
-    if (stepInteractionBlocked || stepModuleTreeSelectionDisabled) {
+    if (stepInteractionBlocked) {
       setHoveredModelReferenceId("");
       setHoveredModelPartId("");
       return;
@@ -3411,7 +3354,6 @@ function CadFileViewSurface({
     viewerInAssemblyMode,
     resolvePickedAssemblyPartId,
     stepInteractionBlocked,
-    stepModuleTreeSelectionDisabled
   ]);
 
   const tangentFaces = useMemo(() => buildTangentFaceGraph(
@@ -3423,7 +3365,7 @@ function CadFileViewSurface({
   ), [selectionFilter, effectiveActiveReferenceMap]);
 
   const handleModelReferenceActivate = useCallback((referenceId, { multiSelect = false } = {}) => {
-    if (stepInteractionBlocked || stepModuleTreeSelectionDisabled) {
+    if (stepInteractionBlocked) {
       return;
     }
     const nextReferenceId = String(referenceId || "").trim();
@@ -3495,11 +3437,10 @@ function CadFileViewSurface({
     toggleReferenceSelection,
     togglePartSelection,
     viewerInAssemblyMode,
-    stepModuleTreeSelectionDisabled
   ]);
 
   const handleModelReferenceDoubleActivate = useCallback((referenceId) => {
-    if (stepInteractionBlocked || stepModuleTreeSelectionDisabled || !isAssemblyView) {
+    if (stepInteractionBlocked || !isAssemblyView) {
       return;
     }
     const pickedPartId = String(referenceId || "").trim();
@@ -3534,7 +3475,6 @@ function CadFileViewSurface({
     isAssemblyView,
     resolvePickedAssemblyPartId,
     stepInteractionBlocked,
-    stepModuleTreeSelectionDisabled,
   ]);
 
   const handleViewportContextMenuOpenChange = useCallback((open) => {
@@ -3700,7 +3640,7 @@ function CadFileViewSurface({
   // Only ever reached under Select (the viewport's menu is offered by that tool alone), so
   // nothing it offers can contradict the tool.
   const handleModelReferenceContext = useCallback((referenceId, { clientX = 0, clientY = 0 } = {}) => {
-    if (stepInteractionBlocked || stepModuleTreeSelectionDisabled) {
+    if (stepInteractionBlocked) {
       setViewerContextMenu(null);
       return;
     }
@@ -3771,7 +3711,6 @@ function CadFileViewSurface({
     selectedEntry,
     stepTreeCopyReferenceMap,
     stepInteractionBlocked,
-    stepModuleTreeSelectionDisabled,
     viewerInAssemblyMode
   ]);
 
@@ -4185,7 +4124,7 @@ function CadFileViewSurface({
     inspectionEnabled: !previewMode,
     viewerAlertOpen,
     tabToolsOpen,
-    isDesktop: isWideLayout,
+    isDesktop: true,
     filesPanelOpen,
     tabToolMode,
     measureDraftActive: Boolean(measureRulerState?.draft?.anchor),
@@ -4242,7 +4181,6 @@ function CadFileViewSurface({
       };
     },
     select({ selectors, replace = true }) {
-      if (stepModuleTreeSelectionDisabled) throw new Error(stepModuleTreeSelectionDisabledReason || 'Selection is unavailable for this model.');
       const names = uniqueStringList(selectors.flatMap(selector => String(selector).split(',').map(value => value.trim())).filter(Boolean));
       if (!names.length) throw new Error('Choose at least one CAD selector.');
       const selections = names.map(selector => resolveSelectorSelection(selector, {
@@ -4372,13 +4310,7 @@ function CadFileViewSurface({
    * in the URL that the catalog does not have, are both something else and
    * have their own answers.
    */
-  const emptyVisible = !previewMode && !selectedEntry && !missingFileRef && !fileParamSelectionPending;
-  const activeSheetWidth = resolveDesktopPanelWidth({
-    open: desktopRightPanelOpen,
-    width: tabToolsWidth,
-    minWidth: DESKTOP_TAB_TOOLS_MIN_WIDTH,
-    maxWidth: DESKTOP_TAB_TOOLS_MAX_WIDTH
-  });
+  const emptyVisible = !previewMode && !selectedEntry;
   const floatingCadToolbarPosition = {
     top: "14px",
     right: "14px"
@@ -4533,7 +4465,6 @@ function CadFileViewSurface({
                 stepAnimation={selectedAnimationRuntime}
                 selectedMeshData={selectedDisplayMeshData}
                 selectedKey={selectedKey}
-                missingFileRef={editingPreview.entry ? "" : missingFileRef}
                 viewerServerInfo={viewerServerInfo}
                 viewerPerspective={viewerPerspective}
                 viewerPerspectiveRef={activePerspectiveRef}
@@ -4689,10 +4620,9 @@ function CadFileViewSurface({
                 key={`step:${selectedKey}`}
                 geometryInspection={{ file: selectedEntry?.file, revision: artifactRevision, references: !viewerLoading && !stepUpdateInProgress ? isAssemblyView ? assemblyStepTreeTopologyReferences : selectedSelectorRuntime?.references || EMPTY_LIST : EMPTY_LIST, parts: !viewerLoading && !stepUpdateInProgress ? selectedMeshData?.parts || EMPTY_LIST : EMPTY_LIST, onHighlight: handleInspectionHighlight, onLoadTopology: loadInspectionTopology }}
                 open={fileSheetOpen}
-                isDesktop={isWideLayout}
-                width={activeSheetWidth || tabToolsWidth}
+                isDesktop
+                width={tabToolsWidth}
                 onOpenChange={setTabToolsOpen}
-                onStartResize={fileSheetResizeHandler}
                 selectedEntry={selectedEntry}
                 viewerLoading={viewerLoading || assemblySidebarLoading}
                 isAssemblyView={isAssemblyView}
@@ -4723,12 +4653,12 @@ function CadFileViewSurface({
                 onClearSelection={clearAssemblySelection}
                 onHoverTreeNode={setHoveredListPartId}
                 onHoverReferenceNode={setHoveredListReferenceId}
-                treeSelectionDisabled={stepInteractionBlocked || stepModuleTreeSelectionDisabled}
+                treeSelectionDisabled={stepInteractionBlocked}
                 treeSelectionDisabledReason={stepInteractionBlocked
                   ? (retainedPreviousStepMeshError
                     ? "Selection is unavailable because the STEP update failed."
                     : "STEP update in progress. Please wait.")
-                  : stepModuleTreeSelectionDisabledReason}
+                  : ""}
                 menuForNode={assemblyNodeMenu}
                 partMenuActions={partMenuActions}
                 onTogglePartVisibility={togglePartVisibility}
@@ -4763,14 +4693,8 @@ function CadFileViewSurface({
         <StatusToast
           copyStatus={copyStatus}
           screenshotStatus={screenshotStatus}
-          persistenceStatus={persistenceStatus}
           previewMode={previewMode}
-          onClear={() => {
-            setCopyStatus("");
-            setScreenshotStatus("");
-            setPersistenceStatus("");
-            lastPersistenceFailureKeyRef.current = "";
-          }}
+          onClear={() => { setCopyStatus(""); setScreenshotStatus(""); }}
         />
 
         <ViewerAlertDialog

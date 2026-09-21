@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { cloneTabSnapshot, createTabRecord, cadWorkspaceDefaultFileSheetWidthForViewport, CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH, CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH } from './state.js';
 import { TAB_TOOL_MODE } from './constants.js';
-import { resolveDesktopPanelWidth } from '../file-view/fileViewState.js';
 import { ENTRY_ICON_KIND, entryIconKind } from '../../../file-viewer/navigation/entryIconKind.js';
 import { CAD_WORKSPACE_LAYOUT_MODE, CAD_WORKSPACE_DESKTOP_BREAKPOINT_PX, CAD_WORKSPACE_FILE_VIEWER_DEFAULT_OPEN_BREAKPOINT_PX, CAD_WORKSPACE_FILE_SHEET_COMPACT_BREAKPOINT_PX, CAD_WORKSPACE_MOBILE_BREAKPOINT_PX, getCadWorkspaceLayoutMode, isCadWorkspaceCompactFileSheetViewport, isCadWorkspaceDesktopViewport, isCadWorkspaceMobileViewport, shouldCadWorkspaceDefaultFileViewerOpen, shouldCadWorkspaceDefaultFileSettingsOpen } from './breakpoints.js';
 
@@ -171,25 +170,3 @@ test("nothing restores into Pose", () => {
   assert.equal(cloneTabSnapshot({ tabToolMode: TAB_TOOL_MODE.POSE }).tabToolMode, TAB_TOOL_MODE.POSE);
 });
 
-test("workspace manual panel widths can open below the model viewport reserve", () => {
-  // ONE panel column now, so one number rather than a pair. A width a person
-  // dragged past the model viewport's reserve is still their width; only the
-  // panel's own range clamps it.
-  assert.equal(
-    resolveDesktopPanelWidth({ open: true, width: 260, minWidth: 150, maxWidth: 520 }),
-    260
-  );
-  assert.equal(
-    resolveDesktopPanelWidth({ open: true, width: 90, minWidth: 150, maxWidth: 520 }),
-    150
-  );
-  assert.equal(
-    resolveDesktopPanelWidth({ open: true, width: 900, minWidth: 150, maxWidth: 520 }),
-    520
-  );
-  // A closed panel takes no room at all.
-  assert.equal(
-    resolveDesktopPanelWidth({ open: false, width: 260, minWidth: 150, maxWidth: 520 }),
-    0
-  );
-});

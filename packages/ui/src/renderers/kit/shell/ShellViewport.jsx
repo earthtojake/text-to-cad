@@ -418,6 +418,9 @@ const ShellViewport = forwardRef(function ShellViewport({
         projection: camera.isOrthographicCamera ? "orthographic" : "perspective",
         position: camera.position.toArray(), target: active.controls?.target?.toArray?.() || null, up: camera.up.toArray(),
         zoom: Number(camera.zoom), halfHeight: readOrthographicHalfHeight(active), zoomPercent: readRuntimeZoomPercent(active),
+        // The depth range the viewport last fitted to what is PLACED in the scene: a
+        // scene that grew in place has a new one, and only a commit re-reads it.
+        near: Number(camera.near), far: Number(camera.far),
         originalBounds: active.zeroPoseBounds
       };
     };
