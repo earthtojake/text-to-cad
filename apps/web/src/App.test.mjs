@@ -20,10 +20,12 @@ await build({
       path: args.kind.startsWith('require') ? require.resolve(args.path) : pathToFileURL(require.resolve(args.path)).href,
       external: true,
     }));
-    plugin.onResolve({ filter: /^@hardcore\/ui\/file-viewer$|^@hardcore\/ui\/renderers\/(cad|dxf|glb|mesh|robot)$|^@hardcore\/ui\/renderers\/cad\/(presentation|empty)$|ViewerTopBar\.jsx$|useViewerAutoReload\.js$/ }, args => ({ path: args.path, namespace: 'host-test' }));
+    plugin.onResolve({ filter: /^@hardcore\/ui\/file-viewer$|^@hardcore\/ui\/renderers\/(step|dxf|glb|mesh|robot|workspace)$|^@hardcore\/ui\/file-viewer\/(presentation|empty)$|ViewerTopBar\.jsx$|useViewerAutoReload\.js$/ }, args => ({ path: args.path, namespace: 'host-test' }));
     plugin.onLoad({ filter: /.*/, namespace: 'host-test' }, args => {
       if (args.path.endsWith('/file-viewer')) return { contents: `let current; export function FileViewer(props){current=props; return null;} export const snapshot=()=>current;`, loader: 'js' };
-      if (args.path.endsWith('/cad')) return { contents: `export {createCadPreferences,CAD_LEGACY_PREFERENCE_KEYS} from ${JSON.stringify(fileURLToPath(new URL('../../../packages/ui/src/renderers/workspace/preferences.ts', import.meta.url)))}; export const createCadRenderer=()=>({id:'cad'});`, loader: 'js', resolveDir: fileURLToPath(new URL('.', import.meta.url)) };
+      if (args.path.endsWith('/step')) return { contents: `export const createStepRenderer=()=>({id:'step'});`, loader: 'js' };
+      // The preferences the host really uses; everything else the workspace module pulls in is a renderer's.
+      if (args.path.endsWith('/workspace')) return { contents: `export {createCadPreferences,CAD_LEGACY_PREFERENCE_KEYS} from ${JSON.stringify(fileURLToPath(new URL('../../../packages/ui/src/renderers/workspace/preferences.ts', import.meta.url)))};`, loader: 'js', resolveDir: fileURLToPath(new URL('.', import.meta.url)) };
       if (args.path.endsWith('/dxf')) return { contents: `export const createDxfRenderer=()=>({id:'dxf'});`, loader: 'js' };
       if (args.path.endsWith('/glb')) return { contents: `export const createGlbRenderer=()=>({id:'glb'});`, loader: 'js' };
       if (args.path.endsWith('/mesh')) return { contents: `export const createMeshRenderer=()=>({id:'mesh'});`, loader: 'js' };
@@ -56,7 +58,7 @@ test('web host preserves compact navigation, history, root state and focus refre
   try {
     await act(() => root.render(createElement(App, { client, server: { rootId: 'a' } })));
     // One viewer renderer per file family, registered together.
-    assert.deepEqual(snapshot().renderers.map(renderer => renderer.id), ['cad', 'dxf', 'glb', 'mesh', 'robot']);
+    assert.deepEqual(snapshot().renderers.map(renderer => renderer.id), ['step', 'dxf', 'glb', 'mesh', 'robot']);
     assert.equal(topBarSnapshot().colorSchemePreference, 'system');
     assert.equal(topBarSnapshot().resolvedColorSchemeMode, 'light');
     await act(() => { systemDark = true; for (const listener of appearanceListeners) listener(); });

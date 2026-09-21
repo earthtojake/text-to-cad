@@ -280,7 +280,7 @@ test("macro views fit visible occurrences without collapsing depth inside an ass
     const records = [{ partBounds }, { partBounds, effectMatrix: new THREE.Matrix4().makeTranslation(100 * scale, -20 * scale, 0) }];
     fitCameraDepthToBounds(camera, bounds);
     const aggregateNear = camera.near;
-    fitCameraDepthToBounds(camera, bounds, { displayRecords: records });
+    fitCameraDepthToBounds(camera, bounds, { placedObjects: records });
     assert.ok(camera.near > aggregateNear * 1000, "offscreen assembly extents cannot destroy closeup precision");
     for (const point of boundsCorners(partBounds)) {
       const projected = point.project(camera);
@@ -288,14 +288,14 @@ test("macro views fit visible occurrences without collapsing depth inside an ass
     }
     records[0].effectMatrix = new THREE.Matrix4().makeTranslation(0, -10 * scale, 0);
     const previousNear = camera.near;
-    fitCameraDepthToBounds(camera, bounds, { displayRecords: records });
+    fitCameraDepthToBounds(camera, bounds, { placedObjects: records });
     assert.ok(camera.near < previousNear, "animated occurrences update the depth fit");
     for (const point of boundsCorners(partBounds)) {
       const projected = point.applyMatrix4(records[0].effectMatrix).project(camera);
       assert.ok(projected.z > -1 && projected.z < 1);
     }
     records[0].tubeGpuState = { active: true };
-    fitCameraDepthToBounds(camera, bounds, { displayRecords: records });
+    fitCameraDepthToBounds(camera, bounds, { placedObjects: records });
     assertClose(camera.near, aggregateNear, 1e-8 * scale);
   }
 });

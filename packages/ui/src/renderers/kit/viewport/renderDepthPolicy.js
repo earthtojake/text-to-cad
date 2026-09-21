@@ -11,7 +11,7 @@ export function viewerDepthSettings(runtime) {
   const halfSize = Number(runtime?.gridConfig?.size) / 2;
   const { x = 0, y = 0, z = 0 } = grid?.position || {};
   return {
-    displayRecords: runtime?.displayRecords,
+    placedObjects: runtime?.placedObjects,
     modelGroup: runtime?.modelGroup,
     groundZ: runtime?.photographicStudio?.ground?.position.z ?? null,
     gridBounds: grid && grid.visible !== false && Number.isFinite(halfSize) && halfSize > 0

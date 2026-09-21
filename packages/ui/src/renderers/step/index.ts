@@ -1,6 +1,6 @@
+// Viewer preferences are the workspace module's, shared by every renderer:
+// a host reads them from `@hardcore/ui/renderers/workspace`, not through a slice.
 import { createCadPreferences, prepareWorkspaceEntry, type CadPreferenceSource, type PreparedWorkspaceEntry, type WorkspaceClientOption } from "../workspace/index.js";
-export { createCadPreferences, CAD_LEGACY_PREFERENCE_KEYS } from "../workspace/index.js";
-export type { CadPreferences, CadPreferenceSource } from "../workspace/index.js";
 import type { PromptContext, PromptReference } from '@hardcore/core/prompt';
 import type { ComponentType } from 'react';
 import { isCadFile } from '@hardcore/core/lib/fileFormats.js';
@@ -10,14 +10,14 @@ import { inspectorPanels } from '../../file-viewer/navigation/panels.js';
 export type { CadLiveBinding, CadLiveController, CadLiveState, CadCameraSnapshot } from './live.js';
 import type { CadLiveBinding } from './live.js';
 
-export interface CadSelectionSlotProps {
+export interface StepSelectionSlotProps {
   selection: readonly PromptReference[];
   selectionKey: string;
   disabled: boolean;
   /** Capture belongs to this source/selection. Host delivery still binds its own destination. */
   createContext(options?: { text?: string; capture?: boolean }): PromptContext;
 }
-export interface CadRendererSlots { selectionExtras?: ComponentType<CadSelectionSlotProps> }
+export interface StepRendererSlots { selectionExtras?: ComponentType<StepSelectionSlotProps> }
 export interface CadCommands {
   selectReference?: { selector: string; key?: string | number } | null;
   captureRequest?: { key: string | number } | null;
@@ -28,26 +28,26 @@ export interface CadCommandSource {
   /** Remove only this admitted command; a later nonce must survive an old acknowledgement. */
   acknowledge?(kind: keyof CadCommands, key: string | number): void;
 }
-export interface CadRendererOptions {
+export interface StepRendererOptions {
   client: WorkspaceClientOption;
-  slots?: CadRendererSlots;
+  slots?: StepRendererSlots;
   commands?: CadCommandSource;
   live?: CadLiveBinding;
   preferences?: CadPreferenceSource;
 }
-export interface PreparedCadDocument extends PreparedWorkspaceEntry {
-  services: Omit<CadRendererOptions, 'client'>;
+export interface PreparedStepDocument extends PreparedWorkspaceEntry {
+  services: Omit<StepRendererOptions, 'client'>;
 }
 
 // A 2D drawing, a native glTF scene, a triangle mesh and a robot description have their own
 // renderers (`renderers/dxf`, `renderers/glb`, `renderers/mesh`, `renderers/robot`).
 const OTHER_RENDERERS_FILE = /\.(?:dxf|glb|stl|3mf|urdf|srdf|sdf)$/i;
 
-/** Registers CAD without loading Three.js, a viewport, or a backend connection. */
-export function createCadRenderer({ client, ...services }: CadRendererOptions) {
+/** Registers STEP without loading Three.js, a viewport, or a backend connection. */
+export function createStepRenderer({ client, ...services }: StepRendererOptions) {
   services.preferences ||= createCadPreferences();
-  return defineFileRenderer<PreparedCadDocument>({
-    id: 'cad',
+  return defineFileRenderer<PreparedStepDocument>({
+    id: 'step',
     priority: 100,
     matches: (file) => !OTHER_RENDERERS_FILE.test(file.path) && (file.mediaType === 'cad' || Boolean(isCadFile(file.path))),
     panels: ({ ready }) => inspectorPanels(ready),
@@ -55,6 +55,6 @@ export function createCadRenderer({ client, ...services }: CadRendererOptions) {
       const prepared = await prepareWorkspaceEntry(client, context);
       return { data: { ...prepared.data, services }, dispose: prepared.dispose };
     },
-    load: () => import('./CadRenderer.js')
+    load: () => import('./StepRenderer.js')
   });
 }

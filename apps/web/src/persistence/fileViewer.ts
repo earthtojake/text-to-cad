@@ -1,7 +1,5 @@
 import { clampPanelWidth } from '@hardcore/ui/navigation';
 import type { FileViewerState, JsonValue } from '@hardcore/ui/file-viewer';
-import type { CadEntry } from '@hardcore/core/client';
-import { readFileSessionState } from '@hardcore/ui/renderers/cad/state';
 import { cadWorkspaceDefaultFileSheetWidthForViewport, readCadDirectorySessionState } from '../client/workbench/persistence.js';
 import { mergeChangedRecords } from './statePatch';
 
@@ -38,20 +36,4 @@ export function writeViewState(rootId: string, viewer: FileViewerState, storage:
     next.renderers = mergeChangedRecords(latest.renderers ?? {}, baseline.renderers ?? {}, viewer.renderers ?? {});
     storage.setItem(keyFor(rootId), JSON.stringify(next));
   } catch { /* Storage failure does not prevent viewing. */ }
-}
-/** Old web sessions used this origin's sessionStorage, with the default namespace. Only the `cad` renderer's files had one. */
-export function restoreCadFileStates(state: FileViewerState, entries: CadEntry[], storage: Storage = sessionStorage): FileViewerState {
-  const renderers = { ...state.renderers };
-  let changed = false;
-  for (const entry of entries) {
-    // A DXF, a GLB, a triangle mesh and a robot description have their own renderers and records; an old `cad` session is not theirs.
-    if (/\.(?:dxf|glb|stl|3mf|urdf|srdf|sdf)$/i.test(entry.file)) continue;
-    const key = JSON.stringify([entry.rootRelativeFile || entry.file, 'cad']);
-    if (key in renderers) continue;
-    const session = readFileSessionState('', entry.file, entry, { storage });
-    if (!session) continue;
-    renderers[key] = { version: 1, fileSession: { ...session } } as JsonValue;
-    changed = true;
-  }
-  return changed ? { ...state, renderers } : state;
 }

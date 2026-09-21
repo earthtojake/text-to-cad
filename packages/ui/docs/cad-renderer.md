@@ -1,16 +1,18 @@
 # CAD renderer
 
-The CAD renderer is the existing viewport, floating toolbar, file sheets,
-reference interactions, measurement and drawing tools, animation,
-loading artwork and alerts, extracted into `@hardcore/ui`. This migration is a
-behavior-preserving refactor apart from the approved prompt-action mapping and
-reference-tooltip removal described in [ViewerHost](viewer-host.md). Changing
-a default, control, layout, saved preference or interaction requires separate
-work and its own review.
+The CAD viewer is the viewport, floating toolbar, file sheets, reference
+interactions, measurement and drawing tools, animation, loading artwork and
+alerts, extracted into `@hardcore/ui`. This migration is a behavior-preserving
+refactor apart from the approved prompt-action mapping and reference-tooltip
+removal described in [ViewerHost](viewer-host.md). Changing a default, control,
+layout, saved preference or interaction requires separate work and its own
+review.
 
-The implementation is under `src/renderers/cad`. `CadFileView` and `CadViewer`
-are private implementation components. Applications use the registration and
-the shared `FileViewer`; they do not import another application's source.
+It is no longer one component stack: there is one renderer per file family over
+a shared, format-blind [kit](#kit) and [shell](#shell). The STEP renderer is
+under `src/renderers/step`; `CadFileView` and `CadViewer` are its private
+implementation components. Applications use the registrations and the shared
+`FileViewer`; they do not import another application's source.
 
 ## Kit
 
@@ -20,7 +22,7 @@ per file family, each a vertical slice over the kit: `src/renderers/dxf`
 ([DXF renderer](#dxf-renderer)), `src/renderers/glb` ([GLB renderer](#glb-renderer)),
 `src/renderers/mesh` (STL and 3MF, [Mesh renderer](#mesh-renderer)),
 `src/renderers/robot` (URDF, SRDF and SDF, [Robot renderer](#robot-renderer)) and
-`src/renderers/cad` (STEP, until it is renamed in turn). The kit imports itself, shared UI
+`src/renderers/step` (STEP and STP, [STEP renderer](#step-and-source-separation)). The kit imports itself, shared UI
 (`primitives`, `lib`, `drawing`) and the format-blind half of `@hardcore/core`
 (`lib/viewer/*`, `lib/perspective.js`, `common/viewSettings.js`,
 `common/sceneSettings.js`, the Render studio); a renderer imports the kit, never
@@ -43,25 +45,25 @@ lists, `features: { sections, modes, surfaceStyles }` (`ViewFeatures` in
 (`VIEW_SECTION_IDS`), the presets and the surface styles it lists. A section left
 out resolves off whatever was saved, and the saved settings are never rewritten.
 Core names two lists, `ALL_VIEW_FEATURES` and `EDGELESS_VIEW_FEATURES` (no Edges,
-Clip or Explode; Solid and Render; Shaded and Flat). The CAD renderer passes the
-first for a STEP and the second for every other format it shows, in three places that
-must agree: the view-settings store (`configure({ features })`), the Display tab,
+Clip or Explode; Solid and Render; Shaded and Flat). The STEP renderer passes the
+first, in three places that must agree: the view-settings store (`configure({ features })`), the Display tab,
 and the headless renderer (`renderMeshScene.js`). The GLB, mesh and robot renderers
 pass the second to the shell, which configures the store and the tab from the one list.
 
 **Tools.** The strip draws the list it is handed: `{ id, label, icon, active,
 disabled, onSelect, description?, menu?, secondPressOpensMenu?, subToolbar? }`.
-`cadInteractionTools` in `cad/components/workbench/FloatingToolBar.js` builds
-this renderer's list per format. `createToolModes({ defaultMode, modes })`
+`cadInteractionTools` in `step/components/workbench/FloatingToolBar.js` builds
+the STEP renderer's list. `createToolModes({ defaultMode, modes })`
 answers what a press does (`next`), what a saved tab may record (`persisted`) and
-which tool a file opens in (`restore`); this renderer's declaration is
+which tool a file opens in (`restore`); the STEP declaration is
 `CAD_TOOL_MODES` in `workbench/constants.js`. The playbar follows the clock on
 the runtime it is handed (`runtime.clock`, an `AnimationClock`); the Pose overlay
 takes a plain handle list, as a prop or (for an owner that poses its model
 outside React) as a ref whose list it replaces per pose.
 
 **The scene contract** (`kit/scene.js`, a JSDoc typedef): `{ object3D, bounds,
-restBounds?, dispose(), setSurfaceLook?(look), keepsAuthoredFinish?, pick?(ray) }`.
+restBounds?, dispose(), setSurfaceLook?(look), keepsAuthoredFinish?, pick?(ray),
+placedObjects?() }`.
 The viewport adopts `object3D`, frames `restBounds`, lights and floors `bounds`,
 and hands over the surface look the Display tab resolved
 (`{ materialSettings, authored, surface: { style, opacity } }`); it only ever
@@ -72,6 +74,9 @@ and the robot renderer's all of it. `pick(ray)` is what `usePointerPick` calls: 
 hook owns the pointer (which press is a tap, one hover pick per frame, the
 cursor), the scene says what is under the ray, and its renderer says what a hit
 means. A tap acts at once: nothing waits to tell it from a double-click.
+`placedObjects()` is for the near/far fit alone: a camera inside a mostly empty
+aggregate box can still be well outside everything visible in it, so a scene that
+placed many things says so and is fitted on them instead of on its whole box.
 A mesh names where "Color by part" deals it a palette colour in
 `userData.cadFillIndex` (otherwise meshes take the palette in traversal order),
 and a material with no source colour says so with `userData.cadSourceColor = false`.
@@ -88,8 +93,9 @@ stale. The same script holds every split-out renderer to its slice
 backend connection a file is prepared against, the host's viewer preferences and
 command types, and `useWorkspaceDocument`), shared UI and core, and never another
 renderer. The
-unbound-identifier test covers the kit and the split-out renderers with the CAD
-renderer.
+unbound-identifier test (`src/renderers/unboundIdentifiers.test.js`) scans the
+whole renderer tree, so a renamed or added slice is covered the moment it
+exists.
 
 ### Shell
 
@@ -157,23 +163,20 @@ per-pane state, fullscreen's camera, gated Display sections, settings that never
 replace the canvas), and Draw has one scenario (`harness/drawScenario.mjs`)
 run under the shell (`kit/tools/draw/Draw.browser.test.mjs`).
 
-The CAD renderer still carries its own copy of the frame, the viewport
+The STEP renderer still carries its own copy of the frame, the viewport
 orchestration and the session record inside `CadFileView.js`, `CadRenderPane.js`
 and `CadViewer.js`; it shares the leaf pieces (`liveBinding`, `loadAlerts`,
 `fileStatus`, `loadingState`, `BlockingViewerAlert`, `useViewerShortcuts`,
-`promptDeliveryMessage`, `chromeBackdrop`). It moves onto the shell when it
-becomes the STEP renderer.
+`promptDeliveryMessage`, `chromeBackdrop`). Moving it onto the shell is what is
+left of the split.
 
-**It has no real-browser test of its own any more.** It matches `.step` and `.stp`
-alone now, and opening one needs a component-SURF package — an `assembly.json`
-descriptor, a `.surf` container per component, and the tessellation, LOD and memory
-pipeline behind them — which the in-memory harness cannot fabricate.
-`CadDrawing.browser.test.mjs` and `CadRenderer.browser.test.mjs` used a small DXF as
-the smallest file this renderer could open without a backend; when DXF left, they had
-nothing to open. Their coverage now sits in `kit/tools/draw/Draw.browser.test.mjs`
-(the same Draw scenario, under the shell) and in each renderer's own browser test
-(each asserts that STEP-only Display sections are absent). Whoever moves STEP onto the
-shell should bring a servable STEP fixture with it.
+Its safety net for that move is `step/StepRenderer.browser.test.mjs`, which
+opens a real `.step` in a real browser: a three-part component-SURF package with
+one revolute mate, one named pose and one routine, committed under
+`step/__fixtures__/step/` and served by `harness/stepScenario.mjs` exactly as
+the backend serves one. `kit/tools/draw/Draw.browser.test.mjs` covers the Draw
+scenario under the shell, and each renderer's own browser test asserts that the
+STEP-only Display sections are absent from it.
 
 ## DXF renderer
 
@@ -256,7 +259,7 @@ the viewer was inventing from the file; a drawing is not that.
 
 `createGlbRenderer` (`@hardcore/ui/renderers/glb`, id `glb`) shows a `.glb` as
 its NATIVE glTF scene, always: one path whether or not a clip is playing. The
-CAD renderer does not match `.glb`.
+STEP renderer does not match `.glb`.
 
 - **Scene** (`glb/glbScene.js`): the file's hierarchy (nodes, skins, morph
   targets, authored materials) placed in CAD space by the document's root
@@ -335,7 +338,7 @@ renderer does not match either.
 `.urdf`, `.srdf` or `.sdf` as its kinematic tree. One renderer, three parsers:
 an SRDF is its paired URDF with the SRDF's semantics on it (group states, end
 effectors, planning groups), an SDF a robot with one more tab. Nothing below the
-loader asks which it is. The CAD renderer matches none of them.
+loader asks which it is. The STEP renderer matches none of them.
 
 - **Scene** (`robot/robotScene.js`, no React, no DOM): a scene GRAPH. One `Group`
   per link, a link's meshes attached to it once, and each joint as three nested
@@ -423,7 +426,7 @@ loader asks which it is. The CAD renderer matches none of them.
 ```tsx
 import { createCadClient } from '@hardcore/core/client';
 import { FileViewer } from '@hardcore/ui/file-viewer';
-import { createCadPreferences, createCadRenderer } from '@hardcore/ui/renderers/cad';
+import { createCadPreferences, createStepRenderer } from '@hardcore/ui/renderers/step';
 import '@hardcore/ui/styles.css';
 
 const client = createCadClient({
@@ -435,7 +438,7 @@ const preferences = createCadPreferences({
   initial: restoredPreferences,
   onChange: savePreferences
 });
-const renderers = [createCadRenderer({ client, preferences })];
+const renderers = [createStepRenderer({ client, preferences })];
 
 // Keep client, preferences and registrations stable for this host root.
 <FileViewer
@@ -453,14 +456,14 @@ The host owns source access, file selection, URL/history, title, navigation,
 the file tree, panel width, browser storage and application color scheme.
 It calls `client.dispose()` when the root connection is no longer owned.
 
-`createCadRenderer` accepts an existing client or an async function receiving
+`createStepRenderer` accepts an existing client or an async function receiving
 `PrepareContext`. The latter lets desktop obtain the local backend only when
 opening a CAD file. The host owns backend startup, authorization, and any
 runtime recovery actions. Construction does not fetch files or load Three.js.
 Preparation resolves metadata with the viewer's abort signal; the component
 and viewport are imported lazily after renderer selection.
 
-The CAD renderer declares the Inspector panel, `cad-file-sheet`. The shared
+The STEP renderer declares the Inspector panel, `cad-file-sheet`. The shared
 viewer owns its frame and open state; the renderer portals panel contents into
 `panelSlot`. The retired `cad-theme` panel is not declared; hosts migrate its
 saved selection to the renderer's default Inspector.
@@ -506,7 +509,7 @@ Hosts preserve these existing preference keys and precedence when migrating:
 | Global fullscreen orbit speed | `cad-viewer:orbit:v1` |
 | Per-file CAD session | `cad-viewer:file-session:v1:<namespace>:<file>` |
 
-`@hardcore/ui/renderers/cad/state` exports the existing tab/file
+`@hardcore/ui/renderers/step/state` exports the existing tab/file
 normalizers and width defaults for migration. `readFileSessionState` requires
 an explicit `{ storage }` supplied by the host. `CAD_LEGACY_PREFERENCE_KEYS`
 exports the directory key name. Retired
@@ -548,7 +551,7 @@ nonce, so an old acknowledgement cannot clear a newer request or replay after a
 remount. A capture waits for ready geometry; a selected reference waits until it
 can resolve against the current model.
 
-`@hardcore/ui/renderers/cad/presentation` exports the lightweight
+`@hardcore/ui/file-viewer/presentation` exports the lightweight
 `ViewerLoadingOverlay`, `MissingFileAlert` and `StatusToast` for host bootstrap and generic
 viewer loading/error presentations. Their markup and wording are the original
 CAD artwork. They mount inside a relative container and require no CAD client.
@@ -560,7 +563,7 @@ captures a PNG without prompt delivery or clipboard effects. It never substitute
 catalog or persisted state for a live viewport. On unmount it retains only a
 serializable inactive snapshot; controls require the tab to be shown. See the
 [viewer host contract](viewer-host.md#app-specific-interfaces) for lifecycle and
-stale-operation rules and [`live.ts`](../src/renderers/cad/live.ts) for signatures.
+stale-operation rules and [`live.ts`](../src/renderers/step/live.ts) for signatures.
 
 ## Lifetimes
 
@@ -641,7 +644,7 @@ axes and retains its snap and drag interactions.
 See [settings controls](settings-ui.md), [render capabilities](render-types.md)
 and [renderer contracts](renderers.md) for changes inside the shared package.
 
-The optional `@hardcore/ui/renderers/cad/empty` entry exports `EmptyCadBackdrop` for the web host’s missing-file presentation. It lazily mounts the same empty CAD viewport with the host’s `colorScheme`, and overlays its `children`. It owns no file access, catalog subscription, or persisted state. This preserves the original grid and camera behind `MissingFileAlert` without loading CAD into the master viewer.
+The optional `@hardcore/ui/file-viewer/empty` entry exports `EmptyCadBackdrop` for the web host’s missing-file presentation. It lazily mounts the same empty CAD viewport with the host’s `colorScheme`, and overlays its `children`. It owns no file access, catalog subscription, or persisted state. This preserves the original grid and camera behind `MissingFileAlert` without loading CAD into the master viewer.
 
 ## STEP and source separation
 
@@ -814,7 +817,7 @@ only interactive things. Leaving keeps the pose.
 One handle system serves both formats. Two adapters turn a description and its
 CURRENT pose into one plain list, in model space: `{ id, label, kind, pivot,
 axis, toward, value, min, max, unit, onChange }` (`robot/jointHandles.js`, and
-the CAD renderer's `workbench/jointHandles.js` for a STEP). A robot's joint
+the STEP renderer's `workbench/jointHandles.js`). A robot's joint
 frame is READ, not solved: it is the world matrix of the joint's motion group in
 the scene graph, which already sits before an SDF joint's static child offset; a
 STEP mate's world-at-rest axis is carried by the

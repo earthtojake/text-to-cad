@@ -1,7 +1,7 @@
 # Client-side STEP feature detection
 
 Feature detection helps people navigate and select geometry in the shared Model
-tree. It belongs to the CAD renderer in `@hardcore/ui`; web and desktop run the
+tree. It belongs to the STEP renderer in `@hardcore/ui`; web and desktop run the
 same code. It reads saved geometry through the injected CAD resource service.
 It never reads model source, writes artifacts or executes a CAD kernel.
 
@@ -71,7 +71,7 @@ and host preference storage. Refreshing the page or restarting the app loses it.
 There is no recognition sidecar, disk database, compile step or backend endpoint.
 
 Advance `MODELING_RECOGNITION_VERSION` in
-[modelingRecognitionCache.js](../src/renderers/cad/workbench/modelingRecognitionCache.js)
+[modelingRecognitionCache.js](../src/renderers/step/workbench/modelingRecognitionCache.js)
 when inference rules, tolerances or serialized results change, including returned
 labels, measurements and face/edge grouping. This is an internal algorithm
 revision, unrelated to the repository's release version. Presentation-only
@@ -129,14 +129,14 @@ concurrency.
 
 ## Implementation and verification
 
-- [useModelingRecognition](../src/renderers/cad/workbench/useModelingRecognition.js):
+- [useModelingRecognition](../src/renderers/step/workbench/useModelingRecognition.js):
   descriptor demand, per-inspector queue, resource requests and cancellation.
-- [modelingTree.worker](../src/renderers/cad/workbench/modelingTree.worker.js):
+- [modelingTree.worker](../src/renderers/step/workbench/modelingTree.worker.js):
   resource-ticket loading, SURF parsing and inference.
-- [modelingTree](../src/renderers/cad/workbench/modelingTree.js) and adjacent
+- [modelingTree](../src/renderers/step/workbench/modelingTree.js) and adjacent
   `modeling*` helpers: pure inference and canonical reference mapping.
-- [modelingPresentation](../src/renderers/cad/workbench/modelingPresentation.js) and
-  [ModelingTree](../src/renderers/cad/components/workbench/ModelingTree.jsx):
+- [modelingPresentation](../src/renderers/step/workbench/modelingPresentation.js) and
+  [ModelingTree](../src/renderers/step/components/workbench/ModelingTree.jsx):
   occurrence binding, presentation, expansion and selection.
 
 Keep renderer-private pure helpers here; they do not need to move to core merely
@@ -147,6 +147,6 @@ Run `npm --prefix packages/ui test` from the repo root for helper and React
 coverage. Recognition tests cover real STEP-derived fixtures, version/geometry
 invalidation, cache bounds and warm reopening, expansion during pending work,
 repeated instances, retry, disposal and rejected late results. Fixture provenance
-lives in the [fixture guide](../src/renderers/cad/workbench/__tests__/fixtures/README.md).
+lives in the [fixture guide](../src/renderers/step/workbench/__tests__/fixtures/README.md).
 Add small test-owned regression fixtures for changed inference rules. Rebuild
 package exports and the bundled viewer before testing either app.

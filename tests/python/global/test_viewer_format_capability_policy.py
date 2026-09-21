@@ -25,7 +25,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 UI_ROOT = REPO_ROOT / "packages" / "ui" / "src"
-CLIENT_ROOT = UI_ROOT / "renderers" / "cad"
+CLIENT_ROOT = UI_ROOT / "renderers" / "step"
 
 # Every remaining identity check is a unification candidate. Lower these as phases land;
 # never raise them.

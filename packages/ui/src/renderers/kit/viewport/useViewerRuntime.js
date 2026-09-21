@@ -764,7 +764,10 @@ export function useViewerRuntime({
         edgePickLines: null,
         vertexPickPoints: null,
         edgePickObjects: [],
-        displayRecords: [],
+        // What a scene tells the depth fit it has placed, each with its own bounds and
+        // transforms (`fitCameraDepthToBounds`). A scene that says nothing leaves it empty
+        // and the fit uses the whole model's box.
+        placedObjects: [],
         modelBounds: null,
         modelRadius: 1,
         activeModelKey: "",

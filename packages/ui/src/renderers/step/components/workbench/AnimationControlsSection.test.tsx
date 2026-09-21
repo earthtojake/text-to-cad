@@ -2,8 +2,8 @@ import React from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { ViewportAnimationBar, animationControlsHaveContent } from '../../../../../dist/renderers/cad/components/workbench/AnimationControlsSection.js';
-import { AnimationClockProvider, createAnimationClock } from '../../../../../dist/renderers/cad/workbench/animationClockStore.js';
+import { ViewportAnimationBar, animationControlsHaveContent } from '../../../../../dist/renderers/step/components/workbench/AnimationControlsSection.js';
+import { AnimationClockProvider, createAnimationClock } from '../../../../../dist/renderers/step/workbench/animationClockStore.js';
 
 beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });

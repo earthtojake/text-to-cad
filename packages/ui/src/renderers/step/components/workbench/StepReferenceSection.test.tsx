@@ -1,7 +1,7 @@
 import React from 'react';
 import {cleanup,fireEvent,render,screen,within} from '@testing-library/react';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
-import {StepReferenceSection} from '../../../../../dist/renderers/cad/components/workbench/StepReferenceSection.js';
+import {StepReferenceSection} from '../../../../../dist/renderers/step/components/workbench/StepReferenceSection.js';
 Object.assign(globalThis,{React});
 beforeEach(()=>{
  vi.stubGlobal('ResizeObserver',class {observe(){} unobserve(){} disconnect(){}});

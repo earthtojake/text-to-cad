@@ -81,6 +81,11 @@ const EMPTY = Object.freeze({});
  *   default stays what a session falls back to; `never` lists recorded tools this file does not come back in.
  * @param {{ available: boolean, bounds: () => import("../scene.js").SceneBounds | null }} [options.selection]  What
  *   "Zoom to selection" frames. Without it the menu item is off.
+ * @param {() => void} [options.onCameraSettled]  The camera came to rest on a new view: it moved and was
+ *   recorded, a presentation camera moved (fullscreen, which records nothing), or the viewport's size
+ *   changed — which can expose part of a scene without changing position, target or zoom at all. For a
+ *   renderer that samples the camera to decide what detail its scene needs. It is called often; debounce
+ *   it if that matters.
  * @param {object} [options.displayTabProps]  Extra Display tab props for sections the renderer's FEATURES opt into.
  * @param {string} [options.sceneScaleMode]
  */
@@ -88,7 +93,7 @@ export function useRendererShell({
   view, services, resource, modelKey, revisionKey = "", features, toolModes = null, scene, load,
   animation = null, live = EMPTY, promptReferences = null,
   escape = EMPTY, rendererState = EMPTY, toolRestore = EMPTY, selection = null, displayTabProps = EMPTY,
-  sceneScaleMode = VIEWER_SCENE_SCALE.CAD
+  onCameraSettled = null, sceneScaleMode = VIEWER_SCENE_SCALE.CAD
 }) {
   const host = useViewerHost();
   const viewerElement = useContext(ViewerElementContext);
@@ -149,7 +154,13 @@ export function useRendererShell({
   useEffect(() => { scheduleSessionSave(); }, [displaySettings, inspectorTab, toolMode, rendererState, scheduleSessionSave]);
   useEffect(() => () => flushSession(), [flushSession]);
 
+  // Stable across renders: the viewport keeps it in a ref for the life of the runtime.
+  const cameraSettledRef = useRef(onCameraSettled);
+  cameraSettledRef.current = onCameraSettled;
+  const reportCameraSettled = useCallback(() => cameraSettledRef.current?.(), []);
   const handlePerspectiveChange = useCallback((nextPerspective) => {
+    // A camera that moved is a camera that settled, whether or not the file records it.
+    cameraSettledRef.current?.();
     if (previewMode) return;
     const snapshot = clonePerspectiveSnapshot(nextPerspective);
     if (!snapshot) return;
@@ -396,6 +407,7 @@ export function useRendererShell({
     frame: {
       view, hostRef, hostElement, viewerElement, sceneBackdrop, colorScheme, modelKey, presentationKey, sceneScaleMode, scene,
       viewerRef, viewUpdate, resolvedScene, viewerPerspective, activePerspectiveRef, handlePerspectiveChange,
+      onCameraSettled: reportCameraSettled,
       previewMode, previewOrbitSpeed, setPreviewOrbitSpeed, viewerLoading, loading, presentationState,
       handlePresentationChange, viewerAlert, fileStatusAlert, viewerAlertOpen, setViewerAlertOpen, setRuntimeAlert,
       setZoomPercent, drawToolActive, drawing, animationAvailable, animation, composer, capture,

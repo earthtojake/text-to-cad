@@ -10,6 +10,10 @@
 // is when it happens most — the G-code and client-DXF removals left six such references
 // across two files.
 //
+// It lives beside the renderers, not inside one, and scans the WHOLE renderer tree rather
+// than a list of slices: a renderer that is renamed, split out or added is covered the
+// moment its files exist, and cannot be silently unscanned by a list nobody updated.
+//
 // Scope is what makes this precise rather than a grep: Babel resolves each reference against
 // its enclosing scopes, so shadowing, hoisting, destructuring and JSX all behave correctly
 // and locals never look like globals.
@@ -26,6 +30,9 @@ import traverseModule from "@babel/traverse";
 const traverse = traverseModule.default ?? traverseModule;
 
 const CLIENT_ROOT = path.dirname(fileURLToPath(import.meta.url));
+
+// Every file family, so a missing one is a failure rather than a smaller number.
+const SLICES = ["step", "kit", "dxf", "glb", "mesh", "robot", "workspace"];
 
 // Globals the browser (and the test runner, for the few node-facing modules here) provides.
 // Deliberately explicit: an allowlist that grows by hand is the point — a new name showing up
@@ -109,10 +116,12 @@ function unboundReferences(filePath) {
   return unbound;
 }
 
-test("every identifier the CAD renderer reads is bound", () => {
-  // The format-blind kit the renderers compose, and the renderers split out of this one, are the same client tree.
-  const files = ["", "../kit", "../dxf", "../glb", "../mesh", "../robot", "../workspace"].flatMap(root => clientSourceFiles(path.join(CLIENT_ROOT, root)));
-  assert.ok(files.length > 50, `expected the client tree at ${CLIENT_ROOT}, found ${files.length} files`);
+test("every identifier the viewer renderers read is bound", () => {
+  // The format-blind kit and every renderer that composes it are one client tree.
+  const files = clientSourceFiles(CLIENT_ROOT);
+  assert.ok(files.length > 300, `expected the renderer tree at ${CLIENT_ROOT}, found ${files.length} files`);
+  const scanned = new Set(files.map(file => path.relative(CLIENT_ROOT, file).split(path.sep)[0]));
+  assert.deepEqual(SLICES.filter(slice => !scanned.has(slice)), [], "a renderer contributed no sources: it was renamed, moved or emptied");
 
   const offenders = files.flatMap((file) => unboundReferences(file));
   assert.deepEqual(

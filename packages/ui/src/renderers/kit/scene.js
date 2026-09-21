@@ -25,6 +25,10 @@
  *   so Inspect gives it a small neutral environment to reflect.
  * @property {(ray: import("three").Ray) => ({ id: string, point: import("three").Vector3 } | null)} [pick]
  *   Only scenes that select.
+ * @property {() => object[]} [placedObjects]  The things the scene has placed, each with its own
+ *   `partBounds` and transforms, for the near/far fit alone (`fitCameraDepthToBounds`): a camera
+ *   inside a mostly empty aggregate box can still be well outside everything visible in it. A
+ *   scene that says nothing is fitted on its whole box.
  */
 
 /** The bounds a camera fit uses for a scene: its rest placement when it has one. */

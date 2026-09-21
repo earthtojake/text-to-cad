@@ -1,4 +1,4 @@
-import type { CadCommands, CadCommandSource } from "@hardcore/ui/renderers/cad";
+import type { CadCommands, CadCommandSource } from "@hardcore/ui/renderers/step";
 import { useExplorer } from "@renderer/state/explorer";
 import type { ExplorerRoot } from "@shared/types";
 

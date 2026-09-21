@@ -622,7 +622,7 @@ the `a` component draws a candidate as a button once it is known to be a
 file or a folder, and as the words it was otherwise. A file opens in the
 explorer with its renderer; a folder is revealed in the tree; a path with
 a selector (`bracket.step#o1.2`, `#label.f45`) opens the file in the
-viewer and hands the selector to the CAD renderer's command source. Paths
+viewer and hands the selector to the STEP renderer's command source. Paths
 are relative to the thread's root — its worktree when it has one.
 
 Activity summaries stay neutral even when a call fails. A separate red failure count marks a folded group, and its failed rows show a red **Failed** indicator; expand a row for the original error. Completed thinking rows use an ellipsis, with a spinner while thinking is active. Status comes from the agent’s tool-call status, not from words in its output.
@@ -1653,7 +1653,7 @@ the inactive viewport is unmounted. Closing the root's last file tab or leaving
 the project disposes the connection and cancels its pending work. Each acquisition
 checks main's current viewer origin; a restarted backend replaces the old client.
 
-The shared CAD renderer separately retains completed STEP CPU geometry in a
+The STEP renderer separately retains completed STEP CPU geometry in a
 bounded cache, including assemblies larger than the component LRU. Returning
 to a warm file restores that geometry without reloading its components; the
 file's camera, display settings and motion state remain separate. Reuse requires

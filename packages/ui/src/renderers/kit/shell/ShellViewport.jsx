@@ -98,6 +98,13 @@ const ShellViewport = forwardRef(function ShellViewport({
   onCameraZoomPercentChange = null,
   onPresentationChange = null,
   onViewerAlertChange = null,
+  // The camera came to rest on a new view: a presentation camera that moved (fullscreen's
+  // orbit, which persists nothing and so emits no perspective), or a viewport whose size
+  // changed. A renderer that samples the camera — to decide what detail the scene needs,
+  // say — cannot see either from the stored perspective alone: an aspect change can expose
+  // a part without changing position, target or zoom. The viewport says the camera settled;
+  // what that is worth is the renderer's.
+  onCameraSettled = null,
   // A renderer's own layer over the canvas: a node, or `(viewport) => node` for one that
   // needs the viewport itself ({ runtimeRef, hostRef, viewerReadyTick }: the live runtime,
   // the element pointer events arrive on, and a tick that changes when the runtime does).
@@ -173,6 +180,7 @@ const ShellViewport = forwardRef(function ShellViewport({
   const modelKeyRef = useRef(modelKey);
   const sceneScaleModeRef = useRef(normalizedSceneScaleMode);
   const cameraMovedRef = useRef(null);
+  cameraMovedRef.current = onCameraSettled;
 
   const resolveViewerRenderState = useMemo(() => createViewerRenderStateResolver(), []);
   const renderState = useMemo(() => resolveViewerRenderState({ themeSettings, displaySettings }),
@@ -314,6 +322,9 @@ const ShellViewport = forwardRef(function ShellViewport({
     if (!refitOpenFraming(runtime)) syncRuntimeViewportFraming(runtime);
     syncCameraZoomPercent(runtime);
     emitPerspectiveChange(runtime);
+    // A resize can change what is on screen without changing the stored perspective,
+    // so the settle is reported here rather than left to perspective deduplication.
+    cameraMovedRef.current?.();
   }, [syncCameraZoomPercent]);
 
   const hasViewportContent = Boolean(scene);
@@ -777,6 +788,7 @@ const ShellViewport = forwardRef(function ShellViewport({
     if (isLoading || !scene) {
       cancelCameraTransition(runtime);
       runtime.zeroPoseBounds = null;
+      runtime.placedObjects = [];
       detachScene(runtime);
       runtime.requestRender();
       if (isLoading) setError("");
@@ -789,6 +801,7 @@ const ShellViewport = forwardRef(function ShellViewport({
     }
     runtime.hasVisibleModel = true;
     runtime.activeModelKey = modelKey || "";
+    runtime.placedObjects = scene.placedObjects?.() || [];
     // TWO boxes: `bounds` is the scene as posed now, which lighting, shadows and the
     // floor follow; the camera is grounded on the rest placement, so a playing
     // routine never re-frames the model and 100% keeps meaning "framed at rest".

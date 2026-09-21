@@ -81,7 +81,7 @@ session state.
 Per-file state survives reloads in the same browser tab without becoming a
 durable global preference. The host's
 [fileViewer.ts](../src/persistence/fileViewer.ts) restores existing records with
-the validated reader exported by `@hardcore/ui/renderers/cad/state`.
+the validated reader exported by `@hardcore/ui/renderers/step/state`.
 
 Legacy records use a namespace and file key; the former standalone web host
 used the default namespace. They remain readable without being rewritten or
@@ -109,7 +109,7 @@ Material appearance comes from the model and its sidecar, never session
 storage. Legacy `materials` overrides (and retired `dxf` preview slices) are
 ignored while the remaining file state is restored.
 
-Current writes store these slices in the CAD renderer's per-file state inside
+Current writes store these slices in the STEP renderer's per-file state inside
 the root-scoped record. Reuse the existing slices when adding a control instead
 of adding a separate storage key.
 
@@ -130,7 +130,7 @@ so independent views cannot overwrite another document's state with a stale snap
 The URL remains the selected-file authority;
 opening the root without a file does not silently select a different artifact.
 
-CAD state normalizers are supplied by `@hardcore/ui/renderers/cad/state`.
+CAD state normalizers are supplied by `@hardcore/ui/renderers/step/state`.
 Storage access is explicit in the host; constructing or importing a renderer
 never chooses a browser storage backend.
 

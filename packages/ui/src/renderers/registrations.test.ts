@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { FileMetadata, FileSource, TextDocument } from "../file-viewer/types.js";
 import { selectRenderer } from "../file-viewer/registry.js";
 import { languageFor, monacoModelUri } from "./code/editor/monaco.js";
-import { createCadRenderer } from "./cad/index.js";
+import { createStepRenderer } from "./step/index.js";
 import { createDxfRenderer } from "./dxf/index.js";
 import { codeRenderer } from "./code/index.js";
 import { imageRenderer } from "./image/index.js";
@@ -113,10 +113,10 @@ describe("viewer renderer registrations", () => {
   const client = {} as never;
   it("gives .dxf its own renderer, and declares no panel for it", () => {
     const dxf = createDxfRenderer({ client });
-    const cad = createCadRenderer({ client });
-    expect(dxf.id).toBe("dxf");
-    expect(selectRenderer([cad, dxf], file("plate.dxf", "cad"))).toBe(dxf);
-    expect(selectRenderer([cad, dxf], file("part.step", "cad"))).toBe(cad);
+    const step = createStepRenderer({ client });
+    expect([dxf.id, step.id]).toEqual(["dxf", "step"]);
+    expect(selectRenderer([step, dxf], file("plate.dxf", "cad"))).toBe(dxf);
+    expect(selectRenderer([step, dxf], file("part.step", "cad"))).toBe(step);
     // A DXF is a straight render: it declares no Inspector, so the navbar offers no
     // toggle for one and the file tree is the only panel a drawing tab can open.
     expect(dxf.panels).toBeUndefined();

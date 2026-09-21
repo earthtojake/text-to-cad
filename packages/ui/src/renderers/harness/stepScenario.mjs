@@ -7,7 +7,7 @@ import { build } from 'esbuild';
 import { chromium } from 'playwright';
 
 // A STEP workspace the harness can open, served from the committed fixture under
-// `renderers/cad/__fixtures__/step` (its README says how those bytes were made).
+// `renderers/step/__fixtures__/step` (its README says how those bytes were made).
 //
 // A STEP is the one format whose load is a conversation rather than a download:
 // the catalog names a store view, the view names components by an immutable
@@ -18,7 +18,7 @@ import { chromium } from 'playwright';
 // the returned URL must be `/__cad/store` carrying the same `tree`,
 // `surfaceInput` and a lowercase 64-hex `object`.
 
-const FIXTURE = new URL('../cad/__fixtures__/step/', import.meta.url);
+const FIXTURE = new URL('../step/__fixtures__/step/', import.meta.url);
 
 const read = (name) => readFile(new URL(name, FIXTURE));
 

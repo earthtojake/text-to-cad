@@ -647,3 +647,139 @@ test('the shell keeps its Draw session across fullscreen, and fullscreen drags a
   assert.equal(await pane.getByRole('button', { name: 'Draw', exact: true }).getAttribute('aria-pressed'), 'false');
   assert.deepEqual(errors, []);
 });
+
+// Three shell surfaces a renderer opts into, driven under the same harness-only
+// renderer over one triangle: a viewport menu whose items are its own, a bottom
+// action whose long label falls back to a count, and the camera-settled report.
+// They go with this renderer when STEP arrives on the shell and uses them for real.
+test('a renderer supplies the viewport menu, a bottom action that falls back to a count, and is told when the camera settles', async (t) => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hardcore-shell-surfaces-'));
+  let server, browser;
+  t.after(async () => { await browser?.close(); if (server) await new Promise(resolve => server.close(resolve)); await rm(temporary, { recursive: true, force: true }); });
+  await build({ entryPoints: [fileURLToPath(new URL('../../harness/index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.woff2': 'dataurl' } });
+  const bundle = await readFile(join(temporary, 'harness.js'));
+  const compiledCss = await readFile(new URL('../../../../dist/styles.css', import.meta.url));
+  server = createServer((request, response) => {
+    const url = new URL(request.url, 'http://test');
+    const root = url.pathname.split('/')[1];
+    if (url.pathname === '/harness.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle); }
+    else if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(compiledCss); }
+    else if (url.pathname.endsWith('/__cad/catalog')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ rootId: root, entries: [] })); }
+    else if (url.pathname.endsWith('/__cad/server')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ rootId: root, rootPath: '/models', backend: 'cadgen' })); }
+    else if (/\.(woff2|ttf)$/.test(url.pathname)) { response.statusCode = 404; response.end(); }
+    else { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css"></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>'); }
+  });
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+  browser = await chromium.launch({ headless: true, args: process.platform === 'darwin'
+    ? ['--use-angle=metal'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+  page.setDefaultTimeout(15000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => { window.Worker = undefined; });
+  await page.goto(`http://127.0.0.1:${server.address().port}/?file=one.harness`);
+  const pane = page.getByTestId('one');
+  const canvas = await pane.locator('[aria-busy="false"] > div > canvas').first().boundingBox();
+  const middle = { x: canvas.x + canvas.width / 2, y: canvas.y + canvas.height / 2 };
+
+  // THE VIEWPORT MENU. A secondary tap over the canvas opens what the renderer
+  // offered, where it was pressed, and the browser's own menu never appears.
+  await page.evaluate(() => {
+    window.nativeMenu = [];
+    document.addEventListener('contextmenu', event => window.nativeMenu.push(event.defaultPrevented));
+  });
+  await page.mouse.click(middle.x, middle.y, { button: 'right' });
+  const menu = page.getByRole('menu');
+  await menu.waitFor();
+  assert.deepEqual(await page.getByRole('menuitem').allInnerTexts(), ['Note the press', 'Clear the note']);
+  assert.deepEqual(await page.evaluate(() => window.nativeMenu), [true], 'the native menu stays off the canvas');
+  const menuBox = await menu.boundingBox();
+  // It opens AT the press, not at a corner: a second press elsewhere moves it by
+  // the same amount the press moved.
+  await page.keyboard.press('Escape');
+  await menu.waitFor({ state: 'detached' });
+  const elsewhere = { x: middle.x + 220, y: middle.y - 140 };
+  await page.mouse.click(elsewhere.x, elsewhere.y, { button: 'right' });
+  await menu.waitFor();
+  const movedBox = await menu.boundingBox();
+  assert.ok(Math.abs((movedBox.x - menuBox.x) - 220) < 6 && Math.abs((movedBox.y - menuBox.y) + 140) < 6,
+    `the menu follows the press (${JSON.stringify(menuBox)} -> ${JSON.stringify(movedBox)})`);
+  assert.ok(Math.abs(movedBox.x - elsewhere.x) < 24 && Math.abs(movedBox.y - elsewhere.y) < 24,
+    `and opens on it (${JSON.stringify(movedBox)} for ${JSON.stringify(elsewhere)})`);
+  await page.keyboard.press('Escape');
+  await menu.waitFor({ state: 'detached' });
+  await page.mouse.click(middle.x, middle.y, { button: 'right' });
+  await menu.waitFor();
+  // The second item is disabled until the first has been taken, which is the
+  // renderer's own state reaching the shell's menu.
+  assert.equal(await page.getByRole('menuitem', { name: 'Clear the note', exact: true }).getAttribute('data-disabled'), '');
+  await page.getByRole('menuitem', { name: 'Note the press', exact: true }).click();
+  await menu.waitFor({ state: 'detached' });
+  assert.equal(await pane.locator('[data-harness-menu-note]').innerText(),
+    `${Math.round(middle.x)},${Math.round(middle.y)}`, 'the item acted on the press the renderer was given');
+
+  // A press the renderer has nothing to say about opens nothing — and still no native menu.
+  await page.evaluate(() => { window.nativeMenu = []; });
+  await page.keyboard.down('Shift');
+  await page.mouse.click(middle.x, middle.y, { button: 'right' });
+  await page.keyboard.up('Shift');
+  await page.waitForTimeout(200);
+  assert.equal(await page.getByRole('menu').count(), 0, 'no items, no menu');
+  assert.deepEqual(await page.evaluate(() => window.nativeMenu), [true]);
+
+  // A secondary DRAG is the camera's: it pans and opens nothing.
+  const settles = () => pane.locator('[data-harness-camera-settles]').innerText();
+  const beforeDrag = await page.evaluate(() => window.cadHarness.a.controller.readState().camera.target);
+  await page.mouse.move(middle.x, middle.y);
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.move(middle.x + 90, middle.y + 40, { steps: 6 });
+  await page.mouse.up({ button: 'right' });
+  await page.waitForTimeout(250);
+  assert.equal(await page.getByRole('menu').count(), 0, 'a secondary drag opens no menu');
+  assert.notDeepEqual(await page.evaluate(() => window.cadHarness.a.controller.readState().camera.target), beforeDrag,
+    'and still pans the camera');
+
+  // THE CAMERA SETTLED. The pan above was reported; so is a presentation camera
+  // that moves in fullscreen (which records no perspective at all), and so is a
+  // viewport RESIZE, which can change what is on screen without moving the camera.
+  const afterPan = Number(await settles());
+  assert.ok(afterPan > 0, `a camera that moved was reported (${afterPan})`);
+  // A viewport whose size changed is a settle too. (This one is over-covered: every
+  // resize the harness can make also moves the stored camera, so the perspective path
+  // reports it as well. The viewport reports it unconditionally because an aspect
+  // change CAN expose part of a scene while every stored field stays equal, which is
+  // the case `resampleLodAfterViewportResize` exists for.)
+  const beforeWidthChange = Number(await settles());
+  await page.setViewportSize({ width: 900, height: 800 });
+  await page.waitForFunction(count => Number(document.querySelector('[data-harness-camera-settles]').textContent) > count, beforeWidthChange);
+  const afterResize = Number(await settles());
+  await page.evaluate(() => { window.cadHarness.preferences.update({ orbit: { speed: 0 } }); window.cadHarness.fullscreen(true); });
+  await pane.getByRole('button', { name: 'Exit fullscreen', exact: true }).waitFor();
+  const fullscreenCanvas = await pane.locator('[aria-busy] > div > canvas').first().boundingBox();
+  await page.mouse.move(fullscreenCanvas.x + fullscreenCanvas.width / 2, fullscreenCanvas.y + fullscreenCanvas.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(fullscreenCanvas.x + fullscreenCanvas.width / 2 + 80, fullscreenCanvas.y + fullscreenCanvas.height / 2 + 30, { steps: 5 });
+  await page.mouse.up();
+  await page.waitForFunction(count => Number(document.querySelector('[data-harness-camera-settles]').textContent) > count, afterResize);
+  await pane.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+  await pane.getByRole('button', { name: 'Draw', exact: true }).waitFor();
+
+  // THE BOTTOM ACTION. What it SAYS is measured, not guessed from the string: a
+  // reference too wide for the button is replaced by the count the renderer
+  // supplied, while the full reference stays the title; a reference that fits is
+  // shown whole. `render` is what actually drew the control both times.
+  const action = pane.locator('[data-harness-bottom-action]');
+  await action.waitFor();
+  const long = await page.evaluate(() => document.querySelector('[data-harness-bottom-action]').title);
+  assert.ok(long.length > 240 && long.startsWith('#harness_document/'), `the renderer's own long reference: ${long.length} chars`);
+  assert.equal(await action.innerText(), 'Copy 1 reference', 'a reference that does not fit becomes the count');
+  assert.equal(await action.getAttribute('title'), long, 'and the full reference is still the title');
+  // What is on screen is one line of the count, not a cut-off reference.
+  assert.ok((await action.boundingBox()).width < 200, 'the button is the count\'s width');
+  await action.click();
+  await page.waitForFunction(() => document.querySelector('[data-harness-bottom-action]')?.textContent?.startsWith('#'));
+  const short = await action.innerText();
+  assert.equal(short, '#harness_document/triangle_face_0001', 'a reference that fits is shown whole');
+  assert.equal(await action.getAttribute('title'), short);
+  assert.deepEqual(errors, []);
+});

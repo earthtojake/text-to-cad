@@ -16,15 +16,15 @@ it("merges only renderer keys changed by a view, including deletion", () => {
 it("a stale view cannot overwrite another tab's renderer state or newer root chrome", () => {
   const tabA = useExplorer.getState().open("file", { path: "a.step" })!;
   const tabB = useExplorer.getState().open("file", { path: "b.step" })!;
-  const a = renderHook(() => useDesktopViewState("shared-root", tabA.id, null, null, "/project"));
-  const b = renderHook(() => useDesktopViewState("shared-root", tabB.id, null, null, "/project"));
+  const a = renderHook(() => useDesktopViewState("shared-root", tabA.id, null, null));
+  const b = renderHook(() => useDesktopViewState("shared-root", tabB.id, null, null));
   const oldA = a.result.current;
   const oldB = b.result.current;
-  act(() => oldB.onStateChange({ ...oldB.state, panelWidth: 360, expandedDirectories: ["parts"], renderers: { '["b.step","cad"]': { camera: "new-b" } } }));
-  act(() => oldA.onStateChange({ ...oldA.state, renderers: { '["a.step","cad"]': { camera: "new-a" } } }));
+  act(() => oldB.onStateChange({ ...oldB.state, panelWidth: 360, expandedDirectories: ["parts"], renderers: { '["b.step","step"]': { camera: "new-b" } } }));
+  act(() => oldA.onStateChange({ ...oldA.state, renderers: { '["a.step","step"]': { camera: "new-a" } } }));
   expect(JSON.parse(localStorage.getItem("hardcore.fileViewer.v1")!)).toEqual({
-    [JSON.stringify(["shared-root", tabA.id])]: { '["a.step","cad"]': { camera: "new-a" } },
-    [JSON.stringify(["shared-root", tabB.id])]: { '["b.step","cad"]': { camera: "new-b" } },
+    [JSON.stringify(["shared-root", tabA.id])]: { '["a.step","step"]': { camera: "new-a" } },
+    [JSON.stringify(["shared-root", tabB.id])]: { '["b.step","step"]': { camera: "new-b" } },
   });
   expect(useExplorer.getState().panelWidth).toBe(360);
   expect(a.result.current.state.expandedDirectories).toEqual(["parts"]);

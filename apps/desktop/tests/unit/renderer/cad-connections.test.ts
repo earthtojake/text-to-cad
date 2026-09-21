@@ -16,7 +16,7 @@ vi.mock("@hardcore/core/client", async (importOriginal) => ({
 // Exercise the real registration/prepare/dispose path without transforming
 // Three.js and the viewport in this connection-ownership unit test. Actual CAD
 // rendering and tab reopens are covered by the Electron integration suite.
-vi.mock("../../../../../packages/ui/dist/renderers/cad/CadRenderer.js", () => ({ default: () => null }));
+vi.mock("../../../../../packages/ui/dist/renderers/step/StepRenderer.js", () => ({ default: () => null }));
 
 function context(path = "part.stl", root = "project", signal = new AbortController().signal): PrepareContext {
   const file = { path, name: path, kind: "file" as const, extension: "stl", mediaType: "cad", size: 12 };
@@ -104,7 +104,7 @@ it("reuses a root client when A, B and A mount in turn, then releases the final 
   try {
     for (const path of ["a.stl", "b.stl", "a.stl"]) {
       const tab = createDesktopRenderers("project", null, path, owner.forRoot(null));
-      const cad = tab.renderers.find((renderer) => renderer.id === "cad")!;
+      const cad = tab.renderers.find((renderer) => renderer.id === "step")!;
       const document = await cad.prepare(context(path));
       document.dispose?.();
       tab.dispose();

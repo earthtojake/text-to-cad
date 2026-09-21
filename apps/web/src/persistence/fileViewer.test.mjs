@@ -12,7 +12,7 @@ await build({
   stdin: { contents: `export * from './persistence/fileViewer.ts'; export * from './persistence/cadPreferences.ts'; export * from './adapters/fileSource.ts';`, resolveDir: fileURLToPath(new URL('../', import.meta.url)) },
   bundle: true, platform: 'node', conditions: ['production'], format: 'esm', outfile: output, loader: { '.webp': 'dataurl', '.css': 'empty' },
 });
-const { readViewState, writeViewState, restoreCadFileStates, createWebCadPreferences, createWebFileSource, createWebFileActions } = await import(pathToFileURL(output).href);
+const { readViewState, writeViewState, createWebCadPreferences, createWebFileSource, createWebFileActions } = await import(pathToFileURL(output).href);
 after(() => rm(temporary, { recursive: true, force: true }));
 function storage() {
   const entries = new Map();
@@ -68,14 +68,6 @@ test('a retired theme panel restores the renderer default without resetting file
   const renderers = { '["part.step","cad"]': { version: 1, fileSession: { render: { enabled: true } } } };
   writeViewState('root', { panel: 'cad-theme', panelWidth: 340, expandedDirectories: ['parts'], renderers }, session);
   assert.deepEqual(readViewState('root', session), { panel: null, panelWidth: 340, expandedDirectories: ['parts'], renderers });
-});
-
-test('legacy per-file sessions are imported for the cad renderer only: a drawing, a GLB, a mesh and a robot keep their own records', () => {
-  const session = storage();
-  const files = ['part.step', 'plate.dxf', 'scan.stl', 'print.3mf', 'scene.glb', 'arm.urdf', 'arm.srdf', 'world.sdf'];
-  for (const file of files) session.setItem(`cad-viewer:file-session:v4:__root__:${encodeURIComponent(file)}`, JSON.stringify({ version: 4, fileKey: file, slices: { largeFile: { selectableTopology: true } } }));
-  const restored = restoreCadFileStates({ panel: null, panelWidth: 300 }, files.map(file => ({ file, kind: file.split('.').pop() })), session);
-  assert.deepEqual(Object.keys(restored.renderers), [JSON.stringify(['part.step', 'cad'])]);
 });
 
 test('web CAD preferences ignore legacy custom themes and retired tutorial state', () => {

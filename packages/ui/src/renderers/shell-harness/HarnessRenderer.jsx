@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import * as THREE from "three";
 import { EDGELESS_VIEW_FEATURES } from "@hardcore/core/common/viewSettings.js";
 import { createSurfaceLook } from "@hardcore/core/lib/viewer/surfaceLook.js";
+import { Button } from "@hardcore/ui/primitives/button";
 import RendererShell from "../kit/shell/RendererShell.jsx";
 import { SHELL_TOOL, useRendererShell } from "../kit/shell/useRendererShell.js";
 import { createToolModes } from "../kit/tools/toolModes.js";
@@ -13,6 +14,11 @@ import { createToolModes } from "../kit/tools/toolModes.js";
 // this there is nowhere to exercise shell-level Draw behaviour (a fullscreen drag
 // while a sketch is open, say) that STEP cannot reach yet. It draws one triangle,
 // reads no bytes and talks to no backend.
+//
+// It also stands in for a renderer that USES the shell surfaces STEP will need
+// when it moves: a viewport context menu of its own, a bottom action whose long
+// label falls back to a count, and the camera-settled report. Each is exercised
+// here against the real shell in a real browser.
 //
 // It is registered by `harness/index.tsx` alone (`*.harness` files) and lives
 // here rather than under `renderers/harness/` only because the library build
@@ -27,6 +33,11 @@ const LIVE = Object.freeze({ declined: {
   select: "The shell harness has nothing to select: it draws one triangle and reads no file.",
   clearSelection: "The shell harness has no selection to clear."
 } });
+// Deliberately far too long for any button, so what the strip shows is the count;
+// pressing it leaves a short one, which fits and is shown whole. The two together
+// are the measuring rule: what is shown depends on the label's WIDTH, not its text.
+const LONG_LABEL = `#harness_document/${"triangle_face_0001.top_surface_of_the_first_and_only_triangle.".repeat(4)}edge_0001`;
+const SHORT_LABEL = "#harness_document/triangle_face_0001";
 
 /** One triangle, as the kit's scene contract (`kit/scene.js`) sees it. */
 function createTriangleScene() {
@@ -57,12 +68,43 @@ function HarnessSurface({ view, data }) {
     preferences, onPreferenceChange: services.preferences.update, live: services.live
   }), [preferences, services]);
 
+  // The camera-settled report is a signal, not state: counted outside React and
+  // shown in the overlay, so a test reads the same number the renderer got.
+  const settles = useRef(0);
+  const [settleLabel, setSettleLabel] = useState("0");
+  const onCameraSettled = useCallback(() => {
+    settles.current += 1;
+    setSettleLabel(String(settles.current));
+  }, []);
+  const [picked, setPicked] = useState("");
+  const [actionLabel, setActionLabel] = useState(LONG_LABEL);
+
   const shell = useRendererShell({
     view, services: shellServices, resource, modelKey: view.file.path, revisionKey: "harness",
     features: EDGELESS_VIEW_FEATURES, toolModes: HARNESS_TOOL_MODES, scene,
-    load: { busy: false }, live: LIVE
+    load: { busy: false }, live: LIVE, onCameraSettled
   });
-  return <RendererShell shell={shell} tools={[shell.tools.draw]} inspector={{ title: "Harness", tabs: [shell.displayTab] }} />;
+
+  // Shift means "nothing to offer here", which must open no menu at all.
+  const contextMenuItems = useCallback(press => (press.shiftKey ? null : [
+    { id: "note", label: "Note the press", onSelect: () => setPicked(`${Math.round(press.clientX)},${Math.round(press.clientY)}`) },
+    { id: "clear", label: "Clear the note", separatorBefore: true, disabled: !picked, onSelect: () => setPicked("") }
+  ]), [picked]);
+
+  return <RendererShell shell={shell} tools={[shell.tools.draw]} inspector={{ title: "Harness", tabs: [shell.displayTab] }}
+    contextMenuItems={contextMenuItems}
+    bottomAction={shell.toolMode === SHELL_TOOL.DRAW ? null : {
+      label: actionLabel, shortLabel: "Copy 1 reference", title: actionLabel,
+      // A renderer whose action is not a plain press renders its own control.
+      render: ({ className, disabled, title, children }) => (
+        <Button type="button" variant="default" size="sm" className={className} disabled={disabled} title={title}
+          data-harness-bottom-action onClick={() => setActionLabel(SHORT_LABEL)}>{children}</Button>
+      )
+    }}
+    viewportOverlay={<div className="pointer-events-none absolute left-2 top-2 z-30 text-xs" data-harness-overlay>
+      <span data-harness-camera-settles>{settleLabel}</span>
+      <span data-harness-menu-note>{picked}</span>
+    </div>}/>;
 }
 
 export default function HarnessRenderer(props) {

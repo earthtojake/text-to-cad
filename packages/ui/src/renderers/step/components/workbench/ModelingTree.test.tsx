@@ -3,9 +3,9 @@ import { createCadClient } from '@hardcore/core/client';
 let client: ReturnType<typeof createCadClient>;
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import ModelingTreeView from '../../../../../dist/renderers/cad/components/workbench/ModelingTree.js';
+import ModelingTreeView from '../../../../../dist/renderers/step/components/workbench/ModelingTree.js';
 
-import { useStepModeling } from '../../../../../dist/renderers/cad/workbench/useStepModeling.js';
+import { useStepModeling } from '../../../../../dist/renderers/step/workbench/useStepModeling.js';
 function ModelingTree(props:any) {
  const modeling=useStepModeling(props.entry,!props.disabled,{client,requestedOccurrenceIds:fixtureDescriptor.occurrences.map(o=>o.id)});
  return <ModelingTreeView {...props} modeling={modeling}/>;
@@ -316,7 +316,7 @@ it('preserves a collapsed group when viewport selection sends its exact visible 
 });
 
 // Model search: a flat ranked view over the same presented tree, never a
-// filter over its expansion (see packages/ui/src/renderers/cad/workbench/modelTreeSearch.js).
+// filter over its expansion (see packages/ui/src/renderers/kit/inspector/modelTreeSearch.js).
 const wheelsDescriptor={components:{c:{surf:'components/c.surf'}},occurrences:[{id:'w1',component:'c',name:'Left Wheel'},{id:'w2',component:'c',name:'Right Wheel'},{id:'w3',component:'c',name:'Rear Wheel'}]};
 const wheelsRoot={id:'document',nodeType:'assembly',name:'doc',children:[partNode('w1','Left Wheel'),partNode('w2','Right Wheel'),partNode('w3','Rear Wheel')]};
 const wheelsModeling={descriptor:wheelsDescriptor,results:{},error:null,retryFailed:vi.fn()};

@@ -96,7 +96,7 @@ contents, plus “Open externally” when the host provides that action.
 
 ```tsx
 import { FileViewer } from '@hardcore/ui/file-viewer';
-import { createCadRenderer } from '@hardcore/ui/renderers/cad';
+import { createStepRenderer } from '@hardcore/ui/renderers/step';
 import { createDxfRenderer } from '@hardcore/ui/renderers/dxf';
 import { createGlbRenderer } from '@hardcore/ui/renderers/glb';
 import { createMeshRenderer } from '@hardcore/ui/renderers/mesh';
@@ -105,7 +105,7 @@ import '@hardcore/ui/tokens.css';
 import '@hardcore/ui/styles.css';
 
 // One viewer renderer per file family, sharing one client and one preference source.
-const renderers = [createCadRenderer({ client, preferences }), createDxfRenderer({ client, preferences }),
+const renderers = [createStepRenderer({ client, preferences }), createDxfRenderer({ client, preferences }),
   createGlbRenderer({ client, preferences }), createMeshRenderer({ client, preferences }),
   createRobotRenderer({ client, preferences })];
 // The host supplies storage, actions, navigation and environmental ports.
@@ -113,8 +113,8 @@ const renderers = [createCadRenderer({ client, preferences }), createDxfRenderer
   state={state} onStateChange={setState} />;
 ```
 
-Public entry points include `/host`, `/file-viewer`, `/navigation`, `/renderers/cad`,
-`/renderers/dxf`, `/renderers/glb`, `/renderers/mesh`, `/renderers/robot`, `/renderers/workspace`, `/renderers/cad/state`, `/renderers/cad/presentation`, `/renderers/cad/empty`,
+Public entry points include `/host`, `/file-viewer`, `/navigation`, `/renderers/step`,
+`/renderers/dxf`, `/renderers/glb`, `/renderers/mesh`, `/renderers/robot`, `/renderers/workspace`, `/renderers/step/state`, `/file-viewer/presentation`, `/file-viewer/empty`,
 `/renderers/markdown`, `/renderers/code`, `/renderers/code/editor`,
 `/renderers/image`, `/renderers/pdf`, `/renderers/unsupported`, `/loading-icon`,
 `/utils`, `/primitives/*`, `/tokens.css`, and `/styles.css`.
@@ -206,7 +206,7 @@ for the non-CAD behavior that must remain unchanged.
 
 ## CAD document updates
 
-The shared CAD renderer consumes the artifact, its schema-9 `.step.json`
+The STEP renderer consumes the artifact, its schema-9 `.step.json`
 sidecar and immutable store views. Embedded animation, authored appearance and
 kinematics travel in the sidecar; an adjacent `.step.js` is a retired input.
 The scene uses progressive component loading and demand-driven exact surfaces.

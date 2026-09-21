@@ -3,21 +3,21 @@ import { FileViewer, type FileViewerState } from '@hardcore/ui/file-viewer';
 import type { ViewerHost } from '@hardcore/ui/host';
 import { EmptyState } from '@hardcore/ui/navigation';
 import { FileText } from 'lucide-react';
-import { createCadRenderer } from '@hardcore/ui/renderers/cad';
+import { createStepRenderer } from '@hardcore/ui/renderers/step';
 import { createDxfRenderer } from '@hardcore/ui/renderers/dxf';
 import { createGlbRenderer } from '@hardcore/ui/renderers/glb';
 import { createMeshRenderer } from '@hardcore/ui/renderers/mesh';
 import { createRobotRenderer } from '@hardcore/ui/renderers/robot';
-import { MissingFileAlert, StatusToast, ViewerLoadingOverlay } from '@hardcore/ui/renderers/cad/presentation';
+import { MissingFileAlert, StatusToast, ViewerLoadingOverlay } from '@hardcore/ui/file-viewer/presentation';
 import { useViewerAutoReload } from './host/useViewerAutoReload.js';
-import { EmptyCadBackdrop } from '@hardcore/ui/renderers/cad/empty';
+import { EmptyCadBackdrop } from '@hardcore/ui/file-viewer/empty';
 import type { CadServerInfo } from '@hardcore/core/client';
 import type { CadClient } from './adapters/fileSource';
 import { createWebFileSource, createWebFileActions } from './adapters/fileSource';
 import { browserClipboard, browserClipboardSupportsImages } from './host/clipboard';
 import { browserLifecycle } from './host/lifecycle';
 import { createWebPromptContext } from './host/promptContext';
-import { readViewState, restoreCadFileStates, writeViewState } from './persistence/fileViewer';
+import { readViewState, writeViewState } from './persistence/fileViewer';
 import { createWebCadPreferences } from './persistence/cadPreferences';
 import ViewerTopBar from './client/components/workbench/ViewerTopBar.jsx';
 import FilenameLoadStatus from './FilenameLoadStatus';
@@ -45,7 +45,7 @@ function RootView({ client, server }: { client: CadClient; server: CadServerInfo
   const preferences = useMemo(createWebCadPreferences, []);
   useEffect(() => preferences.connect(), [preferences]);
   // One renderer per file family; each lazy-loads only its own code.
-  const renderers = useMemo(() => [createCadRenderer({ client, preferences }), createDxfRenderer({ client, preferences }), createGlbRenderer({ client, preferences }), createMeshRenderer({ client, preferences }), createRobotRenderer({ client, preferences })], [client, preferences]);
+  const renderers = useMemo(() => [createStepRenderer({ client, preferences }), createDxfRenderer({ client, preferences }), createGlbRenderer({ client, preferences }), createMeshRenderer({ client, preferences }), createRobotRenderer({ client, preferences })], [client, preferences]);
   const catalog = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot);
   const [file, setFile] = useState(() => readCadParam() || readDefaultCadParam() || '');
   const selectedEntry = useMemo(() => findEntryByUrlPath(catalog.entries, file), [catalog.entries, file]);
@@ -86,8 +86,7 @@ function RootView({ client, server }: { client: CadClient; server: CadServerInfo
   useEffect(() => {
     document.title = selectedEntry ? `text-to-cad | ${selectedEntry.file.split(/[\\/]/).pop()}` : 'text-to-cad';
     if (selectedEntry && !readCadParam()) writeCadParam(file, { history: 'replace' });
-    setState(previous => restoreCadFileStates(previous, catalog.entries));
-  }, [file, catalog.entries, selectedEntry]);
+  }, [file, selectedEntry]);
   useEffect(() => {
     writeViewState(source.id, state, sessionStorage, publishedState.current);
     publishedState.current = state;

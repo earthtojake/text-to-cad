@@ -12,7 +12,7 @@ import {
   readCadDirectorySessionState,
   writeCadDirectorySessionState,
 } from "./persistence.js";
-import { CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH, CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH } from "@hardcore/ui/renderers/cad/state";
+import { CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH, CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH } from "@hardcore/ui/renderers/step/state";
 
 function createMemoryStorage() {
   const values = new Map();

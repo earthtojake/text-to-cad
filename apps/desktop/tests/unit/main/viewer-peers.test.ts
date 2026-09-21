@@ -31,7 +31,7 @@ describe("shared package installation", () => {
   });
   it("exports compiled FileViewer modules and package-owned declarations", () => {
     const ui = JSON.parse(readFileSync(path.join(repoRoot, "packages/ui/package.json"), "utf8"));
-    for (const entry of ["./file-viewer", "./navigation", "./renderers/cad", "./renderers/code/editor"]) {
+    for (const entry of ["./file-viewer", "./navigation", "./renderers/step", "./renderers/code/editor"]) {
       const target = ui.exports[entry] || { import: `./dist/${entry.slice(2)}/index.js`, types: `./dist/${entry.slice(2)}/index.d.ts` };
       expect(readFileSync(path.join(repoRoot, "packages/ui", target.import), "utf8")).not.toMatch(/@renderer\/|apps\/web|apps\/viewer/);
       expect(readFileSync(path.join(repoRoot, "packages/ui", target.types), "utf8")).toBeTruthy();

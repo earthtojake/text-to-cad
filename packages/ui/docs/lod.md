@@ -5,7 +5,7 @@ What the viewport does in the background between "a file was selected" and
 what it refuses under memory pressure, and how it follows a model that is
 being rebuilt while you watch.
 
-All of it is the STEP package path of the CAD renderer. A triangle mesh (STL, 3MF) and a
+All of it is the STEP package path of the STEP renderer. A triangle mesh (STL, 3MF) and a
 GLB have no levels: their renderers load the file whole, parse it once per revision (an
 STL in a worker) and keep the decode cached, so reopening one fetches and parses nothing
 (see [Mesh renderer](cad-renderer.md#mesh-renderer)).

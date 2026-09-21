@@ -1279,7 +1279,7 @@ export async function captureModel(viewport, captureOptions = {}) {
         shadowMapSize: context.quality.shadowMapSize
       });
       fitCameraDepthToBounds(renderCamera, outputBounds, {
-        displayRecords: viewport.model.displayRecords,
+        placedObjects: viewport.model.displayRecords,
         modelGroup: viewport.model.runtime.modelGroup,
         groundZ: viewport.studioRuntime.photographicStudio?.ground?.position.z ?? null
       });
