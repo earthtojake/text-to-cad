@@ -67,7 +67,12 @@ export const ON_AXIS_RATIO = 0.05;
  */
 export function armOffset(axis, centre) {
   const offset = centre ? rejectFromAxis(centre, axis) : null;
-  return offset && length(offset) > ON_AXIS_RATIO * length(centre) ? normalize(offset) : stablePerpendicular(axis);
+  // The ratio test is relative, so a centre that sits on the axis to within floating-point
+  // noise passes it with an offset too short to have a direction at all, and `normalize`
+  // answers null. Every caller treats an arm as a vector, so one that cannot be derived
+  // falls back to the axis's own perpendicular rather than escaping as null.
+  const toward = offset && length(offset) > ON_AXIS_RATIO * length(centre) ? normalize(offset) : null;
+  return toward || stablePerpendicular(axis);
 }
 
 /**

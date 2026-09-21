@@ -170,6 +170,17 @@ test("an arm follows the child's centre off the axis, and takes a fixed perpendi
   const wheel = armOffset(axis, [0.001, 0, 5]);
   assert.deepEqual(wheel, armOffset(axis, null));
   assert.ok(Math.abs(wheel[2]) < 1e-12 && Math.abs(Math.hypot(...wheel) - 1) < 1e-12);
+
+  // A centre that sits on the axis to within floating-point noise passes the RELATIVE
+  // on-axis test with an offset too short to carry a direction. An arm is a vector to
+  // every caller, so this must still answer one: STEP's handles feed theirs straight into
+  // a dot product, and a null here took the whole file view down with it.
+  for (const centre of [[1e-12, 0, 5e-13], [0, 0, 0], [1e-300, 1e-300, 0]]) {
+    const arm = armOffset(axis, centre);
+    assert.ok(Array.isArray(arm) && arm.every(Number.isFinite),
+      `an arm for a centre on the axis (${JSON.stringify(centre)}): ${JSON.stringify(arm)}`);
+    assert.ok(Math.abs(Math.hypot(...arm) - 1) < 1e-12, "and it is a unit direction");
+  }
 });
 
 test("a continuous joint's value is one turn, in (-180, 180]", () => {
