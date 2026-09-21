@@ -45,6 +45,12 @@ const skillGroups = [
       "Finds off-the-shelf STEP parts like screws, bearings, motors, and connectors.",
   },
   {
+    name: "Engineering Drawing",
+    path: "skills/engineering-drawing",
+    summary:
+      "Dimensioned engineering drawings from a part, as a PDF: views, hidden lines, dimensions, hole callouts, title block.",
+  },
+  {
     name: "DXF",
     path: "skills/dxf",
     summary:

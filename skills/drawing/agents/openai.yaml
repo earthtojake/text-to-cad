@@ -1,4 +1,0 @@
-interface:
-  display_name: "Engineering Drawing"
-  short_description: "Make a dimensioned drawing sheet from a CAD part."
-  default_prompt: "Use $drawing to produce a dimensioned engineering drawing (views, dimensions, title block, PDF) of this part, then open the DXF in $cad-viewer."

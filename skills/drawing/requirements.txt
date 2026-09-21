@@ -1,4 +1,0 @@
-cadgen==0.6.5
-# The PDF beside the DXF needs matplotlib; without it the drawing still writes
-# its DXF sheets and says the PDF was skipped.
-matplotlib

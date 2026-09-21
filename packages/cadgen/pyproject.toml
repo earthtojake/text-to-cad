@@ -53,9 +53,12 @@ dependencies = [
   # this keeps the optional visualization stack out of every CAD install.
   "cadquery-ocp-novtk>=7.9,<8",
   "ezdxf",
-  # ezdxf's drawing add-on (the CAD Viewer renders a drawing sheet through it,
-  # and @drawing writes the PDF with it) imports Pillow at module level and
-  # ezdxf does not declare it.
+  # @eng_drawing renders its PDF through ezdxf's drawing add-on, whose
+  # matplotlib backend is the page renderer. The add-on also imports Pillow at
+  # module level and ezdxf declares neither, so a cadgen module would otherwise
+  # import packages cadgen does not depend on -- and the drawing IS the PDF, so
+  # neither is optional.
+  "matplotlib",
   "pillow",
   "shapely",
 ]

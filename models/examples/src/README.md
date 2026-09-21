@@ -1,8 +1,10 @@
 # examples models
 
 Standalone demo parts as one cad-project: every script directly under
-`src/` is a runnable part model and its artifact lands in a format folder at
-the project root (`STEP/`, `STL/`, `3MF/`, `GLB/`). Assemblies live in the
+`src/` is runnable and its artifact lands in a format folder at the project
+root (`STEP/`, `STL/`, `3MF/`, `GLB/`, `PDF/`). All but one are part models;
+`electronics_enclosure_base_drawing.py` is an `@eng_drawing` document over the
+part beside it, which is why it imports that model's constants. Assemblies live in the
 sibling `models/assemblies/` project (one group per assembly) and 2D drawings
 in `models/drawings/`. The `src/` tree is committed; build the outputs you need.
 
@@ -32,6 +34,7 @@ fixtures to work against.
 | `cylindrical_cap.py` | `STEP/cylindrical_cap.step` | Cylindrical cap with hollow interior, top boss, and rounded external edges |
 | `cylindrical_spacer_sleeve.py` | `STEP/cylindrical_spacer_sleeve.step` | Cylindrical spacer sleeve with a central through-bore and rounded rim edges |
 | `electronics_enclosure_base.py` | `STEP/electronics_enclosure_base.step` | Single solid open-top electronics enclosure base |
+| `electronics_enclosure_base_drawing.py` | `PDF/electronics_enclosure_base_drawing.pdf` | **Engineering drawing** (`@eng_drawing`) of that part: three views with hidden lines and centre marks, measured dimensions, hole callouts, title block. Run the model above first. |
 | `flywheel_disk.py` | `STEP/flywheel_disk.step` | Flywheel disk with central bore, annular rim, and lightening holes |
 | `gusset_plate.py` | `STEP/gusset_plate.step` | Gusset plate with a triangular web, base holes, and softened perimeter edges |
 | `keyed_shaft_hub.py` | `STEP/keyed_shaft_hub.step` | Keyed shaft hub with central bore, keyway slot, and bolt-hole pattern |

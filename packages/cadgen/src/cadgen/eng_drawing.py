@@ -1,60 +1,62 @@
-"""Engineering drawings: ``@drawing``, :class:`Sheet` and :class:`View`.
+"""Engineering drawings: ``@eng_drawing``, :class:`Sheet` and :class:`View`.
 
-A drawing is a DOCUMENT derived from a part: orthographic views projected from
-the part's geometry, dimensions that reference points ON that geometry, centre
-marks found on it, a sheet frame and a title block. Because every view and every
-dimension is computed from the shape at run time, the drawing follows the part:
-change the model, rerun the drawing script, and the views, hidden lines and
-measured values move with it. Nothing on the sheet is drawn by hand.
+An engineering drawing is a DOCUMENT derived from a part: orthographic views
+projected from the part's geometry, dimensions that reference points ON that
+geometry, centre marks found on it, a sheet frame and a title block. Because
+every view and every dimension is computed from the shape at run time, the
+drawing follows the part: change the model, rerun the drawing script, and the
+views, hidden lines and measured values move with it. Nothing on the sheet is
+drawn by hand.
 
-Where ``@dxf`` writes geometry only (a cut layout is a toolpath), ``@drawing``
-writes the format's own document constructs: real ``DIMENSION`` entities (the
-value is measured, the arrowheads and witness lines are the dimension style's),
-``TEXT`` for notes and the title block, and a LAYER table whose linetypes say
-which lines are hidden or centre lines. Any CAD package, and the CAD Viewer,
-reads those as a drawing.
+The output is one PDF. A shop receives a PDF, every operating system opens and
+marks one up, and nothing here pairs the document with a second file. ezdxf is
+the in-memory drawing engine -- real ``DIMENSION`` entities so the value is
+measured and the arrowheads and witness lines are the dimension style's, ``TEXT``
+for notes and the title block, a LAYER table whose linetypes say which lines are
+hidden or centre lines -- and no ``.dxf`` reaches disk. ``@dxf`` remains the
+decorator for a DXF: a cut layout is a toolpath, and a drawing is not.
 
 Usage::
 
-    from cadgen.drawing import drawing, Sheet, source_step
+    import cadgen
+    from cadgen.eng_drawing import eng_drawing, Sheet
+    from pathlib import Path
 
-    @drawing(out="../DXF/bracket_drawing.dxf")
+    @eng_drawing(out="../PDF/bracket_drawing.pdf")
     def bracket_drawing():
-        part = source_step("../STEP/bracket.step")      # the model's own artifact
+        part = cadgen.read_step(Path(__file__).parent / "../STEP/bracket.step")
         sheet = Sheet("A3", title="BRACKET", part_number="BRK-001", revision="A")
         top = sheet.view(part, "top", at=(110, 190))
         front = sheet.view(part, "front", at=(110, 90))
         top.overall()                                    # width and height
-        top.dim((-35, 25, 0), (35, 25, 0), offset=26)    # model coordinates
-        top.diameter((35, 25, 15), 1.5, text="%%c3 x 8 DEEP, 4 PLACES")
+        top.dim((-35, 25, 0), (35, 25, 0))               # model coordinates
+        top.hole((35, 25, 15), 3, depth=8, count=4)
         return sheet                                     # or [sheet1, sheet2]
 
     if __name__ == "__main__":
         bracket_drawing()
 
-Running the script writes one ``.dxf`` per sheet (the first at ``out``, the rest
-suffixed ``-sheet2``, ``-sheet3``) and, when matplotlib is installed, one PDF
-with a page per sheet beside them under ``PDF/``. The DXF is the artifact the
-CAD Viewer catalogs; the PDF is the document to send.
+Running the script writes one PDF at ``out`` with a page per sheet. There is no
+default location: ``out`` is the path the caller passes. A live build123d shape
+works in place of ``read_step``; the part is whatever geometry the function has.
 
-Bytes are a function of the content: ezdxf's volatile provenance is pinned the
-same way ``@dxf`` pins it, so an unchanged drawing rebuilds to identical files.
+Bytes are a function of the content: the PDF carries no creation date, so an
+unchanged drawing rebuilds to an identical file.
 
-This module keeps ``@drawing`` outside the build store on purpose: a drawing
-is a document over an artifact, not a model with a closure to hash. Import
+This module keeps ``@eng_drawing`` outside the build store on purpose: a drawing
+is a document over a part, not a model with a closure to hash. Import
 discipline: nothing here pulls in ezdxf or the CAD kernel at module scope.
 """
 
 from __future__ import annotations
 
 import functools
-import io
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
 
-__all__ = ["drawing", "Sheet", "View", "source_step", "SHEET_SIZES"]
+__all__ = ["eng_drawing", "Sheet", "View", "SHEET_SIZES"]
 
 #: ISO 216 sheet sizes, landscape, in millimetres.
 SHEET_SIZES = {
@@ -70,7 +72,11 @@ SHEET_SIZES = {
 #: from; the sheet does not enforce placement, the author picks ``at=``.
 VIEW_DIRECTIONS = {
     "top": ((0.0, 0.0, 1.0), (0.0, 1.0, 0.0)),
-    "bottom": ((0.0, 0.0, -1.0), (0.0, 1.0, 0.0)),
+    # Looking up from below, the sheet's up is the model's -Y: the bottom view is the
+    # top view mirrored about the horizontal, which is what third angle draws. With
+    # up=+Y it comes out rotated 180 degrees (+X to the left), so it would not line up
+    # with the front view above it.
+    "bottom": ((0.0, 0.0, -1.0), (0.0, -1.0, 0.0)),
     "front": ((0.0, -1.0, 0.0), (0.0, 0.0, 1.0)),
     "back": ((0.0, 1.0, 0.0), (0.0, 0.0, 1.0)),
     "right": ((1.0, 0.0, 0.0), (0.0, 0.0, 1.0)),
@@ -80,41 +86,34 @@ VIEW_DIRECTIONS = {
 
 #: Layers a sheet writes, with ACI colour and linetype. ``ink="mono"`` collapses
 #: the colours to the default ink; the linetypes are the drawing's meaning and stay.
+#: Every linetype here must be one ``ezdxf.new(setup=True)` defines, or ezdxf draws
+#: the layer continuous and its audit reports the substitution: there is no HIDDEN
+#: in that table, DASHED is the ISO 128 dashed line it does define.
 _LAYERS = {
     "SHEET": (7, "CONTINUOUS", 0.35),
     "TITLE": (7, "CONTINUOUS", 0.25),
     "VISIBLE": (7, "CONTINUOUS", 0.5),
-    "HIDDEN": (8, "HIDDEN", 0.25),
+    "HIDDEN": (8, "DASHED", 0.25),
     "CENTER": (4, "CENTER", 0.18),
     "DIM": (1, "CONTINUOUS", 0.18),
     "NOTES": (3, "CONTINUOUS", 0.25),
 }
 
+#: Projection conventions the title block may name. The two differ only in WHERE a
+#: view is placed: third angle puts the view from above above the front view and the
+#: view from the right to its right; first angle puts each on the opposite side. The
+#: pictures are the same, so only :meth:`Sheet.three_views` reads this.
+PROJECTIONS = ("THIRD ANGLE", "FIRST ANGLE")
+
 _MARGIN = 10.0
 _TITLE_W, _TITLE_H = 180.0, 40.0
-
-
-def source_step(path: str | Path):
-    """The part a drawing documents, read from a STEP file the model wrote (or any
-    STEP). Relative paths resolve against the calling script, like ``out=``."""
-    from build123d import import_step
-
-    resolved = _resolve_relative(Path(path), depth=2)
-    if not resolved.is_file():
-        raise FileNotFoundError(
-            f"source_step: {resolved} does not exist. Run the model that writes it first "
-            "(python <model>.py); a drawing documents the artifact, it does not build it."
-        )
-    return import_step(str(resolved))
-
-
-def _resolve_relative(path: Path, *, depth: int) -> Path:
-    if path.is_absolute():
-        return path
-    import inspect
-
-    frame = inspect.stack()[depth]
-    return (Path(frame.filename).resolve().parent / path).resolve()
+#: One row of dimensions: the line's distance from the last, with room for its text.
+_DIM_ROW = 12.0
+#: The smallest text a print stays legible at. Below it, text is cut, not shrunk.
+_MIN_TEXT_MM = 1.6
+#: Drawing scales a shop expects to read, largest first. An over-size part is
+#: refused with the first of these that fits rather than an arbitrary ratio.
+_STANDARD_SCALES = (1.0, 1 / 2, 1 / 2.5, 1 / 5, 1 / 10, 1 / 20, 1 / 50, 1 / 100, 1 / 200, 1 / 500, 1 / 1000)
 
 
 @dataclass
@@ -122,7 +121,8 @@ class _Dim:
     kind: str
     p1: tuple[float, float, float]
     p2: tuple[float, float, float] | None
-    offset: float
+    #: Sheet millimetres from the dimensioned points, or None for the next free row.
+    offset: float | None
     text: str | None
     orientation: str | None
     radius: float = 0.0
@@ -154,14 +154,19 @@ class View:
     _dims: list[_Dim] = field(default_factory=list)
     _overall: bool = False
 
-    def dim(self, p1, p2, *, offset: float = 12.0, text: str | None = None, orientation: str | None = None,
+    def dim(self, p1, p2, *, offset: float | None = None, text: str | None = None, orientation: str | None = None,
             tol: float | tuple[float, float] | None = None, fit: str | None = None) -> "View":
         """A linear dimension between two model points. ``orientation`` is ``"h"``,
         ``"v"`` or None (whichever the projected pair spans more); ``offset`` is
         the dimension line's distance from the farther point, in sheet mm, and its
-        sign picks the side. ``tol=0.1`` states ±0.1; ``tol=(0.05, 0.02)`` states
-        +0.05/-0.02 deviations; ``fit="H7"`` appends an ISO fit class."""
-        self._dims.append(_Dim("linear", _p3(p1), _p3(p2), offset, text, orientation, tol=_tol(tol), fit=fit))
+        sign picks the side. Left unset, the dimension takes the next free row on
+        its side, so defaults never stack on each other or on :meth:`overall`.
+        ``tol=0.1`` states ±0.1; ``tol=(0.05, 0.02)`` states +0.05/-0.02
+        deviations; ``fit="H7"`` appends an ISO fit class."""
+        if orientation not in (None, "h", "v"):
+            raise ValueError(f"orientation must be 'h', 'v' or None, got {orientation!r}")
+        self._dims.append(_Dim("linear", _p3(p1), _p3(p2), _offset(offset), text, orientation,
+                               tol=_tol(tol), fit=fit))
         return self
 
     def hole(self, center, diameter: float, *, depth: float | None = None, thru: bool = False,
@@ -174,19 +179,26 @@ class View:
         such as ``M6x1 - 6H`` in place of the diameter. ``tol``/``fit`` qualify the
         diameter the way :meth:`dim` does; ``label`` is appended (``"WHEEL"``).
         ``angle`` is where the leader leaves the circle, degrees from horizontal."""
-        spec = {"diameter": float(diameter), "depth": depth, "thru": thru, "cbore": cbore, "csk": csk,
-                "thread": thread, "count": count, "label": label}
-        self._dims.append(_Dim("hole", _p3(center), None, 0.0, None, None, radius=float(diameter) / 2, angle=angle,
-                               tol=_tol(tol), fit=fit, hole=spec))
+        spec = {"diameter": _positive("diameter", diameter), "depth": _positive("depth", depth, allow_none=True),
+                "thru": bool(thru), "cbore": _pair("cbore", cbore), "csk": _pair("csk", csk),
+                "thread": None if thread is None else str(thread),
+                "count": None if count is None else _positive("count", count, integer=True),
+                "label": None if label is None else str(label)}
+        if thru and depth is not None:
+            raise ValueError("a hole is either THRU or has a depth, not both")
+        self._dims.append(_Dim("hole", _p3(center), None, 0.0, None, None, radius=spec["diameter"] / 2,
+                               angle=float(angle), tol=_tol(tol), fit=fit, hole=spec))
         return self
 
     def diameter(self, center, radius: float, *, angle: float = 45.0, text: str | None = None) -> "View":
         """A diameter dimension on a circular feature at a model centre point."""
-        self._dims.append(_Dim("diameter", _p3(center), None, 0.0, text, None, radius=radius, angle=angle))
+        self._dims.append(_Dim("diameter", _p3(center), None, 0.0, text, None,
+                               radius=_positive("radius", radius), angle=float(angle)))
         return self
 
     def radius(self, center, radius: float, *, angle: float = 45.0, text: str | None = None) -> "View":
-        self._dims.append(_Dim("radius", _p3(center), None, 0.0, text, None, radius=radius, angle=angle))
+        self._dims.append(_Dim("radius", _p3(center), None, 0.0, text, None,
+                               radius=_positive("radius", radius), angle=float(angle)))
         return self
 
     def angle(self, vertex, p1, p2, *, offset: float = 14.0) -> "View":
@@ -216,10 +228,55 @@ def _tol(value):
     """Normalise a tolerance argument to (plus, minus) or None."""
     if value is None:
         return None
+    if isinstance(value, bool):
+        raise TypeError(f"tol must be a number or a (plus, minus) pair, got {value!r}")
     if isinstance(value, (int, float)):
         return (abs(float(value)), abs(float(value)))
-    plus, minus = value
-    return (abs(float(plus)), abs(float(minus)))
+    try:
+        plus, minus = value
+        return (abs(float(plus)), abs(float(minus)))
+    except (TypeError, ValueError) as exc:
+        raise TypeError(f"tol must be a number or a (plus, minus) pair, got {value!r}") from exc
+
+
+def _offset(value) -> float | None:
+    """A dimension offset in sheet millimetres, or None for the next free row."""
+    if value is None:
+        return None
+    try:
+        offset = float(value)
+    except (TypeError, ValueError) as exc:
+        raise TypeError(f"offset must be a number of sheet millimetres, got {value!r}") from exc
+    if not math.isfinite(offset):
+        raise ValueError(f"offset must be finite, got {value!r}")
+    return offset
+
+
+def _positive(name: str, value, *, allow_none: bool = False, integer: bool = False):
+    """A dimension the shop can make: a real, finite, positive number."""
+    if value is None:
+        if allow_none:
+            return None
+        raise ValueError(f"{name} is required")
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise TypeError(f"{name} must be a number, got {value!r}") from exc
+    if not math.isfinite(number) or number <= 0:
+        raise ValueError(f"{name} must be a positive number, got {value!r}")
+    return int(round(number)) if integer else number
+
+
+def _pair(name: str, value) -> tuple[float, float] | None:
+    """A (diameter, depth) or (diameter, angle) pair, both positive."""
+    if value is None:
+        return None
+    if isinstance(value, (str, bytes)) or not isinstance(value, Iterable):
+        raise TypeError(f"{name} must be a pair of numbers, got {value!r}")
+    values = tuple(value)
+    if len(values) != 2:
+        raise ValueError(f"{name} must be a pair of numbers, got {value!r}")
+    return (_positive(f"{name}[0]", values[0]), _positive(f"{name}[1]", values[1]))
 
 
 def _tol_suffix(tol) -> str:
@@ -293,6 +350,14 @@ class Sheet:
             raise ValueError(f"unknown sheet size {self.size!r}; one of {sorted(SHEET_SIZES)}")
         if not (self.scale > 0):
             raise ValueError("scale must be positive")
+        # The title block prints this label and `three_views` lays the views out to
+        # match it. Accepting any string would print "FIRST ANGLE" over a third-angle
+        # arrangement, which is the one mislabel a shop cannot recover from.
+        if self.projection not in PROJECTIONS:
+            raise ValueError(
+                f"unknown projection {self.projection!r}; one of {sorted(PROJECTIONS)}. "
+                "The label and the view arrangement are the same decision."
+            )
 
     @property
     def width(self) -> float:
@@ -329,9 +394,17 @@ class Sheet:
         block_h = H + gap + W
         left = m + reach + max(0.0, (usable_w - block_w) / 2)
         bottom = m + _TITLE_H + notes_h + 12.0 + max(0.0, (usable_h - block_h) / 2)
-        front_at = (left + L / 2, bottom + H / 2)
-        top_at = (front_at[0], bottom + H + gap + W / 2)
-        right_at = (left + L + gap + W / 2, front_at[1])
+        if self.projection == "FIRST ANGLE":
+            # First angle places each view on the side opposite the one it looks from:
+            # the plan below the front, the view from the right to its left. The
+            # pictures are the third-angle pictures; only the slots swap.
+            front_at = (left + W + gap + L / 2, bottom + W + gap + H / 2)
+            top_at = (front_at[0], bottom + W / 2)
+            right_at = (left + W / 2, front_at[1])
+        else:
+            front_at = (left + L / 2, bottom + H / 2)
+            top_at = (front_at[0], bottom + H + gap + W / 2)
+            right_at = (left + L + gap + W / 2, front_at[1])
         views = (
             self.view(shape, "top", at=top_at, hidden=hidden, centre_marks=centre_marks),
             self.view(shape, "front", at=front_at, hidden=hidden, centre_marks=centre_marks),
@@ -345,16 +418,22 @@ class Sheet:
             # room the top view's own callouts need. A pictorial that does not fit is drawn
             # at a smaller scale and says so in its label.
             iso_w, iso_h = _view_extent(shape, "iso", 1.0)
-            # A hole callout beside the top view needs its knee (a dimension row plus
-            # 10) and its text (about 13 characters); keep that much clear of the iso.
-            avail_w = self.width - m - 6 - (left + L + 30.0 + 8.0 + 13 * self.text_height * 0.7 + 8.0)
+            # The upper row is the top view in third angle and the front view in first;
+            # either way the free corner starts at that row's bottom edge and right of
+            # the widest view in it.
+            upper = views[0] if self.projection == "THIRD ANGLE" else views[1]
+            upper_h = W if self.projection == "THIRD ANGLE" else H
+            upper_bottom = upper.at[1] - upper_h / 2
+            # A hole callout beside that view needs its knee (a dimension row plus 10)
+            # and its text (about 13 characters); keep that much clear of the iso.
+            avail_w = self.width - m - 6 - (upper.at[0] + L / 2 + 30.0 + 8.0 + 13 * self.text_height * 0.7 + 8.0)
             # The revision table, when there is one, owns the top-right corner.
             table_h = (len(self.revisions) + 1) * 6.0 + 6.0 if self.revisions else 0.0
-            avail_h = self.height - m - 6 - table_h - (bottom + H + gap)
+            avail_h = self.height - m - 6 - table_h - upper_bottom
             iso_scale = s * min(1.0, max(0.2, avail_w / iso_w if iso_w else 1.0), max(0.2, avail_h / iso_h if iso_h else 1.0))
             iso_w, iso_h = iso_w * iso_scale, iso_h * iso_scale
             iso_x = self.width - m - 6 - iso_w / 2
-            iso_y = min(bottom + H + gap + iso_h / 2, self.height - m - 6 - table_h - iso_h / 2)
+            iso_y = min(upper_bottom + iso_h / 2, self.height - m - 6 - table_h - iso_h / 2)
             ratio = iso_scale / s
             label = "ISOMETRIC" if abs(ratio - 1) < 1e-6 else f"ISOMETRIC (1:{1 / ratio:.3g})"
             return views + (self.view(shape, "iso", at=(iso_x, iso_y), hidden=False, centre_marks=False, label=label,
@@ -512,19 +591,49 @@ def _dimstyle(doc, text_height: float):
     return "Standard"
 
 
-#: XDATA application every sheet entity is tagged with: ``view=<NAME>`` names the
-#: view an entity belongs to and ``dim=<index>`` the dimension in that view's
-#: list (``overall-w``/``overall-h`` for the overall pair), so a viewer can find
-#: a view's extent and a dimension's authoring line without a second file.
-XDATA_APPID = "CADGEN"
+def _assert_views_fit(sheet: Sheet, placed: Sequence[tuple], *, index: int) -> None:
+    """Refuse a sheet whose views run off the frame, naming the scale that fits.
+
+    A part far larger than the paper still writes valid geometry -- out at
+    x = 4284 on a 420 mm sheet -- and the render then crops to a near-empty page.
+    Nothing downstream can tell that from a drawing of a small feature, so the
+    script stops here, at the one place that knows both extents.
+    """
+    m = _MARGIN
+    frame = (m, sheet.width - m, m, sheet.height - m)
+    over = []
+    for view, _proj, _bounds, _cx, _cy, box in placed:
+        if box[0] < frame[0] or box[1] > frame[1] or box[2] < frame[2] or box[3] > frame[3]:
+            over.append((view, box))
+    if not over:
+        return
+    # Measure the whole arrangement, not each view: the views have to fit the frame
+    # together. Shrinking the scale shrinks the geometry but not the gaps between
+    # views, so the ratio below understates what is achievable -- deliberately, since
+    # a suggestion that still does not fit is worse than a conservative one.
+    usable_w, usable_h = frame[1] - frame[0], frame[3] - frame[2]
+    union = (min(b[0] for *_, b in placed), max(b[1] for *_, b in placed),
+             min(b[2] for *_, b in placed), max(b[3] for *_, b in placed))
+    need = min(usable_w / max(union[1] - union[0], 1e-9), usable_h / max(union[3] - union[2], 1e-9))
+    ceiling = min(sheet.scale * need, sheet.scale * 0.999)
+    fits = next((candidate for candidate in _STANDARD_SCALES if candidate <= ceiling), _STANDARD_SCALES[-1])
+    names = ", ".join(sorted({view.name for view, _ in over}))
+    raise ValueError(
+        f"sheet {index} ({sheet.size}, scale {_scale_label(sheet.scale)}): the {names} view"
+        f"{'s run' if len(over) > 1 else ' runs'} off the frame. "
+        f"Use Sheet(scale={fits:g}) ({_scale_label(fits)}), a larger sheet size, or place the views closer."
+    )
 
 
-def _tag(entity, view_name: str, dim_index: str | None = None, extra: Sequence[str] = ()) -> None:
-    tags = [(1000, f"view={view_name}")]
-    if dim_index is not None:
-        tags.append((1000, f"dim={dim_index}"))
-    tags += [(1000, value) for value in extra]
-    entity.set_xdata(XDATA_APPID, tags)
+def _spans(a, b) -> str:
+    """Whether a projected point pair reads as a horizontal or a vertical dimension."""
+    return "h" if abs(b[0] - a[0]) >= abs(b[1] - a[1]) else "v"
+
+
+def _scale_label(scale: float) -> str:
+    if abs(scale - 1) < 1e-9:
+        return "1:1"
+    return f"1:{1 / scale:g}" if scale < 1 else f"{scale:g}:1"
 
 
 def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
@@ -539,15 +648,18 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
         aci = 7 if sheet.ink == "mono" and name != "HIDDEN" else color
         doc.layers.add(name, color=aci, linetype=linetype, lineweight=int(round(weight * 100)))
     dimstyle = _dimstyle(doc, sheet.text_height)
-    if XDATA_APPID not in doc.appids:
-        doc.appids.add(XDATA_APPID)
     W, H = sheet.width, sheet.height
 
     def text(value, x, y, height, align, layer="TITLE", fit: float | None = None):
         # ``fit`` is the width the text may occupy; longer text is set smaller
-        # rather than run through a cell divider or off the sheet.
+        # rather than run through a cell divider or off the sheet. Below the
+        # smallest legible height the text is cut instead, with an ellipsis, so a
+        # long title ends inside its cell rather than running over the next one.
         if fit is not None and value:
-            height = max(1.6, min(height, fit / (len(value) * 0.72)))
+            height = max(_MIN_TEXT_MM, min(height, fit / (len(value) * 0.72)))
+            room = int(fit / (height * 0.72))
+            if len(value) > room:
+                value = (value[: max(room - 1, 1)] + "…") if room > 1 else value[:1]
         entity = msp.add_text(value, dxfattribs={"height": height, "layer": layer})
         entity.set_placement((x, y), align=align)
         return entity
@@ -565,8 +677,8 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
     sub = " · ".join(v for v in (sheet.part_number, sheet.material, sheet.author) if v)
     if sub:
         text(sub, x0 + 3, y0 + th * 0.25, 2.5, TextEntityAlignment.MIDDLE_LEFT, fit=left_w)
-    scale_text = "1:1" if abs(sheet.scale - 1) < 1e-9 else (f"1:{1 / sheet.scale:g}" if sheet.scale < 1 else f"{sheet.scale:g}:1")
-    text(f"SCALE {scale_text}   {sheet.units.upper()}   {sheet.projection}", x0 + tw - 3, y0 + th * 0.75, 2.5, TextEntityAlignment.MIDDLE_RIGHT, fit=right_w)
+    text(f"SCALE {_scale_label(sheet.scale)}   {sheet.units.upper()}   {sheet.projection}",
+         x0 + tw - 3, y0 + th * 0.75, 2.5, TextEntityAlignment.MIDDLE_RIGHT, fit=right_w)
     text(f"SHEET {index} OF {count}   REV {sheet.revision}   {label}", x0 + tw - 3, y0 + th * 0.25, 2.5, TextEntityAlignment.MIDDLE_RIGHT, fit=right_w)
     notes = ([f"TOLERANCES PER {sheet.general_tolerance} UNLESS OTHERWISE SPECIFIED."] if sheet.general_tolerance else []) + list(sheet.notes)
     if notes:
@@ -607,6 +719,7 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
         half_h = (by1 - by0) * sv / 2
         placed.append((view, proj, bounds, cx, cy, (view.at[0] - half_w, view.at[0] + half_w, view.at[1] - half_h, view.at[1] + half_h)))
     boxes = [box for (_, _, _, _, _, box) in placed]
+    _assert_views_fit(sheet, placed, index=index)
 
     def blocked(x0, x1, y0, y1, own_box):
         """Whether a landing area [x0,x1]x[y0,y1] runs off the frame or into another view."""
@@ -630,32 +743,60 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
             return to_sheet(proj.point(p3))
 
         def put(edges, layer):
+            """Write projected edges once each.
+
+            The hidden-line pass returns an edge per face that hides it, so a slot
+            behind two faces comes back twice and the same polyline lands on HIDDEN
+            twice over. Written that way the dashes double-strike and
+            ``validate_drawing_document`` reports every pair, so an edge is keyed by
+            its drawn geometry -- rounded to a micron, and for a line or polyline
+            read the same in either direction -- and a repeat is dropped.
+            """
             from build123d import GeomType
 
+            seen: set = set()
+
+            def once(key) -> bool:
+                if key in seen:
+                    return False
+                seen.add(key)
+                return True
+
+            def q(value: float) -> float:
+                return round(value, 6)
+
             for edge in edges:
-                # A circular edge stays a CIRCLE or ARC: exact on the sheet, and a
-                # viewer can snap to it as a hole or a radius rather than a polyline.
+                # A circular edge stays a CIRCLE or ARC: exact on the sheet, so a hole
+                # reads as a hole and a fillet as a radius rather than as a polyline.
                 if edge.geom_type == GeomType.CIRCLE:
                     c = to_sheet((edge.arc_center.X, edge.arc_center.Y))
                     r = edge.radius * sv
                     if edge.is_closed:
-                        _tag(msp.add_circle(c, r, dxfattribs={"layer": layer}), view.name)
+                        if once(("circle", q(c[0]), q(c[1]), q(r))):
+                            msp.add_circle(c, r, dxfattribs={"layer": layer})
                         continue
                     a, b = edge.position_at(0), edge.position_at(1)
                     mid = edge.position_at(0.5)
-                    ang = lambda q: math.degrees(math.atan2(q.Y - edge.arc_center.Y, q.X - edge.arc_center.X)) % 360
+                    ang = lambda p: math.degrees(math.atan2(p.Y - edge.arc_center.Y, p.X - edge.arc_center.X)) % 360
                     a0, a1, am = ang(a), ang(b), ang(mid)
                     # ezdxf arcs run counter-clockwise from start to end; pick the
                     # order whose sweep passes through the edge's midpoint.
                     if (am - a0) % 360 > (a1 - a0) % 360:
                         a0, a1 = a1, a0
-                    _tag(msp.add_arc(c, r, a0, a1, dxfattribs={"layer": layer}), view.name)
+                    if once(("arc", q(c[0]), q(c[1]), q(r), q(a0), q(a1))):
+                        msp.add_arc(c, r, a0, a1, dxfattribs={"layer": layer})
                     continue
                 poly = [to_sheet(p) for p in _edge_polyline(edge)]
+                points = tuple((q(x), q(y)) for x, y in poly)
+                # The same edge can come back with its ends swapped; one drawn line is
+                # one key whichever way it was walked.
+                key = ("poly", min(points, points[::-1]))
+                if not once(key):
+                    continue
                 if len(poly) == 2:
-                    _tag(msp.add_line(poly[0], poly[1], dxfattribs={"layer": layer}), view.name)
+                    msp.add_line(poly[0], poly[1], dxfattribs={"layer": layer})
                 else:
-                    _tag(msp.add_lwpolyline(poly, dxfattribs={"layer": layer}), view.name)
+                    msp.add_lwpolyline(poly, dxfattribs={"layer": layer})
 
         put(proj.visible, "VISIBLE")
         if view.hidden:
@@ -664,8 +805,8 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
             for centre, radius in _circles(proj.visible):
                 c = to_sheet(centre)
                 arm = radius * sv + 2.0
-                _tag(msp.add_line((c[0] - arm, c[1]), (c[0] + arm, c[1]), dxfattribs={"layer": "CENTER"}), view.name)
-                _tag(msp.add_line((c[0], c[1] - arm), (c[0], c[1] + arm), dxfattribs={"layer": "CENTER"}), view.name)
+                msp.add_line((c[0] - arm, c[1]), (c[0] + arm, c[1]), dxfattribs={"layer": "CENTER"})
+                msp.add_line((c[0], c[1] - arm), (c[0], c[1] + arm), dxfattribs={"layer": "CENTER"})
         vx0, vx1, vy0, vy1 = own_box
 
         # How far annotation already reaches past each side of the view, so a later
@@ -681,13 +822,40 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
             landings[side].append(y)
             return y
 
-        def linear(a, b, offset, override, orientation, tag_index, tol=None, fit=None):
-            dx, dy = abs(b[0] - a[0]), abs(b[1] - a[1])
-            horizontal = (orientation or ("h" if dx >= dy else "v")) == "h"
+        # Rows already taken on each side, so a dimension left to place itself
+        # lands past the ones before it instead of on top of them. `overall()`
+        # claims the first row above and the first row to the left.
+        rows: dict[str, int] = {"left": 0, "right": 0, "top": 0, "bottom": 0}
+
+        def claim_row(side: str) -> float:
+            rows[side] += 1
+            return _DIM_ROW * rows[side]
+
+        def linear(a, b, offset, override, orientation, tol=None, fit=None):
+            horizontal = (orientation or _spans(a, b)) == "h"
+            if offset is None:
+                # Unplaced dimensions go above a horizontal pair and right of a
+                # vertical one, which are the sides `overall()` does not use twice.
+                # The row is measured from the VIEW's edge, not from the dimensioned
+                # points, so two dimensions on different features still land on
+                # different lines -- which is the whole point of not placing them.
+                if horizontal:
+                    offset = (vy1 + claim_row("top")) - max(a[1], b[1])
+                else:
+                    offset = (vx1 + claim_row("right")) - max(a[0], b[0])
+            else:
+                side = ("top" if offset >= 0 else "bottom") if horizontal else ("right" if offset >= 0 else "left")
+                rows[side] = max(rows[side], int(abs(offset) // _DIM_ROW))
             label = (override or "<>") + (f" {fit}" if fit else "")
-            style_override = {}
+            # The value is measured in SHEET millimetres, which are the model's only
+            # at 1:1. dimlfac scales what the dimension prints back to true size, per
+            # view, so a view drawn at its own scale still reads the part.
+            style_override = {"dimlfac": 1.0 / sv}
             if tol:
-                style_override = {"dimtol": 1, "dimtp": tol[0], "dimtm": tol[1], "dimtdec": 2, "dimtfac": 0.7}
+                # The deviations are the author's, in true size, and ezdxf prints them
+                # as given -- dimlfac scales the measurement, not the tolerance.
+                style_override |= {"dimtol": 1, "dimtp": tol[0], "dimtm": tol[1],
+                                   "dimtdec": 2, "dimtfac": 0.7}
             if horizontal:
                 base = (a[0], (max(a[1], b[1]) if offset >= 0 else min(a[1], b[1])) + offset)
                 d = msp.add_linear_dim(base=base, p1=a, p2=b, angle=0, dimstyle=dimstyle, text=label,
@@ -703,14 +871,25 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
                 edge = vx1 if offset >= 0 else vx0
                 reach[side] = max(reach[side], abs(base[0] - edge) + sheet.text_height * 1.5)
             d.render()
-            _tag(d.dimension, view.name, tag_index)
 
+        # The overall pair is the OUTERMOST row on its side: a drawing reads from the
+        # view outward, smallest feature first. Its rows are reserved here so the
+        # feature dimensions and the hole callouts keep clear of them, and drawn
+        # after them so the rows in between stay free.
+        unplaced_above = sum(
+            1 for d in view._dims
+            if d.kind == "linear" and d.offset is None
+            and (d.orientation or _spans(model_to_sheet(d.p1), model_to_sheet(d.p2))) == "h"
+        )
+        overall_top = _DIM_ROW * (unplaced_above + 1)
+        overall_left = _DIM_ROW
         if view._overall:
-            linear((vx0, vy1), (vx1, vy1), 12.0, None, "h", "overall-w")
-            linear((vx0, vy0), (vx0, vy1), -12.0, None, "v", "overall-h")
+            reach["top"] = max(reach["top"], overall_top + sheet.text_height * 1.5)
+            reach["left"] = max(reach["left"], overall_left + sheet.text_height * 1.5)
         for index, dim in enumerate(view._dims):
             if dim.kind == "linear":
-                linear(model_to_sheet(dim.p1), model_to_sheet(dim.p2), dim.offset, dim.text, dim.orientation, str(index), dim.tol, dim.fit)
+                linear(model_to_sheet(dim.p1), model_to_sheet(dim.p2), dim.offset, dim.text,
+                       dim.orientation, dim.tol, dim.fit)
             elif dim.kind in ("diameter", "radius", "hole"):
                 # A hole callout: a leader from the circle's edge to a horizontal landing
                 # outside the view, past whatever dimensions already stand on that side,
@@ -748,10 +927,10 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
                 start = (centre[0] + sign * r * abs(math.cos(exit_angle)), centre[1] + r * math.sin(exit_angle))
                 knee = (knee_x, land_y)
                 landing = (knee[0] + sign * 6.0, knee[1])
-                _tag(msp.add_leader([start, knee, landing], dxfattribs={"layer": "DIM"},
-                                    override={"dimasz": sheet.text_height * 0.85, "dimldrblk": "_CLOSEDFILLED"}), view.name, str(index))
+                msp.add_leader([start, knee, landing], dxfattribs={"layer": "DIM"},
+                               override={"dimasz": sheet.text_height * 0.85, "dimldrblk": "_CLOSEDFILLED"})
                 align = TextEntityAlignment.MIDDLE_LEFT if go_right else TextEntityAlignment.MIDDLE_RIGHT
-                _tag(text(value, landing[0] + sign * 2.0, landing[1], sheet.text_height, align, "DIM"), view.name, str(index))
+                text(value, landing[0] + sign * 2.0, landing[1], sheet.text_height, align, "DIM")
             elif dim.kind == "angle":
                 v = model_to_sheet(dim.p1)
                 a = model_to_sheet(dim.p2)
@@ -762,38 +941,33 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
                 base = (v[0] + dim.offset * math.cos(mid), v[1] + dim.offset * math.sin(mid))
                 d = msp.add_angular_dim_3p(base=base, center=v, p1=a, p2=b, dimstyle=dimstyle, dxfattribs={"layer": "DIM"})
                 d.render()
-                _tag(d.dimension, view.name, str(index))
             elif dim.kind == "note":
                 p = model_to_sheet(dim.p1)
                 q = (p[0] + dim.radius, p[1] + dim.angle)
-                _tag(msp.add_leader([p, q, (q[0] + (3 if dim.radius >= 0 else -3), q[1])], dxfattribs={"layer": "NOTES"}), view.name, str(index))
+                msp.add_leader([p, q, (q[0] + (3 if dim.radius >= 0 else -3), q[1])], dxfattribs={"layer": "NOTES"})
                 align = TextEntityAlignment.BOTTOM_LEFT if dim.radius >= 0 else TextEntityAlignment.BOTTOM_RIGHT
-                _tag(text(dim.text, q[0] + (4 if dim.radius >= 0 else -4), q[1] + 1, sheet.text_height, align, "NOTES"), view.name, str(index))
+                text(dim.text, q[0] + (4 if dim.radius >= 0 else -4), q[1] + 1, sheet.text_height, align, "NOTES")
+
+        if view._overall:
+            linear((vx0, vy1), (vx1, vy1), overall_top, None, "h")
+            linear((vx0, vy0), (vx0, vy1), -overall_left, None, "v")
 
         # The view label goes under everything that hangs below the view, so a
-        # dimension on the bottom side never sits on it. It also carries the view's
-        # placement (at=) and the affine map from model to sheet millimetres
-        # (map=bx,by,a00,a01,a10,a11,a20,a21: b plus the sheet image of each model
-        # axis), so a viewer can turn a sheet point back into model coordinates.
-        b = (view.at[0] + (proj.c[0] - cx) * sv, view.at[1] + (proj.c[1] - cy) * sv)
-        map_values = [b[0], b[1]] + [proj.m[i][j] * sv for i in range(3) for j in range(2)]
-        _tag(text((view.label or view.name).upper(), view.at[0], vy0 - reach["bottom"] - 6, 3.5, TextEntityAlignment.TOP_CENTER, "NOTES"),
-             view.name, extra=[f"at={_fmt(view.at[0])},{_fmt(view.at[1])}", "map=" + ",".join(f"{v:.6g}" for v in map_values)])
+        # dimension on the bottom side never sits on it.
+        text((view.label or view.name).upper(), view.at[0], vy0 - reach["bottom"] - 6, 3.5,
+             TextEntityAlignment.TOP_CENTER, "NOTES")
     return doc
 
 
-def _emit(doc, *, label: str) -> bytes:
-    from cadgen._internal.dxf_emit import _assert_volatile_fields_pinned, _canonicalize_class_registry
+def _write_pdf(docs, sheets: Sequence[Sheet], path: Path) -> None:
+    """Render the sheets to one PDF, a page each.
 
-    _canonicalize_class_registry(doc)
-    buffer = io.StringIO()
-    doc.write(buffer)
-    payload = buffer.getvalue()
-    _assert_volatile_fields_pinned(payload, label=label)
-    return payload.encode("utf-8")
-
-
-def _write_pdf(docs, sheets: Sequence[Sheet], path: Path) -> bool:
+    The PDF is the drawing, so a missing renderer is a failure, not a downgrade:
+    an exit 0 with no document is the one outcome a build cannot recover from.
+    The page carries no creation date, so the bytes are a function of the
+    content, and the render goes to a temporary file that is renamed on success,
+    so a failed run never leaves a half-written document behind.
+    """
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -801,39 +975,59 @@ def _write_pdf(docs, sheets: Sequence[Sheet], path: Path) -> bool:
         from matplotlib.backends.backend_pdf import PdfPages
         from ezdxf.addons.drawing import Frontend, RenderContext, config
         from ezdxf.addons.drawing.matplotlib import MatplotlibBackend
-    except Exception:  # noqa: BLE001 - the PDF is the optional half; the DXF is the artifact
-        return False
+    except ImportError as exc:
+        raise RuntimeError(
+            "@eng_drawing writes a PDF and its renderer is missing: "
+            f"{exc}. Install cadgen's dependencies (pip install matplotlib pillow)."
+        ) from exc
     path.parent.mkdir(parents=True, exist_ok=True)
-    with PdfPages(path) as pdf:
-        for doc, sheet in zip(docs, sheets):
-            fig = plt.figure(figsize=(sheet.width / 25.4, sheet.height / 25.4))
-            ax = fig.add_axes([0, 0, 1, 1])
-            ax.set_xlim(0, sheet.width)
-            ax.set_ylim(0, sheet.height)
-            ctx = RenderContext(doc)
-            ctx.set_current_layout(doc.modelspace())
-            backend = MatplotlibBackend(ax, adjust_figure=False)
-            Frontend(ctx, backend, config=config.Configuration(
-                background_policy=config.BackgroundPolicy.WHITE,
-                color_policy=config.ColorPolicy.BLACK if sheet.ink == "mono" else config.ColorPolicy.COLOR,
-            )).draw_layout(doc.modelspace(), finalize=False)
-            ax.set_xlim(0, sheet.width)
-            ax.set_ylim(0, sheet.height)
-            ax.set_aspect("equal")
-            ax.axis("off")
-            pdf.savefig(fig)
-            plt.close(fig)
-    return True
+    partial = path.with_name(f".{path.name}.partial")
+    try:
+        # CreationDate=None drops the one field matplotlib stamps from the clock.
+        with PdfPages(partial, metadata={"CreationDate": None}) as pdf:
+            for doc, sheet in zip(docs, sheets):
+                fig = plt.figure(figsize=(sheet.width / 25.4, sheet.height / 25.4))
+                ax = fig.add_axes([0, 0, 1, 1])
+                ax.set_xlim(0, sheet.width)
+                ax.set_ylim(0, sheet.height)
+                ctx = RenderContext(doc)
+                ctx.set_current_layout(doc.modelspace())
+                backend = MatplotlibBackend(ax, adjust_figure=False)
+                Frontend(ctx, backend, config=config.Configuration(
+                    background_policy=config.BackgroundPolicy.WHITE,
+                    color_policy=config.ColorPolicy.BLACK if sheet.ink == "mono" else config.ColorPolicy.COLOR,
+                )).draw_layout(doc.modelspace(), finalize=False)
+                ax.set_xlim(0, sheet.width)
+                ax.set_ylim(0, sheet.height)
+                ax.set_aspect("equal")
+                ax.axis("off")
+                pdf.savefig(fig)
+                plt.close(fig)
+        partial.replace(path)
+    finally:
+        partial.unlink(missing_ok=True)
 
 
-def drawing(func: Callable[..., Any] | None = None, *, out: str | None = None, pdf: str | bool = True):
-    """Declare a drawing. The function returns a :class:`Sheet` or a list of them;
-    calling it (the script's ``__main__`` does) writes the files and returns the
-    paths written."""
+def eng_drawing(func: Callable[..., Any] | None = None, *, out: str | Path | None = None):
+    """Declare an engineering drawing. The function returns a :class:`Sheet` or a
+    list of them; calling it (the script's ``__main__`` does) writes one PDF with a
+    page per sheet at ``out`` and returns the path written.
+
+    ``out`` is required and relative paths resolve against the script, because
+    cadgen has no opinion on where a document belongs -- the caller does.
+    """
 
     def apply(fn: Callable[..., Any]) -> Callable[..., Any]:
         import inspect
 
+        if out is None:
+            raise ValueError(
+                f"@eng_drawing {fn.__name__} needs out=<path>.pdf: the drawing is that PDF, "
+                "and cadgen does not choose where it lands."
+            )
+        target_spec = Path(out)
+        if target_spec.suffix.lower() != ".pdf":
+            raise ValueError(f"@eng_drawing out= must name a .pdf, got {out!r}")
         script = Path(inspect.getsourcefile(fn) or inspect.getfile(fn)).resolve()
 
         @functools.wraps(fn)
@@ -841,32 +1035,27 @@ def drawing(func: Callable[..., Any] | None = None, *, out: str | None = None, p
             result = fn(*args, **kwargs)
             sheets = list(result) if isinstance(result, (list, tuple)) else [result]
             if not sheets or not all(isinstance(s, Sheet) for s in sheets):
-                raise TypeError(f"@drawing {fn.__name__} must return a Sheet or a list of Sheets")
-            target = (script.parent / (out or f"../DXF/{fn.__name__}.dxf")).resolve()
-            target.parent.mkdir(parents=True, exist_ok=True)
-            from cadgen._internal.dxf_emit import _pinned_ezdxf_metadata, write_dxf
+                raise TypeError(f"@eng_drawing {fn.__name__} must return a Sheet or a list of Sheets")
+            from cadgen.drawing_checks import raise_on_error_findings, validate_drawing_document
 
-            written: list[Path] = []
+            target = target_spec if target_spec.is_absolute() else (script.parent / target_spec).resolve()
             docs = []
-            with _pinned_ezdxf_metadata():
-                for index, sheet in enumerate(sheets, start=1):
-                    label = fn.__name__
-                    doc = _render_sheet(sheet, index=index, count=len(sheets), label=label)
-                    docs.append(doc)
-                    path = target if index == 1 else target.with_name(f"{target.stem}-sheet{index}{target.suffix}")
-                    write_dxf(_emit(doc, label=f"{label} sheet {index}"), path)
-                    written.append(path)
-                    print(f"wrote {path}")
-            if pdf:
-                pdf_path = (script.parent / pdf).resolve() if isinstance(pdf, str) else target.parent.parent / "PDF" / f"{target.stem}.pdf"
-                if _write_pdf(docs, sheets, pdf_path):
-                    written.append(pdf_path)
-                    print(f"wrote {pdf_path} ({len(sheets)} page{'s' if len(sheets) != 1 else ''})")
-                else:
-                    print("skipped PDF: matplotlib is not installed (pip install matplotlib)")
-            return written
+            for index, sheet in enumerate(sheets, start=1):
+                doc = _render_sheet(sheet, index=index, count=len(sheets), label=fn.__name__)
+                # The same checks every @dxf build runs, against the document the
+                # page is rendered from: duplicate geometry, unset units, an empty
+                # sheet. A drawing skipping them is how the duplicates went unseen.
+                findings = validate_drawing_document(doc)
+                raise_on_error_findings(findings, label=f"{fn.__name__} sheet {index}")
+                for finding in findings:
+                    if finding.severity == "warning":
+                        print(f"{fn.__name__} sheet {index} {finding.render()}")
+                docs.append(doc)
+            _write_pdf(docs, sheets, target)
+            print(f"wrote {target} ({len(sheets)} page{'s' if len(sheets) != 1 else ''})")
+            return [target]
 
-        run.__cadgen_drawing__ = True  # type: ignore[attr-defined]
+        run.__cadgen_eng_drawing__ = True  # type: ignore[attr-defined]
         return run
 
     return apply(func) if func is not None else apply

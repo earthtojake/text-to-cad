@@ -1,0 +1,4 @@
+interface:
+  display_name: "Engineering Drawing"
+  short_description: "Make a dimensioned engineering drawing of a CAD part, as a PDF."
+  default_prompt: "Use $engineering-drawing to produce a dimensioned engineering drawing (views, dimensions, hole callouts, title block) of this part as a PDF."
