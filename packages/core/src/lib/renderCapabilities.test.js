@@ -117,12 +117,13 @@ test("Measure is a STEP tool", () => {
   assert.equal(hasCapability(RENDER_FORMAT.DXF, "measure"), false);
 });
 
-test("artifact-managed formats are exactly STEP and DXF", () => {
+test("STEP is the only artifact-managed format", () => {
   // A SUBSET of owns_entry in cadgen/viewer/artifact.py: a format listed here that the
   // server does not own blocks forever, so a format the viewer renders from its own file
-  // belongs out.
+  // belongs out. A DXF is one of those — `owns_dxf_path` always answers False, and the
+  // renderer parses the file itself.
   const managed = Object.values(RENDER_FORMAT).filter((format) => isArtifactManagedFormat(format));
-  assert.deepEqual(managed.sort(), [RENDER_FORMAT.DXF, RENDER_FORMAT.STEP].sort());
+  assert.deepEqual(managed, [RENDER_FORMAT.STEP]);
 });
 
 test("every format gets the whole toolbar: the tools act on the viewport, not the geometry", () => {
@@ -137,11 +138,6 @@ test("every format gets the whole toolbar: the tools act on the viewport, not th
   // An unrecognised format still gets the viewport tools: they cannot misbehave without
   // geometry-level capabilities behind them.
   assert.equal(supportsTool("totally-unknown", "draw"), true);
-});
-
-test("only DXF offers the plan view today", () => {
-  const planView = Object.values(RENDER_FORMAT).filter((format) => hasCapability(format, "planView"));
-  assert.deepEqual(planView, [RENDER_FORMAT.DXF]);
 });
 
 test("projection is a theme trait for every format", () => {

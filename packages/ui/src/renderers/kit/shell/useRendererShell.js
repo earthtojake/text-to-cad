@@ -32,6 +32,16 @@ export const SHELL_TOOL = Object.freeze({ ORBIT: "orbit", DRAW: "draw", ANIMATE:
 const SESSION_SAVE_DELAY_MS = 180;
 const INSPECTOR_REVEAL_MIN_WIDTH_PX = 520;
 const EMPTY = Object.freeze({});
+// The top-down preset leans a whisker off the pole so screen-up is stable, so "straight
+// down" is a tolerance, not an equality: this is a good deal wider than that lean.
+const PLAN_VIEW_TILT_TOLERANCE = 0.08;
+
+/** Does this camera look straight down the vertical axis, as a plan view must? */
+function isTopDownCamera({ position, target }) {
+  const [x, y, z] = [position[0] - target[0], position[1] - target[1], position[2] - target[2]];
+  const length = Math.hypot(x, y, z);
+  return length > 1e-9 && z / length >= 1 - PLAN_VIEW_TILT_TOLERANCE;
+}
 
 /**
  * Everything a file-family renderer needs from its host that is not about its
@@ -83,6 +93,10 @@ const EMPTY = Object.freeze({});
  *   default stays what a session falls back to; `never` lists recorded tools this file does not come back in.
  * @param {{ available: boolean, bounds: () => import("../scene.js").SceneBounds | null }} [options.selection]  What
  *   "Zoom to selection" frames. Without it the menu item is off.
+ * @param {boolean} [options.planView]  Lock the camera looking straight down: orthographic
+ *   whatever Display's Camera says, no view cube, no rotation (pointer OR keyboard), left-drag
+ *   panning, and every reset — the zoom header, "Reset model", live `resetCamera` — back to
+ *   top-down. A camera the host sets from a tilted pose is declined rather than quietly straightened.
  * @param {object} [options.displayTabProps]  Extra Display tab props for sections the renderer's FEATURES opt into.
  * @param {string} [options.sceneScaleMode]
  */
@@ -90,7 +104,7 @@ export function useRendererShell({
   view, services, resource, modelKey, revisionKey = "", features, toolModes, scene, load,
   animation = null, live = EMPTY, promptReferences = null, navigationActions = null, onResetModel = null,
   escape = EMPTY, rendererState = EMPTY, toolRestore = EMPTY, selection = null, displayTabProps = EMPTY,
-  sceneScaleMode = VIEWER_SCENE_SCALE.CAD
+  planView = false, sceneScaleMode = VIEWER_SCENE_SCALE.CAD
 }) {
   const host = useViewerHost();
   const viewerElement = useContext(ViewerElementContext);
@@ -342,6 +356,11 @@ export function useRendererShell({
         || ["zoom", "focalLength", "orthographicHalfHeight"].some(key => camera[key] != null && (!Number.isFinite(camera[key]) || camera[key] <= 0))) {
         throw new Error("Camera vectors must contain three finite numbers and camera scales must be positive.");
       }
+      // Declined, not straightened: silently clamping a caller's pose would report back a
+      // camera it never asked for, and the caller would have no way to tell the view is locked.
+      if (planView && !isTopDownCamera(camera)) {
+        throw new Error("This view is locked looking straight down, so it cannot be set to a tilted camera. Leave the plan view first, or set a camera whose position is directly above its target.");
+      }
       const nextDisplay = viewerDisplaySettingsForCamera(viewSettingsStore.getSnapshot().display, camera);
       const requested = clonePerspectiveSnapshot(camera);
       if (previewMode) {
@@ -417,7 +436,7 @@ export function useRendererShell({
     inspector: { open: inspectorOpen, setOpen: setInspectorOpen, tab: inspectorTab, setTab: setInspectorTab, reveal: revealInspectorTab },
     // Frame-facing (RendererShell).
     frame: {
-      view, hostRef, hostElement, viewerElement, sceneBackdrop, colorScheme, modelKey, presentationKey, sceneScaleMode, scene,
+      view, hostRef, hostElement, viewerElement, sceneBackdrop, colorScheme, modelKey, presentationKey, sceneScaleMode, scene, planView,
       viewerRef, viewUpdate, resolvedScene, viewerPerspective, activePerspectiveRef, handlePerspectiveChange,
       previewMode, previewOrbitSpeed, setPreviewOrbitSpeed, viewerLoading, loading, presentationState,
       handlePresentationChange, viewerAlert, fileStatusAlert, viewerAlertOpen, setViewerAlertOpen, setRuntimeAlert,

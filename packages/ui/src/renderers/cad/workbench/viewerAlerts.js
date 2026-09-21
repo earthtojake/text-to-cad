@@ -1,9 +1,5 @@
 import { entrySourceFormat } from "@hardcore/core/lib/fileFormats.js";
 import {
-  ASSET_KIND,
-  renderCapabilities
-} from "@hardcore/core/lib/renderCapabilities.js";
-import {
   stepArtifactHasRenderableGlb,
   stepArtifactStatusMessage
 } from "./fileStatusItems.js";
@@ -68,15 +64,6 @@ export function buildViewerMeshAlert(entry, hasMeshData, loadError, artifact = n
       blocking: false,
       message: `${alert.message} The existing model remains visible.`
     } : alert;
-  }
-
-  // A dimensioned DRAWING has no mesh BY DESIGN -- it encloses nothing to extrude
-  // and renders as lines (issue #246). The profile is decided from the PARSED file
-  // now, which this alert path cannot see, so any meshless DXF stays quiet: a
-  // layout's mesh is built from the same parse, and a genuinely broken file
-  // reports through loadError above.
-  if (!hasMeshData && renderCapabilities(entrySourceFormat(entry)).assetKind === ASSET_KIND.DRAWING) {
-    return null;
   }
 
   if (!hasMeshData) {

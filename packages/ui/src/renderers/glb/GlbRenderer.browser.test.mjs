@@ -97,9 +97,14 @@ function dominantColors(image, { minShare = 0.004 } = {}) {
     counts.set(key, (counts.get(key) || 0) + 1);
   }
   const total = image.width * image.height;
-  // The corner pixel is the backdrop, whatever share of the picture the model takes.
-  const backdrop = (image.data[0] << 16) | (image.data[1] << 8) | image.data[2];
-  return [...counts].filter(([key, count]) => key !== backdrop && count / total >= minShare)
+  // The corner pixel is the backdrop, whatever share of the picture the model takes. The
+  // backdrop is a GRADIENT, so its neighbouring shades are backdrop too: matching only the
+  // exact corner colour counts a few of them as "colours of the model" as soon as the model
+  // leaves enough of the frame uncovered.
+  const backdrop = [image.data[0], image.data[1], image.data[2]];
+  const isBackdrop = key => Math.max(Math.abs((key >> 16) - backdrop[0]),
+    Math.abs(((key >> 8) & 255) - backdrop[1]), Math.abs((key & 255) - backdrop[2])) <= 12;
+  return [...counts].filter(([key, count]) => !isBackdrop(key) && count / total >= minShare)
     .sort((left, right) => right[1] - left[1]).map(([key]) => [key >> 16, (key >> 8) & 255, key & 255]);
 }
 const differingPixels = (left, right) => {

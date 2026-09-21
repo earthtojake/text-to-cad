@@ -7,6 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:http';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
+import * as THREE from 'three';
+import { interactiveCameraFrameForBounds } from '../../../../dist/renderers/kit/camera/viewportCameraFit.js';
+import { DEFAULT_VIEW_DIRECTION, WORLD_UP } from '../../../../dist/renderers/kit/camera/viewportCameraKit.js';
+import { CAD_DEFAULT_VERTICAL_FOV_DEGREES } from '../../../../dist/renderers/kit/camera/cameraLens.js';
 
 // The shell end to end, in a real browser, under the smallest renderer that mounts it: a
 // one-triangle mesh file. Everything asserted here is the shell's (kit/shell), so it holds
@@ -512,5 +516,71 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   const clears = await page.evaluate(() => window.cadBufferClears);
   assert.ok(clears.length > 0, 'exercise actual Retina buffer resizes');
   assert.ok(clears.every(clear => clear.redrawn), 'no cleared framebuffer is left waiting for a later draw');
+  assert.deepEqual(errors, []);
+});
+
+// A wide, flat box: the shape whose fit is decided by its WIDTH against the viewport's
+// aspect, so a fit taken under the wrong lens or the wrong canvas shows up immediately.
+// (A tall or cubic model is fitted by its height and hides the difference entirely.)
+const WIDE_CORNERS = [[0, 0, 0], [140, 0, 0], [140, 80, 0], [0, 80, 0], [0, 0, 2], [140, 0, 2], [140, 80, 2], [0, 80, 2]];
+const WIDE_TRIANGLES = [[0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7], [0, 1, 5], [0, 5, 4], [2, 3, 7], [2, 7, 6], [1, 2, 6], [1, 6, 5], [3, 0, 4], [3, 4, 7]];
+const widePlate = `solid plate\n${WIDE_TRIANGLES.map(triangle =>
+  `facet normal 0 0 0\nouter loop\n${triangle.map(index => `vertex ${WIDE_CORNERS[index].join(' ')}`).join('\n')}\nendloop\nendfacet`
+).join('\n')}\nendsolid plate\n`;
+
+test('a file opens framed at 100% of its own ruler: the open fit is the fit, whatever lens it was taken under', async (t) => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hardcore-shell-fit-'));
+  let server, browser;
+  t.after(async () => { await browser?.close(); if (server) await new Promise(resolve => server.close(resolve)); await rm(temporary, { recursive: true, force: true }); });
+  await build({ entryPoints: [fileURLToPath(new URL('../../harness/index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.woff2': 'dataurl' } });
+  const bundle = await readFile(join(temporary, 'harness.js'));
+  const compiledCss = await readFile(new URL('../../../../dist/styles.css', import.meta.url));
+  server = createServer((request, response) => {
+    const url = new URL(request.url, 'http://test');
+    const root = url.pathname.split('/')[1];
+    if (url.pathname === '/harness.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle); }
+    else if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(compiledCss); }
+    else if (url.pathname.endsWith('/__cad/catalog')) {
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({ rootId: root, entries: [
+        { kind: 'stl', file: 'plate.stl', rootRelativeFile: 'plate.stl', url: '/plate.stl', hash: root, bytes: widePlate.length }] }));
+    } else if (url.pathname.endsWith('/__cad/server')) {
+      response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ rootId: root, rootPath: '/models', backend: 'cadgen' }));
+    } else if (url.pathname.endsWith('/plate.stl')) { response.end(widePlate); }
+    else { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css"></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>'); }
+  });
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+  browser = await chromium.launch({ headless: true, args: process.platform === 'darwin'
+    ? ['--use-angle=metal'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+  page.setDefaultTimeout(15000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => { window.Worker = undefined; });
+  await page.goto(`http://127.0.0.1:${server.address().port}/?file=plate.stl`);
+  const pane = page.getByTestId('one');
+  await pane.locator('[aria-busy="false"] > div > canvas').first().waitFor();
+  await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+
+  const opened = await page.evaluate(() => {
+    const camera = window.__cadCamera();
+    const canvas = document.querySelector('[data-testid="one"] [aria-busy] > div > canvas');
+    return { projection: camera.projection, halfHeight: camera.halfHeight, zoomPercent: camera.zoomPercent,
+      bounds: camera.originalBounds, aspect: canvas.clientWidth / canvas.clientHeight };
+  });
+  assert.equal(opened.projection, 'orthographic');
+  // 100% means "framed as the file opens". It is a ruler the viewport computes independently
+  // of the fit, so the two agreeing is the whole claim: a fit taken under the opening
+  // PERSPECTIVE lens and then converted to orthographic used to land near 89% of it.
+  assert.equal(Math.round(opened.zoomPercent), 100, `opened at ${opened.zoomPercent}% of its own ruler`);
+  // And it is the half-height the fit mathematics gives for this box at the REAL canvas aspect.
+  const expected = interactiveCameraFrameForBounds(THREE, {
+    camera: Object.assign(new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1000), { fov: CAD_DEFAULT_VERTICAL_FOV_DEGREES }),
+    controls: { target: new THREE.Vector3() }, bounds: opened.bounds, frameAspect: opened.aspect,
+    minRadius: 0, viewDirection: DEFAULT_VIEW_DIRECTION, viewUp: WORLD_UP,
+  }).halfHeight;
+  assert.ok(Math.abs(opened.halfHeight - expected) / expected < 0.01,
+    `framed at the fit for this aspect: ${opened.halfHeight} vs ${expected}`);
   assert.deepEqual(errors, []);
 });

@@ -16,13 +16,13 @@ an endpoint the server does not implement.
 
 ## Scope
 
-This is the rule inside the CAD renderer (`src/renderers/cad`), which shows STEP and DXF.
-A GLB, a triangle mesh (STL, 3MF) and a robot description (URDF, SRDF, SDF) have renderers
-of their own (`src/renderers/glb`, `src/renderers/mesh`, `src/renderers/robot`; see
-[CAD renderer](cad-renderer.md#kit)): a vertical slice owns its tools, tabs and scene
-outright and consults no capability table. The `glb`, `stl`, `3mf`, `urdf`, `srdf` and
-`sdf` rows below remain for what is not a renderer: the file list's icon and label, and
-the headless snapshot renderer.
+This is the rule inside the CAD renderer (`src/renderers/cad`), which shows STEP. A DXF,
+a GLB, a triangle mesh (STL, 3MF) and a robot description (URDF, SRDF, SDF) have renderers
+of their own (`src/renderers/dxf`, `src/renderers/glb`, `src/renderers/mesh`,
+`src/renderers/robot`; see [CAD renderer](cad-renderer.md#kit)): a vertical slice owns its
+tools, tabs and scene outright and consults no capability table. The `dxf`, `glb`, `stl`,
+`3mf`, `urdf`, `srdf` and `sdf` rows below remain for what is not a renderer: the file
+list's icon and label, and the headless snapshot renderer.
 
 ## The capability registry
 
@@ -32,7 +32,7 @@ format. Pure data: no behaviour, no imports beyond the format enum.
 | Capability | Meaning |
 |---|---|
 | `content` | Which loaded object is the viewport's content: `mesh`, `robot` (a robot row is read by the headless renderer only; the viewer's robot renderer consults no table). Resolved once into `selectedViewportContent`. |
-| `assetKind` | Which asset the viewer LOADS: `mesh`, `drawing`, `robot`. Not the same question as `content` — a DXF loads a drawing and renders it through the mesh viewport, so it shares the viewport but not the loader. |
+| `assetKind` | Which asset the headless renderer LOADS: `mesh`, `drawing`, `robot`. Not the same question as `content`. |
 | `iconKind` | The file-list glyph. |
 | `sheetKind` | Which file-sheet section set mounts. |
 | `label` | User-facing format name (status chips, sheet titles, loading labels). |
@@ -54,7 +54,7 @@ format. Pure data: no behaviour, no imports beyond the format enum.
   Deliberately *not* `normalizeRenderFormat`, which resolves unknowns to STEP and would
   hand an unrecognised entry STEP's full capability set.
 - Capabilities decide **which** panels and tools mount. Format-specific *content* — STEP's
-  tree, DXF's bends — stays format-specific.
+  tree — stays format-specific.
 
 ## The content signal
 
@@ -101,9 +101,8 @@ What is left is deliberate. `useCadAssets` is allowlisted: choosing and running 
 per format is its whole job, and the `assetKind` field names *which* loader without
 pretending the implementations are the same. `stepArtifactStatus.js` keeps its checks
 because STEP package error codes, the `stale` flag and the renderable-GLB fallback are
-STEP vocabulary — generalising the gate without the vocabulary would show a DXF a card
-about a STEP artifact. The generic build-failure card in `viewerAlerts` already covers
-every artifact-managed kind.
+STEP vocabulary. STEP is now the only artifact-managed format: a DXF is rendered from its
+own bytes and the backend never owns one (`owns_dxf_path` always answers False).
 
 ## Standing gate
 
@@ -142,8 +141,6 @@ from a cold start. Isolate a single suspect model rather than trusting one bulk 
 
 Recorded so they are not mistaken for bugs, and so the next person knows the cost:
 
-- **Select is inert for DXF.** It keeps the button for a uniform toolbar shape; it has no
-  pickable topology.
 
 ## Scene recipe conformance
 

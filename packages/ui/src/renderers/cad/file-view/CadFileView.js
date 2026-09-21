@@ -10,7 +10,7 @@ import { buildTangentFaceGraph } from "../workbench/tangentFaceSelection.js";
 
 import * as THREE from "three";
 import { startTransition, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Box, Camera, FileText, Square } from "lucide-react";
+import { Camera, FileText } from "lucide-react";
 import { CAD_PANEL, EmptyState } from "@hardcore/ui/navigation";
 import { cn } from "@hardcore/ui/utils";
 import CadRenderPane from "../components/workbench/CadRenderPane.js";
@@ -21,34 +21,6 @@ import { buildDisplaySettingsTab } from "../../kit/view-settings/DisplaySettings
 import { ALL_VIEW_FEATURES, EDGELESS_VIEW_FEATURES } from "@hardcore/core/common/viewSettings.js";
 import { explodablePartCount } from "../workbench/explodableParts.js";
 import { prefetchRenderStudio } from "../../kit/look/renderStudioChunk.js";
-import DxfFileSheet from "../components/workbench/DxfFileSheet.js";
-import { DXF_PREVIEW_REFERENCE_THICKNESS_MM } from "@hardcore/core/lib/dxf/previewGlb.js";
-import { dxfDataIsDocument } from "@hardcore/core/lib/dxf/parseDxf.js";
-import { loadRenderDxf } from "@hardcore/core/lib/renderAssetClient.js";
-import { extractOrderedDxfBendLines } from "@hardcore/core/lib/dxf/buildPreviewMesh.js";
-import {
-  buildDxfBendsTab,
-  buildDxfMaterialTab,
-  DXF_DEFAULT_BEND_ANGLE_DEG,
-  DXF_DEFAULT_BEND_RADIUS_MM,
-  DXF_DEFAULT_BEND_STYLE,
-  DXF_DEFAULT_KFACTOR,
-  DXF_DEFAULT_MATERIAL,
-  DXF_DEFAULT_ORIENTATION,
-  DXF_DEFAULT_THICKNESS_MM,
-  DXF_DEFAULT_UNITS,
-  normalizeDxfBendAngleDeg,
-  normalizeDxfBendDirection,
-  normalizeDxfBendRadiusMm,
-  normalizeDxfBendStyle,
-  dxfMaterialPreset,
-  normalizeDxfKFactor,
-  normalizeDxfMaterial,
-  normalizeDxfOrientation,
-  normalizeDxfThicknessMm,
-  normalizeDxfUnits
-} from "../components/workbench/DxfSettingsSection.js";
-import { buildDxfLayersTab } from "../components/workbench/DxfLayersSection.js";
 import StepFileSheet from "../components/workbench/StepFileSheet.js";
 import { FileSheetPortalContext, HostPanelSlotContext } from "../../kit/inspector/FileSheet.js";
 import { restoreMotionAnimation, restoreMotionParameters } from "../workbench/motionRestore.js";
@@ -147,7 +119,6 @@ import {
   entryAssetHash,
   entryAssetUrl,
   entryHasDisplayEdges,
-  entryHasDxf,
   entryHasMesh,
   entryHasReferences,
   entryMeshAssetSignature,
@@ -349,9 +320,6 @@ function CadFileViewSurface({
   const viewerReloading = false;
   const viewerServerBackend = String(viewerServerInfo?.backend || "").trim().toLowerCase();
   const [fileSheetOpenSectionIds, setFileSheetOpenSectionIds] = useState(null);
-  const [dxfThicknessMm, setDxfThicknessMm] = useState(0);
-  const [dxfBendSettings, setDxfBendSettings] = useState([]);
-  const [dxfViewMode, setDxfViewMode] = useState("2d");
   const [referenceQuery, setReferenceQuery] = useState("");
   const [selectedReferenceIds, setSelectedReferenceIds] = useState([]);
   const [largeFileState, setLargeFileState] = useState(() => normalizeLargeFileState(DEFAULT_LARGE_FILE_STATE));
@@ -392,34 +360,9 @@ function CadFileViewSurface({
   const [viewerAlertOpen, setViewerAlertOpen] = useState(false);
   const [viewerRuntimeAlert, setViewerRuntimeAlert] = useState(null);
   const chromeBackdropColor = useChromeBackdropColor(uiPrefersDark);
-  // Which way a drawing is being looked at. Session state on purpose: it is a way of looking
-  // at the model open right now, not a preference worth outliving the tab.
-  const [drawingViewMode, setDrawingViewMode] = useState("3d");
   // The zoom pill lives in the top-right toolbar row now; the viewer reports its live
   // percent up, and the pill drives the camera back through the imperative handle.
   const [viewerZoomPercent, setViewerZoomPercent] = useState(100);
-  // Render-time drawing settings. Session state, like the view mode: they reshape the
-  // viewport, never the cached package, so there is nothing to persist or invalidate.
-  const [drawingThicknessMm, setDrawingThicknessMm] = useState(DXF_DEFAULT_THICKNESS_MM);
-  // One entry per bend line, in axis order. An array because "the bend angle" stopped being
-  // a thing the moment a drawing had two bends that want different angles.
-  const [drawingBends, setDrawingBends] = useState([]);
-  const [drawingBendStyle, setDrawingBendStyle] = useState(DXF_DEFAULT_BEND_STYLE);
-  // Sheet-metal bend geometry for the curved style: inside radius (0 = auto) and K-factor.
-  const [drawingBendRadiusMm, setDrawingBendRadiusMm] = useState(DXF_DEFAULT_BEND_RADIUS_MM);
-  const [drawingKFactor, setDrawingKFactor] = useState(DXF_DEFAULT_KFACTOR);
-  // Layer names the user has switched off; everything else renders.
-  const [drawingHiddenLayers, setDrawingHiddenLayers] = useState([]);
-  // The unit the DXF sheet's dimensional inputs display and accept.
-  const [drawingUnits, setDrawingUnits] = useState(DXF_DEFAULT_UNITS);
-  // Post-fold model orientation, in quarter-turns about each world axis.
-  const [drawingOrientation, setDrawingOrientation] = useState(DXF_DEFAULT_ORIENTATION);
-  // Sheet material preset: theme tint + density for the weight fact.
-  const [drawingMaterial, setDrawingMaterial] = useState(DXF_DEFAULT_MATERIAL);
-  // The package's parsed contours, fetched once per entry and kept by URL. Curved bends
-  // re-mesh from these; the URL carries the package version, so a rebuild refetches.
-  const drawingGeometryCacheRef = useRef(new Map());
-  const [drawingGeometry, setDrawingGeometry] = useState(null);
   const rendering = resolvedScene.render.enabled;
   useEffect(() => { if (rendering) prefetchRenderStudio(); }, [rendering]);
   const resolvedThemeSettings = resolvedScene.theme;
@@ -533,11 +476,6 @@ function CadFileViewSurface({
   // Unified render-artifact status for the selected entry: ready (render) | generating (loading) |
   // error (fatal). A missing/stale cache is not an issue — it just triggers a (re)build. Replaces
   // the per-entry step-source-status fetch, the mesh-stripping merge, and the build effect.
-  // Every artifact-managed kind: STEP models and DXF drawings (generated `.dxf.py` AND
-  // imported `.dxf` alike). An imported `.dxf` used to be excluded because it
-  // "renders directly from disk" -- true only while the client still parsed and extruded DXF
-  // entities in the browser. It renders from the package's baked preview.glb now, so it needs
-  // the build for exactly the reason a generated one does.
   const selectedArtifact = useArtifact(
     catalogSelectedEntry ? cadFileParamForEntry(catalogSelectedEntry) : "",
     {
@@ -603,8 +541,8 @@ function CadFileViewSurface({
       }
     : null;
   const selectedEntrySourceFormat = entrySourceFormat(selectedEntry);
-  // Every entry now renders from its own source format: a DXF's geometry is parsed and
-  // meshed client-side, and nothing is baked into a package under a different format.
+  // Every entry renders from its own source format: nothing is baked into a package
+  // under a different one.
   const selectedEntryRenderAssetFormat = selectedEntrySourceFormat;
   const selectedFileSheetKind = fileSheetKindForEntry(selectedEntry);
   // Hide the file-sheet toggle when the kind has no sections.
@@ -626,8 +564,6 @@ function CadFileViewSurface({
   // They are separate capabilities; the table is the source of truth.
   const supportsParts = hasCapability(selectedEntrySourceFormat, "parts");
   const supportsTopology = hasCapability(selectedEntrySourceFormat, "topology");
-  // CAD edges are topology. A file without it (a drawing) resolves with
-  // its edges off and without the presets made of them, and the View tab shows neither.
   // What this file's view opts into: a B-rep model takes every Display section, preset and surface
   // style; every other format the set without edges, Clip or Explode.
   const viewFeatures = supportsTopology ? ALL_VIEW_FEATURES : EDGELESS_VIEW_FEATURES;
@@ -665,13 +601,6 @@ function CadFileViewSurface({
   const selectedEntryHasMesh = entryHasMesh(selectedEntry);
   const selectedEntryHasReferences = entryHasReferences(selectedEntry);
   const selectedEntryHasDisplayEdges = entryHasDisplayEdges(selectedEntry);
-  const selectedEntryHasDxf = entryHasDxf(selectedEntry);
-  // A dimensioned drawing renders its own 2D geometry: there is no mesh to wait
-  // for. Decided from the PARSED data (dimension/leader/paper-space evidence) —
-  // the client twin of cadgen's drawing_checks predicate.
-  const selectedEntryIsDrawingDocument =
-    assetKindForRenderFormat(selectedEntrySourceFormat) === ASSET_KIND.DRAWING
-    && dxfDataIsDocument(drawingGeometry);
   // The selected entry's render artifact is (re)building -> show the loading state. Replaces the
   // old !entryHasMesh + buildable-code derivation.
   const selectedStepArtifactRenderPending = selectedArtifactGenerating;
@@ -1253,23 +1182,16 @@ function CadFileViewSurface({
     renderPartIdsForAssemblySelection
   ]);
   const effectiveRenderFormat = selectedEntrySourceFormat;
-  // A fatal render-artifact error (not building) stops the loading spinner so the error
-  // surfaces. Every artifact-managed format, not just STEP: a DXF build that failed would
-  // otherwise spin forever behind its own error.
+  // A fatal render-artifact error (not building) stops the loading spinner so the error surfaces.
   const artifactBlocksRender =
     isArtifactManagedFormat(effectiveRenderFormat) &&
     selectedArtifact.status === "failed" && !editingHasView;
   const meshViewerLoading =
     !!selectedEntry &&
-    // A DRAWING has no flat pattern and bakes nothing, so "no mesh yet" is its finished state,
-    // not a pending one. Waiting on the mesh path left the pane on LOADING forever (issue #246).
-    !selectedEntryIsDrawingDocument &&
     (selectedStepArtifactRenderPending || !artifactBlocksRender) &&
     status !== ASSET_STATUS.ERROR &&
     ((!selectedMeshMatches && !retainedPreviousStepMeshError) ||
       status === ASSET_STATUS.LOADING || selectedStepModuleLoading);
-  // A DXF loads a drawing but RENDERS the drawing package's baked preview through the
-  // mesh path, so its readiness is the mesh loader's, like everything else's.
   const viewerLoading = meshViewerLoading;
   const effectiveViewerLoading = viewerLoading || selectedArtifactGenerating || selectedCatalogPending || (fileParamSelectionPending && !editingPreview.entry);
   // The file explorer spins the entry the viewer is actually working on. Artifact
@@ -1291,7 +1213,7 @@ function CadFileViewSurface({
     setPresentationState(previous => previous?.file === next.file && previous?.renderMode === next.renderMode &&
       previous?.key === next.key && previous?.covering === next.covering && previous?.preparing === next.preparing ? previous : next);
   }, []);
-  const presentationPending = Boolean(selectedMeshData || selectedEntryIsDrawingDocument) && (
+  const presentationPending = Boolean(selectedMeshData) && (
     presentationState?.file !== selectedKey || presentationState?.key !== presentationKey || presentationState?.renderMode !== rendering ||
     presentationState?.preparing === true
   );
@@ -1300,25 +1222,8 @@ function CadFileViewSurface({
   const completedViewFile = useRef("");
   useEffect(() => {
     if (!effectiveViewerLoading && !selectedMeshPartial && !presentationPending &&
-        (selectedMeshData || selectedEntryIsDrawingDocument)) completedViewFile.current = selectedKey;
-  }, [effectiveViewerLoading, selectedMeshPartial, presentationPending, selectedMeshData, selectedEntryIsDrawingDocument, selectedKey]);
-  const selectedDrawingBendAxisCount = useMemo(() => {
-    if (!drawingGeometry?.geometry) {
-      return 0;
-    }
-    try {
-      return extractOrderedDxfBendLines(drawingGeometry).length;
-    } catch {
-      return 0;
-    }
-  }, [drawingGeometry]);
-  // Gated to drawings HERE, not downstream. The thickness state defaults to 0 mm, and
-  // passing its scale unconditionally squashed every STEP/STL/3MF model to a hair the moment
-  // the default changed -- a drawing setting must not be able to touch any other format.
-  const selectedEntryIsDrawing = selectedEntrySourceFormat === RENDER_FORMAT.DXF;
-  const drawingThicknessScale = selectedEntryIsDrawing
-    ? normalizeDxfThicknessMm(drawingThicknessMm) / DXF_PREVIEW_REFERENCE_THICKNESS_MM
-    : 1;
+        selectedMeshData) completedViewFile.current = selectedKey;
+  }, [effectiveViewerLoading, selectedMeshPartial, presentationPending, selectedMeshData, selectedKey]);
 
   // What the backend says about the document's NEIGHBOURS (a retired render
   // module still sitting beside it, say). The geometry is correct, so this is
@@ -1386,10 +1291,6 @@ function CadFileViewSurface({
     isAssemblyView &&
     viewerSelectableAssemblyNodeIds.length > 0;
   const viewerMode = viewerInAssemblyMode ? "assembly" : "part";
-  // STEP and drawings share the markup tool — the strokes are a screen-space overlay on the
-  // shared mesh scene, nothing STEP-specific. This gate was the last place that said
-  // otherwise: the toolbar showed Draw for a DXF while this kept it inert, so the drag fell
-  // through to orbit.
   const drawModeActive = supportsTool(selectedEntrySourceFormat, "draw") &&
     tabToolMode === TAB_TOOL_MODE.DRAW;
   const drawing = useDrawingSession(drawModeActive, CAD_DRAWING_DEFAULTS);
@@ -1426,8 +1327,7 @@ function CadFileViewSurface({
     componentLodNeedsSelectors,
     // Capability, not just the current pose: a paused/disabled module can move
     // an offscreen part without a camera event when re-enabled.
-    dynamicScene: lodSceneMayMove({ drawing: selectedEntryIsDrawing,
-      kinematics: selectedStepModuleDefinition, kinematicsLoading: selectedStepModuleLoading,
+    dynamicScene: lodSceneMayMove({ kinematics: selectedStepModuleDefinition, kinematicsLoading: selectedStepModuleLoading,
       animation: selectedSourceAnimation, exploded: resolvedScene.display?.exploded?.enabled })
   });
   const viewportQualityStatus = useViewportQualityStatus({
@@ -1448,168 +1348,12 @@ function CadFileViewSurface({
 
   const desktopRightPanelOpen = false;
 
-  const drawingSettingsLoadedKeyRef = useRef(null);
-  useEffect(() => {
-    if (drawingSettingsLoadedKeyRef.current !== selectedKey || !selectedEntryIsDrawing) return;
-    emitState({ drawing: { thicknessMm: drawingThicknessMm, bends: drawingBends,
-      bendStyle: drawingBendStyle, bendRadiusMm: drawingBendRadiusMm, kFactor: drawingKFactor,
-      hiddenLayers: drawingHiddenLayers, units: drawingUnits, orientation: drawingOrientation,
-      material: drawingMaterial, viewMode: drawingViewMode } });
-  }, [selectedKey, selectedEntryIsDrawing, drawingThicknessMm, drawingBends, drawingBendStyle,
-    drawingBendRadiusMm, drawingKFactor, drawingHiddenLayers, drawingUnits, drawingOrientation,
-    drawingMaterial, drawingViewMode, emitState]);
-  useLayoutEffect(() => {
-    const stored = restoreStateRef.current.drawing;
-    drawingSettingsLoadedKeyRef.current = selectedKey;
-    setDrawingThicknessMm(normalizeDxfThicknessMm(stored?.thicknessMm, DXF_DEFAULT_THICKNESS_MM));
-    setDrawingBendStyle(normalizeDxfBendStyle(stored?.bendStyle, DXF_DEFAULT_BEND_STYLE));
-    setDrawingBendRadiusMm(normalizeDxfBendRadiusMm(stored?.bendRadiusMm, DXF_DEFAULT_BEND_RADIUS_MM));
-    setDrawingKFactor(normalizeDxfKFactor(stored?.kFactor, DXF_DEFAULT_KFACTOR));
-    setDrawingHiddenLayers(Array.isArray(stored?.hiddenLayers) ? stored.hiddenLayers : []);
-    setDrawingUnits(normalizeDxfUnits(stored?.units, DXF_DEFAULT_UNITS));
-    setDrawingOrientation(normalizeDxfOrientation(stored?.orientation));
-    setDrawingMaterial(normalizeDxfMaterial(stored?.material, DXF_DEFAULT_MATERIAL));
-    setDrawingViewMode(stored?.viewMode === "2d" ? "2d" : "3d");
-    setDrawingBends(Array.from({ length: selectedDrawingBendAxisCount }, (_, index) => ({
-      angleDeg: normalizeDxfBendAngleDeg(stored?.bends?.[index]?.angleDeg, DXF_DEFAULT_BEND_ANGLE_DEG),
-      direction: normalizeDxfBendDirection(stored?.bends?.[index]?.direction)
-    })));
-  }, [selectedKey, selectedDrawingBendAxisCount]);
-
-  // The drawing's geometry is the parsed .dxf ITSELF (design/standalone-viewer.md
-  // Phase A): no package, no geometry.json — loadRenderDxf memoizes the parse and
-  // the mesh loader reuses the same cache, so the file is fetched and parsed once.
-  const drawingGeometryUrl = selectedEntryIsDrawing
-    ? String(entryAssetUrl(selectedEntry, "dxf") || "")
-    : "";
-  useEffect(() => {
-    if (!drawingGeometryUrl) {
-      setDrawingGeometry(null);
-      return undefined;
-    }
-    const cache = drawingGeometryCacheRef.current;
-    if (cache.has(drawingGeometryUrl)) {
-      setDrawingGeometry(cache.get(drawingGeometryUrl));
-      return undefined;
-    }
-    let cancelled = false;
-    loadRenderDxf(drawingGeometryUrl, { resources: client.resources })
-      .then((payload) => {
-        if (cancelled) {
-          return;
-        }
-        if (payload) {
-          cache.set(drawingGeometryUrl, payload);
-        }
-        setDrawingGeometry(payload || null);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setDrawingGeometry(null);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [drawingGeometryUrl]);
-
-  const handleDrawingBendChange = useCallback((index, patch) => {
-    setDrawingBends((current) => current.map(
-      (bend, bendIndex) => (bendIndex === index ? { ...bend, ...patch } : bend)
-    ));
-  }, []);
-
-  // Per-tab resets (settings-ui.md: one Reset per tab, scoped to that tab's settings).
-  const handleDrawingMaterialReset = useCallback(() => {
-    setDrawingThicknessMm(DXF_DEFAULT_THICKNESS_MM);
-    setDrawingUnits(DXF_DEFAULT_UNITS);
-    setDrawingMaterial(DXF_DEFAULT_MATERIAL);
-  }, []);
-
-  const handleDrawingBendsReset = useCallback(() => {
-    setDrawingBends((current) => current.map(() => ({
-      angleDeg: DXF_DEFAULT_BEND_ANGLE_DEG,
-      direction: "up"
-    })));
-  }, []);
-
-  const handleDrawingOrientationReset = useCallback(() => {
-    setDrawingOrientation(DXF_DEFAULT_ORIENTATION);
-  }, []);
-
-  const handleDrawingRotateOrientation = useCallback((axis) => {
-    setDrawingOrientation((current) => {
-      const normalized = normalizeDxfOrientation(current);
-      return { ...normalized, [axis]: (normalized[axis] + 1) % 4 };
-    });
-  }, []);
-
-  const handleDrawingLayerVisibilityChange = useCallback((layerName, visible) => {
-    setDrawingHiddenLayers((current) => {
-      const next = current.filter((name) => name !== layerName);
-      if (!visible) {
-        next.push(layerName);
-      }
-      return next;
-    });
-  }, []);
-
-  // The bend LINES (full 2D segments — orientation matters now) come from the package's
-  // parsed geometry; the scanner's bendLineCount only sizes the settings rows before the
-  // geometry fetch lands.
-  const drawingBendLines = useMemo(() => {
-    if (!drawingGeometry?.geometry) {
-      return null;
-    }
-    try {
-      return extractOrderedDxfBendLines(drawingGeometry).map((bendLine) => ({
-        start: bendLine.start,
-        end: bendLine.end
-      }));
-    } catch {
-      return null;
-    }
-  }, [drawingGeometry]);
-
-  const drawingLayers = useMemo(
-    () => (Array.isArray(drawingGeometry?.layers) ? drawingGeometry.layers : []),
-    [drawingGeometry]
-  );
-
-
-
-  // Memoised: this array is an effect dependency in the viewer, and a fresh identity per
-  // render would re-run the fold transform on every workspace render.
-  const drawingBendAnglesRad = useMemo(
-    () => drawingBends.map((bend) => (
-      (normalizeDxfBendAngleDeg(bend.angleDeg) * Math.PI / 180)
-        * (bend.direction === "down" ? -1 : 1)
-    )),
-    [drawingBends]
-  );
-
-  const handleDrawingViewModeChange = useCallback((mode) => {
-    const next = mode === "2d" ? "2d" : "3d";
-    setDrawingViewMode(next);
-    if (next === "2d") {
-      // "z" is the top face in VIEW_PLANE_FACES — looking straight down at a flat pattern
-      // IS the 2D view, which is why this needs no separate 2D renderer.
-      viewerRef.current?.activateViewPlaneFace?.("z");
-      return;
-    }
-    viewerRef.current?.activateDefaultViewPlane?.();
-  }, []);
-
   const handleViewerZoomPercentChange = useCallback((nextZoomPercent) => {
     viewerRef.current?.applyZoomPercent?.(nextZoomPercent);
   }, []);
   const handleViewerZoomReset = useCallback(() => {
     viewerRef.current?.resetView?.();
-    if (drawingViewMode === "2d") {
-      // A locked plan view resets to its own top-down, not to the 3D default orientation.
-      viewerRef.current?.activateViewPlaneFace?.("z");
-    }
-  }, [drawingViewMode]);
+  }, []);
 
   // Nothing toggles one panel on its own any more: the panel column has one
   // open id, and `handleTogglePanel` below is the single write that moves it.
@@ -1676,8 +1420,6 @@ function CadFileViewSurface({
     ),
     // Animation is the Animate tool and its playbar, never an Inspector section.
     hasStepAnimationPanel: false,
-    hasDxfBendsPanel: selectedFileSheetKind === "dxf" && drawingBends.length > 0,
-    hasDxfLayersPanel: selectedFileSheetKind === "dxf" && drawingLayers.length > 1,
     renderMode: rendering
   }), [
     selectedAnimationClipList,
@@ -1689,8 +1431,6 @@ function CadFileViewSurface({
     selectedStepModuleError,
     selectedStepModuleStatus,
     selectedStepModuleUrl,
-    drawingBends,
-    drawingLayers,
     rendering
   ]);
 
@@ -2077,12 +1817,7 @@ function CadFileViewSurface({
       cancelMeshLoad();
       return;
     }
-    // DRAWING loads through the mesh path too: a DXF's render asset is its own
-    // file, parsed and prism-meshed client-side (design/standalone-viewer.md
-    // Phase A); a dimensioned document simply yields an empty mesh and renders
-    // as 2D line work instead.
-    const selectedRenderAssetKind = assetKindForRenderFormat(selectedEntryRenderAssetFormat);
-    if (selectedRenderAssetKind !== ASSET_KIND.MESH && selectedRenderAssetKind !== ASSET_KIND.DRAWING) {
+    if (assetKindForRenderFormat(selectedEntryRenderAssetFormat) !== ASSET_KIND.MESH) {
       cancelMeshLoad();
       return;
     }
@@ -2687,7 +2422,7 @@ function CadFileViewSurface({
   const loading = viewerLoadingState({
     busy: effectiveViewerLoading || selectedMeshPartial || presentationPending,
     editPending: ["submitted", "queued", "building"].includes(editingPreview.state?.state) && !editingPreview.state?.saved,
-    previousView: completedViewFile.current === selectedKey && Boolean(selectedMeshData || selectedEntryIsDrawingDocument),
+    previousView: completedViewFile.current === selectedKey && Boolean(selectedMeshData),
     currentPreview: currentPreviewVisible,
     error: viewerAlert || (!selectedMeshData && catalogError) || missingFileRef,
     progress: selectedLoadProgress || (editingPreview.state.phase ? { phase: editingPreview.state.phase, detail: editingPreview.state.detail } : null),
@@ -2719,7 +2454,7 @@ function CadFileViewSurface({
     savedAs: "STEP file",
     showingPreview: currentPreviewVisible,
     qualityStatus: viewportQualityStatus,
-    hasGeometry: Boolean((selectedMeshData && !selectedMeshPartial) || selectedEntryIsDrawingDocument),
+    hasGeometry: Boolean(selectedMeshData && !selectedMeshPartial),
     reloading: viewerReloading
   });
   const fileStatusAlert = resolveFileStatusAlert(fileStatus, viewerAlert, annotationAlert);
@@ -4486,18 +4221,11 @@ function CadFileViewSurface({
   // Display groups (including Custom overrides and projection) stay untouched.
   const handleModelReset = useCallback(() => {
     resetStepMotion();
-    if (selectedEntryIsDrawing) {
-      handleDrawingBendsReset();
-      handleDrawingOrientationReset();
-      setDrawingThicknessMm(DXF_DEFAULT_THICKNESS_MM);
-      setDrawingHiddenLayers([]);
-    }
     setHiddenPartIds([]);
     setIsolatedAssemblyNodeIds([]);
     viewSettingsStore.resetModelTools();
     handleViewerZoomReset();
-  }, [resetStepMotion, selectedEntryIsDrawing, handleDrawingBendsReset,
-    handleDrawingOrientationReset, viewSettingsStore, handleViewerZoomReset]);
+  }, [resetStepMotion, viewSettingsStore, handleViewerZoomReset]);
 
   const zoomSelectionPartIds = inspectionHighlight ? inspectionHighlight.partIds || [] : viewerSelectedPartIds;
   const zoomSelectionReferenceIds = inspectionHighlight ? inspectionHighlight.faceIds || [] : selectedReferenceIds;
@@ -4631,7 +4359,6 @@ function CadFileViewSurface({
     },
     resetCamera() {
       if (!viewerRef.current?.resetView?.()) throw new Error('The viewer camera is unavailable.');
-      if (selectedEntryIsDrawing && drawingViewMode === '2d') viewerRef.current?.activateViewPlaneFace?.('z');
     },
     setDisplaySettings(patch) {
       viewSettingsStore.patch(patch);
@@ -4650,20 +4377,15 @@ function CadFileViewSurface({
   // Publishing navbar actions must not feed parent renders back into this
   // renderer. Stable commands read the current mounted viewport at invocation.
   const navigationHandlersRef = useRef(null);
-  navigationHandlersRef.current = { capture: handleCapture,
-    toggleProjection: () => handleDrawingViewModeChange(drawingViewMode === "2d" ? "3d" : "2d") };
+  navigationHandlersRef.current = { capture: handleCapture };
   const hasViewportContent = Boolean(selectedViewportContent);
   useEffect(() => {
     const actions = selectedKey ? [{ id: "snapshot", label: "Take snapshot", icon: Camera,
       disabled: viewerLoading || stepInteractionBlocked || !hasViewportContent || !promptAvailable,
       onInvoke: () => navigationHandlersRef.current.capture() }] : [];
-    if (selectedEntryIsDrawing) actions.unshift({ id: "drawing-projection", label: drawingViewMode === "2d" ? "Switch to 3D view" : "Switch to 2D view",
-      icon: drawingViewMode === "2d" ? Box : Square,
-      disabled: viewerLoading || !hasViewportContent,
-      onInvoke: () => navigationHandlersRef.current.toggleProjection() });
     onNavigationActionsChange?.(actions);
     return () => onNavigationActionsChange?.([]);
-  }, [onNavigationActionsChange, selectedKey, selectedEntryIsDrawing, drawingViewMode,
+  }, [onNavigationActionsChange, selectedKey,
     viewerLoading, stepInteractionBlocked, hasViewportContent, promptAvailable]);
 
   const selectionToolActive = tabToolMode === TAB_TOOL_MODE.REFERENCES;
@@ -4864,39 +4586,6 @@ function CadFileViewSurface({
                 viewerRef={viewerRef}
                 viewUpdate={viewUpdate}
                 renderFormat={effectiveRenderFormat}
-                drawingThicknessScale={drawingThicknessScale}
-                planMode={selectedEntryIsDrawing && drawingViewMode === "2d"}
-                bendAxisX={selectedEntryIsDrawing ? selectedEntry?.bendAxisX || null : null}
-                drawingBendLines={selectedEntryIsDrawing ? drawingBendLines : null}
-                bendAnglesRad={selectedEntryIsDrawing
-            ? drawingBendAnglesRad
-            : null}
-                drawingBends={selectedEntryIsDrawing
-            ? drawingBends
-            : null}
-                drawingBendStyle={selectedEntryIsDrawing
-            ? drawingBendStyle
-            : DXF_DEFAULT_BEND_STYLE}
-                drawingBendRadiusMm={selectedEntryIsDrawing
-            ? drawingBendRadiusMm
-            : DXF_DEFAULT_BEND_RADIUS_MM}
-                drawingKFactor={selectedEntryIsDrawing
-            ? drawingKFactor
-            : DXF_DEFAULT_KFACTOR}
-                drawingHiddenLayers={selectedEntryIsDrawing
-            ? drawingHiddenLayers
-            : null}
-                drawingOrientation={selectedEntryIsDrawing
-            ? drawingOrientation
-            : null}
-                drawingMaterialColor={selectedEntryIsDrawing
-            ? dxfMaterialPreset(drawingMaterial).colorHex
-            : null}
-                drawingGeometry={selectedEntryIsDrawing ? drawingGeometry : null}
-                drawingIsDocument={selectedEntryIsDrawingDocument}
-                drawingThicknessMm={selectedEntryIsDrawing
-            ? drawingThicknessMm
-            : DXF_DEFAULT_THICKNESS_MM}
                 onCameraZoomPercentChange={setViewerZoomPercent}
                 onLodCameraChange={onLodCameraMoved}
                 onMeshSourceAdoption={handleDisplayMeshAdoption}
@@ -5133,51 +4822,6 @@ function CadFileViewSurface({
                 statusItems={selectedFileStatusItems}
                 renderMode={rendering}
                 settingsTabs={settingsTabs}
-                openSectionIds={effectiveFileSheetOpenSectionIds}
-                onOpenSectionIdsChange={handleFileSheetOpenSectionIdsChange}
-              />
-            ) : null}
-
-            {selectedFileSheetKind === "dxf" ? (
-              <DxfFileSheet
-                headerActions={zoomHeader}
-                key={`dxf:${selectedKey}`}
-                open={fileSheetOpen}
-                isDesktop={isWideLayout}
-                width={activeSheetWidth || tabToolsWidth}
-                onOpenChange={setTabToolsOpen}
-                onStartResize={fileSheetResizeHandler}
-                settingsTabs={[
-                  buildDxfMaterialTab({
-                    thicknessMm: drawingThicknessMm,
-                    onThicknessChange: setDrawingThicknessMm,
-                    units: drawingUnits,
-                    onUnitsChange: setDrawingUnits,
-                    material: drawingMaterial,
-                    onMaterialChange: setDrawingMaterial,
-                    onReset: handleDrawingMaterialReset
-                  }),
-                  ...(drawingBends.length > 0 ? [buildDxfBendsTab({
-                    bends: drawingBends,
-                    onBendChange: handleDrawingBendChange,
-                    bendStyle: drawingBendStyle,
-                    onBendStyleChange: setDrawingBendStyle,
-                    bendRadiusMm: drawingBendRadiusMm,
-                    onBendRadiusChange: setDrawingBendRadiusMm,
-                    kFactor: drawingKFactor,
-                    onKFactorChange: setDrawingKFactor,
-                    units: drawingUnits,
-                    onRotateOrientation: handleDrawingRotateOrientation,
-                    onBendsReset: handleDrawingBendsReset,
-                    onOrientationReset: handleDrawingOrientationReset
-                  })] : []),
-                  ...(drawingLayers.length > 1 ? [buildDxfLayersTab({
-                    layers: drawingLayers,
-                    hiddenLayers: drawingHiddenLayers,
-                    onLayerVisibilityChange: handleDrawingLayerVisibilityChange
-                  })] : []),
-                  ...settingsTabs
-                ]}
                 openSectionIds={effectiveFileSheetOpenSectionIds}
                 onOpenSectionIdsChange={handleFileSheetOpenSectionIdsChange}
               />

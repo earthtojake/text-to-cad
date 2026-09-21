@@ -28,8 +28,9 @@ controls keep their appearance; the shared file viewer keeps the viewer's.
 `features/explorer/FileTab.tsx` is a thin host of `@hardcore/ui/file-viewer`.
 Its adapters translate IPC file access, source capabilities, root identity,
 persistence and CAD commands into package contracts. `renderers.tsx` registers
-the shared viewer renderers (CAD, and GLB, triangle meshes (STL, 3MF) and robot descriptions
-(URDF, SRDF, SDF) as their own renderers; all get the tab's backend connection, preferences, host commands and live binding), Markdown, code,
+the shared viewer renderers (CAD, and DXF drawings, GLB, triangle meshes (STL, 3MF) and
+robot descriptions (URDF, SRDF, SDF) as their own renderers; all get the tab's backend
+connection, preferences, host commands and live binding), Markdown, code,
 image, PDF and fallback renderers. The whole
 file-tab interface is shared with web. Projects, sessions, browser/terminal/
 review tabs, agent integrations and native services remain in this app.
@@ -1103,8 +1104,9 @@ playback and Kinematics' pose retain independent runtimes, enable state and
 actions; every pose write (a value, a named pose, a Pose-tool knob, Reset) is
 an instant jump, and Reset also stops any playing routine and hands the pose
 back to Kinematics. Robots also use Kinematics for their joints, then Links
-(the link tree), and keep the SDF tab; drawings and mesh files retain their
-format-specific controls.
+(the link tree), and keep the SDF tab. A DXF drawing has its own Inspector — Material,
+Bends where the file declares them, Layers where it uses them, then Display — open by
+default, and a 2D/3D action in the file navbar whose 2D view is a locked top-down plan.
 
 Display contains the single Mode dropdown for shaded, edge, wire and photographic
 Render presentation. All modes share the camera, projection, part colors,

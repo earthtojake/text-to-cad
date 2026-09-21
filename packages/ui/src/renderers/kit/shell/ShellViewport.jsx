@@ -28,9 +28,11 @@ import {
 import { useViewportCamera } from "../camera/useViewportCamera.js";
 import {
   DEFAULT_VIEW_DIRECTION, DEFAULT_VIEW_PLANE_ORIENTATION, KEYBOARD_ORBIT_NUDGE_RAD, VIEWING_MODE, VIEW_PLANE_FACES,
-  WHEEL_PINCH_DELTA_BOOST, WORLD_UP, applyOrbitDelta, clearKeyboardOrbitState, getActiveViewPlaneFaceId, getKeyboardOrbitAxes,
-  getKeyboardOrbitCommand, isPinchWheelEvent, isTrackpadLikeWheelEvent, reframeReason, runtimeFramingBounds, stepKeyboardOrbit
+  VIEW_PLANE_FACE_BY_ID, WHEEL_PINCH_DELTA_BOOST, WORLD_UP, applyOrbitDelta, clearKeyboardOrbitState,
+  getActiveViewPlaneFaceId, getKeyboardOrbitAxes, getKeyboardOrbitCommand, isPinchWheelEvent, isTrackpadLikeWheelEvent,
+  reframeReason, runtimeFramingBounds, stepKeyboardOrbit, viewPlaneCameraBasis
 } from "../camera/viewportCameraKit.js";
+import { usePlanMode } from "../camera/usePlanMode.js";
 import {
   ACCELERATED_WHEEL_ZOOM_SPEED, COARSE_POINTER_PINCH_ZOOM_SPEED, COARSE_POINTER_ZOOM_SPEED, DEFAULT_ZOOM_SPEED,
   TRACKPAD_PINCH_ZOOM_SPEED
@@ -51,6 +53,11 @@ import { useViewerRuntime } from "../viewport/useViewerRuntime.js";
 
 const VIEW_PLANE_CONTROL_SIZE = "6rem";
 const STORED_CAMERA_COORDINATES = "cad-z-up-v1";
+// The face a plan view looks from: straight down the vertical axis.
+/** How long after the open-time fit the viewport and projection may still be settling. */
+const OPEN_FIT_SETTLE_MS = 600;
+const PLAN_VIEW_FACE = "z";
+const PLAN_VIEW_BASIS = viewPlaneCameraBasis(VIEW_PLANE_FACE_BY_ID[PLAN_VIEW_FACE]);
 
 // The stage group holds only what the look put there.
 function clearGroup(group) {
@@ -77,6 +84,10 @@ const ShellViewport = forwardRef(function ShellViewport({
   perspective = null,
   perspectiveRef = null,
   projection = CAMERA_PROJECTION.ORTHOGRAPHIC,
+  // PLAN VIEW: the camera is locked looking straight down. Orthographic whatever Display
+  // asks for (a plan is a measurable projection, not a photograph), no view cube, no
+  // rotation, left-drag pans, and every reset lands back on top-down.
+  planMode = false,
   focalLength = null,
   themeSettings = null,
   displaySettings = null,
@@ -105,7 +116,7 @@ const ShellViewport = forwardRef(function ShellViewport({
     throw new Error("ShellViewport needs a kit scene: { object3D, bounds, dispose() } (kit/scene.js).");
   }
   const normalizedSceneScaleMode = normalizeSceneScaleMode(sceneScaleMode);
-  const normalizedProjection = normalizeCameraProjection(projection);
+  const normalizedProjection = normalizeCameraProjection(planMode ? CAMERA_PROJECTION.ORTHOGRAPHIC : projection);
   const defaultGridRadius = defaultSceneGridRadius(normalizedSceneScaleMode);
   const viewerTheme = BASE_VIEWER_THEME;
   const interactionHostRef = useRef(null);
@@ -269,13 +280,56 @@ const ShellViewport = forwardRef(function ShellViewport({
     previewModeRef, previewOrbitSpeed, runWithoutPerspectiveEvents, runtimeRef, sceneScaleModeRef, setActiveViewPlaneFace,
     setCameraZoomPercent, setDefaultPerspectiveDetached, setViewPlaneOrientation, suppressPerspectiveEventsRef, viewerReadyTick
   });
+  // The open-time fit is taken under the lens the viewport opens with, and the file's own
+  // projection arrives a moment later. CONVERTING that fit to the other projection is not the
+  // same as fitting under it: a wide, flat model came up at ~89% of its own ruler. So while
+  // the camera is still the one the viewer itself fitted, a projection change re-FITS along
+  // the direction it looks now (a view-cube face is still the viewer's framing).
+  //
+  // Only while opening settles (`armOpenFit`). Afterwards a viewport RESIZE keeps its
+  // long-standing answer (`syncRuntimeViewportFraming`: the model holds its apparent size),
+  // because opening or closing a panel is not a request to reframe the model.
+  //
+  // A camera TRANSITION in flight is a deliberate move being made right now (a view-cube
+  // face, entering a plan view): re-fitting mid-flight would read the half-turned direction
+  // as "the direction it looks now" and cancel the move. So the open fit waits.
+  // Opening SETTLES: after the fit, the Inspector column takes its width and the file's
+  // projection arrives, each a beat later. That stretch is the viewer's to re-fit in; once it
+  // has been quiet for OPEN_FIT_SETTLE_MS, opening is over, and a resize rescales and a
+  // projection change converts, as they always have for a view a person is looking at.
+  const armOpenFit = useCallback((runtime) => {
+    runtime.openFitPending = true;
+    clearTimeout(runtime.openFitTimer);
+    runtime.openFitTimer = setTimeout(() => { runtime.openFitPending = false; }, OPEN_FIT_SETTLE_MS);
+  }, []);
+  const refitOpenFraming = useCallback((runtime) => {
+    const framing = runtime.interactiveFraming;
+    const target = runtime.controls?.target;
+    if (!runtime.openFitPending || runtime.userMovedCamera || previewModeRef.current
+      || runtime.cameraTransition || !framing?.bounds || !target) return false;
+    const fitted = zoomRuntimeToBounds(runtime, framing.bounds, sceneScaleModeRef.current, {
+      animate: false, modelOffset: modelTransformRef.current.offset,
+      viewDirection: runtime.camera.position.clone().sub(target).normalize().toArray(), viewUp: runtime.camera.up.toArray()
+    });
+    if (!fitted) return false;
+    captureRuntimeViewportFitScale(runtime);
+    resetRuntimeZoomBaseline(runtime);
+    armOpenFit(runtime);
+    return true;
+  }, [armOpenFit]);
   const handleViewportResize = useCallback(() => {
     const runtime = runtimeRef.current;
     if (!runtime) return;
-    syncRuntimeViewportFraming(runtime);
+    if (!refitOpenFraming(runtime)) syncRuntimeViewportFraming(runtime);
     syncCameraZoomPercent(runtime);
     emitPerspectiveChange(runtime);
   }, [syncCameraZoomPercent]);
+
+  // Rotation off, left-drag panning, no vertical origin axis. Everything else about the
+  // lock — the projection, the hidden cube, where a reset lands — is this component's.
+  usePlanMode({ planMode, runtimeRef, viewerReadyTick });
+  const planModeRef = useRef(planMode);
+  planModeRef.current = planMode;
 
   const hasViewportContent = Boolean(scene);
   const drawingOverlayActive = drawingEnabled && !previewMode && hasViewportContent;
@@ -312,15 +366,20 @@ const ShellViewport = forwardRef(function ShellViewport({
     requestRender() { runtimeRef.current?.requestRender?.(); },
     resetView() {
       const runtime = runtimeRef.current;
+      // A locked plan view resets to its OWN top-down, never to the default three-quarter
+      // orientation. One place, so the zoom header, "Reset model" and live `resetCamera`
+      // (which all land here) each re-assert the lock as they re-frame.
+      const plan = planModeRef.current && PLAN_VIEW_BASIS;
       const reset = zoomRuntimeToBounds(runtime, runtimeFramingBounds(runtime, scene?.restBounds || scene?.bounds), sceneScaleModeRef.current, {
         animate: true, modelOffset: modelTransformRef.current.offset, resetZoomBaseline: true,
-        viewDirection: DEFAULT_VIEW_DIRECTION, viewUp: WORLD_UP
+        viewDirection: plan ? PLAN_VIEW_BASIS.direction : DEFAULT_VIEW_DIRECTION,
+        viewUp: plan ? PLAN_VIEW_BASIS.up : WORLD_UP
       });
       if (reset) {
-        activeViewPlaneFaceRef.current = "";
-        setActiveViewPlaneFace("");
-        defaultPerspectiveResettingRef.current = true;
-        setDefaultPerspectiveDetached(false);
+        activeViewPlaneFaceRef.current = plan ? PLAN_VIEW_FACE : "";
+        setActiveViewPlaneFace(plan ? PLAN_VIEW_FACE : "");
+        defaultPerspectiveResettingRef.current = !plan;
+        setDefaultPerspectiveDetached(Boolean(plan));
       }
       return reset;
     },
@@ -330,6 +389,9 @@ const ShellViewport = forwardRef(function ShellViewport({
       });
     },
     setPerspective(nextPerspective, options = {}) {
+      // A camera somebody hands the viewport — a host command, a session being restored —
+      // replaces the open-time fit, so re-fitting it on the next resize would throw it away.
+      if (runtimeRef.current) runtimeRef.current.openFitPending = false;
       if (options?.animate) return transitionCameraToPerspectiveSnapshot(runtimeRef.current, nextPerspective, options);
       const applied = applyPerspectiveSnapshot(runtimeRef.current, nextPerspective);
       if (applied && options?.resetZoomBaseline) {
@@ -365,7 +427,7 @@ const ShellViewport = forwardRef(function ShellViewport({
       }
       return fitted;
     }
-  }), [modelKey, normalizedSceneScaleMode, resetZoomAndPan, scene, syncCameraZoomPercent, syncViewPlaneOrientation]);
+  }), [activateViewPlaneFace, modelKey, normalizedSceneScaleMode, resetZoomAndPan, scene, syncCameraZoomPercent, syncViewPlaneOrientation]);
 
   // Read-only debug/test seam: the LIVE camera of the viewport that mounted last, so a
   // browser test can assert that moving a model leaves the framing exactly where it was.
@@ -513,6 +575,7 @@ const ShellViewport = forwardRef(function ShellViewport({
     lastProjectionRef.current = normalizedProjection;
     if (!syncRuntimeCameraProjection(runtime, normalizedProjection,
       projectionChanged ? { scheduleIdle: false, requestRender: false } : undefined)) return;
+    if (refitOpenFraming(runtime)) syncCameraZoomPercent(runtime);
     emitPerspectiveChange(runtime);
     syncViewPlaneOrientation(runtime);
   }, [normalizedProjection, viewerReadyTick]);
@@ -679,6 +742,9 @@ const ShellViewport = forwardRef(function ShellViewport({
       runtime.interactionState.restoreTimerId = 0;
     }
     clearKeyboardOrbitState(runtime.keyboardOrbitState);
+    // Fullscreen installs a presentation camera and leaving restores the file's own: neither
+    // is the open-time fit, so the viewport stops treating the pose as its to re-fit.
+    runtime.openFitPending = false;
     const orbitActive = previewMode && previewOrbitSpeed > 0;
     runtime.previewOrbitEnabled = orbitActive;
     runtime.orbitControlsLastTimestamp = 0;
@@ -773,6 +839,8 @@ const ShellViewport = forwardRef(function ShellViewport({
       runWithoutPerspectiveEvents(() => {
         const restored = !previewModeRef.current && (reframe === "model" || reframe === "mode") && storedMatches
           && applyPerspectiveSnapshot(runtime, nextPerspective, { scheduleIdle: false });
+        // Only a camera the viewer chose is the viewer's to re-fit when the viewport changes.
+        if (restored) runtime.openFitPending = false; else armOpenFit(runtime);
         if (restored) {
           runtime.interactiveFraming = { bounds: framingBounds,
             minRadius: getSceneScaleSettings(normalizedSceneScaleMode).minModelRadius,
@@ -784,8 +852,16 @@ const ShellViewport = forwardRef(function ShellViewport({
           // Fit with the destination lens, so the first Render entry frames like later ones.
           const fitFocalLength = explicitViewerFocalLength(focalLength);
           if (fitFocalLength != null) setRuntimePerspectiveFocalLength(runtime, fitFocalLength);
+          // A file opened into a locked plan view fits FROM the lock: coming up at the
+          // default three-quarter angle and then being unable to turn out of it reads as broken.
+          if (planMode && PLAN_VIEW_BASIS) {
+            activeViewPlaneFaceRef.current = PLAN_VIEW_FACE;
+            setActiveViewPlaneFace(PLAN_VIEW_FACE);
+          }
           zoomRuntimeToBounds(runtime, framingBounds, normalizedSceneScaleMode, {
-            animate: false, modelOffset, viewDirection: DEFAULT_VIEW_DIRECTION, viewUp: WORLD_UP
+            animate: false, modelOffset,
+            viewDirection: planMode && PLAN_VIEW_BASIS ? PLAN_VIEW_BASIS.direction : DEFAULT_VIEW_DIRECTION,
+            viewUp: planMode && PLAN_VIEW_BASIS ? PLAN_VIEW_BASIS.up : WORLD_UP
           });
           runtime.requestRender();
         }
@@ -814,7 +890,7 @@ const ShellViewport = forwardRef(function ShellViewport({
   }, [
     scene, sceneRevision, markPresentationReady, modelKey, perspective, perspectiveRef, isLoading, viewerReadyTick,
     normalizedSceneScaleMode, resolvedFloorMode, renderMode, floorFollowsModel, viewerTheme, syncCameraZoomPercent,
-    applyActivePhotographicStudio, detachScene
+    applyActivePhotographicStudio, detachScene, planMode
   ]);
 
   // A queued view update is acknowledged once the viewport holds (and, when the
@@ -868,8 +944,9 @@ const ShellViewport = forwardRef(function ShellViewport({
       ) : null}
       {drawingOverlayActive ? <DrawingOverlay drawing={drawing} onReady={handleDrawingReady} onContentChange={handleDrawingContent} onViewportChange={followDrawingViewport} /> : null}
       {typeof children === "function" ? children(viewportContext) : children}
+      {/* A locked view stops advertising the axes it cannot turn towards. */}
       <ViewPlaneControl
-        showViewPlane={!previewMode && !drawingOverlayActive}
+        showViewPlane={!previewMode && !drawingOverlayActive && !planMode}
         previewMode={previewMode}
         isLoading={isLoading}
         meshData={scene}

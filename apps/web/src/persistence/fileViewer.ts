@@ -44,8 +44,8 @@ export function restoreCadFileStates(state: FileViewerState, entries: CadEntry[]
   const renderers = { ...state.renderers };
   let changed = false;
   for (const entry of entries) {
-    // A GLB, a triangle mesh and a robot description have their own renderers and records; an old `cad` session is not theirs.
-    if (/\.(?:glb|stl|3mf|urdf|srdf|sdf)$/i.test(entry.file)) continue;
+    // A DXF, a GLB, a triangle mesh and a robot description have their own renderers and records; an old `cad` session is not theirs.
+    if (/\.(?:dxf|glb|stl|3mf|urdf|srdf|sdf)$/i.test(entry.file)) continue;
     const key = JSON.stringify([entry.rootRelativeFile || entry.file, 'cad']);
     if (key in renderers) continue;
     const session = readFileSessionState('', entry.file, entry, { storage });

@@ -84,6 +84,7 @@ export default function RendererShell({ shell, tools, inspector, bottomAction = 
                     perspective={frame.viewerPerspective}
                     perspectiveRef={frame.activePerspectiveRef}
                     projection={resolvedScene.camera.projection}
+                    planMode={frame.planView}
                     focalLength={resolvedScene.camera.focalLength}
                     themeSettings={resolvedScene.theme}
                     displaySettings={resolvedScene.display}

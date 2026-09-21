@@ -2,11 +2,11 @@
 // one-use receipt applies only to the following effect in the SAME React render;
 // it is never a cache of a later visual, clipping, pose or animation update.
 export function staticSceneResetEligible({ source, renderFormat, parameters, animation,
-  drawing = false, exploded = false, loading = false, records = [] } = {}) {
+  exploded = false, loading = false, records = [] } = {}) {
   return (renderFormat === "step" || renderFormat === "stp")
     && source?.partTransformsBaked === false && !source.geometrySource
     && Array.isArray(source.parts) && source.parts.length > 0
-    && !parameters && !animation && !drawing && !exploded && !loading
+    && !parameters && !animation && !exploded && !loading
     && !records.some(record => record?.effectMatrix || record?.effectStyle
       || record?.effectVisible != null || record?.effectHighlighted || record?.explodedViewMatrix
       || record?.effectDeformation || record?.tubeDeformationState?.active || record?.tubeGpuState?.active);

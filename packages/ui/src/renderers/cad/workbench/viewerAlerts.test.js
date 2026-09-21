@@ -117,14 +117,13 @@ test("mesh errors also recognize browser transport messages", () => {
   }
 });
 
-test("missing geometry gives file context and a next step; empty drawings stay valid", () => {
+test("missing geometry gives file context and a next step", () => {
   const alert = buildViewerMeshAlert({ file: "meshes/part.stl", kind: "stl" }, false, "");
   assert.equal(alert.summary, "Mesh unavailable");
   assert.match(alert.message, /meshes\/part.stl/);
   assert.match(alert.recovery, /saved completely/);
-  const drawing = { file: "plans/panel.dxf.py", kind: "dxf" };
-  assert.equal(buildViewerMeshAlert(drawing, false, ""), null);
-  assert.equal(buildViewerMeshAlert(drawing, false, "bad DXF").summary, "Mesh load failed");
+  // Nothing loaded and nothing raised is "no geometry", for every file this renderer opens.
+  assert.equal(buildViewerMeshAlert({ file: "plans/panel.step", kind: "step" }, false, "").summary, "Mesh unavailable");
   assert.equal(buildViewerMeshAlert(null, false, "failure"), null);
 });
 
