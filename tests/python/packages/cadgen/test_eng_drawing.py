@@ -930,6 +930,56 @@ class MoreVocabularyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "wider than"):
             Sheet("A4", notes=["BREAK ALL SHARP EDGES AND REMOVE BURRS " * 4])
 
+    def test_an_ordinary_shop_note_is_accepted(self) -> None:
+        """The inverse of the guard above, and the case it used to refuse.
+
+        The guard measured `8. {note}` at `text_height` while the sheet drew
+        `NOTES:  1. {note}` at 2.5 mm against the full width of the paper, so
+        it refused a 44-character note with 130 mm of room to spare.
+        """
+        from cadgen.eng_drawing import Sheet
+
+        for note in (
+            "BREAK ALL SHARP EDGES 0.3 MAX AND DEBURR THOROUGHLY",
+            "REMOVE ALL BURRS AND SHARP EDGES BEFORE FINISHING",
+            "ANODISE CLEAR PER MIL-A-8625 TYPE II CLASS 1",
+        ):
+            with self.subTest(note=note):
+                Sheet("A4", notes=[note])
+
+    def test_the_general_tolerance_is_measured_as_it_is_spelled_out(self) -> None:
+        """It reaches the paper as a whole sentence, so that is what is measured."""
+        from cadgen.eng_drawing import Sheet
+
+        sheet = Sheet("A4", general_tolerance="ISO 2768-m")
+        self.assertEqual(
+            sheet.drawn_notes()[0],
+            "TOLERANCES PER ISO 2768-m UNLESS OTHERWISE SPECIFIED.",
+        )
+        with self.assertRaisesRegex(ValueError, "wider than"):
+            Sheet("A4", general_tolerance="ISO 2768-m AND " + "ASME Y14.5 " * 12)
+
+    def test_every_accepted_note_fits_between_the_frame_edges(self) -> None:
+        """The guard and the ink agree: what it passes, the paper holds."""
+        from cadgen.eng_drawing import _MARGIN, _NOTE_HEIGHT, Sheet, _text_width
+
+        sheet = Sheet(
+            "A4",
+            general_tolerance="ISO 2768-fH AND ASME Y14.5-2018 WHERE APPLICABLE",
+            notes=["BREAK ALL SHARP EDGES 0.3 MAX AND DEBURR THOROUGHLY"],
+        )
+        room = sheet.width - 2 * _MARGIN
+        for line in sheet.note_lines():
+            self.assertLessEqual(_text_width(line, _NOTE_HEIGHT), room)
+
+    def test_notes_given_as_a_generator_still_reach_the_sheet(self) -> None:
+        """They are read twice, by the guard and by the draw."""
+        from cadgen.eng_drawing import Sheet
+
+        sheet = Sheet("A4", notes=iter(["FIRST NOTE", "SECOND NOTE"]))
+        self.assertEqual(sheet.drawn_notes(), ["FIRST NOTE", "SECOND NOTE"])
+        self.assertEqual(len(sheet.note_lines()), 2)
+
     def test_angle_checks_its_arguments_like_every_other_verb(self) -> None:
         """It was the one verb whose arguments went unread."""
         with self.assertRaisesRegex(ValueError, "collinear"):

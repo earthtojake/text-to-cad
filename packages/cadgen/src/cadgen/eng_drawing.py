@@ -109,6 +109,12 @@ PROJECTIONS = ("THIRD ANGLE", "FIRST ANGLE")
 
 _MARGIN = 10.0
 _TITLE_W, _TITLE_H = 180.0, 40.0
+#: Text height the notes block is drawn at, and the left inset of its first glyph.
+#: The guard that refuses an over-wide note measures at these, because a guard
+#: that measures a different string at a different height than the draw either
+#: refuses a note that fits or passes one that does not.
+_NOTE_HEIGHT = 2.5
+_NOTE_INSET = 3.0
 #: One row of dimensions: the line's distance from the last, with room for its text.
 _DIM_ROW = 12.0
 #: The smallest text a print stays legible at. Below it, text is cut, not shrunk.
@@ -410,18 +416,37 @@ class Sheet:
                     f"{name} must be a sequence, not a string: {name}=[{getattr(self, name)!r}] "
                     "for one entry. A bare string is a sequence of its own characters."
                 )
+        # `notes` and `revisions` are read twice, by this guard and by the draw. A
+        # generator would be empty the second time and the sheet would print no
+        # notes at all, so they are materialized once, here.
+        self.notes = tuple(self.notes)
+        self.revisions = tuple(tuple(row) for row in self.revisions)
         for row in self.revisions:
-            if isinstance(row, (str, bytes)) or len(tuple(row)) != 3:
+            if isinstance(row, (str, bytes)) or len(row) != 3:
                 raise ValueError(f"each revision must be a (rev, date, description) triple, got {row!r}")
         # A note wider than the sheet runs off the paper, and the sheet is the one
-        # thing here that cannot be made bigger after the fact.
-        room = self.width - 2 * _MARGIN - _TITLE_W - 4.0
-        for note in list(self.notes) + ([self.general_tolerance] if self.general_tolerance else []):
-            if _text_width(f"8. {note}", self.text_height) > room:
+        # thing here that cannot be made bigger after the fact. Measure the line
+        # the sheet DRAWS -- numbered, prefixed, general tolerance expanded -- at
+        # the height it draws it, against the room it has.
+        room = self.width - 2 * (_MARGIN + _NOTE_INSET)
+        for line, note in zip(self.note_lines(), self.drawn_notes()):
+            if _text_width(line, _NOTE_HEIGHT) > room:
                 raise ValueError(
-                    f"note {note!r} is wider than the {self.size} sheet's note column "
+                    f"note {note!r} is wider than the {self.size} sheet's note row "
                     f"({round(room)} mm). Shorten it, or split it across two notes."
                 )
+
+    def drawn_notes(self) -> list[str]:
+        """The note strings as they reach the paper: the general tolerance, spelled
+        out, is note 1 when it is given."""
+        general = [f"TOLERANCES PER {self.general_tolerance} UNLESS OTHERWISE SPECIFIED."]
+        return (general if self.general_tolerance else []) + list(self.notes)
+
+    def note_lines(self) -> list[str]:
+        """Each drawn note with the prefix and number the sheet prints before it."""
+        notes = self.drawn_notes()
+        return [f"{'NOTES:  ' if row == 0 else '        '}{row + 1}. {note}"
+                for row, note in enumerate(notes)]
 
     @property
     def width(self) -> float:
@@ -1043,11 +1068,10 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str, warnings:
     text(f"SCALE {_scale_label(sheet.scale)}   {sheet.units.upper()}   {sheet.projection}",
          x0 + tw - 3, y0 + th * 0.75, 2.5, TextEntityAlignment.MIDDLE_RIGHT, fit=right_w)
     text(f"SHEET {index} OF {count}   REV {sheet.revision}   {label}", x0 + tw - 3, y0 + th * 0.25, 2.5, TextEntityAlignment.MIDDLE_RIGHT, fit=right_w)
-    notes = ([f"TOLERANCES PER {sheet.general_tolerance} UNLESS OTHERWISE SPECIFIED."] if sheet.general_tolerance else []) + list(sheet.notes)
-    if notes:
-        for row, note in enumerate(notes):
-            prefix = "NOTES:  " if row == 0 else "        "
-            text(f"{prefix}{row + 1}. {note}", m + 3, y0 + th + 4 + (len(notes) - 1 - row) * 5, 2.5, TextEntityAlignment.BOTTOM_LEFT, "NOTES")
+    lines = sheet.note_lines()
+    for row, line in enumerate(lines):
+        text(line, m + _NOTE_INSET, y0 + th + 4 + (len(lines) - 1 - row) * 5, _NOTE_HEIGHT,
+             TextEntityAlignment.BOTTOM_LEFT, "NOTES")
     if sheet.revisions:
         # Revision table, top-right inside the frame: REV | DATE | DESCRIPTION.
         cols = (14.0, 26.0, 70.0)
