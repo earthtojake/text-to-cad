@@ -45,8 +45,10 @@ patterns, which are toolpaths, not documents; the two are different jobs.
    value only where the model does not define it. Leave `offset` unset too and
    the dimension takes the next free row outside the view; pass one only to
    place a dimension deliberately, and remember it is measured from the
-   dimension's own points, not the view's edge. Keep notes few and under about
-   45 characters; the layout reserves room for them.
+   dimension's own points, not the view's edge. Keep notes few and short; one
+   wider than the sheet's note column is refused, and `notes=` takes a LIST
+   (`notes="BREAK EDGES"` is a sequence of eleven characters, so it is refused
+   too).
 5. Run `python <name>_drawing.py`. It prints the PDF it wrote, and **anything
    it noticed while drawing** — read those first:
    - *"measures blank paper"*: the dimension's model points do not land on the
@@ -54,7 +56,13 @@ patterns, which are toolpaths, not documents; the two are different jobs.
      script assumed it was centred. Check the part's bounding box.
    - *"annotation overlaps"*: two callouts print on top of each other, usually
      one view's outermost dimension against the label of the view above it.
-     Pass a bigger `three_views(gap=...)` or place one with `offset=`.
+     Pass a bigger `three_views(gap=...)` or place one with `offset=`. The text
+     is measured as the renderer draws it, glyph by glyph, so this fires on ink
+     and not on markup: a chain of toleranced dimensions is silent when the
+     values clear each other.
+
+   Steps 3 and 5 stand on their own: a sheet of views with no dimensions on it
+   yet is a drawing, and writes its PDF.
 
    When running unattended, set `MPLCONFIGDIR` to a writable directory so
    matplotlib's font cache does not warn.
@@ -68,7 +76,9 @@ patterns, which are toolpaths, not documents; the two are different jobs.
 
 - Layers with meaning: `VISIBLE` (heavy outline), `HIDDEN` (dashed), `CENTER`
   (centre marks), `DIM`, `NOTES`, `TITLE`, `SHEET` (frame), each printed at its
-  own weight.
+  own weight — 0.5 mm down to 0.18 mm, so thick reads against thin on paper.
+  An edge is drawn once: a silhouette that the kernel returns as both visible
+  and hidden stays on `VISIBLE`.
 - Dimensions measured from the geometry, with filled arrowheads and witness
   lines, and true-size values at any drawing scale.
 - A title block with title, part number, material, author, scale, units,
@@ -83,11 +93,15 @@ patterns, which are toolpaths, not documents; the two are different jobs.
 
 The script raises rather than writing a wrong or missing document:
 
-- Views that run off the frame, naming the scale that would fit.
+- Views that run off the frame, naming a scale that has been laid out and
+  verified to fit, or saying that no standard scale does.
 - A part argument the vocabulary does not define: an unknown view name, sheet
   size or projection, `orientation=` other than `"h"`/`"v"`, a negative or zero
   diameter, a counterbore that is not a `(diameter, depth)` pair, a `tol` that
-  is not a number or a pair, a hole that is both `thru` and given a depth.
+  is not a number or a pair, a hole that is both `thru` and given a depth,
+  `notes=` or `revisions=` given a bare string, a note wider than the sheet,
+  `angle()` legs that are collinear or zero-length, a non-finite `at=` or
+  `offset=`.
 - A missing renderer. The PDF is the drawing, so no matplotlib is a failure,
   not a skipped half. A failed render leaves no file behind.
 - `out=` missing or not naming a `.pdf`, at import time.

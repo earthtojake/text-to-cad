@@ -526,6 +526,361 @@ class DrawingDocumentTests(unittest.TestCase):
                 not_a_sheet()
 
 
+class UndimensionedSheetTests(unittest.TestCase):
+    """A sheet is a drawing before its author has written a dimension."""
+
+    def test_views_alone_with_curved_geometry_still_write_a_pdf(self) -> None:
+        """The cut-profile checks graded it as a broken laser-cut file.
+
+        `document_is_drawing` needs a DIMENSION or a LEADER before it will
+        believe a document is a document, which is right for a DXF that arrived
+        from elsewhere and wrong for one @eng_drawing just built. A projected
+        outline with a fillet in it does not close, so every part that was not a
+        plain box failed the first time it was drawn -- which is step 3 of the
+        skill's own workflow, before step 4 says to dimension anything.
+        """
+        from build123d import Axis, Box, Cylinder, fillet
+        from cadgen.eng_drawing import Sheet, eng_drawing
+
+        parts = {
+            "filleted": fillet(Box(80, 50, 10).edges().filter_by(Axis.Z), 8),
+            "cylinder": Cylinder(20, 40),
+        }
+        with temporary_directory(prefix="tmp-cad-eng-drawing-") as tmp:
+            for name, part in parts.items():
+                target = Path(tmp) / f"{name}.pdf"
+
+                @eng_drawing(out=str(target))
+                def undimensioned(part=part):
+                    sheet = Sheet("A3", title=name.upper())
+                    sheet.three_views(part)
+                    return sheet
+
+                undimensioned()
+                self.assertTrue(target.exists(), f"{name} wrote no PDF")
+                self.assertGreater(target.stat().st_size, 1000)
+
+    def test_the_duplicate_and_empty_checks_still_run(self) -> None:
+        """Exempting the cut-profile checks must not exempt the rest."""
+        from cadgen.drawing_checks import validate_drawing_document
+
+        import ezdxf
+
+        doc = ezdxf.new("R2010", setup=True)
+        doc.units = ezdxf.units.MM
+        msp = doc.modelspace()
+        square = [(0, 0), (10, 0), (10, 10), (0, 10)]
+        msp.add_lwpolyline(square, close=True, dxfattribs={"layer": "VISIBLE"})
+        msp.add_lwpolyline(square, close=True, dxfattribs={"layer": "VISIBLE"})
+        msp.add_lwpolyline([(0, 0), (10, 0), (10, 10)], dxfattribs={"layer": "VISIBLE"})
+        codes = {f.code for f in validate_drawing_document(doc, drawing=True)}
+        self.assertIn("duplicate_entity", codes, "the check that caught the doubled hidden lines")
+        self.assertNotIn("open_cut_profile", codes)
+        # And the open polyline IS still a finding when nobody vouches for the file.
+        self.assertIn("open_cut_profile", {f.code for f in validate_drawing_document(doc)})
+
+        empty = ezdxf.new("R2010", setup=True)
+        self.assertIn("empty_drawing", {f.code for f in validate_drawing_document(empty, drawing=True)})
+
+
+class TextMeasurementTests(unittest.TestCase):
+    """The markup is not the text, and a character is not a fixed width."""
+
+    def test_mtext_is_measured_by_the_glyphs_it_draws(self) -> None:
+        r"""A toleranced 30 is `\A0;30{\H0.70x;±0.10}`: 15 characters, 7 of
+        which draw nothing and 5 of which draw at 0.7 of the height. Counted raw
+        at full height that is 37.8 mm of ink where about 14 mm exists."""
+        from cadgen.eng_drawing import _mtext_extent, _text_width
+
+        plain, _ = _mtext_extent("\\A0;30", 3.5)
+        toleranced, _ = _mtext_extent("\\A0;30{\\H0.70x;\u00b10.10}", 3.5)
+        stacked, _ = _mtext_extent("\\A0;30{\\H0.70x;\\S+0.05^-0.02;}", 3.5)
+
+        self.assertAlmostEqual(plain, _text_width("30", 3.5), delta=0.01)
+        self.assertLess(toleranced, 16.0, "about 14 mm, not the 37.8 mm of a raw count")
+        self.assertGreater(toleranced, plain)
+        # A stacked deviation prints its halves one above the other, so it is as
+        # wide as the wider half and not as wide as both.
+        self.assertLess(stacked, plain + 2 * _text_width("+0.05", 3.5))
+
+    def test_a_character_is_not_a_fixed_fraction_of_the_height(self) -> None:
+        from cadgen.eng_drawing import _text_width
+
+        wide = _text_width("ELECTRONICS ENCLOSURE BASE", 5.0) / 26
+        narrow = _text_width("+0.10", 5.0) / 5
+        self.assertGreater(wide / narrow, 1.15, "one ratio cannot serve both")
+
+
+class ChainDimensionTests(unittest.TestCase):
+    """The overlap warning has to survive the commonest idiom in drafting."""
+
+    def _warnings(self, pitch: float, tol) -> list:
+        from build123d import Box
+        from cadgen.eng_drawing import Sheet, _render_sheet
+
+        span = 160.0
+        sheet = Sheet("A3", title="CHAIN")
+        top, _front, _right = sheet.three_views(Box(span, 60, 10))
+        for i in range(int(span // pitch)):
+            top.dim((-span / 2 + pitch * i, 30, 0), (-span / 2 + pitch * (i + 1), 30, 0),
+                    tol=tol, offset=14.0)
+        notices: list = []
+        _render_sheet(sheet, index=1, count=1, label="chain", warnings=notices)
+        return [n for n in notices if "overlaps" in n]
+
+    def test_a_toleranced_chain_with_clear_paper_does_not_warn(self) -> None:
+        """Five values about 14 mm wide at 30 mm pitch: 16 mm of clear paper.
+
+        The same chain without `tol=` warned about nothing, which is what gave
+        the false positive away: the tolerance changed the measurement, not the
+        drawing. A warning that cries on a correct sheet is one an agent learns
+        to ignore, and that costs the cases where it is right.
+        """
+        for pitch in (25.0, 30.0, 36.0, 40.0):
+            with self.subTest(pitch=pitch):
+                self.assertEqual([], self._warnings(pitch, 0.1))
+                self.assertEqual([], self._warnings(pitch, None))
+
+    def test_values_that_really_do_collide_still_warn(self) -> None:
+        self.assertNotEqual([], self._warnings(10.0, 0.1))
+
+
+class InkTests(unittest.TestCase):
+    def test_no_edge_is_drawn_on_both_visible_and_hidden(self) -> None:
+        """HIDDEN was written second, so it drew over every visible line.
+
+        HLR returns an edge from each face that bounds it, so a silhouette edge
+        comes back in both passes. One `seen` set per pass caught the repeats
+        inside each pass and none across them: a 600 dpi crop of one view in
+        colour was 34,842 grey pixels against 2,635 black -- the outline
+        printing grey-dashed, the visible/hidden distinction gone. In mono it is
+        black over black, which is why it went unnoticed.
+        """
+        from build123d import Box, Cylinder, Pos
+        from cadgen.eng_drawing import Sheet, _render_sheet
+
+        part = Box(60, 40, 20) - Cylinder(6, 40) - Pos(0, 0, 6) * Cylinder(9, 8)
+        sheet = Sheet("A3", title="INK")
+        sheet.three_views(part)
+        doc = _render_sheet(sheet, index=1, count=1, label="ink")
+
+        drawn: dict[str, set] = {"VISIBLE": set(), "HIDDEN": set()}
+        for entity in doc.modelspace():
+            layer = entity.dxf.layer
+            if layer not in drawn:
+                continue
+            points = tuple((round(x, 6), round(y, 6)) for x, y in _points(entity))
+            drawn[layer].add(min(points, points[::-1]))
+
+        self.assertTrue(drawn["VISIBLE"] and drawn["HIDDEN"], "both passes drew something")
+        self.assertEqual(set(), drawn["VISIBLE"] & drawn["HIDDEN"])
+
+    def test_the_layer_weights_reach_the_pdf(self) -> None:
+        """The backend clamps every width to 72/dpi unless given a floor.
+
+        The sample PDF carried one non-zero width operator: 0.72, 180 times.
+        Thick against thin is most of what makes a print readable at a glance.
+        """
+        import re
+        import zlib
+
+        from cadgen.eng_drawing import Sheet, eng_drawing
+
+        with temporary_directory(prefix="tmp-cad-eng-drawing-") as tmp:
+            target = Path(tmp) / "weights.pdf"
+
+            @eng_drawing(out=str(target))
+            def weights():
+                sheet = Sheet("A3", title="WEIGHTS")
+                top, _f, _r = sheet.three_views(_part())
+                top.overall()
+                return sheet
+
+            weights()
+            raw = target.read_bytes()
+
+        widths = set()
+        for match in re.finditer(rb"stream\r?\n(.*?)endstream", raw, re.S):
+            data = match.group(1)
+            try:
+                data = zlib.decompress(data)
+            except zlib.error:
+                continue
+            widths.update(float(w.group(1)) for w in re.finditer(rb"([\d.]+) w\b", data))
+        widths.discard(0.0)
+
+        self.assertGreaterEqual(len(widths), 4, f"one width per layer, not one for all: {sorted(widths)}")
+        self.assertIn(0.5, widths, "VISIBLE, the heavy outline")
+        self.assertIn(0.18, widths, "CENTER and DIM, the thin ones")
+        self.assertNotEqual({0.72}, widths, "0.72 is 72/dpi, the clamp")
+
+    def test_a_counterbore_gets_one_centre_mark(self) -> None:
+        """Two crosses drawn over each other fill the CENTER gaps in.
+
+        The centre line then prints solid, which is the one thing its dashes are
+        there to say it is not.
+        """
+        from build123d import Box, Cylinder, Pos
+        from cadgen.eng_drawing import Sheet, _render_sheet
+
+        part = Box(60, 40, 20) - Cylinder(4, 40) - Pos(0, 0, 6) * Cylinder(8, 8)
+        sheet = Sheet("A3", title="CBORE")
+        sheet.view(part, "top", at=(150, 150))
+        doc = _render_sheet(sheet, index=1, count=1, label="cbore")
+
+        marks = [e for e in doc.modelspace().query("LINE") if e.dxf.layer == "CENTER"]
+        self.assertEqual(2, len(marks), "one horizontal and one vertical arm, not two of each")
+
+
+class ScaleSuggestionTests(unittest.TestCase):
+    def test_the_scale_the_refusal_names_actually_fits(self) -> None:
+        """Dividing the overflow out treats the whole sheet as if it scaled.
+
+        The 47 mm between views and the 27 mm of annotation reach do not, so the
+        ratio overstated what a smaller scale buys: three of four ordinary sizes
+        needed two refusals, each naming another scale that did not fit either.
+        """
+        import re
+
+        from build123d import Box
+        from cadgen.eng_drawing import Sheet, _render_sheet
+
+        def attempt(dims, scale, iso):
+            sheet = Sheet("A3", title="BIG", scale=scale)
+            sheet.three_views(Box(*dims), iso=iso)
+            try:
+                _render_sheet(sheet, index=1, count=1, label="big")
+            except ValueError as exc:
+                return str(exc)
+            return None
+
+        for dims in ((450, 270, 112), (600, 400, 200), (320, 260, 90)):
+            for iso in (False, True):
+                with self.subTest(dims=dims, iso=iso):
+                    message = attempt(dims, 1.0, iso)
+                    self.assertIsNotNone(message, "this part does not fit at 1:1")
+                    named = re.search(r"Sheet\(scale=([0-9.eE+-]+)\)", message)
+                    self.assertIsNotNone(named, message)
+                    self.assertIsNone(attempt(dims, float(named.group(1)), iso),
+                                      f"{message}\n...and the scale it named did not fit either")
+
+    def test_a_part_no_standard_scale_fits_says_so(self) -> None:
+        from build123d import Box
+        from cadgen.eng_drawing import Sheet, _render_sheet
+
+        sheet = Sheet("A4", title="ENORMOUS")
+        sheet.three_views(Box(4_000_000, 3_000_000, 1_000_000))
+        with self.assertRaisesRegex(ValueError, "No standard scale"):
+            _render_sheet(sheet, index=1, count=1, label="enormous")
+
+    def test_the_isometric_label_states_the_scale_it_drew_at(self) -> None:
+        """It stated its RATIO to the sheet, not the scale it drew at.
+
+        On a 2:1 sheet an isometric that fitted itself to 1.96 is very nearly
+        full size, and the label read "ISOMETRIC (1:1.02)" -- a reduction from
+        full size that never happened. A view's scale is the shop's number.
+        """
+        from build123d import Box
+        from cadgen.eng_drawing import Sheet
+
+        sheet = Sheet("A3", title="ISO", scale=2.0)
+        iso = sheet.three_views(Box(90, 60, 40), iso=True)[3]
+        self.assertIsNotNone(iso.scale)
+        self.assertGreater(iso.scale, 1.0, "drawn larger than full size")
+        self.assertTrue(iso.label.endswith(":1"), f"{iso.label} reads as a reduction")
+
+        full = Sheet("A3", title="ISO", scale=2.0).three_views(Box(30, 20, 10), iso=True)[3]
+        self.assertIsNone(full.scale, "it fitted at the sheet's own scale")
+        self.assertEqual("ISOMETRIC", full.label)
+
+
+class MoreVocabularyTests(unittest.TestCase):
+    """The holes left in the class the vocabulary checks closed."""
+
+    def setUp(self) -> None:
+        from cadgen.eng_drawing import Sheet
+
+        self.view = Sheet("A4").view(_part(), "top", at=(100, 100))
+
+    def test_a_bare_string_of_notes_is_refused(self) -> None:
+        """notes="BREAK EDGES" printed eleven notes reading B, R, E, A, K...
+
+        A str is a Sequence[str] of its own characters, and the wrong spelling
+        cannot be told from the right one after the fact.
+        """
+        from cadgen.eng_drawing import Sheet
+
+        with self.assertRaisesRegex(TypeError, "notes"):
+            Sheet("A4", notes="BREAK EDGES")
+        with self.assertRaisesRegex(TypeError, "revisions"):
+            Sheet("A4", revisions="A")
+        Sheet("A4", notes=["BREAK EDGES"])  # the right spelling still works
+
+    def test_a_note_wider_than_the_sheet_is_refused(self) -> None:
+        from cadgen.eng_drawing import Sheet
+
+        with self.assertRaisesRegex(ValueError, "wider than"):
+            Sheet("A4", notes=["BREAK ALL SHARP EDGES AND REMOVE BURRS " * 4])
+
+    def test_angle_checks_its_arguments_like_every_other_verb(self) -> None:
+        """It was the one verb whose arguments went unread."""
+        with self.assertRaisesRegex(ValueError, "collinear"):
+            self.view.angle((0, 0, 0), (1, 0, 0), (2, 0, 0))
+        with self.assertRaisesRegex(ValueError, "collinear"):
+            self.view.angle((0, 0, 0), (1, 0, 0), (-3, 0, 0))
+        with self.assertRaisesRegex(ValueError, "non-zero length"):
+            self.view.angle((0, 0, 0), (0, 0, 0), (1, 0, 0))
+        with self.assertRaises(ValueError):
+            self.view.angle((0, 0, 0), (1, 0, 0), (0, 1, 0), offset=float("nan"))
+        with self.assertRaises(ValueError):
+            self.view.angle((0, 0, 0), (1, 0, 0), (0, 1, 0), offset=0)
+        self.view.angle((0, 0, 0), (1, 0, 0), (0, 1, 0))  # a real angle still works
+
+    def test_a_note_offset_that_is_not_a_pair_is_refused(self) -> None:
+        with self.assertRaises(TypeError):
+            self.view.note("HI", (0, 0, 0), offset="over there")
+        with self.assertRaises(ValueError):
+            self.view.note("HI", (0, 0, 0), offset=(float("inf"), 10))
+
+    def test_a_non_finite_view_position_is_refused(self) -> None:
+        """It compared False against every frame edge, so the off-frame guard
+        passed it and the sheet rendered blank at exit 0."""
+        from cadgen.eng_drawing import Sheet
+
+        with self.assertRaisesRegex(ValueError, "finite"):
+            Sheet("A4").view(_part(), "top", at=(float("nan"), 100))
+        with self.assertRaises(TypeError):
+            Sheet("A4").view(_part(), "top", at="middle")
+
+
+class OverallRowTests(unittest.TestCase):
+    def test_overall_clears_an_explicitly_placed_dimension(self) -> None:
+        """Counting only the UNPLACED dimensions put them on the same row.
+
+        overall() is the outermost row on its side, and an offset= the author
+        wrote occupies a row just as surely as one the sheet handed out.
+        """
+        from build123d import Box
+        from cadgen.eng_drawing import Sheet, _render_sheet
+
+        sheet = Sheet("A3", title="ROWS")
+        top, _front, _right = sheet.three_views(Box(60, 40, 10))
+        top.dim((-30, 20, 0), (0, 20, 0), offset=24.0)   # the author places this one
+        top.dim((0, 20, 0), (30, 20, 0))                 # and lets the sheet place this one
+        top.overall()
+        doc = _render_sheet(sheet, index=1, count=1, label="rows")
+
+        # Every horizontal dimension line above the top view, by the height it
+        # was drawn at. Three dimensions, three rows: the overall pair is the
+        # outermost, and no two share.
+        rows = [round(d.dxf.defpoint.y, 2) for d in doc.modelspace().query("DIMENSION")
+                if d.dxf.defpoint.y > top.at[1] and abs(d.dxf.angle) < 1e-6]
+        self.assertGreaterEqual(len(rows), 3)
+        self.assertEqual(len(rows), len(set(rows)), f"two dimension lines share a row: {sorted(rows)}")
+        self.assertGreater(max(rows) - sorted(rows)[-2], 1.0,
+                           "overall() is outermost, and clear of the row below it")
+
+
 def _points(entity):
     kind = entity.dxftype()
     if kind == "LINE":

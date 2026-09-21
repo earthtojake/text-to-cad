@@ -52,7 +52,9 @@ from __future__ import annotations
 
 import functools
 import math
+import re
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
 
@@ -153,6 +155,10 @@ class View:
     scale: float | None = None
     _dims: list[_Dim] = field(default_factory=list)
     _overall: bool = False
+    #: ``(bounding-box size, gap, iso)`` when :meth:`Sheet.three_views` placed this
+    #: view, so the off-frame guard can lay the same arrangement out again at a
+    #: candidate scale. None for a hand-placed ``at=``, which does not move.
+    _arranged: tuple | None = None
 
     def dim(self, p1, p2, *, offset: float | None = None, text: str | None = None, orientation: str | None = None,
             tol: float | tuple[float, float] | None = None, fit: str | None = None) -> "View":
@@ -204,13 +210,27 @@ class View:
     def angle(self, vertex, p1, p2, *, offset: float = 14.0) -> "View":
         """The angle at ``vertex`` between the legs toward ``p1`` and ``p2`` (model
         points); ``offset`` is the arc's distance from the vertex, in sheet mm."""
-        self._dims.append(_Dim("angle", _p3(vertex), _p3(p1), offset, None, None, radius=0.0, angle=0.0, hole={"p2": _p3(p2)}))
+        # angle() was the one verb whose arguments went unchecked: offset=nan
+        # reached the PDF, and two legs along one line printed "0 degrees" as
+        # though that were a measurement.
+        vertex, a, b = _p3(vertex), _p3(p1), _p3(p2)
+        distance = _offset(offset)
+        if distance is None or distance == 0.0:
+            raise ValueError(f"angle offset must be a non-zero number of sheet millimetres, got {offset!r}")
+        _assert_legs_measure_an_angle(vertex, a, b)
+        self._dims.append(_Dim("angle", vertex, a, distance, None, None, radius=0.0, angle=0.0, hole={"p2": b}))
         return self
 
     def note(self, text: str, at, *, offset: tuple[float, float] = (10.0, 10.0)) -> "View":
         """A note with a leader from a model point; ``offset`` places the text, in
         sheet mm, relative to the projected point."""
-        self._dims.append(_Dim("note", _p3(at), None, 0.0, text, None, radius=offset[0], angle=offset[1]))
+        try:
+            dx, dy = (float(offset[0]), float(offset[1]))
+        except (TypeError, ValueError, IndexError) as exc:
+            raise TypeError(f"note offset must be an (x, y) pair of sheet millimetres, got {offset!r}") from exc
+        if not (math.isfinite(dx) and math.isfinite(dy)):
+            raise ValueError(f"note offset must be finite, got {offset!r}")
+        self._dims.append(_Dim("note", _p3(at), None, 0.0, str(text), None, radius=dx, angle=dy))
         return self
 
     def overall(self) -> "View":
@@ -237,6 +257,28 @@ def _tol(value):
         return (abs(float(plus)), abs(float(minus)))
     except (TypeError, ValueError) as exc:
         raise TypeError(f"tol must be a number or a (plus, minus) pair, got {value!r}") from exc
+
+
+def _assert_legs_measure_an_angle(vertex, a, b, *, tol_deg: float = 0.05) -> None:
+    """Refuse two legs that do not subtend an angle.
+
+    A zero-length leg has no direction, and two legs along one line subtend
+    nothing: rendered anyway they print "0" beside an arc of no radius, which
+    reads as a measured right angle gone wrong rather than as a bad call.
+    """
+    u = tuple(p - q for p, q in zip(a, vertex))
+    v = tuple(p - q for p, q in zip(b, vertex))
+    nu = math.sqrt(sum(c * c for c in u))
+    nv = math.sqrt(sum(c * c for c in v))
+    if not (nu > 0 and nv > 0):
+        raise ValueError("angle needs two legs of non-zero length; p1 or p2 is the vertex itself")
+    cosine = sum(c * d for c, d in zip(u, v)) / (nu * nv)
+    degrees = math.degrees(math.acos(max(-1.0, min(1.0, cosine))))
+    if degrees < tol_deg or degrees > 180.0 - tol_deg:
+        raise ValueError(
+            f"angle legs are collinear ({degrees:.3g} deg apart), so there is no angle to dimension. "
+            "Give p1 and p2 on the two different faces the angle is between."
+        )
 
 
 def _offset(value) -> float | None:
@@ -358,6 +400,28 @@ class Sheet:
                 f"unknown projection {self.projection!r}; one of {sorted(PROJECTIONS)}. "
                 "The label and the view arrangement are the same decision."
             )
+        # A str is a Sequence[str] of its own characters, so notes="BREAK EDGES"
+        # printed eleven numbered notes reading B, R, E, A, K... The one-note case
+        # is the common one and the wrong spelling of it cannot be told apart from
+        # the right one later, so it is refused here.
+        for name in ("notes", "revisions"):
+            if isinstance(getattr(self, name), (str, bytes)):
+                raise TypeError(
+                    f"{name} must be a sequence, not a string: {name}=[{getattr(self, name)!r}] "
+                    "for one entry. A bare string is a sequence of its own characters."
+                )
+        for row in self.revisions:
+            if isinstance(row, (str, bytes)) or len(tuple(row)) != 3:
+                raise ValueError(f"each revision must be a (rev, date, description) triple, got {row!r}")
+        # A note wider than the sheet runs off the paper, and the sheet is the one
+        # thing here that cannot be made bigger after the fact.
+        room = self.width - 2 * _MARGIN - _TITLE_W - 4.0
+        for note in list(self.notes) + ([self.general_tolerance] if self.general_tolerance else []):
+            if _text_width(f"8. {note}", self.text_height) > room:
+                raise ValueError(
+                    f"note {note!r} is wider than the {self.size} sheet's note column "
+                    f"({round(room)} mm). Shorten it, or split it across two notes."
+                )
 
     @property
     def width(self) -> float:
@@ -376,68 +440,19 @@ class Sheet:
         annotation never runs into the neighbouring view. ``iso=True`` adds an
         isometric view in the free top-right slot and returns it fourth."""
         size = shape.bounding_box().size
-        s = self.scale
-        L, W, H = size.X * s, size.Y * s, size.Z * s
-        m = _MARGIN
         if gap is None:
             gap = 24.0 + 2 * self.text_height + 16.0  # second dimension row + its text + air
-        # Annotation also reaches outside the block: left of the front view (heights),
-        # below it (the label), above the top view (widths); keep that clear too.
-        reach = 12.0 + 2 * self.text_height + 8.0
-        usable_w = self.width - 2 * m - 2 * reach
-        # Notes stack upward from the title block; the block starts above them and
-        # above the label that hangs under the front view.
-        note_rows = len(self.notes) + (1 if self.general_tolerance else 0)
-        notes_h = (note_rows * 5.0 + 8.0) if note_rows else 0.0
-        usable_h = self.height - 2 * m - _TITLE_H - notes_h - reach - 12.0
-        block_w = L + gap + W
-        block_h = H + gap + W
-        left = m + reach + max(0.0, (usable_w - block_w) / 2)
-        bottom = m + _TITLE_H + notes_h + 12.0 + max(0.0, (usable_h - block_h) / 2)
-        if self.projection == "FIRST ANGLE":
-            # First angle places each view on the side opposite the one it looks from:
-            # the plan below the front, the view from the right to its left. The
-            # pictures are the third-angle pictures; only the slots swap.
-            front_at = (left + W + gap + L / 2, bottom + W + gap + H / 2)
-            top_at = (front_at[0], bottom + W / 2)
-            right_at = (left + W / 2, front_at[1])
-        else:
-            front_at = (left + L / 2, bottom + H / 2)
-            top_at = (front_at[0], bottom + H + gap + W / 2)
-            right_at = (left + L + gap + W / 2, front_at[1])
-        views = (
-            self.view(shape, "top", at=top_at, hidden=hidden, centre_marks=centre_marks),
-            self.view(shape, "front", at=front_at, hidden=hidden, centre_marks=centre_marks),
-            self.view(shape, "right", at=right_at, hidden=hidden, centre_marks=centre_marks),
+        slots = _arrange_three_views(self, shape, size, gap, self.scale, iso)
+        views = tuple(
+            self.view(shape, name, at=at, hidden=hidden if name != "iso" else False,
+                      centre_marks=centre_marks if name != "iso" else False,
+                      label=label, scale=view_scale)
+            for name, at, view_scale, label in slots
         )
-        if iso:
-            # The free slot is above the right view. The isometric is taller and wider
-            # than that view, so it is placed from its own projected extent: bottom edge
-            # level with the top view's, centred over the right view, kept inside the frame.
-            # The free corner is right of the top view and above the right view, less the
-            # room the top view's own callouts need. A pictorial that does not fit is drawn
-            # at a smaller scale and says so in its label.
-            iso_w, iso_h = _view_extent(shape, "iso", 1.0)
-            # The upper row is the top view in third angle and the front view in first;
-            # either way the free corner starts at that row's bottom edge and right of
-            # the widest view in it.
-            upper = views[0] if self.projection == "THIRD ANGLE" else views[1]
-            upper_h = W if self.projection == "THIRD ANGLE" else H
-            upper_bottom = upper.at[1] - upper_h / 2
-            # A hole callout beside that view needs its knee (a dimension row plus 10)
-            # and its text (about 13 characters); keep that much clear of the iso.
-            avail_w = self.width - m - 6 - (upper.at[0] + L / 2 + 30.0 + 8.0 + 13 * self.text_height * 0.7 + 8.0)
-            # The revision table, when there is one, owns the top-right corner.
-            table_h = (len(self.revisions) + 1) * 6.0 + 6.0 if self.revisions else 0.0
-            avail_h = self.height - m - 6 - table_h - upper_bottom
-            iso_scale = s * min(1.0, max(0.2, avail_w / iso_w if iso_w else 1.0), max(0.2, avail_h / iso_h if iso_h else 1.0))
-            iso_w, iso_h = iso_w * iso_scale, iso_h * iso_scale
-            iso_x = self.width - m - 6 - iso_w / 2
-            iso_y = min(upper_bottom + iso_h / 2, self.height - m - 6 - table_h - iso_h / 2)
-            ratio = iso_scale / s
-            label = "ISOMETRIC" if abs(ratio - 1) < 1e-6 else f"ISOMETRIC (1:{1 / ratio:.3g})"
-            return views + (self.view(shape, "iso", at=(iso_x, iso_y), hidden=False, centre_marks=False, label=label,
-                                      scale=None if abs(ratio - 1) < 1e-6 else iso_scale),)
+        # What the arrangement was, so the off-frame guard can lay it out again at a
+        # candidate scale instead of guessing how much a smaller one would buy.
+        for view in views:
+            view._arranged = (size, gap, iso)
         return views
 
     def view(self, shape, name: str, *, at, label: str | None = None, hidden: bool = True, centre_marks: bool = True,
@@ -446,7 +461,16 @@ class Sheet:
             raise ValueError(f"unknown view {name!r}; one of {sorted(VIEW_DIRECTIONS)}")
         if scale is not None and not (scale > 0):
             raise ValueError("a view's scale must be positive")
-        view = View(self, shape, name, (float(at[0]), float(at[1])), label, hidden, centre_marks, scale)
+        # A non-finite at= compares False against every frame edge, so the off-frame
+        # guard passed it and the sheet rendered blank at exit 0 -- the one outcome
+        # the guard exists to prevent.
+        try:
+            at = (float(at[0]), float(at[1]))
+        except (TypeError, ValueError, IndexError) as exc:
+            raise TypeError(f"view at= must be an (x, y) pair of sheet millimetres, got {at!r}") from exc
+        if not (math.isfinite(at[0]) and math.isfinite(at[1])):
+            raise ValueError(f"view at= must be finite sheet millimetres, got {at!r}")
+        view = View(self, shape, name, at, label, hidden, centre_marks, scale)
         self.views.append(view)
         return view
 
@@ -573,6 +597,15 @@ def _circles(edges) -> list[tuple[tuple[float, float], float]]:
     return found
 
 
+def _centres(circles: Sequence[tuple[tuple[float, float], float]]) -> list[tuple[tuple[float, float], float]]:
+    """One entry per circle centre, carrying the largest radius found on it."""
+    largest: dict[tuple[float, float], float] = {}
+    for centre, radius in circles:
+        if radius > largest.get(centre, -1.0):
+            largest[centre] = radius
+    return list(largest.items())
+
+
 # --- writing ------------------------------------------------------------------------
 
 def _dimstyle(doc, text_height: float):
@@ -591,6 +624,76 @@ def _dimstyle(doc, text_height: float):
     return "Standard"
 
 
+def _arrange_three_views(sheet: "Sheet", shape, size, gap: float, s: float,
+                         iso: bool) -> list[tuple[str, tuple[float, float], float | None, str | None]]:
+    """Where the three (or four) views of a standard arrangement go at scale ``s``.
+
+    Separate from :meth:`Sheet.three_views` so the off-frame guard can ask the
+    same question of a candidate scale: half the block shrinks with the scale
+    and half of it -- the gap between views, the frame, the title block -- does
+    not, so what a smaller scale buys can be laid out but not divided out.
+    """
+    L, W, H = size.X * s, size.Y * s, size.Z * s
+    m = _MARGIN
+    # Annotation also reaches outside the block: left of the front view (heights),
+    # below it (the label), above the top view (widths); keep that clear too.
+    reach = 12.0 + 2 * sheet.text_height + 8.0
+    usable_w = sheet.width - 2 * m - 2 * reach
+    # Notes stack upward from the title block; the block starts above them and
+    # above the label that hangs under the front view.
+    note_rows = len(sheet.notes) + (1 if sheet.general_tolerance else 0)
+    notes_h = (note_rows * 5.0 + 8.0) if note_rows else 0.0
+    usable_h = sheet.height - 2 * m - _TITLE_H - notes_h - reach - 12.0
+    block_w = L + gap + W
+    block_h = H + gap + W
+    left = m + reach + max(0.0, (usable_w - block_w) / 2)
+    bottom = m + _TITLE_H + notes_h + 12.0 + max(0.0, (usable_h - block_h) / 2)
+    if sheet.projection == "FIRST ANGLE":
+        # First angle places each view on the side opposite the one it looks from:
+        # the plan below the front, the view from the right to its left. The
+        # pictures are the third-angle pictures; only the slots swap.
+        front_at = (left + W + gap + L / 2, bottom + W + gap + H / 2)
+        top_at = (front_at[0], bottom + W / 2)
+        right_at = (left + W / 2, front_at[1])
+    else:
+        front_at = (left + L / 2, bottom + H / 2)
+        top_at = (front_at[0], bottom + H + gap + W / 2)
+        right_at = (left + L + gap + W / 2, front_at[1])
+    slots: list[tuple[str, tuple[float, float], float | None, str | None]] = [
+        ("top", top_at, None, None), ("front", front_at, None, None), ("right", right_at, None, None)]
+    if not iso:
+        return slots
+    # The free slot is above the right view. The isometric is taller and wider
+    # than that view, so it is placed from its own projected extent: bottom edge
+    # level with the top view's, centred over the right view, kept inside the frame.
+    # The free corner is right of the top view and above the right view, less the
+    # room the top view's own callouts need. A pictorial that does not fit is drawn
+    # at a smaller scale and says so in its label.
+    iso_w, iso_h = _view_extent(shape, "iso", 1.0)
+    # The upper row is the top view in third angle and the front view in first;
+    # either way the free corner starts at that row's bottom edge and right of
+    # the widest view in it.
+    upper_at = top_at if sheet.projection == "THIRD ANGLE" else front_at
+    upper_h = W if sheet.projection == "THIRD ANGLE" else H
+    upper_bottom = upper_at[1] - upper_h / 2
+    # A hole callout beside that view needs its knee (a dimension row plus 10)
+    # and its text (about 13 characters); keep that much clear of the iso.
+    avail_w = sheet.width - m - 6 - (upper_at[0] + L / 2 + 30.0 + 8.0 + 13 * sheet.text_height * 0.7 + 8.0)
+    # The revision table, when there is one, owns the top-right corner.
+    table_h = (len(sheet.revisions) + 1) * 6.0 + 6.0 if sheet.revisions else 0.0
+    avail_h = sheet.height - m - 6 - table_h - upper_bottom
+    iso_scale = s * min(1.0, max(0.2, avail_w / iso_w if iso_w else 1.0), max(0.2, avail_h / iso_h if iso_h else 1.0))
+    iso_w, iso_h = iso_w * iso_scale, iso_h * iso_scale
+    iso_x = sheet.width - m - 6 - iso_w / 2
+    iso_y = min(upper_bottom + iso_h / 2, sheet.height - m - 6 - table_h - iso_h / 2)
+    # The label states the scale the pictorial was DRAWN at, not its ratio to the
+    # sheet: at 2:1 a half-size iso is 1:1, and calling it "1:2" claimed a
+    # reduction from full size that never happened.
+    label = "ISOMETRIC" if abs(iso_scale / s - 1) < 1e-6 else f"ISOMETRIC {_scale_label(iso_scale, '.3g')}"
+    slots.append(("iso", (iso_x, iso_y), None if abs(iso_scale / s - 1) < 1e-6 else iso_scale, label))
+    return slots
+
+
 def _assert_views_fit(sheet: Sheet, placed: Sequence[tuple], *, index: int) -> None:
     """Refuse a sheet whose views run off the frame, naming the scale that fits.
 
@@ -607,22 +710,50 @@ def _assert_views_fit(sheet: Sheet, placed: Sequence[tuple], *, index: int) -> N
             over.append((view, box))
     if not over:
         return
-    # Measure the whole arrangement, not each view: the views have to fit the frame
-    # together. Shrinking the scale shrinks the geometry but not the gaps between
-    # views, so the ratio below understates what is achievable -- deliberately, since
-    # a suggestion that still does not fit is worse than a conservative one.
-    usable_w, usable_h = frame[1] - frame[0], frame[3] - frame[2]
-    union = (min(b[0] for *_, b in placed), max(b[1] for *_, b in placed),
-             min(b[2] for *_, b in placed), max(b[3] for *_, b in placed))
-    need = min(usable_w / max(union[1] - union[0], 1e-9), usable_h / max(union[3] - union[2], 1e-9))
-    ceiling = min(sheet.scale * need, sheet.scale * 0.999)
-    fits = next((candidate for candidate in _STANDARD_SCALES if candidate <= ceiling), _STANDARD_SCALES[-1])
+    # Lay the sheet out again at each smaller standard scale and name the first that
+    # actually fits. Dividing the overflow out instead -- usable width over the union
+    # width -- treats the whole arrangement as if it scaled, and the 47 mm between
+    # views and the 27 mm of annotation reach do not: three of four ordinary part
+    # sizes then needed two refusals before a scale rendered, each naming another
+    # that did not fit either.
+    fits = next((candidate for candidate in _STANDARD_SCALES
+                 if candidate < sheet.scale and _fits_at(sheet, placed, candidate, frame)), None)
     names = ", ".join(sorted({view.name for view, _ in over}))
+    remedy = (f"Use Sheet(scale={fits:g}) ({_scale_label(fits)}), a larger sheet size, or place the "
+              "views closer." if fits is not None else
+              f"No standard scale down to {_scale_label(_STANDARD_SCALES[-1])} fits this part on "
+              f"{sheet.size}; use a larger sheet size, or fewer views.")
     raise ValueError(
         f"sheet {index} ({sheet.size}, scale {_scale_label(sheet.scale)}): the {names} view"
-        f"{'s run' if len(over) > 1 else ' runs'} off the frame. "
-        f"Use Sheet(scale={fits:g}) ({_scale_label(fits)}), a larger sheet size, or place the views closer."
+        f"{'s run' if len(over) > 1 else ' runs'} off the frame. {remedy}"
     )
+
+
+def _fits_at(sheet: Sheet, placed: Sequence[tuple], candidate: float, frame) -> bool:
+    """Would every view sit inside the frame if the sheet were drawn at `candidate`?
+
+    A standard arrangement is laid out again, because the views move when they
+    shrink. A hand-placed view keeps its ``at=``, which is what would happen,
+    and only its box shrinks about that point.
+    """
+    ratio = candidate / sheet.scale if sheet.scale else 1.0
+    moved: dict[str, tuple[float, float]] = {}
+    for view, _proj, _bounds, _cx, _cy, _box in placed:
+        arranged = getattr(view, "_arranged", None)
+        if arranged is None:
+            continue
+        size, gap, iso = arranged
+        moved = {name: at for name, at, _s, _l in
+                 _arrange_three_views(sheet, view.shape, size, gap, candidate, iso)}
+        break
+    for view, _proj, bounds, _cx, _cy, box in placed:
+        at = moved.get(view.name, view.at) if getattr(view, "_arranged", None) else view.at
+        half_w = (box[1] - box[0]) / 2 * ratio
+        half_h = (box[3] - box[2]) / 2 * ratio
+        if (at[0] - half_w < frame[0] or at[0] + half_w > frame[1]
+                or at[1] - half_h < frame[2] or at[1] + half_h > frame[3]):
+            return False
+    return True
 
 
 def _spans(a, b) -> str:
@@ -630,19 +761,122 @@ def _spans(a, b) -> str:
     return "h" if abs(b[0] - a[0]) >= abs(b[1] - a[1]) else "v"
 
 
-def _scale_label(scale: float) -> str:
+def _scale_label(scale: float, digits: str = "g") -> str:
+    """"1:2", "2:1", "1:1". ``digits`` rounds a scale nobody chose, such as the
+    one an isometric fitted itself to, to something a reader can take in."""
     if abs(scale - 1) < 1e-9:
         return "1:1"
-    return f"1:{1 / scale:g}" if scale < 1 else f"{scale:g}:1"
+    return f"1:{1 / scale:{digits}}" if scale < 1 else f"{scale:{digits}}:1"
+
+
+#: Fallback width per character, as a multiple of cap height, for when the font
+#: the renderer uses cannot be measured. Set at the wide end of what was
+#: measured (0.70 for "+0.10", 0.89 for "ELECTRONICS ENCLOSURE BASE") so the
+#: fallback overruns nothing.
+_CHAR_WIDTH = 0.9
+#: MTEXT's own control codes: a backslash, a letter, and everything to the ";".
+_MTEXT_CODE = re.compile(r"\\([A-Za-z])([^;]*);")
+
+
+@lru_cache(maxsize=8)
+def _font(height: float):
+    """The renderer's own font at a cap height, or None if it cannot be had.
+
+    A constant width per character is wrong for every proportional font: the
+    same ratio that fits "ELECTRONICS ENCLOSURE BASE" runs "+0.10" 25% over.
+    ezdxf measures the glyphs it is about to draw, so ask it.
+    """
+    try:
+        from ezdxf.fonts import fonts
+
+        return fonts.make_font("txt.shx", height)
+    except Exception:  # noqa: BLE001 - no font manager, no cache; fall back to a ratio
+        return None
+
+
+def _text_width(value: str, height: float) -> float:
+    """How wide `value` prints at this cap height, in millimetres."""
+    if not value:
+        return 0.0
+    font = _font(round(float(height), 4))
+    if font is None:
+        return len(value) * height * _CHAR_WIDTH
+    try:
+        return float(font.text_width(value))
+    except Exception:  # noqa: BLE001 - an unmappable glyph is not worth a failed drawing
+        return len(value) * height * _CHAR_WIDTH
+
+
+def _mtext_extent(raw: str, height: float) -> tuple[float, float]:
+    """The width and height of rendered MTEXT, from the glyphs it actually draws.
+
+    A dimension's value lives as MTEXT markup, and the markup is not the text:
+    a toleranced ``30`` is ``\\A0;30{\\H0.70x;±0.10}``, 15 characters of which 7
+    draw nothing and 5 draw at 0.7 of the height. Counted raw at full height
+    that estimated 37.8 mm of ink where 14 mm exists, and every chain-dimensioned
+    toleranced row -- the commonest idiom in drafting -- reported an overlap.
+    """
+    lines: list[float] = []
+    width = 0.0
+    tallest = height
+    factor = 1.0
+    run: list[str] = []
+
+    def flush() -> None:
+        nonlocal width
+        if run:
+            width += _text_width("".join(run), height * factor)
+            run.clear()
+
+    index = 0
+    while index < len(raw):
+        char = raw[index]
+        if char in "{}":
+            index += 1
+        elif char == "\\" and raw[index + 1:index + 2] in ("\\", "{", "}"):
+            run.append(raw[index + 1])
+            index += 2
+        elif char == "\\" and raw[index + 1:index + 2] in ("P", "p"):
+            flush()
+            lines.append(width)
+            width, tallest = 0.0, tallest + height * factor
+            index += 2
+        elif char == "\\" and (match := _MTEXT_CODE.match(raw, index)):
+            code, body = match.group(1), match.group(2)
+            flush()
+            if code in "Hh":
+                # \H0.70x; is relative to the current height, \H2.5; absolute.
+                try:
+                    value = float(body.rstrip("xX"))
+                except ValueError:
+                    value = 1.0
+                factor = value if body[-1:].lower() == "x" else (value / height if height else 1.0)
+            elif code in "Ss":
+                # A stacked tolerance prints its halves one above the other, so
+                # it is as wide as the wider half, not as wide as both.
+                upper, _, lower = body.partition("^")
+                # Charged at the height in force, not smaller again: the halves
+                # draw at some fraction of it that varies by renderer, and a box
+                # that errs wide misses no overlap.
+                stacked = height * factor
+                width += max(_text_width(upper.strip("^ "), stacked),
+                             _text_width(lower.strip("^ "), stacked))
+                tallest = max(tallest, 2 * stacked)
+            index = match.end()
+        elif raw.startswith("%%", index) and raw[index + 2:index + 3]:
+            run.append("Ø")  # %%c, %%d and %%p each draw exactly one glyph
+            index += 3
+        else:
+            run.append(char)
+            index += 1
+    flush()
+    lines.append(width)
+    return max(lines), tallest
 
 
 def _text_box(value: str, x: float, y: float, height: float, align) -> tuple[float, float, float, float]:
-    """The rectangle a TEXT entity occupies, from its anchor and alignment.
-
-    Character width is taken at 0.72 of the cap height, the same ratio the title
-    block fits text with, so one number governs both.
-    """
-    width = len(value) * height * 0.72
+    """The rectangle a TEXT entity occupies, from its anchor and alignment."""
+    width = _text_width(value, height)
     name = getattr(align, "name", str(align)).upper()
     if "CENTER" in name and "LEFT" not in name and "RIGHT" not in name:
         x0 = x - width / 2
@@ -684,10 +918,17 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str, warnings:
         # smallest legible height the text is cut instead, with an ellipsis, so a
         # long title ends inside its cell rather than running over the next one.
         if fit is not None and value:
-            height = max(_MIN_TEXT_MM, min(height, fit / (len(value) * 0.72)))
-            room = int(fit / (height * 0.72))
-            if len(value) > room:
-                value = (value[: max(room - 1, 1)] + "…") if room > 1 else value[:1]
+            width = _text_width(value, height)
+            if width > fit:
+                # 0.999 so the shrink lands inside the cell rather than exactly on
+                # its edge, where the re-measure rounds over and cuts text that fits.
+                height = max(_MIN_TEXT_MM, height * fit / width * 0.999)
+                if _text_width(value, height) > fit:
+                    # Below the smallest legible height, cut rather than overrun:
+                    # a title that runs into the SCALE cell is worse than a short one.
+                    while len(value) > 1 and _text_width(value[:-1] + "…", height) > fit:
+                        value = value[:-1]
+                    value = (value[:-1] + "…") if len(value) > 1 else value[:1]
         entity = msp.add_text(value, dxfattribs={"height": height, "layer": layer})
         entity.set_placement((x, y), align=align)
         if layer in ("DIM", "NOTES") and value:
@@ -712,14 +953,12 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str, warnings:
         for entity in block:
             if entity.dxftype() != "MTEXT":
                 continue
-            value = stripped = str(entity.text or "")
-            for token in ("\\A0;", "{", "}"):
-                stripped = stripped.replace(token, "")
+            value = str(entity.text or "")
             height = float(entity.dxf.char_height or sheet.text_height)
+            width, tall = _mtext_extent(value, height)
             insert = entity.dxf.insert
-            width = len(stripped.splitlines()[0] if stripped else "") * height * 0.72
-            claim(value, (insert.x - width / 2, insert.y - height / 2,
-                          insert.x + width / 2, insert.y + height / 2))
+            claim(value, (insert.x - width / 2, insert.y - tall / 2,
+                          insert.x + width / 2, insert.y + tall / 2))
 
     def claim(value: str, box: tuple[float, float, float, float]) -> None:
         for other, taken in claimed:
@@ -811,6 +1050,25 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str, warnings:
         def model_to_sheet(p3):
             return to_sheet(proj.point(p3))
 
+        # One set for the whole view, not one per pass. HLR returns an edge from
+        # every face that bounds it, so an edge on the silhouette comes back
+        # visible AND hidden: a per-pass set caught the repeats within each pass
+        # and none across them, and since HIDDEN is written second it drew over
+        # every visible line on the sheet. A 600 dpi crop of one view in colour
+        # was 34,842 grey pixels against 2,635 black -- the outline printing
+        # grey-dashed, the whole visible/hidden distinction gone. In mono it is
+        # black over black, which is why it went unnoticed.
+        seen: set = set()
+
+        def once(key) -> bool:
+            if key in seen:
+                return False
+            seen.add(key)
+            return True
+
+        def q(value: float) -> float:
+            return round(value, 6)
+
         def put(edges, layer):
             """Write projected edges once each.
 
@@ -822,17 +1080,6 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str, warnings:
             read the same in either direction -- and a repeat is dropped.
             """
             from build123d import GeomType
-
-            seen: set = set()
-
-            def once(key) -> bool:
-                if key in seen:
-                    return False
-                seen.add(key)
-                return True
-
-            def q(value: float) -> float:
-                return round(value, 6)
 
             for edge in edges:
                 # A circular edge stays a CIRCLE or ARC: exact on the sheet, so a hole
@@ -871,7 +1118,11 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str, warnings:
         if view.hidden:
             put(proj.hidden, "HIDDEN")
         if view.centre_marks:
-            for centre, radius in _circles(proj.visible):
+            # One cross per CENTRE, sized to the largest circle on it. A counterbore
+            # is two concentric circles, and two crosses drawn over each other fill
+            # the CENTER linetype's gaps in: the centre line printed solid, which is
+            # the one thing its dashes are there to say it is not.
+            for centre, radius in _centres(_circles(proj.visible)):
                 c = to_sheet(centre)
                 arm = radius * sv + 2.0
                 msp.add_line((c[0] - arm, c[1]), (c[0] + arm, c[1]), dxfattribs={"layer": "CENTER"})
@@ -946,13 +1197,32 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str, warnings:
         # view outward, smallest feature first. Its rows are reserved here so the
         # feature dimensions and the hole callouts keep clear of them, and drawn
         # after them so the rows in between stay free.
-        unplaced_above = sum(
-            1 for d in view._dims
-            if d.kind == "linear" and d.offset is None
-            and (d.orientation or _spans(model_to_sheet(d.p1), model_to_sheet(d.p2))) == "h"
-        )
-        overall_top = _DIM_ROW * (unplaced_above + 1)
-        overall_left = _DIM_ROW
+        def rows_used(want_h: bool, want_positive: bool) -> int:
+            """How many rows the author's own dimensions can take on one side.
+
+            An unplaced dimension takes the next free row; a placed one takes the
+            row its offset names, which is why counting only the unplaced ones put
+            overall() on top of an explicitly-placed dimension as soon as a sheet
+            mixed the two. The sum is the worst case, and outermost is where
+            overall() belongs whether or not it is reached.
+            """
+            unplaced = placed_rows = 0
+            for d in view._dims:
+                if d.kind != "linear":
+                    continue
+                horizontal = (d.orientation or _spans(model_to_sheet(d.p1), model_to_sheet(d.p2))) == "h"
+                if horizontal != want_h:
+                    continue
+                if d.offset is None:
+                    # Unplaced dimensions go above a horizontal pair and right of a
+                    # vertical one; they never take the sides overall() uses.
+                    unplaced += 1 if want_positive else 0
+                elif (d.offset >= 0) == want_positive:
+                    placed_rows = max(placed_rows, int(abs(d.offset) // _DIM_ROW))
+            return unplaced + placed_rows
+
+        overall_top = _DIM_ROW * (rows_used(True, True) + 1)
+        overall_left = _DIM_ROW * (rows_used(False, False) + 1)
         if view._overall:
             reach["top"] = max(reach["top"], overall_top + sheet.text_height * 1.5)
             reach["left"] = max(reach["left"], overall_left + sheet.text_height * 1.5)
@@ -1091,6 +1361,13 @@ def _write_pdf(docs, sheets: Sequence[Sheet], path: Path) -> None:
                 Frontend(ctx, backend, config=config.Configuration(
                     background_policy=config.BackgroundPolicy.WHITE,
                     color_policy=config.ColorPolicy.BLACK if sheet.ink == "mono" else config.ColorPolicy.COLOR,
+                    # Without a floor of its own the matplotlib backend clamps every
+                    # width to 72/dpi, and the sheet printed one width throughout --
+                    # the LAYER table resolves 0.5 for VISIBLE against 0.18 for DIM
+                    # and CENTER, and none of it reached the page. Thick against thin
+                    # is most of what makes a print readable at a glance. The unit is
+                    # 1/300 inch, so this is a floor low enough to be no floor.
+                    min_lineweight=0.05,
                 )).draw_layout(doc.modelspace(), finalize=False)
                 ax.set_xlim(0, sheet.width)
                 ax.set_ylim(0, sheet.height)
@@ -1142,7 +1419,10 @@ def eng_drawing(func: Callable[..., Any] | None = None, *, out: str | Path | Non
                 # The same checks every @dxf build runs, against the document the
                 # page is rendered from: duplicate geometry, unset units, an empty
                 # sheet. A drawing skipping them is how the duplicates went unseen.
-                findings = validate_drawing_document(doc)
+                # drawing=True because this IS one: the cut-profile checks grade a
+                # file as a laser-cut layout, and a projected outline with a fillet
+                # in it does not close.
+                findings = validate_drawing_document(doc, drawing=True)
                 raise_on_error_findings(findings, label=f"{fn.__name__} sheet {index}")
                 for finding in findings:
                     if finding.severity == "warning":
