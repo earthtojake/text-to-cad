@@ -30,6 +30,7 @@ const INSPECTOR_WIDTH = 365;
  *   bottomAction?: { label: string, shortLabel?: string, title?: string, disabled?: boolean,
  *     onInvoke?(): void, render?: (props: object) => import("react").ReactNode, children?: import("react").ReactNode } | null,
  *   contextMenuItems?: ((press: { clientX: number, clientY: number, shiftKey: boolean }) => object[] | null) | null,
+ *   onContextMenuOpenChange?: ((open: boolean) => void) | null,
  *   sceneRevision?: number, className?: string,
  *   viewportOverlay?: import("react").ReactNode | ((viewport: { runtimeRef: object, hostRef: object, viewerReadyTick: number }) => import("react").ReactNode) }} props
  *   `tools`: left to right, from `shell.tools`; an EMPTY list draws no strip at all,
@@ -39,14 +40,15 @@ const INSPECTOR_WIDTH = 365;
  *   replaces Draw's (copy the view with its ink) while the renderer's own tool is active.
  *   `contextMenuItems`: what THIS renderer offers on a secondary tap over the canvas; the
  *   gesture, the anchor and the dismissal are the shell's (`ViewportContextMenu.jsx`), and a
- *   renderer that passes none has no viewport menu at all.
+ *   renderer that passes none has no viewport menu at all. `onContextMenuOpenChange(open)`
+ *   says while that menu is up, for a renderer that marks what the menu is about.
  *   `viewportOverlay`: the renderer's own layer over the canvas; as a function it is given
  *   the viewport (its live runtime, the element its pointer events arrive on, and a tick
  *   that changes when the runtime is replaced), which is what a handle overlay or a
  *   pointer pick (`kit/tools/select/usePointerPick.js`) needs.
  */
 export default function RendererShell({ shell, tools, inspector, bottomAction = null, contextMenuItems = null,
-  sceneRevision = 0, viewportOverlay = null, className = "" }) {
+  onContextMenuOpenChange = null, sceneRevision = 0, viewportOverlay = null, className = "" }) {
   const frame = shell.frame;
   const { view, resolvedScene, previewMode, viewerLoading, scene } = frame;
   const hasContent = Boolean(scene) && !viewerLoading;
@@ -56,7 +58,7 @@ export default function RendererShell({ shell, tools, inspector, bottomAction = 
     : null);
   // The renderer's overlay and the shell's own layers share one viewport context.
   const overlay = viewport => <>
-    {previewMode || !contextMenuItems ? null : <ViewportContextMenu viewport={viewport} items={contextMenuItems} />}
+    {previewMode || !contextMenuItems ? null : <ViewportContextMenu viewport={viewport} items={contextMenuItems} onOpenChange={onContextMenuOpenChange} />}
     {typeof viewportOverlay === "function" ? viewportOverlay(viewport) : viewportOverlay}
   </>;
   return (
@@ -117,6 +119,8 @@ export default function RendererShell({ shell, tools, inspector, bottomAction = 
                     onPresentationChange={frame.handlePresentationChange}
                     onViewerAlertChange={frame.setRuntimeAlert}
                     onCameraSettled={frame.onCameraSettled}
+                    preserveInteractionPixelRatio={frame.preserveInteractionPixelRatio}
+                    runtimeLifecycle={frame.runtimeLifecycle}
                   >{overlay}</ShellViewport>
                   {!previewMode ? <BlockingViewerAlert alert={blockingAlert} onReload={view.reload} /> : null}
                   {!previewMode && action ? <ViewportBottomAction composer={frame.composer} {...action} /> : null}

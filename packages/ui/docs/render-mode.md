@@ -148,7 +148,10 @@ across every preset and settings edit. It uses shadow-compatible conventional
 depth throughout, fitting near/far planes to the current model, closeup records
 and floor/grid planes on every frame. The grid's bounds also fit the far plane;
 it remains visible when Floor is off. Grid spacing is five cells across the
-default model framing. Enabling photographic effects updates that live scene;
+default model framing. The grid, the stage and the Render studio's floor are
+SIZED from the model's rest placement for every renderer, STEP included: a pose, a
+playing routine, or entering Render while the model is posed never rescales or
+slides the ground; its height, the lighting and the shadow reach follow the model. Enabling photographic effects updates that live scene;
 it never clears or covers the canvas with a loading screen. Only actual context
 recovery replaces the renderer. Quality refines tessellation within the same
 cache and memory budget. Picking/topology stays demand-driven in every preset.

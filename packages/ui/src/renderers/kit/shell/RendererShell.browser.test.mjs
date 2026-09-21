@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:http';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
+import { PNG } from 'pngjs';
 import * as THREE from 'three';
 import { interactiveCameraFrameForBounds } from '../../../../dist/renderers/kit/camera/viewportCameraFit.js';
 import { DEFAULT_VIEW_DIRECTION, WORLD_UP } from '../../../../dist/renderers/kit/camera/viewportCameraKit.js';
@@ -652,6 +653,153 @@ test('the shell keeps its Draw session across fullscreen, and fullscreen drags a
 // renderer over one triangle: a viewport menu whose items are its own, a bottom
 // action whose long label falls back to a count, and the camera-settled report.
 // They go with this renderer when STEP arrives on the shell and uses them for real.
+test('a scene that arrives in place is framed when whole, a renderer hears what became of its WebGL runtime, hairlines stay sharp while the camera moves, and an open menu is reported', async (t) => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hardcore-shell-scene-'));
+  let server, browser;
+  t.after(async () => { await browser?.close(); if (server) await new Promise(resolve => server.close(resolve)); await rm(temporary, { recursive: true, force: true }); });
+  await build({ entryPoints: [fileURLToPath(new URL('../../harness/index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.woff2': 'dataurl' } });
+  const bundle = await readFile(join(temporary, 'harness.js'));
+  const compiledCss = await readFile(new URL('../../../../dist/styles.css', import.meta.url));
+  server = createServer((request, response) => {
+    const url = new URL(request.url, 'http://test');
+    const root = url.pathname.split('/')[1];
+    if (url.pathname === '/harness.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle); }
+    else if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(compiledCss); }
+    else if (url.pathname.endsWith('/__cad/catalog')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ rootId: root, entries: [] })); }
+    else if (url.pathname.endsWith('/__cad/server')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ rootId: root, rootPath: '/models', backend: 'cadgen' })); }
+    else if (/\.(woff2|ttf)$/.test(url.pathname)) { response.statusCode = 404; response.end(); }
+    else { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css"></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>'); }
+  });
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+  browser = await chromium.launch({ headless: true, args: process.platform === 'darwin'
+    ? ['--use-angle=metal'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 });
+  page.setDefaultTimeout(15000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => { window.Worker = undefined; });
+  await page.goto(`http://127.0.0.1:${server.address().port}/?file=one.harness`);
+  const pane = page.getByTestId('one');
+  const canvasElement = pane.locator('[aria-busy="false"] > div > canvas').first();
+  const canvas = await canvasElement.boundingBox();
+  const middle = { x: canvas.x + canvas.width / 2, y: canvas.y + canvas.height / 2 };
+  // The drawn frame: how much of it is the triangle, and whether it runs off the edge.
+  const drawn = async () => {
+    const png = PNG.sync.read(await canvasElement.screenshot());
+    const { width, height, data } = png;
+    const background = [data[8 * 4 * width + 32], data[8 * 4 * width + 33], data[8 * 4 * width + 34]];
+    let painted = 0, atEdge = 0;
+    for (let y = 0; y < height; y += 2) for (let x = 0; x < width; x += 2) {
+      const at = (y * width + x) * 4;
+      // The triangle is a flat blue-grey; the grid lines and the axes are thin and sampled away by the solid test.
+      const solid = Math.abs(data[at] - background[0]) + Math.abs(data[at + 1] - background[1]) + Math.abs(data[at + 2] - background[2]) > 60
+        && data[at + 2] > data[at] + 8;
+      if (!solid) continue;
+      painted += 1;
+      if (x < 6 || y < 6 || x > width - 8 || y > height - 8) atEdge += 1;
+    }
+    return { painted, atEdge };
+  };
+  const waitForFrame = async (accept, what) => {
+    let last;
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      last = await drawn();
+      if (accept(last)) return last;
+      await page.waitForTimeout(100);
+    }
+    assert.fail(`the drawn frame never ${what}: ${JSON.stringify(last)}`);
+  };
+
+  // A SCENE THAT ARRIVES IN PLACE. The same scene identity grows fourfold and says it is not
+  // whole yet: the viewport adopts what arrived (it is drawn, larger) but does NOT re-frame,
+  // so the triangle runs off the canvas. When the scene says it is whole, it is framed again.
+  const opened = await waitForFrame(frame => frame.painted > 500 && frame.atEdge === 0, 'showed the framed triangle');
+  const pose = () => page.evaluate(() => { const c = window.__cadCamera(); return [c.position, c.target, c.zoom]; });
+  const openedPose = await pose();
+  await pane.locator('[data-harness-arrive="partial"]').click();
+  const partial = await waitForFrame(frame => frame.painted > opened.painted * 3 && frame.atEdge > 0,
+    'drew the grown scene, unframed, while it was still arriving');
+  assert.deepEqual(await pose(), openedPose, 'the camera did not move for a partial arrival');
+  await pane.locator('[data-harness-arrive="whole"]').click();
+  const whole = await waitForFrame(frame => frame.atEdge === 0 && frame.painted > 500 && frame.painted < partial.painted,
+    'framed the scene once it was whole');
+  assert.ok(Math.abs(whole.painted - opened.painted) < opened.painted * 0.2,
+    `the whole scene fills the frame as the first one did: ${JSON.stringify({ opened, whole })}`);
+
+  // SHADOW RECEPTION IS THE SCENE'S, where the scene says so. Entering Render turns shadows
+  // on: the scene is told, and its mesh -- which never takes one -- is left exactly as it was.
+  assert.equal(await pane.locator('[data-harness-shadows]').innerText(), 'false:false');
+  await page.evaluate(() => window.cadHarness.a.controller.setRenderMode(true));
+  await page.waitForFunction(() => document.querySelector('[data-harness-shadows]').textContent.startsWith('true:'));
+  await page.waitForTimeout(300);
+  await page.evaluate(() => window.cadHarness.a.controller.setRenderMode(false));
+  await page.waitForFunction(() => document.querySelector('[data-harness-shadows]').textContent.startsWith('false:'));
+  assert.equal(await pane.locator('[data-harness-shadows]').innerText(), 'false:false', 'the viewport never set the mesh itself');
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().renderMode !== 'render');
+  await page.waitForTimeout(600);
+
+  // AN OPEN MENU IS REPORTED, for exactly as long as it is up.
+  const menuUp = () => pane.locator('[data-harness-menu-open]').innerText();
+  assert.equal(await menuUp(), '');
+  await page.mouse.click(middle.x, middle.y, { button: 'right' });
+  await page.getByRole('menu').waitFor();
+  await page.waitForFunction(() => document.querySelector('[data-harness-menu-open]').textContent === 'up');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.querySelector('[data-harness-menu-open]').textContent === '');
+  await page.mouse.click(middle.x, middle.y, { button: 'right' });
+  await page.waitForFunction(() => document.querySelector('[data-harness-menu-open]').textContent === 'up');
+  await page.getByRole('menuitem', { name: 'Note the press', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('[data-harness-menu-open]').textContent === '');
+  // Primary and secondary together is the pan chord, never a menu -- in either order. (A
+  // button that joins one already held is a pointer MOVE, so the secondary-first order is the
+  // one that reaches the menu's own press and has to be refused there.)
+  await page.mouse.move(middle.x, middle.y);
+  for (const [first, second] of [['left', 'right'], ['right', 'left']]) {
+    await page.mouse.down({ button: first });
+    await page.mouse.down({ button: second });
+    await page.mouse.up({ button: second });
+    await page.mouse.up({ button: first });
+    await page.waitForTimeout(250);
+    assert.equal(await page.getByRole('menu').count(), 0, `a ${first}-then-${second} chord opens no menu`);
+  }
+  assert.equal(await menuUp(), '');
+
+  // HAIRLINES STAY SHARP. While the camera moves the backing store drops to the interaction
+  // pixel ratio; a renderer that says its scene is drawn with hairlines keeps the idle one.
+  const backingScale = async (file) => {
+    await page.goto(`http://127.0.0.1:${server.address().port}/?file=${file}`);
+    const element = page.getByTestId('one').locator('[aria-busy="false"] > div > canvas').first();
+    const box = await element.boundingBox();
+    await page.waitForTimeout(400);
+    const idle = await element.evaluate(node => node.width / node.clientWidth);
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 60, box.y + box.height / 2 + 20, { steps: 4 });
+    const moving = await element.evaluate(node => node.width / node.clientWidth);
+    await page.mouse.up();
+    return { idle, moving };
+  };
+  const plain = await backingScale('one.harness');
+  assert.ok(plain.idle > 1.4 && plain.moving < plain.idle - 0.2, `an ordinary scene drops its pixel ratio while it moves: ${JSON.stringify(plain)}`);
+  const hairline = await backingScale('hairline.harness');
+  assert.ok(hairline.idle === plain.idle && hairline.moving === hairline.idle, `a hairline scene keeps it: ${JSON.stringify(hairline)}`);
+
+  // THE RUNTIME UNDER THE SCENE. A lost context is reported; the replacement runtime's
+  // predecessor is released while its renderer is still alive, and named a handoff.
+  await page.waitForTimeout(300);
+  await page.evaluate(() => {
+    const node = document.querySelector('[data-testid="one"] [aria-busy] > div > canvas');
+    const gl = node.getContext('webgl2') || node.getContext('webgl');
+    window.__lose = gl.getExtension('WEBGL_lose_context');
+    window.__lose.loseContext();
+  });
+  await page.waitForFunction(() => document.querySelector('[data-harness-runtime]').textContent === 'lost');
+  await page.evaluate(() => window.__lose.restoreContext());
+  await page.waitForFunction(() => document.querySelector('[data-harness-runtime]').textContent === 'lost release:live:handoff');
+  await waitForFrame(frame => frame.painted > 500, 'drew again on the replacement runtime');
+  assert.deepEqual(errors, []);
+});
+
 test('a renderer supplies the viewport menu, a bottom action that falls back to a count, and is told when the camera settles', async (t) => {
   const temporary = await mkdtemp(join(tmpdir(), 'hardcore-shell-surfaces-'));
   let server, browser;
@@ -748,7 +896,7 @@ test('a renderer supplies the viewport menu, a bottom action that falls back to 
   // resize the harness can make also moves the stored camera, so the perspective path
   // reports it as well. The viewport reports it unconditionally because an aspect
   // change CAN expose part of a scene while every stored field stays equal, which is
-  // the case `resampleLodAfterViewportResize` exists for.)
+  // the case a renderer that samples the camera for detail needs.)
   const beforeWidthChange = Number(await settles());
   await page.setViewportSize({ width: 900, height: 800 });
   await page.waitForFunction(count => Number(document.querySelector('[data-harness-camera-settles]').textContent) > count, beforeWidthChange);

@@ -86,6 +86,11 @@ const EMPTY = Object.freeze({});
  *   changed — which can expose part of a scene without changing position, target or zoom at all. For a
  *   renderer that samples the camera to decide what detail its scene needs. It is called often; debounce
  *   it if that matters.
+ * @param {boolean} [options.preserveInteractionPixelRatio]  The scene is drawn with hairlines just now: keep the
+ *   idle pixel ratio while the camera moves, instead of dropping it for the duration of the gesture.
+ * @param {{ onRelease?(runtime: object, detail: { handoff: boolean }): void, onContextLost?(): void,
+ *   onInitializationError?(error: unknown): void }} [options.runtimeLifecycle]  What happens to the WebGL runtime
+ *   under the scene, for a renderer that hangs its own objects or in-flight work on it (`ShellViewport.jsx`).
  * @param {object} [options.displayTabProps]  Extra Display tab props for sections the renderer's FEATURES opt into.
  * @param {string} [options.sceneScaleMode]
  */
@@ -93,7 +98,8 @@ export function useRendererShell({
   view, services, resource, modelKey, revisionKey = "", features, toolModes = null, scene, load,
   animation = null, live = EMPTY, promptReferences = null,
   escape = EMPTY, rendererState = EMPTY, toolRestore = EMPTY, selection = null, displayTabProps = EMPTY,
-  onCameraSettled = null, sceneScaleMode = VIEWER_SCENE_SCALE.CAD
+  onCameraSettled = null, preserveInteractionPixelRatio = false, runtimeLifecycle = null,
+  sceneScaleMode = VIEWER_SCENE_SCALE.CAD
 }) {
   const host = useViewerHost();
   const viewerElement = useContext(ViewerElementContext);
@@ -158,6 +164,13 @@ export function useRendererShell({
   const cameraSettledRef = useRef(onCameraSettled);
   cameraSettledRef.current = onCameraSettled;
   const reportCameraSettled = useCallback(() => cameraSettledRef.current?.(), []);
+  const runtimeLifecycleRef = useRef(runtimeLifecycle);
+  runtimeLifecycleRef.current = runtimeLifecycle;
+  const stableRuntimeLifecycle = useMemo(() => ({
+    onRelease: (runtime, detail) => runtimeLifecycleRef.current?.onRelease?.(runtime, detail),
+    onContextLost: () => runtimeLifecycleRef.current?.onContextLost?.(),
+    onInitializationError: (error) => runtimeLifecycleRef.current?.onInitializationError?.(error)
+  }), []);
   const handlePerspectiveChange = useCallback((nextPerspective) => {
     // A camera that moved is a camera that settled, whether or not the file records it.
     cameraSettledRef.current?.();
@@ -408,6 +421,8 @@ export function useRendererShell({
       view, hostRef, hostElement, viewerElement, sceneBackdrop, colorScheme, modelKey, presentationKey, sceneScaleMode, scene,
       viewerRef, viewUpdate, resolvedScene, viewerPerspective, activePerspectiveRef, handlePerspectiveChange,
       onCameraSettled: reportCameraSettled,
+      preserveInteractionPixelRatio: preserveInteractionPixelRatio === true,
+      runtimeLifecycle: stableRuntimeLifecycle,
       previewMode, previewOrbitSpeed, setPreviewOrbitSpeed, viewerLoading, loading, presentationState,
       handlePresentationChange, viewerAlert, fileStatusAlert, viewerAlertOpen, setViewerAlertOpen, setRuntimeAlert,
       setZoomPercent, drawToolActive, drawing, animationAvailable, animation, composer, capture,

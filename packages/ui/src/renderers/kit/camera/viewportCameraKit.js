@@ -1,5 +1,5 @@
 // Shared, renderer-agnostic viewport/camera helpers used by the CAD viewer
-// (CadViewer). They operate on a generic `runtime` shape that exposes at least
+// (the kit viewport). They operate on a generic `runtime` shape that exposes at least
 // `{ THREE, camera, controls, keyboardOrbitState }`; they make no assumption
 // about how the scene itself is rendered.
 
@@ -117,7 +117,7 @@ export function isTrackpadLikeWheelEvent(event) {
 // what stops a wide model from being cropped by a narrowing viewport.
 //
 // The formulas mirror getFitDistanceForBoundingSphere and
-// getOrthographicHalfHeightForBoundingSphere in CadViewer, so a viewport change
+// getOrthographicHalfHeightForBoundingSphere in the old monolithic viewer, so a viewport change
 // leaves the camera exactly where a fresh fit would have put it -- that is what
 // keeps "100%" honest across a resize.
 export function viewportFitScale({
@@ -378,7 +378,7 @@ export function stepKeyboardOrbit(runtime, timestamp) {
  * Returns `{ direction, up }` as plain arrays. `up` is ALWAYS world up, so OrbitControls
  * orbits about the same axis from every view; a preset that declares another up (the poles
  * declare [0,1,0]) contributes only the screen orientation, by choosing which way the pole
- * offset leans. Lived in CadViewer, where the invariant could not be tested.
+ * offset leans. Lived in the monolithic viewer, where the invariant could not be tested.
  */
 export function viewPlaneCameraBasis(preset, worldUp = WORLD_UP) {
   const dir = normalizeVector3(preset?.direction);

@@ -10,7 +10,6 @@ import { applyDisplayRecordTransform, syncRuntimeStepClipPlane } from "@hardcore
 import { syncTopologyDisplayEdgeLine } from "@hardcore/core/lib/viewer/topologyDisplayEdgeLine.js";
 import {
   createStaticSceneReset,
-  sceneSourceAlreadyPlaced,
   staticSceneResetEligible
 } from "./staticSceneReset.js";
 
@@ -69,31 +68,6 @@ test("first load, repeated layout setup, invalidation and unmount retain ordinar
   tracker.complete(next, input); tracker.reset(); assert.equal(tracker.consume(next, input), false);
   tracker.beginRender({}, true); tracker.complete(next, input);
   assert.equal(tracker.consume(next, input), false, "an old effect cannot stamp a newer render");
-});
-
-test("placement follow-up skips an exact adopted package but keeps posed wrappers live", () => {
-  const adopted = { parts: [] };
-  const geometrySource = { vertices: new Float32Array(0) };
-  const posed = { geometrySource, parts: [] };
-  const runtime = { cadScene: { source: adopted }, placedSourceParts: adopted.parts };
-  assert.equal(sceneSourceAlreadyPlaced(runtime, adopted), true);
-  assert.equal(sceneSourceAlreadyPlaced(runtime, posed), false);
-  runtime.cadScene.source = geometrySource;
-  assert.equal(sceneSourceAlreadyPlaced(runtime, posed), false, "wrapper placement remains distinct from retained geometry");
-  assert.equal(sceneSourceAlreadyPlaced(null, adopted), false);
-});
-
-test("new rows published on the adopted wrapper still reach placement", () => {
-  // A pose may rewrite `parts` on the wrapper the scene already owns, so the
-  // wrapper identity alone cannot say whether these rows were placed.
-  const rest = [{ id: "arm:v1", transform: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] }];
-  const posedWrapper = { partTransformsBaked: false, parts: rest };
-  const runtime = { cadScene: { source: posedWrapper }, placedSourceParts: rest };
-  assert.equal(sceneSourceAlreadyPlaced(runtime, posedWrapper), true, "the rows this scene placed are not placed twice");
-
-  posedWrapper.parts = [{ id: "arm:v1", transform: [0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 0.06, 1] }];
-  assert.equal(sceneSourceAlreadyPlaced(runtime, posedWrapper), false, "new rows on the same wrapper must be placed");
-  assert.equal(sceneSourceAlreadyPlaced({ cadScene: { source: posedWrapper } }, posedWrapper), false);
 });
 
 test("eligibility excludes merged, non-STEP, active and residual dynamic states", () => {

@@ -4,7 +4,7 @@
 // stage load only when an enabled lighting/background/floor group requires them.
 // The lightweight grouped settings panel is always available in every preset.
 //
-// The scene half cannot be a React.lazy component: CadViewer applies the studio
+// The scene half cannot be a React.lazy component: the viewport applies the studio
 // from effects, not from JSX. It is a module handle instead — `studioScene()`
 // answers synchronously with the loaded namespace or `null`, and `null` is a
 // legitimate state that the viewer already knows how to present. A new canvas

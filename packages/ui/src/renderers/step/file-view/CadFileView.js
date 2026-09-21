@@ -13,7 +13,8 @@ import { startTransition, useCallback, useContext, useEffect, useLayoutEffect, u
 import { Camera, FileText } from "lucide-react";
 import { CAD_PANEL, EmptyState } from "@hardcore/ui/navigation";
 import { cn } from "@hardcore/ui/utils";
-import CadRenderPane from "../components/workbench/CadRenderPane.js";
+import StepViewport from "../scene/StepViewport.jsx";
+import { viewportMenuEntries } from "../components/workbench/AssemblyContextMenuItems.js";
 import { useViewportLod } from "../render/useViewportLod.js";
 import { lodSceneMayMove } from "../render/lodCameraSample.js";
 import { registerLodDisplaySource } from "../render/lodSceneAdoption.js";
@@ -338,7 +339,15 @@ function CadFileViewSurface({
   const [activeTreeNodeScrollKey, setActiveTreeNodeScrollKey] = useState("");
   const [hiddenPartIds, setHiddenPartIds] = useState([]);
   const [isolatedAssemblyNodeIds, setIsolatedAssemblyNodeIds] = useState([]);
-  const [viewerContextMenu, setViewerContextMenu] = useState(null);
+  // What the viewport's menu is ABOUT while it is up (the part stays marked); the menu itself,
+  // its gesture and its dismissal are the shell's (`kit/shell/ViewportContextMenu.jsx`). The ref
+  // is how the press that asks for the menu's entries reads the descriptor it just resolved.
+  const [viewerContextMenu, setViewerContextMenuState] = useState(null);
+  const viewerContextMenuRef = useRef(null);
+  const setViewerContextMenu = useCallback((next) => {
+    viewerContextMenuRef.current = next;
+    setViewerContextMenuState(next);
+  }, []);
   const { display: displaySettings, scene: desiredScene, store: viewSettingsStore } = useViewSettings(resolvedColorSchemeMode);
   const viewerRef = useRef(null);
   const viewUpdate = useAppliedViewSettings(desiredScene, selectedKey, viewerRef, viewSettingsStore);
@@ -2615,7 +2624,7 @@ function CadFileViewSurface({
     () => buildSelectionCopyButtonLabel(canonicalCopySelectionLines, { count: copySelectionPayload.copiedCount }),
     [canonicalCopySelectionLines, copySelectionPayload.copiedCount]
   );
-  // Shown instead of the ref when the ref will not fit. CadRenderPane decides that by
+  // Shown instead of the ref when the ref will not fit. The kit's bottom action decides that by
   // measuring, since whether it fits depends on the viewport, not the string.
   const copyButtonCountLabel = useMemo(
     () => buildSelectionCopyCountLabel(
@@ -3628,8 +3637,8 @@ function CadFileViewSurface({
     stepModuleTreeSelectionDisabled,
   ]);
 
-  const closeViewerContextMenu = useCallback(() => {
-    setViewerContextMenu(null);
+  const handleViewportContextMenuOpenChange = useCallback((open) => {
+    if (!open) setViewerContextMenu(null);
   }, []);
 
   useEffect(() => {
@@ -3789,8 +3798,8 @@ function CadFileViewSurface({
     stepTreeCopyReferenceMap
   ]);
 
-  // Only ever reached under Select (`handleModelReferenceContext` is handed to the
-  // viewport by that tool alone), so nothing it offers can contradict the tool.
+  // Only ever reached under Select (the viewport's menu is offered by that tool alone), so
+  // nothing it offers can contradict the tool.
   const handleModelReferenceContext = useCallback((referenceId, { clientX = 0, clientY = 0 } = {}) => {
     if (stepInteractionBlocked || stepModuleTreeSelectionDisabled) {
       setViewerContextMenu(null);
@@ -4206,6 +4215,20 @@ function CadFileViewSurface({
     ensureSelectTool
   ]);
 
+  // The viewport's menu, asked for at the moment of a secondary tap under Select: resolve what
+  // is under the press into the one menu descriptor (a part, a topology reference, or the model
+  // as a whole), remember it so the part stays marked while the menu is up, and hand the shell
+  // the entries. Nothing to offer is an empty answer, and the shell opens nothing.
+  const viewportContextMenuItems = useCallback((press, referenceId) => {
+    handleModelReferenceContext(referenceId, press);
+    const menu = viewerContextMenuRef.current;
+    return menu ? viewportMenuEntries(menu, { actions: {
+      ...partMenuActions,
+      // Offered only where the host has somewhere to put it.
+      onAddToPrompt: hostReference?.canAddToPrompt ? partMenuActions.onAddToPrompt : undefined
+    } }) : null;
+  }, [handleModelReferenceContext, hostReference, partMenuActions]);
+
   const handleSelectEntry = useCallback((key) => {
     const next = entryMap.get(key);
     onOpenFile?.(next ? cadFileParamForEntry(next) : key);
@@ -4604,11 +4627,10 @@ function CadFileViewSurface({
               style={{ backgroundColor: sceneBackdrop }}
             >
               <div className="pointer-events-auto absolute inset-0 z-0">
-                <CadRenderPane
+                <StepViewport
+                ref={viewerRef}
                 onReload={onReload}
-                viewerRef={viewerRef}
                 viewUpdate={viewUpdate}
-                renderFormat={effectiveRenderFormat}
                 onCameraZoomPercentChange={setViewerZoomPercent}
                 onLodCameraChange={onLodCameraMoved}
                 onMeshSourceAdoption={handleDisplayMeshAdoption}
@@ -4668,14 +4690,12 @@ function CadFileViewSurface({
                 handleModelHoverChange={handleModelHoverChange}
                 handleModelReferenceActivate={handleModelReferenceActivate}
                 handleModelReferenceDoubleActivate={handleModelReferenceDoubleActivate}
-                handleModelReferenceContext={selectionToolActive ? handleModelReferenceContext : null}
+                contextMenuItems={selectionToolActive ? viewportContextMenuItems : null}
+                onContextMenuOpenChange={handleViewportContextMenuOpenChange}
                 onMeasurePick={handleMeasurePick}
                 onMeasureHoverPoint={handleMeasureHoverPoint}
                 activeMeasurementId={inspectionHighlight?.measurement?.id || activeMeasureId}
                 measureState={inspectionHighlight?.measurement ? { measurements: [inspectionHighlight.measurement] } : measureRulerState}
-                viewerContextMenu={viewerContextMenu}
-                onViewerContextMenuClose={closeViewerContextMenu}
-                viewerContextMenuActions={partMenuActions}
                 handleViewerAlertChange={handleViewerAlertChange}
                 handleStepModuleTransformDetectedChange={handleStepModuleTransformDetectedChange}
                 selectionCount={selectionCount}
@@ -4683,7 +4703,6 @@ function CadFileViewSurface({
                 copyButtonCountLabel={copyButtonCountLabel}
                 animateToolActive={animateToolActive}
                 jointHandles={jointHandles}
-                handleCopySelection={handleCopySelection}
                 selectionFilter={selectionFilter}
                 createPromptContext={createSelectionPromptContext}
                 onPromptResult={showPromptResult}

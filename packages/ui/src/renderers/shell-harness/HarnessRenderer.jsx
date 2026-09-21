@@ -16,9 +16,11 @@ import { createToolModes } from "../kit/tools/toolModes.js";
 // reads no bytes and talks to no backend.
 //
 // It also stands in for a renderer that USES the shell surfaces STEP will need
-// when it moves: a viewport context menu of its own, a bottom action whose long
-// label falls back to a count, and the camera-settled report. Each is exercised
-// here against the real shell in a real browser.
+// when it moves: a viewport context menu of its own (and word of when it is up), a
+// bottom action whose long label falls back to a count, the camera-settled report,
+// a scene that ARRIVES in place (`complete`, `viewport.commitScene()`), and what
+// happens to the WebGL runtime under it (`runtimeLifecycle`). Each is exercised here
+// against the real shell in a real browser.
 //
 // It is registered by `harness/index.tsx` alone (`*.harness` files) and lives
 // here rather than under `renderers/harness/` only because the library build
@@ -52,6 +54,18 @@ function createTriangleScene() {
   const bounds = { min: [0, 0, 0], max: [20, 20, 0] };
   return {
     object3D: root, bounds, restBounds: bounds,
+    // This scene's one surface never takes a shadow, whatever the view says: it is TOLD the
+    // setting and keeps its own rule, so the viewport must not set its meshes itself.
+    setShadowReception(receives) { this.onShadowReception?.(`${receives}:${root.children[0].receiveShadow}`); },
+    // The same identity, changed in place: more of the scene "arrives" (it grows fourfold)
+    // while it is still incomplete, and then it is whole.
+    arrive(complete) {
+      const size = 80;
+      root.scale.setScalar(size / 20);
+      root.updateMatrixWorld(true);
+      this.bounds = this.restBounds = { min: [0, 0, 0], max: [size, size, 0] };
+      this.complete = complete;
+    },
     setSurfaceLook(next) { look.apply(next ? { ...next, authored: false } : null); },
     dispose() { root.removeFromParent(); look.dispose(); material.dispose(); geometry.dispose(); }
   };
@@ -77,12 +91,23 @@ function HarnessSurface({ view, data }) {
     setSettleLabel(String(settles.current));
   }, []);
   const [picked, setPicked] = useState("");
+  const [menuUp, setMenuUp] = useState(false);
+  const [shadowReception, setShadowReception] = useState("");
+  scene.onShadowReception = setShadowReception;
+  // What became of the WebGL runtime under the scene, in order.
+  const [runtimeEvents, setRuntimeEvents] = useState([]);
+  const runtimeLifecycle = useMemo(() => ({
+    onRelease: (runtime, { handoff }) => setRuntimeEvents(events => [...events, `release:${runtime?.renderer ? "live" : "gone"}:${handoff ? "handoff" : "final"}`]),
+    onContextLost: () => setRuntimeEvents(events => [...events, "lost"])
+  }), []);
   const [actionLabel, setActionLabel] = useState(LONG_LABEL);
 
   const shell = useRendererShell({
     view, services: shellServices, resource, modelKey: view.file.path, revisionKey: "harness",
     features: EDGELESS_VIEW_FEATURES, toolModes: HARNESS_TOOL_MODES, scene,
-    load: { busy: false }, live: LIVE, onCameraSettled
+    load: { busy: false }, live: LIVE, onCameraSettled, runtimeLifecycle,
+    // A file named for it stands in for a scene drawn with hairlines.
+    preserveInteractionPixelRatio: view.file.path.startsWith("hairline")
   });
 
   // Shift means "nothing to offer here", which must open no menu at all.
@@ -92,7 +117,7 @@ function HarnessSurface({ view, data }) {
   ]), [picked]);
 
   return <RendererShell shell={shell} tools={[shell.tools.draw]} inspector={{ title: "Harness", tabs: [shell.displayTab] }}
-    contextMenuItems={contextMenuItems}
+    contextMenuItems={contextMenuItems} onContextMenuOpenChange={setMenuUp}
     bottomAction={shell.toolMode === SHELL_TOOL.DRAW ? null : {
       label: actionLabel, shortLabel: "Copy 1 reference", title: actionLabel,
       // A renderer whose action is not a plain press renders its own control.
@@ -101,9 +126,16 @@ function HarnessSurface({ view, data }) {
           data-harness-bottom-action onClick={() => setActionLabel(SHORT_LABEL)}>{children}</Button>
       )
     }}
-    viewportOverlay={<div className="pointer-events-none absolute left-2 top-2 z-30 text-xs" data-harness-overlay>
+    viewportOverlay={viewport => <div className="pointer-events-none absolute left-2 top-2 z-30 text-xs" data-harness-overlay>
       <span data-harness-camera-settles>{settleLabel}</span>
       <span data-harness-menu-note>{picked}</span>
+      <span data-harness-menu-open>{menuUp ? "up" : ""}</span>
+      <span data-harness-runtime>{runtimeEvents.join(" ")}</span>
+      <span data-harness-shadows>{shadowReception}</span>
+      <button type="button" className="pointer-events-auto" data-harness-arrive="partial"
+        onClick={() => { scene.arrive(false); viewport.commitScene(); }}>partial</button>
+      <button type="button" className="pointer-events-auto" data-harness-arrive="whole"
+        onClick={() => { scene.arrive(true); viewport.commitScene(); }}>whole</button>
     </div>}/>;
 }
 

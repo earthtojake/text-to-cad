@@ -10,7 +10,6 @@ import { buildEdgeLinePositionsFromProxy } from "@hardcore/core/lib/viewer/refer
 import { pointVisibleByClipPlane } from "@hardcore/core/lib/viewer/clipPlane.js";
 import { screenLimitedPickThreshold } from "@hardcore/core/lib/viewer/pickingThresholds.js";
 import { PERF_MEASURE_NAMES, perfMeasure, perfStart } from "@hardcore/core/lib/viewer/perfMarks.js";
-import { createViewerContextMenuGestureState } from "./viewerContextMenuGesture.js";
 import { partIdFromIntersection, shouldRaycastRecordForPick } from "./partPicking.js";
 
 const AUTO_EDGE_PICK_THRESHOLD_FACTOR = 1;
@@ -264,7 +263,7 @@ function filterClippedIntersections(runtime, intersections) {
   return intersections.filter((intersection) => intersectionVisibleByClipPlane(runtime, intersection));
 }
 
-export function useViewerPicking({
+export function useStepPicking({
   runtimeRef,
   mountRef,
   sceneMountRef = null,
@@ -279,7 +278,9 @@ export function useViewerPicking({
   onHoverReferenceChange,
   onActivateReference,
   onDoubleActivateReference,
-  onContextReference,
+  // What is under a point of the screen right now, for the viewport menu: set while the
+  // listeners are bound, null otherwise. (clientX, clientY, pointerType) -> reference id or "".
+  pickAtRef = null,
   onMeasurePick,
   onMeasureHoverPoint,
   viewerReadyTick,
@@ -299,7 +300,6 @@ export function useViewerPicking({
   const onHoverReferenceChangeRef = useRef(onHoverReferenceChange);
   const onActivateReferenceRef = useRef(onActivateReference);
   const onDoubleActivateReferenceRef = useRef(onDoubleActivateReference);
-  const onContextReferenceRef = useRef(onContextReference);
   const onMeasurePickRef = useRef(onMeasurePick);
   const onMeasureHoverPointRef = useRef(onMeasureHoverPoint);
   const allowMeshVertexSnapRef = useRef(allowMeshVertexSnap);
@@ -317,7 +317,6 @@ export function useViewerPicking({
   onHoverReferenceChangeRef.current = onHoverReferenceChange;
   onActivateReferenceRef.current = onActivateReference;
   onDoubleActivateReferenceRef.current = onDoubleActivateReference;
-  onContextReferenceRef.current = onContextReference;
   onMeasurePickRef.current = onMeasurePick;
   onMeasureHoverPointRef.current = onMeasureHoverPoint;
   allowMeshVertexSnapRef.current = allowMeshVertexSnap === true;
@@ -396,7 +395,6 @@ export function useViewerPicking({
     };
     const doubleClickEnabled = !defaultToCoarsePointer;
     let activationTimerId = 0;
-    const contextMenuGesture = createViewerContextMenuGestureState();
 
     function pointerButtons(event) {
       const buttons = Number(event?.buttons);
@@ -429,7 +427,6 @@ export function useViewerPicking({
     }
 
     function suppressContextMenuFromPanChord() {
-      contextMenuGesture.suppressNextContextMenu();
       contextPointer.blocked = true;
       contextPointer.moved = true;
       pointerDown.active = false;
@@ -1110,42 +1107,12 @@ export function useViewerPicking({
       contextPointer.pointerType = event.pointerType || "";
     }
 
-    function shouldOpenContextMenuFromRelease(event) {
-      if (!contextPointer.startedInScene || contextPointer.blocked || contextPointer.moved) {
-        return false;
+    // A secondary TAP is the viewport's own menu, whose gesture and items are mounted by the
+    // renderer's frame. All this hook keeps of it is that a tap is not an activation in waiting.
+    function releaseContextPointer() {
+      if (contextPointer.startedInScene && !contextPointer.blocked && !contextPointer.moved) {
+        clearPendingActivation();
       }
-      if (primaryPointer.active || primaryButtonHeld(event) || chordButtonsHeld(event)) {
-        return false;
-      }
-      const tapSlop = tapSlopForPointer(contextPointer.pointerType || event.pointerType);
-      const moved = Math.hypot(event.clientX - contextPointer.x, event.clientY - contextPointer.y);
-      return moved <= tapSlop;
-    }
-
-    function openContextMenuFromEvent(event, { suppressNativeContextMenu = true } = {}) {
-      clearPendingActivation();
-      if (suppressNativeContextMenu) {
-        contextMenuGesture.suppressNextContextMenu();
-      }
-      const referenceId = pickActivationReference(event.clientX, event.clientY, event.pointerType || contextPointer.pointerType || "") || "";
-      onContextReferenceRef.current?.(referenceId || "", {
-        clientX: event.clientX,
-        clientY: event.clientY,
-        multiSelect: !!event.shiftKey
-      });
-      resetContextPointer();
-    }
-
-    function releaseContextPointer(event) {
-      if (!contextPointer.startedInScene && !contextMenuGesture.isSuppressed()) {
-        contextPointer.active = false;
-        return;
-      }
-      if (shouldOpenContextMenuFromRelease(event)) {
-        openContextMenuFromEvent(event);
-        return;
-      }
-      contextMenuGesture.suppressNextContextMenu();
       resetContextPointer();
     }
 
@@ -1366,12 +1333,12 @@ export function useViewerPicking({
       event.preventDefault();
       event.stopPropagation();
       clearPendingActivation();
-      contextMenuGesture.consumeSuppression();
       if (!contextPointer.startedInScene) {
         resetContextPointer();
       }
     }
 
+    if (pickAtRef) pickAtRef.current = (clientX, clientY, pointerType = "") => pickActivationReference(clientX, clientY, pointerType) || "";
     container.addEventListener("pointerdown", handlePointerDownCapture, true);
     container.addEventListener("pointermove", handlePointerMoveCapture, true);
     container.addEventListener("pointerup", handlePointerUpCapture, true);
@@ -1388,6 +1355,7 @@ export function useViewerPicking({
     }
 
     return () => {
+      if (pickAtRef) pickAtRef.current = null;
       container.removeEventListener("pointerdown", handlePointerDownCapture, true);
       container.removeEventListener("pointermove", handlePointerMoveCapture, true);
       container.removeEventListener("pointerup", handlePointerUpCapture, true);
@@ -1402,7 +1370,6 @@ export function useViewerPicking({
       if (doubleClickEnabled) {
         container.removeEventListener("dblclick", handleDoubleClick);
       }
-      contextMenuGesture.clear();
       clearPendingActivation();
       clearHoverState();
       container.style.cursor = "";
