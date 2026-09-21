@@ -151,9 +151,9 @@ test('CAD tools stay within the scene, with direct snapshot and Select filters',
       const zoomBounds = await zoom.boundingBox();
       assert(zoomBounds.x + zoomBounds.width <= headerBounds.x + headerBounds.width + 1);
       await zoom.click();
-      for (const name of ['Zoom in', 'Zoom out', 'Zoom to 100%', 'Zoom to fit', 'Reset camera', 'Reset model']) {
-        await expect(page.getByRole('menuitem', { name, exact: true })).toBeVisible();
-      }
+      // Framing, and nothing else: the menu holds no reset of the model itself.
+      assert.deepEqual(await page.getByRole('menuitem').allTextContents(),
+        ['Zoom in', 'Zoom out', 'Zoom to 100%', 'Zoom to fit', 'Zoom to selection', 'Reset Zoom']);
       await page.keyboard.press('Escape');
       await fit();
     };

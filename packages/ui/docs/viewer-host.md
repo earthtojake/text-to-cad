@@ -179,9 +179,9 @@ reapplies that preset before its explicit group overrides; clipping and exploded
 view remain independent tools. Custom is derived from the effective overrides,
 not a sixth mode. `setRenderMode(true/false)` selects Render/Solid through that
 same state. Grouped camera projection/lens changes preserve the viewport's pose
-and zoom. Display Reset restores the selected preset and disables both tools.
-The Inspector zoom menu's Reset model instead clears spatial/motion changes
-and resets the camera while retaining the exact display settings.
+and zoom. Display Reset restores the selected preset and disables both tools. The
+Inspector zoom menu is framing only; `resetCamera` frames the model again
+without turning the camera, exactly as its "Reset Zoom" does.
 
 Persisted pre-grouped file sessions migrate once at the state boundary: their
 old display and photographic payload become this display record; the render

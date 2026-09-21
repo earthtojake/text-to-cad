@@ -82,7 +82,7 @@ amount and reopening starts at 50%; editing back to 0% does not auto-collapse.
 Clip follows the
 same gate rule: disabling discards its offsets and Flip; re-enabling restores
 the default X center cut. Preset selection preserves Clip/Explode; Display Reset
-and the zoom menu's Reset model disable both tools. Grid and Axes are independent sections.
+disables both tools. Grid and Axes are independent sections.
 The fixed panel order is Mode, Surfaces, Explode, Clip, Edges, Grid, Axes,
 Lighting, Background, Floor: tools first, then Solid's enabled display groups,
 then its disabled groups. Preset changes never reorder controls.
@@ -112,7 +112,7 @@ framing and snapshots, but is not a routine viewer control.
   values. The UI removes those values when disabling; a CLI payload may contain
   disabled values but they have no effect.
 - `clip` and `exploded` remain tool groups outside Custom and preset selection.
-  Display Reset and Reset model disable them.
+  Display Reset disables them.
 - Viewer appearance inherits its host; snapshots default to `light`.
   Explicit `appearance: "light" | "dark"` overrides that baseline.
 - Interactive lighting defaults to Preview; snapshots to Final. Core takes this

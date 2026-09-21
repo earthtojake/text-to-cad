@@ -143,19 +143,21 @@ beside the fixed tabs, using `FileSheetTabbedSurface.headerActions`. It remains
 outside the tablist and does not scroll with a tab's content. The percentage is
 read-only; clicking it opens the shared `ZoomControl` menu. There is no duplicate
 zoom toolbar over the viewport. The menu contains Zoom in/out, Zoom to 100%,
-Zoom to fit, Zoom to selection (disabled without a selection), and two resets.
+Zoom to fit, Zoom to selection (disabled without a selection), and Reset Zoom.
 Do not advertise keyboard shortcuts that the viewer does not implement.
+
+Everything in this menu is about framing, and nothing in it touches the model,
+its motion or its display settings.
 
 | Action | Scope |
 | --- | --- |
-| Reset camera | Original authored bounds and default camera pose; current projection remains |
-| Reset model | Stop/reset animation and pose, disable Clip/Explode, reveal hidden/isolated geometry, restore original camera framing; keep the exact display settings, including Custom and projection |
+| Zoom to 100% | The zoom number, back to the opening ruler; the pan and the direction stay |
+| Zoom to fit | Frame the whole model |
+| Reset Zoom | Frame the model again — zoom AND pan — without turning the camera. What the live `resetCamera` command does |
 | Display → Reset | Restore selected preset defaults and disable Clip/Explode; keep Kinematics and camera pose |
 
-A model reset must stop clocks before writing authored pose values,
-so a queued frame cannot undo it. A GLB returns to its authored rest
-transforms, not the possibly displaced first frame of an animation clip. Robot
-joints and drawing fold/orientation controls follow the same spatial reset rule.
+Restoring the model itself belongs to whoever owns it: the Kinematics tab's
+Reset for a pose, the Display tab's Reset for settings.
 
 ## Kinematics
 

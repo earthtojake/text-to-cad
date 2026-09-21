@@ -1082,19 +1082,24 @@ default; other saved panel choices remain unchanged.
 
 ### Inspect and Render
 
-CAD controls are shared with web: the top-right toolbar contains Select,
-Measure (STEP only) and Draw, plus Pose (drag joints by viewport handles) and Animate where a file has joints or routines. Pressing Select again opens its selection-filter dropdown.
-A robot description opens in Pose, which leads its tools, followed by a Select that picks whole links, and Draw. An agent's select command on one fails with a sentence saying so; its clearSelection clears the link selection.
-A GLB, an STL and a 3MF have nothing to select: their first tool is Orbit (the default, which only leaves the camera to the pointer),
-then Draw, then, for a GLB with clips, Animate. An agent's select command on one of them fails with a sentence saying so.
+CAD controls are shared with web. A file has a top-right tool strip only where it
+has tools: a STEP's contains Select, Measure and Draw, plus Pose (drag joints by
+viewport handles) and Animate where the file has joints or routines. Pressing Select again opens its selection-filter dropdown.
+A robot description opens in Pose, which leads its tools, followed by a Select that picks whole links. An agent's select command on one fails with a sentence saying so; its clearSelection clears the link selection.
+Draw is a STEP tool and appears nowhere else.
+A GLB, an STL and a 3MF have nothing to select and no tools at all: their viewport
+simply orbits, pans and zooms, with no strip over it and no menu on a secondary
+press. A GLB with clips shows the playbar under the model always — a transport,
+not a tool — and the file opens at rest. An agent's select command on one of them fails with a sentence saying so.
 Buttons wrap inside the pill in a narrow explorer pane. The file navbar has a
 direct snapshot action before Inspector (`SlidersHorizontal`) and file tree (`Folders`).
 Snapshot attaches the viewport PNG and references to this tab's owning session
 draft through the prompt-context adapter; it does not send a message. Playback
 lives in the Animate tool, not the Inspector. A small muted percentage beside the Inspector tabs opens
-zoom/fit controls, Reset camera and Reset model. Reset model clears kinematics and
-spatial tools while retaining display settings; Display Reset instead restores
-the selected preset and disables Clip/Explode. X/Y/Z labels stay outside the
+the framing menu: zoom/fit controls and Reset Zoom, which frames the model again
+without turning the camera. Nothing in it touches the model, its motion or its
+display settings; Display Reset restores the selected preset and disables
+Clip/Explode, and the Kinematics tab's Reset restores a pose. X/Y/Z labels stay outside the
 bottom-right axis endpoints, with the yellow center above their stems.
 The web header's fullscreen action is owned by that app.
 

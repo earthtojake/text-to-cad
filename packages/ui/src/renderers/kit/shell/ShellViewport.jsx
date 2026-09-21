@@ -366,9 +366,9 @@ const ShellViewport = forwardRef(function ShellViewport({
     requestRender() { runtimeRef.current?.requestRender?.(); },
     resetView() {
       const runtime = runtimeRef.current;
-      // A locked plan view resets to its OWN top-down, never to the default three-quarter
-      // orientation. One place, so the zoom header, "Reset model" and live `resetCamera`
-      // (which all land here) each re-assert the lock as they re-frame.
+      // A locked plan view resets to its OWN top-down, never to the default
+      // three-quarter orientation: this is the one path that chooses a direction,
+      // so it re-asserts the lock as it re-frames.
       const plan = planModeRef.current && PLAN_VIEW_BASIS;
       const reset = zoomRuntimeToBounds(runtime, runtimeFramingBounds(runtime, scene?.restBounds || scene?.bounds), sceneScaleModeRef.current, {
         animate: true, modelOffset: modelTransformRef.current.offset, resetZoomBaseline: true,

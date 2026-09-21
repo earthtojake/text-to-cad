@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Axis3d, Camera, CirclePlay, Pencil } from "lucide-react";
+import { Camera, Pencil } from "lucide-react";
 import { clonePerspectiveSnapshot } from "@hardcore/core/lib/perspective.js";
 import { VIEWER_SCENE_SCALE } from "@hardcore/core/lib/viewer/sceneScale.js";
 import { ViewerElementContext, useViewerHost, usePromptDestination } from "../../../host/context.js";
@@ -27,7 +27,7 @@ import { readShellState, scopeShellCamera, shellStatesEqual, writeShellState } f
 import { useViewerShortcuts } from "./useViewerShortcuts.js";
 
 /** The tool ids the shell itself understands. A renderer's own tools use any other id. */
-export const SHELL_TOOL = Object.freeze({ ORBIT: "orbit", DRAW: "draw", ANIMATE: "animate" });
+export const SHELL_TOOL = Object.freeze({ DRAW: "draw" });
 
 const SESSION_SAVE_DELAY_MS = 180;
 const INSPECTOR_REVEAL_MIN_WIDTH_PX = 520;
@@ -53,8 +53,8 @@ function isTopDownCamera({ position, target }) {
  *    `renderer` slot that is the renderer's own;
  *  - Display settings: store, resolution against the renderer's FEATURES, the
  *    queued application to the viewport, and the Display tab;
- *  - tools: the mode state machine, Draw's session, Animate's mode (release on
- *    leaving, fullscreen shares it);
+ *  - tools: the mode state machine and Draw's session, or none at all for a
+ *    renderer whose viewport is the camera's alone;
  *  - the host contract: Inspector panel, navbar actions, prompt snapshots,
  *    clipboard screenshots, fullscreen, file activity, alerts, shortcuts;
  *  - the live command surface, with the renderer's added and declined commands.
@@ -68,11 +68,13 @@ function isTopDownCamera({ position, target }) {
  * @param {string} options.modelKey  Stable per file: scopes the stored camera and the presentation.
  * @param {string} [options.revisionKey]  Changes when the file's bytes do.
  * @param {import("@hardcore/core/common/viewSettings.js").ViewFeatures} options.features
- * @param {ReturnType<typeof import("../tools/toolModes.js").createToolModes>} options.toolModes
+ * @param {ReturnType<typeof import("../tools/toolModes.js").createToolModes> | null} [options.toolModes]  Omitted
+ *   by a renderer with no tools: the shell then has no active tool and a saved tab records none.
  * @param {import("../scene.js").KitScene | null} options.scene
  * @param {{ busy: boolean, updating?: boolean, progress?: object | null, alert?: object | null }} options.load  The
  *   renderer's document load. `busy`: nothing to show yet. `updating`: a newer revision is loading behind the scene on screen.
- * @param {object | null} [options.animation]  A playbar runtime (with `clock` and `resetModel`), when the file has routines.
+ * @param {object | null} [options.animation]  A playbar runtime (with its own `clock`), when the file has
+ *   routines. The playbar is then always under the model; it is not a tool to take up and leave.
  * @param {{ commands?: Record<string, (...args: any[]) => void>, declined?: Record<string, string>,
  *   state?: () => object }} [options.live]  Live commands this renderer adds (by name) or declines (name to the
  *   error its caller reads), and extra fields for the live state. Every name in `HOST_LIVE_COMMANDS` must be one or the other.
@@ -80,8 +82,6 @@ function isTopDownCamera({ position, target }) {
  *   depicts, when that is narrower than the whole file (a selection). Default: the file.
  * @param {import("../../../file-viewer/types.js").FileNavigationAction[]} [options.navigationActions]  Navbar
  *   actions of the renderer's own, drawn before "Take snapshot". Keep the array stable.
- * @param {() => void} [options.onResetModel]  The renderer's share of "Reset model" (the shell releases the routine,
- *   resets model tools and the camera).
  * @param {{ active?: boolean, handle?: () => boolean }} [options.escape]  Escape, innermost first: `handle` returns
  *   true when it spent the key; otherwise the shell closes the alert dialog and the Inspector.
  * @param {object | (() => object)} [options.rendererState]  The renderer's own slice of the per-file record. A
@@ -94,15 +94,14 @@ function isTopDownCamera({ position, target }) {
  * @param {{ available: boolean, bounds: () => import("../scene.js").SceneBounds | null }} [options.selection]  What
  *   "Zoom to selection" frames. Without it the menu item is off.
  * @param {boolean} [options.planView]  Lock the camera looking straight down: orthographic
- *   whatever Display's Camera says, no view cube, no rotation (pointer OR keyboard), left-drag
- *   panning, and every reset — the zoom header, "Reset model", live `resetCamera` — back to
- *   top-down. A camera the host sets from a tilted pose is declined rather than quietly straightened.
+ *   whatever Display's Camera says, no view cube, no rotation (pointer OR keyboard) and left-drag
+ *   panning. A camera the host sets from a tilted pose is declined rather than quietly straightened.
  * @param {object} [options.displayTabProps]  Extra Display tab props for sections the renderer's FEATURES opt into.
  * @param {string} [options.sceneScaleMode]
  */
 export function useRendererShell({
-  view, services, resource, modelKey, revisionKey = "", features, toolModes, scene, load,
-  animation = null, live = EMPTY, promptReferences = null, navigationActions = null, onResetModel = null,
+  view, services, resource, modelKey, revisionKey = "", features, toolModes = null, scene, load,
+  animation = null, live = EMPTY, promptReferences = null, navigationActions = null,
   escape = EMPTY, rendererState = EMPTY, toolRestore = EMPTY, selection = null, displayTabProps = EMPTY,
   planView = false, sceneScaleMode = VIEWER_SCENE_SCALE.CAD
 }) {
@@ -137,14 +136,17 @@ export function useRendererShell({
     return scoped;
   });
   const [inspectorTab, setInspectorTab] = useState(restored.inspectorTab);
-  const [toolMode, setToolMode] = useState(() => toolModes.restore(restored.tool, toolRestore));
+  // "" is a renderer with no tools at all: there is no active tool to be in, and
+  // nothing for a saved tab to record.
+  const [toolMode, setToolMode] = useState(() => (toolModes ? toolModes.restore(restored.tool, toolRestore) : ""));
   const recordRef = useRef(null);
   const onStateChangeRef = useRef(onStateChange);
   onStateChangeRef.current = onStateChange;
   const latestRecord = useRef(null);
   latestRecord.current = () => writeShellState({
     camera: activePerspectiveRef.current, display: viewSettingsStore.getSnapshot().display,
-    inspectorTab, tool: toolModes.persisted(toolMode), renderer: typeof rendererState === "function" ? rendererState() : rendererState
+    inspectorTab, tool: toolModes ? toolModes.persisted(toolMode) : "",
+    renderer: typeof rendererState === "function" ? rendererState() : rendererState
   });
   const saveTimer = useRef(0);
   const flushSession = useCallback(() => {
@@ -243,23 +245,11 @@ export function useRendererShell({
 
   // ---- tools ----------------------------------------------------------------
   const idle = viewerLoading || !scene;
+  // A file with routines shows the playbar, always: it is not a tool to take up and
+  // leave, so the file simply opens at rest with its transport under the model.
   const animationAvailable = animationControlsHaveContent(animation);
   const drawToolActive = !previewMode && toolMode === SHELL_TOOL.DRAW;
-  const animateToolActive = !previewMode && animationAvailable && toolMode === SHELL_TOOL.ANIMATE;
-  // Animate is one mode with two ways in: the tool, and fullscreen, which is that
-  // tool with the rest of the viewer put away (or no tool, without routines).
-  const animateModeActive = animationAvailable && (previewMode || animateToolActive);
-  useEffect(() => {
-    if (!animationAvailable && !viewerLoading) setToolMode(current => current === SHELL_TOOL.ANIMATE ? toolModes.defaultMode : current);
-  }, [animationAvailable, viewerLoading, toolModes]);
-  // A routine owns the model's pose only inside the mode. Outside it the routine is
-  // released: stopped, rewound, the model at rest. Nothing of the playback survives.
-  const animationOwnsPose = animationAvailable && animation?.enabled !== false;
-  const releaseAnimation = animation?.resetModel;
-  useEffect(() => {
-    if (!animateModeActive && animationOwnsPose) releaseAnimation?.();
-  }, [animateModeActive, animationOwnsPose, releaseAnimation]);
-  const selectTool = useCallback((mode) => setToolMode(current => toolModes.next(current, mode)), [toolModes]);
+  const selectTool = useCallback((mode) => setToolMode(current => (toolModes ? toolModes.next(current, mode) : current)), [toolModes]);
   const drawing = useDrawingSession(drawToolActive, CAD_DRAWING_DEFAULTS);
 
   // ---- prompt snapshots, clipboard ------------------------------------------
@@ -304,12 +294,6 @@ export function useRendererShell({
   }, [onNavigationActionsChange, modelKey, viewerLoading, Boolean(scene), promptAvailable, extraActions]);
 
   // ---- zoom header ------------------------------------------------------------
-  const resetModel = useCallback(() => {
-    releaseAnimation?.();
-    onResetModel?.();
-    viewSettingsStore.resetModelTools();
-    viewerRef.current?.resetView?.();
-  }, [releaseAnimation, onResetModel, viewSettingsStore]);
   const zoomToFit = useCallback(() => { if (!viewerRef.current?.zoomToFit?.()) setCopyStatus("The viewer camera is not ready"); }, []);
   const resetZoom = useCallback(() => { if (!viewerRef.current?.resetZoom?.()) setCopyStatus("The viewer camera is not ready"); }, []);
   const selectionRef = useRef(selection);
@@ -319,9 +303,8 @@ export function useRendererShell({
   }, []);
   const zoomHeader = <ZoomControl zoomPercent={zoomPercent} disabled={idle}
     onZoomPercentChange={value => viewerRef.current?.applyZoomPercent?.(value)}
-    onZoomReset={() => viewerRef.current?.resetView?.()}
     onZoomFit={zoomToFit} selectionAvailable={Boolean(selection?.available)} onZoomSelection={zoomToSelection}
-    onModelReset={resetModel} />;
+    onResetZoom={resetZoom} />;
 
   // ---- shortcuts ------------------------------------------------------------
   const escapeRef = useRef(escape.handle);
@@ -374,8 +357,11 @@ export function useRendererShell({
       setViewerPerspective(scoped);
       handlePerspectiveChange(scoped);
     },
+    // What the zoom header's "Reset Zoom" does: frame the model again, without
+    // turning the camera. The name is the host protocol's ("cad-reset-camera"),
+    // older than the menu item it now shares its behaviour with.
     resetCamera() {
-      if (!viewerRef.current?.resetView?.()) throw new Error("The viewer camera is unavailable.");
+      if (!viewerRef.current?.resetZoom?.()) throw new Error("The viewer camera is unavailable.");
     },
     setDisplaySettings(patch) { viewSettingsStore.patch(patch); },
     setRenderMode(enabled) { viewSettingsStore.selectPreset(enabled ? "render" : "solid"); },
@@ -411,15 +397,8 @@ export function useRendererShell({
   const tools = {
     /** A tool of the renderer's own: `{ id, label, icon }` plus anything the strip reads. */
     own: tool,
-    // The plain view tool, for a file with nothing to pick: it leaves the camera to the
-    // pointer, which every tool allows, and promises no selection (`viewTools.js`).
-    orbit: tool({ id: SHELL_TOOL.ORBIT, label: "Orbit", icon: <Axis3d className="size-3" strokeWidth={2} aria-hidden="true" /> }),
     draw: tool({ id: SHELL_TOOL.DRAW, label: "Draw", icon: <Pencil className="size-3" strokeWidth={2} aria-hidden="true" />,
-      subToolbar: drawToolActive ? <DrawingToolbar drawing={drawing} /> : null }),
-    // Rightmost, and only in a file that has routines: no routines, no button (never a
-    // disabled one). Its controls are the playbar, the bottom action while it is active.
-    animate: animationAvailable ? tool({ id: SHELL_TOOL.ANIMATE, label: "Animate",
-      icon: <CirclePlay className="size-3" strokeWidth={2} aria-hidden="true" /> }) : null
+      subToolbar: drawToolActive ? <DrawingToolbar drawing={drawing} /> : null })
   };
 
   return {
@@ -440,8 +419,8 @@ export function useRendererShell({
       viewerRef, viewUpdate, resolvedScene, viewerPerspective, activePerspectiveRef, handlePerspectiveChange,
       previewMode, previewOrbitSpeed, setPreviewOrbitSpeed, viewerLoading, loading, presentationState,
       handlePresentationChange, viewerAlert, fileStatusAlert, viewerAlertOpen, setViewerAlertOpen, setRuntimeAlert,
-      setZoomPercent, drawToolActive, drawing, animateToolActive, animation, composer, capture,
-      inspectorOpen, setInspectorOpen, inspectorTab, setInspectorTab, zoomHeader, zoomToFit, resetZoom,
+      setZoomPercent, drawToolActive, drawing, animationAvailable, animation, composer, capture,
+      inspectorOpen, setInspectorOpen, inspectorTab, setInspectorTab, zoomHeader,
       copyStatus, screenshotStatus, setCopyStatus, setScreenshotStatus
     }
   };

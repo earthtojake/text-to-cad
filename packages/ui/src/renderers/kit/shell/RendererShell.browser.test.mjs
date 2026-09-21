@@ -118,66 +118,27 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   assert.equal(captured.references[0].resource.workspaceId, 'one');
   assert.equal(captured.references[0].resource.path, 'part.stl');
   assert.equal(await first.locator('[data-file-sheet="STL"]').count(), 0);
-  // Fullscreen hides the host frame without remounting the scene or losing
-  // the selected panel/tool. A direct navbar snapshot uses the prompt port.
-  await first.getByRole('button', { name: 'Inspector', exact: true }).click();
-  await page.evaluate(async () => {
-    window.cadHarness.preferences.update({ orbit: { speed: 0 } });
-    const controller = window.cadHarness.a.controller;
-    const camera = controller.readState().camera;
-    await controller.setCamera({ ...camera, position: [40, -25, 30], target: [2, 3, 0], zoom: 1.4 });
-  });
-  await first.getByRole('button', { name: 'Draw', exact: true }).click();
-  await first.locator('[data-drawing-ready]').waitFor();
-  await page.waitForTimeout(250);
-  const regularCamera = await page.evaluate(() => window.cadHarness.a.controller.readState().camera);
-  await page.evaluate(() => { window.beforeFullscreenCanvas = document.querySelector('[data-testid="one"] [aria-busy] > div > canvas'); window.cadHarness.fullscreen(true); });
-  await first.getByRole('button', { name: 'Inspector', exact: true }).waitFor({ state: 'detached' });
-  assert.equal(await first.getByRole('group', { name: 'Interaction tools' }).count(), 0);
-  assert.equal(await first.getByRole('button', { name: 'Zoom controls' }).count(), 0);
-  assert.equal(await first.locator('[data-file-sheet="STL"]').count(), 0);
-  const defaultFullscreenCamera = await page.evaluate(() => window.cadHarness.a.controller.readState().camera);
-  assert.notDeepEqual(defaultFullscreenCamera.position, regularCamera.position, 'fullscreen starts from the default camera');
-  assert.equal(defaultFullscreenCamera.zoom, 1);
-  await page.evaluate(async () => {
-    const controller = window.cadHarness.a.controller;
-    await controller.setCamera({ ...controller.readState().camera, position: [80, 30, 35], target: [4, 6, 1], zoom: 1.8, projection: 'perspective' });
-  });
-  const beforeDrag = await page.evaluate(() => window.cadHarness.a.controller.readState().camera);
-  const viewport = await first.locator('[aria-busy] > div > canvas').first().boundingBox();
-  await page.mouse.move(viewport.x + viewport.width / 2, viewport.y + viewport.height / 2);
-  await page.mouse.down(); await page.mouse.move(viewport.x + viewport.width / 2 + 80, viewport.y + viewport.height / 2 + 30, { steps: 5 }); await page.mouse.up();
-  const afterDrag = await page.evaluate(() => window.cadHarness.a.controller.readState().camera);
-  assert.notDeepEqual(afterDrag.position, beforeDrag.position, 'Draw tool cannot capture fullscreen camera drags');
-  assert.equal(await page.evaluate(() => window.beforeFullscreenCanvas === document.querySelector('[data-testid="one"] [aria-busy] > div > canvas')), true);
-  // Exercise actual hit testing above the pointer-transparent viewport overlay,
-  // and the exit callback across FileViewer -> renderer -> toolbar.
-  assert.equal(await first.getByRole('toolbar', { name: 'Animation playback' }).count(), 0);
-  await first.getByRole('button', { name: 'Orbit settings', exact: true }).click();
-  await page.getByRole('slider', { name: 'Orbit speed', exact: true }).press('Home');
-  assert.equal(await page.getByRole('textbox', { name: 'Orbit speed value', exact: true }).inputValue(), '0×');
-  await page.keyboard.press('Escape');
-  await first.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
-  await first.locator('[data-file-sheet="STL"]').waitFor();
-  const restoredCamera = await page.evaluate(() => window.cadHarness.a.controller.readState().camera);
-  for (const key of ['position', 'target', 'up']) {
-    regularCamera[key].forEach((value, index) => assert.ok(Math.abs(value - restoredCamera[key][index]) < 1e-6, `restore ${key}[${index}]: ${JSON.stringify({ regularCamera, restoredCamera })}`));
+  // A mesh hands the shell no tools, so there is no strip over its viewport at
+  // all: orbit, pan and zoom, and nothing to take up.
+  assert.equal(await first.getByRole('group', { name: 'Interaction tools' }).count(), 0, 'no tools, no strip');
+  for (const name of ['Orbit', 'Draw', 'Select', 'Measure', 'Pose', 'Animate']) {
+    assert.equal(await first.getByRole('button', { name, exact: true }).count(), 0, name);
   }
-  assert.equal(restoredCamera.projection, regularCamera.projection);
-  assert.equal(restoredCamera.zoom, regularCamera.zoom);
-  // Presentation state is discarded each time, never resumed from the last orbit.
-  await page.evaluate(() => window.cadHarness.fullscreen(true));
-  await first.getByRole('button', { name: 'Exit fullscreen', exact: true }).waitFor();
-  const secondFullscreenCamera = await page.evaluate(() => window.cadHarness.a.controller.readState().camera);
-  for (const key of ['position', 'target', 'up']) {
-    defaultFullscreenCamera[key].forEach((value, index) => assert.ok(Math.abs(value - secondFullscreenCamera[key][index]) < 1e-6, `fresh fullscreen ${key}[${index}]`));
-  }
-  await first.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
-  await first.locator('[data-file-sheet="STL"]').waitFor();
-  assert.equal(await first.getByRole('button', { name: 'Draw', exact: true }).getAttribute('aria-pressed'), 'true');
-  await first.getByRole('button', { name: 'Orbit', exact: true }).click();
+  // Nor a menu of its own on a secondary press — and the browser's own is still
+  // kept off the canvas, so the press is the camera's and nothing else.
+  const canvasBox = await first.locator('[aria-busy] > div > canvas').first().boundingBox();
+  await page.evaluate(() => {
+    window.nativeMenu = [];
+    window.addEventListener('contextmenu', event => window.nativeMenu.push(event.defaultPrevented), true);
+    document.addEventListener('contextmenu', event => window.nativeMenu.push(event.defaultPrevented));
+  });
+  await page.mouse.click(canvasBox.x + canvasBox.width / 2, canvasBox.y + canvasBox.height / 2, { button: 'right' });
+  await page.waitForTimeout(200);
+  assert.equal(await page.getByRole('menu').count(), 0, 'a mesh viewport opens no menu');
+  assert.deepEqual(await page.evaluate(() => window.nativeMenu), [false, true],
+    'the event reaches the canvas and leaves it prevented: no native menu either');
   await first.getByRole('button', { name: 'Inspector', exact: true }).click();
-  await zoomAction('Reset camera');
+  await zoomAction('Reset Zoom');
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [aria-label="Zoom level percent"]')?.textContent === '100%');
   await zoomAction('Zoom in');
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [aria-label="Zoom level percent"]')?.textContent === '110%');
@@ -582,5 +543,107 @@ test('a file opens framed at 100% of its own ruler: the open fit is the fit, wha
   }).halfHeight;
   assert.ok(Math.abs(opened.halfHeight - expected) / expected < 0.01,
     `framed at the fit for this aspect: ${opened.halfHeight} vs ${expected}`);
+  assert.deepEqual(errors, []);
+});
+
+// Draw is the one tool the shell itself owns. The only format that has it is
+// STEP, which is still the pre-shell renderer, so shell-level Draw behaviour is
+// driven here through a harness-only renderer over one triangle
+// (`renderers/shell-harness`). It goes when STEP moves onto the shell.
+test('the shell keeps its Draw session across fullscreen, and fullscreen drags are the camera\'s', async (t) => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hardcore-shell-draw-'));
+  let server, browser;
+  t.after(async () => { await browser?.close(); if (server) await new Promise(resolve => server.close(resolve)); await rm(temporary, { recursive: true, force: true }); });
+  await build({ entryPoints: [fileURLToPath(new URL('../../harness/index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.woff2': 'dataurl' } });
+  const bundle = await readFile(join(temporary, 'harness.js'));
+  // The drawing editor's own stylesheet, extracted from what the bundle imports:
+  // without it the editor has no layout and sizes its canvas from an unconstrained container.
+  const bundledCss = await readFile(join(temporary, 'harness.css')).catch(() => '');
+  const compiledCss = await readFile(new URL('../../../../dist/styles.css', import.meta.url));
+  server = createServer((request, response) => {
+    const url = new URL(request.url, 'http://test');
+    const root = url.pathname.split('/')[1];
+    if (url.pathname === '/harness.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle); }
+    else if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(compiledCss); }
+    else if (url.pathname === '/harness.css') { response.setHeader('Content-Type', 'text/css'); response.end(bundledCss); }
+    else if (url.pathname.endsWith('/__cad/catalog')) {
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({ rootId: root, entries: [] }));
+    } else if (url.pathname.endsWith('/__cad/server')) {
+      response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ rootId: root, rootPath: '/models', backend: 'cadgen' }));
+    } else if (/\.(woff2|ttf)$/.test(url.pathname)) { response.statusCode = 404; response.end(); }
+    else { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/harness.css"></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>'); }
+  });
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+  browser = await chromium.launch({ headless: true, args: process.platform === 'darwin'
+    ? ['--use-angle=metal'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+  page.setDefaultTimeout(15000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => { window.Worker = undefined; });
+  await page.goto(`http://127.0.0.1:${server.address().port}/?file=one.harness`);
+  const pane = page.getByTestId('one');
+  await pane.locator('[aria-busy="false"] > div > canvas').first().waitFor();
+  const camera = () => page.evaluate(() => window.cadHarness.a.controller.readState().camera);
+
+  await page.evaluate(async () => {
+    window.cadHarness.preferences.update({ orbit: { speed: 0 } });
+    const controller = window.cadHarness.a.controller;
+    await controller.setCamera({ ...controller.readState().camera, position: [40, -25, 30], target: [2, 3, 0], zoom: 1.4 });
+  });
+  await pane.getByRole('button', { name: 'Draw', exact: true }).click();
+  await pane.locator('[data-drawing-ready]').waitFor();
+  await page.waitForTimeout(250);
+  const regularCamera = await camera();
+
+  // Fullscreen hides the host frame without remounting the scene or losing the tool.
+  await page.evaluate(() => { window.beforeFullscreenCanvas = document.querySelector('[data-testid="one"] [aria-busy] > div > canvas'); window.cadHarness.fullscreen(true); });
+  await pane.getByRole('button', { name: 'Inspector', exact: true }).waitFor({ state: 'detached' });
+  assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).count(), 0);
+  assert.equal(await pane.getByRole('button', { name: 'Zoom controls' }).count(), 0);
+  const defaultFullscreenCamera = await camera();
+  assert.notDeepEqual(defaultFullscreenCamera.position, regularCamera.position, 'fullscreen starts from the default camera');
+  assert.equal(defaultFullscreenCamera.zoom, 1);
+  await page.evaluate(async () => {
+    const controller = window.cadHarness.a.controller;
+    await controller.setCamera({ ...controller.readState().camera, position: [80, 30, 35], target: [4, 6, 1], zoom: 1.8, projection: 'perspective' });
+  });
+  const beforeDrag = await camera();
+  const viewport = await pane.locator('[aria-busy] > div > canvas').first().boundingBox();
+  await page.mouse.move(viewport.x + viewport.width / 2, viewport.y + viewport.height / 2);
+  await page.mouse.down(); await page.mouse.move(viewport.x + viewport.width / 2 + 80, viewport.y + viewport.height / 2 + 30, { steps: 5 }); await page.mouse.up();
+  assert.notDeepEqual((await camera()).position, beforeDrag.position, 'Draw cannot capture fullscreen camera drags');
+  assert.equal(await page.evaluate(() => window.beforeFullscreenCanvas === document.querySelector('[data-testid="one"] [aria-busy] > div > canvas')), true);
+  // Exercise actual hit testing above the pointer-transparent viewport overlay,
+  // and the exit callback across FileViewer -> renderer -> toolbar.
+  assert.equal(await pane.getByRole('toolbar', { name: 'Animation playback' }).count(), 0);
+  await pane.getByRole('button', { name: 'Orbit settings', exact: true }).click();
+  await page.getByRole('slider', { name: 'Orbit speed', exact: true }).press('Home');
+  assert.equal(await page.getByRole('textbox', { name: 'Orbit speed value', exact: true }).inputValue(), '0×');
+  await page.keyboard.press('Escape');
+  await pane.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+  await pane.getByRole('button', { name: 'Draw', exact: true }).waitFor();
+  const restoredCamera = await camera();
+  for (const key of ['position', 'target', 'up']) {
+    regularCamera[key].forEach((value, index) => assert.ok(Math.abs(value - restoredCamera[key][index]) < 1e-6, `restore ${key}[${index}]`));
+  }
+  assert.equal(restoredCamera.projection, regularCamera.projection);
+  assert.equal(restoredCamera.zoom, regularCamera.zoom);
+  // Presentation state is discarded each time, never resumed from the last orbit.
+  await page.evaluate(() => window.cadHarness.fullscreen(true));
+  await pane.getByRole('button', { name: 'Exit fullscreen', exact: true }).waitFor();
+  const secondFullscreenCamera = await camera();
+  for (const key of ['position', 'target', 'up']) {
+    defaultFullscreenCamera[key].forEach((value, index) => assert.ok(Math.abs(value - secondFullscreenCamera[key][index]) < 1e-6, `fresh fullscreen ${key}[${index}]`));
+  }
+  await pane.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+  await pane.getByRole('button', { name: 'Draw', exact: true }).waitFor();
+  assert.equal(await pane.getByRole('button', { name: 'Draw', exact: true }).getAttribute('aria-pressed'), 'true',
+    'the session the sketch is in survives a trip through fullscreen');
+  // Pressing it again ends the session, and the strip is left with no tool taken up.
+  await pane.getByRole('button', { name: 'Draw', exact: true }).click();
+  await pane.locator('[data-drawing-ready]').waitFor({ state: 'detached' });
+  assert.equal(await pane.getByRole('button', { name: 'Draw', exact: true }).getAttribute('aria-pressed'), 'false');
   assert.deepEqual(errors, []);
 });

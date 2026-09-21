@@ -91,60 +91,45 @@ test("a failed save explains that the updated model remains visible", () => {
   });
 });
 
-test("backend warnings badge the entry without failing it", () => {
-  const alert = {
-    severity: "warning",
-    title: "Model warning",
-    warnings: [
-      {
-        heading: "part.step.js is a retired render module",
-        message: "It is read by nothing.",
-        recovery: "Move its clips into the decorator and delete part.step.js."
-      }
-    ]
-  };
-  // A warning is not a failure: the model stays visible and the badge summarizes
-  // the server's own heading rather than any wording of the client's.
-  assert.deepEqual(resolveFileStatus({ ...ready, error: alert }), {
-    label: "Model warning",
-    title: "part.step.js is a retired render module",
+test("a warning the model survives badges the entry with what the warning IS", () => {
+  // Not a failure: the model stays visible and the badge carries the alert's own
+  // summary, which is also its `data-file-status` hook.
+  assert.deepEqual(resolveFileStatus({
+    ...ready,
+    error: {
+      severity: "warning", summary: "No flat pattern", title: "No closed cut contour",
+      message: "“panel.dxf” has no closed contour to extrude, so it is shown as its line-work."
+    }
+  }), {
+    label: "No flat pattern",
+    title: "“panel.dxf” has no closed contour to extrude, so it is shown as its line-work.",
     tone: "warning",
     busy: false
   });
-  // Several warnings keep one stable badge label -- it is also the `data-file-status` hook.
-  const two = resolveFileStatus({
-    ...ready,
-    error: { ...alert, warnings: [...alert.warnings, { heading: "Second neighbour", message: "" }] }
+  // A tooltip outranks the message, a warning with no summary falls back to its
+  // title, and one with neither still says something rather than nothing.
+  assert.equal(resolveFileStatus({
+    ...ready, error: { severity: "warning", title: "Animation unavailable", tooltip: "Its animation could not be loaded." }
+  }).label, "Animation unavailable");
+  assert.equal(resolveFileStatus({
+    ...ready, error: { severity: "warning", title: "Animation unavailable", tooltip: "Its animation could not be loaded." }
+  }).title, "Its animation could not be loaded.");
+  assert.deepEqual(resolveFileStatus({ ...ready, error: { severity: "warning" } }), {
+    label: "Warning",
+    title: "Something about this file could not be applied. The model can still be viewed.",
+    tone: "warning",
+    busy: false
   });
-  assert.equal(two.label, "Model warning");
-  assert.equal(two.title, "part.step.js is a retired render module Second neighbour");
-  // A warning with no heading falls back to its explanation, and an alert with no
-  // warnings at all keeps the pre-existing tooltip/message behaviour.
-  assert.equal(
-    resolveFileStatus({ ...ready, error: { ...alert, warnings: ["Bare sentence."] } }).title,
-    "Bare sentence."
-  );
-  assert.equal(
-    resolveFileStatus({
-      ...ready,
-      error: { ...alert, warnings: [], message: "Saved model settings are unavailable." }
-    }).title,
-    "Saved model settings are unavailable."
-  );
-  assert.equal(
-    resolveFileStatus({ ...ready, error: { ...alert, warnings: [] } }).title,
-    "Some model settings could not be applied. The model can still be viewed."
-  );
 });
 
 test("warnings remain actionable while successful background work stays quiet", () => {
   assert.equal(resolveFileStatus({
     ...ready,
-    error: { severity: "warning", message: "Saved model settings are unavailable." }
-  }).label, "Model warning");
+    error: { severity: "warning", summary: "Environment unavailable", message: "Saved model settings are unavailable." }
+  }).label, "Environment unavailable");
   assert.equal(resolveFileStatus({
     ...ready, opening: true,
-    error: { severity: "warning", message: "Saved model settings are unavailable." }
+    error: { severity: "warning", summary: "Environment unavailable", message: "Saved model settings are unavailable." }
   }).label, "Opening");
   assert.equal(resolveFileStatus({
     ...ready,
@@ -176,9 +161,10 @@ test("the resolver emits only the approved filename labels", () => {
     { hasFile: true, error: "bad" },
     { ...ready, error: "bad" },
     { ...ready, qualityStatus: { state: "limited" } },
-    { ...ready, error: { severity: "warning", message: "Missing settings" } }
+    { ...ready, error: { severity: "warning", summary: "Environment unavailable", message: "Missing settings" } }
   ];
-  const allowed = new Set(["Opening", "Updating", "Open failed", "Update failed", "Limited detail", "Model warning"]);
+  // The fixed labels, plus whatever a warning calls itself.
+  const allowed = new Set(["Opening", "Updating", "Open failed", "Update failed", "Limited detail", "Environment unavailable"]);
   for (const input of inputs) {
     assert.ok(allowed.has(resolveFileStatus(input).label));
   }

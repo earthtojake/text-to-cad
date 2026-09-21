@@ -112,11 +112,6 @@ class CadgenOps:
                 "reason": status.get("reason"),
                 "compile": True,
             }
-            # Warnings are about the document's neighbours, not its state, so
-            # the narrowed offer keeps them: this is the branch a model with a
-            # leftover render module beside it most often lands in.
-            if status.get("warnings"):
-                offer["warnings"] = status["warnings"]
             return offer
         return status
 

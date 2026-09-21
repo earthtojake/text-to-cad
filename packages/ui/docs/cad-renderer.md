@@ -34,7 +34,7 @@ the reverse.
 | `view-settings/` | The settings model and store (`viewSettingsStore`, `useViewSettings`, `viewerDisplaySettings`, `renderState`), applying a change to a viewport (`useAppliedViewSettings`, `viewUpdateCoordinator`, `viewUpdateGate`, `viewUpdatePlan`), and the Display tab (`DisplaySettingsTab`, `DisplayModeOptions`). |
 | `tools/` | `FloatingToolBar` (the dumb strip), `toolModes` (the tool-mode state machine), `ToolbarButton`, and the format-blind tools: `draw/` (overlay, view lock, `useDrawingViewLock`), `fullscreen/` (controls and the orbit preference), `playbar/` (`ViewportAnimationBar`, `animationClock`, `usePlaybackFrames`), `pose/` (the handle overlay, canvas, drag mathematics), `select/` (`usePointerPick`: taps and hover through a scene's own `pick`). Screenshot capture is `@hardcore/core/lib/viewer/screenshotCapture.js`. |
 | `inspector/` | `FileSheet` and its row primitives, `FileSheetTabbedSurface`, `activeSection`, `InspectorSplit`, `modelTreeSearch`, `referenceRows` (`InfoRow`, `MonoValue`, `CoordValue`), `kinematicsControls` (the named-position dropdown and the Reset button every Kinematics tab ends with). The tree row and filter box are `primitives/tree-row` and `primitives/tree-filter`. |
-| `status/` | `LoadingIndicator` and `ViewerLoadingOverlay`, `ViewerAlertDialog` and `ViewerAlertBody`, `BlockingViewerAlert`, `MissingFileAlert`, `StatusToast`, `ViewUpdateStatus`, `useFileActivityReport`, `artifactWarnings`, `loadingState` (`viewerLoadingState`), `fileStatus` (`resolveFileStatus`, the chip beside the filename), `loadAlerts` (`failureAlert`, `noGeometryAlert`, `resolveFileStatusAlert`). |
+| `status/` | `LoadingIndicator` and `ViewerLoadingOverlay`, `ViewerAlertDialog` and `ViewerAlertBody`, `BlockingViewerAlert`, `MissingFileAlert`, `StatusToast`, `ViewUpdateStatus`, `useFileActivityReport`, `loadingState` (`viewerLoadingState`), `fileStatus` (`resolveFileStatus`, the chip beside the filename), `loadAlerts` (`failureAlert`, `noGeometryAlert`, `resolveFileStatusAlert`). |
 | `shell/` | The host glue every renderer needs that is not about its scene: see [Shell](#shell). |
 
 **What a view opts into.** The Display tab and `resolveViewSettings` take explicit
@@ -99,15 +99,14 @@ calls one hook; the shell owns the rest.
 
 | module | what it is |
 | --- | --- |
-| `useRendererShell.js` | The hook. Per-file state through the host, the Display settings store and tab, tool modes with Draw and Animate, the Inspector panel (and its control by the renderer), zoom with "Zoom to selection", navbar actions, prompt snapshots, the clipboard screenshot, fullscreen, file activity, alerts, shortcuts, the live command surface, and [plan view](#plan-view). |
+| `useRendererShell.js` | The hook. Per-file state through the host, the Display settings store and tab, tool modes (Draw is the only tool the shell itself owns; `toolModes` is omitted altogether by a renderer with no tools), the Inspector panel (and its control by the renderer), zoom with "Zoom to selection", navbar actions, prompt snapshots, the clipboard screenshot, fullscreen, file activity, alerts, shortcuts, the live command surface, and [plan view](#plan-view). |
 | `RendererShell.jsx` | The frame: viewport box, tool strip, bottom action, playbar, fullscreen controls, loading/update/alert overlays, status toast and the Inspector portaled into the host's panel column. One DOM structure (`data-slot="cad-file-view"`, `data-cad-surface`, `data-cad-scene-backdrop`, `data-cad-toolbar`, `data-file-sheet`) for every renderer. |
 | `ShellViewport.jsx` | The three.js viewport around ONE kit scene: `useViewerRuntime`, `useViewportCamera`, the look (rig or studio, environment, background, floor, grid, axes), the Draw overlay and view lock, the view cube, frame presentation and the queued view-settings handshake. Its children may be a function of the viewport (`{ runtimeRef, hostRef, viewerReadyTick }`), which is how a renderer mounts its own overlay or pointer pick. `syncSceneBounds()` re-fits lighting, shadows and the floor's height to a scene that moved its own bounds, with no React render and no reframe. What is SIZED stays sized from the rest placement, in Inspect and in Render alike: the grid and stage (`sceneRadiusForBounds` on `restBounds`) and the Render studio's floor plane (`applyPhotographicStudio`'s `groundBounds`), so a pose or a playing routine never rescales or slides the ground under the model; `zoomToBounds(bounds)` frames part of the scene. Read-only test seams: `window.__cadCamera()` (the live camera) and `window.__cadStage()` (the ground's radius, the bounds the stage is fitted to, the floor's height, the studio floor's size and centre). |
 | `shellState.js` | The per-file record `{ version, camera, display, inspectorTab, tool, renderer }`, read forgivingly and written exactly. The host keys it `[file path, renderer id]`. |
 | `liveBinding.ts` | `attachLiveBinding`: the live command surface. Base commands (`readState`, `setCamera`, `resetCamera`, `setDisplaySettings`, `setRenderMode`, `capture`) mean the same for every renderer; a renderer ADDS commands by name and DECLINES the known host commands (`HOST_LIVE_COMMANDS`) that make no sense for it with the sentence the caller reads. Binding fails when a renderer does neither. |
 | `promptContext.js` | `createViewPromptContext` (a snapshot and what it depicts) and `promptDeliveryMessage`. |
-| `viewTools.js` | `createViewToolModes({ animate })`: the tool modes of a file with nothing to pick. `shell.tools.orbit` is the plain view tool (the default, the one a saved tab records), then Draw, then Animate for a family that can carry routines. |
 | `useViewerShortcuts.js` | Which mounted viewer an Escape belongs to; the renderer says what Escape means. |
-| `ViewportBottomAction.jsx`, `ViewportContextMenu.jsx` | The active tool's one bottom button (Draw: the view with its ink, to the prompt or clipboard); the canvas's camera menu (Reset Zoom, Zoom To Fit). |
+| `ViewportBottomAction.jsx` | The active tool's one bottom button (Draw: the view with its ink, to the prompt or clipboard). A renderer on the shell has no viewport context menu at all: framing lives in the zoom menu, and a menu of nothing but framing is a menu with nothing to say. |
 
 ```jsx
 const shell = useRendererShell({
@@ -115,12 +114,12 @@ const shell = useRendererShell({
   services,             // { preferences, onPreferenceChange, live?, captureRequest?, acknowledgeCommand? }
   resource, modelKey, revisionKey,
   features,             // ViewFeatures: the Display sections this family opts into
-  toolModes,            // createToolModes({ defaultMode, modes })
+  toolModes,            // createToolModes({ defaultMode, modes }), or omitted: no tools at all
   scene,                // KitScene | null
   load,                 // { busy, updating?, progress?, alert? }: the renderer's document load
-  animation,            // playbar runtime with its own `clock` and `resetModel`, or null
+  animation,            // playbar runtime with its own `clock`, or null
   live,                 // { commands?, declined?, state? }
-  // optional: promptReferences, navigationActions, onResetModel, escape, displayTabProps, sceneScaleMode,
+  // optional: promptReferences, navigationActions, escape, displayTabProps, sceneScaleMode,
   //   rendererState   the renderer's slot of the record: an object, or a FUNCTION read when the record is written
   //   toolRestore     { opensIn, never }: the tool THIS file opens in, while the tool modes' default stays the fallback
   //   selection       { available, bounds() }: what "Zoom to selection" frames
@@ -131,7 +130,7 @@ shell.inspector.reveal(tabId);   // turn to a tab, opening the panel where there
 shell.inspector.setOpen(open); shell.inspector.setTab(tabId);   // and { open, tab }
 shell.syncSceneBounds();         // the scene moved its bounds (a pose): the stage follows, no render
 shell.scheduleStateSave();       // state kept outside React changed: write the record soon, and on unmount
-const tools = [shell.tools.own({ id, label, icon }), shell.tools.draw, shell.tools.animate].filter(Boolean);
+const tools = [shell.tools.own({ id, label, icon }), shell.tools.draw].filter(Boolean);   // or [] for no strip at all
 return <RendererShell shell={shell} tools={tools} inspector={{ title, tabs: [...own, shell.displayTab] }}
   viewportOverlay={viewport => <PointerPick viewport={viewport} scene={scene} enabled={selecting} onPick={pick} onHover={hover} />} />;
 ```
@@ -149,9 +148,10 @@ dimension worth turning towards. It is one flag, and the shell owns all of it:
   controls refuse rotation, so the keyboard nudge cannot break the lock either;
 - **no view cube**, and no vertical origin axis: a locked view stops advertising the
   axes it cannot turn towards;
-- **every reset lands top-down**. `ShellViewport.resetView()` fits along the plan
-  direction, which is the one path the zoom header's Reset camera, "Reset model" and
-  the live `resetCamera` command all take;
+- **every reset lands top-down**. A locked view is already looking straight down and
+  neither the zoom header's "Reset Zoom" nor the live `resetCamera` command turns a
+  camera, so re-framing keeps the lock; `ShellViewport.resetView()` re-asserts it
+  explicitly for the one path that does choose a direction;
 - **a file that opens locked fits from the lock** — coming up at the default
   three-quarter angle and then being unable to turn out of it reads as broken;
 - **a tilted `setCamera` is DECLINED**, in a sentence, rather than quietly
@@ -257,8 +257,9 @@ client and nothing else: it fetches the file and parses it.
   pointer does. 2D is the shell's [plan view](#plan-view). A **document is inherently a
   plan**: it opens locked and offers no action.
 - **Display**: `EDGELESS_VIEW_FEATURES` (Solid and Render; no Edges, Clip or Explode).
-- **Tools**: **Orbit** (the default), then **Draw**. No Select, Measure, Pose or
-  Animate. They are about a scene, not about a mesh, so they work on a document too.
+- **Tools**: none. Nothing of a drawing picks, measures, poses, plays or is drawn
+  on, so there is no tool strip over the viewport at all and no viewport context
+  menu: the pointer orbits, pans and zooms, and that is the whole of it.
 - **Inspector**, titled `DXF`, open by default (a drawing's settings live in it):
   **Material**, **Bends** when the file has bend lines, **Layers** when it uses more
   than one, then **Display**. Tabs are computed per presentation.
@@ -300,14 +301,14 @@ CAD renderer does not match `.glb`.
   flag, or the grey a STEP export stamps on uncoloured parts) takes the viewer's
   surface colour in Inspect.
 - **Display**: `EDGELESS_VIEW_FEATURES` (Solid and Render; no Edges, Clip or Explode).
-- **Tools**, left to right: **Orbit** (the default; a GLB picks nothing, so
-  there is no Select, no filter menu and no copy-references action), **Draw**,
-  and **Animate** when the file has playable clips. No Measure, no Pose.
-  Fullscreen is Animate when the file has clips, else no tool.
-- **Animation** (`glb/useGlbAnimation.js`): one `AnimationMixer` on the native
-  scene, alive only while a routine owns the pose, driven by the kit playbar
-  through the renderer's own clock. Leaving Animate stops the action and three
-  restores every animated property, so the model is at rest again exactly.
+- **Tools**: none. A GLB picks nothing, so there is no Select, no filter menu, no
+  copy-references action — and no tool strip and no viewport context menu either.
+- **Animation** (`glb/useGlbAnimation.js`): a file with playable clips shows the
+  kit playbar under the model, always: it is a transport, not a tool to take up
+  and leave, and fullscreen shows the same one. The file OPENS AT REST — one
+  `AnimationMixer` on the native scene, built by the first play, scrub or clip
+  choice and alive only while a routine owns the pose — so the bar appearing
+  changes nothing on screen.
 - **Inspector**: the single Display tab; the panel starts shut
   (`inspectorPanels(ready, { defaultOpen: false })`).
 - **Host commands**: the base live commands; `select` and `clearSelection` are
@@ -342,8 +343,9 @@ renderer does not match either.
   Single colour and Color by part override source colours (the palette is dealt
   in the order it always was, `paletteIndex`), opacity applies to every object.
 - **Display**: `EDGELESS_VIEW_FEATURES` (Solid and Render; no Edges, Clip or Explode).
-- **Tools**: **Orbit** (the default), then **Draw**. No Select, Measure, Pose or
-  Animate. Fullscreen has no tool, only its orbit settings.
+- **Tools**: none. A triangle mesh has nothing to pick, measure, pose or play, so
+  there is no tool strip over the viewport and no viewport context menu; fullscreen
+  offers its orbit settings, as it does for every format.
 - **Inspector**: the single Display tab, titled `STL` or `3MF`; the panel starts shut.
 - **Alerts**: a file that fails to parse raises the load alert ("Couldn’t load
   the model", with the loader's error in Details); one that parses to no
@@ -736,7 +738,21 @@ primitive and 28px height, with the model tree's horizontal inset. The disclosur
 button expands children; the rest of the row selects its canonical references.
 Labels keep the row's width; summaries and measurements belong in the selected
 reference details. The small eye action changes visibility, while Isolate stays
-in the context menu. The tree starts directly below `Filter model…`, the file
+in the row's context menu.
+
+That menu is THE part menu, the one the viewport offers over the same part: one
+descriptor (`assemblyNodeMenu`) and one set of actions (`partMenuActions`),
+rendered by `AssemblyPartMenuItems`, so the two cannot drift apart. Add to prompt,
+Copy Reference, Select/Deselect, Isolate/Exit isolate, Exit all isolates, Hide
+others, Hide/Reveal, then the tree's Expand/Collapse and Expand all/Collapse all.
+The camera is NOT in it: framing lives in the zoom menu, so no item can
+contradict the tool in hand. The VIEWPORT's menu exists only while Select is the
+active tool — under Measure, Draw, Pose or Animate a secondary tap opens nothing,
+though the native menu stays suppressed and a secondary drag still pans. The
+TREE's is available under any tool, and every action returns to Select first,
+exactly as clicking a row already does (`ensureSelectTool`). A secondary tap on
+empty space asks about the model as a whole (Show all, Expand all, Collapse all)
+and opens nothing at all when none of those can do anything. The tree starts directly below `Filter model…`, the file
 tree's filter box (`primitives/tree-filter`). Conditional Show all and Exit isolate
 actions sit on the filter row's right side; there is no feature-count header.
 Clicking empty tree space clears selection, including a pending topology pick.
@@ -932,14 +948,19 @@ effects pass reports whether a style, visibility or highlight changed
 ### Draw
 
 Draw is the shared [drawing editor](drawing.md) (Excalidraw) laid transparently
-over the viewport. The chunk loads on the first use of the tool, and the surface
-stays hidden until the editor has its scene, so its default white page never
-flashes over the model. Pressing Draw again, like Measure, ends the session.
+over the viewport. It is a STEP tool and appears on no other format: a GLB, an
+STL, a 3MF, a DXF and a robot description do not offer it. (The tool itself is
+the SHELL's — `kit/tools/draw`, `shell.tools.draw` — because STEP moves onto the
+shell next; until it does, `renderers/shell-harness` is the only other frame that
+mounts it, for tests.) The chunk loads on the first use of the tool, and the
+surface stays hidden until the editor has its scene, so its default white page
+never flashes over the model. Pressing Draw again, like Measure, ends the session.
 
 The editor's own toolbar, `DrawingToolbar`, is placed by the viewer as a second
-row under the interaction tools in the same button metrics: Select and move
-drawings, Pan view, Pen, Line, Arrow, Rectangle, Ellipse, Text, Fill area and
-Eraser, then Color, Undo, Redo and Clear drawing. It shows the editor's active
+row under the interaction tools in the same button metrics, in the order a sketch
+is made: Pen, Line, Arrow, Rectangle, Ellipse, Text, Fill area and Eraser, then
+Color, then Select and move drawings and Pan view, then Undo, Redo and Clear
+drawing. It shows the editor's active
 tool. Tools are sticky: a line is followed by another line. Color opens a strip
 of neon swatches (plus white and black) in the toolbar's own flow; it sets the
 color of what is drawn next and never recolors existing ink. Fill area is not an
@@ -980,10 +1001,12 @@ through its clipboard adapter. The DXF renderer also contributes its 2D/3D proje
 The shared FileViewer renders these registered actions without importing CAD.
 
 Zoom is a small muted percentage at the right of the Inspector tab strip. Its
-menu offers zoom steps, 100%, fit, selection fit, Reset camera and Reset model.
-The viewport has no zoom toolbar. Reset camera uses the original authored
-bounds; Reset model also restores authored motion and disables spatial tools
-while preserving display settings. See [settings-ui.md](settings-ui.md). X/Y/Z labels
+menu offers zoom steps, 100%, fit, selection fit and Reset Zoom, and nothing
+else: framing is all it does, and restoring the model itself belongs to whoever
+owns it (Kinematics' Reset for a pose, Display's for settings). Zoom to 100% is
+the zoom number; Reset Zoom frames the model again, zoom and pan, without
+turning the camera. The viewport has no zoom toolbar.
+See [settings-ui.md](settings-ui.md). X/Y/Z labels
 remain outside the bottom-right axis endpoints. Fullscreen hides all of these
 controls. The web header owns Fullscreen (`Maximize2`) beside appearance; while
 active, shared `FullscreenToolbar` places a transparent animation play bar at

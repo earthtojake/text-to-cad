@@ -1,9 +1,6 @@
-import { createViewToolModes } from "../kit/shell/viewTools.js";
-
-// A DXF has nothing to pick, measure, pose or play: Orbit and Draw. Which way the drawing is
-// being looked at (2D or 3D) is not a tool — it is a navbar action, because it changes the
-// camera rather than what the pointer does.
-export const DXF_TOOL_MODES = createViewToolModes();
+// A DXF has nothing to pick, measure, pose or play, so it has no tools at all. Which way the
+// drawing is being looked at (2D or 3D) is not a tool either — it is a navbar action, because
+// it changes the camera rather than what the pointer does.
 
 /** What a host command that needs picking is told. A DXF is 2D geometry; it carries no CAD references. */
 export const DXF_DECLINED_LIVE_COMMANDS = Object.freeze({

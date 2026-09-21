@@ -168,9 +168,15 @@ test("sidecars are closed, schema-bound, document-bound, and normalize embedded 
   assert.throws(() => validateSourceSidecar({ ...valid, documentHash: "b".repeat(64) }, {
     url: "/part.step.json", documentHash: DOCUMENT_HASH
   }), /does not match STEP sha256/);
-  assert.throws(() => validateSourceSidecar({ ...valid, schemaVersion: 8 }, {
-    url: "/part.step.json", documentHash: DOCUMENT_HASH
-  }), /unsupported sidecar schema 8 \(expected 9\)/);
+  // Word for word what the Python reader says: what is lost, and the migration to do.
+  for (const [payload, found] of [[{ ...valid, schemaVersion: 8 }, "8"], ["not an object", "none"], [{ ...valid, schemaVersion: undefined }, "none"]]) {
+    assert.throws(() => validateSourceSidecar(payload, { url: "/part.step.json", documentHash: DOCUMENT_HASH }), (error) => {
+      assert.match(error.message, new RegExp(`part\\.step\\.json: unsupported sidecar schema ${found} \\(expected 9\\),`));
+      assert.match(error.message, /the kinematics, materials and animation it declares cannot be read and this model poses and plays nothing\./);
+      assert.match(error.message, /Migrate it now: rebuild the model \(python part\.py\) or re-annotate the document \(cadgen step build\)/);
+      return true;
+    });
+  }
   assert.throws(() => normalizeSourceAnimation("export const clips = {};"), /only language and source/);
   assert.throws(() => normalizeSourceAnimation({ language: "typescript", source: "x" }), /javascript/);
 });

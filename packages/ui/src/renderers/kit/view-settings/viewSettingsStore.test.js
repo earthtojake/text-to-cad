@@ -113,13 +113,3 @@ test("lighting and floor edits do not invalidate geometry settings, and no-op ed
   assert.equal(updates, 0);
   assert.equal(store.getSnapshot(), after);
 });
-
-test("model-tool reset preserves exact Custom appearance and disables spatial tools", () => {
-  const display = { mode: "render", camera: { projection: "orthographic" }, lighting: { exposure: 0.7 },
-    clip: { enabled: true, offsets: { x: 0.5 } }, exploded: { enabled: true, amount: 0.75 } };
-  const store = createViewSettingsStore(display);
-  store.resetModelTools();
-  assert.deepEqual(store.getSnapshot().display, { ...display, clip: { enabled: false }, exploded: { enabled: false } });
-  assert.equal(store.getSnapshot().scene.view.clip.enabled, false);
-  assert.equal(store.getSnapshot().scene.view.exploded.enabled, false);
-});

@@ -204,18 +204,19 @@ displayed without a status badge. A later successful no-op run without a new
 preview, or an expired preview with a validated saved result, uses the saved
 file instead.
 
-**Badges.** The filename badge reports only **Opening**, **Updating**, **Open
-failed**, **Update failed**, **Limited detail**, or **Model warning**. Once a
+**Badges.** The filename badge reports **Opening**, **Updating**, **Open
+failed**, **Update failed**, **Limited detail**, or — for a warning the model
+survives — what that warning calls itself (its own summary). Once a
 usable current view is displayed, saving, successful completion, idle edit-feed
 state and routine refinement stay quiet. Busy badges have a spinner; failures
 and detail limits have an icon and open their explanation on click. Tooltips
 explain the current stage or the effect on the view, distinguish a previous
 version from new geometry whose STEP write failed, and point to details when
 clickable; stage counts never imply overall completion, and full diagnostics
-remain in the dialog. Invalid
-saved settings produce a nonblocking model warning, with rebuild guidance and
-full diagnostics; geometry remains usable. Existing usable views remain visible
-during updates and failures.
+remain in the dialog. A sidecar this build cannot read is NOT a badge: the model
+renders with no kinematics, no materials and no routine, and the migration is
+announced where it can be acted on — the build and the cad skill. Existing
+usable views remain visible during updates and failures.
 
 **Opening.** Opening shows one step line — **Finding file**, **Reading
 model**, **Loading geometry**, or **Preparing view** — with no headline above

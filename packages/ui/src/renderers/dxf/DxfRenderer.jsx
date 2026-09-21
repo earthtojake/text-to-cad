@@ -7,7 +7,7 @@ import { readShellState } from "../kit/shell/shellState.js";
 import { useRendererShell } from "../kit/shell/useRendererShell.js";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
 import { createDxfScene } from "./dxfScene.js";
-import { DXF_DECLINED_LIVE_COMMANDS, DXF_TOOL_MODES } from "./tools.js";
+import { DXF_DECLINED_LIVE_COMMANDS } from "./tools.js";
 import { useDxfDocument } from "./useDxfDocument.js";
 import { useDxfSettings } from "./useDxfSettings.js";
 import { BendsTab } from "./tabs/BendsTab.jsx";
@@ -62,9 +62,9 @@ function DxfSurface({ view, data }) {
 
   const shell = useRendererShell({
     view, services: workspace.services, resource: workspace.resource, modelKey: workspace.modelKey,
-    revisionKey: loaded.revision, features: EDGELESS_VIEW_FEATURES, toolModes: DXF_TOOL_MODES, scene,
+    revisionKey: loaded.revision, features: EDGELESS_VIEW_FEATURES, scene,
     load: { busy: loaded.busy && !scene, updating: loaded.busy && Boolean(scene), progress: loaded.progress, alert: loadAlert },
-    live: LIVE, planView, navigationActions, rendererState: settings.record, onResetModel: settings.resetModel
+    live: LIVE, planView, navigationActions, rendererState: settings.record
   });
   useDeclinedSelectReference(workspace, shell.setCopyStatus, DXF_DECLINED_LIVE_COMMANDS.select);
 
@@ -113,8 +113,7 @@ function DxfSurface({ view, data }) {
     : [{ id: DXF_TAB.MATERIAL, title: "Material", content: <MaterialTab settings={settings} /> }, layersTab]
   ).concat(shell.displayTab).filter(Boolean);
 
-  const tools = [shell.tools.orbit, shell.tools.draw];
-  return <RendererShell shell={shell} tools={tools} inspector={{ title: "DXF", tabs }} />;
+  return <RendererShell shell={shell} tools={[]} inspector={{ title: "DXF", tabs }} />;
 }
 
 export default function DxfRenderer(props) {

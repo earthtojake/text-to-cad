@@ -9,10 +9,15 @@ export function normalizeZoomPercent(value, fallback = 100) {
   return Number.isFinite(numeric) ? Math.min(MAX_PERCENT, Math.max(MIN_PERCENT, numeric)) : fallback;
 }
 
-// The header is a readout, not an input. All camera/model operations stay with
-// the owning viewport; this menu never owns or persists another zoom value.
-export function ZoomControl({ zoomPercent = 100, onZoomPercentChange, onZoomReset,
-  onZoomFit, onZoomSelection, selectionAvailable = false, onModelReset, disabled = false }) {
+// The header is a readout, not an input. All camera operations stay with the
+// owning viewport; this menu never owns or persists another zoom value.
+//
+// "Zoom to 100%" and "Reset Zoom" are not the same act and both are offered:
+// 100% sets the zoom number and leaves the pan alone, while Reset Zoom re-frames
+// the model — zoom AND pan back to the opening framing — without turning the
+// camera. Neither changes which way the model is being looked at.
+export function ZoomControl({ zoomPercent = 100, onZoomPercentChange, onResetZoom,
+  onZoomFit, onZoomSelection, selectionAvailable = false, disabled = false }) {
   const boundary = useContext(FileSheetPortalContext);
   const adjust = delta => onZoomPercentChange?.(normalizeZoomPercent(Math.round(zoomPercent) + delta));
   return <DropdownMenu>
@@ -29,8 +34,7 @@ export function ZoomControl({ zoomPercent = 100, onZoomPercentChange, onZoomRese
       <DropdownMenuItem onSelect={onZoomFit}>Zoom to fit</DropdownMenuItem>
       <DropdownMenuItem disabled={!selectionAvailable} onSelect={onZoomSelection}>Zoom to selection</DropdownMenuItem>
       <DropdownMenuSeparator />
-      <DropdownMenuItem onSelect={onZoomReset}>Reset camera</DropdownMenuItem>
-      <DropdownMenuItem onSelect={onModelReset} title="Restore the model, motion and camera; keep display settings">Reset model</DropdownMenuItem>
+      <DropdownMenuItem onSelect={onResetZoom} title="Frame the model again; keep the direction it is looked at from">Reset Zoom</DropdownMenuItem>
     </DropdownMenuContent>
   </DropdownMenu>;
 }

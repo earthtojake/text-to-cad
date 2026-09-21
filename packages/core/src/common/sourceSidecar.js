@@ -200,18 +200,26 @@ export function normalizeSourceAnimation(block) {
   return { language: "javascript", source: block.source };
 }
 
+// Word for word what the Python reader says (`cadgen/_internal/source_sidecar.py`):
+// what is lost, and that it is a migration to DO. Read as a passing remark, a
+// model keeps shipping with no kinematics, no materials and no routines at all.
+function schemaError(url, found) {
+  const name = sidecarName(url);
+  const model = name.replace(/\.(step|stp)\.json$/i, "");
+  return new Error(
+    `${name}: unsupported sidecar schema ${found} (expected ${SOURCE_SIDECAR_SCHEMA_VERSION}), `
+    + "so the kinematics, materials and animation it declares cannot be read and this model "
+    + `poses and plays nothing. Migrate it now: rebuild the model (python ${model}.py) `
+    + "or re-annotate the document (cadgen step build)"
+  );
+}
+
 export function validateSourceSidecar(sidecar, { url = "", documentHash = "" } = {}) {
   if (!isObject(sidecar)) {
-    throw new Error(`${sidecarName(url)}: unsupported sidecar schema none (expected ${SOURCE_SIDECAR_SCHEMA_VERSION})`);
+    throw schemaError(url, "none");
   }
   if (sidecar.schemaVersion !== SOURCE_SIDECAR_SCHEMA_VERSION) {
-    const name = sidecarName(url);
-    const model = name.replace(/\.(step|stp)\.json$/i, "");
-    throw new Error(
-      `${name}: unsupported sidecar schema ${sidecar.schemaVersion ?? "none"} `
-      + `(expected ${SOURCE_SIDECAR_SCHEMA_VERSION}) — rebuild the model `
-      + `(python ${model}.py) or re-annotate the document (cadgen step build)`
-    );
+    throw schemaError(url, sidecar.schemaVersion ?? "none");
   }
   const unknown = Object.keys(sidecar).filter((key) => !SIDECAR_KEYS.has(key));
   if (unknown.length) {

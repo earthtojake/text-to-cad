@@ -1,14 +1,12 @@
 import { createToolModes } from "../kit/tools/toolModes.js";
-import { SHELL_TOOL } from "../kit/shell/useRendererShell.js";
 
-export const ROBOT_TOOL = Object.freeze({ POSE: "pose", SELECT: "select", DRAW: SHELL_TOOL.DRAW });
+export const ROBOT_TOOL = Object.freeze({ POSE: "pose", SELECT: "select" });
 
-// Select is what a session falls back to (ending Draw lands in it, as does a robot with
-// nothing to pose); Pose is what a robot OPENS in (`ROBOT_TOOL_RESTORE`). Both are
-// recorded by a saved tab; Draw is a session that ends when its tool is asked for again.
+// Select is what a session falls back to (a robot with nothing to pose lands there);
+// Pose is what a robot OPENS in (`ROBOT_TOOL_RESTORE`). A saved tab records either.
 export const ROBOT_TOOL_MODES = createToolModes({
   defaultMode: ROBOT_TOOL.SELECT,
-  modes: { [ROBOT_TOOL.POSE]: { persists: true }, [ROBOT_TOOL.SELECT]: { persists: true }, [ROBOT_TOOL.DRAW]: { toggles: true } }
+  modes: { [ROBOT_TOOL.POSE]: { persists: true }, [ROBOT_TOOL.SELECT]: { persists: true } }
 });
 export const ROBOT_TOOL_RESTORE = Object.freeze({ opensIn: ROBOT_TOOL.POSE });
 

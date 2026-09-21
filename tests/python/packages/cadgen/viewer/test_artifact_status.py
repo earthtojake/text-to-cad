@@ -330,12 +330,13 @@ class InvalidUtf8(ArtifactStatusTestCase):
 
 
 class RetiredRenderModule(ArtifactStatusTestCase):
-    """A leftover ``<name>.step.js`` warns; it never refuses the document.
+    """A leftover ``<name>.step.js`` is the BUILD's to announce, not status'.
 
-    Animation moved into ``@step(animation=...)`` and travels in the sidecar,
-    so the companion file is read by nothing. A door never refuses a document
-    (law 1), so the viewer says so and renders anyway -- the build is where
-    the same file is a hard error.
+    Animation moved into ``@step(animation=...)`` and travels in the sidecar, so
+    the companion file is read by nothing. Status answers about this document's
+    own state; a neighbour it does not read is not part of that answer, and the
+    viewer would be the wrong place to raise it in any case -- the build and the
+    cad skill say it where there is a command to run.
     """
 
     def _status(self, name="model.step", *, companion=True, package=True):
@@ -346,26 +347,15 @@ class RetiredRenderModule(ArtifactStatusTestCase):
             self.tree.package(step_path)
         return artifact_status(name, str(self.tree.root))
 
-    def test_a_rendered_document_still_renders_and_names_the_replacement(self):
-        status = self._status()
-        self.assertEqual(status["state"], "compiled")
-        (warning,) = status["warnings"]
-        # The viewer's actionable triple, split here rather than in the client:
-        # the UI renders the fields it is handed and never parses the sentences.
-        self.assertEqual(sorted(warning), ["heading", "message", "recovery"])
-        self.assertIn("model.step.js", warning["heading"])
-        self.assertIn("@step(animation=...)", warning["message"])
-        self.assertIn("sidecar", warning["message"])
-        self.assertIn("model.step.js", warning["recovery"])
+    def test_a_document_with_one_beside_it_is_simply_rendered(self):
+        self.assertEqual(self._status(), {"state": "compiled"})
 
-    def test_an_uncompiled_document_carries_it_too(self):
-        status = self._status(package=False)
-        self.assertEqual(status["state"], "not-compiled")
-        self.assertEqual(len(status["warnings"]), 1)
+    def test_an_uncompiled_document_reports_only_its_state(self):
+        self.assertNotIn("warnings", self._status(package=False))
 
-    def test_a_stp_document_is_covered_and_a_clean_one_is_silent(self):
-        self.assertIn("model.stp.js", self._status("model.stp")["warnings"][0]["heading"])
-        self.assertNotIn("warnings", self._status("clean.step", companion=False))
+    def test_no_state_carries_warnings(self):
+        for status in (self._status(), self._status("model.stp"), self._status("clean.step", companion=False)):
+            self.assertNotIn("warnings", status)
 
 
 if __name__ == "__main__":

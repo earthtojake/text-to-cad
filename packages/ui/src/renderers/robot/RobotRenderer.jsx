@@ -101,8 +101,7 @@ function RobotSurface({ view, data }) {
     features: EDGELESS_VIEW_FEATURES, toolModes: ROBOT_TOOL_MODES, toolRestore: ROBOT_TOOL_RESTORE, scene,
     sceneScaleMode: VIEWER_SCENE_SCALE.URDF,
     load: { busy: (loaded.busy && !scene) || (Boolean(robot) && !scene), updating: loaded.busy && Boolean(scene), progress: loaded.progress, alert: loadAlert },
-    live, escape, rendererState, selection: zoomSelection,
-    onResetModel: () => poseRef.current?.reset()
+    live, escape, rendererState, selection: zoomSelection
   });
   shellRef.current = shell;
   useDeclinedSelectReference(document, shell.setCopyStatus, ROBOT_DECLINED_LIVE_COMMANDS.select);
@@ -186,8 +185,7 @@ function RobotSurface({ view, data }) {
 
   const tools = [
     posable ? shell.tools.own({ id: ROBOT_TOOL.POSE, label: "Pose", icon: POSE_ICON }) : null,
-    shell.tools.own({ id: ROBOT_TOOL.SELECT, label: "Select", icon: SELECT_ICON }),
-    shell.tools.draw
+    shell.tools.own({ id: ROBOT_TOOL.SELECT, label: "Select", icon: SELECT_ICON })
   ].filter(Boolean);
   const tabs = [
     { id: ROBOT_TAB.KINEMATICS, title: "Kinematics", content: pose ? <KinematicsTab key={robot.revision} pose={pose} /> : null },

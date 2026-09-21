@@ -4,7 +4,7 @@ import RendererShell from "../kit/shell/RendererShell.jsx";
 import { useRendererShell } from "../kit/shell/useRendererShell.js";
 import { noGeometryAlert } from "../kit/status/loadAlerts.js";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
-import { MESH_DECLINED_LIVE_COMMANDS, MESH_TOOL_MODES } from "./tools.js";
+import { MESH_DECLINED_LIVE_COMMANDS } from "./tools.js";
 import { useMeshScene } from "./useMeshScene.js";
 
 const LIVE = Object.freeze({ declined: MESH_DECLINED_LIVE_COMMANDS });
@@ -22,13 +22,13 @@ function MeshSurface({ view, data }) {
 
   const shell = useRendererShell({
     view, services: document.services, resource: document.resource, modelKey: document.modelKey, revisionKey: loaded.revision,
-    features: EDGELESS_VIEW_FEATURES, toolModes: MESH_TOOL_MODES, scene,
+    features: EDGELESS_VIEW_FEATURES, scene,
     load: { busy: loaded.busy && !scene, updating: loaded.busy && Boolean(scene), progress: loaded.progress, alert: loadAlert },
     live: LIVE
   });
   useDeclinedSelectReference(document, shell.setCopyStatus, MESH_DECLINED_LIVE_COMMANDS.select);
 
-  return <RendererShell shell={shell} tools={[shell.tools.orbit, shell.tools.draw]}
+  return <RendererShell shell={shell} tools={[]}
     inspector={{ title: formatLabel(view.file.path), tabs: [shell.displayTab] }} />;
 }
 

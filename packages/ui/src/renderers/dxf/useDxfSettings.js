@@ -3,7 +3,7 @@ import {
   dxfMaterialPreset, dxfSettingsRecord, normalizeDxfBendAngleDeg, normalizeDxfBendDirection,
   normalizeDxfBendRadiusMm, normalizeDxfBendStyle, normalizeDxfBends, normalizeDxfKFactor,
   normalizeDxfMaterial, normalizeDxfOrientation, normalizeDxfThicknessMm, normalizeDxfUnits,
-  normalizeDxfView, readDxfSettings, resetDxfModel, DXF_DEFAULT_BEND_ANGLE_DEG,
+  normalizeDxfView, readDxfSettings, DXF_DEFAULT_BEND_ANGLE_DEG,
   DXF_DEFAULT_MATERIAL, DXF_DEFAULT_ORIENTATION, DXF_DEFAULT_THICKNESS_MM, DXF_DEFAULT_UNITS
 } from "./dxfSettings.js";
 
@@ -38,7 +38,6 @@ function reduce(state, action) {
     case "resetBends": return { ...current,
       bends: current.bends.map(() => ({ angleDeg: DXF_DEFAULT_BEND_ANGLE_DEG, direction: "up" })) };
     case "resetOrientation": return { ...current, orientation: { ...DXF_DEFAULT_ORIENTATION } };
-    case "resetModel": return resetDxfModel(current);
     default: return current;
   }
 }
@@ -80,7 +79,6 @@ export function useDxfSettings(restored, bendCount) {
     setLayerVisible: useCallback((name, visible) => send({ type: "layer", name, visible }), [send]),
     resetMaterial: useCallback(() => send({ type: "resetMaterial" }), [send]),
     resetBends: useCallback(() => send({ type: "resetBends" }), [send]),
-    resetOrientation: useCallback(() => send({ type: "resetOrientation" }), [send]),
-    resetModel: useCallback(() => send({ type: "resetModel" }), [send])
+    resetOrientation: useCallback(() => send({ type: "resetOrientation" }), [send])
   };
 }

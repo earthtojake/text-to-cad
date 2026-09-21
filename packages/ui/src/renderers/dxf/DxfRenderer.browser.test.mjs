@@ -94,8 +94,14 @@ async function serveHarness(t) {
 
 const ready = pane => pane.locator('[aria-busy="false"] > div > canvas').first().waitFor();
 const loaded = page => page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
-const toolNames = pane => pane.getByRole('group', { name: 'Interaction tools' }).getByRole('button')
-  .evaluateAll(buttons => buttons.map(button => [button.getAttribute('aria-label'), button.getAttribute('aria-pressed')]));
+// A DXF has no tools at all: 2D/3D is a navbar action, not a tool, because it
+// changes the camera rather than what the pointer does.
+const noTools = async (pane) => {
+  assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).count(), 0, 'a DXF viewport has no tool strip');
+  for (const name of ['Orbit', 'Draw', 'Select', 'Measure', 'Pose', 'Animate']) {
+    assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
+  }
+};
 const tabNames = pane => pane.getByRole('tab').evaluateAll(tabs => tabs.map(tab => [tab.textContent, tab.getAttribute('aria-selected')]));
 const settle = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 const state = page => page.evaluate(() => window.cadHarness.a.controller.readState());
@@ -188,17 +194,14 @@ const rest = page => page.waitForFunction(() => {
   return still;
 }, null, { polling: 200 });
 
-test('a cut layout opens in Orbit with its own settings tabs, and 2D is a locked plan view', async (t) => {
+test('a cut layout opens with no tools and its own settings tabs, and 2D is a locked plan view', async (t) => {
   const { open } = await serveHarness(t);
   const { page, pane, errors } = await open('plate.dxf');
   await ready(pane);
   await loaded(page);
 
-  // Orbit and Draw, and nothing that would promise a selection.
-  assert.deepEqual(await toolNames(pane), [['Orbit', 'true'], ['Draw', 'false']]);
-  for (const name of ['Select', 'Measure', 'Pose', 'Animate']) {
-    assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
-  }
+  // No tools, and no menu of the viewer's on a secondary press either.
+  await noTools(pane);
   // A drawing's settings live in the Inspector: Material first.
   await openInspector(pane);
   assert.deepEqual(await tabNames(pane), [['Material', 'true'], ['Display', 'false']],
@@ -263,7 +266,9 @@ test('a cut layout opens in Orbit with its own settings tabs, and 2D is a locked
   });
   assert.deepEqual((await state(page)).camera.target.map(Math.round), [5, 5, 0]);
 
-  // Reset camera in 2D lands back on top-down, not on the default three-quarter view.
+  // The host's `resetCamera` does what the zoom menu's "Reset Zoom" does: it
+  // frames the drawing again without turning the camera, so a locked 2D view
+  // comes back centred and still looking straight down.
   await page.evaluate(() => window.cadHarness.a.controller.resetCamera());
   await page.waitForFunction(() => {
     const camera = window.cadHarness.a.controller.readState().camera;
@@ -363,7 +368,7 @@ test('thickness, bends, layers and the stock material each reshape what is drawn
   assert.deepEqual(errors, []);
 });
 
-test('a dimensioned drawing draws its line-work, opens locked, and has every tool that works on a scene', async (t) => {
+test('a dimensioned drawing draws its line-work, opens locked, and captures like any other scene', async (t) => {
   const { open } = await serveHarness(t);
   const { page, pane, errors } = await open('sheet.dxf');
   await ready(pane);
@@ -375,9 +380,8 @@ test('a dimensioned drawing draws its line-work, opens locked, and has every too
   assert.equal(Math.round(viewDirection(camera)[2] * 100), 100, 'opened looking straight down');
   assert.equal(camera.projection, 'orthographic');
 
-  // Tools, the snapshot and a capture all work on it: they are about a scene, not about a mesh.
-  assert.deepEqual(await toolNames(pane), [['Orbit', 'true'], ['Draw', 'false']]);
-  assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).getByRole('button', { name: 'Orbit' }).isDisabled(), false);
+  // The snapshot and a capture work on it: they are about a scene, not about a mesh.
+  await noTools(pane);
   await display(page, GUIDES_OFF);
   await settle(page);
   const drawn = await capture(page);
@@ -385,24 +389,6 @@ test('a dimensioned drawing draws its line-work, opens locked, and has every too
   await pane.getByRole('button', { name: 'Take snapshot', exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.captures.length === 1);
   assert.deepEqual(await page.evaluate(() => [window.cadHarness.captures[0].file, window.cadHarness.captures[0].type]), ['sheet.dxf', 'image/png']);
-
-  // Draw works over it, and never moves the camera.
-  await pane.getByRole('button', { name: 'Draw', exact: true }).click();
-  await pane.locator('[data-drawing-ready]').waitFor();
-  const locked = (await state(page)).camera;
-  const overlay = await pane.locator('[data-cad-drawing-overlay]').boundingBox();
-  await page.mouse.move(overlay.x + 140, overlay.y + 140);
-  await page.mouse.down();
-  await page.mouse.move(overlay.x + 280, overlay.y + 180, { steps: 8 });
-  await page.mouse.up();
-  assert.deepEqual((await state(page)).camera, locked, 'drawing never moves the camera');
-  await pane.getByRole('button', { name: 'Add to Prompt', exact: true }).click();
-  await page.waitForFunction(() => window.cadHarness.captures.length === 2);
-  await pane.getByRole('button', { name: 'Draw', exact: true }).click();
-  await pane.locator('[data-drawing-ready]').waitFor({ state: 'detached' });
-  // Leaving Draw leaves the plan lock exactly as it was.
-  await settle(page);
-  assert.equal(Math.round(viewDirection((await state(page)).camera)[2] * 100), 100);
 
   // Layers: a document's are its line objects.
   await openInspector(pane);
@@ -460,8 +446,9 @@ test('a DXF that will not parse says so; one with no closed contour shows its li
   const unclosed = await open('open.dxf');
   await ready(unclosed.pane);
   await loaded(unclosed.page);
-  // A non-blocking warning rides the file badge; pressing it opens the diagnostic.
-  await unclosed.pane.locator('[data-file-status="Model warning"]').click();
+  // A non-blocking warning rides the file badge, which says what the warning IS;
+  // pressing it opens the diagnostic.
+  await unclosed.pane.locator('[data-file-status="No flat pattern"]').click();
   await unclosed.page.getByText('No closed cut contour').first().waitFor();
   await unclosed.page.keyboard.press('Escape');
   await display(unclosed.page, GUIDES_OFF);
@@ -533,11 +520,10 @@ test('a host command that needs a selection is declined in words, and fullscreen
     return offset[2] / Math.hypot(...offset) > 0.99;
   });
   await page.evaluate(() => window.cadHarness.fullscreen(true));
-  await pane.getByRole('group', { name: 'Interaction tools' }).waitFor({ state: 'detached' });
   await pane.getByRole('group', { name: 'Fullscreen controls' }).waitFor();
   assert.equal(await pane.locator('[data-animation-transport]').count(), 0, 'a drawing has no routines to play');
   await page.evaluate(() => window.cadHarness.fullscreen(false));
-  await pane.getByRole('group', { name: 'Interaction tools' }).waitFor();
+  await pane.getByRole('button', { name: 'Inspector', exact: true }).waitFor();
   await settle(page);
   // Fullscreen's slow auto-orbit still turns a locked view a little — a hole in the lock
   // this phase carries rather than widens; what matters is that leaving it is a plan view again.

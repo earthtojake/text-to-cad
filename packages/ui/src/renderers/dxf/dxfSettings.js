@@ -263,16 +263,3 @@ export function dxfSettingsRecord(state) {
   };
 }
 
-/**
- * "Reset model": back to the geometry as authored. The display unit and the stock material
- * are how the part is being LOOKED at, not what it is, so they stay — as does the 2D/3D view.
- */
-export function resetDxfModel(state) {
-  return {
-    ...state,
-    thicknessMm: DXF_DEFAULT_THICKNESS_MM,
-    bends: state.bends.map(() => ({ angleDeg: DXF_DEFAULT_BEND_ANGLE_DEG, direction: "up" })),
-    orientation: { ...DXF_DEFAULT_ORIENTATION },
-    hiddenLayers: []
-  };
-}

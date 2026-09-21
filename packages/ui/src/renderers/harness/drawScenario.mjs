@@ -1,54 +1,20 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { createServer } from 'node:http';
-import { build } from 'esbuild';
-import { chromium } from 'playwright';
 
 // The Draw tool end to end in a real browser: the real drawing editor over the
 // real viewport. Unit tests cover the camera mathematics, the editor controller
-// and the fill algorithm; this is the flow a person actually uses. Draw is a kit
-// tool, so the flow is one scenario run under each frame that mounts it.
+// and the fill algorithm; this is the flow a person actually uses.
+//
+// Draw is a KIT tool, so this body takes an already-open page and knows nothing
+// about the frame that mounted it: one scenario, run under each frame that
+// offers Draw. Today that is STEP (`serveStepHarness`, whose server must keep
+// serving `/harness.css` — without the editor's own stylesheet it has no layout
+// and sizes its canvas from an unconstrained container).
 
 /**
- * @param {import('node:test').TestContext} t
- * @param {{ file: string, entries: (root: string) => object[], assets: Record<string, string> }} fixture
- *   The file the harness opens, the catalog that lists it, and the bytes behind each asset path.
+ * @param {{ page: import('playwright').Page, pane: import('playwright').Locator, errors: string[] }} view
+ *   A page the harness has opened on a file whose renderer offers Draw.
  */
-export async function runDrawScenario(t, { file, entries, assets }) {
-  const temporary = await mkdtemp(join(tmpdir(), 'hardcore-cad-drawing-'));
-  let server, browser;
-  t.after(async () => { await browser?.close(); if (server) await new Promise((resolve) => server.close(resolve)); await rm(temporary, { recursive: true, force: true }); });
-  await build({ entryPoints: [fileURLToPath(new URL('./index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.woff2': 'dataurl' } });
-  const bundle = await readFile(join(temporary, 'harness.js'));
-  const bundledCss = await readFile(join(temporary, 'harness.css')).catch(() => '');
-  const compiledCss = await readFile(new URL('../../../dist/styles.css', import.meta.url));
-  server = createServer((request, response) => {
-    const url = new URL(request.url, 'http://test');
-    const root = url.pathname.split('/')[1];
-    if (url.pathname === '/harness.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle); }
-    else if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(compiledCss); }
-    else if (url.pathname === '/harness.css') { response.setHeader('Content-Type', 'text/css'); response.end(bundledCss); }
-    else if (url.pathname.endsWith('/__cad/catalog')) {
-      response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify({ rootId: root, entries: entries(root) }));
-    } else if (url.pathname.endsWith('/__cad/server')) {
-      response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ rootId: root, rootPath: '/models', backend: 'cadgen' }));
-    } else if (assets[`/${url.pathname.split('/').pop()}`]) { response.end(assets[`/${url.pathname.split('/').pop()}`]); }
-    else if (/\.(woff2|ttf)$/.test(url.pathname)) { response.statusCode = 404; response.end(); }
-    else { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html><head><title>Host</title><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/harness.css"></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>'); }
-  });
-  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
-  browser = await chromium.launch({ headless: true, args: process.platform === 'darwin' ? ['--use-angle=metal'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
-  const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
-  page.setDefaultTimeout(15000);
-  const errors = [];
-  page.on('pageerror', (error) => errors.push(error.message));
-  await page.addInitScript(() => { window.Worker = undefined; });
-  await page.goto(`http://127.0.0.1:${server.address().port}/?file=${file}`);
-  const pane = page.getByTestId('one');
+export async function runDrawScenario({ page, pane, errors }) {
   const tool = name => pane.getByRole('group', { name: 'Drawing tools' }).getByRole('button', { name, exact: true });
   const camera = () => page.evaluate(() => window.cadHarness.a.controller.readState().camera);
   // What the static ink canvas holds: pixel counts by kind, and the ink's left edge in CSS pixels.
@@ -67,13 +33,20 @@ export async function runDrawScenario(t, { file, entries, assets }) {
   const drag = async (from, to) => { await page.mouse.move(...from); await page.mouse.down(); await page.mouse.move(...to, { steps: 8 }); await page.mouse.up(); };
 
   const draw = pane.getByRole('button', { name: 'Draw', exact: true });
-  await page.waitForFunction(() => Object.keys(window.cadHarness.state.renderers || {}).length > 0);
+  await pane.locator('[aria-busy="false"] > div > canvas').first().waitFor();
+  await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
 
-  assert.equal(await pane.getByRole('button', { name: 'Animate', exact: true }).count(), 0, 'no routines, no Animate tool');
   await draw.click();
   await pane.locator('[data-cad-drawing-overlay] canvas.excalidraw__canvas.interactive').waitFor();
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [data-drawing-ready]'));
   assert.equal(await tool('Pen').getAttribute('aria-pressed'), 'true', 'Draw opens on the pen');
+  // The sub-toolbar reads left to right in the order a sketch is made: the marks,
+  // the colour they are made in, the two ways of moving around what was drawn,
+  // then undo/redo and Clear.
+  assert.deepEqual(await pane.getByRole('group', { name: 'Drawing tools' }).getByRole('button')
+    .evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
+  ['Pen', 'Line', 'Arrow', 'Rectangle', 'Ellipse', 'Text', 'Fill area', 'Eraser',
+    'Color', 'Select and move drawings', 'Pan view', 'Undo', 'Redo', 'Clear drawing']);
   assert.equal(await pane.locator('.layer-ui__wrapper').isVisible(), false, 'the SDK has no controls of its own here');
   const box = await pane.locator('[data-cad-drawing-overlay]').boundingBox();
   const at = (x, y) => [box.x + x, box.y + y];

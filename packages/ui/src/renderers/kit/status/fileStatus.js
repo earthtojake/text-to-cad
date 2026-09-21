@@ -1,5 +1,3 @@
-import { artifactWarningItems } from "./artifactWarnings.js";
-
 function status(label, title, tone = "neutral", busy = false) {
   return { label, title, tone, busy };
 }
@@ -136,20 +134,14 @@ export function resolveFileStatus({
     );
   }
 
+  // A warning the model survives rides the badge, and the badge says what the
+  // warning IS: its own summary, which is also its `data-file-status` hook.
   if (error?.severity === "warning") {
-    // An alert carrying backend warnings summarizes THEM: the badge's tooltip is
-    // the only place their headings fit before the dialog is opened. The label
-    // stays the same string whatever the count, because it is also the badge's
-    // `data-file-status` hook.
-    const warnings = artifactWarningItems(error);
-    if (warnings.length > 0) {
-      return status(
-        "Model warning",
-        warnings.map((warning) => warning.heading || warning.message).join(" "),
-        "warning"
-      );
-    }
-    return status("Model warning", text(error.tooltip || error.message) || "Some model settings could not be applied. The model can still be viewed.", "warning");
+    return status(
+      text(error.summary) || text(error.title) || "Warning",
+      text(error.tooltip || error.message) || "Something about this file could not be applied. The model can still be viewed.",
+      "warning"
+    );
   }
 
   if (qualityStatus?.state === "limited" || qualityStatus?.state === "error") {

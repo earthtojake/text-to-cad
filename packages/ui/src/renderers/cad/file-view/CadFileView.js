@@ -40,7 +40,6 @@ import { resolveDesktopPanelWidth } from "./fileViewState.js";
 import { useEditingPreview } from "../components/workbench/hooks/useEditingPreview.js";
 import { useViewportQualityStatus } from "../components/workbench/hooks/useViewportQualityStatus.js";
 import { previewGeometryChanged } from "../workbench/editingPreview.js";
-import { buildArtifactWarningAlert } from "../../kit/status/artifactWarnings.js";
 import { resolveFileStatus } from "../../kit/status/fileStatus.js";
 import { useFileActivityReport } from "../../kit/status/useFileActivityReport.js";
 import MeasurePanel from "../components/workbench/MeasurePanel.jsx";
@@ -90,7 +89,6 @@ import {
   PARAMETER_SOURCE
 } from "@hardcore/core/lib/renderCapabilities.js";
 import {
-  buildViewerAnnotationAlert,
   buildViewerMeshAlert,
   buildViewerEditAlert
 } from "../workbench/viewerAlerts.js";
@@ -1225,14 +1223,6 @@ function CadFileViewSurface({
         selectedMeshData) completedViewFile.current = selectedKey;
   }, [effectiveViewerLoading, selectedMeshPartial, presentationPending, selectedMeshData, selectedKey]);
 
-  // What the backend says about the document's NEIGHBOURS (a retired render
-  // module still sitting beside it, say). The geometry is correct, so this is
-  // the LAST alert considered below: any real failure outranks it, and it never
-  // blocks the viewport -- it rides the file-status badge and its dialog.
-  const artifactWarningAlert = useMemo(
-    () => buildArtifactWarningAlert(fileKey(selectedEntry), selectedArtifact.warnings),
-    [selectedEntry, selectedArtifact.warnings]
-  );
   const viewerAlert = useMemo(() => {
     const editFailure = buildViewerEditAlert(editingPreview.state, currentPreviewVisible, Boolean(selectedMeshData && !selectedMeshPartial));
     if (editFailure) return editFailure;
@@ -1263,9 +1253,8 @@ function CadFileViewSurface({
         ? null : selectedArtifact,
       { partial: selectedMeshPartial }
     );
-    return meshAlert || viewerRuntimeAlert || artifactWarningAlert;
+    return meshAlert || viewerRuntimeAlert;
   }, [
-    artifactWarningAlert,
     editingPreview.state,
     currentPreviewVisible,
     catalogError,
@@ -1350,9 +1339,6 @@ function CadFileViewSurface({
 
   const handleViewerZoomPercentChange = useCallback((nextZoomPercent) => {
     viewerRef.current?.applyZoomPercent?.(nextZoomPercent);
-  }, []);
-  const handleViewerZoomReset = useCallback(() => {
-    viewerRef.current?.resetView?.();
   }, []);
 
   // Nothing toggles one panel on its own any more: the panel column has one
@@ -2430,14 +2416,15 @@ function CadFileViewSurface({
     preparing: presentationPending && !effectiveViewerLoading && !selectedMeshPartial,
   });
   // A routine that failed to load has no Animate tool to say so on: it is reported
-  // with the file's other unavailable settings, beside the filename.
-  const annotationAlert = buildViewerAnnotationAlert(selectedEntry) || (selectedAnimationError ? {
+  // beside the filename instead.
+  const annotationAlert = selectedAnimationError ? {
     severity: "warning", blocking: false,
+    summary: "Animation unavailable",
     title: "Animation unavailable",
     tooltip: "The shape is visible, but its animation could not be loaded.",
     message: "The geometry is visible, but its animation could not be loaded, so the Animate tool is not offered.",
     details: `File: ${fileKey(selectedEntry)}\n${selectedAnimationError}`,
-  } : null);
+  } : null;
   const fileStatus = resolveFileStatus({
     hasFile: Boolean(selectedEntry || explicitFileParam),
     error: viewerAlert || (catalogError && !selectedMeshData ? catalogError : null) || (missingFileRef
@@ -3649,11 +3636,16 @@ function CadFileViewSurface({
     setViewerContextMenu(null);
   }, [selectedKey]);
 
-  // Right-clicking empty space is a VIEWPORT gesture, so the menu it opens belongs to
-  // every format that draws something — camera actions are not a STEP feature. Only the
-  // assembly-tree entries below are capability-gated; a format with no parts simply gets
-  // the camera section. This also un-strands `zoomToFitSelection`'s whole-model fallback,
-  // which was unreachable while this handler bailed on anything but STEP.
+  // The viewport's menu belongs to Select. Leaving the tool takes an open one
+  // with it, so no item can outlive the tool it was offered under.
+  useEffect(() => {
+    if (tabToolMode !== TAB_TOOL_MODE.REFERENCES) setViewerContextMenu(null);
+  }, [tabToolMode]);
+
+  // Right-clicking empty space asks about the model as a whole: reveal what is
+  // hidden, open or close the tree. Framing is not here — it is in the zoom menu
+  // — so when none of these can do anything the press opens nothing at all
+  // rather than a menu of greyed-out words.
   const openGlobalViewerContextMenu = useCallback(({ clientX = 0, clientY = 0 } = {}) => {
     if (!selectedViewportContent) {
       setViewerContextMenu(null);
@@ -3669,22 +3661,26 @@ function CadFileViewSurface({
           actionNodeIds: []
         })
       : { showExpandCollapse: false, collapsedExpandableTreeNodeIds: [] };
+    const showShowAll = hasPartsMenu && hiddenPartIds.length > 0;
+    const expandAllDisabled = expansionState.collapsedExpandableTreeNodeIds.length < 1;
+    const collapseAllDisabled = expandedStepTreeNodeIds.length < 1;
+    const showExpandCollapse = hasPartsMenu && (expansionState.showExpandCollapse || expandedStepTreeNodeIds.length > 0);
+    if (!showShowAll && (!showExpandCollapse || (expandAllDisabled && collapseAllDisabled))) {
+      setViewerContextMenu(null);
+      return;
+    }
     setViewerContextMenu({
       x: Number(clientX) || 0,
       y: Number(clientY) || 0,
       global: true,
       label: "Viewer",
       hidden: true,
-      showShowAll: hasPartsMenu && hiddenPartIds.length > 0,
-      showCameraActions: true,
-      // Nothing narrower is selected here, so "Zoom To Fit" means the whole model.
-      fitWholeModel: true,
-      showExpandCollapse: hasPartsMenu &&
-        (expansionState.showExpandCollapse || expandedStepTreeNodeIds.length > 0),
+      showShowAll,
+      showExpandCollapse,
       collapsedExpandableTreeNodeIds: expansionState.collapsedExpandableTreeNodeIds,
       expandedExpandableTreeNodeIds: expandedStepTreeNodeIds,
-      expandAllDisabled: expansionState.collapsedExpandableTreeNodeIds.length < 1,
-      collapseAllDisabled: expandedStepTreeNodeIds.length < 1
+      expandAllDisabled,
+      collapseAllDisabled
     });
   }, [
     displayStepTreeRoot,
@@ -3696,6 +3692,105 @@ function CadFileViewSurface({
     selectedViewportContent
   ]);
 
+  /**
+   * The part menu for ONE node of the model, as a descriptor
+   * (`AssemblyPartMenuItems` renders it). The viewport's secondary tap and the
+   * Features tree's row menu both ask for it, so the two are the same menu over
+   * the same node by construction rather than by two lists kept in step.
+   *
+   * `renderPartId` is the leaf the pointer actually landed on, when the menu was
+   * asked for in the viewport; a tree row is its own node.
+   */
+  const assemblyNodeMenu = useCallback((nodeId, renderPartId = "") => {
+    const normalizedNodeId = String(nodeId || "").trim();
+    if (!normalizedNodeId) {
+      return null;
+    }
+    const pickedPartId = String(renderPartId || "").trim() || normalizedNodeId;
+    const node = assemblyPartMap.get(normalizedNodeId) || findAssemblyNode(assemblyRoot, normalizedNodeId) || null;
+    const label = String(
+      node?.displayName ||
+      node?.name ||
+      node?.label ||
+      normalizedNodeId
+    ).trim();
+    const leafIds = renderPartIdsForAssemblySelection(normalizedNodeId, pickedPartId);
+    const hidden = leafIds.length > 0 && leafIds.every((id) => hiddenPartIds.includes(id));
+    const focused = focusedAssemblyNodeIds.includes(normalizedNodeId);
+    const selected = selectedPartIdsRef.current.includes(normalizedNodeId);
+    const actionNodeIds = uniqueStringList([
+      ...selectedPartIdsRef.current
+        .map((id) => String(id || "").trim())
+        .filter(Boolean),
+      normalizedNodeId
+    ]);
+    const expansionState = buildStepTreeExpansionMenuState({
+      root: displayStepTreeRoot,
+      isAssemblyView,
+      expandedTreeNodeIds: expandedStepTreeNodeIds,
+      loadableTreeNodeIds: loadableStepTreeTopologyNodeIds,
+      actionNodeIds
+    });
+    const contextCopyReference = stepTreeCopyReferenceMap.get(normalizedNodeId) ||
+      copyReferenceForStepTreeNodeSelection(node, normalizedNodeId, "assembly-part") ||
+      copyReferenceForAssemblyPartSelection(node, normalizedNodeId) ||
+      copyReferenceForRawSelectorSelection(normalizedNodeId, "assembly-part");
+    const { lines } = copyPayloadWithSelectedIdFallback(buildSelectionCopyPayload({
+      references: contextCopyReference ? [contextCopyReference] : [],
+      parts: [],
+      entry: selectedEntry
+    }), {
+      selectedPartIds: actionNodeIds,
+      copyReferenceMap: stepTreeCopyReferenceMap
+    });
+    return {
+      nodeId: normalizedNodeId,
+      renderPartId: pickedPartId,
+      label,
+      selected,
+      hidden,
+      focused,
+      actionNodeIds,
+      actionCount: actionNodeIds.length || 1,
+      copyText: lines[0] || "",
+      selectDisabled: !selected && hidden,
+      showIsolate: isAssemblyView,
+      isolateDisabled: false,
+      showExitAllIsolate: focusedAssemblyNodeIds.length > 1,
+      exitAllIsolateDisabled: focusedAssemblyNodeIds.length < 2,
+      showHideOther: true,
+      hideOtherDisabled: hidden,
+      showVisibility: !focused,
+      visibilityDisabled: focused,
+      showHideAll: false,
+      hideAllDisabled: false,
+      hideAllLabel: "Show all",
+      showExpandCollapse: expansionState.showExpandCollapse,
+      collapsedActionNodeIds: expansionState.collapsedActionNodeIds,
+      expandedActionNodeIds: expansionState.expandedActionNodeIds,
+      collapsedExpandableTreeNodeIds: expansionState.collapsedExpandableTreeNodeIds,
+      expandedExpandableTreeNodeIds: expansionState.expandedExpandableTreeNodeIds,
+      expandSelectedDisabled: expansionState.collapsedActionNodeIds.length < 1,
+      collapseSelectedDisabled: expansionState.expandedActionNodeIds.length < 1,
+      expandAllDisabled: expansionState.collapsedExpandableTreeNodeIds.length < 1,
+      collapseAllDisabled: expansionState.expandedExpandableTreeNodeIds.length < 1
+    };
+  }, [
+    assemblyPartMap,
+    assemblyRoot,
+    displayStepTreeRoot,
+    expandedStepTreeNodeIds,
+    focusedAssemblyNodeIds,
+    hiddenPartIds,
+    isAssemblyView,
+    loadableStepTreeTopologyNodeIds,
+    renderPartIdsForAssemblySelection,
+    selectedEntry,
+    stepTreeCopyReferenceMap
+  ]);
+
+  // Only ever reached under Select (`handleModelReferenceContext` is handed to the
+  // viewport by that tool alone), so nothing it offers can contradict the tool.
   const handleModelReferenceContext = useCallback((referenceId, { clientX = 0, clientY = 0 } = {}) => {
     if (stepInteractionBlocked || stepModuleTreeSelectionDisabled) {
       setViewerContextMenu(null);
@@ -3722,23 +3817,6 @@ function CadFileViewSurface({
           copyReferenceForRawSelectorSelection(id, "topology")
         ))
         .filter(Boolean);
-      const fitReferenceIds = actionReferenceIds;
-      const selectedFitPartIds = uniqueStringList(
-        selectedPartIdsRef.current
-          .map((id) => String(id || "").trim())
-          .filter(Boolean)
-          .flatMap((id) => renderPartIdsForAssemblySelection(id, id))
-      );
-      const fitPartIds = uniqueStringList([
-        ...selectedFitPartIds,
-        ...fitReferenceIds
-          .map((id) => referencePartId(
-            effectiveActiveReferenceMap.get(id) ||
-            (id === pickedPartId ? topologyReference : null)
-          ))
-          .filter(Boolean)
-      ]);
-      const fitAvailable = fitReferenceIds.length > 0 || fitPartIds.length > 0;
       const { lines } = copyPayloadWithSelectedIdFallback(buildSelectionCopyPayload({
         references: referencesForCopy.length ? referencesForCopy : [topologyReference],
         parts: [],
@@ -3761,11 +3839,7 @@ function CadFileViewSurface({
         showIsolate: false,
         showHideOther: false,
         showVisibility: false,
-        showHideAll: false,
-        showCameraActions: true,
-        zoomToFitDisabled: !fitAvailable,
-        fitReferenceIds,
-        fitPartIds
+        showHideAll: false
       });
       return;
     }
@@ -3773,113 +3847,20 @@ function CadFileViewSurface({
       openGlobalViewerContextMenu({ clientX, clientY });
       return;
     }
-    const nodeId = resolvePickedAssemblyPartId(pickedPartId);
-    if (!nodeId) {
+    const menu = assemblyNodeMenu(resolvePickedAssemblyPartId(pickedPartId), pickedPartId);
+    if (!menu) {
       openGlobalViewerContextMenu({ clientX, clientY });
       return;
     }
-    const node = assemblyPartMap.get(nodeId) || findAssemblyNode(assemblyRoot, nodeId) || null;
-    const label = String(
-      node?.displayName ||
-      node?.name ||
-      node?.label ||
-      nodeId
-    ).trim();
-    const leafIds = renderPartIdsForAssemblySelection(nodeId, pickedPartId);
-    const hidden = leafIds.length > 0 && leafIds.every((id) => hiddenPartIds.includes(id));
-    const focused = focusedAssemblyNodeIds.includes(nodeId);
-    const selected = selectedPartIdsRef.current.includes(nodeId);
-    const actionNodeIds = uniqueStringList([
-      ...selectedPartIdsRef.current
-        .map((id) => String(id || "").trim())
-        .filter(Boolean),
-      nodeId
-    ]);
-    const fitReferenceIds = uniqueStringList(
-      selectedReferenceIdsRef.current
-        .map((id) => String(id || "").trim())
-        .filter(Boolean)
-    );
-    const fitPartIds = uniqueStringList([
-      ...actionNodeIds.flatMap((id) => renderPartIdsForAssemblySelection(
-        id,
-        id === nodeId ? pickedPartId : id
-      ))
-    ]);
-    const fitAvailable = fitReferenceIds.length > 0 || fitPartIds.length > 0;
-    const expansionState = buildStepTreeExpansionMenuState({
-      root: displayStepTreeRoot,
-      isAssemblyView,
-      expandedTreeNodeIds: expandedStepTreeNodeIds,
-      loadableTreeNodeIds: loadableStepTreeTopologyNodeIds,
-      actionNodeIds
-    });
-    const contextCopyReference = stepTreeCopyReferenceMap.get(nodeId) ||
-      copyReferenceForStepTreeNodeSelection(node, nodeId, "assembly-part") ||
-      copyReferenceForAssemblyPartSelection(node, nodeId) ||
-      copyReferenceForRawSelectorSelection(nodeId, "assembly-part");
-    const { lines } = copyPayloadWithSelectedIdFallback(buildSelectionCopyPayload({
-      references: contextCopyReference ? [contextCopyReference] : [],
-      parts: [],
-      entry: selectedEntry
-    }), {
-      selectedPartIds: actionNodeIds,
-      copyReferenceMap: stepTreeCopyReferenceMap
-    });
-    setViewerContextMenu({
-      x: Number(clientX) || 0,
-      y: Number(clientY) || 0,
-      nodeId,
-      renderPartId: pickedPartId,
-      label,
-      selected,
-      hidden,
-      focused,
-      actionNodeIds,
-      actionCount: actionNodeIds.length || 1,
-      copyText: lines[0] || "",
-      selectDisabled: !selected && hidden,
-      showIsolate: true,
-      isolateDisabled: false,
-      showExitAllIsolate: focusedAssemblyNodeIds.length > 1,
-      exitAllIsolateDisabled: focusedAssemblyNodeIds.length < 2,
-      showHideOther: true,
-      hideOtherDisabled: hidden,
-      showVisibility: !focused,
-      visibilityDisabled: focused,
-      showHideAll: false,
-      hideAllDisabled: false,
-      hideAllLabel: "Show all",
-      showCameraActions: true,
-      zoomToFitDisabled: !fitAvailable,
-      fitPartIds,
-      fitReferenceIds,
-      showExpandCollapse: expansionState.showExpandCollapse,
-      collapsedActionNodeIds: expansionState.collapsedActionNodeIds,
-      expandedActionNodeIds: expansionState.expandedActionNodeIds,
-      collapsedExpandableTreeNodeIds: expansionState.collapsedExpandableTreeNodeIds,
-      expandedExpandableTreeNodeIds: expansionState.expandedExpandableTreeNodeIds,
-      expandSelectedDisabled: expansionState.collapsedActionNodeIds.length < 1,
-      collapseSelectedDisabled: expansionState.expandedActionNodeIds.length < 1,
-      expandAllDisabled: expansionState.collapsedExpandableTreeNodeIds.length < 1,
-      collapseAllDisabled: expansionState.expandedExpandableTreeNodeIds.length < 1
-    });
+    setViewerContextMenu({ x: Number(clientX) || 0, y: Number(clientY) || 0, ...menu });
   }, [
-    assemblyPartMap,
-    assemblyRoot,
-    displayStepTreeRoot,
-    focusedAssemblyNodeIds,
+    assemblyNodeMenu,
     effectiveActiveReferenceMap,
-    hiddenPartIds,
-    isAssemblyView,
     isViewerTopologyReference,
-    loadableStepTreeTopologyNodeIds,
-    renderPartIdsForAssemblySelection,
     openGlobalViewerContextMenu,
     resolvePickedAssemblyPartId,
     selectedEntry,
     stepTreeCopyReferenceMap,
-    expandedStepTreeNodeIds,
     stepInteractionBlocked,
     stepModuleTreeSelectionDisabled,
     viewerInAssemblyMode
@@ -4117,7 +4098,7 @@ function CadFileViewSurface({
     handleShowAllHiddenParts
   ]);
 
-  const resetZoomViewerContextMenu = useCallback(() => {
+  const handleResetZoom = useCallback(() => {
     if (!viewerRef.current?.resetZoom?.()) {
       setCopyStatus("CAD Viewer camera not ready");
     }
@@ -4175,6 +4156,56 @@ function CadFileViewSurface({
     }
   }, [toggleStepTreeNode]);
 
+  const addPartMenuReferenceToPrompt = useCallback((menu) => {
+    const copyText = String(menu?.copyText || "")
+      .split("\n")
+      .map((line) => canonicalCadRefCopyText(line))
+      .filter(Boolean)
+      .join("\n");
+    if (!copyText) {
+      setCopyStatus("No selector ref is available for this node");
+      return;
+    }
+    addReferenceText(copyText);
+  }, [addReferenceText]);
+
+  /**
+   * The actions behind the one part menu, wherever it was opened: the viewport
+   * under Select, and a Features tree row under any tool. A tree row's menu can
+   * therefore ask for something the active tool cannot show, so every action
+   * lands in Select first — exactly what clicking a tree row already does.
+   */
+  const partMenuActions = useMemo(() => Object.fromEntries(Object.entries({
+    onAddToPrompt: addPartMenuReferenceToPrompt,
+    onCopyReference: copyViewerContextMenuReference,
+    onSelect: selectViewerContextMenuNode,
+    onIsolate: focusViewerContextMenuNode,
+    onExitAllIsolate: handleExitIsolate,
+    onHideOther: hideOtherViewerContextMenuNode,
+    onHideAll: hideAllViewerContextMenuNodes,
+    onHide: hideViewerContextMenuNode,
+    onReveal: revealViewerContextMenuNode,
+    onExpandSelected: expandSelectedViewerContextMenuNodes,
+    onCollapseSelected: collapseSelectedViewerContextMenuNodes,
+    onExpandAll: expandAllViewerContextMenuNodes,
+    onCollapseAll: collapseAllViewerContextMenuNodes
+  }).map(([name, action]) => [name, (menu) => { ensureSelectTool(); return action(menu); }])), [
+    addPartMenuReferenceToPrompt,
+    copyViewerContextMenuReference,
+    selectViewerContextMenuNode,
+    focusViewerContextMenuNode,
+    handleExitIsolate,
+    hideOtherViewerContextMenuNode,
+    hideAllViewerContextMenuNodes,
+    hideViewerContextMenuNode,
+    revealViewerContextMenuNode,
+    expandSelectedViewerContextMenuNodes,
+    collapseSelectedViewerContextMenuNodes,
+    expandAllViewerContextMenuNodes,
+    collapseAllViewerContextMenuNodes,
+    ensureSelectTool
+  ]);
+
   const handleSelectEntry = useCallback((key) => {
     const next = entryMap.get(key);
     onOpenFile?.(next ? cadFileParamForEntry(next) : key);
@@ -4216,26 +4247,15 @@ function CadFileViewSurface({
 
   const handleDisplayReset = viewSettingsStore.reset;
 
-  // Restore authored geometry in one user action. Stop every producer first:
-  // a playback frame must not undo the reset later.
-  // Display groups (including Custom overrides and projection) stay untouched.
-  const handleModelReset = useCallback(() => {
-    resetStepMotion();
-    setHiddenPartIds([]);
-    setIsolatedAssemblyNodeIds([]);
-    viewSettingsStore.resetModelTools();
-    handleViewerZoomReset();
-  }, [resetStepMotion, viewSettingsStore, handleViewerZoomReset]);
-
   const zoomSelectionPartIds = inspectionHighlight ? inspectionHighlight.partIds || [] : viewerSelectedPartIds;
   const zoomSelectionReferenceIds = inspectionHighlight ? inspectionHighlight.faceIds || [] : selectedReferenceIds;
   const zoomHeader = <ZoomControl zoomPercent={viewerZoomPercent}
     disabled={viewerLoading || stepInteractionBlocked || !selectedViewportContent}
-    onZoomPercentChange={handleViewerZoomPercentChange} onZoomReset={handleViewerZoomReset}
+    onZoomPercentChange={handleViewerZoomPercentChange}
     onZoomFit={() => zoomToFitViewerContextMenu({ fitWholeModel: true })}
     selectionAvailable={Boolean(zoomSelectionPartIds.length || zoomSelectionReferenceIds.length)}
     onZoomSelection={() => zoomToFitViewerContextMenu({ fitPartIds: zoomSelectionPartIds, fitReferenceIds: zoomSelectionReferenceIds })}
-    onModelReset={handleModelReset} />;
+    onResetZoom={handleResetZoom} />;
 
   useCadWorkspaceShortcuts({
     viewerElement,
@@ -4357,8 +4377,11 @@ function CadFileViewSurface({
       setViewerPerspective(scoped);
       handlePerspectiveChange(scoped);
     },
+    // What the zoom header's "Reset Zoom" does: frame the model again, without
+    // turning the camera. The name is the host protocol's ("cad-reset-camera"),
+    // older than the menu item it now shares its behaviour with.
     resetCamera() {
-      if (!viewerRef.current?.resetView?.()) throw new Error('The viewer camera is unavailable.');
+      if (!viewerRef.current?.resetZoom?.()) throw new Error('The viewer camera is unavailable.');
     },
     setDisplaySettings(patch) {
       viewSettingsStore.patch(patch);
@@ -4645,27 +4668,14 @@ function CadFileViewSurface({
                 handleModelHoverChange={handleModelHoverChange}
                 handleModelReferenceActivate={handleModelReferenceActivate}
                 handleModelReferenceDoubleActivate={handleModelReferenceDoubleActivate}
-                handleModelReferenceContext={handleModelReferenceContext}
+                handleModelReferenceContext={selectionToolActive ? handleModelReferenceContext : null}
                 onMeasurePick={handleMeasurePick}
                 onMeasureHoverPoint={handleMeasureHoverPoint}
                 activeMeasurementId={inspectionHighlight?.measurement?.id || activeMeasureId}
                 measureState={inspectionHighlight?.measurement ? { measurements: [inspectionHighlight.measurement] } : measureRulerState}
                 viewerContextMenu={viewerContextMenu}
                 onViewerContextMenuClose={closeViewerContextMenu}
-                onViewerContextMenuCopyReference={copyViewerContextMenuReference}
-                onViewerContextMenuSelect={selectViewerContextMenuNode}
-                onViewerContextMenuFocus={focusViewerContextMenuNode}
-                onViewerContextMenuExitAllIsolate={handleExitIsolate}
-                onViewerContextMenuHideOther={hideOtherViewerContextMenuNode}
-                onViewerContextMenuHideAll={hideAllViewerContextMenuNodes}
-                onViewerContextMenuHide={hideViewerContextMenuNode}
-                onViewerContextMenuReveal={revealViewerContextMenuNode}
-                onViewerContextMenuResetZoom={resetZoomViewerContextMenu}
-                onViewerContextMenuZoomToFit={zoomToFitViewerContextMenu}
-                onViewerContextMenuExpandSelected={expandSelectedViewerContextMenuNodes}
-                onViewerContextMenuCollapseSelected={collapseSelectedViewerContextMenuNodes}
-                onViewerContextMenuExpandAll={expandAllViewerContextMenuNodes}
-                onViewerContextMenuCollapseAll={collapseAllViewerContextMenuNodes}
+                viewerContextMenuActions={partMenuActions}
                 handleViewerAlertChange={handleViewerAlertChange}
                 handleStepModuleTransformDetectedChange={handleStepModuleTransformDetectedChange}
                 selectionCount={selectionCount}
@@ -4810,6 +4820,8 @@ function CadFileViewSurface({
                     ? "Selection is unavailable because the STEP update failed."
                     : "STEP update in progress. Please wait.")
                   : stepModuleTreeSelectionDisabledReason}
+                menuForNode={assemblyNodeMenu}
+                partMenuActions={partMenuActions}
                 onTogglePartVisibility={togglePartVisibility}
                 hideOtherSelectedParts={handleHideOtherSelectedParts}
                 hideAllParts={handleHideAllParts}

@@ -11,7 +11,6 @@ import FullscreenToolbar from "../tools/fullscreen/FullscreenToolbar.jsx";
 import { ViewportAnimationBar } from "../tools/playbar/ViewportAnimationBar.js";
 import ShellViewport from "./ShellViewport.jsx";
 import ViewportBottomAction, { drawingCaptureAction } from "./ViewportBottomAction.jsx";
-import ViewportContextMenu from "./ViewportContextMenu.jsx";
 
 const TOOLBAR_POSITION = Object.freeze({ top: "14px", right: "14px" });
 // The host's panel column sizes the Inspector; this is only the sheet's nominal width.
@@ -30,7 +29,9 @@ const INSPECTOR_WIDTH = 365;
  *   bottomAction?: { label: string, title?: string, disabled?: boolean, onInvoke(): void } | null,
  *   sceneRevision?: number, className?: string,
  *   viewportOverlay?: import("react").ReactNode | ((viewport: { runtimeRef: object, hostRef: object, viewerReadyTick: number }) => import("react").ReactNode) }} props
- *   `tools`: left to right, from `shell.tools`. `inspector.tabs`: tab descriptors
+ *   `tools`: left to right, from `shell.tools`; an EMPTY list draws no strip at all,
+ *   which is what a file whose viewport only orbits, pans and zooms hands over.
+ *   `inspector.tabs`: tab descriptors
  *   (`{ id, title, content }`), usually ending with `shell.displayTab`. `bottomAction`
  *   replaces Draw's (copy the view with its ink) while the renderer's own tool is active.
  *   `viewportOverlay`: the renderer's own layer over the canvas; as a function it is given
@@ -105,8 +106,6 @@ export default function RendererShell({ shell, tools, inspector, bottomAction = 
                     onPresentationChange={frame.handlePresentationChange}
                     onViewerAlertChange={frame.setRuntimeAlert}
                   >{viewportOverlay}</ShellViewport>
-                  <ViewportContextMenu surface={frame.hostElement} disabled={previewMode || !hasContent}
-                    onResetZoom={frame.resetZoom} onZoomToFit={frame.zoomToFit} />
                   {!previewMode ? <BlockingViewerAlert alert={blockingAlert} onReload={view.reload} /> : null}
                   {!previewMode && action ? <ViewportBottomAction composer={frame.composer} {...action} /> : null}
                 </div>
@@ -118,13 +117,16 @@ export default function RendererShell({ shell, tools, inspector, bottomAction = 
                 disabled={viewerLoading || !scene}
                 onExit={view.onExitFullscreen}/>}
 
-              {frame.animateToolActive && (
+              {/* Routines, so the playbar — whatever tool is in hand, and with the file at rest
+                  until somebody presses play. Its appearance alone changes nothing on screen. */}
+              {!previewMode && frame.animationAvailable && (
                 <ViewportAnimationBar key={frame.modelKey} runtime={frame.animation} avoidViewControl
                   className="pointer-events-auto"
                   disabled={viewerLoading || !scene}/>
               )}
 
-              {previewMode ? null : <FloatingToolBar tools={tools} position={TOOLBAR_POSITION} />}
+              {/* A renderer with no tools has no strip: the viewport is the camera's alone. */}
+              {previewMode || tools.length === 0 ? null : <FloatingToolBar tools={tools} position={TOOLBAR_POSITION} />}
 
               <ViewUpdateStatus status={frame.viewUpdate.status} onRetry={frame.viewUpdate.retry} className="absolute bottom-3 left-3 z-30" />
               <ViewerLoadingOverlay

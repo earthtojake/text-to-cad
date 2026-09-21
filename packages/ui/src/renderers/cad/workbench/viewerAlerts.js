@@ -7,18 +7,6 @@ import { failedStepArtifact } from "./stepArtifactStatus.js";
 import { fileKey } from "./entryPaths.js";
 import { failureAlert, isViewerServiceFailure, noGeometryAlert } from "../../kit/status/loadAlerts.js";
 
-export function buildViewerAnnotationAlert(entry) {
-  if (!entry?.annotationError || entry.editingPreview) return null;
-  return {
-    severity: "warning", blocking: false,
-    title: "Some model settings are unavailable",
-    tooltip: "The shape is visible, but some saved model settings could not be read. Materials, animation, or joint controls may be unavailable.",
-    message: "The geometry is visible, but its saved settings could not be read. Kinematics or appearance settings may be missing.",
-    recovery: "Rebuild the model with the current cadgen version, then reload.",
-    details: `File: ${fileKey(entry)}\n${entry.annotationError}`,
-  };
-}
-
 export function buildViewerMeshAlert(entry, hasMeshData, loadError, artifact = null, { partial = false } = {}) {
   const fileRef = fileKey(entry);
   if (!fileRef) {

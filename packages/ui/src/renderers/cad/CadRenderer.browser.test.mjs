@@ -128,6 +128,13 @@ async function open() {
     rows: () => pane.getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))
       .filter(label => label?.startsWith('Select ') || label?.startsWith('Expand ') || label?.startsWith('Collapse '))),
     frame: () => frame(pane),
+    // What the pointer looks like over the model. Read from the INTERACTIVE
+    // canvas: a tool sets the cursor on the viewport host and the canvas
+    // inherits it, which three's OrbitControls used to break by pinning
+    // `cursor: auto` on the canvas inline (`kit/viewport/useViewerRuntime.js`).
+    cursor: () => page.evaluate(() => getComputedStyle(document.querySelector('[data-testid="one"] [aria-busy] > div > canvas')).cursor),
+    waitCursor: value => page.waitForFunction(wanted => getComputedStyle(
+      document.querySelector('[data-testid="one"] [aria-busy] > div > canvas')).cursor === wanted, value),
   };
 }
 
@@ -154,10 +161,11 @@ test('Select picks parts and faces, a selection lives only under Select, and the
   // Hover lights the part under the pointer, and lets go when it leaves.
   const still = await view.frame();
   await page.mouse.move(...at([6, 6, 5]));
-  await page.waitForFunction(() => [...document.querySelectorAll('[data-testid="one"] [data-cad-surface] div')].some(node => node.style.cursor === 'pointer'));
+  // Over a part the pointer says it can be picked; over the backdrop it does not.
+  await view.waitCursor('pointer');
   await frameWhen(view, shot => differing(still, shot) > 2000, 'lit the hovered part');
   await page.mouse.move(view.box.x + 20, view.box.y + view.box.height - 20);
-  await page.waitForFunction(() => ![...document.querySelectorAll('[data-testid="one"] [data-cad-surface] div')].some(node => node.style.cursor === 'pointer'));
+  await view.waitCursor('auto');
   assert.equal(differing(still, await view.frame()), 0, 'and is exactly as it was once the pointer leaves');
 
   await page.mouse.click(...at([6, 6, 5]));
@@ -247,7 +255,12 @@ test('the Features tree searches as a second view: typing ranks matches and expa
   assert.deepEqual(errors, []);
 });
 
-test('hiding a part takes it off the screen, and the two viewport context menus offer what they can do', async () => {
+// What the one part menu offers, in order. The camera is not in it: framing lives
+// in the zoom menu, so no item of this menu can contradict the tool in hand.
+const PART_MENU = ['Add to prompt', 'Copy Reference', 'Select', 'Isolate', 'Hide others', 'Hide',
+  'Expand', 'Collapse', 'Expand all', 'Collapse all'];
+
+test('hiding a part takes it off the screen, and the viewport menus offer what they can do', async () => {
   const view = await open();
   const { page, pane, at, box, errors } = view;
   const opened = await view.frame();
@@ -269,14 +282,61 @@ test('hiding a part takes it off the screen, and the two viewport context menus 
 
   await page.mouse.click(...at([6, 6, 5]), { button: 'right' });
   await page.getByRole('menu').waitFor();
-  assert.deepEqual(await page.getByRole('menuitem').allTextContents(),
-    ['Add to prompt', 'Copy Reference', 'Select', 'Isolate', 'Hide others', 'Hide', 'Reset Zoom', 'Zoom To Fit', 'Expand', 'Collapse', 'Expand all', 'Collapse all'],
-    'the node menu: what can be done to the part under the pointer, then the camera, then the tree');
+  assert.deepEqual(await page.getByRole('menuitem').allTextContents(), PART_MENU,
+    'the node menu: what can be done to the part under the pointer, then the tree');
   await page.keyboard.press('Escape');
   await page.getByRole('menu').waitFor({ state: 'detached' });
+  // Empty space asks about the model as a whole. Nothing is hidden here, so all
+  // it can offer is the tree.
   await page.mouse.click(box.x + 30, box.y + box.height - 30, { button: 'right' });
   await page.getByRole('menu').waitFor();
-  assert.deepEqual(await page.getByRole('menuitem').allTextContents(), ['Reset Zoom', 'Zoom To Fit', 'Expand all', 'Collapse all']);
+  assert.deepEqual(await page.getByRole('menuitem').allTextContents(), ['Expand all', 'Collapse all']);
+  await page.keyboard.press('Escape');
+  await page.getByRole('menu').waitFor({ state: 'detached' });
+
+  // A tree row carries that same menu, item for item, and the tree's is available
+  // under any tool while the viewport's belongs to Select alone.
+  await pane.getByRole('button', { name: 'Select base', exact: true }).click({ button: 'right' });
+  await page.getByRole('menu').waitFor();
+  assert.deepEqual(await page.getByRole('menuitem').allTextContents(), PART_MENU);
+  await page.keyboard.press('Escape');
+  await page.getByRole('menu').waitFor({ state: 'detached' });
+  await away();
+  for (const tool of ['Measure', 'Pose', 'Animate', 'Draw']) {
+    await view.tool(tool).click();
+    await page.mouse.click(...at([6, 6, 5]), { button: 'right' });
+    await page.waitForTimeout(150);
+    assert.equal(await page.getByRole('menu').count(), 0, `${tool} opens no viewport menu over a part`);
+    await page.mouse.click(box.x + 30, box.y + box.height - 30, { button: 'right' });
+    await page.waitForTimeout(150);
+    assert.equal(await page.getByRole('menu').count(), 0, `${tool} opens no viewport menu over empty space`);
+    // The browser's own menu is still kept off the canvas, and a secondary drag still pans.
+    // (The viewer stops the event's propagation as it prevents it, so what it left
+    // behind is read from the event itself rather than from a later listener.)
+    assert.equal(await page.evaluate(() => {
+      const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+      document.querySelector('[data-testid="one"] [aria-busy] > div > canvas').dispatchEvent(event);
+      return event.defaultPrevented;
+    }), true, `${tool} still suppresses the native menu`);
+    // And a secondary DRAG is still a pan. (Not under Draw: that tool locks the
+    // view on purpose and the editor takes the drag, which its own test asserts.)
+    if (tool === 'Draw') continue;
+    const before = await page.evaluate(() => window.__cadCamera().target);
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down({ button: 'right' });
+    await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2 + 60, { steps: 8 });
+    await page.mouse.up({ button: 'right' });
+    await page.waitForFunction(target => window.__cadCamera().target.some((value, index) => Math.abs(value - target[index]) > 1e-3), before,
+      { timeout: 5000 });
+  }
+  // A tree-row action chosen under another tool lands in Select first, then acts —
+  // Isolate, which has no selection of its own to make and so cannot get there by itself.
+  assert.deepEqual(await view.tools(), ['Select:false', 'Measure:false', 'Draw:true', 'Pose:false', 'Animate:false']);
+  await pane.getByRole('button', { name: 'Select arm', exact: true }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Isolate', exact: true }).click();
+  await page.getByRole('menu').waitFor({ state: 'detached' });
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().isolatedPartIds.join() === 'o1.2');
+  assert.deepEqual(await view.tools(), ['Select:true', 'Measure:false', 'Draw:false', 'Pose:false', 'Animate:false']);
   await page.keyboard.press('Escape');
   assert.deepEqual(errors, []);
 });
@@ -493,6 +553,9 @@ test('Measure reads a distance between two picks; Draw lays ink over a STEP; and
   await page.getByRole('menuitemradio', { name: /^Any geometry/ }).click();
   await page.getByRole('menu').waitFor({ state: 'detached' });
   assert.equal(await view.tool('Measure').getAttribute('aria-pressed'), 'true', 'a second press opens the snap filter, it does not toggle the tool off');
+  // Measure says what the pointer does over the model: a crosshair, not Select's hand.
+  await page.mouse.move(...at([0, 0, 5]));
+  await view.waitCursor('crosshair');
   const measurements = pane.getByRole('region', { name: 'Measurements' });
   assert.equal(await measurements.count(), 0, 'no panel until something is measured');
   const measure = async (from, to) => {
