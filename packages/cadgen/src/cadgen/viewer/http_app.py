@@ -439,6 +439,8 @@ class CadApp:
                     response.send_json(200, preview_update(
                         self.backend.root_path, query.get("file") or "", after=query.get("after")
                     ))
+                elif pathname == "/__cad/drawing":
+                    self._handle_drawing(request, response, query)
                 elif pathname == "/__cad/store":
                     self._handle_store_asset(request, response, query)
                 elif pathname == "/__cad/asset":
@@ -596,6 +598,25 @@ class CadApp:
             response.send_json(404, {"error": "Not found"})
             return
         response.stream_file(str(payload), stat_result, content_type)
+
+    def _handle_drawing(self, request, response, query):
+        """A ``.dxf`` flattened to 2D primitives (``drawings.py`` owns both rules).
+
+        NOT in ``_UNCOUNTED_ROUTES``: that set is for polls and parked waits,
+        and this one does real work — up to a second of CPU on a large drawing
+        — that a development restart would throw away, exactly like a compile.
+
+        The payload is already JSON bytes from the store's ``drawing`` index,
+        so it goes out through ``send_bytes`` rather than being decoded and
+        re-encoded on the way past.
+        """
+        from .drawings import drawing_payload_response
+
+        status, body = drawing_payload_response(self.backend.root_path, query.get("file") or "")
+        if isinstance(body, bytes):
+            response.send_bytes(status, body, "application/json; charset=utf-8")
+            return
+        response.send_json(status, body)
 
     def _handle_asset(self, request, response, query):
         candidate = self.backend.asset_path_for_file_ref(query.get("file") or "")

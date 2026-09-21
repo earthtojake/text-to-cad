@@ -68,6 +68,7 @@ def _cmd_info(as_json: bool) -> int:
         "surface": "surface entries",
         "op": "op-memo entries",
         "mesh": "mesh entries",
+        "drawing": "drawing render payloads",
     }
     for kind, count in counts.items():
         print(f"index/{kind:<10} {count} {labels[kind]}")
