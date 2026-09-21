@@ -42,20 +42,6 @@ it('draws a single section as a single, selected tab', () => {
   expect(screen.getByRole('tabpanel', { name: 'Features' }).textContent).toBe('Assembly tree');
 });
 
-it('keeps header actions outside the tablist, including single-section inspectors', () => {
-  const { rerender } = render(<FileSheetTabbedSurface sections={[
-    { id: 'tree', title: 'Features', content: <p>Assembly tree</p> },
-    { id: 'display', title: 'Display', content: <p>View controls</p> },
-  ]} headerActions={<button>100%</button>} />);
-  const zoom = screen.getByRole('button', { name: '100%' });
-  expect(zoom.closest('[role="tablist"]')).toBeNull();
-  expect(zoom.closest('[data-file-sheet-header]')).toBeTruthy();
-  rerender(<FileSheetTabbedSurface sections={[
-    { id: 'tree', title: 'Features', content: <p>Assembly tree</p> },
-  ]} headerActions={<button>100%</button>} />);
-  expect(screen.getByRole('button', { name: '100%' }).closest('[role="tablist"]')).toBeNull();
-});
-
 it('uses native tab keyboard navigation', async () => {
   render(<Inspector />);
   const model = screen.getByRole('tab', { name: 'Features' });

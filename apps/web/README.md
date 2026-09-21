@@ -213,15 +213,17 @@ their viewport simply orbits, pans and zooms, and a secondary press opens
 nothing. A GLB with clips shows the playbar under the model always — it is a
 transport, not a tool, and the file opens at rest. A DXF is not a viewport at
 all: it is a straight 2D render on a canvas (drag to pan, wheel or pinch to zoom
-about the pointer, double-click to fit), and its file navbar carries Zoom out,
-Zoom in, Reset Zoom and Take snapshot. Buttons wrap inside the pill
+about the pointer, double-click to fit), and its file navbar carries Take
+snapshot and nothing else. Buttons wrap inside the pill
 when the Inspector or a narrow host reduces the scene width. Snapshot is a
 direct action beside the Inspector and file-tree toggles in the file navbar;
 the web prompt adapter copies the viewport image and references to the clipboard.
-The small muted percentage beside the Inspector tabs opens the framing menu:
-zoom steps, 100%, fit, selection fit and Reset Zoom, which frames the model again
-without turning the camera. Nothing in it touches the model, its motion or its
-display settings.
+There is no zoom control: no percentage beside the Inspector tabs, no menu behind
+one, no zoom toolbar. A STEP's viewport context menu ends in Zoom to fit and Zoom
+to selection (off without a selection), offered over a part, over the backdrop and
+on every Features tree row; on every other 3D file the view cube's centre, "Reset
+to default isometric view", frames the model again from the default direction.
+Nothing in either touches the model, its motion or its display settings.
 X/Y/Z labels remain visible outside the bottom-right axis endpoints.
 
 Fullscreen (`Maximize2`) sits beside appearance in the web header. The app owns

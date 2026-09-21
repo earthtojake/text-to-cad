@@ -77,10 +77,6 @@ function RobotSurface({ view, data }) {
   const selection = useLinkSelection({ scene, hidden: Boolean(view.fullscreen), requestRender });
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
-  const zoomSelection = useMemo(() => ({
-    available: selection.active,
-    bounds: () => scene?.selectionBounds({ linkName: selectionRef.current.selectedLinkName, componentIds: selectionRef.current.selectedComponentIds }) || null
-  }), [selection.active, scene]);
   const live = useMemo(() => ({
     declined: ROBOT_DECLINED_LIVE_COMMANDS,
     commands: { clearSelection: () => selectionRef.current.clear() },
@@ -101,7 +97,7 @@ function RobotSurface({ view, data }) {
     features: EDGELESS_VIEW_FEATURES, toolModes: ROBOT_TOOL_MODES, toolRestore: ROBOT_TOOL_RESTORE, scene,
     sceneScaleMode: VIEWER_SCENE_SCALE.URDF,
     load: { busy: (loaded.busy && !scene) || (Boolean(robot) && !scene), updating: loaded.busy && Boolean(scene), progress: loaded.progress, alert: loadAlert },
-    live, escape, rendererState, selection: zoomSelection
+    live, escape, rendererState
   });
   shellRef.current = shell;
   useDeclinedSelectReference(document, shell.setCopyStatus, ROBOT_DECLINED_LIVE_COMMANDS.select);

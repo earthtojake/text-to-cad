@@ -103,9 +103,6 @@ test("bounds follow the pose and the rest box does not; only the moved subtree i
   assert.ok(scene.bounds.max[2] > rest.max[2] + 0.5, "the arm stands up");
   assert.deepEqual(scene.restBounds, rest);
   assert.equal(scene.bounds, scene.bounds, "one box per pose, not one per read");
-  const tool = scene.selectionBounds({ linkName: "tool" });
-  assert.ok(tool.min[2] > 1.9, "a link's own box, where it is now");
-  assert.equal(scene.selectionBounds({ linkName: "camera" }), null, "a frame-only link occupies nothing");
 });
 
 test("the look: a description's colour, the viewer's surface colour without one, Color by part in the order parts always took", () => {

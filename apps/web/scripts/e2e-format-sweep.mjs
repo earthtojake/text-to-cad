@@ -16,7 +16,7 @@
 //                                               [--out <dir>]
 //
 // Asserts, per format: the viewport is not blank, no page errors, the whole viewport tool
-// cluster is present and usable, and the right-click viewport menu offers the camera
+// cluster is present and usable, and STEP's right-click viewport menu offers the framing
 // actions (with assembly-tree entries only where the `parts` capability is declared).
 //
 // Requires a viewer already serving <models-root>: run
@@ -43,8 +43,8 @@ function parseArgs(argv) {
 // One fixture per format family. Kept small on purpose: this runs on every shared-code
 // change, so it has to stay fast enough that people actually run it.
 //
-// `parts` is the capability that decides whether the viewport menu carries assembly-tree
-// entries; everything else must show the camera section and nothing else.
+// `parts` is the capability that decides whether a format HAS a viewport menu at all:
+// STEP alone, carrying the assembly-tree entries and the framing group.
 // Paths are relative to --dir and must track the models/ layout. They silently rotted once
 // already (fun/, simple/ and a top-level dxf/ that no longer exist), which turns the sweep
 // into a gate that fails on fixture 1 for a reason that has nothing to do with the change
@@ -105,10 +105,10 @@ async function toolProblem(page) {
   return "";
 }
 
-// Camera actions are viewport-level, so every format's right-click menu must offer them.
-// They were STEP-only until U3, and the failure was invisible: right-clicking simply did
-// nothing on five of six formats.
-const CAMERA_ACTIONS = ["Reset Zoom", "Zoom To Fit"];
+// Framing is STEP's alone: it is the only renderer with a viewport menu, and since the
+// Inspector's zoom readout and its menu were removed, that menu is the viewer's only zoom
+// control. Every other format must open no viewport menu at all.
+const FRAMING_ACTIONS = ["Zoom to fit", "Zoom to selection"];
 const TREE_ACTIONS = ["Show all", "Expand all", "Collapse all"];
 
 // A fixed screen coordinate silently tests the file sheet instead of the viewport on any
@@ -144,13 +144,14 @@ async function viewportMenuItems(page) {
 
 function menuProblem(items, fixture) {
   if (items === null) return "no canvas under the probe point";
-  if (!items.length) return "viewport menu did not open";
-  const missing = CAMERA_ACTIONS.filter((action) => !items.includes(action));
-  if (missing.length) return `menu missing ${missing.join(", ")} (got: ${items.join(", ")})`;
   if (!fixture.parts) {
-    const leaked = TREE_ACTIONS.filter((action) => items.includes(action));
-    if (leaked.length) return `menu offers ${leaked.join(", ")} without the parts capability`;
+    return items.length ? `a viewport menu opened on a renderer that has none (${items.join(", ")})` : "";
   }
+  if (!items.length) return "viewport menu did not open";
+  const missing = FRAMING_ACTIONS.filter((action) => !items.includes(action));
+  if (missing.length) return `menu missing ${missing.join(", ")} (got: ${items.join(", ")})`;
+  const absent = TREE_ACTIONS.filter((action) => !items.includes(action));
+  if (absent.length) return `parts menu missing ${absent.join(", ")}`;
   return "";
 }
 

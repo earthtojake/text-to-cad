@@ -8,7 +8,6 @@ import { VIEWER_PICK_MODE } from "@hardcore/core/lib/viewer/constants.js";
 import { runtimeModelKeyMatches, toNumber } from "@hardcore/core/lib/viewer/modelRuntime.js";
 import { normalizePartIdList } from "@hardcore/core/lib/viewer/partVisualState.js";
 import { PromptContextAction } from "../../../host/PromptContextAction.js";
-import { runtimeFramingBounds } from "../../kit/camera/viewportCameraKit.js";
 import ShellViewport from "../../kit/shell/ShellViewport.jsx";
 import ViewportBottomAction, { drawingCaptureAction } from "../../kit/shell/ViewportBottomAction.jsx";
 import ViewportContextMenu from "../../kit/shell/ViewportContextMenu.jsx";
@@ -125,7 +124,6 @@ const StepViewport = forwardRef(function StepViewport({
   referenceSelectionPending = false,
   referenceSelectionUnavailable = false,
   referenceSelectionDeferred = false,
-  onCameraZoomPercentChange = null,
   onLodCameraChange = null,
   onMeshSourceAdoption = null,
   viewerMode,
@@ -294,13 +292,12 @@ const StepViewport = forwardRef(function StepViewport({
       activateViewPlaneFace: faceId => shell()?.activateViewPlaneFace(faceId),
       activateDefaultViewPlane: () => shell()?.activateDefaultViewPlane(),
       focusViewPreset: faceId => shell()?.activateViewPlaneFace(faceId),
-      applyZoomPercent: percent => shell()?.applyZoomPercent(percent),
       requestRender: () => shell()?.requestRender(),
-      resetView: () => shell()?.resetView(),
       getPerspective: () => shell()?.getPerspective(),
       setPerspective: (perspective, options) => shell()?.setPerspective(perspective, options),
+      // Frame the whole model again. "Zoom to fit" in the context menu and the live
+      // resetCamera command are the same act.
       resetZoom: () => shell()?.resetZoom(),
-      zoomToFit: options => shell()?.zoomToFit(options),
       // Viewport LOD sampler: projection parameters + nearest eligible occurrence distances.
       // Whole live bounds include floor/group placement; numeric samples retain no scene objects.
       sampleLodCamera(options) {
@@ -308,15 +305,14 @@ const StepViewport = forwardRef(function StepViewport({
         if (!runtimeModelKeyMatches(runtime, modelKeyRef.current)) return null;
         return sampleLodCamera(THREE, runtime, { ...options, selectedPartIds: lodSelectedPartIdsRef.current });
       },
-      // Frame what is selected. 100% keeps meaning the rest framing.
-      // `fallbackToModel` is the CALLER saying "there is no narrower target here": the zoom menu's
-      // Zoom to fit, which frames the rest placement without redefining 100%.
-      zoomToFitSelection({ partIds = [], referenceIds = [], fallbackToModel = false, animate = true } = {}) {
+      // Frame what is selected: the context menu's "Zoom to selection". Framing the
+      // whole model is resetZoom above, not a fallback here.
+      zoomToFitSelection({ partIds = [], referenceIds = [], animate = true } = {}) {
         const runtime = runtimeRefRef.current?.current;
         const bounds = mergeBoundsList([
           selectorReferenceBounds(layersApiRef.current?.activeSelectorRuntime, referenceIds),
           displayRecordBoundsForPartIds(runtime, partIds)
-        ]) || (fallbackToModel ? runtimeFramingBounds(runtime, stepScene.restBounds) : null);
+        ]);
         return bounds ? Boolean(shell()?.zoomToBounds(bounds, { animate })) : false;
       }
     };
@@ -368,7 +364,6 @@ const StepViewport = forwardRef(function StepViewport({
         drawingEnabled={!previewMode && drawToolActive}
         drawing={drawing}
         onPerspectiveChange={handlePerspectiveChange}
-        onCameraZoomPercentChange={onCameraZoomPercentChange}
         onPresentationChange={onPresentationChange}
         onViewerAlertChange={handleViewerAlertChange}
         onCameraSettled={onLodCameraChange}

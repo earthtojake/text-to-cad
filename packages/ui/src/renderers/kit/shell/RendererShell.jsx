@@ -115,7 +115,6 @@ export default function RendererShell({ shell, tools, inspector, bottomAction = 
                     drawingEnabled={frame.drawToolActive}
                     drawing={frame.drawing}
                     onPerspectiveChange={frame.handlePerspectiveChange}
-                    onCameraZoomPercentChange={frame.setZoomPercent}
                     onPresentationChange={frame.handlePresentationChange}
                     onViewerAlertChange={frame.setRuntimeAlert}
                     onCameraSettled={frame.onCameraSettled}
@@ -160,8 +159,7 @@ export default function RendererShell({ shell, tools, inspector, bottomAction = 
               onOpenChange={frame.setInspectorOpen}
               scrollBody={false}
             >
-              <FileSheetTabbedSurface headerActions={frame.zoomHeader}
-                sections={inspector.tabs}
+              <FileSheetTabbedSurface sections={inspector.tabs}
                 openSectionIds={frame.inspectorTab ? [frame.inspectorTab] : []}
                 onOpenSectionIdsChange={ids => frame.setInspectorTab(ids.at(-1) || "")}
               />

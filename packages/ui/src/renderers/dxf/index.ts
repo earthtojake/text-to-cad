@@ -7,19 +7,13 @@ import type { CadPreferenceSource, PreparedWorkspaceEntry, ViewerCommandSource, 
 
 export type { LiveCameraSnapshot, LiveViewBinding, LiveViewController, LiveViewState } from '../kit/shell/liveBinding.js';
 
-/** The live state of a mounted drawing: the base state, plus how far it is zoomed. */
-export interface DxfLiveState extends LiveViewState {
-  /**
-   * The current scale as a percentage of the FITTED one, so 100 is the whole
-   * drawing as it opens. Relative because an absolute scale means nothing: the
-   * same drawing in metres and in millimetres would read a thousand apart.
-   */
-  zoomPercent: number;
-}
-export interface DxfLiveController extends LiveViewController<DxfLiveState> {
-  /** Zoom to a percentage of the fitted view, about the pane's centre. */
-  setZoom(percent: number): Promise<DxfLiveState>;
-}
+/**
+ * A drawing's live state is the base state and nothing more. It has no camera and
+ * no zoom command: `resetCamera` fits the drawing again, and everything else about
+ * the view is the pointer's.
+ */
+export type DxfLiveState = LiveViewState;
+export type DxfLiveController = LiveViewController<DxfLiveState>;
 
 export interface DxfRendererOptions {
   client: WorkspaceClientOption;

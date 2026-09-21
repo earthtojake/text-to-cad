@@ -11,7 +11,6 @@ import { stepGeometryMeasurements } from '../../workbench/stepGeometryMeasuremen
 const EMPTY = [];
 
 export default function StepFileSheet({
-  headerActions = null,
   client, open, isDesktop, width, onOpenChange, onStartResize, selectedEntry, viewerLoading,
   geometryInspection = null, stepTreeRoot, isAssemblyView = false,
   selectedMeshData = null, selectedSourceAppearance = null,
@@ -71,7 +70,7 @@ export default function StepFileSheet({
   }), ...settingsTabs, buildFileStatusTab(statusItems)].filter(Boolean);
   return <FileSheet open={open} title="STEP" isDesktop={isDesktop} width={width}
     onOpenChange={onOpenChange} onStartResize={onStartResize} scrollBody={false}>
-    <FileSheetTabbedSurface headerActions={headerActions} sections={sections} openSectionIds={openSectionIds}
+    <FileSheetTabbedSurface sections={sections} openSectionIds={openSectionIds}
       onOpenSectionIdsChange={onOpenSectionIdsChange} />
   </FileSheet>;
 }

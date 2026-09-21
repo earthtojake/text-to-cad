@@ -64,8 +64,9 @@ format. Pure data: no behaviour, no imports beyond the format enum.
 ## The content signal
 
 `selectedViewportContent` in the STEP renderer is the single answer to "is there anything on
-screen?", derived from `content`. Toolbar gates, the CTA, preview mode, the zoom pill and
-alert blocking all read it, rather than each one re-deriving the answer per format.
+screen?", derived from `content`. Toolbar gates, the CTA, preview mode, the viewport
+context menu and alert blocking all read it, rather than each one re-deriving the answer
+per format.
 
 ## The render-backend contract
 
@@ -75,7 +76,7 @@ imperative viewer API. A renderer's **scene** (`renderers/kit/scene.js`; STEP's 
 `renderers/step/scene/stepScene.js`) owns geometry only:
 
 1. **Consume content** for its `content` kind (mesh data, robot).
-2. **Publish bounds** so the shared fit, zoom baseline and zoom-percent work. The mesh
+2. **Publish bounds** so the shared fit and its zoom baseline work. The mesh
    path does this via `applyRuntimeModelBounds` after composing; a backend with no mesh
    calls back with its own bounds instead.
 3. **Optionally install loop-tuning hooks** on the runtime. All are inert unless set, so

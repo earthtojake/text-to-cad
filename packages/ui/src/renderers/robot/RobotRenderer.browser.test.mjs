@@ -364,14 +364,10 @@ test('Select picks links at once; a selection lives only under Select; Links sho
   assert.deepEqual(await robot.pressedRows(), ['Select upper_arm'], 'selected by the next frame');
   assert.equal(await robot.tab('Links').getAttribute('aria-selected'), 'true');
   assert.deepEqual((await page.evaluate(() => window.cadHarness.a.controller.readState())).selectedLinks, ['upper_arm']);
-  // Zoom to selection frames the link and leaves 100% meaning the rest framing.
-  await pane.getByRole('button', { name: 'Zoom controls', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Zoom to selection', exact: true }).click();
-  await page.waitForFunction(() => window.__cadCamera().zoomPercent > 130);
-  await pane.getByRole('button', { name: 'Zoom controls', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Reset Zoom', exact: true }).click();
-  await page.waitForFunction(() => Math.abs(window.__cadCamera().zoomPercent - 100) < 0.5);
-  await page.waitForTimeout(600);
+  // A robot has no zoom control of any kind: no percentage readout, no menu behind it,
+  // and no viewport menu to put framing in. The view cube's centre is the way back.
+  assert.equal(await pane.getByRole('button', { name: 'Zoom controls', exact: true }).count(), 0);
+  assert.equal(await pane.getByLabel('Zoom level percent', { exact: true }).count(), 0);
 
   // Escape clears the selection first, and only then shuts the Inspector.
   await page.mouse.click(surface.x + 30, surface.y + surface.height - 30);

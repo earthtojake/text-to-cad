@@ -18,7 +18,7 @@ function FileSheetTabContent({ section, active }) {
 
 // Descriptor order is the canonical order for each format. Only the active tab
 // belongs to per-file state; old global drag/split preferences are never read.
-export default function FileSheetTabbedSurface({ sections, openSectionIds = [], onOpenSectionIdsChange, headerActions = null }) {
+export default function FileSheetTabbedSurface({ sections, openSectionIds = [], onOpenSectionIdsChange }) {
   const visibleSections = Array.isArray(sections) ? sections.filter(Boolean) : [];
   const sectionIds = visibleSections.map(section => section.id);
   const activeId = resolveActiveFileSheetSectionId(openSectionIds, sectionIds);
@@ -36,7 +36,6 @@ export default function FileSheetTabbedSurface({ sections, openSectionIds = [], 
           <span className="min-w-0 truncate text-xs">{section.title}</span>
         </TabsTrigger>)}
       </TabsList>
-      {headerActions && <div className="ml-auto shrink-0">{headerActions}</div>}
       </div>}
       {visibleSections.map(section => <FileSheetTabContent key={section.id}
         section={section} active={section.id === activeId} />)}

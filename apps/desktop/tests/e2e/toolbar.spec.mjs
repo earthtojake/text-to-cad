@@ -96,9 +96,7 @@ test('CAD tools stay within the scene, with direct snapshot and Select filters',
       name: 'tests/fixtures/cad/import-smoke.step',
       exact: false
     }).first().click();
-    await expect(page.getByLabel('Zoom level percent', {
-      exact: true
-    })).toBeVisible({
+    await expect(page.locator('[data-file-sheet-header]')).toBeVisible({
       timeout: 60000
     });
     const toolbar = page.locator('[data-cad-toolbar]');
@@ -137,24 +135,18 @@ test('CAD tools stay within the scene, with direct snapshot and Select filters',
     await expect(toolbar).toHaveAttribute('data-cad-toolbar', 'tools');
     const fullLabels = await toolbar.getByRole('button').evaluateAll(els => els.map(el => el.getAttribute('aria-label')));
     const tools = toolbar.getByRole('group', { name: 'Interaction tools', exact: true });
-    const zoom = page.getByRole('button', { name: 'Zoom controls', exact: true });
     const grouping = async () => {
       await expect(page.getByRole('button', { name: 'Take snapshot', exact: true })).toBeVisible();
       await expect(toolbar.getByRole('group', { name: 'View and actions' })).toHaveCount(0);
       for (const name of ['Select', 'Measure', 'Draw']) await expect(tools.getByRole('button', { name, exact: true })).toBeVisible();
       await expect(toolbar.getByRole('button', { name: 'Display', exact: true })).toHaveCount(0);
       await expect(toolbar.getByRole('button', { name: /^Viewing mode:/ })).toHaveCount(0);
-      await expect(zoom).toBeVisible();
-      await expect(zoom.locator('input')).toHaveCount(0);
-      await expect(toolbar.getByRole('button', { name: 'Zoom controls', exact: true })).toHaveCount(0);
-      const headerBounds = await page.locator('[data-file-sheet-header]').boundingBox();
-      const zoomBounds = await zoom.boundingBox();
-      assert(zoomBounds.x + zoomBounds.width <= headerBounds.x + headerBounds.width + 1);
-      await zoom.click();
-      // Framing, and nothing else: the menu holds no reset of the model itself.
-      assert.deepEqual(await page.getByRole('menuitem').allTextContents(),
-        ['Zoom in', 'Zoom out', 'Zoom to 100%', 'Zoom to fit', 'Zoom to selection', 'Reset Zoom']);
-      await page.keyboard.press('Escape');
+      // There is no zoom control anywhere: not in the toolbar, not in the Inspector
+      // header, which now carries its tabs and nothing else. Framing a STEP is in its
+      // viewport context menu, and that is the whole of it.
+      await expect(page.getByRole('button', { name: 'Zoom controls', exact: true })).toHaveCount(0);
+      await expect(page.getByLabel('Zoom level percent', { exact: true })).toHaveCount(0);
+      await expect(page.locator('[data-file-sheet-header]').getByRole('button')).toHaveCount(0);
       await fit();
     };
     await grouping();

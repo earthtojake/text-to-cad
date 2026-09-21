@@ -655,11 +655,8 @@ export function zoomRuntimeToBounds(runtime, bounds, sceneScaleMode, {
     setOrthographicCameraHalfHeight(runtime, orthographicHalfHeight, frameMetrics);
   }
   const applied = applyPerspectiveSnapshot(runtime, snapshot);
-  if (applied) {
-    if (resetZoomBaseline) {
-      resetRuntimeZoomBaseline(runtime);
-    }
-    runtime.onZoomChange?.(runtime);
+  if (applied && resetZoomBaseline) {
+    resetRuntimeZoomBaseline(runtime);
   }
   return applied;
 }
@@ -714,7 +711,6 @@ export function stepCameraTransition(runtime, timestamp) {
     if (transition.resetZoomBaselineOnComplete) {
       resetRuntimeZoomBaseline(runtime);
     }
-    runtime.onZoomChange?.(runtime);
     runtime.cameraTransition = null;
     runtime.controls.enableDamping = true;
     runtime.controls.dampingFactor = DEFAULT_DAMPING_FACTOR;
