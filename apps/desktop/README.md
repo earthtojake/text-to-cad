@@ -1109,9 +1109,10 @@ playback and Kinematics' pose retain independent runtimes, enable state and
 actions; every pose write (a value, a named pose, a Pose-tool knob, Reset) is
 an instant jump, and Reset also stops any playing routine and hands the pose
 back to Kinematics. Robots also use Kinematics for their joints, then Links
-(the link tree), and keep the SDF tab. A DXF drawing has its own Inspector — Material,
-Bends where the file declares them, Layers where it uses them, then Display — open by
-default, and a 2D/3D action in the file navbar whose 2D view is a locked top-down plan.
+(the link tree), and keep the SDF tab. A DXF drawing has NO Inspector at all, and no
+toggle for one in its file navbar: it is a straight 2D render on a canvas — drag to pan,
+wheel or pinch to zoom about the pointer, double-click to fit — and the navbar carries
+only Zoom out, Zoom in, Reset Zoom and Take snapshot.
 
 Display contains the single Mode dropdown for shaded, edge, wire and photographic
 Render presentation. All modes share the camera, projection, part colors,

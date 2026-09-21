@@ -28,11 +28,10 @@ import {
 import { useViewportCamera } from "../camera/useViewportCamera.js";
 import {
   DEFAULT_VIEW_DIRECTION, DEFAULT_VIEW_PLANE_ORIENTATION, KEYBOARD_ORBIT_NUDGE_RAD, VIEWING_MODE, VIEW_PLANE_FACES,
-  VIEW_PLANE_FACE_BY_ID, WHEEL_PINCH_DELTA_BOOST, WORLD_UP, applyOrbitDelta, clearKeyboardOrbitState,
+  WHEEL_PINCH_DELTA_BOOST, WORLD_UP, applyOrbitDelta, clearKeyboardOrbitState,
   getActiveViewPlaneFaceId, getKeyboardOrbitAxes, getKeyboardOrbitCommand, isPinchWheelEvent, isTrackpadLikeWheelEvent,
-  reframeReason, runtimeFramingBounds, stepKeyboardOrbit, viewPlaneCameraBasis
+  reframeReason, runtimeFramingBounds, stepKeyboardOrbit
 } from "../camera/viewportCameraKit.js";
-import { usePlanMode } from "../camera/usePlanMode.js";
 import {
   ACCELERATED_WHEEL_ZOOM_SPEED, COARSE_POINTER_PINCH_ZOOM_SPEED, COARSE_POINTER_ZOOM_SPEED, DEFAULT_ZOOM_SPEED,
   TRACKPAD_PINCH_ZOOM_SPEED
@@ -53,12 +52,8 @@ import { useViewerRuntime } from "../viewport/useViewerRuntime.js";
 
 const VIEW_PLANE_CONTROL_SIZE = "6rem";
 const STORED_CAMERA_COORDINATES = "cad-z-up-v1";
-// The face a plan view looks from: straight down the vertical axis.
 /** How long after the open-time fit the viewport and projection may still be settling. */
 const OPEN_FIT_SETTLE_MS = 600;
-const PLAN_VIEW_FACE = "z";
-const PLAN_VIEW_BASIS = viewPlaneCameraBasis(VIEW_PLANE_FACE_BY_ID[PLAN_VIEW_FACE]);
-
 // The stage group holds only what the look put there.
 function clearGroup(group) {
   for (const child of [...(group?.children || [])]) disposeSceneObject(child);
@@ -84,10 +79,6 @@ const ShellViewport = forwardRef(function ShellViewport({
   perspective = null,
   perspectiveRef = null,
   projection = CAMERA_PROJECTION.ORTHOGRAPHIC,
-  // PLAN VIEW: the camera is locked looking straight down. Orthographic whatever Display
-  // asks for (a plan is a measurable projection, not a photograph), no view cube, no
-  // rotation, left-drag pans, and every reset lands back on top-down.
-  planMode = false,
   focalLength = null,
   themeSettings = null,
   displaySettings = null,
@@ -116,7 +107,7 @@ const ShellViewport = forwardRef(function ShellViewport({
     throw new Error("ShellViewport needs a kit scene: { object3D, bounds, dispose() } (kit/scene.js).");
   }
   const normalizedSceneScaleMode = normalizeSceneScaleMode(sceneScaleMode);
-  const normalizedProjection = normalizeCameraProjection(planMode ? CAMERA_PROJECTION.ORTHOGRAPHIC : projection);
+  const normalizedProjection = normalizeCameraProjection(projection);
   const defaultGridRadius = defaultSceneGridRadius(normalizedSceneScaleMode);
   const viewerTheme = BASE_VIEWER_THEME;
   const interactionHostRef = useRef(null);
@@ -325,12 +316,6 @@ const ShellViewport = forwardRef(function ShellViewport({
     emitPerspectiveChange(runtime);
   }, [syncCameraZoomPercent]);
 
-  // Rotation off, left-drag panning, no vertical origin axis. Everything else about the
-  // lock — the projection, the hidden cube, where a reset lands — is this component's.
-  usePlanMode({ planMode, runtimeRef, viewerReadyTick });
-  const planModeRef = useRef(planMode);
-  planModeRef.current = planMode;
-
   const hasViewportContent = Boolean(scene);
   const drawingOverlayActive = drawingEnabled && !previewMode && hasViewportContent;
   const { drawingControllerRef, handleDrawingContent, handleDrawingReady, followDrawingViewport } = useDrawingViewLock({
@@ -366,20 +351,16 @@ const ShellViewport = forwardRef(function ShellViewport({
     requestRender() { runtimeRef.current?.requestRender?.(); },
     resetView() {
       const runtime = runtimeRef.current;
-      // A locked plan view resets to its OWN top-down, never to the default
-      // three-quarter orientation: this is the one path that chooses a direction,
-      // so it re-asserts the lock as it re-frames.
-      const plan = planModeRef.current && PLAN_VIEW_BASIS;
       const reset = zoomRuntimeToBounds(runtime, runtimeFramingBounds(runtime, scene?.restBounds || scene?.bounds), sceneScaleModeRef.current, {
         animate: true, modelOffset: modelTransformRef.current.offset, resetZoomBaseline: true,
-        viewDirection: plan ? PLAN_VIEW_BASIS.direction : DEFAULT_VIEW_DIRECTION,
-        viewUp: plan ? PLAN_VIEW_BASIS.up : WORLD_UP
+        viewDirection: DEFAULT_VIEW_DIRECTION,
+        viewUp: WORLD_UP
       });
       if (reset) {
-        activeViewPlaneFaceRef.current = plan ? PLAN_VIEW_FACE : "";
-        setActiveViewPlaneFace(plan ? PLAN_VIEW_FACE : "");
-        defaultPerspectiveResettingRef.current = !plan;
-        setDefaultPerspectiveDetached(Boolean(plan));
+        activeViewPlaneFaceRef.current = "";
+        setActiveViewPlaneFace("");
+        defaultPerspectiveResettingRef.current = true;
+        setDefaultPerspectiveDetached(false);
       }
       return reset;
     },
@@ -852,16 +833,10 @@ const ShellViewport = forwardRef(function ShellViewport({
           // Fit with the destination lens, so the first Render entry frames like later ones.
           const fitFocalLength = explicitViewerFocalLength(focalLength);
           if (fitFocalLength != null) setRuntimePerspectiveFocalLength(runtime, fitFocalLength);
-          // A file opened into a locked plan view fits FROM the lock: coming up at the
-          // default three-quarter angle and then being unable to turn out of it reads as broken.
-          if (planMode && PLAN_VIEW_BASIS) {
-            activeViewPlaneFaceRef.current = PLAN_VIEW_FACE;
-            setActiveViewPlaneFace(PLAN_VIEW_FACE);
-          }
           zoomRuntimeToBounds(runtime, framingBounds, normalizedSceneScaleMode, {
             animate: false, modelOffset,
-            viewDirection: planMode && PLAN_VIEW_BASIS ? PLAN_VIEW_BASIS.direction : DEFAULT_VIEW_DIRECTION,
-            viewUp: planMode && PLAN_VIEW_BASIS ? PLAN_VIEW_BASIS.up : WORLD_UP
+            viewDirection: DEFAULT_VIEW_DIRECTION,
+            viewUp: WORLD_UP
           });
           runtime.requestRender();
         }
@@ -890,7 +865,7 @@ const ShellViewport = forwardRef(function ShellViewport({
   }, [
     scene, sceneRevision, markPresentationReady, modelKey, perspective, perspectiveRef, isLoading, viewerReadyTick,
     normalizedSceneScaleMode, resolvedFloorMode, renderMode, floorFollowsModel, viewerTheme, syncCameraZoomPercent,
-    applyActivePhotographicStudio, detachScene, planMode
+    applyActivePhotographicStudio, detachScene
   ]);
 
   // A queued view update is acknowledged once the viewport holds (and, when the
@@ -944,9 +919,8 @@ const ShellViewport = forwardRef(function ShellViewport({
       ) : null}
       {drawingOverlayActive ? <DrawingOverlay drawing={drawing} onReady={handleDrawingReady} onContentChange={handleDrawingContent} onViewportChange={followDrawingViewport} /> : null}
       {typeof children === "function" ? children(viewportContext) : children}
-      {/* A locked view stops advertising the axes it cannot turn towards. */}
       <ViewPlaneControl
-        showViewPlane={!previewMode && !drawingOverlayActive && !planMode}
+        showViewPlane={!previewMode && !drawingOverlayActive}
         previewMode={previewMode}
         isLoading={isLoading}
         meshData={scene}

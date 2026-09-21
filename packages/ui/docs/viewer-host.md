@@ -33,6 +33,7 @@ are for reading and maintaining the contracts.
 | `CadWorkspaceService`, `CadResourceProvider`, worker tickets | [CAD service types](../../core/src/client/types.ts) | `@hardcore/core/client` |
 | `CadRendererSlots`, selection props, `CadCommandSource`, `CadLiveBinding` | [CAD registration](../src/renderers/cad/index.ts) | `@hardcore/ui/renderers/cad` |
 | `CadPreferenceSource` | [Viewer preferences](../src/renderers/workspace/preferences.ts) | `@hardcore/ui/renderers/cad` (also `@hardcore/ui/renderers/workspace`) |
+| `DxfRendererOptions` (2D drawings; declares no panel, and declines every camera, display and selection command) | [DXF registration](../src/renderers/dxf/index.ts) | `@hardcore/ui/renderers/dxf` |
 | `GlbRendererOptions`, `LiveViewBinding`, `LiveViewController` | [GLB registration](../src/renderers/glb/index.ts), [live binding](../src/renderers/kit/shell/liveBinding.ts) | `@hardcore/ui/renderers/glb` |
 | `MeshRendererOptions` (STL, 3MF), `LiveViewBinding`, `LiveViewController` | [Mesh registration](../src/renderers/mesh/index.ts) | `@hardcore/ui/renderers/mesh` |
 | `RobotRendererOptions` (URDF, SRDF, SDF), `RobotLiveController`, `RobotLiveState` (`selectedLinks`, `selectedPartIds`) | [Robot registration](../src/renderers/robot/index.ts) | `@hardcore/ui/renderers/robot` |

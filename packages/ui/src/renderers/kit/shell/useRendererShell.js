@@ -32,16 +32,6 @@ export const SHELL_TOOL = Object.freeze({ DRAW: "draw" });
 const SESSION_SAVE_DELAY_MS = 180;
 const INSPECTOR_REVEAL_MIN_WIDTH_PX = 520;
 const EMPTY = Object.freeze({});
-// The top-down preset leans a whisker off the pole so screen-up is stable, so "straight
-// down" is a tolerance, not an equality: this is a good deal wider than that lean.
-const PLAN_VIEW_TILT_TOLERANCE = 0.08;
-
-/** Does this camera look straight down the vertical axis, as a plan view must? */
-function isTopDownCamera({ position, target }) {
-  const [x, y, z] = [position[0] - target[0], position[1] - target[1], position[2] - target[2]];
-  const length = Math.hypot(x, y, z);
-  return length > 1e-9 && z / length >= 1 - PLAN_VIEW_TILT_TOLERANCE;
-}
 
 /**
  * Everything a file-family renderer needs from its host that is not about its
@@ -80,8 +70,6 @@ function isTopDownCamera({ position, target }) {
  *   error its caller reads), and extra fields for the live state. Every name in `HOST_LIVE_COMMANDS` must be one or the other.
  * @param {() => import("@hardcore/core/prompt").PromptReference[]} [options.promptReferences]  What a snapshot
  *   depicts, when that is narrower than the whole file (a selection). Default: the file.
- * @param {import("../../../file-viewer/types.js").FileNavigationAction[]} [options.navigationActions]  Navbar
- *   actions of the renderer's own, drawn before "Take snapshot". Keep the array stable.
  * @param {{ active?: boolean, handle?: () => boolean }} [options.escape]  Escape, innermost first: `handle` returns
  *   true when it spent the key; otherwise the shell closes the alert dialog and the Inspector.
  * @param {object | (() => object)} [options.rendererState]  The renderer's own slice of the per-file record. A
@@ -93,17 +81,14 @@ function isTopDownCamera({ position, target }) {
  *   default stays what a session falls back to; `never` lists recorded tools this file does not come back in.
  * @param {{ available: boolean, bounds: () => import("../scene.js").SceneBounds | null }} [options.selection]  What
  *   "Zoom to selection" frames. Without it the menu item is off.
- * @param {boolean} [options.planView]  Lock the camera looking straight down: orthographic
- *   whatever Display's Camera says, no view cube, no rotation (pointer OR keyboard) and left-drag
- *   panning. A camera the host sets from a tilted pose is declined rather than quietly straightened.
  * @param {object} [options.displayTabProps]  Extra Display tab props for sections the renderer's FEATURES opt into.
  * @param {string} [options.sceneScaleMode]
  */
 export function useRendererShell({
   view, services, resource, modelKey, revisionKey = "", features, toolModes = null, scene, load,
-  animation = null, live = EMPTY, promptReferences = null, navigationActions = null,
+  animation = null, live = EMPTY, promptReferences = null,
   escape = EMPTY, rendererState = EMPTY, toolRestore = EMPTY, selection = null, displayTabProps = EMPTY,
-  planView = false, sceneScaleMode = VIEWER_SCENE_SCALE.CAD
+  sceneScaleMode = VIEWER_SCENE_SCALE.CAD
 }) {
   const host = useViewerHost();
   const viewerElement = useContext(ViewerElementContext);
@@ -285,13 +270,12 @@ export function useRendererShell({
   // Publishing navbar actions must not feed parent renders back into this renderer.
   const captureRef = useRef(capture);
   captureRef.current = capture;
-  const extraActions = navigationActions;
   useEffect(() => {
-    const actions = modelKey ? [...(extraActions || []), { id: "snapshot", label: "Take snapshot", icon: Camera,
+    const actions = modelKey ? [{ id: "snapshot", label: "Take snapshot", icon: Camera,
       disabled: viewerLoading || !scene || !promptAvailable, onInvoke: () => captureRef.current() }] : [];
     onNavigationActionsChange?.(actions);
     return () => onNavigationActionsChange?.([]);
-  }, [onNavigationActionsChange, modelKey, viewerLoading, Boolean(scene), promptAvailable, extraActions]);
+  }, [onNavigationActionsChange, modelKey, viewerLoading, Boolean(scene), promptAvailable]);
 
   // ---- zoom header ------------------------------------------------------------
   const zoomToFit = useCallback(() => { if (!viewerRef.current?.zoomToFit?.()) setCopyStatus("The viewer camera is not ready"); }, []);
@@ -338,11 +322,6 @@ export function useRendererShell({
         || (camera.projection != null && !["perspective", "orthographic"].includes(camera.projection))
         || ["zoom", "focalLength", "orthographicHalfHeight"].some(key => camera[key] != null && (!Number.isFinite(camera[key]) || camera[key] <= 0))) {
         throw new Error("Camera vectors must contain three finite numbers and camera scales must be positive.");
-      }
-      // Declined, not straightened: silently clamping a caller's pose would report back a
-      // camera it never asked for, and the caller would have no way to tell the view is locked.
-      if (planView && !isTopDownCamera(camera)) {
-        throw new Error("This view is locked looking straight down, so it cannot be set to a tilted camera. Leave the plan view first, or set a camera whose position is directly above its target.");
       }
       const nextDisplay = viewerDisplaySettingsForCamera(viewSettingsStore.getSnapshot().display, camera);
       const requested = clonePerspectiveSnapshot(camera);
@@ -415,7 +394,7 @@ export function useRendererShell({
     inspector: { open: inspectorOpen, setOpen: setInspectorOpen, tab: inspectorTab, setTab: setInspectorTab, reveal: revealInspectorTab },
     // Frame-facing (RendererShell).
     frame: {
-      view, hostRef, hostElement, viewerElement, sceneBackdrop, colorScheme, modelKey, presentationKey, sceneScaleMode, scene, planView,
+      view, hostRef, hostElement, viewerElement, sceneBackdrop, colorScheme, modelKey, presentationKey, sceneScaleMode, scene,
       viewerRef, viewUpdate, resolvedScene, viewerPerspective, activePerspectiveRef, handlePerspectiveChange,
       previewMode, previewOrbitSpeed, setPreviewOrbitSpeed, viewerLoading, loading, presentationState,
       handlePresentationChange, viewerAlert, fileStatusAlert, viewerAlertOpen, setViewerAlertOpen, setRuntimeAlert,

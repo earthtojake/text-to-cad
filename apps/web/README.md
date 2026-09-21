@@ -209,9 +209,10 @@ that picks whole links. Draw is a STEP tool and appears nowhere else. A DXF, a
 GLB, an STL and a 3MF (their own renderers) have NO tools and no strip at all:
 their viewport simply orbits, pans and zooms, and a secondary press opens
 nothing. A GLB with clips shows the playbar under the model always — it is a
-transport, not a tool, and the file opens at rest. A DXF adds a 2D/3D action to
-the file navbar, and its 2D view is a locked top-down plan: orthographic, no view
-cube, left-drag pans. Buttons wrap inside the pill
+transport, not a tool, and the file opens at rest. A DXF is not a viewport at
+all: it is a straight 2D render on a canvas (drag to pan, wheel or pinch to zoom
+about the pointer, double-click to fit), and its file navbar carries Zoom out,
+Zoom in, Reset Zoom and Take snapshot. Buttons wrap inside the pill
 when the Inspector or a narrow host reduces the scene width. Snapshot is a
 direct action beside the Inspector and file-tree toggles in the file navbar;
 the web prompt adapter copies the viewport image and references to the clipboard.
@@ -246,9 +247,10 @@ named pose, a slider, a typed value, or a Pose-tool knob — is an instant jump;
 there is no eased transition. Reset also stops any playing routine and hands
 the pose back to Kinematics, so the two never disagree about which one is in
 control afterward. Robot Pose and Joints controls also live in Kinematics,
-followed by a Links tab that always shows the robot's link tree. A DXF has its own
-Inspector (Material, Bends where the file declares them, Layers where it uses them,
-then Display), open by default.
+followed by a Links tab that always shows the robot's link tree. A DXF has NO
+Inspector at all — no Display settings, no tabs, and no toggle for one in its
+navbar: a drawing is a finished 2D document, and the pane shows it and nothing
+else.
 
 Display owns a single Mode dropdown: Solid, Render, X-ray, Hidden line and Wireframe.
 Modes are presets over one grouped display schema, and all settings groups are

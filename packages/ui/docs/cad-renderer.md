@@ -29,7 +29,7 @@ the reverse.
 | folder | what it is |
 | --- | --- |
 | `viewport/` | `useViewerRuntime` (three.js renderer lifecycle, on-demand render loop and `requestRender`, resize and device-pixel-ratio caps, context loss, keyboard orbit, teardown), `framePresentation`, `viewportBuffer`, `renderDepthPolicy`, `sceneObjects` (`disposeSceneObject`), DOM helpers. The scene in the viewport is its owner's: teardown calls the injected `disposeScene(runtime)` and `disposeStudio(runtime)`. |
-| `camera/` | `runtimeCamera` (zoom percent against the authored framing, projection and lens sync, perspective snapshots, eased transitions, fit-to-bounds, recentre), `useViewportCamera` (that behaviour bound to a mounted viewport: live zoom, the perspective a session stores, the fullscreen camera swap and its restore, view-cube presets), `usePlanMode`, `viewportCameraKit` and `viewportCameraFit`, `orbitControls`, `zoomPivotReanchor`, `zoomSpeeds`, `cameraLens`, `ViewPlaneControl` (view cube), `ZoomControl`. |
+| `camera/` | `runtimeCamera` (zoom percent against the authored framing, projection and lens sync, perspective snapshots, eased transitions, fit-to-bounds, recentre), `useViewportCamera` (that behaviour bound to a mounted viewport: live zoom, the perspective a session stores, the fullscreen camera swap and its restore, view-cube presets), `viewportCameraKit` and `viewportCameraFit`, `orbitControls`, `zoomPivotReanchor`, `zoomSpeeds`, `cameraLens`, `ViewPlaneControl` (view cube), `ZoomControl`. |
 | `look/` | `stageEffects` (lighting rig scaled to the model, floor, glow and shadow catcher, grid and origin axes), the Render studio boundary (`renderStudioChunk`, `studioEnvironmentCache` and its worker). `chromeBackdrop` and `useChromeBackdropColor` (the frame colour around a scene). The surface LOOK is data the viewport resolves and a scene applies to its own materials: `@hardcore/core/lib/viewer/surfaceLook.js` (`createSurfaceLook(THREE, root).apply(look)`) does it for any authored material tree. |
 | `view-settings/` | The settings model and store (`viewSettingsStore`, `useViewSettings`, `viewerDisplaySettings`, `renderState`), applying a change to a viewport (`useAppliedViewSettings`, `viewUpdateCoordinator`, `viewUpdateGate`, `viewUpdatePlan`), and the Display tab (`DisplaySettingsTab`, `DisplayModeOptions`). |
 | `tools/` | `FloatingToolBar` (the dumb strip), `toolModes` (the tool-mode state machine), `ToolbarButton`, and the format-blind tools: `draw/` (overlay, view lock, `useDrawingViewLock`), `fullscreen/` (controls and the orbit preference), `playbar/` (`ViewportAnimationBar`, `animationClock`, `usePlaybackFrames`), `pose/` (the handle overlay, canvas, drag mathematics), `select/` (`usePointerPick`: taps and hover through a scene's own `pick`). Screenshot capture is `@hardcore/core/lib/viewer/screenshotCapture.js`. |
@@ -99,7 +99,7 @@ calls one hook; the shell owns the rest.
 
 | module | what it is |
 | --- | --- |
-| `useRendererShell.js` | The hook. Per-file state through the host, the Display settings store and tab, tool modes (Draw is the only tool the shell itself owns; `toolModes` is omitted altogether by a renderer with no tools), the Inspector panel (and its control by the renderer), zoom with "Zoom to selection", navbar actions, prompt snapshots, the clipboard screenshot, fullscreen, file activity, alerts, shortcuts, the live command surface, and [plan view](#plan-view). |
+| `useRendererShell.js` | The hook. Per-file state through the host, the Display settings store and tab, tool modes (Draw is the only tool the shell itself owns; `toolModes` is omitted altogether by a renderer with no tools), the Inspector panel (and its control by the renderer), zoom with "Zoom to selection", navbar actions, prompt snapshots, the clipboard screenshot, fullscreen, file activity, alerts, shortcuts, and the live command surface. |
 | `RendererShell.jsx` | The frame: viewport box, tool strip, bottom action, playbar, fullscreen controls, loading/update/alert overlays, status toast and the Inspector portaled into the host's panel column. One DOM structure (`data-slot="cad-file-view"`, `data-cad-surface`, `data-cad-scene-backdrop`, `data-cad-toolbar`, `data-file-sheet`) for every renderer. |
 | `ShellViewport.jsx` | The three.js viewport around ONE kit scene: `useViewerRuntime`, `useViewportCamera`, the look (rig or studio, environment, background, floor, grid, axes), the Draw overlay and view lock, the view cube, frame presentation and the queued view-settings handshake. Its children may be a function of the viewport (`{ runtimeRef, hostRef, viewerReadyTick }`), which is how a renderer mounts its own overlay or pointer pick. `syncSceneBounds()` re-fits lighting, shadows and the floor's height to a scene that moved its own bounds, with no React render and no reframe. What is SIZED stays sized from the rest placement, in Inspect and in Render alike: the grid and stage (`sceneRadiusForBounds` on `restBounds`) and the Render studio's floor plane (`applyPhotographicStudio`'s `groundBounds`), so a pose or a playing routine never rescales or slides the ground under the model; `zoomToBounds(bounds)` frames part of the scene. Read-only test seams: `window.__cadCamera()` (the live camera) and `window.__cadStage()` (the ground's radius, the bounds the stage is fitted to, the floor's height, the studio floor's size and centre). |
 | `shellState.js` | The per-file record `{ version, camera, display, inspectorTab, tool, renderer }`, read forgivingly and written exactly. The host keys it `[file path, renderer id]`. |
@@ -119,11 +119,10 @@ const shell = useRendererShell({
   load,                 // { busy, updating?, progress?, alert? }: the renderer's document load
   animation,            // playbar runtime with its own `clock`, or null
   live,                 // { commands?, declined?, state? }
-  // optional: promptReferences, navigationActions, escape, displayTabProps, sceneScaleMode,
+  // optional: promptReferences, escape, displayTabProps, sceneScaleMode,
   //   rendererState   the renderer's slot of the record: an object, or a FUNCTION read when the record is written
   //   toolRestore     { opensIn, never }: the tool THIS file opens in, while the tool modes' default stays the fallback
   //   selection       { available, bounds() }: what "Zoom to selection" frames
-  //   planView        lock the camera looking straight down (see Plan view)
 });
 // Renderer-facing, beside `tools`, `displayTab`, `toolMode`, `selectTool`, `requestRender`:
 shell.inspector.reveal(tabId);   // turn to a tab, opening the panel where there is room beside the model
@@ -134,33 +133,6 @@ const tools = [shell.tools.own({ id, label, icon }), shell.tools.draw].filter(Bo
 return <RendererShell shell={shell} tools={tools} inspector={{ title, tabs: [...own, shell.displayTab] }}
   viewportOverlay={viewport => <PointerPick viewport={viewport} scene={scene} enabled={selecting} onPick={pick} onHover={hover} />} />;
 ```
-
-#### Plan view
-
-`planView: true` locks the camera looking straight down, for a model with no third
-dimension worth turning towards. It is one flag, and the shell owns all of it:
-
-- **orthographic**, whatever Display → Camera says — a plan is a measurable
-  projection, not a photograph, and a top-down perspective view still foreshortens
-  off-centre;
-- **no rotation**, from any input: `usePlanMode` turns `controls.enableRotate` off
-  and moves left-drag onto pan, and `applyOrbitDelta` refuses to turn a camera whose
-  controls refuse rotation, so the keyboard nudge cannot break the lock either;
-- **no view cube**, and no vertical origin axis: a locked view stops advertising the
-  axes it cannot turn towards;
-- **every reset lands top-down**. A locked view is already looking straight down and
-  neither the zoom header's "Reset Zoom" nor the live `resetCamera` command turns a
-  camera, so re-framing keeps the lock; `ShellViewport.resetView()` re-asserts it
-  explicitly for the one path that does choose a direction;
-- **a file that opens locked fits from the lock** — coming up at the default
-  three-quarter angle and then being unable to turn out of it reads as broken;
-- **a tilted `setCamera` is DECLINED**, in a sentence, rather than quietly
-  straightened: a caller handed back a camera it never asked for has no way to learn
-  the view is locked.
-
-Known gap: fullscreen's slow auto-orbit still turns a locked view a little
-(OrbitControls' `autoRotate` does not consult `enableRotate`). Leaving fullscreen is
-a plan view again.
 
 A renderer whose model moves outside React (a robot's pose) keeps that state in
 its own store: `rendererState` as a function is read at the moment the record is
@@ -175,8 +147,9 @@ returns the live catalog entry of the prepared file, the prompt `resource`, the
 `workspaceLoadAlert` turns a catalog or loader failure into `load.alert`; and
 `useDeclinedSelectReference` consumes a host's request to select a reference in
 a file that has none and answers it in the status toast. A renderer is then its
-scene hook, its tool list and its tabs (`dxf/DxfRenderer.jsx`, `glb/GlbRenderer.jsx`,
-`mesh/MeshRenderer.jsx`, `robot/RobotRenderer.jsx`).
+scene hook, its tool list and its tabs (`glb/GlbRenderer.jsx`, `mesh/MeshRenderer.jsx`,
+`robot/RobotRenderer.jsx`). The DXF renderer uses the workspace module without the
+shell: it has no scene, so it reaches the same catalog entry and commands directly.
 
 The shell's behaviour has one real-browser test,
 `kit/shell/RendererShell.browser.test.mjs` (deferred files, warm reopen, isolated
@@ -205,79 +178,72 @@ shell should bring a servable STEP fixture with it.
 ## DXF renderer
 
 `createDxfRenderer` (`@hardcore/ui/renderers/dxf`, id `dxf`) shows a `.dxf`. The CAD
-renderer does not match one. A DXF is **not artifact-managed** — the backend never
-owns one (`owns_dxf_path` always answers False) — so the renderer needs the workspace
-client and nothing else: it fetches the file and parses it.
+renderer does not match one.
 
-- **Two presentations, chosen from the parse** (`dxf/presentation/`, behind one
-  interface: `{ kind, object3D, restBounds, update(settings), setSurfaceLook?, dispose }`).
-  `dxfDataIsDocument` decides.
-  - A **layout** (closed cut contours) is a flat pattern that folds
-    (`presentation/layout.js`): the prism is baked ONCE at 1 mm, so thickness is a
-    scale on a cached buffer and a boxed fold is a vertex rewrite of it. A curved
-    fold, and a hidden cut layer, are the two things only a fresh mesh can express;
-    that mesh is swapped into the same sheet object. The drawing's annotations — the
-    dashed bend creases, score lines and text markings — ride the same fold chain as
-    the sheet, so they stay on the faces they annotate.
-  - A **document** (a dimensioned drawing: plan views, sections, a title block, which
-    encloses nothing) is its line-work (`presentation/document.js`): one
-    `LineSegments` per layer and no mesh at all. Hiding a layer hides its object;
-    nothing is rebuilt.
-  - A layout whose contours will not mesh **falls back to the document presentation**
-    and says so through `meshFailure`, which the renderer raises as a non-blocking
-    "No closed cut contour" warning on the file badge. It used to sit under a loading
-    overlay forever.
-- **Geometry** is all core's (`@hardcore/core/lib/dxf/*`), shared verbatim with the
-  headless snapshot builder (`packages/core/bin/dxf-mesh.mjs`): `parseDxf` (which
-  scales the file's own `$INSUNITS` to millimetres, the scene's unit),
-  `buildDxfPreviewMeshData`, `foldPreview`, `buildDrawingLines`. The renderer owns the
-  objects and what a setting does to them, never the mathematics.
-- **Loading** (`dxf/useDxfDocument.js`): `loadRenderDxf`, memoized by core per file
-  revision. Progress reads "Reading model", then "Loading geometry 0/1". A file that
-  will not parse raises the load alert with the parser's own sentence.
-- **Settings** (`dxf/dxfSettings.js`, `dxf/useDxfSettings.js`): thickness, stock
-  material, the per-bend angle and direction, the fold's corner style, radius and
-  K-factor, hidden layers, the display unit, the post-fold orientation and 2D/3D —
-  one reducer, all of it render-time, none of it reaching back into the file. All
-  dimensional state is MILLIMETRES; the Units select converts at the input boundary
-  only, so switching units never changes the part.
-- **Look**: the sheet has no authored colour — it is stock, not a painted part — so it
-  wears the viewer's surface in Solid and the studio's in Render, over the same colour
-  (`setSurfaceLook` forces `authored: false`, as the mesh renderer does; keeping a finish
-  would leave the sheet the bare white its material is constructed with). A Material preset
-  is a **tint**, and it beats every colour mode (`applyTint` runs after the look, which is
-  the precedence the monolith had). Line-work, guides, scores and text are unlit and
-  outside the look.
-- **Bounds**: `restBounds` is the flat 1 mm prism's box (a document's is its line
-  box). Framing, 100% zoom, lighting, the floor and shadows all stay on it — a folded
-  or thickened part does not re-frame itself. Known gap: they do not follow the fold
-  either, so a tall flange is lit as a flat sheet.
-- **2D / 3D** is a **navbar action** (`drawing-projection`, "Switch to 2D view" /
-  "Switch to 3D view"), not a tool and not a pill: it changes the camera, not what the
-  pointer does. 2D is the shell's [plan view](#plan-view). A **document is inherently a
-  plan**: it opens locked and offers no action.
-- **Display**: `EDGELESS_VIEW_FEATURES` (Solid and Render; no Edges, Clip or Explode).
-- **Tools**: none. Nothing of a drawing picks, measures, poses, plays or is drawn
-  on, so there is no tool strip over the viewport at all and no viewport context
-  menu: the pointer orbits, pans and zooms, and that is the whole of it.
-- **Inspector**, titled `DXF`, open by default (a drawing's settings live in it):
-  **Material**, **Bends** when the file has bend lines, **Layers** when it uses more
-  than one, then **Display**. Tabs are computed per presentation.
-- **Host commands**: the base live commands; `select` and `clearSelection` are
-  declined with a sentence, and a `selectReference` host request is consumed and
-  answered in the status toast. `setCamera` with a tilted pose is declined while the
-  view is locked.
-- **State**: the shell record under `[path, "dxf"]`, holding the ten settings and the
-  view. Records written under `[path, "cad"]` are not migrated: thickness, bends,
-  hidden layers, 2D and the camera reset once.
-- **Posing asks for a frame.** The render loop is on demand, so `update(settings)` is
-  followed by `shell.requestRender()`. Without it a setting re-poses the scene and the
-  viewport keeps showing the last frame it drew — and no capture-based test can see that,
-  because capturing renders. The browser test reads the CANVAS for anything that claims a
-  setting reached the screen.
-- **Known gaps carried, not introduced**: `layer.visibleDefault` is parsed and unused;
-  the Layers rows have no colour swatch; hiding the ONLY cut layer changes nothing
-  visible (the re-mesh raises "requires one outer contour" and the prism stands).
+It is **not on the shell**, and that is the whole design: a DXF is a finished 2D
+document, so the pane is a canvas and the drawing is painted on it. No three.js, no
+viewport, no scene, no Inspector, no Display settings, no tools, no toolbar. The
+questions the old Material/Bends/Layers tabs answered were about a sheet-metal part
+the viewer was inventing from the file; a drawing is not that.
+
+- **The picture comes from the BACKEND.** `client.drawing(file)` is one
+  `GET /__cad/drawing` (`apps/web/docs/backend.md`): ezdxf flattens the modelspace on
+  the server — text outlined, dimensions exploded, hatches filled, blocks placed — and
+  the client receives five primitive shapes in DXF coordinates, y up. **This renderer
+  never parses DXF.** The payload is cached server-side by the document's content
+  hash, so reopening a file costs a round trip and nothing else.
+- **Drawing is core's** (`@hardcore/core/lib/drawing2d`), so the headless snapshot
+  bundle paints the same picture from the same payload: `fitTransform` / `zoomTransform`
+  / `panTransform` (one uniform scale and a translation; the y flip lives in the
+  transform, not in the geometry), `prepareDrawing(payload)` (paths built ONCE, per
+  colour for strokes and per primitive for fills) and `drawDrawing(ctx, drawable, …)`.
+- **Hairlines, always.** Strokes are 1.25 CSS px at every zoom, as AutoCAD draws with
+  LWDISPLAY off: paths are in MODEL space and the context carries the view, so one
+  `lineWidth = 1.25 / scale` per frame rebuilds no geometry. Model-space lineweights
+  are not displayed at all.
+- **`color: null` is the default pen** (ACI 7, "whatever contrasts with the
+  background"), resolved at DRAW time against the app's `--foreground` on its
+  `--background` — the same pair the 3D viewers' chrome uses. One payload therefore
+  serves both themes: flipping `.dark` repaints, it does not refetch. The tokens are
+  read off the pane, and a mutation on `<html>` schedules a frame.
+- **Fills are even-odd, and each one is filled on its own.** A `filled-paths`
+  primitive's inner rings are its holes; merging two overlapping regions of one colour
+  into a single path would turn their overlap into a hole as well. Fills go down
+  before strokes, which is the one ordering that never hides an edge.
+- **Interaction** (`dxf/useDrawingView.js`): fit on open and on resize until the
+  person moves the view, drag to pan (any primary press, one finger), wheel or pinch to
+  zoom about the pointer, double-click to fit again. The view lives in a REF and the
+  canvas repaints through one `requestAnimationFrame` when something changed; a pan
+  never re-renders the component tree. The backing store is DPR-aware
+  (`kit/viewport/pixelRatio.js`), and the cursor is `grab` / `grabbing`.
+- **Navbar**: `Zoom out`, `Zoom in`, `Reset Zoom`, `Take snapshot` — and no Inspector
+  toggle, because the renderer declares no panel. The zoom READOUT is gone with the
+  Inspector header it lived in: `FileNavigationAction` is an icon button, not a slot
+  for a control, so the three things `ZoomControl`'s menu did are those three buttons.
+  The snapshot is the canvas as a PNG, background included, delivered through
+  `host.promptContext` like every other renderer's.
+- **Empty and failed drawings.** `bounds: null` (nothing in the modelspace) is a quiet
+  sentence over the empty pane, not an error. A non-200 becomes the ordinary actionable
+  alert carrying the SERVER's sentence (`failureAlert`, `kind: "http"`); a payload from
+  a cadgen that disagrees about `schemaVersion` gets its own alert whose recovery is to
+  update cadgen and the app together.
+- **Host commands**: `resetCamera` fits the drawing again, `setZoom(percent)` zooms
+  against the fit (100% IS the fit), `capture` hands over the PNG, and `readState`
+  reports `camera: null`, an empty `display` and the current `zoomPercent`. `select`,
+  `clearSelection`, `setCamera`, `setDisplaySettings` and `setRenderMode` are each
+  declined with a sentence that says why a flat drawing has no such thing; a
+  `selectReference` host request is consumed and answered in the status toast.
+- **State** under `[path, "dxf"]`: `{ kind: "dxf-view", version: 1, transform }`, and
+  only once the person has MOVED the view — an untouched drawing stores nothing, so it
+  reopens fitted to whatever pane it lands in. A hard cutover: every record the 3D DXF
+  viewer wrote (thickness, bends, hidden layers, 2D/3D, a camera) reads as nothing
+  stored.
+- **Fixture and test**: `dxf/__fixtures__/sample.drawing.json` is exactly what the route
+  answered for `sample.dxf` (default-pen line-work, a red circle, a solid hatch with an
+  island, TEXT, a bulged LWPOLYLINE); `make_fixture.py` regenerates the pair.
+  `DxfRenderer.browser.test.mjs` serves it and asserts on PIXELS — the fit, the theme
+  flip, the red circle, the unfilled island, the hairline at 800%, zoom about the
+  pointer, pan, re-fit, the resize rule, and that no sidebar, tab or tool strip exists.
 
 ## GLB renderer
 
@@ -520,8 +486,8 @@ Per-file state belongs to `FileViewerState.renderers`, keyed by
 the existing versioned file-session slices: display settings, selections,
 camera, drawing history, file-sheet sections, kinematic parameters, clip/time
 preferences and large-file opt-in. (A robot's joint values are in the robot
-renderer's own record, `[path, "robot"]`; a drawing's sheet settings are in the DXF
-renderer's, `[path, "dxf"]`.) Asset signatures retain
+renderer's own record, `[path, "robot"]`; a drawing's view is in the DXF renderer's,
+`[path, "dxf"]`.) Asset signatures retain
 the original invalidation rules. Playback time is saved when stopped or
 unmounted, and opening a file does not resume playback automatically.
 
@@ -997,7 +963,8 @@ model gets the room until a person opens it (a robot's Inspector opens, on
 Kinematics). Each renderer says so in its own
 `panels()` (`inspectorPanels(ready, { defaultOpen })`). Snapshot uses the host prompt-context port: desktop attaches
 the viewport image and references to the owning session's draft; web copies
-through its clipboard adapter. The DXF renderer also contributes its 2D/3D projection action.
+through its clipboard adapter. The DXF renderer, which is not on the shell,
+contributes its own four: Zoom out, Zoom in, Reset Zoom and Take snapshot.
 The shared FileViewer renders these registered actions without importing CAD.
 
 Zoom is a small muted percentage at the right of the Inspector tab strip. Its
