@@ -1,5 +1,5 @@
-import { createCadPreferences, type CadPreferences } from '@hardcore/ui/renderers/cad';
-import { readOrbit, writeOrbit, ORBIT_STORAGE_KEY } from '@hardcore/ui/renderers/cad/state';
+import { createCadPreferences, type CadPreferences } from '@hardcore/ui/renderers/workspace';
+import { readOrbit, writeOrbit, ORBIT_STORAGE_KEY } from '@hardcore/ui/renderers/step/state';
 
 /** The browser host persists motion preferences; CAD modes own appearance. */
 export function createWebCadPreferences() {

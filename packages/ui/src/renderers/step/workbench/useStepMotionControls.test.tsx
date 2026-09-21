@@ -2,8 +2,8 @@ import React, { useRef, useState } from 'react';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { animationRenderFrame, buildDefaultAnimationState, findAnimationClip } from '@hardcore/core/common/animationClock.js';
-import { AnimationClockProvider, createAnimationClock } from '../../../../dist/renderers/cad/workbench/animationClockStore.js';
-import { useStepMotionControls } from '../../../../dist/renderers/cad/workbench/useStepMotionControls.js';
+import { AnimationClockProvider, createAnimationClock } from '../../../../dist/renderers/step/workbench/animationClockStore.js';
+import { useStepMotionControls } from '../../../../dist/renderers/step/workbench/useStepMotionControls.js';
 
 const parameters = [
   { id: 'hinge', type: 'number', defaultValue: 5, min: -90, max: 90 },

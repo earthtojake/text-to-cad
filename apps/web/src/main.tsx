@@ -3,7 +3,7 @@ import { EmptyState } from '@hardcore/ui/navigation';
 import { StrictMode, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { FileViewer, type FileSource } from '@hardcore/ui/file-viewer';
-import { ViewerLoadingOverlay } from '@hardcore/ui/renderers/cad/presentation';
+import { ViewerLoadingOverlay } from '@hardcore/ui/file-viewer/presentation';
 import { createCadClient } from '@hardcore/core/client';
 import { unavailablePromptContext } from '@hardcore/core/prompt';
 import type { ViewerHost } from '@hardcore/ui/host';

@@ -3,14 +3,15 @@ import { useState } from 'react';
 import { FileViewer } from '@hardcore/ui/file-viewer';
 import type { FileSource, FileViewerState } from '@hardcore/ui/file-viewer';
 import { createCadClient } from '@hardcore/core/client';
-import { createCadPreferences, createCadRenderer } from '@hardcore/ui/renderers/cad';
+import { createCadPreferences } from '@hardcore/ui/renderers/workspace';
+import { createStepRenderer } from '@hardcore/ui/renderers/step';
 import { createDxfRenderer } from '@hardcore/ui/renderers/dxf';
 import { createGlbRenderer } from '@hardcore/ui/renderers/glb';
 import { createMeshRenderer } from '@hardcore/ui/renderers/mesh';
 import { createRobotRenderer } from '@hardcore/ui/renderers/robot';
 import { createHarnessRenderer } from '@hardcore/ui/renderers/shell-harness';
 import type { ViewerHost } from '@hardcore/ui/host';
-import type { CadLiveController, CadCommands } from '@hardcore/ui/renderers/cad';
+import type { CadLiveController, CadCommands } from '@hardcore/ui/renderers/step';
 
 // The one file both panes open: `?file=arm.urdf` for a test whose fixture is not the default mesh.
 const file = new URLSearchParams(location.search).get('file') || 'part.stl';
@@ -53,7 +54,7 @@ function workspace(id: string) {
   // One live binding per pane: whichever renderer the file selects binds the mounted view.
   const services = { client, preferences, commands, live };
   // `harness` is test scaffolding for the shell's own tools; it ships nowhere.
-  const renderers = [createCadRenderer(services), createDxfRenderer(services), createGlbRenderer(services), createMeshRenderer(services), createRobotRenderer(services), createHarnessRenderer(services)];
+  const renderers = [createStepRenderer(services), createDxfRenderer(services), createGlbRenderer(services), createMeshRenderer(services), createRobotRenderer(services), createHarnessRenderer(services)];
   return { client, source, host, renderers, commands, capture, selectReference, get controller() { return controller; } };
 }
 const a = workspace('one'), b = workspace('two');

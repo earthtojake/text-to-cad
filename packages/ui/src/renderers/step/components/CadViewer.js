@@ -1606,6 +1606,8 @@ const CadViewer = forwardRef(function CadViewer({
         surfaceSettings
       });
       runtime.displayRecords = runtime.cadScene.displayRecords;
+      // The kit's depth fit asks the runtime what a scene placed; these are ours.
+      runtime.placedObjects = runtime.displayRecords;
     } else {
       for (const record of runtime.displayRecords || []) {
         applyMaterialSettingsToRecord(runtime.THREE, record, materialSettings, {
@@ -2068,6 +2070,7 @@ const CadViewer = forwardRef(function CadViewer({
     // same geometry source.
     runtime.placedSourceParts = Array.isArray(meshData?.parts) ? meshData.parts : null;
     runtime.displayRecords = cadScene.displayRecords;
+    runtime.placedObjects = runtime.displayRecords;
     runtime.syncScreenSpaceLineMaterials?.();
     setDisplayRecordsToken((token) => token + 1);
     runtime.hasVisibleModel = true;
@@ -2452,6 +2455,7 @@ const CadViewer = forwardRef(function CadViewer({
         // cleanup failure transfers the still-owned scene to this host.
         runtime.cadScene = error.failedCadScene;
         runtime.displayRecords = error.failedCadScene.displayRecords;
+        runtime.placedObjects = runtime.displayRecords;
         modelGroup.add(error.failedCadScene.modelGroup);
         edgesGroup.add(error.failedCadScene.edgesGroup);
       }

@@ -11,6 +11,7 @@ import FullscreenToolbar from "../tools/fullscreen/FullscreenToolbar.jsx";
 import { ViewportAnimationBar } from "../tools/playbar/ViewportAnimationBar.js";
 import ShellViewport from "./ShellViewport.jsx";
 import ViewportBottomAction, { drawingCaptureAction } from "./ViewportBottomAction.jsx";
+import ViewportContextMenu from "./ViewportContextMenu.jsx";
 
 const TOOLBAR_POSITION = Object.freeze({ top: "14px", right: "14px" });
 // The host's panel column sizes the Inspector; this is only the sheet's nominal width.
@@ -26,7 +27,9 @@ const INSPECTOR_WIDTH = 365;
  * @param {{ shell: ReturnType<typeof import("./useRendererShell.js").useRendererShell>,
  *   tools: import("../tools/FloatingToolBar.js").ViewportTool[],
  *   inspector: { title: string, tabs: object[] },
- *   bottomAction?: { label: string, title?: string, disabled?: boolean, onInvoke(): void } | null,
+ *   bottomAction?: { label: string, shortLabel?: string, title?: string, disabled?: boolean,
+ *     onInvoke?(): void, render?: (props: object) => import("react").ReactNode, children?: import("react").ReactNode } | null,
+ *   contextMenuItems?: ((press: { clientX: number, clientY: number, shiftKey: boolean }) => object[] | null) | null,
  *   sceneRevision?: number, className?: string,
  *   viewportOverlay?: import("react").ReactNode | ((viewport: { runtimeRef: object, hostRef: object, viewerReadyTick: number }) => import("react").ReactNode) }} props
  *   `tools`: left to right, from `shell.tools`; an EMPTY list draws no strip at all,
@@ -34,12 +37,16 @@ const INSPECTOR_WIDTH = 365;
  *   `inspector.tabs`: tab descriptors
  *   (`{ id, title, content }`), usually ending with `shell.displayTab`. `bottomAction`
  *   replaces Draw's (copy the view with its ink) while the renderer's own tool is active.
+ *   `contextMenuItems`: what THIS renderer offers on a secondary tap over the canvas; the
+ *   gesture, the anchor and the dismissal are the shell's (`ViewportContextMenu.jsx`), and a
+ *   renderer that passes none has no viewport menu at all.
  *   `viewportOverlay`: the renderer's own layer over the canvas; as a function it is given
  *   the viewport (its live runtime, the element its pointer events arrive on, and a tick
  *   that changes when the runtime is replaced), which is what a handle overlay or a
  *   pointer pick (`kit/tools/select/usePointerPick.js`) needs.
  */
-export default function RendererShell({ shell, tools, inspector, bottomAction = null, sceneRevision = 0, viewportOverlay = null, className = "" }) {
+export default function RendererShell({ shell, tools, inspector, bottomAction = null, contextMenuItems = null,
+  sceneRevision = 0, viewportOverlay = null, className = "" }) {
   const frame = shell.frame;
   const { view, resolvedScene, previewMode, viewerLoading, scene } = frame;
   const hasContent = Boolean(scene) && !viewerLoading;
@@ -47,6 +54,11 @@ export default function RendererShell({ shell, tools, inspector, bottomAction = 
   const action = bottomAction || (frame.drawToolActive
     ? drawingCaptureAction({ composer: frame.composer, disabled: viewerLoading || !hasContent, onInvoke: frame.capture })
     : null);
+  // The renderer's overlay and the shell's own layers share one viewport context.
+  const overlay = viewport => <>
+    {previewMode || !contextMenuItems ? null : <ViewportContextMenu viewport={viewport} items={contextMenuItems} />}
+    {typeof viewportOverlay === "function" ? viewportOverlay(viewport) : viewportOverlay}
+  </>;
   return (
     <HostPanelSlotContext.Provider value={view.panelSlot}>
     <FileSheetPortalContext.Provider value={frame.hostElement}>
@@ -104,7 +116,8 @@ export default function RendererShell({ shell, tools, inspector, bottomAction = 
                     onCameraZoomPercentChange={frame.setZoomPercent}
                     onPresentationChange={frame.handlePresentationChange}
                     onViewerAlertChange={frame.setRuntimeAlert}
-                  >{viewportOverlay}</ShellViewport>
+                    onCameraSettled={frame.onCameraSettled}
+                  >{overlay}</ShellViewport>
                   {!previewMode ? <BlockingViewerAlert alert={blockingAlert} onReload={view.reload} /> : null}
                   {!previewMode && action ? <ViewportBottomAction composer={frame.composer} {...action} /> : null}
                 </div>

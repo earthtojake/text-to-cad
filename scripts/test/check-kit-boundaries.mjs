@@ -41,8 +41,6 @@ const SECTION_RULES = new Set(['explode', 'section clipping']);
 export const KIT_WORD_ALLOWLIST = [
   ['camera/ViewPlaneControl.js', 'showSelector', 'UI word: the view-plane "selector" is the orientation control itself, not a CAD selector'],
   ['camera/ViewPlaneControl.js', 'view selector', 'user-visible aria label of the same control ("2D view selector" / "Perspective selector")'],
-  ['viewport/useViewerRuntime.js', 'displayRecords: []', 'runtime slot the current scene builders fill; it leaves with the STEP scene (renderer-split phase 5)'],
-  ['viewport/renderDepthPolicy.js', 'displayRecords: runtime?.displayRecords', 'passes that same slot to the depth fit; leaves with it'],
   ['view-settings/viewerDisplaySettings.js', 'buildStepClipPatch', "core's clip-settings API carries STEP in its names; the settings model only passes the Clip section through"],
   ['view-settings/DisplaySettingsTab.js', 'DEFAULT_STEP_CLIP_SETTINGS', 'same core API, read by the opt-in Clip section'],
   ['view-settings/DisplaySettingsTab.js', 'normalizeStepClipSettings', 'same core API, read by the opt-in Clip section'],
@@ -94,10 +92,10 @@ export function checkKitBoundaries(repo, { allowlist = KIT_WORD_ALLOWLIST } = {}
 // RENDERER SLICES. One renderer per file family, each a vertical slice: it imports
 // the kit, the shared workspace module (backend connection, preferences), shared
 // UI and core. It never imports another renderer, so a family can be changed,
-// lazy-loaded and deleted alone. A slice joins this list when it is split out of
-// the legacy `cad` renderer; `workspace` is held to the same rule.
+// lazy-loaded and deleted alone. Every file family is on this list; `workspace`
+// is held to the same rule.
 export const RENDERERS_ROOT = 'packages/ui/src/renderers';
-export const RENDERER_SLICES = ['dxf', 'glb', 'mesh', 'robot', 'workspace'];
+export const RENDERER_SLICES = ['dxf', 'glb', 'mesh', 'robot', 'step', 'workspace'];
 const SLICE_SHARED = ['kit', 'workspace'];
 
 export function checkRendererSlices(repo, { slices = RENDERER_SLICES } = {}) {

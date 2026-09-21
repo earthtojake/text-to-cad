@@ -2,15 +2,13 @@ import type { FileViewerState, JsonValue } from "@hardcore/ui/file-viewer";
 import { useCallback, useMemo, useState } from "react";
 import { useExplorer, useTree } from "@renderer/state/explorer";
 import type { ExplorerRoot } from "@shared/types";
-import { migrateCadFileStates } from "./cadPersistence";
 import { mergeChangedRecords } from "./statePatch";
 export { mergeChangedRecords as mergeRendererState } from "./statePatch";
 
 const KEY = "hardcore.fileViewer.v1";
 type RendererStates = NonNullable<FileViewerState["renderers"]>;
-function read(sourceId: string, rootPath: string): RendererStates {
+function read(sourceId: string): RendererStates {
   try {
-    migrateCadFileStates(sourceId, rootPath, localStorage, sessionStorage);
     const parsed: unknown = JSON.parse(localStorage.getItem(KEY) ?? "null");
     if (!parsed || typeof parsed !== "object" || !(sourceId in parsed)) return {};
     const entry = (parsed as Record<string, unknown>)[sourceId];
@@ -26,13 +24,13 @@ function write(sourceId: string, renderers: RendererStates) {
 }
 
 /** Keep existing panel/width/tree preferences; add one versioned root-scoped renderer record. */
-export function useDesktopViewState(sourceId: string, tabId: string, root: ExplorerRoot, panel: string | null, rootPath: string) {
+export function useDesktopViewState(sourceId: string, tabId: string, root: ExplorerRoot, panel: string | null) {
   // View choices belong to this persisted tab; immutable geometry caches still share resources.
   const stateKey = JSON.stringify([sourceId, tabId]);
   const panelWidth = useExplorer((state) => state.panelWidth);
   const { open } = useTree(root);
-  const [stored, setStored] = useState(() => ({ id: stateKey, renderers: read(stateKey, rootPath) }));
-  const renderers = useMemo(() => stored.id === stateKey ? stored.renderers : read(stateKey, rootPath), [stateKey, rootPath, stored]);
+  const [stored, setStored] = useState(() => ({ id: stateKey, renderers: read(stateKey) }));
+  const renderers = useMemo(() => stored.id === stateKey ? stored.renderers : read(stateKey), [stateKey, stored]);
   const state = useMemo<FileViewerState>(() => ({ panel, panelWidth, expandedDirectories: [...open], renderers }), [panel, panelWidth, open, renderers]);
   const onStateChange = useCallback((next: FileViewerState) => {
     const explorer = useExplorer.getState();
@@ -45,9 +43,9 @@ export function useDesktopViewState(sourceId: string, tabId: string, root: Explo
       return previous.size === expanded.size && [...previous].every((directory) => expanded.has(directory)) ? previous : expanded;
     });
     if (next.renderers !== renderers) {
-      const value = mergeChangedRecords(read(stateKey, rootPath), renderers, next.renderers ?? {});
+      const value = mergeChangedRecords(read(stateKey), renderers, next.renderers ?? {});
       setStored({ id: stateKey, renderers: value }); write(stateKey, value);
     }
-  }, [stateKey, rootPath, root, tabId, renderers, state]);
+  }, [stateKey, root, tabId, renderers, state]);
   return { state, onStateChange };
 }

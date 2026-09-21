@@ -21,10 +21,10 @@ test('a format-blind kit module passes, including its shared-UI and core imports
 }, result => assert.deepEqual(result.errors, [])));
 
 test('the kit never imports a renderer or a file-family core module', () => fixture({
-  [kit('tools/a.js')]: "import x from '../../cad/workbench/state.js';\n",
+  [kit('tools/a.js')]: "import x from '../../step/workbench/state.js';\n",
   [kit('tools/b.js')]: "const load = () => import('@hardcore/core/lib/urdf/parseUrdf.js');\n",
   [kit('tools/c.js')]: "import { buildModel } from '@hardcore/core/common/cadScene.js';\n",
-  [kit('tools/d.js')]: "import y from '@hardcore/ui/renderers/cad';\n",
+  [kit('tools/d.js')]: "import y from '@hardcore/ui/renderers/step';\n",
 }, result => {
   assert.equal(result.errors.filter(error => error.includes('imports a renderer')).length, 2);
   assert.equal(result.errors.filter(error => error.includes('file-family core module')).length, 2);
@@ -65,12 +65,12 @@ test('a renderer slice imports the kit, the workspace module, shared UI and core
 }, result => assert.deepEqual(result.errors, [])));
 
 test('a renderer slice never imports another renderer; its tests are not scanned', () => sliceFixture({
-  'glb/a.js': "import view from '../cad/file-view/CadFileView.js';\n",
-  'glb/b.js': "const load = () => import('@hardcore/ui/renderers/cad');\n",
-  'glb/c.test.js': "import '../cad/live.js';\n",
+  'glb/a.js': "import view from '../step/file-view/StepSurface.jsx';\n",
+  'glb/b.js': "const load = () => import('@hardcore/ui/renderers/step');\n",
+  'glb/c.test.js': "import '../step/live.js';\n",
 }, result => {
   assert.equal(result.errors.length, 2);
-  assert.ok(result.errors.every(error => error.includes('imports the "cad" renderer')));
+  assert.ok(result.errors.every(error => error.includes('imports the "step" renderer')));
 }));
 
 test('a listed slice that does not exist fails rather than passing silently', () => sliceFixture({

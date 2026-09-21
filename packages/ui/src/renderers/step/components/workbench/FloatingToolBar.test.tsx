@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
-import FloatingToolBar from '../../../../../dist/renderers/cad/components/workbench/FloatingToolBar.js';
+import FloatingToolBar from '../../../../../dist/renderers/step/components/workbench/FloatingToolBar.js';
 
 Object.assign(globalThis, { React });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });

@@ -14,7 +14,7 @@ test('file and model trees share row sizing and insets while model disclosure, i
     resolveDir: fileURLToPath(new URL('.', import.meta.url)), loader: 'jsx', contents: `
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import ModelingTree from '../../../dist/renderers/cad/components/workbench/ModelingTree.js';
+import ModelingTree from '../../../dist/renderers/step/components/workbench/ModelingTree.js';
 import { FileTree } from '../../../dist/file-viewer/navigation/FileTree.js';
 const leaves = Array.from({length:70}, (_, i) => ({id:'o'+i,nodeType:'part',displayName:'Part '+i,leafPartIds:['o'+i],children:[]}));
 const group = {id:'group',nodeType:'assembly',displayName:'Subassembly',leafPartIds:['o0','o1'],children:leaves.slice(0,2)};

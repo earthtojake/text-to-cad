@@ -618,9 +618,9 @@ function groundPlaneFrustumDepths(camera, groundZ) {
 // A close camera can enter an assembly's mostly empty aggregate box while
 // remaining well outside every visible part. Fit those parts independently so
 // the near plane does not collapse and make thin surfaces fight for depth.
-// This uses existing occurrence bounds, never vertex scans or CAD picking.
-function closeupSubjectNear(camera, displayRecords, modelGroup) {
-  if (!displayRecords?.length) return null;
+// This uses the placed objects' existing bounds, never vertex scans or picking.
+function closeupSubjectNear(camera, placedObjects, modelGroup) {
+  if (!placedObjects?.length) return null;
   const frustum = new THREE.Frustum().setFromProjectionMatrix(
     new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),
     camera.coordinateSystem, camera.reversedDepth
@@ -633,7 +633,7 @@ function closeupSubjectNear(camera, displayRecords, modelGroup) {
   const world = new THREE.Matrix4(), view = new THREE.Matrix4();
   modelGroup?.updateWorldMatrix?.(true, false);
   let nearest = Infinity;
-  for (const record of displayRecords) {
+  for (const record of placedObjects) {
     if (record.mesh?.visible === false) continue;
     const bounds = record.partBounds;
     if (!Array.isArray(bounds?.min) || !Array.isArray(bounds?.max)
@@ -671,7 +671,7 @@ function closeupSubjectNear(camera, displayRecords, modelGroup) {
 // foreground ground that is actually visible without forcing an arbitrary
 // scene-scale near plane.
 export function fitCameraDepthToBounds(camera, bounds, {
-  displayRecords, modelGroup, groundZ = bounds?.min?.[2], gridBounds = null
+  placedObjects, modelGroup, groundZ = bounds?.min?.[2], gridBounds = null
 } = {}) {
   if (!camera?.isCamera || !Array.isArray(bounds?.min) || !Array.isArray(bounds?.max)
     || bounds.min.length < 3 || bounds.max.length < 3
@@ -683,7 +683,7 @@ export function fitCameraDepthToBounds(camera, bounds, {
   const radius = Math.max(Math.hypot(...bounds.max.map((value, axis) => value - bounds.min[axis])) / 2, 1e-6);
   let subjectNear = Math.min(...depths) - radius * 0.1;
   if (subjectNear <= radius * 1e-5) {
-    subjectNear = closeupSubjectNear(camera, displayRecords, modelGroup) ?? subjectNear;
+    subjectNear = closeupSubjectNear(camera, placedObjects, modelGroup) ?? subjectNear;
   }
   // Guides exist independently of the photographic floor. Fit their visible
   // plane too, otherwise the model's near plane slices off foreground grid lines.

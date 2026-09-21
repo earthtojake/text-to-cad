@@ -16,7 +16,7 @@ an endpoint the server does not implement.
 
 ## Scope
 
-This is the rule inside the CAD renderer (`src/renderers/cad`), which shows STEP. A DXF,
+This is the rule inside the STEP renderer (`src/renderers/step`). A DXF,
 a GLB, a triangle mesh (STL, 3MF) and a robot description (URDF, SRDF, SDF) have renderers
 of their own (`src/renderers/dxf`, `src/renderers/glb`, `src/renderers/mesh`,
 `src/renderers/robot`; see [CAD renderer](cad-renderer.md#kit)): a vertical slice owns its
@@ -63,7 +63,7 @@ format. Pure data: no behaviour, no imports beyond the format enum.
 
 ## The content signal
 
-`selectedViewportContent` in the CAD renderer is the single answer to "is there anything on
+`selectedViewportContent` in the STEP renderer is the single answer to "is there anything on
 screen?", derived from `content`. Toolbar gates, the CTA, preview mode, the zoom pill and
 alert blocking all read it, rather than each one re-deriving the answer per format.
 

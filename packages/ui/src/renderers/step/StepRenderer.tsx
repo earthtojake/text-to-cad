@@ -1,7 +1,7 @@
 import { useSyncExternalStore, type ComponentType } from 'react';
 import type { FileActivity, FileNavigationAction, FileRendererProps, JsonValue } from '../../file-viewer/types.js';
 import type { CadWorkspaceService, CadEntry, CadRenderSession, CadServerInfo } from '@hardcore/core/client';
-import type { CadCommands, CadCommandSource, CadLiveBinding, CadRendererSlots, PreparedCadDocument } from './index.js';
+import type { CadCommands, CadCommandSource, CadLiveBinding, StepRendererSlots, PreparedStepDocument } from './index.js';
 import type { ResourceRef } from '@hardcore/core/prompt';
 import type { CadPreferences } from '../workspace/index.js';
 import CadFileView from './file-view/CadFileView.js';
@@ -9,7 +9,7 @@ import CadFileView from './file-view/CadFileView.js';
 const emptyCommands: CadCommands = Object.freeze({});
 const emptySubscribe = () => () => {};
 const getEmptyCommands = () => emptyCommands;
-interface CadSurfaceProps {
+interface StepSurfaceProps {
   fullscreen?: boolean;
   onExitFullscreen?: () => void;
   onNavigationActionsChange?: (actions: readonly FileNavigationAction[]) => void;
@@ -33,12 +33,12 @@ interface CadSurfaceProps {
   captureRequest?: CadCommands['captureRequest'];
   acknowledgeCommand?: CadCommandSource['acknowledge'];
   documentResource: ResourceRef;
-  slots?: CadRendererSlots;
+  slots?: StepRendererSlots;
   live?: CadLiveBinding;
 }
-const Surface = CadFileView as ComponentType<CadSurfaceProps>;
+const Surface = CadFileView as ComponentType<StepSurfaceProps>;
 
-export default function CadRenderer(props: FileRendererProps<PreparedCadDocument>) {
+export default function StepRenderer(props: FileRendererProps<PreparedStepDocument>) {
   const { data } = props;
   const commands = useSyncExternalStore(
     data.services.commands?.subscribe || emptySubscribe,

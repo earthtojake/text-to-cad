@@ -2,8 +2,8 @@ import React from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import FullscreenToolbar, { FULLSCREEN_TOOLBAR_IDLE_MS } from '../../../../../dist/renderers/cad/components/workbench/FullscreenToolbar.js';
-import { AnimationClockProvider, createAnimationClock } from '../../../../../dist/renderers/cad/workbench/animationClockStore.js';
+import FullscreenToolbar, { FULLSCREEN_TOOLBAR_IDLE_MS } from '../../../../../dist/renderers/step/components/workbench/FullscreenToolbar.js';
+import { AnimationClockProvider, createAnimationClock } from '../../../../../dist/renderers/step/workbench/animationClockStore.js';
 
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });

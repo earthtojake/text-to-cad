@@ -1,4 +1,4 @@
-import type { CadLiveBinding, CadLiveController, CadLiveState } from "@hardcore/ui/renderers/cad";
+import type { CadLiveBinding, CadLiveController, CadLiveState } from "@hardcore/ui/renderers/step";
 type Scope = { projectId: string; root: string | null };
 const live = new Map<string, Scope & { controller: CadLiveController }>();
 const snapshots = new Map<string, Scope & { state: CadLiveState }>();

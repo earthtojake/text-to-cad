@@ -14,7 +14,7 @@ selection/measurements/tools, inspector layout and responsive behavior.
 
 **Owns:** URL selection, browser history, document title/appearance, catalog
 file-source adapter, browser persistence, and this app's top bar/release links.
-`src/App.tsx` composes an explicit `ViewerHost` and the shared CAD renderer. The catalog
+`src/App.tsx` composes an explicit `ViewerHost` and one renderer per file family. The catalog
 continues to expose CAD artifacts only; this migration adds no file types or
 write endpoints to the web app.
 Follow the [shared host contract](../../packages/ui/docs/viewer-host.md) when
@@ -155,7 +155,7 @@ the build — detection only; it keeps serving.
 
 This app exports no components. Other hosts use `@hardcore/ui/file-viewer` with
 registered renderers and explicit services. Viewer content is registered through
-`@hardcore/ui/renderers/cad`, for `.dxf` `@hardcore/ui/renderers/dxf`, for `.glb`
+`@hardcore/ui/renderers/step`, for `.dxf` `@hardcore/ui/renderers/dxf`, for `.glb`
 `@hardcore/ui/renderers/glb`, for `.stl` and `.3mf` `@hardcore/ui/renderers/mesh`, and
 for `.urdf`, `.srdf` and `.sdf` `@hardcore/ui/renderers/robot` (`App.tsx` registers all
 five with the same client and preferences); all loading,

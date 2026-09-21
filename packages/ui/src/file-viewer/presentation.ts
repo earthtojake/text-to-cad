@@ -1,9 +1,9 @@
 import { createElement, type ComponentType } from 'react';
-import Overlay from '../kit/status/ViewerLoadingOverlay.js';
-import Toast from '../kit/status/StatusToast.js';
+import Overlay from '../renderers/kit/status/ViewerLoadingOverlay.js';
+import Toast from '../renderers/kit/status/StatusToast.js';
 
-export { default as MissingFileAlert } from '../kit/status/MissingFileAlert.js';
-export type { MissingFileAlertProps } from '../kit/status/MissingFileAlert.js';
+export { default as MissingFileAlert } from '../renderers/kit/status/MissingFileAlert.js';
+export type { MissingFileAlertProps } from '../renderers/kit/status/MissingFileAlert.js';
 
 export interface CadArtifactProgress {
   phase: string;

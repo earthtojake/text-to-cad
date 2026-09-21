@@ -25,7 +25,7 @@ export function FileTab({ sessionId, tabId, project, root, path, panel, cadConne
     projectName: () => useProjects.getState().projects.find(entry => entry.id === project.id)?.name ?? "Project", root }), [sessionId, project.id, root]);
   const composition = useMemo(() => createDesktopRenderers(project.id, root, tabId, cadConnection), [project.id, root, tabId, cadConnection]);
   useEffect(() => () => composition.dispose(), [composition]);
-  const { state, onStateChange } = useDesktopViewState(source.id, tabId, root, panel, root ?? project.path);
+  const { state, onStateChange } = useDesktopViewState(source.id, tabId, root, panel);
   const reveal = useExplorer((state) => state.reveal);
   const colorScheme = useResolvedTheme();
   const promptContext = useMemo(() => createDesktopPromptContext(project.id, root, source.id, sessionId), [sessionId, project.id, root, source.id]);

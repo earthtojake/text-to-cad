@@ -1,6 +1,6 @@
 import { desktopCadLive } from "@renderer/state/live-cad";
 import type { PrepareContext, RendererRegistration } from "@hardcore/ui/file-viewer";
-import { createCadRenderer } from "@hardcore/ui/renderers/cad";
+import { createStepRenderer } from "@hardcore/ui/renderers/step";
 import { createDxfRenderer } from "@hardcore/ui/renderers/dxf";
 import { createGlbRenderer } from "@hardcore/ui/renderers/glb";
 import { createMeshRenderer } from "@hardcore/ui/renderers/mesh";
@@ -40,6 +40,6 @@ export function createDesktopRenderers(projectId: string, root: ExplorerRoot, ta
       }
     },
   });
-  const viewers = [createCadRenderer(services), createDxfRenderer(services), createGlbRenderer(services), createMeshRenderer(services), createRobotRenderer(services)].map(withRuntimeFailure);
+  const viewers = [createStepRenderer(services), createDxfRenderer(services), createGlbRenderer(services), createMeshRenderer(services), createRobotRenderer(services)].map(withRuntimeFailure);
   return { renderers: [markdownRenderer, codeRenderer, ...viewers, imageRenderer, pdfRenderer, unsupportedRenderer], dispose: () => ownedConnection?.dispose() };
 }

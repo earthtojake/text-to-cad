@@ -29,8 +29,8 @@ test('rejects Node builtins reached through a dynamic core import',()=>fixture({
   'packages/core/src/lib/node.js':"import fs from 'fs'; export const read = fs.readFileSync;",
 },result=>assert.ok(result.errors.some(error=>error.includes('reaches Node-only')))));
 test('keeps concrete renderers out of the FileViewer import graph',()=>fixture({
-  'packages/ui/src/file-viewer/index.ts':"export * from '../renderers/cad';",
-  'packages/ui/src/renderers/cad/index.ts':'export const cad = 1;',
+  'packages/ui/src/file-viewer/index.ts':"export * from '../renderers/step';",
+  'packages/ui/src/renderers/step/index.ts':'export const step = 1;',
 },result=>assert.ok(result.errors.some(error=>error.includes('eagerly imports')))));
 test('rejects desktop renderer imports of main-process modules',()=>fixture({
   'apps/desktop/src/renderer/view.ts':"import '../main/private';",

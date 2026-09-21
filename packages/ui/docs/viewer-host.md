@@ -31,14 +31,14 @@ are for reading and maintaining the contracts.
 | `FileSource`, `FileActions`, mutation receipts, `FileViewerState` | [File viewer types](../src/file-viewer/types.ts) | `@hardcore/ui/file-viewer` |
 | `PromptContextPort`, bundles, references and delivery receipts | [Prompt types](../../core/src/prompt/types.ts) | `@hardcore/core/prompt` |
 | `CadWorkspaceService`, `CadResourceProvider`, worker tickets | [CAD service types](../../core/src/client/types.ts) | `@hardcore/core/client` |
-| `CadRendererSlots`, selection props, `CadCommandSource`, `CadLiveBinding` | [CAD registration](../src/renderers/cad/index.ts) | `@hardcore/ui/renderers/cad` |
-| `CadPreferenceSource` | [Viewer preferences](../src/renderers/workspace/preferences.ts) | `@hardcore/ui/renderers/cad` (also `@hardcore/ui/renderers/workspace`) |
+| `StepRendererSlots`, selection props, `CadCommandSource`, `CadLiveBinding` | [STEP registration](../src/renderers/step/index.ts) | `@hardcore/ui/renderers/step` |
+| `CadPreferenceSource` | [Viewer preferences](../src/renderers/workspace/preferences.ts) | `@hardcore/ui/renderers/workspace` |
 | `DxfRendererOptions` (2D drawings; declares no panel, and declines every camera, display and selection command) | [DXF registration](../src/renderers/dxf/index.ts) | `@hardcore/ui/renderers/dxf` |
 | `GlbRendererOptions`, `LiveViewBinding`, `LiveViewController` | [GLB registration](../src/renderers/glb/index.ts), [live binding](../src/renderers/kit/shell/liveBinding.ts) | `@hardcore/ui/renderers/glb` |
 | `MeshRendererOptions` (STL, 3MF), `LiveViewBinding`, `LiveViewController` | [Mesh registration](../src/renderers/mesh/index.ts) | `@hardcore/ui/renderers/mesh` |
 | `RobotRendererOptions` (URDF, SRDF, SDF), `RobotLiveController`, `RobotLiveState` (`selectedLinks`, `selectedPartIds`) | [Robot registration](../src/renderers/robot/index.ts) | `@hardcore/ui/renderers/robot` |
 | `ViewerCommands`, `ViewerCommandSource` (the host requests the GLB, mesh and robot renderers take) | [Viewer commands](../src/renderers/workspace/commands.ts) | `@hardcore/ui/renderers/workspace` |
-| CAD snapshot validation and versioning | [CAD state](../src/renderers/cad/state.ts) | `@hardcore/ui/renderers/cad/state` |
+| STEP snapshot validation and versioning | [STEP state](../src/renderers/step/state.ts) | `@hardcore/ui/renderers/step/state` |
 
 Start with the actual composition in [web App](../../../apps/web/src/App.tsx)
 or [desktop FileTab](../../../apps/desktop/src/renderer/features/explorer/FileTab.tsx).

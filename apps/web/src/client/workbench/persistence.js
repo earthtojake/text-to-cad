@@ -1,5 +1,5 @@
-import { fileSheetWidthPxForSessionState } from "@hardcore/ui/renderers/cad/state";
-export { cadWorkspaceDefaultFileSheetWidthForViewport } from "@hardcore/ui/renderers/cad/state";
+import { fileSheetWidthPxForSessionState } from "@hardcore/ui/renderers/step/state";
+export { cadWorkspaceDefaultFileSheetWidthForViewport } from "@hardcore/ui/renderers/step/state";
 
 export const CAD_DIRECTORY_SESSION_STORAGE_VERSION = 1;
 export const CAD_DIRECTORY_SESSION_STORAGE_KEY = `cad-viewer:directory-session:v${CAD_DIRECTORY_SESSION_STORAGE_VERSION}`;

@@ -128,7 +128,7 @@ the cached bytes. The shared JavaScript entry codec and key scheme live in
 access because this shared store is outside the served root.
 
 The browser host constructs a `CadClient` from `@hardcore/core/client` and
-injects it into the CAD renderer. Catalog subscriptions share the client's
+injects it into the viewer renderers. Catalog subscriptions share the client's
 two-second poll and stop when its last subscriber leaves. Each prepared render
 session owns its tessellation provider, work queue and cancellation signal;
 there is no page-global provider registration. Session disposal releases its

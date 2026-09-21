@@ -5,7 +5,7 @@ import { serveStepHarness } from '../harness/stepScenario.mjs';
 
 // The STEP renderer end to end in a real browser, over the committed two-part
 // fixture (`__fixtures__/step`): a coloured base with a bore, a coloured arm, one
-// revolute mate, one named pose and one routine. Everything under `renderers/cad`
+// revolute mate, one named pose and one routine. Everything under `renderers/step`
 // serves STEP alone, and none of it had a browser test until this one — written
 // against the renderer as it is, so the move onto the shared shell has a net.
 //
@@ -608,7 +608,7 @@ test('Measure reads a distance between two picks; Draw lays ink over a STEP; and
   await page.evaluate(() => window.cadHarness.mounted(false));
   await pane.locator('[data-slot="cad-file-view"]').waitFor({ state: 'detached' });
   assert.deepEqual(Object.keys(await page.evaluate(() => window.cadHarness.state.renderers)),
-    [JSON.stringify(['hinge_block.step', 'cad'])], 'one record per file, keyed [path, renderer id]');
+    [JSON.stringify(['hinge_block.step', 'step'])], 'one record per file, keyed [path, renderer id]');
   await page.evaluate(() => window.cadHarness.mounted(true));
   await pane.locator('[aria-busy="false"] > div > canvas').first().waitFor();
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);

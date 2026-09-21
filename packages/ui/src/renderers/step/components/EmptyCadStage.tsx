@@ -2,7 +2,7 @@ import { useMemo, type ComponentType } from 'react';
 import { entrySourceFormat } from '@hardcore/core/lib/fileFormats.js';
 import { resolveSceneSettings } from '@hardcore/core/common/sceneSettings.js';
 import { VIEWER_PICK_MODE } from '@hardcore/core/lib/viewer/constants.js';
-import type { EmptyCadBackdropProps } from '../empty.js';
+import type { EmptyCadBackdropProps } from '../../../file-viewer/empty.js';
 import type { CadStateObject } from '../state.js';
 import { useChromeBackdropColor } from '../../kit/look/useChromeBackdropColor.js';
 import { sceneBackdropEdgeColor } from '../../kit/look/chromeBackdrop.js';

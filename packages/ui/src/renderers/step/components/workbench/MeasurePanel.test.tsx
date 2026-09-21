@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import MeasurePanel from '../../../../../dist/renderers/cad/components/workbench/MeasurePanel.js';
+import MeasurePanel from '../../../../../dist/renderers/step/components/workbench/MeasurePanel.js';
 
 afterEach(cleanup);
 const measurement = (id: string, distance: number, colorIndex: number) => ({ id, colorIndex,
