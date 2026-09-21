@@ -62,7 +62,12 @@ const a = workspace('one'), b = workspace('two');
 // return path-only placeholders until the selected file is requested.
 await Promise.all([a.client.refresh(), b.client.refresh()]);
 function App() {
-  const [state, setState] = useState<FileViewerState>({ panel: '', panelWidth: 300 });
+  // A file is normally REOPENED with what a previous session left for it: the open tab, the
+  // display settings, the camera. `__cadViewerState` is how a test starts a page that way, so
+  // "reopen this file" can be a real open against a stored state rather than a remount over a
+  // live client that still holds everything it has already downloaded.
+  const [state, setState] = useState<FileViewerState>(
+    () => (window as unknown as { __cadViewerState?: FileViewerState }).__cadViewerState || { panel: '', panelWidth: 300 });
   const [otherState, setOtherState] = useState<FileViewerState>({ panel: '', panelWidth: 300 });
   const [second, setSecond] = useState(false);
   const [mounted, setMounted] = useState(true);
