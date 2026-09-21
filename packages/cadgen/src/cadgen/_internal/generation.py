@@ -977,19 +977,20 @@ _WARNED_RETIRED_RENDER_MODULES: set[str] = set()
 
 def retired_render_module_warning(companion: Path) -> str:
     return (
-        f"warning: {_display_path(companion)} is a retired render module and is read by nothing. "
-        "Animation is declared on the model: @step(animation=...) embeds the module text "
-        "in the document's sidecar, which is what the viewer, snapshots and mesh exports "
-        "read. Move this file's clips into the decorator and delete it; "
+        f"warning: {_display_path(companion)} is a retired render module and is read by nothing, "
+        "so every clip in it is missing from this model: the viewer, snapshots and mesh "
+        "exports play none of them. Migrate it now: animation is declared on the model, "
+        "@step(animation=...) embeds the module text in the document's sidecar. Move this "
+        "file's clips into the decorator, delete the file and rebuild; "
         "see the cad skill's kinematics reference (references/kinematics.md)."
     )
 
 
 def _warn_retired_render_module(spec: EntrySpec) -> None:
     """A stray file nothing reads does not stop a build: the document is still
-    correct without it. It is named once per run, on stderr, with the replacement,
-    so the migration is visible without being enforced (the Viewer shows the same
-    text as a model warning)."""
+    correct without it. It is named once per run, on stderr, with what is lost and
+    the replacement. This is the ONLY place the migration is announced (the Viewer
+    shows no badge for it), so the text has to read as a task, not a remark."""
     if spec.source != "generated" or not spec.step_output:
         return
     companion = retired_render_module_path(spec.step_path)

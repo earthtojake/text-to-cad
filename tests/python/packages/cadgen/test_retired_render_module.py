@@ -84,6 +84,10 @@ class RetiredRenderModuleWarns(unittest.TestCase):
         self.assertIn("part.step.js", built.stderr)
         self.assertIn("@step(animation=...)", built.stderr)
         self.assertIn("kinematics", built.stderr)
+        # It says what is lost and that it is a migration to do: the build is the only
+        # place this is announced, so a remark that reads as optional goes undone.
+        self.assertIn("missing from this model", built.stderr)
+        self.assertIn("Migrate it now", built.stderr)
         # A stray file nothing reads does not stop the build.
         self.assertTrue(self.document.is_file(), "the build did not write its document")
 

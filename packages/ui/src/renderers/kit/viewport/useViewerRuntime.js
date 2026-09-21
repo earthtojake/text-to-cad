@@ -213,6 +213,10 @@ export function useViewerRuntime({
       container.appendChild(renderer.domElement);
 
       const controls = new OrbitControls(camera, renderer.domElement);
+      // three's controls write `cursor: auto` inline on the canvas when they (re)connect, and
+      // `auto` does not inherit: it would pin the arrow over every tool's cursor (Select's
+      // pointer, Pose's grab, Measure's crosshair), which the tools set on the viewport host.
+      renderer.domElement.style.cursor = "";
       controls.enableDamping = true;
       controls.dampingFactor = DEFAULT_DAMPING_FACTOR;
       controls.rotateSpeed = 1;
