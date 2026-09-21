@@ -33,10 +33,15 @@ def _stl(part, tmp: Path, name: str) -> str:
     return str(path)
 
 
-def _drafted_box(draft_deg: float, base: float = 20.0, height: float = 15.0):
-    """Four side walls leaning inward by draft_deg; top and bottom flat."""
-    top = base - 2 * height * math.tan(math.radians(draft_deg))
-    return loft([Plane.XY * Rectangle(base, base), Plane.XY.offset(height) * Rectangle(top, top)])
+def _drafted_box(draft_deg: float, base=20.0, height: float = 15.0):
+    """Four side walls leaning inward by draft_deg; top and bottom flat.
+
+    `base` is one number for a square footprint or an (x, y) pair.
+    """
+    x, y = (base, base) if isinstance(base, (int, float)) else base
+    lean = 2 * height * math.tan(math.radians(draft_deg))
+    return loft([Plane.XY * Rectangle(x, y),
+                 Plane.XY.offset(height) * Rectangle(x - lean, y - lean)])
 
 
 def _z(mesh):
@@ -495,7 +500,7 @@ class CommandLineTest(unittest.TestCase):
         self.assertEqual(sorted(k for k in report if k != "file"),
                          ["draft", "mesh", "partial", "projection", "scale", "undercuts"])
         self.assertNotIn("wall_thickness", report, "thickness is $dfam-check's measurement")
-        self.assertEqual(report["draft"]["pull_axis"], [-0.0, -0.0, -1.0], "--pull -z reached argparse")
+        self.assertEqual(report["draft"]["pull_axis"], [0.0, 0.0, -1.0], "--pull -z reached argparse")
 
     def test_a_bad_pull_exits_one(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -503,6 +508,264 @@ class CommandLineTest(unittest.TestCase):
 
         self.assertEqual(code, 1)
         self.assertIn("error", json.loads(text))
+
+
+class MinimumDraftKeepsRealWallsTest(unittest.TestCase):
+    """The minimum must not disagree with the zero-draft area in the same report."""
+
+    def test_a_dead_vertical_boss_wall_sets_the_minimum(self) -> None:
+        """The figure the skill tells an agent to quote used to hide this wall.
+
+        A 200 x 150 x 100 tray drafted 2 deg carries one dead-vertical 20 x 20
+        boss. Its four walls are 800 mm2 each -- planar, axis-aligned, six
+        times the area floor, nothing sliver-like about them. Kept only to the
+        largest faces covering 95% of wall area, all four fell off the end of
+        the list behind the tray's own four walls, and the report said the part
+        was drafted 2 deg throughout while `zero_draft_wall_area_mm2` in the
+        same report said 3,200.
+        """
+        align = (Align.CENTER, Align.CENTER, Align.MIN)
+        part = (_drafted_box(2.0, base=(200.0, 150.0), height=100.0)
+                + Pos(0, 0, 100) * Box(20, 20, 40, align=align))
+        with tempfile.TemporaryDirectory() as td:
+            facts = _z(mold_tool._load(_stl(part, Path(td), "tray")))
+
+        floor = 0.001 * 129_449.0
+        self.assertAlmostEqual(facts["zero_draft_wall_area_mm2"], 4 * 20 * 40, delta=1.0)
+        self.assertEqual(facts["min_wall_draft"]["draft_deg"], 0.0)
+        self.assertAlmostEqual(facts["min_wall_draft"]["area_mm2"], 800.0, delta=1.0)
+        self.assertGreater(facts["min_wall_draft"]["area_mm2"], floor * 5)
+        # The invariant behind the case: zero-draft wall area above the floor
+        # and a non-zero minimum cannot both be true of one part.
+        self.assertEqual(facts["min_wall_draft"]["draft_deg"],
+                         facts["lowest_draft_wall_faces"][0]["draft_deg"])
+
+    def test_the_minimum_still_ignores_a_sliver(self) -> None:
+        """Dropping the coverage prefix must not bring the sliver tail back."""
+        align = (Align.CENTER, Align.CENTER, Align.MIN)
+        part = _drafted_box(2.0, base=20.0, height=15.0) + Pos(0, 0, 15) * Box(0.5, 0.5, 1.0, align=align)
+        with tempfile.TemporaryDirectory() as td:
+            facts = _z(mold_tool._load(_stl(part, Path(td), "pinned")))
+
+        self.assertAlmostEqual(facts["min_wall_draft"]["draft_deg"], 2.0, delta=0.05)
+
+
+class FlatWallBetweenFilletsTest(unittest.TestCase):
+    """A wall is not a tangent band because it happens to sit between two curves."""
+
+    def _rim(self, height: float, tolerance: float) -> dict:
+        from build123d import fillet
+
+        radius, outer = 1.0, 80.0
+        blank = Pos(0, 0, 0) * Cylinder(outer / 2, height + 2 * radius)
+        part = fillet(blank.edges().filter_by(GeomType.CIRCLE), radius)
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "rim.stl"
+            export_stl(part, str(path), tolerance=tolerance, angular_tolerance=0.5)
+            return _z(mold_tool._load(str(path)))
+
+    def test_a_short_rim_stays_a_wall_at_either_tessellation(self) -> None:
+        """Read one triangle at a time, a fine export ate this wall whole.
+
+        A flat wall is split into rows by nothing but the export tolerance, and
+        a single row of a 2 mm rim is no taller than the fillet facet beside
+        it -- so on the finer mesh all 502 mm2 of a real zero-draft wall filed
+        itself as tessellation and the part read as having none. The region the
+        rule measures is now the whole wall, not one row of it.
+        """
+        for tolerance in (0.5, 0.01):
+            with self.subTest(tolerance=tolerance):
+                facts = self._rim(2.0, tolerance)
+                straight = math.pi * 80.0 * 2.0
+                self.assertAlmostEqual(facts["zero_draft_wall_area_mm2"], straight,
+                                       delta=straight * 0.05)
+                self.assertEqual(facts["zero_draft_tangent_area_mm2"], 0.0)
+
+    def test_a_one_millimetre_rim_is_still_a_wall(self) -> None:
+        facts = self._rim(1.0, 0.5)
+        self.assertAlmostEqual(facts["zero_draft_wall_area_mm2"], math.pi * 80.0, delta=15.0)
+
+
+class DraftReadingIsLabelledTest(unittest.TestCase):
+    def test_a_fillet_sweeping_through_zero_does_not_move_the_minimum(self) -> None:
+        """It read 0.31 deg coarse and 2.00 deg fine on the same 2 deg wall.
+
+        The crossing facet of a fillet that sweeps THROUGH parallel is not a
+        wall at any draft, so it is excluded from the minimum for the same
+        reason it is excluded from the zero-draft wall area.
+        """
+        from build123d import fillet
+
+        readings = []
+        for tolerance in (0.5, 0.1, 0.02):
+            part = _drafted_box(2.0, base=40.0, height=20.0)
+            part = fillet(part.edges().group_by(Axis.Z)[-1], 3.0)
+            with tempfile.TemporaryDirectory() as td:
+                path = Path(td) / "swept.stl"
+                export_stl(part, str(path), tolerance=tolerance, angular_tolerance=0.4)
+                readings.append(_z(mold_tool._load(str(path)))["min_wall_draft"]["draft_deg"])
+
+        for reading in readings:
+            self.assertAlmostEqual(reading, 2.0, delta=0.05, msg=f"readings were {readings}")
+
+    def test_a_flat_wall_reads_exact_and_a_curved_one_reads_low(self) -> None:
+        """A facet of a curved face is a chord, and a chord tilts less.
+
+        That cannot be measured away, so the reading says which kind of face it
+        came from: a 3 deg conic wall reads under 3 and says it is a lower
+        bound, a 2 deg flat wall reads 2 and says nothing.
+        """
+        align = (Align.CENTER, Align.CENTER, Align.MIN)
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            cone = _z(mold_tool._load(_stl(Cone(20, 20 - 40 * math.tan(math.radians(3.0)), 40,
+                                                align=align), tmp, "cone")))
+            flat = _z(mold_tool._load(_stl(_drafted_box(2.0), tmp, "box")))
+
+        self.assertEqual(cone["min_wall_draft"]["surface"], "curved")
+        self.assertLessEqual(cone["min_wall_draft"]["draft_deg"], 3.0)
+        self.assertIn("LOWER BOUND", cone["min_wall_draft"]["reading_note"])
+        self.assertEqual(flat["min_wall_draft"]["surface"], "flat")
+        self.assertAlmostEqual(flat["min_wall_draft"]["draft_deg"], 2.0, delta=0.05)
+        self.assertNotIn("reading_note", flat["min_wall_draft"])
+
+
+class SealedVoidTest(unittest.TestCase):
+    def test_a_cored_part_is_one_body_not_an_assembly(self) -> None:
+        """Coring a thick section is the standard molding fix, not a split export.
+
+        `mesh.body_count` counts connected shells, so the cavity read as a
+        second body and the report told the agent to stop reviewing the file as
+        a part. A shell's normals point away from the material, so a void's
+        signed volume is negative and a body's is positive.
+        """
+        part = Box(40, 30, 20) - Box(20, 15, 10)
+        with tempfile.TemporaryDirectory() as td:
+            facts = mold_tool._mesh_facts(mold_tool._load(_stl(part, Path(td), "cored")))
+
+        self.assertEqual(facts["body_count"], 1)
+        self.assertEqual(facts["internal_void_count"], 1)
+        self.assertNotIn("note", facts, "nothing here is an assembly")
+
+    def test_two_separate_solids_are_still_an_assembly(self) -> None:
+        part = Box(20, 20, 20) + Pos(60, 0, 0) * Box(20, 20, 20)
+        with tempfile.TemporaryDirectory() as td:
+            facts = mold_tool._mesh_facts(mold_tool._load(_stl(part, Path(td), "asm")))
+
+        self.assertEqual(facts["body_count"], 2)
+        self.assertNotIn("internal_void_count", facts)
+        self.assertIn("assembly", facts["note"])
+
+
+class PullsReportsItsFailuresTest(unittest.TestCase):
+    def test_a_failed_undercut_family_reaches_the_exit_code(self) -> None:
+        """`pulls` kept the numbers and threw the error away.
+
+        With rtree missing, `measure` exited 2 and named the family while
+        `pulls` exited 0 with three null areas and no error anywhere -- the
+        silent "no findings" the partial machinery exists to prevent, on the
+        verb an agent runs FIRST to choose a pull direction.
+        """
+        def boom(*_args, **_kwargs):
+            raise RuntimeError("No module named 'rtree'")
+
+        original = mold_tool._undercut_facts
+        mold_tool._undercut_facts = boom
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                code, text = _run_cli(["pulls", _stl(Box(20, 20, 15), Path(td), "box")])
+        finally:
+            mold_tool._undercut_facts = original
+
+        report = json.loads(text)
+        self.assertEqual(code, 2)
+        self.assertTrue(report["partial"])
+        self.assertEqual(report["partial_sections"], ["pulls"])
+        self.assertTrue(all("error" in c for c in report["pulls"]["candidates"]))
+
+    def test_an_error_nested_anywhere_marks_the_report(self) -> None:
+        nested = {"pulls": {"candidates": [{"pull": "z", "error": "boom"}]}}
+        self.assertTrue(mold_tool._mark_partial(nested))
+        self.assertEqual(nested["partial_sections"], ["pulls"])
+
+
+class ProbeBudgetTest(unittest.TestCase):
+    def test_a_mesh_over_budget_says_it_was_not_split(self) -> None:
+        """It used to report a probe edge hundreds of times the part's size.
+
+        A mesh already over the face budget cannot be refined at all, so the
+        doubling loop ran out and named an edge 437 times the part as though it
+        were the resolution reached.
+        """
+        import trimesh
+
+        mesh = trimesh.creation.icosphere(subdivisions=3, radius=20)
+        original = mold_tool._PROBE_FACE_BUDGET
+        mold_tool._PROBE_FACE_BUDGET = len(mesh.faces) // 2
+        try:
+            probe, edge, note = mold_tool._probe_mesh(mesh)
+        finally:
+            mold_tool._PROBE_FACE_BUDGET = original
+
+        self.assertEqual(len(probe.faces), len(mesh.faces), "nothing could be split")
+        self.assertLess(edge, float(np.linalg.norm(mesh.extents)), "an edge, not a multiple of the part")
+        self.assertIn("NOT split", note)
+
+    def test_a_mesh_within_budget_is_split_and_says_nothing(self) -> None:
+        import trimesh
+
+        mesh = trimesh.creation.box(extents=(20, 20, 20))
+        probe, edge, note = mold_tool._probe_mesh(mesh)
+        self.assertGreater(len(probe.faces), len(mesh.faces))
+        self.assertIsNone(note)
+        self.assertAlmostEqual(edge, float(np.linalg.norm(mesh.extents)) * mold_tool._PROBE_EDGE_FRACTION)
+
+
+class ExitCodesTest(unittest.TestCase):
+    def test_a_usage_error_exits_one_not_two(self) -> None:
+        """Exit 2 means the report is partial; a misspelled flag is not that."""
+        with tempfile.TemporaryDirectory() as td:
+            path = _stl(Box(20, 20, 15), Path(td), "box")
+            with self.assertRaises(SystemExit) as raised:
+                _run_cli(["measure", path, "--not-a-flag"])
+
+        self.assertEqual(raised.exception.code, 1)
+
+    def test_a_non_finite_measurement_exits_one_as_json(self) -> None:
+        """allow_nan=False raised through main() as a traceback on stdout."""
+        original = mold_tool._projection_facts
+        mold_tool._projection_facts = lambda *_a, **_k: {"projected_area_mm2": float("nan")}
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                code, text = _run_cli(["measure", _stl(Box(20, 20, 15), Path(td), "box")])
+        finally:
+            mold_tool._projection_facts = original
+
+        self.assertEqual(code, 1)
+        report = json.loads(text)
+        self.assertIn("not a finite number", report["error"])
+        self.assertTrue(report["partial"])
+
+
+class PullVectorSignTest(unittest.TestCase):
+    def test_a_negative_first_component_does_not_flip_the_vector(self) -> None:
+        """`--pull=-1,0,1` measured along (-1,0,-1): a different axis, no complaint."""
+        np.testing.assert_allclose(mold_tool._pull_vector("-1,0,1"),
+                                   [-1 / math.sqrt(2), 0.0, 1 / math.sqrt(2)], atol=1e-9)
+        np.testing.assert_allclose(mold_tool._pull_vector("0,-1,0"), [0.0, -1.0, 0.0])
+        np.testing.assert_allclose(mold_tool._pull_vector("-z"), [0.0, 0.0, -1.0])
+
+
+class ZeroToleranceIsHonouredTest(unittest.TestCase):
+    def test_one_report_does_not_call_the_same_face_both_things(self) -> None:
+        """`_pooled_faces` hardcoded 0.05, so --zero-tol moved one figure only."""
+        with tempfile.TemporaryDirectory() as td:
+            mesh = mold_tool._load(_stl(_drafted_box(1.0, base=20.0, height=15.0), Path(td), "d1"))
+            facts = mold_tool._draft_facts(mesh, np.array([0.0, 0.0, 1.0]), 45.0, 2.0)
+
+        self.assertGreater(facts["zero_draft_wall_area_mm2"], 0.0, "1 deg is under a 2 deg tolerance")
+        for face in facts["largest_zero_draft_faces"]:
+            self.assertEqual(face["opens_toward"], "none")
 
 
 def _run_cli(argv: list[str]) -> tuple[int, str]:

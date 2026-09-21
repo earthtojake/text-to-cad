@@ -42,5 +42,7 @@ for kind in ('baseline','fdm','sheet','cnc','injection'):
     facts[kind]={'valid':True,'solids':1,'bounds_mm':list(box.size),'volume_mm3':s.volume,'wall_mm':wall,'floor_mm':floor,'circular_edge_radii_mm':radii,'mounting_hole_xy_mm':centers,'hole_diameter_mm':4.5}
     if kind=='injection':
         facts[kind].update(wall_measurement_z_mm=16,wall_draft_degrees=draft_measurements,rib_width_at_z3_mm=rib_widths,hole_note='Diameter at Z=0; holes open toward +Z with 1 degree draft')
-(ROOT/'reports'/'geometry-facts.json').write_text(json.dumps(facts,indent=2)+'\n')
+out=ROOT/'tmp'; out.mkdir(exist_ok=True)
+# tmp/ is gitignored: a run's output is regenerable, so none of it is committed.
+(out/'geometry-facts.json').write_text(json.dumps(facts,indent=2)+'\n')
 print(json.dumps(facts,indent=2))

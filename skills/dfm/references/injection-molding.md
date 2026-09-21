@@ -27,11 +27,16 @@ run stays under a minute. The tool splits faces further where it needs to.
 Mesh files carry no units, so `--units mm|cm|m|in|ft` states the file's, and
 the report repeats it as `scale.declared_units`. Without it everything is read
 as millimetres, and `scale.units_suspect` flags a part whose bounding box is
-then not the size of a molded part.
+then not the size of a molded part. That flag catches only the extremes: a
+4 × 3 × 2 part is plausible in millimetres, centimetres AND inches, so
+`scale.bbox_mm_if_units` gives the envelope under each one. Check it against
+the part you expect rather than treating a clear flag as confirmation.
 
 If a fact family fails, the report carries `"partial": true`, lists the family
 in `partial_sections`, and the command exits 2. Do not read a partial report as
-"no findings".
+"no findings". A family that fails inside `pulls` counts: every candidate axis
+carries its own `error`. Exit 1 is a failure with no report to read — a bad
+argument, an unloadable mesh, or a measurement that was not a finite number.
 
 ### `draft`
 
@@ -49,17 +54,26 @@ in `partial_sections`, and the command exits 2. Do not read a partial report as
   an area, so this figure scales with the tessellation — one sphere read
   261 mm² coarse and 67 mm² fine. Report it as a tangency, never as a wall.
   A wall that a fillet joins tangentially is NOT this: a flange rim with a
-  radius top and bottom stays zero-draft wall, because it reaches many times
-  further along the pull than the fillet facets bounding it, where a real
-  tangent band is the same size as its neighbours.
-- `min_wall_draft`: the lowest draft over faces pooled by normal, ignoring the
-  sliver tail, with its area and location. `min_facet_draft` is the single
-  worst triangle; it moves with the mesh, so quote `min_wall_draft`.
+  radius top and bottom stays zero-draft wall. The whole connected zero-draft
+  region is measured, not one triangle of it, so a flat wall the exporter split
+  into rows is not mistaken for one step of a sweep.
+- `min_wall_draft`: the lowest draft over faces pooled by normal and above an
+  absolute area floor (0.1% of surface area), with its area and location.
+  Tangent bands are excluded. `min_facet_draft` is the single worst triangle;
+  it moves with the mesh, so quote `min_wall_draft`.
 - `drafted_wall_mean_draft_deg`: area-weighted over the drafted walls.
 
-Curved faces are read per facet, so a 1° cone bore reads a little under 1°
-because a chord facet tilts less than the analytic surface. Report the measured
-value with that caveat rather than rounding it up.
+Every pooled face carries `"surface"`: `"flat"` or `"curved"`. A flat face
+carries the surface's own normal, so its draft is exact. A facet of a curved
+face is a chord, and a chord tilts less than the surface it cuts: one 3.000°
+conic wall read 0.46°, 0.68° and 1.91° at three tessellations, all of them low.
+Where `min_wall_draft` comes off a curved face and claims some draft, the report
+says so in `reading_note`. Quote such a figure as "at least", or re-export finer
+before citing it against a limit — never round it up.
+
+Read `min_wall_draft` against `zero_draft_wall_area_mm2` in the same report. If
+there is zero-draft wall area and the minimum is not zero, the two disagree and
+the report is wrong; say so rather than quoting one of them.
 
 ### `undercuts`
 
@@ -78,7 +92,14 @@ path and shutoffs, is made in the review, not here.
 A file with several bodies is an assembly, not one molded part: each body is
 tested against itself, `body_count` and `per_body` appear, and nothing treats
 one body as an obstruction for another. Say so in the report rather than
-reviewing an assembly as a part.
+reviewing an assembly as a part. A sealed internal void is NOT a second body —
+coring a thick section is the standard molding fix, so it is counted in
+`internal_void_count` and the part stays one body. Nothing here measures a
+sealed void's own walls or reaches inside one.
+
+`probe_resolution_note` appears when the face budget stopped the split short.
+A mesh already over budget is cast unsplit, so undercut area follows the
+tessellation; re-export nearer the edge the note names before quoting the area.
 
 ### `projection`
 

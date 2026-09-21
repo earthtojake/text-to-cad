@@ -38,15 +38,15 @@ claim cost or cycle-time optimization.
   down: 4,294.88 mm². This is a geometric heuristic, not slicer verification or
   proof of a globally optimal orientation.
 - Ran the new `skills/dfm/scripts/mold_tool.py measure --pull z`
-  on the injection and baseline STL, and `pulls` on the injection STL
-  Injection: no
-  zero-draft wall area, mean wall draft 1.005° over 6,590 mm² of wall, no
-  straight-pull undercut candidates for Z; an X pull would trap 7,499 mm² and a
-  Y pull 1,729 mm². Cone-sampled thickness: median 2.4 mm, p05 1.7 mm on the
-  ribs, minimum 0.97 mm at rib edges where the cone reads under the true wall.
-  Baseline: 6,233 mm² of zero-draft wall, median 3.0 mm, p05 0.8 mm. Per-facet
-  reading; the pooled faces list merges parallel walls that share a normal.
-  The injection STL is not watertight as exported, so its volume is unreported.
+  on the injection and baseline STL, and `pulls` on the injection STL.
+  Injection: no zero-draft wall area, mean wall draft 1.005° over 6,590 mm² of
+  wall, no straight-pull undercut candidates for Z; an X pull would trap
+  7,499 mm² and a Y pull 1,729 mm². Baseline: 6,233 mm² of zero-draft wall.
+  Per-facet reading; the pooled faces list merges parallel walls that share a
+  normal, and a reading off a curved face is marked `"surface": "curved"` and
+  is a lower bound. The injection STL is not watertight as exported, so its
+  volume is unreported. `mold_tool.py` does not measure wall thickness; the
+  thickness figures above are `dfam_tool.py`'s.
 - Visually reviewed CAD snapshots and the comparison figure. The figure uses
   real STL triangles with a depth buffer; colors only distinguish variants.
 
@@ -68,9 +68,10 @@ python skills/dfam-check/scripts/dfam_tool.py measure models/dfm-process-compari
 python skills/dfam-check/scripts/dfam_tool.py orientations models/dfm-process-comparison/STL/fdm.stl --angle-limit 45
 ```
 
-CAD exports and scratch images are regenerable and ignored. The share image is
-`tmp/manufacturing-comparison.png`. Nothing from a run is committed: rerun the
-commands above to reproduce the numbers this README quotes.
+CAD exports, the facts JSON and scratch images are regenerable and ignored:
+`verify.py` writes `tmp/geometry-facts.json` and `figure.py` writes the share
+image `tmp/manufacturing-comparison.png`. Nothing from a run is committed;
+rerun the commands above to reproduce the numbers this README quotes.
 
 
 ## Injection-molding fourth process
