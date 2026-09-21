@@ -429,3 +429,23 @@ test("the LAYER table's linetype and lineweight reach the layer summary", () => 
   assert.equal(byName.get("CUT").lineweightMm, null);
 });
 
+test("a layer that HOLDS dimensions is annotation, whatever it is called", () => {
+  // Foreign drawings name the dimension layer in their own language ("Kote",
+  // "Bemassung"), which no name-token classifier recognises. Drawn at outline
+  // weight, a dimension line comes out as heavy as the profile it measures.
+  const parsed = parseDxf(dxfText([
+    "0", "SECTION", "2", "ENTITIES",
+    "0", "LINE", "8", "Profil kontura", "10", "0", "20", "0", "11", "10", "21", "0",
+    "0", "DIMENSION", "8", "Kote", "2", "*NOBLOCK", "10", "0", "20", "0", "11", "5", "21", "-4", "42", "10", "1", "<>",
+    "0", "LEADER", "8", "Napomene", "10", "0", "20", "0", "10", "5", "20", "5",
+    "0", "ENDSEC", "0", "EOF"
+  ]));
+  const kinds = new Map(parsed.layers.map((layer) => [layer.name, layer.kind]));
+  assert.equal(kinds.get("Kote"), "reference");
+  assert.equal(kinds.get("Napomene"), "reference");
+  assert.equal(kinds.get("Profil kontura"), "cut", "the outline stays the outline");
+  assert.equal(parsed.apparatus.dimensions, 1);
+  assert.equal(parsed.apparatus.leaders, 1);
+  assert.equal(parsed.apparatus.annotationLayers, undefined, "an internal set does not reach the caller");
+});
+

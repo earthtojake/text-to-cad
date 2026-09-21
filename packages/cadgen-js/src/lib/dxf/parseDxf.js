@@ -1016,8 +1016,10 @@ function parseEntities(records, { blocks = new Map(), transform = null, depth = 
       // cut layout has no dimensions, leaders, or paper-space entities.
       if (entityType === "DIMENSION" || entityType === "ARC_DIMENSION") {
         apparatus.dimensions += 1;
+        apparatus.annotationLayers?.add(normalizeLayerName(entityRecords.find((record) => record.code === 8)?.value));
       } else if (entityType === "LEADER" || entityType === "MLEADER" || entityType === "MULTILEADER") {
         apparatus.leaders += 1;
+        apparatus.annotationLayers?.add(normalizeLayerName(entityRecords.find((record) => record.code === 8)?.value));
       }
       if (entityRecords.some((record) => record.code === 67 && Number(record.value) === 1)) {
         apparatus.paperspaceEntities += 1;
@@ -1309,7 +1311,11 @@ export function parseDxf(dxfText, { fileRef = "", sourceUrl = "" } = {}) {
   const layerTable = parseLayerTable(sections.get("TABLES") || []);
   const blocks = parseBlocks(sections.get("BLOCKS") || []);
   const unitsScaleMm = dxfUnitsScaleMm(header.sourceUnits);
-  const apparatus = { dimensions: 0, leaders: 0, paperspaceEntities: 0 };
+  // A layer is annotation if it HOLDS annotation, whatever it is called. A
+  // foreign drawing's dimension layer is "Kote" or "Bemassung", which no
+  // name-token classifier recognises, and drawn at outline weight a dimension
+  // line is as heavy as the profile it measures.
+  const apparatus = { dimensions: 0, leaders: 0, paperspaceEntities: 0, annotationLayers: new Set() };
   const entities = scaleEntitiesToMm(
     parseEntities(sections.get("ENTITIES") || [], { blocks, apparatus }),
     unitsScaleMm
@@ -1386,6 +1392,8 @@ export function parseDxf(dxfText, { fileRef = "", sourceUrl = "" } = {}) {
   }
 
 
+  const annotationLayers = apparatus.annotationLayers || new Set();
+
   return {
     fileRef,
     sourceUrl,
@@ -1405,12 +1413,13 @@ export function parseDxf(dxfText, { fileRef = "", sourceUrl = "" } = {}) {
       circles: circleRecords.length,
       entities: pathRecords.length + circleRecords.length
     },
-    apparatus,
+    apparatus: { dimensions: apparatus.dimensions, leaders: apparatus.leaders, paperspaceEntities: apparatus.paperspaceEntities },
     layers: [...layerSummary.keys()].sort().map((name) => {
       const summary = layerSummary.get(name);
       const tableEntry = layerTable.get(name);
       return {
         ...summary,
+        kind: annotationLayers.has(name) ? "reference" : summary.kind,
         colorAci: tableEntry ? tableEntry.aci : null,
         colorHex: tableEntry ? aciColorHex(tableEntry.aci) : null,
         visibleDefault: tableEntry ? tableEntry.visibleDefault : true,
