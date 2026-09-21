@@ -1,6 +1,14 @@
 import { useMemo } from "react";
 import { buildAssemblyPartMap, buildReferenceMap } from "../../../workbench/selectors.js";
 
+// ONE shared empty list, never a fresh `[]` per render. Everything the workspace tells the
+// viewport about parts and references hangs off the two lists below, so a new identity
+// carrying the same contents re-ran the whole chain — the reference maps, the render-part id
+// lists, every viewport layer keyed on one of them — on a render that changed nothing. The
+// viewport held that back with a comparison of its own (`StepViewport`'s `useStableIds`),
+// which left a memo load-bearing for how much work happens rather than merely for its speed.
+const EMPTY_REFERENCES = Object.freeze([]);
+
 export function useCadWorkspaceSelectors({
   selectedReferencesMatch,
   referenceState,
@@ -17,11 +25,13 @@ export function useCadWorkspaceSelectors({
   hoveredListPartId,
   hoveredModelPartId
 }) {
-  const currentReferences = selectedReferencesMatch
-    ? (Array.isArray(referenceState?.references) ? referenceState.references : [])
-    : [];
+  const loadedReferences = referenceState?.references;
+  const currentReferences = useMemo(
+    () => (selectedReferencesMatch && Array.isArray(loadedReferences) ? loadedReferences : EMPTY_REFERENCES),
+    [selectedReferencesMatch, loadedReferences]
+  );
   const normalizedAssemblyParts = useMemo(
-    () => (supportsPartSelection && Array.isArray(assemblyParts) ? assemblyParts : []),
+    () => (supportsPartSelection && Array.isArray(assemblyParts) ? assemblyParts : EMPTY_REFERENCES),
     [assemblyParts, supportsPartSelection]
   );
   const normalizedAssemblyPartMap = useMemo(
@@ -31,7 +41,7 @@ export function useCadWorkspaceSelectors({
 
   const inspectedAssemblyPartId = String(inspectedAssemblyNodeId || "").trim();
   const inspectedAssemblyPartIds = useMemo(
-    () => (inspectedAssemblyPartId ? [inspectedAssemblyPartId] : []),
+    () => (inspectedAssemblyPartId ? [inspectedAssemblyPartId] : EMPTY_REFERENCES),
     [inspectedAssemblyPartId]
   );
   const inspectedAssemblyPart = useMemo(
@@ -47,7 +57,8 @@ export function useCadWorkspaceSelectors({
     String(inspectedAssemblyPart?.nodeType || "").trim() === "part" &&
     !(Array.isArray(inspectedAssemblyPart?.children) && inspectedAssemblyPart.children.length > 0);
   const inspectedAssemblyPartReferences = useMemo(
-    () => (Array.isArray(inspectedAssemblyPartTopologyReferences) ? inspectedAssemblyPartTopologyReferences : []),
+    () => (Array.isArray(inspectedAssemblyPartTopologyReferences) && inspectedAssemblyPartTopologyReferences.length
+      ? inspectedAssemblyPartTopologyReferences : EMPTY_REFERENCES),
     [inspectedAssemblyPartTopologyReferences]
   );
 

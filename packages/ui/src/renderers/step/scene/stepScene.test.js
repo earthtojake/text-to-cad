@@ -61,11 +61,35 @@ test("a build setting that changes how records are made rebuilds under the same 
   const root = scene.object3D;
   const released = scene.release({ releaseGpu: false, preserveModelIdentity: true });
   assert.ok(released, "the released source is named");
-  assert.equal(scene.object3D.children.length, 0);
+  assert.deepEqual(scene.object3D.children, [scene.overlayObject3D], "the build is gone; the overlay root stays");
   const rebuilt = scene.build(source([mesh(1)]), wireframe, settings);
   assert.equal(scene.object3D, root);
   assert.equal(rebuilt.modelGroup.parent, root);
   scene.dispose();
+});
+
+// What STEP draws over the model -- the reference highlight's face fill -- used to hang in
+// the viewport's own `modelGroup`, which `render/lodSceneCleanup.js` deliberately never
+// clears. A rebuild then took the outline (the edge layer IS cleared) and left the fill lit
+// over a model it was no longer measured against.
+test("an overlay drawn with the surfaces hangs in this scene's root, and leaves with it", () => {
+  const scene = createStepScene(THREE);
+  assert.equal(scene.overlayObject3D.parent, scene.object3D, "the overlay root is this scene's, not the viewport's");
+  const fill = new THREE.Group();
+  scene.overlayObject3D.add(fill);
+  scene.build(source([mesh(1)]), identity, settings);
+  // A rebuild under the same identity replaces the build and keeps the overlay root, so the
+  // layer that drew into it is the one layer that clears it.
+  scene.release();
+  assert.equal(fill.parent, scene.overlayObject3D);
+  assert.equal(scene.overlayObject3D.parent, scene.object3D);
+  scene.build(source([mesh(1)]), identity, settings);
+  assert.equal(scene.object3D.children.includes(scene.overlayObject3D), true);
+  scene.dispose();
+  // `dispose` takes the root out of the viewport, and the overlay with it: nothing STEP drew
+  // is left behind in a group the viewport owns.
+  assert.equal(scene.object3D.parent, null);
+  assert.equal(fill.parent, scene.overlayObject3D);
 });
 
 test("shared component geometry is not the scene's to dispose: releasing one scene leaves another's buffers alone", () => {

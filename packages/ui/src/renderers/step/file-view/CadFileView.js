@@ -544,6 +544,11 @@ function CadFileViewSurface({
       }
     : null;
   const selectedEntrySourceFormat = entrySourceFormat(selectedEntry);
+  // This renderer serves .step/.stp and nothing else (`index.ts` matches no other
+  // extension), so "is the entry a STEP" is "is the entry the file that opened this
+  // renderer". Asked once, here, rather than re-derived at every gate that used to be a
+  // per-format branch in the shared stack.
+  const isStepEntry = selectedEntrySourceFormat === RENDER_FORMAT.STEP;
   // Every entry renders from its own source format: nothing is baked into a package
   // under a different one.
   const selectedEntryRenderAssetFormat = selectedEntrySourceFormat;
@@ -620,7 +625,7 @@ function CadFileViewSurface({
   const retainingPreviousStepMesh =
     selectedEntryHasMesh &&
     !!selectedMeshHash &&
-    selectedEntrySourceFormat === RENDER_FORMAT.STEP &&
+    isStepEntry &&
     !selectedStepModuleUrl &&
     !selectedAnimationSourceKey &&
     shouldRetainCompleteSameFileMesh(meshState, selectedEntry, selectedMeshHash);
@@ -1908,7 +1913,7 @@ function CadFileViewSurface({
     : null;
   const selectedStepPartRootActive = !isAssemblyView && expandedStepTreeNodeIds.includes(STEP_MODEL_ROOT_ID);
   const plainStepReferencePickingEnabled =
-    effectiveRenderFormat === RENDER_FORMAT.STEP &&
+    isStepEntry &&
     selectedEntryHasReferences &&
     !isAssemblyView;
   const topologyCapabilityRequested = selectedStepPartRootActive;
@@ -1916,12 +1921,12 @@ function CadFileViewSurface({
     plainStepReferencePickingEnabled &&
     (topologyCapabilityRequested || selectedStepModuleTopologyRequested);
   const assemblyStepTreeTopologyLoadingEnabled =
-    effectiveRenderFormat === RENDER_FORMAT.STEP &&
+    isStepEntry &&
     selectedEntryHasReferences &&
     isAssemblyView &&
     requestedStepTreeTopologyNodeIds.length > 0;
   const selectedStepDisplayEdgesRequested =
-    effectiveRenderFormat === RENDER_FORMAT.STEP &&
+    isStepEntry &&
     selectedEntryHasDisplayEdges &&
     resolvedDisplayEdgeSettings.enabled !== false;
   const selectedTopologyExplicitlyEnabled = largeFileState.selectableTopologyEnabled === true;
@@ -2044,7 +2049,7 @@ function CadFileViewSurface({
     assemblyParts,
     assemblyPartMap,
     inspectedAssemblyNodeId: "",
-    inspectedAssemblyPartTopologyReferences: [],
+    inspectedAssemblyPartTopologyReferences: EMPTY_LIST,
     selectedReferenceIds,
     selectedPartIds,
     hoveredListReferenceId,
@@ -2380,7 +2385,7 @@ function CadFileViewSurface({
     (isAssemblyView && requestedStepTreeTopologyNodeIds.length > 0) ||
     topLevelReferenceSelectionActive;
   const referenceSelectionUnavailable = stepModuleTreeSelectionDisabled || (
-    effectiveRenderFormat === RENDER_FORMAT.STEP &&
+    isStepEntry &&
     selectedEntryHasReferences &&
     topologySelectionActive &&
     !viewerInAssemblyMode &&
@@ -2396,7 +2401,7 @@ function CadFileViewSurface({
     )
   );
   const referenceSelectionPending = (
-    effectiveRenderFormat === RENDER_FORMAT.STEP &&
+    isStepEntry &&
     selectedEntryHasReferences &&
     topologySelectionActive &&
     !viewerInAssemblyMode &&
@@ -2818,107 +2823,6 @@ function CadFileViewSurface({
     }
     return createCadPromptContext({ resource: promptResource, references, text: [inspected, instruction].filter(Boolean).join('\n\n'), capture });
   }, [selectionKey, promptResource, viewerLoading, stepInteractionBlocked, inspectionHighlight, effectiveActiveReferenceMap, selectedMeshData, selectedEntry, canonicalCopySelectionLines, referencesForHost]);
-
-  const handleCopySelection = useCallback(async () => {
-    setScreenshotStatus("");
-    if (stepInteractionBlocked) {
-      setCopyStatus(retainedPreviousStepMeshError
-        ? "Selection unavailable because the STEP update failed."
-        : "STEP update in progress. Please wait.");
-      return;
-    }
-    const selectedReferencesForCopy = selectedReferenceIdsRef.current
-      .map((id) => (
-        stepTreeCopyReferenceMap.get(id) ||
-        effectiveActiveReferenceMap.get(id) ||
-        copyReferenceForRawSelectorSelection(id, "topology")
-      ))
-      .filter(Boolean);
-    if (!isAssemblyView && selectedPartIdsRef.current.includes(STEP_MODEL_ROOT_ID)) {
-      const wholeStepEntryReference = buildWholeStepEntryCopyReference(selectedEntry);
-      if (wholeStepEntryReference) {
-        selectedReferencesForCopy.push(wholeStepEntryReference);
-      }
-    }
-    const selectedPartReferencesForCopy = selectedPartIdsRef.current
-      .map((id) => (
-        copyReferenceForRawSelectorSelection(id, "assembly-part") ||
-        stepTreeCopyReferenceMap.get(id) ||
-        copyReferenceForStepTreeNodeSelection(
-          copyableStepTreeNodeForWorkspace({
-            assemblyPartMap,
-            displayStepTreeRoot,
-            stepTreeRoot,
-            nodeId: id
-          }),
-          id,
-          "assembly-part"
-        )
-      ))
-      .filter(Boolean);
-    if (
-      !selectedReferencesForCopy.length &&
-      !selectedPartReferencesForCopy.length
-    ) {
-      setCopyStatus("Nothing selected");
-      return;
-    }
-
-    const payload = copyPayloadWithSelectedIdFallback(buildSelectionCopyPayload({
-      references: [
-        ...selectedReferencesForCopy,
-        ...selectedPartReferencesForCopy
-      ],
-      parts: [],
-      entry: selectedEntry
-    }), {
-      selectedReferenceIds: selectedReferenceIdsRef.current,
-      selectedPartIds: selectedPartIdsRef.current,
-      copyReferenceMap: stepTreeCopyReferenceMap
-    });
-    const { lines, missingPartNames = [] } = payload;
-    if (!lines.length) {
-      setCopyStatus(
-        missingPartNames.length === 1
-          ? `No selector ref is available for ${missingPartNames[0]}`
-          : "No selector refs are available for the selection"
-      );
-      return;
-    }
-
-    try {
-      // The SAME prefixing the button label gets. This is the write that matters, and it
-      // built its own payload rather than reusing canonicalCopySelectionLines, so leaving it
-      // out made the label promise a file prefix the clipboard never carried.
-      await deliverReferenceText(
-        lines
-          .map((line) => canonicalCadRefCopyText(line))
-          .map((line) => withFileRefPrefix(line, selectedEntry?.fileRefPrefix))
-          .filter(Boolean)
-          .join("\n")
-      );
-      const copiedCount = payload.copiedCount ||
-        selectedReferencesForCopy.length +
-        selectedPartReferencesForCopy.length -
-        missingPartNames.length;
-      const missingSuffix = missingPartNames.length
-        ? ` (${missingPartNames.length} unavailable)`
-        : "";
-      setCopyStatus(`Copied ${copiedCount} ref${copiedCount === 1 ? "" : "s"}${missingSuffix}`);
-    } catch (err) {
-      setCopyStatus(err instanceof Error ? err.message : "Clipboard write failed");
-    }
-  }, [
-    assemblyPartMap,
-    displayStepTreeRoot,
-    effectiveActiveReferenceMap,
-    selectedEntry,
-    retainedPreviousStepMeshError,
-    setScreenshotStatus,
-    stepTreeCopyReferenceMap,
-    stepTreeRoot,
-    stepInteractionBlocked
-  ]);
 
   const toggleStepTreeNode = useCallback((nodeId) => {
     const normalizedNodeId = String(nodeId || "").trim();
@@ -3567,7 +3471,7 @@ function CadFileViewSurface({
       togglePartSelection(nextPartId, { multiSelect, renderPartId: pickedPartId });
       return;
     }
-    if (selectedEntry && effectiveRenderFormat === RENDER_FORMAT.STEP) {
+    if (selectedEntry && isStepEntry) {
       togglePartSelection(STEP_MODEL_ROOT_ID, { multiSelect, renderPartId: nextReferenceId });
     }
   }, [
@@ -4651,7 +4555,7 @@ function CadFileViewSurface({
                 onPresentationChange={handlePresentationChange}
                 presentationKey={presentationKey}
                 loadingPresentation={loading}
-                stepUpdateInProgress={effectiveRenderFormat === RENDER_FORMAT.STEP && stepUpdateInProgress}
+                stepUpdateInProgress={isStepEntry && stepUpdateInProgress}
                 referenceSelectionPending={referenceSelectionPending}
                 referenceSelectionUnavailable={referenceSelectionUnavailable}
                 referenceSelectionDeferred={selectedTopologyDeferredByCost}
@@ -4659,10 +4563,10 @@ function CadFileViewSurface({
                 assemblyPickingActive={viewerInAssemblyMode}
                 assemblyParts={viewerAssemblyRenderParts}
                 hiddenPartIds={viewerHiddenPartIds}
-                selectedPartIds={inspectionHighlight ? inspectionHighlight.partIds || [] : viewerSelectedPartIds}
+                selectedPartIds={inspectionHighlight ? inspectionHighlight.partIds || EMPTY_LIST : viewerSelectedPartIds}
                 hoveredPartId={viewerHoveredPartIds}
                 hoveredReferenceId={effectiveHoveredReferenceId}
-                selectedReferenceIds={inspectionHighlight ? inspectionHighlight.faceIds : selectedReferenceIds}
+                selectedReferenceIds={inspectionHighlight ? inspectionHighlight.faceIds || EMPTY_LIST : selectedReferenceIds}
                 selectorRuntime={effectiveSelectorRuntime}
                 displayEdgeRuntime={selectedDisplayEdgeRuntime}
                 pickableFaces={measureModeActive ? (["all", "faces"].includes(measureSelectionFilter) ? viewerPickableFaces : EMPTY_LIST) : filteredViewerFaces}

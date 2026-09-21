@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { checkKitBoundaries, checkRendererSlices, KIT_ROOT, RENDERERS_ROOT } from './check-kit-boundaries.mjs';
+import { checkFileViewerBoundary, checkKitBoundaries, checkRendererSlices, FILE_VIEWER_ROOT, KIT_ROOT, RENDERERS_ROOT } from './check-kit-boundaries.mjs';
 
 function fixture(files, run, allowlist = []) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hardcore-kit-boundaries-'));
@@ -75,4 +75,33 @@ test('a renderer slice never imports another renderer; its tests are not scanned
 
 test('a listed slice that does not exist fails rather than passing silently', () => sliceFixture({
   'mesh/index.ts': "export {};\n",
+}, result => assert.match(result.errors[0], /does not exist/)));
+
+function hostFixture(files, run) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hardcore-file-viewer-boundary-'));
+  for (const [name, code] of Object.entries(files)) {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, code);
+  }
+  try { run(checkFileViewerBoundary(root)); } finally { fs.rmSync(root, { recursive: true, force: true }); }
+}
+const host = name => `${FILE_VIEWER_ROOT}/${name}`;
+
+test('the file viewer builds its own chrome out of the kit', () => hostFixture({
+  [host('EmptyCadStage.tsx')]: "import Viewport from '../renderers/kit/shell/ShellViewport.jsx';\nimport { prepareWorkspaceEntry } from '../renderers/workspace/prepare.js';\nimport { cn } from '@hardcore/ui/utils';\n",
+}, result => assert.deepEqual(result.errors, [])));
+
+test('the file viewer never imports a family slice: it mounts one through the registry', () => hostFixture({
+  [host('empty.tsx')]: "const Stage = () => import('../renderers/step/components/EmptyCadStage.js');\n",
+  [host('navigation/icons.ts')]: "import { GLB } from '@hardcore/ui/renderers/glb';\n",
+  [host('empty.test.tsx')]: "import '../renderers/robot/RobotRenderer.jsx';\n",
+}, result => {
+  assert.equal(result.errors.length, 2, 'both sources are caught and the test file is not scanned');
+  assert.ok(result.errors.some(error => error.includes('imports the "step" renderer')));
+  assert.ok(result.errors.some(error => error.includes('imports the "glb" renderer')));
+}));
+
+test('a missing file viewer fails rather than passing silently', () => hostFixture({
+  'packages/ui/src/renderers/kit/shell/ShellViewport.jsx': "export default null;\n",
 }, result => assert.match(result.errors[0], /does not exist/)));

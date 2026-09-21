@@ -96,7 +96,9 @@ stale. The same script holds every split-out renderer to its slice
 (`RENDERER_SLICES`): a renderer imports the kit, `renderers/workspace` (the
 backend connection a file is prepared against, the host's viewer preferences and
 command types, and `useWorkspaceDocument`), shared UI and core, and never another
-renderer. The
+renderer. It holds the host's file viewer (`src/file-viewer`) to the mirror of
+that rule: the file viewer mounts a renderer through the registry and imports
+none itself, so no host pays for a family it is not showing. The
 unbound-identifier test (`src/renderers/unboundIdentifiers.test.js`) scans the
 whole renderer tree, so a renamed or added slice is covered the moment it
 exists.
@@ -651,7 +653,7 @@ axes and retains its snap and drag interactions.
 See [settings controls](settings-ui.md), [render capabilities](render-types.md)
 and [renderer contracts](renderers.md) for changes inside the shared package.
 
-The optional `@hardcore/ui/file-viewer/empty` entry exports `EmptyCadBackdrop` for the web host’s missing-file presentation. It lazily mounts the same empty CAD viewport with the host’s `colorScheme`, and overlays its `children`. It owns no file access, catalog subscription, or persisted state. This preserves the original grid and camera behind `MissingFileAlert` without loading CAD into the master viewer.
+The optional `@hardcore/ui/file-viewer/empty` entry exports `EmptyCadBackdrop` for the web host’s missing-file presentation. It lazily mounts an empty CAD viewport with the host’s `colorScheme`, and overlays its `children`. It owns no file access, catalog subscription, or persisted state. This preserves the original grid and camera behind `MissingFileAlert` without loading CAD into the master viewer. Its stage (`file-viewer/EmptyCadStage.tsx`) is `ShellViewport` with a null scene, built out of the kit alone: the file viewer MOUNTS a renderer through the registry and imports none itself, because a static edge into a slice pulls that family — and three.js with it — into every host that shows any file at all. `scripts/test/check-kit-boundaries.mjs` enforces that alongside the kit and slice rules.
 
 ## STEP scene and viewport
 
@@ -680,10 +682,20 @@ The optional `@hardcore/ui/file-viewer/empty` entry exports `EmptyCadBackdrop` f
   keeps its components' GPU buffers and BVHs. Runtime-level teardown
   (`render/lodSceneCleanup.js`) clears only the groups that hold nothing but STEP's
   own objects (the edge layer and the three pick groups) — never the model group or
-  the stage, which are the viewport's. The LOD publisher's ownership protocol
-  (`onMeshSourceAdoption`) is answered for every source the scene shows, releases
-  or fails to show, and for every way the WebGL runtime under it can go away
-  (`runtimeLifecycle`).
+  the stage, which are the viewport's. **So nothing STEP draws may be parked in the
+  viewport's model group.** An overlay that belongs WITH the surfaces rather than
+  with the linework — the reference highlight's face fill — hangs in this scene's
+  own `overlayObject3D`, a permanent child of its root: a rebuild took the outline
+  (the edge layer IS cleared) and left a fill lit over a model it was no longer
+  measured against. That fill is rebuilt whenever the records are
+  (`displayRecordsToken`), because its geometry is read off the display meshes on
+  screen. The LOD publisher's ownership protocol (`onMeshSourceAdoption`) is
+  answered for every source the scene shows, releases or fails to show, and for
+  every way the WebGL runtime under it can go away (`runtimeLifecycle`) — which is
+  also the ONE place the scene is released. The viewport does not release it a
+  second time from an unmount of its own: two owners firing parent-first worked
+  only because `dispose()` happens to be idempotent, which is a property to lean on
+  in recovery, not a teardown design.
 - **The ground is sized from REST.** The viewport sizes the grid, the stage and the
   Render studio's floor from `restBounds`, as it does for every renderer, so posing
   a mate or playing a routine never rescales or slides the ground — including a
@@ -727,8 +739,13 @@ The optional `@hardcore/ui/file-viewer/empty` entry exports `EmptyCadBackdrop` f
   path does: the topology line it re-syncs is told not to
   (`syncTopologyDisplayEdgeLine(..., { requestRender: false })`), a highlight layer
   asks only when it drew or had drawn something, and part visual state does not
-  re-run for a pose at all (the part-id lists keep their identity while their
-  contents hold, `useStableIds`). `StepRenderer.browser.test.mjs` fails its
+  re-run for a pose at all — every part-id list the workspace hands the viewport
+  keeps its identity while its contents hold, because each is derived through a
+  memo and the empty case is one shared frozen list
+  (`hooks/useCadWorkspaceSelectors.js`). It passes through the viewport by identity
+  from there. The viewport used to hold that back with a comparison of its own,
+  which hid the churn upstream and left a memo load-bearing for how much work
+  happens rather than for its speed. `StepRenderer.browser.test.mjs` fails its
   Kinematics and Animate tests when that one request is removed.
 - **The viewport menu** is the part menu, one list
   (`assemblyPartMenuEntries` in `components/workbench/AssemblyContextMenuItems.js`)

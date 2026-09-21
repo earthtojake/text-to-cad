@@ -29,7 +29,13 @@ CLIENT_ROOT = UI_ROOT / "renderers" / "step"
 
 # Every remaining identity check is a unification candidate. Lower these as phases land;
 # never raise them.
-MAX_RENDER_FORMAT_CHECKS = 13
+#
+# 13 -> 6: the STEP file view asked "is this entry a STEP" eight separate times, inside a
+# renderer that matches no other extension. It derives that once now. What is left is the
+# enum re-export's own default (``workbench/state.js``) and four in
+# ``workbench/stepArtifactStatus.js``, which still take a ``sourceFormat`` parameter that
+# only ever arrives as STEP — those go with the parameter.
+MAX_RENDER_FORMAT_CHECKS = 6
 MAX_FORMAT_PREDICATE_CALLS = 0
 
 # Files allowed to know about concrete formats, because deciding *which* format an entry
@@ -118,17 +124,24 @@ class ViewerFormatCapabilityPolicyTest(unittest.TestCase):
         These are the shell: if they start branching on format identity again, every
         feature added to one format stops reaching the others.
         """
+        # The STEP scene and everything of it that lives in the kit's viewport
+        # (`CadViewer.js` and `CadRenderPane.js` before the renderer split). They show ONE
+        # family, so there is no format left for them to ask about. The sweep is asserted
+        # non-empty: a renamed directory would otherwise match nothing and pass in silence.
+        scene_sources = sorted(
+            path
+            for suffix in ("*.js", "*.jsx")
+            for path in (CLIENT_ROOT / "scene").glob(suffix)
+            if not path.name.endswith((".test.js", ".test.jsx"))
+        )
+        self.assertGreater(
+            len(scene_sources),
+            5,
+            f"swept no scene sources under {CLIENT_ROOT / 'scene'} — did the directory move?",
+        )
         for path in (
             CLIENT_ROOT / "components/workbench/FloatingToolBar.js",
-            # The STEP scene and everything of it that lives in the kit's viewport
-            # (`CadViewer.js` and `CadRenderPane.js` before the renderer split). They
-            # show ONE family, so there is no format left for them to ask about.
-            *sorted(
-                path
-                for suffix in ("*.js", "*.jsx")
-                for path in (CLIENT_ROOT / "scene").glob(suffix)
-                if not path.name.endswith((".test.js", ".test.jsx"))
-            ),
+            *scene_sources,
             # Status, alerts and the file list: every one of these was a per-format
             # cascade, and each cascade was a place a new format inherited the wrong
             # advice, the wrong icon or no spinner at all.

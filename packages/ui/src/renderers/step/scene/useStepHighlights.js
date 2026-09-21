@@ -60,28 +60,35 @@ function syntheticOccurrenceSelectorFromReferenceId(referenceId) {
  * runtime AS POSED, and re-reads each record's exploded matrix when the explosion comes to rest.
  */
 export function useStepHighlights(layers) {
-  const { viewport, props, policy, activeSelectorRuntime, pickableReferenceMap, explodedViewPoseTick } = layers;
+  const { viewport, props, policy, stepScene, activeSelectorRuntime, pickableReferenceMap,
+    explodedViewPoseTick, displayRecordsToken } = layers;
   const { runtimeRef, viewerReadyTick } = viewport;
   const { hoveredReferenceId, selectedReferenceIds, measureModeActive } = props;
   const { viewerTheme, displayEdgeSettings } = policy;
 
   useEffect(() => {
     const runtime = runtimeRef.current;
-    if (!runtime?.THREE || !runtime?.edgesGroup || !runtime?.modelGroup) {
+    if (!runtime?.THREE || !runtime?.edgesGroup) {
       return;
     }
 
-    const { THREE, edgesGroup, modelGroup } = runtime;
+    const { THREE, edgesGroup } = runtime;
     if (!runtime.referenceHighlightGroup || runtime.referenceHighlightGroup.parent !== edgesGroup) {
       runtime.referenceHighlightGroup = new THREE.Group();
       runtime.referenceHighlightGroup.renderOrder = 25;
       edgesGroup.add(runtime.referenceHighlightGroup);
     }
     const highlightGroup = runtime.referenceHighlightGroup;
-    if (!runtime.referenceFaceFillGroup || runtime.referenceFaceFillGroup.parent !== modelGroup) {
+    // The fill is drawn WITH the surfaces, so it hangs in this scene's own overlay root
+    // rather than in the viewport's model group: what STEP draws, STEP owns and STEP
+    // clears (`stepScene.js`). The fill's geometry is read off the display meshes of the
+    // build on screen, so a rebuild invalidates it -- which is why `displayRecordsToken`
+    // is a dependency below and not merely a nicety.
+    const overlayRoot = stepScene.overlayObject3D;
+    if (!runtime.referenceFaceFillGroup || runtime.referenceFaceFillGroup.parent !== overlayRoot) {
       runtime.referenceFaceFillGroup = new THREE.Group();
       runtime.referenceFaceFillGroup.renderOrder = 24;
-      modelGroup.add(runtime.referenceFaceFillGroup);
+      overlayRoot.add(runtime.referenceFaceFillGroup);
     }
     const faceFillGroup = runtime.referenceFaceFillGroup;
 
@@ -263,5 +270,6 @@ export function useStepHighlights(layers) {
       clearOverlayGroup(runtime, highlightGroup);
       clearOverlayGroup(runtime, faceFillGroup);
     };
-  }, [activeSelectorRuntime, explodedViewPoseTick, hoveredReferenceId, pickableReferenceMap, selectedReferenceIds, viewerReadyTick, viewerTheme, displayEdgeSettings, measureModeActive]);
+  }, [activeSelectorRuntime, displayRecordsToken, explodedViewPoseTick, hoveredReferenceId, pickableReferenceMap,
+    selectedReferenceIds, stepScene, viewerReadyTick, viewerTheme, displayEdgeSettings, measureModeActive]);
 }

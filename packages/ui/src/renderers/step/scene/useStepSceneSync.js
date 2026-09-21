@@ -490,11 +490,28 @@ export function useStepSceneSync(layers) {
   ]);
 }
 
-/** The runtime under the scene is going away: release what STEP hung on it, and say so. */
+/**
+ * The runtime under the scene is going away: release what STEP hung on it, and say so.
+ *
+ * This is the ONE owner of that release. The viewport tells its renderer exactly once, from
+ * one place (`runtimeLifecycle.onRelease`), on a context loss, a runtime handoff and an
+ * unmount alike — so `StepViewport` does not also release the scene from an unmount effect
+ * of its own. Two owners firing parent-first only ever worked because `dispose()` happens to
+ * be idempotent, which is a property to rely on in recovery, not a teardown design.
+ *
+ * `dispose()` (rather than `release()`) because the scene is leaving this runtime entirely:
+ * it drops the build AND takes its roots out of the viewport's groups. It is not terminal —
+ * React's development remount runs this cleanup and then the effects again over the same
+ * scene, which simply builds into it once more.
+ */
 export function releaseStepRuntime(runtime, stepScene) {
-  if (!runtime) return stepScene.release();
+  if (!runtime) {
+    const source = stepScene.source;
+    stepScene.dispose();
+    return source;
+  }
   disposeSectionCaps(runtime);
   const source = disposeViewerCadScene(runtime, { clearSceneGroup });
-  stepScene.release();
+  stepScene.dispose();
   return source;
 }
