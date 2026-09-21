@@ -61,6 +61,15 @@ export function createStepScene(THREE) {
   // root of its own; the renderer's layers parent it there.
   const edgesObject3D = new THREE.Group();
   edgesObject3D.name = "StepSceneEdges";
+  // Overlays that belong WITH the surfaces rather than with the linework -- the reference
+  // highlight's face fill -- hang here, inside this scene's own root. The viewport's
+  // `modelGroup` is the viewport's: nothing here may add to it, because nothing here clears
+  // it (`render/lodSceneCleanup.js` clears the edge and pick groups and deliberately leaves
+  // the model group alone), and an overlay parked there outlives the build it was drawn
+  // against -- a picked face whose outline goes with the rebuild while its fill stays lit.
+  const overlayObject3D = new THREE.Group();
+  overlayObject3D.name = "StepSceneOverlay";
+  object3D.add(overlayObject3D);
 
   let cadScene = null;
   let built = { key: "", viewerTheme: null, modelKey: "" };
@@ -87,6 +96,7 @@ export function createStepScene(THREE) {
   const scene = {
     object3D,
     edgesObject3D,
+    overlayObject3D,
     get cadScene() { return cadScene; },
     get source() { return cadScene?.source || null; },
     get displayRecords() { return cadScene?.displayRecords || EMPTY_RECORDS; },

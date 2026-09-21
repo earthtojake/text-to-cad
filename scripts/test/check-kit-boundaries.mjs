@@ -126,11 +126,46 @@ export function checkRendererSlices(repo, { slices = RENDERER_SLICES } = {}) {
   return { errors, sourceCount };
 }
 
+// THE HOST'S FILE VIEWER. `packages/ui/src/file-viewer` is what MOUNTS a renderer: it
+// resolves which slice a file belongs to and lazy-loads it through the registry. So it must
+// not import one itself — a static edge into a slice defeats the split, pulling that
+// family's code (and three.js with it) into every host that shows any file at all. The kit
+// and the workspace module are shared, so those are fine. The empty CAD backdrop is the case
+// this rule was written for: it drew a stage with NO model in it and reached into the STEP
+// renderer to do it.
+export const FILE_VIEWER_ROOT = 'packages/ui/src/file-viewer';
+
+export function checkFileViewerBoundary(repo, { shared = SLICE_SHARED } = {}) {
+  const root = path.join(repo, FILE_VIEWER_ROOT);
+  const renderers = path.join(repo, RENDERERS_ROOT);
+  if (!fs.existsSync(root)) return { errors: [`${FILE_VIEWER_ROOT} does not exist`], sourceCount: 0 };
+  const errors = [];
+  const files = kitSources(root);
+  for (const file of files) {
+    const repoRel = path.relative(repo, file).split(path.sep).join('/');
+    fs.readFileSync(file, 'utf8').split('\n').forEach((line, index) => {
+      for (const match of line.matchAll(/(?:from\s*|import\s*\(\s*|import\s+|new URL\(\s*)["']([^"']+)["']/g)) {
+        const specifier = match[1];
+        let owner = '';
+        if (specifier.startsWith('.')) {
+          const target = path.resolve(path.dirname(file), specifier);
+          if (target.startsWith(renderers + path.sep)) owner = path.relative(renderers, target).split(path.sep)[0];
+        } else owner = /^@hardcore\/ui\/renderers\/([^/]+)/.exec(specifier)?.[1] || '';
+        if (owner && !shared.includes(owner)) {
+          errors.push(`${repoRel}:${index + 1} imports the "${owner}" renderer (${specifier}); the file viewer mounts a renderer through the registry and imports only the kit and the workspace module`);
+        }
+      }
+    });
+  }
+  return { errors, sourceCount: files.length };
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
   const kit = checkKitBoundaries(repo);
   const slices = checkRendererSlices(repo);
-  const errors = [...kit.errors, ...slices.errors];
+  const host = checkFileViewerBoundary(repo);
+  const errors = [...kit.errors, ...slices.errors, ...host.errors];
   if (errors.length) { console.error(errors.join('\n')); process.exitCode = 1; }
-  else console.log(`Kit boundaries passed (${kit.sourceCount} format-blind sources); renderer slices passed (${RENDERER_SLICES.join(', ')}: ${slices.sourceCount} sources).`);
+  else console.log(`Kit boundaries passed (${kit.sourceCount} format-blind sources); renderer slices passed (${RENDERER_SLICES.join(', ')}: ${slices.sourceCount} sources); the file viewer imports no slice (${host.sourceCount} sources).`);
 }

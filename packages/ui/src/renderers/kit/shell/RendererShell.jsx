@@ -32,7 +32,8 @@ const INSPECTOR_WIDTH = 365;
  *   contextMenuItems?: ((press: { clientX: number, clientY: number, shiftKey: boolean }) => object[] | null) | null,
  *   onContextMenuOpenChange?: ((open: boolean) => void) | null,
  *   sceneRevision?: number, className?: string,
- *   viewportOverlay?: import("react").ReactNode | ((viewport: { runtimeRef: object, hostRef: object, viewerReadyTick: number }) => import("react").ReactNode) }} props
+ *   viewportOverlay?: import("react").ReactNode | ((viewport: { runtimeRef: object, hostRef: object,
+ *     mountRef: object, viewerReadyTick: number, commitScene: () => boolean }) => import("react").ReactNode) }} props
  *   `tools`: left to right, from `shell.tools`; an EMPTY list draws no strip at all,
  *   which is what a file whose viewport only orbits, pans and zooms hands over.
  *   `inspector.tabs`: tab descriptors
@@ -43,9 +44,12 @@ const INSPECTOR_WIDTH = 365;
  *   renderer that passes none has no viewport menu at all. `onContextMenuOpenChange(open)`
  *   says while that menu is up, for a renderer that marks what the menu is about.
  *   `viewportOverlay`: the renderer's own layer over the canvas; as a function it is given
- *   the viewport (its live runtime, the element its pointer events arrive on, and a tick
- *   that changes when the runtime is replaced), which is what a handle overlay or a
- *   pointer pick (`kit/tools/select/usePointerPick.js`) needs.
+ *   the viewport, which is five things: its live runtime, the element its pointer events
+ *   arrive on, the element the canvas is mounted in, a tick that changes when the runtime is
+ *   replaced, and `commitScene()` for a scene that changed IN PLACE. A handle overlay or a
+ *   pointer pick (`kit/tools/select/usePointerPick.js`) reads the first, second and fourth;
+ *   a renderer that draws its own canvas over the model or publishes a scene progressively
+ *   needs the other two.
  */
 export default function RendererShell({ shell, tools, inspector, bottomAction = null, contextMenuItems = null,
   onContextMenuOpenChange = null, sceneRevision = 0, viewportOverlay = null, className = "" }) {

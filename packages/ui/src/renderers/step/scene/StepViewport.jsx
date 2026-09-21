@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { hasAuthoredMaterials } from "@hardcore/core/common/inspectEnvironment.js";
 import { CAMERA_PROJECTION, normalizeCameraProjection } from "@hardcore/core/lib/displaySettings.js";
@@ -23,19 +23,6 @@ import { createStepScene, stepSceneView } from "./stepScene.js";
 import { useStepViewPolicy } from "./useStepViewPolicy.js";
 
 const EMPTY_LIST = Object.freeze([]);
-
-// The workspace re-derives its part-id lists on every render, and a pose renders it several
-// times. The SAME ids in a new array would re-run every layer keyed on the list -- part visual
-// state over every record, for one -- on a write that changed no part's state. So a list keeps
-// its identity for as long as its contents hold.
-function useStableIds(value) {
-  const held = useRef(value);
-  const same = Array.isArray(value) && Array.isArray(held.current)
-    ? value.length === held.current.length && value.every((id, index) => id === held.current[index])
-    : value === held.current;
-  if (!same) held.current = value;
-  return held.current;
-}
 
 // --- zoom to selection -------------------------------------------------------
 // What a selection occupies NOW: the boxes of its references, from the selector runtime as
@@ -198,10 +185,17 @@ const StepViewport = forwardRef(function StepViewport({
   // One shared empty list: a fresh [] per render -- per animation frame -- invalidated the
   // layers' pickable memos and reference map.
   const pickable = list => (!holdingPreviousMesh && !watching ? list : EMPTY_LIST);
-  const stableHiddenPartIds = useStableIds(viewerHiddenPartIdsForRenderPane({ inspectionEnabled: true, hasParts: true, hiddenPartIds }));
-  const stableSelectedPartIds = useStableIds(previewMode ? EMPTY_LIST : viewerSelectedPartIdsForRenderPane({ renderMode, hasParts: true, selectedPartIds }));
-  const stableHoveredPartId = useStableIds(!previewMode ? hoveredPartId : "");
-  const stableFocusedPartIds = useStableIds(focusedPartIds);
+  // Part-state lists pass through by IDENTITY, both here and in the helpers below
+  // (`workbench/viewerPickMode.js` hands back the list it was given, or the one shared empty
+  // one). What reaches this component is already stable for as long as its contents hold —
+  // the workspace derives each of these through a memo — so there is nothing to hold back
+  // here. A comparison in this component used to do it, and while it was here the churn
+  // upstream was invisible: the SAME ids in a fresh array re-ran every layer keyed on the
+  // list, part visual state over every record among them, on renders that changed no part.
+  const stableHiddenPartIds = viewerHiddenPartIdsForRenderPane({ inspectionEnabled: true, hasParts: true, hiddenPartIds });
+  const stableSelectedPartIds = previewMode ? EMPTY_LIST : viewerSelectedPartIdsForRenderPane({ renderMode, hasParts: true, selectedPartIds });
+  const stableHoveredPartId = !previewMode ? hoveredPartId : "";
+  const stableFocusedPartIds = focusedPartIds;
   const layerProps = {
     meshData: selectedMeshData,
     modelKey: selectedKey,
@@ -267,7 +261,10 @@ const StepViewport = forwardRef(function StepViewport({
   meshSourceAdoptionRef.current = onMeshSourceAdoption;
 
   // The WebGL runtime under the scene. A scene owns GPU-backed work the LOD publisher is
-  // counting on, so every way a runtime can go away is named to it exactly once.
+  // counting on, so every way a runtime can go away is named to it exactly once — and this
+  // is that one place. There is deliberately no unmount effect here releasing the scene as
+  // well: unmounting this component unmounts the viewport under it, which releases its
+  // runtime, which calls `onRelease`.
   const runtimeLifecycle = useMemo(() => ({
     onRelease(runtime, { handoff }) {
       const source = releaseStepRuntime(runtime, stepScene);
@@ -278,7 +275,6 @@ const StepViewport = forwardRef(function StepViewport({
     // in-flight LOD handoff.
     onInitializationError() { meshSourceAdoptionRef.current?.(null, false, { disposed: true, terminal: true }); }
   }), [stepScene]);
-  useEffect(() => () => stepScene.dispose(), [stepScene]);
 
   useImperativeHandle(ref, () => {
     const shell = () => shellRef.current;

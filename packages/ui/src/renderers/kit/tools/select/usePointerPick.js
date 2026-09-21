@@ -18,8 +18,13 @@ const COARSE_TAP_SLOP_PX = 12;
  * passive observers on the viewport's element, alive only while `enabled`.
  *
  * @param {object} options
- * @param {{ runtimeRef: { current: object | null }, hostRef: { current: HTMLElement | null }, viewerReadyTick: number }} options.viewport
- *   What `RendererShell`'s `viewportOverlay` render prop is given.
+ * @param {{ runtimeRef: { current: object | null }, hostRef: { current: HTMLElement | null },
+ *   mountRef: { current: HTMLElement | null }, viewerReadyTick: number,
+ *   commitScene: () => boolean }} options.viewport
+ *   What `RendererShell`'s `viewportOverlay` render prop is given, all five keys. This hook
+ *   reads the runtime, the element pointer events arrive on and the ready tick; the mount
+ *   element and `commitScene()` belong to a renderer that draws its own layer into the
+ *   viewport or publishes a scene that changed in place.
  * @param {import("../../scene.js").KitScene | null} options.scene
  * @param {boolean} options.enabled  The renderer's selecting tool is active (never in fullscreen, never under Draw).
  * @param {(hit: object | null, modifiers: { multiSelect: boolean }) => void} options.onPick  A tap. Shift adds.

@@ -12,7 +12,8 @@
 //   cad:tessellate   one component surf → triangles, in a worker; the detail
 //                    carries `{ cid, cacheHit }` (hit = the shared cache
 //                    answered, and the worker skipped the tessellator)
-//   cad:hover-pick   one hover raycast over the model (useViewerPicking)
+//   cad:hover-pick   one hover raycast over the model, from whichever pointer
+//                    pick the renderer mounts (`renderers/step/scene/useStepPicking.js`)
 //   cad:frame        one render-on-demand frame (useViewerRuntime)
 
 export const PERF_MEASURE_NAMES = Object.freeze({
