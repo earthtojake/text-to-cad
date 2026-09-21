@@ -78,7 +78,10 @@ patterns, which are toolpaths, not documents; the two are different jobs.
   (centre marks), `DIM`, `NOTES`, `TITLE`, `SHEET` (frame), each printed at its
   own weight — 0.5 mm down to 0.18 mm, so thick reads against thin on paper.
   An edge is drawn once: a silhouette that the kernel returns as both visible
-  and hidden stays on `VISIBLE`.
+  and hidden stays on `VISIBLE`. Hidden TANGENT transitions are not drawn at
+  all — a fillet running into a face, or the seam where a cylinder closes on
+  itself, marks nothing a shop can see, and drawn dashed it reads as a hidden
+  edge that is not there (on a bore, as a line down the hole's own axis).
 - Dimensions measured from the geometry, with filled arrowheads and witness
   lines, and true-size values at any drawing scale.
 - A title block with title, part number, material, author, scale, units,

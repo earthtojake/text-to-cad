@@ -477,6 +477,63 @@ class Sheet:
 
 # --- projection ---------------------------------------------------------------------
 
+def _project_to_viewport(shape, origin, up, look_at):
+    """Hidden-line projection, with tangent transitions left out of the hidden half.
+
+    ``Shape.project_to_viewport`` bundles three OCCT compounds into each half.
+    For the hidden half those are sharp edges (``HCompound``), silhouettes
+    (``OutLineHCompound``) and SMOOTH edges (``Rg1LineHCompound``) -- the
+    tangent transition where a fillet runs into a face, or a cylinder into the
+    plane it touches. A drawing does not draw those: ISO 128 has no tangent
+    transition line, and one that is behind material marks nothing a shop could
+    look at. Drawn anyway they print as extra dashed lines running the length of
+    the feature they belong to, which reads as a hidden edge that is not there.
+    On the examples' circular flange the right view drew two, the full width of
+    the part.
+
+    The visible half keeps all three: a tangent line you can see is the
+    conventional runout, and the sheets already read correctly with them.
+    """
+    from build123d import Edge, ShapeList, Vector
+    from build123d.topology import downcast
+    from OCP.BRepLib import BRepLib
+    from OCP.gp import gp_Ax1, gp_Ax2
+    from OCP.HLRAlgo import HLRAlgo_Projector
+    from OCP.HLRBRep import HLRBRep_Algo, HLRBRep_HLRToShape
+    from OCP.TopAbs import TopAbs_ShapeEnum
+    from OCP.TopExp import TopExp_Explorer
+
+    hlr = HLRBRep_Algo()
+    hlr.Add(shape.wrapped)
+    camera = gp_Ax2()
+    camera.SetAxis(gp_Ax1(Vector(origin).to_pnt(), (Vector(origin) - Vector(look_at)).normalized().to_dir()))
+    camera.SetYDirection(Vector(up).normalized().to_dir())
+    hlr.Projector(HLRAlgo_Projector(camera))
+    hlr.Update()
+    hlr.Hide()
+    shapes = HLRBRep_HLRToShape(hlr)
+
+    def edges(compound) -> list:
+        found = []
+        if compound is None or compound.IsNull():
+            return found
+        explorer = TopExp_Explorer(downcast(compound), TopAbs_ShapeEnum.TopAbs_EDGE)
+        while explorer.More():
+            edge = downcast(explorer.Current())
+            # Without this the curve is 2D only and later reads segfault.
+            BRepLib.BuildCurves3d_s(edge, 1e-9)
+            found.append(Edge(edge))
+            explorer.Next()
+        return found
+
+    # Same compounds in the same order as build123d, so the entity order on the
+    # sheet -- and the PDF bytes -- do not move; the hidden half drops Rg1Line.
+    visible = (edges(shapes.VCompound()) + edges(shapes.Rg1LineVCompound())
+               + edges(shapes.OutLineVCompound()))
+    hidden = edges(shapes.HCompound()) + edges(shapes.OutLineHCompound())
+    return ShapeList(visible), ShapeList(hidden)
+
+
 class _Projection:
     """The affine map a build123d viewport applies, recovered from the viewport
     itself, so dimension points land exactly where the geometry did."""
@@ -491,9 +548,7 @@ class _Projection:
         d = Vector(*direction).normalized()
         origin = centre + d * (radius * 10.0)
         self.origin, self.up, self.look_at = origin, up, centre
-        self.visible, self.hidden = shape.project_to_viewport(
-            viewport_origin=origin, viewport_up=up, look_at=centre
-        )
+        self.visible, self.hidden = _project_to_viewport(shape, origin, up, centre)
         # Recover the map from three unit lines along the model axes.
         probes = []
         for axis in ((1, 0, 0), (0, 1, 0), (0, 0, 1)):

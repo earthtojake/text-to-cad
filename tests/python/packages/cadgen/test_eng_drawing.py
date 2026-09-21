@@ -212,18 +212,33 @@ class DrawingSheetTests(unittest.TestCase):
         _render_sheet(fits, index=1, count=1, label="big")
 
     def test_a_title_longer_than_its_cell_is_cut_not_overrun(self) -> None:
-        from cadgen.eng_drawing import _MIN_TEXT_MM, Sheet, _render_sheet
+        """Measured the way it is drawn, whatever font this machine resolves.
 
-        title = "ELECTRONICS ENCLOSURE BASE, LOWER HALF, REVISION C, MACHINED FROM 6061-T6 BILLET"
-        sheet = Sheet("A4", title=title)
-        sheet.view(_part(), "top", at=(150, 120))
-        doc = _render_sheet(sheet, index=1, count=1, label="long")
-        drawn = next(e for e in doc.modelspace().query("TEXT[layer=='TITLE']")
-                     if e.dxf.text.startswith("ELECTRONICS"))
-        self.assertGreaterEqual(drawn.dxf.height, _MIN_TEXT_MM)
+        A character is not a fixed fraction of the cap height, and which
+        fraction it is depends on the font the renderer finds: proportional
+        here, near-monospace on a runner with no system fonts. Whether a given
+        title has to be cut or merely shrunk is that font's business. That it
+        ends up inside its cell is not.
+        """
+        from cadgen.eng_drawing import _MIN_TEXT_MM, Sheet, _render_sheet, _text_width
+
         cell = min(180.0, 297 - 20) * 0.6 - 6
-        self.assertLessEqual(len(drawn.dxf.text) * drawn.dxf.height * 0.72, cell + 1e-6)
-        self.assertTrue(drawn.dxf.text.endswith("…"), drawn.dxf.text)
+        for title in ("ENCLOSURE",
+                      "ELECTRONICS ENCLOSURE BASE",
+                      "ELECTRONICS ENCLOSURE BASE, LOWER HALF, REVISION C, MACHINED FROM 6061-T6 BILLET",
+                      "M" * 400):
+            with self.subTest(title=title):
+                sheet = Sheet("A4", title=title)
+                sheet.view(_part(), "top", at=(150, 120))
+                doc = _render_sheet(sheet, index=1, count=1, label="long")
+                drawn = next(e for e in doc.modelspace().query("TEXT[layer=='TITLE']")
+                             if e.dxf.text and title.startswith(e.dxf.text.rstrip("…")[:4]))
+                self.assertGreaterEqual(drawn.dxf.height, _MIN_TEXT_MM, "still legible")
+                self.assertLessEqual(_text_width(drawn.dxf.text, drawn.dxf.height), cell + 1e-6,
+                                     f"{drawn.dxf.text!r} at {drawn.dxf.height} runs into the SCALE cell")
+                if drawn.dxf.text != title:
+                    self.assertTrue(drawn.dxf.text.endswith("…"),
+                                    f"{drawn.dxf.text!r} was shortened without saying so")
 
     def test_first_angle_lays_the_views_out_first_angle(self) -> None:
         """The label and the arrangement are the same decision."""
@@ -584,32 +599,57 @@ class UndimensionedSheetTests(unittest.TestCase):
 
 
 class TextMeasurementTests(unittest.TestCase):
-    """The markup is not the text, and a character is not a fixed width."""
+    """The markup is not the text.
+
+    Everything here is asserted against the font this machine resolves, never
+    against a millimetre figure. The frontend turns text into glyph paths
+    through the same font machinery the measurement asks, so the two agree by
+    construction -- on a workstation full of typefaces and on a runner with
+    none. Baking in one font's numbers tests the runner, not the code.
+    """
 
     def test_mtext_is_measured_by_the_glyphs_it_draws(self) -> None:
         r"""A toleranced 30 is `\A0;30{\H0.70x;±0.10}`: 15 characters, 7 of
         which draw nothing and 5 of which draw at 0.7 of the height. Counted raw
-        at full height that is 37.8 mm of ink where about 14 mm exists."""
+        at full height that was 37.8 mm of ink where about 14 mm exists."""
         from cadgen.eng_drawing import _mtext_extent, _text_width
 
         plain, _ = _mtext_extent("\\A0;30", 3.5)
         toleranced, _ = _mtext_extent("\\A0;30{\\H0.70x;\u00b10.10}", 3.5)
         stacked, _ = _mtext_extent("\\A0;30{\\H0.70x;\\S+0.05^-0.02;}", 3.5)
 
+        # The control codes draw nothing, so the plain value is exactly its digits.
         self.assertAlmostEqual(plain, _text_width("30", 3.5), delta=0.01)
-        self.assertLess(toleranced, 16.0, "about 14 mm, not the 37.8 mm of a raw count")
-        self.assertGreater(toleranced, plain)
+        # And the deviation is charged at 0.7 of the height, as it is drawn.
+        self.assertAlmostEqual(toleranced, plain + _text_width("\u00b10.10", 3.5 * 0.7), delta=0.01)
+        # Far short of the raw count that produced the false positives: fifteen
+        # characters at full height, braces and \H0.70x; included.
+        self.assertLess(toleranced, _text_width("30\\H0.70x;\u00b10.10", 3.5) * 0.6)
         # A stacked deviation prints its halves one above the other, so it is as
         # wide as the wider half and not as wide as both.
         self.assertLess(stacked, plain + 2 * _text_width("+0.05", 3.5))
 
-    def test_a_character_is_not_a_fixed_fraction_of_the_height(self) -> None:
+    def test_the_measurement_is_the_font_the_renderer_will_use(self) -> None:
+        """No fixed fraction of the cap height serves every string: the ratio
+        that fits "ELECTRONICS ENCLOSURE BASE" runs "+0.10" 25% over in a
+        proportional font, and a machine with no system fonts resolves a
+        different one again. Ask the font, do not assume it."""
+        from cadgen.eng_drawing import _font, _text_width
+
+        font = _font(5.0)
+        if font is None:
+            self.skipTest("no font machinery here; the conservative ratio applies")
+        for value in ("ELECTRONICS ENCLOSURE BASE", "+0.10", "\u00d86 THRU", "R18"):
+            with self.subTest(value=value):
+                self.assertAlmostEqual(_text_width(value, 5.0), float(font.text_width(value)),
+                                       delta=1e-6)
+
+    def test_width_grows_with_the_string_and_the_height(self) -> None:
         from cadgen.eng_drawing import _text_width
 
-        wide = _text_width("ELECTRONICS ENCLOSURE BASE", 5.0) / 26
-        narrow = _text_width("+0.10", 5.0) / 5
-        self.assertGreater(wide / narrow, 1.15, "one ratio cannot serve both")
-
+        self.assertEqual(0.0, _text_width("", 3.5))
+        self.assertLess(_text_width("12", 3.5), _text_width("1234", 3.5))
+        self.assertAlmostEqual(_text_width("1234", 7.0), 2 * _text_width("1234", 3.5), delta=1e-6)
 
 class ChainDimensionTests(unittest.TestCase):
     """The overlap warning has to survive the commonest idiom in drafting."""
@@ -642,7 +682,12 @@ class ChainDimensionTests(unittest.TestCase):
                 self.assertEqual([], self._warnings(pitch, None))
 
     def test_values_that_really_do_collide_still_warn(self) -> None:
-        self.assertNotEqual([], self._warnings(10.0, 0.1))
+        """The pitch comes from the measurement, so this is a collision on any
+        font: values packed at half the width of the value itself."""
+        from cadgen.eng_drawing import _mtext_extent
+
+        width, _ = _mtext_extent("\\A0;30{\\H0.70x;±0.10}", 3.5)
+        self.assertNotEqual([], self._warnings(round(width / 2, 1), 0.1))
 
 
 class InkTests(unittest.TestCase):
@@ -674,6 +719,69 @@ class InkTests(unittest.TestCase):
 
         self.assertTrue(drawn["VISIBLE"] and drawn["HIDDEN"], "both passes drew something")
         self.assertEqual(set(), drawn["VISIBLE"] & drawn["HIDDEN"])
+
+    def test_a_tangent_transition_is_not_drawn_as_a_hidden_edge(self) -> None:
+        """A drawing has no tangent transition line, and one behind material
+        marks nothing a shop can look at.
+
+        `project_to_viewport` bundles OCCT's smooth edges into the hidden half
+        along with sharp edges and silhouettes. A cylindrical face carries a
+        SEAM where it closes on itself, the seam is smooth, and it lands in that
+        bundle -- so wherever the seam happens to face the camera it prints as
+        an extra dashed line the length of the feature. On this disc the right
+        view drew two, the full width of the part, inside its real edges; on a
+        bore the same line runs down the hole's own axis.
+
+        Which view shows it is an accident of where the kernel put the seam, so
+        every view is checked.
+        """
+        from build123d import Cylinder, GeomType, Pos, fillet
+        from cadgen.eng_drawing import Sheet, _render_sheet
+
+        radius, height, blend = 40.0, 10.0, 1.5
+        blank = Pos(0, 0, height / 2) * Cylinder(radius, height)
+        part = fillet(blank.edges().filter_by(GeomType.CIRCLE), blend)
+        tangent = round(height / 2 - blend, 3)
+
+        def spans(name: str) -> list:
+            sheet = Sheet("A3", title="FLANGE")
+            view = sheet.view(part, name, at=(200, 150))
+            doc = _render_sheet(sheet, index=1, count=1, label="flange")
+            found = []
+            for entity in doc.modelspace():
+                if entity.dxf.layer != "HIDDEN":
+                    continue
+                points = _points(entity)
+                ys = {round(y - view.at[1], 2) for _x, y in points}
+                xs = [x for x, _y in points]
+                if len(ys) == 1 and max(xs) - min(xs) > radius:
+                    found.append(ys.pop())
+            return found
+
+        for name in ("front", "right"):
+            with self.subTest(view=name):
+                drawn = spans(name)
+                self.assertNotIn(tangent, drawn, f"{name}: a seam is drawn as a hidden edge")
+                self.assertNotIn(-tangent, drawn, f"{name}: a seam is drawn as a hidden edge")
+
+    def test_real_hidden_edges_and_silhouettes_survive(self) -> None:
+        """Dropping tangents must not drop a bore's walls or a sharp edge."""
+        from build123d import Box, Cylinder, Pos
+        from cadgen.eng_drawing import Sheet, _render_sheet
+
+        part = Box(60, 40, 20) - Cylinder(6, 40) - Pos(0, 0, 6) * Cylinder(9, 8)
+        sheet = Sheet("A3", title="BORES")
+        front = sheet.view(part, "front", at=(200, 150))
+        doc = _render_sheet(sheet, index=1, count=1, label="bores")
+
+        walls = set()
+        for entity in doc.modelspace().query("LINE[layer=='HIDDEN']"):
+            a, b = entity.dxf.start, entity.dxf.end
+            if abs(a.x - b.x) < 1e-6:
+                walls.add(round(a.x - front.at[0], 2))
+        # Both bores, both walls each: the silhouettes a hole is read from.
+        for x in (-9.0, -6.0, 6.0, 9.0):
+            self.assertIn(x, walls, f"the bore wall at {x} is missing: {sorted(walls)}")
 
     def test_the_layer_weights_reach_the_pdf(self) -> None:
         """The backend clamps every width to 72/dpi unless given a floor.
