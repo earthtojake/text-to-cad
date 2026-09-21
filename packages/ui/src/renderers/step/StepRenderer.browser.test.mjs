@@ -595,6 +595,61 @@ test('Kinematics drives the mate and repaints, a named pose jumps, the Pose knob
   assert.deepEqual(errors, []);
 });
 
+// The test above drives the mate with NOTHING selected, and a selection is not nothing: it
+// re-runs the highlight layers, the part visual state and the pick groups around the pose, and
+// each of those owns frames of its own. So the pose is driven again here with a selection
+// standing — once on a part that does not move, and once on the part the mate swings — and
+// what is asserted is the DRAWN frame, because a repaint that never comes leaves a scene that
+// is correct in every other way.
+test('a pose reaches the screen while a part is selected, whether the selection moves with it or stays put', async () => {
+  const view = await open();
+  const { page, pane, at, box, errors } = view;
+  const slider = pane.getByLabel('hinge slider value', { exact: true });
+  const away = () => page.mouse.move(box.x + 20, box.y + box.height - 20);
+  const armY = () => page.evaluate(() => window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix[13]);
+  const pose = async (value) => {
+    const before = await armY();
+    await view.tab('Kinematics').click();
+    await slider.fill(String(value));
+    await slider.press('Enter');
+    await page.waitForFunction(was => Math.abs(window.__cadDisplayRecords()
+      .find(record => record.partId === 'o1.2').matrix[13] - was) > 1, before);
+  };
+
+  // THE BASE SELECTED: the selection stands still and the arm swings out of it.
+  await page.mouse.click(...at([6, 6, 5]));
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.join() === 'o1.1');
+  await away();
+  await page.waitForTimeout(400);
+  const selected = await view.frame();
+  const armAt = image => { const arm = partBoxes(image).arm; return arm ? Math.round((arm.y0 + arm.y1) / 2) : null; };
+  assert.ok(armAt(selected) !== null, 'the arm is drawn in its own colour beside the selected base');
+  await pose(60);
+  const posed = await frameWhen(view, shot => differing(selected, shot) > 20_000,
+    'repainted for a mate driven while a part was selected');
+  assert.ok(Math.abs(armAt(posed) - armAt(selected)) > 40,
+    `and the arm is drawn somewhere else for it (${armAt(selected)} -> ${armAt(posed)})`);
+  assert.deepEqual((await view.state()).selectedPartIds, ['o1.1'], 'the selection was standing the whole time');
+
+  // THE ARM SELECTED: now the selection itself is what moves, so its ink has to move with it.
+  await view.tab('Features').click();
+  await pane.getByRole('button', { name: 'Select arm', exact: true }).click();
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.join() === 'o1.2');
+  await away();
+  await page.waitForTimeout(400);
+  const armSelected = await frameWhen(view, shot => differing(posed, shot) > 5_000, 'lit the arm it was asked to select');
+  await pose(0);
+  await frameWhen(view, shot => differing(armSelected, shot) > 20_000, 'repainted for a mate that moved the selected part');
+  // Back at rest with the arm still selected, the ink is where the arm is: the picture is the
+  // one the same selection gave at rest, not the one it gave posed.
+  await view.tab('Features').click();
+  await pane.getByRole('button', { name: 'Select base', exact: true }).click();
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.join() === 'o1.1');
+  await away();
+  await frameWhen(view, shot => differing(selected, shot) === 0, 'came back to the rest pose under the same selection');
+  assert.deepEqual(errors, []);
+});
+
 test('Animate is the rightmost tool, its playbar plays the routine, and leaving it puts the model back exactly', async () => {
   const view = await open();
   const { page, pane, errors } = view;
@@ -788,5 +843,48 @@ test('a package that arrives in pieces re-sizes its ground, its depth range and 
   const framed = partBoxes(await frame(pane));
   assert.ok(framed.base && framed.base.count < after.base.count * 0.8,
     `and it is drawn smaller for it: the base ran off the frame it now sits inside (${after.base.count} -> ${framed.base.count} pixels)`);
+
+  // AND WHOSE CAMERA IT IS. Framing on completion exists for a camera NOBODY set: the fit
+  // taken against whichever handful of components arrived first. A camera this file kept from
+  // the last time someone looked at it is not that, and it is restored when the model is first
+  // framed — on the FIRST publish, which for a package in pieces is not the last word. The
+  // completion that follows must leave it alone, or a file that publishes more than once loses
+  // the camera every single time it is opened.
+  await page.evaluate(() => window.cadHarness.a.controller.setCamera({
+    ...window.cadHarness.a.controller.readState().camera, position: [90, -30, 38], target: [4, 1, 0], zoom: 1.6 }));
+  await page.waitForTimeout(600);
+  const chosen = await page.evaluate(() => window.__cadCamera());
+  const chosenFrame = await frame(pane);
+  assert.ok(chosen.position.some((value, index) => Math.abs(value - whole.camera.position[index]) > 1),
+    'the camera the person set is somewhere the fit never puts it');
+  const stored = await page.evaluate(() => JSON.parse(JSON.stringify(window.cadHarness.state)));
+
+  // Reopened: a fresh page over the same package, held in pieces again, carrying what the last
+  // session left for this file. (A remount would not do: the client still holds every component
+  // it downloaded, so the package would arrive whole in ONE publish and never reach completion
+  // as a second framing at all.)
+  staggered.hold('a'); staggered.hold('b');
+  const reopened = await staggered.open({ timeout: 60000, state: stored });
+  await reopened.pane.locator('[aria-busy] > div > canvas').first().waitFor();
+  await reopened.page.waitForFunction(() => window.__cadMeshCost?.loadedComponents === 8, null, { timeout: 60000 });
+  staggered.release('a');
+  await reopened.page.waitForFunction(() => window.__cadMeshCost?.loadedComponents === 24, null, { timeout: 60000 });
+  staggered.release('b');
+  await reopened.page.waitForFunction(() => window.__cadMeshCost?.final === true, null, { timeout: 60000 });
+  await reopened.page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false, null, { timeout: 60000 });
+  await reopened.page.waitForTimeout(800);
+  assert.deepEqual(await reopened.page.evaluate(() => [window.__cadMeshCost.publishCount, window.__cadMeshCost.final]),
+    [3, true], 'it arrived in three publishes again, so completion really did reframe');
+  const kept = await reopened.page.evaluate(() => window.__cadCamera());
+  for (const key of ['position', 'target']) {
+    chosen[key].forEach((value, index) => assert.ok(Math.abs(value - kept[key][index]) < 1e-6,
+      `${key}[${index}] is the camera the file kept, not the fit completion would have taken` +
+      ` (${JSON.stringify(chosen[key])} vs ${JSON.stringify(kept[key])}, fit ${JSON.stringify(whole.camera[key])})`));
+  }
+  // On the DRAWN frame: what the reopened file shows is the picture the person left.
+  const reopenedFrame = await frame(reopened.pane);
+  assert.ok(differing(chosenFrame, reopenedFrame) < 3000,
+    `the reopened picture is the one the person left: ${differing(chosenFrame, reopenedFrame)} pixels differ`);
+  assert.deepEqual(reopened.errors, []);
   assert.deepEqual(errors, []);
 });

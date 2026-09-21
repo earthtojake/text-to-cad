@@ -199,6 +199,12 @@ export function sameZeroPoseBounds(a, b, epsilon = ZERO_POSE_REVISION_EPSILON) {
 // every save. A mode change does NOT stand down -- switching mode is itself the
 // deliberate act, and it carries Reset view's meaning for the mode being
 // entered. Reset view still takes a stood-down camera to the new zero pose.
+//
+// `userMovedCamera` is the only deliberate camera this function can see. The other
+// one is the camera a file KEPT, restored when the model was first framed, and it
+// is not visible from here because a restore is something the caller does with the
+// answer. The caller stands "complete" down for it the other way round, by
+// restoring again instead of fitting (`ShellViewport`'s `restorable`).
 export function reframeReason({
   modelKey = "",
   framedModelKey = "",

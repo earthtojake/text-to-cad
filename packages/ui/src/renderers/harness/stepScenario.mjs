@@ -152,8 +152,11 @@ export async function serveStepHarness(t, { onRequest, progressive = false } = {
   const loaded = await loadStepFixture();
   const fixture = progressive ? stageProgressiveFixture(loaded) : loaded;
   const entry = stepCatalogEntry(fixture);
-  const opened = {};
-  const gates = Object.fromEntries(['a', 'b'].map(name => [name, new Promise(resolve => { opened[name] = resolve; })]));
+  // Each gate is a latch a test can close again (`hold`), so one server can serve the same
+  // package progressively more than once — an open, and then a REOPEN in a fresh page.
+  const opened = {}, gates = {};
+  const hold = name => { gates[name] = new Promise(resolve => { opened[name] = resolve; }); };
+  for (const name of ['a', 'b']) hold(name);
   const temporary = await mkdtemp(join(tmpdir(), 'hardcore-step-browser-'));
   let server, browser;
   t.after(async () => {
@@ -235,8 +238,12 @@ export async function serveStepHarness(t, { onRequest, progressive = false } = {
   browser = await chromium.launch({ headless: true, args: process.platform === 'darwin'
     ? ['--use-angle=metal'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 
-  /** One page over the fixture. `deviceScaleFactor: 1` keeps a screenshot's pixels the viewport's. */
-  const open = async ({ timeout = 30000 } = {}) => {
+  /**
+   * One page over the fixture. `deviceScaleFactor: 1` keeps a screenshot's pixels the viewport's.
+   * `state` opens the page as a previous session left this file: the viewer state a test read
+   * off `window.cadHarness.state` earlier, seeded before any of the app runs.
+   */
+  const open = async ({ timeout = 30000, state = null } = {}) => {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
     t.after(() => page.close().catch(() => {}));
     page.setDefaultTimeout(timeout);
@@ -245,8 +252,9 @@ export async function serveStepHarness(t, { onRequest, progressive = false } = {
     // No Worker: the surf tessellator falls back to the main thread, which is
     // what `renderAssetClient` does for a host without one.
     await page.addInitScript(() => { window.Worker = undefined; });
+    if (state) await page.addInitScript(stored => { window.__cadViewerState = stored; }, state);
     await page.goto(`http://127.0.0.1:${server.address().port}/?file=${fixture.file}`);
     return { page, errors, pane: page.getByTestId('one') };
   };
-  return { open, requests, fixture, entry, port: () => server.address().port, release: gate => opened[gate]?.() };
+  return { open, requests, fixture, entry, port: () => server.address().port, release: gate => opened[gate]?.(), hold };
 }

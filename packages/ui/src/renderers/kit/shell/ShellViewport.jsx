@@ -195,6 +195,9 @@ const ShellViewport = forwardRef(function ShellViewport({
   // Which model was framed once it was WHOLE. A scene that arrives in pieces is framed on its
   // first piece, so something is on screen at once, and again when the last piece lands.
   const framedCompleteModelKeyRef = useRef("");
+  // Which model is wearing a camera RESTORED from what was stored for it, rather than one this
+  // viewport fitted. Only the fit is the viewport's to take back.
+  const restoredCameraModelKeyRef = useRef("");
 
   const resolveViewerRenderState = useMemo(() => createViewerRenderStateResolver(), []);
   const renderState = useMemo(() => resolveViewerRenderState({ themeSettings, displaySettings }),
@@ -837,9 +840,21 @@ const ShellViewport = forwardRef(function ShellViewport({
         modelKey, sceneScaleMode: normalizedSceneScaleMode, coordinateSystem: STORED_CAMERA_COORDINATES,
         requireModelKey: true, requireSceneScaleMode: true, requireCoordinateSystem: true
       });
+      // WHOSE CAMERA IS ON SCREEN. The completion fit exists for a camera NOBODY set: a
+      // progressive model is framed on the handful of components that arrived first, and that
+      // frame belongs to no one, so the whole model gets framed again. A camera the person set
+      // is a different thing, and `reframeReason` already stands "complete" down for the one it
+      // can see (`userMovedCamera`). It cannot see the OTHER way this file's camera becomes the
+      // person's: the stored one, restored when the model was first framed. So a completion that
+      // follows a restore restores again rather than fitting -- re-applying the same snapshot is
+      // a no-op for the camera, and it keeps the framing bookkeeping below (interactiveFraming,
+      // framedBounds) moving to the WHOLE model's box rather than the first batch's.
+      const restorable = reframe === "model" || reframe === "mode"
+        || (reframe === "complete" && restoredCameraModelKeyRef.current === (modelKey || ""));
       runWithoutPerspectiveEvents(() => {
-        const restored = !previewModeRef.current && (reframe === "model" || reframe === "mode") && storedMatches
+        const restored = !previewModeRef.current && restorable && storedMatches
           && applyPerspectiveSnapshot(runtime, nextPerspective, { scheduleIdle: false });
+        restoredCameraModelKeyRef.current = restored ? (modelKey || "") : "";
         // Only a camera the viewer chose is the viewer's to re-fit when the viewport changes.
         if (restored) runtime.openFitPending = false; else armOpenFit(runtime);
         if (restored) {
