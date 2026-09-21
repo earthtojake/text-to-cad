@@ -150,8 +150,8 @@ def _bulk(groups: list, coverage: float = 0.95) -> list:
     return kept or ranked
 
 
-def _tangent_faces(mesh: trimesh.Trimesh, along: np.ndarray, zero_tol: float,
-                   smooth_deg: float = 45.0) -> np.ndarray:
+def _tangent_faces(mesh: trimesh.Trimesh, pull: np.ndarray, along: np.ndarray, zero_tol: float,
+                   smooth_deg: float = 45.0, taller_than_its_bounds: float = 3.0) -> np.ndarray:
     """Per face: is it a facet on a curved face that is merely TANGENT to the pull?
 
     A sphere is parallel to the pull along a LINE, and a tessellation turns
@@ -164,6 +164,15 @@ def _tangent_faces(mesh: trimesh.Trimesh, along: np.ndarray, zero_tol: float,
     line it passes THROUGH parallel, so the face has smoothly-joined
     neighbours leaning both ways. Across a sharp edge (a box corner, a cap)
     the surface is a different face, so only smooth joins are followed.
+
+    That test alone is not enough, because a fillet joins a wall smoothly too:
+    the rim of a flange with a radius top and bottom has leaning neighbours
+    both ways and is still a real zero-draft wall 7 mm tall. What separates
+    those is SIZE: a band standing in for a tangent line is a facet of the same
+    curved surface as the facets bounding it, so it reaches about as far along
+    the pull as they do. A wall is much taller than the fillet that ends it --
+    measured, 1.0 to 1.2 times for three tessellations of a sphere against 48
+    for that flange rim, which is why the cut between them needs no tuning.
     """
     tangent = np.zeros(len(mesh.faces), dtype=bool)
     adjacency = mesh.face_adjacency
@@ -191,7 +200,15 @@ def _tangent_faces(mesh: trimesh.Trimesh, along: np.ndarray, zero_tol: float,
             above[facet] = True
         if below[facet].any():
             below[facet] = True
-    return above & below
+    # ... and no taller along the pull than the leaning faces that bound it.
+    reach = mesh.triangles @ pull
+    height = reach.max(axis=1) - reach.min(axis=1)
+    leaning = np.abs(along) > tol
+    bound = np.zeros(len(mesh.faces))
+    for near, far in ((left, right), (right, left)):
+        np.maximum.at(bound, near, np.where(leaning[far], height[far], 0.0))
+    same_size = height <= taller_than_its_bounds * np.maximum(bound, 1e-9)
+    return above & below & same_size
 
 
 def _draft_facts(mesh: trimesh.Trimesh, pull: np.ndarray, wall_limit: float, zero_tol: float) -> dict:
@@ -219,7 +236,7 @@ def _draft_facts(mesh: trimesh.Trimesh, pull: np.ndarray, wall_limit: float, zer
             hist[f"{lo:g}-{hi:g}deg"] = round(area, 2)
 
     zero = walls & (draft < zero_tol)
-    tangent = _tangent_faces(mesh, along, zero_tol)
+    tangent = _tangent_faces(mesh, pull, along, zero_tol)
     flat_zero = zero & ~tangent
     tangent_zero = zero & tangent
     zero_groups = _pooled_faces(mesh, flat_zero, pull, along)

@@ -17,7 +17,8 @@ import unittest
 from pathlib import Path
 
 import numpy as np
-from build123d import Align, Axis, Box, Cone, Cylinder, Plane, Pos, Rectangle, export_stl, loft
+from build123d import (Align, Axis, Box, Cone, Cylinder, GeomType, Plane, Pos, Rectangle,
+                       export_stl, loft)
 
 from tests.python.support.paths import add_repo_path
 
@@ -267,6 +268,29 @@ class TangentCurvedFaceTest(unittest.TestCase):
 
         self.assertEqual(facts["zero_draft_wall_area_mm2"], 0.0)
         self.assertGreater(facts["zero_draft_tangent_area_mm2"], 0.0)
+
+    def test_a_filleted_rim_is_a_wall_even_though_it_joins_smoothly(self) -> None:
+        """Found by running the tool on the examples' circular flange.
+
+        Its outer rim is a Ø80 cylinder 10 mm tall with an R1.5 fillet top and
+        bottom. Both fillets join it tangentially, so the rim's facets have
+        smoothly-joined neighbours leaning both ways -- which is the signature
+        of a tangent band. It is not one: it is 7 mm of zero-draft wall that
+        needs draft, and calling it a tessellation artifact would hide that.
+        The rim is many times taller along the pull than the fillet facets that
+        end it, and a real tangent band is the same size as its neighbours.
+        """
+        from build123d import Axis, Cylinder, fillet
+
+        outer, height, radius = 80.0, 10.0, 1.5
+        blank = Pos(0, 0, height / 2) * Cylinder(outer / 2, height)
+        part = fillet(blank.edges().filter_by(GeomType.CIRCLE), radius)
+        with tempfile.TemporaryDirectory() as td:
+            facts = _z(mold_tool._load(_stl(part, Path(td), "rim")))
+
+        straight = math.pi * outer * (height - 2 * radius)
+        self.assertAlmostEqual(facts["zero_draft_wall_area_mm2"], straight, delta=straight * 0.05)
+        self.assertEqual(facts["zero_draft_tangent_area_mm2"], 0.0)
 
     def test_a_cylinder_wall_is_a_real_zero_draft_wall(self) -> None:
         """Curved, but parallel to the pull over its whole area, not just a line."""

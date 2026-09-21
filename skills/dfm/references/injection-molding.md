@@ -48,6 +48,10 @@ in `partial_sections`, and the command exits 2. Do not read a partial report as
   parallel to the pull. A sphere is tangent to the pull along a line, not over
   an area, so this figure scales with the tessellation — one sphere read
   261 mm² coarse and 67 mm² fine. Report it as a tangency, never as a wall.
+  A wall that a fillet joins tangentially is NOT this: a flange rim with a
+  radius top and bottom stays zero-draft wall, because it reaches many times
+  further along the pull than the fillet facets bounding it, where a real
+  tangent band is the same size as its neighbours.
 - `min_wall_draft`: the lowest draft over faces pooled by normal, ignoring the
   sliver tail, with its area and location. `min_facet_draft` is the single
   worst triangle; it moves with the mesh, so quote `min_wall_draft`.
