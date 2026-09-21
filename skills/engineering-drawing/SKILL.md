@@ -47,9 +47,17 @@ patterns, which are toolpaths, not documents; the two are different jobs.
    place a dimension deliberately, and remember it is measured from the
    dimension's own points, not the view's edge. Keep notes few and under about
    45 characters; the layout reserves room for them.
-5. Run `python <name>_drawing.py`. It prints the PDF it wrote. When running
-   unattended, set `MPLCONFIGDIR` to a writable directory so matplotlib's font
-   cache does not warn.
+5. Run `python <name>_drawing.py`. It prints the PDF it wrote, and **anything
+   it noticed while drawing** — read those first:
+   - *"measures blank paper"*: the dimension's model points do not land on the
+     view's geometry. Almost always the part was built from a corner and the
+     script assumed it was centred. Check the part's bounding box.
+   - *"annotation overlaps"*: two callouts print on top of each other, usually
+     one view's outermost dimension against the label of the view above it.
+     Pass a bigger `three_views(gap=...)` or place one with `offset=`.
+
+   When running unattended, set `MPLCONFIGDIR` to a writable directory so
+   matplotlib's font cache does not warn.
 6. **Read the PDF** and fix what collides. Check that no dimension text sits on
    a view, that hidden lines appear where features are behind faces, that every
    hole has a centre mark, and that no leader crosses the part. Very small
@@ -91,5 +99,6 @@ The script raises rather than writing a wrong or missing document:
   invented. A dimension without one is nominal.
 - Views are orthographic projections with hidden lines from the kernel; no
   sections, details, or auxiliary views yet. Say what a view does not show.
-- The sheet keeps callouts clear of the views it knows about, but it does not
-  check every annotation against every other. Read the PDF.
+- The sheet keeps callouts clear of the views it knows about, and reports
+  annotation that still prints over other annotation, but it does not check
+  annotation against line work. Read the PDF.

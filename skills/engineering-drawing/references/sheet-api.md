@@ -82,6 +82,12 @@ drawing takes geometry, not a file.
 
 A view whose geometry runs off the frame raises, naming the scale that fits.
 
+Running the drawing also prints what it noticed: a dimension whose points miss
+the view's geometry (it draws, but it measures blank paper — usually a part
+built from a corner and dimensioned as if centred), and annotation printed over
+other annotation (usually one view's outermost row against the label of the
+view above it, which `three_views(gap=...)` fixes).
+
 ## `View`
 
 All points are MODEL coordinates (3-tuples; a 2-tuple means z = 0). Offsets

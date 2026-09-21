@@ -636,8 +636,36 @@ def _scale_label(scale: float) -> str:
     return f"1:{1 / scale:g}" if scale < 1 else f"{scale:g}:1"
 
 
-def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
-    """Build the ezdxf document for one sheet. Returns the document."""
+def _text_box(value: str, x: float, y: float, height: float, align) -> tuple[float, float, float, float]:
+    """The rectangle a TEXT entity occupies, from its anchor and alignment.
+
+    Character width is taken at 0.72 of the cap height, the same ratio the title
+    block fits text with, so one number governs both.
+    """
+    width = len(value) * height * 0.72
+    name = getattr(align, "name", str(align)).upper()
+    if "CENTER" in name and "LEFT" not in name and "RIGHT" not in name:
+        x0 = x - width / 2
+    elif "RIGHT" in name:
+        x0 = x - width
+    else:
+        x0 = x
+    if "TOP" in name:
+        y0 = y - height
+    elif "MIDDLE" in name:
+        y0 = y - height / 2
+    else:
+        y0 = y
+    return (x0, y0, x0 + width, y0 + height)
+
+
+def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str, warnings: list | None = None):
+    """Build the ezdxf document for one sheet. Returns the document.
+
+    ``warnings`` collects anything the sheet renders but a reader should look
+    at -- a dimension whose points miss the geometry, say. The render never
+    stops for one: it is the PDF that answers whether the sheet is right.
+    """
     import ezdxf
     from ezdxf.enums import TextEntityAlignment
 
@@ -662,7 +690,48 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
                 value = (value[: max(room - 1, 1)] + "…") if room > 1 else value[:1]
         entity = msp.add_text(value, dxfattribs={"height": height, "layer": layer})
         entity.set_placement((x, y), align=align)
+        if layer in ("DIM", "NOTES") and value:
+            claim(value, _text_box(value, x, y, height, align))
         return entity
+
+    # Annotation already on the paper, as (what it says, its box). A sheet lays
+    # each view out knowing only where the views are, so two views' callouts can
+    # still land on each other -- the overall width of one view against the label
+    # of the view above it, say. Nothing here moves them, because which of the two
+    # should give way is the author's call; it says so instead of leaving it to be
+    # noticed on the print.
+    claimed: list[tuple[str, tuple[float, float, float, float]]] = []
+
+    def claim_rendered(dimension) -> None:
+        """A dimension's VALUE lives as MTEXT inside its rendered block, not as
+        TEXT on the sheet, so it is registered from there once it is drawn."""
+        try:
+            block = doc.blocks.get(dimension.dxf.geometry)
+        except Exception:  # noqa: BLE001 - a dimension with no block draws nothing to collide with
+            return
+        for entity in block:
+            if entity.dxftype() != "MTEXT":
+                continue
+            value = stripped = str(entity.text or "")
+            for token in ("\\A0;", "{", "}"):
+                stripped = stripped.replace(token, "")
+            height = float(entity.dxf.char_height or sheet.text_height)
+            insert = entity.dxf.insert
+            width = len(stripped.splitlines()[0] if stripped else "") * height * 0.72
+            claim(value, (insert.x - width / 2, insert.y - height / 2,
+                          insert.x + width / 2, insert.y + height / 2))
+
+    def claim(value: str, box: tuple[float, float, float, float]) -> None:
+        for other, taken in claimed:
+            if (box[0] < taken[2] and box[2] > taken[0] and box[1] < taken[3] and box[3] > taken[1]):
+                if warnings is not None:
+                    warnings.append(
+                        f"annotation overlaps: {value.strip()!r} is printed over {other.strip()!r} "
+                        f"around ({box[0]:.0f}, {box[1]:.0f}). Give the view more room "
+                        "(three_views(gap=...)), or place one of them with offset=."
+                    )
+                break
+        claimed.append((value, box))
 
     # Frame and title block.
     m = _MARGIN
@@ -871,6 +940,7 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
                 edge = vx1 if offset >= 0 else vx0
                 reach[side] = max(reach[side], abs(base[0] - edge) + sheet.text_height * 1.5)
             d.render()
+            claim_rendered(d.dimension)
 
         # The overall pair is the OUTERMOST row on its side: a drawing reads from the
         # view outward, smallest feature first. Its rows are reserved here so the
@@ -886,16 +956,38 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
         if view._overall:
             reach["top"] = max(reach["top"], overall_top + sheet.text_height * 1.5)
             reach["left"] = max(reach["left"], overall_left + sheet.text_height * 1.5)
+        def on_view(point, margin: float = 1.0) -> bool:
+            """Does a projected point land on the view's own drawn extent?"""
+            return (vx0 - margin <= point[0] <= vx1 + margin
+                    and vy0 - margin <= point[1] <= vy1 + margin)
+
+        def check(kind: str, index: int, *points) -> None:
+            # A dimension between two points in SPACE draws perfectly and measures
+            # nothing: move the holes in the model, leave the constants alone, and
+            # the sheet prints a clean dimension over blank paper. The commonest
+            # cause is model coordinates assumed to be centred when the part was
+            # built from a corner.
+            off = [p for p in points if not on_view(p)]
+            if off and warnings is not None:
+                where = ", ".join(f"({p[0]:.1f}, {p[1]:.1f})" for p in off)
+                warnings.append(
+                    f"{view.name} {kind} {index}: {len(off)} of {len(points)} point(s) fall outside the "
+                    f"view's geometry at sheet {where}. The dimension is drawn, but it measures blank "
+                    "paper -- check the model coordinates it was given."
+                )
+
         for index, dim in enumerate(view._dims):
             if dim.kind == "linear":
-                linear(model_to_sheet(dim.p1), model_to_sheet(dim.p2), dim.offset, dim.text,
-                       dim.orientation, dim.tol, dim.fit)
+                a, b = model_to_sheet(dim.p1), model_to_sheet(dim.p2)
+                check("dim", index, a, b)
+                linear(a, b, dim.offset, dim.text, dim.orientation, dim.tol, dim.fit)
             elif dim.kind in ("diameter", "radius", "hole"):
                 # A hole callout: a leader from the circle's edge to a horizontal landing
                 # outside the view, past whatever dimensions already stand on that side,
                 # with the text reading along the landing. Nothing is drawn across the
                 # part, and stacked callouts on one side land at their own hole's height.
                 centre = model_to_sheet(dim.p1)
+                check(dim.kind, index, centre)
                 r = dim.radius * sv
                 if dim.kind == "hole":
                     value = hole_callout_text(dim.hole, tol=dim.tol, fit=dim.fit)
@@ -935,14 +1027,17 @@ def _render_sheet(sheet: Sheet, *, index: int, count: int, label: str):
                 v = model_to_sheet(dim.p1)
                 a = model_to_sheet(dim.p2)
                 b = model_to_sheet(dim.hole["p2"])
+                check("angle", index, v, a, b)
                 ua = math.atan2(a[1] - v[1], a[0] - v[0])
                 ub = math.atan2(b[1] - v[1], b[0] - v[0])
                 mid = ua + ((ub - ua + math.pi) % (2 * math.pi) - math.pi) / 2
                 base = (v[0] + dim.offset * math.cos(mid), v[1] + dim.offset * math.sin(mid))
                 d = msp.add_angular_dim_3p(base=base, center=v, p1=a, p2=b, dimstyle=dimstyle, dxfattribs={"layer": "DIM"})
                 d.render()
+                claim_rendered(d.dimension)
             elif dim.kind == "note":
                 p = model_to_sheet(dim.p1)
+                check("note", index, p)
                 q = (p[0] + dim.radius, p[1] + dim.angle)
                 msp.add_leader([p, q, (q[0] + (3 if dim.radius >= 0 else -3), q[1])], dxfattribs={"layer": "NOTES"})
                 align = TextEntityAlignment.BOTTOM_LEFT if dim.radius >= 0 else TextEntityAlignment.BOTTOM_RIGHT
@@ -1040,8 +1135,10 @@ def eng_drawing(func: Callable[..., Any] | None = None, *, out: str | Path | Non
 
             target = target_spec if target_spec.is_absolute() else (script.parent / target_spec).resolve()
             docs = []
+            notices: list[str] = []
             for index, sheet in enumerate(sheets, start=1):
-                doc = _render_sheet(sheet, index=index, count=len(sheets), label=fn.__name__)
+                doc = _render_sheet(sheet, index=index, count=len(sheets), label=fn.__name__,
+                                    warnings=notices)
                 # The same checks every @dxf build runs, against the document the
                 # page is rendered from: duplicate geometry, unset units, an empty
                 # sheet. A drawing skipping them is how the duplicates went unseen.
@@ -1051,6 +1148,8 @@ def eng_drawing(func: Callable[..., Any] | None = None, *, out: str | Path | Non
                     if finding.severity == "warning":
                         print(f"{fn.__name__} sheet {index} {finding.render()}")
                 docs.append(doc)
+            for notice in notices:
+                print(f"{fn.__name__}: {notice}")
             _write_pdf(docs, sheets, target)
             print(f"wrote {target} ({len(sheets)} page{'s' if len(sheets) != 1 else ''})")
             return [target]

@@ -330,6 +330,63 @@ class DrawingSheetTests(unittest.TestCase):
         self.assertTrue(any(d.dimtype == 5 for d in dims), "an angular dimension on the DIM layer")
 
 
+class SheetWarningTests(unittest.TestCase):
+    """What the sheet draws but a reader should look at. Found by running the
+    skill on parts it was not written against."""
+
+    def test_a_dimension_whose_points_miss_the_geometry_says_so(self) -> None:
+        """A part built from a corner, dimensioned as if it were centred.
+
+        The dimension renders perfectly and measures blank paper, which is the
+        one error a shop cannot catch from the print.
+        """
+        from build123d import Align, Box
+        from cadgen.eng_drawing import Sheet, _render_sheet
+
+        part = Box(120, 30, 30, align=(Align.MIN, Align.CENTER, Align.CENTER))  # X runs 0..120
+        sheet = Sheet("A3")
+        front = sheet.view(part, "front", at=(210, 150))
+        front.dim((0, 0, 15), (30, 0, 15))          # on the part
+        front.dim((-60, 0, 15), (-30, 0, 15))       # as if it were centred: off in space
+        front.note("BORE", (-55, 0, 0))
+        notices: list[str] = []
+        _render_sheet(sheet, index=1, count=1, label="off", warnings=notices)
+
+        self.assertEqual(len(notices), 2, notices)
+        self.assertTrue(any("dim 1" in n for n in notices), notices)
+        self.assertTrue(any("note 2" in n for n in notices), notices)
+        self.assertTrue(all("measures blank paper" in n for n in notices), notices)
+
+    def test_a_clean_sheet_warns_about_nothing(self) -> None:
+        from cadgen.eng_drawing import _render_sheet
+
+        notices: list[str] = []
+        _render_sheet(_sheet(_part()), index=1, count=1, label="clean", warnings=notices)
+        self.assertEqual(notices, [])
+
+    def test_annotation_printed_over_annotation_says_so(self) -> None:
+        """Two views are laid out knowing only where the views are, so one view's
+        outermost dimension can land on the view label of the view above it."""
+        from cadgen.eng_drawing import Sheet, _render_sheet
+
+        def build(gap):
+            # The default gap reserves two dimension rows. Asking the front view
+            # for three puts its outermost row where the top view's label hangs.
+            sheet = Sheet("A3")
+            _top, front, _right = sheet.three_views(_part(), gap=gap)
+            front.overall()
+            front.dim((-20, -15, 0), (20, -15, 0))
+            front.dim((-20, -15, 10), (20, -15, 10))
+            notices: list[str] = []
+            _render_sheet(sheet, index=1, count=1, label="rows", warnings=notices)
+            return [n for n in notices if "annotation overlaps" in n]
+
+        crowded = build(None)
+        self.assertTrue(crowded, "three rows into a two-row gap should be reported")
+        self.assertIn("three_views(gap=", crowded[0])
+        self.assertEqual(build(70), [], "given the room, the same sheet is quiet")
+
+
 class DrawingVocabularyTests(unittest.TestCase):
     """Every argument is checked where it is written, not at render time."""
 
