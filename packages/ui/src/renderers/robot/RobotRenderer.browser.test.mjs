@@ -157,6 +157,13 @@ async function open(t, file, { inspector = true } = {}) {
       return PNG.sync.read(Buffer.from(base64, 'base64'));
     },
     async surface() { return pane.locator('[data-cad-surface] canvas').first().boundingBox(); },
+    // What the pointer looks like over the model. Read from the INTERACTIVE
+    // canvas: a tool sets the cursor on the viewport host and the canvas
+    // inherits it, which three's OrbitControls used to break by pinning
+    // `cursor: auto` on the canvas inline (`kit/viewport/useViewerRuntime.js`).
+    cursor: () => page.evaluate(() => getComputedStyle(document.querySelector('[data-testid="one"] [aria-busy] > div > canvas')).cursor),
+    waitCursor: value => page.waitForFunction(wanted => getComputedStyle(
+      document.querySelector('[data-testid="one"] [aria-busy] > div > canvas')).cursor === wanted, value),
   };
   if (inspector) {
     await pane.locator('[aria-busy="false"] canvas').first().waitFor();
@@ -179,7 +186,8 @@ test('a robot opens in Pose on Kinematics: knobs drag joints, the camera keeps e
 
   // The robot opens in Pose, Pose leads its tools, and the Inspector lands on Kinematics.
   await page.waitForFunction(() => window.__cadJointHandles?.().length > 0);
-  assert.deepEqual(await robot.toolNames(), ['Pose:true', 'Select:false', 'Draw:false']);
+  assert.deepEqual(await robot.toolNames(), ['Pose:true', 'Select:false']);
+  assert.equal(await robot.tool('Draw').count(), 0, 'Draw is a STEP tool; a robot description has none');
   assert.deepEqual(await pane.getByRole('tab').evaluateAll(tabs => tabs.map(tab => `${tab.textContent.trim()}:${tab.getAttribute('aria-selected')}`)),
     ['Kinematics:true', 'Links:false', 'Display:false']);
   assert.equal(await pane.locator('[data-file-sheet="SRDF"]').count(), 1, 'the Inspector is titled by the format on disk');
@@ -214,7 +222,10 @@ test('a robot opens in Pose on Kinematics: knobs drag joints, the camera keeps e
   const { shoulder } = await robot.handles();
   await page.mouse.move(...at(shoulder.x, shoulder.y));
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [data-cad-joint-handle-label]')?.textContent.startsWith('shoulder'));
+  // Over a knob the pointer says it can be taken hold of, and says so while it is held.
+  await robot.waitCursor('grab');
   await page.mouse.down();
+  await robot.waitCursor('grabbing');
   const radius = Math.hypot(shoulder.x - shoulder.pivotX, shoulder.y - shoulder.pivotY);
   const bearing = Math.atan2(shoulder.y - shoulder.pivotY, shoulder.x - shoulder.pivotX);
   for (let step = 1; step <= 9; step += 1) {
@@ -227,6 +238,7 @@ test('a robot opens in Pose on Kinematics: knobs drag joints, the camera keeps e
   assert.match(await pane.locator('[data-cad-joint-handle-label]').textContent(), /^shoulder\s+-?\d+\.\d°$/);
   await page.mouse.up();
   await page.waitForTimeout(300);
+  assert.equal(await robot.cursor(), 'grab', 'released, and still on the knob');
   // Nothing eases behind the drag: the value at release is the value that stays.
   assert.equal((await robot.handles()).shoulder.value, held);
   assert.ok(sameCamera(await robot.camera(), framed), 'a knob drag never moves the camera');
@@ -265,6 +277,7 @@ test('a robot opens in Pose on Kinematics: knobs drag joints, the camera keeps e
   // Anywhere else the press is the camera's, and no joint moves.
   const posed = await robot.handles();
   await page.mouse.move(...at(40, 420));
+  await robot.waitCursor('auto');
   await page.mouse.down();
   await page.mouse.move(...at(160, 470), { steps: 8 });
   await page.mouse.up();
@@ -292,10 +305,6 @@ test('a robot opens in Pose on Kinematics: knobs drag joints, the camera keeps e
   await robot.tool('Pose').click();
   await page.waitForFunction(() => window.__cadJointHandles().length === 4);
   assert.equal((await robot.handles()).shoulder.value, -40);
-  // Draw is a session: ending it lands in Select, the tool a robot falls back to.
-  await robot.tool('Draw').click();
-  await robot.tool('Draw').click();
-  assert.deepEqual(await robot.toolNames(), ['Pose:false', 'Select:true', 'Draw:false']);
   assert.deepEqual(robot.errors, []);
 });
 
@@ -315,7 +324,7 @@ test('Select picks links at once; a selection lives only under Select; Links sho
   // Under Pose the model picks nothing: a click on it is the camera's.
   await page.mouse.click(...onScreen(spots.lift).map((value, index) => value + (index ? 14 : 14)));
   await robot.settle();
-  assert.deepEqual(await robot.toolNames(), ['Pose:true', 'Select:false', 'Draw:false']);
+  assert.deepEqual(await robot.toolNames(), ['Pose:true', 'Select:false']);
   await robot.tab('Links').click();
   assert.deepEqual(await robot.pressedRows(), []);
   // The tree: a frame-only root is elided, so the base leads it, pinned (no chevron of its own).
@@ -325,7 +334,7 @@ test('Select picks links at once; a selection lives only under Select; Links sho
 
   // Choosing a row under Pose returns to Select first; the row is the selection.
   await pane.getByRole('button', { name: 'Select upper_arm', exact: true }).click();
-  assert.deepEqual(await robot.toolNames(), ['Pose:false', 'Select:true', 'Draw:false']);
+  assert.deepEqual(await robot.toolNames(), ['Pose:false', 'Select:true']);
   assert.deepEqual(await robot.pressedRows(), ['Select upper_arm']);
   const reference = pane.getByLabel('Reference details');
   await reference.getByText('shoulder', { exact: true }).first().waitFor();
@@ -342,10 +351,11 @@ test('Select picks links at once; a selection lives only under Select; Links sho
   const still = (await robot.capture()).data;
   await page.mouse.move(...onScreen(spots.shoulder).map(value => value - 3));
   await page.mouse.move(...onScreen(spots.shoulder));
-  await page.waitForFunction(() => [...document.querySelectorAll('[data-testid="one"] [data-cad-surface] div')].some(node => node.style.cursor === 'pointer'));
+  // Over a link the pointer says it can be picked; over the backdrop it does not.
+  await robot.waitCursor('pointer');
   assert.ok(!(await robot.capture()).data.equals(still), 'a hovered link is lit');
   await page.mouse.move(surface.x + 30, surface.y + surface.height - 30);
-  await page.waitForFunction(() => ![...document.querySelectorAll('[data-testid="one"] [data-cad-surface] div')].some(node => node.style.cursor === 'pointer'));
+  await robot.waitCursor('auto');
   assert.ok((await robot.capture()).data.equals(still), 'and is exactly as it was once the pointer leaves');
 
   await page.mouse.move(...onScreen(spots.shoulder));
@@ -359,7 +369,7 @@ test('Select picks links at once; a selection lives only under Select; Links sho
   await page.getByRole('menuitem', { name: 'Zoom to selection', exact: true }).click();
   await page.waitForFunction(() => window.__cadCamera().zoomPercent > 130);
   await pane.getByRole('button', { name: 'Zoom controls', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Reset camera', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Reset Zoom', exact: true }).click();
   await page.waitForFunction(() => Math.abs(window.__cadCamera().zoomPercent - 100) < 0.5);
   await page.waitForTimeout(600);
 
@@ -490,7 +500,7 @@ test('a pose, the tool and the open tab survive closing the file, and a pose is 
   await page.evaluate(() => window.cadHarness.mounted(true));
   await robot.jointField('shoulder').waitFor();
   assert.deepEqual([await robot.jointField('shoulder').inputValue(), await robot.jointField('lift', 'm').inputValue(), await robot.jointField('nod').inputValue()], ['25°', '0.2 m', '12°']);
-  assert.deepEqual(await robot.toolNames(), ['Pose:false', 'Select:true', 'Draw:false'], 'a robot left in Select comes back in Select');
+  assert.deepEqual(await robot.toolNames(), ['Pose:false', 'Select:true'], 'a robot left in Select comes back in Select');
   const links = await robot.links();
   assert.equal(round6(translation(links.carriage)[2]), 0.35, 'and the robot on screen is in that pose');
 
@@ -509,7 +519,7 @@ test('an SDF is the same robot with its own tab; fullscreen has no tools and no 
   const robot = await open(t, 'swing.sdf');
   const { page, pane } = robot;
   await page.waitForFunction(() => window.__cadJointHandles?.().length === 1);
-  assert.deepEqual(await robot.toolNames(), ['Pose:true', 'Select:false', 'Draw:false']);
+  assert.deepEqual(await robot.toolNames(), ['Pose:true', 'Select:false']);
   assert.deepEqual(await pane.getByRole('tab').evaluateAll(tabs => tabs.map(tab => tab.textContent.trim())), ['Kinematics', 'Links', 'SDF', 'Display']);
   assert.equal(await pane.locator('[data-file-sheet="SDF"]').count(), 1);
   await robot.tab('SDF').click();

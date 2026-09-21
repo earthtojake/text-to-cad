@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   dxfFormatLength, dxfMaterialPreset, dxfParseLengthToMm, dxfSettingsRecord, dxfUnitOption,
   normalizeDxfBendRadiusMm, normalizeDxfKFactor, normalizeDxfOrientation, normalizeDxfThicknessMm,
-  readDxfSettings, resetDxfModel
+  readDxfSettings
 } from "./dxfSettings.js";
 
 test("an empty record is the defaults: flat, millimetres, no stock, curved corners, 3D", () => {
@@ -45,17 +45,6 @@ test("Units convert at the input boundary only: the state stays millimetres", ()
   assert.equal(dxfFormatLength(25.4, inches), "1.00 in");
   assert.equal(Math.round(dxfParseLengthToMm("2 in", inches, 0) * 100) / 100, 50.8);
   assert.equal(dxfParseLengthToMm("nonsense", inches, 7), 7, "an unreadable entry keeps what was there");
-});
-
-test("Reset model restores the geometry, and leaves how it is being looked at alone", () => {
-  const state = readDxfSettings({
-    thicknessMm: 6, bends: [{ angleDeg: 90, direction: "down" }], hiddenLayers: ["CUT"],
-    orientation: { x: 1, y: 2, z: 3 }, units: "in", material: "brass", view: "2d", bendStyle: "boxed"
-  }, 1);
-  const reset = resetDxfModel(state);
-  assert.deepEqual([reset.thicknessMm, reset.bends, reset.hiddenLayers, reset.orientation],
-    [0, [{ angleDeg: 0, direction: "up" }], [], { x: 0, y: 0, z: 0 }]);
-  assert.deepEqual([reset.units, reset.material, reset.view, reset.bendStyle], ["in", "brass", "2d", "boxed"]);
 });
 
 test("a material preset carries the tint the sheet wears; None carries none", () => {

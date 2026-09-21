@@ -29,9 +29,9 @@ elements pass bounded scene validation.
 
 Every SDK control is hidden. The canvases, the in-place text editor, the context
 menu and the toast remain, and `DrawingToolbar` (`drawing/toolbar.tsx`) is the
-one control surface: Select and move drawings, Pan view, Pen, Line, Arrow,
-Rectangle, Ellipse, Text, Fill area, Eraser, Color, Undo, Redo and Clear
-drawing, in the floating-toolbar button primitive. It imports nothing of the SDK.
+one control surface, in the order a sketch is made: Pen, Line, Arrow, Rectangle,
+Ellipse, Text, Fill area, Eraser, Color, Select and move drawings, Pan view,
+Undo, Redo and Clear drawing, in the floating-toolbar button primitive. It imports nothing of the SDK.
 The standalone editor renders it top-centre and always light (its tokens are
 re-declared inside the editor, and the color strip is in the toolbar's flow
 rather than a portalled popover, so a dark application cannot restyle it). A
@@ -103,7 +103,8 @@ does not delete an already attached image.
 The editor is independent of explorer tabs and prompt destinations. Its
 `mode="overlay"` uses a transparent drawing surface, red default ink and
 transparent PNG export; `exportPng({ background: false })` also works explicitly.
-The CAD renderer's Draw tool is this component ([Draw](cad-renderer.md#draw)).
+The STEP renderer's Draw tool is this component ([Draw](cad-renderer.md#draw));
+no other file family offers it.
 
 `toolbar={false}` leaves the toolbar to the host, and `initialTool` chooses the
 tool a new editor opens on. The controller drives the editor: `setTool` (one of

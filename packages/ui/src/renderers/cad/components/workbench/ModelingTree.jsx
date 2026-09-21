@@ -35,7 +35,7 @@ function ModelingRow({ node, depth=0, selected, expanded, toggle, choose, disabl
   // its descendants can. Only a hidden owner blocks its entire subtree.
   const {hiddenByOwner,outsideFrontier,unavailable}=nodeAvailability(node,partControls,inheritedHidden,inheritedUnavailable);
   return <li className="min-w-0" ref={element => { if (element) rowRefs.current.set(node.id, element); else rowRefs.current.delete(node.id); }}>
-    <ModelPartMenu node={node} controls={partControls} disabled={disabled} selectDisabled={disabled || unavailable} selected={selected.has(node.id)} onSelect={event=>choose(node,event)}>
+    <ModelPartMenu node={node} controls={partControls} disabled={disabled}>
       <TreeRowSurface active={selected.has(node.id)} className={cn('gap-0 pr-0', hiddenByOwner && 'opacity-50')}
         onMouseEnter={() => partControls.onHoverTreeNode?.(node.selectionId || node.occurrenceId || '')}
         onMouseLeave={() => partControls.onHoverTreeNode?.('')} style={{paddingLeft:depth*14}}>
@@ -63,7 +63,7 @@ function ModelingSearchRow({ match, index, selected, cursor, choose, disabled, p
   const {hiddenByOwner,unavailable}=modelTreeSearchChain(index,match.at).reduce(
     (owner,step)=>nodeAvailability(step,partControls,owner.hiddenByOwner,owner.outsideFrontier),{hiddenByOwner:false,outsideFrontier:false});
   return <li className="min-w-0" data-search-row={node.id}>
-    <ModelPartMenu node={node} controls={partControls} disabled={disabled} selectDisabled={disabled || unavailable} selected={selected.has(node.id)} onSelect={event=>choose(node,event)}>
+    <ModelPartMenu node={node} controls={partControls} disabled={disabled}>
       <TreeRowSurface active={selected.has(node.id)} cursor={cursor} className={cn('gap-0 pr-0', hiddenByOwner && 'opacity-50')}
         onMouseEnter={() => partControls.onHoverTreeNode?.(node.selectionId || node.occurrenceId || '')}
         onMouseLeave={() => partControls.onHoverTreeNode?.('')}>

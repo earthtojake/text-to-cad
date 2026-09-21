@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import { runDrawScenario } from '../../../harness/drawScenario.mjs';
+import { serveStepHarness } from '../../../harness/stepScenario.mjs';
 
-// Under the shell (kit/shell), mounted by the smallest renderer built on it: a one-triangle mesh file.
-const mesh = 'solid triangle\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 20 0 0\nvertex 0 20 0\nendloop\nendfacet\nendsolid triangle\n';
+// Draw under the frame that ships it: the STEP renderer, over the committed
+// two-part fixture. It is a kit tool, so the scenario itself
+// (`harness/drawScenario.mjs`) knows nothing about STEP.
 
-test('Draw locks the view, pans model and ink together, keeps tools, colors and fills, and discards the sketch when left', t => runDrawScenario(t, {
-  file: 'part.stl',
-  entries: root => [{ kind: 'stl', file: 'part.stl', rootRelativeFile: 'part.stl', url: '/mesh.stl', hash: root, bytes: mesh.length }],
-  assets: { '/mesh.stl': mesh },
-}));
+test('Draw locks the view, pans model and ink together, keeps tools, colors and fills, and discards the sketch when left', async (t) => {
+  const harness = await serveStepHarness(t);
+  await runDrawScenario(await harness.open());
+});

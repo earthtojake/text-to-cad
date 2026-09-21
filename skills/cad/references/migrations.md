@@ -24,10 +24,11 @@ materials and animation and looks like a plain part.
   running the model's script again (`python <model>.py`), which writes a current
   sidecar beside the STEP. For an imported STEP that has no script, re-annotate
   it with `cadgen step build`. Never edit `schemaVersion` by hand.
-- A leftover `<model>.step.js` beside the STEP (the build warns it "is a retired
-  render module") is read by nothing, so its clips are missing from the model.
-  Move them into `@step(animation=...)` ([kinematics](kinematics.md)), delete
-  the file and rebuild.
+- A leftover companion render module beside the STEP (a `.js` file named after
+  the document; the build warns it "is a retired render module") is read by
+  nothing, so its clips are missing from the model. Move them into
+  `@step(animation=...)` ([kinematics](kinematics.md)), delete the file and
+  rebuild.
 - After migrating, confirm it took: the sidecar declares the current schema and
   the document's hash, the build printed no migration warning, and the model
   articulates (a `cadgen step snapshot --kinematics …` pose differs from rest,

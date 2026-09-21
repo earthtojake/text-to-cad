@@ -94,8 +94,13 @@ async function serveHarness(t) {
 }
 
 const ready = pane => pane.locator('[aria-busy="false"] > div > canvas').first().waitFor();
-const toolNames = pane => pane.getByRole('group', { name: 'Interaction tools' }).getByRole('button')
-  .evaluateAll(buttons => buttons.map(button => [button.getAttribute('aria-label'), button.getAttribute('aria-pressed')]));
+// A mesh has no tools at all, so this must stay empty wherever it is asked.
+const noTools = async (pane) => {
+  assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).count(), 0, 'a mesh viewport has no tool strip');
+  for (const name of ['Orbit', 'Draw', 'Select', 'Measure', 'Pose', 'Animate']) {
+    assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
+  }
+};
 // The viewport's own pixels, without any chrome over them: what a host capture returns.
 async function capture(page) {
   const encoded = await page.evaluate(async () => {
@@ -141,15 +146,15 @@ const GUIDES_OFF = { grid: { enabled: false }, axes: { enabled: false }, floor: 
 const isRed = ([r, g, b]) => r > 150 && g < 90 && b < 90;
 const isBlue = ([r, g, b]) => b > 150 && r < 90 && g < 130;
 
-test('an STL opens in Orbit as one mesh: display settings, orbit, Draw, host commands and state all work', async (t) => {
+test('an STL opens as one mesh with no tools: display settings, orbit, host commands and state all work', async (t) => {
   const { open, requests } = await serveHarness(t);
   const { page, pane, errors } = await open('part.stl');
   await ready(pane);
   assert.deepEqual(errors, []);
 
-  // Orbit is the default tool and promises no selection; nothing of a mesh picks, measures, poses or plays.
-  assert.deepEqual(await toolNames(pane), [['Orbit', 'true'], ['Draw', 'false']]);
-  for (const name of ['Select', 'Measure', 'Pose', 'Animate']) assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
+  // Nothing of a mesh picks, measures, poses, plays or is drawn on: the viewport
+  // simply orbits, pans and zooms, with no strip over it.
+  await noTools(pane);
   assert.equal(await pane.getByRole('button', { name: /Copy|Add to prompt/i }).count(), 0, 'no copy-references action');
 
   // The Inspector starts shut and holds the single Display tab, titled by the format.
@@ -226,10 +231,16 @@ test('an STL opens in Orbit as one mesh: display settings, orbit, Draw, host com
     return still;
   }, null, { polling: 250 });
 
-  // The canvas's own menu is the camera's.
+  // A secondary press on the canvas is the camera's: the viewer opens no menu of
+  // its own, and the browser's own stays off the canvas.
+  await page.evaluate(() => {
+    window.nativeMenu = [];
+    document.addEventListener('contextmenu', event => window.nativeMenu.push(event.defaultPrevented));
+  });
   await page.mouse.click(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2, { button: 'right' });
-  assert.deepEqual(await page.getByRole('menuitem').allInnerTexts(), ['Reset Zoom', 'Zoom To Fit']);
-  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  assert.equal(await page.getByRole('menu').count(), 0);
+  assert.deepEqual(await page.evaluate(() => window.nativeMenu), [true], 'the native menu is still prevented');
 
   // Host commands drive the mounted view, and one that makes no sense here fails loudly.
   const camera = await page.evaluate(async () => {
@@ -248,28 +259,14 @@ test('an STL opens in Orbit as one mesh: display settings, orbit, Draw, host com
   await pane.getByText(/A mesh file has nothing to select/).waitFor();
   assert.equal(await page.evaluate(() => window.cadHarness.a.commands.getSnapshot().selectReference ?? null), null, 'the declined request is acknowledged');
 
-  // Draw: the overlay, its bottom action to the prompt with the ink, and the toggle back to Orbit.
-  await pane.getByRole('button', { name: 'Draw', exact: true }).click();
-  await pane.locator('[data-drawing-ready]').waitFor();
-  assert.deepEqual(await toolNames(pane), [['Orbit', 'false'], ['Draw', 'true']]);
-  const overlay = await pane.locator('[data-cad-drawing-overlay]').boundingBox();
-  const locked = await page.evaluate(() => window.cadHarness.a.controller.readState().camera);
-  await page.mouse.move(overlay.x + 120, overlay.y + 120);
-  await page.mouse.down(); await page.mouse.move(overlay.x + 260, overlay.y + 150, { steps: 8 }); await page.mouse.up();
-  assert.deepEqual(await page.evaluate(() => window.cadHarness.a.controller.readState().camera), locked, 'drawing never moves the camera');
-  await pane.getByRole('button', { name: 'Add to Prompt', exact: true }).click();
-  await page.waitForFunction(() => window.cadHarness.captures.length === 1);
-  const drawn = await page.evaluate(() => window.cadHarness.captures[0]);
-  assert.deepEqual([drawn.file, drawn.type, drawn.references.length], ['part.stl', 'image/png', 1]);
-  assert.deepEqual(drawn.references[0].target, { kind: 'whole-resource' });
-  await pane.getByRole('button', { name: 'Draw', exact: true }).click();
-  await pane.locator('[data-drawing-ready]').waitFor({ state: 'detached' });
-  assert.deepEqual(await toolNames(pane), [['Orbit', 'true'], ['Draw', 'false']]);
   // The navbar snapshot and a host's capture request go through the same prompt port.
   await pane.getByRole('button', { name: 'Take snapshot', exact: true }).click();
-  await page.waitForFunction(() => window.cadHarness.captures.length === 2);
+  await page.waitForFunction(() => window.cadHarness.captures.length === 1);
+  const captured = await page.evaluate(() => window.cadHarness.captures[0]);
+  assert.deepEqual([captured.file, captured.type, captured.references.length], ['part.stl', 'image/png', 1]);
+  assert.deepEqual(captured.references[0].target, { kind: 'whole-resource' });
   await page.evaluate(() => window.cadHarness.capture());
-  await page.waitForFunction(() => window.cadHarness.captures.length === 3);
+  await page.waitForFunction(() => window.cadHarness.captures.length === 2);
 
   // Camera and Display settings belong to this file under this renderer's id, and survive a remount.
   await display(page, { surfaces: { colorMode: 'single', color: '#00c040' }, grid: { enabled: true }, floor: { enabled: true } });
@@ -289,14 +286,14 @@ test('an STL opens in Orbit as one mesh: display settings, orbit, Draw, host com
   assert.deepEqual([reopened.display.surfaces.colorMode, reopened.display.surfaces.color, reopened.display.grid.enabled, reopened.display.floor.enabled], ['single', '#00c040', true, true]);
   assert.equal(requests.filter(path => path === '/one/part.stl').length, 1, 'reopening a file reuses its decoded mesh without another asset request');
 
-  // Fullscreen: no tools, no Inspector toggle, orbit settings only (a mesh has nothing to play).
+  // Fullscreen: no Inspector toggle, orbit settings only (a mesh has nothing to play).
   await page.evaluate(() => window.cadHarness.fullscreen(true));
-  await pane.getByRole('group', { name: 'Interaction tools' }).waitFor({ state: 'detached' });
   await pane.getByRole('group', { name: 'Fullscreen controls' }).waitFor();
   assert.equal(await pane.getByRole('button', { name: 'Orbit settings', exact: true }).count(), 1);
   assert.equal(await pane.locator('[data-animation-transport]').count(), 0);
   await page.evaluate(() => window.cadHarness.fullscreen(false));
-  await pane.getByRole('group', { name: 'Interaction tools' }).waitFor();
+  await pane.getByRole('button', { name: 'Inspector', exact: true }).waitFor();
+  await noTools(pane);
   assert.deepEqual(errors, []);
 });
 
@@ -305,7 +302,7 @@ test('a 3MF is one mesh per object with its source colour; an uncoloured one tak
   const { page, pane, errors } = await open('pair.3mf');
   await ready(pane);
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
-  assert.deepEqual(await toolNames(pane), [['Orbit', 'true'], ['Draw', 'false']]);
+  await noTools(pane);
   await pane.getByRole('button', { name: 'Inspector', exact: true }).click();
   await pane.locator('[data-file-sheet="3MF"]').waitFor();
   await pane.getByRole('button', { name: 'Inspector', exact: true }).click();
@@ -356,7 +353,7 @@ test('a corrupt mesh raises the viewer\'s load alert and an empty one says there
   await alert.waitFor();
   assert.match(await alert.innerText(), /Couldn’t load the model/);
   assert.match(await alert.innerText(), /broken\.stl/);
-  assert.equal(await broken.pane.getByRole('group', { name: 'Interaction tools' }).getByRole('button', { name: 'Orbit' }).isDisabled(), true);
+  await noTools(broken.pane);
   assert.equal(await alert.getByRole('button', { name: 'Try again', exact: true }).count(), 1);
   assert.equal(await alert.getByText('Details', { exact: true }).count(), 1);
 

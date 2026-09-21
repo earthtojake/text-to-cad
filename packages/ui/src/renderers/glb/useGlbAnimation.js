@@ -21,9 +21,10 @@ const REST = Object.freeze({ activeClipId: "", enabled: false, playing: false, e
 /**
  * The file's glTF clips as the kit playbar's runtime, driven by this renderer's
  * own clock: ONE `AnimationMixer` on the native scene, alive only while a routine
- * owns the pose. Releasing it (`resetModel`, which the shell calls on leaving
- * Animate) stops the action, and three restores every animated property to the
- * value it had at rest, so the model returns to the authored pose exactly.
+ * owns the pose. The file opens at rest with no mixer at all, so the playbar
+ * appearing under the model changes nothing on screen; the mixer is built by the
+ * first play, scrub or clip choice, and disposing it restores every animated
+ * property to the value it had at rest.
  *
  * @param {object | null} document  The native GLB document on screen.
  * @param {() => void} requestRender  Asks the viewport for a frame.
@@ -68,10 +69,6 @@ export function useGlbAnimation(document, requestRender) {
     clock.resetAnimationClock();
     update({ enabled: true, playing: false, elapsedSec: 0 });
   }, [clock, update]);
-  const resetModel = useCallback(() => {
-    clock.resetAnimationClock();
-    update({ ...REST, activeClipId: clips[0]?.id || "" });
-  }, [clips, clock, update]);
   const onScrub = useCallback((value) => {
     if (!activeClip) return;
     const elapsedSec = clampAnimationElapsed(value, activeClip.duration);
@@ -128,8 +125,8 @@ export function useGlbAnimation(document, requestRender) {
     clips, activeClipId: activeClip?.id || "", enabled: state.enabled, playing: state.playing,
     elapsedSec: state.elapsedSec, speed: state.speed, loopEnabled: state.loopEnabled,
     clock, showRestart: false,
-    onClipSelect, onPlayToggle, onRestart, onScrub, resetModel,
+    onClipSelect, onPlayToggle, onRestart, onScrub,
     onSpeedChange: (speed) => update({ speed: clampAnimationSpeed(speed) }),
     onLoopToggle: (loopEnabled) => update({ loopEnabled: loopEnabled !== false })
-  } : null), [clips, activeClip, state, clock, onClipSelect, onPlayToggle, onRestart, onScrub, resetModel, update]);
+  } : null), [clips, activeClip, state, clock, onClipSelect, onPlayToggle, onRestart, onScrub, update]);
 }

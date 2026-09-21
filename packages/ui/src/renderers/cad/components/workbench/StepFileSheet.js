@@ -21,6 +21,8 @@ export default function StepFileSheet({
   activeTreeNodeScrollKey = '', onSelectTreeNode, onSelectReferenceGroup, onClearSelection,
   onFocusTreeNode, onUnfocusTreeNode, onExitAllIsolate, onTogglePartVisibility,
   onCopyTreeNodeReference, onHoverTreeNode, showAllHiddenParts,
+  // The one part menu a tree row carries: its descriptor per node, and the actions behind it.
+  menuForNode = null, partMenuActions = null,
   treeSelectionDisabled = false, treeSelectionDisabledReason = '',
   stepModule = null, stepAnimation = null, statusItems = EMPTY,
   openSectionIds = EMPTY, onOpenSectionIdsChange, settingsTabs = EMPTY,
@@ -60,7 +62,8 @@ export default function StepFileSheet({
       onLoadTopology={geometryInspection?.onLoadTopology} onSelect={onSelectReferenceGroup} onClearSelection={onClearSelection}
       partControls={{isAssemblyView, hiddenPartIds, focusedNodeIds, selectableNodeIds, expandedTreeNodeIds, onToggleTreeNode,
         onSelectTreeNode, onFocusTreeNode, onUnfocusTreeNode, onExitAllIsolate,
-        onTogglePartVisibility, showAllHiddenParts, onCopyTreeNodeReference, onHoverTreeNode}}
+        onTogglePartVisibility, showAllHiddenParts, onCopyTreeNodeReference, onHoverTreeNode,
+        menuForNode, partMenuActions}}
     />,
   }, buildMotionControlsTab({
     poseRuntime: stepModule, animationRuntime: stepAnimation,

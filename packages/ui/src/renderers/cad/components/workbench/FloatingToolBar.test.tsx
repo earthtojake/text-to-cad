@@ -40,8 +40,13 @@ it('first activates Select, then opens its filter on a second press and restores
   expect(screen.getByRole('menu')).toBeTruthy();
 });
 
-const DRAWING_TOOL_LABELS = ['Select and move drawings', 'Pan view', 'Pen', 'Line', 'Arrow', 'Rectangle', 'Ellipse', 'Text', 'Fill area', 'Eraser'];
-const DRAWING_BUTTON_LABELS = [...DRAWING_TOOL_LABELS, 'Color', 'Undo', 'Redo', 'Clear drawing'];
+// The sub-toolbar reads left to right in the order a sketch is made: the marks
+// first (Pen leading, because that is what Draw opens on), then the colour they
+// are made in, then the two ways of moving around what was drawn, then undo/redo
+// and Clear. This list IS that order.
+const DRAWING_TOOL_LABELS = ['Pen', 'Line', 'Arrow', 'Rectangle', 'Ellipse', 'Text', 'Fill area', 'Eraser', 'Select and move drawings', 'Pan view'];
+const DRAWING_BUTTON_LABELS = ['Pen', 'Line', 'Arrow', 'Rectangle', 'Ellipse', 'Text', 'Fill area', 'Eraser',
+  'Color', 'Select and move drawings', 'Pan view', 'Undo', 'Redo', 'Clear drawing'];
 
 function drawingSession(overrides = {}) {
   return { ready: true, tool: 'freedraw', color: '#ff2d55', hasContent: true, selectTool: vi.fn(), selectColor: vi.fn(), undo: vi.fn(), redo: vi.fn(), clear: vi.fn(), ...overrides };

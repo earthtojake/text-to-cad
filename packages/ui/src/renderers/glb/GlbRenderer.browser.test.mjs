@@ -76,8 +76,13 @@ async function serveHarness(t) {
 }
 
 const ready = pane => pane.locator('[aria-busy="false"] > div > canvas').first().waitFor();
-const toolNames = pane => pane.getByRole('group', { name: 'Interaction tools' }).getByRole('button')
-  .evaluateAll(buttons => buttons.map(button => [button.getAttribute('aria-label'), button.getAttribute('aria-pressed')]));
+// A GLB has no tools at all, so this must stay empty wherever it is asked.
+const noTools = async (pane) => {
+  assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).count(), 0, 'a GLB viewport has no tool strip');
+  for (const name of ['Orbit', 'Draw', 'Select', 'Measure', 'Pose', 'Animate']) {
+    assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
+  }
+};
 // The viewport's own pixels, without any chrome over them: what a host capture returns.
 async function capture(page) {
   const encoded = await page.evaluate(async () => {
@@ -118,15 +123,15 @@ const differingPixels = (left, right) => {
 const settle = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 const display = (page, patch) => page.evaluate(next => window.cadHarness.a.controller.setDisplaySettings(next), patch);
 
-test('a static GLB opens in Orbit on its native scene: display settings, orbit, Draw, host commands and state all work', async (t) => {
+test('a static GLB opens on its native scene with no tools: display settings, orbit, host commands and state all work', async (t) => {
   const { open } = await serveHarness(t);
   const { page, pane, errors } = await open('static.glb');
   await ready(pane);
   assert.deepEqual(errors, []);
 
-  // Orbit is the default tool and promises no selection; nothing of a GLB picks, measures or poses.
-  assert.deepEqual(await toolNames(pane), [['Orbit', 'true'], ['Draw', 'false']]);
-  for (const name of ['Select', 'Measure', 'Pose', 'Animate']) assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
+  // Nothing of a GLB picks, measures, poses or is drawn on: the viewport simply
+  // orbits, pans and zooms, with no strip over it.
+  await noTools(pane);
   assert.equal(await pane.getByRole('button', { name: /Copy|Add to prompt/i }).count(), 0, 'no copy-references action');
 
   // The Inspector starts shut and holds the single Display tab.
@@ -206,21 +211,22 @@ test('a static GLB opens in Orbit on its native scene: display settings, orbit, 
   assert.match(declined, /A GLB has nothing to select/);
   assert.match(await page.evaluate(() => window.cadHarness.a.controller.clearSelection().then(() => '', error => error.message)), /no selection to clear/);
 
-  // Draw: the overlay, its bottom action to the prompt with the ink, and the toggle back to Orbit.
-  await pane.getByRole('button', { name: 'Draw', exact: true }).click();
-  await pane.locator('[data-drawing-ready]').waitFor();
-  assert.deepEqual(await toolNames(pane), [['Orbit', 'false'], ['Draw', 'true']]);
-  await pane.getByRole('button', { name: 'Add to Prompt', exact: true }).click();
-  await page.waitForFunction(() => window.cadHarness.captures.length === 1);
-  const drawn = await page.evaluate(() => window.cadHarness.captures[0]);
-  assert.deepEqual([drawn.file, drawn.type, drawn.references.length], ['static.glb', 'image/png', 1]);
-  assert.deepEqual(drawn.references[0].target, { kind: 'whole-resource' });
-  await pane.getByRole('button', { name: 'Draw', exact: true }).click();
-  await pane.locator('[data-drawing-ready]').waitFor({ state: 'detached' });
-  assert.deepEqual(await toolNames(pane), [['Orbit', 'true'], ['Draw', 'false']]);
-  // The navbar snapshot goes through the same prompt port.
+  // A secondary press is the camera's: no menu of the viewer's, and the browser's own stays off the canvas.
+  await page.evaluate(() => {
+    window.nativeMenu = [];
+    document.addEventListener('contextmenu', event => window.nativeMenu.push(event.defaultPrevented));
+  });
+  await page.mouse.click(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2, { button: 'right' });
+  await page.waitForTimeout(200);
+  assert.equal(await page.getByRole('menu').count(), 0);
+  assert.deepEqual(await page.evaluate(() => window.nativeMenu), [true]);
+
+  // The navbar snapshot goes through the prompt port.
   await pane.getByRole('button', { name: 'Take snapshot', exact: true }).click();
-  await page.waitForFunction(() => window.cadHarness.captures.length === 2);
+  await page.waitForFunction(() => window.cadHarness.captures.length === 1);
+  const captured = await page.evaluate(() => window.cadHarness.captures[0]);
+  assert.deepEqual([captured.file, captured.type, captured.references.length], ['static.glb', 'image/png', 1]);
+  assert.deepEqual(captured.references[0].target, { kind: 'whole-resource' });
 
   // Camera and Display settings belong to this file under this renderer's id, and survive a remount.
   await display(page, { surfaces: { colorMode: 'single', color: '#00c040' }, grid: { enabled: false } });
@@ -239,64 +245,60 @@ test('a static GLB opens in Orbit on its native scene: display settings, orbit, 
   assert.equal(reopened.camera.zoom, left.camera.zoom);
   assert.deepEqual([reopened.display.surfaces.colorMode, reopened.display.surfaces.color, reopened.display.grid.enabled], ['single', '#00c040', false]);
 
-  // Fullscreen: no tools, no Inspector toggle, orbit settings only (a static file has nothing to play).
+  // Fullscreen: no Inspector toggle, orbit settings only (a static file has nothing to play).
   await page.evaluate(() => window.cadHarness.fullscreen(true));
-  await pane.getByRole('group', { name: 'Interaction tools' }).waitFor({ state: 'detached' });
   await pane.getByRole('group', { name: 'Fullscreen controls' }).waitFor();
   assert.equal(await pane.locator('[data-animation-transport]').count(), 0);
   await page.evaluate(() => window.cadHarness.fullscreen(false));
-  await pane.getByRole('group', { name: 'Interaction tools' }).waitFor();
+  await pane.getByRole('button', { name: 'Inspector', exact: true }).waitFor();
+  await noTools(pane);
   assert.deepEqual(errors, []);
 });
 
-test('an animated GLB adds Animate, rightmost: one scene whether or not a clip plays, and leaving returns to rest exactly', async (t) => {
+test('an animated GLB shows its playbar always: the file opens at rest, and the transport is the only way it moves', async (t) => {
   const { open } = await serveHarness(t);
   const { page, pane, errors } = await open('animated.glb');
   await ready(pane);
-  assert.deepEqual(await toolNames(pane), [['Orbit', 'true'], ['Draw', 'false'], ['Animate', 'false']]);
+  // Clips, so the playbar — and still no tool strip: a playbar is a transport, not a tool to take up.
+  await pane.locator('[data-animation-transport]').waitFor();
+  await noTools(pane);
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
   const rest = await capture(page);
+  // The bar is simply there, and the file is at rest under it: nothing about its
+  // appearance re-shades or re-poses the model.
+  assert.equal(await pane.getByRole('button', { name: 'Play animation', exact: true }).count(), 1);
+  assert.equal(await pane.getByRole('button', { name: 'Pause animation', exact: true }).count(), 0, 'it opens paused');
+  assert.equal(Number(await pane.getByRole('slider', { name: 'Animation time' }).getAttribute('aria-valuenow')), 0);
 
-  // Entering the tool changes nothing on screen: the same scene, the same finish, the clip at its start.
-  await pane.getByRole('button', { name: 'Animate', exact: true }).click();
-  await pane.locator('[data-animation-transport]').waitFor();
-  assert.deepEqual(await toolNames(pane), [['Orbit', 'false'], ['Draw', 'false'], ['Animate', 'true']]);
-  assert.equal(differingPixels(rest, await capture(page)), 0, 'rest and Animate paused at 0 are the same picture');
+  // Scrubbing away and back is the rest pose again.
   const time = pane.getByRole('slider', { name: 'Animation time' });
   await time.focus();
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('ArrowLeft');
   assert.equal(differingPixels(rest, await capture(page)), 0, 'a clip scrubbed back to 0 is the rest pose');
 
-  // Playing moves the model.
+  // Playing moves the model; pausing leaves it where it stopped.
   await pane.getByRole('button', { name: 'Play animation', exact: true }).click();
   await page.waitForFunction(() => Number(document.querySelector('[data-testid="one"] [role="slider"][aria-label="Animation time"]')?.getAttribute('aria-valuenow')) > 0.25);
   await pane.getByRole('button', { name: 'Pause animation', exact: true }).click();
-  assert.ok(differingPixels(rest, await capture(page)) > 200, 'the rider moved');
+  const moved = await capture(page);
+  assert.ok(differingPixels(rest, moved) > 200, 'the rider moved');
 
-  // Leaving the tool releases the routine: the model is at rest again, pixel for pixel.
-  await pane.getByRole('button', { name: 'Orbit', exact: true }).click();
-  await pane.locator('[data-animation-transport]').waitFor({ state: 'detached' });
-  await page.waitForFunction(() => window.cadHarness.a.controller.readState().loading === false);
-  await settle(page);
-  assert.equal(differingPixels(rest, await capture(page)), 0, 'leaving Animate restores the rest pose exactly');
-
-  // Fullscreen is locked in Animate for a file with clips: the playbar, no tools.
+  // Fullscreen is the same playbar over the same frame, and coming back keeps the pose it was left in.
   await page.evaluate(() => window.cadHarness.fullscreen(true));
-  await pane.getByRole('group', { name: 'Interaction tools' }).waitFor({ state: 'detached' });
+  await pane.getByRole('group', { name: 'Fullscreen controls' }).waitFor();
   await pane.locator('[data-animation-transport]').waitFor();
   await page.evaluate(() => window.cadHarness.fullscreen(false));
-  await pane.locator('[data-animation-transport]').waitFor({ state: 'detached' });
-  assert.deepEqual(await toolNames(pane), [['Orbit', 'true'], ['Draw', 'false'], ['Animate', 'false']]);
+  await pane.getByRole('button', { name: 'Inspector', exact: true }).waitFor();
+  await pane.locator('[data-animation-transport]').waitFor();
+  await noTools(pane);
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().loading === false);
+  await settle(page);
 
-  // In Render the studio's floor is sized from the rest placement: a clip at 0 is the rest picture, and a playing one never resizes it.
+  // In Render the studio's floor is sized from the rest placement: a playing clip never resizes it.
   await page.evaluate(() => window.cadHarness.a.controller.setRenderMode(true));
   await page.waitForFunction(() => window.__cadStage()?.studioGround);
   const floor = await page.evaluate(() => window.__cadStage().studioGround);
-  const renderedRest = await capture(page);
-  await pane.getByRole('button', { name: 'Animate', exact: true }).click();
-  await pane.locator('[data-animation-transport]').waitFor();
-  assert.equal(differingPixels(renderedRest, await capture(page)), 0, 'Render at rest and Animate paused at 0 are the same picture');
   await pane.getByRole('button', { name: 'Play animation', exact: true }).click();
   await page.waitForFunction(() => Number(document.querySelector('[data-testid="one"] [role="slider"][aria-label="Animation time"]')?.getAttribute('aria-valuenow')) > 0.25);
   await pane.getByRole('button', { name: 'Pause animation', exact: true }).click();
@@ -311,6 +313,6 @@ test('a corrupt GLB raises the viewer\'s load alert, with reload and details', a
   await alert.waitFor();
   assert.match(await alert.innerText(), /Couldn’t load the model/);
   assert.match(await alert.innerText(), /broken\.glb/);
-  assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).getByRole('button', { name: 'Orbit' }).isDisabled(), true);
+  await noTools(pane);
   void page;
 });

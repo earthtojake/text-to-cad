@@ -1,24 +1,28 @@
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@hardcore/ui/primitives/context-menu';
 import { useHostReference } from '../../file-view/hostReference.js';
-import AssemblyContextMenuItems from './AssemblyContextMenuItems.js';
+import { AssemblyPartMenuItems } from './AssemblyContextMenuItems.js';
 
-export default function ModelPartMenu({node, controls, disabled, selectDisabled, selected, children, onSelect}) {
-  const hostReference=useHostReference();
-  if(!node.selectionId)return children;
-  const id=node.selectionId, focused=controls.focusedNodeIds?.includes(id);
-  const hidden=node.leafPartIds?.length > 0 && node.leafPartIds.every(leaf=>controls.hiddenPartIds?.includes(leaf));
+// A Features tree row's menu. It is the SAME menu the viewport offers over that
+// part — one descriptor (`controls.menuForNode`) and one set of actions
+// (`controls.partMenuActions`) — and unlike the viewport's it is available under
+// any tool, because every one of its actions returns to Select before it runs.
+
+/** Built only once the menu is actually open, so a tree of rows never pays for it. */
+function TreeNodeMenuItems({ id, controls, disabled }) {
+  const hostReference = useHostReference();
+  const actions = controls.partMenuActions || {};
+  const menu = controls.menuForNode?.(id);
+  if (!menu) return null;
+  return <AssemblyPartMenuItems menu={menu} Item={ContextMenuItem} Separator={ContextMenuSeparator}
+    disabled={disabled}
+    actions={{ ...actions, onAddToPrompt: hostReference?.canAddToPrompt ? actions.onAddToPrompt : undefined }} />;
+}
+
+export default function ModelPartMenu({ node, controls, disabled, children }) {
+  if (!node.selectionId || !controls.menuForNode) return children;
   return <ContextMenu><ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
     <ContextMenuContent className="w-44">
-      <AssemblyContextMenuItems Item={ContextMenuItem} Separator={ContextMenuSeparator}
-        selected={selected} isolated={focused} hidden={hidden}
-        copyReferenceDisabled={!controls.onCopyTreeNodeReference || disabled}
-        selectDisabled={selectDisabled || hidden} showIsolate={controls.isAssemblyView} isolateDisabled={disabled}
-        showHideOther={false} showVisibility={!focused} visibilityDisabled={disabled}
-        showExitAllIsolate={controls.focusedNodeIds?.length > 0} exitAllIsolateDisabled={disabled}
-        onAddToPrompt={hostReference?.canAddToPrompt ? ()=>controls.onCopyTreeNodeReference?.(id,{toPrompt:true}) : undefined}
-        onCopyReference={()=>controls.onCopyTreeNodeReference?.(id)} onSelect={onSelect}
-        onIsolate={()=>focused ? controls.onUnfocusTreeNode?.(id) : controls.onFocusTreeNode?.(id)}
-        onToggleVisibility={()=>controls.onTogglePartVisibility?.(id)} onExitAllIsolate={controls.onExitAllIsolate}/>
+      <TreeNodeMenuItems id={node.selectionId} controls={controls} disabled={disabled} />
     </ContextMenuContent>
   </ContextMenu>;
 }

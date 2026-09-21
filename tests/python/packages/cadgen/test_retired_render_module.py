@@ -12,8 +12,8 @@ once per run on stderr, naming the replacement -- including on the run that
 rebuilds NOTHING, because a model whose tree is already current takes the no-op
 path and would otherwise sail past the check.
 
-The viewer says the same thing as a model warning (law 1: a door never refuses
-a document). That is ``viewer/test_artifact_status.py``.
+The viewer says nothing: it shows the document it is handed, and the absence of
+the routine is visible there already. The build is the one announcement.
 """
 
 from __future__ import annotations

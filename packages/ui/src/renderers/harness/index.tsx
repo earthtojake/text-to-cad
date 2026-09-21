@@ -8,6 +8,7 @@ import { createDxfRenderer } from '@hardcore/ui/renderers/dxf';
 import { createGlbRenderer } from '@hardcore/ui/renderers/glb';
 import { createMeshRenderer } from '@hardcore/ui/renderers/mesh';
 import { createRobotRenderer } from '@hardcore/ui/renderers/robot';
+import { createHarnessRenderer } from '@hardcore/ui/renderers/shell-harness';
 import type { ViewerHost } from '@hardcore/ui/host';
 import type { CadLiveController, CadCommands } from '@hardcore/ui/renderers/cad';
 
@@ -51,7 +52,8 @@ function workspace(id: string) {
   const live = { bind(next: CadLiveController) { controller = next; return () => { controller = null; }; } };
   // One live binding per pane: whichever renderer the file selects binds the mounted view.
   const services = { client, preferences, commands, live };
-  const renderers = [createCadRenderer(services), createDxfRenderer(services), createGlbRenderer(services), createMeshRenderer(services), createRobotRenderer(services)];
+  // `harness` is test scaffolding for the shell's own tools; it ships nowhere.
+  const renderers = [createCadRenderer(services), createDxfRenderer(services), createGlbRenderer(services), createMeshRenderer(services), createRobotRenderer(services), createHarnessRenderer(services)];
   return { client, source, host, renderers, commands, capture, selectReference, get controller() { return controller; } };
 }
 const a = workspace('one'), b = workspace('two');

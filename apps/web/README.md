@@ -201,20 +201,24 @@ the UI package's asset documentation for asset provenance and regeneration.
 
 ### Narrow CAD panes
 
-The shared top-right toolbar contains Select, Measure (STEP only) and Draw, plus Pose (drag
-joints by viewport handles) and Animate where a file
-has joints or routines. Pressing
-Select again opens its selection-filter dropdown. A robot description (its own renderer)
-opens in Pose, which leads its tools, followed by a Select that picks whole links, and Draw. A DXF, a GLB, an STL and a 3MF (their own
-renderers) have nothing to select: they open in Orbit, a plain view tool, followed by
-Draw and, for a GLB with clips, Animate. A DXF adds a 2D/3D action to the file navbar,
-and its 2D view is a locked top-down plan: orthographic, no view cube, left-drag pans. Buttons wrap inside the pill
+A file has a top-right tool strip only where it has tools. A STEP's holds Select,
+Measure, Draw, plus Pose and Animate where the file has joints or routines;
+pressing Select again opens its selection-filter dropdown. A robot description
+(its own renderer) opens in Pose, which leads its tools, followed by a Select
+that picks whole links. Draw is a STEP tool and appears nowhere else. A DXF, a
+GLB, an STL and a 3MF (their own renderers) have NO tools and no strip at all:
+their viewport simply orbits, pans and zooms, and a secondary press opens
+nothing. A GLB with clips shows the playbar under the model always — it is a
+transport, not a tool, and the file opens at rest. A DXF adds a 2D/3D action to
+the file navbar, and its 2D view is a locked top-down plan: orthographic, no view
+cube, left-drag pans. Buttons wrap inside the pill
 when the Inspector or a narrow host reduces the scene width. Snapshot is a
 direct action beside the Inspector and file-tree toggles in the file navbar;
 the web prompt adapter copies the viewport image and references to the clipboard.
-The small muted percentage beside the Inspector tabs opens zoom/fit controls,
-Reset camera and Reset model. Reset model clears kinematics, Clip/Explode and
-hide/isolate state, restores the original camera, and preserves display settings.
+The small muted percentage beside the Inspector tabs opens the framing menu:
+zoom steps, 100%, fit, selection fit and Reset Zoom, which frames the model again
+without turning the camera. Nothing in it touches the model, its motion or its
+display settings.
 X/Y/Z labels remain visible outside the bottom-right axis endpoints.
 
 Fullscreen (`Maximize2`) sits beside appearance in the web header. The app owns
