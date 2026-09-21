@@ -1,6 +1,6 @@
 import SelectionFilterMenu from "./SelectionFilterMenu.jsx";
 import { MEASURE_SELECTION_FILTERS, SELECTION_FILTERS } from "../../workbench/selectionFilter.js";
-import { CirclePlay, MousePointer2, PenTool, Rotate3d, Ruler } from "lucide-react";
+import { CirclePlay, MousePointer2, Pencil, Rotate3d, Ruler } from "lucide-react";
 import { renderCapabilities, supportsTool } from "@hardcore/core/lib/renderCapabilities.js";
 import { DrawingToolbar } from "../../../../drawing/toolbar.jsx";
 import KitFloatingToolBar, { FLOATING_TOOL_BAR_SURFACE_CLASS } from "../../../kit/tools/FloatingToolBar.js";
@@ -65,7 +65,7 @@ export function cadInteractionTools({
   } : null;
   const drawTool = supportsTool(renderFormat, "draw") ? {
     id: "draw", label: "Draw",
-    icon: <PenTool className="size-3" strokeWidth={2} aria-hidden="true" />,
+    icon: <Pencil className="size-3" strokeWidth={2} aria-hidden="true" />,
     active: drawToolActive, disabled: idle,
     onSelect: () => handleSelectTabToolMode("draw"),
     subToolbar: drawToolActive ? <DrawingToolbar drawing={drawing} /> : null,

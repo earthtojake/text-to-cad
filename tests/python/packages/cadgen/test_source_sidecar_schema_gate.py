@@ -90,6 +90,9 @@ class SidecarSchemaGate(unittest.TestCase):
         )
         self.assertIn("python hinge.py", message)
         self.assertIn("cadgen step build", message)
+        # It says what is lost and that migrating is the job, so it cannot be read as a passing warning.
+        self.assertIn("cannot be read", message)
+        self.assertIn("Migrate it now", message)
         # The error states the requirement and the remedy, never the history.
         self.assertNotIn("renamed", message)
         self.assertNotIn("no longer", message)

@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Axis3d, Camera, CirclePlay, PenTool } from "lucide-react";
+import { Axis3d, Camera, CirclePlay, Pencil } from "lucide-react";
 import { clonePerspectiveSnapshot } from "@hardcore/core/lib/perspective.js";
 import { VIEWER_SCENE_SCALE } from "@hardcore/core/lib/viewer/sceneScale.js";
 import { ViewerElementContext, useViewerHost, usePromptDestination } from "../../../host/context.js";
@@ -414,7 +414,7 @@ export function useRendererShell({
     // The plain view tool, for a file with nothing to pick: it leaves the camera to the
     // pointer, which every tool allows, and promises no selection (`viewTools.js`).
     orbit: tool({ id: SHELL_TOOL.ORBIT, label: "Orbit", icon: <Axis3d className="size-3" strokeWidth={2} aria-hidden="true" /> }),
-    draw: tool({ id: SHELL_TOOL.DRAW, label: "Draw", icon: <PenTool className="size-3" strokeWidth={2} aria-hidden="true" />,
+    draw: tool({ id: SHELL_TOOL.DRAW, label: "Draw", icon: <Pencil className="size-3" strokeWidth={2} aria-hidden="true" />,
       subToolbar: drawToolActive ? <DrawingToolbar drawing={drawing} /> : null }),
     // Rightmost, and only in a file that has routines: no routines, no button (never a
     // disabled one). Its controls are the playbar, the bottom action while it is active.

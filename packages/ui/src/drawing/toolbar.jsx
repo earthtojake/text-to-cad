@@ -12,10 +12,9 @@ import { ToolbarButton } from '@hardcore/ui/primitives/toolbar-button';
  * The drawing editor's tools a host offers. Its lock, image, frame, embed and laser tools are left out.
  * @typedef {'selection' | 'hand' | 'freedraw' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'fill' | 'eraser'} DrawingTool
  */
+// What puts ink down, the pen first: it is what Draw opens on, and the icon of the Draw tool itself.
 /** @type {readonly { id: DrawingTool, label: string, Icon: typeof Hand }[]} */
-export const DRAWING_TOOLBAR_TOOLS = [
-  { id: 'selection', label: 'Select and move drawings', Icon: MousePointer2 },
-  { id: 'hand', label: 'Pan view', Icon: Hand },
+const INK_TOOLS = [
   { id: 'freedraw', label: 'Pen', Icon: Pencil },
   { id: 'line', label: 'Line', Icon: Minus },
   { id: 'arrow', label: 'Arrow', Icon: MoveUpRight },
@@ -26,6 +25,14 @@ export const DRAWING_TOOLBAR_TOOLS = [
   { id: 'fill', label: 'Fill area', Icon: PaintBucket },
   { id: 'eraser', label: 'Eraser', Icon: Eraser },
 ];
+// What handles a sketch already made, or the view under it: drawn after the color, beside undo and redo.
+/** @type {readonly { id: DrawingTool, label: string, Icon: typeof Hand }[]} */
+const HANDLING_TOOLS = [
+  { id: 'selection', label: 'Select and move drawings', Icon: MousePointer2 },
+  { id: 'hand', label: 'Pan view', Icon: Hand },
+];
+/** @type {readonly { id: DrawingTool, label: string, Icon: typeof Hand }[]} */
+export const DRAWING_TOOLBAR_TOOLS = [...INK_TOOLS, ...HANDLING_TOOLS];
 /** @type {readonly DrawingTool[]} */
 export const DRAWING_TOOLS = DRAWING_TOOLBAR_TOOLS.map(tool => tool.id);
 
@@ -55,16 +62,18 @@ export function DrawingToolbar({ drawing, className = '' }) {
   const [choosingColor, setChoosingColor] = useState(false);
   const disabled = !drawing.ready;
   // No tooltips: over a canvas they cover the ink being pointed at. Every button keeps its accessible name.
+  const toolButton = ({ id, label, Icon }) => <ToolbarButton key={id} tooltip={false} label={label} disabled={disabled}
+    active={!disabled && drawing.tool === id} aria-pressed={!disabled && drawing.tool === id} onClick={() => drawing.selectTool(id)}>
+    <Icon className="size-3" strokeWidth={2} aria-hidden="true" />
+  </ToolbarButton>;
   return (
     <div className={`hardcore-drawing-toolbar flex max-w-full flex-col items-end gap-1 ${className}`}>
       <div role="group" aria-label="Drawing tools" className={SURFACE}>
-        {DRAWING_TOOLBAR_TOOLS.map(({ id, label, Icon }) => <ToolbarButton key={id} tooltip={false} label={label} disabled={disabled}
-          active={!disabled && drawing.tool === id} aria-pressed={!disabled && drawing.tool === id} onClick={() => drawing.selectTool(id)}>
-          <Icon className="size-3" strokeWidth={2} aria-hidden="true" />
-        </ToolbarButton>)}
+        {INK_TOOLS.map(toolButton)}
         <ToolbarButton tooltip={false} label="Color" disabled={disabled} active={choosingColor} aria-expanded={choosingColor} onClick={() => setChoosingColor(open => !open)}>
           <span className="size-3 rounded-full" style={swatch(drawing.color)} aria-hidden="true" />
         </ToolbarButton>
+        {HANDLING_TOOLS.map(toolButton)}
         <ToolbarButton tooltip={false} label="Undo" disabled={disabled} onClick={() => drawing.undo()}><Undo2 className="size-3" strokeWidth={2} aria-hidden="true" /></ToolbarButton>
         <ToolbarButton tooltip={false} label="Redo" disabled={disabled} onClick={() => drawing.redo()}><Redo2 className="size-3" strokeWidth={2} aria-hidden="true" /></ToolbarButton>
         <ToolbarButton tooltip={false} label="Clear drawing" disabled={disabled || !drawing.hasContent} onClick={() => drawing.clear()}><Trash2 className="size-3" strokeWidth={2} aria-hidden="true" /></ToolbarButton>

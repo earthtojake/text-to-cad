@@ -5,7 +5,8 @@ export default function ModelPartActions({ node, controls, disabled }) {
   const {focusedNodeIds=[], onTogglePartVisibility} = controls;
   const focused = focusedNodeIds.includes(node.selectionId);
   const hidden = node.leafPartIds?.length > 0 && node.leafPartIds.every(id => controls.hiddenPartIds?.includes(id));
-  return <div className="flex shrink-0 items-center">
+  // The row itself has no right padding (its select button runs to the edge), so the eye brings its own.
+  return <div className="flex shrink-0 items-center pr-1">
     <Button variant="ghost" size="icon-xs" className="size-5 text-muted-foreground" disabled={disabled || focused} aria-label={`${hidden ? 'Reveal' : 'Hide'} ${node.label}`}
       title={hidden ? 'Reveal' : 'Hide'} onClick={() => onTogglePartVisibility?.(node.selectionId)}>
       {hidden ? <EyeOff className="size-3"/> : <Eye className="size-3"/>}
