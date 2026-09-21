@@ -20,10 +20,13 @@ reads a plate's length rather than its thickness.
 Draft is measured per triangle as the angle between the face and the pull
 axis: 0 means the face is parallel to the pull (no draft), 90 means it is
 perpendicular to it (a top or bottom face). Faces at or above `--wall-limit`
-from the pull axis are not counted as walls. Curved faces are read per facet,
-so the reported draft of a cylinder or cone is the facet's draft, not an
-analytic value, and a curved face merely TANGENT to the pull is reported apart
-from a flat zero-draft wall because its area is a tessellation artifact.
+from the pull axis are not counted as walls. A flat face is pooled by normal
+and read exactly; a CURVED face is pooled by the surface it lies on and read at
+the 5th percentile of that surface's area, because a facet of a curved face is
+a chord and chords scatter -- `spread_deg` reports that scatter and bounds how
+far low the reading can be. A curved face merely TANGENT to the pull is
+reported apart from a flat zero-draft wall because its area is a tessellation
+artifact.
 Which mold half forms a face, whether a parting line makes it an undercut, and
 side actions are not determined here. The undercut family is a straight-pull
 occlusion test: a face whose withdrawal ray is blocked by the part itself is
@@ -314,7 +317,8 @@ def _draft_facts(mesh: trimesh.Trimesh, pull: np.ndarray, wall_limit: float, zer
         "drafted_wall_mean_draft_deg": round(drafted_mean, 3) if drafted_mean is not None else None,
         "largest_zero_draft_faces": zero_groups,
         "method": (
-            "per-triangle angle to the pull axis; curved faces read per facet; "
+            "per-triangle angle to the pull axis; flat faces pooled by normal, curved faces "
+            "pooled by surface and read at the 5th percentile of their area; "
             "faces at or above wall_limit_deg from the pull are not walls"
         ),
     }
@@ -324,8 +328,16 @@ def _draft_facts(mesh: trimesh.Trimesh, pull: np.ndarray, wall_limit: float, zer
         # its crossing facet is not a wall at any draft, and read as one it made
         # this figure move with the mesh (0.308 deg coarse against 2.000 fine on
         # the same 2 deg wall) -- the defect min_wall_draft exists to avoid.
-        pooled = _pooled_faces(mesh, walls & ~tangent, pull, along, limit=None, draft=draft,
-                               zero_tol=zero_tol, curved=curved)
+        # Flat faces pool by normal, which is exact for them: every facet of a
+        # planar wall carries the surface's own normal. Curved faces pool by the
+        # SURFACE, because a facet of one is a chord and a chord tilts less than
+        # what it cuts -- read per normal, a 3 degree cone became 318 separate
+        # "faces" and the lowest chord among them was reported as the part's
+        # minimum.
+        measurable = walls & ~tangent
+        pooled = (_pooled_faces(mesh, measurable & ~curved, pull, along, limit=None, draft=draft,
+                                zero_tol=zero_tol, curved=curved)
+                  + _surface_faces(mesh, measurable & curved, pull, along, draft, zero_tol))
         # The lowest draft over POOLED faces, ignoring the sliver tail. Read
         # from one triangle the figure moves with the mesh -- an injection tray
         # read 0.97 deg on one export and 0.60 on another, both off 0.05 mm2
@@ -348,20 +360,29 @@ def _draft_facts(mesh: trimesh.Trimesh, pull: np.ndarray, wall_limit: float, zer
             "location_xyz": worst["centroid_xyz"],
             "opens_toward": worst["opens_toward"],
             "surface": worst["surface"],
-            "method": (f"area-weighted over faces pooled by normal, above {round(floor, 2)} mm2 "
-                       "(0.1% of surface area), tangent bands excluded"),
+            "method": (
+                f"flat faces pooled by normal and read exactly; curved faces pooled by SURFACE and "
+                f"read at the 5th percentile of their area; both above {round(floor, 2)} mm2 "
+                "(0.1% of surface area), tangent bands excluded"),
         }
-        # Only where the reading CLAIMS draft. A curved wall reading zero is
-        # already at the worst case, and the chord cannot be hiding draft below
-        # none.
-        if worst["surface"] == "curved" and worst["draft_deg"] > zero_tol:
-            result["min_wall_draft"]["reading_note"] = (
-                "this came off a CURVED face, where a facet is a chord and a chord tilts less than "
-                "the surface it cuts, so the figure is a LOWER BOUND that rises with mesh density "
-                "-- one 3.000 deg conic wall read 0.46, 0.68 and 1.91 deg at three tessellations. "
-                "Quote it as 'at least', or re-export finer before citing it against a limit. A "
-                "flat face carries the surface's own normal and needs no such allowance."
-            )
+        if worst["surface"] == "curved":
+            result["min_wall_draft"]["spread_deg"] = worst["spread_deg"]
+            # A curved face is read from chords, and chords scatter. Over the
+            # surface that scatter cancels; what it leaves is a figure whose
+            # trustworthiness the spread states. A flat face has no such term,
+            # and a reading of zero needs no allowance -- it is already the worst
+            # case, and no chord hides draft below none.
+            if worst["spread_deg"] > 1.0 and worst["draft_deg"] > zero_tol:
+                result["min_wall_draft"]["reading_note"] = (
+                    f"this came off a CURVED face whose draft varies by {worst['spread_deg']} deg "
+                    "across it, so it is one figure for a face that does not have one: the 5th "
+                    "percentile of its area, with area_mm2 the whole face's. On a face whose draft "
+                    "SHOULD be uniform -- a conic wall, a drafted bore -- that spread is the "
+                    "export's tessellation rather than the part, because a facet is a chord and a "
+                    "chord tilts less than the surface it cuts; one 3.000 deg cone settled at 2.85 "
+                    "once its facets agreed to within half a degree and read 0.56 when they "
+                    "scattered over ten. Re-export finer before citing this against a limit."
+                )
         i = int(np.argmin(np.where(walls, draft, np.inf)))
         result["min_facet_draft"] = {
             "draft_deg": round(float(draft[i]), 3),
@@ -371,6 +392,7 @@ def _draft_facts(mesh: trimesh.Trimesh, pull: np.ndarray, wall_limit: float, zer
         }
         result["lowest_draft_wall_faces"] = [
             {"draft_deg": g["draft_deg"], "area_mm2": g["area_mm2"], "surface": g["surface"],
+             **({"spread_deg": g["spread_deg"]} if "spread_deg" in g else {}),
              "location_xyz": g["centroid_xyz"], "opens_toward": g["opens_toward"]}
             for g in sorted(pooled, key=lambda g: g["draft_deg"])[:8]
         ]
@@ -415,6 +437,68 @@ def _curved_faces(mesh: trimesh.Trimesh, smooth_deg: float = 45.0,
     if len(turning):
         curved[turning.ravel()] = True
     return curved
+
+
+def _surface_faces(mesh: trimesh.Trimesh, sel: np.ndarray, pull: np.ndarray, along: np.ndarray,
+                   draft: np.ndarray, zero_tol: float, smooth_deg: float = 45.0,
+                   quantile: float = 0.05) -> list:
+    """Pool a CURVED face's facets by the surface they lie on, not by their normals.
+
+    A facet of a curved face is a chord, and pooling by rounded normal gives
+    each chord a face of its own: one 3 degree cone came back as 318 "faces" of
+    10 to 60 mm2 apiece, and the lowest of them -- an outlier the mesher happened
+    to leave -- was reported as the part's minimum wall draft at 1.9 degrees.
+    The surface is one face. Pooled as one, the same cone reads 2.98 at every
+    tessellation from 76 facets to 1778.
+
+    What is reported for it is the draft at the `quantile` of its area, lowest
+    first, not the mean and not the minimum. The mean would bury a real
+    low-draft band on a surface whose draft varies -- a sphere's wall near its
+    equator -- and the minimum is the chord outlier all over again. At 5% of
+    area the figure matches the old one exactly wherever the old one was right
+    (a sphere reads 2.467 and 4.221 as before, every zero-draft wall reads 0.0)
+    and drops the outliers where it was not.
+
+    `spread_deg` is the same quantile from the other end minus this one: on a
+    surface whose facets should agree it is the tessellation's own scatter, and
+    a large value says the export is too coarse to read this face from.
+    """
+    groups: list = []
+    if not sel.any():
+        return groups
+    adjacency = mesh.face_adjacency
+    if not len(adjacency):
+        return groups
+    smooth = adjacency[np.degrees(mesh.face_adjacency_angles) < smooth_deg]
+    if len(smooth):
+        left, right = smooth[:, 0], smooth[:, 1]
+        smooth = smooth[sel[left] & sel[right]]
+    areas = mesh.area_faces
+    centers = mesh.triangles_center
+    heights = mesh.triangles @ pull
+    for surface in trimesh.graph.connected_components(smooth, nodes=np.where(sel)[0], min_len=1):
+        area = float(areas[surface].sum())
+        if area <= 0:
+            continue
+        order = surface[np.argsort(draft[surface])]
+        share = np.cumsum(areas[order]) / area
+        low = float(draft[order][int(np.searchsorted(share, quantile))])
+        high = float(draft[order][min(int(np.searchsorted(share, 1.0 - quantile)), len(order) - 1)])
+        weight = areas[surface]
+        groups.append({
+            "normal": [round(float(v), 3) for v in
+                       (mesh.face_normals[surface] * weight[:, None]).sum(axis=0) / area],
+            "area_mm2": round(area, 2),
+            "centroid_xyz": [round(float(v), 2) for v in
+                             (centers[surface] * weight[:, None]).sum(axis=0) / area],
+            "extent_along_pull_mm": round(float(heights[surface].max() - heights[surface].min()), 2),
+            "triangle_count": int(len(surface)),
+            "draft_deg": round(low, 3),
+            "spread_deg": round(high - low, 3),
+            "surface": "curved",
+            "opens_toward": _opens(float(np.average(along[surface], weights=weight)), zero_tol),
+        })
+    return groups
 
 
 def _pooled_faces(mesh: trimesh.Trimesh, sel: np.ndarray, pull: np.ndarray, along: np.ndarray,

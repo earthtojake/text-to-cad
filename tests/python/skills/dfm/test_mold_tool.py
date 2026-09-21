@@ -17,8 +17,8 @@ import unittest
 from pathlib import Path
 
 import numpy as np
-from build123d import (Align, Axis, Box, Cone, Cylinder, GeomType, Plane, Pos, Rectangle,
-                       export_stl, loft)
+from build123d import (Align, Axis, Box, Circle, Cone, Cylinder, GeomType, Plane, Pos,
+                       Rectangle, export_stl, extrude, loft)
 
 from tests.python.support.paths import add_repo_path
 
@@ -608,26 +608,81 @@ class DraftReadingIsLabelledTest(unittest.TestCase):
         for reading in readings:
             self.assertAlmostEqual(reading, 2.0, delta=0.05, msg=f"readings were {readings}")
 
-    def test_a_flat_wall_reads_exact_and_a_curved_one_reads_low(self) -> None:
-        """A facet of a curved face is a chord, and a chord tilts less.
+    def test_a_conic_wall_reads_its_built_draft_at_any_usable_mesh(self) -> None:
+        """Pooled by NORMAL, a cone is not one face but one face per chord.
 
-        That cannot be measured away, so the reading says which kind of face it
-        came from: a 3 deg conic wall reads under 3 and says it is a lower
-        bound, a 2 deg flat wall reads 2 and says nothing.
+        A facet of a curved face is a chord and a chord tilts less than what it
+        cuts, so a 3.000 deg conic wall came back as 318 "faces" of 10 to 60 mm2
+        and the lowest chord among them was reported as the part's minimum:
+        0.46, 0.68 and 1.91 deg at three tessellations of the same wall. The
+        surface is ONE face, and read at the 5th percentile of its own area the
+        scatter stops deciding the answer.
         """
-        align = (Align.CENTER, Align.CENTER, Align.MIN)
+        built = 3.0
+        cone = extrude(Plane.XY * Circle(20), 40, taper=built)
+        readings = []
         with tempfile.TemporaryDirectory() as td:
-            tmp = Path(td)
-            cone = _z(mold_tool._load(_stl(Cone(20, 20 - 40 * math.tan(math.radians(3.0)), 40,
-                                                align=align), tmp, "cone")))
-            flat = _z(mold_tool._load(_stl(_drafted_box(2.0), tmp, "box")))
+            for tolerance, angular in ((0.1, 0.2), (0.02, 0.1), (0.005, 0.02)):
+                path = Path(td) / f"cone{tolerance}.stl"
+                export_stl(cone, str(path), tolerance=tolerance, angular_tolerance=angular)
+                facts = _z(mold_tool._load(str(path)))["min_wall_draft"]
+                readings.append(facts["draft_deg"])
+                with self.subTest(tolerance=tolerance):
+                    self.assertEqual(facts["surface"], "curved")
+                    # The whole conic wall, not a chord's worth of it.
+                    self.assertGreater(facts["area_mm2"], 4000.0)
+                    # A chord tilts LESS than the surface it cuts, never more.
+                    self.assertLessEqual(facts["draft_deg"], built + 1e-6)
+                    # ... and by no more than the scatter the reading declares,
+                    # which is what makes spread_deg worth printing: it bounds
+                    # the error instead of describing it.
+                    self.assertLessEqual(built - facts["draft_deg"], facts["spread_deg"] + 1e-6,
+                                         f"read {facts['draft_deg']} claiming {facts['spread_deg']}")
+        # Read per chord the same wall gave 0.46, 0.68 and 1.91 -- a figure that
+        # moved with the mesh. Every reading is now within half a degree of the
+        # wall, and the finest is exact.
+        self.assertGreater(min(readings), built - 0.7, f"readings were {readings}")
+        self.assertAlmostEqual(readings[-1], built, delta=0.01, msg=f"readings were {readings}")
 
-        self.assertEqual(cone["min_wall_draft"]["surface"], "curved")
-        self.assertLessEqual(cone["min_wall_draft"]["draft_deg"], 3.0)
-        self.assertIn("LOWER BOUND", cone["min_wall_draft"]["reading_note"])
+    def test_a_coarse_curved_face_says_its_facets_disagree(self) -> None:
+        """What the chord scatter cannot be averaged out of, it declares.
+
+        Below about a hundred facets a cone's chords scatter over degrees, and
+        no statistic recovers the surface from them. The reading carries the
+        spread and says to re-export rather than quoting a figure it cannot
+        stand behind.
+        """
+        cone = extrude(Plane.XY * Circle(20), 40, taper=3.0)
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "coarse.stl"
+            export_stl(cone, str(path), tolerance=2.0, angular_tolerance=1.0)
+            facts = _z(mold_tool._load(str(path)))["min_wall_draft"]
+
+        self.assertGreater(facts["spread_deg"], 1.0, "these facets do not agree")
+        self.assertIn("Re-export finer", facts["reading_note"])
+
+    def test_a_flat_wall_reads_exact_and_says_nothing(self) -> None:
+        """A planar wall's facets all carry the surface's own normal."""
+        with tempfile.TemporaryDirectory() as td:
+            flat = _z(mold_tool._load(_stl(_drafted_box(2.0), Path(td), "box")))
+
         self.assertEqual(flat["min_wall_draft"]["surface"], "flat")
         self.assertAlmostEqual(flat["min_wall_draft"]["draft_deg"], 2.0, delta=0.05)
         self.assertNotIn("reading_note", flat["min_wall_draft"])
+        self.assertNotIn("spread_deg", flat["min_wall_draft"])
+
+    def test_a_zero_draft_wall_on_a_curved_face_is_not_second_guessed(self) -> None:
+        """A cylinder bore reads 0.0, over the whole bore, with no caveat: zero
+        is already the worst case and no chord hides draft below none."""
+        align = (Align.CENTER, Align.CENTER, Align.MIN)
+        part = Box(60, 60, 30, align=align) - Cylinder(10, 30, align=align)
+        with tempfile.TemporaryDirectory() as td:
+            facts = _z(mold_tool._load(_stl(part, Path(td), "bore")))
+
+        worst = facts["min_wall_draft"]
+        self.assertEqual(worst["draft_deg"], 0.0)
+        self.assertNotIn("reading_note", worst)
+        self.assertGreater(facts["zero_draft_wall_area_mm2"], 0.0)
 
 
 class SealedVoidTest(unittest.TestCase):

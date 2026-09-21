@@ -57,19 +57,28 @@ argument, an unloadable mesh, or a measurement that was not a finite number.
   radius top and bottom stays zero-draft wall. The whole connected zero-draft
   region is measured, not one triangle of it, so a flat wall the exporter split
   into rows is not mistaken for one step of a sweep.
-- `min_wall_draft`: the lowest draft over faces pooled by normal and above an
-  absolute area floor (0.1% of surface area), with its area and location.
-  Tangent bands are excluded. `min_facet_draft` is the single worst triangle;
-  it moves with the mesh, so quote `min_wall_draft`.
+- `min_wall_draft`: the lowest draft over the part's faces, above an absolute
+  area floor (0.1% of surface area), with its area and location. Tangent bands
+  are excluded. `min_facet_draft` is the single worst triangle; it moves with
+  the mesh, so quote `min_wall_draft`.
 - `drafted_wall_mean_draft_deg`: area-weighted over the drafted walls.
 
-Every pooled face carries `"surface"`: `"flat"` or `"curved"`. A flat face
-carries the surface's own normal, so its draft is exact. A facet of a curved
-face is a chord, and a chord tilts less than the surface it cuts: one 3.000°
-conic wall read 0.46°, 0.68° and 1.91° at three tessellations, all of them low.
-Where `min_wall_draft` comes off a curved face and claims some draft, the report
-says so in `reading_note`. Quote such a figure as "at least", or re-export finer
-before citing it against a limit — never round it up.
+Every reported face carries `"surface"`: `"flat"` or `"curved"`, and the two are
+pooled differently because they have to be. A flat face is pooled by normal and
+read exactly — every facet of a planar wall carries the surface's own normal. A
+curved face is pooled by the SURFACE it lies on, because a facet of one is a
+chord: pooled by normal instead, a 3° cone came back as 318 separate "faces" of
+10 to 60 mm² and the lowest chord among them was reported as the part's minimum,
+giving 0.46°, 0.68° and 1.91° for the same wall at three tessellations.
+
+A curved face is read at the **5th percentile of its own area**, not its mean
+(which would bury a real low-draft band on a sphere) and not its minimum (the
+chord outlier again). It also carries `spread_deg`, the scatter across the same
+face. On a face whose draft should be uniform that spread is the export's
+tessellation, and it BOUNDS the error: the reading is low by no more than the
+spread it declares. A spread over a degree means re-export finer before citing
+the figure against a limit, and `reading_note` says so. Note that `area_mm2` for
+a curved face is the whole face's area, not the area at that one draft.
 
 Read `min_wall_draft` against `zero_draft_wall_area_mm2` in the same report. If
 there is zero-draft wall area and the minimum is not zero, the two disagree and
