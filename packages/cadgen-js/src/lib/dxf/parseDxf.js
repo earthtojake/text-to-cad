@@ -269,9 +269,15 @@ function parseLayerTable(records) {
     }
     const name = normalizeLayerName(body.find((entry) => entry.code === 2)?.value);
     const colorValue = Math.trunc(toFiniteNumber(body.find((entry) => entry.code === 62)?.value, 7));
+    // Code 6 is the linetype name (CONTINUOUS, HIDDEN, CENTER, ...); 370 the lineweight in
+    // hundredths of a millimetre, negative for "by default / by layer / by block".
+    const linetype = String(body.find((entry) => entry.code === 6)?.value || "").trim().toUpperCase() || "CONTINUOUS";
+    const lineweightRaw = Math.trunc(toFiniteNumber(body.find((entry) => entry.code === 370)?.value, -3));
     layers.set(name, {
       aci: Math.abs(colorValue),
-      visibleDefault: colorValue >= 0
+      visibleDefault: colorValue >= 0,
+      linetype,
+      lineweightMm: lineweightRaw > 0 ? lineweightRaw / 100 : null
     });
   }
   return layers;
@@ -655,14 +661,58 @@ function parseHatchEntity(records) {
   return { lines, arcs: [] };
 }
 
+/** SOLID / TRACE: a filled triangle or quad, which is what an AutoCAD arrowhead is
+ *  (`_CLOSEDFILLED` and friends are one SOLID each). Rendered as its outline. Corners are
+ *  codes 10/20, 11/21, 12/22, 13/23; the format stores a quad as a bow-tie (1, 2, 4, 3),
+ *  so the last two are swapped to walk the perimeter. A triangle repeats its third corner. */
+function parseSolidEntity(records) {
+  const layer = normalizeLayerName(records.find((record) => record.code === 8)?.value);
+  const corner = (xCode, yCode) => {
+    const x = records.find((record) => record.code === xCode);
+    const y = records.find((record) => record.code === yCode);
+    if (!x || !y) {
+      return null;
+    }
+    return [toFiniteNumber(x.value), toFiniteNumber(y.value)];
+  };
+  const raw = [corner(10, 20), corner(11, 21), corner(13, 23), corner(12, 22)].filter(Boolean);
+  const points = raw.filter((point, index) => {
+    const previous = raw[index - 1];
+    return !previous || previous[0] !== point[0] || previous[1] !== point[1];
+  });
+  if (points.length < 3) {
+    return { lines: [], arcs: [], fills: [] };
+  }
+  // The outline serves the cut/engrave consumers; the fill is what a drawing shows.
+  return { lines: samplePolylinePoints(layer, points, { closed: true }), arcs: [], fills: [{ layer, points }] };
+}
+
+/** LEADER: a polyline from the note to the feature, vertices as repeated 10/20 pairs. Its
+ *  arrowhead is drawn by the file as a SOLID or an INSERT, not by the LEADER itself. */
+function parseLeaderEntity(records) {
+  const layer = normalizeLayerName(records.find((record) => record.code === 8)?.value);
+  const points = [];
+  for (const record of records) {
+    if (record.code === 10) {
+      points.push([toFiniteNumber(record.value), Number.NaN]);
+    } else if (record.code === 20 && points.length) {
+      points[points.length - 1][1] = toFiniteNumber(record.value);
+    }
+  }
+  const usable = points.filter((point) => Number.isFinite(point[1]));
+  return { lines: usable.length >= 2 ? samplePolylinePoints(layer, usable) : [], arcs: [] };
+}
+
 /** Entities that carry no cut geometry. Skipped rather than rejected: a drawing is not
  *  unrenderable because it is annotated, and refusing one over a dimension line is how a
  *  perfectly good profile ends up showing an error card. (TEXT/MTEXT/DIMENSION are no longer
- *  here — they parse into flat text markings the viewer engraves onto the sheet.) */
+ *  here — they parse into flat text markings the viewer engraves onto the sheet; SOLID, TRACE
+ *  and LEADER are outlines, because arrowheads and leader lines are what a dimensioned
+ *  drawing is made of.) */
 const NON_GEOMETRIC_ENTITY_TYPES = new Set([
-  "ATTRIB", "ATTDEF", "LEADER", "MLEADER", "MULTILEADER",
+  "ATTRIB", "ATTDEF", "MLEADER", "MULTILEADER",
   "POINT", "VIEWPORT", "SEQEND", "TOLERANCE", "OLE2FRAME", "WIPEOUT", "IMAGE", "RAY", "XLINE",
-  "ACAD_PROXY_ENTITY", "ACAD_TABLE", "BODY", "REGION", "SHAPE", "SOLID", "TRACE", "3DFACE",
+  "ACAD_PROXY_ENTITY", "ACAD_TABLE", "BODY", "REGION", "SHAPE", "3DFACE",
   "HELIX", "MESH", "SPLINE_PROXY",
 ]);
 
@@ -694,20 +744,39 @@ export function stripMtextFormatting(raw) {
   return text.trim();
 }
 
+/** Where a marking's anchor sits on its text box. DXF stores the anchor point and an
+ *  alignment code; the viewer, which is the only thing that knows the rendered width, turns
+ *  the two into a placement. Default is the format's own: baseline, left. */
+const TEXT_H_ALIGN = { 0: "left", 1: "center", 2: "right", 3: "left", 4: "center", 5: "left" };
+const TEXT_V_ALIGN = { 0: "baseline", 1: "bottom", 2: "middle", 3: "top" };
+const MTEXT_ATTACHMENT = {
+  1: ["left", "top"], 2: ["center", "top"], 3: ["right", "top"],
+  4: ["left", "middle"], 5: ["center", "middle"], 6: ["right", "middle"],
+  7: ["left", "bottom"], 8: ["center", "bottom"], 9: ["right", "bottom"],
+};
+
 function parseTextEntity(records) {
   const layer = normalizeLayerName(records.find((record) => record.code === 8)?.value);
   const value = String(records.find((record) => record.code === 1)?.value ?? "").trim();
   if (!value) {
     return null;
   }
+  const hCode = Math.trunc(toFiniteNumber(records.find((record) => record.code === 72)?.value, 0));
+  const vCode = Math.trunc(toFiniteNumber(records.find((record) => record.code === 73)?.value, 0));
+  // With any alignment other than baseline-left the anchor is the SECOND alignment point
+  // (11/21); the first is where the text would start if it were left-justified.
+  const aligned = hCode !== 0 || vCode !== 0;
+  const pointCodes = aligned && records.some((record) => record.code === 11) ? [11, 21] : [10, 20];
   return {
     layer,
     position: [
-      toFiniteNumber(records.find((record) => record.code === 10)?.value),
-      toFiniteNumber(records.find((record) => record.code === 20)?.value)
+      toFiniteNumber(records.find((record) => record.code === pointCodes[0])?.value),
+      toFiniteNumber(records.find((record) => record.code === pointCodes[1])?.value)
     ],
     heightMm: Math.max(toFiniteNumber(records.find((record) => record.code === 40)?.value, 2.5), 0.01),
     rotationDeg: toFiniteNumber(records.find((record) => record.code === 50)?.value, 0),
+    hAlign: TEXT_H_ALIGN[hCode] || "left",
+    vAlign: TEXT_V_ALIGN[vCode] || "baseline",
     value
   };
 }
@@ -729,18 +798,40 @@ function parseMtextEntity(records) {
     ],
     heightMm: Math.max(toFiniteNumber(records.find((record) => record.code === 40)?.value, 2.5), 0.01),
     rotationDeg: toFiniteNumber(records.find((record) => record.code === 50)?.value, 0),
+    hAlign: (MTEXT_ATTACHMENT[Math.trunc(toFiniteNumber(records.find((record) => record.code === 71)?.value, 1))] || ["left", "top"])[0],
+    vAlign: (MTEXT_ATTACHMENT[Math.trunc(toFiniteNumber(records.find((record) => record.code === 71)?.value, 1))] || ["left", "top"])[1],
     value
   };
 }
 
-/** DIMENSION: the graphics live in an anonymous block we do not expand (witness lines are
- *  not part geometry); what matters on a part preview is the measurement text. Code 1 is
- *  the override ("<>" means "the measured value", which the file does not store), code 11/21
- *  the text midpoint. */
+/** DIMENSION: the graphics -- witness lines, the dimension line, arrowheads and the value
+ *  as MTEXT -- live in an anonymous block (code 2, `*D12`) that every CAD package writes when
+ *  it renders the dimension. The block is drawn in model coordinates, so it expands like an
+ *  INSERT at the origin. A file without the block (some exporters write the entity alone)
+ *  falls back to a marking of the value: the override (code 1) when there is one, else the
+ *  measurement the file stored (code 42). "<>" means "the measured value" and is not text. */
+function dimensionBlockName(records) {
+  return String(records.find((record) => record.code === 2)?.value || "").trim();
+}
+
+function formatMeasurement(value) {
+  if (!Number.isFinite(value)) {
+    return "";
+  }
+  // Two decimals, then trailing zeros dropped: 100 reads "100", 4.5 reads "4.5". The file's
+  // own dimension style would know its precision; without the block that style rendered
+  // into, this is the readable default, not a tolerance statement.
+  return String(Number(value.toFixed(2)));
+}
+
 function parseDimensionEntity(records) {
   const layer = normalizeLayerName(records.find((record) => record.code === 8)?.value);
   const override = String(records.find((record) => record.code === 1)?.value ?? "").trim();
-  if (!override || override === "<>") {
+  const measured = formatMeasurement(toFiniteNumber(records.find((record) => record.code === 42)?.value, Number.NaN));
+  const value = override && override !== "<>"
+    ? stripMtextFormatting(override.replace(/<>/g, measured))
+    : measured;
+  if (!value) {
     return null;
   }
   return {
@@ -751,7 +842,9 @@ function parseDimensionEntity(records) {
     ],
     heightMm: 2.5,
     rotationDeg: toFiniteNumber(records.find((record) => record.code === 53)?.value, 0),
-    value: stripMtextFormatting(override)
+    hAlign: "center",
+    vAlign: "middle",
+    value
   };
 }
 
@@ -779,9 +872,9 @@ function transformPoint(point, transform) {
   return [x * cos - y * sin + tx, x * sin + y * cos + ty];
 }
 
-function transformGeometry({ lines, arcs, circles }, transform) {
+function transformGeometry({ lines, arcs, circles, fills = [] }, transform) {
   if (!transform) {
-    return { lines, arcs, circles };
+    return { lines, arcs, circles, fills };
   }
   const { cos, sin, sx, sy, tx, ty } = transform;
   const scale = Math.abs(sx);
@@ -806,6 +899,27 @@ function transformGeometry({ lines, arcs, circles }, transform) {
       center: transformPoint(circle.center, transform),
       radius: circle.radius * scale,
     })),
+    fills: fills.map((fill) => ({
+      ...fill,
+      points: fill.points.map((point) => transformPoint(point, transform)),
+    })),
+  };
+}
+
+/** Entities on layer "0" inside a block belong to whatever placed the block: that is the
+ *  format's rule for block contents, and it is how an arrowhead block drawn on layer 0
+ *  lands on the DIM layer of the dimension that uses it. */
+function inheritBlockLayer(parsed, blockLayer) {
+  if (!blockLayer || blockLayer === "0") {
+    return parsed;
+  }
+  const relayer = (entity) => (entity.layer === "0" ? { ...entity, layer: blockLayer } : entity);
+  return {
+    lines: parsed.lines.map(relayer),
+    arcs: parsed.arcs.map(relayer),
+    circles: parsed.circles.map(relayer),
+    texts: parsed.texts.map(relayer),
+    fills: parsed.fills.map(relayer),
   };
 }
 
@@ -854,14 +968,23 @@ function parseEntities(records, { blocks = new Map(), transform = null, depth = 
   const arcs = [];
   const circles = [];
   const texts = [];
+  const fills = [];
   const push = (geometry) => {
     const placed = transformGeometry(
-      { lines: geometry.lines || [], arcs: geometry.arcs || [], circles: geometry.circles || [] },
+      { lines: geometry.lines || [], arcs: geometry.arcs || [], circles: geometry.circles || [], fills: geometry.fills || [] },
       transform
     );
     lines.push(...placed.lines);
     arcs.push(...placed.arcs);
     circles.push(...placed.circles);
+    fills.push(...placed.fills);
+  };
+  const pushNested = (nested) => {
+    lines.push(...nested.lines);
+    arcs.push(...nested.arcs);
+    circles.push(...nested.circles);
+    texts.push(...nested.texts);
+    fills.push(...nested.fills);
   };
   const pushText = (text) => {
     if (text) {
@@ -937,8 +1060,27 @@ function parseEntities(records, { blocks = new Map(), transform = null, depth = 
       pushText(parseMtextEntity(entityRecords));
       continue;
     }
-    if (entityType === "DIMENSION") {
-      pushText(parseDimensionEntity(entityRecords));
+    if (entityType === "DIMENSION" || entityType === "ARC_DIMENSION") {
+      const blockRecords = blocks.get(dimensionBlockName(entityRecords).toUpperCase());
+      if (blockRecords && depth < MAX_BLOCK_NESTING) {
+        // The rendered dimension, exactly as the authoring package drew it.
+        const dimensionLayer = normalizeLayerName(entityRecords.find((record) => record.code === 8)?.value);
+        const expanded = inheritBlockLayer(
+          parseEntities(blockRecords, { blocks, transform, depth: depth + 1 }),
+          dimensionLayer
+        );
+        pushNested(expanded);
+      } else {
+        pushText(parseDimensionEntity(entityRecords));
+      }
+      continue;
+    }
+    if (entityType === "SOLID" || entityType === "TRACE") {
+      push(parseSolidEntity(entityRecords));
+      continue;
+    }
+    if (entityType === "LEADER") {
+      push(parseLeaderEntity(entityRecords));
       continue;
     }
     if (entityType === "POLYLINE") {
@@ -986,16 +1128,16 @@ function parseEntities(records, { blocks = new Map(), transform = null, depth = 
         // define, and one dangling name should not cost the whole profile.
         continue;
       }
+      const insertLayer = normalizeLayerName(entityRecords.find((record) => record.code === 8)?.value);
       for (const placement of insertTransforms(entityRecords)) {
-        const nested = parseEntities(blockRecords, {
-          blocks,
-          transform: composeTransforms(transform, placement),
-          depth: depth + 1,
-        });
-        lines.push(...nested.lines);
-        arcs.push(...nested.arcs);
-        circles.push(...nested.circles);
-        texts.push(...nested.texts);
+        pushNested(inheritBlockLayer(
+          parseEntities(blockRecords, {
+            blocks,
+            transform: composeTransforms(transform, placement),
+            depth: depth + 1,
+          }),
+          insertLayer
+        ));
       }
       continue;
     }
@@ -1005,7 +1147,7 @@ function parseEntities(records, { blocks = new Map(), transform = null, depth = 
     throw new Error(`Unsupported DXF entity ${entityType}`);
   }
 
-  return { lines, arcs, circles, texts };
+  return { lines, arcs, circles, texts, fills };
 }
 
 /** BLOCKS as name -> its entity records, so an INSERT can be expanded in place.
@@ -1123,6 +1265,10 @@ function scaleEntitiesToMm(entities, scale) {
       ...text,
       position: scalePoint(text.position),
       heightMm: text.heightMm * scale
+    })),
+    fills: (entities.fills || []).map((fill) => ({
+      ...fill,
+      points: fill.points.map(scalePoint)
     }))
   };
 }
@@ -1239,6 +1385,7 @@ export function parseDxf(dxfText, { fileRef = "", sourceUrl = "" } = {}) {
     touchLayer(layerSummary, text.layer).textCount += 1;
   }
 
+
   return {
     fileRef,
     sourceUrl,
@@ -1266,15 +1413,18 @@ export function parseDxf(dxfText, { fileRef = "", sourceUrl = "" } = {}) {
         ...summary,
         colorAci: tableEntry ? tableEntry.aci : null,
         colorHex: tableEntry ? aciColorHex(tableEntry.aci) : null,
-        visibleDefault: tableEntry ? tableEntry.visibleDefault : true
+        visibleDefault: tableEntry ? tableEntry.visibleDefault : true,
+        linetype: tableEntry ? tableEntry.linetype : "CONTINUOUS",
+        lineweightMm: tableEntry ? tableEntry.lineweightMm : null
       };
     }),
     geometry: {
+      // A sheet's tags ride along (view=, dim=) so the viewer can attach to a view's line work.
       lines: entities.lines.map((line) => ({
         layer: line.layer,
         kind: semanticKindForLayer(line.layer),
         start: [formatNumber(line.start[0]), formatNumber(line.start[1])],
-        end: [formatNumber(line.end[0]), formatNumber(line.end[1])]
+        end: [formatNumber(line.end[0]), formatNumber(line.end[1])],
       })),
       arcs: entities.arcs.map((arc) => ({
         layer: arc.layer,
@@ -1288,7 +1438,7 @@ export function parseDxf(dxfText, { fileRef = "", sourceUrl = "" } = {}) {
         layer: circle.layer,
         kind: semanticKindForLayer(circle.layer),
         center: [formatNumber(circle.center[0]), formatNumber(circle.center[1])],
-        radius: formatNumber(circle.radius)
+        radius: formatNumber(circle.radius),
       })),
       texts: entities.texts.map((text) => ({
         layer: text.layer,
@@ -1296,7 +1446,14 @@ export function parseDxf(dxfText, { fileRef = "", sourceUrl = "" } = {}) {
         position: [formatNumber(text.position[0]), formatNumber(text.position[1])],
         heightMm: formatNumber(text.heightMm),
         rotationDeg: formatNumber(text.rotationDeg),
+        hAlign: text.hAlign || "left",
+        vAlign: text.vAlign || "baseline",
         value: text.value
+      })),
+      fills: (entities.fills || []).map((fill) => ({
+        layer: fill.layer,
+        kind: semanticKindForLayer(fill.layer),
+        points: fill.points.map((point) => [formatNumber(point[0]), formatNumber(point[1])])
       }))
     },
     paths: pathRecords,
