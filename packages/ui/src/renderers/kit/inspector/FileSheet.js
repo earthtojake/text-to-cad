@@ -494,7 +494,23 @@ export function FileSheetValueInput({
       }}
       onKeyDown={(event) => {
         if (event.key === "Enter") {
-          event.currentTarget.blur();
+          // Enter commits HERE rather than delegating to the blur. `blur()` only fires an
+          // event when the input is the active element, so an Enter that arrives when it is
+          // not — a re-render that replaced the node, a host that moved focus — used to leave
+          // the edit sitting in the draft, looking typed but applying to nothing, until some
+          // later focus change flushed it into whatever the person had moved on to.
+          const input = event.currentTarget;
+          event.preventDefault();
+          setEditing(false);
+          onValueCommit?.(draftValue);
+          // The blur this asks for must not commit the same edit a second time — the same
+          // handshake Escape uses. If no blur runs, the guard is disarmed again, or it would
+          // swallow the NEXT commit instead of this one.
+          skipCommitRef.current = true;
+          input.blur();
+          if (typeof document !== "undefined" && document.activeElement === input) {
+            skipCommitRef.current = false;
+          }
         }
         if (event.key === "Escape") {
           event.preventDefault();
