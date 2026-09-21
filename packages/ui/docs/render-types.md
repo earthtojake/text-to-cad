@@ -24,6 +24,9 @@ tools, tabs and scene outright and consults no capability table. The `dxf`, `glb
 `3mf`, `urdf`, `srdf` and `sdf` rows below remain for what is not a renderer: the file
 list's icon and label, and the headless snapshot renderer.
 
+The DXF slice does not even have a scene: it is a canvas painted from
+`GET /__cad/drawing`, so none of the viewport capabilities below describes it.
+
 ## The capability registry
 
 `packages/core/src/lib/renderCapabilities.js` — one frozen table, keyed by render
@@ -41,7 +44,6 @@ format. Pure data: no behaviour, no imports beyond the format enum.
 | `parts` | Per-part selection, hiding, isolate, assembly tree. |
 | `topology` | Face/edge/vertex references. Implies `parts`. |
 | `exploded`, `displayModes`, `clip` | STEP-tier display transforms. |
-| `planView` | Offers the 2D/3D top-down lock. |
 | `themeProjection` | Honours the internally resolved scene recipe's `themeSettings.projection`. |
 | `params` | `sidecar` (the model's `@step(pose=...)` block), or `null`. |
 | `animations` | Has animation clips, so transport controls apply. |
@@ -101,8 +103,9 @@ What is left is deliberate. `useCadAssets` is allowlisted: choosing and running 
 per format is its whole job, and the `assetKind` field names *which* loader without
 pretending the implementations are the same. `stepArtifactStatus.js` keeps its checks
 because STEP package error codes, the `stale` flag and the renderable-GLB fallback are
-STEP vocabulary. STEP is now the only artifact-managed format: a DXF is rendered from its
-own bytes and the backend never owns one (`owns_dxf_path` always answers False).
+STEP vocabulary. STEP is now the only artifact-managed format: a DXF is rendered from
+the file that is on disk — the backend flattens those bytes to 2D primitives per request
+and never owns a package for one (`owns_dxf_path` always answers False).
 
 ## Standing gate
 

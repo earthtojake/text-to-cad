@@ -294,3 +294,36 @@ test('surface and preview requests are origin-bound, guarded and cancelled with 
   client.dispose();
   await assert.rejects(client.editingPreview('part.step'), { name: 'AbortError' });
 });
+
+test('a drawing is one plain GET, and a refusal arrives with the server’s own sentence', async () => {
+  const calls = [];
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options) => {
+    calls.push({ url, options });
+    return json({ schemaVersion: 1, bounds: [0, 0, 10, 10], layers: [], primitives: [] });
+  } });
+  const payload = await client.drawing('drawings/plate.dxf');
+  assert.equal(payload.schemaVersion, 1);
+  assert.equal(new URL(calls[0].url).pathname, '/__cad/drawing');
+  assert.equal(new URL(calls[0].url).searchParams.get('file'), 'drawings/plate.dxf');
+  assert.equal(calls[0].options.method, 'GET');
+  // A GET carries no cross-site POST guard: this route reads bytes and nothing else.
+  assert.equal(calls[0].options.headers['x-cadgen-viewer'], undefined);
+  await assert.rejects(client.drawing(''), /Missing file/);
+  client.dispose();
+});
+
+test('a drawing refused by the server raises the classified failure an alert is built from', async () => {
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async () => ({
+    ok: false, status: 400, statusText: 'Bad Request',
+    json: async () => ({ error: 'plate.dxf is not a readable DXF document.' })
+  }) });
+  await assert.rejects(client.drawing('plate.dxf'), (error) => {
+    assert.equal(error.name, 'ViewerRequestError');
+    assert.equal(error.failure.kind, 'http');
+    assert.equal(error.failure.status, 400);
+    assert.equal(error.failure.operation, 'drawing');
+    assert.equal(error.failure.detail, 'plate.dxf is not a readable DXF document.');
+    return true;
+  });
+  client.dispose();
+});

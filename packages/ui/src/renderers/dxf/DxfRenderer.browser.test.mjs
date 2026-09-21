@@ -9,51 +9,18 @@ import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { PNG } from 'pngjs';
 
-// Inline fixtures, served from memory. The models corpus is entirely cut layouts in
-// millimetres with no text and no coloured layer, so a document, a unit override, a
-// coloured layer and an unclosed contour exist nowhere but here.
-const dxf = body => Buffer.from(`${['0', 'SECTION', '2', 'ENTITIES', ...body, '0', 'ENDSEC', '0', 'EOF'].join('\n')}\n`);
-const header = pairs => ['0', 'SECTION', '2', 'HEADER', ...pairs, '0', 'ENDSEC'];
-const rect = (layer, [x, y], [w, h]) => [
-  '0', 'LWPOLYLINE', '8', layer, '90', '4', '70', '1',
-  '10', `${x}`, '20', `${y}`, '10', `${x + w}`, '20', `${y}`,
-  '10', `${x + w}`, '20', `${y + h}`, '10', `${x}`, '20', `${y + h}`,
-];
-const line = (layer, [x1, y1], [x2, y2]) => ['0', 'LINE', '8', layer, '10', `${x1}`, '20', `${y1}`, '11', `${x2}`, '21', `${y2}`];
-// A layer table entry, so a layer can declare a colour of its own (ACI 1 is red).
-const layerTable = rows => ['0', 'SECTION', '2', 'TABLES', '0', 'TABLE', '2', 'LAYER',
-  ...rows.flatMap(([name, aci]) => ['0', 'LAYER', '2', name, '62', `${aci}`]), '0', 'ENDTAB', '0', 'ENDSEC'];
+// The drawing under test is a COMMITTED payload: exactly what
+// `GET /__cad/drawing` answered for `__fixtures__/sample.dxf`, so this test
+// needs neither Python nor ezdxf and cannot drift from the route by accident.
+// `__fixtures__/README.md` says how to regenerate the pair.
+const SAMPLE = JSON.parse(await readFile(new URL('./__fixtures__/sample.drawing.json', import.meta.url), 'utf8'));
+// A drawing whose modelspace is empty: `bounds: null`, and nothing to frame.
+const EMPTY = { schemaVersion: 1, units: SAMPLE.units, bounds: null, layers: [], primitives: [] };
+const BAD_DXF_MESSAGE = 'plate.dxf is not a readable DXF document: run `ezdxf audit` on it, or export it again.';
 
-const FILES = {
-  // One closed rectangle with a hole: one layer, so neither Bends nor Layers has anything to show.
-  'plate.dxf': dxf([...rect('CUT', [0, 0], [40, 20]), '0', 'CIRCLE', '8', 'CUT', '10', '20', '20', '10', '40', '3']),
-  // Four creases, a score line, a label, and a layer that names its own colour.
-  'panel.dxf': Buffer.concat([
-    Buffer.from(`${layerTable([['NOTES', 1]]).join('\n')}\n`),
-    dxf([
-      ...rect('CUT', [0, 0], [100, 20]),
-      ...line('BEND', [20, 0], [20, 20]), ...line('BEND', [40, 0], [40, 20]),
-      ...line('BEND', [60, 0], [60, 20]), ...line('BEND', [80, 0], [80, 20]),
-      ...line('ENGRAVE', [4, 10], [16, 10]),
-      '0', 'TEXT', '8', 'NOTES', '10', '4', '20', '4', '40', '4', '1', 'PART A',
-    ]),
-  ]),
-  // A dimensioned drawing: line-work and a DIMENSION, so there is no flat pattern at all.
-  'sheet.dxf': dxf([
-    ...line('OUTLINE', [0, 0], [50, 0]), ...line('OUTLINE', [50, 0], [50, 30]),
-    ...line('OUTLINE', [50, 30], [0, 30]), ...line('OUTLINE', [0, 30], [0, 0]),
-    ...line('DIMS', [0, -6], [50, -6]),
-    '0', 'DIMENSION', '8', 'DIMS', '10', '0', '20', '-6', '11', '25', '21', '-9',
-  ]),
-  // The same 40x20 rectangle, declared in INCHES ($INSUNITS 1).
-  'inches.dxf': Buffer.concat([
-    Buffer.from(`${header(['9', '$INSUNITS', '70', '1']).join('\n')}\n`),
-    dxf([...rect('CUT', [0, 0], [40, 20])]),
-  ]),
-  'broken.dxf': Buffer.from('this is prose, and not a drawing\n'),
-  // A cut layer that never closes: a layout by profile with nothing to extrude.
-  'open.dxf': dxf([...line('CUT', [0, 0], [30, 0]), ...line('CUT', [30, 0], [30, 15])]),
-};
+// The fixture's own measurements, so an assertion can say WHICH edge it is reading.
+const MODEL = { width: 100, height: 60 };
+const DRAWINGS = { 'sample.dxf': SAMPLE, 'empty.dxf': EMPTY };
 
 async function serveHarness(t) {
   const temporary = await mkdtemp(join(tmpdir(), 'hardcore-dxf-browser-'));
@@ -62,24 +29,27 @@ async function serveHarness(t) {
   await build({ entryPoints: [fileURLToPath(new URL('../harness/index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.woff2': 'dataurl' } });
   const bundle = await readFile(join(temporary, 'harness.js'));
   const css = await readFile(new URL('../../../dist/styles.css', import.meta.url));
+  const files = ['sample.dxf', 'empty.dxf', 'broken.dxf'];
   server = createServer((request, response) => {
     const url = new URL(request.url, 'http://test');
     const root = url.pathname.split('/')[1];
-    const name = url.pathname.split('/').pop();
     if (url.pathname === '/harness.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle); }
     else if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(css); }
-    else if (url.pathname.endsWith('/__cad/catalog')) {
+    else if (url.pathname.endsWith('/__cad/drawing')) {
+      const drawing = DRAWINGS[url.searchParams.get('file')];
       response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify({ rootId: root, entries: Object.entries(FILES).map(([file, data]) => (
-        { kind: 'dxf', file, rootRelativeFile: file, url: `/${file}`, hash: `${root}-${file}`, bytes: data.length })) }));
+      if (!drawing) { response.statusCode = 400; response.end(JSON.stringify({ error: BAD_DXF_MESSAGE })); return; }
+      response.end(JSON.stringify(drawing));
+    } else if (url.pathname.endsWith('/__cad/catalog')) {
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({ rootId: root, entries: files.map(file => (
+        { kind: 'dxf', file, rootRelativeFile: file, url: `/${file}`, hash: `${root}-${file}`, bytes: 4096 })) }));
     } else if (url.pathname.endsWith('/__cad/server')) {
       response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ rootId: root, rootPath: '/models', backend: 'cadgen' }));
-    } else if (FILES[name]) { response.setHeader('Content-Type', 'application/octet-stream'); response.end(FILES[name]); }
-    else { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css"></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>'); }
+    } else { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css"></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>'); }
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
-  browser = await chromium.launch({ headless: true, args: process.platform === 'darwin'
-    ? ['--use-angle=metal'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+  browser = await chromium.launch({ headless: true });
   const open = async (file) => {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
     page.setDefaultTimeout(20000);
@@ -92,441 +62,374 @@ async function serveHarness(t) {
   return { open };
 }
 
-const ready = pane => pane.locator('[aria-busy="false"] > div > canvas').first().waitFor();
-const loaded = page => page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
-// A DXF has no tools at all: 2D/3D is a navbar action, not a tool, because it
-// changes the camera rather than what the pointer does.
-const noTools = async (pane) => {
-  assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).count(), 0, 'a DXF viewport has no tool strip');
-  for (const name of ['Orbit', 'Draw', 'Select', 'Measure', 'Pose', 'Animate']) {
-    assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
-  }
-};
-const tabNames = pane => pane.getByRole('tab').evaluateAll(tabs => tabs.map(tab => [tab.textContent, tab.getAttribute('aria-selected')]));
+const canvasOf = pane => pane.locator('[data-drawing-surface] canvas').first();
 const settle = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-const state = page => page.evaluate(() => window.cadHarness.a.controller.readState());
-const display = (page, patch) => page.evaluate(next => window.cadHarness.a.controller.setDisplaySettings(next), patch);
-const GUIDES_OFF = { grid: { enabled: false }, axes: { enabled: false }, floor: { enabled: false } };
-
-/**
- * The FRAME ON SCREEN: the last thing the viewport actually drew.
- *
- * Not `capture()` — a capture renders before it reads pixels, so it shows the scene as it
- * IS rather than as it was drawn, and a setting that re-poses the scene without asking for a
- * frame passes every capture-based assertion while the viewport sits on a stale picture.
- * (That is exactly what shipped once: bends folded the geometry and nothing repainted.)
- * Anything asserting "this setting reached the screen" must read the frame, not a capture.
- */
+const drawn = async (pane) => {
+  await canvasOf(pane).waitFor();
+  await pane.locator('[aria-busy="false"]').first().waitFor();
+  await settle(pane.page());
+};
+/** The frame ON SCREEN, not a re-render: what the person is actually looking at. */
 async function frame(pane) {
   await settle(pane.page());
-  return PNG.sync.read(await pane.locator('[aria-busy] > div > canvas').first().screenshot());
+  return PNG.sync.read(await canvasOf(pane).screenshot());
 }
-
-async function capture(page) {
-  const encoded = await page.evaluate(async () => {
-    const blob = await window.cadHarness.a.controller.capture();
-    const data = new Uint8Array(await blob.arrayBuffer());
-    let binary = ''; for (const byte of data) binary += String.fromCharCode(byte);
-    return { type: blob.type, base64: btoa(binary) };
-  });
-  assert.equal(encoded.type, 'image/png');
-  return PNG.sync.read(Buffer.from(encoded.base64, 'base64'));
-}
-/** How much of the picture is not the backdrop: the model's share of it. */
-function coverage(image) {
-  const backdrop = [image.data[0], image.data[1], image.data[2]];
-  let painted = 0;
-  for (let offset = 0; offset < image.data.length; offset += 4) {
-    if (Math.abs(image.data[offset] - backdrop[0]) + Math.abs(image.data[offset + 1] - backdrop[1])
-      + Math.abs(image.data[offset + 2] - backdrop[2]) > 12) painted += 1;
+const pixel = (image, x, y) => {
+  const offset = (Math.round(y) * image.width + Math.round(x)) * 4;
+  return [image.data[offset], image.data[offset + 1], image.data[offset + 2]];
+};
+const near = (left, right, tolerance = 12) =>
+  Math.abs(left[0] - right[0]) + Math.abs(left[1] - right[1]) + Math.abs(left[2] - right[2]) <= tolerance;
+/** The box around everything that is not the pane's own background. */
+function inkBox(image) {
+  const backdrop = pixel(image, 0, 0);
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, painted = 0;
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      if (near(pixel(image, x, y), backdrop)) continue;
+      painted += 1;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
   }
-  return painted / (image.width * image.height);
+  assert.ok(painted > 0, 'nothing was drawn on this canvas');
+  return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY, painted,
+    centreX: (minX + maxX) / 2, centreY: (minY + maxY) / 2, backdrop };
 }
-/** The mean colour of the pixels that are not the backdrop. */
-function meanColor(image) {
-  const backdrop = [image.data[0], image.data[1], image.data[2]];
-  const total = [0, 0, 0];
-  let painted = 0;
-  for (let offset = 0; offset < image.data.length; offset += 4) {
-    if (Math.abs(image.data[offset] - backdrop[0]) + Math.abs(image.data[offset + 1] - backdrop[1])
-      + Math.abs(image.data[offset + 2] - backdrop[2]) <= 12) continue;
-    painted += 1;
-    for (let channel = 0; channel < 3; channel += 1) total[channel] += image.data[offset + channel];
+/** Contiguous runs of ink down one column: how thick the strokes crossing it are. */
+function columnRuns(image, x) {
+  const backdrop = pixel(image, 0, 0);
+  const runs = [];
+  let start = -1;
+  for (let y = 0; y < image.height; y += 1) {
+    const ink = !near(pixel(image, x, y), backdrop);
+    if (ink && start < 0) start = y;
+    if (!ink && start >= 0) { runs.push(y - start); start = -1; }
   }
-  return painted ? total.map(sum => Math.round(sum / painted)) : [0, 0, 0];
+  if (start >= 0) runs.push(image.height - start);
+  return runs;
 }
-const differingPixels = (left, right) => {
-  assert.deepEqual([left.width, left.height], [right.width, right.height]);
+const countWhere = (image, predicate) => {
   let count = 0;
-  for (let offset = 0; offset < left.data.length; offset += 4) {
-    if (left.data[offset] !== right.data[offset] || left.data[offset + 1] !== right.data[offset + 1]
-      || left.data[offset + 2] !== right.data[offset + 2]) count += 1;
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    if (predicate(image.data[offset], image.data[offset + 1], image.data[offset + 2])) count += 1;
   }
   return count;
 };
-/** The unit direction the camera looks along, for asserting "straight down". */
-const viewDirection = (camera) => {
-  const offset = camera.position.map((value, axis) => value - camera.target[axis]);
-  const length = Math.hypot(...offset);
-  return offset.map(value => value / length);
-};
-const commit = async (pane, label, value) => {
-  const input = pane.getByLabel(label, { exact: true });
-  await input.click();
-  await input.fill(String(value));
-  await input.press('Enter');
-};
-const tab = (pane, name) => pane.getByRole('tab', { name, exact: true }).click();
-// The harness opens every file with `panel: ''` — nothing open — so a test that wants the
-// Inspector asks for it. That it OPENS by default for a DXF is the registration's business
-// (`registrations.test.ts`), not this harness's.
-const openInspector = async (pane) => {
-  // One panel is open at a time and the harness keeps that choice across a remount, so this
-  // asks for the Inspector rather than toggling it.
-  if (!await pane.locator('[data-file-sheet="DXF"]').count()) await pane.getByRole('button', { name: 'Inspector', exact: true }).click();
-  await pane.locator('[data-file-sheet="DXF"]').waitFor();
-};
-// An eased camera transition coasts. A comparison of two cameras waits for both to be still.
-const rest = page => page.waitForFunction(() => {
-  const camera = JSON.stringify(window.cadHarness.a.controller.readState().camera);
-  const still = window.__restCamera === camera;
-  window.__restCamera = camera;
-  return still;
-}, null, { polling: 200 });
-
-test('a cut layout opens with no tools and its own settings tabs, and 2D is a locked plan view', async (t) => {
-  const { open } = await serveHarness(t);
-  const { page, pane, errors } = await open('plate.dxf');
-  await ready(pane);
-  await loaded(page);
-
-  // No tools, and no menu of the viewer's on a secondary press either.
-  await noTools(pane);
-  // A drawing's settings live in the Inspector: Material first.
-  await openInspector(pane);
-  assert.deepEqual(await tabNames(pane), [['Material', 'true'], ['Display', 'false']],
-    'one layer and no bend lines: neither Bends nor Layers has anything to show');
-  for (const section of ['Edges', 'Clip', 'Explode']) {
-    assert.equal(await pane.getByRole('heading', { name: section, exact: true }).count(), 0, section);
+const reddish = (r, g, b) => r - g > 60 && r - b > 60;
+/** The extreme luminance along one row: the middle of a hairline, not its antialiased skirt. */
+function rowExtreme(image, y, pick) {
+  let best = null;
+  for (let x = 0; x < image.width; x += 1) {
+    const value = pixel(image, x, y);
+    const luminance = value[0] + value[1] + value[2];
+    if (best === null || pick(luminance, best.luminance)) best = { value, luminance };
   }
+  return best.value;
+}
+const darkestOnRow = (image, y) => rowExtreme(image, y, (next, best) => next < best);
+const lightestOnRow = (image, y) => rowExtreme(image, y, (next, best) => next > best);
+const wheelAt = (page, box, point, deltaY) => page.mouse.move(box.x + point.x, box.y + point.y)
+  .then(() => page.mouse.wheel(0, deltaY));
+/** The wheel delta this renderer reads as `factor`: it zooms by exp(-deltaY * 0.0015). */
+const deltaForFactor = factor => -Math.log(factor) / 0.0015;
+const state = page => page.evaluate(() => window.cadHarness.a.controller.readState());
 
-  // 3D is the default, and the view cube is offered.
-  const solid = await state(page);
-  assert.equal(solid.camera.projection, 'orthographic');
-  assert.ok(Math.abs(viewDirection(solid.camera)[2]) < 0.9, 'a three-quarter view');
-  assert.equal(await pane.getByLabel('Jump to top view', { exact: true }).count(), 1);
+test('a drawing opens fitted and centred, in the theme’s ink, and flips with the theme', async (t) => {
+  const { open } = await serveHarness(t);
+  const { page, pane, errors } = await open('sample.dxf');
+  await drawn(pane);
 
-  // 2D: the navbar action, the label flipping, and the lock.
-  await display(page, { camera: { projection: 'perspective' } });
-  await pane.getByRole('button', { name: 'Switch to 2D view', exact: true }).click();
-  await pane.getByRole('button', { name: 'Switch to 3D view', exact: true }).waitFor();
-  await page.waitForFunction(() => {
-    const camera = window.cadHarness.a.controller.readState().camera;
-    const offset = camera.position.map((value, axis) => value - camera.target[axis]);
-    return offset[2] / Math.hypot(...offset) > 0.99;
+  const light = await frame(pane);
+  const box = inkBox(light);
+  // Fitted: the drawing's own aspect, centred, filling the pane but for the gutter.
+  assert.ok(Math.abs(box.centreX - light.width / 2) <= 2, `centred across: ${box.centreX} of ${light.width}`);
+  assert.ok(Math.abs(box.centreY - light.height / 2) <= 2, `centred down: ${box.centreY} of ${light.height}`);
+  const aspect = box.width / box.height;
+  assert.ok(Math.abs(aspect - MODEL.width / MODEL.height) < 0.05, `the drawing's own aspect: ${aspect}`);
+  // The pane is wider than the drawing, so height is the binding axis: the ink
+  // reaches to the 16 px gutter and no further.
+  assert.ok(Math.abs(box.height - (light.height - 32)) <= 3, `fitted to the gutter: ${box.height} in ${light.height}`);
+
+  // Default pen: the theme's foreground, on the theme's background. The outline's
+  // left edge is default-pen line-work.
+  assert.ok(near(box.backdrop, [255, 255, 255], 12), `light background: ${box.backdrop}`);
+  const edgeLight = darkestOnRow(light, Math.round(light.height / 2));
+  assert.ok(edgeLight[0] < 110 && edgeLight[1] < 110 && edgeLight[2] < 110, `dark ink on light: ${edgeLight}`);
+
+  // The red circle is red — its own pen, not the theme's.
+  assert.ok(countWhere(light, reddish) > 200, `a red circle is drawn: ${countWhere(light, reddish)} px`);
+
+  // One payload serves both themes: flipping the app's tokens repaints, it does not refetch.
+  await page.evaluate(() => document.documentElement.classList.add('dark'));
+  const dark = await frame(pane);
+  const darkBox = inkBox(dark);
+  assert.ok(darkBox.backdrop[0] < 110, `dark background: ${darkBox.backdrop}`);
+  const edgeDark = lightestOnRow(dark, Math.round(dark.height / 2));
+  assert.ok(edgeDark[0] > 200 && edgeDark[1] > 200 && edgeDark[2] > 200, `light ink on dark: ${edgeDark}`);
+  assert.ok(countWhere(dark, reddish) > 200, 'and the red circle is still red');
+  // The view did not move while the ink changed.
+  assert.ok(Math.abs(darkBox.minX - box.minX) <= 1 && Math.abs(darkBox.maxY - box.maxY) <= 1, 'the theme is not a camera move');
+  assert.deepEqual(errors, []);
+});
+
+test('a solid hatch’s island is a hole, not a filled square', async (t) => {
+  const { open } = await serveHarness(t);
+  const { pane, errors } = await open('sample.dxf');
+  await drawn(pane);
+  const image = await frame(pane);
+  const box = inkBox(image);
+  // Model -> screen, from the fitted ink box: the drawing's bounds ARE that box.
+  const at = (x, y) => ({
+    x: box.minX + (x / MODEL.width) * box.width,
+    y: box.maxY - (y / MODEL.height) * box.height
   });
-  await rest(page);
-  const plan = await state(page);
-  assert.equal(plan.camera.projection, 'orthographic', 'a plan is a measurable projection, whatever Display asks for');
-  assert.equal(plan.display.camera.projection, 'perspective', 'and Display keeps what it was set to');
-  assert.equal(await pane.getByLabel('Jump to top view', { exact: true }).count(), 0, 'a locked view stops advertising axes it cannot turn to');
+  // The hatch is (58,28)-(92,52) with an island at (68,34)-(82,46), in blue.
+  const ring = at(62, 30);
+  const hole = at(75, 40);
+  const ringColor = pixel(image, ring.x, ring.y);
+  assert.ok(ringColor[2] - ringColor[0] > 80, `the hatch is filled blue: ${ringColor}`);
+  assert.ok(near(pixel(image, hole.x, hole.y), box.backdrop), `its island is unfilled: ${pixel(image, hole.x, hole.y)}`);
+  assert.deepEqual(errors, []);
+});
 
-  // Left-drag pans a locked view instead of turning it; the keyboard cannot turn it either.
-  const canvas = await pane.locator('[aria-busy] > div > canvas').first().boundingBox();
+test('strokes stay hairlines when the drawing is zoomed in eight times', async (t) => {
+  const { open } = await serveHarness(t);
+  const { page, pane, errors } = await open('sample.dxf');
+  await drawn(pane);
+  const fitted = inkBox(await frame(pane));
+  const canvas = await canvasOf(pane).boundingBox();
+  // A column 90% of the way across crosses the bottom outline and nothing else
+  // once the drawing is blown up, so its one run IS that stroke's thickness.
+  const column = Math.round(fitted.minX + fitted.width * 0.9);
+  const bottomAtFit = columnRuns(await frame(pane), column).at(-1);
+
+  // Zoom about a point ON that bottom edge, so the edge stays under the column.
+  await wheelAt(page, canvas, { x: column, y: fitted.maxY }, deltaForFactor(8));
+  const zoomed = await frame(pane);
+  const bottomAtZoom = columnRuns(zoomed, column).at(-1);
+
+  assert.ok(bottomAtFit <= 4, `a hairline at 100%: ${bottomAtFit} px`);
+  assert.ok(bottomAtZoom <= 4, `still a hairline at 800%: ${bottomAtZoom} px`);
+  assert.ok(Math.abs(bottomAtZoom - bottomAtFit) <= 1.5,
+    `model-space lineweights are not displayed: ${bottomAtFit} -> ${bottomAtZoom} px`);
+  // And the drawing really is eight times bigger: at 800% that bottom edge is the
+  // only thing left on the pane, running its whole width and still a hairline tall.
+  const overrun = inkBox(zoomed);
+  assert.ok(overrun.minX <= 1 && overrun.maxX >= zoomed.width - 2,
+    `the bottom edge now spans the pane: ${JSON.stringify(overrun)}`);
+  assert.ok(overrun.height <= 3, `and it is still a hairline: ${overrun.height} px tall`);
+  assert.equal(Math.round((await state(page)).zoomPercent / 10) * 10, 800);
+  assert.deepEqual(errors, []);
+});
+
+test('the wheel zooms about the pointer, dragging pans, and a double-click fits again', async (t) => {
+  const { open } = await serveHarness(t);
+  const { page, pane, errors } = await open('sample.dxf');
+  await drawn(pane);
+  const fitted = inkBox(await frame(pane));
+  const canvas = await canvasOf(pane).boundingBox();
+
+  // The point under the pointer does not move: put it on the drawing's bottom-left
+  // corner. Zooming OUT, so the whole drawing stays on the canvas and the ink box
+  // measures the drawing rather than the pane's edges.
+  const anchor = { x: fitted.minX, y: fitted.maxY };
+  await wheelAt(page, canvas, anchor, deltaForFactor(0.5));
+  const zoomed = inkBox(await frame(pane));
+  assert.ok(Math.abs(zoomed.minX - anchor.x) <= 2 && Math.abs(zoomed.maxY - anchor.y) <= 2,
+    `the corner under the pointer stayed put: (${zoomed.minX}, ${zoomed.maxY}) vs (${anchor.x}, ${anchor.y})`);
+  assert.ok(Math.abs(zoomed.height / fitted.height - 0.5) < 0.03, `and it halved: ${zoomed.height / fitted.height}`);
+
+  // Dragging moves the picture by exactly the pointer's travel. Up and to the
+  // right, so the whole drawing stays on the canvas and the ink box measures it
+  // rather than the pane's edges.
   await page.mouse.move(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
   await page.mouse.down();
-  await page.mouse.move(canvas.x + canvas.width / 2 + 160, canvas.y + canvas.height / 2 + 60, { steps: 6 });
+  await page.mouse.move(canvas.x + canvas.width / 2 + 140, canvas.y + canvas.height / 2 - 45, { steps: 8 });
   await page.mouse.up();
-  await page.waitForFunction(target => JSON.stringify(window.cadHarness.a.controller.readState().camera.target) !== target,
-    JSON.stringify(plan.camera.target));
-  await rest(page);
-  const panned = await state(page);
-  assert.deepEqual(viewDirection(panned.camera).map(value => Math.round(value * 100)), viewDirection(plan.camera).map(value => Math.round(value * 100)),
-    'dragging slides the sheet; it never turns it');
+  const panned = inkBox(await frame(pane));
+  assert.ok(Math.abs((panned.minX - zoomed.minX) - 140) <= 2, `panned right 140: ${panned.minX - zoomed.minX}`);
+  assert.ok(Math.abs((panned.maxY - zoomed.maxY) + 45) <= 2, `panned up 45: ${panned.maxY - zoomed.maxY}`);
+  assert.ok(Math.abs(panned.height - zoomed.height) <= 2, 'panning is not zooming');
 
-  await page.locator('canvas').first().click({ position: { x: 40, y: 40 } });
-  for (const key of ['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown']) await page.keyboard.press(key);
-  await settle(page);
-  assert.deepEqual(viewDirection((await state(page)).camera).map(value => Math.round(value * 100)),
-    viewDirection(panned.camera).map(value => Math.round(value * 100)), 'and neither do the arrow keys');
-
-  // A host that asks for a tilted camera is told why it cannot have one, not quietly straightened.
-  const declined = await page.evaluate(async () => {
-    const controller = window.cadHarness.a.controller;
-    const camera = controller.readState().camera;
-    return controller.setCamera({ ...camera, position: [90, -70, 60], target: [10, 5, 5] }).then(() => '', error => error.message);
-  });
-  assert.match(declined, /locked looking straight down/);
-  assert.equal(Math.round(viewDirection((await state(page)).camera)[2] * 100), 100);
-  // One it CAN have is applied.
-  await page.evaluate(async () => {
-    const controller = window.cadHarness.a.controller;
-    const { projection, ...camera } = controller.readState().camera;
-    await controller.setCamera({ ...camera, position: [5, 5, 120], target: [5, 5, 0] });
-  });
-  assert.deepEqual((await state(page)).camera.target.map(Math.round), [5, 5, 0]);
-
-  // The host's `resetCamera` does what the zoom menu's "Reset Zoom" does: it
-  // frames the drawing again without turning the camera, so a locked 2D view
-  // comes back centred and still looking straight down.
-  await page.evaluate(() => window.cadHarness.a.controller.resetCamera());
-  await page.waitForFunction(() => {
-    const camera = window.cadHarness.a.controller.readState().camera;
-    const offset = camera.position.map((value, axis) => value - camera.target[axis]);
-    // Framed on the plate's centre again, and still looking straight down at it.
-    return offset[2] / Math.hypot(...offset) > 0.99 && Math.abs(camera.target[0] - 20) < 1;
-  });
-
-  // And back to 3D: the three-quarter view and the cube return.
-  await pane.getByRole('button', { name: 'Switch to 3D view', exact: true }).click();
-  await page.waitForFunction(() => {
-    const camera = window.cadHarness.a.controller.readState().camera;
-    const offset = camera.position.map((value, axis) => value - camera.target[axis]);
-    return Math.abs(offset[2] / Math.hypot(...offset)) < 0.9;
-  });
-  await pane.getByLabel('Jump to top view', { exact: true }).waitFor();
-  await page.waitForFunction(() => window.cadHarness.a.controller.readState().camera.projection === 'perspective',
-    null, { message: 'Display gets its projection back' });
+  // A double-click frames the whole drawing again.
+  await page.mouse.dblclick(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
+  const refitted = inkBox(await frame(pane));
+  assert.ok(Math.abs(refitted.height - fitted.height) <= 2 && Math.abs(refitted.centreX - fitted.centreX) <= 2,
+    `back to the fit: ${JSON.stringify(refitted)} vs ${JSON.stringify(fitted)}`);
   assert.deepEqual(errors, []);
 });
 
-test('thickness, bends, layers and the stock material each reshape what is drawn', async (t) => {
+test('the cursor says the drawing can be dragged, and says so louder while it is', async (t) => {
   const { open } = await serveHarness(t);
-  const { page, pane, errors } = await open('panel.dxf');
-  await ready(pane);
-  await loaded(page);
-  await openInspector(pane);
-  assert.deepEqual(await tabNames(pane), [['Material', 'true'], ['Bends', 'false'], ['Layers', 'false'], ['Display', 'false']]);
-  await display(page, GUIDES_OFF);
-  await settle(page);
-
-  // Thickness: the flat sheet is nearly edge-on from the default view, so giving it 6 mm of
-  // stock puts visibly more of it on screen — ON SCREEN, without anything else prompting a frame.
-  const flat = await frame(pane);
-  await commit(pane, 'Thickness value', 6);
-  const thick = await frame(pane);
-  assert.ok(coverage(thick) > coverage(flat) * 1.15, `6 mm of stock is more picture: ${coverage(flat)} -> ${coverage(thick)}`);
-  assert.ok(differingPixels(flat, thick) > 20000, 'and the viewport drew it');
-
-  // Bends. One crease first, so "up" and "down" are unmistakably different pictures.
-  await commit(pane, 'Thickness value', 2);
-  const unfolded = await frame(pane);
-  await tab(pane, 'Bends');
-  await commit(pane, 'Bend 1 angle value', 90);
-  const foldedUp = await frame(pane);
-  // A fold stands a whole strip of the sheet up. "Not blank" would pass on a sheet that never
-  // moved, so this asks for a large CHANGE against the flat frame.
-  assert.ok(differingPixels(unfolded, foldedUp) > 20000,
-    `a 90° fold visibly reshapes the sheet: ${differingPixels(unfolded, foldedUp)} pixels`);
-  assert.ok(coverage(foldedUp) > 0.01, `and it is not blank: ${coverage(foldedUp)}`);
-  await pane.locator('[aria-label="Bend 1 direction"]').getByLabel('Down', { exact: true }).click();
-  assert.ok(differingPixels(foldedUp, await frame(pane)) > 20000, 'folding down is not folding up');
-
-  // Four creases is the count that used to blank the sheet outright, because the re-meshed
-  // geometry kept the first build's normal buffer and the draw was rejected silently.
-  await pane.locator('[aria-label="Bend 1 direction"]').getByLabel('Up', { exact: true }).click();
-  for (const index of [2, 3, 4]) await commit(pane, `Bend ${index} angle value`, 90);
-  const fourBends = await frame(pane);
-  assert.ok(coverage(fourBends) > 0.01, 'a four-bend fold still draws');
-  assert.ok(differingPixels(unfolded, fourBends) > 20000, 'and all four creases reached the screen');
-  // And the schematic fold draws, differently from the curved one.
-  await pane.getByRole('combobox', { name: 'Corners', exact: true }).click();
-  await page.getByRole('option', { name: 'Boxed', exact: true }).click();
-  const boxed = await frame(pane);
-  assert.ok(coverage(boxed) > 0.01, 'and so does a boxed one');
-  assert.ok(differingPixels(unfolded, boxed) > 20000, 'which is also a fold');
-
-  // Layers: the dashed creases belong to BEND, the score line and the label to their layers.
-  await tab(pane, 'Layers');
-  await pane.getByRole('button', { name: 'Reset bend angles', exact: true }).count();
-  await tab(pane, 'Bends');
-  await pane.getByRole('button', { name: 'Reset bend angles', exact: true }).click();
-  await settle(page);
-  await tab(pane, 'Layers');
-  const withGuides = await frame(pane);
-  await pane.getByRole('button', { name: 'Hide layer BEND', exact: true }).click({ force: true });
-  const withoutGuides = await frame(pane);
-  assert.ok(differingPixels(withGuides, withoutGuides) > 200, 'the crease marks ARE that layer');
-  await pane.getByRole('button', { name: 'Show layer BEND', exact: true }).click({ force: true });
-  assert.ok(differingPixels(withGuides, await frame(pane)) < 200, 'and showing it brings them back');
-  await pane.getByRole('button', { name: 'Hide layer ENGRAVE', exact: true }).click({ force: true });
-  assert.ok(differingPixels(withGuides, await frame(pane)) > 100, 'the score line goes with ENGRAVE');
-  await pane.getByRole('button', { name: 'Show layer ENGRAVE', exact: true }).click({ force: true });
-  await settle(page);
-
-  // Material: a preset is a tint, and it beats every colour mode.
-  await tab(pane, 'Material');
-  const neutral = meanColor(await frame(pane));
-  await pane.getByRole('button', { name: 'Material', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Metals', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Brass', exact: true }).click();
-  const brass = meanColor(await frame(pane));
-  assert.ok(brass[0] - brass[2] > neutral[0] - neutral[2] + 20, `brass is warmer than the viewer's surface: ${neutral} -> ${brass}`);
-  await display(page, { surfaces: { colorMode: 'single', color: '#0040ff' } });
-  const stillBrass = meanColor(await frame(pane));
-  assert.ok(stillBrass[0] > stillBrass[2], `a chosen stock beats Single colour: ${stillBrass}`);
+  const { page, pane, errors } = await open('sample.dxf');
+  await drawn(pane);
+  const canvas = canvasOf(pane);
+  const cursor = () => canvas.evaluate(node => getComputedStyle(node).cursor);
+  assert.equal(await cursor(), 'grab');
+  const box = await canvas.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 30, box.y + box.height / 2, { steps: 3 });
+  assert.equal(await cursor(), 'grabbing');
+  await page.mouse.up();
+  assert.equal(await cursor(), 'grab');
   assert.deepEqual(errors, []);
 });
 
-test('a dimensioned drawing draws its line-work, opens locked, and captures like any other scene', async (t) => {
+test('a pane that is resized re-fits only while the view is still the one it opened with', async (t) => {
   const { open } = await serveHarness(t);
-  const { page, pane, errors } = await open('sheet.dxf');
-  await ready(pane);
-  await loaded(page);
+  const { page, pane, errors } = await open('sample.dxf');
+  await drawn(pane);
+  const shrink = height => page.evaluate(next => {
+    document.querySelector('[data-testid="one"]').parentElement.style.height = next;
+  }, height);
 
-  // It IS a plan: no third dimension to look at, so there is no 2D/3D action to offer.
-  assert.equal(await pane.getByRole('button', { name: /Switch to (2D|3D) view/ }).count(), 0);
-  const camera = (await state(page)).camera;
-  assert.equal(Math.round(viewDirection(camera)[2] * 100), 100, 'opened looking straight down');
-  assert.equal(camera.projection, 'orthographic');
-
-  // The snapshot and a capture work on it: they are about a scene, not about a mesh.
-  await noTools(pane);
-  await display(page, GUIDES_OFF);
+  // Untouched: the drawing is re-framed for the pane it now has.
+  const fitted = inkBox(await frame(pane));
+  await shrink('420px');
   await settle(page);
-  const drawn = await capture(page);
-  assert.ok(coverage(drawn) > 0.0005, `the drawing is on screen: ${coverage(drawn)}`);
+  const refitted = inkBox(await frame(pane));
+  assert.ok(refitted.height < fitted.height * 0.8, `re-fitted smaller: ${fitted.height} -> ${refitted.height}`);
+  const resized = await frame(pane);
+  assert.ok(Math.abs(refitted.height - (resized.height - 32)) <= 3, `fitted to the new pane: ${refitted.height} in ${resized.height}`);
+
+  // Touched: the person's framing is theirs, and a resize does not take it back.
+  const canvas = await canvasOf(pane).boundingBox();
+  await wheelAt(page, canvas, { x: canvas.width / 2, y: canvas.height / 2 }, deltaForFactor(0.5));
+  const chosen = inkBox(await frame(pane));
+  await shrink('640px');
+  await settle(page);
+  const kept = inkBox(await frame(pane));
+  assert.ok(Math.abs(kept.height - chosen.height) <= 2,
+    `the chosen zoom survived the resize: ${chosen.height} -> ${kept.height}`);
+  assert.deepEqual(errors, []);
+});
+
+test('a DXF has no sidebar, no inspector toggle and no tools', async (t) => {
+  const { open } = await serveHarness(t);
+  const { page, pane, errors } = await open('sample.dxf');
+  await drawn(pane);
+
+  assert.equal(await pane.getByRole('button', { name: 'Inspector', exact: true }).count(), 0,
+    'a drawing has no Inspector, so the navbar offers no toggle for one');
+  assert.equal(await pane.locator('[data-file-sheet]').count(), 0, 'and no file sheet in the DOM');
+  assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).count(), 0, 'no tool strip');
+  for (const name of ['Orbit', 'Draw', 'Select', 'Measure', 'Pose', 'Animate']) {
+    assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
+  }
+  for (const name of ['Switch to 2D view', 'Switch to 3D view']) {
+    assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
+  }
+  assert.equal(await pane.getByRole('tab').count(), 0, 'no Material, Bends, Layers or Display tabs');
+  // The host's own panels are untouched: the file tree is still one press away.
+  assert.equal(await pane.getByRole('button', { name: 'Show files', exact: true }).count(), 1);
+  // What a drawing DOES offer: the three zoom acts and a snapshot.
+  for (const name of ['Zoom in', 'Zoom out', 'Reset Zoom', 'Take snapshot']) {
+    assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 1, name);
+  }
+
+  // The snapshot is the drawing WITH its background, delivered through the host.
   await pane.getByRole('button', { name: 'Take snapshot', exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.captures.length === 1);
-  assert.deepEqual(await page.evaluate(() => [window.cadHarness.captures[0].file, window.cadHarness.captures[0].type]), ['sheet.dxf', 'image/png']);
-
-  // Layers: a document's are its line objects.
-  await openInspector(pane);
-  assert.deepEqual(await tabNames(pane), [['Material', 'true'], ['Layers', 'false'], ['Display', 'false']]);
-  await tab(pane, 'Layers');
-  await pane.getByRole('button', { name: 'Hide layer OUTLINE', exact: true }).click({ force: true });
-  await settle(page);
-  assert.ok(coverage(await capture(page)) < coverage(drawn), 'hiding a layer takes its lines away');
+  assert.deepEqual(await page.evaluate(() => [window.cadHarness.captures[0].file, window.cadHarness.captures[0].type]),
+    ['sample.dxf', 'image/png']);
   assert.deepEqual(errors, []);
 });
 
-test('a source unit other than millimetres scales the drawing; the Units select only relabels it', async (t) => {
-  const { open } = await serveHarness(t);
-  const millimetres = await open('plate.dxf');
-  await ready(millimetres.pane);
-  await loaded(millimetres.page);
-  const inches = await open('inches.dxf');
-  await ready(inches.pane);
-  await loaded(inches.page);
-  // The same 40 x 20 rectangle, declared in inches: the scene is millimetres, so it is 25.4x bigger.
-  const framed = page => page.evaluate(() => {
-    const bounds = window.__cadCamera().originalBounds;
-    return bounds.max[0] - bounds.min[0];
-  });
-  assert.ok(Math.abs((await framed(inches.page)) / (await framed(millimetres.page)) - 25.4) < 0.1,
-    `${await framed(inches.page)} / ${await framed(millimetres.page)}`);
-
-  // The Units select converts what the inputs show and accept, and nothing else.
-  await openInspector(inches.pane);
-  await commit(inches.pane, 'Thickness value', 6);
-  await settle(inches.page);
-  const box = await inches.page.evaluate(() => window.__cadCamera().originalBounds);
-  await inches.pane.getByRole('combobox', { name: 'Units', exact: true }).click();
-  await inches.page.getByRole('option', { name: 'Inches', exact: true }).click();
-  await settle(inches.page);
-  assert.match(await inches.pane.getByLabel('Thickness value', { exact: true }).inputValue(), /^0\.24/);
-  // The part itself is untouched: the same box, still 6 mm of stock. (A pixel comparison here
-  // would be a claim about the renderer's idle resolution, not about units.)
-  assert.deepEqual(await inches.page.evaluate(() => window.__cadCamera().originalBounds), box, 'the part is unchanged');
-  assert.equal(await inches.pane.getByRole('combobox', { name: 'Units', exact: true }).innerText(), 'Inches');
-  assert.deepEqual(inches.errors, []);
-});
-
-test('a DXF that will not parse says so; one with no closed contour shows its lines and warns', async (t) => {
+test('an unreadable drawing shows the server’s own sentence, and an empty one says it is empty', async (t) => {
   const { open } = await serveHarness(t);
   const broken = await open('broken.dxf');
   const alert = broken.pane.getByRole('alert');
   await alert.waitFor();
-  assert.match(await alert.innerText(), /Couldn’t load the model/);
-  assert.match(await alert.innerText(), /broken\.dxf/);
-  // The point of the fix: the parser's own sentence, instead of a loading overlay forever.
-  assert.match(await alert.innerText(), /malformed/i);
-  assert.equal(await broken.pane.locator('[data-viewer-loading]').count(), 0);
+  const text = await alert.innerText();
+  assert.match(text, /The viewer couldn’t complete the request/);
+  assert.match(text, /HTTP 400/);
+  assert.match(text, /not a readable DXF document/);
+  assert.match(text, /Try again/);
+  assert.equal(await broken.pane.locator('[data-viewer-loading]').count(), 0, 'and not a spinner forever');
 
-  const unclosed = await open('open.dxf');
-  await ready(unclosed.pane);
-  await loaded(unclosed.page);
-  // A non-blocking warning rides the file badge, which says what the warning IS;
-  // pressing it opens the diagnostic.
-  await unclosed.pane.locator('[data-file-status="No flat pattern"]').click();
-  await unclosed.page.getByText('No closed cut contour').first().waitFor();
-  await unclosed.page.keyboard.press('Escape');
-  await display(unclosed.page, GUIDES_OFF);
-  await settle(unclosed.page);
-  assert.ok(coverage(await capture(unclosed.page)) > 0.0005, 'its line-work is drawn rather than nothing');
-  assert.deepEqual(unclosed.errors, []);
+  const empty = await open('empty.dxf');
+  await drawn(empty.pane);
+  await empty.pane.locator('[data-drawing-empty]').waitFor();
+  assert.match(await empty.pane.locator('[data-drawing-empty]').innerText(), /no geometry in its modelspace/);
+  assert.equal(await empty.pane.getByRole('alert').count(), 0, 'an empty drawing is not an error');
+  assert.deepEqual(empty.errors, []);
 });
 
-test('thickness, bends, hidden layers, the 2D view and the camera all come back on reopening', async (t) => {
+test('the view a person chose comes back when the tab is reopened', async (t) => {
   const { open } = await serveHarness(t);
-  const { page, pane, errors } = await open('panel.dxf');
-  await ready(pane);
-  await loaded(page);
-  await openInspector(pane);
+  const { page, pane, errors } = await open('sample.dxf');
+  await drawn(pane);
+  const canvas = await canvasOf(pane).boundingBox();
+  await wheelAt(page, canvas, { x: canvas.width * 0.35, y: canvas.height * 0.6 }, deltaForFactor(3));
+  const chosen = inkBox(await frame(pane));
 
-  await commit(pane, 'Thickness value', 4);
-  await tab(pane, 'Bends');
-  await commit(pane, 'Bend 1 angle value', 75);
-  await tab(pane, 'Layers');
-  await pane.getByRole('button', { name: 'Hide layer ENGRAVE', exact: true }).click({ force: true });
-  await pane.getByRole('button', { name: 'Switch to 2D view', exact: true }).click();
-  await page.waitForFunction(() => window.cadHarness.state.renderers?.[JSON.stringify(['panel.dxf', 'dxf'])]?.renderer?.view === '2d');
-  const stored = await page.evaluate(() => window.cadHarness.state.renderers);
-  assert.deepEqual(Object.keys(stored), [JSON.stringify(['panel.dxf', 'dxf'])], 'keyed by [path, renderer id]');
-  const record = stored[JSON.stringify(['panel.dxf', 'dxf'])].renderer;
-  assert.deepEqual([record.thicknessMm, record.bends[0], record.hiddenLayers, record.view],
-    [4, { angleDeg: 75, direction: 'up' }, ['ENGRAVE'], '2d']);
-  const left = await state(page);
-  await page.waitForFunction(position => JSON.stringify(window.cadHarness.state.renderers[JSON.stringify(['panel.dxf', 'dxf'])].camera?.position.map(Math.round)) === position,
-    JSON.stringify(left.camera.position.map(Math.round)));
+  const key = JSON.stringify(['sample.dxf', 'dxf']);
+  await page.waitForFunction(stateKey => window.cadHarness.state.renderers?.[stateKey]?.kind === 'dxf-view', key);
+  const record = await page.evaluate(stateKey => window.cadHarness.state.renderers[stateKey], key);
+  assert.equal(record.version, 1);
+  assert.deepEqual(Object.keys(record.transform).sort(), ['offsetX', 'offsetY', 'scale']);
 
   await page.evaluate(() => window.cadHarness.mounted(false));
-  await pane.locator('canvas').first().waitFor({ state: 'detached' });
+  await canvasOf(pane).waitFor({ state: 'detached' });
   await page.evaluate(() => window.cadHarness.mounted(true));
-  await ready(pane);
-  await loaded(page);
-  await openInspector(pane);
-  const reopened = await state(page);
-  // The Inspector comes back on the tab it was left on, so ask for the one being read.
-  await tab(pane, 'Material');
-  assert.deepEqual(reopened.camera.position.map(value => Math.round(value * 100)), left.camera.position.map(value => Math.round(value * 100)));
-  assert.equal(Math.round(viewDirection(reopened.camera)[2] * 100), 100, 'reopened into the locked plan view');
-  await pane.getByRole('button', { name: 'Switch to 3D view', exact: true }).waitFor();
-  assert.equal(await pane.getByLabel('Thickness value', { exact: true }).inputValue(), '4.0 mm');
-  await tab(pane, 'Bends');
-  assert.equal(await pane.getByLabel('Bend 1 angle value', { exact: true }).inputValue(), '75°');
-  await tab(pane, 'Layers');
-  await pane.getByRole('button', { name: 'Show layer ENGRAVE', exact: true }).waitFor();
+  await drawn(pane);
+  const reopened = inkBox(await frame(pane));
+  assert.ok(Math.abs(reopened.minX - chosen.minX) <= 2 && Math.abs(reopened.height - chosen.height) <= 2,
+    `reopened where it was left: ${JSON.stringify(reopened)} vs ${JSON.stringify(chosen)}`);
   assert.deepEqual(errors, []);
 });
 
-test('a host command that needs a selection is declined in words, and fullscreen keeps the plan view', async (t) => {
+test('host commands a flat drawing cannot answer are declined in words', async (t) => {
   const { open } = await serveHarness(t);
-  const { page, pane, errors } = await open('plate.dxf');
-  await ready(pane);
-  await loaded(page);
+  const { page, pane, errors } = await open('sample.dxf');
+  await drawn(pane);
 
-  const declined = await page.evaluate(() => window.cadHarness.a.controller.select({ selectors: ['o1.f1'] }).then(() => '', error => error.message));
-  assert.match(declined, /A DXF has nothing to select/);
-  assert.match(await page.evaluate(() => window.cadHarness.a.controller.clearSelection().then(() => '', error => error.message)), /no selection to clear/);
-  await page.evaluate(() => window.cadHarness.selectReference('o1.f1'));
-  await pane.getByText(/A DXF has nothing to select/).waitFor();
-  assert.equal(await page.evaluate(() => window.cadHarness.a.commands.getSnapshot().selectReference ?? null), null, 'the declined request is acknowledged');
+  const refuse = (call) => page.evaluate(async (source) => {
+    const controller = window.cadHarness.a.controller;
+    // eslint-disable-next-line no-new-func
+    return new Function('controller', `return (${source})(controller)`)(controller).then(() => '', error => error.message);
+  }, call);
 
-  await pane.getByRole('button', { name: 'Switch to 2D view', exact: true }).click();
-  await page.waitForFunction(() => {
-    const camera = window.cadHarness.a.controller.readState().camera;
-    const offset = camera.position.map((value, axis) => value - camera.target[axis]);
-    return offset[2] / Math.hypot(...offset) > 0.99;
+  assert.match(await refuse('c => c.select({ selectors: ["o1.f1"] })'), /A DXF is a 2D drawing without CAD references/);
+  assert.match(await refuse('c => c.clearSelection()'), /never has a selection to clear/);
+  assert.match(await refuse('c => c.setCamera({ position: [0, 0, 1], target: [0, 0, 0], up: [0, 1, 0] })'), /no camera to pose/);
+  assert.match(await refuse('c => c.setRenderMode(true)'), /no Display settings/);
+
+  // What it CAN do: report itself, fit again, zoom, and hand over a PNG.
+  const snapshot = await state(page);
+  assert.equal(snapshot.loading, false);
+  assert.equal(snapshot.camera, null);
+  assert.deepEqual(snapshot.selection, []);
+  assert.equal(Math.round(snapshot.zoomPercent), 100);
+
+  const fitted = inkBox(await frame(pane));
+  await page.evaluate(() => window.cadHarness.a.controller.setZoom(50));
+  const zoomed = inkBox(await frame(pane));
+  assert.ok(Math.abs(zoomed.height / fitted.height - 0.5) < 0.03, `setZoom(50) halved it: ${zoomed.height / fitted.height}`);
+  await page.evaluate(() => window.cadHarness.a.controller.resetCamera());
+  assert.ok(Math.abs(inkBox(await frame(pane)).height - fitted.height) <= 2, 'resetCamera fits the drawing again');
+
+  const captured = await page.evaluate(async () => {
+    const blob = await window.cadHarness.a.controller.capture();
+    return { type: blob.type, size: blob.size };
   });
-  await page.evaluate(() => window.cadHarness.fullscreen(true));
-  await pane.getByRole('group', { name: 'Fullscreen controls' }).waitFor();
-  assert.equal(await pane.locator('[data-animation-transport]').count(), 0, 'a drawing has no routines to play');
-  await page.evaluate(() => window.cadHarness.fullscreen(false));
-  await pane.getByRole('button', { name: 'Inspector', exact: true }).waitFor();
-  await settle(page);
-  // Fullscreen's slow auto-orbit still turns a locked view a little — a hole in the lock
-  // this phase carries rather than widens; what matters is that leaving it is a plan view again.
-  assert.ok(viewDirection((await state(page)).camera)[2] > 0.95, 'leaving fullscreen is still the plan view');
+  assert.equal(captured.type, 'image/png');
+  assert.ok(captured.size > 1000, `a real picture: ${captured.size} bytes`);
+  assert.deepEqual(errors, []);
+});
+
+// A host asking a drawing to select something is answered, not ignored.
+test('a select-reference request is consumed and explained', async (t) => {
+  const { open } = await serveHarness(t);
+  const { page, pane, errors } = await open('sample.dxf');
+  await drawn(pane);
+  await page.evaluate(() => window.cadHarness.selectReference('o1.f1'));
+  await pane.getByText(/A DXF is a 2D drawing without CAD references/).waitFor();
+  assert.equal(await page.evaluate(() => window.cadHarness.a.commands.getSnapshot().selectReference ?? null), null,
+    'the declined request is acknowledged');
   assert.deepEqual(errors, []);
 });

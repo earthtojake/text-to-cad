@@ -151,6 +151,8 @@ src/
                    #   (ref runtime), assembly/ (package composition),
                    #   render/ (format mesh loaders), viewer/ (exploded
                    #   view, part visual state), urdf/ (robot loading),
+                   #   drawing2d/ (a GET /__cad/drawing payload -> Canvas 2D:
+                   #   fit/pan/zoom maths, batched Path2D, hairline strokes),
                    #   export/ (packageMeshExport), cadRefs (grammar,
                    #   parity-tested against cad_ref_syntax.py)
 bin/               # node builders the bundler ships into _runtime/node:

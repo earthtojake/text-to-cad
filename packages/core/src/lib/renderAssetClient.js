@@ -1,5 +1,4 @@
 import { cadResourceCacheKey } from "../client/resources.js";
-import { parseDxf } from "./dxf/parseDxf.js";
 import {
   STEP_EDGE_BARYCENTRIC_ATTRIBUTE,
   STEP_EDGE_CLASS_ATTRIBUTE,
@@ -46,7 +45,6 @@ const threeMfCache = new Map();
 const selectorCache = new Map();
 const displayEdgeCache = new Map();
 const topologyIndexCache = new Map();
-const dxfCache = new Map();
 const urdfCache = new Map();
 const srdfCache = new Map();
 const sdfCache = new Map();
@@ -983,19 +981,6 @@ export async function loadRenderSurfDisplayEdgeBundle(surfUrl, {
   finalizeCached(displayEdgeCache, cacheKey, bundle);
   retainSurfEntry(displayEdgeCache, cacheKey);
   return bundle;
-}
-
-export async function loadRenderDxf(url, { signal, resources } = {}) {
-  const cacheKey = cadResourceCacheKey(resources, url);
-  const payload = await loadCached(dxfCache, cacheKey, async () => {
-    const dxfText = await loadRenderText(url, { signal, resources });
-    return parseDxf(dxfText, { fileRef: "", sourceUrl: url });
-  }, { cachePending: !signal });
-  return finalizeCached(dxfCache, cacheKey, payload);
-}
-
-export function peekRenderDxf(url, { resources } = {}) {
-  return peekCached(dxfCache, cadResourceCacheKey(resources, url));
 }
 
 function urdfCacheKey(url) {

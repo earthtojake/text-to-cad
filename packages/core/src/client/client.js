@@ -213,6 +213,15 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
       if (payload?.catalog) publishCatalog(payload.catalog);
       return payload;
     },
+    drawing(file, { signal } = {}) {
+      // A `.dxf` flattened to 2D render primitives on the SERVER: ezdxf does the
+      // reading, the client only paints. One plain GET, because the route is
+      // derived data cached by content hash — a second request for unchanged
+      // bytes is served from the store. The 10 s bound is the house value for a
+      // GET that can do real work (a cold 10k-entity drawing is ~0.7 s).
+      if (!file) return Promise.reject(new Error('Missing file'));
+      return request('/__cad/drawing', { file, signal, timeoutMs: 10_000, operation: 'drawing' });
+    },
     requestSurfaces(body, { signal } = {}) {
       return request('/__cad/surfaces', {
         body, signal, method: 'POST', operation: 'surfaces',

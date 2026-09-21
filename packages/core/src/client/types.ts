@@ -39,6 +39,25 @@ export interface CadArtifactResult {
   error?: string;
   [key: string]: unknown;
 }
+/**
+ * What `GET /__cad/drawing` answers: a drawing's modelspace, flattened to the
+ * five primitive shapes ezdxf reduces every entity to, in DXF coordinates with
+ * y UP. `color: null` is the default pen, painted with the theme's foreground;
+ * `bounds: null` is a drawing with nothing in it. See `apps/web/docs/backend.md`.
+ */
+export interface CadDrawingPayload {
+  schemaVersion: number;
+  units: { insunits: number; name: string; toMillimetres: number };
+  bounds: [number, number, number, number] | null;
+  layers: { name: string; color: string | null; count: number }[];
+  primitives: {
+    type: 'point' | 'lines' | 'path' | 'filled-paths' | 'filled-polygon';
+    layer: string;
+    color: string | null;
+    geometry: unknown;
+  }[];
+  [key: string]: unknown;
+}
 /** Byte tickets own their buffer exclusively: workers may detach it. URL tickets are approved by the provider. */
 export type CadWorkerResourceTicket =
   | { kind: 'url'; url: string; headers?: Record<string, string>; cache?: RequestCache; maxBytes?: number }
@@ -124,6 +143,8 @@ export interface CadWorkspaceService {
   serverInfo(options?: CadRequestOptions & { fresh?: boolean }): Promise<CadServerInfo>;
   requestArtifactStatus(file: string, options?: CadRequestOptions): Promise<CadArtifactResult>;
   requestArtifact(file: string, options?: CadRequestOptions & {force?: boolean}): Promise<CadArtifactResult>;
+  /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */
+  drawing(file: string, options?: CadRequestOptions): Promise<CadDrawingPayload>;
   readonly resources: CadResourceProvider;
   resolveSurfaceComponents(view: CadRuntimeView, requested: CadSurfaceComponentRequest[], options?: CadRequestOptions): Promise<Map<string, CadSurfaceTicket>>;
   observeEditingPreview(file: string, onUpdate: (preview: CadEditingPreview) => void, onError: (error: unknown) => void, options?: CadPreviewObserverOptions): () => void;
