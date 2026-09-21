@@ -422,11 +422,11 @@ class BuilderErrorMessageTests(unittest.TestCase):
 
     def test_the_message_line_is_preferred_over_stack_frames(self) -> None:
         lines = [
-            "Error: Unsupported DXF entity HATCH",
-            "    at parseDxf (file:///x/parseDxf.js:139:11)",
-            "    at main (file:///x/dxf-artifact.mjs:83:19)",
+            "Error: Unsupported mesh primitive mode 4",
+            "    at readPrimitive (file:///x/mesh-export.mjs:139:11)",
+            "    at main (file:///x/mesh-export.mjs:83:19)",
         ]
-        self.assertEqual("Unsupported DXF entity HATCH", node_runtime.first_builder_error(lines))
+        self.assertEqual("Unsupported mesh primitive mode 4", node_runtime.first_builder_error(lines))
 
     def test_a_message_without_the_error_prefix_still_reports_something(self) -> None:
         self.assertEqual("something broke", node_runtime.first_builder_error(["something broke"]))

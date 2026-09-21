@@ -334,8 +334,11 @@ def display_modes_for_kind(kind: str) -> frozenset[str]:
 
     An error that lists modes lists THESE, so a mesh door never offers a preset it
     is about to refuse. An unknown kind gets the full set: its own refusal comes
-    first and says what the file is.
+    first and says what the file is. A DRAWING gets none: it has no scene for a
+    preset to configure, and its whole display is ``appearance``.
     """
+    if kind in DRAWING_KINDS:
+        return frozenset()
     if not kind or kind in CAD_MODEL_KINDS:
         return DISPLAY_MODES
     return DISPLAY_MODES - CAD_MODEL_DISPLAY_MODES
@@ -432,6 +435,11 @@ CAD_MODEL_DISPLAY_MODES = frozenset({"xray", "hidden-line", "wireframe"})
 # "hidden" and "off" let the edges carry the picture; without edges they draw nothing.
 CAD_MODEL_SURFACE_STYLES = frozenset({"hidden", "off"})
 CAD_MODEL_KINDS = frozenset({"step", "stp"})
+# Inputs that are DRAWN rather than staged. Nothing in `display` but
+# ``appearance`` reaches them, which is a stricter rule than the one below and is
+# stated where a drawing's rules live
+# (:func:`cadgen.snapshot_cli.check_drawing_render_job`).
+DRAWING_KINDS = frozenset({"dxf"})
 
 
 def validate_display_for_kind(display: Mapping[str, object], *, kind: str, input_label: str) -> None:
@@ -440,8 +448,12 @@ def validate_display_for_kind(display: Mapping[str, object], *, kind: str, input
     Asking for a section of a mesh would otherwise render a picture that silently
     ignores the request, so the request is refused by name, as the viewer refuses
     to offer the control.
+
+    A drawing is skipped, not exempt: its own check refuses the whole of
+    ``display`` but ``appearance``, and would otherwise be pre-empted here by a
+    message offering it the 'solid' and 'render' presets it cannot take either.
     """
-    if kind in CAD_MODEL_KINDS or not is_plain_object(display):
+    if kind in CAD_MODEL_KINDS or kind in DRAWING_KINDS or not is_plain_object(display):
         return
     requested = [f"display.{name}" for name in CAD_MODEL_DISPLAY_GROUPS if name in display]
     mode = display.get("mode")
@@ -506,6 +518,14 @@ def _find_display_object(
                 display_path = cwd / display_path
             looks_like_file = display.lower().endswith(".json") or "/" in display or "\\" in display
             if not looks_like_file and not display_path.exists():
+                if modes is not None and not modes:
+                    # An input with NO presets at all (a drawing): "supported
+                    # modes: " followed by nothing is not an answer.
+                    raise SnapshotError(
+                        f"Unsupported display mode: {display}. This input takes no display "
+                        'preset — its whole appearance is light or dark ("display": '
+                        '{"appearance": "dark"}).'
+                    )
                 supported = ", ".join(sorted(modes or DISPLAY_MODES))
                 raise SnapshotError(f"Unsupported display mode: {display}. Supported modes: {supported}")
             if not display_path.exists():

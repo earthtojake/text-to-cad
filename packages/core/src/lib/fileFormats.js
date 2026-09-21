@@ -78,8 +78,8 @@ export function isMeshRenderFormat(format) {
 
 export function meshAssetKeyForFormat(format) {
   const normalized = normalizeFormat(format);
-  // DXF is mesh-loaded too — from its own file, parsed and prism-meshed
-  // client-side — so its key is itself, never a baked GLB relation.
+  // A DXF's render asset is its own file (the server flattens it to a 2D payload;
+  // nothing bakes a mesh for it), so its key is itself, never a baked GLB relation.
   return isMeshRenderFormat(normalized) || normalized === RENDER_FORMAT.DXF
     ? normalized
     : RENDER_FORMAT.GLB;

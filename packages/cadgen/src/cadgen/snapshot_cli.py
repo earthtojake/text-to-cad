@@ -21,7 +21,7 @@ enable is refused BY NAME with what the door does accept, so a `.urdf` handed to
 A job goes through two steps, and the split between them is the output contract.
 PREPARING a job decides every refusal that can be decided from the request and the
 input's kind, and builds nothing; only then are the declared outputs cleared.
-RESOLVING it builds what the render needs (the STEP tree, a drawing's mesh). So a
+RESOLVING it builds what the render needs (the STEP tree, a drawing's payload). So a
 refused request leaves an existing OUT untouched, and a failed build or render
 leaves no file at all.
 """
@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import functools
 import json
 import math
 import sys
@@ -1288,92 +1289,189 @@ def resolve_step_render_job(
     return resolved_job
 
 
-def check_drawing_render_job(job: Mapping[str, object], *, mode: str, **_context: object) -> None:
-    """What a drawing cannot be asked for: it carries no CAD topology."""
+# A DXF is DRAWN, not staged: `cadgen dxf snapshot` paints the same
+# `cadgen.drawing_payload` the CAD Viewer's DXF pane paints, with the same
+# core code (@hardcore/core/lib/drawing2d), so the CLI cannot show a picture
+# the viewer cannot. Everything below is what that costs the option surface.
+#
+# `appearance` is the whole of a drawing's display: it picks the background,
+# and therefore the colour of an entity with no pen of its own (ACI 7).
+DRAWING_DISPLAY_KEYS = frozenset({"appearance"})
+# Output settings that still mean something for a picture with no scene.
+DRAWING_OUTPUT_SETTINGS_KEYS = frozenset({"sizeProfile", "renderScale", "transparent"})
+# ...and why each of the others does not.
+DRAWING_OUTPUT_SETTING_REASONS = {
+    "padding": (
+        "a drawing is fitted with the fixed gutter the viewer leaves around it, "
+        "and there is no camera to pull further back"
+    ),
+    "viewLabels": "a drawing has no camera, so there is no view name to burn into the image",
+    "tightFrame": (
+        "a tight frame re-fits a camera to projected geometry; a drawing is already "
+        "framed on the bounds of what it draws"
+    ),
+}
+# What a drawing IS, said once: every refusal below opens with it.
+_DRAWING_IS = "a DXF is drawn as a flat 2D drawing, fitted to the image and painted head on"
+
+
+def _drawing_output_cameras(job: Mapping[str, object]) -> bool:
+    outputs = job.get("outputs") if isinstance(job.get("outputs"), list) else []
+    return any(is_plain_object(output) and output.get("camera") is not None for output in outputs)
+
+
+def _drawing_output_labels(job: Mapping[str, object]) -> list[str]:
+    outputs = job.get("outputs") if isinstance(job.get("outputs"), list) else []
+    return sorted({
+        key
+        for output in outputs
+        if is_plain_object(output)
+        for key in ("label", "viewLabel")
+        if output.get(key) is not None
+    })
+
+
+def check_drawing_render_job(
+    job: Mapping[str, object], *, input_path: Path, mode: str, **_context: object
+) -> None:
+    """What a drawing cannot be asked for: anything that describes a 3D scene.
+
+    This door used to render a DXF as a 3D flat pattern, so it took a camera,
+    display settings and a render mode. It does not any more — the viewer shows
+    a drawing, and what the viewer cannot show the CLI does not render — and
+    every one of those requests is refused BY NAME here rather than accepted
+    and quietly ignored. This is also the path `cadgen snapshot` routes a `.dxf`
+    through, so the two cannot disagree.
+    """
+    label = input_path.name
+    display = job.get("display") if is_plain_object(job.get("display")) else {}
+    scene = sorted(f"display.{key}" for key in set(display) - DRAWING_DISPLAY_KEYS)
+    if scene:
+        raise SnapshotError(
+            f"{', '.join(scene)} {'describes' if len(scene) == 1 else 'describe'} a 3D scene — "
+            f"a render mode, surfaces, lighting, a floor; {_DRAWING_IS}, so {label} has none of "
+            "them. Light or dark is the whole of a drawing's appearance: pass "
+            '--appearance light|dark (in a job, "display": {"appearance": "dark"}).'
+        )
+    if job.get("camera") is not None or _drawing_output_cameras(job):
+        raise SnapshotError(
+            f"camera poses a model in space; {_DRAWING_IS}, so {label} has no camera and no views "
+            "to choose between — it is always shown whole, the way it was drawn."
+        )
+    if mode != "view" or job.get("section") is not None:
+        raise SnapshotError(
+            f"{_DRAWING_IS}: it has no parts to list and no solid to section, so view is the only "
+            f"mode {label} renders in."
+        )
+    if job.get("scale") is not None:
+        raise SnapshotError(
+            f"scale picks the units a 3D scene is lit and framed for (cad or urdf); {_DRAWING_IS} "
+            f"in its own drawing units, so {label} has no scene to scale."
+        )
+    labels = _drawing_output_labels(job)
+    if labels:
+        raise SnapshotError(
+            f"an output's {' and '.join(labels)} names the view burnt into the image; {_DRAWING_IS} "
+            f"and {label} has no view to name."
+        )
+    settings = job.get("output") if is_plain_object(job.get("output")) else {}
+    unsupported = sorted(set(settings) - DRAWING_OUTPUT_SETTINGS_KEYS)
+    if unsupported:
+        # Every one of them, with its own reason: fixing them one refusal per run
+        # is three runs to learn what one message can say.
+        reasons = "; ".join(
+            f"{key} — {DRAWING_OUTPUT_SETTING_REASONS.get(key, _DRAWING_IS)}" for key in unsupported
+        )
+        named = ", ".join(f"output.{key}" for key in unsupported)
+        raise SnapshotError(
+            f"{named} {'has' if len(unsupported) == 1 else 'have'} no meaning for a DXF "
+            f"({reasons}). A drawing's output takes: "
+            f"{', '.join(sorted(DRAWING_OUTPUT_SETTINGS_KEYS))}."
+        )
+    # The refusals every non-STEP input shares (selection, poses, clips, videos,
+    # tessellation). Mode and section are already decided above, with a sentence
+    # about drawings rather than about mesh inputs.
     refuse_cad_model_requests(
         job,
         mode=mode,
         subject="DXF drawings",
         pose_hint="a DXF drawing has no kinematics",
-        tessellation_hint="a DXF drawing is meshed from its line work as drawn",
+        tessellation_hint="a DXF drawing is line work, not a tessellated surface",
     )
 
 
 def resolve_drawing_render_job(
     job: dict[str, object],
     *,
+    kind: str,
     input_path: Path,
-    resolved_cwd: Path,
     **_kind_context: object,
 ) -> dict[str, object]:
-    """Resolve a `.dxf` drawing.
+    """Resolve a `.dxf` drawing: its 2D render payload, on a path the page can fetch.
 
-    A drawing has no geometry of its own to render: what the viewport shows is
-    the 3D flat pattern. There is no drawing package — the `.dxf` IS the product
-    — so the mesh is produced on demand by the bundled Node one-shot
-    (bin/dxf-mesh.mjs: parseDxf -> buildDxfPreviewMeshData -> writeGlb) into a
-    temp GLB the ordinary mesh path renders.
+    There is no drawing package and nothing to build — the `.dxf` IS the
+    product. What the render needs is the SAME payload
+    (:mod:`cadgen.drawing_payload`) the Viewer's `GET /__cad/drawing` answers
+    with: ezdxf flattens the modelspace once, the store caches it by the
+    document's content hash, and the page draws it.
     """
-    preview = drawing_mesh_path(input_path)
-    # The mesh is a temp artifact beside nothing the caller serves, so serve it
-    # from its own directory when it falls outside the cwd.
-    serve_root = resolved_cwd if path_is_inside_or_equal(preview, resolved_cwd) else preview.parent
-    return resolve_mesh_render_job(job, kind="glb", input_path=preview, root_path=serve_root)
+    payload_path = drawing_payload_file(input_path)
+    serve_root = payload_path.parent
+    resolved: dict[str, object] = {
+        "rootPath": str(serve_root),
+        "inputPath": str(input_path),
+        "kind": kind,
+        "drawingUrl": asset_url_for_path(payload_path, serve_root),
+    }
+    if bool(job.get("debug")):
+        resolved["debug"] = {"drawingSource": {"kind": kind, "payloadBytes": payload_path.stat().st_size}}
+    return {**job, "resolved": resolved}
 
 
-# The snapshot mesher: DXF text on stdin -> one GLB. Bundled into _runtime/node
-# by scripts/bundle/cadgen-runtime.sh; the name is pinned by test_node_builder_bundles.
-DXF_MESH_BUILDER = "dxf-mesh.mjs"
+@functools.lru_cache(maxsize=1)
+def _drawing_payload_dir() -> Path:
+    """One directory per process for resolved drawing payloads, removed at exit.
 
-
-def drawing_mesh_path(source: Path) -> Path:
-    """Mesh the drawing on demand and return a GLB path for the mesh renderer.
-
-    The `.dxf` is meshed as-is: it is the product, so there is nothing to
-    regenerate here. The mesh is produced by the bundled dxf-mesh.mjs one-shot
-    into the snapshot's temp space — nothing is cached, matching the viewer,
-    which parses and meshes the `.dxf` client-side.
+    The page fetches the payload over the host's loopback asset server, which
+    serves FILES; inlining a megabyte of JSON into the job would instead push it
+    through the Playwright driver pipe as one escaped protocol message, which is
+    the transport that fails on real drawings. The expensive half — ezdxf — is
+    cached in the store, so this is only ever a write of bytes already in hand.
     """
-    import subprocess
+    import atexit
+    import shutil
     import tempfile
 
-    from cadgen._internal.node_runtime import cad_node_executable, node_builder_script
+    directory = Path(tempfile.mkdtemp(prefix="cadgen-drawing-payload-"))
+    atexit.register(shutil.rmtree, directory, True)
+    return directory
+
+
+def drawing_payload_file(source: Path) -> Path:
+    """The `.dxf`'s 2D render payload, written where the render can fetch it.
+
+    Named by the payload's own content hash, so two jobs over the same drawing
+    (and two runs in one process) share one file.
+    """
+    from hashlib import sha256
+
+    from cadgen._internal.atomic_replace import write_bytes_atomic
+    from cadgen.drawing_payload import DrawingReadError, drawing_payload_bytes
 
     if not source.name.lower().endswith(".dxf"):
         raise SnapshotError(f"snapshot input must be a .dxf document: {source}")
     if not source.is_file():
         raise SnapshotError(f"snapshot input does not exist: {source}")
-    dxf_path = source
-    out_dir = Path(tempfile.mkdtemp(prefix="cadgen-dxf-snapshot-"))
-    out_path = out_dir / f"{dxf_path.stem}.glb"
-    proc = subprocess.run(
-        [str(cad_node_executable()), str(node_builder_script(DXF_MESH_BUILDER)),
-         "--out", str(out_path), "--name", dxf_path.stem],
-        input=dxf_path.read_text(encoding="utf-8", errors="replace"),
-        capture_output=True,
-        text=True,
-    )
-    lines = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
-    payload: dict = {}
-    for line in reversed(lines):
-        if line.startswith("{"):
-            try:
-                payload = json.loads(line)
-            except ValueError:
-                pass  # unreadable: the raw line is reported below instead
-            break
-    if not payload.get("ok") or not out_path.is_file():
-        # The builder's own words first, then whatever it actually printed. An
-        # unparseable stdout line used to leave "exit 0" as the entire message,
-        # which named neither the line nor the reason it could not be read.
-        detail = str(
-            payload.get("error")
-            or proc.stderr.strip()
-            or (lines[-1] if lines else "")
-            or f"exit {proc.returncode}"
-        ).strip()
-        raise SnapshotError(f"could not mesh {dxf_path.name}: {detail}")
-    return out_path.resolve()
+    try:
+        data = drawing_payload_bytes(source)
+    except DrawingReadError as error:
+        # The payload reader's messages already name the file and what to do
+        # about it; this only moves them onto the snapshot's error type.
+        raise SnapshotError(str(error)) from None
+    payload_path = _drawing_payload_dir() / f"{sha256(data).hexdigest()}.drawing.json"
+    if not payload_path.is_file():
+        write_bytes_atomic(payload_path, data)
+    return payload_path
 
 
 # Kind dispatch for render-job resolution. Every resolver takes the same

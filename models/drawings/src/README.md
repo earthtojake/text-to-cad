@@ -129,15 +129,16 @@ From [mozman/ezdxf](https://github.com/mozman/ezdxf) (`examples_dxf`, MIT):
 Authored in-repo (committed because no script here can rebuild them):
 
 - `bracket_inches.dxf` — a small bracket profile authored with `$INSUNITS = 1`
-  (inches). The units fixture: the parser scales every coordinate to
-  millimetres, and a drawing baked before that support existed came out 25.4×
-  too small. Its LWPOLYLINEs omit the `AcDbPolyline` subclass marker, so
-  ezdxf's strict reader refuses it while cadgen's own parser accepts it — which
-  is itself the point of keeping it.
+  (inches). The units fixture: the render payload reports the drawing's own
+  units and the factor to millimetres rather than rescaling its coordinates, so
+  a consumer that ignores `units` reads inches as millimetres. Its LWPOLYLINEs
+  also omit the `AcDbPolyline` subclass marker, so `ezdxf.readfile` refuses it
+  and only the `ezdxf.recover` retry opens it — which is itself the point of
+  keeping it.
 
 `DIMENSION`-entity coverage lives in `alu_extrusion_profile.dxf`. DXF `TEXT` and
-`MTEXT` entities are covered by unit fixtures in
-`packages/core/src/lib/dxf/parseDxf.test.js`, not by a file here — the
+`MTEXT` entities are covered by the committed renderer fixture in
+`packages/ui/src/renderers/dxf/__fixtures__/`, not by a file here — the
 cabinet panel drawing that used to hold that coverage is now generated, as
 `src/cabinet_panel_drawing.py`.
 

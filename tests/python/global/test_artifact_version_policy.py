@@ -104,17 +104,6 @@ class DeadVersionsStayDeadTest(unittest.TestCase):
     and invites a reader to reason about compatibility that was never enforced.
     """
 
-    def test_dxf_render_schema_version_is_gone_from_both_languages(self) -> None:
-        for relative in (
-            "packages/cadgen/src/cadgen/drawing_render.py",
-            "packages/core/src/lib/dxf/parseDxf.js",
-        ):
-            self.assertNotIn(
-                "DXF_RENDER_SCHEMA_VERSION",
-                (ROOT / relative).read_text(encoding="utf-8"),
-                f"{relative} stamped a version nothing ever read",
-            )
-
     def test_viewer_server_info_schema_version_is_gone(self) -> None:
         self.assertNotIn(
             "VIEWER_SERVER_INFO_SCHEMA_VERSION",

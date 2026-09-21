@@ -362,13 +362,21 @@ class PublicVerbs(unittest.TestCase):
         )
         self.assertNotIn("joint_values", step, "a STEP model has no joints to pose")
 
-        for door in ("stl", "threemf", "glb", "dxf"):
+        for door in ("stl", "threemf", "glb"):
             with self.subTest(door=door):
                 mesh = parameters(f"cadgen.{door}")
                 self.assertLessEqual({"camera", "display"}, mesh)
                 self.assertNotIn("render", mesh)
                 for absent in ("kinematics", "focus", "hide", "joint_values"):
                     self.assertNotIn(absent, mesh, f"{absent} has nothing to act on here")
+
+        # The drawing door is the narrowest of the four shapes: a DXF is drawn
+        # flat, so there is no scene to stage and nothing to pose or frame.
+        drawing = parameters("cadgen.dxf")
+        self.assertIn("appearance", drawing)
+        for absent in ("camera", "display", "mode", "view_labels",
+                       "kinematics", "focus", "hide", "joint_values", "section"):
+            self.assertNotIn(absent, drawing, f"{absent} describes a scene a drawing does not have")
 
         for door in ("urdf", "sdf"):
             with self.subTest(door=door):
@@ -399,7 +407,14 @@ class PublicVerbs(unittest.TestCase):
             return set(inspect_module.signature(verb).parameters)
 
         self.assertEqual(parameters("urdf") - {"joint_values"}, parameters("stl"))
-        self.assertEqual(parameters("stl"), parameters("dxf"))
+        # A drawing is deliberately NOT one of them: it shares the whole of what
+        # is left after the scene goes (where, how big, and which appearance),
+        # and adds nothing the mesh shape does not also mean.
+        self.assertLessEqual(
+            parameters("dxf") - {"appearance"},
+            parameters("stl"),
+            "the drawing door invented a spelling the mesh door does not have",
+        )
 
 
     def test_a_verb_with_no_target_says_so_rather_than_reading_stdin(self) -> None:

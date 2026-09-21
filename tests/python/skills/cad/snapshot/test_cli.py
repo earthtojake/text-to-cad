@@ -337,7 +337,11 @@ class SnapshotCliTests(unittest.TestCase):
         for kind in ("step", "stp"):
             validate({"mode": "wireframe", "edges": {"enabled": True}, "clip": {"axis": "x"},
                       "exploded": {"amount": 0.5}}, kind=kind, input_label="part.step")
-        for kind in ("stl", "3mf", "glb", "dxf", "urdf", "srdf", "sdf"):
+        # A DXF is absent on purpose: it takes no display at all, so its own
+        # check (cadgen.snapshot_cli.check_drawing_render_job) refuses every key
+        # but `appearance` — a stricter rule, and this one steps aside for it.
+        validate({"mode": "wireframe", "clip": {"axis": "x"}}, kind="dxf", input_label="panel.dxf")
+        for kind in ("stl", "3mf", "glb", "urdf", "srdf", "sdf"):
             validate({"mode": "solid", "appearance": "light"}, kind=kind, input_label=f"part.{kind}")
             validate({"mode": "render", "lighting": {"exposure": 0.5}, "floor": {"placement": "lowest"},
                       "surfaces": {"opacity": 0.5}, "grid": {"enabled": False}}, kind=kind, input_label=f"part.{kind}")

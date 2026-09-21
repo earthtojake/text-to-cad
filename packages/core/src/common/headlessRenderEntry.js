@@ -16,6 +16,7 @@ import {
 } from "./source.js";
 import { resolveAnimationFrame } from "./animationClock.js";
 import { framePlanElapsedSec, resolveFramePlan } from "./framePlan.js";
+import { runHeadlessDrawingJob } from "./headlessDrawingRender.js";
 import { loadSourceAnimation } from "./renderModule.js";
 import {
   createHttpTessellationCacheProvider,
@@ -123,7 +124,18 @@ async function prepareRenderJob(job) {
   return prepared;
 }
 
+/** A `.dxf` job: a flat 2D drawing, not a scene. */
+function jobIsDrawing(job) {
+  return String(job?.resolved?.kind || "").toLowerCase() === "dxf";
+}
+
 export async function runHeadlessRenderJob(job) {
+  // A drawing never enters the mesh pipeline: there is no source to fetch, no
+  // model to build and no viewport to fit. It is painted on a 2D canvas with
+  // the code the viewer's DXF pane paints with (./headlessDrawingRender.js).
+  if (jobIsDrawing(job)) {
+    return runHeadlessDrawingJob(job);
+  }
   const { source, renderJob, stageTimings } = await prepareRenderJob(job);
   return capturePreparedSource(source, renderJob, stageTimings);
 }
@@ -213,6 +225,9 @@ let activeRenderSequence = null;
 
 export async function prepareHeadlessRenderSequence(job) {
   disposeHeadlessRenderSequence();
+  if (jobIsDrawing(job)) {
+    throw new Error("a video renders an animation clip; a DXF is a flat 2D drawing with no clips");
+  }
   const { source, stepAnimation, renderJob } = await prepareRenderJob(job);
   if (!stepAnimation) {
     throw new Error("a video renders a clip: the job needs an animation request beside its video request");

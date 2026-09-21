@@ -182,7 +182,6 @@ jobs:
             cadgen/_runtime/browser/snapshot-render.js \
             cadgen/_runtime/browser/render.html \
             cadgen/_runtime/node/mesh-export.mjs \
-            cadgen/_runtime/node/dxf-mesh.mjs \
             cadgen/_runtime/viewer/index.html; do
             if ! printf '%s\n' "$listing" | grep -qF " $required"; then
               echo "$(basename "$wheel") does not contain $required" >&2

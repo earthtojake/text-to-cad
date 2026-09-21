@@ -182,11 +182,13 @@ class CrossKindOptionsAreRefusedByName(_Workspace):
 
     def test_a_drawing_is_called_a_drawing(self) -> None:
         self.write("panel.dxf", "0\nEOF\n")
-        with mock.patch.object(snapshot_cli, "drawing_mesh_path", side_effect=AssertionError("meshed")):
+        # And is refused before the file is ever opened: a request this input
+        # cannot honour must not cost a flattening first.
+        with mock.patch.object(snapshot_cli, "drawing_payload_file", side_effect=AssertionError("flattened")):
             with self.assertRaises(SnapshotError) as caught:
                 self.resolve({"input": "panel.dxf", "outputs": [{"path": "o.png"}],
                               "quality": {"tessellation": {"chordTolerance": 0.001}}})
-        self.assertIn("a DXF drawing is meshed from its line work", str(caught.exception))
+        self.assertIn("a DXF drawing is line work, not a tessellated surface", str(caught.exception))
         self.assertNotIn("GLB", str(caught.exception))
 
     def test_a_robots_link_meshes_cannot_be_retessellated_either(self) -> None:

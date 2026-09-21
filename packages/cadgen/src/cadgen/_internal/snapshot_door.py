@@ -8,13 +8,16 @@ the loaders the verb already uses; library-side a real dict through the same
 parameter — so the signature IS the surface and ``cli_from_function`` derives
 the CLI exactly as it does for ``build`` and ``validate``.
 
-Three signature shapes cover the seven doors honestly (the old shared
+Four signature shapes cover the seven doors honestly (the old shared
 signature advertised STEP-only options to every door and refused them at
 runtime):
 
 - STEP: the full surface — section mode and its plane, display, kinematics, animation, focus/hide.
-- mesh (stl/3mf/glb) and dxf: view/list renders of untyped geometry.
+- mesh (stl/3mf/glb): view/list renders of untyped geometry.
 - robot (urdf/sdf): the mesh shape plus ``joint_values``.
+- dxf: a DRAWING, not a scene. Where, how big, and light or dark — nothing
+  else, because a flat 2D drawing has no camera to pose, no surfaces to
+  shade and no parts to list.
 
 The polymorphic ``cadgen snapshot`` binds the UNION shape (STEP surface +
 ``joint_values``) over every kind at once: a job packet may mix formats, and
@@ -264,8 +267,91 @@ def step_snapshot_verb(door: str):
     return snapshot
 
 
+def drawing_snapshot_verb(door: str):
+    """The DRAWING-shaped verb: a flat 2D render of a ``.dxf``.
+
+    The narrowest door of the seven, and deliberately so. A DXF is drawn
+    exactly as the CAD Viewer's DXF pane draws it — the whole drawing, fitted
+    to the image, in the pens the file declares on the theme's background — so
+    every option that describes a 3D scene is absent from this signature
+    rather than accepted and ignored: no ``camera`` (nothing to pose), no
+    ``display`` (no surfaces, lighting or render mode), no ``mode`` (a drawing
+    has no parts to list and no solid to section), no ``view_labels`` (no view
+    to label). ``appearance`` is what survives of display, because a default
+    pen has no colour until a background is chosen.
+    """
+    kinds = DOOR_KINDS[door]
+    suffixes = ", ".join(f".{kind}" for kind in kinds)
+
+    @_track_explicit_options
+    def snapshot(
+        target: Path | None = None,
+        out: Path | None = None,
+        *,
+        job: Path | None = None,
+        appearance: str = "light",
+        width: int | None = None,
+        height: int | None = None,
+        size_profile: str = "",
+        debug: bool = False,
+    ) -> SnapshotResult:
+        """Render TARGET as a flat 2D drawing and report the files written.
+
+        The whole drawing is fitted to the image, head on, in the pens the
+        file declares; an entity with no pen of its own (ACI 7) takes the
+        appearance's foreground. An explicit OUT is written exactly there. A
+        refused request leaves an existing OUT untouched; once the request is
+        accepted OUT is cleared, so a failed render leaves no file at all. A
+        directory gets a generated timestamped name inside it.
+
+        target: the drawing to render. It accepts: {suffixes}.
+        out: destination .png path, written EXACTLY there, or a directory
+            for a generated timestamped name.
+        job: a render-job JSON file — one job, an array of them, or
+            {"jobs": [...]}. When given it wins: target/out are ignored, and
+            the other flags override every job in it.
+        appearance: light (default) or dark — the background the drawing is
+            painted on, and therefore the colour of its default pen.
+        width: output width in pixels (1..8192), overriding the size profile;
+            with --job it sizes every output in the packet.
+        height: output height in pixels (1..8192), overriding the size profile.
+        size_profile: simple (1200x900), simple-square (1024x1024), diagnostic
+            (1600x1200, the default), labeled (1600x1200), assembly (1800x1200),
+            assembly-large (1920x1440), presentation (2400x1600),
+            presentation-large (2800x1800), or contact-sheet (2400x1600).
+        debug: report artifact resolution and measured browser stages in the
+            result's debug field (read it with --json).
+        """
+        # The same closed set every other door's `display.appearance` takes,
+        # read from where it is declared rather than spelled again here.
+        from cadgen.snapshot_core import DISPLAY_APPEARANCES
+
+        if appearance not in DISPLAY_APPEARANCES:
+            raise ValueError(
+                f"appearance is {' or '.join(sorted(DISPLAY_APPEARANCES))}; got {appearance!r}"
+            )
+        return _run(
+            kinds,
+            target=target, out=out, job=job, mode="view",
+            camera=None,
+            # `appearance` IS display, for a drawing: the one display key that
+            # survives. Passing it only when it was asked for keeps a `--job`
+            # file's own appearance from being overwritten by this default.
+            display=(
+                {"appearance": appearance}
+                if "appearance" in _EXPLICIT_SNAPSHOT_OPTIONS.get()
+                else None
+            ),
+            width=width, height=height, size_profile=size_profile,
+            view_labels=False, debug=debug,
+        )
+
+    snapshot.__doc__ = snapshot.__doc__.replace("{suffixes}", suffixes)
+    return snapshot
+
+
 def mesh_snapshot_verb(door: str):
-    """The mesh/dxf-shaped verb: view/list renders of untyped geometry —
+    """The mesh-shaped verb: view/list renders of untyped geometry —
     no kinematics, section mode, or selection (nothing to act on)."""
     kinds = DOOR_KINDS[door]
     suffixes = ", ".join(f".{kind}" for kind in kinds)
@@ -439,18 +525,21 @@ def polymorphic_snapshot_verb():
         job: a render-job JSON file — one job, an array of them, or
             {"jobs": [...]}; jobs may mix formats. When given it wins, and the
             other flags override every job in it.
-        mode: view (default), section (STEP only), or list.
+        mode: view (default), section (STEP only), or list (not DXF: a
+            drawing has no parts to list).
         section: where a STEP --mode section cuts, as PLANE[:OFFSET] — XY, XZ
             or YZ, offset along the plane's normal in model units: XZ:12.5.
         camera: a preset (front, back, left, right, top, bottom, iso), an
             "azimuth:elevation" pair, or camera JSON;
             orthographicHalfHeight preserves an orthographic view's scale.
             Projection and focalLength (20..200 mm) belong in display.camera.
+            A DXF is drawn flat and head on, and refuses a camera.
         display: solid (default), render, xray, hidden-line or wireframe, grouped
             display JSON, or a JSON file path. appearance defaults to light.
             Omitted groups inherit the preset. edges, clip, exploded, the xray,
             hidden-line and wireframe modes and the hidden/off surface styles
-            describe a STEP model; every other input takes solid or render.
+            describe a STEP model; every other input takes solid or render. A
+            DXF takes appearance alone (`cadgen dxf snapshot --appearance`).
         kinematics: pose values for a STEP model's kinematics — a preset
             name or {dof: value} JSON; available in every display mode.
         animation: one still frame of a STEP model's clip — the clip name

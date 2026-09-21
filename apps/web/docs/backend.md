@@ -172,6 +172,12 @@ drawing add-on over the `.dxf`'s modelspace and returns what every entity
 flattens to — text outlined, dimensions exploded, hatches filled or patterned,
 block inserts placed — so the client draws primitives and never parses DXF.
 
+`cadgen dxf snapshot` draws the SAME payload: its resolver calls
+`cadgen.drawing_payload` too, writes the bytes where the headless page can fetch
+them, and the page paints them with `@hardcore/core/lib/drawing2d` — the module
+the DXF pane paints with. One flattening, one renderer, so the CLI cannot
+produce a picture this route could not.
+
 `?file=` takes the same refs the asset route does (root-relative, or the
 absolute path the catalog hands out) and applies the same containment rule:
 outside the root is 403, a hidden path component or a missing file is 404, and

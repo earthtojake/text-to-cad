@@ -434,7 +434,7 @@ export function writeGlb(mesh, options = {}) {
   // WHICH SPACE the caller's positions are in, declared rather than guessed. glTF's
   // own convention is Y-up, so "y" is the default and the value a spec-conformant
   // writer wants; "z" says these bytes were pre-rotated into CAD Z-up before they got
-  // here (bin/dxf-mesh.mjs does exactly that) and a CAD reader must NOT rotate again.
+  // here, and a CAD reader must NOT rotate again.
   //
   // The reader used to infer this from the presence of a `cadOccurrenceId` extra, which
   // is written on every node by both presets and so answered "already CAD space" for

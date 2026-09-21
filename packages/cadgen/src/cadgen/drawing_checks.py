@@ -20,8 +20,11 @@ from typing import Iterable
 
 # Layer intent is decided by WHOLE tokens of the layer name (split on
 # non-alphanumerics), never substrings — "PREFORM" must not match "ref".
-# This is the single classifier: drawing_render (and the viewer's parseDxf)
-# follow the same token rule so validation, snapshots, and rendering agree.
+# This is the single classifier, and the only reader of a layer's NAME in
+# cadgen: rendering a drawing (cadgen.drawing_payload) draws every layer the
+# same way, in the pens the file declares, so intent is a fabrication question
+# — what must close, what may stay open, what a cutting service is being asked
+# to do — and it is answered here alone.
 _LAYER_INTENT_BY_TOKEN = {
     # An explicit cut token WINS: a layer called CUT_SECTION is a cut path whose name happens
     # to mention a view, and classifying it as annotation would skip the closure check on the

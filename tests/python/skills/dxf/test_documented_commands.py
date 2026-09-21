@@ -392,7 +392,7 @@ class DocumentationTeachesTheNewContract(unittest.TestCase):
         free to drift back into teaching what to KNOW instead of what to do.
         """
         text = SKILL.read_text(encoding="utf-8")
-        snapshot_section = text[text.index("cadgen dxf snapshot` renders") :]
+        snapshot_section = text[text.index("cadgen dxf snapshot` draws a drawing flat") :]
         self.assertIn("written exactly as given", snapshot_section)
         self.assertIn("current working directory", snapshot_section)
         self.assertIn("missing file", snapshot_section)

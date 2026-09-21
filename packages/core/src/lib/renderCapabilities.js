@@ -23,8 +23,12 @@ import { RENDER_FORMAT, normalizeFormat } from "./fileFormats.js";
 // Which loaded object is "the thing on screen" for this format. The viewer resolves it
 // once into a single content signal; asking `!selectedMeshData` per format is what left
 // screenshot and orbit buttons permanently disabled for a format that loads no mesh.
+//
+// DRAWING is not a viewport at all: a DXF is painted on a 2D canvas, so the row says so
+// rather than claiming the mesh viewport it used to be rendered in.
 export const VIEWPORT_CONTENT = Object.freeze({
   MESH: "mesh",
+  DRAWING: "drawing",
   ROBOT: "robot"
 });
 
@@ -34,9 +38,9 @@ export const PARAMETER_SOURCE = Object.freeze({
 });
 
 // WHICH ASSET the viewer loads for this format — not the same question as `content`, which
-// is what ends up drawn. A DXF loads a DRAWING and renders it as a mesh, so it shares the
-// mesh viewport but not the mesh loader, and every "is it loaded yet?" check has to ask
-// about the drawing. Loader implementations stay per-format; this only names which one.
+// is what ends up drawn. A DXF loads a DRAWING: the server's flattened 2D payload, not a
+// mesh, so every "is it loaded yet?" check has to ask about the drawing. Loader
+// implementations stay per-format; this only names which one.
 export const ASSET_KIND = Object.freeze({
   MESH: "mesh",
   DRAWING: "drawing",
@@ -56,19 +60,26 @@ export const ENTRY_ICON_KIND = Object.freeze({
 });
 
 // The toolbar cluster. ALL of these act on the VIEWPORT, not on the geometry, so every
-// format gets every one of them — a mesh can be panned and annotated exactly as a STEP
-// assembly can. Select is the only one that needs a caveat: on a format without `topology`
-// it is inert, and stays visible so the toolbar keeps one shape rather than reflowing as
-// you move between files.
+// format WITH a viewport gets every one of them — a mesh can be panned and annotated
+// exactly as a STEP assembly can. Select is the only one that needs a caveat: on a format
+// without `topology` it is inert, and stays visible so the toolbar keeps one shape rather
+// than reflowing as you move between files.
 //
-// Kept as a map rather than dropped now that every row agrees, because this is the place a
-// format would DECLINE a tool, and because the shell reads it through `supportsTool`. A
-// row that overrides it is making a claim; today none do.
+// This is the place a format DECLINES a tool, and the shell reads it through
+// `supportsTool`. DXF is the row that declines: a drawing is painted on a canvas with no
+// toolbar over it at all, so it claims none of these rather than advertising four buttons
+// that exist nowhere.
 const VIEWPORT_TOOLS = Object.freeze({
   select: true,
   draw: true,
   orbit: true,
   screenshot: true
+});
+const NO_VIEWPORT_TOOLS = Object.freeze({
+  select: false,
+  draw: false,
+  orbit: false,
+  screenshot: false
 });
 
 const MESH_CAPABILITIES = Object.freeze({
@@ -173,11 +184,17 @@ export const RENDER_CAPABILITIES = Object.freeze({
     // Content-gated after parse: only embedded playable clips mount controls.
     animations: true
   }),
+  // A DXF is NOT on the 3D shell (packages/ui/src/renderers/dxf): the pane is a canvas
+  // painted from `GET /__cad/drawing`. What survives here is what the file LIST and the
+  // asset layer still ask — the icon, the label, which asset to load — plus the two
+  // claims the row has to withdraw: there is no viewport, and so no viewport tools.
   [RENDER_FORMAT.DXF]: Object.freeze({
     ...DEFAULT_CAPABILITIES,
+    content: VIEWPORT_CONTENT.DRAWING,
     assetKind: ASSET_KIND.DRAWING,
     iconKind: ENTRY_ICON_KIND.DXF,
     label: "DXF",
+    tools: NO_VIEWPORT_TOOLS,
   }),
   [RENDER_FORMAT.URDF]: Object.freeze({ ...DEFAULT_CAPABILITIES, ...ROBOT_CAPABILITIES, label: "URDF" }),
   [RENDER_FORMAT.SRDF]: Object.freeze({

@@ -24,10 +24,36 @@ backgrounds. Unknown keys and retired modes are refused.
 
 `edges`, `clip`, `exploded`, the `xray`, `hidden-line` and `wireframe` presets and
 the `hidden` and `off` surface styles describe a CAD model: its topology edges,
-its parts and its solids. They apply to STEP/STP inputs only. Every other input
-(STL, 3MF, GLB, DXF, URDF, SRDF, SDF) takes `solid` or `render`, the `shaded` or
-`flat` surface style and the remaining groups, and refuses the rest by name
-before anything is rendered.
+its parts and its solids. They apply to STEP/STP inputs only. A mesh or a robot
+description (STL, 3MF, GLB, URDF, SRDF, SDF) takes `solid` or `render`, the
+`shaded` or `flat` surface style and the remaining groups, and refuses the rest
+by name before anything is rendered.
+
+## Drawings
+
+A `.dxf` is not rendered in a scene at all, so `cadgen dxf snapshot` is the
+narrowest door of the seven. It draws the whole drawing, fitted to the image and
+head on, in the pens the file declares — the same picture the CAD Viewer's DXF
+pane shows, from the same server-side payload, through the same drawing code.
+What the viewer cannot show, the CLI does not render.
+
+```bash
+cadgen dxf snapshot plate.dxf review.png
+cadgen dxf snapshot plate.dxf review.png --appearance dark --width 1600 --height 1000
+```
+
+It takes `TARGET`, `OUT`, `--job`, `--appearance` (`light`, the default, or
+`dark`), `--width`/`--height`, `--size-profile`, `--debug` and `--json`, plus
+`output.renderScale` and `output.transparent` in a job. An entity with no pen of
+its own (ACI 7) is painted in the appearance's foreground on its background, so
+`--appearance` is the whole of a drawing's display.
+
+Everything that describes a scene is gone from the door rather than accepted and
+ignored: `--camera`, `--display`, `--mode` and `--view-labels` are not flags it
+has, and a job (or `cadgen snapshot` routing a `.dxf`) that carries `camera`,
+any `display` key but `appearance`, `mode` other than `view`, `section`,
+`scale`, an output `label`/`viewLabel`, or `output.padding`, `output.viewLabels`
+or `output.tightFrame` is refused by name with what a drawing is.
 
 ## Requests and OUT
 

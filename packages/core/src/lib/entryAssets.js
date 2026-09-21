@@ -150,10 +150,6 @@ export function entryHasDisplayEdges(entry) {
   );
 }
 
-export function entryHasDxf(entry) {
-  return Boolean(entryAssetUrl(entry, "dxf") && entryAssetHash(entry, "dxf"));
-}
-
 export function entryPoseUrl(entry) {
   // The sidecar URL for a STEP model that declares kinematics — the source of
   // the viewer's Pose tab. The block is authored on the decorator and travels

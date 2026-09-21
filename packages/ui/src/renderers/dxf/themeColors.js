@@ -10,14 +10,17 @@
  * Read at DRAW time off the pane's own element rather than resolved once:
  * a host toggles `.dark` on `<html>` whenever it likes, and a token read in an
  * effect would be the value from before the switch.
+ *
+ * When the tokens cannot be read the pair comes from `APP_THEME_COLORS`, which
+ * is also what `cadgen dxf snapshot` paints with: the headless bundle has no
+ * stylesheet to read, so that constant is the one place the two colours are
+ * written down and the CLI and this pane cannot drift.
  */
-import { CHROME_BACKDROP_FALLBACK, cssColorToHex } from "../kit/look/chromeBackdrop.js";
+import { APP_THEME_COLORS } from "@hardcore/core/lib/appTheme.js";
+import { cssColorToHex } from "../kit/look/chromeBackdrop.js";
 
 /** What a pane falls back to when the tokens cannot be read at all. */
-export const DRAWING_THEME_FALLBACK = Object.freeze({
-  light: { background: CHROME_BACKDROP_FALLBACK.light, foreground: "#171717" },
-  dark: { background: CHROME_BACKDROP_FALLBACK.dark, foreground: "#fafafa" }
-});
+export const DRAWING_THEME_FALLBACK = APP_THEME_COLORS;
 
 function token(element, name) {
   try {

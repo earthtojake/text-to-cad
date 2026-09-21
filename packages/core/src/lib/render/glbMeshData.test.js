@@ -498,8 +498,9 @@ test("a GLB DECLARING glTF Y-up is converted, occurrence ids or not", async () =
 });
 
 test("a GLB DECLARING CAD Z-up is left alone", async () => {
-  // bin/dxf-mesh.mjs pre-rotates its positions, so correcting again would stand the
-  // drawing on its edge. Only the declaration distinguishes it from the file above.
+  // A writer that pre-rotates its positions gets them back unchanged; correcting again
+  // would stand the model on its edge. Only the declaration distinguishes it from the
+  // file above.
   const meshData = await buildMeshDataFromGlbBuffer(makeOccurrenceGlb({ upAxis: "z" }));
   assert.deepEqual(cadVertices(meshData), Y_UP_UNCONVERTED);
 });

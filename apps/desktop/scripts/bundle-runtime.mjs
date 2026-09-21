@@ -250,7 +250,6 @@ const PROBE = [
 ].join("; ");
 
 export const CADGEN_RUNTIME_FILES = [
-  "_runtime/node/dxf-mesh.mjs",
   "_runtime/node/mesh-export.mjs",
   "_runtime/browser/render.html",
   "_runtime/browser/snapshot-render.js",
