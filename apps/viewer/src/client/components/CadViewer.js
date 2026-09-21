@@ -16,7 +16,8 @@ import {
   transformDxfPreviewPositions
 } from "cadgen-js/lib/dxf/foldPreview";
 import { buildDxfPreviewMeshData, extractDxfScorePolylines } from "cadgen-js/lib/dxf/buildPreviewMesh";
-import { buildDxfDrawingLineGroups, drawingLineBounds } from "cadgen-js/lib/dxf/buildDrawingLines";
+import { buildDxfDrawingLineGroups, drawingLineBounds, drawingLinetypeIsDashed } from "cadgen-js/lib/dxf/buildDrawingLines";
+import { textMarkingCenter } from "cadgen-js/lib/dxf/textMarkingLayout";
 import { STEP_TREE_TOPOLOGY_NODE_PREFIX } from "cadgen-js/lib/step/stepTree";
 import { copyImageBlobToClipboard } from "@/ui/clipboard";
 import {
@@ -1627,6 +1628,62 @@ function buildNativeGlbCadScene(THREE, document, source, receiveShadows) {
   };
 }
 
+/** Drawing ink that reads against the viewport background: near-black on paper, near-white
+ *  on a dark sheet. A drawing is line work, and line work that matches the sheet is gone. */
+function drawingInkForBackground(backgroundCss) {
+  const match = /^#?([0-9a-f]{6})$/iu.exec(String(backgroundCss || "").trim());
+  if (!match) {
+    return 0xd7dde5;
+  }
+  const value = Number.parseInt(match[1], 16);
+  const luminance = (0.2126 * ((value >> 16) & 255) + 0.7152 * ((value >> 8) & 255) + 0.0722 * (value & 255)) / 255;
+  return luminance > 0.5 ? 0x172638 : 0xd7dde5;
+}
+
+/** Line widths in screen pixels by what the line is. ISO 128 draws visible outlines heavy and
+ *  everything annotative (dimension, witness, leader, centre, hidden) thin; the ratio is what
+ *  makes a sheet read as a drawing rather than a wireframe. */
+const DRAWING_LINE_WIDTH_PX = { outline: 2.2, annotation: 1.0 };
+
+/** A text marking as a canvas-textured plane: the string painted once at fontPx, sized to
+ *  `heightMm` on the sheet. Returns the mesh and its box so the caller can place it; the
+ *  baseline sits at `baselineFraction` of the box height above its bottom edge, which is
+ *  what textMarkingCenter needs to honour the DXF anchor. */
+function buildTextMarkingMesh(THREE, text, colorCss, fontPx = 64) {
+  const value = String(text?.value || "").trim();
+  if (!value || typeof document === "undefined") {
+    return null;
+  }
+  const heightMm = Math.max(Number(text.heightMm) || 2.5, 0.2);
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  if (!context) {
+    return null;
+  }
+  const fontSpec = `500 ${fontPx}px ui-sans-serif, system-ui, sans-serif`;
+  context.font = fontSpec;
+  const firstLine = value.split("\n")[0];
+  const textWidthPx = Math.max(context.measureText(firstLine).width, fontPx * 0.5);
+  canvas.width = Math.ceil(textWidthPx) + 8;
+  canvas.height = Math.ceil(fontPx * 1.35);
+  const drawContext = canvas.getContext("2d");
+  drawContext.font = fontSpec;
+  drawContext.fillStyle = colorCss;
+  drawContext.textBaseline = "alphabetic";
+  drawContext.fillText(firstLine, 4, fontPx);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
+  const planeWidth = heightMm * (canvas.width / fontPx);
+  const planeHeight = heightMm * (canvas.height / fontPx);
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(planeWidth, planeHeight),
+    new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, side: THREE.DoubleSide })
+  );
+  mesh.userData.dxfTextMarking = true;
+  return { mesh, heightMm, planeWidth, planeHeight, baselineFraction: 1 - fontPx / canvas.height };
+}
+
 function getEdgeThickness(edgeSettings = null, viewerTheme = null) {
   const fallbackThickness = Number.isFinite(Number(viewerTheme?.edgeThickness))
     ? Number(viewerTheme.edgeThickness)
@@ -2777,32 +2834,111 @@ const CadViewer = forwardRef(function CadViewer({
     }
     const container = new THREE.Group();
     container.userData.dxfDrawingLines = true;
-    for (const layer of layers) {
-      if (hiddenLayers.has(layer.name)) {
-        continue;
-      }
-      // Mesher space is y-up; the scene is CAD Z-up. Same (x, y, z) -> (x, z, -y) map the
-      // curved fold preview uses, so a drawing and a flat pattern share one orientation,
-      // one camera fit and one set of view controls.
-      const source = layer.positions;
+    const ink = drawingInkForBackground(resolveElementBackgroundColor(runtime?.renderer?.domElement));
+    const inkCss = `#${ink.toString(16).padStart(6, "0")}`;
+    // Mesher space is y-up; the scene is CAD Z-up. Same (x, y, z) -> (x, z, -y) map the
+    // curved fold preview uses, so a drawing and a flat pattern share one orientation,
+    // one camera fit and one set of view controls.
+    const mapPositions = (source) => {
       const mapped = new Float32Array(source.length);
       for (let index = 0; index < source.length; index += 3) {
         mapped[index] = source[index];
         mapped[index + 1] = source[index + 2];
         mapped[index + 2] = -source[index + 1];
       }
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute("position", new THREE.BufferAttribute(mapped, 3));
+      return mapped;
+    };
+    const sheetBounds = drawingLineBounds({ layers });
+    const sheetSpan = sheetBounds
+      ? Math.max(sheetBounds.max[0] - sheetBounds.min[0], sheetBounds.max[2] - sheetBounds.min[2], 1)
+      : 100;
+    for (const layer of layers) {
+      if (hiddenLayers.has(layer.name)) {
+        continue;
+      }
       const color = layerColors.get(layer.name);
-      const lines = new THREE.LineSegments(
-        geometry,
-        new THREE.LineBasicMaterial({
-          color: typeof color === "string" && color ? new THREE.Color(color) : new THREE.Color(DEFAULT_INK),
-          transparent: false
-        })
-      );
-      lines.userData.dxfDrawingLayer = layer.name;
-      container.add(lines);
+      const colorValue = typeof color === "string" && color ? new THREE.Color(color) : new THREE.Color(ink);
+      // What the line IS decides how it is drawn: a visible outline (a cut-kind layer with a
+      // continuous linetype) heavy, a hidden/centre linetype dashed and thin, everything
+      // annotative thin. Layer colours are kept; only the weight and the pattern change.
+      const dashed = drawingLinetypeIsDashed(layer.linetype);
+      const outline = layer.kind === "cut" && !dashed;
+      if (layer.positions.length) {
+        const mapped = mapPositions(layer.positions);
+        let lines = null;
+        if (outline) {
+          lines = createScreenSpaceLineSegments(runtime, mapped, {
+            color: colorValue,
+            lineWidth: DRAWING_LINE_WIDTH_PX.outline,
+            depthTest: false,
+            renderOrder: 3
+          });
+        }
+        if (!lines) {
+          const geometry = new THREE.BufferGeometry();
+          geometry.setAttribute("position", new THREE.BufferAttribute(mapped, 3));
+          const material = dashed
+            ? new THREE.LineDashedMaterial({
+              color: colorValue,
+              dashSize: sheetSpan / 60,
+              gapSize: sheetSpan / 120,
+              depthTest: false
+            })
+            : new THREE.LineBasicMaterial({ color: colorValue, transparent: false, depthTest: false });
+          lines = new THREE.LineSegments(geometry, material);
+          if (dashed) {
+            lines.computeLineDistances();
+          }
+          lines.renderOrder = outline ? 3 : 2;
+        }
+        lines.userData.dxfDrawingLayer = layer.name;
+        lines.frustumCulled = false;
+        container.add(lines);
+      }
+      if (layer.fillPositions?.length) {
+        // Arrowheads. Solid, in the layer's ink, on top of the lines they terminate.
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute("position", new THREE.BufferAttribute(mapPositions(layer.fillPositions), 3));
+        const fill = new THREE.Mesh(
+          geometry,
+          new THREE.MeshBasicMaterial({ color: colorValue, side: THREE.DoubleSide, depthTest: false })
+        );
+        fill.userData.dxfDrawingLayer = layer.name;
+        fill.renderOrder = 4;
+        fill.frustumCulled = false;
+        container.add(fill);
+      }
+    }
+    // The drawing's text: dimension values, notes, the title block's lettering. Placed by the
+    // anchor the file stored, on the sheet, facing the plan camera.
+    const texts = Array.isArray(drawingGeometry.geometry?.texts) ? drawingGeometry.geometry.texts : [];
+    for (const text of texts) {
+      if (hiddenLayers.has(text.layer)) {
+        continue;
+      }
+      const color = layerColors.get(text.layer);
+      const built = buildTextMarkingMesh(THREE, text, typeof color === "string" && color ? color : inkCss);
+      if (!built) {
+        continue;
+      }
+      const rotationDeg = Number(text.rotationDeg) || 0;
+      const center = textMarkingCenter({
+        anchor: text.position,
+        hAlign: text.hAlign,
+        vAlign: text.vAlign,
+        heightMm: built.heightMm,
+        planeWidth: built.planeWidth,
+        planeHeight: built.planeHeight,
+        rotationDeg,
+        baselineFraction: built.baselineFraction
+      });
+      // Sheet (x, y) is scene (x, y) with the sheet in the XY plane; text lifts a hair off it.
+      built.mesh.position.set(center[0], center[1], 0.02);
+      built.mesh.rotation.set(0, 0, (rotationDeg * Math.PI) / 180);
+      built.mesh.material.depthTest = false;
+      built.mesh.renderOrder = 5;
+      built.mesh.userData.dxfDrawingLayer = text.layer;
+      container.add(built.mesh);
     }
     group.add(container);
     if (runtime) {
@@ -2812,7 +2948,7 @@ const CadViewer = forwardRef(function CadViewer({
     // A document has no mesh for the shared fit to measure, so its own extent stands in.
     // Publishing runtime.modelBounds is how it gets the shared zoom baseline, reset and fit
     // with no format-specific branch.
-    const meshBounds = drawingLineBounds({ layers });
+    const meshBounds = sheetBounds;
     const bounds = meshBounds
       ? {
         min: [meshBounds.min[0], meshBounds.min[2], -meshBounds.max[1]],
