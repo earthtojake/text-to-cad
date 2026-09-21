@@ -56,6 +56,8 @@ const EMPTY = Object.freeze({});
  * @param {string} options.modelKey  Stable per file: scopes the stored camera and the presentation.
  * @param {string} [options.revisionKey]  Changes when the file's bytes do.
  * @param {import("@hardcore/core/common/viewSettings.js").ViewFeatures} options.features
+ * @param {object} [options.viewSettings]  The result of `useViewSettings`, when the renderer needs the
+ *   display settings earlier in its own render than this hook could hand them back.
  * @param {ReturnType<typeof import("../tools/toolModes.js").createToolModes> | null} [options.toolModes]  Omitted
  *   by a renderer with no tools: the shell then has no active tool and a saved tab records none.
  * @param {import("../scene.js").KitScene | null} options.scene
@@ -104,6 +106,7 @@ const EMPTY = Object.freeze({});
  */
 export function useRendererShell({
   view, services, resource, modelKey, revisionKey = "", features, toolModes = null, scene, load,
+  viewSettings = null,
   animation = null, live = EMPTY, promptReferences = null, promptContext = createViewPromptContext,
   fileStatus: fileStatusFields = EMPTY,
   escape = EMPTY, rendererState = EMPTY, toolRestore = EMPTY, displayTabProps = EMPTY,
@@ -122,7 +125,12 @@ export function useRendererShell({
 
   // ---- per-file state -------------------------------------------------------
   const [restored] = useState(() => readShellState(view.state));
-  const { display: displaySettings, scene: desiredScene, store: viewSettingsStore } = useViewSettings(colorScheme);
+  // A renderer whose own work needs the display settings BEFORE it can hand this hook a scene
+  // — STEP reads them while it is still deciding what to load — creates them itself and passes
+  // them in. It is the same store either way; owning it here is a convenience, not a rule.
+  const ownViewSettings = useViewSettings(colorScheme);
+  const { display: displaySettings, scene: desiredScene, store: viewSettingsStore } =
+    viewSettings || ownViewSettings;
   useLayoutEffect(() => { viewSettingsStore.configure({ features }); }, [viewSettingsStore, features]);
   // Before the first paint, like every later edit: through the store, never around it.
   useLayoutEffect(() => { viewSettingsStore.restore(restored.display); }, [viewSettingsStore, restored]);
