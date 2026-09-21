@@ -1,7 +1,7 @@
 # One mounting tray, four manufacturing processes
 
 Controlled design exercise using the existing `dfam-check` skill and the new
-`sheet-metal-dfm`, `cnc-dfm`, and `injection-molding-dfm` guided reviews. These are authored redesigns,
+the `dfm` skill's sheet-metal, CNC and injection-molding guided reviews. These are authored redesigns,
 not outputs from an automatic optimization solver.
 
 Every variant retains an 80 × 60 × 25 mm envelope and four holes that are Ø4.5 mm at the underside datum
@@ -28,8 +28,6 @@ claim cost or cycle-time optimization.
 - Intersected exported solids with probes to measure floor/wall thickness.
 - Confirmed four hole centers and diameters from actual circular STEP edges.
 - Confirmed sheet bend radii and CNC root radius from exported edges.
-- Ran `cadgen step inspect validate` on each export; reports are alongside the
-  numerical checks in `reports/`.
 - Ran the **existing** `skills/dfam-check/scripts/dfam_tool.py measure` on baseline
   and FDM STL with a 45° threshold. Both are watertight, one body. Sampled minimum
   wall thickness rose from **0.8 to 2.4 mm**, clearing the skill's generic FDM
@@ -39,9 +37,9 @@ claim cost or cycle-time optimization.
 - Tested six axis-aligned FDM orientations. Upright: zero flagged area; upside
   down: 4,294.88 mm². This is a geometric heuristic, not slicer verification or
   proof of a globally optimal orientation.
-- Ran the new `skills/injection-molding-dfm/scripts/mold_tool.py measure --pull z`
+- Ran the new `skills/dfm/scripts/mold_tool.py measure --pull z`
   on the injection and baseline STL, and `pulls` on the injection STL
-  (`reports/*-mold.json`, `reports/injection-pulls.json`). Injection: no
+  Injection: no
   zero-draft wall area, mean wall draft 1.005° over 6,590 mm² of wall, no
   straight-pull undercut candidates for Z; an X pull would trap 7,499 mm² and a
   Y pull 1,729 mm². Cone-sampled thickness: median 2.4 mm, p05 1.7 mm on the
@@ -68,11 +66,11 @@ From the repository root, run these for `baseline` and `fdm`:
 ```sh
 python skills/dfam-check/scripts/dfam_tool.py measure models/dfm-process-comparison/STL/fdm.stl --angle-limit 45
 python skills/dfam-check/scripts/dfam_tool.py orientations models/dfm-process-comparison/STL/fdm.stl --angle-limit 45
-python -m cadgen.cli step inspect validate models/dfm-process-comparison/STEP/fdm.step
 ```
 
 CAD exports and scratch images are regenerable and ignored. The share image is
-`tmp/manufacturing-comparison.png`. Recorded JSON reports capture this run.
+`tmp/manufacturing-comparison.png`. Nothing from a run is committed: rerun the
+commands above to reproduce the numbers this README quotes.
 
 
 ## Injection-molding fourth process

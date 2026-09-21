@@ -1,0 +1,4 @@
+interface:
+  display_name: "DFM Review"
+  short_description: "Review a part for sheet metal, CNC machining, or injection molding."
+  default_prompt: "Use $dfm to review this part for manufacturability by the process I name (sheet metal, CNC, or injection molding), with measured evidence and the applicable rule for every finding."

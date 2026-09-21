@@ -1,0 +1,10 @@
+trimesh
+numpy
+# Ray casting for the injection-molding undercut test.
+rtree
+# trimesh treats these as optional extras, but mesh.split (per-body undercut
+# measurement) needs scipy, and loading the .3mf that the reference advertises
+# needs the rest.
+scipy
+networkx
+lxml

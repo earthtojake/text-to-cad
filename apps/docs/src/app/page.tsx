@@ -80,6 +80,12 @@ const skillGroups = [
       "Measures mesh printability per process: wall thickness, overhangs, support volume, and build orientation.",
   },
   {
+    name: "DFM",
+    path: "skills/dfm",
+    summary:
+      "Reviews a part for sheet metal, CNC machining, or injection molding, with measured evidence and the cited rule behind every finding.",
+  },
+  {
     name: "G-code",
     path: "skills/gcode",
     summary:
