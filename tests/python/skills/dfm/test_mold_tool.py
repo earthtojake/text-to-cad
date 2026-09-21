@@ -307,6 +307,24 @@ class TangentCurvedFaceTest(unittest.TestCase):
         self.assertAlmostEqual(facts["zero_draft_wall_area_mm2"], 2 * math.pi * 10 * 30, delta=20.0)
         self.assertEqual(facts["zero_draft_tangent_area_mm2"], 0.0)
 
+    def test_a_small_bore_the_mesher_fanned_is_a_real_zero_draft_wall(self) -> None:
+        """The tessellation a CAD export actually produces for a small hole.
+
+        OCCT fans a bore of this size: every facet spans the full depth, so the
+        zero-draft region is no taller than the facets bounding it and the size
+        test alone reads it as a tangent band. A straight through-bore is the
+        textbook zero-draft feature, so it has to survive. The plate around it
+        is drafted, which leaves the bore as the only zero-draft face here.
+        """
+        plate = extrude(Rectangle(40, 30), 3, taper=2.0) - Pos(0, 0, 1.5) * Cylinder(2.25, 3)
+        with tempfile.TemporaryDirectory() as td:
+            mesh = mold_tool._load(_stl(plate, Path(td), "bore"))
+            facts = _z(mesh)
+
+        wall = 2 * math.pi * 2.25 * 3
+        self.assertAlmostEqual(facts["zero_draft_wall_area_mm2"], wall, delta=wall * 0.05)
+        self.assertEqual(facts["zero_draft_tangent_area_mm2"], 0.0)
+
 
 class MinimumDraftIsPooledTest(unittest.TestCase):
     def test_a_sliver_face_does_not_set_the_minimum(self) -> None:

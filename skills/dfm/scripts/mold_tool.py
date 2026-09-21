@@ -175,7 +175,8 @@ def _mesh_facts(mesh: trimesh.Trimesh) -> dict:
 
 
 def _tangent_faces(mesh: trimesh.Trimesh, pull: np.ndarray, along: np.ndarray, zero_tol: float,
-                   smooth_deg: float = 45.0, taller_than_its_bounds: float = 3.0) -> np.ndarray:
+                   smooth_deg: float = 45.0, taller_than_its_bounds: float = 3.0,
+                   crosses_across: float = 0.6) -> np.ndarray:
     """Per face: is it a facet on a curved face that is merely TANGENT to the pull?
 
     A sphere is parallel to the pull along a LINE, and a tessellation turns
@@ -248,7 +249,38 @@ def _tangent_faces(mesh: trimesh.Trimesh, pull: np.ndarray, along: np.ndarray, z
         np.logical_or.at(below, index, along[far][sel] < -tol)
         np.minimum.at(bound, index, face_height[far][sel])
     bound[~np.isfinite(bound)] = 0.0
-    verdict = above & below & (height <= taller_than_its_bounds * np.maximum(bound, 1e-9))
+
+    # Size alone is not enough either, because a mesher is free to build a wall
+    # out of triangles that each span its whole height: OCCT fans a small bore,
+    # so every facet reaches the full depth and the region is no taller than the
+    # facets bounding it. A real tangent line is a CROSSING -- the surface passes
+    # through parallel, so the leaning neighbours sit on either side of the
+    # region ALONG the pull. Around a fanned bore they sit beside it, spanning
+    # the same depth, and the two groups have the same centre. Measured: a
+    # sphere's band separates by 0.89 to 1.67 of its own height, the tray's
+    # 4.5 mm bores by 0.33.
+    up_sum = np.zeros(len(regions))
+    up_count = np.zeros(len(regions))
+    down_sum = np.zeros(len(regions))
+    down_count = np.zeros(len(regions))
+    center = mesh.triangles_center @ pull
+    for near, far in ((left, right), (right, left)):
+        sel = (owner[near] >= 0) & (np.abs(along[far]) > tol)
+        if not sel.any():
+            continue
+        index = owner[near][sel]
+        lean, where = along[far][sel], center[far][sel]
+        np.add.at(up_sum, index[lean > tol], where[lean > tol])
+        np.add.at(up_count, index[lean > tol], 1.0)
+        np.add.at(down_sum, index[lean < -tol], where[lean < -tol])
+        np.add.at(down_count, index[lean < -tol], 1.0)
+    crossing = np.zeros(len(regions))
+    both = (up_count > 0) & (down_count > 0)
+    crossing[both] = np.abs(up_sum[both] / up_count[both] - down_sum[both] / down_count[both])
+
+    verdict = (above & below
+               & (height <= taller_than_its_bounds * np.maximum(bound, 1e-9))
+               & (crossing >= crosses_across * np.maximum(height, 1e-9)))
     tangent[owner >= 0] = verdict[owner[owner >= 0]]
     return tangent
 
