@@ -69,9 +69,7 @@ test('Model tree preserves part controls and adds precise viewport references to
       name: 'tests/fixtures/cad/import-smoke.step',
       exact: false
     }).first().click();
-    await expect(page.getByLabel('Zoom level percent', {
-      exact: true
-    })).toBeVisible({
+    await expect(page.locator('[data-file-sheet-header]')).toBeVisible({
       timeout: 60000
     });
     await expect(page.getByRole('tab',{name:'Model',exact:true})).toBeVisible();

@@ -1095,11 +1095,14 @@ Buttons wrap inside the pill in a narrow explorer pane. The file navbar has a
 direct snapshot action before Inspector (`SlidersHorizontal`) and file tree (`Folders`).
 Snapshot attaches the viewport PNG and references to this tab's owning session
 draft through the prompt-context adapter; it does not send a message. Playback
-lives in the Animate tool, not the Inspector. A small muted percentage beside the Inspector tabs opens
-the framing menu: zoom/fit controls and Reset Zoom, which frames the model again
-without turning the camera. Nothing in it touches the model, its motion or its
-display settings; Display Reset restores the selected preset and disables
-Clip/Explode, and the Kinematics tab's Reset restores a pose. X/Y/Z labels stay outside the
+lives in the Animate tool, not the Inspector. There is no zoom control anywhere:
+no percentage beside the Inspector tabs, no menu behind one, no zoom toolbar. A
+STEP's viewport context menu ends in Zoom to fit and Zoom to selection (off without
+a selection), offered over a part, over the backdrop and on every Features tree row;
+on every other 3D file the view cube's centre, "Reset to default isometric view",
+frames the model again from the default direction. Nothing in either touches the
+model, its motion or its display settings; Display Reset restores the selected
+preset and disables Clip/Explode, and the Kinematics tab's Reset restores a pose. X/Y/Z labels stay outside the
 bottom-right axis endpoints, with the yellow center above their stems.
 The web header's fullscreen action is owned by that app.
 
@@ -1112,7 +1115,7 @@ back to Kinematics. Robots also use Kinematics for their joints, then Links
 (the link tree), and keep the SDF tab. A DXF drawing has NO Inspector at all, and no
 toggle for one in its file navbar: it is a straight 2D render on a canvas — drag to pan,
 wheel or pinch to zoom about the pointer, double-click to fit — and the navbar carries
-only Zoom out, Zoom in, Reset Zoom and Take snapshot.
+only Take snapshot.
 
 Display contains the single Mode dropdown for shaded, edge, wire and photographic
 Render presentation. All modes share the camera, projection, part colors,

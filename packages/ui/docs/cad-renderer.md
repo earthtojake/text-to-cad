@@ -32,7 +32,7 @@ the reverse.
 | folder | what it is |
 | --- | --- |
 | `viewport/` | `useViewerRuntime` (three.js renderer lifecycle, on-demand render loop and `requestRender`, resize and device-pixel-ratio caps, context loss, keyboard orbit, teardown), `framePresentation`, `viewportBuffer`, `renderDepthPolicy`, `sceneObjects` (`disposeSceneObject`), DOM helpers. The scene in the viewport is its owner's: teardown calls the injected `disposeScene(runtime)` and `disposeStudio(runtime)`. |
-| `camera/` | `runtimeCamera` (zoom percent against the authored framing, projection and lens sync, perspective snapshots, eased transitions, fit-to-bounds, recentre), `useViewportCamera` (that behaviour bound to a mounted viewport: live zoom, the perspective a session stores, the fullscreen camera swap and its restore, view-cube presets), `viewportCameraKit` and `viewportCameraFit`, `orbitControls`, `zoomPivotReanchor`, `zoomSpeeds`, `cameraLens`, `ViewPlaneControl` (view cube), `ZoomControl`. |
+| `camera/` | `runtimeCamera` (zoom percent against the authored framing, projection and lens sync, perspective snapshots, eased transitions, fit-to-bounds, recentre), `useViewportCamera` (that behaviour bound to a mounted viewport: the perspective a session stores, the fullscreen camera swap and its restore, the reset, view-cube presets — whose default preset FRAMES as well as turns), `viewportCameraKit` and `viewportCameraFit`, `orbitControls`, `zoomPivotReanchor`, `zoomSpeeds`, `cameraLens`, `ViewPlaneControl` (view cube). |
 | `look/` | `stageEffects` (lighting rig scaled to the model, floor, glow and shadow catcher, grid and origin axes), the Render studio boundary (`renderStudioChunk`, `studioEnvironmentCache` and its worker). `chromeBackdrop` and `useChromeBackdropColor` (the frame colour around a scene). The surface LOOK is data the viewport resolves and a scene applies to its own materials: `@hardcore/core/lib/viewer/surfaceLook.js` (`createSurfaceLook(THREE, root).apply(look)`) does it for any authored material tree. |
 | `view-settings/` | The settings model and store (`viewSettingsStore`, `useViewSettings`, `viewerDisplaySettings`, `renderState`), applying a change to a viewport (`useAppliedViewSettings`, `viewUpdateCoordinator`, `viewUpdateGate`, `viewUpdatePlan`), and the Display tab (`DisplaySettingsTab`, `DisplayModeOptions`). |
 | `tools/` | `FloatingToolBar` (the dumb strip), `toolModes` (the tool-mode state machine), `ToolbarButton`, and the format-blind tools: `draw/` (overlay, view lock, `useDrawingViewLock`), `fullscreen/` (controls and the orbit preference), `playbar/` (`ViewportAnimationBar`, `animationClock`, `usePlaybackFrames`), `pose/` (the handle overlay, canvas, drag mathematics), `select/` (`usePointerPick`: taps and hover through a scene's own `pick`). Screenshot capture is `@hardcore/core/lib/viewer/screenshotCapture.js`. |
@@ -109,7 +109,7 @@ calls one hook; the shell owns the rest.
 
 | module | what it is |
 | --- | --- |
-| `useRendererShell.js` | The hook. Per-file state through the host, the Display settings store and tab, tool modes (Draw is the only tool the shell itself owns; `toolModes` is omitted altogether by a renderer with no tools), the Inspector panel (and its control by the renderer), zoom with "Zoom to selection", navbar actions, prompt snapshots, the clipboard screenshot, fullscreen, file activity, alerts, shortcuts, and the live command surface. |
+| `useRendererShell.js` | The hook. Per-file state through the host, the Display settings store and tab, tool modes (Draw is the only tool the shell itself owns; `toolModes` is omitted altogether by a renderer with no tools), the Inspector panel (and its control by the renderer), navbar actions, prompt snapshots, the clipboard screenshot, fullscreen, file activity, alerts, shortcuts, and the live command surface. It owns no zoom control: the shell has none. |
 | `RendererShell.jsx` | The frame: viewport box, tool strip, bottom action, playbar, fullscreen controls, loading/update/alert overlays, status toast and the Inspector portaled into the host's panel column. One DOM structure (`data-slot="cad-file-view"`, `data-cad-surface`, `data-cad-scene-backdrop`, `data-cad-toolbar`, `data-file-sheet`) for every renderer. |
 | `ShellViewport.jsx` | The three.js viewport around ONE kit scene: `useViewerRuntime`, `useViewportCamera`, the look (rig or studio, environment, background, floor, grid, axes), the Draw overlay and view lock, the view cube, frame presentation and the queued view-settings handshake. Its children may be a function of the viewport (`{ runtimeRef, hostRef, mountRef, viewerReadyTick, commitScene }`), which is how a renderer mounts its own overlay or pointer pick. A scene that changes IN PLACE (it arrives in pieces, swaps its detail, is rebuilt under one identity) calls `commitScene()` from its own effect: the viewport re-reads what it placed, fits the stage and the depth range and applies the framing rules THEN, because a child's effects run before the viewport's own adoption effect. The one thing a commit never does ahead of the viewport is FRAME under a camera that is about to change: when the same render also changed the lens, the projection or the viewing mode, the stage is adopted at once and the framing follows once the camera has been given those props (a stored camera applied under the old projection and then converted comes out about a sixth smaller). A scene that says `complete: false` is framed on what has arrived and once more when it is whole. `preserveInteractionPixelRatio` keeps the idle pixel ratio while the camera moves (a scene drawn with hairlines), and `runtimeLifecycle` (`onRelease(runtime, { handoff })` while the WebGL renderer is still alive, `onContextLost()`, `onInitializationError(error)`) is for a renderer that hangs its own objects or in-flight work on the runtime. `syncSceneBounds()` re-fits lighting, shadows and the floor's height to a scene that moved its own bounds, with no React render and no reframe. What is SIZED stays sized from the rest placement, in Inspect and in Render alike: the grid and stage (`sceneRadiusForBounds` on `restBounds`) and the Render studio's floor plane (`applyPhotographicStudio`'s `groundBounds`), so a pose or a playing routine never rescales or slides the ground under the model; `zoomToBounds(bounds)` frames part of the scene. Read-only test seams: `window.__cadCamera()` (the live camera) and `window.__cadStage()` (the ground's radius, the bounds the stage is fitted to, the floor's height, the studio floor's size and centre). |
 | `shellState.js` | The per-file record `{ version, camera, display, inspectorTab, tool, renderer }`, read forgivingly and written exactly. The host keys it `[file path, renderer id]`. |
@@ -117,7 +117,7 @@ calls one hook; the shell owns the rest.
 | `promptContext.js` | `createViewPromptContext` (a snapshot and what it depicts) and `promptDeliveryMessage`. |
 | `useViewerShortcuts.js` | Which mounted viewer an Escape belongs to; the renderer says what Escape means. |
 | `ViewportBottomAction.jsx` | The active tool's one bottom button (Draw: the view with its ink, to the prompt or clipboard); `{ label, shortLabel, render }` for a renderer's own, where a label too wide for the button becomes `shortLabel` and `render` draws a control that is not a plain press. |
-| `ViewportContextMenu.jsx` | The viewport's menu on a secondary TAP (a secondary drag pans; primary and secondary together is the pan chord). The gesture, the anchor, the clamping and the dismissal are the shell's; the ITEMS are the renderer's (`contextMenuItems(press)`), asked at the moment of the press, and `onContextMenuOpenChange(open)` says while the menu is up. A renderer that passes no items has no viewport menu at all: framing lives in the zoom menu. |
+| `ViewportContextMenu.jsx` | The viewport's menu on a secondary TAP (a secondary drag pans; primary and secondary together is the pan chord). The gesture, the anchor, the clamping and the dismissal are the shell's; the ITEMS are the renderer's (`contextMenuItems(press)`), asked at the moment of the press, and `onContextMenuOpenChange(open)` says while the menu is up. A renderer that passes no items has no viewport menu at all — every renderer but STEP. |
 
 ```jsx
 const shell = useRendererShell({
@@ -133,7 +133,6 @@ const shell = useRendererShell({
   // optional: promptReferences, escape, displayTabProps, sceneScaleMode,
   //   rendererState   the renderer's slot of the record: an object, or a FUNCTION read when the record is written
   //   toolRestore     { opensIn, never }: the tool THIS file opens in, while the tool modes' default stays the fallback
-  //   selection       { available, bounds() }: what "Zoom to selection" frames
 });
 // Renderer-facing, beside `tools`, `displayTab`, `toolMode`, `selectTool`, `requestRender`:
 shell.inspector.reveal(tabId);   // turn to a tab, opening the panel where there is room beside the model
@@ -235,20 +234,19 @@ the viewer was inventing from the file; a drawing is not that.
   canvas repaints through one `requestAnimationFrame` when something changed; a pan
   never re-renders the component tree. The backing store is DPR-aware
   (`kit/viewport/pixelRatio.js`), and the cursor is `grab` / `grabbing`.
-- **Navbar**: `Zoom out`, `Zoom in`, `Reset Zoom`, `Take snapshot` — and no Inspector
-  toggle, because the renderer declares no panel. The zoom READOUT is gone with the
-  Inspector header it lived in: `FileNavigationAction` is an icon button, not a slot
-  for a control, so the three things `ZoomControl`'s menu did are those three buttons.
-  The snapshot is the canvas as a PNG, background included, delivered through
-  `host.promptContext` like every other renderer's.
+- **Navbar**: `Take snapshot`, and nothing else — no Inspector toggle, because the
+  renderer declares no panel, and no zoom buttons, because zooming a drawing is the
+  pointer's: wheel or pinch about it, drag to pan, double-click to fit. The snapshot is
+  the canvas as a PNG, background included, delivered through `host.promptContext`
+  like every other renderer's.
 - **Empty and failed drawings.** `bounds: null` (nothing in the modelspace) is a quiet
   sentence over the empty pane, not an error. A non-200 becomes the ordinary actionable
   alert carrying the SERVER's sentence (`failureAlert`, `kind: "http"`); a payload from
   a cadgen that disagrees about `schemaVersion` gets its own alert whose recovery is to
   update cadgen and the app together.
-- **Host commands**: `resetCamera` fits the drawing again, `setZoom(percent)` zooms
-  against the fit (100% IS the fit), `capture` hands over the PNG, and `readState`
-  reports `camera: null`, an empty `display` and the current `zoomPercent`. `select`,
+- **Host commands**: `resetCamera` fits the drawing again, `capture` hands over the
+  PNG, and `readState` reports `camera: null` and an empty `display`. There is no zoom
+  command and no zoom percentage: no host ever sent one. `select`,
   `clearSelection`, `setCamera`, `setDisplaySettings` and `setRenderMode` are each
   declined with a sentence that says why a flat drawing has no such thing; a
   `selectReference` host request is consumed and answered in the status toast.
@@ -411,8 +409,8 @@ loader asks which it is. The STEP renderer matches none of them.
   Select clears it. A viewport pick opens the Inspector on Links
   (`shell.inspector.reveal`). Escape clears the selection before it shuts the
   Inspector. Hover and selection are drawn by the scene (`setHighlight`), with
-  the highlight ink a STEP part wears; hover is not React state. "Zoom to
-  selection" frames what the selection occupies now.
+  the highlight ink a STEP part wears; hover is not React state. A robot has no
+  viewport menu and so no framing items: its way back to a framed view is the view cube.
 - **Inspector**: titled `URDF`, `SRDF` or `SDF`; opens by default, on
   **Kinematics** ("Pose": named poses, only with group states; "Joints": a slider
   per driven joint; Reset; "No movable joints." when there are none). Then
@@ -815,9 +813,10 @@ That menu is THE part menu, the one the viewport offers over the same part: one
 descriptor (`assemblyNodeMenu`) and one set of actions (`partMenuActions`),
 rendered by `AssemblyPartMenuItems`, so the two cannot drift apart. Add to prompt,
 Copy Reference, Select/Deselect, Isolate/Exit isolate, Exit all isolates, Hide
-others, Hide/Reveal, then the tree's Expand/Collapse and Expand all/Collapse all.
-The camera is NOT in it: framing lives in the zoom menu, so no item can
-contradict the tool in hand. The VIEWPORT's menu exists only while Select is the
+others, Hide/Reveal, then the tree's Expand/Collapse and Expand all/Collapse all,
+and last one framing group: **Zoom to fit** and **Zoom to selection** (off without
+a selection). Framing cannot contradict the tool in hand, and every item of this
+menu returns to Select before it acts. The VIEWPORT's menu exists only while Select is the
 active tool — under Measure, Draw, Pose or Animate a secondary tap opens nothing,
 though the native menu stays suppressed and a secondary drag still pans. The
 TREE's is available under any tool, and every action returns to Select first,
@@ -1069,15 +1068,23 @@ Kinematics). Each renderer says so in its own
 `panels()` (`inspectorPanels(ready, { defaultOpen })`). Snapshot uses the host prompt-context port: desktop attaches
 the viewport image and references to the owning session's draft; web copies
 through its clipboard adapter. The DXF renderer, which is not on the shell,
-contributes its own four: Zoom out, Zoom in, Reset Zoom and Take snapshot.
+contributes its own one: Take snapshot.
 The shared FileViewer renders these registered actions without importing CAD.
 
-Zoom is a small muted percentage at the right of the Inspector tab strip. Its
-menu offers zoom steps, 100%, fit, selection fit and Reset Zoom, and nothing
-else: framing is all it does, and restoring the model itself belongs to whoever
-owns it (Kinematics' Reset for a pose, Display's for settings). Zoom to 100% is
-the zoom number; Reset Zoom frames the model again, zoom and pan, without
-turning the camera. The viewport has no zoom toolbar.
+**There is no zoom control in the viewer.** No percentage readout, no menu behind
+it, no zoom toolbar and no navbar zoom buttons: the camera is the pointer's
+(wheel or pinch to zoom, drag to pan, and on a DXF double-click to fit). Two
+places bring a lost view back. STEP's viewport context menu ends in a framing
+group — **Zoom to fit** and **Zoom to selection**, the latter off without a
+selection — offered wherever that one menu is rendered: over a part, over the
+backdrop and on every Features tree row (`AssemblyContextMenuItems.js`). And the
+view cube's centre, "Reset to default isometric view", FRAMES the model from the
+default direction, which is the only way back on a robot, a GLB or a mesh.
+Framing the whole model is ONE act — `zoomRuntimeToBounds` over the authored
+bounds with `resetZoomBaseline: true`, which the viewport calls `resetZoom` — so
+it is offered once, and the live `resetCamera` command is that same call.
+Restoring the model itself still belongs to whoever owns it (Kinematics' Reset
+for a pose, Display's for settings).
 See [settings-ui.md](settings-ui.md). X/Y/Z labels
 remain outside the bottom-right axis endpoints. Fullscreen hides all of these
 controls. The web header owns Fullscreen (`Maximize2`) beside appearance; while
@@ -1276,4 +1283,6 @@ other scene effects never redefine 100%. Perspective and orthographic derive
 their own baseline from that same box and the current viewport dimensions.
 Selection fit may move the camera but cannot make that new framing become 100%.
 `kit/camera/viewportCameraFit.js` owns the fit calculation; live posed bounds remain useful
-for clipping, lighting and picking. Zoom controls live in the Inspector header percentage menu.
+for clipping, lighting and picking. Nothing displays that percentage any more — it
+survives only as the `window.__cadCamera()` test seam — and the acts that frame the
+model are STEP's context menu and the view cube's centre.

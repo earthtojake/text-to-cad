@@ -198,21 +198,6 @@ export function zoomTransform(transform, anchor, factor, limits) {
 }
 
 /**
- * The zoom readout: the current scale as a percentage of the fitted one, so
- * "100%" means "the whole drawing, as it opened".
- *
- * @param {DrawingTransform} transform
- * @param {number} fitScale
- * @returns {number}
- */
-export function zoomPercent(transform, fitScale) {
-  if (!finite(fitScale) || fitScale <= 0) {
-    throw new Error(`zoomPercent needs a positive fitted scale; received ${fitScale}.`);
-  }
-  return (transform.scale / fitScale) * 100;
-}
-
-/**
  * Whether two transforms are the same view, within a pixel-invisible epsilon.
  *
  * Used to decide whether the person has MOVED the view (and so whether it is

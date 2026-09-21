@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Camera, Maximize2, ZoomIn, ZoomOut } from "lucide-react";
+import { Camera } from "lucide-react";
 import { cn } from "@hardcore/ui/utils";
 import { usePromptDestination, useViewerHost } from "../../host/context.js";
 import BlockingViewerAlert, { blockingViewerAlert } from "../kit/status/BlockingViewerAlert.jsx";
@@ -9,7 +9,7 @@ import { attachLiveBinding } from "../kit/shell/liveBinding.js";
 import { createViewPromptContext, promptDeliveryMessage } from "../kit/shell/promptContext.js";
 import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { drawingLoadAlert, useDrawingPayload } from "./useDrawingPayload.js";
-import { ZOOM_STEP, useDrawingView } from "./useDrawingView.js";
+import { useDrawingView } from "./useDrawingView.js";
 import { dxfViewStateRecord, readDxfViewState } from "./viewState.js";
 
 /**
@@ -67,7 +67,7 @@ function DxfSurface({ view, data }) {
     drawing: payload.drawing, restored, colorScheme: view.appearance?.colorScheme === "dark" ? "dark" : "light",
     onViewMoved: rememberView
   });
-  const { canvasRef, capture, containerRef, dragging, fit, readZoomPercent, zoomBy } = drawingView;
+  const { canvasRef, capture, containerRef, dragging, fit } = drawingView;
 
   // ---- host chrome -----------------------------------------------------------
   useEffect(() => { onReady?.(true); }, [onReady]);
@@ -127,19 +127,13 @@ function DxfSurface({ view, data }) {
   }, [selectKey, workspace.acknowledgeCommand]);
 
   // ---- the navbar ------------------------------------------------------------
-  // Icon buttons only: the host's navbar slot takes actions, not controls, so the
-  // zoom READOUT and its menu have nowhere to live now that a DXF has no Inspector
-  // header. The three things that menu did are these three buttons.
-  const actionsRef = useRef({ fit, zoomBy, snapshot });
-  actionsRef.current = { fit, zoomBy, snapshot };
+  // One action, and it is not the camera's. Zooming a drawing is the pointer's job —
+  // wheel or pinch about the pointer, drag to pan, double-click to fit — so there are
+  // no zoom buttons to press, here or anywhere else in the viewer.
+  const actionsRef = useRef({ snapshot });
+  actionsRef.current = { snapshot };
   useEffect(() => {
     const actions = [
-      { id: "zoom-out", label: "Zoom out", icon: ZoomOut, disabled: !ready,
-        onInvoke: () => actionsRef.current.zoomBy(1 / ZOOM_STEP) },
-      { id: "zoom-in", label: "Zoom in", icon: ZoomIn, disabled: !ready,
-        onInvoke: () => actionsRef.current.zoomBy(ZOOM_STEP) },
-      { id: "reset-zoom", label: "Reset Zoom", icon: Maximize2, disabled: !ready,
-        onInvoke: () => actionsRef.current.fit() },
       { id: "snapshot", label: "Take snapshot", icon: Camera, disabled: !ready || !promptAvailable,
         onInvoke: () => actionsRef.current.snapshot() }
     ];
@@ -152,27 +146,18 @@ function DxfSurface({ view, data }) {
   runtimeRef.current = {
     readState: () => ({
       resource: { ...workspace.resource }, revision: String(workspace.resource.revision || ""),
-      loading: payload.loading, selection: [], camera: null, display: {}, renderMode: "inspect",
-      zoomPercent: readZoomPercent()
+      loading: payload.loading, selection: [], camera: null, display: {}, renderMode: "inspect"
     }),
     setCamera() { throw new Error(NO_CAMERA); },
     resetCamera() { fit(); },
     setDisplaySettings() { throw new Error(NO_DISPLAY); },
     setRenderMode() { throw new Error(NO_DISPLAY); },
-    setZoom(percent) {
-      const target = Number(percent);
-      if (!Number.isFinite(target) || target <= 0) {
-        throw new Error(`setZoom takes a positive percentage of the fitted view; received ${JSON.stringify(percent)}.`);
-      }
-      zoomBy(target / readZoomPercent());
-    },
     capture
   };
   const binding = data.services.live;
   useEffect(() => {
     if (!binding) return undefined;
-    return attachLiveBinding(binding, () => runtimeRef.current,
-      { commands: ["setZoom"], declined: DECLINED_LIVE_COMMANDS });
+    return attachLiveBinding(binding, () => runtimeRef.current, { declined: DECLINED_LIVE_COMMANDS });
   }, [binding]);
 
   return (

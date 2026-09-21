@@ -16,7 +16,6 @@ export {
   sameTransform,
   screenToModel,
   zoomLimits,
-  zoomPercent,
   zoomTransform
 } from "./transform.js";
 export {

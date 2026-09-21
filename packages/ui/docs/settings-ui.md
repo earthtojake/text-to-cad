@@ -136,26 +136,25 @@ appear in the viewport, but rendering cannot rewrite controls. The small status
 indicator, cancellation, and presentation policy live in
 [view-updates.md](view-updates.md).
 
-## Zoom and reset menu
+## Framing
 
-Place the muted 10px zoom percentage at the far right of the inspector header,
-beside the fixed tabs, using `FileSheetTabbedSurface.headerActions`. It remains
-outside the tablist and does not scroll with a tab's content. The percentage is
-read-only; clicking it opens the shared `ZoomControl` menu. There is no duplicate
-zoom toolbar over the viewport. The menu contains Zoom in/out, Zoom to 100%,
-Zoom to fit, Zoom to selection (disabled without a selection), and Reset Zoom.
-Do not advertise keyboard shortcuts that the viewer does not implement.
+There is NO zoom control. The Inspector header carries its tabs and nothing else,
+there is no percentage readout, no menu behind one, and no zoom toolbar over the
+viewport. Do not add one, and do not advertise keyboard shortcuts the viewer does
+not implement. Zooming is the pointer's: wheel or pinch to zoom, drag to pan, and
+on a DXF double-click to fit.
 
-Everything in this menu is about framing, and nothing in it touches the model,
-its motion or its display settings.
+Two affordances frame the model, and between them every renderer has a way back
+from a view that has been driven off it.
 
-| Action | Scope |
-| --- | --- |
-| Zoom to 100% | The zoom number, back to the opening ruler; the pan and the direction stay |
-| Zoom to fit | Frame the whole model |
-| Reset Zoom | Frame the model again — zoom AND pan — without turning the camera. What the live `resetCamera` command does |
-| Display → Reset | Restore selected preset defaults and disable Clip/Explode; keep Kinematics and camera pose |
+| Action | Where | Scope |
+| --- | --- | --- |
+| Zoom to fit | STEP's viewport context menu — over a part, over the backdrop, and on every Features tree row | Frame the whole model again, without turning the camera. What the live `resetCamera` command does |
+| Zoom to selection | The same menu, disabled without a selection | Frame what is selected now |
+| Reset to default isometric view | The view cube's centre, in every 3D renderer | Frame the model AND return to the default direction — the only way back on a robot, a GLB or a mesh |
+| Display → Reset | The Display tab | Restore selected preset defaults and disable Clip/Explode; keep Kinematics and camera pose |
 
+Framing the whole model is ONE act, so it is offered once and under one name.
 Restoring the model itself belongs to whoever owns it: the Kinematics tab's
 Reset for a pose, the Display tab's Reset for settings.
 

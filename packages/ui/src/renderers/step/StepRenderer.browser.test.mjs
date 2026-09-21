@@ -255,10 +255,13 @@ test('the Features tree searches as a second view: typing ranks matches and expa
   assert.deepEqual(errors, []);
 });
 
-// What the one part menu offers, in order. The camera is not in it: framing lives
-// in the zoom menu, so no item of this menu can contradict the tool in hand.
+// What the one part menu offers, in order, ending in the framing group. That group is
+// the viewer's ONLY zoom control — the Inspector's percentage readout and its menu are
+// gone — so it is here, on every tree row, and on the empty-space menu below. It cannot
+// contradict the tool in hand: every item returns to Select before it acts.
+const ZOOM_SECTION = ['Zoom to fit', 'Zoom to selection'];
 const PART_MENU = ['Add to prompt', 'Copy Reference', 'Select', 'Isolate', 'Hide others', 'Hide',
-  'Expand', 'Collapse', 'Expand all', 'Collapse all'];
+  'Expand', 'Collapse', 'Expand all', 'Collapse all', ...ZOOM_SECTION];
 
 test('hiding a part takes it off the screen, and the viewport menus offer what they can do', async () => {
   const view = await open();
@@ -286,11 +289,11 @@ test('hiding a part takes it off the screen, and the viewport menus offer what t
     'the node menu: what can be done to the part under the pointer, then the tree');
   await page.keyboard.press('Escape');
   await page.getByRole('menu').waitFor({ state: 'detached' });
-  // Empty space asks about the model as a whole. Nothing is hidden here, so all
-  // it can offer is the tree.
+  // Empty space asks about the model as a whole. Nothing is hidden here, so besides
+  // the framing group all it can offer is the tree.
   await page.mouse.click(box.x + 30, box.y + box.height - 30, { button: 'right' });
   await page.getByRole('menu').waitFor();
-  assert.deepEqual(await page.getByRole('menuitem').allTextContents(), ['Expand all', 'Collapse all']);
+  assert.deepEqual(await page.getByRole('menuitem').allTextContents(), ['Expand all', 'Collapse all', ...ZOOM_SECTION]);
   await page.keyboard.press('Escape');
   await page.getByRole('menu').waitFor({ state: 'detached' });
 
@@ -338,6 +341,71 @@ test('hiding a part takes it off the screen, and the viewport menus offer what t
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().isolatedPartIds.join() === 'o1.2');
   assert.deepEqual(await view.tools(), ['Select:true', 'Measure:false', 'Draw:false', 'Pose:false', 'Animate:false']);
   await page.keyboard.press('Escape');
+  assert.deepEqual(errors, []);
+});
+
+test('the context menu frames the model and the selection, from the viewport and from a tree row', async () => {
+  const view = await open();
+  const { page, pane, at, box, errors } = view;
+  const menuItem = name => page.getByRole('menuitem', { name, exact: true });
+  const openMenu = async (gesture) => { await gesture(); await page.getByRole('menu').waitFor(); };
+  const dismiss = async () => { await page.keyboard.press('Escape'); await page.getByRole('menu').waitFor({ state: 'detached' }); };
+  const choose = async (gesture, name) => {
+    await openMenu(gesture);
+    await menuItem(name).click();
+    await page.getByRole('menu').waitFor({ state: 'detached' });
+  };
+  // Every claim below is read off the DRAWN frame: how wide the arm is in the pane.
+  // The camera eases, so each one waits for the picture to arrive rather than sleeping.
+  const armWidth = image => { const arm = partBoxes(image).arm; return arm ? arm.x1 - arm.x0 : 0; };
+  const emptySpace = () => page.mouse.click(box.x + 30, box.y + box.height - 30, { button: 'right' });
+  const overPart = () => page.mouse.click(...at([6, 6, 5]), { button: 'right' });
+  const treeRow = name => () => pane.getByRole('button', { name, exact: true }).click({ button: 'right' });
+
+  // With nothing selected the item that needs a selection is off — in all three places
+  // the menu is rendered, because the three are one definition.
+  for (const gesture of [emptySpace, overPart, treeRow('Select base')]) {
+    await openMenu(gesture);
+    assert.equal(await menuItem('Zoom to fit').getAttribute('aria-disabled'), null, 'Zoom to fit always acts');
+    assert.equal(await menuItem('Zoom to selection').getAttribute('aria-disabled'), 'true',
+      'Zoom to selection is off with nothing selected');
+    await dismiss();
+  }
+
+  // Zoom to fit, asked for over empty space, really pulls the camera back to the model.
+  await page.evaluate(() => { const c = window.cadHarness.a.controller;
+    return c.setCamera({ ...c.readState().camera, zoom: 2.4 }); });
+  const zoomedIn = armWidth(await frameWhen(view, shot => armWidth(shot) > 0, 'drew the arm zoomed in'));
+  await choose(emptySpace, 'Zoom to fit');
+  const fitted = armWidth(await frameWhen(view, shot => armWidth(shot) > 0 && armWidth(shot) < zoomedIn * 0.75,
+    'pulled back to the whole model'));
+  assert.ok(coverage(await view.frame()) > 0.2, 'and the model is on screen, not off it');
+
+  // With a selection, Zoom to selection frames THAT and fills the pane with it.
+  await pane.getByRole('button', { name: 'Select arm', exact: true }).click();
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.join() === 'o1.2');
+  await openMenu(overPart);
+  assert.equal(await menuItem('Zoom to selection').getAttribute('aria-disabled'), null, 'a selection enables it');
+  await menuItem('Zoom to selection').click();
+  await page.getByRole('menu').waitFor({ state: 'detached' });
+  await frameWhen(view, shot => coverage(shot) > 0.9, 'filled the pane with what was selected');
+  // A selected part wears the selection ink, so its own colour only comes back once the
+  // selection is dropped — which moves no camera. THEN the arm can be measured, and it
+  // is the arm that the camera was put on.
+  await page.evaluate(() => window.cadHarness.a.controller.clearSelection());
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.length === 0);
+  const framedSelection = armWidth(await frameWhen(view, shot => armWidth(shot) > fitted * 1.3,
+    `framed the selected arm rather than the model (${fitted} wide at the model fit)`));
+
+  // And from a tree row under another tool it lands in Select first, exactly as every
+  // other tree-row action does, then frames the model again.
+  await view.tool('Measure').click();
+  assert.deepEqual(await view.tools(), ['Select:false', 'Measure:true', 'Draw:false', 'Pose:false', 'Animate:false']);
+  await choose(treeRow('Select base'), 'Zoom to fit');
+  assert.deepEqual(await view.tools(), ['Select:true', 'Measure:false', 'Draw:false', 'Pose:false', 'Animate:false'],
+    'a tree-row framing action comes back to Select, like the rest of that menu');
+  await frameWhen(view, shot => armWidth(shot) > 0 && armWidth(shot) < framedSelection * 0.9,
+    `framed the whole model again from ${framedSelection}`);
   assert.deepEqual(errors, []);
 });
 

@@ -14,13 +14,14 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  clampScale,
   clearSurface,
   drawDrawing,
   fitTransform,
   panTransform,
   sameTransform,
+  screenToModel,
   zoomLimits,
-  zoomPercent,
   zoomTransform
 } from "@hardcore/core/lib/drawing2d/index.js";
 import { IDLE_PIXEL_RATIO_CAP, getPixelRatioCap } from "../kit/viewport/pixelRatio.js";
@@ -32,9 +33,6 @@ const WHEEL_ZOOM_SPEED = 0.0015;
 const PINCH_WHEEL_ZOOM_SPEED = 0.01;
 const LINE_HEIGHT_PX = 16;
 const PAGE_HEIGHT_PX = 400;
-/** One step of the navbar's Zoom in / Zoom out. */
-export const ZOOM_STEP = 1.25;
-
 function wheelZoomFactor(event) {
   const unit = event.deltaMode === 1 ? LINE_HEIGHT_PX : event.deltaMode === 2 ? PAGE_HEIGHT_PX : 1;
   const speed = event.ctrlKey ? PINCH_WHEEL_ZOOM_SPEED : WHEEL_ZOOM_SPEED;
@@ -136,7 +134,17 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
       const rect = container.getBoundingClientRect();
       const width = Math.max(0, Math.round(rect.width));
       const height = Math.max(0, Math.round(rect.height));
-      if (width === sizeRef.current.width && height === sizeRef.current.height) return;
+      const previous = sizeRef.current;
+      if (width === previous.width && height === previous.height) return;
+      // What the pane held in its middle, and how far the view was from the fitted scale.
+      // Both are read BEFORE the size changes: a view the person chose is carried across a
+      // resize in those terms rather than in pixels (see below).
+      const heldCentre = transformRef.current && previous.width > 0 && previous.height > 0
+        ? screenToModel(transformRef.current, previous.width / 2, previous.height / 2)
+        : null;
+      const heldZoom = transformRef.current && fitScaleRef.current > 0
+        ? transformRef.current.scale / fitScaleRef.current
+        : 0;
       sizeRef.current = { width, height };
       const pixelRatio = getPixelRatioCap(IDLE_PIXEL_RATIO_CAP);
       canvas.width = Math.max(1, Math.round(width * pixelRatio));
@@ -147,13 +155,26 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
       // cached context has to be re-read along with the picture.
       contextRef.current = canvas.getContext("2d");
       refit(false);
+      // A view the person framed is not taken back by a resize — but it must not keep an
+      // absolute pixel scale either, or a pane that narrows (the file tree opening, the
+      // window resizing) simply crops the drawing where it stands. So it keeps what it
+      // MEANT: the same zoom relative to the fit, still centred on what it was centred on.
+      // That is how the 3D viewports behave when their pane changes size.
+      if (heldCentre && heldZoom > 0 && movedRef.current && fitScaleRef.current > 0) {
+        const scale = clampScale(heldZoom * fitScaleRef.current, zoomLimits(fitScaleRef.current));
+        moveTo({
+          scale,
+          offsetX: width / 2 - heldCentre[0] * scale,
+          offsetY: height / 2 + heldCentre[1] * scale
+        });
+      }
       requestPaint();
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(container);
     return () => observer.disconnect();
-  }, [refit, requestPaint]);
+  }, [moveTo, refit, requestPaint]);
 
   // A new drawing frames itself, unless this file's view is already the person's.
   useEffect(() => {
@@ -270,10 +291,5 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
     }, "image/png");
   }), []);
 
-  const readZoomPercent = useCallback(
-    () => (transformRef.current && fitScaleRef.current ? zoomPercent(transformRef.current, fitScaleRef.current) : 100),
-    []
-  );
-
-  return { containerRef, canvasRef, dragging, fit, zoomBy, capture, readZoomPercent, transformRef };
+  return { containerRef, canvasRef, dragging, fit, zoomBy, capture, transformRef };
 }

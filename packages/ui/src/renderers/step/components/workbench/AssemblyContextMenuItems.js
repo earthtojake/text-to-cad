@@ -1,13 +1,17 @@
 import { Fragment } from "react";
 
 // The part menu: what can be done to one node of the model, wherever it was
-// asked for. The camera is NOT here — framing lives in the zoom menu beside the
-// Inspector's readout, so no item of this menu can contradict the active tool.
+// asked for.
 //
 // It is ONE list (`assemblyPartMenuEntries`) with two presentations: the Features
 // tree renders it into its own context menu (`AssemblyPartMenuItems`), and the
 // viewport hands the same entries to the shell's viewport menu, which owns the
 // gesture, the anchor and the dismissal. Neither can drift from the other.
+//
+// Its last group is the model's framing, and it is the only zoom control the
+// viewer has left: a percentage readout and its menu used to sit in the Inspector
+// header, and nothing replaced them. Framing cannot contradict the active tool,
+// and every action here returns to Select first anyway (`partMenuActions`).
 function AssemblyContextMenuItemLabel({ children }) {
   return <span className="min-w-0 truncate">{children}</span>;
 }
@@ -15,6 +19,20 @@ function AssemblyContextMenuItemLabel({ children }) {
 const entry = (id, text, disabled, onSelect, separatorBefore = false) => ({
   id, label: <AssemblyContextMenuItemLabel>{text}</AssemblyContextMenuItemLabel>, disabled: disabled === true, separatorBefore, onSelect
 });
+
+/**
+ * The framing group, identical wherever the menu was asked for: over a part, over a
+ * tree row, or over empty space. "Zoom to fit" frames the whole model from where the
+ * camera looks now — the one act the viewer calls `resetZoom` — and "Zoom to selection"
+ * frames what is selected, so it is off when nothing is (`menu.zoomSelectionAvailable`).
+ */
+function zoomEntries(menu, { disabled = false, actions = {} } = {}) {
+  const run = (action) => () => action?.(menu);
+  return [
+    entry("zoom-fit", "Zoom to fit", disabled, run(actions.onZoomFit), true),
+    entry("zoom-selection", "Zoom to selection", disabled || menu.zoomSelectionAvailable !== true, run(actions.onZoomSelection))
+  ];
+}
 
 /**
  * The entries of the part menu for the descriptor the workspace builds for a node
@@ -58,12 +76,14 @@ export function assemblyPartMenuEntries(menu, { disabled = false, actions = {} }
     entries.push(entry("expand-all", "Expand all", disabled || menu.expandAllDisabled !== false, run(actions.onExpandAll)));
     entries.push(entry("collapse-all", "Collapse all", disabled || menu.collapseAllDisabled !== false, run(actions.onCollapseAll)));
   }
+  entries.push(...zoomEntries(menu, { disabled, actions }));
   return entries;
 }
 
 /**
  * What a secondary tap on EMPTY space offers: the model as a whole (Show all, Expand all,
- * Collapse all). The workspace only builds this descriptor when one of them can do something.
+ * Collapse all) and the framing group — which is why this menu always has something to
+ * show, and why somebody who has zoomed off the model can press anywhere to get it back.
  */
 export function modelMenuEntries(menu, { actions = {} } = {}) {
   const run = (action) => () => action?.(menu);
@@ -74,6 +94,10 @@ export function modelMenuEntries(menu, { actions = {} } = {}) {
       separatorBefore: menu.showShowAll === true, onSelect: run(actions.onExpandAll) });
     entries.push({ id: "collapse-all", label: "Collapse all", disabled: menu.collapseAllDisabled === true, onSelect: run(actions.onCollapseAll) });
   }
+  const zoom = zoomEntries(menu, { actions });
+  // Nothing above it: the group opens the menu rather than following a separator.
+  if (!entries.length) zoom[0] = { ...zoom[0], separatorBefore: false };
+  entries.push(...zoom);
   return entries;
 }
 

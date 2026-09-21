@@ -6,7 +6,6 @@ import { ViewerElementContext, useViewerHost, usePromptDestination } from "../..
 import { CAD_PANEL } from "../../../file-viewer/navigation/panels.js";
 import { useDrawingSession } from "../../../drawing/session.js";
 import { DrawingToolbar } from "../../../drawing/toolbar.jsx";
-import { ZoomControl } from "../camera/ZoomControl.js";
 import { sceneBackdropEdgeColor } from "../look/chromeBackdrop.js";
 import { useChromeBackdropColor } from "../look/useChromeBackdropColor.js";
 import { prefetchRenderStudio } from "../look/renderStudioChunk.js";
@@ -79,8 +78,6 @@ const EMPTY = Object.freeze({});
  * @param {{ opensIn?: string, never?: string[] }} [options.toolRestore]  How this FILE restores its tool
  *   (`toolModes.restore`): `opensIn` is the tool a file with nothing recorded opens in, while the tool modes'
  *   default stays what a session falls back to; `never` lists recorded tools this file does not come back in.
- * @param {{ available: boolean, bounds: () => import("../scene.js").SceneBounds | null }} [options.selection]  What
- *   "Zoom to selection" frames. Without it the menu item is off.
  * @param {() => void} [options.onCameraSettled]  The camera came to rest on a new view: it moved and was
  *   recorded, a presentation camera moved (fullscreen, which records nothing), or the viewport's size
  *   changed — which can expose part of a scene without changing position, target or zoom at all. For a
@@ -97,7 +94,7 @@ const EMPTY = Object.freeze({});
 export function useRendererShell({
   view, services, resource, modelKey, revisionKey = "", features, toolModes = null, scene, load,
   animation = null, live = EMPTY, promptReferences = null,
-  escape = EMPTY, rendererState = EMPTY, toolRestore = EMPTY, selection = null, displayTabProps = EMPTY,
+  escape = EMPTY, rendererState = EMPTY, toolRestore = EMPTY, displayTabProps = EMPTY,
   onCameraSettled = null, preserveInteractionPixelRatio = false, runtimeLifecycle = null,
   sceneScaleMode = VIEWER_SCENE_SCALE.CAD
 }) {
@@ -216,7 +213,6 @@ export function useRendererShell({
   const [screenshotStatus, setScreenshotStatus] = useState("");
   const [viewerAlertOpen, setViewerAlertOpen] = useState(false);
   const [runtimeAlert, setRuntimeAlert] = useState(null);
-  const [zoomPercent, setZoomPercent] = useState(100);
   const viewerLoading = Boolean(load.busy);
   const hasContent = Boolean(scene) && !viewerLoading;
   const presentationKey = modelKey ? `${modelKey}:${revisionKey}:complete` : "";
@@ -301,19 +297,6 @@ export function useRendererShell({
     return () => onNavigationActionsChange?.([]);
   }, [onNavigationActionsChange, modelKey, viewerLoading, Boolean(scene), promptAvailable]);
 
-  // ---- zoom header ------------------------------------------------------------
-  const zoomToFit = useCallback(() => { if (!viewerRef.current?.zoomToFit?.()) setCopyStatus("The viewer camera is not ready"); }, []);
-  const resetZoom = useCallback(() => { if (!viewerRef.current?.resetZoom?.()) setCopyStatus("The viewer camera is not ready"); }, []);
-  const selectionRef = useRef(selection);
-  selectionRef.current = selection;
-  const zoomToSelection = useCallback(() => {
-    if (!viewerRef.current?.zoomToBounds?.(selectionRef.current?.bounds?.() || null)) setCopyStatus("The selection has nothing to frame");
-  }, []);
-  const zoomHeader = <ZoomControl zoomPercent={zoomPercent} disabled={idle}
-    onZoomPercentChange={value => viewerRef.current?.applyZoomPercent?.(value)}
-    onZoomFit={zoomToFit} selectionAvailable={Boolean(selection?.available)} onZoomSelection={zoomToSelection}
-    onResetZoom={resetZoom} />;
-
   // ---- shortcuts ------------------------------------------------------------
   const escapeRef = useRef(escape.handle);
   escapeRef.current = escape.handle;
@@ -360,9 +343,8 @@ export function useRendererShell({
       setViewerPerspective(scoped);
       handlePerspectiveChange(scoped);
     },
-    // What the zoom header's "Reset Zoom" does: frame the model again, without
-    // turning the camera. The name is the host protocol's ("cad-reset-camera"),
-    // older than the menu item it now shares its behaviour with.
+    // Frame the model again, without turning the camera. The name is the host
+    // protocol's ("cad-reset-camera"); the viewport calls the same act resetZoom.
     resetCamera() {
       if (!viewerRef.current?.resetZoom?.()) throw new Error("The viewer camera is unavailable.");
     },
@@ -425,8 +407,8 @@ export function useRendererShell({
       runtimeLifecycle: stableRuntimeLifecycle,
       previewMode, previewOrbitSpeed, setPreviewOrbitSpeed, viewerLoading, loading, presentationState,
       handlePresentationChange, viewerAlert, fileStatusAlert, viewerAlertOpen, setViewerAlertOpen, setRuntimeAlert,
-      setZoomPercent, drawToolActive, drawing, animationAvailable, animation, composer, capture,
-      inspectorOpen, setInspectorOpen, inspectorTab, setInspectorTab, zoomHeader,
+      drawToolActive, drawing, animationAvailable, animation, composer, capture,
+      inspectorOpen, setInspectorOpen, inspectorTab, setInspectorTab,
       copyStatus, screenshotStatus, setCopyStatus, setScreenshotStatus
     }
   };

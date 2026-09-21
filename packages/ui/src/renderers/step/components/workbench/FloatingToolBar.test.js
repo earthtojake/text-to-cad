@@ -37,7 +37,6 @@ test('the floating toolbar contains only interaction tools in every display mode
     const filter = nodes.find(node => node.type?.name === 'SelectionFilterMenu');
     assert.equal(filter.props.trigger.props.label, 'Select');
     assert.deepEqual(nodes.map(node => node.props.label).filter(Boolean), ['Measure', 'Draw']);
-    assert.equal(nodes.some(node => node.props['aria-label'] === 'Zoom controls'), false);
     toolbar.unmount(); outer.unmount();
   }
 });

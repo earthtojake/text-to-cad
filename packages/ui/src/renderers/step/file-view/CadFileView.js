@@ -26,7 +26,6 @@ import StepFileSheet from "../components/workbench/StepFileSheet.js";
 import { FileSheetPortalContext, HostPanelSlotContext } from "../../kit/inspector/FileSheet.js";
 import { restoreMotionAnimation, restoreMotionParameters } from "../workbench/motionRestore.js";
 import { useStepMotionControls } from "../workbench/useStepMotionControls.js";
-import { ZoomControl } from "../../kit/camera/ZoomControl.js";
 import StatusToast from "../../kit/status/StatusToast.js";
 import ViewerAlertDialog from "../../kit/status/ViewerAlertDialog.js";
 import ViewerLoadingOverlay from "../../kit/status/ViewerLoadingOverlay.js";
@@ -367,9 +366,6 @@ function CadFileViewSurface({
   const [viewerAlertOpen, setViewerAlertOpen] = useState(false);
   const [viewerRuntimeAlert, setViewerRuntimeAlert] = useState(null);
   const chromeBackdropColor = useChromeBackdropColor(uiPrefersDark);
-  // The zoom pill lives in the top-right toolbar row now; the viewer reports its live
-  // percent up, and the pill drives the camera back through the imperative handle.
-  const [viewerZoomPercent, setViewerZoomPercent] = useState(100);
   const rendering = resolvedScene.render.enabled;
   useEffect(() => { if (rendering) prefetchRenderStudio(); }, [rendering]);
   const resolvedThemeSettings = resolvedScene.theme;
@@ -1296,6 +1292,10 @@ function CadFileViewSurface({
 
   const selectedReferenceIdsRef = useRef(selectedReferenceIds);
   const selectedPartIdsRef = useRef(selectedPartIds);
+  // What the context menu's "Zoom to selection" frames, as it stands right now. It is
+  // read when a menu descriptor is built — on the press, or when a tree row's menu
+  // opens — so every place that menu appears offers the same item over the same target.
+  const zoomSelectionRef = useRef({ partIds: EMPTY_LIST, referenceIds: EMPTY_LIST, available: false });
   const selectedEntryBuildSnapshotRef = useRef({
     fileRef: "",
     stepHash: ""
@@ -1345,10 +1345,6 @@ function CadFileViewSurface({
   const selectedFileSheetKeyRef = useRef("");
 
   const desktopRightPanelOpen = false;
-
-  const handleViewerZoomPercentChange = useCallback((nextZoomPercent) => {
-    viewerRef.current?.applyZoomPercent?.(nextZoomPercent);
-  }, []);
 
   // Nothing toggles one panel on its own any more: the panel column has one
   // open id, and `handleTogglePanel` below is the single write that moves it.
@@ -3652,9 +3648,10 @@ function CadFileViewSurface({
   }, [tabToolMode]);
 
   // Right-clicking empty space asks about the model as a whole: reveal what is
-  // hidden, open or close the tree. Framing is not here — it is in the zoom menu
-  // — so when none of these can do anything the press opens nothing at all
-  // rather than a menu of greyed-out words.
+  // hidden, open or close the tree, and frame it again. The framing group is always
+  // worth offering — a press on the backdrop is how somebody who has zoomed off the
+  // model gets it back — so this menu always opens over a loaded model, and only the
+  // show/expand items come and go with what they could do.
   const openGlobalViewerContextMenu = useCallback(({ clientX = 0, clientY = 0 } = {}) => {
     if (!selectedViewportContent) {
       setViewerContextMenu(null);
@@ -3674,18 +3671,15 @@ function CadFileViewSurface({
     const expandAllDisabled = expansionState.collapsedExpandableTreeNodeIds.length < 1;
     const collapseAllDisabled = expandedStepTreeNodeIds.length < 1;
     const showExpandCollapse = hasPartsMenu && (expansionState.showExpandCollapse || expandedStepTreeNodeIds.length > 0);
-    if (!showShowAll && (!showExpandCollapse || (expandAllDisabled && collapseAllDisabled))) {
-      setViewerContextMenu(null);
-      return;
-    }
     setViewerContextMenu({
       x: Number(clientX) || 0,
       y: Number(clientY) || 0,
       global: true,
       label: "Viewer",
       hidden: true,
+      zoomSelectionAvailable: zoomSelectionRef.current.available,
       showShowAll,
-      showExpandCollapse,
+      showExpandCollapse: showExpandCollapse && !(expandAllDisabled && collapseAllDisabled),
       collapsedExpandableTreeNodeIds: expansionState.collapsedExpandableTreeNodeIds,
       expandedExpandableTreeNodeIds: expandedStepTreeNodeIds,
       expandAllDisabled,
@@ -3756,6 +3750,7 @@ function CadFileViewSurface({
       nodeId: normalizedNodeId,
       renderPartId: pickedPartId,
       label,
+      zoomSelectionAvailable: zoomSelectionRef.current.available,
       selected,
       hidden,
       focused,
@@ -3845,6 +3840,7 @@ function CadFileViewSurface({
         focused: false,
         actionCount: actionReferenceIds.length || 1,
         copyText: lines.join("\n"),
+        zoomSelectionAvailable: zoomSelectionRef.current.available,
         showIsolate: false,
         showHideOther: false,
         showVisibility: false,
@@ -4107,36 +4103,25 @@ function CadFileViewSurface({
     handleShowAllHiddenParts
   ]);
 
-  const handleResetZoom = useCallback(() => {
+  // "Zoom to fit": frame the whole model again from where the camera looks now. It is
+  // the viewport's one framing act — the live `resetCamera` command is the same call.
+  const zoomToFitModel = useCallback(() => {
     if (!viewerRef.current?.resetZoom?.()) {
       setCopyStatus("CAD Viewer camera not ready");
     }
   }, []);
 
-  const zoomToFitViewerContextMenu = useCallback((menu) => {
-    const fitPartIds = uniqueStringList(
-      (Array.isArray(menu?.fitPartIds) ? menu.fitPartIds : [])
-        .map((id) => String(id || "").trim())
-        .filter(Boolean)
+  // "Zoom to selection": frame what is selected right now, whichever menu asked and
+  // whatever node it was asked over. The item is offered only where there IS a
+  // selection, so finding nothing to frame here is a real failure and says so.
+  const zoomToSelection = useCallback(() => {
+    const ids = (list) => uniqueStringList(
+      (Array.isArray(list) ? list : []).map((id) => String(id || "").trim()).filter(Boolean)
     );
-    const fitReferenceIds = uniqueStringList(
-      (Array.isArray(menu?.fitReferenceIds) ? menu.fitReferenceIds : [])
-        .map((id) => String(id || "").trim())
-        .filter(Boolean)
-    );
-    // The global menu has no narrower target by construction, so it asks for the model.
-    // A part menu that resolved no ids is a real failure and still says so.
-    const fitWholeModel = menu?.fitWholeModel === true;
-    if (!fitWholeModel && !fitPartIds.length && !fitReferenceIds.length) {
-      setCopyStatus("No geometry to fit");
-      return;
-    }
-    if (!viewerRef.current?.zoomToFitSelection?.({
-      partIds: fitPartIds,
-      referenceIds: fitReferenceIds,
-      fallbackToModel: fitWholeModel,
-      animate: true
-    })) {
+    const partIds = ids(zoomSelectionRef.current.partIds);
+    const referenceIds = ids(zoomSelectionRef.current.referenceIds);
+    if (!(partIds.length || referenceIds.length)
+      || !viewerRef.current?.zoomToFitSelection?.({ partIds, referenceIds, animate: true })) {
       setCopyStatus("No geometry to fit");
     }
   }, []);
@@ -4197,7 +4182,9 @@ function CadFileViewSurface({
     onExpandSelected: expandSelectedViewerContextMenuNodes,
     onCollapseSelected: collapseSelectedViewerContextMenuNodes,
     onExpandAll: expandAllViewerContextMenuNodes,
-    onCollapseAll: collapseAllViewerContextMenuNodes
+    onCollapseAll: collapseAllViewerContextMenuNodes,
+    onZoomFit: zoomToFitModel,
+    onZoomSelection: zoomToSelection
   }).map(([name, action]) => [name, (menu) => { ensureSelectTool(); return action(menu); }])), [
     addPartMenuReferenceToPrompt,
     copyViewerContextMenuReference,
@@ -4212,6 +4199,8 @@ function CadFileViewSurface({
     collapseSelectedViewerContextMenuNodes,
     expandAllViewerContextMenuNodes,
     collapseAllViewerContextMenuNodes,
+    zoomToFitModel,
+    zoomToSelection,
     ensureSelectTool
   ]);
 
@@ -4270,15 +4259,15 @@ function CadFileViewSurface({
 
   const handleDisplayReset = viewSettingsStore.reset;
 
-  const zoomSelectionPartIds = inspectionHighlight ? inspectionHighlight.partIds || [] : viewerSelectedPartIds;
-  const zoomSelectionReferenceIds = inspectionHighlight ? inspectionHighlight.faceIds || [] : selectedReferenceIds;
-  const zoomHeader = <ZoomControl zoomPercent={viewerZoomPercent}
-    disabled={viewerLoading || stepInteractionBlocked || !selectedViewportContent}
-    onZoomPercentChange={handleViewerZoomPercentChange}
-    onZoomFit={() => zoomToFitViewerContextMenu({ fitWholeModel: true })}
-    selectionAvailable={Boolean(zoomSelectionPartIds.length || zoomSelectionReferenceIds.length)}
-    onZoomSelection={() => zoomToFitViewerContextMenu({ fitPartIds: zoomSelectionPartIds, fitReferenceIds: zoomSelectionReferenceIds })}
-    onResetZoom={handleResetZoom} />;
+  // An inspection highlight is a narrower selection than the tree's, and is what the
+  // person is actually looking at, so it wins.
+  const zoomSelectionPartIds = inspectionHighlight ? inspectionHighlight.partIds || EMPTY_LIST : viewerSelectedPartIds;
+  const zoomSelectionReferenceIds = inspectionHighlight ? inspectionHighlight.faceIds || EMPTY_LIST : selectedReferenceIds;
+  zoomSelectionRef.current = {
+    partIds: zoomSelectionPartIds,
+    referenceIds: zoomSelectionReferenceIds,
+    available: Boolean(zoomSelectionPartIds.length || zoomSelectionReferenceIds.length)
+  };
 
   useCadWorkspaceShortcuts({
     viewerElement,
@@ -4400,9 +4389,8 @@ function CadFileViewSurface({
       setViewerPerspective(scoped);
       handlePerspectiveChange(scoped);
     },
-    // What the zoom header's "Reset Zoom" does: frame the model again, without
-    // turning the camera. The name is the host protocol's ("cad-reset-camera"),
-    // older than the menu item it now shares its behaviour with.
+    // What the context menu's "Zoom to fit" does: frame the model again, without
+    // turning the camera. The name is the host protocol's ("cad-reset-camera").
     resetCamera() {
       if (!viewerRef.current?.resetZoom?.()) throw new Error('The viewer camera is unavailable.');
     },
@@ -4631,7 +4619,6 @@ function CadFileViewSurface({
                 ref={viewerRef}
                 onReload={onReload}
                 viewUpdate={viewUpdate}
-                onCameraZoomPercentChange={setViewerZoomPercent}
                 onLodCameraChange={onLodCameraMoved}
                 onMeshSourceAdoption={handleDisplayMeshAdoption}
                 renderPartsIndividually={
@@ -4792,7 +4779,6 @@ function CadFileViewSurface({
 
             {selectedFileSheetKind === "step" ? (
               <StepFileSheet
-                headerActions={zoomHeader}
                 selectedMeshData={selectedDisplayMeshData}
                 selectedSourceAppearance={selectedSourceAppearance}
                 client={client}

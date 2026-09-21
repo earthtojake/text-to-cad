@@ -81,7 +81,7 @@ function boxOf(bounds) {
  *   URDF's). `parts`: `buildRobotParts` — one per visual, or per named object of a visual's mesh.
  * @returns {import("../kit/scene.js").KitScene & object}  The contract, plus: `setJointValues(values)` (true when a
  *   matrix was written), `setHighlight({ hoveredLink, hoveredComponent, selectedLink, selectedComponents })`,
- *   `selectionBounds(selection)`, `linkCentre(name)`, `motionFrame(jointName)`, `linkFrames()`, `hasComponent(id)`,
+ *   `linkCentre(name)`, `motionFrame(jointName)`, `linkFrames()`, `hasComponent(id)`,
  *   and `stats` (test seam: matrix writes per pose).
  */
 export function createRobotScene(THREE, { description, parts }) {
@@ -375,8 +375,6 @@ export function createRobotScene(THREE, { description, parts }) {
       return [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2];
     },
     hasComponent(id) { return recordByComponent.has(id); },
-    /** What a selection occupies now, for "Zoom to selection"; null when it has no geometry. */
-    selectionBounds({ linkName = "", componentIds = [] } = {}) { return merged(recordsFor(linkName, componentIds)); },
     setHighlight(next) {
       if (disposed) return;
       highlight = { hoveredLink: "", hoveredComponent: "", selectedLink: "", selectedComponents: [], ...next };

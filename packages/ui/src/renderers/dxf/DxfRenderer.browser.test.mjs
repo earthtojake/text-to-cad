@@ -221,7 +221,6 @@ test('strokes stay hairlines when the drawing is zoomed in eight times', async (
   assert.ok(overrun.minX <= 1 && overrun.maxX >= zoomed.width - 2,
     `the bottom edge now spans the pane: ${JSON.stringify(overrun)}`);
   assert.ok(overrun.height <= 3, `and it is still a hairline: ${overrun.height} px tall`);
-  assert.equal(Math.round((await state(page)).zoomPercent / 10) * 10, 800);
   assert.deepEqual(errors, []);
 });
 
@@ -296,15 +295,27 @@ test('a pane that is resized re-fits only while the view is still the one it ope
   const resized = await frame(pane);
   assert.ok(Math.abs(refitted.height - (resized.height - 32)) <= 3, `fitted to the new pane: ${refitted.height} in ${resized.height}`);
 
-  // Touched: the person's framing is theirs, and a resize does not take it back.
+  // Touched: the person's framing is theirs and a resize does not take it back — but it is
+  // kept in the terms it was chosen in, not in pixels. The view holds the same zoom
+  // RELATIVE to the fit, still centred on what it was centred on, so a pane that grows
+  // shows the same view bigger, as the 3D viewports do. Holding an absolute pixel scale
+  // would instead crop the drawing where it stood when the pane narrowed.
   const canvas = await canvasOf(pane).boundingBox();
   await wheelAt(page, canvas, { x: canvas.width / 2, y: canvas.height / 2 }, deltaForFactor(0.5));
-  const chosen = inkBox(await frame(pane));
+  const chosenShot = await frame(pane);
+  const chosen = inkBox(chosenShot);
   await shrink('640px');
   await settle(page);
-  const kept = inkBox(await frame(pane));
-  assert.ok(Math.abs(kept.height - chosen.height) <= 2,
-    `the chosen zoom survived the resize: ${chosen.height} -> ${kept.height}`);
+  const grownShot = await frame(pane);
+  const kept = inkBox(grownShot);
+  // The canvas is the pane less its navbar; the share of it the drawing covers is the
+  // person's zoom, and that is what survives.
+  const share = (ink, shot) => ink.height / (shot.height - 32);
+  assert.ok(Math.abs(share(kept, grownShot) - share(chosen, chosenShot)) < 0.02,
+    `half the fit, before and after: ${share(chosen, chosenShot)} -> ${share(kept, grownShot)}`);
+  assert.ok(kept.height > chosen.height * 1.3,
+    `a bigger pane shows the same view bigger: ${chosen.height} -> ${kept.height}`);
+  assert.ok(share(kept, grownShot) < 0.7, 'and it is still the zoom they chose, not the fit');
   assert.deepEqual(errors, []);
 });
 
@@ -326,9 +337,12 @@ test('a DXF has no sidebar, no inspector toggle and no tools', async (t) => {
   assert.equal(await pane.getByRole('tab').count(), 0, 'no Material, Bends, Layers or Display tabs');
   // The host's own panels are untouched: the file tree is still one press away.
   assert.equal(await pane.getByRole('button', { name: 'Show files', exact: true }).count(), 1);
-  // What a drawing DOES offer: the three zoom acts and a snapshot.
-  for (const name of ['Zoom in', 'Zoom out', 'Reset Zoom', 'Take snapshot']) {
-    assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 1, name);
+  // What a drawing offers: a snapshot, and nothing else. Zooming is the pointer's —
+  // wheel or pinch about it, drag to pan, double-click to fit — so the navbar carries
+  // no zoom buttons, and there is no zoom control anywhere else in the viewer either.
+  assert.equal(await pane.getByRole('button', { name: 'Take snapshot', exact: true }).count(), 1);
+  for (const name of ['Zoom in', 'Zoom out', 'Reset Zoom', 'Zoom to fit', 'Zoom controls']) {
+    assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
   }
 
   // The snapshot is the drawing WITH its background, delivered through the host.
@@ -399,17 +413,20 @@ test('host commands a flat drawing cannot answer are declined in words', async (
   assert.match(await refuse('c => c.setCamera({ position: [0, 0, 1], target: [0, 0, 0], up: [0, 1, 0] })'), /no camera to pose/);
   assert.match(await refuse('c => c.setRenderMode(true)'), /no Display settings/);
 
-  // What it CAN do: report itself, fit again, zoom, and hand over a PNG.
+  // What it CAN do: report itself, fit again, and hand over a PNG. There is no zoom
+  // command and no zoom readout: no host ever sent one, and nothing read the percentage.
   const snapshot = await state(page);
   assert.equal(snapshot.loading, false);
   assert.equal(snapshot.camera, null);
   assert.deepEqual(snapshot.selection, []);
-  assert.equal(Math.round(snapshot.zoomPercent), 100);
+  assert.equal('zoomPercent' in snapshot, false, 'the live state carries no zoom percentage');
+  // setZoom is gone with the UI that was its only caller: no host ever sent it.
+  assert.equal(await page.evaluate(() => typeof window.cadHarness.a.controller.setZoom), 'undefined');
 
   const fitted = inkBox(await frame(pane));
-  await page.evaluate(() => window.cadHarness.a.controller.setZoom(50));
-  const zoomed = inkBox(await frame(pane));
-  assert.ok(Math.abs(zoomed.height / fitted.height - 0.5) < 0.03, `setZoom(50) halved it: ${zoomed.height / fitted.height}`);
+  const canvas = await canvasOf(pane).boundingBox();
+  await wheelAt(page, canvas, { x: fitted.minX, y: fitted.maxY }, deltaForFactor(0.5));
+  assert.ok(Math.abs(inkBox(await frame(pane)).height / fitted.height - 0.5) < 0.03, 'the wheel still zooms the drawing');
   await page.evaluate(() => window.cadHarness.a.controller.resetCamera());
   assert.ok(Math.abs(inkBox(await frame(pane)).height - fitted.height) <= 2, 'resetCamera fits the drawing again');
 

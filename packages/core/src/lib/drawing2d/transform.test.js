@@ -11,7 +11,6 @@ import {
   sameTransform,
   screenToModel,
   zoomLimits,
-  zoomPercent,
   zoomTransform
 } from "./transform.js";
 
@@ -127,13 +126,6 @@ test("bad zoom inputs are refused by name", () => {
   assert.throws(() => zoomTransform({ scale: 1, offsetX: 0, offsetY: 0 }, { x: 0, y: 0 }, 0, zoomLimits(1)), /positive factor/);
   assert.throws(() => zoomLimits(0), /positive fitted scale/);
   assert.throws(() => clampScale(1, { minScale: 4, maxScale: 2 }), /minScale <= maxScale/);
-  assert.throws(() => zoomPercent({ scale: 1, offsetX: 0, offsetY: 0 }, 0), /positive fitted scale/);
-});
-
-test("the zoom readout calls the fitted view 100%", () => {
-  const fitted = fitTransform([0, 0, 100, 100], 400, 400, { margin: 0 });
-  assert.equal(zoomPercent(fitted, fitted.scale), 100);
-  assert.equal(zoomPercent({ ...fitted, scale: fitted.scale * 8 }, fitted.scale), 800);
 });
 
 test("sameTransform tells a resize's drift from a pan", () => {

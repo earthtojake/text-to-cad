@@ -89,20 +89,27 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
       await pane.getByRole('button', { name: 'Inspector', exact: true }).click();
     }
   };
-  const zoomAction = async name => {
-    await ensureInspector(first);
-    await first.getByRole('button', { name: 'Zoom controls', exact: true }).click();
-    await page.getByRole('menuitem', { name, exact: true }).click();
-    await page.getByRole('menu').waitFor({ state: 'detached' });
-  };
+  // The camera is moved through the live controller now: there is no zoom control in the
+  // viewer to press. A mesh's Inspector header holds its tabs and nothing else.
+  const zoomTo = (testId, zoom) => page.evaluate(async ([id, value]) => {
+    const controller = window.cadHarness[id].controller;
+    await controller.setCamera({ ...controller.readState().camera, zoom: value });
+  }, [testId, zoom]);
+  const cameraZoom = () => page.evaluate(() => window.cadHarness.a.controller.readState().camera?.zoom ?? null);
   await ensureInspector(first);
 
-  await first.getByLabel('Zoom level percent', { exact: true }).waitFor().catch(async (error) => { throw new Error(`${error.message}; page errors: ${errors.join('; ')}; body: ${await page.locator("body").innerText()}; requests: ${requests.join(", ")}`); });
+  await first.locator('[data-file-sheet-header]').waitFor().catch(async (error) => { throw new Error(`${error.message}; page errors: ${errors.join('; ')}; body: ${await page.locator("body").innerText()}; requests: ${requests.join(", ")}`); });
   await page.waitForFunction(() => Object.keys(window.cadHarness.state.renderers || {}).length > 0);
   assert.deepEqual(errors, []);
   assert.equal(await page.title(), 'Host title');
-  await zoomAction('Zoom in');
-  await page.waitForFunction(() => document.querySelector('[aria-label="Zoom level percent"]')?.textContent !== '100%');
+  // No zoom chrome survives anywhere in the shell: not the percentage readout, not the
+  // menu behind it, and not in the Inspector header that used to carry both.
+  assert.equal(await first.getByRole('button', { name: 'Zoom controls', exact: true }).count(), 0);
+  assert.equal(await first.getByLabel('Zoom level percent', { exact: true }).count(), 0);
+  assert.equal(await first.locator('[data-file-sheet-header]').getByRole('button').count(), 0,
+    'the Inspector header is tabs alone');
+  await zoomTo('a', 1.1);
+  await page.waitForFunction(() => Math.abs((window.cadHarness.a.controller.readState().camera?.zoom ?? 0) - 1.1) < 1e-6);
   await ensureInspector(first);
   await first.locator('[data-file-sheet="STL"]').waitFor();
   assert.equal(await first.getByRole('button', { name: 'Theme settings', exact: true }).count(), 0);
@@ -139,19 +146,17 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   assert.deepEqual(await page.evaluate(() => window.nativeMenu), [false, true],
     'the event reaches the canvas and leaves it prevented: no native menu either');
   await first.getByRole('button', { name: 'Inspector', exact: true }).click();
-  await zoomAction('Reset Zoom');
-  await page.waitForFunction(() => document.querySelector('[data-testid="one"] [aria-label="Zoom level percent"]')?.textContent === '100%');
-  await zoomAction('Zoom in');
-  await page.waitForFunction(() => document.querySelector('[data-testid="one"] [aria-label="Zoom level percent"]')?.textContent === '110%');
   await page.evaluate(() => window.cadHarness.second(true));
   await ensureInspector(page.getByTestId('two'));
-  await page.getByTestId('two').getByLabel('Zoom level percent', { exact: true }).waitFor();
-  assert.equal(await page.getByTestId('two').getByLabel('Zoom level percent', { exact: true }).innerText(), '100%');
+  await page.getByTestId('two').locator('[data-file-sheet-header]').waitFor();
+  assert.equal(await page.getByTestId('two').getByRole('button', { name: 'Zoom controls', exact: true }).count(), 0);
+  assert.equal(await page.evaluate(() => window.cadHarness.b.controller.readState().camera?.zoom), 1,
+    'a sibling renderer opens at its own framing');
   assert.ok(requests.includes('/one/mesh.stl'));
   assert.ok(requests.includes('/two/mesh.stl'));
   assert.ok(catalogFiles.some(({ root, file }) => root === 'one' && file === 'part.stl'));
   assert.ok(catalogFiles.some(({ root, file }) => root === 'two' && file === 'part.stl'));
-  assert.equal(await first.getByLabel('Zoom level percent', { exact: true }).innerText(), '110%');
+  assert.ok(Math.abs(await cameraZoom() - 1.1) < 1e-6, 'the first pane kept the camera it was given');
   // A second pane changes the first viewport's dimensions. Let its resize
   // observer and camera event publish before taking the saved snapshot.
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -164,27 +169,23 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   assert.deepEqual(Object.keys(before.renderers), [JSON.stringify(['part.stl', 'mesh'])], 'one record per file, keyed [path, renderer id]');
   for (const saved of Object.values(before.renderers)) assert.ok(saved.camera, 'unmount flushes the outgoing camera');
   await page.evaluate(() => window.cadHarness.mounted(true));
-  await first.getByLabel('Zoom level percent', { exact: true }).waitFor();
-  // The toolbar mounts with its default 100% before the viewport adopts the mesh
-  // and publishes its restored camera. Wait for the actual presented frame,
-  // not for the expected zoom value or an arbitrary settling delay.
+  await first.locator('[data-file-sheet-header]').waitFor();
+  // The pane remounts before the viewport adopts the mesh and publishes its restored
+  // camera. Wait for the actual presented frame, not an arbitrary settling delay.
   const restoreDiagnostic = await page.evaluate(() => {
     const pane = document.querySelector('[data-testid="one"]');
     const state = Object.values(window.cadHarness.state.renderers || {})[0];
-    return { zoom: pane.querySelector('[aria-label="Zoom level percent"]')?.textContent,
-      busy: pane.querySelector('[aria-busy]')?.getAttribute('aria-busy'),
-      savedCamera: state?.camera };
+    return { busy: pane.querySelector('[aria-busy]')?.getAttribute('aria-busy'), savedCamera: state?.camera };
   });
   await page.waitForFunction(() => {
     const pane = document.querySelector('[data-testid="one"]');
     return pane?.querySelector('[aria-busy="false"] canvas') &&
       !pane.querySelector('[data-viewer-transition], [data-file-status] .animate-spin');
   });
-  t.diagnostic(`Remount camera readiness: ${JSON.stringify({ ...restoreDiagnostic,
-    presentedZoom: await first.getByLabel('Zoom level percent', { exact: true }).innerText() })}`);
+  t.diagnostic(`Remount camera readiness: ${JSON.stringify({ ...restoreDiagnostic, presentedZoom: await cameraZoom() })}`);
   // Serialized camera state restores in its file session; a sibling renderer
-  // still opens at its own default zoom. Runtime-only scope is not persisted.
-  assert.equal(await first.getByLabel('Zoom level percent', { exact: true }).innerText(), '110%');
+  // still opens at its own framing. Runtime-only scope is not persisted.
+  await page.waitForFunction(() => Math.abs((window.cadHarness.a.controller.readState().camera?.zoom ?? 0) - 1.1) < 1e-6);
   const after = await page.evaluate(() => window.cadHarness.state);
   const previousState = structuredClone(before.renderers);
   const restoredState = structuredClone(after.renderers);
@@ -544,6 +545,47 @@ test('a file opens framed at 100% of its own ruler: the open fit is the fit, wha
   }).halfHeight;
   assert.ok(Math.abs(opened.halfHeight - expected) / expected < 0.01,
     `framed at the fit for this aspect: ${opened.halfHeight} vs ${expected}`);
+
+  // And the way BACK. A mesh has no tools, no viewport menu and — since the Inspector's
+  // zoom readout and its menu were removed — no zoom control at all. The view cube's
+  // centre is the only affordance left, so it has to do what its label says: reset the
+  // VIEW. It used to turn the camera to the default direction and keep the distance and
+  // the pan, which from a camera driven off the model left the pane empty.
+  const canvas = pane.locator('[aria-busy] > div > canvas').first();
+  const inkFraction = async () => {
+    const png = PNG.sync.read(await canvas.screenshot());
+    const background = [png.data[0], png.data[1], png.data[2]];
+    let drawn = 0;
+    for (let offset = 0; offset < png.data.length; offset += 4) {
+      const delta = Math.abs(png.data[offset] - background[0]) + Math.abs(png.data[offset + 1] - background[1])
+        + Math.abs(png.data[offset + 2] - background[2]);
+      if (delta > 32) drawn += 1;
+    }
+    return drawn / (png.width * png.height);
+  };
+  const settleInk = async (reached, what) => {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const ink = await inkFraction();
+      if (reached(ink)) return ink;
+      await page.waitForTimeout(150);
+    }
+    throw new Error(`the drawn frame never ${what}`);
+  };
+  assert.ok(await settleInk(ink => ink > 0.05, 'showed the plate') > 0.05);
+  // Zoomed right in and dragged far off it: the model is no longer on screen.
+  await page.evaluate(async () => {
+    const controller = window.cadHarness.a.controller;
+    const camera = controller.readState().camera;
+    await controller.setCamera({ ...camera, target: [camera.target[0] + 4000, camera.target[1] + 4000, camera.target[2]],
+      position: [camera.position[0] + 4000, camera.position[1] + 4000, camera.position[2]], zoom: 9 });
+  });
+  const lost = await settleInk(ink => ink < 0.01, 'emptied when the camera was driven off the model');
+
+  const cube = pane.getByRole('button', { name: 'Reset to default isometric view', exact: true });
+  assert.equal(await cube.count(), 1, 'a mesh keeps the view cube');
+  await cube.click();
+  const recovered = await settleInk(ink => ink > 0.05, 'framed the plate again after the view cube was pressed');
+  assert.ok(recovered > lost * 5, `the cube re-frames, it does not only re-orient: ${lost} -> ${recovered}`);
   assert.deepEqual(errors, []);
 });
 

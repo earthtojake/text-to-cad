@@ -1,16 +1,16 @@
-import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
-import { applyPerspectiveSnapshot, cancelCameraTransition, captureRuntimeViewportFitScale, readPerspectiveSnapshot, readRuntimeZoomPercent, readScopedPerspectiveSnapshot, recenterRuntimeTarget, setRuntimeZoomPercent, syncRuntimeViewportFraming, transitionCameraToViewPreset, zoomRuntimeToBounds } from "./runtimeCamera.js";
+import { useCallback, useLayoutEffect, useRef } from "react";
+import { applyPerspectiveSnapshot, cancelCameraTransition, captureRuntimeViewportFitScale, readPerspectiveSnapshot, readScopedPerspectiveSnapshot, recenterRuntimeTarget, setRuntimeZoomPercent, syncRuntimeViewportFraming, transitionCameraToViewPreset, zoomRuntimeToBounds } from "./runtimeCamera.js";
 import { runtimeModelKeyMatches } from "@hardcore/core/lib/viewer/modelRuntime.js";
 import { perspectiveSnapshotEqual, perspectiveSnapshotMatchesScene, resolvePerspectiveSnapshot } from "@hardcore/core/lib/perspective.js";
 import { DEFAULT_VIEW_DIRECTION, VIEW_PLANE_DEFAULT_PRESET, VIEW_PLANE_FACE_BY_ID, WORLD_UP, cameraMatchesViewPreset, clearKeyboardOrbitState, readViewPlaneOrientation, runtimeFramingBounds, viewPlaneOrientationEqual } from "./viewportCameraKit.js";
 
 /**
- * The camera of a mounted viewport, as React sees it: the live zoom percent, the
- * perspective a session stores (emitted when it really changed, never while a
- * presentation camera is showing), the initial/stored view, the fullscreen
- * camera swap and its exact restore, zoom/reset commands, and the view cube's
- * face presets. The refs and setters are the mounting component's; this hook
- * owns the behaviour between them and the runtime (`runtimeCamera.js`).
+ * The camera of a mounted viewport, as React sees it: the perspective a session
+ * stores (emitted when it really changed, never while a presentation camera is
+ * showing), the initial/stored view, the fullscreen camera swap and its exact
+ * restore, the reset, and the view cube's face presets. The refs and setters are
+ * the mounting component's; this hook owns the behaviour between them and the
+ * runtime (`runtimeCamera.js`).
  *
  * `modelBounds` is the authored `{ min, max }` a reset frames; `coordinateSystemFor`
  * names the coordinate system a stored camera belongs to, for a scale mode;
@@ -19,7 +19,6 @@ import { DEFAULT_VIEW_DIRECTION, VIEW_PLANE_DEFAULT_PRESET, VIEW_PLANE_FACE_BY_I
 export function useViewportCamera({
   coordinateSystemFor,
   activeViewPlaneFaceRef,
-  cameraZoomPercent,
   defaultPerspectiveResettingRef,
   fullscreenCameraRef,
   lastEmittedPerspectiveRef,
@@ -28,7 +27,6 @@ export function useViewportCamera({
   modelKey,
   modelKeyRef,
   modelTransformRef,
-  onCameraZoomPercentChange,
   perspectiveChangeRef,
   perspectivePropRef,
   perspectiveRef,
@@ -39,29 +37,11 @@ export function useViewportCamera({
   runtimeRef,
   sceneScaleModeRef,
   setActiveViewPlaneFace,
-  setCameraZoomPercent,
   setDefaultPerspectiveDetached,
   setViewPlaneOrientation,
   suppressPerspectiveEventsRef,
   viewerReadyTick
 }) {
-const syncCameraZoomPercent = useCallback((runtime = runtimeRef.current) => {
-    if (!runtime?.camera) {
-      setCameraZoomPercent((current) => (current === 100 ? current : 100));
-      return;
-    }
-    const nextZoomPercent = Math.round(readRuntimeZoomPercent(runtime));
-    setCameraZoomPercent((current) => (
-      Math.abs(current - nextZoomPercent) < 0.5 ? current : nextZoomPercent
-    ));
-  }, []);
-  // The zoom pill lives in the workspace's top-right toolbar row now, so the live percent
-  // has to travel up — the viewer keeps the camera math, the toolbar keeps the control.
-  const onCameraZoomPercentChangeRef = useRef(onCameraZoomPercentChange);
-  onCameraZoomPercentChangeRef.current = onCameraZoomPercentChange;
-  useEffect(() => {
-    onCameraZoomPercentChangeRef.current?.(cameraZoomPercent);
-  }, [cameraZoomPercent]);
   const emitPerspectiveChange = (runtime = runtimeRef.current) => {
     const currentModelKey = modelKeyRef.current;
     if (!runtimeModelKeyMatches(runtime, currentModelKey)) {
@@ -75,7 +55,6 @@ const syncCameraZoomPercent = useCallback((runtime = runtimeRef.current) => {
     if (!nextPerspective) {
       return;
     }
-    syncCameraZoomPercent(runtime);
     if (previewModeRef.current || fullscreenCameraRef.current) {
       // LOD still follows the presentation camera, but session persistence does not.
       cameraMovedRef.current?.();
@@ -178,7 +157,6 @@ const syncCameraZoomPercent = useCallback((runtime = runtimeRef.current) => {
       controls.enableDamping = true;
       controls.autoRotate = entering && previewOrbitSpeed > 0;
       captureRuntimeViewportFitScale(runtime);
-      syncCameraZoomPercent(runtime);
       syncViewPlaneOrientation(runtime);
       runtime.requestRender?.();
     });
@@ -188,23 +166,16 @@ const syncCameraZoomPercent = useCallback((runtime = runtimeRef.current) => {
     syncFullscreenCamera();
     // Entry/exit must precede ResizeObserver and the next presented frame.
   }, [previewMode, modelKey, viewerReadyTick]);
-  const applyZoomPercent = useCallback((nextZoomPercent) => {
-    const runtime = runtimeRef.current;
-    if (!setRuntimeZoomPercent(runtime, nextZoomPercent)) {
-      return;
-    }
-    syncCameraZoomPercent(runtime);
-    emitPerspectiveChange(runtime);
-    syncViewPlaneOrientation(runtime);
-  }, [
-    syncCameraZoomPercent,
-    syncViewPlaneOrientation
-  ]);
+  // The authored bounds a reset frames, read at the moment of the reset: it is a
+  // fresh object every render, and both resets below must stay stable — one is
+  // handed to the memoized view cube, the other to the viewport's imperative handle.
+  const modelBoundsRef = useRef(modelBounds);
+  modelBoundsRef.current = modelBounds;
   const resetZoomAndPan = useCallback(({ animate = true } = {}) => {
     const runtime = runtimeRef.current;
     const reset = zoomRuntimeToBounds(
       runtime,
-      runtimeFramingBounds(runtime, modelBounds),
+      runtimeFramingBounds(runtime, modelBoundsRef.current),
       sceneScaleModeRef.current,
       {
         animate,
@@ -213,7 +184,6 @@ const syncCameraZoomPercent = useCallback((runtime = runtimeRef.current) => {
       }
     );
     if (reset && !animate) {
-      syncCameraZoomPercent(runtime);
       emitPerspectiveChange(runtime);
       syncViewPlaneOrientation(runtime);
     }
@@ -229,15 +199,10 @@ const syncCameraZoomPercent = useCallback((runtime = runtimeRef.current) => {
     if (!setRuntimeZoomPercent(runtime, 100)) {
       return false;
     }
-    syncCameraZoomPercent(runtime);
     emitPerspectiveChange(runtime);
     syncViewPlaneOrientation(runtime);
     return true;
-  }, [
-    modelBounds,
-    syncCameraZoomPercent,
-    syncViewPlaneOrientation
-  ]);
+  }, []);
   // Stable, and built only from refs and setters: the view cube is memoized, so a viewer
   // render that changed nothing of the cube's (every animation frame) does not redraw it.
   const activateViewPlaneFace = useCallback((faceId) => {
@@ -255,6 +220,12 @@ const syncCameraZoomPercent = useCallback((runtime = runtimeRef.current) => {
     }
     return transitioned;
   }, []);
+  // The view cube's centre: "Reset to default isometric view". It resets the VIEW —
+  // the model is FRAMED again, from the default direction — not just the direction.
+  // Turning the camera alone left somebody who had zoomed or panned away looking
+  // isometrically at empty space, and for a renderer that offers no viewport menu
+  // this button is the only way back to a framed model.
+  // With no authored bounds to frame there is nothing to fit, so it still turns.
   const activateDefaultViewPlane = useCallback(() => {
     const runtime = runtimeRef.current;
     if (!runtime) {
@@ -262,21 +233,25 @@ const syncCameraZoomPercent = useCallback((runtime = runtimeRef.current) => {
     }
     activeViewPlaneFaceRef.current = "";
     setActiveViewPlaneFace("");
-    const transitioned = transitionCameraToViewPreset(runtime, VIEW_PLANE_DEFAULT_PRESET);
-    if (transitioned) {
+    const reset = zoomRuntimeToBounds(runtime, runtimeFramingBounds(runtime, modelBoundsRef.current), sceneScaleModeRef.current, {
+      animate: true,
+      modelOffset: modelTransformRef.current.offset,
+      resetZoomBaseline: true,
+      viewDirection: DEFAULT_VIEW_DIRECTION,
+      viewUp: WORLD_UP
+    }) || transitionCameraToViewPreset(runtime, VIEW_PLANE_DEFAULT_PRESET);
+    if (reset) {
       defaultPerspectiveResettingRef.current = true;
       setDefaultPerspectiveDetached(false);
     }
-    return transitioned;
+    return reset;
   }, []);
   return {
     activateDefaultViewPlane,
     activateViewPlaneFace,
     applyInitialPerspective,
-    applyZoomPercent,
     emitPerspectiveChange,
     resetZoomAndPan,
-    syncCameraZoomPercent,
     syncFullscreenCamera,
     syncViewPlaneOrientation
   };

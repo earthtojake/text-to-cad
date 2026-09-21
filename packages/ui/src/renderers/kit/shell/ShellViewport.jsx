@@ -67,7 +67,8 @@ function clearGroup(group) {
  * it. The scene stays its renderer's: this component detaches it, never disposes it.
  *
  * The imperative handle is what the shell drives: view settings preparation and
- * presentation, screenshot pixels, zoom, fit, reset and stored perspectives.
+ * presentation, screenshot pixels, the reset that frames the model, framing a
+ * given box, and stored perspectives.
  */
 const ShellViewport = forwardRef(function ShellViewport({
   scene = null,
@@ -95,7 +96,6 @@ const ShellViewport = forwardRef(function ShellViewport({
   drawingEnabled = false,
   drawing = null,
   onPerspectiveChange = null,
-  onCameraZoomPercentChange = null,
   onPresentationChange = null,
   onViewerAlertChange = null,
   // The camera came to rest on a new view: a presentation camera that moved (fullscreen's
@@ -180,7 +180,6 @@ const ShellViewport = forwardRef(function ShellViewport({
   }, [resolvedPresentationKey]);
   const [activeViewPlaneFace, setActiveViewPlaneFace] = useState("");
   const [viewPlaneOrientation, setViewPlaneOrientation] = useState(DEFAULT_VIEW_PLANE_ORIENTATION);
-  const [cameraZoomPercent, setCameraZoomPercent] = useState(100);
   const activeViewPlaneFaceRef = useRef("");
   const defaultPerspectiveResettingRef = useRef(false);
   const previewModeRef = useRef(previewMode);
@@ -285,14 +284,14 @@ const ShellViewport = forwardRef(function ShellViewport({
   };
   const coordinateSystemFor = useCallback(() => STORED_CAMERA_COORDINATES, []);
   const {
-    activateDefaultViewPlane, activateViewPlaneFace, applyInitialPerspective, applyZoomPercent, emitPerspectiveChange,
-    resetZoomAndPan, syncCameraZoomPercent, syncFullscreenCamera, syncViewPlaneOrientation
+    activateDefaultViewPlane, activateViewPlaneFace, applyInitialPerspective, emitPerspectiveChange,
+    resetZoomAndPan, syncFullscreenCamera, syncViewPlaneOrientation
   } = useViewportCamera({
-    coordinateSystemFor, activeViewPlaneFaceRef, cameraZoomPercent, defaultPerspectiveResettingRef, fullscreenCameraRef,
+    coordinateSystemFor, activeViewPlaneFaceRef, defaultPerspectiveResettingRef, fullscreenCameraRef,
     lastEmittedPerspectiveRef, cameraMovedRef, modelBounds: scene?.restBounds || scene?.bounds || null, modelKey, modelKeyRef,
-    modelTransformRef, onCameraZoomPercentChange, perspectiveChangeRef, perspectivePropRef, perspectiveRef, previewMode,
+    modelTransformRef, perspectiveChangeRef, perspectivePropRef, perspectiveRef, previewMode,
     previewModeRef, previewOrbitSpeed, runWithoutPerspectiveEvents, runtimeRef, sceneScaleModeRef, setActiveViewPlaneFace,
-    setCameraZoomPercent, setDefaultPerspectiveDetached, setViewPlaneOrientation, suppressPerspectiveEventsRef, viewerReadyTick
+    setDefaultPerspectiveDetached, setViewPlaneOrientation, suppressPerspectiveEventsRef, viewerReadyTick
   });
   // The open-time fit is taken under the lens the viewport opens with, and the file's own
   // projection arrives a moment later. CONVERTING that fit to the other projection is not the
@@ -335,12 +334,11 @@ const ShellViewport = forwardRef(function ShellViewport({
     const runtime = runtimeRef.current;
     if (!runtime) return;
     if (!refitOpenFraming(runtime)) syncRuntimeViewportFraming(runtime);
-    syncCameraZoomPercent(runtime);
     emitPerspectiveChange(runtime);
     // A resize can change what is on screen without changing the stored perspective,
     // so the settle is reported here rather than left to perspective deduplication.
     cameraMovedRef.current?.();
-  }, [syncCameraZoomPercent]);
+  }, []);
 
   const hasViewportContent = Boolean(scene);
   const drawingOverlayActive = drawingEnabled && !previewMode && hasViewportContent;
@@ -373,23 +371,7 @@ const ShellViewport = forwardRef(function ShellViewport({
     },
     activateViewPlaneFace,
     activateDefaultViewPlane,
-    applyZoomPercent,
     requestRender() { runtimeRef.current?.requestRender?.(); },
-    resetView() {
-      const runtime = runtimeRef.current;
-      const reset = zoomRuntimeToBounds(runtime, runtimeFramingBounds(runtime, scene?.restBounds || scene?.bounds), sceneScaleModeRef.current, {
-        animate: true, modelOffset: modelTransformRef.current.offset, resetZoomBaseline: true,
-        viewDirection: DEFAULT_VIEW_DIRECTION,
-        viewUp: WORLD_UP
-      });
-      if (reset) {
-        activeViewPlaneFaceRef.current = "";
-        setActiveViewPlaneFace("");
-        defaultPerspectiveResettingRef.current = true;
-        setDefaultPerspectiveDetached(false);
-      }
-      return reset;
-    },
     getPerspective() {
       return readScopedPerspectiveSnapshot(runtimeRef.current, {
         modelKey, sceneScaleMode: normalizedSceneScaleMode, coordinateSystem: STORED_CAMERA_COORDINATES
@@ -401,12 +383,11 @@ const ShellViewport = forwardRef(function ShellViewport({
       if (runtimeRef.current) runtimeRef.current.openFitPending = false;
       if (options?.animate) return transitionCameraToPerspectiveSnapshot(runtimeRef.current, nextPerspective, options);
       const applied = applyPerspectiveSnapshot(runtimeRef.current, nextPerspective);
-      if (applied && options?.resetZoomBaseline) {
-        resetRuntimeZoomBaseline(runtimeRef.current);
-        syncCameraZoomPercent(runtimeRef.current);
-      }
+      if (applied && options?.resetZoomBaseline) resetRuntimeZoomBaseline(runtimeRef.current);
       return applied;
     },
+    // Frame the model again, from where the camera looks now. A renderer's "Zoom to
+    // fit" and the live `resetCamera` command are both this one act.
     resetZoom() { return resetZoomAndPan({ animate: true }); },
     // The scene moved its own bounds (a pose, a frame of a routine): lighting, shadows and
     // the floor follow it NOW, with no React render, no re-adoption and no reframe.
@@ -418,23 +399,13 @@ const ShellViewport = forwardRef(function ShellViewport({
       runtime.requestRender?.();
       return true;
     },
-    // Frame part of the scene (a selection). The camera moves; 100% keeps meaning the rest framing.
+    // Frame part of the scene: what a renderer's "Zoom to selection" moves the camera to.
     zoomToBounds(bounds, { animate = true } = {}) {
       const runtime = runtimeRef.current;
       if (!bounds || !runtime) return false;
       return zoomRuntimeToBounds(runtime, bounds, sceneScaleModeRef.current, { animate, modelOffset: modelTransformRef.current.offset });
-    },
-    zoomToFit({ animate = true } = {}) {
-      const runtime = runtimeRef.current;
-      const fitted = zoomRuntimeToBounds(runtime, runtimeFramingBounds(runtime, scene?.restBounds || scene?.bounds),
-        sceneScaleModeRef.current, { animate, modelOffset: modelTransformRef.current.offset, resetZoomBaseline: true });
-      if (fitted && !animate) {
-        emitPerspectiveChange(runtime);
-        syncViewPlaneOrientation(runtime);
-      }
-      return fitted;
     }
-  }), [activateViewPlaneFace, modelKey, normalizedSceneScaleMode, resetZoomAndPan, scene, syncCameraZoomPercent, syncViewPlaneOrientation]);
+  }), [activateViewPlaneFace, activateDefaultViewPlane, modelKey, normalizedSceneScaleMode, resetZoomAndPan, scene]);
 
   // Read-only debug/test seam: the LIVE camera of the viewport that mounted last, so a
   // browser test can assert that moving a model leaves the framing exactly where it was.
@@ -466,13 +437,6 @@ const ShellViewport = forwardRef(function ShellViewport({
     };
   }, []);
   useEffect(() => { perspectiveChangeRef.current = onPerspectiveChange; }, [onPerspectiveChange]);
-  useEffect(() => {
-    const runtime = runtimeRef.current;
-    if (!runtime) return undefined;
-    runtime.onZoomChange = syncCameraZoomPercent;
-    syncCameraZoomPercent(runtime);
-    return () => { if (runtime.onZoomChange === syncCameraZoomPercent) runtime.onZoomChange = null; };
-  }, [syncCameraZoomPercent, viewerReadyTick]);
 
   const handleRuntimeContextRestored = useCallback(() => {
     framedModelKeyRef.current = "";
@@ -599,7 +563,7 @@ const ShellViewport = forwardRef(function ShellViewport({
     lastProjectionRef.current = normalizedProjection;
     if (!syncRuntimeCameraProjection(runtime, normalizedProjection,
       projectionChanged ? { scheduleIdle: false, requestRender: false } : undefined)) return;
-    if (refitOpenFraming(runtime)) syncCameraZoomPercent(runtime);
+    refitOpenFraming(runtime);
     emitPerspectiveChange(runtime);
     syncViewPlaneOrientation(runtime);
   }, [normalizedProjection, viewerReadyTick]);
@@ -896,7 +860,6 @@ const ShellViewport = forwardRef(function ShellViewport({
       });
       captureRuntimeViewportFitScale(runtime);
       resetRuntimeZoomBaseline(runtime);
-      syncCameraZoomPercent(runtime);
       framedModelKeyRef.current = modelKey || "";
       framedViewingModeRef.current = viewingMode;
       framedBoundsRef.current = framingBounds;
@@ -904,10 +867,7 @@ const ShellViewport = forwardRef(function ShellViewport({
     }
     // A replaced runtime (context recovery) restores framing independently of what drew last.
     if (runtime.previousViewState) {
-      if (runtime.previousViewState.modelKey === modelKey) {
-        Object.assign(runtime, runtime.previousViewState.framing);
-        syncCameraZoomPercent(runtime);
-      }
+      if (runtime.previousViewState.modelKey === modelKey) Object.assign(runtime, runtime.previousViewState.framing);
       runtime.previousViewState = null;
     }
     setError("");
@@ -929,7 +889,7 @@ const ShellViewport = forwardRef(function ShellViewport({
     if (runtimeRef.current) adoptSceneRef.current(runtimeRef.current);
   }, [
     scene, sceneRevision, markPresentationReady, modelKey, perspective, perspectiveRef, isLoading, viewerReadyTick,
-    normalizedSceneScaleMode, resolvedFloorMode, renderMode, floorFollowsModel, viewerTheme, syncCameraZoomPercent,
+    normalizedSceneScaleMode, resolvedFloorMode, renderMode, floorFollowsModel, viewerTheme,
     applyActivePhotographicStudio, detachScene
   ]);
 

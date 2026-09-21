@@ -751,8 +751,9 @@ async function formatGate() {
   // Its Orbit action provides the immersive preview (main called it Fullscreen).
   // Require each action through that preserved layout, not one standalone button.
   const tools = ["Select", "Draw", "View controls", "Capture"];
-  const camera = ["Reset Zoom", "Zoom To Fit"];
-  const tree = ["Show all", "Expand all", "Collapse all"];
+  // Framing lives in STEP's viewport menu and nowhere else: no other renderer opens a
+  // viewport menu at all, and the Inspector's zoom readout and its menu are gone.
+  const framing = ["Zoom to fit", "Zoom to selection"];
   const presentTree = ["Expand all", "Collapse all"];
   // One fixture per LOAD PATH under --ci: an exact-surface STEP package, a mesh,
   // a 2D drawing, a robot description. The three left out are parity cases over a
@@ -795,11 +796,11 @@ async function formatGate() {
         failures.push(`${fixture.format}: Measure is offered on a view that cannot measure (must be hidden, not disabled)`);
       }
       const menu = await canvasMenuItems(page, canvas);
-      for (const item of camera) if (!menu.includes(item)) failures.push(`${fixture.format}: menu missing ${item}`);
       if (fixture.parts) {
+        for (const item of framing) if (!menu.includes(item)) failures.push(`${fixture.format}: menu missing ${item}`);
         for (const item of presentTree) if (!menu.includes(item)) failures.push(`${fixture.format}: parts menu missing ${item}`);
-      } else {
-        for (const item of tree) if (menu.includes(item)) failures.push(`${fixture.format}: tree action ${item} leaked without parts`);
+      } else if (menu.length) {
+        failures.push(`${fixture.format}: a viewport menu opened on a renderer that has none (${menu.join(", ")})`);
       }
       if (errors.length) failures.push(`${fixture.format}: ${errors.join(" | ")}`);
       results.push({ format: fixture.format, coverage: drawn });
