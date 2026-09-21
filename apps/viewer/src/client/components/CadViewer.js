@@ -16,8 +16,7 @@ import {
   transformDxfPreviewPositions
 } from "cadgen-js/lib/dxf/foldPreview";
 import { buildDxfPreviewMeshData, extractDxfScorePolylines } from "cadgen-js/lib/dxf/buildPreviewMesh";
-import { buildDxfDrawingLineGroups, drawingLineBounds, drawingLinetypeIsDashed } from "cadgen-js/lib/dxf/buildDrawingLines";
-import { textMarkingCenter } from "cadgen-js/lib/dxf/textMarkingLayout";
+import { buildDxfDrawingLineGroups, drawingLineBounds } from "cadgen-js/lib/dxf/buildDrawingLines";
 import { STEP_TREE_TOPOLOGY_NODE_PREFIX } from "cadgen-js/lib/step/stepTree";
 import { copyImageBlobToClipboard } from "@/ui/clipboard";
 import {
@@ -184,7 +183,6 @@ import {
 } from "cadgen-js/lib/themeSettings";
 import ViewPlaneControl from "./viewer/ViewPlaneControl";
 import { useViewerDrawingOverlay } from "./viewer/hooks/useViewerDrawingOverlay";
-import { useViewerSheetEdit } from "./viewer/hooks/useViewerSheetEdit";
 import { useViewerMeasureOverlay } from "./viewer/hooks/useViewerMeasureOverlay";
 import { useViewerPicking } from "./viewer/hooks/useViewerPicking";
 import { useViewerRuntime } from "./viewer/hooks/useViewerRuntime";
@@ -1629,108 +1627,6 @@ function buildNativeGlbCadScene(THREE, document, source, receiveShadows) {
   };
 }
 
-/** Drawing ink that reads against the viewport background: near-black on paper, near-white
- *  on a dark sheet. A drawing is line work, and line work that matches the sheet is gone. */
-/** Rasterise a sheet's SVG into a texture. The SVG is the printed drawing (ezdxf's own
- *  renderer), so the on-screen sheet and the PDF are one look. `maxPixels` bounds the
- *  canvas: an A3 sheet at ~12 px/mm reads 3.5 mm text crisply at 100% and stays sharp to
- *  about 3x zoom, which is where a drawing gets read. */
-function rasterizeSvgToTexture(THREE, svgText, { maxPixels = 5000 * 3600 } = {}) {
-  return new Promise((resolve, reject) => {
-    if (typeof document === "undefined" || typeof Image === "undefined") {
-      reject(new Error("no DOM"));
-      return;
-    }
-    const match = /viewBox="([^"]+)"/u.exec(svgText);
-    const viewBox = match ? match[1].trim().split(/[\s,]+/u).map(Number) : null;
-    const widthMm = viewBox && viewBox.length === 4 ? viewBox[2] : 420;
-    const heightMm = viewBox && viewBox.length === 4 ? viewBox[3] : 297;
-    const scale = Math.sqrt(maxPixels / Math.max(widthMm * heightMm, 1));
-    const width = Math.max(64, Math.round(widthMm * scale));
-    const height = Math.max(64, Math.round(heightMm * scale));
-    const blob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const image = new Image();
-    image.onload = () => {
-      try {
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const context = canvas.getContext("2d");
-        context.drawImage(image, 0, 0, width, height);
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.colorSpace = THREE.SRGBColorSpace;
-        texture.anisotropy = 8;
-        resolve({ texture, widthMm, heightMm });
-      } catch (error) {
-        reject(error);
-      } finally {
-        URL.revokeObjectURL(url);
-      }
-    };
-    image.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("svg decode failed"));
-    };
-    image.src = url;
-  });
-}
-
-function drawingInkForBackground(backgroundCss) {
-  const match = /^#?([0-9a-f]{6})$/iu.exec(String(backgroundCss || "").trim());
-  if (!match) {
-    return 0xd7dde5;
-  }
-  const value = Number.parseInt(match[1], 16);
-  const luminance = (0.2126 * ((value >> 16) & 255) + 0.7152 * ((value >> 8) & 255) + 0.0722 * (value & 255)) / 255;
-  return luminance > 0.5 ? 0x172638 : 0xd7dde5;
-}
-
-/** Line widths in screen pixels by what the line is. ISO 128 draws visible outlines heavy and
- *  everything annotative (dimension, witness, leader, centre, hidden) thin; the ratio is what
- *  makes a sheet read as a drawing rather than a wireframe. */
-const DRAWING_LINE_WIDTH_PX = { outline: 2.2, annotation: 1.0 };
-
-/** A text marking as a canvas-textured plane: the string painted once at fontPx, sized to
- *  `heightMm` on the sheet. Returns the mesh and its box so the caller can place it; the
- *  baseline sits at `baselineFraction` of the box height above its bottom edge, which is
- *  what textMarkingCenter needs to honour the DXF anchor. Shared by the flat-pattern and the
- *  document render paths. */
-function buildTextMarkingMesh(THREE, text, colorCss, fontPx = 64) {
-  const value = String(text?.value || "").trim();
-  if (!value || typeof document === "undefined") {
-    return null;
-  }
-  const heightMm = Math.max(Number(text.heightMm) || 2.5, 0.2);
-  const canvas = document.createElement("canvas");
-  const context = canvas.getContext("2d");
-  if (!context) {
-    return null;
-  }
-  const fontSpec = `500 ${fontPx}px ui-sans-serif, system-ui, sans-serif`;
-  context.font = fontSpec;
-  const firstLine = value.split("\n")[0];
-  const textWidthPx = Math.max(context.measureText(firstLine).width, fontPx * 0.5);
-  canvas.width = Math.ceil(textWidthPx) + 8;
-  canvas.height = Math.ceil(fontPx * 1.35);
-  const drawContext = canvas.getContext("2d");
-  drawContext.font = fontSpec;
-  drawContext.fillStyle = colorCss;
-  drawContext.textBaseline = "alphabetic";
-  drawContext.fillText(firstLine, 4, fontPx);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 8;
-  const planeWidth = heightMm * (canvas.width / fontPx);
-  const planeHeight = heightMm * (canvas.height / fontPx);
-  const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(planeWidth, planeHeight),
-    new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, side: THREE.DoubleSide })
-  );
-  mesh.userData.dxfTextMarking = true;
-  return { mesh, heightMm, planeWidth, planeHeight, baselineFraction: 1 - fontPx / canvas.height };
-}
-
 function getEdgeThickness(edgeSettings = null, viewerTheme = null) {
   const fallbackThickness = Number.isFinite(Number(viewerTheme?.edgeThickness))
     ? Number(viewerTheme.edgeThickness)
@@ -1793,8 +1689,6 @@ function disposeOverlayChild(runtime, child) {
   }
 }
 
-const EMPTY_SHEET_EDIT_LIST = Object.freeze([]);
-
 function clearOverlayGroup(runtime, group) {
   while (group?.children?.length) {
     const child = group.children[group.children.length - 1];
@@ -1832,14 +1726,6 @@ function updateGridHelper(
     disposeSceneObject,
     floorSettings
   });
-  // A drawing is a page on a desk, not a model on a stage: the floor grid and the
-  // origin axis read as 3D scenery behind it and are what make a sheet look like it
-  // is floating in space. Hidden here rather than at the call sites, so nothing that
-  // rebuilds the grid (theme, scale, render mode) can bring it back under a sheet.
-  if (runtime.hasDrawingDocument) {
-    if (runtime.gridHelper) runtime.gridHelper.visible = false;
-    if (runtime.originAxis) runtime.originAxis.visible = false;
-  }
   runtime.gridFloorZ = floorZ;
   runtime.floorMode = floorMode;
   return result;
@@ -1863,18 +1749,6 @@ const CadViewer = forwardRef(function CadViewer({
   drawingMaterialColor = null,
   drawingGeometry = null,
   drawingIsDocument = false,
-  drawingSvgUrl = "",
-  // Sheet editing on a document: "" | "pick" | "move"; the views to drag; the points
-  // picked so far; and the reports back to the workspace.
-  sheetEditTool = "",
-  sheetEditViews = null,
-  sheetEditSnapTargets = null,
-  sheetEditPickedPoints = null,
-  sheetEditPendingSnaps = null,
-  sheetEditSnapKinds = null,
-  onSheetEditPick = null,
-  onSheetEditViewMove = null,
-  onSheetEditCancel = null,
   drawingThicknessMm = 0,
   onCameraZoomPercentChange = null,
   perspective = null,
@@ -2040,10 +1914,6 @@ const CadViewer = forwardRef(function CadViewer({
   const [defaultPerspectiveDetached, setDefaultPerspectiveDetached] = useState(false);
   const [error, setError] = useState("");
   const [viewerReadyTick, setViewerReadyTick] = useState(0);
-  // The drawing document's sheet on screen (container, bounds, image mesh), for the
-  // image effect to swap textures onto; bumped when the container is rebuilt.
-  const drawingSheetSlotRef = useRef(null);
-  const [drawingSheetSlotTick, setDrawingSheetSlotTick] = useState(0);
   const [runtimeResetToken, setRuntimeResetToken] = useState(0);
   const presentationEpoch = useMemo(() => ({}), [renderMode, runtimeResetToken]);
   const [presentedEpoch, setPresentedEpoch] = useState(null);
@@ -2777,8 +2647,6 @@ const CadViewer = forwardRef(function CadViewer({
 
 
 
-  const planModeRef = useRef(planMode);
-  planModeRef.current = planMode;
   const activateViewPlaneFace = (faceId) => {
     const runtime = runtimeRef.current;
     const face = VIEW_PLANE_FACE_BY_ID[faceId];
@@ -2909,187 +2777,38 @@ const CadViewer = forwardRef(function CadViewer({
     }
     const container = new THREE.Group();
     container.userData.dxfDrawingLines = true;
-    const ink = drawingInkForBackground(resolveElementBackgroundColor(runtime.renderer?.domElement));
-    const inkCss = `#${ink.toString(16).padStart(6, "0")}`;
-    // Mesher space is y-up; the scene is CAD Z-up. Same (x, y, z) -> (x, z, -y) map the
-    // curved fold preview uses, so a drawing and a flat pattern share one orientation,
-    // one camera fit and one set of view controls.
-    const mapPositions = (source) => {
+    for (const layer of layers) {
+      if (hiddenLayers.has(layer.name)) {
+        continue;
+      }
+      // Mesher space is y-up; the scene is CAD Z-up. Same (x, y, z) -> (x, z, -y) map the
+      // curved fold preview uses, so a drawing and a flat pattern share one orientation,
+      // one camera fit and one set of view controls.
+      const source = layer.positions;
       const mapped = new Float32Array(source.length);
       for (let index = 0; index < source.length; index += 3) {
         mapped[index] = source[index];
         mapped[index + 1] = source[index + 2];
         mapped[index + 2] = -source[index + 1];
       }
-      return mapped;
-    };
-    const sheetBounds = drawingLineBounds({ layers });
-    const sheetSpan = sheetBounds
-      ? Math.max(sheetBounds.max[0] - sheetBounds.min[0], sheetBounds.max[2] - sheetBounds.min[2], 1)
-      : 100;
-    // A drawing that declares its sheet (a SHEET layer holding the frame) gets paper
-    // behind it: the frame's extent, in a tone a shade off the viewport so the sheet
-    // reads as a page on the desk rather than lines floating in space.
-    const sheetLayer = layers.find((layer) => layer.name.toUpperCase() === "SHEET" && layer.positions.length);
-    if (sheetLayer) {
-      const frame = drawingLineBounds({ layers: [sheetLayer] });
-      if (frame) {
-        const paper = ink === 0x172638 ? 0xffffff : 0x2f343b;
-        const margin = 3;
-        const width = frame.max[0] - frame.min[0] + 2 * margin;
-        const height = frame.max[2] - frame.min[2] + 2 * margin;
-        const centreX = (frame.min[0] + frame.max[0]) / 2;
-        const centreY = (frame.min[2] + frame.max[2]) / 2;
-        // The page's own rectangle, for the Fit page / Width / 100% presets.
-        runtime.drawingPageBox = { x0: centreX - width / 2, y0: centreY - height / 2, x1: centreX + width / 2, y1: centreY + height / 2 };
-        // The desk the page lies on. The viewport's own backdrop is the void a model
-        // hangs in: white paper on it reads as a lit rectangle in space, and a shadow
-        // cast onto it is invisible. A plane well past the page gives the sheet a
-        // ground, so the edge and the shadow have something to be seen against.
-        const desk = new THREE.Mesh(
-          new THREE.PlaneGeometry(Math.max(width, height) * 40, Math.max(width, height) * 40),
-          new THREE.MeshBasicMaterial({ color: ink === 0x172638 ? 0xe8e8e5 : 0x2a2e33, depthWrite: false })
-        );
-        desk.position.set(centreX, centreY, -0.12);
-        desk.renderOrder = -2;
-        desk.userData.dxfDrawingDesk = true;
-        container.add(desk);
-        // A drop shadow under the page: stacked quads, each a little larger than the
-        // last, so the darkness builds toward the page edge and fades outward. Quads
-        // rather than a blurred canvas, which would depend on ctx.filter, and drawn in
-        // millimetres so the shadow grows with the page as it is zoomed.
-        const shadowReach = Math.max(width, height) * 0.02;
-        const shadowSteps = 12;
-        for (let step = shadowSteps; step >= 1; step -= 1) {
-          const grow = (shadowReach * step) / shadowSteps;
-          const quad = new THREE.Mesh(
-            new THREE.PlaneGeometry(width + 2 * grow, height + 2 * grow),
-            new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.06, depthWrite: false })
-          );
-          quad.position.set(centreX + shadowReach * 0.25, centreY - shadowReach * 0.35, -0.09 - step * 1e-4);
-          quad.renderOrder = -1;
-          quad.userData.dxfDrawingPaperShadow = true;
-          container.add(quad);
-        }
-        const plane = new THREE.Mesh(
-          new THREE.PlaneGeometry(width, height),
-          new THREE.MeshBasicMaterial({ color: paper, depthWrite: false })
-        );
-        plane.position.set(centreX, centreY, -0.05);
-        plane.renderOrder = 0;
-        plane.userData.dxfDrawingPaper = true;
-        container.add(plane);
-        // A hairline at the page edge, so the sheet ends somewhere definite even where
-        // the shadow is faint.
-        const edge = new THREE.Line(
-          new THREE.BufferGeometry().setFromPoints([
-            [-1, -1], [1, -1], [1, 1], [-1, 1], [-1, -1]
-          ].map(([sx, sy]) => new THREE.Vector3(centreX + (sx * width) / 2, centreY + (sy * height) / 2, -0.04))),
-          new THREE.LineBasicMaterial({ color: ink === 0x172638 ? 0xc8c8c8 : 0x4a5158, transparent: true, opacity: 0.9 })
-        );
-        edge.renderOrder = 1;
-        edge.userData.dxfDrawingPaperEdge = true;
-        container.add(edge);
-      }
-    }
-    for (const layer of layers) {
-      if (hiddenLayers.has(layer.name)) {
-        continue;
-      }
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.BufferAttribute(mapped, 3));
       const color = layerColors.get(layer.name);
-      const colorValue = typeof color === "string" && color ? new THREE.Color(color) : new THREE.Color(ink);
-      // What the line IS decides how it is drawn: a visible outline (a cut-kind layer with a
-      // continuous linetype) heavy, a hidden/centre linetype dashed and thin, everything
-      // annotative thin. Layer colours are kept; only the weight and the pattern change.
-      const dashed = drawingLinetypeIsDashed(layer.linetype);
-      const outline = layer.kind === "cut" && !dashed;
-      if (layer.positions.length) {
-        const mapped = mapPositions(layer.positions);
-        let lines = null;
-        if (outline) {
-          lines = createScreenSpaceLineSegments(runtime, mapped, {
-            color: colorValue,
-            lineWidth: DRAWING_LINE_WIDTH_PX.outline,
-            depthTest: false,
-            renderOrder: 3
-          });
-        }
-        if (!lines) {
-          const geometry = new THREE.BufferGeometry();
-          geometry.setAttribute("position", new THREE.BufferAttribute(mapped, 3));
-          const material = dashed
-            ? new THREE.LineDashedMaterial({
-              color: colorValue,
-              dashSize: sheetSpan / 60,
-              gapSize: sheetSpan / 120,
-              depthTest: false
-            })
-            : new THREE.LineBasicMaterial({ color: colorValue, transparent: false, depthTest: false });
-          lines = new THREE.LineSegments(geometry, material);
-          if (dashed) {
-            lines.computeLineDistances();
-          }
-          lines.renderOrder = outline ? 3 : 2;
-        }
-        lines.userData.dxfDrawingLayer = layer.name;
-        lines.frustumCulled = false;
-        container.add(lines);
-      }
-      if (layer.fillPositions?.length) {
-        // Arrowheads. Solid, in the layer's ink, on top of the lines they terminate.
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute("position", new THREE.BufferAttribute(mapPositions(layer.fillPositions), 3));
-        const fill = new THREE.Mesh(
-          geometry,
-          new THREE.MeshBasicMaterial({ color: colorValue, side: THREE.DoubleSide, depthTest: false })
-        );
-        fill.userData.dxfDrawingLayer = layer.name;
-        fill.renderOrder = 4;
-        fill.frustumCulled = false;
-        container.add(fill);
-      }
-    }
-    // The drawing's text: dimension values, notes, the title block's lettering. Placed by the
-    // anchor the file stored, on the sheet, facing the plan camera.
-    const texts = Array.isArray(drawingGeometry.geometry?.texts) ? drawingGeometry.geometry.texts : [];
-    for (const text of texts) {
-      if (hiddenLayers.has(text.layer)) {
-        continue;
-      }
-      const color = layerColors.get(text.layer);
-      const built = buildTextMarkingMesh(THREE, text, typeof color === "string" && color ? color : inkCss);
-      if (!built) {
-        continue;
-      }
-      const rotationDeg = Number(text.rotationDeg) || 0;
-      const center = textMarkingCenter({
-        anchor: text.position,
-        hAlign: text.hAlign,
-        vAlign: text.vAlign,
-        heightMm: built.heightMm,
-        planeWidth: built.planeWidth,
-        planeHeight: built.planeHeight,
-        rotationDeg,
-        baselineFraction: built.baselineFraction
-      });
-      // Sheet (x, y) is scene (x, y) with the sheet in the XY plane; text lifts a hair off it.
-      built.mesh.position.set(center[0], center[1], 0.02);
-      built.mesh.rotation.set(0, 0, (rotationDeg * Math.PI) / 180);
-      built.mesh.material.depthTest = false;
-      built.mesh.renderOrder = 5;
-      built.mesh.userData.dxfDrawingLayer = text.layer;
-      container.add(built.mesh);
+      const lines = new THREE.LineSegments(
+        geometry,
+        new THREE.LineBasicMaterial({
+          color: typeof color === "string" && color ? new THREE.Color(color) : new THREE.Color(DEFAULT_INK),
+          transparent: false
+        })
+      );
+      lines.userData.dxfDrawingLayer = layer.name;
+      container.add(lines);
     }
     group.add(container);
     if (runtime) {
       runtime.dxfDrawingLines = container;
       runtime.hasDrawingDocument = true;
     }
-    // The printed look (the sheet's SVG) is fetched by its own effect below, so a new
-    // image swaps onto the existing sheet instead of rebuilding this container: the
-    // line work here is the first render and the fallback, and it stays put.
-    drawingSheetSlotRef.current = { container, group, sheetBounds, sheet: null };
-    setDrawingSheetSlotTick((tick) => tick + 1);
     // A document has no mesh for the shared fit to measure, so its own extent stands in.
     // Publishing runtime.modelBounds is how it gets the shared zoom baseline, reset and fit
     // with no format-specific branch.
@@ -3109,121 +2828,12 @@ const CadViewer = forwardRef(function CadViewer({
       // A drawing has no cadScene to publish restBounds, and the flat pattern
       // IS its zero pose -- the fold slider poses it from here.
       runtime.zeroPoseBounds = bounds;
-      if (planMode && runtime.camera && runtime.controls) {
-        // The workspace asked for the sheet view before the runtime had anything to look
-        // at. Now that the document has bounds, pose the camera straight above its centre
-        // at the fitted distance, without a tween: the fit that follows keeps the
-        // orientation and only settles the distance, so nothing fights this.
-        const face = VIEW_PLANE_FACE_BY_ID.z;
-        const centre = new THREE.Vector3(
-          (bounds.min[0] + bounds.max[0]) / 2,
-          (bounds.min[1] + bounds.max[1]) / 2,
-          (bounds.min[2] + bounds.max[2]) / 2
-        );
-        const radius = Math.max(
-          0.5 * Math.hypot(bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1], bounds.max[2] - bounds.min[2]),
-          1
-        );
-        const distance = Math.max(runtime.camera.position.distanceTo(runtime.controls.target), radius * 2.5);
-        cancelCameraTransition(runtime);
-        runtime.camera.up.set(...face.up);
-        runtime.camera.position.copy(centre).addScaledVector(new THREE.Vector3(...face.direction), distance);
-        runtime.controls.target.copy(centre);
-        runtime.camera.lookAt(runtime.controls.target);
-        runtime.controls.update();
-        activeViewPlaneFaceRef.current = face.id;
-        setActiveViewPlaneFace(face.id);
-        setDefaultPerspectiveDetached(true);
-        requestAnimationFrame(() => {
-          resetZoomAndPan?.({ animate: false });
-        });
-      }
       resetZoomAndPan({ animate: false });
     }
     markPresentationReady(runtime);
     runtime?.requestRender?.();
-    return () => {
-      if (drawingSheetSlotRef.current?.container === container) {
-        drawingSheetSlotRef.current = null;
-      }
-    };
-  }, [applyActivePhotographicStudio, drawingIsDocument, drawingGeometry, drawingHiddenLayers, markPresentationReady, planMode, viewerReadyTick]);
-
-  // The sheet image: fetched whenever its URL changes (a layer switched, a line weight,
-  // a previewed edit) and swapped onto the sheet already on screen once it has arrived.
-  // The previous image stays visible until then, so re-rendering never flashes the line
-  // work or bare paper. The first image also hides the line work it replaces.
-  useEffect(() => {
-    const slot = drawingSheetSlotRef.current;
-    const runtime = runtimeRef.current;
-    const THREE = runtime?.THREE;
-    if (!slot || !drawingSvgUrl || !slot.sheetBounds || !THREE) {
-      return undefined;
-    }
-    const state = { cancelled: false };
-    fetch(drawingSvgUrl)
-      .then((res) => (res.ok ? res.text() : Promise.reject(new Error(`drawing svg ${res.status}`))))
-      .then((svgText) => rasterizeSvgToTexture(THREE, svgText).then(({ texture }) => ({ texture, svgText })))
-      .then(({ texture, svgText }) => {
-        if (state.cancelled || slot.container.parent !== slot.group) {
-          texture.dispose();
-          return;
-        }
-        if (slot.sheet) {
-          // A re-render can change the extent (a draft dimension past the frame), so
-          // the existing sheet is re-sized to the new image as well as re-textured.
-          const again = svgText.match(/data-extent="([-\d.]+) ([-\d.]+) ([-\d.]+) ([-\d.]+)"/);
-          if (again) {
-            const [x0, y0, x1, y1] = again.slice(1).map(Number);
-            slot.sheet.geometry.dispose();
-            slot.sheet.geometry = new THREE.PlaneGeometry(x1 - x0, y1 - y0);
-            slot.sheet.position.set((x0 + x1) / 2, (y0 + y1) / 2, 0.01);
-          }
-          const previous = slot.sheet.material.map;
-          slot.sheet.material.map = texture;
-          slot.sheet.material.needsUpdate = true;
-          previous?.dispose?.();
-          runtime.requestRender?.();
-          return;
-        }
-        // The page is the drawing's extent with no margin, so it spans the parsed
-        // bounds exactly: the same rectangle the line work occupies.
-        const { sheetBounds, container } = slot;
-        // The image covers exactly the extent the server rendered (data-extent on the
-        // SVG root, drawing units). Placing it from the parsed line work instead would
-        // stretch it whenever text or arrows reach past the lines, and every feature
-        // would drift from the tool's overlay. The parse is only the fallback.
-        const extent = svgText.match(/data-extent="([-\d.]+) ([-\d.]+) ([-\d.]+) ([-\d.]+)"/);
-        const box = extent
-          ? { x0: Number(extent[1]), y0: Number(extent[2]), x1: Number(extent[3]), y1: Number(extent[4]) }
-          : { x0: sheetBounds.min[0], y0: sheetBounds.min[2], x1: sheetBounds.max[0], y1: sheetBounds.max[2] };
-        const width = box.x1 - box.x0;
-        const height = box.y1 - box.y0;
-        const sheet = new THREE.Mesh(
-          new THREE.PlaneGeometry(width, height),
-          new THREE.MeshBasicMaterial({ map: texture, depthWrite: false, toneMapped: false })
-        );
-        sheet.position.set((box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2, 0.01);
-        sheet.renderOrder = 6;
-        sheet.userData.dxfDrawingSheet = true;
-        for (const child of container.children) {
-          if (!child.userData?.dxfDrawingPaper) {
-            child.visible = false;
-          }
-        }
-        container.add(sheet);
-        slot.sheet = sheet;
-        runtime.requestRender?.();
-      })
-      .catch((error) => {
-        // The line work stays. A server without ezdxf's add-on, or an older server,
-        // still shows the drawing; say why in the console so a broken route is visible.
-        console.warn("[cad-viewer] drawing sheet image unavailable, showing line work:", error?.message || error);
-      });
-    return () => {
-      state.cancelled = true;
-    };
-  }, [drawingSvgUrl, drawingSheetSlotTick]);
+    return undefined;
+  }, [applyActivePhotographicStudio, drawingIsDocument, drawingGeometry, drawingHiddenLayers, markPresentationReady, viewerReadyTick]);
 
   // Applied SYNCHRONOUSLY when the meshes already exist. The previous version restored flat
   // positions in its cleanup and re-folded on the next animation frame — so every slider
@@ -3708,20 +3318,12 @@ const CadViewer = forwardRef(function CadViewer({
           texture.colorSpace = THREE.SRGBColorSpace;
           const planeWidth = heightMm * (canvas.width / fontPx);
           const planeHeight = heightMm * (canvas.height / fontPx);
-          // The anchor is wherever the file said: baseline-left for a plain label, middle
-          // centre for a dimension value, right-top for a justified note. The canvas paints
-          // the baseline at fontPx of canvas.height, so the box centre follows from that.
-          // All in FLAT coords, then folded.
-          const centerFlat = textMarkingCenter({
-            anchor,
-            hAlign: text.hAlign,
-            vAlign: text.vAlign,
-            heightMm,
-            planeWidth,
-            planeHeight,
-            rotationDeg: Number(text.rotationDeg) || 0,
-            baselineFraction: 1 - fontPx / canvas.height
-          });
+          // The DXF anchor is baseline-left; the plane's centre sits half a width along the
+          // text direction and a bit above the baseline. All in FLAT coords, then folded.
+          const centerFlat = [
+            anchor[0] + ex[0] * (planeWidth / 2) + ey[0] * (planeHeight * 0.22),
+            anchor[1] + ex[1] * (planeWidth / 2) + ey[1] * (planeHeight * 0.22)
+          ];
           const origin3 = orientPoint(foldDxfPoint(centerFlat[0], centerFlat[1], zTop, resolvedFold));
           const step = 0.5;
           const alongX = orientPoint(foldDxfPoint(centerFlat[0] + ex[0] * step, centerFlat[1] + ex[1] * step, zTop, resolvedFold));
@@ -3791,57 +3393,6 @@ const CadViewer = forwardRef(function CadViewer({
     },
     applyZoomPercent(nextZoomPercent) {
       return applyZoomPercent(nextZoomPercent);
-    },
-    /**
-     * Zoom a drawing the way a document editor does: the whole page, the page's
-     * width, or actual size (1 mm on the sheet is 1 mm on screen, at the 96 CSS
-     * pixels per inch the browser lays out with). Returns false when the current
-     * file is not a page.
-     */
-    fitSheet(mode = "page") {
-      const runtime = runtimeRef.current;
-      const page = runtime?.drawingPageBox;
-      const camera = runtime?.camera;
-      const controls = runtime?.controls;
-      if (!page || !camera || !controls || !runtime.THREE) {
-        return false;
-      }
-      const metrics = getViewportFrameMetrics(runtime, viewportFrameInsetsRef.current);
-      const aspect = metrics.framedWidth / Math.max(metrics.framedHeight, 1);
-      const pageWidth = page.x1 - page.x0;
-      const pageHeight = page.y1 - page.y0;
-      let halfHeight;
-      if (mode === "actual") {
-        halfHeight = metrics.framedHeight / 2 / (96 / 25.4);
-      } else if (mode === "width") {
-        halfHeight = (pageWidth / 2 / Math.max(aspect, 1e-6)) * 1.02;
-      } else {
-        halfHeight = Math.max(pageHeight / 2, pageWidth / 2 / Math.max(aspect, 1e-6)) * 1.04;
-      }
-      const centre = new runtime.THREE.Vector3((page.x0 + page.x1) / 2, (page.y0 + page.y1) / 2, 0);
-      // Fit width and actual size scroll to the top of the page, which is where a
-      // reader starts; fit page keeps the whole sheet centred.
-      if (mode !== "page" && halfHeight < pageHeight / 2) {
-        centre.y = page.y1 - halfHeight;
-      }
-      cancelCameraTransition(runtime);
-      const face = VIEW_PLANE_FACE_BY_ID.z;
-      camera.up.set(...face.up);
-      if (camera.isOrthographicCamera) {
-        camera.zoom = 1;
-        setOrthographicCameraHalfHeight(runtime, halfHeight, metrics);
-        const distance = Math.max(camera.position.distanceTo(controls.target), Math.max(pageWidth, pageHeight) * 2.5);
-        camera.position.set(centre.x, centre.y, centre.z + distance);
-      } else {
-        const fov = (camera.fov * Math.PI) / 180;
-        camera.position.set(centre.x, centre.y, centre.z + halfHeight / Math.tan(fov / 2));
-      }
-      controls.target.copy(centre);
-      camera.lookAt(controls.target);
-      camera.updateProjectionMatrix?.();
-      controls.update?.();
-      runtime.requestRender?.();
-      return true;
     },
     resetView() {
       // Refit instantly (establishes target and distance), then animate the orientation —
@@ -4988,13 +4539,9 @@ const CadViewer = forwardRef(function CadViewer({
           const frameMetrics = getViewportFrameMetrics(runtime, viewportFrameInsetsRef.current);
           const camera = runtime.camera;
           const fitDistance = frameRuntimeCameraForBoundingSphere(runtime, zeroPoseRadius, normalizedSceneScaleMode, frameMetrics);
-          // A sheet in plan mode frames from straight above; everything else from the
-          // default isometric. Deciding it here, in the one place the opening view is
-          // set, is what keeps a drawing from flashing isometric before the plan view.
-          const planFace = planModeRef.current ? VIEW_PLANE_FACE_BY_ID.z : null;
-          const viewDirection = new THREE.Vector3(...(planFace ? planFace.direction : DEFAULT_VIEW_DIRECTION)).normalize();
+          const viewDirection = new THREE.Vector3(...DEFAULT_VIEW_DIRECTION).normalize();
           camera.zoom = 1;
-          camera.up.set(...(planFace ? planFace.up : WORLD_UP));
+          camera.up.set(...WORLD_UP);
           frameRuntimeCameraForBoundingSphere(runtime, zeroPoseRadius, normalizedSceneScaleMode, frameMetrics);
           applyCameraFrameInsets(runtime, viewportFrameInsetsRef.current, { updateProjection: false });
           // The model is at its authored coordinates, so the camera frames the
@@ -6161,22 +5708,6 @@ const CadViewer = forwardRef(function CadViewer({
     viewerReadyTick,
     suppressTopologyPicking: (renderMode && !materialPickingEnabled) || stepAnimationPlaying,
     allowMeshVertexSnap
-  });
-
-  useViewerSheetEdit({
-    runtimeRef,
-    mountRef: interactionHostRef,
-    enabled: Boolean(drawingIsDocument && !previewMode),
-    tool: sheetEditTool,
-    views: Array.isArray(sheetEditViews) ? sheetEditViews : EMPTY_SHEET_EDIT_LIST,
-    snapTargets: sheetEditSnapTargets,
-    pickedPoints: Array.isArray(sheetEditPickedPoints) ? sheetEditPickedPoints : EMPTY_SHEET_EDIT_LIST,
-    pendingSnaps: Array.isArray(sheetEditPendingSnaps) ? sheetEditPendingSnaps : EMPTY_SHEET_EDIT_LIST,
-    snapKinds: sheetEditSnapKinds,
-    onPick: onSheetEditPick,
-    onViewMove: onSheetEditViewMove,
-    onCancel: onSheetEditCancel,
-    viewerReadyTick
   });
 
   const hasPresentableContent = hasViewportContent || Boolean(drawingIsDocument && drawingGeometry?.geometry);

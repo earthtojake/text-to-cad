@@ -44,27 +44,6 @@ import {
   normalizeDxfUnits
 } from "./workbench/DxfSettingsSection";
 import { buildDxfLayersTab } from "./workbench/DxfLayersSection";
-import {
-  DXF_DEFAULT_DIMENSION_DISPLAY,
-  DXF_DEFAULT_LINE_WEIGHT,
-  buildDxfSheetTab,
-  dxfDimensionDisplayParams,
-  dxfLineWeightScale,
-  normalizeDxfDimensionDisplay,
-  normalizeDxfLineWeight
-} from "./workbench/DxfSheetSection";
-import { drawingSheetFacts } from "@/workbench/drawingSheetFacts";
-import {
-  createDrawingEditId,
-  drawingEditParams,
-  drawingEditsPromptText,
-  SNAP_KINDS,
-  nearestView,
-  netViewMoves,
-  sheetSnapTargets,
-  smartDimensionFromSnaps,
-  viewAtSheetPoint
-} from "@/workbench/drawingEdits";
 import StepFileSheet from "./workbench/StepFileSheet";
 import { poseValuesForPreset } from "./workbench/PoseControlsSection";
 import { usePoseTransition, usePoseValueAnimation } from "../workbench/poseTransition.js";
@@ -105,7 +84,6 @@ import {
 import { useSystemPrefersDark } from "@/ui/useSystemPrefersDark";
 import { useChromeBackdropColor } from "@/ui/useChromeBackdropColor";
 import { sceneBackdropEdgeColor } from "../workbench/chromeBackdrop.js";
-import { documentDeskColor } from "@/workbench/documentDesk";
 import {
   displayModeForcesEdges,
   displayModeIsWireframe,
@@ -1244,21 +1222,6 @@ export default function CadWorkspace({
   const [drawingOrientation, setDrawingOrientation] = useState(DXF_DEFAULT_ORIENTATION);
   // Sheet material preset: theme tint + density for the weight fact.
   const [drawingMaterial, setDrawingMaterial] = useState(DXF_DEFAULT_MATERIAL);
-  // A drawing DOCUMENT's stroke scale (Fine/Normal/Bold), applied by the SVG route.
-  const [drawingLineWeight, setDrawingLineWeight] = useState(DXF_DEFAULT_LINE_WEIGHT);
-  // How a document's dimensions read (units, places, text size): re-rendered server-side.
-  const [drawingDimensionDisplay, setDrawingDimensionDisplay] = useState(DXF_DEFAULT_DIMENSION_DISPLAY);
-  // Sheet editing: staged edits (previewed by the server, sent to the agent as script
-  // changes), the tool in hand ("" | "pick" | "move"), the points picked for a new
-  // dimension, and the dimension selected in the list (highlighted in red).
-  const [drawingEdits, setDrawingEdits] = useState([]);
-  const [drawingEditTool, setDrawingEditTool] = useState("");
-  const [drawingPickedPoints, setDrawingPickedPoints] = useState([]);
-  // The picks in hand (in the coordinates the sheet shows), for the rubber band.
-  const [drawingPendingSnaps, setDrawingPendingSnaps] = useState([]);
-  // The snap filter: which kinds the dimension tool may grab (all, until narrowed).
-  const [drawingSnapKinds, setDrawingSnapKinds] = useState(() => [...SNAP_KINDS]);
-  const [drawingSelectedDimension, setDrawingSelectedDimension] = useState("");
   // The package's parsed contours, fetched once per entry and kept by URL. Curved bends
   // re-mesh from these; the URL carries the package version, so a rebuild refetches.
   const drawingGeometryCacheRef = useRef(new Map());
@@ -1666,12 +1629,6 @@ export default function CadWorkspace({
   const selectedEntryIsDrawingDocument =
     assetKindForRenderFormat(selectedEntrySourceFormat) === ASSET_KIND.DRAWING
     && dxfDataIsDocument(drawingGeometry);
-  // A sheet lies on a desk, not in the void a model hangs in: the page needs a ground
-  // it can cast a shadow onto and end against. Decided here rather than with the
-  // backdrop itself, which is settled before the selection is known.
-  const effectiveSceneBackdrop = selectedEntryIsDrawingDocument && !renderSession.enabled
-    ? documentDeskColor(sceneBackdrop)
-    : sceneBackdrop;
   // The selected entry's render artifact is (re)building -> show the loading state. Replaces the
   // old !entryHasMesh + buildable-code derivation.
   const selectedStepArtifactRenderPending = selectedArtifactGenerating;
@@ -3062,15 +3019,13 @@ export default function CadWorkspace({
           hiddenLayers: drawingHiddenLayers,
           units: drawingUnits,
           orientation: drawingOrientation,
-          material: drawingMaterial,
-          lineWeight: drawingLineWeight,
-          dimensionDisplay: drawingDimensionDisplay
+          material: drawingMaterial
         })
       );
     } catch (storageError) {
       // Quota or privacy mode: settings simply stop surviving a file switch.
     }
-  }, [selectedEntryIsDrawing, selectedKey, drawingThicknessMm, drawingBends, drawingBendStyle, drawingBendRadiusMm, drawingKFactor, drawingHiddenLayers, drawingUnits, drawingOrientation, drawingMaterial, drawingLineWeight, drawingDimensionDisplay]);
+  }, [selectedEntryIsDrawing, selectedKey, drawingThicknessMm, drawingBends, drawingBendStyle, drawingBendRadiusMm, drawingKFactor, drawingHiddenLayers, drawingUnits, drawingOrientation, drawingMaterial]);
 
   useEffect(() => {
     let stored = null;
@@ -3093,8 +3048,6 @@ export default function CadWorkspace({
     setDrawingUnits(normalizeDxfUnits(stored?.units, DXF_DEFAULT_UNITS));
     setDrawingOrientation(normalizeDxfOrientation(stored?.orientation));
     setDrawingMaterial(normalizeDxfMaterial(stored?.material, DXF_DEFAULT_MATERIAL));
-    setDrawingLineWeight(normalizeDxfLineWeight(stored?.lineWeight, DXF_DEFAULT_LINE_WEIGHT));
-    setDrawingDimensionDisplay(normalizeDxfDimensionDisplay(stored?.dimensionDisplay));
     setDrawingBends(Array.from({ length: selectedDrawingBendAxisCount }, (_, index) => ({
       angleDeg: normalizeDxfBendAngleDeg(stored?.bends?.[index]?.angleDeg, DXF_DEFAULT_BEND_ANGLE_DEG),
       direction: normalizeDxfBendDirection(stored?.bends?.[index]?.direction)
@@ -3107,46 +3060,6 @@ export default function CadWorkspace({
   const drawingGeometryUrl = selectedEntryIsDrawing
     ? String(entryAssetUrl(selectedEntry, "dxf") || "")
     : "";
-  // A dimensioned DOCUMENT is shown as ezdxf renders it (the same renderer that prints
-  // the PDF): the server answers /__cad/drawing with SVG for the same file ref the asset
-  // URL carries, minus whichever layers are switched off.
-  const drawingSvgUrl = useMemo(() => {
-    if (!drawingGeometryUrl || !selectedEntryIsDrawingDocument) {
-      return "";
-    }
-    let fileRef = "";
-    try {
-      fileRef = new URL(drawingGeometryUrl, "http://cad.local").searchParams.get("file") || "";
-    } catch {
-      fileRef = "";
-    }
-    if (!fileRef) {
-      return "";
-    }
-    const params = new URLSearchParams({ file: fileRef });
-    const hidden = (Array.isArray(drawingHiddenLayers) ? drawingHiddenLayers : []).filter(Boolean);
-    if (hidden.length) {
-      params.set("hide", hidden.join(","));
-    }
-    const lineWeightScale = dxfLineWeightScale(drawingLineWeight);
-    if (lineWeightScale !== 1) {
-      params.set("lw", String(lineWeightScale));
-    }
-    for (const [key, value] of Object.entries(dxfDimensionDisplayParams(drawingDimensionDisplay))) {
-      params.set(key, value);
-    }
-    for (const [key, value] of Object.entries(drawingEditParams(drawingEdits, { highlight: drawingSelectedDimension }))) {
-      params.set(key, value);
-    }
-    return `/__cad/drawing?${params.toString()}`;
-  }, [drawingGeometryUrl, selectedEntryIsDrawingDocument, drawingHiddenLayers, drawingLineWeight, drawingDimensionDisplay, drawingEdits, drawingSelectedDimension]);
-  // Edits belong to one sheet: switching files drops them and the tool.
-  useEffect(() => {
-    setDrawingEdits([]);
-    setDrawingEditTool("");
-    setDrawingPickedPoints([]);
-    setDrawingSelectedDimension("");
-  }, [selectedKey]);
   useEffect(() => {
     if (!drawingGeometryUrl) {
       setDrawingGeometry(null);
@@ -3189,164 +3102,6 @@ export default function CadWorkspace({
     setDrawingThicknessMm(DXF_DEFAULT_THICKNESS_MM);
     setDrawingUnits(DXF_DEFAULT_UNITS);
     setDrawingMaterial(DXF_DEFAULT_MATERIAL);
-  }, []);
-
-  const drawingViews = useMemo(
-    () => (Array.isArray(drawingGeometry?.views) ? drawingGeometry.views : EMPTY_LIST),
-    [drawingGeometry]
-  );
-  const drawingSheetDimensions = useMemo(
-    () => (Array.isArray(drawingGeometry?.sheetDimensions) ? drawingGeometry.sheetDimensions : EMPTY_LIST),
-    [drawingGeometry]
-  );
-  const handleDrawingEditToolChange = useCallback((tool) => {
-    setDrawingEditTool(tool);
-    setDrawingPickedPoints([]);
-    setDrawingPendingSnaps([]);
-    drawingPickedSnapsRef.current = [];
-  }, []);
-  const handleDrawingPickCancel = useCallback(() => {
-    drawingPickedSnapsRef.current = [];
-    setDrawingPickedPoints([]);
-    setDrawingPendingSnaps([]);
-  }, []);
-  const handleDrawingFitSheet = useCallback((mode) => {
-    viewerRef.current?.fitSheet?.(mode);
-  }, []);
-  const handleDrawingSnapKindToggle = useCallback((kind) => {
-    setDrawingSnapKinds((current) => {
-      const next = current.includes(kind) ? current.filter((item) => item !== kind) : [...current, kind];
-      return next.length ? next : [...SNAP_KINDS];
-    });
-  }, []);
-  // Smart dimension: an edge or a hole dimensions itself on one click; a corner waits
-  // for a second pick and the two give a distance. Picks carry the snap they landed on.
-  // Staged moves shift what the tools see (outlines, snap targets) so a moved view is
-  // where it now shows; a pick on it is put back into the file's coordinates before it
-  // is staged, since the server applies the moves itself when it previews.
-  const drawingViewShifts = useMemo(() => netViewMoves(drawingEdits), [drawingEdits]);
-  const shiftForView = useCallback((name) => drawingViewShifts.get(name) || null, [drawingViewShifts]);
-  const drawingShiftedViews = useMemo(() => drawingViews.map((view) => {
-    const shift = drawingViewShifts.get(view.name);
-    return shift ? { ...view, minX: view.minX + shift[0], maxX: view.maxX + shift[0], minY: view.minY + shift[1], maxY: view.maxY + shift[1] } : view;
-  }), [drawingViews, drawingViewShifts]);
-  const drawingSnapTargets = useMemo(() => {
-    const targets = sheetSnapTargets(drawingGeometry?.geometry, drawingSheetDimensions);
-    if (!drawingViewShifts.size) return targets;
-    const move = (point, shift) => (shift ? [point[0] + shift[0], point[1] + shift[1]] : point);
-    return {
-      lines: targets.lines.map((line) => { const shift = drawingViewShifts.get(line.view); return shift ? { ...line, start: move(line.start, shift), end: move(line.end, shift) } : line; }),
-      circles: targets.circles.map((circle) => { const shift = drawingViewShifts.get(circle.view); return shift ? { ...circle, center: move(circle.center, shift) } : circle; }),
-      dimensions: targets.dimensions.map((dimension) => { const shift = drawingViewShifts.get(dimension.view); return shift ? { ...dimension, position: move(dimension.position, shift) } : dimension; })
-    };
-  }, [drawingGeometry, drawingSheetDimensions, drawingViewShifts]);
-  const drawingPickedSnapsRef = useRef([]);
-  const handleDrawingSheetPick = useCallback((picked) => {
-    if (picked.kind === "empty") {
-      const pendingView = drawingPickedSnapsRef.current[0]?.view;
-      const shift = pendingView ? shiftForView(pendingView) : null;
-      const pending = drawingPickedSnapsRef.current;
-      if (!pending.length) return;
-      const view = drawingViews.find((candidate) => candidate.name === pendingView)
-        || viewAtSheetPoint(drawingViews, pending[0].point) || nearestView(drawingViews, pending[0].point);
-      const placement = shift ? [picked.point[0] - shift[0], picked.point[1] - shift[1]] : picked.point;
-      const edit = smartDimensionFromSnaps(view, pending, placement);
-      if (edit) {
-        setDrawingEdits((edits) => [...edits, { id: createDrawingEditId(), ...edit, view: edit.view || view?.name }]);
-      }
-      drawingPickedSnapsRef.current = [];
-      setDrawingPickedPoints([]);
-      setDrawingPendingSnaps([]);
-      return;
-    }
-    // Picking an existing dimension selects it (red on the sheet) for a tolerance or removal.
-    if (picked.kind === "dimension") {
-      setDrawingSelectedDimension((current) => (current === `${picked.view}:${picked.index}` ? "" : `${picked.view}:${picked.index}`));
-      drawingPickedSnapsRef.current = [];
-      setDrawingPickedPoints([]);
-      setDrawingPendingSnaps([]);
-      return;
-    }
-    const shift = shiftForView(picked.view);
-    const back = (point) => (shift ? [point[0] - shift[0], point[1] - shift[1]] : point);
-    const snap = shift ? {
-      ...picked,
-      point: back(picked.point),
-      line: picked.line ? { ...picked.line, start: back(picked.line.start), end: back(picked.line.end) } : picked.line,
-      circle: picked.circle ? { ...picked.circle, center: back(picked.circle.center) } : picked.circle
-    } : picked;
-    // SolidWorks-style: picks accumulate (at most two), and a click on empty sheet
-    // places the dimension they make where the click landed. A lone corner waits.
-    const pending = drawingPickedSnapsRef.current;
-    const snaps = pending.length >= 2 || (pending.length && pending[0].view !== snap.view) ? [snap] : [...pending, snap];
-    drawingPickedSnapsRef.current = snaps;
-    setDrawingPickedPoints(snaps.map((item) => {
-      const itemShift = shiftForView(item.view);
-      return itemShift ? [item.point[0] + itemShift[0], item.point[1] + itemShift[1]] : item.point;
-    }));
-    // The rubber band works in what the sheet shows, so the picks go back out shifted.
-    setDrawingPendingSnaps(snaps.map((item) => {
-      const itemShift = shiftForView(item.view);
-      if (!itemShift) return item;
-      const fwd = (point) => [point[0] + itemShift[0], point[1] + itemShift[1]];
-      return { ...item, point: fwd(item.point),
-        line: item.line ? { ...item.line, start: fwd(item.line.start), end: fwd(item.line.end) } : item.line,
-        circle: item.circle ? { ...item.circle, center: fwd(item.circle.center) } : item.circle,
-        arc: item.arc ? { ...item.arc, center: fwd(item.arc.center) } : item.arc };
-    }));
-  }, [drawingViews, shiftForView]);
-  const handleDrawingViewMove = useCallback((view, dx, dy) => {
-    setDrawingEdits((edits) => [...edits, { id: createDrawingEditId(), kind: "move", view, dx, dy }]);
-  }, []);
-  const handleDrawingAddTolerance = useCallback((key, spec) => {
-    const [view, index] = String(key).split(":");
-    if (!view || index === undefined) return;
-    setDrawingEdits((edits) => [
-      ...edits.filter((edit) => !(edit.kind === "tol" && edit.view === view && String(edit.index) === index)),
-      { id: createDrawingEditId(), kind: "tol", view, index, spec }
-    ]);
-  }, []);
-  const handleDrawingRemoveDimension = useCallback((key) => {
-    const [view, index] = String(key).split(":");
-    if (!view || index === undefined) return;
-    setDrawingEdits((edits) => [
-      ...edits.filter((edit) => !((edit.kind === "del" || edit.kind === "tol") && edit.view === view && String(edit.index) === index)),
-      { id: createDrawingEditId(), kind: "del", view, index }
-    ]);
-    setDrawingSelectedDimension("");
-  }, []);
-  const handleDrawingDiscardEdit = useCallback((id) => {
-    setDrawingEdits((edits) => edits.filter((edit) => edit.id !== id));
-  }, []);
-  const handleDrawingDiscardEdits = useCallback(() => {
-    setDrawingEdits([]);
-    setDrawingEditTool("");
-    setDrawingPickedPoints([]);
-    setDrawingPendingSnaps([]);
-    drawingPickedSnapsRef.current = [];
-  }, []);
-  // The web viewer has no agent beside it: the request is copied for pasting into one.
-  const handleDrawingSendEdits = useCallback(() => {
-    const text = drawingEditsPromptText({
-      drawingPath: selectedEntry ? cadFileParamForEntry(selectedEntry) : "",
-      edits: drawingEdits,
-      views: drawingViews,
-      dimensions: drawingSheetDimensions
-    });
-    if (!text) return;
-    const done = () => setCopyStatus("Drawing edits copied. Paste them to the agent that owns the script.");
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(text).then(done, () => setCopyStatus("Could not copy the drawing edits."));
-    } else {
-      done();
-    }
-  }, [selectedEntry, drawingEdits, drawingViews, drawingSheetDimensions]);
-
-  // The Sheet tab's Reset: the document's own look, every layer shown.
-  const handleDrawingSheetReset = useCallback(() => {
-    setDrawingLineWeight(DXF_DEFAULT_LINE_WEIGHT);
-    setDrawingDimensionDisplay(DXF_DEFAULT_DIMENSION_DISPLAY);
-    setDrawingHiddenLayers([]);
   }, []);
 
   const handleDrawingBendsReset = useCallback(() => {
@@ -3398,12 +3153,6 @@ export default function CadWorkspace({
     () => (Array.isArray(drawingGeometry?.layers) ? drawingGeometry.layers : []),
     [drawingGeometry]
   );
-  // What the sheet says about itself (paper, scale, projection, revision): read from
-  // its frame and title block, so the Sheet tab states only what the drawing states.
-  const drawingSheetFactsValue = useMemo(
-    () => (selectedEntryIsDrawingDocument ? drawingSheetFacts(drawingGeometry) : null),
-    [selectedEntryIsDrawingDocument, drawingGeometry]
-  );
 
 
 
@@ -3428,21 +3177,6 @@ export default function CadWorkspace({
     }
     viewerRef.current?.activateDefaultViewPlane?.();
   }, []);
-
-  // A dimensioned drawing is a sheet: it opens looking straight down at it. The 3D toggle
-  // is still there for anyone who wants the tilt; the default is the drawing's own view.
-  const documentPlanKeyRef = useRef(null);
-  useEffect(() => {
-    if (!selectedEntryIsDrawingDocument) {
-      documentPlanKeyRef.current = null;
-      return;
-    }
-    if (documentPlanKeyRef.current === selectedKey) {
-      return;
-    }
-    documentPlanKeyRef.current = selectedKey;
-    handleDrawingViewModeChange("2d");
-  }, [selectedEntryIsDrawingDocument, selectedKey, handleDrawingViewModeChange]);
 
   const handleViewerZoomPercentChange = useCallback((nextZoomPercent) => {
     viewerRef.current?.applyZoomPercent?.(nextZoomPercent);
@@ -3631,7 +3365,6 @@ export default function CadWorkspace({
     measurementAvailable: effectiveSupportsMeasure,
     hasDxfBendsPanel: selectedFileSheetKind === "dxf" && drawingBends.length > 0,
     hasDxfLayersPanel: selectedFileSheetKind === "dxf" && drawingLayers.length > 1,
-    isDrawingDocument: selectedFileSheetKind === "dxf" && selectedEntryIsDrawingDocument,
     renderMode: renderSession.enabled,
     isSdf: selectedFileSheetKind === "sdf",
     hasRobotComponents: selectedUrdfComponents.length > 0,
@@ -3651,7 +3384,6 @@ export default function CadWorkspace({
     selectedUrdfComponents,
     drawingBends,
     drawingLayers,
-    selectedEntryIsDrawingDocument,
     renderSession.enabled
   ]);
 
@@ -7721,8 +7453,8 @@ export default function CadWorkspace({
     >
       <div
         className="fixed inset-0 z-0"
-        data-cad-scene-backdrop={effectiveSceneBackdrop}
-        style={{ backgroundColor: effectiveSceneBackdrop }}
+        data-cad-scene-backdrop={sceneBackdrop}
+        style={{ backgroundColor: sceneBackdrop }}
       >
         <CadRenderPane
           viewerRef={viewerRef}
@@ -7759,16 +7491,6 @@ export default function CadWorkspace({
             : null}
           drawingGeometry={selectedEntryIsDrawing ? drawingGeometry : null}
           drawingIsDocument={selectedEntryIsDrawingDocument}
-          drawingSvgUrl={drawingSvgUrl}
-          sheetEditTool={selectedEntryIsDrawingDocument ? drawingEditTool : ""}
-          sheetEditViews={drawingShiftedViews}
-          sheetEditSnapTargets={drawingSnapTargets}
-          sheetEditPickedPoints={drawingPickedPoints}
-          sheetEditPendingSnaps={drawingPendingSnaps}
-          sheetEditSnapKinds={drawingSnapKinds}
-          onSheetEditPick={handleDrawingSheetPick}
-          onSheetEditViewMove={handleDrawingViewMove}
-          onSheetEditCancel={handleDrawingPickCancel}
           drawingThicknessMm={selectedEntryIsDrawing && !renderSession.enabled
             ? drawingThicknessMm
             : DXF_DEFAULT_THICKNESS_MM}
@@ -8138,38 +7860,7 @@ export default function CadWorkspace({
                 viewerServerInfo={viewerServerInfo}
                 suppressDynamicMetadataStatus={selectedArtifactGenerating}
                 renderMode={renderSession.enabled}
-                settingsTabs={renderSession.enabled ? settingsTabs : selectedEntryIsDrawingDocument ? [
-                  buildDxfSheetTab({
-                    facts: drawingSheetFactsValue,
-                    lineWeight: drawingLineWeight,
-                    onLineWeightChange: setDrawingLineWeight,
-                    dimensionDisplay: drawingDimensionDisplay,
-                    onDimensionDisplayChange: setDrawingDimensionDisplay,
-                    dimensionCount: Number(drawingGeometry?.apparatus?.dimensions) || 0,
-                    views: drawingViews,
-                    sheetDimensions: drawingSheetDimensions,
-                    edits: drawingEdits,
-                    editTool: drawingEditTool,
-                    onEditToolChange: handleDrawingEditToolChange,
-                    pickedPointCount: drawingPickedPoints.length,
-                    snapKinds: drawingSnapKinds,
-                    onSnapKindToggle: handleDrawingSnapKindToggle,
-                    onFitSheet: handleDrawingFitSheet,
-                    selectedDimension: drawingSelectedDimension,
-                    onSelectDimension: setDrawingSelectedDimension,
-                    onAddTolerance: handleDrawingAddTolerance,
-                    onRemoveDimension: handleDrawingRemoveDimension,
-                    onDiscardEdit: handleDrawingDiscardEdit,
-                    onDiscardEdits: handleDrawingDiscardEdits,
-                    onSendEdits: handleDrawingSendEdits,
-                    sendLabel: "Copy for the agent",
-                    layers: drawingLayers,
-                    hiddenLayers: drawingHiddenLayers,
-                    onLayerVisibilityChange: handleDrawingLayerVisibilityChange,
-                    onReset: handleDrawingSheetReset
-                  }),
-                  ...settingsTabs
-                ] : [
+                settingsTabs={renderSession.enabled ? settingsTabs : [
                   buildDxfMaterialTab({
                     thicknessMm: drawingThicknessMm,
                     onThicknessChange: setDrawingThicknessMm,

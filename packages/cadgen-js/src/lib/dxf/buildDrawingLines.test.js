@@ -160,32 +160,3 @@ test("an arc without the parser's angle keys is skipped, not guessed at", () => 
 
   assert.equal(groups.layers.length, 0);
 });
-
-import { drawingLinetypeIsDashed } from "./buildDrawingLines.js";
-
-test("fills become triangle fans on their layer, with the layer's kind and linetype alongside", () => {
-  const groups = buildDxfDrawingLineGroups({
-    layers: [{ name: "DIM", kind: "reference", linetype: "CONTINUOUS", lineweightMm: 0.18 }],
-    geometry: {
-      lines: [{ layer: "DIM", start: [0, 0], end: [10, 0] }],
-      arcs: [],
-      circles: [],
-      fills: [{ layer: "DIM", points: [[0, 0], [10, 0], [10, 10], [0, 10]] }]
-    }
-  });
-  assert.equal(groups.layers.length, 1);
-  const [dim] = groups.layers;
-  assert.equal(dim.kind, "reference");
-  assert.equal(dim.linetype, "CONTINUOUS");
-  assert.equal(dim.lineweightMm, 0.18);
-  assert.equal(dim.positions.length, 6, "one segment");
-  assert.equal(dim.fillPositions.length, 2 * 3 * 3, "a quad is two triangles");
-});
-
-test("hidden, centre and phantom linetypes are dashed; continuous is not", () => {
-  for (const name of ["HIDDEN", "HIDDEN2", "CENTER", "CENTRE", "PHANTOM", "DASHDOT", "ACAD_ISO02W100_DASHED"]) {
-    assert.equal(drawingLinetypeIsDashed(name), true, name);
-  }
-  assert.equal(drawingLinetypeIsDashed("CONTINUOUS"), false);
-  assert.equal(drawingLinetypeIsDashed(""), false);
-});

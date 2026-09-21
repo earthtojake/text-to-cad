@@ -80,7 +80,6 @@ export function buildDxfDrawingLineGroups(dxfData, options = null) {
   const elevation = Number(options?.elevation) || 0;
   const requested = Number(options?.arcSegments) || DEFAULT_ARC_SEGMENTS;
   const byLayer = new Map();
-  const fillsByLayer = new Map();
   const bucket = (layer) => {
     const name = normalizeLayerName(layer);
     if (!byLayer.has(name)) {
@@ -90,26 +89,6 @@ export function buildDxfDrawingLineGroups(dxfData, options = null) {
   };
   if (!geometry || typeof geometry !== "object") {
     return { layers: [] };
-  }
-  // Filled polygons (arrowheads) as triangle fans, so a drawing's arrows read solid.
-  for (const fill of Array.isArray(geometry.fills) ? geometry.fills : []) {
-    const points = Array.isArray(fill?.points) ? fill.points : [];
-    if (points.length < 3) {
-      continue;
-    }
-    const name = normalizeLayerName(fill.layer);
-    if (!fillsByLayer.has(name)) {
-      fillsByLayer.set(name, []);
-    }
-    const target = fillsByLayer.get(name);
-    for (let index = 1; index < points.length - 1; index += 1) {
-      target.push(
-        points[0][0], elevation, points[0][1],
-        points[index][0], elevation, points[index][1],
-        points[index + 1][0], elevation, points[index + 1][1]
-      );
-    }
-    bucket(fill.layer);
   }
   for (const line of Array.isArray(geometry.lines) ? geometry.lines : []) {
     const start = line?.start;
@@ -125,33 +104,14 @@ export function buildDxfDrawingLineGroups(dxfData, options = null) {
   for (const circle of Array.isArray(geometry.circles) ? geometry.circles : []) {
     sampleCircle(bucket(circle?.layer), circle, elevation, requested);
   }
-  const layerInfo = new Map(
-    (Array.isArray(dxfData?.layers) ? dxfData.layers : []).map((layer) => [normalizeLayerName(layer?.name), layer])
-  );
   const layers = [];
   for (const [name, values] of byLayer) {
-    const fillValues = fillsByLayer.get(name) || [];
-    if (!values.length && !fillValues.length) {
+    if (!values.length) {
       continue;
     }
-    const info = layerInfo.get(name);
-    layers.push({
-      name,
-      kind: info?.kind || "cut",
-      linetype: String(info?.linetype || "CONTINUOUS").toUpperCase(),
-      lineweightMm: Number.isFinite(info?.lineweightMm) ? info.lineweightMm : null,
-      positions: new Float32Array(values),
-      fillPositions: new Float32Array(fillValues)
-    });
+    layers.push({ name, positions: new Float32Array(values) });
   }
   return { layers };
-}
-
-/** ISO 128 linetypes that a drawing draws broken rather than continuous: hidden edges,
- *  centre lines, phantom lines. Read from the LAYER table's linetype name. */
-export function drawingLinetypeIsDashed(linetype) {
-  const name = String(linetype || "").trim().toUpperCase();
-  return /HIDDEN|CENTER|CENTRE|PHANTOM|DASH|DOT|DIVIDE/u.test(name);
 }
 
 /** Does this drawing hold anything a 2D render can show? */
