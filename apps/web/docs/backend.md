@@ -144,6 +144,7 @@ cache reads and writes.
 | `GET /__cad/catalog` | Current catalog and root identity. |
 | `GET /__cad/asset?file=...` | Allowed artifact bytes inside the served root. |
 | `GET /__cad/store?file=...` | Virtual render assets from the shared store. |
+| `GET /__cad/drawing?file=...` | A `.dxf` flattened to 2D render primitives. |
 | `GET /__cad/artifact?file=...` | Artifact status and advisory progress. |
 | `POST /__cad/artifact?file=...` | Import a foreign STEP; `&force=1` requests a rebuild. |
 | `GET /__tess_cache/<key>.tess` | Read a tessellation-cache entry. |
@@ -163,3 +164,58 @@ actions remain outside this HTTP interface.
 Backend tests live in `tests/python/packages/cadgen/viewer` and are run by
 `scripts/test/test-python.sh`. The web app's `npm run test` covers its JavaScript
 host only.
+
+## `GET /__cad/drawing`
+
+A 2D drawing is rendered on the SERVER. `cadgen.drawing_payload` runs ezdxf's
+drawing add-on over the `.dxf`'s modelspace and returns what every entity
+flattens to — text outlined, dimensions exploded, hatches filled or patterned,
+block inserts placed — so the client draws primitives and never parses DXF.
+
+`?file=` takes the same refs the asset route does (root-relative, or the
+absolute path the catalog hands out) and applies the same containment rule:
+outside the root is 403, a hidden path component or a missing file is 404, and
+anything that is not a `.dxf` is 400. An unreadable drawing is 400 with the
+reason and the repair; the server retries a damaged file through
+`ezdxf.recover` before giving up. The answer is `application/json;
+charset=utf-8`, uncompressed (the backend has no gzip helper and this route did
+not add one).
+
+```jsonc
+{
+  "schemaVersion": 1,
+  "units": { "insunits": 4, "name": "Millimeters", "toMillimetres": 1.0 },
+  "bounds": [minX, minY, maxX, maxY],        // null when nothing was drawn
+  "layers": [{ "name": "CUT", "color": "#ff0000", "count": 12 }],
+  "primitives": [{ "type": "lines", "layer": "CUT", "color": "#ff0000",
+                   "geometry": [[0, 0, 40, 0]] }]
+}
+```
+
+- **Coordinates** are DXF modelspace coordinates, **y up**, rounded to 4
+  decimals and written as integers where they are whole. `bounds` is computed
+  from those same rounded numbers and includes Bezier control points, so it is
+  a conservative box that never clips.
+- **`color: null`** means the drawing's default pen (ACI 7 — "whatever
+  contrasts with the background"). The client paints those with the theme's
+  foreground, which is why one payload serves both the light and the dark
+  theme. Every other ACI and every true colour is a literal `#rrggbb`. A layer
+  row's `color` is null on the same rule. Lineweights are not in the payload:
+  the client draws hairlines, as AutoCAD does with LWDISPLAY off.
+- **`primitives[].type`** is ezdxf's own vocabulary: `point` (`[x, y]`),
+  `lines` (`[[x0,y0,x1,y1], …]`), `path` (SVG-like `["M"|"L"|"Q"|"C"|"Z", …]`
+  commands), `filled-paths` (a list of those command lists, even-odd filled)
+  and `filled-polygon` (an explicitly closed `[[x, y], …]` ring).
+- **`layers`** lists only layers that drew something, in first-seen order.
+
+The payload is derived data, cached in the store's `drawing` index under the
+document's content hash plus the extraction scheme, so a second request for
+unchanged bytes re-serves stored bytes without entering — or importing —
+ezdxf. See `packages/cadgen/STORE.md` §2.
+
+Rendering is CPU-bound Python on the request thread (~0.1 s for a 1k-entity
+drawing, ~0.7 s for 10k on a warm laptop), and the server is a
+`ThreadingHTTPServer`, so a large cold drawing holds the GIL against other
+requests for about that long. If drawings that size become routine, the
+escalation is cadgen's build pool — the same move the STEP import made — not a
+second thread pool here.
