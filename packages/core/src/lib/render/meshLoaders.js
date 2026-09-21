@@ -4,11 +4,9 @@ import {
 } from "../fileFormats.js";
 import {
   loadRender3Mf,
-  loadRenderDxfMesh,
   loadRenderGlb,
   loadRenderStl,
   peekRender3Mf,
-  peekRenderDxfMesh,
   peekRenderGlb,
   peekRenderStl
 } from "../renderAssetClient.js";
@@ -17,7 +15,6 @@ function meshRenderFormat(format) {
   return format === RENDER_FORMAT.STL
     || format === RENDER_FORMAT.THREE_MF
     || format === RENDER_FORMAT.GLB
-    || format === RENDER_FORMAT.DXF
     ? format
     : "";
 }
@@ -62,9 +59,6 @@ export function resolveMeshFormatFromUrl(url, { fallback = RENDER_FORMAT.GLB } =
 
 export function peekRenderMeshByUrl(url, options = {}) {
   const format = resolveMeshFormatFromUrl(url, options);
-  if (format === RENDER_FORMAT.DXF) {
-    return peekRenderDxfMesh(url, options);
-  }
   if (format === RENDER_FORMAT.STL) {
     return peekRenderStl(url, options);
   }
@@ -76,9 +70,6 @@ export function peekRenderMeshByUrl(url, options = {}) {
 
 export async function loadRenderMeshByUrl(url, options = {}) {
   const format = resolveMeshFormatFromUrl(url, options);
-  if (format === RENDER_FORMAT.DXF) {
-    return loadRenderDxfMesh(url, options);
-  }
   if (format === RENDER_FORMAT.STL) {
     return loadRenderStl(url, options);
   }

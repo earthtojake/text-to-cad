@@ -4,6 +4,7 @@ import type { ViewerHost } from '@hardcore/ui/host';
 import { EmptyState } from '@hardcore/ui/navigation';
 import { FileText } from 'lucide-react';
 import { createCadRenderer } from '@hardcore/ui/renderers/cad';
+import { createDxfRenderer } from '@hardcore/ui/renderers/dxf';
 import { createGlbRenderer } from '@hardcore/ui/renderers/glb';
 import { createMeshRenderer } from '@hardcore/ui/renderers/mesh';
 import { createRobotRenderer } from '@hardcore/ui/renderers/robot';
@@ -44,7 +45,7 @@ function RootView({ client, server }: { client: CadClient; server: CadServerInfo
   const preferences = useMemo(createWebCadPreferences, []);
   useEffect(() => preferences.connect(), [preferences]);
   // One renderer per file family; each lazy-loads only its own code.
-  const renderers = useMemo(() => [createCadRenderer({ client, preferences }), createGlbRenderer({ client, preferences }), createMeshRenderer({ client, preferences }), createRobotRenderer({ client, preferences })], [client, preferences]);
+  const renderers = useMemo(() => [createCadRenderer({ client, preferences }), createDxfRenderer({ client, preferences }), createGlbRenderer({ client, preferences }), createMeshRenderer({ client, preferences }), createRobotRenderer({ client, preferences })], [client, preferences]);
   const catalog = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot);
   const [file, setFile] = useState(() => readCadParam() || readDefaultCadParam() || '');
   const selectedEntry = useMemo(() => findEntryByUrlPath(catalog.entries, file), [catalog.entries, file]);

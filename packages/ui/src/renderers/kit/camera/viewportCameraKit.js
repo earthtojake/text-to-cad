@@ -294,6 +294,12 @@ export function applyOrbitDelta(runtime, azimuthDelta, polarDelta) {
   if (!runtime?.THREE || !runtime?.camera || !runtime?.controls) {
     return false;
   }
+  // A view locked against rotation is locked against EVERY way in, not only the pointer.
+  // The keyboard nudge used to turn a view whose controls refuse to rotate, which reads
+  // as the lock breaking rather than as a second way to orbit.
+  if (runtime.controls.enableRotate === false) {
+    return false;
+  }
   if (Math.abs(azimuthDelta) < 1e-6 && Math.abs(polarDelta) < 1e-6) {
     return false;
   }

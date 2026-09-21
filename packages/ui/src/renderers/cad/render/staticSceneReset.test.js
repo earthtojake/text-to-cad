@@ -96,7 +96,7 @@ test("new rows published on the adopted wrapper still reach placement", () => {
   assert.equal(sceneSourceAlreadyPlaced({ cadScene: { source: posedWrapper } }, posedWrapper), false);
 });
 
-test("eligibility excludes merged, robot/drawing, active and residual dynamic states", () => {
+test("eligibility excludes merged, non-STEP, active and residual dynamic states", () => {
   const { input } = receiptFixture();
   const base = { source: input.source, renderFormat: "step" };
   assert.equal(staticSceneResetEligible(base), true);
@@ -104,15 +104,15 @@ test("eligibility excludes merged, robot/drawing, active and residual dynamic st
     { source: { ...input.source, partTransformsBaked: true } },
     { source: { ...input.source, geometrySource: {} } }, { source: { parts: [] } },
     { renderFormat: "urdf" }, { renderFormat: "dxf" }, { renderFormat: "glb" },
-    { parameters: {} }, { animation: {} }, { drawing: true }, { exploded: true }, { loading: true },
+    { parameters: {} }, { animation: {} }, { exploded: true }, { loading: true },
     ...[{ effectMatrix: {} }, { explodedViewMatrix: {} }, { effectStyle: {} }, { effectVisible: false },
       { effectHighlighted: true }, { effectDeformation: {} }, { tubeDeformationState: { active: true } },
       { tubeGpuState: { active: true } }].map(record => ({ records: [record] })),
   ]) assert.equal(staticSceneResetEligible({ ...base, ...patch }), false, JSON.stringify(patch));
 });
 
-test("removing a prior module, animation, drawing or exploded pose never skips the transition reset", () => {
-  for (const capability of ["parameters", "animation", "drawing", "exploded"]) {
+test("removing a prior module, animation or exploded pose never skips the transition reset", () => {
+  for (const capability of ["parameters", "animation", "exploded"]) {
     const { tracker, input } = receiptFixture();
     tracker.beginRender({}, staticSceneResetEligible({ source: input.source, renderFormat: "step", [capability]: {} }));
     const removed = {}; tracker.beginRender(removed, true); tracker.complete(removed, input);

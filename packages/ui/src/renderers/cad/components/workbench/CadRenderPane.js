@@ -26,7 +26,6 @@ import {
 } from "@hardcore/core/lib/displaySettings.js";
 import { VIEWER_PICK_MODE } from "@hardcore/core/lib/viewer/constants.js";
 import { viewerHiddenPartIdsForRenderPane, viewerPickModeForRenderPane, viewerSelectedPartIdsForRenderPane, viewerSelectorRuntimeForRenderPane } from "../../workbench/viewerPickMode.js";
-import { viewerBendGuidesForRenderPane } from "../../workbench/renderPaneDrawing.js";
 
 const EMPTY_LIST = Object.freeze([]);
 function viewerContextMenuAnchorStyle(menu) {
@@ -260,21 +259,6 @@ export default function CadRenderPane({
   referenceSelectionPending = false,
   referenceSelectionUnavailable = false,
   referenceSelectionDeferred = false,
-  drawingThicknessScale = 1,
-  planMode = false,
-  bendAxisX = null,
-  drawingBendLines = null,
-  bendAnglesRad = null,
-  drawingBends = null,
-  drawingBendStyle = "boxed",
-  drawingBendRadiusMm = 0,
-  drawingKFactor = 0.5,
-  drawingHiddenLayers = null,
-  drawingOrientation = null,
-  drawingMaterialColor = null,
-  drawingGeometry = null,
-  drawingIsDocument = false,
-  drawingThicknessMm = 0,
   onCameraZoomPercentChange = null,
   onLodCameraChange = null,
   onMeshSourceAdoption = null,
@@ -351,24 +335,16 @@ export default function CadRenderPane({
   const hasParts = capabilities.parts;
   const hasTopology = capabilities.topology;
   const inspectionEnabled = true;
-  const drawingGuides = viewerBendGuidesForRenderPane({ renderMode, bendAxisX, drawingBendLines });
-  const effectivePlanMode = inspectionEnabled && planMode;
   // Render supplies one clean presentation display state to every format,
   // including plain meshes whose Inspect mode has no display-mode panel.
   const displaySettingsActive = !!displaySettings;
-  // A plan view additionally forces orthographic: a top-down lock still
-  // foreshortens off-centre under perspective, which is exactly what a plan view must
-  // not do. Every other format receives projection from the resolved scene camera.
-  const cadProjection = effectivePlanMode
-    ? CAMERA_PROJECTION.ORTHOGRAPHIC
-    : normalizeCameraProjection(projection, CAMERA_PROJECTION.ORTHOGRAPHIC);
+  const cadProjection = normalizeCameraProjection(projection, CAMERA_PROJECTION.ORTHOGRAPHIC);
   const cadViewerBoundsAnimationActive = Boolean(stepAnimation?.playing);
   const topologySelectionPending = Boolean(referenceSelectionPending && hasTopology);
   const topologySelectionUnavailable = Boolean(referenceSelectionUnavailable && hasTopology);
   const topologySelectionDeferred = Boolean(referenceSelectionDeferred && selectedMeshData && hasTopology);
-  // Is there anything on screen? For every mesh-backed format that means mesh data -- DXF
-  // included, since it lost its 2D fallback in phase 3a and now renders its baked preview,
-  // so a failed build must read as "nothing renderable" and let the viewer alert block.
+  // Is there anything on screen? For a mesh-backed format that means mesh data, so a failed
+  // build reads as "nothing renderable" and lets the viewer alert block.
   const viewportHasRenderableContent = !!selectedMeshData;
   const ctaMode = inspectionEnabled && drawEnabled && drawToolActive
     ? "screenshot"
@@ -433,21 +409,6 @@ export default function CadRenderPane({
         viewUpdate={viewUpdate}
         loadingPresentation={loadingPresentation}
         renderFormat={renderFormat}
-        drawingThicknessScale={drawingThicknessScale}
-        planMode={effectivePlanMode}
-        bendAxisX={drawingGuides.bendAxisX}
-        drawingBendLines={drawingGuides.drawingBendLines}
-        bendAnglesRad={bendAnglesRad}
-        drawingBends={drawingBends}
-        drawingBendStyle={drawingBendStyle}
-        drawingBendRadiusMm={drawingBendRadiusMm}
-        drawingKFactor={drawingKFactor}
-        drawingHiddenLayers={drawingHiddenLayers}
-        drawingOrientation={drawingOrientation}
-        drawingMaterialColor={drawingMaterialColor}
-        drawingGeometry={drawingGeometry}
-        drawingIsDocument={drawingIsDocument}
-        drawingThicknessMm={drawingThicknessMm}
         onCameraZoomPercentChange={onCameraZoomPercentChange}
         onLodCameraChange={onLodCameraChange}
         onMeshSourceAdoption={onMeshSourceAdoption}

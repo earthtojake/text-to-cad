@@ -2,13 +2,11 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import {
   isAbortError,
   loadRenderDisplayEdgeBundle,
-  loadRenderDxfMesh,
   loadRenderGlb,
   loadRenderSurf,
   loadRenderSelectorBundle,
   loadRenderSurfSelectorBundle,
   peekRenderDisplayEdgeBundle,
-  peekRenderDxfMesh,
   peekRenderGlb,
   peekRenderSelectorBundle,
   peekRenderTopologyIndex,
@@ -59,8 +57,7 @@ import {
   entryMeshAssetUrl,
   entrySelectorTopologyAssetUrl,
   entrySourceSidecarUrl,
-  entryTopologyAssetUrl,
-  meshAssetKeyForEntry
+  entryTopologyAssetUrl
 } from "@hardcore/core/lib/entryAssets.js";
 import { reclaimIdleSurfWorkers } from "@hardcore/core/lib/renderAssetClient.js";
 import { estimateMeshRenderCost } from "@hardcore/core/lib/render/meshCost.js";
@@ -186,16 +183,6 @@ function runtimeComponentSurfUrl(context, cid, resources) {
     || (component?.surf ? resolvePackageAssetUrl(entryAssetUrl(context.entry, "glb"), component.surf, resources) : "");
 }
 
-// The one single-file model this renderer still loads whole is a drawing's prism:
-// every STEP is a package, and a robot, a triangle mesh and a GLB have their own renderers.
-function peekRenderMeshForEntry(entry, resources) {
-  return peekRenderDxfMesh(entryMeshAssetUrl(entry), { resources });
-}
-
-function loadRenderMeshForEntry(entry, options) {
-  return loadRenderDxfMesh(entryMeshAssetUrl(entry), options);
-}
-
 function createAssemblyPreviewMeshData(meshData, topologyManifest = null) {
   return {
     ...meshData,
@@ -266,16 +253,7 @@ export function useCadAssets({
       }
       return null;
     }
-    const meshData = peekRenderMeshForEntry(entry, resources);
-    if (!meshData) {
-      return null;
-    }
-    return {
-      file: entry.file,
-      kind: entry.kind,
-      meshHash: entryMeshAssetHash(entry),
-      meshData
-    };
+    return null;
   }, [buildAssemblyPreviewMeshState, entryHasMesh, restoreCompletedPackage, resources]);
 
   // FileViewer remounts file-owned controls. Restore immutable warm assets on
@@ -809,8 +787,7 @@ export function useCadAssets({
 
     try {
       // Every STEP entry is a component-GLB package (a single-component part is just a
-      // package with one occurrence); compose it the same way. Only a drawing's prism
-      // falls through to the single-file loader below.
+      // package with one occurrence); compose it the same way.
       if (entrySourceFormat(entry) === RENDER_FORMAT.STEP) {
         setMeshLoadProgress({
           phase: "read",
@@ -1171,50 +1148,11 @@ export function useCadAssets({
           `STEP file ${entry.file || "(unknown)"} is not a component-GLB package; regenerate it to produce an assembly.json package.`
         );
       }
-      const meshUrl = entryMeshAssetUrl(entry);
-      setMeshLoadProgress({
-        phase: "read",
-        label: "Reading model",
-        done: 0,
-        total: 0,
-        determinate: false,
-      });
-      if (!meshUrl) {
-        const assetLabel = meshAssetKeyForEntry(entry).toUpperCase();
-        throw new Error(`${assetLabel} entry is missing ${assetLabel} asset: ${entry.file || "(unknown)"}`);
-      }
-      setMeshLoadProgress(progressiveLoadProgress(0, 1));
-      const meshData = await loadRenderMeshForEntry(entry, { resources, signal: controller.signal });
-      const meshHash = entryMeshAssetHash(entry);
-      if (requestId !== requestIdRef.current || controller.signal.aborted) {
-        return;
-      }
-      if (meshData?.sourceFormat === "dxf" && !meshData.vertices?.length) {
-        // A dimensioned DRAWING has no prism BY DESIGN: it renders as 2D line
-        // work drawn by the viewer itself. Publishing an empty mesh would make
-        // the scene sync clear the group — wiping the line container — so this
-        // matches the old no-mesh state instead.
-        setMeshState(null);
-        setStatus(ASSET_STATUS.PENDING);
-        setError("");
-        return;
-      }
-      setMeshLoadProgress({
-        phase: "view",
-        label: "Preparing view",
-        done: 1,
-        total: 1,
-        determinate: true,
-      });
-      displayedLodPackageRef.current = null;
-      displayedReferenceCompositionRef.current = null;
-      setMeshState({
-        file: entry.file,
-        kind: entry.kind,
-        meshHash,
-        meshData
-      });
-      setStatus(ASSET_STATUS.READY);
+      // Nothing else reaches here: every format but STEP has its own renderer, and this
+      // one only matches `.step`/`.stp`. A file that arrives anyway is a registration bug.
+      throw new Error(
+        `${entry.file || "(unknown)"} is not a STEP model; it has no renderer in this view.`
+      );
     } catch (err) {
       if (requestId !== requestIdRef.current || isAbortError(err) || controller.signal.aborted) {
         return;

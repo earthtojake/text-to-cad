@@ -12,16 +12,13 @@ test("STEP shares Model, optional Motion, and View across both viewing modes", (
   }
 });
 
-test("format-specific tabs remain available in both viewing modes", () => {
+test("this renderer holds a sheet for STEP alone; every other family has its own renderer", () => {
   for (const renderMode of [false, true]) {
-    assert.deepEqual(renderedFileSheetSectionIds("dxf", { renderMode, hasDxfBendsPanel: true, hasDxfLayersPanel: true }), ["material", "bends", "dxfLayers", "display"]);
-    // A triangle mesh, a GLB and a robot description have their own renderers: this one holds no sheet for them.
-    for (const kind of ["mesh", "urdf", "srdf", "sdf"]) assert.deepEqual(renderedFileSheetSectionIds(kind, { renderMode }), []);
+    for (const kind of ["dxf", "mesh", "urdf", "srdf", "sdf"]) assert.deepEqual(renderedFileSheetSectionIds(kind, { renderMode }), []);
   }
 });
 
 test("defaults retain useful format-specific selections", () => {
-  assert.deepEqual(defaultOpenFileSheetSectionIds("dxf"), []);
   assert.deepEqual(defaultOpenFileSheetSectionIds("step", { hasFileStatus: true }), ["status", "tree"]);
   assert.deepEqual(defaultOpenFileSheetSectionIds("urdf"), []);
 });
@@ -45,7 +42,7 @@ test("one tab is active: the last selected one that exists, else the format's fi
   assert.equal(resolveActiveFileSheetSectionId(["tree", "display", "kinematics"], tabs), "kinematics");
   assert.equal(resolveActiveFileSheetSectionId(["tree", "render"], tabs), "tree");
   assert.equal(resolveActiveFileSheetSectionId(["retired", "kinematics"], ["tree", "display"]), "tree");
-  assert.equal(resolveActiveFileSheetSectionId([], ["material", "bends", "dxfLayers", "display"]), "material");
+  assert.equal(resolveActiveFileSheetSectionId([], ["features", "kinematics", "display"]), "features");
   assert.equal(resolveActiveFileSheetSectionId(null, []), "");
   assert.deepEqual(tabs, ["tree", "kinematics", "display"]);
 });

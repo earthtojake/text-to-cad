@@ -9,16 +9,6 @@ import { disposeSectionCaps } from "@hardcore/core/lib/viewer/sectionCaps.js";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { viewerTransitionBackdrop } from "../../kit/viewport/framePresentation.js";
-import {
-  dxfBendGuideSegments,
-  dxfFlatPatternExtents,
-  dxfFoldIsIdentity,
-  foldDxfPoint,
-  normalizeDxfFoldOptions,
-  transformDxfPreviewPositions
-} from "@hardcore/core/lib/dxf/foldPreview.js";
-import { buildDxfPreviewMeshData, extractDxfScorePolylines } from "@hardcore/core/lib/dxf/buildPreviewMesh.js";
-import { buildDxfDrawingLineGroups, drawingLineBounds } from "@hardcore/core/lib/dxf/buildDrawingLines.js";
 import { STEP_TREE_TOPOLOGY_NODE_PREFIX } from "@hardcore/core/lib/step/stepTree.js";
 import {
   CAMERA_PROJECTION,
@@ -140,7 +130,6 @@ import DrawingOverlay from "../../kit/tools/draw/DrawingOverlay.jsx";
 import JointHandleOverlay from "../../kit/tools/pose/JointHandleOverlay.jsx";
 import { usePlaybackFrames } from "../../kit/tools/playbar/usePlaybackFrames.js";
 import { useDrawingViewLock } from "../../kit/tools/draw/useDrawingViewLock.js";
-import { usePlanMode } from "../../kit/camera/usePlanMode.js";
 import { useAnimationClockStore } from "../workbench/animationClockStore.js";
 import { useViewerMeasureOverlay } from "./viewer/hooks/useViewerMeasureOverlay.js";
 import { useViewerPicking } from "./viewer/hooks/useViewerPicking.js";
@@ -248,8 +237,6 @@ const EXPLODED_VIEW_ANIMATION_DURATION_MS = 1000;
 const CAD_COORDINATE_SYSTEM = "cad-z-up-v1";
 const VIEW_PLANE_CONTROL_SIZE = "6rem";
 const CAD_EDGE_OPACITY = 0.84;
-const BEND_GUIDE_COLOR = "#f59e0b";
-const BEND_GUIDE_WIDTH_MULTIPLIER = 1.35;
 
 function referenceSelectorType(reference) {
   return String(reference?.selectorType || "").trim();
@@ -500,15 +487,7 @@ function sceneBuildKeyDifference(previous, next, runtime, modelKey) {
 }
 
 function clearSceneGroup(group) {
-  // The 2D drawing line-work is an OVERLAY owned by its own effect (it renders a
-  // dimensioned DXF, which has no mesh for this sync to manage). Clearing it here
-  // erased the drawing whenever a meshless sync ran after the lines were added.
-  for (const child of [...group.children]) {
-    if (child.userData?.dxfDrawingLines) {
-      continue;
-    }
-    disposeSceneObject(child);
-  }
+  for (const child of [...group.children]) disposeSceneObject(child);
 }
 
 function getEdgeThickness(edgeSettings = null, viewerTheme = null) {
@@ -593,21 +572,6 @@ const CadViewer = forwardRef(function CadViewer({
   meshData,
   modelKey,
   renderFormat = "",
-  drawingThicknessScale = 1,
-  planMode = false,
-  bendAxisX = null,
-  drawingBendLines = null,
-  bendAnglesRad = null,
-  drawingBends = null,
-  drawingBendStyle = "boxed",
-  drawingBendRadiusMm = 0,
-  drawingKFactor = 0.5,
-  drawingHiddenLayers = null,
-  drawingOrientation = null,
-  drawingMaterialColor = null,
-  drawingGeometry = null,
-  drawingIsDocument = false,
-  drawingThicknessMm = 0,
   onCameraZoomPercentChange = null,
   perspective = null,
   perspectiveRef = null,
@@ -863,7 +827,6 @@ const CadViewer = forwardRef(function CadViewer({
       renderFormat,
       parameters: stepParameterRuntime,
       animation: stepAnimationRuntime,
-      drawing: drawingIsDocument || drawingGeometry || planMode,
       exploded: explodedViewActive || explosion.enabled || explosion.rafId || Number(explosion.progress) !== 0,
       loading: isLoading,
       records: runtimeRef.current?.displayRecords || [],
@@ -1227,640 +1190,6 @@ const CadViewer = forwardRef(function CadViewer({
     active: drawingOverlayActive, drawing, runtimeRef, mountRef, viewerReadyTick
   });
 
-  usePlanMode({ planMode, runtimeRef, viewerReadyTick });
-
-  // DRAWING TRANSFORM: thickness and fold, one vertex rewrite, math from
-  // @hardcore/core/lib/dxf/foldPreview (node-tested; the snapshot runtime shares it by construction).
-  //
-  // A dimensioned DRAWING renders as LINES, because that is what it is.
-  //
-  // A cut layout's closed contours get extruded into a flat pattern and drawn as a solid. A
-  // drawing -- plan views, sections, centre lines, a title block -- encloses nothing, so it has
-  // no flat pattern, bakes no preview.glb, and used to sit on LOADING forever waiting for a mesh
-  // that was never coming (issue #246). Its geometry.json is already everything needed to draw
-  // it, so it is drawn here: one LineSegments per layer, coloured from the layer table and
-  // hidden by the same layer switches a cut layout uses.
-  useEffect(() => {
-    const runtime = runtimeRef.current;
-    const group = runtime?.modelGroup;
-    const previous = runtime?.dxfDrawingLines || null;
-    const dispose = () => {
-      if (previous) {
-        previous.parent?.remove(previous);
-        for (const child of previous.children || []) {
-          child.geometry?.dispose?.();
-          child.material?.dispose?.();
-        }
-      }
-      if (runtime) {
-        runtime.dxfDrawingLines = null;
-        runtime.hasDrawingDocument = false;
-      }
-    };
-    if (!group || !drawingIsDocument || !drawingGeometry?.geometry) {
-      dispose();
-      return undefined;
-    }
-    dispose();
-    const hiddenLayers = new Set(Array.isArray(drawingHiddenLayers) ? drawingHiddenLayers : []);
-    // ACI 7 is the DXF "default ink" colour: it means "whatever reads against the background",
-    // which is why the package resolves it to a near-white grey suited to a dark sheet. Taking
-    // that literally paints a drawing invisible on a light theme, so only a layer that names a
-    // real colour gets its own; the rest use the same slate the bend guides use, which reads on
-    // both themes.
-    const DEFAULT_INK = 0x5f6775;
-    const layerColors = new Map(
-      (Array.isArray(drawingGeometry.layers) ? drawingGeometry.layers : [])
-        .map((layer) => [layer?.name, Number(layer?.colorAci) === 7 ? null : layer?.colorHex])
-    );
-    const { layers } = buildDxfDrawingLineGroups(drawingGeometry);
-    if (!layers.length) {
-      runtime.hasDrawingDocument = true;
-      markPresentationReady(runtime);
-      return undefined;
-    }
-    const container = new THREE.Group();
-    container.userData.dxfDrawingLines = true;
-    for (const layer of layers) {
-      if (hiddenLayers.has(layer.name)) {
-        continue;
-      }
-      // Mesher space is y-up; the scene is CAD Z-up. Same (x, y, z) -> (x, z, -y) map the
-      // curved fold preview uses, so a drawing and a flat pattern share one orientation,
-      // one camera fit and one set of view controls.
-      const source = layer.positions;
-      const mapped = new Float32Array(source.length);
-      for (let index = 0; index < source.length; index += 3) {
-        mapped[index] = source[index];
-        mapped[index + 1] = source[index + 2];
-        mapped[index + 2] = -source[index + 1];
-      }
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute("position", new THREE.BufferAttribute(mapped, 3));
-      const color = layerColors.get(layer.name);
-      const lines = new THREE.LineSegments(
-        geometry,
-        new THREE.LineBasicMaterial({
-          color: typeof color === "string" && color ? new THREE.Color(color) : new THREE.Color(DEFAULT_INK),
-          transparent: false
-        })
-      );
-      lines.userData.dxfDrawingLayer = layer.name;
-      container.add(lines);
-    }
-    group.add(container);
-    if (runtime) {
-      runtime.dxfDrawingLines = container;
-      runtime.hasDrawingDocument = true;
-    }
-    // A document has no mesh for the shared fit to measure, so its own extent stands in.
-    // Publishing runtime.modelBounds is how it gets the shared zoom baseline, reset and fit
-    // with no format-specific branch.
-    const meshBounds = drawingLineBounds({ layers });
-    const bounds = meshBounds
-      ? {
-        min: [meshBounds.min[0], meshBounds.min[2], -meshBounds.max[1]],
-        max: [meshBounds.max[0], meshBounds.max[2], -meshBounds.min[1]]
-      }
-      : null;
-    if (bounds && runtime?.THREE) {
-      applyRuntimeModelBounds(runtime.THREE, runtime, bounds, sceneScaleModeRef.current, {
-        shadowMapSize: renderShadowMapSizeRef.current
-      });
-      applyActivePhotographicStudio(runtime, bounds);
-      runtime.hasVisibleModel = true;
-      // A drawing has no cadScene to publish restBounds, and the flat pattern
-      // IS its zero pose -- the fold slider poses it from here.
-      runtime.zeroPoseBounds = bounds;
-      resetZoomAndPan({ animate: false });
-    }
-    markPresentationReady(runtime);
-    runtime?.requestRender?.();
-    return undefined;
-  }, [applyActivePhotographicStudio, drawingIsDocument, drawingGeometry, drawingHiddenLayers, markPresentationReady, viewerReadyTick]);
-
-  // Applied SYNCHRONOUSLY when the meshes already exist. The previous version restored flat
-  // positions in its cleanup and re-folded on the next animation frame — so every slider
-  // tick painted one flat frame between the two, which is the flicker. Cleanup now only
-  // cancels a pending first-load retry: the next run overwrites positions from the cached
-  // flat copy anyway, and an identity run writes the flat values back explicitly.
-  useEffect(() => {
-    const runtime = runtimeRef.current;
-    const group = runtime?.modelGroup;
-    if (!group) {
-      return undefined;
-    }
-    // Bend lines as full 2D segments (orientation matters — the fold handles any direction);
-    // the scanner's bare axis-X list is only the fallback until geometry.json lands.
-    const foldOptions = {
-      bendLines: Array.isArray(drawingBendLines) && drawingBendLines.length ? drawingBendLines : null,
-      bendAxesX: Array.isArray(bendAxisX) ? bendAxisX : [],
-      bendAnglesRad: Array.isArray(bendAnglesRad) ? bendAnglesRad : [],
-      thicknessScale: drawingThicknessScale
-    };
-    const identity = dxfFoldIsIdentity(foldOptions);
-    const bendCount = foldOptions.bendLines ? foldOptions.bendLines.length : foldOptions.bendAxesX.length;
-
-    // Post-fold model orientation: quarter-turns about each world axis, rotating the folded
-    // part about the flat pattern's own centre so it stays where the camera is looking.
-    // Exact by construction (sin/cos of k*90 degrees are integers), and applied to the SAME
-    // buffers the fold writes, so overlays, picking, and fit all follow.
-    const quarterTurn = (component) => {
-      const numeric = Math.trunc(Number(component));
-      return Number.isFinite(numeric) ? ((numeric % 4) + 4) % 4 : 0;
-    };
-    const orientation = {
-      x: quarterTurn(drawingOrientation?.x),
-      y: quarterTurn(drawingOrientation?.y),
-      z: quarterTurn(drawingOrientation?.z)
-    };
-    const orientationActive = orientation.x !== 0 || orientation.y !== 0 || orientation.z !== 0;
-    const orientationMatrix = orientationActive
-      ? new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(
-        (orientation.x * Math.PI) / 2,
-        (orientation.y * Math.PI) / 2,
-        (orientation.z * Math.PI) / 2,
-        "XYZ"
-      ))
-      : null;
-    const anyBendAngle = foldOptions.bendAnglesRad.some((angle) => angle !== 0);
-
-    // Layer visibility: hiding a cut layer changes the SOLID, which only a live re-mesh can
-    // express — the baked prism has the hidden geometry welded in.
-    const hiddenLayers = new Set(Array.isArray(drawingHiddenLayers) ? drawingHiddenLayers : []);
-    const geometryLayers = Array.isArray(drawingGeometry?.layers) ? drawingGeometry.layers : [];
-    const anyCutLayerHidden = hiddenLayers.size > 0
-      && geometryLayers.some((layer) => hiddenLayers.has(layer.name) && layer.kind === "cut");
-    const filterByLayer = (records) => (Array.isArray(records)
-      ? records.filter((record) => !hiddenLayers.has(record?.layer))
-      : []);
-    const effectiveGeometry = drawingGeometry?.geometry
-      ? (hiddenLayers.size
-        ? {
-          ...drawingGeometry,
-          geometry: {
-            lines: filterByLayer(drawingGeometry.geometry.lines),
-            arcs: filterByLayer(drawingGeometry.geometry.arcs),
-            circles: filterByLayer(drawingGeometry.geometry.circles),
-            texts: filterByLayer(drawingGeometry.geometry.texts)
-          }
-        }
-        : drawingGeometry)
-      : null;
-
-    // Curved re-meshes from the package's cached contours: the flat prism has no vertices
-    // inside a bend region to curve, so a curved bend is a FRESH mesh (the full mesher, the
-    // old live path), not a transform of the baked one. Boxed stays the vertex fold — but a
-    // hidden cut layer forces the re-mesh path too (its bends then render curved; the mesher
-    // has one bend geometry).
-    const curvedRequested = !!effectiveGeometry
-      && ((drawingBendStyle === "curved" && bendCount > 0 && anyBendAngle) || anyCutLayerHidden);
-
-    // Overlays (dotted guides, score lines, text markings) exist for any drawing whose
-    // geometry is loaded, even flat at identity.
-    const hasOverlaySource = !!effectiveGeometry;
-    if (!curvedRequested && identity && !orientationActive && !hasOverlaySource
-      && !drawingMaterialColor && !runtimeRef.current?.dxfTransformTouched) {
-      return undefined;
-    }
-    runtimeRef.current.dxfTransformTouched = curvedRequested || !identity || orientationActive;
-    let frame = 0;
-    let attempts = 0;
-
-    const apply = () => {
-      // Everything here keys on the GEOMETRY, never the mesh. Geometries are cached and
-      // reused across mounts while meshes are rebuilt per scene — a baseline stored on the
-      // mesh is lost on remount, and the next visit then snapshots the previous visit's
-      // POSE as "flat" (measured: reopening a 5 mm drawing made 8 mm render 40 mm tall).
-      const targets = [];
-      const seenGeometries = new Set();
-      group.traverse((child) => {
-        if (
-          child.userData?.dxfBendGuide
-          || child.userData?.dxfCurvedPreview
-          || child.userData?.dxfScoreOverlay
-          || child.userData?.dxfTextMarking
-        ) {
-          return;
-        }
-        const geometry = child.geometry;
-        let position = geometry?.getAttribute?.("position");
-        if (!position) {
-          return;
-        }
-        if (seenGeometries.has(geometry)) {
-          // Occurrences share geometry; transforming it once per apply is both correct and
-          // what keeps the fold from compounding across instances.
-          return;
-        }
-        seenGeometries.add(geometry);
-        // First touch of this geometry, ever: snapshot the FLAT baseline and DETACH the
-        // attribute onto a private buffer. The scene wraps the mesh cache's own vertex
-        // array when it is already a Float32Array (cadScene sourceMesh path, no copy) —
-        // writing through it would corrupt the cache's flat baseline for every future
-        // mount. The transform may only ever own memory nothing else reads.
-        if (!geometry.userData.dxfFoldOriginal) {
-          geometry.userData.dxfFoldOriginal = Float32Array.from(position.array);
-          const privateAttribute = new THREE.BufferAttribute(Float32Array.from(position.array), 3);
-          geometry.setAttribute("position", privateAttribute);
-          position = privateAttribute;
-        }
-        // The material-preset tint rides the mesh as a claim (like dxfHiddenForCurved):
-        // partVisualState re-asserts surface colors on every selection/hover pass, and it
-        // honours this in place of the record's base color. The curved preview shares this
-        // mesh's material, so it follows automatically.
-        if (drawingMaterialColor) {
-          child.userData.dxfMaterialTint = new THREE.Color(drawingMaterialColor);
-        } else {
-          delete child.userData.dxfMaterialTint;
-        }
-        targets.push({ child, geometry, original: geometry.userData.dxfFoldOriginal, position });
-      });
-
-      if (!targets.length) {
-        // First load only: this effect is declared before the scene sync, so a fresh model's
-        // group can still be empty. Retry a few frames rather than silently doing nothing.
-        if ((!identity || curvedRequested || hasOverlaySource) && attempts < 60) {
-          attempts += 1;
-          frame = requestAnimationFrame(apply);
-        }
-        return;
-      }
-
-      const removeCurvedPreview = () => {
-        const curved = runtimeRef.current?.dxfCurvedPreview;
-        if (curved) {
-          curved.parent?.remove(curved);
-          curved.geometry?.dispose?.();
-          runtimeRef.current.dxfCurvedPreview = null;
-        }
-      };
-
-      // Orientation helpers (no-ops when inactive), rotating about the flat pattern's own
-      // centre so the reoriented part stays under the camera.
-      let orientCenter = null;
-      if (orientationMatrix && targets.length) {
-        const source = targets[0].original;
-        let minX = Infinity;
-        let maxX = -Infinity;
-        let minY = Infinity;
-        let maxY = -Infinity;
-        for (let index = 0; index < source.length; index += 3) {
-          const x = source[index];
-          const y = source[index + 1];
-          if (x < minX) minX = x;
-          if (x > maxX) maxX = x;
-          if (y < minY) minY = y;
-          if (y > maxY) maxY = y;
-        }
-        orientCenter = [(minX + maxX) / 2, (minY + maxY) / 2, 0];
-      }
-      const orientElements = orientationMatrix?.elements || null;
-      const orientBuffer = (array) => {
-        if (!orientElements || !orientCenter) {
-          return array;
-        }
-        const e = orientElements;
-        for (let index = 0; index < array.length; index += 3) {
-          const x = array[index] - orientCenter[0];
-          const y = array[index + 1] - orientCenter[1];
-          const z = array[index + 2] - orientCenter[2];
-          array[index] = e[0] * x + e[4] * y + e[8] * z + orientCenter[0];
-          array[index + 1] = e[1] * x + e[5] * y + e[9] * z + orientCenter[1];
-          array[index + 2] = e[2] * x + e[6] * y + e[10] * z + orientCenter[2];
-        }
-        return array;
-      };
-      const orientPoint = (point) => {
-        if (!orientElements || !orientCenter) {
-          return point;
-        }
-        const e = orientElements;
-        const x = point[0] - orientCenter[0];
-        const y = point[1] - orientCenter[1];
-        const z = point[2] - orientCenter[2];
-        return [
-          e[0] * x + e[4] * y + e[8] * z + orientCenter[0],
-          e[1] * x + e[5] * y + e[9] * z + orientCenter[1],
-          e[2] * x + e[6] * y + e[10] * z + orientCenter[2]
-        ];
-      };
-
-      let guideSegments = null;
-      let flat = null;
-      if (curvedRequested) {
-        // Full remesh, exactly the geometry the old live viewer built: tessellated bend
-        // bands, constant thickness around the arc. The baked meshes are hidden, not
-        // touched — the curved preview is its own object, so nothing cached is at risk.
-        // Direction flips on the way in. The mesher bends "up" toward ITS +Y, and the only
-        // proper rotation into CAD Z-up that keeps the pattern footprint un-mirrored,
-        // (x, y, z) -> (x, z, -y), sends mesher +Y to CAD -Z. Handing the mesher the
-        // opposite direction is what makes the UI's Up fold up on screen.
-        const bendSettings = Array.isArray(drawingBends)
-          ? drawingBends.map((bend) => ({
-            angleDeg: bend?.angleDeg,
-            direction: bend?.direction === "down" ? "up" : "down"
-          }))
-          : [];
-        // The mesher treats <= 0 as "use the drawing default" (2 mm); a hair keeps the
-        // 0 mm setting meaning FLAT-thin rather than jumping to the default.
-        const meshThicknessMm = Math.max(Number(drawingThicknessMm) || 0, 0.05);
-        let curvedData = null;
-        try {
-          // guideElevationSign -1: the (x, z, -y) map below sends the mesher's +Y to CAD
-          // -Z, so guides elevated over the mesher's top face would land UNDER the sheet.
-          curvedData = buildDxfPreviewMeshData(effectiveGeometry, meshThicknessMm, bendSettings, {
-            guideElevationSign: -1,
-            bendInsideRadiusMm: drawingBendRadiusMm,
-            bendKFactor: drawingKFactor
-          });
-        } catch (curveError) {
-          // A drawing the bend mesher cannot band (a hole crossing a bend region) falls
-          // back to the sharp fold rather than rendering nothing.
-          curvedData = null;
-        }
-        if (curvedData) {
-          // Mesher output is Y-up; the scene is CAD Z-up: (x, y, z) -> (x, z, -y).
-          const source = curvedData.vertices;
-          const mapped = new Float32Array(source.length);
-          for (let index = 0; index < source.length; index += 3) {
-            mapped[index] = source[index];
-            mapped[index + 1] = source[index + 2];
-            mapped[index + 2] = -source[index + 1];
-          }
-          orientBuffer(mapped);
-          let curved = runtimeRef.current?.dxfCurvedPreview || null;
-          if (curved && curved.parent !== group) {
-            curved = null;
-            runtimeRef.current.dxfCurvedPreview = null;
-          }
-          if (!curved) {
-            curved = new THREE.Mesh(new THREE.BufferGeometry(), targets[0].child.material);
-            curved.userData.dxfCurvedPreview = true;
-            group.add(curved);
-            runtimeRef.current.dxfCurvedPreview = curved;
-          }
-          curved.material = targets[0].child.material;
-          curved.geometry.setAttribute("position", new THREE.BufferAttribute(mapped, 3));
-          curved.geometry.setIndex(new THREE.BufferAttribute(curvedData.indices, 1));
-          // Drop the old normals first: computeVertexNormals REUSES an existing normal
-          // attribute, so on this reused geometry they stay at the vertex count of the FIRST
-          // curved build while every remesh changes it -- each bend's band adds vertices. The
-          // draw is then rejected outright ("vertex buffer is not big enough"), silently, the
-          // first time an index runs past that stale buffer. A four-bend panel goes blank on
-          // the fourth bend; three bends stay under the count and look fine.
-          curved.geometry.deleteAttribute("normal");
-          curved.geometry.computeVertexNormals();
-          curved.geometry.computeBoundingBox?.();
-          curved.geometry.computeBoundingSphere?.();
-          for (const { child } of targets) {
-            if (child.visible) {
-              child.userData.dxfHiddenForCurved = true;
-              child.visible = false;
-            }
-          }
-          const guides = curvedData.guide_line_segments;
-          if (guides?.length) {
-            guideSegments = new Float32Array(guides.length);
-            for (let index = 0; index < guides.length; index += 3) {
-              guideSegments[index] = guides[index];
-              guideSegments[index + 1] = guides[index + 2];
-              guideSegments[index + 2] = -guides[index + 1];
-            }
-          }
-          flat = targets[0]?.original || null;
-        }
-      }
-
-      if (!curvedRequested || !runtimeRef.current?.dxfCurvedPreview) {
-        removeCurvedPreview();
-        for (const { child } of targets) {
-          if (child.userData.dxfHiddenForCurved) {
-            child.visible = true;
-            delete child.userData.dxfHiddenForCurved;
-          }
-        }
-        for (const { geometry, original, position } of targets) {
-          transformDxfPreviewPositions(original, position.array, foldOptions);
-          orientBuffer(position.array);
-          position.needsUpdate = true;
-          geometry.computeVertexNormals?.();
-          geometry.computeBoundingBox?.();
-          geometry.computeBoundingSphere?.();
-          if (!flat || original.length > flat.length) {
-            flat = original;
-          }
-        }
-      }
-
-      // The dotted bend lines, folded through the same chain so each stays on its crease.
-      // The overlay OBJECT persists and its buffer is swapped — removing and re-adding it
-      // per slider tick made the dashes blink alongside the old geometry flicker.
-      let overlay = runtimeRef.current?.dxfBendGuideOverlay || null;
-      if (overlay && overlay.parent !== group) {
-        // The scene sync cleared the group under us; the ref is a dangling object.
-        overlay = null;
-        runtimeRef.current.dxfBendGuideOverlay = null;
-      }
-      // Hiding a bend layer hides its dashed guides too — the crease marks ARE that layer.
-      const bendLayerHidden = hiddenLayers.size > 0
-        && geometryLayers.some((layer) => hiddenLayers.has(layer.name) && layer.kind === "bend");
-      const segments = bendLayerHidden
-        ? new Float32Array(0)
-        : guideSegments
-          || (flat && bendCount
-            ? dxfBendGuideSegments(flat, foldOptions)
-            : new Float32Array(0));
-      if (!segments.length) {
-        if (overlay) {
-          overlay.parent?.remove(overlay);
-          overlay.geometry?.dispose?.();
-          overlay.material?.dispose?.();
-          runtimeRef.current.dxfBendGuideOverlay = null;
-        }
-      } else {
-        if (!overlay) {
-          const { yMin, yMax } = dxfFlatPatternExtents(flat);
-          const span = Math.max(yMax - yMin, 1);
-          overlay = new THREE.LineSegments(
-            new THREE.BufferGeometry(),
-            new THREE.LineDashedMaterial({
-              color: 0x5f6775,
-              dashSize: span / 24,
-              gapSize: span / 36,
-              transparent: true,
-              opacity: 0.9,
-              depthWrite: false
-            })
-          );
-          overlay.userData.dxfBendGuide = true;
-          overlay.frustumCulled = false;
-          group.add(overlay);
-          runtimeRef.current.dxfBendGuideOverlay = overlay;
-        }
-        overlay.geometry.setAttribute("position", new THREE.BufferAttribute(orientBuffer(segments), 3));
-        overlay.computeLineDistances();
-        overlay.geometry.computeBoundingSphere?.();
-      }
-
-      // SCORE LINES and TEXT MARKINGS: the drawing's annotations, overlaid on the sheet's
-      // top face and folded through the same chain as the geometry. In curved mode the fold
-      // used here is the vertex fold, so a score crossing a bend band chords across the arc
-      // — an accepted approximation; annotations rarely sit inside a bend.
-      const resolvedFold = normalizeDxfFoldOptions(foldOptions);
-      const layerColorByName = new Map(geometryLayers.map((layer) => [layer.name, layer.colorHex]));
-      const flatExtents = flat ? dxfFlatPatternExtents(flat) : { zMax: 0.5 };
-      const zTop = flatExtents.zMax + 0.3 / Math.max(resolvedFold.scale, 1e-6);
-
-      let scoreSegments = [];
-      if (effectiveGeometry) {
-        try {
-          for (const polyline of extractDxfScorePolylines(effectiveGeometry)) {
-            for (let index = 0; index < polyline.length - 1; index += 1) {
-              const a = foldDxfPoint(polyline[index][0], polyline[index][1], zTop, resolvedFold);
-              const b = foldDxfPoint(polyline[index + 1][0], polyline[index + 1][1], zTop, resolvedFold);
-              scoreSegments.push(a[0], a[1], a[2], b[0], b[1], b[2]);
-            }
-          }
-        } catch (scoreError) {
-          scoreSegments = [];
-        }
-      }
-      let scoreOverlay = runtimeRef.current?.dxfScoreOverlay || null;
-      if (scoreOverlay && scoreOverlay.parent !== group) {
-        scoreOverlay = null;
-        runtimeRef.current.dxfScoreOverlay = null;
-      }
-      if (!scoreSegments.length) {
-        if (scoreOverlay) {
-          scoreOverlay.parent?.remove(scoreOverlay);
-          scoreOverlay.geometry?.dispose?.();
-          scoreOverlay.material?.dispose?.();
-          runtimeRef.current.dxfScoreOverlay = null;
-        }
-      } else {
-        if (!scoreOverlay) {
-          scoreOverlay = new THREE.LineSegments(
-            new THREE.BufferGeometry(),
-            new THREE.LineBasicMaterial({
-              color: 0x8a93a3,
-              transparent: true,
-              opacity: 0.95,
-              depthWrite: false
-            })
-          );
-          scoreOverlay.userData.dxfScoreOverlay = true;
-          scoreOverlay.frustumCulled = false;
-          group.add(scoreOverlay);
-          runtimeRef.current.dxfScoreOverlay = scoreOverlay;
-        }
-        scoreOverlay.geometry.setAttribute(
-          "position",
-          new THREE.BufferAttribute(orientBuffer(Float32Array.from(scoreSegments)), 3)
-        );
-        scoreOverlay.geometry.computeBoundingSphere?.();
-      }
-
-      // Text markings render as canvas-textured planes lying on the sheet — string, height,
-      // rotation from the DXF; no font tables, no glyph outlines. Rebuilt per apply: a
-      // drawing carries a handful of labels, not thousands.
-      let textGroup = runtimeRef.current?.dxfTextGroup || null;
-      if (textGroup && textGroup.parent !== group) {
-        textGroup = null;
-        runtimeRef.current.dxfTextGroup = null;
-      }
-      const disposeTextChildren = (container) => {
-        for (const child of [...container.children]) {
-          container.remove(child);
-          child.geometry?.dispose?.();
-          child.material?.map?.dispose?.();
-          child.material?.dispose?.();
-        }
-      };
-      const textMarkings = Array.isArray(effectiveGeometry?.geometry?.texts)
-        ? effectiveGeometry.geometry.texts.filter((text) => String(text?.value || "").trim())
-        : [];
-      if (!textMarkings.length) {
-        if (textGroup) {
-          disposeTextChildren(textGroup);
-          textGroup.parent?.remove(textGroup);
-          runtimeRef.current.dxfTextGroup = null;
-        }
-      } else if (typeof document !== "undefined") {
-        if (!textGroup) {
-          textGroup = new THREE.Group();
-          textGroup.userData.dxfTextMarking = true;
-          group.add(textGroup);
-          runtimeRef.current.dxfTextGroup = textGroup;
-        }
-        disposeTextChildren(textGroup);
-        for (const text of textMarkings) {
-          const value = String(text.value).trim();
-          const heightMm = Math.max(Number(text.heightMm) || 2.5, 0.2);
-          const anchor = text.position;
-          const rotation = ((Number(text.rotationDeg) || 0) * Math.PI) / 180;
-          const ex = [Math.cos(rotation), Math.sin(rotation)];
-          const ey = [-Math.sin(rotation), Math.cos(rotation)];
-          const fontPx = 64;
-          const canvas = document.createElement("canvas");
-          const context = canvas.getContext("2d");
-          if (!context) {
-            continue;
-          }
-          const fontSpec = `600 ${fontPx}px ui-sans-serif, system-ui, sans-serif`;
-          context.font = fontSpec;
-          const firstLine = value.split("\n")[0];
-          const textWidthPx = Math.max(context.measureText(firstLine).width, fontPx * 0.5);
-          canvas.width = Math.ceil(textWidthPx) + 8;
-          canvas.height = Math.ceil(fontPx * 1.35);
-          const drawContext = canvas.getContext("2d");
-          drawContext.font = fontSpec;
-          drawContext.fillStyle = layerColorByName.get(text.layer) || "#8a93a3";
-          drawContext.textBaseline = "alphabetic";
-          drawContext.fillText(firstLine, 4, fontPx);
-          const texture = new THREE.CanvasTexture(canvas);
-          texture.colorSpace = THREE.SRGBColorSpace;
-          const planeWidth = heightMm * (canvas.width / fontPx);
-          const planeHeight = heightMm * (canvas.height / fontPx);
-          // The DXF anchor is baseline-left; the plane's centre sits half a width along the
-          // text direction and a bit above the baseline. All in FLAT coords, then folded.
-          const centerFlat = [
-            anchor[0] + ex[0] * (planeWidth / 2) + ey[0] * (planeHeight * 0.22),
-            anchor[1] + ex[1] * (planeWidth / 2) + ey[1] * (planeHeight * 0.22)
-          ];
-          const origin3 = orientPoint(foldDxfPoint(centerFlat[0], centerFlat[1], zTop, resolvedFold));
-          const step = 0.5;
-          const alongX = orientPoint(foldDxfPoint(centerFlat[0] + ex[0] * step, centerFlat[1] + ex[1] * step, zTop, resolvedFold));
-          const alongY = orientPoint(foldDxfPoint(centerFlat[0] + ey[0] * step, centerFlat[1] + ey[1] * step, zTop, resolvedFold));
-          const basisX = new THREE.Vector3(alongX[0] - origin3[0], alongX[1] - origin3[1], alongX[2] - origin3[2]).normalize();
-          const basisY = new THREE.Vector3(alongY[0] - origin3[0], alongY[1] - origin3[1], alongY[2] - origin3[2]).normalize();
-          const basisZ = new THREE.Vector3().crossVectors(basisX, basisY).normalize();
-          const marking = new THREE.Mesh(
-            new THREE.PlaneGeometry(planeWidth, planeHeight),
-            new THREE.MeshBasicMaterial({
-              map: texture,
-              transparent: true,
-              depthWrite: false,
-              side: THREE.DoubleSide
-            })
-          );
-          marking.userData.dxfTextMarking = true;
-          marking.position.set(origin3[0], origin3[1], origin3[2]);
-          marking.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(basisX, basisY, basisZ));
-          marking.renderOrder = 2;
-          textGroup.add(marking);
-        }
-      }
-
-      runtime.requestRender?.();
-    };
-
-    apply();
-    return () => {
-      cancelAnimationFrame(frame);
-    };
-  }, [bendAxisX, drawingBendLines, bendAnglesRad, drawingBends, drawingBendStyle, drawingBendRadiusMm, drawingKFactor, drawingHiddenLayers, drawingOrientation, drawingMaterialColor, drawingGeometry, drawingThicknessMm, drawingThicknessScale, meshData, viewerReadyTick]);
-
   useImperativeHandle(ref, () => ({
     async prepareViewSettings(scene, signal) {
       const runtime = runtimeRef.current;
@@ -1898,10 +1227,9 @@ const CadViewer = forwardRef(function CadViewer({
         selectedPartIds: lodSelectedPartIdsRef.current,
       });
     },
-    // Exposed so a toolbar can drive the camera the same way the view-plane widget does.
-    // The DXF 2D/3D toggle is exactly "look straight down" vs "the default three-quarter
-    // view", and reusing these keeps one camera authority rather than a second one that
-    // drifts from the widget's idea of where `top` is.
+    // Exposed so a toolbar can drive the camera the same way the view-plane widget does,
+    // which keeps one camera authority rather than a second that drifts from the widget's
+    // idea of where `top` is.
     activateViewPlaneFace(faceId) {
       return activateViewPlaneFace(faceId);
     },
@@ -2794,7 +2122,7 @@ const CadViewer = forwardRef(function CadViewer({
     // TWO boxes, and the split is the point. displayBounds is the model in the
     // pose it is in right now -- what lighting, shadows, the floor height and
     // clipping must follow (the grid and stage keep the rest pose's SIZE). zeroPoseBounds is the model at its authored
-    // placement: a STEP assembly before its mates moved anything, a drawing as loaded. The CAMERA is grounded on that one, so
+    // placement: a STEP assembly before its mates moved anything. The CAMERA is grounded on that one, so
     // driving a joint, picking a group state or scrubbing an animation never
     // re-frames the model, and 100% keeps meaning "framed at the zero pose".
     const zeroPoseBounds = mergeBoundsList([cadScene.restBounds || meshData.bounds]);
@@ -3760,45 +3088,6 @@ const CadViewer = forwardRef(function CadViewer({
     );
   }, [activeDisplayEdgeRuntime, activeSelectorRuntime, displayEdgeRuntime, viewerReadyTick, viewerTheme, focusedPartIds, hiddenAwareVisualEdgeSettings, selectorRuntime, topologyDisplayEdgesVisible, visualEdgeSettings]);
 
-  useEffect(() => {
-    const runtime = runtimeRef.current;
-    if (!runtime?.THREE || !runtime?.edgesGroup) {
-      return;
-    }
-
-    const { THREE, edgesGroup } = runtime;
-    if (!runtime.bendGuideGroup || runtime.bendGuideGroup.parent !== edgesGroup) {
-      runtime.bendGuideGroup = new THREE.Group();
-      runtime.bendGuideGroup.renderOrder = 15;
-      edgesGroup.add(runtime.bendGuideGroup);
-    }
-    const bendGuideGroup = runtime.bendGuideGroup;
-    clearOverlayGroup(runtime, bendGuideGroup);
-
-    if (isLoading || !meshData || !isNumericArray(meshData.guide_line_segments, 6)) {
-      return () => {
-        clearOverlayGroup(runtime, bendGuideGroup);
-      };
-    }
-
-    const bendGuideLine = createScreenSpaceLineSegments(runtime, meshData.guide_line_segments, {
-      color: BEND_GUIDE_COLOR,
-      opacity: 0.98,
-      lineWidth: Math.max(getEdgeThickness(displayEdgeSettings, viewerTheme) * BEND_GUIDE_WIDTH_MULTIPLIER, 1.4),
-      renderOrder: 16,
-      depthTest: false,
-      depthWrite: false
-    });
-    if (bendGuideLine) {
-      bendGuideGroup.add(bendGuideLine);
-    }
-    bendGuideGroup.visible = bendGuideGroup.children.length > 0;
-    runtime.requestRender();
-
-    return () => {
-      clearOverlayGroup(runtime, bendGuideGroup);
-    };
-  }, [isLoading, meshData, modelKey, displayEdgeSettings, viewerReadyTick, viewerTheme]);
 
 
   useEffect(() => {
@@ -4166,7 +3455,7 @@ const CadViewer = forwardRef(function CadViewer({
     return () => { cancelled = true; };
   }, [viewUpdate?.revision, viewUpdate?.binding, viewerReadyTick]);
 
-  const hasPresentableContent = hasViewportContent || Boolean(drawingIsDocument && drawingGeometry?.geometry);
+  const hasPresentableContent = hasViewportContent;
   const preparingFrame = Boolean(resolvedPresentationKey) &&
     (presentedEpoch !== presentationEpoch || presentedKey !== resolvedPresentationKey) && !error;
   const coveringModeTransition = presentedEpoch !== presentationEpoch && !error && hasPresentableContent;
@@ -4208,7 +3497,7 @@ const CadViewer = forwardRef(function CadViewer({
       {drawingOverlayActive ? <DrawingOverlay drawing={drawing} onReady={handleDrawingReady} onContentChange={handleDrawingContent} onViewportChange={followDrawingViewport} /> : null}
       {jointHandles ? <JointHandleOverlay handles={jointHandles} runtimeRef={runtimeRef} hostRef={interactionHostRef} layoutSeamRef={jointHandleLayoutRef} viewerReadyTick={viewerReadyTick} /> : null}
       <ViewPlaneControl
-        showViewPlane={showViewPlane && !planMode && !drawingOverlayActive}
+        showViewPlane={showViewPlane && !drawingOverlayActive}
         previewMode={previewMode}
         isLoading={isLoading}
         meshData={viewportContent}

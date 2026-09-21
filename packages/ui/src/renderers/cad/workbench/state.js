@@ -126,14 +126,6 @@ const TAB_STATE_SCHEMA = [
     normalize: (value) => normalizeRenderFormat(value)
   },
   {
-    key: "dxfThicknessMm",
-    defaultValue: 0,
-    normalize: (value) => {
-      const numericValue = normalizeNumber(value, 0);
-      return numericValue > 0 ? numericValue : 0;
-    }
-  },
-  {
     key: "referenceQuery",
     defaultValue: "",
     normalize: normalizeString

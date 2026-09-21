@@ -190,8 +190,7 @@ function entryTabSignature(entry) {
     normalizeString(entry?.hash),
     entryAssetHash(entry, "selectorTopology"),
     entryAssetHash(entry, "topology"),
-    entryAssetHash(entry, "glb"),
-    entryAssetHash(entry, "dxf")
+    entryAssetHash(entry, "glb")
   ].filter(Boolean).join(":") || normalizeString(entry?.file);
 }
 

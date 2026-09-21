@@ -1793,13 +1793,6 @@ test("direct viewer effects and clip passes synchronize shared surfaces without 
     pass();
     assert.deepEqual(matrix.elements, record.mesh.matrix.elements, "reactivation uploads the current pose");
   }
-  record.mesh.userData.dxfHiddenForCurved = true;
-  pass();
-  assert.equal(record.mesh.visible, false);
-  assert.deepEqual(matrix.elements, zero.elements);
-  delete record.mesh.userData.dxfHiddenForCurved;
-  pass();
-
   for (const item of runtime.displayRecords) {
     applyViewerMaterialSettings(THREE, item, { ...scene.runtime.materialSettings, envMapIntensity: 3.25 });
   }

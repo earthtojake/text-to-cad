@@ -14,9 +14,6 @@ export const FILE_SHEET_SECTION_IDS = Object.freeze({
   STEP_REFERENCE: "reference",
   KINEMATICS: "kinematics",
   DISPLAY: DISPLAY_SECTION_ID,
-  DXF_MATERIAL: "material",
-  DXF_BENDS: "bends",
-  DXF_LAYERS: "dxfLayers",
   FILE_METADATA: "metadata"
 });
 
@@ -27,19 +24,6 @@ function normalizeString(value) {
 export function renderedFileSheetSectionIds(kind, options = {}) {
   const normalizedKind = normalizeString(kind);
   switch (normalizedKind) {
-    // A drawing HAS controls of its own. Thickness (and, where the drawing declares
-    // them, bends) are render-time parameters applied to the cached prism rather than bake
-    // settings, so they steer the viewport without touching the package.
-    case "dxf":
-      // One tab per concern: Material (units + stock), Bends (only when the drawing has
-      // bend lines), and Layers — the drawing's own STRUCTURE, the DXF analogue of STEP's
-      // Tree — whenever the file actually uses layers.
-      return [
-        FILE_SHEET_SECTION_IDS.DXF_MATERIAL,
-        ...(options.hasDxfBendsPanel ? [FILE_SHEET_SECTION_IDS.DXF_BENDS] : []),
-        ...(options.hasDxfLayersPanel ? [FILE_SHEET_SECTION_IDS.DXF_LAYERS] : []),
-        FILE_SHEET_SECTION_IDS.DISPLAY
-      ];
     case "step":
       // Kinematics appears only when the sidecar declares it.
       return [
@@ -55,8 +39,6 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
 export function defaultOpenFileSheetSectionIds(kind, options = {}) {
   const normalizedKind = normalizeString(kind);
   switch (normalizedKind) {
-    case "dxf":
-      return [];
     case "step":
       // Open the geometry tree by default.
       return [

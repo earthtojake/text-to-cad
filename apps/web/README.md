@@ -155,10 +155,10 @@ the build — detection only; it keeps serving.
 
 This app exports no components. Other hosts use `@hardcore/ui/file-viewer` with
 registered renderers and explicit services. Viewer content is registered through
-`@hardcore/ui/renderers/cad`, for `.glb` `@hardcore/ui/renderers/glb`, for
-`.stl` and `.3mf` `@hardcore/ui/renderers/mesh`, and for `.urdf`, `.srdf` and `.sdf`
-`@hardcore/ui/renderers/robot` (`App.tsx` registers all four with the
-same client and preferences); all loading,
+`@hardcore/ui/renderers/cad`, for `.dxf` `@hardcore/ui/renderers/dxf`, for `.glb`
+`@hardcore/ui/renderers/glb`, for `.stl` and `.3mf` `@hardcore/ui/renderers/mesh`, and
+for `.urdf`, `.srdf` and `.sdf` `@hardcore/ui/renderers/robot` (`App.tsx` registers all
+five with the same client and preferences); all loading,
 selection, inspector and tool behavior is shared. Public declarations, styles and worker assets are built in that
 package. See `docs/shell.md` for the host boundary and `docs/storage.md` for
 browser persistence. CAD control guidance lives with the UI package.
@@ -205,9 +205,10 @@ The shared top-right toolbar contains Select, Measure (STEP only) and Draw, plus
 joints by viewport handles) and Animate where a file
 has joints or routines. Pressing
 Select again opens its selection-filter dropdown. A robot description (its own renderer)
-opens in Pose, which leads its tools, followed by a Select that picks whole links, and Draw. A GLB, an STL and a 3MF (their own
+opens in Pose, which leads its tools, followed by a Select that picks whole links, and Draw. A DXF, a GLB, an STL and a 3MF (their own
 renderers) have nothing to select: they open in Orbit, a plain view tool, followed by
-Draw and, for a GLB with clips, Animate. Buttons wrap inside the pill
+Draw and, for a GLB with clips, Animate. A DXF adds a 2D/3D action to the file navbar,
+and its 2D view is a locked top-down plan: orthographic, no view cube, left-drag pans. Buttons wrap inside the pill
 when the Inspector or a narrow host reduces the scene width. Snapshot is a
 direct action beside the Inspector and file-tree toggles in the file navbar;
 the web prompt adapter copies the viewport image and references to the clipboard.
@@ -241,8 +242,9 @@ named pose, a slider, a typed value, or a Pose-tool knob — is an instant jump;
 there is no eased transition. Reset also stops any playing routine and hands
 the pose back to Kinematics, so the two never disagree about which one is in
 control afterward. Robot Pose and Joints controls also live in Kinematics,
-followed by a Links tab that always shows the robot's link tree, and DXF/mesh
-files retain their format-specific controls.
+followed by a Links tab that always shows the robot's link tree. A DXF has its own
+Inspector (Material, Bends where the file declares them, Layers where it uses them,
+then Display), open by default.
 
 Display owns a single Mode dropdown: Solid, Render, X-ray, Hidden line and Wireframe.
 Modes are presets over one grouped display schema, and all settings groups are

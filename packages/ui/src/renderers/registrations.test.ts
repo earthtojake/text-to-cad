@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { FileMetadata, FileSource, TextDocument } from "../file-viewer/types.js";
 import { selectRenderer } from "../file-viewer/registry.js";
 import { languageFor, monacoModelUri } from "./code/editor/monaco.js";
+import { createCadRenderer } from "./cad/index.js";
+import { createDxfRenderer } from "./dxf/index.js";
 import { codeRenderer } from "./code/index.js";
 import { imageRenderer } from "./image/index.js";
 import { markdownRenderer } from "./markdown/index.js";
@@ -104,6 +106,21 @@ describe("non-CAD renderer registrations", () => {
       signal: controller.signal,
     })).rejects.toMatchObject({ name: "AbortError" });
     expect(release).toHaveBeenCalledOnce();
+  });
+});
+
+describe("viewer renderer registrations", () => {
+  const client = {} as never;
+  it("gives .dxf its own renderer, and opens it with its settings", () => {
+    const dxf = createDxfRenderer({ client });
+    const cad = createCadRenderer({ client });
+    expect(dxf.id).toBe("dxf");
+    expect(selectRenderer([cad, dxf], file("plate.dxf", "cad"))).toBe(dxf);
+    expect(selectRenderer([cad, dxf], file("part.step", "cad"))).toBe(cad);
+    // A drawing's Inspector holds Material, Bends and Layers, so it opens with them.
+    expect(dxf.panels?.({ open: "", ready: true, file: file("plate.dxf", "cad") }))
+      .toMatchObject([{ id: "cad-file-sheet", label: "Inspector", defaultOpen: true }]);
+    expect(dxf.panels?.({ open: "", ready: false, file: file("plate.dxf", "cad") })).toEqual([]);
   });
 });
 

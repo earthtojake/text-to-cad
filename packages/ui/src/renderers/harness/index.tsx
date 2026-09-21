@@ -4,6 +4,7 @@ import { FileViewer } from '@hardcore/ui/file-viewer';
 import type { FileSource, FileViewerState } from '@hardcore/ui/file-viewer';
 import { createCadClient } from '@hardcore/core/client';
 import { createCadPreferences, createCadRenderer } from '@hardcore/ui/renderers/cad';
+import { createDxfRenderer } from '@hardcore/ui/renderers/dxf';
 import { createGlbRenderer } from '@hardcore/ui/renderers/glb';
 import { createMeshRenderer } from '@hardcore/ui/renderers/mesh';
 import { createRobotRenderer } from '@hardcore/ui/renderers/robot';
@@ -50,7 +51,7 @@ function workspace(id: string) {
   const live = { bind(next: CadLiveController) { controller = next; return () => { controller = null; }; } };
   // One live binding per pane: whichever renderer the file selects binds the mounted view.
   const services = { client, preferences, commands, live };
-  const renderers = [createCadRenderer(services), createGlbRenderer(services), createMeshRenderer(services), createRobotRenderer(services)];
+  const renderers = [createCadRenderer(services), createDxfRenderer(services), createGlbRenderer(services), createMeshRenderer(services), createRobotRenderer(services)];
   return { client, source, host, renderers, commands, capture, selectReference, get controller() { return controller; } };
 }
 const a = workspace('one'), b = workspace('two');
