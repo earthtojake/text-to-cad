@@ -280,23 +280,28 @@ class TangentCurvedFaceTest(unittest.TestCase):
 
 
 class MinimumDraftIsPooledTest(unittest.TestCase):
-    def test_a_sliver_facet_does_not_set_the_minimum(self) -> None:
+    def test_a_sliver_face_does_not_set_the_minimum(self) -> None:
         """Read off one triangle, the figure moved with the mesh.
 
-        A 2 deg drafted box with a filleted top edge has facets on the fillet
-        that tilt through every angle down to zero. The part's minimum WALL
-        draft is still 2 deg.
+        A 20 mm box drafted 2 deg carries a 0.5 mm square pin with NO draft on
+        its top. The pin's four walls are 0.5 mm2 each, far under the area
+        floor and in the sliver tail of the wall area, so the part's minimum
+        wall draft is still the 2 deg its walls were built at -- while the
+        per-facet reading, which is what used to be reported, is the pin's 0.
+        The sliver is geometry here, not a tessellation artifact, so the
+        answer does not depend on how the mesher happened to triangulate.
         """
-        from build123d import Axis, fillet
-
-        box = _drafted_box(2.0, base=20.0, height=15.0)
-        part = fillet(box.edges().filter_by_position(Axis.Z, 14.9, 15.1), 3)
+        align = (Align.CENTER, Align.CENTER, Align.MIN)
+        part = _drafted_box(2.0, base=20.0, height=15.0) + Pos(0, 0, 15) * Box(0.5, 0.5, 1.0, align=align)
         with tempfile.TemporaryDirectory() as td:
-            facts = _z(mold_tool._load(_stl(part, Path(td), "filleted")))
+            facts = _z(mold_tool._load(_stl(part, Path(td), "pinned")))
 
-        self.assertAlmostEqual(facts["min_wall_draft"]["draft_deg"], 2.0, delta=0.2)
-        self.assertLess(facts["min_facet_draft"]["draft_deg"], facts["min_wall_draft"]["draft_deg"])
-        self.assertIn("area_mm2", facts["min_wall_draft"])
+        self.assertAlmostEqual(facts["min_wall_draft"]["draft_deg"], 2.0, delta=0.05)
+        self.assertGreater(facts["min_wall_draft"]["area_mm2"], 100.0, "a wall, not a sliver")
+        self.assertEqual(facts["min_facet_draft"]["draft_deg"], 0.0)
+        self.assertLess(facts["min_facet_draft"]["area_mm2"], 1.0)
+        # The pin's four vertical walls are real zero-draft walls, just tiny ones.
+        self.assertAlmostEqual(facts["zero_draft_wall_area_mm2"], 4 * 0.5 * 1.0, delta=0.1)
 
 
 class WallOpeningDirectionTest(unittest.TestCase):
