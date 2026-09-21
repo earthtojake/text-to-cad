@@ -29,8 +29,8 @@ CLIENT_ROOT = UI_ROOT / "renderers" / "cad"
 
 # Every remaining identity check is a unification candidate. Lower these as phases land;
 # never raise them.
-MAX_RENDER_FORMAT_CHECKS = 18
-MAX_FORMAT_PREDICATE_CALLS = 3
+MAX_RENDER_FORMAT_CHECKS = 13
+MAX_FORMAT_PREDICATE_CALLS = 0
 
 # Files allowed to know about concrete formats, because deciding *which* format an entry
 # is, or loading it, is their whole job. Everything else must go through capabilities.
