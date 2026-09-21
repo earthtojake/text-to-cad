@@ -49,11 +49,15 @@ its own (ACI 7) is painted in the appearance's foreground on its background, so
 `--appearance` is the whole of a drawing's display.
 
 Everything that describes a scene is gone from the door rather than accepted and
-ignored: `--camera`, `--display`, `--mode` and `--view-labels` are not flags it
-has, and a job (or `cadgen snapshot` routing a `.dxf`) that carries `camera`,
+ignored, and gone is not silent. `--camera`, `--display`, `--mode` and
+`--view-labels` are out of the signature and out of `--help`, and passing one is
+refused by name — what the flag meant, why a flat drawing has no such thing, and
+what to pass instead — rather than reported as an unrecognized argument. A job
+(or `cadgen snapshot` routing a `.dxf`) that carries `camera`,
 any `display` key but `appearance`, `mode` other than `view`, `section`,
 `scale`, an output `label`/`viewLabel`, or `output.padding`, `output.viewLabels`
-or `output.tightFrame` is refused by name with what a drawing is.
+or `output.tightFrame` is refused by name with what a drawing is — in the same
+words, because the flag and the job key are one request arriving two ways.
 
 ## Requests and OUT
 
