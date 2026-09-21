@@ -23,6 +23,14 @@ an argument-parsing framework:
 * The return value is a dataclass: ``--json`` serializes it to one line,
   otherwise it prints human lines. A raised exception becomes
   ``{"ok": false, "error": ...}`` + exit 1.
+* A flag the verb USED to take is declared on the function as
+  ``__cadgen_retired_options__`` (see :func:`retired_options`). It is the one
+  thing in a generated parser that is not a parameter, because a deleted
+  parameter leaves nothing behind to derive from: without it a hard cutover
+  reaches the user as argparse's ``unrecognized arguments``, which names no
+  reason and no replacement, and law 8 ("every retired surface fails loudly
+  with a teaching error naming its replacement") is not satisfied by an error
+  that happens to exist.
 
 Stdlib only, and light: building a parser at dispatch costs microseconds, and
 nothing here may pull the CAD stack in — ``cadgen <verb> --help`` must stay off
@@ -62,6 +70,48 @@ _SCALARS: dict[Any, Callable[[str], Any]] = {
 
 class NotDerivable(TypeError):
     """The function is outside the mirror subset; it must be an adapter."""
+
+
+# The attribute a verb declares its retired flags on: ``{"--flag": "why it is
+# gone and what to do instead"}``. Metadata rather than a parameter, because
+# the whole point is that the parameter is gone.
+RETIRED_ATTRIBUTE = "__cadgen_retired_options__"
+
+
+class RetiredOption(Exception):
+    """A flag this command used to take, refused by name.
+
+    Raised out of :meth:`argparse.ArgumentParser.parse_args` the moment the
+    option string is seen, so the flag is REFUSED rather than accepted and
+    ignored. :func:`run_cli` turns it into the message alone on stderr and exit
+    2 -- the same shape as a retired COMMAND (``cadgen.cli._RETIRED``), minus
+    the usage dump that buries the teaching in a wall of live flags.
+    """
+
+
+class _RetiredOptionAction(argparse.Action):
+    """The hidden parser entry that exists only to raise :class:`RetiredOption`.
+
+    ``nargs="?"`` so every spelling the flag ever had reaches it -- ``--camera
+    iso``, ``--camera=iso`` and a bare ``--view-labels`` alike -- and the
+    refusal is the flag's OWN message rather than argparse's report of how many
+    arguments it expected.
+    """
+
+    def __call__(self, parser, namespace, values, option_string=None):  # noqa: ANN001
+        del namespace, values
+        raise RetiredOption(f"{parser.prog} no longer takes {option_string}: {self.const}")
+
+
+def retired_options(func: Callable[..., Any]) -> dict[str, str]:
+    """``{flag: teaching message}`` this verb declares, by its hard-cutover name.
+
+    The message says what the flag meant, why this command has no such thing,
+    and what to do instead; the flag and the command name are added by the
+    action, so a declaration never repeats them.
+    """
+    declared = getattr(func, RETIRED_ATTRIBUTE, None) or {}
+    return {str(flag): str(message) for flag, message in dict(declared).items()}
 
 
 def _scalar(annotation: Any, *, where: str) -> Any:
@@ -242,6 +292,27 @@ def cli_from_function(func: Callable[..., Any], *, prog: str) -> argparse.Argume
             options["nargs"] = "?"
             options["default"] = parameter.default
         parser.add_argument(name, **options)
+    # Retired flags are metadata on the verb, not parameters: they stay out of
+    # `--help` and out of `parser_dests` (so the signature-sync policy test
+    # still sees exactly the signature), they can never invoke the function,
+    # and they exist only so a hard cutover names its own replacement.
+    live = {"--" + name.replace("_", "-") for name in inspect.signature(func).parameters}
+    for flag, message in retired_options(func).items():
+        if not flag.startswith("--"):
+            raise NotDerivable(f"{where}: retired option {flag!r} must be a --long spelling")
+        if flag in live:
+            raise NotDerivable(
+                f"{where}: {flag} is declared retired but the signature still takes it -- "
+                "a flag is either a parameter or a retirement, never both"
+            )
+        parser.add_argument(
+            flag,
+            action=_RetiredOptionAction,
+            const=message,
+            nargs="?",
+            dest=argparse.SUPPRESS,
+            help=argparse.SUPPRESS,
+        )
     parser.add_argument(
         "--json",
         dest=JSON_FLAG_DEST,
@@ -421,7 +492,15 @@ def run_cli(
     """Parse ``argv`` against ``func``'s generated parser, call it, print the result."""
     tokens = list(argv) if argv is not None else sys.argv[1:]
     parser = cli_from_function(func, prog=prog)
-    args = parser.parse_args(tokens)
+    try:
+        args = parser.parse_args(tokens)
+    except RetiredOption as retired:
+        # The message and nothing else. A usage line here would answer a
+        # question the caller did not ask ("what else does this take?") above
+        # the one they did ("why not this?"), and the flags it lists are the
+        # ones that survived -- which is what `--help` is for.
+        print(str(retired), file=sys.stderr)
+        return 2
     positional, keywords = _call_arguments(
         func,
         args,

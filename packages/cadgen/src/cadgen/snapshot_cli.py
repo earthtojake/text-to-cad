@@ -42,6 +42,16 @@ import cadgen.cad_ref_syntax as cad_ref_syntax
 import cadgen.lookup as lookup
 from cadgen.assets import browser_runtime_dir
 from cadgen._internal.doors import document_snapshot
+# A drawing's refusals are written once, beside the signature whose absences
+# they explain, so the flag that is gone and the job key that is refused say
+# the same thing about the same request.
+from cadgen._internal.snapshot_door import (
+    DRAWING_IS,
+    DRAWING_NO_VIEW_NAME,
+    drawing_camera_refusal,
+    drawing_mode_refusal,
+    drawing_scene_refusal,
+)
 from cadgen.store.view import view_dir_for
 from cadgen.step_targets import ResolvedStepTarget, StepTopologyArtifact, StepTopologyArtifactError
 
@@ -1305,14 +1315,12 @@ DRAWING_OUTPUT_SETTING_REASONS = {
         "a drawing is fitted with the fixed gutter the viewer leaves around it, "
         "and there is no camera to pull further back"
     ),
-    "viewLabels": "a drawing has no camera, so there is no view name to burn into the image",
+    "viewLabels": DRAWING_NO_VIEW_NAME,
     "tightFrame": (
         "a tight frame re-fits a camera to projected geometry; a drawing is already "
         "framed on the bounds of what it draws"
     ),
 }
-# What a drawing IS, said once: every refusal below opens with it.
-_DRAWING_IS = "a DXF is drawn as a flat 2D drawing, fitted to the image and painted head on"
 
 
 def _drawing_output_cameras(job: Mapping[str, object]) -> bool:
@@ -1342,36 +1350,32 @@ def check_drawing_render_job(
     every one of those requests is refused BY NAME here rather than accepted
     and quietly ignored. This is also the path `cadgen snapshot` routes a `.dxf`
     through, so the two cannot disagree.
+
+    The flag half of the same cutover (`cadgen dxf snapshot --camera`) is
+    refused while parsing, from the same sentences
+    (`cadgen._internal.snapshot_door.DRAWING_RETIRED_OPTIONS`): one request, one
+    answer, whichever surface it arrives on.
     """
     label = input_path.name
     display = job.get("display") if is_plain_object(job.get("display")) else {}
     scene = sorted(f"display.{key}" for key in set(display) - DRAWING_DISPLAY_KEYS)
     if scene:
         raise SnapshotError(
-            f"{', '.join(scene)} {'describes' if len(scene) == 1 else 'describe'} a 3D scene — "
-            f"a render mode, surfaces, lighting, a floor; {_DRAWING_IS}, so {label} has none of "
-            "them. Light or dark is the whole of a drawing's appearance: pass "
-            '--appearance light|dark (in a job, "display": {"appearance": "dark"}).'
+            drawing_scene_refusal(", ".join(scene), label, plural=len(scene) != 1)
         )
     if job.get("camera") is not None or _drawing_output_cameras(job):
-        raise SnapshotError(
-            f"camera poses a model in space; {_DRAWING_IS}, so {label} has no camera and no views "
-            "to choose between — it is always shown whole, the way it was drawn."
-        )
+        raise SnapshotError(drawing_camera_refusal(label))
     if mode != "view" or job.get("section") is not None:
-        raise SnapshotError(
-            f"{_DRAWING_IS}: it has no parts to list and no solid to section, so view is the only "
-            f"mode {label} renders in."
-        )
+        raise SnapshotError(drawing_mode_refusal(label))
     if job.get("scale") is not None:
         raise SnapshotError(
-            f"scale picks the units a 3D scene is lit and framed for (cad or urdf); {_DRAWING_IS} "
+            f"scale picks the units a 3D scene is lit and framed for (cad or urdf); {DRAWING_IS} "
             f"in its own drawing units, so {label} has no scene to scale."
         )
     labels = _drawing_output_labels(job)
     if labels:
         raise SnapshotError(
-            f"an output's {' and '.join(labels)} names the view burnt into the image; {_DRAWING_IS} "
+            f"an output's {' and '.join(labels)} names the view burnt into the image; {DRAWING_IS} "
             f"and {label} has no view to name."
         )
     settings = job.get("output") if is_plain_object(job.get("output")) else {}
@@ -1380,7 +1384,7 @@ def check_drawing_render_job(
         # Every one of them, with its own reason: fixing them one refusal per run
         # is three runs to learn what one message can say.
         reasons = "; ".join(
-            f"{key} — {DRAWING_OUTPUT_SETTING_REASONS.get(key, _DRAWING_IS)}" for key in unsupported
+            f"{key} — {DRAWING_OUTPUT_SETTING_REASONS.get(key, DRAWING_IS)}" for key in unsupported
         )
         named = ", ".join(f"output.{key}" for key in unsupported)
         raise SnapshotError(
