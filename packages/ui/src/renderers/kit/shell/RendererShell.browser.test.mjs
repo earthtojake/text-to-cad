@@ -880,18 +880,25 @@ test('a renderer supplies the viewport menu, a bottom action that falls back to 
   });
   await page.mouse.click(middle.x, middle.y, { button: 'right' });
   const menu = page.getByRole('menu');
+  // The menu ANIMATES in (it scales up from 95%), so a box read the moment it is
+  // attached is a box mid-flight, several pixels from where it comes to rest.
+  // Every measurement here waits for that animation to finish first.
+  const restingBox = async () => {
+    await menu.waitFor();
+    await menu.evaluate(element => Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished)));
+    return menu.boundingBox();
+  };
   await menu.waitFor();
   assert.deepEqual(await page.getByRole('menuitem').allInnerTexts(), ['Note the press', 'Clear the note']);
   assert.deepEqual(await page.evaluate(() => window.nativeMenu), [true], 'the native menu stays off the canvas');
-  const menuBox = await menu.boundingBox();
+  const menuBox = await restingBox();
   // It opens AT the press, not at a corner: a second press elsewhere moves it by
   // the same amount the press moved.
   await page.keyboard.press('Escape');
   await menu.waitFor({ state: 'detached' });
   const elsewhere = { x: middle.x + 220, y: middle.y - 140 };
   await page.mouse.click(elsewhere.x, elsewhere.y, { button: 'right' });
-  await menu.waitFor();
-  const movedBox = await menu.boundingBox();
+  const movedBox = await restingBox();
   assert.ok(Math.abs((movedBox.x - menuBox.x) - 220) < 6 && Math.abs((movedBox.y - menuBox.y) + 140) < 6,
     `the menu follows the press (${JSON.stringify(menuBox)} -> ${JSON.stringify(movedBox)})`);
   assert.ok(Math.abs(movedBox.x - elsewhere.x) < 24 && Math.abs(movedBox.y - elsewhere.y) < 24,
@@ -971,5 +978,118 @@ test('a renderer supplies the viewport menu, a bottom action that falls back to 
   const short = await action.innerText();
   assert.equal(short, '#harness_document/triangle_face_0001', 'a reference that fits is shown whole');
   assert.equal(await action.getAttribute('title'), short);
+  assert.deepEqual(errors, []);
+});
+
+test('a renderer says more about its load than a download: edit states, a preview, a warning, a degraded view, the revision on screen, its own snapshot and its own frame', async (t) => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hardcore-shell-load-'));
+  let server, browser;
+  t.after(async () => { await browser?.close(); if (server) await new Promise(resolve => server.close(resolve)); await rm(temporary, { recursive: true, force: true }); });
+  await build({ entryPoints: [fileURLToPath(new URL('../../harness/index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.woff2': 'dataurl' } });
+  const bundle = await readFile(join(temporary, 'harness.js'));
+  const compiledCss = await readFile(new URL('../../../../dist/styles.css', import.meta.url));
+  server = createServer((request, response) => {
+    const url = new URL(request.url, 'http://test');
+    const root = url.pathname.split('/')[1];
+    if (url.pathname === '/harness.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle); }
+    else if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(compiledCss); }
+    else if (url.pathname.endsWith('/__cad/catalog')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ rootId: root, entries: [] })); }
+    else if (url.pathname.endsWith('/__cad/server')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ rootId: root, rootPath: '/models', backend: 'cadgen' })); }
+    else if (/\.(woff2|ttf)$/.test(url.pathname)) { response.statusCode = 404; response.end(); }
+    else { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css"></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>'); }
+  });
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+  browser = await chromium.launch({ headless: true, args: process.platform === 'darwin'
+    ? ['--use-angle=metal'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+  page.setDefaultTimeout(15000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => { window.Worker = undefined; });
+  await page.goto(`http://127.0.0.1:${server.address().port}/?file=one.harness`);
+  const pane = page.getByTestId('one');
+  const canvas = await pane.locator('[aria-busy="false"] > div > canvas').first().boundingBox();
+  const middle = { x: canvas.x + canvas.width / 2, y: canvas.y + canvas.height / 2 };
+  // The chip beside the filename is the host's, drawn from what the shell reports.
+  const chip = pane.locator('[data-file-status]');
+  const stage = name => pane.locator(`[data-harness-stage="${name}"]`).click();
+
+  // THE FRAME IS THE RENDERER'S TO WRAP. Its own context reaches the frame — and
+  // it is above the frame, so it is there before anything the renderer draws in it.
+  assert.equal(await pane.locator('[data-harness-frame-context]').innerText(), 'frame:idle');
+
+  // A LOAD THAT IS ONLY A DOWNLOAD SAYS NOTHING. Nothing of the six is passed, and
+  // the file on screen has no chip at all — which is every renderer but STEP.
+  assert.equal(await chip.count(), 0, 'a plain load has nothing to report');
+
+  // FINDING: the wait before the file is even located, named as such rather than
+  // as a phase of reading it.
+  await stage('finding');
+  await chip.waitFor();
+  assert.equal(await chip.getAttribute('data-file-status'), 'Opening');
+  assert.match(await chip.getAttribute('title'), /Looking up the selected file/);
+
+  // AN EDIT OF THE PERSON'S OWN is a wait with nothing downloading; the chip names
+  // it, and the busy spinner is up.
+  await stage('editing');
+  await page.waitForFunction(() => document.querySelector('[data-file-status]')?.dataset.fileStatus === 'Updating');
+  assert.equal(await pane.locator('[data-file-status] .animate-spin').count(), 1, 'an edit in flight is busy');
+
+  // THE PREVIEW ENDS IT: the result is on screen, so the wait is over even though
+  // the write is not, and the chip goes quiet.
+  await stage('previewing');
+  await page.waitForFunction(() => !document.querySelector('[data-file-status]'));
+
+  // A WARNING the model survives rides the badge under its own summary, opens as an
+  // alert, and is not a failed load: the canvas is still there and not covered.
+  await stage('warned');
+  await chip.waitFor();
+  assert.equal(await chip.getAttribute('data-file-status'), 'Harness warning');
+  assert.equal(await pane.locator('[data-harness-overlay]').count(), 1, 'the model is still on screen');
+  await chip.click();
+  await page.getByRole('alertdialog').waitFor();
+  assert.match(await page.getByRole('alertdialog').innerText(), /triangle is visible, but the harness reports a problem/);
+  await page.keyboard.press('Escape');
+  await page.getByRole('alertdialog').waitFor({ state: 'detached' });
+
+  // A DEGRADED VIEW is the renderer's own verdict about what it drew, and only it
+  // can reach it: the shell has no idea what a triangle should have looked like.
+  await stage('degraded');
+  await page.waitForFunction(() => document.querySelector('[data-file-status]')?.dataset.fileStatus === 'Limited detail');
+
+  // A SCENE THAT IS NOT WHOLE is not geometry to report on: the same failure reads
+  // "Open failed" rather than "Update failed", because there is nothing to fall back to.
+  await stage('partial');
+  await page.waitForFunction(() => !document.querySelector('[data-file-status]'));
+
+  await stage('idle');
+  await page.waitForFunction(() => !document.querySelector('[data-file-status]'));
+
+  // THE REVISION ON SCREEN. Live state reports what is being SHOWN, which a renderer
+  // holding a predecessor over a rebuild knows and the shell does not.
+  const shown = () => page.evaluate(() => { const s = window.cadHarness.a.controller.readState(); return [s.revision, s.resource.revision]; });
+  assert.deepEqual(await shown(), ['harness', 'harness']);
+  await pane.locator('[data-harness-shown-revision]').click();
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().revision === 'shown-revision');
+  assert.deepEqual(await shown(), ['shown-revision', 'shown-revision'], 'both halves name the revision on screen');
+
+  // THE SNAPSHOT IS THE RENDERER'S TO ASSEMBLE. Its own reference vocabulary goes
+  // through its own builder — and the resource it names is the one on screen.
+  const before = await page.evaluate(() => window.cadHarness.captures.length);
+  await pane.getByRole('button', { name: 'Take snapshot', exact: true }).click();
+  await page.waitForFunction(count => window.cadHarness.captures.length > count, before);
+  assert.deepEqual(await page.evaluate(() => {
+    const context = window.cadHarness.captures.at(-1);
+    return [context.type, context.references.map(reference => reference.resource.revision)];
+  }), ['image/png', ['shown-revision']]);
+  await pane.locator('[data-harness-shown-revision]').click();
+
+  // A PRESS ON THE MODEL is the renderer's to hear: it puts down what it was
+  // showing about something else before the viewport sees the press at all.
+  assert.equal(await pane.locator('[data-harness-put-down]').innerText(), '');
+  await page.mouse.click(middle.x, middle.y);
+  await page.waitForFunction(() => document.querySelector('[data-harness-put-down]')?.textContent === 'put down @idle');
+  // And the frame still takes focus on that same press, as it always did.
+  assert.equal(await page.evaluate(() => document.activeElement?.dataset?.slot), 'cad-file-view');
   assert.deepEqual(errors, []);
 });

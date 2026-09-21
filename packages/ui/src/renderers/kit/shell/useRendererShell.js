@@ -9,9 +9,7 @@ import { DrawingToolbar } from "../../../drawing/toolbar.jsx";
 import { sceneBackdropEdgeColor } from "../look/chromeBackdrop.js";
 import { useChromeBackdropColor } from "../look/useChromeBackdropColor.js";
 import { prefetchRenderStudio } from "../look/renderStudioChunk.js";
-import { resolveFileStatus } from "../status/fileStatus.js";
-import { fileStatusAlertKey, resolveFileStatusAlert } from "../status/loadAlerts.js";
-import { viewerLoadingState } from "../status/loadingState.js";
+import { fileStatusAlertKey } from "../status/loadAlerts.js";
 import { useFileActivityReport } from "../status/useFileActivityReport.js";
 import { CAD_DRAWING_DEFAULTS } from "../tools/draw/DrawingOverlay.jsx";
 import { normalizeOrbit } from "../tools/fullscreen/orbitPreferences.js";
@@ -21,6 +19,7 @@ import { useAppliedViewSettings } from "../view-settings/useAppliedViewSettings.
 import { useViewSettings } from "../view-settings/useViewSettings.js";
 import { cameraForViewSettings, viewerDisplaySettingsForCamera } from "../view-settings/viewerDisplaySettings.js";
 import { attachLiveBinding } from "./liveBinding.js";
+import { shellLoadReport } from "./loadReport.js";
 import { createViewPromptContext, promptDeliveryMessage } from "./promptContext.js";
 import { readShellState, scopeShellCamera, shellStatesEqual, writeShellState } from "./shellState.js";
 import { useViewerShortcuts } from "./useViewerShortcuts.js";
@@ -60,15 +59,27 @@ const EMPTY = Object.freeze({});
  * @param {ReturnType<typeof import("../tools/toolModes.js").createToolModes> | null} [options.toolModes]  Omitted
  *   by a renderer with no tools: the shell then has no active tool and a saved tab records none.
  * @param {import("../scene.js").KitScene | null} options.scene
- * @param {{ busy: boolean, updating?: boolean, progress?: object | null, alert?: object | null }} options.load  The
- *   renderer's document load. `busy`: nothing to show yet. `updating`: a newer revision is loading behind the scene on screen.
+ * @param {{ busy: boolean, updating?: boolean, progress?: object | null, alert?: object | null,
+ *   warning?: object | null, editPending?: boolean, currentPreview?: boolean, finding?: boolean }} options.load  The
+ *   renderer's document load. `busy`: nothing to show yet. `updating`: a newer revision is loading behind the scene on
+ *   screen. The rest are for a renderer whose document is more than a download — see `loadReport.js`.
+ * @param {object} [options.fileStatus]  Extra fields for the chip beside the filename (`loadReport.js`): a live
+ *   edit's state, what it is saved as, whether its preview is what is on screen, a degraded-view report, and
+ *   `hasGeometry` for a scene that exists before its geometry is whole. Omitted: the shell derives all it can.
  * @param {object | null} [options.animation]  A playbar runtime (with its own `clock`), when the file has
  *   routines. The playbar is then always under the model; it is not a tool to take up and leave.
  * @param {{ commands?: Record<string, (...args: any[]) => void>, declined?: Record<string, string>,
- *   state?: () => object }} [options.live]  Live commands this renderer adds (by name) or declines (name to the
- *   error its caller reads), and extra fields for the live state. Every name in `HOST_LIVE_COMMANDS` must be one or the other.
+ *   state?: () => object, resource?: () => object }} [options.live]  Live commands this renderer adds (by name) or
+ *   declines (name to the error its caller reads), and extra fields for the live state. Every name in
+ *   `HOST_LIVE_COMMANDS` must be one or the other. `resource` is the document the viewport is SHOWING, when that
+ *   can lag the one being loaded (a rebuild whose predecessor is retained): live state reports what is on screen,
+ *   never what is on its way in. Omitted: the resource the renderer was handed.
  * @param {() => import("@hardcore/core/prompt").PromptReference[]} [options.promptReferences]  What a snapshot
  *   depicts, when that is narrower than the whole file (a selection). Default: the file.
+ * @param {(input: { resource: object, references: object[], capture: Promise<Blob> }) => object} [options.promptContext]
+ *   How this renderer assembles a snapshot's prompt context. Default `createViewPromptContext`, which takes
+ *   references already in the prompt grammar; a renderer with a reference vocabulary of its own supplies the
+ *   builder that speaks it, and then `promptReferences` may return that vocabulary instead.
  * @param {{ active?: boolean, handle?: () => boolean }} [options.escape]  Escape, innermost first: `handle` returns
  *   true when it spent the key; otherwise the shell closes the alert dialog and the Inspector.
  * @param {object | (() => object)} [options.rendererState]  The renderer's own slice of the per-file record. A
@@ -93,7 +104,8 @@ const EMPTY = Object.freeze({});
  */
 export function useRendererShell({
   view, services, resource, modelKey, revisionKey = "", features, toolModes = null, scene, load,
-  animation = null, live = EMPTY, promptReferences = null,
+  animation = null, live = EMPTY, promptReferences = null, promptContext = createViewPromptContext,
+  fileStatus: fileStatusFields = EMPTY,
   escape = EMPTY, rendererState = EMPTY, toolRestore = EMPTY, displayTabProps = EMPTY,
   onCameraSettled = null, preserveInteractionPixelRatio = false, runtimeLifecycle = null,
   sceneScaleMode = VIEWER_SCENE_SCALE.CAD
@@ -228,18 +240,12 @@ export function useRendererShell({
   const completedView = useRef(false);
   useEffect(() => { if (hasContent && !presentationPending) completedView.current = true; }, [hasContent, presentationPending]);
   const viewerAlert = runtimeAlert?.blocking ? runtimeAlert : viewerLoading ? null : load.alert || runtimeAlert || null;
-  const loading = viewerLoadingState({
-    busy: viewerLoading || Boolean(load.updating) || presentationPending,
-    previousView: completedView.current && hasContent,
-    error: viewerAlert,
-    progress: load.progress || null,
-    preparing: presentationPending && !viewerLoading
+  const { loading, fileStatus, fileStatusAlert } = shellLoadReport({
+    load, fileStatus: fileStatusFields,
+    hasFile: Boolean(modelKey), alert: viewerAlert, busy: presentationPending,
+    previousView: completedView.current && hasContent, hasGeometry: hasContent,
+    renderMode: rendering, preparing: presentationPending && !viewerLoading
   });
-  const fileStatus = resolveFileStatus({
-    hasFile: Boolean(modelKey), error: viewerAlert, opening: loading.opening, updating: loading.updating,
-    loadingProgress: loading.progress, renderMode: rendering, hasGeometry: hasContent
-  });
-  const fileStatusAlert = resolveFileStatusAlert(fileStatus, viewerAlert);
   const alertKey = fileStatusAlertKey(modelKey, fileStatusAlert);
   useEffect(() => { setViewerAlertOpen(false); }, [alertKey]);
   const activity = useMemo(() => fileStatus ? {
@@ -268,6 +274,10 @@ export function useRendererShell({
   }, [host.promptContext, showPromptResult]);
   const referencesRef = useRef(promptReferences);
   referencesRef.current = promptReferences;
+  const promptContextRef = useRef(promptContext);
+  promptContextRef.current = promptContext;
+  const liveResourceRef = useRef(live.resource);
+  liveResourceRef.current = live.resource;
   // Freeze references now; the host binds its destination before waiting for the PNG.
   const capture = useCallback(() => {
     if (!modelKey || !promptAvailable || viewerLoading) return;
@@ -275,7 +285,9 @@ export function useRendererShell({
       if (!viewerRef.current?.captureScreenshotBlob) throw new Error("The viewer is not ready");
       const pixels = viewerRef.current.captureScreenshotBlob();
       void pixels.catch(() => {});
-      void deliverPrompt(createViewPromptContext({ resource, references: referencesRef.current?.() || [], capture: pixels }));
+      void deliverPrompt(promptContextRef.current({
+        resource: liveResourceRef.current?.() || resource, references: referencesRef.current?.() || [], capture: pixels
+      }));
     } catch (error) { setScreenshotStatus(error instanceof Error ? error.message : "Capture failed"); }
   }, [modelKey, promptAvailable, viewerLoading, deliverPrompt, resource]);
   const captureKey = services.captureRequest?.key ?? null;
@@ -315,8 +327,11 @@ export function useRendererShell({
   liveRuntimeRef.current = {
     readState() {
       const display = viewSettingsStore.getSnapshot().display;
+      // What is SHOWN, which is not always what is loading: a rebuild that keeps its
+      // predecessor on screen reports the predecessor's revision until it is replaced.
+      const shown = liveResourceRef.current?.() || resource;
       return {
-        resource: { ...resource }, revision: String(resource.revision || ""), loading: viewerLoading || !scene,
+        resource: { ...shown }, revision: String(shown.revision || ""), loading: viewerLoading || !scene,
         selection: referencesRef.current?.() || [],
         camera: clonePerspectiveSnapshot(viewerRef.current?.getPerspective?.() || activePerspectiveRef.current),
         display, renderMode: display.mode === "render" ? "render" : "inspect",

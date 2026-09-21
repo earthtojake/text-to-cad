@@ -29,8 +29,6 @@ export function ViewerLoadingOverlay({ viewerLoading, previewMode, progress }: V
 export interface StatusToastProps {
   copyStatus?: string;
   screenshotStatus?: string;
-  persistenceStatus?: string;
-  motionErrorStatus?: string;
   previewMode?: boolean;
   onClear?: () => void;
 }

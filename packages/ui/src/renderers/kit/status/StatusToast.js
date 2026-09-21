@@ -5,9 +5,13 @@ import {
   ToastViewport
 } from "@hardcore/ui/primitives/toast";
 
-export default function StatusToast({ copyStatus, screenshotStatus, persistenceStatus, motionErrorStatus, previewMode, onClear }) {
-  const message = motionErrorStatus || copyStatus || screenshotStatus || persistenceStatus;
-  const isError = Boolean(motionErrorStatus);
+/**
+ * The one line a viewer says about something it just did: a reference copied, a
+ * snapshot delivered, a capture that could not be taken. Two slots, in the order
+ * a person reads them — nothing here is an error, which is the alert dialog's.
+ */
+export default function StatusToast({ copyStatus, screenshotStatus, previewMode, onClear }) {
+  const message = copyStatus || screenshotStatus;
   if (!message || previewMode) {
     return null;
   }
@@ -16,7 +20,6 @@ export default function StatusToast({ copyStatus, screenshotStatus, persistenceS
     <ToastProvider duration={2200} swipeDirection="right">
       <Toast
         open={true}
-        className={isError ? "border-destructive/40 text-destructive" : undefined}
         onOpenChange={(open) => {
           if (!open) {
             onClear?.();
