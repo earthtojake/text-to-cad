@@ -4,6 +4,7 @@ let client: ReturnType<typeof createCadClient>;
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import ModelingTreeView from '../../../../../dist/renderers/step/components/workbench/ModelingTree.js';
+import { HostReferenceContext } from '../../../../../dist/renderers/step/file-view/hostReference.js';
 
 import { useStepModeling } from '../../../../../dist/renderers/step/workbench/useStepModeling.js';
 function ModelingTree(props:any) {
@@ -445,4 +446,49 @@ it('blank-area deselection cancels pending geometry selection',async()=>{
  rerender(<ModelingTree {...props} references={refs()}/>);
  expect(onSelect).not.toHaveBeenCalled();expect(clear).toHaveBeenCalledOnce();
  expect(screen.queryByRole('region',{name:'Reference details'})).toBeNull();
+});
+
+// A feature row stands for faces, not for a part: its menu is the viewport's menu over those
+// faces (the host's `menuForReferences`), never its owning part's, and its Select is the row's
+// own click. The host's descriptor is stubbed here; what is under test is what the ROW asks for.
+function featureMenuSetup(references:any[]){
+ vi.stubGlobal('ResizeObserver',class{observe(){}unobserve(){}disconnect(){}});
+ const calls={onSelect:vi.fn(),onLoadTopology:vi.fn(),add:vi.fn(),select:vi.fn(),menuForNode:vi.fn()};
+ const menuForReferences=vi.fn((ids:string[],label:string)=>({referenceId:ids[0]||'',referenceIds:ids,label,selected:false,
+  copyText:ids.length?`case.step#${ids.join(',')}`:'',zoomSelectionAvailable:false,showIsolate:false,showHideOther:false,showVisibility:false}));
+ const stepRoot={id:'__step_model__',nodeType:'part',name:'Case',leafPartIds:['__model__'],children:[]};
+ const view=(refsNow:any[])=><HostReferenceContext.Provider value={{canAddToPrompt:true}}>
+  <ModelingTreeView active stepRoot={stepRoot} onLoadTopology={calls.onLoadTopology} onSelect={calls.onSelect} references={refsNow}
+   modeling={{descriptor,results:{c:{tree}},error:null}}
+   partControls={{menuForNode:calls.menuForNode,menuForReferences,partMenuActions:{onAddToPrompt:calls.add,onSelect:calls.select}}}/>
+ </HostReferenceContext.Provider>;
+ const {rerender}=render(view(references));
+ return {...calls,menuForReferences,rerender:(refsNow:any[])=>rerender(view(refsNow))};
+}
+const openRowMenu=async(label:string)=>{
+ fireEvent.contextMenu(screen.getByRole('button',{name:`Select ${label}`}));
+ return (await screen.findAllByRole('menuitem')).map(item=>item.textContent);
+};
+it('gives a feature row the viewport’s menu over its faces, not its part’s, and its Select is the row’s own click',async()=>{
+ const menu=featureMenuSetup(refs());
+ expect(await openRowMenu('Cut extrude 1')).toEqual(['Add to prompt','Copy Reference','Select','Zoom to fit','Zoom to selection']);
+ expect(menu.menuForReferences).toHaveBeenLastCalledWith(['o1.f1','o1.f2'],'Cut extrude 1');
+ expect(menu.menuForNode).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('menuitem',{name:'Add to prompt'}));
+ expect(menu.add).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({referenceIds:['o1.f1','o1.f2'],copyText:'case.step#o1.f1,o1.f2'}));
+ await waitFor(()=>expect(screen.queryByRole('menu')).toBeNull());
+ await openRowMenu('Cut extrude 1');
+ fireEvent.click(screen.getByRole('menuitem',{name:'Select'}));
+ expect(menu.onSelect).toHaveBeenCalledExactlyOnceWith(['o1.f1','o1.f2']);
+ expect(menu.select).not.toHaveBeenCalled();
+});
+it('asks for a feature row’s faces when its menu opens, and fills the menu in when they arrive',async()=>{
+ const menu=featureMenuSetup([]);
+ menu.onLoadTopology.mockClear();
+ await openRowMenu('Cut extrude 1');
+ expect(screen.getByRole('menuitem',{name:'Add to prompt'}).getAttribute('aria-disabled')).toBe('true');
+ expect(menu.onLoadTopology).toHaveBeenCalledWith(['o1']);
+ menu.rerender(refs());
+ await waitFor(()=>expect(screen.getByRole('menuitem',{name:'Add to prompt'}).getAttribute('aria-disabled')).toBeNull());
+ expect(menu.menuForReferences).toHaveBeenLastCalledWith(['o1.f1','o1.f2'],'Cut extrude 1');
 });

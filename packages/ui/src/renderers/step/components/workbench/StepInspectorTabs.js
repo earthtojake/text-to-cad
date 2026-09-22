@@ -23,8 +23,9 @@ export function useStepInspectorTabs({
   activeTreeNodeScrollKey = '', onSelectTreeNode, onSelectReferenceGroup, onClearSelection,
   onFocusTreeNode, onUnfocusTreeNode, onExitAllIsolate, onTogglePartVisibility,
   onCopyTreeNodeReference, onHoverTreeNode, showAllHiddenParts,
-  // The one part menu a tree row carries: its descriptor per node, and the actions behind it.
-  menuForNode = null, partMenuActions = null,
+  // The menus a tree row carries: a part's descriptor per node, a feature's per set of faces
+  // and edges (the viewport's menu over that topology), and the one set of actions behind both.
+  menuForNode = null, menuForReferences = null, partMenuActions = null,
   treeSelectionDisabled = false, treeSelectionDisabledReason = '',
   stepModule = null, stepAnimation = null, statusItems = EMPTY, settingsTabs = EMPTY,
 }) {
@@ -64,7 +65,7 @@ export function useStepInspectorTabs({
       partControls={{isAssemblyView, hiddenPartIds, focusedNodeIds, selectableNodeIds, expandedTreeNodeIds, onToggleTreeNode,
         onSelectTreeNode, onFocusTreeNode, onUnfocusTreeNode, onExitAllIsolate,
         onTogglePartVisibility, showAllHiddenParts, onCopyTreeNodeReference, onHoverTreeNode,
-        menuForNode, partMenuActions}}
+        menuForNode, menuForReferences, partMenuActions}}
     />,
   }, buildMotionControlsTab({
     poseRuntime: stepModule, animationRuntime: stepAnimation,
