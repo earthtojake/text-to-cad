@@ -160,12 +160,118 @@ export function checkFileViewerBoundary(repo, { shared = SLICE_SHARED } = {}) {
   return { errors, sourceCount: files.length };
 }
 
+// ONE SCENE BUILDER PER FILE FAMILY, TWO CALLERS. The snapshot CLI's headless stage
+// (`HEADLESS_SCENE`) and the viewer's renderer for a family draw that family's files with
+// the same core module: the same loader, the same builder, the same look and the same
+// opening pose. So each shared piece is imported by BOTH from ONE module, is defined
+// nowhere else, and the headless render path imports no mesh flattener of its own — a
+// snapshot that drew a GLB, a mesh or a robot its own way is exactly what this stops.
+export const HEADLESS_ENTRY = 'packages/core/src/common/headlessRenderEntry.js';
+export const HEADLESS_SCENE = 'packages/core/src/common/headlessScene.js';
+export const SHARED_SCENE_PIECES = [
+  { what: 'the GLB scene', module: 'packages/core/src/lib/render/glbScene.js',
+    viewer: ['packages/ui/src/renderers/glb/useGlbScene.js', ['createGlbScene']], headless: ['createGlbScene'] },
+  { what: 'the mesh scene', module: 'packages/core/src/lib/render/meshScene.js',
+    viewer: ['packages/ui/src/renderers/mesh/useMeshScene.js', ['buildMeshScene']], headless: ['buildMeshScene'] },
+  { what: 'the robot scene', module: 'packages/core/src/lib/urdf/robotScene.js',
+    viewer: ['packages/ui/src/renderers/robot/RobotRenderer.jsx', ['createRobotScene']], headless: ['createRobotScene'] },
+  { what: 'the robot loader', module: 'packages/core/src/lib/urdf/loadRobot.js',
+    viewer: ['packages/ui/src/renderers/robot/useRobotDocument.js', ['loadRobotDescription', 'loadRobotMeshes', 'robotModel']], headless: ['loadRobot'] },
+  { what: 'the opening pose', module: 'packages/core/src/lib/urdf/motion.js',
+    viewer: ['packages/ui/src/renderers/robot/poseStore.js', ['robotOpeningPose']], headless: ['robotOpeningPose'] },
+  { what: 'the surface look', module: 'packages/core/src/common/sceneSettings.js',
+    viewer: ['packages/ui/src/renderers/kit/shell/ShellViewport.jsx', ['resolveSceneSurfaceLook']], headless: ['resolveSceneSurfaceLook'] },
+];
+// Defined once, in their module: a second definition is a second way to draw a family.
+const SHARED_BUILDER_NAMES = ['createGlbScene', 'createMeshScene', 'buildMeshScene', 'createRobotScene', 'buildRobotParts',
+  'robotOpeningPose', 'resolveSceneSurfaceLook'];
+// What the headless render path used to flatten a family with, and must not reach for again.
+const HEADLESS_RENDER_PATH = [HEADLESS_ENTRY, HEADLESS_SCENE, 'packages/core/src/common/renderMeshScene.js', 'packages/core/src/common/source.js'];
+const MESH_FLATTENERS = ['buildMeshDataFromGlbBuffer', 'buildMeshDataFromStlBuffer', 'buildMeshDataFrom3MfBuffer', 'buildUrdfVisualParts', 'buildRobotParts'];
+
+// `import { a, b as c } from '...'` (across lines): each imported NAME with the specifier it came from.
+function namedImports(code) {
+  const imports = [];
+  for (const match of code.matchAll(/import\s*\{([^}]*)\}\s*from\s*["']([^"']+)["']/g)) {
+    for (const part of match[1].split(',')) {
+      const name = part.trim().split(/\s+as\s+/)[0].trim();
+      if (name) imports.push({ name, specifier: match[2] });
+    }
+  }
+  return imports;
+}
+
+function resolveSource(repo, file, specifier) {
+  const core = /^@hardcore\/core\/(lib|common)\/(.+)$/.exec(specifier);
+  if (core) return `packages/core/src/${core[1]}/${core[2]}`;
+  if (specifier.startsWith('.')) return path.relative(repo, path.resolve(path.dirname(path.join(repo, file)), specifier)).split(path.sep).join('/');
+  return specifier;
+}
+
+function packageSources(repo) {
+  const files = [];
+  for (const root of ['packages/core/src', 'packages/ui/src']) {
+    const dir = path.join(repo, root);
+    if (!fs.existsSync(dir)) continue;
+    for (const file of kitSources(dir)) {
+      const rel = path.relative(repo, file).split(path.sep).join('/');
+      if (!rel.split('/').some(part => part === '__tests__' || part === 'harness')) files.push(rel);
+    }
+  }
+  return files;
+}
+
+export function checkSharedSceneBuilders(repo, { pieces = SHARED_SCENE_PIECES, builderNames = SHARED_BUILDER_NAMES } = {}) {
+  const errors = [];
+  const read = rel => (fs.existsSync(path.join(repo, rel)) ? fs.readFileSync(path.join(repo, rel), 'utf8') : null);
+  const importsFrom = (rel, names, module) => {
+    const code = read(rel);
+    if (code === null) return `${rel} does not exist`;
+    const found = namedImports(code).filter(entry => names.includes(entry.name));
+    const missing = names.filter(name => !found.some(entry => entry.name === name));
+    if (missing.length) return `${rel} does not import ${missing.join(', ')}`;
+    const elsewhere = found.filter(entry => resolveSource(repo, rel, entry.specifier) !== module);
+    return elsewhere.length ? `${rel} imports ${elsewhere.map(entry => `${entry.name} from ${entry.specifier}`).join(', ')}, not from ${module}` : '';
+  };
+  for (const piece of pieces) {
+    if (read(piece.module) === null) { errors.push(`${piece.what}: ${piece.module} does not exist`); continue; }
+    const [viewerFile, viewerNames] = piece.viewer;
+    const viewer = importsFrom(viewerFile, viewerNames, piece.module);
+    if (viewer) errors.push(`${piece.what}: the viewer's ${viewer}`);
+    const headless = importsFrom(HEADLESS_SCENE, piece.headless, piece.module);
+    if (headless) errors.push(`${piece.what}: the snapshot's ${headless}`);
+  }
+  const entry = read(HEADLESS_ENTRY);
+  if (entry === null) errors.push(`${HEADLESS_ENTRY} does not exist`);
+  else if (!namedImports(entry).some(item => item.name === 'headlessSceneFamily' && resolveSource(repo, HEADLESS_ENTRY, item.specifier) === HEADLESS_SCENE)) {
+    errors.push(`${HEADLESS_ENTRY} does not route a family's job through headlessSceneFamily (${HEADLESS_SCENE})`);
+  }
+  for (const rel of HEADLESS_RENDER_PATH) {
+    const code = read(rel);
+    for (const item of code === null ? [] : namedImports(code)) {
+      if (MESH_FLATTENERS.includes(item.name)) errors.push(`${rel} imports ${item.name}: the snapshot draws a family with its shared builder, never a copy flattened for it`);
+    }
+  }
+  const definitions = new Map(builderNames.map(name => [name, []]));
+  for (const rel of packageSources(repo)) {
+    const code = read(rel);
+    for (const name of builderNames) {
+      if (new RegExp(`(?:function\\s+${name}\\s*\\(|(?:const|let|var)\\s+${name}\\s*=)`).test(code)) definitions.get(name).push(rel);
+    }
+  }
+  for (const [name, files] of definitions) {
+    if (files.length !== 1) errors.push(`${name} is defined ${files.length ? `in ${files.length} places (${files.join(', ')})` : 'nowhere'}; it is ONE shared builder`);
+  }
+  return { errors, pieceCount: pieces.length };
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
   const kit = checkKitBoundaries(repo);
   const slices = checkRendererSlices(repo);
   const host = checkFileViewerBoundary(repo);
-  const errors = [...kit.errors, ...slices.errors, ...host.errors];
+  const shared = checkSharedSceneBuilders(repo);
+  const errors = [...kit.errors, ...slices.errors, ...host.errors, ...shared.errors];
   if (errors.length) { console.error(errors.join('\n')); process.exitCode = 1; }
-  else console.log(`Kit boundaries passed (${kit.sourceCount} format-blind sources); renderer slices passed (${RENDERER_SLICES.join(', ')}: ${slices.sourceCount} sources); the file viewer imports no slice (${host.sourceCount} sources).`);
+  else console.log(`Kit boundaries passed (${kit.sourceCount} format-blind sources); renderer slices passed (${RENDERER_SLICES.join(', ')}: ${slices.sourceCount} sources); the file viewer imports no slice (${host.sourceCount} sources); the viewer and the snapshot CLI share ${shared.pieceCount} scene pieces.`);
 }

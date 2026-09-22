@@ -3,7 +3,10 @@ import { test } from 'node:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { checkFileViewerBoundary, checkKitBoundaries, checkRendererSlices, FILE_VIEWER_ROOT, KIT_ROOT, RENDERERS_ROOT } from './check-kit-boundaries.mjs';
+import {
+  checkFileViewerBoundary, checkKitBoundaries, checkRendererSlices, checkSharedSceneBuilders, FILE_VIEWER_ROOT, HEADLESS_ENTRY, HEADLESS_SCENE,
+  KIT_ROOT, RENDERERS_ROOT, SHARED_SCENE_PIECES
+} from './check-kit-boundaries.mjs';
 
 function fixture(files, run, allowlist = []) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hardcore-kit-boundaries-'));
@@ -105,3 +108,60 @@ test('the file viewer never imports a family slice: it mounts one through the re
 test('a missing file viewer fails rather than passing silently', () => hostFixture({
   'packages/ui/src/renderers/kit/shell/ShellViewport.jsx': "export default null;\n",
 }, result => assert.match(result.errors[0], /does not exist/)));
+
+// A repository in which every shared scene piece is imported by the viewer AND the snapshot
+// from its one module, defined there and nowhere else; `patch` breaks one thing at a time.
+function sharedFixture(patch, run) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hardcore-shared-scenes-'));
+  const files = {};
+  const coreSpecifier = module => `@hardcore/core/${module.replace('packages/core/src/', '')}`;
+  const relativeTo = (from, module) => {
+    const rel = path.relative(path.dirname(from), module).split(path.sep).join('/');
+    return rel.startsWith('.') ? rel : `./${rel}`;
+  };
+  const headless = [];
+  for (const piece of SHARED_SCENE_PIECES) {
+    const names = [...new Set([...piece.viewer[1], ...piece.headless])];
+    files[piece.module] = `${files[piece.module] || ''}${names.map(name => `export function ${name}() {}\n`).join('')}`;
+    files[piece.viewer[0]] = `${files[piece.viewer[0]] || ''}import { ${piece.viewer[1].join(', ')} } from '${coreSpecifier(piece.module)}';\n`;
+    headless.push(`import {\n  ${piece.headless.join(',\n  ')}\n} from '${relativeTo(HEADLESS_SCENE, piece.module)}';`);
+  }
+  // The two builders the others are made of: defined once, called through the pieces above.
+  files['packages/core/src/lib/render/meshScene.js'] += 'export function createMeshScene() {}\n';
+  files['packages/core/src/lib/urdf/robotParts.js'] = 'export function buildRobotParts() {}\n';
+  files[HEADLESS_SCENE] = `${headless.join('\n')}\nexport function headlessSceneFamily() {}\n`;
+  files[HEADLESS_ENTRY] = "import { headlessSceneFamily, headlessSceneModel } from './headlessScene.js';\n";
+  patch(files);
+  for (const [name, code] of Object.entries(files)) {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, code);
+  }
+  try { run(checkSharedSceneBuilders(root)); } finally { fs.rmSync(root, { recursive: true, force: true }); }
+}
+
+test('the viewer and the snapshot build each family from one shared module', () => sharedFixture(() => {},
+  result => assert.deepEqual(result.errors, [])));
+
+test('a snapshot that draws a family with a builder of its own is refused', () => sharedFixture((files) => {
+  files[HEADLESS_SCENE] = files[HEADLESS_SCENE].replace("from '../lib/render/glbScene.js'", "from './glbSnapshotScene.js'");
+  files['packages/core/src/common/glbSnapshotScene.js'] = 'export function createGlbScene() {}\n';
+}, result => {
+  assert.ok(result.errors.some(error => error.includes("the GLB scene: the snapshot's") && error.includes('./glbSnapshotScene.js')), result.errors.join('\n'));
+  assert.ok(result.errors.some(error => error.startsWith('createGlbScene is defined in 2 places')), result.errors.join('\n'));
+}));
+
+test('a viewer renderer that builds its own scene is refused as well', () => sharedFixture((files) => {
+  files['packages/ui/src/renderers/robot/RobotRenderer.jsx'] = 'function createRobotScene() {}\n';
+}, result => assert.deepEqual(result.errors.sort(), [
+  "createRobotScene is defined in 2 places (packages/core/src/lib/urdf/robotScene.js, packages/ui/src/renderers/robot/RobotRenderer.jsx); it is ONE shared builder",
+  "the robot scene: the viewer's packages/ui/src/renderers/robot/RobotRenderer.jsx does not import createRobotScene"
+])));
+
+test('the snapshot entry routes families through the shared scenes and reaches for no mesh flattener', () => sharedFixture((files) => {
+  files[HEADLESS_ENTRY] = "import { buildModel } from './cadScene.js';\n";
+  files['packages/core/src/common/source.js'] = "import { buildMeshDataFromGlbBuffer } from '../lib/render/glbMeshData.js';\n";
+}, result => assert.deepEqual(result.errors, [
+  `${HEADLESS_ENTRY} does not route a family's job through headlessSceneFamily (${HEADLESS_SCENE})`,
+  'packages/core/src/common/source.js imports buildMeshDataFromGlbBuffer: the snapshot draws a family with its shared builder, never a copy flattened for it'
+])));
