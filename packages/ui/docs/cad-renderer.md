@@ -10,9 +10,9 @@ review.
 
 It is no longer one component stack: there is one renderer per file family over
 a shared, format-blind [kit](#kit) and [shell](#shell). The STEP renderer is
-under `src/renderers/step`: its scene and everything of it that lives in the
-viewport are on the kit ([STEP scene and viewport](#step-scene-and-viewport));
-`CadFileView` is still its private surface. Applications use the registrations and the shared
+under `src/renderers/step`, on the kit like every other family: its scene and viewport
+([STEP scene and viewport](#step-scene-and-viewport)) and its surface, `StepSurface.jsx`, which
+runs `useRendererShell` exactly as the other renderers do. Applications use the registrations and the shared
 `FileViewer`; they do not import another application's source.
 
 ## Kit
@@ -53,8 +53,8 @@ pass the second to the shell, which configures the store and the tab from the on
 
 **Tools.** The strip draws the list it is handed: `{ id, label, icon, active,
 disabled, onSelect, description?, menu?, secondPressOpensMenu?, subToolbar? }`.
-`cadInteractionTools` in `step/components/workbench/FloatingToolBar.js` builds
-the STEP renderer's list. `createToolModes({ defaultMode, modes })`
+A renderer builds its own list from `shell.tools.own(...)`, adding `shell.tools.draw`
+where it offers Draw; STEP's is in `step/StepSurface.jsx`. `createToolModes({ defaultMode, modes })`
 answers what a press does (`next`), what a saved tab may record (`persisted`) and
 which tool a file opens in (`restore`); the STEP declaration is
 `CAD_TOOL_MODES` in `workbench/constants.js`. The playbar follows the clock on
@@ -170,13 +170,17 @@ per-pane state, fullscreen's camera, gated Display sections, settings that never
 replace the canvas), and Draw has one scenario (`harness/drawScenario.mjs`)
 run under the shell (`kit/tools/draw/Draw.browser.test.mjs`).
 
-The STEP renderer's scene and viewport are on the kit
-([STEP scene and viewport](#step-scene-and-viewport)); its FRAME, its per-file
-record and its host glue are still `CadFileView.js`'s own copy, which shares the
-leaf pieces (`liveBinding`, `loadAlerts`, `fileStatus`, `loadingState`,
-`BlockingViewerAlert`, `useViewerShortcuts`, `promptDeliveryMessage`,
-`chromeBackdrop`). Moving that surface onto `useRendererShell` is what is left
-of the split.
+The STEP renderer is on the shell end to end: its scene and viewport
+([STEP scene and viewport](#step-scene-and-viewport)) and its surface, `StepSurface.jsx`,
+whose frame, per-file record and host glue are the shell's. What STEP keeps of its own is
+what only a STEP has — its slice of the per-file record (`workbench/stepSessionRecord.js`:
+the tree, the pose, the animation, the large-file setting, each behind the signature that
+says whether it still fits the file), its prompt context, and the resource its live state
+reports while a rebuild is held behind the previous mesh (`live.resource`). The shell was
+widened for it rather than forked: it accepts display settings a renderer made earlier than
+it could hand them back (`viewSettings`), a viewer handle the renderer owns (`viewerRef`),
+externally held tool state (`tool`), and a load report that knows about finding, editing and
+previewing.
 
 Its safety net is `step/StepRenderer.browser.test.mjs`, which opens a real `.step`
 in a real browser: a two-part component-SURF package with one revolute mate, one
@@ -717,12 +721,11 @@ The optional `@hardcore/ui/file-viewer/empty` entry exports `EmptyCadBackdrop` f
   reception are STEP's (`setLookContext`). Both resolve the same settings, so the
   scene wears a look once: whichever arrives second finds it already on.
   `keepsAuthoredFinish` is `hasAuthoredMaterials(meshData)`.
-- **Viewport** (`scene/StepViewport.jsx`): a props adapter around the kit's
-  `ShellViewport`. It decides what the viewport may show and pick just now (nothing
+- **Viewport**: the shell's own `ShellViewport`, mounted by `RendererShell` — STEP no
+  longer wraps it. The surface decides what it may show and pick just now (nothing
   under Pose, Animate or fullscreen; no topology while a previous mesh is held over
-  an update), mounts the viewport menu and the bottom action from the shell's own
-  pieces, and adds to the kit viewport's handle the two things only a STEP can
-  answer: `sampleLodCamera` and `zoomToFitSelection` (the boxes of the selected
+  an update) and hands the viewport menu and the bottom action to the shell, and it
+  keeps the two things only a STEP can answer, beside the kit viewport's handle: `sampleLodCamera` and `zoomToFitSelection` (the boxes of the selected
   references, from the selector runtime as posed, merged with the boxes of the
   selected parts, from the records on screen).
 - **Layers** (`scene/StepSceneLayers.jsx`), mounted through the viewport's overlay
