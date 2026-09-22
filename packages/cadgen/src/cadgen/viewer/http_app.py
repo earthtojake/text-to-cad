@@ -509,6 +509,7 @@ class CadApp:
         """
         from base64 import b64decode
 
+        from .._internal.atomic_replace import replace_atomic, temp_suffix
         from .part_export import EXPORT_DIRECTORY, resolve_export_target
 
         if int(request.headers.get("content-length") or 0) > self._EXPORT_BODY_LIMIT:
@@ -528,11 +529,14 @@ class CadApp:
         os.makedirs(os.path.dirname(target), exist_ok=True)
         # Written whole through a temp file in the same directory, so a reader
         # watching the tree never sees a half-written mesh under the final name.
-        partial = f"{target}.partial"
+        # The rename goes through the shared helper for the reason every other
+        # artifact writer does: a bare os.replace loses to WinError 32 on an SMB
+        # share, and a project directory is exactly the kind of place that is one.
+        partial = f"{target}{temp_suffix()}"
         try:
             with open(partial, "wb") as handle:
                 handle.write(data)
-            os.replace(partial, target)
+            replace_atomic(partial, target)
         finally:
             if os.path.exists(partial):
                 os.unlink(partial)
