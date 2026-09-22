@@ -59,7 +59,12 @@ def resolve_export_target(root_path: str, name: str) -> tuple[str, str]:
     root = os.path.realpath(root_path)
     filename = safe_export_name(name)
     directory = os.path.join(root, EXPORT_DIRECTORY)
+    # An existing STL/ is checked through its REAL path: a directory that is a
+    # symlink out of the project would otherwise be a legal-looking way to write
+    # anywhere. One that does not exist yet is checked as written, since there is
+    # no link to follow and realpath would just echo it back.
+    resolved_directory = os.path.realpath(directory) if os.path.isdir(directory) else directory
+    require_contained(root, resolved_directory)
     target = os.path.join(directory, filename)
-    require_contained(root, os.path.realpath(os.path.dirname(target)) if os.path.isdir(directory) else directory)
     require_contained(root, target)
     return target, os.path.join(EXPORT_DIRECTORY, filename)

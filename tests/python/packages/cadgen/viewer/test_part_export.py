@@ -53,6 +53,15 @@ class ResolveExportTargetTests(unittest.TestCase):
         with self.assertRaises(ForbiddenAssetError):
             resolve_export_target("", "plant_1_02")
 
+    def test_an_export_directory_symlinked_out_of_the_project_is_refused(self):
+        # A directory that is a symlink out of the project would be a
+        # legal-looking way to write anywhere, so it is checked through its
+        # real path rather than the name it was reached by.
+        with tempfile.TemporaryDirectory() as root, tempfile.TemporaryDirectory() as outside:
+            os.symlink(outside, os.path.join(root, EXPORT_DIRECTORY))
+            with self.assertRaises(ForbiddenAssetError):
+                resolve_export_target(root, "plant_1_02")
+
     def test_an_existing_export_directory_is_reused(self):
         with tempfile.TemporaryDirectory() as root:
             os.makedirs(os.path.join(root, EXPORT_DIRECTORY))
