@@ -29,6 +29,35 @@ description (STL, 3MF, GLB, URDF, SRDF, SDF) takes `solid` or `render`, the
 `shaded` or `flat` surface style and the remaining groups, and refuses the rest
 by name before anything is rendered.
 
+## Meshes and robot descriptions
+
+A GLB, an STL, a 3MF and a URDF, SRDF or SDF are drawn with the scene the CAD
+Viewer draws for them: the snapshot's page and the viewer build it with the same
+code, dress it in the same look for the same display settings, and pose it the
+same way. A snapshot therefore cannot show one of these files differently from the
+viewer; only the camera framing, the image size and the encoding are the
+snapshot's own.
+
+- A GLB is its own glTF scene: nodes, skins, morph targets and authored
+  materials, drawn where its skins and morph weights put them. `solid` wears the
+  viewer's surface over its colours, maps and opacity; `render` shows the finish
+  the file authored. Its clips are the viewer's playbar: a snapshot draws the file
+  at rest, lights and grounds it on the box its clips sweep, as the viewer does,
+  and refuses `--animation` and `--video`.
+- An STL is one object and a 3MF one per object (and per material within one),
+  each in its colour. They author no finish: `solid` wears the viewer's surface and
+  `render` the studio's.
+- A robot is drawn where the viewer opens it: every joint at its default, then an
+  SRDF's `home` group state, with the joints `--joint-values` names on top. A
+  colour the description gives a visual wins over the colours its link mesh
+  carries, and a link mesh that cannot be loaded fails the snapshot rather than
+  leaving the link out.
+- The ground is sized from the rest placement, so a pose never rescales it; only
+  the floor's height follows a posed robot down.
+- `--mode list` lists what the scene drew, one row per mesh: a `ref` naming it,
+  its `name`, its triangle and vertex counts, and its bounds as drawn. For these
+  inputs a ref is a name, not a selector: `--focus` and `--hide` are STEP-only.
+
 ## Drawings
 
 A `.dxf` is not rendered in a scene at all, so `cadgen dxf snapshot` is the

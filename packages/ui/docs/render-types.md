@@ -22,11 +22,13 @@ of their own (`src/renderers/dxf`, `src/renderers/glb`, `src/renderers/mesh`,
 `src/renderers/robot`; see [CAD renderer](cad-renderer.md#kit)): a vertical slice owns its
 tools, tabs and scene outright and consults no capability table. The `dxf`, `glb`, `stl`,
 `3mf`, `urdf`, `srdf` and `sdf` rows below remain for what is not a renderer: the file
-list's icon and label, and the headless snapshot renderer.
+list's icon and label. The headless snapshot renderer consults no table either: it draws
+each of those families with the scene builder its renderer uses
+([one scene builder per family](cad-renderer.md#one-scene-builder-per-family-the-viewer-and-the-snapshot-cli)).
 
 The DXF slice does not even have a scene: it is a canvas painted from
 `GET /__cad/drawing`, so none of the viewport capabilities below describes it — and its
-row says so, with `content: drawing` and no tools. `cadgen dxf snapshot` paints the same
+row says so, with `assetKind: drawing` and no tools. `cadgen dxf snapshot` paints the same
 payload with the same code (`@hardcore/core/lib/drawing2d`), so the CLI cannot produce a
 picture the pane could not.
 
@@ -37,12 +39,10 @@ format. Pure data: no behaviour, no imports beyond the format enum.
 
 | Capability | Meaning |
 |---|---|
-| `content` | Which loaded object is the viewport's content: `mesh`, `robot`, or `drawing` for the one format that has no viewport at all (a robot row is read by the headless renderer only; the viewer's robot renderer consults no table). Resolved once into `selectedViewportContent`. |
-| `assetKind` | Which asset the headless renderer LOADS: `mesh`, `drawing`, `robot`. Not the same question as `content`. |
+| `assetKind` | Which asset a format LOADS: `mesh`, `drawing`, `robot`. |
 | `iconKind` | The file-list glyph. |
 | `sheetKind` | Which file-sheet section set mounts. |
 | `label` | User-facing format name (status chips, sheet titles, loading labels). |
-| `sceneScale` | `cad` or `urdf`; picks the scene-scale profile. |
 | `tools` | `select`, `pan`, `draw`, `orbit`, `screenshot`. Orbit and screenshot are true for every format WITH a viewport — they act on the viewport, not the geometry. `dxf` claims none of them: its pane is a canvas with no toolbar over it. |
 | `parts` | Per-part selection, hiding, isolate, assembly tree. |
 | `topology` | Face/edge/vertex references. Implies `parts`. |
@@ -64,7 +64,7 @@ format. Pure data: no behaviour, no imports beyond the format enum.
 ## The content signal
 
 `selectedViewportContent` in the STEP renderer is the single answer to "is there anything on
-screen?", derived from `content`. Toolbar gates, the CTA, preview mode, the viewport
+screen?", its loaded mesh data. Toolbar gates, the CTA, preview mode, the viewport
 context menu and alert blocking all read it, rather than each one re-deriving the answer
 per format.
 
@@ -72,10 +72,12 @@ per format.
 
 The kit's viewport (`renderers/kit/shell/ShellViewport.jsx`) is the shell and owns the camera,
 `OrbitControls`, the scene stage, frame presentation, the Draw overlay, screenshots and the
-imperative viewer API. A renderer's **scene** (`renderers/kit/scene.js`; STEP's is
+imperative viewer API. A renderer's **scene** (the contract `renderers/kit/scene.js` re-exports from core; STEP's is
 `renderers/step/scene/stepScene.js`) owns geometry only:
 
-1. **Consume content** for its `content` kind (mesh data, robot).
+1. **Consume content**: the document its renderer loaded (a STEP's mesh data, a GLB's native
+   scene, a mesh file's objects, a robot's parts). A GLB's, a mesh's and a robot's scene is
+   built in `@hardcore/core`, where the snapshot CLI builds the same one.
 2. **Publish bounds** so the shared fit and its zoom baseline work. The mesh
    path does this via `applyRuntimeModelBounds` after composing; a backend with no mesh
    calls back with its own bounds instead.

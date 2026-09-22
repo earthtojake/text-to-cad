@@ -3,15 +3,15 @@ import test from "node:test";
 
 import { RENDER_FORMAT } from "./fileFormats.js";
 import {
+  ASSET_KIND,
   PARAMETER_SOURCE,
   RENDER_CAPABILITIES,
-  VIEWPORT_CONTENT,
+  assetKindForRenderFormat,
   hasCapability,
   isArtifactManagedFormat,
   renderCapabilities,
   renderFormatLabel,
-  supportsTool,
-  viewportContentKind
+  supportsTool
 } from "./renderCapabilities.js";
 
 // Every format drawn in a 3D viewport. DXF is the one that is not: its pane is a 2D
@@ -52,26 +52,15 @@ test("every row declares the same tool set", () => {
   }
 });
 
-test("viewport content kinds are known", () => {
-  const kinds = new Set(Object.values(VIEWPORT_CONTENT));
+test("asset kinds are known", () => {
+  const kinds = new Set(Object.values(ASSET_KIND));
   for (const [format, row] of Object.entries(RENDER_CAPABILITIES)) {
-    assert.ok(kinds.has(row.content), `${format} has unknown content kind ${row.content}`);
+    assert.ok(kinds.has(row.assetKind), `${format} has unknown asset kind ${row.assetKind}`);
   }
-  assert.equal(viewportContentKind(RENDER_FORMAT.STL), VIEWPORT_CONTENT.MESH);
-  assert.equal(viewportContentKind(RENDER_FORMAT.URDF), VIEWPORT_CONTENT.ROBOT);
-  // A drawing is not a mesh and never was one: the row said MESH while a DXF was
-  // rendered as a 3D flat pattern, and that pattern is gone.
-  assert.equal(viewportContentKind(RENDER_FORMAT.DXF), VIEWPORT_CONTENT.DRAWING);
-});
-
-test("camera framing uses the format's declared scene scale", () => {
-  for (const format of [RENDER_FORMAT.URDF, RENDER_FORMAT.SRDF, RENDER_FORMAT.SDF]) {
-    assert.equal(renderCapabilities(format).sceneScale, "urdf", format);
-  }
-  for (const format of [RENDER_FORMAT.STEP, RENDER_FORMAT.DXF, RENDER_FORMAT.STL,
-    RENDER_FORMAT.THREE_MF, RENDER_FORMAT.GLB, "gltf", "unknown"]) {
-    assert.equal(renderCapabilities(format).sceneScale, "cad", format);
-  }
+  assert.equal(assetKindForRenderFormat(RENDER_FORMAT.STL), ASSET_KIND.MESH);
+  assert.equal(assetKindForRenderFormat(RENDER_FORMAT.URDF), ASSET_KIND.ROBOT);
+  // A drawing is not a mesh and never was one: a DXF loads the backend's 2D payload.
+  assert.equal(assetKindForRenderFormat(RENDER_FORMAT.DXF), ASSET_KIND.DRAWING);
 });
 
 test("orbit and screenshot are available to every format with a viewport", () => {
@@ -177,7 +166,7 @@ test("labels are present for the formats that surface one", () => {
 
 test("aliases resolve to their real format", () => {
   assert.equal(renderCapabilities("stp").sheetKind, RENDER_FORMAT.STEP);
-  assert.equal(renderCapabilities("gltf").content, VIEWPORT_CONTENT.MESH);
+  assert.equal(renderCapabilities("gltf").iconKind, renderCapabilities(RENDER_FORMAT.GLB).iconKind);
   assert.equal(renderCapabilities("  STEP  ").parts, true);
 });
 

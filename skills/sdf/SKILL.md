@@ -115,9 +115,11 @@ cadgen sdf snapshot path/to/robot.sdf review.png
 ```
 
 It accepts `.sdf` only (a format door, same `TARGET [OUT]` grammar as the rest). Pose the robot with `--joint-values` — `{joint: degrees}` JSON,
-joints you do not name staying at the rest pose (the `"jointValues"` job field is the same
-thing in a packet). Robots are authored in metres and are framed on the robot scene scale
-automatically.
+joints you do not name staying at their defaults, where the CAD Viewer opens the robot (the
+`"jointValues"` job field is the same thing in a packet). The snapshot draws the robot with the
+viewer's own scene, so it shows what the viewer shows, and a link mesh that cannot be loaded
+fails it rather than leaving the link out. Robots are authored in metres and are framed on the
+robot scene scale automatically.
 
 A normal snapshot uses the Solid preset and Light appearance; omitted groups inherit preset defaults.
 Pass `--display render` for the shared photographic scene. Inline display JSON and
