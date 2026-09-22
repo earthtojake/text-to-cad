@@ -1,6 +1,6 @@
 import type { PromptReference, ResourceRef } from '@hardcore/core/prompt';
 import type { JsonValue } from '../../../file-viewer/types.js';
-import { normalizeViewSettings } from '@hardcore/core/common/viewSettings.js';
+import { normalizeViewSettings, resolveViewSettings } from '@hardcore/core/common/viewSettings.js';
 import { mergeViewerDisplaySettings } from '../view-settings/viewerDisplaySettings.js';
 
 // The live command surface: what an app-owned tool (an agent, a test) may ask of
@@ -128,8 +128,12 @@ export function attachLiveBinding<State extends LiveViewState, Controller extend
         runtime.setDisplaySettings(canonicalPatch as { [key: string]: JsonValue });
       }, state => containsPatch(state.display, expectedDisplay));
     },
+    // Committed once the VIEWPORT shows the mode, not once the store names it: the store flips at
+    // once, the camera takes the mode's projection a frame or more later, and the reply (or a
+    // capture right after it) must not describe the mode it left.
     setRenderMode: enabled => mutate(runtime => runtime.setRenderMode(enabled),
-      state => state.renderMode === (enabled ? 'render' : 'inspect')),
+      state => state.renderMode === (enabled ? 'render' : 'inspect')
+        && (!state.camera?.projection || state.camera.projection === resolveViewSettings(state.display).camera.projection)),
     async capture() {
       const { runtime, scope } = admit();
       const pending = runtime.capture();

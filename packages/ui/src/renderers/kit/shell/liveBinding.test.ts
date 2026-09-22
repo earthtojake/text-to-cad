@@ -42,4 +42,19 @@ describe('the shell live binding', () => {
     const view = harness({ commands: ['select', 'clearSelection'] }, { select: vi.fn() });
     await expect(view.controller.clearSelection()).rejects.toThrow('declared the live command "clearSelection"');
   });
+  it('answers a render-mode switch once the viewport shows the mode, not once the store names it', async () => {
+    // The store flips at once; the camera takes the mode's projection some frames later.
+    let mode = 'solid', projection: 'orthographic' | 'perspective' = 'orthographic', frames = 0;
+    const camera = () => ({ position: [1, 1, 1] as [number, number, number], target: [0, 0, 0] as [number, number, number], up: [0, 0, 1] as [number, number, number], projection });
+    const view = harness({ declined, settle: async () => {
+      frames += 1;
+      if (frames === 3) projection = mode === 'render' ? 'perspective' : 'orthographic';
+    } }, {
+      readState: () => ({ ...state(), camera: camera(), display: { mode }, renderMode: mode === 'render' ? 'render' : 'inspect' }),
+      setRenderMode: (enabled: boolean) => { mode = enabled ? 'render' : 'solid'; frames = 0; },
+    });
+    expect((await view.controller.setRenderMode(true)).camera?.projection).toBe('perspective');
+    expect(frames).toBe(3);
+    expect((await view.controller.setRenderMode(false)).camera?.projection).toBe('orthographic');
+  });
 });
