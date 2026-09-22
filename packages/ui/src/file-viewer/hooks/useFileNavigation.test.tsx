@@ -32,7 +32,8 @@ test('typed directory moves preserve expansion and navigate the current file; de
   });
   await waitFor(() => expect(result.current.tree.listings['old/deep']).toBeDefined());
   act(() => notify({ sourceId: files.id, changes: [{ kind: 'moved', from: 'old', to: 'new', entryKind: 'directory' }] }));
-  expect(open).toHaveBeenCalledWith('new/deep/note.txt', { target: 'current' });
+  // The tab follows its file to the new folder, keeping the panel it had open (here, the tree).
+  expect(open).toHaveBeenCalledWith('new/deep/note.txt', { target: 'current', panel: 'tree' });
   expect([...result.current.tree.expanded]).toEqual(['', 'new', 'new/deep']);
   await waitFor(() => expect(result.current.tree.listings['new/deep']).toEqual([entry('new/deep/note.txt')]));
   act(() => notify({ sourceId: files.id, changes: [{ kind: 'deleted', path: 'new', entryKind: 'directory' }] }));

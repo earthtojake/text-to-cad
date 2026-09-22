@@ -57,12 +57,10 @@ export {
   CAD_PANEL,
   FILE_PANEL_TREE,
   SOURCE_PANEL,
-  inspectorPanels,
   markdownPanels,
   nextOpenPanel,
-  panelClosedBy,
-  panelsFor,
   resolveOpenPanel,
-  treePanel
+  treePanel,
+  viewerPanels
 } from "./panels.js";
 export { useElementWidth } from "./useElementWidth.js";

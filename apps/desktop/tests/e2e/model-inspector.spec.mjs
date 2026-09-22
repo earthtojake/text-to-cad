@@ -69,13 +69,20 @@ test('the Features tree presents a lone part as its features, and precise viewpo
       name: 'tests/fixtures/cad/import-smoke.step',
       exact: false
     }).first().click();
-    await expect(page.locator('[data-file-sheet-header]')).toBeVisible({
-      timeout: 60000
-    });
-    // The tree is the Features tab's; the Model, Surfaces and Geometry tabs are gone.
-    await expect(page.getByRole('tab',{name:'Features',exact:true})).toBeVisible();
-    await expect(page.locator('[data-file-sheet-tab-panel=tree]')).toBeVisible();
-    for (const retired of ['Model','Surfaces','Geometry']) await expect(page.getByRole('tab',{name:retired,exact:true})).toHaveCount(0);
+    // Picked in the tree, the STEP opens with the tree still up, and its own panel — named for
+    // what it is, a lone part — one press away.
+    const partPanel = page.locator('header [data-file-panel=cad-file]');
+    await expect(partPanel).toHaveAttribute('aria-label','Part', { timeout: 60000 });
+    await expect(page.getByTestId('tree-toggle')).toHaveAttribute('aria-pressed','true');
+    await partPanel.click();
+    await expect(page.locator('[data-file-sheet=Part]')).toBeVisible();
+    // The tree is the panel's Features section — with no joints and no issues, its only one —
+    // and there are no tabs at all: the Model, Surfaces and Geometry tabs are gone with the rest.
+    await expect(page.getByRole('region',{name:'Features',exact:true})).toBeVisible();
+    await expect(page.locator('[data-file-panel-section=features]')).toBeVisible();
+    await expect(page.locator('[data-file-sheet=Part] [data-file-panel-section]')).toHaveCount(1);
+    await expect(page.locator('[data-file-sheet]').getByRole('tab')).toHaveCount(0);
+    for (const retired of ['Model','Surfaces','Geometry']) await expect(page.getByRole('region',{name:retired,exact:true})).toHaveCount(0);
     const tree=page.getByRole('list',{name:'Model',exact:true});
     // A lone part is presented as its features directly: the part itself adds no choice.
     const feature=tree.getByRole('button',{name:/^Select Base (extrude|revolve)$/}).first();
@@ -103,7 +110,7 @@ test('the Features tree presents a lone part as its features, and precise viewpo
     await canvas.click({position:{x:box.width*0.5,y:box.height*0.5}});
     await page.screenshot({path:`${output}/after-pick.png`,animations:'disabled'});
     await expect(page.getByRole('button',{name:'Add to prompt',exact:true})).toBeVisible();
-    const reference=page.locator('[data-file-sheet-tab-panel=tree]').getByText(/^o[0-9.]+\.[fe][0-9]+$/);
+    const reference=page.locator('[data-file-panel-section=features]').getByText(/^o[0-9.]+\.[fe][0-9]+$/);
     await expect(reference).toBeVisible();
     const selector=await reference.innerText();
     await page.getByRole('button',{name:'Add to prompt',exact:true}).click();

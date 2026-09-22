@@ -52,28 +52,19 @@ function FrameContextNote() {
 // The state a document that is EDITED while it is open moves through. Every one of
 // these is optional to the shell: `idle` is a renderer that only downloads its file.
 const LOAD_STAGES = Object.freeze({
-  idle: { load: {}, fileStatus: {} },
-  finding: { load: { busy: true, finding: true }, fileStatus: {} },
+  idle: { load: {} },
+  finding: { load: { busy: true, finding: true } },
   // Queued work of the person's own, with nothing of it on screen yet.
-  editing: {
-    load: { editPending: true },
-    fileStatus: { editingState: { state: "building", revision: 2 }, savedAs: "harness file" }
-  },
+  editing: { load: { editPending: true } },
   // The same work, now drawn: the wait is over even though the write is not.
-  previewing: {
-    load: { editPending: true, currentPreview: true },
-    fileStatus: { editingState: { state: "building", revision: 2, preview: { revision: 2 } }, savedAs: "harness file" }
-  },
-  // The model survives, and the badge says what did not.
-  warned: {
-    load: { warning: { severity: "warning", blocking: false, summary: "Harness warning",
-      title: "Harness warning", tooltip: "The triangle is fine; something beside it is not.",
-      message: "The triangle is visible, but the harness reports a problem beside it.", details: "harness detail" } },
-    fileStatus: {}
-  },
-  degraded: { load: {}, fileStatus: { qualityStatus: { state: "limited", title: "The harness drew fewer triangles than it has." } } },
-  // A scene on screen that is not yet WHOLE: the renderer says so; the shell cannot know.
-  partial: { load: {}, fileStatus: { hasGeometry: false } }
+  previewing: { load: { editPending: true, currentPreview: true } },
+  // A newer revision failed and the model on screen survives it: the viewport's card says
+  // so, and can be put away, because the previous version is still there to use.
+  failed: {
+    load: { alert: { severity: "error", blocking: false, summary: "Update failed", title: "Harness update failed",
+      message: "The harness could not load its latest revision. The existing model remains visible.",
+      details: "harness detail", reload: true } }
+  }
 });
 
 /** One triangle, as the kit's scene contract (`kit/scene.js`) sees it. */
@@ -141,7 +132,7 @@ function HarnessSurface({ view, data }) {
   const [shownRevision, setShownRevision] = useState("");
   // What the frame put down when the person reached for the model.
   const [putDown, setPutDown] = useState("");
-  const { load: stageLoad, fileStatus: stageFileStatus } = LOAD_STAGES[stage] || LOAD_STAGES.idle;
+  const { load: stageLoad } = LOAD_STAGES[stage] || LOAD_STAGES.idle;
   const live = useMemo(() => (shownRevision
     ? { ...LIVE, resource: () => ({ ...resource, revision: shownRevision }) }
     : LIVE), [resource, shownRevision]);
@@ -149,7 +140,7 @@ function HarnessSurface({ view, data }) {
   const shell = useRendererShell({
     view, services: shellServices, resource, modelKey: view.file.path, revisionKey: "harness",
     features: EDGELESS_VIEW_FEATURES, toolModes: HARNESS_TOOL_MODES, scene,
-    load: { busy: false, ...stageLoad }, fileStatus: stageFileStatus,
+    load: { busy: false, ...stageLoad },
     live, onCameraSettled, runtimeLifecycle,
     // A renderer whose references are its own vocabulary assembles its own snapshot.
     promptContext: ({ resource: shown, references, capture }) => createPromptContext([
@@ -168,7 +159,7 @@ function HarnessSurface({ view, data }) {
     { id: "clear", label: "Clear the note", separatorBefore: true, disabled: !picked, onSelect: () => setPicked("") }
   ]), [picked]);
 
-  return <RendererShell shell={shell} tools={[shell.tools.draw]} inspector={{ title: "Harness", tabs: [shell.displayTab] }}
+  return <RendererShell shell={shell} tools={[shell.tools.draw]}
     contextMenuItems={contextMenuItems} onContextMenuOpenChange={setMenuUp}
     frameProvider={frame => <HarnessFrameContext.Provider value={`frame:${stage}`}>{frame}</HarnessFrameContext.Provider>}
     onCanvasPointerDown={() => setPutDown(`put down @${stage}`)}

@@ -16,7 +16,7 @@ import { FILE_SHEET_PRECISION_SLIDER_CLASSES } from "../../inspector/FileSheet.j
 //
 // Every animation source shares this transport UI. The bar only edits the clip
 // and clock state of the runtime it is handed; evaluating a clip is its owner's.
-// Animation has no Inspector section: it is the Animate tool's bottom action,
+// Animation has no panel section: it is the Animate tool's bottom action,
 // and the whole of fullscreen's animation control.
 //
 // runtime: { clips: [{ id, label, duration }], activeClipId, playing, elapsedSec,

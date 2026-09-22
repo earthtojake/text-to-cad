@@ -4,7 +4,6 @@ import { normalizeExplodedViewSettings } from "@hardcore/core/lib/displaySetting
 import { ALL_VIEW_FEATURES, normalizeViewFeatures, normalizeViewSettings, resolveViewSettings, viewSettingsAreCustom } from "@hardcore/core/common/viewSettings.js";
 import { clipAxisBounds, clipAxisPosition, DEFAULT_STEP_CLIP_SETTINGS, normalizeStepClipSettings } from "@hardcore/core/lib/viewer/clipPlane.js";
 import { MAX_THEME_FILL_COLORS } from "@hardcore/core/lib/themeSettings.js";
-import { DISPLAY_SECTION_ID } from "./displaySection.js";
 import { Button } from "@hardcore/ui/primitives/button";
 import { Slider } from "@hardcore/ui/primitives/slider";
 import { DISPLAY_MODE_OPTIONS } from "./DisplayModeOptions.js";
@@ -175,7 +174,7 @@ export function DisplaySettingsSection({
 }) {
   const settings = useMemo(() => normalizeViewSettings(viewSettings), [viewSettings]);
   const view = resolvedView || resolveViewSettings(settings, { appearance: hostAppearance, lightingQuality, features });
-  // The tab is built from what its caller opted into: sections it mounts, presets and surface styles it lists.
+  // The panel is built from what its caller opted into: sections it mounts, presets and surface styles it lists.
   const offered = useMemo(() => normalizeViewFeatures(features), [features]);
   const offers = id => offered.sections.includes(id);
   const modeOptions = DISPLAY_MODE_OPTIONS.filter(option => offered.modes.includes(option.value));
@@ -263,8 +262,4 @@ export function DisplaySettingsSection({
       </div>
     </div>
   );
-}
-
-export function buildDisplaySettingsTab(props) {
-  return { id: DISPLAY_SECTION_ID, title: "Display", content: <DisplaySettingsSection {...props} /> };
 }

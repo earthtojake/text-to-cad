@@ -44,7 +44,7 @@ moving or wrapping them. Icon-only controls need an accessible name; use the
 existing Lucide icons and tooltips. Status and error text must convey meaning
 without relying only on color.
 
-For CAD Inspector and theme-editor rows, follow
+For rows in a CAD file's panels (its own panel and Display), follow
 `packages/ui/docs/settings-ui.md`. It defines the
 existing row types, control widths, units, section structure and accessible
 label conventions. Reuse those CAD controls inside the renderer instead of
@@ -59,7 +59,7 @@ change a control's availability or alter selection and navigation behavior.
 
 Check the affected app and shared component in light and dark modes, at the
 normal and narrow layouts, and with keyboard as well as pointer input. For CAD
-changes, include the existing Inspector, toolbar, loading/error and preview
+changes, include the file's panels, toolbar, loading/error and preview
 states; the `packages/ui/docs/render-types.md` cover
 cross-format and theme behavior. Rebuild shared package output before checking
 an app that consumes it, following the package README. Do not use a migration

@@ -12,7 +12,6 @@ import {
   fileStatusWarningOrErrorItems,
   mostIntenseFileStatusLevel
 } from "../../workbench/fileStatusItems.js";
-import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections.js";
 
 const LEVEL_RENDER_META = Object.freeze({
   [FILE_STATUS_LEVELS.ERROR]: {
@@ -36,7 +35,7 @@ function renderMetaForLevel(level) {
   return LEVEL_RENDER_META[level] || LEVEL_RENDER_META[FILE_STATUS_LEVELS.INFO];
 }
 
-function FileStatusTabContent({ items = [] }) {
+function FileStatusSectionContent({ items = [] }) {
   const { clipboard } = useViewerHost();
   const [expandedItemIds, setExpandedItemIds] = useState(() => new Set());
   const [copiedItemId, setCopiedItemId] = useState("");
@@ -195,10 +194,10 @@ function FileStatusTabContent({ items = [] }) {
   );
 }
 
-// Build the "Issues" tab descriptor, or null when there is nothing to show.
-// INFO advisories (stale/busy) make the tab exist but never inflate its count
+// Build the "Issues" section of a STEP's panel, or null when there is nothing to show.
+// INFO advisories (stale/busy) make the section exist but never inflate its count
 // badge — only warnings/errors are alarming enough to number.
-export function buildFileStatusTab(items = []) {
+export function buildIssuesSection(items = []) {
   const warningOrErrorItems = fileStatusWarningOrErrorItems(items);
   const advisoryItems = fileStatusAdvisoryInfoItems(items);
   if (!warningOrErrorItems.length && !advisoryItems.length) {
@@ -206,7 +205,7 @@ export function buildFileStatusTab(items = []) {
   }
   const headerMeta = renderMetaForLevel(mostIntenseFileStatusLevel(warningOrErrorItems));
   return {
-    id: FILE_SHEET_SECTION_IDS.FILE_STATUS,
+    id: "issues",
     title: (
       <span className="flex min-w-0 items-center gap-1.5">
         <span>Issues</span>
@@ -215,6 +214,6 @@ export function buildFileStatusTab(items = []) {
         ) : null}
       </span>
     ),
-    content: <FileStatusTabContent items={items} />
+    content: <FileStatusSectionContent items={items} />
   };
 }

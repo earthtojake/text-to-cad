@@ -95,7 +95,7 @@ if __name__ == "__main__":
   and `0.5*x` to `wrist`).
   Exact gear trains are ratio arithmetic, not code.
   A geared member BACK-DRIVES in the viewer: when exactly one coupling gears a
-  DOF with a nonzero ratio, its Pose slider reads the effective value
+  DOF with a nonzero ratio, its Position slider reads the effective value
   (own + ratio x coupling), is labelled "driven by <coupling>", and dragging it
   moves the COUPLING — `coupling = (target - own)/ratio`, clamped to the
   coupling's limits — so sliding one gear turns the whole train. A member's own
@@ -186,7 +186,8 @@ def arm(): ...
   `animation=` is simply a model without animation.
 - Targets are checked at LOAD, against the compiled tree: every clip's
   `update(0, m)` runs once when the module loads, and a label or occurrence
-  id no part carries is reported in the viewer's Status tab and in
+  id no part carries is reported in the viewer's Issues (`Animation
+  unavailable`, in the file's panel) and in
   `snapshot --animation`'s error — not at the first frame that reaches it.
 - Mesh-only models (no `.step`) have no document sidecar; animation is a
   STEP-document concern.
@@ -340,7 +341,7 @@ For `.deformTube()` authoring, morph fitting, memory limits and braid export
 limitations, read [tube deformation and morph export](animation-deformation.md).
 
 The CAD Viewer plays a GLB's embedded rigid, skinned and morph animation through
-its Animation tab in both Inspect and Render. These are baked clips: the STEP
+the playbar it always shows under the model, in both Inspect and Render. These are baked clips: the STEP
 sidecar module's procedural controls are not available in the exported GLB.
 
 An animated export writes ONE node per occurrence instead of the flat,

@@ -1,7 +1,8 @@
 import type { ComponentType } from 'react';
 import { defineFileRenderer } from '../../file-viewer/registry.js';
 import type { FileRendererProps } from '../../file-viewer/types.js';
-import { inspectorPanels } from '../../file-viewer/navigation/panels.js';
+import { Bot } from 'lucide-react';
+import { viewerPanels } from '../../file-viewer/navigation/panels.js';
 import type { LiveViewBinding, LiveViewController, LiveViewState } from '../kit/shell/liveBinding.js';
 import { createCadPreferences, prepareWorkspaceEntry } from '../workspace/index.js';
 import type { CadPreferenceSource, PreparedWorkspaceEntry, ViewerCommandSource, WorkspaceClientOption } from '../workspace/index.js';
@@ -40,8 +41,9 @@ export function createRobotRenderer({ client, ...options }: RobotRendererOptions
     id: 'robot',
     priority: 100,
     matches: (file) => ROBOT_FILE.test(file.path),
-    // A robot opens onto its joints: the Inspector starts open, on Kinematics.
-    panels: ({ ready }) => inspectorPanels(ready, { defaultOpen: true }),
+    // A robot opens onto its joints: its own panel, Position first then Links, is the default,
+    // under the icon the file tree draws.
+    panels: ({ ready }) => viewerPanels(ready, { file: { label: 'Robot', icon: Bot } }),
     async prepare(context) {
       const prepared = await prepareWorkspaceEntry(client, context);
       return { data: { ...prepared.data, services }, dispose: prepared.dispose };

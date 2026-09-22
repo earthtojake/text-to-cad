@@ -22,7 +22,7 @@ display concern only.
 | [3](#3-admission-and-memory-pressure) | Budgets, reservations, coarsening caps |
 | [4](#4-the-replacement-batch) | CID caps, the first-ready deadline, adoption receipts |
 | [5](#5-cancellation-failure-and-cleanup) | Parked targets, restoration, ownership |
-| [6](#6-following-an-active-build) | The edit feed, badges, the status heartbeat |
+| [6](#6-following-an-active-build) | The edit feed, what the viewport shows, the status heartbeat |
 
 ## 1. Where a model starts
 
@@ -37,8 +37,10 @@ complete estimate.
 Coarse geometry is a temporary preview: visible components automatically reach
 at least the standard level, preserving its angular smoothness even when
 projected chord error alone would permit a coarser mesh. Close inspection can
-request finer detail. The top bar distinguishes preview, refinement, standard
-detail, and limited or failed refinement; background file writing stays quiet.
+request finer detail. The chrome does not report detail levels: the STEP renderer
+records first geometry and standard detail for benchmark harnesses only
+(`window.__cadViewerQuality`, `useViewportQualityStatus`), and background file
+writing stays quiet.
 
 ## 2. What refinement samples
 
@@ -211,23 +213,23 @@ independently; a superseded request cannot cancel its replacement.
 **After a save.** Source files hold the authored changes; there is no hidden
 durable preview document, and every explicit model run still waits for its
 declared outputs. A successful save leaves that revision's authored preview
-displayed without a status badge. A later successful no-op run without a new
+displayed, with nothing announced. A later successful no-op run without a new
 preview, or an expired preview with a validated saved result, uses the saved
 file instead.
 
-**Badges.** The filename badge reports **Opening**, **Updating**, **Open
-failed**, **Update failed**, **Limited detail**, or — for a warning the model
-survives — what that warning calls itself (its own summary). Once a
+**What the viewport shows.** The breadcrumb carries no status. Opening and
+updating are the viewport's loading overlay (`ViewerLoadingOverlay`). A failure is
+a card over the viewport (`kit/status/ViewerAlertCard.jsx`) with its explanation,
+its next step and the full diagnostic under Details: an error always shows, and a
+failed update the model survives (`blocking: false`, the previous version still on
+screen) has a Dismiss button and stays dismissed until the alert changes, or
+clears and is raised again. A warning is a card only while nothing is on screen;
+beside a model, a STEP lists it in its panel's Issues. Once a
 usable current view is displayed, saving, successful completion, idle edit-feed
-state and routine refinement stay quiet. Busy badges have a spinner; failures
-and detail limits have an icon and open their explanation on click. Tooltips
-explain the current stage or the effect on the view, distinguish a previous
-version from new geometry whose STEP write failed, and point to details when
-clickable; stage counts never imply overall completion, and full diagnostics
-remain in the dialog. A sidecar this build cannot read is NOT a badge: the model
-renders with no kinematics, no materials and no routine, and the migration is
-announced where it can be acted on — the build and the cad skill. Existing
-usable views remain visible during updates and failures.
+state and routine refinement stay quiet. A sidecar this build cannot read raises
+no alert: the model renders with no kinematics, no materials and no routine, and
+the migration is announced where it can be acted on — the build and the cad
+skill. Existing usable views remain visible during updates and failures.
 
 **Opening.** Opening shows one step line — **Finding file**, **Reading
 model**, **Loading geometry**, or **Preparing view** — with no headline above

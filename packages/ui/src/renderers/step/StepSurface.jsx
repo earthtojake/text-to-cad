@@ -3,7 +3,7 @@ import { buildEdgeChainGraph } from "./workbench/edgeChainSelection.js";
 
 import SelectionFilterMenu, { ToolFilterNote } from "./components/workbench/SelectionFilterMenu.jsx";
 import { MEASURE_SELECTION_FILTERS, SELECTION_FILTERS } from "./workbench/selectionFilter.js";
-import { CirclePlay, MousePointer2, Rotate3d, Ruler } from "lucide-react";
+import { CirclePlay, MousePointer2, Ruler, SplinePointer } from "lucide-react";
 import { stepGeometryContextText, stepGeometryPromptText } from "./workbench/stepGeometryPrompt.js";
 import { filterSelectionReferences, toggleReferenceGroupSelection, connectedReferenceIds } from "./workbench/selectionFilter.js";
 import { buildTangentFaceGraph } from "./workbench/tangentFaceSelection.js";
@@ -32,7 +32,8 @@ import { lodSceneMayMove, sampleLodCamera } from "./render/lodCameraSample.js";
 import { registerLodDisplaySource } from "./render/lodSceneAdoption.js";
 import { ALL_VIEW_FEATURES, EDGELESS_VIEW_FEATURES } from "@hardcore/core/common/viewSettings.js";
 import { explodablePartCount } from "./workbench/explodableParts.js";
-import { useStepInspectorTabs } from "./components/workbench/StepInspectorTabs.js";
+import { useStepPanel } from "./components/workbench/StepPanel.js";
+import { CAD_PANEL } from "../../file-viewer/navigation/panels.js";
 import { restoreMotionAnimation, restoreMotionParameters } from "./workbench/motionRestore.js";
 import { useStepMotionControls } from "./workbench/useStepMotionControls.js";
 import { animationControlsHaveContent } from "./components/workbench/AnimationControlsSection.js";
@@ -52,7 +53,6 @@ import {
   REFERENCE_STATUS,
   TAB_TOOL_MODE
 } from "./workbench/constants.js";
-import { FILE_SHEET_SECTION_IDS } from "./workbench/fileSheetSections.js";
 import { promptDeliveryMessage } from "../kit/shell/promptContext.js";
 import { readStepRecord, stepRecordSignatures, writeStepRecord } from "./workbench/stepSessionRecord.js";
 import {
@@ -260,15 +260,15 @@ export default function StepSurface(props) {
 function StepSurfaceBody({
   client, entry, serverInfo, renderSession: cadRenderSession, preferences, onPreferenceChange, onOpenFile, className = "",
   panelSlot, colorScheme = "light", selectReference, captureRequest, acknowledgeCommand, documentResource, slots, live,
-  fullscreen = false, onExitFullscreen, onNavigationActionsChange,
-  openPanel = "", onPanelOpen, onChromeVisibilityChange, onActivityChange, onReload, state, onStateChange
+  fullscreen = false, onFullscreenChange, onNavigationActionsChange,
+  openPanel = "", onPanelOpen, onChromeVisibilityChange, onReload, state, onStateChange
 }) {
   // The host's props, as the shell reads them. This renderer took them apart before the
   // shell existed; it hands the same things back under the names every renderer uses.
   const view = {
-    fullscreen, openPanel, onPanelOpen, onChromeVisibilityChange, onActivityChange,
+    fullscreen, openPanel, onPanelOpen, onChromeVisibilityChange,
     onNavigationActionsChange, onStateChange, state, panelSlot, onOpenFile,
-    reload: onReload, onExitFullscreen, appearance: { colorScheme }
+    reload: onReload, onFullscreenChange, appearance: { colorScheme }
   };
   const services = { preferences, onPreferenceChange, live, captureRequest, acknowledgeCommand };
   const host = useViewerHost();
@@ -632,7 +632,7 @@ function StepSurfaceBody({
       // A sidecar with no kinematics section resolves to a NULL definition —
       // an animation-only model has a sidecar and lands here — so the ready
       // state is committed from one place that expects that (see
-      // workbench/stepModuleLoad); the Kinematics tab is then absent, not empty.
+      // workbench/stepModuleLoad); the Position section is then absent, not empty.
       const resolved = resolveStepModuleLoad({
         url: selectedStepModuleUrl,
         definition,
@@ -1168,7 +1168,6 @@ function StepSurfaceBody({
     if (catalogError && !selectedMeshData) return {
       severity: "error", kind: "status", title: "Couldn’t open the model",
       message: "The viewer couldn’t retrieve this file’s information.",
-      tooltip: "The viewer couldn’t retrieve information about this file. Try reloading the viewer.",
       recovery: "Try again. If this continues, check that the viewer is running.",
       details: catalogError, reload: true,
     };
@@ -1268,7 +1267,8 @@ function StepSurfaceBody({
     dynamicScene: lodSceneMayMove({ kinematics: selectedStepModuleDefinition, kinematicsLoading: selectedStepModuleLoading,
       animation: selectedSourceAnimation, exploded: resolvedScene.display?.exploded?.enabled })
   });
-  const viewportQualityStatus = useViewportQualityStatus({
+  // Publishes the readiness moments (first geometry, standard detail) that harnesses read.
+  useViewportQualityStatus({
     modelKey: viewportQualityModelKey,
     quality: resolvedScene.quality,
     file: selectedEntry?.file || "",
@@ -1300,6 +1300,15 @@ function StepSurfaceBody({
     setCopyStatus("");
   }, []);
 
+  // A routine that failed to load has no Animate tool to say so on: it is one of the file's
+  // Issues instead.
+  const annotationAlert = useMemo(() => (selectedAnimationError ? {
+    severity: "warning", blocking: false,
+    summary: "Animation unavailable",
+    title: "Animation unavailable",
+    message: "The geometry is visible, but its animation could not be loaded, so the Animate tool is not offered.",
+    details: `File: ${fileKey(selectedEntry)}\n${selectedAnimationError}`,
+  } : null), [selectedAnimationError, selectedEntry]);
   const selectedFileStatusItems = useMemo(() => (
     selectedArtifactGenerating
       ? []
@@ -1308,6 +1317,7 @@ function StepSurfaceBody({
         fileSheetKind: selectedFileSheetKind,
         stepSourceStatus: selectedStepSourceStatus,
         viewerAlert,
+        warningAlert: annotationAlert,
         stepArtifactGenerationAvailable,
         activeGenerationFiles: activeStepArtifactGenerationFiles,
         viewerServerInfo,
@@ -1322,11 +1332,10 @@ function StepSurfaceBody({
     stepArtifactGenerationAvailable,
     selectedStepSourceStatus,
     viewerAlert,
+    annotationAlert,
     viewerServerInfo
   ]);
 
-  // Reveal a tab because something in the viewport has details to show there.
-  const openFileSheetSection = useCallback((sectionId) => { shellRef.current?.inspector.reveal(sectionId); }, []);
 
   // ---- this STEP's own slice of the per-file record --------------------------------------
   // Read when the record is WRITTEN, never at render: the pose is written outside React, and
@@ -1717,7 +1726,7 @@ function StepSurfaceBody({
     hoveredModelPartId
   });
 
-  // The Reference inspector shows every selected element: topology references
+  // The Reference pane shows every selected element: topology references
   // (faces/edges/shapes) plus selected components and subassemblies.
   const selectedReferenceItems = useMemo(
     () => [...(selectedReferences || []), ...(selectedParts || [])],
@@ -2199,19 +2208,9 @@ function StepSurfaceBody({
   const promptReferencesRef = useRef(() => EMPTY_LIST);
   const escapeRef = useRef(() => false);
   // Escape has something to do here whenever there is a selection to clear or a Measure session
-  // to leave; the alert and the Inspector are the shell's own reasons.
+  // to leave; an open panel is the shell's own reason.
   const escapeActive = selectedPartIds.length > 0 || selectedReferenceIds.length > 0 || tabToolMode === TAB_TOOL_MODE.MEASURE;
 
-  // A routine that failed to load has no Animate tool to say so on: it is reported
-  // beside the filename instead.
-  const annotationAlert = selectedAnimationError ? {
-    severity: "warning", blocking: false,
-    summary: "Animation unavailable",
-    title: "Animation unavailable",
-    tooltip: "The shape is visible, but its animation could not be loaded.",
-    message: "The geometry is visible, but its animation could not be loaded, so the Animate tool is not offered.",
-    details: `File: ${fileKey(selectedEntry)}\n${selectedAnimationError}`,
-  } : null;
 
   // ---- the shell --------------------------------------------------------------------------
   // Everything this renderer needs from its host that is not about its scene. It is called
@@ -2234,17 +2233,9 @@ function StepSurfaceBody({
       updating: !viewportIsLoading && (effectiveViewerLoading || selectedMeshPartial),
       progress: selectedLoadProgress || (editingPreview.state.phase ? { phase: editingPreview.state.phase, detail: editingPreview.state.detail } : null),
       alert: viewerAlert || (!selectedMeshData && catalogError ? catalogError : null),
-      warning: annotationAlert,
       editPending: ["submitted", "queued", "building"].includes(editingPreview.state?.state) && !editingPreview.state?.saved,
       currentPreview: currentPreviewVisible,
       finding: !catalogHydrated || selectedCatalogPending
-    },
-    fileStatus: {
-      editingState: editingAvailable ? editingPreview.state : null,
-      savedAs: "STEP file",
-      showingPreview: currentPreviewVisible,
-      qualityStatus: viewportQualityStatus,
-      hasGeometry: Boolean(selectedMeshData && !selectedMeshPartial)
     },
     // The playbar belongs to the Animate mode here, not to every file with routines: a STEP
     // takes Animate UP, and leaving it puts the model back at rest.
@@ -2261,7 +2252,7 @@ function StepSurfaceBody({
     escape: { active: escapeActive, handle: () => escapeRef.current() },
     rendererState,
     toolRestore: CAD_TOOL_RESTORE,
-    displayTabProps: {
+    displayProps: {
       clipBounds: selectedMeshData?.bounds || null,
       explodeDisabled: Boolean(selectedMeshData) && explodablePartCount(selectedMeshData) <= 1,
       edgeStatus: displayEdgeStatus,
@@ -2276,7 +2267,7 @@ function StepSurfaceBody({
   shellRef.current = shell;
   const setCopyStatus = shell.setCopyStatus;
   const setScreenshotStatus = shell.setScreenshotStatus;
-  const tabToolsOpen = shell.inspector.open;
+  const filePanelOpen = shell.openPanel === CAD_PANEL.file;
 
   useEffect(() => {
     if (!animationAvailable && shellRef.current?.toolMode === TAB_TOOL_MODE.ANIMATE) shellRef.current.selectTool(TAB_TOOL_MODE.REFERENCES);
@@ -2492,13 +2483,13 @@ function StepSurfaceBody({
       return;
     }
     setActiveTreeNodeScrollKey(source === "viewer" || source === "reference" ? `${source}:${Date.now()}:${normalizedNodeId}` : "");
-    openFileSheetSection(FILE_SHEET_SECTION_IDS.STEP_TREE);
+    // Something in the viewport has details in the tree: show this file's panel.
+    shellRef.current?.revealFilePanel();
     if (expandAncestors || expandSelf || source === "reference") {
       expandStepTreeAroundNode(normalizedNodeId, { expandSelf });
     }
   }, [
     expandStepTreeAroundNode,
-    openFileSheetSection,
     selectedFileSheetKind
   ]);
 
@@ -3909,7 +3900,6 @@ function StepSurfaceBody({
   }, [handleModelReferenceContext, hostReference, partMenuActions]);
 
   const handleSelectTabToolMode = useCallback((mode) => {
-    shellRef.current?.dismissAlert();
     // Measure and Draw are sessions: asking for the active one again ends it, which is the
     // shell's state machine. (The Measure button spends its second press on the snap menu.)
     shellRef.current?.selectTool(mode);
@@ -3934,7 +3924,7 @@ function StepSurfaceBody({
   };
 
   // What Escape means in this renderer, innermost first: a measurement in progress, then
-  // the Measure tool, then the selection. The alert and the Inspector are the shell's.
+  // the Measure tool, then the selection. An open panel is the shell's.
   escapeRef.current = () => {
     if (!previewMode && tabToolMode === TAB_TOOL_MODE.MEASURE) {
       // Escape cancels the measurement in progress and leaves the tool armed, the way it does
@@ -4157,14 +4147,17 @@ function StepSurfaceBody({
     supportsTool(selectedEntrySourceFormat, "draw") ? { ...shell.tools.draw, disabled: toolIdle } : null,
     // Only in a file with joints to drag (never a disabled button). It sits with Animate,
     // the other tool that moves the model.
-    poseAvailable ? shell.tools.own({ id: TAB_TOOL_MODE.POSE, label: "Pose",
-      icon: <Rotate3d className="size-3" strokeWidth={2} aria-hidden="true" />,
+    poseAvailable ? shell.tools.own({ id: TAB_TOOL_MODE.POSE, label: "Position",
+      icon: <SplinePointer className="size-3" strokeWidth={2} aria-hidden="true" />,
       active: poseToolActive, disabled: toolIdle, onSelect: () => handleSelectTabToolMode(TAB_TOOL_MODE.POSE) }) : null,
-    // Rightmost, and only in a file that has routines: no routines, no button. Its controls
+    // Last of the model's own tools, and only in a file that has routines: no routines, no button. Its controls
     // are the playbar, under the model while the tool is up.
     animationAvailable ? shell.tools.own({ id: TAB_TOOL_MODE.ANIMATE, label: "Animate",
       icon: <CirclePlay className="size-3" strokeWidth={2} aria-hidden="true" />,
-      active: animateToolActive, disabled: toolIdle, onSelect: () => handleSelectTabToolMode(TAB_TOOL_MODE.ANIMATE) }) : null
+      active: animateToolActive, disabled: toolIdle, onSelect: () => handleSelectTabToolMode(TAB_TOOL_MODE.ANIMATE) }) : null,
+    // Last of all, and only where the host offers one: fullscreen is an act on the view, not a
+    // tool to be in, and a STEP is the one file that presents itself there.
+    shell.tools.fullscreen
   ].filter(Boolean);
 
   // ---- the bottom action ----------------------------------------------------------------------
@@ -4188,8 +4181,8 @@ function StepSurfaceBody({
       /> : null
     } : null;
 
-  // ---- the Inspector --------------------------------------------------------------------------
-  const inspectorTabs = useStepInspectorTabs({
+  // ---- the file's panel ------------------------------------------------------------------------
+  const stepPanel = useStepPanel({
     selectedMeshData: selectedDisplayMeshData,
     selectedSourceAppearance,
     client,
@@ -4197,7 +4190,7 @@ function StepSurfaceBody({
       references: !viewerLoading && !stepUpdateInProgress ? isAssemblyView ? assemblyStepTreeTopologyReferences : selectedSelectorRuntime?.references || EMPTY_LIST : EMPTY_LIST,
       parts: !viewerLoading && !stepUpdateInProgress ? selectedMeshData?.parts || EMPTY_LIST : EMPTY_LIST,
       onHighlight: handleInspectionHighlight, onLoadTopology: loadInspectionTopology },
-    open: tabToolsOpen && !previewMode,
+    open: filePanelOpen && !previewMode,
     selectedEntry,
     viewerLoading: viewerLoading || assemblySidebarLoading,
     isAssemblyView,
@@ -4222,22 +4215,16 @@ function StepSurfaceBody({
     onHoverTreeNode: setHoveredListPartId,
     onTogglePartVisibility: togglePartVisibility,
     treeSelectionDisabled: stepInteractionBlocked,
-    treeSelectionDisabledReason: stepInteractionBlocked
-      ? (retainedPreviousStepMeshError
-        ? "Selection is unavailable because the STEP update failed."
-        : "STEP update in progress. Please wait.")
-      : "",
     menuForNode: assemblyNodeMenu,
     menuForReferences: topologyReferenceMenu,
     partMenuActions,
     showAllHiddenParts: handleShowAllHiddenParts,
     stepModule: stepPositionControls,
     stepAnimation: stepAnimationControls,
-    statusItems: selectedFileStatusItems,
-    settingsTabs: [shell.displayTab]
+    statusItems: selectedFileStatusItems
   });
 
-  return <RendererShell shell={shell} tools={tools} inspector={{ title: "STEP", tabs: inspectorTabs }}
+  return <RendererShell shell={shell} tools={tools} panel={stepPanel}
     className={className}
     bottomAction={bottomAction}
     contextMenuItems={selectionToolActive
@@ -4247,7 +4234,7 @@ function StepSurfaceBody({
     // is what they just pointed at.
     onCanvasPointerDown={() => setInspectionHighlight(null)}
     // Both halves read it: the viewport's menu resolves references through it, and so do the
-    // Inspector's rows, which are portaled out of this tree into the host's panel column.
+    // panel's rows, which are portaled out of this tree into the host's panel column.
     frameProvider={frame => <HostReferenceContext.Provider value={hostReference}>{frame}</HostReferenceContext.Provider>}
     viewportOverlay={viewport => {
       runtimeRefRef.current = viewport.runtimeRef;

@@ -2,8 +2,8 @@ import React from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import FullscreenToolbar, { FULLSCREEN_TOOLBAR_IDLE_MS } from '../../../../../dist/renderers/step/components/workbench/FullscreenToolbar.js';
-import { AnimationClockProvider, createAnimationClock } from '../../../../../dist/renderers/step/workbench/animationClockStore.js';
+import FullscreenToolbar, { FULLSCREEN_TOOLBAR_IDLE_MS } from '../../../../../dist/renderers/kit/tools/fullscreen/FullscreenToolbar.js';
+import { createAnimationClock } from '../../../../../dist/renderers/step/workbench/animationClockStore.js';
 
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
@@ -18,13 +18,11 @@ function Harness({ clips: available = clips, toggle = vi.fn(), select = vi.fn(),
   const [playing, setPlaying] = React.useState(false), [activeClipId, setClip] = React.useState('turn'), [orbitSpeed, setOrbit] = React.useState(1);
   const [animationSpeed, setSpeed] = React.useState(1), [loopEnabled, setLoop] = React.useState(true);
   const [step] = React.useState(() => stepClock || createAnimationClock());
-  return <AnimationClockProvider value={step}>
-    <FullscreenToolbar orbitSpeed={orbitSpeed} onOrbitSpeedChange={setOrbit} onExit={exit}
-      animation={{ clips: available, playing, activeClipId, elapsedSec: 2, onRestart: restart, onScrub: scrub, speed: animationSpeed, loopEnabled,
+  return <FullscreenToolbar orbitSpeed={orbitSpeed} onOrbitSpeedChange={setOrbit} onExit={exit}
+      animation={{ clips: available, playing, activeClipId, elapsedSec: 2, clock: step, onRestart: restart, onScrub: scrub, speed: animationSpeed, loopEnabled,
         onSpeedChange(value: number) { speed(value); setSpeed(value); }, onLoopToggle(value: boolean) { loop(value); setLoop(value); },
         onPlayToggle() { toggle(); setPlaying(value => !value); },
-        onClipSelect(id: string) { select(id); setClip(id); setPlaying(false); } }}/>
-  </AnimationClockProvider>;
+        onClipSelect(id: string) { select(id); setClip(id); setPlaying(false); } }}/>;
 }
 
 it('fades both control areas on idle, wakes on pointer/keyboard activity, and cleans up', () => {

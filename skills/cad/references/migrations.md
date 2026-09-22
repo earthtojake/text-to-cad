@@ -16,8 +16,8 @@ When a build, snapshot or validation reports that a model needs
 migrating (a sidecar refused for its schema version, a leftover companion file
 the build warns about, a retired decorator argument or command named by a
 teaching error), do the migration then, as part of the work in hand. Do not
-route around it, silence it, or leave it for later: the CAD Viewer shows no
-badge for a stale model, so an unmigrated one simply loses its kinematics,
+route around it, silence it, or leave it for later: the CAD Viewer does not
+flag a stale model, so an unmigrated one simply loses its kinematics,
 materials and animation and looks like a plain part.
 
 - A refused sidecar (`unsupported sidecar schema N (expected M)`) is fixed by
@@ -32,7 +32,8 @@ materials and animation and looks like a plain part.
 - After migrating, confirm it took: the sidecar declares the current schema and
   the document's hash, the build printed no migration warning, and the model
   articulates (a `cadgen step snapshot --kinematics …` pose differs from rest,
-  or the Viewer shows its Kinematics tab and Pose and Animate tools).
+  or the Viewer shows a Position section in the file's panel and the Position
+  and Animate tools).
 - If the script itself no longer runs on the installed cadgen, migrate the
   script using the sections below, then rebuild.
 

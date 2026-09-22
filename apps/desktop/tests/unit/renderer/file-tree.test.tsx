@@ -108,7 +108,8 @@ describe("FileTree", () => {
     expect(rowExists(".git")).toBe(true);
     expect(rowExists("node_modules")).toBe(true);
     await user.click(row("output.unsupported"));
-    expect(onOpenFile).toHaveBeenCalledWith("output.unsupported", { target: "new" });
+    // A pick in the tree opens the file with the tree, so a person can go on walking it.
+    expect(onOpenFile).toHaveBeenCalledWith("output.unsupported", { target: "new", panel: "tree" });
   });
 
   it("keeps ignored CAD and unknown extensions in the fuzzy filter", async () => {

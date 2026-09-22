@@ -32,7 +32,6 @@ export function buildViewerMeshAlert(entry, hasMeshData, loadError, artifact = n
       return {
         severity: renderableGlb ? "warning" : "error",
         ...(renderableGlb ? { blocking: false } : {}),
-        compact: true,
         summary,
         title: summary,
         message: `“${fileRef}”: ${stepArtifactStatusMessage(stepArtifactError)}`,
@@ -118,7 +117,6 @@ export function buildViewerEditAlert(editingState, showingCurrentPreview = false
       kind: "service",
       summary: "Viewer service failed",
       title: "Couldn’t prepare the model",
-      tooltip: "The viewer couldn’t finish preparing the updated model for display.",
       message: usableModelVisible
         ? "The viewer couldn’t prepare the latest update. You’re still viewing the previous version."
         : "The viewer’s processing service failed.",

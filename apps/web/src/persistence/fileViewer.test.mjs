@@ -20,11 +20,12 @@ function storage() {
 }
 function viewport(width) { globalThis.window = { innerWidth: width, sessionStorage: storage() }; }
 
-test('fresh narrow views open the tree at the original width; wider views use the renderer default', () => {
+// A page load is a file opened directly, so it opens with the file's own default panel
+// (`panel: null`) at any width, whatever the last page had open.
+test('a page load opens with the file’s default panel; its width is the renderer default for the viewport', () => {
   viewport(480);
-  const narrow = readViewState('narrow', storage());
-  assert.equal(narrow.panel, 'tree');
-  assert.equal(narrow.panelWidth, 365);
+  assert.equal(readViewState('narrow', storage()).panel, null);
+  assert.equal(readViewState('narrow', storage()).panelWidth, 365);
   viewport(800);
   assert.equal(readViewState('compact', storage()).panelWidth, 280);
   viewport(1280);
@@ -32,24 +33,15 @@ test('fresh narrow views open the tree at the original width; wider views use th
   assert.equal(readViewState('wide', storage()).panelWidth, 365);
 });
 
-test('restoration uses the supplied storage and keeps explicit closed/default panels', () => {
+test('restoration keeps the width and the expanded folders, never the open panel', () => {
   viewport(1280);
   const session = storage();
-  session.setItem('cad-viewer:directory-session:v1', JSON.stringify({ version: 1, fileSheetOpen: false, fileViewerOpen: false, fileSheetWidthPx: 401, fileViewerExpandedDirectoryIds: ['nested'] }));
-  assert.deepEqual(readViewState('old', session), { panel: '', panelWidth: 401, expandedDirectories: ['nested'] });
-  writeViewState('a', { panel: null, panelWidth: 300, expandedDirectories: ['a'] }, session);
+  session.setItem('cad-viewer:directory-session:v1', JSON.stringify({ version: 1, fileSheetWidthPx: 401, fileViewerExpandedDirectoryIds: ['nested'] }));
+  assert.deepEqual(readViewState('old', session), { panel: null, panelWidth: 401, expandedDirectories: ['nested'] });
+  writeViewState('a', { panel: 'tree', panelWidth: 900, expandedDirectories: ['a'] }, session);
   assert.equal(readViewState('a', session).panel, null);
-  writeViewState('a', { panel: '', panelWidth: 900 }, session);
-  assert.equal(readViewState('a', session).panel, '');
   assert.equal(readViewState('a', session).panelWidth, 480);
   assert.equal(readViewState('b', session).panelWidth, 401);
-});
-
-test('closing the legacy inspector without an explicit tree decision restores the tree', () => {
-  viewport(1280);
-  const session = storage();
-  session.setItem('cad-viewer:directory-session:v1', JSON.stringify({ version: 1, fileSheetOpen: false }));
-  assert.equal(readViewState('root', session).panel, 'tree');
 });
 
 test('a stale web view merges its renderer changes without reverting another view', () => {
@@ -59,10 +51,10 @@ test('a stale web view merges its renderer changes without reverting another vie
   writeViewState('root', baseline, session);
   writeViewState('root', { ...baseline, panel: 'tree', panelWidth: 420, expandedDirectories: ['parts'], renderers: { ...baseline.renderers, b: { camera: 'new-b' } } }, session, baseline);
   writeViewState('root', { ...baseline, renderers: { ...baseline.renderers, a: { camera: 'new-a' } } }, session, baseline);
-  assert.deepEqual(readViewState('root', session), { panel: 'tree', panelWidth: 420, expandedDirectories: ['parts'], renderers: { a: { camera: 'new-a' }, b: { camera: 'new-b' } } });
+  assert.deepEqual(readViewState('root', session), { panel: null, panelWidth: 420, expandedDirectories: ['parts'], renderers: { a: { camera: 'new-a' }, b: { camera: 'new-b' } } });
 });
 
-test('a retired theme panel restores the renderer default without resetting file state', () => {
+test('whatever panel was stored, a load restores the file state and opens the renderer default', () => {
   viewport(1280);
   const session = storage();
   const renderers = { '["part.step","cad"]': { version: 1, fileSession: { render: { enabled: true } } } };

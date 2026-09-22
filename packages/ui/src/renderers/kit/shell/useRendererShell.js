@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Camera, Pencil } from "lucide-react";
+import { Camera, Maximize2, Pencil } from "lucide-react";
 import { clonePerspectiveSnapshot } from "@hardcore/core/lib/perspective.js";
 import { VIEWER_SCENE_SCALE } from "@hardcore/core/lib/viewer/sceneScale.js";
 import { ViewerElementContext, useViewerHost, usePromptDestination } from "../../../host/context.js";
@@ -9,12 +9,10 @@ import { DrawingToolbar } from "../../../drawing/toolbar.jsx";
 import { sceneBackdropEdgeColor } from "../look/chromeBackdrop.js";
 import { useChromeBackdropColor } from "../look/useChromeBackdropColor.js";
 import { prefetchRenderStudio } from "../look/renderStudioChunk.js";
-import { fileStatusAlertKey } from "../status/loadAlerts.js";
-import { useFileActivityReport } from "../status/useFileActivityReport.js";
 import { CAD_DRAWING_DEFAULTS } from "../tools/draw/DrawingOverlay.jsx";
 import { normalizeOrbit } from "../tools/fullscreen/orbitPreferences.js";
 import { animationControlsHaveContent } from "../tools/playbar/ViewportAnimationBar.js";
-import { buildDisplaySettingsTab } from "../view-settings/DisplaySettingsTab.js";
+import { DisplaySettingsSection } from "../view-settings/DisplaySettingsSection.js";
 import { useAppliedViewSettings } from "../view-settings/useAppliedViewSettings.js";
 import { useViewSettings } from "../view-settings/useViewSettings.js";
 import { cameraForViewSettings, viewerDisplaySettingsForCamera } from "../view-settings/viewerDisplaySettings.js";
@@ -28,7 +26,7 @@ import { useViewerShortcuts } from "./useViewerShortcuts.js";
 export const SHELL_TOOL = Object.freeze({ DRAW: "draw" });
 
 const SESSION_SAVE_DELAY_MS = 180;
-const INSPECTOR_REVEAL_MIN_WIDTH_PX = 520;
+const PANEL_REVEAL_MIN_WIDTH_PX = 520;
 const EMPTY = Object.freeze({});
 
 /**
@@ -37,14 +35,14 @@ const EMPTY = Object.freeze({});
  * the rest and hands back one `shell` object for `<RendererShell>`:
  *
  *  - per-file state through the host (`state` / `onStateChange`): camera,
- *    Display settings, the open Inspector tab, the recorded tool, and one
- *    `renderer` slot that is the renderer's own;
+ *    Display settings, the recorded tool, and one `renderer` slot that is the
+ *    renderer's own;
  *  - Display settings: store, resolution against the renderer's FEATURES, the
- *    queued application to the viewport, and the Display tab;
+ *    queued application to the viewport, and the Display panel's content;
  *  - tools: the mode state machine and Draw's session, or none at all for a
  *    renderer whose viewport is the camera's alone;
- *  - the host contract: Inspector panel, navbar actions, prompt snapshots,
- *    clipboard screenshots, fullscreen, file activity, alerts, shortcuts;
+ *  - the host contract: the file's panels, navbar actions, prompt snapshots,
+ *    clipboard screenshots, fullscreen, alerts, shortcuts;
  *  - the live command surface, with the renderer's added and declined commands.
  *
  * @param {object} options
@@ -71,12 +69,9 @@ const EMPTY = Object.freeze({});
  *   `set` is given the mode `toolModes` decided. Omitted: the shell holds the state.
  * @param {import("../scene.js").KitScene | null} options.scene
  * @param {{ busy: boolean, updating?: boolean, progress?: object | null, alert?: object | null,
- *   warning?: object | null, editPending?: boolean, currentPreview?: boolean, finding?: boolean }} options.load  The
+ *   editPending?: boolean, currentPreview?: boolean, finding?: boolean }} options.load  The
  *   renderer's document load. `busy`: nothing to show yet. `updating`: a newer revision is loading behind the scene on
  *   screen. The rest are for a renderer whose document is more than a download — see `loadReport.js`.
- * @param {object} [options.fileStatus]  Extra fields for the chip beside the filename (`loadReport.js`): a live
- *   edit's state, what it is saved as, whether its preview is what is on screen, a degraded-view report, and
- *   `hasGeometry` for a scene that exists before its geometry is whole. Omitted: the shell derives all it can.
  * @param {object | null} [options.animation]  A playbar runtime (with its own `clock`), when the file has
  *   routines. The playbar is then always under the model; it is not a tool to take up and leave.
  * @param {{ commands?: Record<string, (...args: any[]) => void>, declined?: Record<string, string>,
@@ -93,7 +88,7 @@ const EMPTY = Object.freeze({});
  *   builder that speaks it, and then `promptReferences` may return that vocabulary instead — and such a
  *   renderer reports its live `selection` itself, in the prompt grammar, through `live.state`.
  * @param {{ active?: boolean, handle?: () => boolean }} [options.escape]  Escape, innermost first: `handle` returns
- *   true when it spent the key; otherwise the shell closes the alert dialog and the Inspector.
+ *   true when it spent the key; otherwise the shell closes the file's open panel.
  * @param {object | (() => object)} [options.rendererState]  The renderer's own slice of the per-file record. A
  *   FUNCTION is read when the record is written, never at render: state a renderer keeps outside React (a pose
  *   written per frame) is saved as it is at that moment, its last change before unmount included. Such a
@@ -120,15 +115,14 @@ const EMPTY = Object.freeze({});
  *   presenting. The shell always keeps this for its own report; this is for a renderer that must
  *   answer "is what is on screen the document I asked for" itself — a live preview deciding whether
  *   its own result has landed. Compare `key` with `shellPresentationKey(modelKey, revisionKey)`.
- * @param {object} [options.displayTabProps]  Extra Display tab props for sections the renderer's FEATURES opt into.
+ * @param {object} [options.displayProps]  Extra Display props for sections the renderer's FEATURES opt into.
  * @param {string} [options.sceneScaleMode]
  */
 export function useRendererShell({
   view, services, resource, modelKey, revisionKey = "", features, toolModes = null, tool = null, scene, load,
   viewSettings = null, viewerRef: providedViewerRef = null,
   animation = null, live = EMPTY, promptReferences = null, promptContext = createViewPromptContext,
-  fileStatus: fileStatusFields = EMPTY,
-  escape = EMPTY, rendererState = EMPTY, toolRestore = EMPTY, displayTabProps = EMPTY,
+  escape = EMPTY, rendererState = EMPTY, toolRestore = EMPTY, displayProps = EMPTY,
   onCameraSettled = null, preserveInteractionPixelRatio = false, runtimeLifecycle = null,
   onRuntimeAlert = null, onPresentationChange = null,
   sceneScaleMode = VIEWER_SCENE_SCALE.CAD
@@ -138,7 +132,7 @@ export function useRendererShell({
   const destination = usePromptDestination();
   const promptAvailable = destination.available;
   const composer = destination.kind === "composer";
-  const { fullscreen = false, openPanel = "", onPanelOpen, onChromeVisibilityChange, onActivityChange,
+  const { fullscreen = false, onFullscreenChange = null, openPanel = "", onPanelOpen, onChromeVisibilityChange,
     onNavigationActionsChange, onStateChange, appearance } = view;
   const colorScheme = appearance?.colorScheme === "dark" ? "dark" : "light";
   const previewMode = fullscreen;
@@ -173,7 +167,6 @@ export function useRendererShell({
     activePerspectiveRef.current = scoped;
     return scoped;
   });
-  const [inspectorTab, setInspectorTab] = useState(restored.inspectorTab);
   // "" is a renderer with no tools at all: there is no active tool to be in, and
   // nothing for a saved tab to record.
   const [ownToolMode, setOwnToolMode] = useState(() => (toolModes ? toolModes.restore(restored.tool, toolRestore) : ""));
@@ -185,7 +178,7 @@ export function useRendererShell({
   const latestRecord = useRef(null);
   latestRecord.current = () => writeShellState({
     camera: activePerspectiveRef.current, display: viewSettingsStore.getSnapshot().display,
-    inspectorTab, tool: toolModes ? toolModes.persisted(toolMode) : "",
+    tool: toolModes ? toolModes.persisted(toolMode) : "",
     renderer: typeof rendererState === "function" ? rendererState() : rendererState
   });
   const saveTimer = useRef(0);
@@ -201,7 +194,7 @@ export function useRendererShell({
     window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(flushSession, SESSION_SAVE_DELAY_MS);
   }, [flushSession]);
-  useEffect(() => { scheduleSessionSave(); }, [displaySettings, inspectorTab, toolMode, rendererState, scheduleSessionSave]);
+  useEffect(() => { scheduleSessionSave(); }, [displaySettings, toolMode, rendererState, scheduleSessionSave]);
   useEffect(() => () => flushSession(), [flushSession]);
 
   // Stable across renders: the viewport keeps it in a ref for the life of the runtime.
@@ -227,19 +220,21 @@ export function useRendererShell({
 
   // ---- host chrome ----------------------------------------------------------
   useEffect(() => { onChromeVisibilityChange?.(!previewMode); }, [onChromeVisibilityChange, previewMode]);
+  // The file's panels are the host's (its nav row is their tab strip); the shell draws the
+  // one that is open. `revealFilePanel` is for something in the viewport with details to
+  // show (a pick): it opens the file's own panel, where there is room for it beside the model.
   const panelRef = useRef({ openPanel, onPanelOpen });
   panelRef.current = { openPanel, onPanelOpen };
-  const inspectorOpen = openPanel === CAD_PANEL.fileSheet;
-  const setInspectorOpen = useCallback((value) => {
-    const current = panelRef.current.openPanel === CAD_PANEL.fileSheet;
-    const next = typeof value === "function" ? value(current) : value;
-    if (next !== current) panelRef.current.onPanelOpen?.(next ? CAD_PANEL.fileSheet : "");
+  const panelOpen = openPanel === CAD_PANEL.file || openPanel === CAD_PANEL.display;
+  const closePanel = useCallback(() => {
+    const current = panelRef.current.openPanel;
+    if (current === CAD_PANEL.file || current === CAD_PANEL.display) panelRef.current.onPanelOpen?.("");
   }, []);
-  const revealInspectorTab = useCallback((tab) => {
+  const revealFilePanel = useCallback(() => {
     // Below this width the panel covers the model it was asked about, so it stays the person's to open.
-    if (window.matchMedia?.(`(min-width: ${INSPECTOR_REVEAL_MIN_WIDTH_PX}px)`)?.matches ?? true) setInspectorOpen(true);
-    setInspectorTab(String(tab || ""));
-  }, [setInspectorOpen]);
+    if (!(window.matchMedia?.(`(min-width: ${PANEL_REVEAL_MIN_WIDTH_PX}px)`)?.matches ?? true)) return;
+    if (panelRef.current.openPanel !== CAD_PANEL.file) panelRef.current.onPanelOpen?.(CAD_PANEL.file);
+  }, []);
   const chromeBackdropColor = useChromeBackdropColor(colorScheme === "dark");
   const sceneBackdrop = useMemo(
     () => resolvedScene.view.background.enabled && resolvedScene.view.background.opacity === 1
@@ -255,10 +250,9 @@ export function useRendererShell({
   const [hostElement, setHostElement] = useState(null);
   useEffect(() => { setHostElement(hostRef.current); }, []);
 
-  // ---- loading, alerts, activity -------------------------------------------
+  // ---- loading and alerts ---------------------------------------------------
   const [copyStatus, setCopyStatus] = useState("");
   const [screenshotStatus, setScreenshotStatus] = useState("");
-  const [viewerAlertOpen, setViewerAlertOpen] = useState(false);
   const [ownRuntimeAlert, setOwnRuntimeAlert] = useState(null);
   // A renderer that composes the viewport's alert into its own keeps that state; the shell
   // then holds none, so the composed `load.alert` is not counted a second time here.
@@ -284,19 +278,10 @@ export function useRendererShell({
   const completedView = useRef(false);
   useEffect(() => { if (hasContent && !presentationPending) completedView.current = true; }, [hasContent, presentationPending]);
   const viewerAlert = runtimeAlert?.blocking ? runtimeAlert : viewerLoading ? null : load.alert || runtimeAlert || null;
-  const { loading, fileStatus, fileStatusAlert } = shellLoadReport({
-    load, fileStatus: fileStatusFields,
-    hasFile: Boolean(modelKey), alert: viewerAlert, busy: presentationPending,
-    previousView: completedView.current && hasContent, hasGeometry: hasContent,
-    renderMode: rendering, preparing: presentationPending && !viewerLoading
+  const loading = shellLoadReport({
+    load, alert: viewerAlert, busy: presentationPending,
+    previousView: completedView.current && hasContent, preparing: presentationPending && !viewerLoading
   });
-  const alertKey = fileStatusAlertKey(modelKey, fileStatusAlert);
-  useEffect(() => { setViewerAlertOpen(false); }, [alertKey]);
-  const activity = useMemo(() => fileStatus ? {
-    loading: fileStatus.busy === true, label: fileStatus.label, title: fileStatus.title, tone: fileStatus.tone,
-    onActivate: fileStatusAlert ? () => setViewerAlertOpen(true) : undefined
-  } : null, [fileStatus?.busy, fileStatus?.label, fileStatus?.title, fileStatus?.tone, Boolean(fileStatusAlert)]);
-  useFileActivityReport(activity, onActivityChange);
 
   // ---- tools ----------------------------------------------------------------
   const idle = viewerLoading || !scene;
@@ -358,11 +343,10 @@ export function useRendererShell({
   escapeRef.current = escape.handle;
   useViewerShortcuts({
     viewerElement, previewMode, copyStatus, screenshotStatus, setCopyStatus, setScreenshotStatus,
-    escapeActive: Boolean(viewerAlertOpen || inspectorOpen || escape.active),
+    escapeActive: Boolean(panelOpen || escape.active),
     onEscape() {
       if (escapeRef.current?.() === true) return;
-      setViewerAlertOpen(false);
-      setInspectorOpen(false);
+      closePanel();
     }
   });
 
@@ -430,14 +414,14 @@ export function useRendererShell({
   }, [liveBinding, commandNames]);
 
   // ---- what the frame and the renderer read ---------------------------------
-  const displayTab = buildDisplaySettingsTab({
-    features, viewSettings: displaySettings, hostAppearance: colorScheme, lightingQuality: "preview",
-    resolvedView: desiredScene.view, onViewSettingsPatch: viewSettingsStore.patch,
-    onGroupEnabledChange: viewSettingsStore.setEnabled, onModeChange: viewSettingsStore.selectPreset,
-    onViewReset: viewSettingsStore.reset,
+  // The Display panel's content: every renderer's, built here from its display settings.
+  const display = <DisplaySettingsSection
+    features={features} viewSettings={displaySettings} hostAppearance={colorScheme} lightingQuality="preview"
+    resolvedView={desiredScene.view} onViewSettingsPatch={viewSettingsStore.patch}
+    onGroupEnabledChange={viewSettingsStore.setEnabled} onModeChange={viewSettingsStore.selectPreset}
+    onViewReset={viewSettingsStore.reset}
     // What only an opted-in section reads (its bounds, its status): the renderer that opted in supplies it.
-    ...displayTabProps
-  });
+    {...displayProps} />;
   const stripTool = ({ id, label, icon, ...rest }) => ({
     id, label, icon, active: !previewMode && toolMode === id, disabled: idle, onSelect: () => selectTool(id), ...rest
   });
@@ -445,24 +429,21 @@ export function useRendererShell({
     /** A tool of the renderer's own: `{ id, label, icon }` plus anything the strip reads. */
     own: stripTool,
     draw: stripTool({ id: SHELL_TOOL.DRAW, label: "Draw", icon: <Pencil className="size-3" strokeWidth={2} aria-hidden="true" />,
-      subToolbar: drawToolActive ? <DrawingToolbar drawing={drawing} /> : null })
+      subToolbar: drawToolActive ? <DrawingToolbar drawing={drawing} /> : null }),
+    /** The host's fullscreen, when this renderer was handed it: an act, not a mode to be in. */
+    fullscreen: onFullscreenChange ? { id: "fullscreen", label: "Fullscreen", disabled: idle,
+      icon: <Maximize2 className="size-3" strokeWidth={2} aria-hidden="true" />, onSelect: () => onFullscreenChange(true) } : null
   };
 
   return {
     // Renderer-facing.
-    toolMode, selectTool, tools, displayTab, idle, previewMode, rendering, resolvedScene, viewerRef,
+    toolMode, selectTool, tools, display, idle, previewMode, rendering, resolvedScene, viewerRef, openPanel,
     setCopyStatus, setScreenshotStatus, capture, requestRender: () => viewerRef.current?.requestRender?.(),
-    // Put the alert dialog away. The shell closes it whenever the alert behind it changes; this
-    // is for a renderer with a reason of its own (taking up a tool, say).
-    dismissAlert: () => setViewerAlertOpen(false),
     // The scene moved its own bounds: lighting, shadows and the floor follow, with no React render.
     syncSceneBounds: () => viewerRef.current?.syncSceneBounds?.(),
     // State the renderer keeps outside React changed: write the record soon (and on unmount).
     scheduleStateSave: scheduleSessionSave,
-    // The Inspector is the host's panel. `reveal(tab)` is for something in the viewport that
-    // has details to show (a pick): it turns to the tab, and opens the panel where there
-    // is room for it beside the model.
-    inspector: { open: inspectorOpen, setOpen: setInspectorOpen, tab: inspectorTab, setTab: setInspectorTab, reveal: revealInspectorTab },
+    revealFilePanel,
     // Frame-facing (RendererShell).
     frame: {
       view, hostRef, hostElement, viewerElement, sceneBackdrop, colorScheme, modelKey, presentationKey, sceneScaleMode, scene,
@@ -471,9 +452,8 @@ export function useRendererShell({
       preserveInteractionPixelRatio: preserveInteractionPixelRatio === true,
       runtimeLifecycle: stableRuntimeLifecycle,
       previewMode, previewOrbitSpeed, setPreviewOrbitSpeed, viewerLoading, loading, presentationState,
-      handlePresentationChange, viewerAlert, fileStatusAlert, viewerAlertOpen, setViewerAlertOpen, setRuntimeAlert,
-      drawToolActive, drawing, animationAvailable, animation, composer, capture,
-      inspectorOpen, setInspectorOpen, inspectorTab, setInspectorTab,
+      handlePresentationChange, viewerAlert, setRuntimeAlert,
+      drawToolActive, drawing, animationAvailable, animation, composer, capture, openPanel, display,
       copyStatus, screenshotStatus, setCopyStatus, setScreenshotStatus
     }
   };

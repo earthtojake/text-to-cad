@@ -1,7 +1,7 @@
 # The STEP browser-test fixture
 
 What a browser test has to serve to open one STEP in the viewer, and nothing
-else. `CadRenderer.browser.test.mjs` serves it through
+else. `StepRenderer.browser.test.mjs` serves it through
 `renderers/harness/stepScenario.mjs`.
 
 The model is `hinge_block`: a 20 × 20 × 10 mm **base** in `#3A6EA5` with a Ø6 mm
@@ -12,7 +12,7 @@ one revolute mate. Every property is there for a test:
 | --- | --- |
 | two parts, two distinct colours | a part's pixels can be told from the other's, so "hidden", "exploded" and "posed" are measurements rather than guesses about total ink |
 | the bore | a cylindrical face beside planar ones, so a face pick has something to report a diameter for, and the modeling tree a cut feature to recognise |
-| one revolute mate `hinge` (0…90°) | the Kinematics tab, the Pose tool and its one knob |
+| one revolute mate `hinge` (0…90°) | the panel's Position section, the Position tool and its one knob |
 | one named pose `open` | the named-pose jump |
 | one routine `swing` | the Animate tool and its playbar |
 
@@ -39,7 +39,7 @@ viewer never fetches it: the catalog names a store view, not the document.
 `read_source_sidecar` refuses a sidecar whose `schemaVersion` is not current or
 whose `documentHash` is not the digest of the STEP bytes being resolved, and the
 catalog entry then carries no `sourceSidecar` — so the file silently has no
-Kinematics tab and no Animate tool. This one is bound: `schemaVersion` is 9 and
+Position section and no Animate tool. This one is bound: `schemaVersion` is 9 and
 `documentHash` is
 `3c1e7edf8593d6019706ff355445199971b740e2bd0661eda6ade9b961082f58`, the SHA-256
 of the generated `hinge_block.step`, which is also the `documentHash` in

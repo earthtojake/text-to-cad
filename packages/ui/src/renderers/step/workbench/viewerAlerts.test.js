@@ -4,7 +4,6 @@ import {
   buildViewerEditAlert,
   buildViewerMeshAlert,
 } from "./viewerAlerts.js";
-import { fileStatusAlertKey, resolveFileStatusAlert } from "../../kit/status/loadAlerts.js";
 
 const step = { file: "STEP/moonwatch.step", kind: "part" };
 
@@ -174,39 +173,6 @@ test("edit worker failures are distinct from invalid-model failures", () => {
   assert.equal(invalid.summary, "Open failed");
   assert.match(invalid.recovery, /correct the model/i);
   assert.equal(invalid.reason, "Fillet radius is too large");
-});
-
-// A non-blocking advisory beside the filename: the animation a document declares
-// could not be loaded, so the model is shown with no routine to play.
-const animationAlert = (detail) => ({
-  severity: "warning", blocking: false, summary: "Animation unavailable", title: "Animation unavailable",
-  message: "The geometry is visible, but its animation could not be loaded, so the Animate tool is not offered.",
-  details: `File: ${step.file}\n${detail}`,
-});
-
-test("file status alerts stay unavailable while the displayed status is busy", () => {
-  const annotation = animationAlert("invalid settings");
-  assert.equal(resolveFileStatusAlert({ label: "Opening", tone: "info", busy: true }, null, annotation), null);
-  assert.equal(resolveFileStatusAlert(null, { severity: "error", title: "Failed" }), null);
-
-  assert.equal(
-    resolveFileStatusAlert({ label: "Animation unavailable", title: annotation.message, tone: "warning", busy: false }, null, annotation),
-    annotation
-  );
-});
-
-test("file status alert identity tracks warning diagnostics and selected file", () => {
-  const first = animationAlert("schema 1");
-  const changed = animationAlert("schema 2");
-  assert.equal(fileStatusAlertKey("STEP/moonwatch.step", null), "");
-  assert.notEqual(
-    fileStatusAlertKey("STEP/moonwatch.step", first),
-    fileStatusAlertKey("STEP/moonwatch.step", changed)
-  );
-  assert.notEqual(
-    fileStatusAlertKey("STEP/moonwatch.step", first),
-    fileStatusAlertKey("STEP/other.step", first)
-  );
 });
 
 test("progressive geometry is valid while loading but cannot mask a failed first load", () => {

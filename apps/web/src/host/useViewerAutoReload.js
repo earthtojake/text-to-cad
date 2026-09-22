@@ -1,9 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import {
-  AUTO_RELOAD_PHASE,
-  autoReloadIsPending,
-  nextAutoReloadState
-} from "./viewerAutoReload.js";
+import { useEffect, useRef } from "react";
+import { AUTO_RELOAD_PHASE, nextAutoReloadState } from "./viewerAutoReload.js";
 
 /**
  * Watch a development backend that restarts itself, and reload when it does.
@@ -13,7 +9,6 @@ import {
  * `viewerAutoReload.js`; this is the timer, the fetch and the reload.
  *
  * @param {{autoReload?: boolean, identityToken?: string}|null} serverInfo
- * @returns {boolean} true while the page should say the viewer is reloading
  */
 export function useViewerAutoReload(serverInfo, {
   fetchServerInfo = defaultFetchServerInfo,
@@ -22,7 +17,6 @@ export function useViewerAutoReload(serverInfo, {
   schedule = (run, delayMs) => setTimeout(run, delayMs),
   cancel = (handle) => clearTimeout(handle)
 } = {}) {
-  const [pending, setPending] = useState(false);
   const optionsRef = useRef(null);
   optionsRef.current = { fetchServerInfo, reload, now, schedule, cancel };
   const enabled = Boolean(serverInfo?.autoReload);
@@ -30,7 +24,6 @@ export function useViewerAutoReload(serverInfo, {
 
   useEffect(() => {
     if (!enabled || !baseline) {
-      setPending(false);
       return undefined;
     }
     let active = true;
@@ -45,7 +38,6 @@ export function useViewerAutoReload(serverInfo, {
       const moment = optionsRef.current.now();
       const next = nextAutoReloadState(state, poll, { baseline, now: moment });
       state = { phase: next.phase, since: next.since };
-      setPending(autoReloadIsPending(state, moment));
       if (next.reload) {
         active = false;
         optionsRef.current.reload();
@@ -62,8 +54,6 @@ export function useViewerAutoReload(serverInfo, {
       }
     };
   }, [enabled, baseline]);
-
-  return pending;
 }
 
 async function defaultFetchServerInfo() {

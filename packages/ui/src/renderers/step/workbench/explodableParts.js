@@ -1,5 +1,5 @@
 // Explode separates a model's parts: with one part (or none that can be placed)
-// there is nothing to separate, and the Display tab's slider says so.
+// there is nothing to separate, and the Display panel's slider says so.
 export function explodablePartCount(meshData) {
   const parts = Array.isArray(meshData?.parts) ? meshData.parts : [];
   return parts.filter((part) => part && (part.bounds || part.sourceBounds) &&

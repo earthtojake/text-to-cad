@@ -3,7 +3,7 @@ import test from "node:test";
 import { EDGELESS_VIEW_FEATURES, resolveViewSettings, viewSettingsAreCustom } from "@hardcore/core/common/viewSettings.js";
 import { elements, render } from "../../../../scripts/reactHarness.mjs";
 import { DISPLAY_MODE_OPTIONS } from "./DisplayModeOptions.js";
-import { buildDisplaySettingsTab, DisplaySettingsSection } from "./DisplaySettingsTab.js";
+import { DisplaySettingsSection } from "./DisplaySettingsSection.js";
 import { createViewSettingsStore } from "./viewSettingsStore.js";
 
 function panel(input = {}) {
@@ -18,7 +18,6 @@ function panel(input = {}) {
 const labelled = (tree, label) => elements(tree).find(node => node.props.label === label);
 
 test("View has the same feature groups for every preset, with Render second", () => {
-  assert.equal(buildDisplaySettingsTab({}).title, "Display");
   assert.deepEqual(DISPLAY_MODE_OPTIONS.map(option => option.value), ["solid", "render", "xray", "hidden-line", "wireframe"]);
   for (const mode of DISPLAY_MODE_OPTIONS.map(option => option.value)) {
     const view = panel({ mode });

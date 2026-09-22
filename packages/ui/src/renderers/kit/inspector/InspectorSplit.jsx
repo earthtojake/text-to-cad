@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 
-// The details pane opens at a third of the tab. On a short screen a third is too little
+// The details pane opens at a third of its section. On a short screen a third is too little
 // to read, so it never goes below MIN_DETAILS — nor above what leaves the tree MIN_TREE.
 const DEFAULT_RATIO = 1 / 3;
 const MIN_DETAILS = '11rem';

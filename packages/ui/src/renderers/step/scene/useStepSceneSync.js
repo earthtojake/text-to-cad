@@ -245,7 +245,6 @@ export function useStepSceneSync(layers) {
         onWarning: (warning) => {
           viewerAlertChangeRef.current?.({
             severity: "warning",
-            compact: true,
             title: warning?.title || "CAD scene warning",
             message: warning?.message || "The CAD scene renderer reported a warning."
           });

@@ -1,5 +1,5 @@
 /**
- * What the Pose tool can take hold of in a STEP with kinematics. (A robot
+ * What the Position tool can take hold of in a STEP with kinematics. (A robot
  * description has its own adapter, in its own renderer.)
  *
  * The adapter turns a definition and its CURRENT pose into the kit's plain
@@ -10,7 +10,7 @@
  *
  * `pivot` rides the moving part (a slider's pivot is where its child now is),
  * `toward` is a point on the child that gives a turning joint's arm its
- * direction, and `onChange` is the Kinematics tab's own change handler, so
+ * direction, and `onChange` is the Position section's own change handler, so
  * limits, couplings and persistence are decided in one place. The viewer
  * consumes the list and knows nothing about the format.
  */

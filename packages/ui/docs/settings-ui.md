@@ -1,9 +1,11 @@
 # File-viewer settings design system
 
-This is the binding contract for settings in shared file-viewer tabs, including
-Display and Kinematics. Use the primitives in
-[`FileSheet.js`](../src/renderers/kit/inspector/FileSheet.js), and the
-fixed strip in [`FileSheetTabbedSurface.js`](../src/renderers/kit/inspector/FileSheetTabbedSurface.js).
+This is the binding contract for settings in shared file-viewer panels, including
+Display and a file's Position section. Use the primitives in
+[`FileSheet.js`](../src/renderers/kit/inspector/FileSheet.js), and stack a file's
+own panel with [`FilePanelSections.jsx`](../src/renderers/kit/inspector/FilePanelSections.jsx).
+A panel has no tabs: the nav row's toggles are the tab strip (the file's own
+panel, Display, the file tree), and a panel is one column of sections.
 Extend a shared primitive when a new control shape is needed. Do not recreate
 rows or section behavior inside each renderer. Environmental effects belong to
 the host, per [viewer-host.md](viewer-host.md); these controls work in either app.
@@ -15,13 +17,13 @@ put the display groups inside another “Display settings” accordion.
 
 | Kind | Primitive | Behavior | Examples |
 | --- | --- | --- | --- |
-| Always available | `FileSheetStaticSection` | Always open; no plus/minus, hover treatment, or enable switch | Mode, Surfaces, Pose, Joints |
+| Always available | `FileSheetStaticSection` in Display; `FilePanelSections` in a file's own panel (the same heading) | Always open; no plus/minus, hover treatment, or enable switch | Mode, Surfaces, Features, Position, Issues, Links |
 | Optional feature | `FileSheetGatedSection` | Expanded means enabled; collapsed means disabled | Explode, Clip, Edges, Grid, Axes, Lighting, Background, Floor |
 
 A section is gated only when its entire feature has a meaningful disabled state.
 Surfaces stays open because the group configures the model's basic presentation;
-its style picker can still explicitly select Off. Pose and Joints are
-controls over authored motion, not optional display effects: neither collapses.
+its style picker can still explicitly select Off. Position holds controls over
+authored motion, not an optional display effect: it never collapses.
 
 For an optional feature:
 
@@ -53,14 +55,13 @@ geometry-manipulation actions out of this read-only panel.
 
 ## Density and spacing
 
-Use 8px horizontal gutters throughout. The tab strip also has 8px of top inset;
-its container is 28px high with 2px internal padding and 24px triggers. Tabs use
-the standard 13px text size, regular weight, and remain in a fixed order.
-The shared inspector/file-explorer column has a 256px minimum width so the full
-tab strip and zoom value fit without scrolling. Dragging narrower collapses the
-panel; reopening starts at 320px. Both panels use the same resize frame and rule.
+Use 8px horizontal gutters throughout. There is no tab strip inside a panel.
+The shared panel column has a 256px minimum width, so a Position section's joint
+sliders and their typed values fit without scrolling sideways. Dragging narrower
+collapses the panel; reopening starts at 320px. Every panel (the file tree, a
+file's own panel, Display) uses the same resize frame and rule.
 If the containing file view itself becomes narrower than the minimum, collapse
-the column as well. Collapsing never resets file, kinematics, or display state.
+the column as well. Collapsing never resets file, pose, or display state.
 
 Section headers are at least 28px high with regular 12px text. Controls follow
 the header directly, without extra top padding; expanded headers have no hover
@@ -128,7 +129,7 @@ Solid's basic display groups precede the effects disabled by default in Solid.
 Presets are batches of settings; controls do not branch on the mode name. An
 edit makes the selected value read muted **Custom**, which is not a menu option.
 **Reset** restores the currently selected preset's display defaults and disables
-Clip and Explode. It leaves Kinematics and camera pose unchanged. See
+Clip and Explode. It leaves the model's pose and the camera unchanged. See
 [render-mode.md](render-mode.md) for the grouped settings/CLI contract.
 
 The desired settings update immediately. Expensive changes can take longer to
@@ -138,9 +139,8 @@ indicator, cancellation, and presentation policy live in
 
 ## Framing
 
-There is NO zoom control. The Inspector header carries its tabs and nothing else,
-there is no percentage readout, no menu behind one, and no zoom toolbar over the
-viewport. Do not add one, and do not advertise keyboard shortcuts the viewer does
+There is NO zoom control. No panel carries one, there is no percentage readout,
+no menu behind one, and no zoom toolbar over the viewport. Do not add one, and do not advertise keyboard shortcuts the viewer does
 not implement. Zooming is the pointer's: wheel or pinch to zoom, drag to pan, and
 on a DXF double-click to fit.
 
@@ -152,44 +152,50 @@ from a view that has been driven off it.
 | Zoom to fit | STEP's viewport context menu — over a part, over the backdrop, and on every Features tree row | Frame the whole model again, without turning the camera. What the live `resetCamera` command does |
 | Zoom to selection | The same menu, disabled without a selection | Frame what is selected now |
 | Reset to default isometric view | The view cube's centre, in every 3D renderer | Frame the model AND return to the default direction — the only way back on a robot, a GLB or a mesh |
-| Display → Reset | The Display tab | Restore selected preset defaults and disable Clip/Explode; keep Kinematics and camera pose |
+| Display → Reset | The Display panel | Restore selected preset defaults and disable Clip/Explode; keep the model's pose and the camera |
 
 Framing the whole model is ONE act, so it is offered once and under one name.
-Restoring the model itself belongs to whoever owns it: the Kinematics tab's
-Reset for a pose, the Display tab's Reset for settings.
+Restoring the model itself belongs to whoever owns it: the Position section's
+Reset for a pose, the Display panel's Reset for settings.
 
-## Kinematics
+## Position
 
-The standard STEP strip is **Features | Kinematics | Display**. Include
-Kinematics only when the sidecar declares it. Detect Pose and Joints
-independently from their respective sidecar blocks (or the SRDF's group
-states), not from the file extension or the existence of the other block.
-Loading/error status for a requested block can be shown; absence of a block
-does not create empty controls. Animation has no section here: it is the
-Animate tool's own playbar, entirely outside this tab (see
+A STEP's own panel stacks **Features**, then **Position**, then **Issues**; a
+robot's stacks **Position**, then **Links**, then **SDF** for an `.sdf`. Include
+Position only when there is something to drive: a STEP whose sidecar declares
+kinematics, a robot with a joint a person can move. Detect the named poses and
+the joint values independently from their respective sidecar blocks (or the
+SRDF's group states), not from the file extension or the existence of the other
+block. Loading/error status for a requested block can be shown; absence of a
+block does not create empty controls. Animation has no section here: it is the
+Animate tool's own playbar, entirely outside this panel (see
 [Fullscreen presentation controls](#fullscreen-presentation-controls) for its
 transport, which the tool also shows at the bottom of the regular viewport).
 
-**Pose** is a permanent section containing only the named-pose dropdown,
-present only if named poses exist (a STEP sidecar's poses, an SRDF's group
-states). **Joints** is a separate permanent section below it, present only if
-joint values exist. Keep each DOF's label and unit: these are not
+Position is ONE section of rows, with no sections of its own inside it. First a
+**Pose** row, the label on the left and the named-pose dropdown right-aligned
+beside it (`KinematicsPoseRow`), present only if named poses exist (a STEP
+sidecar's poses, an SRDF's group states); then a row per joint value, present
+only if joint values exist. Keep each DOF's label and unit: these are not
 self-explanatory icons. Numeric DOFs use compact slider/value rows with 4px
 gaps and a label column capped at 96px; longer labels truncate to preserve
 slider space. Do not include a Copy button. Every pose write lands in the same
-frame — a named pose, a slider drag, a typed number, a Pose-tool knob and
+frame — a named pose, a slider drag, a typed number, a Position-tool knob and
 Reset — and none of them ease; motion over time is the Animate tool's, never
-this tab's.
+this section's.
 
-Place one **Reset** at the bottom of Kinematics. It restores authored joint
+Place one **Reset** at the bottom of Position. It restores authored joint
 values and, if a routine owns the pose, also stops playback and hands the pose
-back to Kinematics, so animation and a modified pose never disagree about
+back to Position, so animation and a modified pose never disagree about
 which one is in control after a reset. Display settings and camera remain
 unchanged.
 
 ## Fullscreen presentation controls
 
-`FullscreenToolbar` places the Animate tool's playbar (`ViewportAnimationBar`,
+Fullscreen is entered from the `Fullscreen` tool (`Maximize2`), the last item of
+a STEP's tool strip, which exists only where the host offers fullscreen (the web
+app does; the desktop app does not). The kit's `FullscreenToolbar`
+(`kit/tools/fullscreen/`) places the Animate tool's playbar (`ViewportAnimationBar`,
 the same transparent bar the regular viewport shows at bottom center while a
 routine plays) at the bottom center, with an Orbit-settings button and X at
 the top-right. Use shared 24px buttons and 12px icons without a toolbar
@@ -202,8 +208,8 @@ width and height to the viewport and scroll its contents when needed. It holds
 one permanent `FileSheetStaticSection`, **Orbit**: a compact speed slider,
 also untooltipped, plus numeric input (0–5×, slider steps of 0.05; 0 stops
 rotation). Persist this global preference through `CadPreferences`. Settings
-never changes the inspector's tab or opens its panel, and closing it does not
-disable animation.
+never opens or switches a file's panel, and closing it does not disable
+animation.
 
 Both control areas fade together after two seconds without pointer/wheel/keyboard
 activity. An open settings panel, a scrub gesture or keyboard focus keeps them
@@ -222,5 +228,5 @@ Native sliders and editable number fields must share one update path.
 New behavior must work with mouse and keyboard. Verify disabled/enabled
 semantics, preset stability, independently available kinematics blocks, empty and
 error states, and narrow panels. Test state transitions rather than exact class
-strings. The Display/Pose/Joints components are the reference consumers;
+strings. The Display and Position components are the reference consumers;
 legacy subsection primitives elsewhere are not the pattern for new settings.

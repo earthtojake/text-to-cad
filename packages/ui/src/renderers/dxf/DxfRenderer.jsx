@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Camera } from "lucide-react";
 import { cn } from "@hardcore/ui/utils";
 import { usePromptDestination, useViewerHost } from "../../host/context.js";
-import BlockingViewerAlert, { blockingViewerAlert } from "../kit/status/BlockingViewerAlert.jsx";
+import ViewerAlertCard from "../kit/status/ViewerAlertCard.jsx";
 import StatusToast from "../kit/status/StatusToast.js";
 import ViewerLoadingOverlay from "../kit/status/ViewerLoadingOverlay.js";
 import { attachLiveBinding } from "../kit/shell/liveBinding.js";
@@ -16,7 +16,7 @@ import { dxfViewStateRecord, readDxfViewState } from "./viewState.js";
  * A `.dxf` is a straight render: the drawing, on a canvas, and nothing else.
  *
  * No 3D, no fold preview, no thickness or material, no tools, no toolbar and no
- * sidebar — not an Inspector, not Display settings, not a layer list. A DXF is a
+ * panel — not a file panel, not Display settings, not a layer list. A DXF is a
  * finished 2D document; the questions those controls answered were about a
  * sheet-metal part the viewer was inventing from it.
  *
@@ -43,7 +43,7 @@ function DxfSurface({ view, data }) {
   const file = workspace.entry?.file || view.file.path;
   const payload = useDrawingPayload({ client: workspace.client, file, revision: workspace.resource.revision });
   const [status, setStatus] = useState("");
-  const { onReady, onChromeVisibilityChange, onNavigationActionsChange, onStateChange } = view;
+  const { onReady, onNavigationActionsChange, onStateChange } = view;
 
   // ---- the view this file was left at ---------------------------------------
   const [restored] = useState(() => readDxfViewState(view.state));
@@ -71,7 +71,6 @@ function DxfSurface({ view, data }) {
 
   // ---- host chrome -----------------------------------------------------------
   useEffect(() => { onReady?.(true); }, [onReady]);
-  useEffect(() => { onChromeVisibilityChange?.(!view.fullscreen); }, [onChromeVisibilityChange, view.fullscreen]);
 
   const alert = useMemo(() => {
     if (workspace.catalogError) {
@@ -84,7 +83,6 @@ function DxfSurface({ view, data }) {
     }
     return drawingLoadAlert(workspace.modelKey || file, payload.error);
   }, [workspace.catalogError, workspace.modelKey, file, payload.error]);
-  const blocking = blockingViewerAlert(alert, false);
   const empty = Boolean(payload.drawing) && !payload.drawing.bounds;
   const ready = Boolean(payload.drawing) && !payload.loading && !alert;
 
@@ -172,11 +170,11 @@ function DxfSurface({ view, data }) {
             This drawing has no geometry in its modelspace, so there is nothing to show.
           </p>
         ) : null}
-        <ViewerLoadingOverlay loading={{ opening: payload.loading && !blocking, progress: { label: "Reading drawing" } }}
-          previewMode={view.fullscreen} operationKey={file} />
-        <BlockingViewerAlert alert={blocking} onReload={view.reload} />
+        <ViewerLoadingOverlay loading={{ opening: payload.loading && !alert, progress: { label: "Reading drawing" } }}
+          operationKey={file} />
+        <ViewerAlertCard alert={alert} hasContent={false} onReload={view.reload} />
       </div>
-      <StatusToast copyStatus={status} previewMode={view.fullscreen} onClear={() => setStatus("")} />
+      <StatusToast copyStatus={status} onClear={() => setStatus("")} />
     </div>
   );
 }

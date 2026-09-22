@@ -169,11 +169,14 @@ export function FileSheetSection({
 
 // A properties-panel section that is always visible: no disclosure affordance
 // or hover treatment. Use for primary controls such as Mode and Projection.
+/** A section heading: 28px, regular 12px, never a control (`docs/settings-ui.md`). */
+export const FILE_SHEET_SECTION_HEADING_CLASSES = "flex min-h-7 items-center px-2 py-1 text-xs font-normal leading-4 text-foreground";
+
 export function FileSheetStaticSection({ title, children }) {
   const titleId = useId();
   return (
     <section aria-labelledby={titleId} className="border-b border-border pb-2">
-      <h3 id={titleId} className="flex min-h-7 items-center px-2 py-1 text-xs font-normal leading-4 text-foreground">{title}</h3>
+      <h3 id={titleId} className={FILE_SHEET_SECTION_HEADING_CLASSES}>{title}</h3>
       <div className="space-y-1">{children}</div>
     </section>
   );
@@ -998,11 +1001,10 @@ function normalizeFileSheetWidth(width) {
 
 export default function FileSheet({
   open,
+  hidden = false,
   title,
   isDesktop,
   width,
-  onOpenChange,
-  onStartResize,
   bodyClassName,
   scrollBody = true,
   children
@@ -1037,6 +1039,6 @@ export default function FileSheet({
 
   // FileViewer owns the single column and its dimensions. Wait for its slot.
   return open && hostPanelSlot
-    ? createPortal(<div className="flex h-full min-h-0 flex-col" data-file-sheet={title || ""}>{sheetBody}</div>, hostPanelSlot)
+    ? createPortal(<div className="flex h-full min-h-0 flex-col" hidden={hidden} data-file-sheet={title || ""}>{sheetBody}</div>, hostPanelSlot)
     : null;
 }

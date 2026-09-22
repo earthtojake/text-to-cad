@@ -90,7 +90,6 @@ export interface PrepareContext {
   refresh?: boolean;
 }
 export interface PreparedDocument<T> { data: T; text?: TextDocument; dispose?: () => void }
-export interface FileActivity { loading: boolean; label?: string; title?: string; tone?: "neutral" | "info" | "warning" | "error"; onActivate?: () => void }
 /** Renderer-owned actions shown before the common panel buttons. Never persisted. */
 export interface FileNavigationAction {
   id: string;
@@ -103,8 +102,11 @@ export interface FileNavigationAction {
 export interface RendererViewProps {
   /** Host-controlled presentation; disables editing/picking tools, not document state. */
   fullscreen?: boolean;
-  /** Ask the host to leave fullscreen from renderer-owned presentation controls. */
-  onExitFullscreen?: () => void;
+  /**
+   * Enter or leave fullscreen. Given only to a renderer that declares `fullscreen` and only
+   * by a host that has a fullscreen to offer, so its absence is the whole "no fullscreen here".
+   */
+  onFullscreenChange?: (fullscreen: boolean) => void;
   onNavigationActionsChange?: (actions: readonly FileNavigationAction[]) => void;
   file: FileMetadata;
   source: FileSource;
@@ -115,8 +117,6 @@ export interface RendererViewProps {
   onReady: (ready: boolean) => void;
   /** Preview modes can hide the common navigation and panel column. */
   onChromeVisibilityChange: (visible: boolean) => void;
-  /** Renderer work that a host may present beside the filename. */
-  onActivityChange: (activity: FileActivity | null) => void;
   onOpenFile: (path: string, options?: { target: "current" | "new" }) => void;
   appearance: { colorScheme: "light" | "dark" };
   state: JsonValue | undefined;
@@ -129,13 +129,19 @@ export interface FileRendererDefinition<T> {
   priority: number;
   matches: (file: FileMetadata) => boolean;
   fallback?: boolean;
-  panels?: (context: { open: string; ready: boolean; file: FileMetadata }) => FilePanel[];
+  /** Offers fullscreen: the host's `onFullscreenChange` reaches this renderer and no other. */
+  fullscreen?: boolean;
+  /** The nav row's panels for this file, which can depend on what `prepare` found (`data`). */
+  panels?: (context: PanelContext & { data: T }) => FilePanel[];
   prepare: (context: PrepareContext) => Promise<PreparedDocument<T>>;
   load: () => Promise<{ default: ComponentType<FileRendererProps<T>> }>;
 }
+export interface PanelContext { open: string; ready: boolean; file: FileMetadata }
 /** The typed payload is closed over by defineFileRenderer, never erased to `any`. */
 export interface PreparedRenderer {
   Component: ComponentType<RendererViewProps>;
+  /** The definition's panels over this document's prepared data. */
+  panels?: (context: PanelContext) => FilePanel[];
   text?: TextDocument;
   dispose?: () => void;
 }
@@ -144,13 +150,14 @@ export interface RendererRegistration {
   priority: number;
   matches: (file: FileMetadata) => boolean;
   fallback?: boolean;
-  panels?: FileRendererDefinition<never>["panels"];
+  fullscreen?: boolean;
   prepare: (context: PrepareContext) => Promise<PreparedRenderer>;
 }
 export interface FileViewerProps {
   /** The app owns fullscreen state and its surrounding chrome. */
   fullscreen?: boolean;
-  onExitFullscreen?: () => void;
+  /** The host's fullscreen, offered to a renderer that declares one; omitted, there is none. */
+  onFullscreenChange?: (fullscreen: boolean) => void;
   file: string | FileMetadata | null;
   host: ViewerHost;
   renderers: readonly RendererRegistration[];
@@ -163,5 +170,5 @@ export interface FileViewerProps {
   narrowCrumbs?: boolean;
   reveal?: { path: string; directory: boolean; nonce?: number } | null;
   onError?: (error: Error) => void;
-  presentation?: { empty?: ReactNode; loading?: ReactNode; error?: (message: string) => ReactNode; activity?: (activity: FileActivity | null) => ReactNode };
+  presentation?: { empty?: ReactNode; loading?: ReactNode; error?: (message: string) => ReactNode };
 }

@@ -134,11 +134,15 @@ test("an agent in a worktree opens the file it wrote there, and the explorer roo
   expect(openFile!.status, JSON.stringify(openFile!.output)).toBe("completed");
 
   // And the explorer opened it: a tab named after the file, the worktree in
-  // the breadcrumb, the file's own bytes, and the worktree's tree beside it.
+  // the breadcrumb, the file's own bytes, and the worktree's tree one press away.
   await expect(page.getByRole("tab", { name: /hello\.txt/ })).toBeVisible({ timeout: 15_000 });
   await expect(page.locator("[data-crumb=worktree]")).toContainText("model-the-wrist");
   await expect(page.locator("[data-crumb=worktree]")).toHaveAttribute("title", worktree);
   await expect(page.locator(".monaco-editor").first()).toContainText("hello", { timeout: 15_000 });
+  // Opened by a command, the file opens on its own default, which for a document is no
+  // panel: the tree is the person's to take up, and it is the worktree's.
+  await expect(page.getByTestId("tree-toggle")).toHaveAttribute("aria-pressed", "false");
+  await page.getByTestId("tree-toggle").click();
   await expect(page.locator('[data-path="tracked.txt"]')).toBeVisible();
   await expect(page.locator('[data-path="hello.txt"]')).toBeVisible();
 

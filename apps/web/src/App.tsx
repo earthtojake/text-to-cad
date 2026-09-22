@@ -20,7 +20,6 @@ import { createWebPromptContext } from './host/promptContext';
 import { readViewState, writeViewState } from './persistence/fileViewer';
 import { createWebCadPreferences } from './persistence/cadPreferences';
 import ViewerTopBar from './client/components/workbench/ViewerTopBar.jsx';
-import FilenameLoadStatus from './FilenameLoadStatus';
 import { cadFileParamForEntry, findEntryByUrlPath, normalizeCadFileQueryParam, readCadParam, readDefaultCadParam, writeCadParam } from './client/workbench/sidebar.js';
 import { applyColorSchemeToDocument, readColorSchemePreference, resolveColorSchemeMode, writeColorSchemePreference } from './client/ui/colorScheme.js';
 
@@ -38,7 +37,7 @@ function RootView({ client, server }: { client: CadClient; server: CadServerInfo
     return () => window.removeEventListener("keydown", exit);
   }, [fullscreen]);
   const [copyStatus, setCopyStatus] = useState('');
-  const viewerReloading = useViewerAutoReload(server, { fetchServerInfo: () => client.serverInfo({ fresh: true }).then(info => ({ ok: true, identityToken: String(info.identityToken || '') }), () => ({ ok: false })) });
+  useViewerAutoReload(server, { fetchServerInfo: () => client.serverInfo({ fresh: true }).then(info => ({ ok: true, identityToken: String(info.identityToken || '') }), () => ({ ok: false })) });
   const source = useMemo(() => createWebFileSource(client, server), [client, server]);
   const promptContext = useMemo(() => createWebPromptContext(source.id, server.rootPath || '', browserClipboard, browserClipboardSupportsImages()), [source.id, server.rootPath]);
   const fileActions = useMemo(() => createWebFileActions(client, server, { promptContext, clipboard: browserClipboard, onCopyStatus: setCopyStatus }), [client, server, promptContext]);
@@ -91,28 +90,32 @@ function RootView({ client, server }: { client: CadClient; server: CadServerInfo
     writeViewState(source.id, state, sessionStorage, publishedState.current);
     publishedState.current = state;
   }, [state, source.id]);
-  const open = useCallback((path: string) => {
+  const shownFile = useRef(file);
+  shownFile.current = file;
+  const open = useCallback((path: string, options?: { panel?: string }) => {
     const entry = findEntryByUrlPath(client.getSnapshot().entries, path);
     if (!entry) return;
     const next = normalizeCadFileQueryParam(cadFileParamForEntry(entry));
-    writeCadParam(next, { history: 'push' });
-    setFile(next);
-    // The original compact surface clears the tree after selecting its file.
-    if (window.innerWidth < 520) setState(previous => previous.panel === 'tree' || previous.panel === null ? { ...previous, panel: '' } : previous);
+    if (next !== shownFile.current) {
+      writeCadParam(next, { history: 'push' });
+      setFile(next);
+    } else if (options?.panel === undefined) return;
+    // The file opens with the panel it was opened with (the tree, for one picked there) or with
+    // its own default. The compact surface gives the model the room: nothing opens there.
+    setState(previous => ({ ...previous, panel: window.innerWidth < 520 ? '' : options?.panel ?? null }));
   }, [client]);
   const host = useMemo<ViewerHost>(() => ({
     files: source, fileActions, clipboard: browserClipboard, promptContext,
     navigation: { openFile: open }, environment: appearance, lifecycle: browserLifecycle,
   }), [source, fileActions, promptContext, open, appearance]);
   const empty = <div className="pointer-events-auto absolute inset-0 z-10 bg-background"><EmptyState icon={FileText} title="No file open" description="Pick one from the tree on the right, or filter by name." /></div>;
-  return <div className="flex h-svh flex-col overflow-hidden"><ViewerTopBar fullscreen={fullscreen} onFullscreenChange={setFullscreen} fullscreenAvailable={Boolean(selectedEntry)} colorSchemePreference={colorSchemePreference} resolvedColorSchemeMode={appearance.colorScheme} onColorSchemePreferenceChange={changeColorScheme} /><div className="min-h-0 flex-1">
-    <FileViewer fullscreen={fullscreen} onExitFullscreen={() => setFullscreen(false)} file={file || null} host={host} renderers={renderers} state={state} onStateChange={setState} narrowCrumbs={false}
+  return <div className="flex h-svh flex-col overflow-hidden"><ViewerTopBar fullscreen={fullscreen} colorSchemePreference={colorSchemePreference} resolvedColorSchemeMode={appearance.colorScheme} onColorSchemePreferenceChange={changeColorScheme} /><div className="min-h-0 flex-1">
+    <FileViewer fullscreen={fullscreen} onFullscreenChange={setFullscreen} file={file || null} host={host} renderers={renderers} state={state} onStateChange={setState} narrowCrumbs={false}
       navigationPath={selectedEntry ? normalizeCadFileQueryParam(cadFileParamForEntry(selectedEntry)) : null}
       onError={error => setCopyStatus(error.message)} presentation={{
         empty: <div className="relative h-full">{empty}</div>,
         loading: <div className="relative h-full"><ViewerLoadingOverlay viewerLoading /></div>,
         error: () => <div className="relative h-full">{catalog.error ? empty : <EmptyCadBackdrop colorScheme={appearance.colorScheme}><MissingFileAlert missingFileRef={file} rootPath={server.rootPath} /></EmptyCadBackdrop>}</div>,
-        activity: activity => <FilenameLoadStatus activity={viewerReloading ? { loading: true, label: "Reloading", title: "The viewer is restarting after a code change." } : activity} />,
       }} />
   </div><StatusToast previewMode={fullscreen} copyStatus={copyStatus} onClear={() => setCopyStatus('')} /></div>;
 }

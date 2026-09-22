@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import KinematicsTab from '../../../dist/renderers/robot/KinematicsTab.js';
+import PositionControls from '../../../dist/renderers/robot/PositionControls.js';
 import { createPoseStore } from '../../../dist/renderers/robot/poseStore.js';
 
 Object.assign(globalThis, { React });
@@ -17,25 +17,29 @@ const description = {
 };
 const field = (name: string, unit: string) => screen.getByRole('textbox', { name: `${name} value in ${unit}` }) as HTMLInputElement;
 
-it('lists named poses, then a slider per joint a person can drive, then Reset', () => {
-  render(<KinematicsTab pose={createPoseStore(description)}/>);
-  expect(screen.getAllByRole('heading').map(heading => heading.textContent)).toEqual(['Pose', 'Joints']);
+it('lists the named pose on a labelled row, then a slider per joint a person can drive, then Reset: no sections of its own', () => {
+  render(<PositionControls pose={createPoseStore(description)}/>);
+  // One section's rows: the Position section around them is the panel's.
+  expect(screen.queryAllByRole('heading')).toEqual([]);
+  expect(screen.getByRole('combobox', { name: 'Pose' }).textContent).toBe('None');
+  expect(screen.getByText('Pose')).toBeTruthy();
   expect([field('shoulder', 'deg').value, field('lift', 'm').value]).toEqual(['0°', '0 m']);
   expect(screen.queryByRole('textbox', { name: /mount|follower/ })).toBeNull();
   expect(screen.getByRole('button', { name: 'Reset' })).toBeTruthy();
 });
 
-it('a plain description has no Pose section, and one with nothing to move says so', () => {
-  render(<KinematicsTab pose={createPoseStore({ joints: [joint('shoulder', 'revolute')] })}/>);
-  expect(screen.getAllByRole('heading').map(heading => heading.textContent)).toEqual(['Joints']);
+it('a plain description has no pose row, and one with nothing to move says so', () => {
+  render(<PositionControls pose={createPoseStore({ joints: [joint('shoulder', 'revolute')] })}/>);
+  expect(screen.queryByRole('combobox', { name: 'Pose' })).toBeNull();
+  expect(field('shoulder', 'deg').value).toBe('0°');
   cleanup();
-  render(<KinematicsTab pose={createPoseStore({ joints: [joint('mount', 'fixed')] })}/>);
+  render(<PositionControls pose={createPoseStore({ joints: [joint('mount', 'fixed')] })}/>);
   expect(screen.getByText('No movable joints.')).toBeTruthy();
 });
 
 it('follows the pose store, and writes to it: a typed value is clamped, Reset returns the defaults', () => {
   const pose = createPoseStore(description);
-  render(<KinematicsTab pose={pose}/>);
+  render(<PositionControls pose={pose}/>);
   act(() => { pose.write(pose.joints[0], 30); });
   expect(field('shoulder', 'deg').value).toBe('30°');
   fireEvent.change(field('lift', 'm'), { target: { value: '5' } });

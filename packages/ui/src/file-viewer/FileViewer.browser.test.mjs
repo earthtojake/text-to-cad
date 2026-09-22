@@ -62,6 +62,8 @@ test("watchers reload clean documents while dirty documents retain their draft",
   assert.equal(await document().inputValue(), "draft survives");
   await page.getByRole("button", { name: "Keep mine" }).click();
   assert.equal(await document().inputValue(), "draft survives");
+  // The tree is not where a document opens: it is opened to watch it take the new file.
+  await page.getByTestId("tree-toggle").click();
   await page.evaluate(() => window.harness.a.add("added.txt"));
   await page.getByRole("treeitem", { name: "added.txt", exact: true }).waitFor();
 });
@@ -86,6 +88,12 @@ test("typing during save and late writes after a root switch cannot replace anot
 });
 test("panel exclusivity, capability menus, rename and create use the shared chrome", async () => {
   await reset();
+  // A document opens with no panel: its renderer's Details does not claim the default, and
+  // the tree is not where a file opens — only where there is no file to show.
+  assert.equal(await page.getByRole("tree").count(), 0);
+  assert.equal(await page.getByText("Injected panel").count(), 0);
+  assert.equal(await page.getByTestId("tree-toggle").getAttribute("aria-pressed"), "false");
+  assert.equal(await page.getByTestId("tree-toggle").getAttribute("aria-label"), "Show files");
   await page.getByRole("button", { name: "Details", exact: true }).click();
   await page.getByText("Injected panel").waitFor();
   assert.equal(await page.getByRole("tree").count(), 0);
@@ -98,16 +106,69 @@ test("panel exclusivity, capability menus, rename and create use the shared chro
   await page.getByRole("textbox", { name: "Rename file", exact: true }).fill("renamed.txt");
   await page.getByRole("textbox", { name: "Rename file", exact: true }).press("Enter");
   await page.getByRole("button", { name: "Browse renamed.txt", exact: true }).waitFor();
+  // The tab follows the file to its new name through the host, and keeps the panel it had.
+  assert.deepEqual(await page.evaluate(() => window.harness.opened.at(-1)), { path: "renamed.txt", options: { target: "current", panel: "tree" } });
   await page.getByRole("tree").dispatchEvent("contextmenu", { button: 2 });
   await page.getByRole("menuitem", { name: /New file/ }).click();
   await page.getByRole("textbox", { name: "New file name", exact: true }).fill("created.txt");
   await page.getByRole("textbox", { name: "New file name", exact: true }).press("Enter");
   await page.getByRole("button", { name: "Browse created.txt", exact: true }).waitFor();
+  // Made in the tree, the file is opened the way a pick there opens one: with the tree.
+  assert.deepEqual(await page.evaluate(() => window.harness.opened.at(-1)), { path: "created.txt", options: { target: "new", panel: "tree" } });
+  assert.equal(await page.getByRole("tree").count(), 1);
+});
+test("an empty tab opens on the tree, a pick in the tree opens the file with the tree, and a crumb opens it on its own default", async () => {
+  // With no file to show, the tree is the one thing to reach for: it is what an empty tab opens on.
+  await reset();
+  await page.evaluate(() => window.harness.open(null));
+  await page.getByRole("tree").waitFor();
+  assert.equal(await page.getByTestId("tree-toggle").getAttribute("aria-pressed"), "true");
+
+  // A pick in the tree asks the host for the file WITH the tree, so a person walks it file by
+  // file — the empty tab's tree too, which nobody opened by hand.
+  await page.locator('[role="treeitem"][data-path="next.txt"]').click();
+  await waitValue("root-a next");
+  assert.deepEqual(await page.evaluate(() => window.harness.opened.at(-1)), { path: "next.txt", options: { target: "new", panel: "tree" } });
+  assert.equal(await page.getByRole("tree").count(), 1, "the tree is still open on the file");
+  await page.locator('[role="treeitem"][data-path="notes.txt"]').click();
+  await waitValue("root-a original");
+  assert.equal(await page.getByRole("tree").count(), 1, "and on the next one");
+  assert.equal(await page.evaluate(() => window.harness.state.panel), "tree");
+
+  // A file in folders nobody has opened is revealed as the tab reaches it: the tree opens them,
+  // and they stay open — nothing the move writes lands over them.
+  await page.evaluate(() => { window.harness.a.add("nested/deep/file.txt"); window.harness.open("nested/deep/file.txt"); });
+  await waitValue("added");
+  const revealed = page.locator('[role="treeitem"][data-path="nested/deep/file.txt"]');
+  await revealed.waitFor();
+  assert.equal(await revealed.getAttribute("aria-selected"), "true");
+  await page.waitForTimeout(200);
+  assert.deepEqual(await page.evaluate(() => window.harness.state.expandedDirectories), ["", "nested", "nested/deep"]);
+  assert.equal(await revealed.isVisible(), true, "and the folders it was revealed in are still open");
+
+  // A crumb is not the tree: it opens the file on its own default — for a document, no panel —
+  // and not on whatever the last file had open (here, its renderer's Details).
+  await page.evaluate(() => window.harness.open("notes.txt"));
+  await waitValue("root-a original");
+  await page.getByRole("button", { name: "Details", exact: true }).click();
+  await page.getByText("Injected panel").waitFor();
+  await page.getByRole("button", { name: "Browse notes.txt", exact: true }).click();
+  await page.getByRole("menu", { name: "Browse notes.txt" }).getByRole("menuitem", { name: "next.txt", exact: true }).click();
+  await waitValue("root-a next");
+  assert.deepEqual(await page.evaluate(() => window.harness.opened.at(-1)), { path: "next.txt", options: { target: "current" } });
+  assert.equal(await page.getByText("Injected panel").count(), 0, "the last file's panel is not the next one's");
+  assert.equal(await page.getByRole("tree").count(), 0);
+  assert.equal(await page.evaluate(() => window.harness.state.panel), null, "the field is back to the file's own default");
 });
 test("preview hides shared chrome, another document restores it, and widths stay bounded", async () => {
   await reset();
+  await page.getByTestId("tree-toggle").click();
+  await page.getByRole("tree").waitFor();
   await page.evaluate(() => window.harness.width(99999));
+  // The width is bounded at the column's maximum. (The store write renders on React's
+  // schedule, so the handle is read once it has.)
   const handle = page.getByRole("separator", { name: "Resize Hide files panel" });
+  await page.waitForFunction(() => document.querySelector('[role="separator"][aria-label="Resize Hide files panel"]')?.getAttribute("aria-valuenow") !== "300");
   assert.equal(await handle.getAttribute("aria-valuenow"), await handle.getAttribute("aria-valuemax"));
   await page.getByRole("button", { name: "Preview", exact: true }).click();
   assert.equal(await page.getByTestId("tree-toggle").count(), 0);
@@ -140,6 +201,8 @@ test("root changes, multiple instances, cancelled loads and readonly documents r
 });
 test("a former renderer cannot change the new root's panels, state or preview", async () => {
   await reset();
+  await page.getByTestId("tree-toggle").click();
+  await page.getByRole("tree").waitFor();
   await page.evaluate(() => window.harness.setRoot("root-b"));
   await waitValue("root-b original");
   await page.evaluate(() => {
@@ -148,6 +211,7 @@ test("a former renderer cannot change the new root's panels, state or preview", 
   });
   await page.getByTestId("tree-toggle").waitFor();
   assert.equal(await page.getByRole("tree").count(), 1);
+  assert.equal(await page.getByText("Injected panel").count(), 0);
   assert.equal(await page.evaluate(() => window.harness.state.renderers), undefined);
 });
 
@@ -191,7 +255,7 @@ test("a departing renderer flushes its own state on file changes and reloads, bu
   assert.deepEqual(await page.evaluate(() => window.harness.state.renderers['["next.txt","in-memory"]']), { drawing: 'pending stroke' });
 });
 
-test("host breadcrumb policy and filename activity stay scoped to the active document", async () => {
+test("host breadcrumb policy stays scoped to the active document", async () => {
   await reset();
   await page.evaluate(() => { window.harness.a.add('nested/deep/file.txt'); window.harness.narrowCrumbs(true); window.harness.open('nested/deep/file.txt'); });
   await waitValue('added');
@@ -199,12 +263,8 @@ test("host breadcrumb policy and filename activity stay scoped to the active doc
   await page.evaluate(() => window.harness.narrowCrumbs(false));
   await page.getByRole('button', { name: 'Browse nested', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Browse deep', exact: true }).waitFor();
-  await page.evaluate(() => { window.harness.rendererCallbacks.get('root-a').onActivityChange({ loading: true, title: 'Building geometry' }); window.outgoingActivity = window.harness.rendererCallbacks.get('root-a').onActivityChange; });
-  assert.equal(await page.getByTestId('activity').textContent(), 'Building geometry');
   await page.evaluate(() => window.harness.open('next.txt'));
   await waitValue('root-a next');
-  await page.evaluate(() => window.outgoingActivity({ loading: true, title: 'Stale build' }));
-  assert.equal(await page.getByTestId('activity').count(), 0);
   await page.evaluate(() => window.harness.navigationPath(null));
   assert.equal(await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button').count(), 0);
   assert.equal(await document().inputValue(), 'root-a next');
@@ -214,6 +274,7 @@ test("host breadcrumb policy and filename activity stay scoped to the active doc
 
 test("late trash completion does not issue new requests into the previous root", async () => {
   await reset();
+  await page.getByTestId('tree-toggle').click();
   await page.locator('[role="treeitem"][data-path="notes.txt"]').click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Move to Trash' }).click();
   await page.evaluate(() => window.harness.setRoot('root-b'));
@@ -227,6 +288,7 @@ test("late trash completion does not issue new requests into the previous root",
 test("catalog arrival restarts the initial pending directory listing", async () => {
   await page.goto(`http://127.0.0.1:${server.address().port}/?initialList=1`);
   await waitValue('root-a original');
+  await page.getByTestId('tree-toggle').click();
   await page.getByText('Reading…', { exact: true }).waitFor();
   await page.evaluate(() => window.harness.a.add('catalog-file.txt'));
   await page.locator('[role="treeitem"][data-path="catalog-file.txt"]').waitFor();

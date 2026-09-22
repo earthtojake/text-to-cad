@@ -26,11 +26,9 @@ async function mount(serverInfo, drive) {
   const previous = new Map(['window', 'document', 'IS_REACT_ACT_ENVIRONMENT'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const root = createRoot(dom.window.document.getElementById('root'));
-  let result;
-  function Probe() { result = useViewerAutoReload(serverInfo, drive.options); return null; }
+  function Probe() { useViewerAutoReload(serverInfo, drive.options); return null; }
   await act(() => root.render(createElement(Probe)));
   return {
-    get result() { return result; },
     advance: () => act(() => drive.advance()),
     async dispose() {
       await act(() => root.unmount()); dom.window.close();
@@ -42,26 +40,24 @@ async function mount(serverInfo, drive) {
 test('production viewer schedules no reload polling', async () => {
   const drive = driver([]);
   const view = await mount({ autoReload: false, identityToken: 'a' }, drive);
-  try { assert.equal(view.result, false); assert.equal(drive.scheduled, 0); }
+  try { assert.equal(drive.scheduled, 0); }
   finally { await view.dispose(); }
 });
 
-test('development restart reports pending and reloads exactly once', async () => {
+test('a development restart reloads exactly once, when the new server answers', async () => {
   const drive = driver([{ ok: true, identityToken: 'a' }, { ok: false }, { ok: false }, { ok: true, identityToken: 'b' }]);
   const view = await mount({ autoReload: true, identityToken: 'a' }, drive);
   try {
-    await view.advance(); assert.equal(view.result, false);
-    await view.advance(); assert.equal(view.result, true); assert.deepEqual(drive.reloads, []);
+    await view.advance(); await view.advance(); assert.deepEqual(drive.reloads, []);
     await view.advance(); await view.advance();
     assert.equal(drive.reloads.length, 1); assert.equal(drive.scheduled, 0);
   } finally { await view.dispose(); }
 });
 
-test('a transient outage clears pending without reload and unmount cancels polling', async () => {
+test('a transient outage does not reload, and unmount cancels polling', async () => {
   const drive = driver([{ ok: false }, { ok: true, identityToken: 'a' }]);
   const view = await mount({ autoReload: true, identityToken: 'a' }, drive);
-  await view.advance(); assert.equal(view.result, true);
-  await view.advance(); assert.equal(view.result, false); assert.deepEqual(drive.reloads, []);
+  await view.advance(); await view.advance(); assert.deepEqual(drive.reloads, []);
   assert.equal(drive.scheduled, 1);
   await view.dispose(); assert.equal(drive.scheduled, 0);
 });

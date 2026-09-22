@@ -66,6 +66,12 @@ test('live CAD commands observe and control the mounted tiny STEP viewport witho
   const opened = await command('open-file') as { tabId: string };
   const tabId = opened.tabId;
   await expect(page.locator('[data-cad-surface] canvas').first()).toBeVisible({ timeout: 90_000 });
+  // Opened by a command rather than picked in the tree, the STEP opens on its own panel —
+  // named for what it is, a lone part — and not on Display or the tree.
+  await expect(page.locator('header [data-file-panel=cad-file]')).toHaveAttribute('aria-pressed', 'true', { timeout: 90_000 });
+  await expect(page.locator('header [data-file-panel=cad-file]')).toHaveAttribute('aria-label', 'Part');
+  await expect(page.locator('header [data-file-panel=cad-display]')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByTestId('tree-toggle')).toHaveAttribute('aria-pressed', 'false');
   let state!: CadLiveState;
   await expect.poll(async () => {
     const result = await reply('viewer-state', tabId); if (!result.ok) return false;
@@ -111,8 +117,9 @@ test('live CAD commands observe and control the mounted tiny STEP viewport witho
   expect(renderedState.renderMode).toBe('render');
   expect(renderedState.display.mode).toBe('render');
   expect(renderedState.camera?.projection).toBe('perspective');
-  await page.getByRole('tab', { name: 'Display', exact: true }).click();
-  const displayMode = page.getByRole('tabpanel', { name: 'Display', exact: true }).getByRole('combobox', { name: 'Mode' });
+  // Display is a panel of its own: its toggle in the nav row turns the column over to it.
+  await page.locator('header [data-file-panel=cad-display]').click();
+  const displayMode = page.locator('[data-file-sheet=Display]').getByRole('combobox', { name: 'Mode' });
   await expect(displayMode).toContainText('Render');
   const solidState = await command('cad-render-mode', tabId, { mode: 'inspect' }) as CadLiveState;
   expect(solidState.display.mode).toBe('solid');

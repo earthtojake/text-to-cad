@@ -2,11 +2,12 @@
  * A file surface's panels: the list, and the rule that only one is open.
  *
  * ONE panel column, one width, one border, one resize handle
- * (`FilePanelColumn.jsx`) — and a list of things that can be in it: the CAD
- * Inspector, whatever else the host's renderer declares,
- * and the file tree LAST. The nav row draws one icon button per panel, in
- * declaration order, and highlights the open one; pressing a toggle opens that
- * panel and closes whatever was open.
+ * (`FilePanelColumn.jsx`) — and a list of things that can be in it: what the
+ * file's renderer declares (a viewer file's own controls, then its Display
+ * settings) and the file tree LAST. The nav row draws one icon button per
+ * panel, in declaration order, and highlights the open one; pressing a toggle
+ * opens that panel and closes whatever was open. A panel has no tabs inside it:
+ * the nav row IS the tab strip.
  *
  * The panel frame is shared across both apps: the tree is an
  * entry in this list, not a second column beside it with a design of its own.
@@ -21,14 +22,14 @@
  *
  * Pure but for its lucide glyphs, so `node --test` loads it with no bundler.
  */
-import { Code2, Eye, Folders, PanelLeft, SlidersHorizontal } from "lucide-react";
+import { Code2, Eye, Folders, SlidersHorizontal } from "lucide-react";
 
 /**
  * Where a panel's content comes from — which is who draws it.
  *
  * `"tree"` and `"slot"` are both the panel column: the shared file tree, or a
- * box handed to the file's renderer to draw into (the CAD surface portals its
- * Inspector there, `panelSlot` in `docs/file-view.md`).
+ * box handed to the file's renderer to draw into (a viewer surface portals its
+ * panels there, `panelSlot` in `docs/file-viewer.md`).
  * `"body"` is the one panel that is not a column at all — the desktop's
  * markdown source view is the same bytes read differently, so it replaces the
  * content instead of sitting beside it. It is still in this list, and still
@@ -43,9 +44,10 @@ import { Code2, Eye, Folders, PanelLeft, SlidersHorizontal } from "lucide-react"
  * @property {import("react").ElementType} icon
  * @property {FilePanelContent} content
  * @property {boolean} [defaultOpen]
- *   The panel a surface opens with when the person has not said (`panel:
- *   null`). The FIRST declaration that claims it wins, and the tree is last,
- *   so a CAD file opens with its Inspector and everything else with the tree.
+ *   The panel a surface opens with when nobody has said (`panel: null`): the
+ *   FIRST declaration that claims it wins. A viewer file's own controls claim it;
+ *   its Display settings and the file tree never do, so a file opened directly
+ *   shows its controls, or nothing when it has none.
  *
  * @typedef {object} FilePanelContext
  * @property {string} open
@@ -63,49 +65,41 @@ import { Code2, Eye, Folders, PanelLeft, SlidersHorizontal } from "lucide-react"
  */
 export const FILE_PANEL_TREE = "tree";
 
-/** The Inspector's panel id, shared by both hosts and every viewer renderer. */
+/**
+ * A viewer file's two panels, by id: its own controls and its Display settings.
+ * Every viewer renderer declares the SAME ids, so a person who opened a file's
+ * Display keeps it open from one model to the next, whichever renderer shows it.
+ */
 export const CAD_PANEL = Object.freeze({
-  fileSheet: "cad-file-sheet"
+  file: "cad-file",
+  display: "cad-display"
 });
 
 /** The desktop's markdown source view — its own id, since the field holds ids. */
 export const SOURCE_PANEL = "source";
 
 /**
- * The Inspector: the panel a viewer renderer declares for its file's tabs.
+ * A viewer file's panels, in nav-row order: the file's own controls, when it has
+ * any, then its Display settings.
  *
- * Declared here rather than in either app, because both draw it: each portals
- * it into its panel column through `panelSlot`. Every viewer renderer declares
- * this SAME panel, so a person who opened the Inspector keeps it open from one
- * model to the next, whichever renderer shows it.
- *
- * "Inspector" is the name a person sees. The id stays `cad-file-sheet` because
- * the desktop's stored `panel` field holds it and the viewer's host contract
- * calls the same panel `fileSheetOpen`.
+ * `file` names the first by what the file is — `{ label, icon }`, the icon the
+ * file tree draws for that kind of document (a part's box, an assembly's boxes, a
+ * robot) — and is null for a file whose only settings are Display's (a mesh). It is
+ * the default: a file opened directly opens with its controls. Display never is.
  *
  * Nothing until the surface is up: a pane whose runtime did not start shows a
  * failure card, and a toggle over a card would open nothing.
  *
- * Whether it starts open is the renderer's to say (`defaultOpen`): a file whose
- * Inspector is only its Display settings opens with the column shut, so the model
- * gets the room. It is a default, so a person who opens the Inspector keeps it open.
- *
  * @param {boolean} ready
- * @param {{ defaultOpen?: boolean }} [options]
+ * @param {{ file?: { label: string, icon: import("react").ElementType } | null }} [options]
  * @returns {FilePanel[]}
  */
-export function inspectorPanels(ready, { defaultOpen = true } = {}) {
-  return ready
-    ? [
-      {
-        id: CAD_PANEL.fileSheet,
-        label: "Inspector",
-        icon: SlidersHorizontal,
-        content: "slot",
-        defaultOpen
-      }
-    ]
-    : [];
+export function viewerPanels(ready, { file = null } = {}) {
+  if (!ready) return [];
+  return [
+    ...(file ? [{ id: CAD_PANEL.file, label: file.label, icon: file.icon, content: "slot", defaultOpen: true }] : []),
+    { id: CAD_PANEL.display, label: "Display", icon: SlidersHorizontal, content: "slot" }
+  ];
 }
 
 /**
@@ -128,34 +122,25 @@ export function markdownPanels(open) {
 }
 
 /**
- * The file tree, as the last entry in every panel list.
+ * The file tree, as the last entry in every panel list: the folders glyph is
+ * always the rightmost navigation action.
  *
- * The folders glyph is always the rightmost navigation action. Inspector
- * uses PanelLeft; document actions precede the pair.
+ * It stays open while a person walks the tree from file to file, but it is not
+ * what a file opens with — except where there is no file to show at all, when
+ * the tree is the only thing to reach for (`empty`).
  *
  * @param {string} open
+ * @param {{ empty?: boolean }} [options]
  * @returns {FilePanel}
  */
-export function treePanel(open) {
+export function treePanel(open, { empty = false } = {}) {
   return {
     id: FILE_PANEL_TREE,
     label: open === FILE_PANEL_TREE ? "Hide files" : "Show files",
     icon: Folders,
     content: "tree",
-    defaultOpen: true
+    defaultOpen: empty
   };
-}
-
-/**
- * Every panel a surface has, in the order the nav row draws them: the
- * renderer's, then the tree.
- *
- * @param {FilePanel[]} declared
- * @param {string} open
- * @returns {FilePanel[]}
- */
-export function panelsFor(declared, open) {
-  return [...declared, treePanel(open)];
 }
 
 /**
@@ -192,25 +177,4 @@ export function resolveOpenPanel(panels, panel) {
  */
 export function nextOpenPanel(open, id) {
   return open === id ? "" : id;
-}
-
-/**
- * What the open panel becomes when the CAD surface reports one of ITS OWN
- * panels open or shut.
- *
- * `true` opens it, over whatever was up. `false` is only ever about the panel
- * it names: the surface reports its state on every change, so a "the
- * Inspector is shut" arriving while the file TREE is the open panel must leave
- * the tree alone rather than close the column.
- *
- * @param {boolean} open
- * @param {string} current
- * @param {string} id
- * @returns {string}
- */
-export function panelClosedBy(open, current, id) {
-  if (open) {
-    return id;
-  }
-  return current === id ? "" : current;
 }

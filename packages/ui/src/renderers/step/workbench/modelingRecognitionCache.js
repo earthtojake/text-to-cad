@@ -33,7 +33,7 @@ export function createModelingRecognitionCache({ maxEntries = MAX_ENTRIES, maxBy
       if (!entry) return null;
       entries.delete(key);
       entries.set(key, entry);
-      // Each mounted inspector receives its own mutable presentation metadata.
+      // Each mounted Features tree receives its own mutable presentation metadata.
       return JSON.parse(entry.json);
     },
     set(key, result) {

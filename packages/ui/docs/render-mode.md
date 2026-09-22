@@ -49,7 +49,7 @@ Camera pose remains viewport-owned, separate from preset settings.
 Selecting a preset replaces visual overrides, including projection/lens. **Reset**
 restores that selected preset and disables Clip/Explode. Selecting a preset
 preserves those tools. Neither action changes camera viewpoint/zoom, selection,
-visibility, active inspector tab or Kinematics state.
+visibility, the open panel or the model's pose.
 Projection remains editable in every preset, including orthographic Render.
 
 ## Groups and enablement
@@ -84,8 +84,7 @@ same gate rule: disabling discards its offsets and Flip; re-enabling restores
 the default X center cut. Preset selection preserves Clip/Explode; Display Reset
 disables both tools. Grid and Axes are independent sections.
 The fixed panel order is Mode, Surfaces, Explode, Clip, Edges, Grid, Axes,
-Lighting, Background, Floor: tools first, then Solid's enabled display groups,
-then its disabled groups. Preset changes never reorder controls.
+Lighting, Background, Floor. Preset changes never reorder controls.
 The remaining optional effects use the same feature gate primitive. A surface
 gate that just restores ordinary shading is not a meaningful disable action.
 The Lens slider and Camera section are omitted: perspective uses the standard
@@ -171,13 +170,17 @@ padding multiplier. Preset changes do not refit. Motion changes geometry, not
 what 100% means. A changed camera clears current screen-space drawings; camera
 state republished unchanged after a runtime replacement does not.
 
-## Inspector structure
+## Panel structure
 
-STEP uses **Features | Kinematics | Display**, with Kinematics only when the
-sidecar declares it. Pose precedes Joints; each is independently present only
-when its content exists and is permanently expanded without an enable switch.
-Tabs stay in canonical order, without drag/split behavior. Visited Model trees
-keep disclosure and scroll. The floating interaction toolbar owns
-Select/Measure (STEP only)/Draw, plus Pose and Animate where a file has joints
-or routines; view actions and capture remain separate. Format-specific
-controls retain their own tabs.
+Display is its own panel in the nav row, beside the file's own. A STEP's own
+panel stacks **Features**, **Position** (only when the sidecar declares
+kinematics) and **Issues** (only when there are any) under headings that never
+collapse. Within Position the `Pose` row precedes the joint rows; each is
+independently present only when its content exists, without an enable switch.
+There are no tabs and no drag or split behavior. The file's own panel stays
+mounted while Display is open, so the Features tree keeps disclosure and scroll.
+The floating interaction toolbar owns Select/Measure (STEP only)/Draw, plus
+Position and Animate where a file has joints or routines, and on a STEP,
+Fullscreen last where the host offers it; view actions and capture remain
+separate. A robot description's own panel stacks Position, Links and (for an
+SDF) SDF.

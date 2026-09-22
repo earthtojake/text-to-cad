@@ -1,7 +1,7 @@
 import React from 'react';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import LinksTab from '../../../dist/renderers/robot/LinksTab.js';
+import LinksSection from '../../../dist/renderers/robot/LinksSection.js';
 import { useLinkSelection } from '../../../dist/renderers/robot/useLinkSelection.js';
 
 Object.assign(globalThis, { React });
@@ -58,7 +58,7 @@ function Harness({ spy = {} as Record<string, (...args: any[]) => void>, groupNa
     selectLink: (name: string) => { spy.selectLink?.(name); selection.selectLink(name); },
     hoverLink: (name: string) => { spy.hoverLink?.(name); selection.hoverLink(name); },
   };
-  return <LinksTab description={description} components={components} parts={parts} selection={observed} groupNamesByLink={groupNamesByLink} meshPath={meshPath} onOpenFile={onOpenFile}/>;
+  return <LinksSection description={description} components={components} parts={parts} selection={observed} groupNamesByLink={groupNamesByLink} meshPath={meshPath} onOpenFile={onOpenFile}/>;
 }
 const rows = () => within(screen.getByRole('list', { name: 'Robot links' })).getAllByRole('button', { name: /^Select / }).map(row => row.getAttribute('aria-label'));
 const filter = () => screen.getByRole('textbox', { name: 'Filter links' });
@@ -215,7 +215,7 @@ it('a viewport pick of a surface selects its link; a named object selects itself
       <button type="button" onClick={() => selection.pick({ linkName: 'wrist_link', componentId: '' })}>Pick surface</button>
       <button type="button" onClick={() => selection.pick({ linkName: 'wrist_link', componentId: 'wrist_link:v1/object/0' }, { multiSelect: true })}>Pick named</button>
       <button type="button" onClick={() => selection.pick(null)}>Pick nothing</button>
-      <LinksTab description={description} components={components} parts={parts} selection={selection}/>
+      <LinksSection description={description} components={components} parts={parts} selection={selection}/>
     </div>;
   }
   render(<Viewport/>);

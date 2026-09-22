@@ -1,7 +1,7 @@
 import type { ComponentType } from 'react';
 import { defineFileRenderer } from '../../file-viewer/registry.js';
 import type { FileRendererProps } from '../../file-viewer/types.js';
-import { inspectorPanels } from '../../file-viewer/navigation/panels.js';
+import { viewerPanels } from '../../file-viewer/navigation/panels.js';
 import type { CadPreferenceSource } from '../workspace/index.js';
 import type { LiveViewBinding } from '../kit/shell/liveBinding.js';
 
@@ -19,7 +19,10 @@ export function createHarnessRenderer(services: HarnessRendererOptions) {
     id: 'shell-harness',
     priority: 100,
     matches: (file) => /\.harness$/i.test(file.path),
-    panels: ({ ready }) => inspectorPanels(ready, { defaultOpen: false }),
+    // Fullscreen is the shell's (its controls, its presentation camera), and a renderer only
+    // reaches it by declaring it: this frame declares it so the shell's fullscreen is driven here.
+    fullscreen: true,
+    panels: ({ ready }) => viewerPanels(ready),
     async prepare() { return { data: { services } }; },
     load: () => import('./HarnessRenderer.jsx') as Promise<{ default: ComponentType<FileRendererProps<{ services: HarnessRendererOptions }>> }>
   });

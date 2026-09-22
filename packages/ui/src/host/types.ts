@@ -32,7 +32,14 @@ export interface ViewerHost {
   fileActions?: FileActions;
   clipboard: ClipboardPort;
   promptContext: PromptContextPort;
-  navigation: { openFile(path: string, options?: { target: 'current' | 'new' }): void };
+  /**
+   * Show a file: in this view, or in a new one where the host has more than one (`target`).
+   * `panel` is the panel the file opens with, by id: the tree's, for a file picked in the tree,
+   * so the tree stays up while a person walks it file by file. Without one, a file opened in
+   * place or in a new view opens with its own default panel (`panels.js`: its controls, or
+   * nothing), and a view that already shows the file keeps whatever it has open.
+   */
+  navigation: { openFile(path: string, options?: { target: 'current' | 'new'; panel?: string }): void };
   environment: { colorScheme: 'light' | 'dark'; platform?: string };
   /** Publish state during host shutdown/page exit; this is never an implicit document save. */
   lifecycle?: { subscribeFlush(listener: () => void): () => void };
