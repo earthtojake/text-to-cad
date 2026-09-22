@@ -518,13 +518,13 @@ test('every Display control reaches the drawn frame: the five modes, edges, the 
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().display.edges?.enabled !== false);
   await page.waitForTimeout(400);
 
-  // Clip: the half of the model past the plane stops being drawn, and Flip
+  // Cross-section: the half of the model past the plane stops being drawn, and Flip
   // swaps which half that is.
   const whole = partBoxes(await view.frame());
-  await panel.getByRole('button', { name: 'Enable Clip', exact: true }).click();
+  await pane.getByRole('button', { name: 'Cross-section', exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().display.clip?.enabled === true);
   const cut = await frameWhen(view, shot => partBoxes(shot).base.count < whole.base.count * 0.75, 'cut the model down');
-  await panel.getByLabel('Flip', { exact: true }).click();
+  await pane.getByLabel('Flip', { exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().display.clip?.invert === true);
   const flipped = await frameWhen(view, shot => differing(cut, shot) > 30_000, 'drew the other half after Flip');
   assert.ok(partBoxes(flipped).base.count < whole.base.count * 0.95, 'and it is still a cut');
@@ -536,7 +536,7 @@ test('every Display control reaches the drawn frame: the five modes, edges, the 
   const framed = await page.evaluate(() => window.__cadCamera().zoomPercent);
   const together = partBoxes(await view.frame());
   const gap = boxes => boxes.arm.x0 - boxes.base.x1;
-  await panel.getByRole('button', { name: 'Enable Explode', exact: true }).click();
+  await pane.getByRole('button', { name: 'Explode', exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().display.exploded?.enabled === true);
   assert.equal(await pane.getByLabel('Explode value', { exact: true }).inputValue(), '50%', 'enabling Explode lands on half');
   // The separation eases over a second (EXPLODED_VIEW_ANIMATION_DURATION_MS).

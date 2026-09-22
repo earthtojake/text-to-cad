@@ -1,6 +1,6 @@
 import { Children, createContext, useContext, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, Minus, Plus } from "lucide-react";
+import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@hardcore/ui/utils";
 import { Button } from "@hardcore/ui/primitives/button";
 import {
@@ -186,7 +186,8 @@ export function FileSheetStaticSection({ title, children }) {
 // scrolling and another section moving under the pointer must never write state.
 /**
  * The heading row of a section that opens and shuts: its title — shown muted, and a button
- * that opens it, while it is shut — and a trailing plus or minus. `verbs` name the two acts
+ * that opens it, while it is shut — and a trailing chevron, right while shut and down while
+ * open, like a dropdown. `verbs` name the two acts
  * for the button's label: `["Enable", "Disable"]` for a Display gate, `["Expand",
  * "Collapse"]` for a file panel's section a person folds away.
  */
@@ -206,7 +207,7 @@ export function FileSheetToggleHeading({ title, open, onOpenChange, headingId, c
         aria-expanded={open} aria-controls={contentId}
         onClick={open ? () => onOpenChange(false) : show}
         className="mr-1 size-6 shrink-0 text-muted-foreground hover:text-foreground">
-        {open ? <Minus className="size-3.5" strokeWidth={1.5} /> : <Plus className="size-3.5" strokeWidth={1.5} />}
+        {open ? <ChevronDown className="size-3.5" strokeWidth={1.5} /> : <ChevronRight className="size-3.5" strokeWidth={1.5} />}
       </Button>
     </div>
   );

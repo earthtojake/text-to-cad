@@ -180,7 +180,7 @@ test('an STL opens as one mesh with no tools: display settings, orbit, host comm
   assert.deepEqual(await options('Mode'), ['Solid', 'Render'], 'a mesh has no edges to draw: Solid and Render only');
   assert.deepEqual(await options('Surface style'), ['Shaded', 'Flat']);
   assert.deepEqual(await options('Parts'), ['Original', 'Single color', 'Color by part']);
-  for (const section of ['Edges', 'Clip', 'Explode']) assert.equal(await pane.getByRole('heading', { name: section, exact: true }).count(), 0, section);
+  for (const section of ['Edges', 'Cross-section', 'Explode']) assert.equal(await pane.getByRole('heading', { name: section, exact: true }).count(), 0, section);
   for (const section of ['Lighting', 'Background', 'Floor', 'Grid', 'Axes']) assert.equal(await pane.getByRole('heading', { name: section, exact: true }).count(), 1, section);
   assert.equal(await pane.getByRole('combobox', { name: 'Projection', exact: true }).count(), 1);
   assert.equal(await pane.getByRole('button', { name: 'Reset', exact: true }).count(), 1);

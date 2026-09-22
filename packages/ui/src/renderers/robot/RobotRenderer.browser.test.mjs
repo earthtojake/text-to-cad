@@ -589,10 +589,10 @@ test('an SDF is the same robot with a section of its own; a robot declines the h
   await robot.type('hinge', 40);
   const links = await robot.links();
   assert.equal(round6(translation(links.arm)[2]), round6(0.2 - 0.05 * Math.sin((40 * Math.PI) / 180)));
-  // The Display panel offers no Edges, Clip or Explode.
+  // The Display panel offers no Edges, Cross-section or Explode.
   await robot.toggle('cad-display').click();
   const display = await pane.locator('[data-file-sheet="Display"]').innerText();
-  for (const absent of ['Edges', 'Clip', 'Explode']) assert.equal(display.includes(absent), false, absent);
+  for (const absent of ['Edges', 'Cross-section', 'Explode']) assert.equal(display.includes(absent), false, absent);
 
   await pane.getByRole('button', { name: 'Take snapshot', exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.captures.length === 1);

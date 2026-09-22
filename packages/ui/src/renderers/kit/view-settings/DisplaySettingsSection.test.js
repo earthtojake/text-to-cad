@@ -3,11 +3,12 @@ import test from "node:test";
 import { EDGELESS_VIEW_FEATURES, resolveViewSettings, viewSettingsAreCustom } from "@hardcore/core/common/viewSettings.js";
 import { elements, render } from "../../../../scripts/reactHarness.mjs";
 import { DISPLAY_MODE_OPTIONS } from "./DisplayModeOptions.js";
-import { DisplaySettingsSection } from "./DisplaySettingsSection.js";
+import { DisplaySettingsSection, ExplodeControls } from "./DisplaySettingsSection.js";
 import { createViewSettingsStore } from "./viewSettingsStore.js";
 
 function panel(input = {}) {
   const store = createViewSettingsStore(input);
+  panel.store = store;
   const { display: settings, scene } = store.getSnapshot();
   const result = render(DisplaySettingsSection, {
     viewSettings: settings, resolvedView: scene.view,
@@ -22,7 +23,7 @@ test("View has the same feature groups for every preset, with Render second", ()
   for (const mode of DISPLAY_MODE_OPTIONS.map(option => option.value)) {
     const view = panel({ mode });
     assert.deepEqual(elements(view.tree).filter(node => node.type?.name === "FileSheetGatedSection").map(node => node.props.title),
-      ["Explode", "Edges", "Grid", "Axes", "Lighting", "Background", "Floor"]);
+      ["Edges", "Grid", "Axes", "Lighting", "Background", "Floor"]);
     assert.ok(labelled(view.tree, "Projection"));
     assert.equal(labelled(view.tree, "Lens"), undefined);
     assert.deepEqual(elements(view.tree).filter(node => node.type?.name === "FileSheetStaticSection").map(node => node.props.title),
@@ -46,7 +47,10 @@ test("group edits are sparse and disabling discards only that group's overrides"
 
 test("projection and tools update independent groups; only the view change is Custom", () => {
   const view = panel({ mode: "solid" });
-  labelled(view.tree, "Explode").props.onChange(45);
+  // Explode is the toolbar's toggle now; its panel writes the same store.
+  const explode = render(ExplodeControls, { viewSettings: view.settings(), onViewSettingsPatch: panel.store.patch });
+  labelled(explode.tree, "Explode").props.onChange(45);
+  explode.unmount();
   assert.equal(viewSettingsAreCustom(view.settings()), false);
   assert.deepEqual(view.settings().exploded, { amount: 0.45, enabled: true });
   labelled(view.tree, "Projection").props.onValueChange("perspective");
@@ -63,7 +67,7 @@ test("surface controls remain usable when restoring a formerly disabled section"
   view.unmount();
 });
 
-test("a file that is not a CAD model has no Edges, Explode or Clip section and only the presets not made of edges", () => {
+test("a file that is not a CAD model has no Edges section and only the presets not made of edges", () => {
   // A mesh opened while the saved preset is Wireframe: shown as Solid, never as its tessellation.
   const store = createViewSettingsStore({ mode: "wireframe", edges: { enabled: true, visibility: "all" } }, { features: EDGELESS_VIEW_FEATURES });
   const { display, scene } = store.getSnapshot();
