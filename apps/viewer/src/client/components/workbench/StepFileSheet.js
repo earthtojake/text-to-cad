@@ -408,6 +408,10 @@ export default function StepFileSheet({
   const previousVisibleRowsRef = useRef([]);
   const [focusedTreeRowId, setFocusedTreeRowId] = useState("");
   const [contextTreeRowId, setContextTreeRowId] = useState("");
+  // The tree already knows how to filter: flattenVisibleStepTreeRows takes a
+  // query, keeps a match's ancestors visible so a hit is never orphaned, and
+  // expands to reveal it. Nothing was supplying one.
+  const [treeQuery, setTreeQuery] = useState("");
   const lastActiveTreeNodeScrollKeyRef = useRef("");
   const selectedIds = Array.isArray(selectedPartIds) ? selectedPartIds : [];
   const selectedReferenceIdSet = useMemo(
@@ -438,9 +442,10 @@ export default function StepFileSheet({
   const visibleRows = useMemo(
     () => flattenVisibleStepTreeRows(treeRoot, expandedTreeNodeIds, {
       omitRoot: elideRootTreeRow,
-      showAllRootChildren: true
+      showAllRootChildren: true,
+      query: treeQuery
     }),
-    [elideRootTreeRow, expandedTreeNodeIds, treeRoot]
+    [elideRootTreeRow, expandedTreeNodeIds, treeQuery, treeRoot]
   );
   const treeWindow = useStepTreeWindow(visibleRows, focusedTreeRowId, contextTreeRowId);
   const siblingPositions = useMemo(() => stepTreeSiblingPositions(visibleRows), [visibleRows]);
@@ -733,6 +738,22 @@ export default function StepFileSheet({
                 }}
               >
               {hasAssemblyTree ? (
+                <div className="pb-1.5 pr-1">
+                  <input
+                    id="step-tree-filter"
+                    type="search"
+                    value={treeQuery}
+                    onChange={(event) => setTreeQuery(event.target.value)}
+                    placeholder="Filter parts"
+                    aria-label="Filter parts"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="w-full rounded-sm border border-sidebar-border bg-transparent px-2 py-1 text-[11px] text-sidebar-foreground placeholder:text-sidebar-foreground/40 focus:border-sidebar-ring focus:outline-none"
+                  />
+                </div>
+              ) : null}
+
+              {hasAssemblyTree ? (
                 <div className="flex items-center justify-between gap-2 pr-1">
                   <div className={treeGroupLabelClasses} role="presentation">
                     Assembly
@@ -755,6 +776,12 @@ export default function StepFileSheet({
               {viewerLoading && !visibleRows.length ? (
                 <FileSheetStatusText className="py-1">
                   Loading STEP tree...
+                </FileSheetStatusText>
+              ) : null}
+
+              {!viewerLoading && treeQuery.trim() && !visibleRows.length ? (
+                <FileSheetStatusText className="py-1">
+                  No parts match “{treeQuery.trim()}”.
                 </FileSheetStatusText>
               ) : null}
 
