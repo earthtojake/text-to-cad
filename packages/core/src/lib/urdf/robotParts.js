@@ -1,5 +1,5 @@
-import { paletteIndices } from "@hardcore/core/lib/render/meshObjects.js";
-import { buildUrdfMeshGeometry } from "@hardcore/core/lib/urdf/kinematics.js";
+import { paletteIndices } from "../render/meshObjects.js";
+import { buildUrdfVisualParts } from "./kinematics.js";
 
 // Keep each source mesh object independently pickable through the shared mesh renderer.
 // Split before posing so every object retains its visual's link and local transform.
@@ -156,10 +156,9 @@ export function robotComponents(meshData) {
  * @returns {{ parts: object[], components: ReturnType<typeof robotComponents> }}
  */
 export function buildRobotParts(description, meshesByUrl) {
-  const composed = buildUrdfMeshGeometry(description, meshesByUrl, { lightweight: true });
   // What the DESCRIPTION says a visual's colour is (a URDF <material>, an SDF <diffuse>), kept
   // apart from the colour a named object of its mesh brings: the description's wins over both.
-  const visuals = { ...composed, parts: composed.parts.map(part => ({ ...part, descriptionColor: String(part.color || "").trim() })) };
+  const visuals = { parts: buildUrdfVisualParts(description, meshesByUrl).map(part => ({ ...part, descriptionColor: String(part.color || "").trim() })) };
   let geometry = visuals;
   // The split is an enhancement: a failure in it costs the named objects, never the robot.
   try { geometry = buildRobotComponentGeometry(visuals); }

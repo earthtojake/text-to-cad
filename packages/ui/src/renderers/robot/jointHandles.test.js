@@ -8,7 +8,7 @@ import {
 import { armOffset, normalize } from "../kit/tools/pose/jointHandleMath.js";
 import { parseArmUrdf, parseSwingSdf, robotOf } from "./__tests__/robotFixtures.js";
 import { prepareRobotJointHandles, robotJointHandles, robotPosableJoints } from "./jointHandles.js";
-import { createRobotScene } from "./robotScene.js";
+import { createRobotScene } from "@hardcore/core/lib/urdf/robotScene.js";
 
 // The handles are READ from the scene graph. The oracle is how they were SOLVED before there
 // was one: the child link's solved frame, less an SDF joint's static child offset.

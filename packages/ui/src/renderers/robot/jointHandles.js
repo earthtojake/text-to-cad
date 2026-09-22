@@ -27,7 +27,7 @@ export function robotPosableJoints(description) {
  *
  * @param {typeof import("three")} THREE
  * @param {object} description
- * @param {ReturnType<typeof import("./robotScene.js").createRobotScene>} scene
+ * @param {ReturnType<typeof import("@hardcore/core/lib/urdf/robotScene.js").createRobotScene>} scene
  */
 export function prepareRobotJointHandles(THREE, description, scene) {
   const prepared = [];
@@ -57,7 +57,7 @@ export function prepareRobotJointHandles(THREE, description, scene) {
  *
  * @param {typeof import("three")} THREE
  * @param {ReturnType<typeof prepareRobotJointHandles>} prepared
- * @param {ReturnType<typeof import("./robotScene.js").createRobotScene>} scene
+ * @param {ReturnType<typeof import("@hardcore/core/lib/urdf/robotScene.js").createRobotScene>} scene
  * @param {Record<string, number>} values  The pose store's values.
  * @param {(joint: object, value: number) => void} onJointValueChange  The pose store's one write path.
  */

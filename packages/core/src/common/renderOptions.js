@@ -105,20 +105,17 @@ export function renderSceneScaleSettings(value, settingsByScale) {
   return settingsByScale[normalizeRenderSceneScale(value)];
 }
 
+// A robot description is authored in metres; everything else is a CAD model in millimetres.
 export function inferRenderSceneScale({
   explicit = "",
-  kind = "",
-  parts = []
+  kind = ""
 } = {}) {
   const normalizedExplicit = String(explicit || "").trim().toLowerCase();
   if (normalizedExplicit) {
     return normalizeRenderSceneScale(normalizedExplicit);
   }
   const normalizedKind = String(kind || "").trim().toLowerCase();
-  if (normalizedKind === "urdf" || normalizedKind === "srdf" || normalizedKind === "sdf") {
-    return RENDER_SCENE_SCALE.URDF;
-  }
-  return (Array.isArray(parts) ? parts : []).some((part) => String(part?.linkName || "").trim())
+  return normalizedKind === "urdf" || normalizedKind === "srdf" || normalizedKind === "sdf"
     ? RENDER_SCENE_SCALE.URDF
     : RENDER_SCENE_SCALE.CAD;
 }

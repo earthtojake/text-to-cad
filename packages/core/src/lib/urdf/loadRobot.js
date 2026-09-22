@@ -1,137 +1,103 @@
-// Assemble a robot into ordinary mesh data, with no UI attached.
+// A robot description and every mesh it names, loaded into the once-built part list its
+// scene is made from (`robotParts.js`, then `robotScene.js`). No React and no DOM beyond
+// fetch: the viewer's robot renderer (`useRobotDocument`, which adds its progress, its warm
+// reopen and its abort) and the snapshot CLI's headless stage both load a robot through
+// these, so they read the same description, resolve the same link meshes and fail on the
+// same missing one.
 //
-// This is the step that lets a robot render ANYWHERE the mesh path runs. The viewer had
-// it, spread across a React hook (fetch the description, fetch every link mesh, build the
-// geometry, pose it) — which is why headless renders had no robot support at all: the
-// assembly only existed inside a component. Nothing here touches React or the DOM beyond
-// fetch, so the snapshot runtime uses the same code the viewer does.
-//
-// The viewer keeps its own loader: it publishes links progressively and handles aborts on
-// selection changes, neither of which a one-shot headless render wants.
+// URDF, SRDF and SDF differ only in which parser reads them. An SRDF holds planning
+// semantics; what is drawn is the URDF it is paired with, with the SRDF's semantics on it.
 
 import {
   loadRenderSdf,
   loadRenderSrdf,
-  loadRenderUrdf
+  loadRenderUrdf,
+  peekRenderSdf,
+  peekRenderSrdf,
+  peekRenderUrdf
 } from "../renderAssetClient.js";
-import { loadRenderMeshByUrl } from "../render/meshLoaders.js";
-import {
-  applyUrdfPoseToMeshData,
-  buildDefaultUrdfJointValues,
-  buildUrdfMeshGeometry
-} from "./kinematics.js";
+import { loadRenderMeshByUrl, peekRenderMeshByUrl } from "../render/meshLoaders.js";
+import { buildRobotParts } from "./robotParts.js";
 
-export const ROBOT_SOURCE_KINDS = Object.freeze(["urdf", "srdf", "sdf"]);
+const DEFAULT_MESH_CONCURRENCY = 6;
 
-export function isRobotSourceKind(kind) {
-  return ROBOT_SOURCE_KINDS.includes(String(kind || "").trim().toLowerCase());
+/** Every distinct mesh a description's visuals name, already absolute (the parser resolves them). */
+export function robotMeshUrls(description) {
+  return [...new Set((Array.isArray(description?.links) ? description.links : [])
+    .flatMap(link => (Array.isArray(link?.visuals) ? link.visuals : []))
+    .map(visual => String(visual?.meshUrl || "").trim()).filter(Boolean))];
 }
 
-export function robotSourceKindFromUrl(url = "") {
-  const pathname = String(url || "").split(/[?#]/, 1)[0].toLowerCase();
-  return ROBOT_SOURCE_KINDS.find((kind) => pathname.endsWith(`.${kind}`)) || "";
+/**
+ * @param {"urdf" | "srdf" | "sdf"} kind
+ * @param {{ url: string, urdfUrl?: string, resources?: object }} source  `url` is the description
+ *   itself; an SRDF also names the URDF it is paired with.
+ * @returns {object | null}  The parsed description when it is already decoded, else null.
+ */
+export function peekRobotDescription(kind, { url, urdfUrl = "", resources } = {}) {
+  if (!url) return null;
+  if (kind === "srdf") return urdfUrl ? peekRenderSrdf(url, { resources, urdfUrl })?.urdfData || null : null;
+  return kind === "sdf" ? peekRenderSdf(url, { resources }) : peekRenderUrdf(url, { resources });
 }
 
-// Every distinct mesh a robot's visuals reference. Already absolute: the parser resolves
-// each `filename` against the description's own URL, so a headless caller needs to know
-// nothing about where the link meshes live.
-export function urdfMeshUrls(urdfData) {
-  return [...new Set(
-    (Array.isArray(urdfData?.links) ? urdfData.links : [])
-      .flatMap((link) => (Array.isArray(link?.visuals) ? link.visuals : []))
-      .map((visual) => String(visual?.meshUrl || "").trim())
-      .filter(Boolean)
-  )];
+/** The parsed description (an SRDF's is its URDF's, with the SRDF on it). */
+export async function loadRobotDescription(kind, { url, urdfUrl = "", resources, signal } = {}) {
+  if (kind === "srdf") return (await loadRenderSrdf(url, { resources, signal, urdfUrl })).urdfData;
+  return kind === "sdf" ? loadRenderSdf(url, { resources, signal }) : loadRenderUrdf(url, { resources, signal });
 }
 
-async function loadRobotDescription(url, kind, { signal, resources, urdfUrl = "" } = {}) {
-  const normalizedKind = String(kind || "").trim().toLowerCase() || robotSourceKindFromUrl(url);
-  if (normalizedKind === "srdf") {
-    // An SRDF describes semantics for a URDF; the geometry still comes from the pair.
-    const payload = await loadRenderSrdf(url, { signal, resources, urdfUrl });
-    return payload?.urdfData || null;
-  }
-  if (normalizedKind === "sdf") {
-    return loadRenderSdf(url, { signal, resources });
-  }
-  return loadRenderUrdf(url, { signal, resources });
+/** Every link mesh already decoded, in `urls` order, or null when any one is not. */
+export function peekRobotMeshes(urls, { resources } = {}) {
+  const meshes = urls.map(url => peekRenderMeshByUrl(url, { resources, fallback: "stl" }));
+  return meshes.every(Boolean) ? meshes : null;
 }
 
-async function loadMeshesByUrl(meshUrls, { signal, resources, concurrency = 6 } = {}) {
-  const meshesByUrl = new Map();
-  const queue = [...meshUrls];
-  const workers = Array.from({ length: Math.max(1, Math.min(concurrency, queue.length)) }, async () => {
-    for (;;) {
-      const meshUrl = queue.shift();
-      if (!meshUrl) {
-        return;
-      }
-      // A link whose mesh will not load is skipped rather than fatal: a robot missing one
-      // visual should still render, the same way the viewer draws what it has.
-      try {
-        const mesh = await loadRenderMeshByUrl(meshUrl, { signal, resources, fallback: "stl" });
-        if (mesh) {
-          meshesByUrl.set(meshUrl, mesh);
-        }
-      } catch {
-        // fall through
-      }
+/**
+ * Every link mesh, in `urls` order. A mesh that fails to load fails the robot: a robot
+ * drawn without one of its links is a plausible wrong picture, in the viewer and in a
+ * snapshot alike.
+ *
+ * @param {string[]} urls  `robotMeshUrls(description)`.
+ * @param {{ resources?: object, signal?: AbortSignal, concurrency?: number, onMeshLoaded?: (done: number) => void }} [options]
+ */
+export async function loadRobotMeshes(urls, { resources, signal, concurrency = DEFAULT_MESH_CONCURRENCY, onMeshLoaded } = {}) {
+  const meshes = new Array(urls.length);
+  let next = 0;
+  let done = 0;
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, concurrency), urls.length) }, async () => {
+    while (next < urls.length) {
+      const index = next;
+      next += 1;
+      signal?.throwIfAborted();
+      meshes[index] = await loadRenderMeshByUrl(urls[index], { signal, resources, fallback: "stl" });
+      done += 1;
+      onMeshLoaded?.(done);
     }
-  });
-  await Promise.all(workers);
-  return meshesByUrl;
+  }));
+  return meshes;
 }
 
-// Assemble a robot at a pose. `jointValues` is the robot's analogue of a STEP parameter
-// sidecar's values — omit it for the rest pose.
-export async function loadRobotMeshData(url, {
-  kind = "",
-  jointValues = null,
-  urdfUrl = "",
-  signal = null,
-  resources,
-  concurrency = 6
-} = {}) {
-  const sourceUrl = String(url || "").trim();
-  if (!sourceUrl) {
-    throw new Error("loadRobotMeshData requires a robot description URL");
-  }
-  const urdfData = await loadRobotDescription(sourceUrl, kind, { signal, resources, urdfUrl });
-  if (!urdfData) {
-    throw new Error(`Robot description did not parse: ${sourceUrl}`);
-  }
-  const meshUrls = urdfMeshUrls(urdfData);
-  const meshesByUrl = await loadMeshesByUrl(meshUrls, { signal, resources, concurrency });
-  if (!meshesByUrl.size && meshUrls.length) {
-    throw new Error(`No link mesh loaded for robot: ${sourceUrl}`);
-  }
-  const meshData = buildUrdfMeshGeometry(urdfData, meshesByUrl, { lightweight: true });
-  const posed = applyUrdfPoseToMeshData(
-    urdfData,
-    meshData,
-    resolveJointValues(urdfData, jointValues)
-  );
-  return {
-    urdfData,
-    meshData: posed?.meshData || meshData,
-    linkWorldTransforms: posed?.linkWorldTransforms || new Map()
-  };
+/**
+ * The robot a scene is built from: the description and its part list (`buildRobotParts`).
+ *
+ * @param {object} description  `loadRobotDescription`.
+ * @param {string[]} urls  `robotMeshUrls(description)`.
+ * @param {object[]} meshes  `loadRobotMeshes(urls)` or `peekRobotMeshes(urls)`.
+ * @returns {{ description: object, parts: object[], components: object[] }}
+ */
+export function robotModel(description, urls, meshes) {
+  return { description, ...buildRobotParts(description, new Map(urls.map((url, index) => [url, meshes[index]]))) };
 }
 
-// Named joints override the rest pose; anything unnamed keeps its default, so a caller can
-// pose one joint without restating the robot.
-export function resolveJointValues(urdfData, jointValues) {
-  const defaults = buildDefaultUrdfJointValues(urdfData);
-  if (!jointValues || typeof jointValues !== "object" || Array.isArray(jointValues)) {
-    return defaults;
-  }
-  const resolved = { ...defaults };
-  for (const [name, value] of Object.entries(jointValues)) {
-    const jointName = String(name || "").trim();
-    const numericValue = Number(value);
-    if (jointName && Number.isFinite(numericValue)) {
-      resolved[jointName] = numericValue;
-    }
-  }
-  return resolved;
+/**
+ * Load a robot whole: its description, then every link mesh it names.
+ *
+ * @param {"urdf" | "srdf" | "sdf"} kind
+ * @param {{ url: string, urdfUrl?: string, resources?: object, signal?: AbortSignal, concurrency?: number }} source
+ */
+export async function loadRobot(kind, { url, urdfUrl = "", resources, signal, concurrency } = {}) {
+  const description = await loadRobotDescription(kind, { url, urdfUrl, resources, signal });
+  if (!description) throw new Error(`Robot description did not parse: ${url}`);
+  const urls = robotMeshUrls(description);
+  return robotModel(description, urls, await loadRobotMeshes(urls, { resources, signal, concurrency }));
 }

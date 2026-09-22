@@ -1,13 +1,13 @@
-import { resolveCadEdgeSettings } from "@hardcore/core/common/cadInk.js";
-import { jointMotionTransform, resolveUrdfJointValues } from "@hardcore/core/lib/urdf/kinematics.js";
+import { resolveCadEdgeSettings } from "../../common/cadInk.js";
 import {
   PART_HOVER_EMISSIVE_INTENSITY, PART_HOVER_HIGHLIGHT_BLEND, PART_SELECTED_EMISSIVE_INTENSITY,
   PART_SELECTED_HIGHLIGHT_BLEND, partHighlightSurfaceColor, syncPartOcclusionGhost
-} from "@hardcore/core/lib/viewer/partHighlight.js";
-import { scheduleRuntimeRaycastBvh } from "@hardcore/core/lib/viewer/raycastBvh.js";
-import { REFERENCE_HOVER_COLOR } from "@hardcore/core/lib/viewer/referenceGeometry.js";
-import { createSurfaceLook } from "@hardcore/core/lib/viewer/surfaceLook.js";
-import { shapeSourceColor } from "@hardcore/core/lib/viewer/surfaceMaterials.js";
+} from "../viewer/partHighlight.js";
+import { scheduleRuntimeRaycastBvh } from "../viewer/raycastBvh.js";
+import { REFERENCE_HOVER_COLOR } from "../viewer/referenceGeometry.js";
+import { createSurfaceLook } from "../viewer/surfaceLook.js";
+import { shapeSourceColor } from "../viewer/surfaceMaterials.js";
+import { jointMotionTransform, resolveUrdfJointValues } from "./kinematics.js";
 
 // A robot as a SCENE GRAPH. One Group per link, a link's meshes attached to it once,
 // and each joint as three nested frames of which a pose writes exactly one:
@@ -24,8 +24,10 @@ import { shapeSourceColor } from "@hardcore/core/lib/viewer/surfaceMaterials.js"
 // touched by a pose, and `motion:<name>.matrixWorld` IS the joint frame after its motion,
 // which is what the Pose handles hang on.
 //
-// No React and no DOM in here: the description and the loaded part list in, a kit scene
-// (`kit/scene.js`) out, with the robot's own verbs beside the contract.
+// No React and no DOM in here: the description and the loaded part list in, a scene
+// (`../viewer/sceneContract.js`) out, with the robot's own verbs beside the contract. The
+// ONE builder of a robot's scene: the viewer's robot renderer and the snapshot CLI's
+// headless stage both call it, and both pose it the one way it poses (`setJointValues`).
 
 const HIGHLIGHT_RENDER_ORDER = 23;
 const POSE_EPSILON = 1e-9;
@@ -79,7 +81,7 @@ function boxOf(bounds) {
  * @param {typeof import("three")} THREE
  * @param {{ description: object, parts: object[] }} input  `description`: a parsed URDF or SDF (an SRDF's is its
  *   URDF's). `parts`: `buildRobotParts` — one per visual, or per named object of a visual's mesh.
- * @returns {import("../kit/scene.js").KitScene & object}  The contract, plus: `setJointValues(values)` (true when a
+ * @returns {import("../viewer/sceneContract.js").KitScene & object}  The contract, plus: `setJointValues(values)` (true when a
  *   matrix was written), `setHighlight({ hoveredLink, hoveredComponent, selectedLink, selectedComponents })`,
  *   `linkCentre(name)`, `motionFrame(jointName)`, `linkFrames()`, `hasComponent(id)`,
  *   and `stats` (test seam: matrix writes per pose).
@@ -157,6 +159,8 @@ export function createRobotScene(THREE, { description, parts }) {
     mesh.name = String(part.id || "");
     mesh.castShadow = true;
     mesh.userData.partId = mesh.name;
+    // The part's display name, where a GLB keeps a node's authored one (a snapshot lists it).
+    mesh.userData.name = String(part.name || "");
     mesh.userData.linkName = String(part.linkName);
     if (part.componentName) mesh.userData.componentId = mesh.name;
     // Where "Color by part" deals this part its palette colour.

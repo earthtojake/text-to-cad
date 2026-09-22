@@ -1,14 +1,57 @@
-// Robot descriptions for this folder's tests, parsed by core's own parsers (jsdom supplies
-// the DOMParser a browser would). Primitives only: no mesh is fetched.
-import { JSDOM } from "jsdom";
-import { parseSdf } from "@hardcore/core/lib/urdf/parseSdf.js";
-import { parseSrdf } from "@hardcore/core/lib/urdf/parseSrdf.js";
-import { parseUrdf } from "@hardcore/core/lib/urdf/parseUrdf.js";
-import { buildRobotParts } from "@hardcore/core/lib/urdf/robotParts.js";
+// Robot descriptions for the robot scene's tests, parsed by this package's own parsers.
+// The parsers read a DOM (`DOMParser`), which Node does not have and this package does not
+// depend on, so a small XML reader stands in for it: elements, attributes and text, which is
+// all a URDF, an SRDF or an SDF uses. Primitives only: no mesh is fetched.
+import {
+  mergeBounds, multiplyTransforms, solveUrdfLinkWorldTransforms, transformBounds, buildUrdfVisualParts
+} from "../kinematics.js";
+import { parseSdf } from "../parseSdf.js";
+import { parseSrdf } from "../parseSrdf.js";
+import { parseUrdf } from "../parseUrdf.js";
+import { buildRobotParts } from "../robotParts.js";
 
-function withDom(read) {
+const ENTITIES = { amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'" };
+const decode = text => text.replace(/&(amp|lt|gt|quot|apos);/g, (_, name) => ENTITIES[name]);
+
+function element(tagName, attributes, parentNode) {
+  const node = {
+    nodeType: 1, tagName, localName: tagName.split(":").pop(), namespaceURI: null, parentNode, childNodes: [],
+    getAttribute: name => (Object.hasOwn(attributes, name) ? attributes[name] : null),
+    get textContent() { return node.childNodes.map(child => child.textContent).join(""); }
+  };
+  return node;
+}
+
+/** A document the robot parsers can read: `documentElement`, and no parse error. */
+export function parseXml(text) {
+  const root = { childNodes: [] };
+  const stack = [root];
+  const token = /<\?[\s\S]*?\?>|<!--[\s\S]*?-->|<\/([^\s>]+)\s*>|<([^\s/>]+)((?:\s+[^\s=/>]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*(\/?)>|([^<]+)/g;
+  for (const match of text.matchAll(token)) {
+    const [, closing, opening, attributeText, selfClosing, textRun] = match;
+    const parent = stack[stack.length - 1];
+    if (closing) {
+      if (stack.length < 2 || parent.tagName !== closing) throw new Error(`unbalanced </${closing}>`);
+      stack.pop();
+    } else if (opening) {
+      const attributes = {};
+      for (const [, name, double, single] of (attributeText || "").matchAll(/([^\s=]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) {
+        attributes[name] = decode(double ?? single);
+      }
+      const node = element(opening, attributes, parent.tagName ? parent : null);
+      parent.childNodes.push(node);
+      if (!selfClosing) stack.push(node);
+    } else if (textRun !== undefined) {
+      parent.childNodes.push({ nodeType: 3, textContent: decode(textRun), parentNode: parent });
+    }
+  }
+  if (stack.length !== 1) throw new Error(`unclosed <${stack[stack.length - 1].tagName}>`);
+  return { documentElement: root.childNodes.find(node => node.nodeType === 1) || null, querySelector: () => null };
+}
+
+function withXml(read) {
   const previous = globalThis.DOMParser;
-  globalThis.DOMParser = new JSDOM("").window.DOMParser;
+  globalThis.DOMParser = class { parseFromString(text) { return parseXml(text); } };
   try { return read(); } finally { globalThis.DOMParser = previous; }
 }
 
@@ -57,15 +100,27 @@ export const SWING_SDF = `<?xml version="1.0"?>
   <joint name="slide" type="prismatic"><pose relative_to="arm">0.5 0 0 0 0 0</pose><parent>arm</parent><child>tip</child><axis><xyz>1 0 0</xyz><limit><lower>0</lower><upper>0.3</upper></limit></axis></joint>
 </model></sdf>`;
 
-export const parseArmUrdf = (xml = ARM_URDF) => withDom(() => parseUrdf(xml, { sourceUrl: "/robots/arm.urdf" }));
-export const parseSwingSdf = (xml = SWING_SDF) => withDom(() => parseSdf(xml, { sourceUrl: "/robots/swing.sdf" }));
+export const parseArmUrdf = (xml = ARM_URDF) => withXml(() => parseUrdf(xml, { sourceUrl: "/robots/arm.urdf" }));
+export const parseSwingSdf = (xml = SWING_SDF) => withXml(() => parseSdf(xml, { sourceUrl: "/robots/swing.sdf" }));
 /** An SRDF's description: its URDF's, with the SRDF's semantics on it (as `loadRenderSrdf` builds it). */
 export function parseArmSrdf() {
   const urdfData = parseArmUrdf();
-  const srdf = withDom(() => parseSrdf(ARM_SRDF, { sourceUrl: "/robots/arm.srdf", urdfData }));
+  const srdf = withXml(() => parseSrdf(ARM_SRDF, { sourceUrl: "/robots/arm.srdf", urdfData }));
   return { ...urdfData, srdf };
 }
-/** A description with its once-built part list, as the robot renderer loads it. */
+
+/** A description with its once-built part list, as the robot renderer and the snapshot CLI load it. */
 export function robotOf(description, meshesByUrl = new Map()) {
-  return { description, ...buildRobotParts(description, meshesByUrl) };
+  return { description, ...buildRobotParts(description, meshesByUrl), oracleParts: buildUrdfVisualParts(description, meshesByUrl) };
+}
+
+/**
+ * The ORACLE a robot scene is held to: the description solver's box around every visual at
+ * `pose`, each visual's source box carried through its link's solved transform and its own.
+ */
+export function solvedBounds(robot, pose = {}) {
+  const links = solveUrdfLinkWorldTransforms(robot.description, pose);
+  const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+  return mergeBounds(robot.oracleParts.map(part => transformBounds(part.sourceBounds,
+    multiplyTransforms(links.get(part.linkName) || identity, part.localTransform))));
 }

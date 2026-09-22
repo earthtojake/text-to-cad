@@ -2,7 +2,6 @@ import { createHttpCadResourceProvider } from "../client/resources.js";
 import {
   buildComposedPackageMeshData
 } from "../lib/assembly/meshData.js";
-import { buildMeshDataFromGlbBuffer } from "../lib/render/glbMeshData.js";
 import { buildMeshDataFromSurf } from "../lib/surf/surfMeshData.js";
 import { parseSurf } from "../lib/surf/container.js";
 import { tessellateComponent } from "../lib/surf/tessellate.js";
@@ -20,8 +19,6 @@ import {
   decodeComponentTessellation,
   surfIndexFromCacheEntry,
 } from "../lib/surf/tessellationCache.js";
-import { buildMeshDataFromStlBuffer } from "../lib/render/stlMeshData.js";
-import { buildMeshDataFrom3MfBuffer } from "../lib/render/threeMfMeshData.js";
 import {
   loadRenderDisplayEdgeBundle,
   loadRenderGlb,
@@ -47,25 +44,24 @@ import {
   validateSourceSidecar
 } from "./sourceSidecar.js";
 import {
-  isRobotSourceKind,
-  loadRobotMeshData,
-  robotSourceKindFromUrl
-} from "../lib/urdf/loadRobot.js";
-import {
   hasStepParameterRenderValues,
   normalizeStepParameterRenderValues,
   stepParameterRenderState,
   stepParameterRenderValues
 } from "./stepParameters.js";
 
+// A render source is a STEP document: its model is composed here and built by `buildModel`
+// (`cadScene.js`), in the viewer's STEP renderer and in a snapshot alike. Every other file
+// family is drawn by its own scene builder, which the viewer's renderer for it and the
+// snapshot CLI both call (`headlessScene.js`); none of them is flattened into mesh data here.
 export const SOURCE_KIND = Object.freeze({
   STEP: "step",
   STP: "stp",
-  GLB: "glb",
-  STL: "stl",
-  THREE_MF: "3mf",
   UNKNOWN: "unknown"
 });
+
+// The families that have a scene builder of their own, refused here by name.
+const FAMILY_SCENE_KINDS = Object.freeze(["glb", "gltf", "stl", "3mf", "urdf", "srdf", "sdf"]);
 
 function isObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -73,13 +69,7 @@ function isObject(value) {
 
 function normalizeKind(value = "") {
   const kind = String(value || "").trim().toLowerCase();
-  if (kind === "step" || kind === "stp" || kind === "glb" || kind === "stl" || kind === "3mf") {
-    return kind;
-  }
-  if (isRobotSourceKind(kind)) {
-    return kind;
-  }
-  return SOURCE_KIND.UNKNOWN;
+  return kind === "step" || kind === "stp" ? kind : SOURCE_KIND.UNKNOWN;
 }
 
 function sourceKindFromUrl(url = "") {
@@ -90,16 +80,17 @@ function sourceKindFromUrl(url = "") {
   if (pathname.endsWith(".stp")) {
     return SOURCE_KIND.STP;
   }
-  if (pathname.endsWith(".glb") || pathname.endsWith(".gltf")) {
-    return SOURCE_KIND.GLB;
+  return FAMILY_SCENE_KINDS.find((kind) => pathname.endsWith(`.${kind}`)) || SOURCE_KIND.UNKNOWN;
+}
+
+function refuseFamilySceneKind(rawKind) {
+  const kind = String(rawKind || "").trim().toLowerCase();
+  if (FAMILY_SCENE_KINDS.includes(kind)) {
+    throw new Error(
+      `loadSource composes a STEP document; a ${kind.toUpperCase()} is drawn by its own scene builder, `
+      + "the one its viewer renderer uses (see common/headlessScene.js)"
+    );
   }
-  if (pathname.endsWith(".stl")) {
-    return SOURCE_KIND.STL;
-  }
-  if (pathname.endsWith(".3mf")) {
-    return SOURCE_KIND.THREE_MF;
-  }
-  return SOURCE_KIND.UNKNOWN;
 }
 
 export function sourceIsStep(sourceOrKind) {
@@ -391,11 +382,8 @@ async function loadPackageMeshData(packageInfo, tessellation = {}, appearance = 
 }
 
 async function loadMeshDataFromUrl(url, kind, options) {
-  if (sourceIsStep(kind)) return loadStepMeshFromGlb(url, options);
-  const builders = { glb: buildMeshDataFromGlbBuffer, stl: buildMeshDataFromStlBuffer, "3mf": buildMeshDataFrom3MfBuffer };
-  if (!builders[kind]) throw new Error(`Unsupported render source kind: ${kind || SOURCE_KIND.UNKNOWN}`);
-  try { return await builders[kind](await options.resources.readBytes(url, { signal: options.signal }), { resources: options.resources, sourceUrl: url, signal: options.signal }); }
-  catch (error) { if (error.status) throw new Error(`Failed to load ${kind.toUpperCase()} source: HTTP ${error.status}`, { cause: error }); throw error; }
+  if (!sourceIsStep(kind)) throw new Error(`Unsupported render source kind: ${kind || SOURCE_KIND.UNKNOWN}; a render source is a STEP/STP document`);
+  return loadStepMeshFromGlb(url, options);
 }
 
 // A pose PRESET name in place of a values object. `--kinematics` takes either
@@ -517,6 +505,7 @@ export async function loadSource(input, options = {}) {
   const rawKind = inputObject.kind || resolved.kind || options.kind || (
     typeof input === "string" ? sourceKindFromUrl(input) : ""
   );
+  refuseFamilySceneKind(rawKind);
   const kind = normalizeKind(rawKind);
   const rawTessellation = inputObject.quality?.tessellation;
   const tessellation = tessellationForSnapshotQuality(inputObject);
@@ -582,29 +571,6 @@ export async function loadSource(input, options = {}) {
   }
   const glbUrl = String(inputObject.glbUrl || resolved.glbUrl || options.glbUrl || "").trim();
   const url = String(typeof input === "string" ? input : inputObject.url || resolved.url || glbUrl || "").trim();
-
-  // A robot is not one mesh: it is a description plus a mesh per link, assembled and posed.
-  // Doing that here is what lets every mesh-path consumer — snapshot stills, orbit GIFs —
-  // render a robot without knowing it is one.
-  if (!meshData && (isRobotSourceKind(kind) || robotSourceKindFromUrl(url))) {
-    const robot = await loadRobotMeshData(url, {
-      resources, signal: options.signal, kind,
-      jointValues: inputObject.jointValues || resolved.jointValues || options.jointValues || null,
-      urdfUrl: String(resolved.urdfUrl || inputObject.urdfUrl || "").trim()
-    });
-    return {
-      kind,
-      meshData: robot.meshData,
-      selectorRuntime: null,
-      displayEdgeRuntime: null,
-      stepParameterSource: null,
-      sourceSidecar,
-      resolved,
-      url,
-      glbUrl: "",
-      cadPath
-    };
-  }
 
   // Render asset caches live for the whole page, so every entry a resolved job populates must be
   // tagged with the source it belongs to. This is the only place a resolved job meets those caches,

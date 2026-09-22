@@ -1,8 +1,7 @@
 import { URDF_JOINT_VALUE_EPSILON } from "@hardcore/core/lib/urdf/jointValues.js";
-import { buildDefaultUrdfJointValues, clampJointValueDeg } from "@hardcore/core/lib/urdf/kinematics.js";
-import {
-  cloneJointValueMap, findBestMatchingJointValueState, srdfGroupStateJointValuesToDisplay, srdfHomeGroupStateJointValuesToDisplay
-} from "./robotMotion.js";
+import { clampJointValueDeg } from "@hardcore/core/lib/urdf/kinematics.js";
+import { robotOpeningPose, srdfGroupStateJointValuesToDisplay } from "@hardcore/core/lib/urdf/motion.js";
+import { cloneJointValueMap, findBestMatchingJointValueState } from "./robotMotion.js";
 
 // A robot's pose: the value of every joint a person can drive (degrees, or metres for a
 // prismatic joint), outside React. There is ONE write path, and every write is where the
@@ -42,8 +41,9 @@ export function movableJoints(description) {
 export function createPoseStore(description, initial = null) {
   const joints = movableJoints(description);
   const jointByName = new Map(joints.map(joint => [joint.name, joint]));
-  // The opening pose: every joint at its declared default, then the SRDF group state(s) named "home".
-  const defaults = Object.freeze({ ...buildDefaultUrdfJointValues(description), ...srdfHomeGroupStateJointValuesToDisplay(description) });
+  // The opening pose (core's, so a snapshot renders the robot where this opens it): every
+  // joint at its declared default, then the SRDF group state(s) named "home".
+  const defaults = Object.freeze(robotOpeningPose(description));
   const groupStates = groupStatesOf(description);
   const listeners = new Set();
   const clampKnown = values => Object.fromEntries(Object.entries(cloneJointValueMap(values))

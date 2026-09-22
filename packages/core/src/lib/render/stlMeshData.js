@@ -59,7 +59,6 @@ export function buildMeshDataFromStlGeometry(geometry, { toCreasedNormals } = {}
       parts: [],
       has_source_colors: false,
       sourceColor: "",
-      sourceFormat: "stl",
     };
   } finally {
     displayGeometry.dispose?.();

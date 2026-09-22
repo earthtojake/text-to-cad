@@ -1,5 +1,4 @@
 import { jointValueMapsClose } from "@hardcore/core/lib/urdf/jointValues.js";
-import { nativeJointValueToDisplay } from "@hardcore/core/lib/urdf/motion.js";
 
 const toFiniteNumber = (value, fallback = 0) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
 
@@ -12,44 +11,6 @@ export function cloneJointValueMap(values) {
       .map(([name, value]) => [String(name || "").trim(), toFiniteNumber(value, 0)])
       .filter(([name]) => name)
   );
-}
-
-export function srdfGroupStateJointValuesToDisplay(urdfData, jointValuesByName) {
-  if (!jointValuesByName || typeof jointValuesByName !== "object") {
-    return {};
-  }
-  const joints = Array.isArray(urdfData?.joints) ? urdfData.joints : [];
-  const jointByName = new Map(joints.map((joint) => [String(joint?.name || ""), joint]).filter(([name]) => name));
-  return Object.fromEntries(
-    Object.entries(jointValuesByName)
-      .map(([name, value]) => {
-        const jointName = String(name || "").trim();
-        const joint = jointByName.get(jointName);
-        return jointName && joint ? [jointName, nativeJointValueToDisplay(joint, value)] : null;
-      })
-      .filter(Boolean)
-  );
-}
-
-export function srdfHomeGroupStateJointValuesToDisplay(urdfData) {
-  const groupStates = Array.isArray(urdfData?.srdf?.groupStates)
-    ? urdfData.srdf.groupStates
-    : Array.isArray(urdfData?.motion?.groupStates)
-      ? urdfData.motion.groupStates
-      : [];
-  return groupStates.reduce((homeValues, state) => {
-    if (String(state?.name || "").trim().toLowerCase() !== "home") {
-      return homeValues;
-    }
-    const jointValuesByName = srdfGroupStateJointValuesToDisplay(
-      urdfData,
-      state?.jointValuesByName || state?.jointValuesByNameRad
-    );
-    return {
-      ...homeValues,
-      ...jointValuesByName
-    };
-  }, {});
 }
 
 export function jointValueSubsetClose(values, subset) {

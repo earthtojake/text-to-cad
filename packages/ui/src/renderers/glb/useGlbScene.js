@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { entryMeshAssetHash, entryMeshAssetUrl } from "@hardcore/core/lib/entryAssets.js";
 import { isAbortError, loadRenderGlbDocument } from "@hardcore/core/lib/renderAssetClient.js";
 import { disposeGlbDocument } from "@hardcore/core/lib/render/glbMeshData.js";
-import { createGlbScene } from "./glbScene.js";
+import { createGlbScene } from "@hardcore/core/lib/render/glbScene.js";
 
 const READING = Object.freeze({ phase: "read", label: "Reading model", done: 0, total: 0, determinate: false });
 const LOADING = Object.freeze({ phase: "geometry", label: "Loading geometry", done: 0, total: 1, determinate: true });

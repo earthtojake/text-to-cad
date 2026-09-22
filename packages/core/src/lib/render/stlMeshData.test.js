@@ -37,5 +37,4 @@ test("buildMeshDataFromStlGeometry recomputes crease-aware STL display normals",
   assert.equal(meshData.indices.length, 6);
   assert.deepEqual([...meshData.normals.slice(0, 3)], [0, 0, 1]);
   assert.equal(meshData.has_source_colors, false);
-  assert.equal(meshData.sourceFormat, "stl");
 });

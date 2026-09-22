@@ -1,4 +1,5 @@
-import { createSurfaceLook } from "@hardcore/core/lib/viewer/surfaceLook.js";
+import { createSurfaceLook } from "../viewer/surfaceLook.js";
+import { buildMeshObjects } from "./meshObjects.js";
 
 function boundsOf(THREE, objects) {
   const box = new THREE.Box3();
@@ -11,16 +12,16 @@ function boundsOf(THREE, objects) {
 }
 
 /**
- * The mesh renderer's scene (`kit/scene.js`): one `Mesh` per object of the file,
- * and nothing else. A triangle mesh authors no finish, so it wears the viewer's
+ * A mesh file's scene (`../viewer/sceneContract.js`): one `Mesh` per object of the
+ * file, and nothing else. A triangle mesh authors no finish, so it wears the viewer's
  * surface in Solid and the studio's in Render; all a file can say is an object's
  * colour, which "Original" keeps. An object without one is marked
  * `userData.cadSourceColor = false` and takes the viewer's surface colour.
  *
  * @param {typeof import("three")} THREE
- * @param {import("@hardcore/core/lib/render/meshObjects.js").MeshObject[]} objects  `buildMeshObjects`.
+ * @param {import("./meshObjects.js").MeshObject[]} objects  `buildMeshObjects`.
  *   The scene owns their geometries from here on.
- * @returns {import("../kit/scene.js").KitScene & { meshCount: number }}
+ * @returns {import("../viewer/sceneContract.js").KitScene & { meshCount: number }}
  */
 export function createMeshScene(THREE, objects) {
   const root = new THREE.Group();
@@ -56,4 +57,18 @@ export function createMeshScene(THREE, objects) {
       for (const { geometry } of objects) geometry.dispose();
     }
   };
+}
+
+/**
+ * An STL's or a 3MF's scene from its decode (`loadRenderMeshByUrl`), or null when the
+ * file holds no triangles. The ONE builder of a mesh file's scene: the viewer's mesh
+ * renderer and the snapshot CLI's headless stage both call it, so neither can draw an
+ * STL or a 3MF the other does not.
+ *
+ * @param {typeof import("three")} THREE
+ * @param {object} meshData  `buildMeshDataFromStlBuffer` / `buildMeshDataFrom3MfBuffer` output.
+ */
+export function buildMeshScene(THREE, meshData) {
+  const objects = buildMeshObjects(THREE, meshData);
+  return objects.length ? createMeshScene(THREE, objects) : null;
 }
