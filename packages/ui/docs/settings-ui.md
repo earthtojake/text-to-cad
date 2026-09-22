@@ -17,9 +17,9 @@ put the display groups inside another “Display settings” accordion.
 
 | Kind | Primitive | Behavior | Examples |
 | --- | --- | --- | --- |
-| Always available | `FileSheetStaticSection` | Always open; no plus/minus, hover treatment, or enable switch | Display, Surfaces |
-| Foldable | `FilePanelSections` in a file's own panel, beside another section (`FileSheetToggleHeading`, Expand/Collapse) | The gates' plus and minus as a view only: folding changes nothing the section does, and a folded section stays mounted | Features, Position, Issues, Links, SDF |
-| Optional feature | `FileSheetGatedSection` | Expanded means enabled; collapsed means disabled | Explode, Clip, Edges, Grid, Axes, Lighting, Background, Floor |
+| Always available | `FileSheetStaticSection` | Always open; no chevron, hover treatment, or enable switch | Display, Surfaces |
+| Foldable | `FilePanelSections` in a file's own panel, beside another section (`FileSheetToggleHeading`, Expand/Collapse) | The gates' chevron as a view only: folding changes nothing the section does, and a folded section stays mounted | Features, Position, Issues, Links, SDF |
+| Optional feature | `FileSheetGatedSection` | Expanded means enabled; collapsed means disabled | Edges, Grid, Axes, Lighting, Background, Floor |
 
 A section is gated only when its entire feature has a meaningful disabled state.
 Surfaces stays open because the group configures the model's basic presentation;
@@ -29,22 +29,38 @@ away beside Features changes the view and nothing else.
 
 For an optional feature:
 
-- The disabled header has muted text and a plus. The title and plus enable it
-  on click or keyboard activation. Hover provides a gray background only.
-- The enabled header is static primary text. Only the separate minus is an
-  interactive icon button, with the standard button hover/focus treatment.
+- The disabled header has muted text and a chevron pointing right. The title and
+  chevron enable it on click or keyboard activation. Hover provides a gray
+  background only.
+- The enabled header is static primary text with a chevron pointing down. Only the
+  chevron is an interactive icon button, with the standard button hover/focus
+  treatment.
 - Enabling initializes the group's defaults. Disabling removes its overrides
   and applies its neutral behavior. Reopening never restores old edits.
 - Do not add an enable checkbox inside the section, and do not infer whether it
-  is open from the numerical value of a control. Explode stays open at 0%.
+  is open from the numerical value of a control.
 - Hover, focus, scrolling, layout movement, or renderer completion must never
   write settings or open/close a section.
 
 Feature state comes from the canonical per-file settings store. There is no
-second accordion-open state to synchronize with it. Clip opens with an X center
-cut and Flip off, exposing the section toward the default camera. Flip reverses
-the kept half without moving the plane; orbiting does not change the cut.
-Explode opens at 50%. These two tools stay outside presets.
+second accordion-open state to synchronize with it.
+
+## Explode and Cross-section
+
+These are how a person examines a design, so they are not Display sections: they are
+toggle buttons in a STEP's tool strip, after Measure. They are not tools. Tools are
+one at a time; a person selects or measures while exploded or cut, so a toggle
+leaves the active tool alone. A press turns one on and puts its controls in a
+panel under the strip (`ViewToolPanel`, the Measure panel's surface); a press
+while on turns it off. The panel has no close button. The controls
+(`ExplodeControls`, `CrossSectionControls`) write the same `exploded` and `clip`
+settings Display's Reset clears.
+
+Cross-section (the `clip` setting) opens with an X center cut and Flip off,
+exposing the section toward the default camera. Flip reverses the kept half
+without moving the plane; orbiting does not change the cut. Explode opens at 50%
+and stays on at 0%, and its button is disabled with fewer than two parts. Both stay
+outside presets.
 
 ## Read-only inspection
 
@@ -111,8 +127,6 @@ Keep this order in every preset; enabling a feature never moves it:
 | --- | --- |
 | Display | Equal-width Mode and Projection dropdowns |
 | Surfaces | Style and part-color mode together; compact color/opacity controls |
-| Explode | Amount slider/value |
-| Clip | X/Y/Z slider/value rows, then Flip checkbox |
 | Edges | Visibility and color together |
 | Grid | Color/opacity |
 | Axes | Color/opacity, matching Grid's default color |
@@ -120,7 +134,7 @@ Keep this order in every preset; enabling a feature never moves it:
 | Background | Color/opacity |
 | Floor | Placement and color/opacity, using model origin by default |
 
-Explode, Clip and Edges are for CAD models (STEP). A mesh, a robot or a drawing has
+Explode, Cross-section and Edges are for CAD models (STEP). A mesh, a robot or a drawing has
 no parts to separate, no solid to section and no topology to draw edges from: those
 three sections are not rendered for it, they resolve disabled whatever was saved,
 and the presets made of edges (X-ray, Hidden line, Wireframe) are not offered
@@ -131,7 +145,7 @@ Solid's basic display groups precede the effects disabled by default in Solid.
 Presets are batches of settings; controls do not branch on the mode name. An
 edit makes the selected value read muted **Custom**, which is not a menu option.
 **Reset** restores the currently selected preset's display defaults and disables
-Clip and Explode. It leaves the model's pose and the camera unchanged. See
+Cross-section and Explode. It leaves the model's pose and the camera unchanged. See
 [render-mode.md](render-mode.md) for the grouped settings/CLI contract.
 
 The desired settings update immediately. Expensive changes can take longer to
@@ -154,7 +168,7 @@ from a view that has been driven off it.
 | Zoom to fit | STEP's viewport context menu — over a part, over the backdrop, and on every Features tree row | Frame the whole model again, without turning the camera. What the live `resetCamera` command does |
 | Zoom to selection | The same menu, disabled without a selection | Frame what is selected now |
 | Reset to default isometric view | The view cube's centre, in every 3D renderer | Frame the model AND return to the default direction — the only way back on a robot, a GLB or a mesh |
-| Display → Reset | The Display panel | Restore selected preset defaults and disable Clip/Explode; keep the model's pose and the camera |
+| Display → Reset | The Display panel | Restore selected preset defaults and disable Cross-section/Explode; keep the model's pose and the camera |
 
 Framing the whole model is ONE act, so it is offered once and under one name.
 Restoring the model itself belongs to whoever owns it: the Position section's

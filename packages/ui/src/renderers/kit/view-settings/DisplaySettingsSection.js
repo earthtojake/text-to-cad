@@ -111,11 +111,13 @@ function ColorPalette({ colors, onChange }) {
   );
 }
 
-function ClipSettings({ viewSettings, onViewSettingsPatch, onGroupEnabledChange, bounds }) {
-  const clip = normalizeStepClipSettings(viewSettings.clip);
+// Explode and Cross-section are toolbar toggles, not Display sections: a person examines a
+// design with them while Select or Measure is up. These are the bodies of their panels.
+export function CrossSectionControls({ viewSettings, onViewSettingsPatch, bounds }) {
+  const clip = normalizeStepClipSettings(normalizeViewSettings(viewSettings).clip);
   const setClip = (patch) => onViewSettingsPatch({ clip: patch });
   return (
-    <FileSheetGatedSection title="Clip" enabled={clip.enabled} onEnabledChange={(enabled) => onGroupEnabledChange("clip", enabled)}>
+    <>
       {AXES.map((axis) => {
         const offset = clip.offsets?.[axis] ?? DEFAULT_STEP_CLIP_SETTINGS.offsets[axis];
         const axisBounds = clipAxisBounds(bounds, axis);
@@ -144,7 +146,7 @@ function ClipSettings({ viewSettings, onViewSettingsPatch, onGroupEnabledChange,
               });
               changeOffset(range > 0 ? (nextPosition - axisBounds.min) / range : offset);
             }}
-            valueInputProps={{ disabled: !range, ariaLabel: `Clip ${axis.toUpperCase()} position` }}
+            valueInputProps={{ disabled: !range, ariaLabel: `Cross-section ${axis.toUpperCase()} position` }}
           >
             <Slider
               value={[offset]}
@@ -159,8 +161,14 @@ function ClipSettings({ viewSettings, onViewSettingsPatch, onGroupEnabledChange,
         );
       })}
       <FileSheetCheckboxRow label="Flip" checked={clip.invert} onCheckedChange={(invert) => setClip({ invert })} />
-    </FileSheetGatedSection>
+    </>
   );
+}
+
+export function ExplodeControls({ viewSettings, onViewSettingsPatch, disabled = false }) {
+  const exploded = normalizeExplodedViewSettings(normalizeViewSettings(viewSettings).exploded);
+  return <SettingsSlider label="Explode" hideLabel value={exploded.enabled ? exploded.amount * 100 : 0} min={0} max={100} step={1} digits={0} suffix="%" disabled={disabled}
+    onChange={amount => onViewSettingsPatch({ exploded: { amount: amount / 100, enabled: true } })} />;
 }
 
 function NumberProperty({ label, Icon, value, min, max, unit = "", digits = 2, onChange }) {
@@ -170,7 +178,7 @@ function NumberProperty({ label, Icon, value, min, max, unit = "", digits = 2, o
 
 export function DisplaySettingsSection({
   viewSettings = {}, resolvedView, hostAppearance = "light", lightingQuality = "final", onViewSettingsPatch, onGroupEnabledChange, onModeChange, onViewReset,
-  clipBounds = null, explodeDisabled = false, edgeStatus = "idle", edgeError = "", features = ALL_VIEW_FEATURES
+  edgeStatus = "idle", edgeError = "", features = ALL_VIEW_FEATURES
 }) {
   const settings = useMemo(() => normalizeViewSettings(viewSettings), [viewSettings]);
   const view = resolvedView || resolveViewSettings(settings, { appearance: hostAppearance, lightingQuality, features });
@@ -189,8 +197,6 @@ export function DisplaySettingsSection({
   const projection = view.camera.projection;
   const selectedProjection = PROJECTION_OPTIONS.find(option => option.value === projection) || PROJECTION_OPTIONS[0];
   const ProjectionIcon = selectedProjection.Icon;
-  const exploded = normalizeExplodedViewSettings(settings.exploded);
-  const explodedDisabled = explodeDisabled === true;
   const section = (group, title, children) => !offers(group) ? null : (
     <FileSheetGatedSection title={title} enabled={view[group].enabled} onEnabledChange={enabled => onGroupEnabledChange(group, enabled)}>
       {children}
@@ -222,12 +228,6 @@ export function DisplaySettingsSection({
         {view.surfaces.colorMode === "by-part" ? <ColorPalette colors={view.surfaces.colors} onChange={colors => setGroup("surfaces", { colors })} /> : null}
         {view.surfaces.colorMode !== "single" ? <FileSheetFieldGrid columns={1}><NumberProperty label="Surface opacity" Icon={Blend} value={view.surfaces.opacity * 100} min={0} max={100} unit="%" digits={0} onChange={value => setGroup("surfaces", { opacity: value / 100 })} /></FileSheetFieldGrid> : null}
       </FileSheetStaticSection>}
-      {/* Explode separates parts and Clip sections solids: only a view that has them opts in. */}
-      {offers("exploded") && <FileSheetGatedSection title="Explode" enabled={exploded.enabled} onEnabledChange={enabled => onGroupEnabledChange("exploded", enabled)}>
-        <SettingsSlider label="Explode" hideLabel value={exploded.enabled ? exploded.amount * 100 : 0} min={0} max={100} step={1} digits={0} suffix="%" disabled={explodedDisabled}
-          onChange={amount => onViewSettingsPatch({ exploded: { amount: amount / 100, enabled: true } })} />
-      </FileSheetGatedSection>}
-      {offers("clip") && <ClipSettings viewSettings={settings} onViewSettingsPatch={onViewSettingsPatch} onGroupEnabledChange={onGroupEnabledChange} bounds={clipBounds} />}
       {section("edges", "Edges", <FileSheetFieldGrid>
         <FileSheetSelectRow hideLabel className="px-0" label="Edge visibility" value={view.edges.visibility} onValueChange={visibility => setGroup("edges", { visibility })}
           options={[{ value: "visible", label: "Visible" }, { value: "all", label: "All" }]} />

@@ -3,7 +3,7 @@ import { buildEdgeChainGraph } from "./workbench/edgeChainSelection.js";
 
 import SelectionFilterMenu, { ToolFilterNote } from "./components/workbench/SelectionFilterMenu.jsx";
 import { MEASURE_SELECTION_FILTERS, SELECTION_FILTERS } from "./workbench/selectionFilter.js";
-import { CirclePlay, MousePointer2, Ruler, SplinePointer } from "lucide-react";
+import { CirclePlay, MousePointer2, Ruler, SplinePointer, SquareSplitHorizontal, UnfoldVertical } from "lucide-react";
 import { stepGeometryContextText, stepGeometryPromptText } from "./workbench/stepGeometryPrompt.js";
 import { filterSelectionReferences, toggleReferenceGroupSelection, connectedReferenceIds } from "./workbench/selectionFilter.js";
 import { buildTangentFaceGraph } from "./workbench/tangentFaceSelection.js";
@@ -42,6 +42,8 @@ import { useEditingPreview } from "./components/workbench/hooks/useEditingPrevie
 import { useViewportQualityStatus } from "./components/workbench/hooks/useViewportQualityStatus.js";
 import { previewGeometryChanged } from "./workbench/editingPreview.js";
 import MeasurePanel from "./components/workbench/MeasurePanel.jsx";
+import ViewToolPanel from "./components/workbench/ViewToolPanel.jsx";
+import { CrossSectionControls, ExplodeControls } from "../kit/view-settings/DisplaySettingsSection.js";
 import { useCadWorkspaceSelection } from "./components/workbench/hooks/useCadWorkspaceSelection.js";
 import { useCadWorkspaceSelectors } from "./components/workbench/hooks/useCadWorkspaceSelectors.js";
 import { useAppliedViewSettings } from "../kit/view-settings/useAppliedViewSettings.js";
@@ -2253,8 +2255,6 @@ function StepSurfaceBody({
     rendererState,
     toolRestore: CAD_TOOL_RESTORE,
     displayProps: {
-      clipBounds: selectedMeshData?.bounds || null,
-      explodeDisabled: Boolean(selectedMeshData) && explodablePartCount(selectedMeshData) <= 1,
       edgeStatus: displayEdgeStatus,
       edgeError: displayEdgeError
     },
@@ -4111,6 +4111,20 @@ function StepSurfaceBody({
   const selectDisabled = viewerLoading || !selectedMeshData || referenceSelectionPending ||
     referenceSelectionUnavailable || topologySelectionDeferred;
   const toolIdle = viewerLoading || !selectedMeshData;
+  const viewToggle = ({ id, group, label, Icon, disabled, panel }) => {
+    const on = desiredScene.view[group]?.enabled === true;
+    return { id, label, active: !previewMode && on, disabled: toolIdle || disabled,
+      icon: <Icon className="size-3" strokeWidth={2} aria-hidden="true" />,
+      onSelect: () => viewSettingsStore.setEnabled(group, !on),
+      subToolbar: on && !previewMode ? <ViewToolPanel title={label}>{panel}</ViewToolPanel> : null };
+  };
+  const viewToggles = [
+    viewFeatures.sections.includes("exploded") ? viewToggle({ id: "explode", group: "exploded", label: "Explode", Icon: UnfoldVertical,
+      disabled: explodablePartCount(selectedMeshData) <= 1,
+      panel: <ExplodeControls viewSettings={displaySettings} onViewSettingsPatch={viewSettingsStore.patch} /> }) : null,
+    viewFeatures.sections.includes("clip") ? viewToggle({ id: "cross-section", group: "clip", label: "Cross-section", Icon: SquareSplitHorizontal,
+      panel: <CrossSectionControls viewSettings={displaySettings} onViewSettingsPatch={viewSettingsStore.patch} bounds={selectedMeshData?.bounds || null} /> }) : null
+  ].filter(Boolean);
   const tools = [
     supportsTool(selectedEntrySourceFormat, "select") ? shell.tools.own({
       id: TAB_TOOL_MODE.REFERENCES,
@@ -4144,6 +4158,10 @@ function StepSurfaceBody({
         panel={<MeasurePanel measurements={measureMeasurements} activeId={activeMeasureId}
           onActivate={setActiveMeasureId} onDelete={handleMeasureDelete} onClear={handleMeasureClear} />} />
     }) : null,
+    // Explode and Cross-section examine the design, like Measure, but they are toggles and not
+    // tools: tools are one at a time, and a person selects or measures while exploded or cut.
+    // A press turns one on or off; while on, its controls sit in a panel under the strip.
+    ...viewToggles,
     supportsTool(selectedEntrySourceFormat, "draw") ? { ...shell.tools.draw, disabled: toolIdle } : null,
     // Only in a file with joints to drag (never a disabled button). It sits with Animate,
     // the other tool that moves the model.

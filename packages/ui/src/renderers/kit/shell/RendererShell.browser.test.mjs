@@ -245,16 +245,16 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   assert.equal(await modeRegion.getByRole('slider').count(), 0);
   // The fixture is a mesh: no parts to explode, no solid to section and no CAD edges, so
   // the View tab offers none of those sections, by heading, gate or title button.
-  for (const title of ['Explode', 'Clip', 'Edges']) {
+  for (const title of ['Explode', 'Cross-section', 'Edges']) {
     assert.equal(await first.getByRole('region', { name: title, exact: true }).count(), 0, `a mesh has no ${title} section`);
     assert.equal(await first.getByRole('heading', { name: title, exact: true }).count(), 0, `a mesh has no ${title} heading`);
     assert.equal(await first.getByRole('button', { name: new RegExp(`^(?:(?:Enable|Disable) )?${title}$`) }).count(), 0, `a mesh has no ${title} button`);
   }
-  // The same queries do find a gate the mesh has (its title button and its plus), so the zeros above mean absence.
+  // The same queries do find a gate the mesh has (its title button and its chevron), so the zeros above mean absence.
   assert.equal(await first.getByRole('heading', { name: 'Floor', exact: true }).count(), 1);
   assert.equal(await first.getByRole('button', { name: /^(?:(?:Enable|Disable) )?Floor$/ }).count(), 2);
   assert.equal(await first.getByLabel('Explode value', { exact: true }).count(), 0);
-  assert.equal(await first.getByLabel(/^Clip [XYZ] position$/).count(), 0);
+  assert.equal(await first.getByLabel(/^Cross-section [XYZ] position$/).count(), 0);
   // A gate opens its section at the defaults; its controls do not exist while it is off.
   assert.equal(await first.getByLabel('Exposure value', { exact: true }).count(), 0);
   await first.getByRole('button', { name: 'Enable Lighting', exact: true }).click();
@@ -337,8 +337,8 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   // A command's tools are saved as written, never rewritten to fit the file; a view whose
   // features leave those sections out resolves them off, and no section appears.
   const assertMeshToolsStayOff = async () => {
-    assert.equal(await first.getByRole('region', { name: /^(?:Clip|Explode)$/ }).count(), 0);
-    assert.equal(await first.getByRole('button', { name: /^(?:Enable|Disable) (?:Clip|Explode)$/ }).count(), 0);
+    assert.equal(await first.getByRole('region', { name: /^(?:Cross-section|Explode)$/ }).count(), 0);
+    assert.equal(await first.getByRole('button', { name: /^(?:Cross-section|Explode)$/ }).count(), 0);
   };
   assert.equal(beforeStyle.display.clip.enabled, true);
   assert.equal(beforeStyle.display.clip.axis, 'x');

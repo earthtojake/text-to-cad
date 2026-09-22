@@ -149,7 +149,7 @@ test('a static GLB opens on its native scene with no tools: display settings, or
   await pane.getByRole('combobox', { name: 'Mode', exact: true }).click();
   assert.deepEqual(await page.getByRole('option').allInnerTexts(), ['Solid', 'Render'], 'a GLB has no edges to draw: Solid and Render only');
   await page.keyboard.press('Escape');
-  for (const section of ['Edges', 'Clip', 'Explode']) assert.equal(await pane.getByRole('heading', { name: section, exact: true }).count(), 0, section);
+  for (const section of ['Edges', 'Cross-section', 'Explode']) assert.equal(await pane.getByRole('heading', { name: section, exact: true }).count(), 0, section);
   await pane.locator('[data-file-panel="cad-display"]').click();
   await pane.locator('[data-file-sheet="Display"]').waitFor({ state: 'detached' });
   // The column closing reaches the scene as a resize; let that frame land before comparing pictures.

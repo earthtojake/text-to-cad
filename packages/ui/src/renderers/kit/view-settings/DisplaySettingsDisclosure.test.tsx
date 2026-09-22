@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { resolveViewSettings } from '@hardcore/core/common/viewSettings.js';
 import { createViewSettingsStore } from './viewSettingsStore.js';
-import { DisplaySettingsSection } from '../../../../dist/renderers/kit/view-settings/DisplaySettingsSection.js';
+import { CrossSectionControls, DisplaySettingsSection, ExplodeControls } from '../../../../dist/renderers/kit/view-settings/DisplaySettingsSection.js';
 import { FileSheetGatedSection } from '../../../../dist/renderers/kit/inspector/FileSheet.js';
 
 Object.assign(globalThis, { React });
@@ -21,21 +21,21 @@ function Harness({ initial = { mode: 'solid' } }: { initial?: any }) {
     clipBounds={{ min: [0, 0, 0], max: [100, 100, 100] }} />;
 }
 
-it('a deliberate plus click after hovering cannot become a minus click', async () => {
+it('a deliberate click on a shut chevron after hovering cannot shut it again', async () => {
   const user = userEvent.setup();
   function Gate() {
     const [enabled, setEnabled] = React.useState(false);
-    return <FileSheetGatedSection title="Clip" enabled={enabled} onEnabledChange={setEnabled}>Clip settings</FileSheetGatedSection>;
+    return <FileSheetGatedSection title="Grid" enabled={enabled} onEnabledChange={setEnabled}>Grid settings</FileSheetGatedSection>;
   }
   render(<Gate />);
-  const plus = screen.getByRole('button', { name: 'Enable Clip' });
-  await user.hover(plus);
+  const chevron = screen.getByRole('button', { name: 'Enable Grid' });
+  await user.hover(chevron);
   await new Promise(resolve => setTimeout(resolve, 200));
-  await user.click(plus);
-  expect(screen.getByText('Clip settings')).toBeTruthy();
+  await user.click(chevron);
+  expect(screen.getByText('Grid settings')).toBeTruthy();
 });
 
-it.each(['Explode', 'Clip', 'Edges', 'Grid', 'Axes'])('Render remains a preset when the pointer rests on disabled %s', title => {
+it.each(['Edges', 'Grid', 'Axes'])('Render remains a preset when the pointer rests on disabled %s', title => {
   vi.useFakeTimers();
   render(<Harness initial={{ mode: 'render' }} />);
   const heading = screen.getByRole('heading', { name: title, exact: true });
@@ -46,7 +46,7 @@ it.each(['Explode', 'Clip', 'Edges', 'Grid', 'Axes'])('Render remains a preset w
   expect(screen.getByRole('button', { name: `Enable ${title}` }).getAttribute('aria-expanded')).toBe('false');
 });
 
-it('opens feature sections by click or keyboard and only the minus disables them', async () => {
+it('opens feature sections by click or keyboard and only the open chevron disables them', async () => {
   const user = userEvent.setup();
   render(<Harness />);
   const floor = screen.getByRole('button', { name: 'Floor', exact: true });
@@ -91,7 +91,6 @@ it('Reset disables tools and restores the preset; transparency stays in the colo
   expect(within(mode).getByRole('combobox', { name: 'Mode' }).textContent).toBe('Custom');
   expect(within(mode).getByRole('combobox', { name: 'Projection' }).querySelector('svg')).toBeTruthy();
   expect(within(mode).queryByRole('slider')).toBeNull();
-  expect(within(screen.getByRole('region', { name: 'Explode', exact: true })).getByRole('textbox', { name: 'Explode value' })).toBeTruthy();
   const background = screen.getByRole('button', { name: 'Background color' });
   const preview = background.querySelector('[data-color-preview]') as HTMLElement;
   expect(preview.style.opacity).toBe('0.4');
@@ -101,25 +100,13 @@ it('Reset disables tools and restores the preset; transparency stays in the colo
   fireEvent.change(screen.getByRole('spinbutton', { name: 'Color opacity' }), { target: { value: '0' } });
   expect(current.background.opacity).toBe(0);
   await user.keyboard('{Escape}');
-  await user.click(screen.getByRole('button', { name: 'Clip', exact: true }));
-  const x = screen.getByRole('textbox', { name: 'Clip X position' });
-  fireEvent.change(x, { target: { value: '35' } }); fireEvent.blur(x);
-  await user.click(screen.getByRole('checkbox', { name: 'Flip' }));
   await user.click(screen.getByRole('button', { name: 'Reset', exact: true }));
   expect(current).toEqual({ mode: 'render' });
-  expect(screen.getByRole('button', { name: 'Enable Explode' })).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Enable Clip' })).toBeTruthy();
-  expect(within(mode).getByRole('combobox', { name: 'Mode' }).textContent).toBe('Render');
-  await user.click(screen.getByRole('button', { name: 'Enable Clip' }));
-  expect(resolveViewSettings(current).clip.offsets.x).toBe(0.5);
-  expect(resolveViewSettings(current).clip.invert).toBe(false);
-  expect((screen.getByRole('textbox', { name: 'Clip X position' }) as HTMLInputElement).value).toBe('50.00 mm');
-  expect((screen.getByRole('checkbox', { name: 'Flip' }) as HTMLInputElement).checked).toBe(false);
   expect(within(mode).getByRole('combobox', { name: 'Mode' }).textContent).toBe('Render');
 });
 
 it('keeps one section order in every preset, Display first', () => {
-  const headings = ['Display', 'Surfaces', 'Explode', 'Clip', 'Edges', 'Grid', 'Axes', 'Lighting', 'Background', 'Floor'];
+  const headings = ['Display', 'Surfaces', 'Edges', 'Grid', 'Axes', 'Lighting', 'Background', 'Floor'];
   for (const mode of ['solid', 'render', 'wireframe']) {
     render(<Harness initial={{ mode }} />);
     expect(screen.getAllByRole('heading').map(node => node.textContent)).toEqual(headings);
@@ -127,23 +114,55 @@ it('keeps one section order in every preset, Display first', () => {
   }
 });
 
-it('keeps Explode open at zero and resets its amount when reopened without changing the preset', async () => {
-  const user = userEvent.setup();
+// Explode and Cross-section are toolbar toggles; these are their panels' controls.
+function Tools() {
+  const [store] = React.useState(() => createViewSettingsStore({ mode: 'solid' }));
+  const { display: settings } = React.useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+  current = settings;
+  return <>
+    <button type="button" onClick={() => store.setEnabled('exploded', !resolveViewSettings(settings).exploded.enabled)}>Explode</button>
+    <button type="button" onClick={() => store.setEnabled('clip', !resolveViewSettings(settings).clip.enabled)}>Cross-section</button>
+    <ExplodeControls viewSettings={settings} onViewSettingsPatch={store.patch} />
+    <CrossSectionControls viewSettings={settings} onViewSettingsPatch={store.patch} bounds={{ min: [0, 0, 0], max: [100, 100, 100] }} />
+  </>;
+}
+
+it('Display has no Explode or Cross-section: they are the toolbar\'s', () => {
   render(<Harness />);
+  for (const name of ['Explode', 'Clip', 'Cross-section']) expect(screen.queryByRole('heading', { name })).toBeNull();
   expect(screen.queryByRole('textbox', { name: 'Explode value' })).toBeNull();
-  await user.click(screen.getByRole('button', { name: 'Enable Explode' }));
+  expect(screen.queryByRole('textbox', { name: /^Cross-section [XYZ] position$/ })).toBeNull();
+});
+
+it('Explode turns on at half, stays on at zero, and restarts at half', async () => {
+  const user = userEvent.setup();
+  render(<Tools />);
+  await user.click(screen.getByRole('button', { name: 'Explode' }));
   const input = screen.getByRole('textbox', { name: 'Explode value' });
   expect((input as HTMLInputElement).value).toBe('50%');
   for (const amount of ['50', '0', '75']) {
     fireEvent.change(input, { target: { value: amount } }); fireEvent.blur(input);
     expect(current.exploded).toEqual({ enabled: true, amount: Number(amount) / 100 });
-    expect(screen.getByRole('button', { name: 'Disable Explode' })).toBeTruthy();
   }
-  await user.click(screen.getByRole('button', { name: 'Disable Explode' }));
+  await user.click(screen.getByRole('button', { name: 'Explode' }));
   expect(current.exploded).toEqual({ enabled: false });
-  await user.click(screen.getByRole('button', { name: 'Enable Explode' }));
+  await user.click(screen.getByRole('button', { name: 'Explode' }));
   expect((screen.getByRole('textbox', { name: 'Explode value' }) as HTMLInputElement).value).toBe('50%');
-  expect(screen.getByRole('combobox', { name: 'Mode', exact: true }).textContent).toBe('Solid');
+});
+
+it('Cross-section turns on at an X centre cut, and Flip reverses it', async () => {
+  const user = userEvent.setup();
+  render(<Tools />);
+  await user.click(screen.getByRole('button', { name: 'Cross-section' }));
+  expect(resolveViewSettings(current).clip.offsets.x).toBe(0.5);
+  const x = screen.getByRole('textbox', { name: 'Cross-section X position' });
+  expect((x as HTMLInputElement).value).toBe('50.00 mm');
+  fireEvent.change(x, { target: { value: '35' } }); fireEvent.blur(x);
+  expect(resolveViewSettings(current).clip.offsets.x).toBeCloseTo(0.35);
+  await user.click(screen.getByRole('checkbox', { name: 'Flip' }));
+  expect(resolveViewSettings(current).clip.invert).toBe(true);
+  await user.click(screen.getByRole('button', { name: 'Cross-section' }));
+  expect(resolveViewSettings(current).clip.enabled).toBe(false);
 });
 
 it('exposes Grid and Axes independently in every preset', async () => {
