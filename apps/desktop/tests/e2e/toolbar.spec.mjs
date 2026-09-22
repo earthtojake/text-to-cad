@@ -96,9 +96,9 @@ test('CAD tools stay within the scene, with direct snapshot and Select filters',
       name: 'tests/fixtures/cad/import-smoke.step',
       exact: false
     }).first().click();
-    await expect(page.locator('[data-file-sheet-header]')).toBeVisible({
-      timeout: 60000
-    });
+    // Picked in the tree, the STEP opens with the tree; its own panel (a lone part's) is taken up.
+    await page.locator('header [data-file-panel=cad-file]').click({ timeout: 60000 });
+    await expect(page.locator('[data-file-sheet=Part]')).toBeVisible();
     const toolbar = page.locator('[data-cad-toolbar]');
     const resize = async width => app.evaluate(({
       BrowserWindow
@@ -139,18 +139,22 @@ test('CAD tools stay within the scene, with direct snapshot and Select filters',
       await expect(page.getByRole('button', { name: 'Take snapshot', exact: true })).toBeVisible();
       await expect(toolbar.getByRole('group', { name: 'View and actions' })).toHaveCount(0);
       for (const name of ['Select', 'Measure', 'Draw']) await expect(tools.getByRole('button', { name, exact: true })).toBeVisible();
+      // The desktop offers no fullscreen (the session pane is never taken away), so a STEP's
+      // strip ends without the Fullscreen button a host with one would get.
+      await expect(tools.getByRole('button', { name: 'Fullscreen', exact: true })).toHaveCount(0);
       await expect(toolbar.getByRole('button', { name: 'Display', exact: true })).toHaveCount(0);
       await expect(toolbar.getByRole('button', { name: /^Viewing mode:/ })).toHaveCount(0);
-      // There is no zoom control anywhere: not in the toolbar, not in the Inspector
-      // header, which now carries its tabs and nothing else. Framing a STEP is in its
-      // viewport context menu, and that is the whole of it.
+      // There is no zoom control anywhere: not in the toolbar, and not in the file's panel,
+      // which has no header of tabs to carry one. Framing a STEP is in its viewport context
+      // menu, and that is the whole of it.
       await expect(page.getByRole('button', { name: 'Zoom controls', exact: true })).toHaveCount(0);
       await expect(page.getByLabel('Zoom level percent', { exact: true })).toHaveCount(0);
-      await expect(page.locator('[data-file-sheet-header]').getByRole('button')).toHaveCount(0);
+      await expect(page.locator('[data-file-sheet]').getByRole('tab')).toHaveCount(0);
       await fit();
     };
     await grouping();
-    const viewTab = page.getByRole('tab', { name: 'Display', exact: true });
+    // Display is a panel of its own, its toggle in the nav row.
+    const viewTab = page.locator('header [data-file-panel=cad-display]');
     await expect(viewTab).toBeVisible();
     await viewTab.click();
     const displayMode = page.getByRole('combobox', { name: 'Mode', exact: true });
@@ -202,7 +206,7 @@ test('CAD tools stay within the scene, with direct snapshot and Select filters',
     assert.deepEqual(errors, []);
     assert.deepEqual(sourceRequests, []);
     await expect(page.getByRole('tab', { name: 'Source features' })).toHaveCount(0);
-    console.info('PASS: tools at both widths; Display tab and Render; Select filter menu; Draw; focus; scene bounds; snapshot loading state; no renderer errors');
+    console.info('PASS: tools at both widths; Display panel and Render; Select filter menu; Draw; focus; scene bounds; snapshot loading state; no renderer errors');
   } finally {
     await page?.unrouteAll({ behavior: 'wait' });
     const runtimeLog = path.join(profile, 'cad-runtime.log');

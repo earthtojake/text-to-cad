@@ -5,7 +5,7 @@ import { FilePanelColumn, PANEL_MIN_WIDTH, PANEL_MAX_WIDTH } from '../../../dist
 
 afterEach(cleanup);
 it('resizes either panel down to the minimum, then collapses rather than squeezing it', () => {
-  for (const id of ['tree', 'cad-file-sheet']) {
+  for (const id of ['tree', 'cad-file']) {
     const resize = vi.fn(), collapse = vi.fn();
     render(<FilePanelColumn id={id} label={id} width={PANEL_MIN_WIDTH} onWidthChange={resize} onCollapse={collapse}>Content</FilePanelColumn>);
     const handle = screen.getByRole('separator');

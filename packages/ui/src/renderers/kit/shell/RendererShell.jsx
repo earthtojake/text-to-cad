@@ -1,10 +1,11 @@
 import { cn } from "@hardcore/ui/utils";
+import { ScrollArea } from "@hardcore/ui/primitives/scroll-area";
+import { CAD_PANEL } from "../../../file-viewer/navigation/panels.js";
+import FilePanelSections from "../inspector/FilePanelSections.jsx";
 import FileSheet, { FileSheetPortalContext, HostPanelSlotContext } from "../inspector/FileSheet.js";
-import FileSheetTabbedSurface from "../inspector/FileSheetTabbedSurface.js";
-import BlockingViewerAlert, { blockingViewerAlert } from "../status/BlockingViewerAlert.jsx";
+import ViewerAlertCard from "../status/ViewerAlertCard.jsx";
 import StatusToast from "../status/StatusToast.js";
 import { ViewUpdateStatus } from "../status/ViewUpdateStatus.jsx";
-import ViewerAlertDialog from "../status/ViewerAlertDialog.js";
 import ViewerLoadingOverlay from "../status/ViewerLoadingOverlay.js";
 import FloatingToolBar from "../tools/FloatingToolBar.js";
 import FullscreenToolbar from "../tools/fullscreen/FullscreenToolbar.jsx";
@@ -14,19 +15,21 @@ import ViewportBottomAction, { drawingCaptureAction } from "./ViewportBottomActi
 import ViewportContextMenu from "./ViewportContextMenu.jsx";
 
 const TOOLBAR_POSITION = Object.freeze({ top: "14px", right: "14px" });
-// The host's panel column sizes the Inspector; this is only the sheet's nominal width.
-const INSPECTOR_WIDTH = 365;
+// The host's panel column sizes a panel; this is only the sheet's nominal width.
+const PANEL_WIDTH = 365;
+const MODEL_UPDATE_STATUS = Object.freeze({ pending: true, label: "Updating model…" });
 
 /**
  * The frame every file-family renderer draws itself in: the viewport box with
  * the tool strip at its corner, the active tool's bottom action, the loading,
- * update and alert overlays, fullscreen's controls, and the Inspector portaled
- * into the host's panel column. The same structure, classes and data attributes
- * for every renderer: hosts, stylesheets and tests key on them.
+ * update and alert overlays, fullscreen's controls, and the file's panels
+ * portaled into the host's panel column: its own (`panel`) and Display. The same
+ * structure, classes and data attributes for every renderer: hosts, stylesheets
+ * and tests key on them.
  *
  * @param {{ shell: ReturnType<typeof import("./useRendererShell.js").useRendererShell>,
  *   tools: import("../tools/FloatingToolBar.js").ViewportTool[],
- *   inspector: { title: string, tabs: object[] },
+ *   panel?: { title: string, sections: object[] } | null,
  *   bottomAction?: { label: string, shortLabel?: string, title?: string, disabled?: boolean,
  *     onInvoke?(): void, render?: (props: object) => import("react").ReactNode, children?: import("react").ReactNode } | null,
  *   contextMenuItems?: ((press: { clientX: number, clientY: number, shiftKey: boolean }) => object[] | null) | null,
@@ -38,8 +41,9 @@ const INSPECTOR_WIDTH = 365;
  *     mountRef: object, viewerReadyTick: number, commitScene: () => boolean }) => import("react").ReactNode) }} props
  *   `tools`: left to right, from `shell.tools`; an EMPTY list draws no strip at all,
  *   which is what a file whose viewport only orbits, pans and zooms hands over.
- *   `inspector.tabs`: tab descriptors
- *   (`{ id, title, content }`), usually ending with `shell.displayTab`. `bottomAction`
+ *   `panel`: the file's own panel, whose nav-row button the renderer's registration
+ *   declares (`viewerPanels`): its sections (`FilePanelSections`), or none for a file
+ *   whose only settings are Display's. `bottomAction`
  *   replaces Draw's (copy the view with its ink) while the renderer's own tool is active.
  *   `contextMenuItems`: what THIS renderer offers on a secondary tap over the canvas; the
  *   gesture, the anchor and the dismissal are the shell's (`ViewportContextMenu.jsx`), and a
@@ -52,20 +56,21 @@ const INSPECTOR_WIDTH = 365;
  *   pointer pick (`kit/tools/select/usePointerPick.js`) reads the first, second and fourth;
  *   a renderer that draws its own canvas over the model or publishes a scene progressively
  *   needs the other two.
- *   `frameProvider`: the renderer wraps the WHOLE frame — its own context, above the Inspector's
+ *   `frameProvider`: the renderer wraps the WHOLE frame — its own context, above the panels'
  *   portal as well as the viewport, because both halves read it. It is given the frame and returns
  *   it wrapped; a renderer that passes none is mounted exactly as it is.
  *   `onCanvasPointerDown`: a press that landed on the canvas, before anything in the viewport sees
  *   it. The frame focuses itself on such a press whatever the renderer does; this is for a renderer
  *   that also has something to put down when the person reaches for the model.
  */
-export default function RendererShell({ shell, tools, inspector, bottomAction = null, contextMenuItems = null,
+export default function RendererShell({ shell, tools, panel = null, bottomAction = null, contextMenuItems = null,
   onContextMenuOpenChange = null, sceneRevision = 0, viewportOverlay = null, className = "",
   frameProvider = null, onCanvasPointerDown = null }) {
   const frame = shell.frame;
   const { view, resolvedScene, previewMode, viewerLoading, scene } = frame;
   const hasContent = Boolean(scene) && !viewerLoading;
-  const blockingAlert = blockingViewerAlert(frame.viewerAlert, hasContent);
+  const filePanelOpen = frame.openPanel === CAD_PANEL.file;
+  const displayOpen = frame.openPanel === CAD_PANEL.display;
   const action = bottomAction || (frame.drawToolActive
     ? drawingCaptureAction({ composer: frame.composer, disabled: viewerLoading || !hasContent, onInvoke: frame.capture })
     : null);
@@ -134,7 +139,7 @@ export default function RendererShell({ shell, tools, inspector, bottomAction = 
                     preserveInteractionPixelRatio={frame.preserveInteractionPixelRatio}
                     runtimeLifecycle={frame.runtimeLifecycle}
                   >{overlay}</ShellViewport>
-                  {!previewMode ? <BlockingViewerAlert alert={blockingAlert} onReload={view.reload} /> : null}
+                  {!previewMode ? <ViewerAlertCard key={frame.modelKey} alert={frame.viewerAlert} hasContent={hasContent} onReload={view.reload} /> : null}
                   {!previewMode && action ? <ViewportBottomAction composer={frame.composer} {...action} /> : null}
                 </div>
               </div>
@@ -143,7 +148,7 @@ export default function RendererShell({ shell, tools, inspector, bottomAction = 
                 orbitSpeed={frame.previewOrbitSpeed} onOrbitSpeedChange={frame.setPreviewOrbitSpeed}
                 animation={frame.animation}
                 disabled={viewerLoading || !scene}
-                onExit={view.onExitFullscreen}/>}
+                onExit={() => view.onFullscreenChange?.(false)}/>}
 
               {/* Routines, so the playbar — whatever tool is in hand, and with the file at rest
                   until somebody presses play. Its appearance alone changes nothing on screen. */}
@@ -156,7 +161,11 @@ export default function RendererShell({ shell, tools, inspector, bottomAction = 
               {/* A renderer with no tools has no strip: the viewport is the camera's alone. */}
               {previewMode || tools.length === 0 ? null : <FloatingToolBar tools={tools} position={TOOLBAR_POSITION} />}
 
-              <ViewUpdateStatus status={frame.viewUpdate.status} onRetry={frame.viewUpdate.retry} className="absolute bottom-3 left-3 z-30" />
+              {/* One place says the view is catching up: a newer revision of the file loading behind the
+                  model on screen, or a Display change being prepared — the latter's failure first, since
+                  it is the one with something to retry. */}
+              <ViewUpdateStatus status={frame.loading.updating && !frame.viewUpdate.status.error
+                ? MODEL_UPDATE_STATUS : frame.viewUpdate.status} onRetry={frame.viewUpdate.retry} className="absolute bottom-3 left-3 z-30" />
               <ViewerLoadingOverlay
                 loading={frame.presentationState?.file === frame.modelKey && frame.presentationState?.covering ? null : frame.loading}
                 previewMode={previewMode}
@@ -164,18 +173,14 @@ export default function RendererShell({ shell, tools, inspector, bottomAction = 
               />
             </div>
 
-            <FileSheet
-              open={frame.inspectorOpen}
-              title={inspector.title}
-              isDesktop
-              width={INSPECTOR_WIDTH}
-              onOpenChange={frame.setInspectorOpen}
-              scrollBody={false}
-            >
-              <FileSheetTabbedSurface sections={inspector.tabs}
-                openSectionIds={frame.inspectorTab ? [frame.inspectorTab] : []}
-                onOpenSectionIdsChange={ids => frame.setInspectorTab(ids.at(-1) || "")}
-              />
+            {/* The file's own panel stays mounted (hidden) while Display is up, so a tree keeps
+                its disclosure and scroll across the switch. */}
+            {panel ? <FileSheet open={filePanelOpen || displayOpen} hidden={!filePanelOpen} title={panel.title}
+              isDesktop width={PANEL_WIDTH} scrollBody={false}>
+              <FilePanelSections sections={panel.sections} active={filePanelOpen} />
+            </FileSheet> : null}
+            <FileSheet open={displayOpen} title="Display" isDesktop width={PANEL_WIDTH} scrollBody={false}>
+              <ScrollArea className="min-h-0 flex-1" viewportClassName="h-full">{frame.display}</ScrollArea>
             </FileSheet>
           </div>
         </div>
@@ -185,14 +190,6 @@ export default function RendererShell({ shell, tools, inspector, bottomAction = 
           screenshotStatus={frame.screenshotStatus}
           previewMode={previewMode}
           onClear={() => { frame.setCopyStatus(""); frame.setScreenshotStatus(""); }}
-        />
-
-        <ViewerAlertDialog
-          onReload={view.reload}
-          viewerAlertOpen={frame.viewerAlertOpen}
-          viewerAlert={frame.fileStatusAlert}
-          previewMode={previewMode}
-          setViewerAlertOpen={frame.setViewerAlertOpen}
         />
       </div>
     </div>

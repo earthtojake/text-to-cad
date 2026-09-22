@@ -102,7 +102,6 @@ export function useStepPose(layers) {
     } catch (error) {
       viewerAlertChangeRef.current?.({
         severity: "warning",
-        compact: true,
         title: "STEP parameter setup failed",
         message: error instanceof Error ? error.message : String(error)
       });
@@ -229,7 +228,6 @@ export function useStepPose(layers) {
           sceneEffectsAlertRef.current = passError;
           viewerAlertChangeRef.current?.({
             severity: "warning",
-            compact: true,
             title,
             message
           });

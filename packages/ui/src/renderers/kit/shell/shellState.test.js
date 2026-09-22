@@ -11,21 +11,21 @@ test("a missing, foreign or older record restores nothing and never throws", () 
     assert.equal(state.version, SHELL_STATE_VERSION);
     assert.equal(state.camera, null);
     assert.equal(state.display.mode, "solid");
-    assert.deepEqual([state.inspectorTab, state.tool, state.renderer], ["", "", {}]);
+    assert.deepEqual([state.tool, state.renderer], ["", {}]);
   }
 });
 
-test("the record round-trips camera, display, Inspector tab, tool and the renderer's own slice", () => {
+test("the record round-trips camera, display, tool and the renderer's own slice", () => {
   const display = readShellState({ version: 1, display: { mode: "render", surfaces: { colorMode: "single", color: "#00c040" } } }).display;
-  const written = writeShellState({ camera, display, inspectorTab: "display", tool: "orbit", renderer: { clip: "glb:1" } });
+  const written = writeShellState({ camera, display, tool: "orbit", renderer: { clip: "glb:1" } });
   const copy = JSON.parse(JSON.stringify(written));
   const state = readShellState(copy);
   assert.deepEqual(state.camera.position, camera.position);
   assert.equal(state.camera.zoom, 1.5);
   assert.deepEqual([state.display.mode, state.display.surfaces.colorMode, state.display.surfaces.color], ["render", "single", "#00c040"]);
-  assert.deepEqual([state.inspectorTab, state.tool, state.renderer], ["display", "orbit", { clip: "glb:1" }]);
-  assert.equal(shellStatesEqual(written, writeShellState({ camera, display, inspectorTab: "display", tool: "orbit", renderer: { clip: "glb:1" } })), true);
-  assert.equal(shellStatesEqual(written, writeShellState({ camera, display, inspectorTab: "display", tool: "draw" })), false);
+  assert.deepEqual([state.tool, state.renderer], ["orbit", { clip: "glb:1" }]);
+  assert.equal(shellStatesEqual(written, writeShellState({ camera, display, tool: "orbit", renderer: { clip: "glb:1" } })), true);
+  assert.equal(shellStatesEqual(written, writeShellState({ camera, display, tool: "draw" })), false);
 });
 
 test("display settings this build cannot read are the defaults, and the stored record is not rewritten", () => {

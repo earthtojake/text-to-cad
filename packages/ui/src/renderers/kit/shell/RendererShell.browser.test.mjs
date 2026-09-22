@@ -84,37 +84,42 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   });
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
   const first = page.getByTestId('one');
-  const ensureInspector = async pane => {
-    if (!await pane.locator('[data-file-sheet-header]').isVisible()) {
-      await pane.getByRole('button', { name: 'Inspector', exact: true }).click();
-    }
+  // The nav row's panel toggles, in order, each with whether its panel is the open one.
+  const panels = pane => pane.locator('[data-file-panel]')
+    .evaluateAll(buttons => buttons.map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`));
+  // A mesh's one panel is Display, which a file never opens with: it is opened by its toggle.
+  const openDisplay = async pane => {
+    if (!await pane.locator('[data-file-sheet="Display"]').isVisible()) await pane.locator('[data-file-panel="cad-display"]').click();
+    await pane.locator('[data-file-sheet="Display"]').waitFor();
   };
   // The camera is moved through the live controller now: there is no zoom control in the
-  // viewer to press. A mesh's Inspector header holds its tabs and nothing else.
+  // viewer to press.
   const zoomTo = (testId, zoom) => page.evaluate(async ([id, value]) => {
     const controller = window.cadHarness[id].controller;
     await controller.setCamera({ ...controller.readState().camera, zoom: value });
   }, [testId, zoom]);
   const cameraZoom = () => page.evaluate(() => window.cadHarness.a.controller.readState().camera?.zoom ?? null);
-  await ensureInspector(first);
-
-  await first.locator('[data-file-sheet-header]').waitFor().catch(async (error) => { throw new Error(`${error.message}; page errors: ${errors.join('; ')}; body: ${await page.locator("body").innerText()}; requests: ${requests.join(", ")}`); });
+  await first.locator('[data-file-panel="cad-display"]').waitFor().catch(async (error) => { throw new Error(`${error.message}; page errors: ${errors.join('; ')}; body: ${await page.locator("body").innerText()}; requests: ${requests.join(", ")}`); });
+  // The file opened directly and opened with nothing: a mesh has no panel of its own, and
+  // Display, its only one, is never where a file opens. Nor is the tree.
+  assert.deepEqual(await panels(first), ['Display:false', 'Show files:false']);
+  assert.equal(await first.locator('[data-file-sheet]').count(), 0);
+  await openDisplay(first);
   await page.waitForFunction(() => Object.keys(window.cadHarness.state.renderers || {}).length > 0);
   assert.deepEqual(errors, []);
   assert.equal(await page.title(), 'Host title');
-  // No zoom chrome survives anywhere in the shell: not the percentage readout, not the
-  // menu behind it, and not in the Inspector header that used to carry both.
+  // No zoom chrome survives anywhere in the shell: not the percentage readout, and not the
+  // menu behind it. Nor is there a header of tabs inside the panel to carry either: the nav
+  // row is the tab strip.
   assert.equal(await first.getByRole('button', { name: 'Zoom controls', exact: true }).count(), 0);
   assert.equal(await first.getByLabel('Zoom level percent', { exact: true }).count(), 0);
-  assert.equal(await first.locator('[data-file-sheet-header]').getByRole('button').count(), 0,
-    'the Inspector header is tabs alone');
+  assert.equal(await first.getByRole('tablist').count(), 0, 'no tab strip inside the panel');
   await zoomTo('a', 1.1);
   await page.waitForFunction(() => Math.abs((window.cadHarness.a.controller.readState().camera?.zoom ?? 0) - 1.1) < 1e-6);
-  await ensureInspector(first);
-  await first.locator('[data-file-sheet="STL"]').waitFor();
+  await openDisplay(first);
   assert.equal(await first.getByRole('button', { name: 'Theme settings', exact: true }).count(), 0);
   assert.equal(await first.locator('[data-file-sheet="Theme"]').count(), 0);
-  await first.getByRole('button', { name: 'Inspector', exact: true }).click();
+  await first.locator('[data-file-panel="cad-display"]').click();
   await first.getByRole('button', { name: 'Take snapshot', exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.captures.length === 1);
   const captured = await page.evaluate(() => window.cadHarness.captures[0]);
@@ -125,11 +130,11 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   assert.deepEqual(captured.references[0].target, { kind: 'whole-resource' });
   assert.equal(captured.references[0].resource.workspaceId, 'one');
   assert.equal(captured.references[0].resource.path, 'part.stl');
-  assert.equal(await first.locator('[data-file-sheet="STL"]').count(), 0);
+  assert.equal(await first.locator('[data-file-sheet="Display"]').count(), 0);
   // A mesh hands the shell no tools, so there is no strip over its viewport at
-  // all: orbit, pan and zoom, and nothing to take up.
+  // all: orbit, pan and zoom, and nothing to take up — nor Fullscreen, which is a STEP's.
   assert.equal(await first.getByRole('group', { name: 'Interaction tools' }).count(), 0, 'no tools, no strip');
-  for (const name of ['Orbit', 'Draw', 'Select', 'Measure', 'Pose', 'Animate']) {
+  for (const name of ['Orbit', 'Draw', 'Select', 'Measure', 'Position', 'Animate', 'Fullscreen']) {
     assert.equal(await first.getByRole('button', { name, exact: true }).count(), 0, name);
   }
   // Nor a menu of its own on a secondary press — and the browser's own is still
@@ -145,10 +150,9 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   assert.equal(await page.getByRole('menu').count(), 0, 'a mesh viewport opens no menu');
   assert.deepEqual(await page.evaluate(() => window.nativeMenu), [false, true],
     'the event reaches the canvas and leaves it prevented: no native menu either');
-  await first.getByRole('button', { name: 'Inspector', exact: true }).click();
+  await openDisplay(first);
   await page.evaluate(() => window.cadHarness.second(true));
-  await ensureInspector(page.getByTestId('two'));
-  await page.getByTestId('two').locator('[data-file-sheet-header]').waitFor();
+  await openDisplay(page.getByTestId('two'));
   assert.equal(await page.getByTestId('two').getByRole('button', { name: 'Zoom controls', exact: true }).count(), 0);
   assert.equal(await page.evaluate(() => window.cadHarness.b.controller.readState().camera?.zoom), 1,
     'a sibling renderer opens at its own framing');
@@ -169,7 +173,8 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   assert.deepEqual(Object.keys(before.renderers), [JSON.stringify(['part.stl', 'mesh'])], 'one record per file, keyed [path, renderer id]');
   for (const saved of Object.values(before.renderers)) assert.ok(saved.camera, 'unmount flushes the outgoing camera');
   await page.evaluate(() => window.cadHarness.mounted(true));
-  await first.locator('[data-file-sheet-header]').waitFor();
+  // Display was left open, and which panel is open is the host's: it comes back open.
+  await first.locator('[data-file-sheet="Display"]').waitFor();
   // The pane remounts before the viewport adopts the mesh and publishes its restored
   // camera. Wait for the actual presented frame, not an arbitrary settling delay.
   const restoreDiagnostic = await page.evaluate(() => {
@@ -180,7 +185,7 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   await page.waitForFunction(() => {
     const pane = document.querySelector('[data-testid="one"]');
     return pane?.querySelector('[aria-busy="false"] canvas') &&
-      !pane.querySelector('[data-viewer-transition], [data-file-status] .animate-spin');
+      !pane.querySelector('[data-viewer-transition], [data-viewer-loading]');
   });
   t.diagnostic(`Remount camera readiness: ${JSON.stringify({ ...restoreDiagnostic, presentedZoom: await cameraZoom() })}`);
   // Serialized camera state restores in its file session; a sibling renderer
@@ -231,9 +236,11 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
     });
     observer.observe(pane, { subtree: true, childList: true, attributes: true, attributeFilter: ['style'], attributeOldValue: true });
   });
-  await ensureInspector(first);
-  // A mesh Inspector is Display alone, drawn as the one selected tab every Inspector has.
-  assert.deepEqual(await first.getByRole('tab').evaluateAll(tabs => tabs.map(tab => [tab.textContent, tab.getAttribute('aria-selected')])), [['Display', 'true']]);
+  await openDisplay(first);
+  // A mesh's panels are Display and the tree, and Display is the one open: sections under
+  // headings, with no tab in sight.
+  assert.deepEqual(await panels(first), ['Display:true', 'Show files:false']);
+  assert.equal(await first.getByRole('tab').count(), 0);
   const modeRegion = first.getByRole('region', { name: 'Mode', exact: true });
   assert.equal(await modeRegion.getByRole('slider').count(), 0);
   // The fixture is a mesh: no parts to explode, no solid to section and no CAD edges, so
@@ -589,10 +596,10 @@ test('a file opens framed at 100% of its own ruler: the open fit is the fit, wha
   assert.deepEqual(errors, []);
 });
 
-// Draw is the one tool the shell itself owns. The only format that has it is
-// STEP, which is still the pre-shell renderer, so shell-level Draw behaviour is
-// driven here through a harness-only renderer over one triangle
-// (`renderers/shell-harness`). It goes when STEP moves onto the shell.
+// Draw is the one tool the shell itself owns, and fullscreen the one presentation it
+// owns. Both are driven here through a harness-only renderer over one triangle
+// (`renderers/shell-harness`), which declares fullscreen the way a STEP does: a renderer
+// that does not is never handed the host's (the mesh, GLB, robot and DXF tests hold that).
 test('the shell keeps its Draw session across fullscreen, and fullscreen drags are the camera\'s', async (t) => {
   const temporary = await mkdtemp(join(tmpdir(), 'hardcore-shell-draw-'));
   let server, browser;
@@ -640,9 +647,10 @@ test('the shell keeps its Draw session across fullscreen, and fullscreen drags a
   await page.waitForTimeout(250);
   const regularCamera = await camera();
 
-  // Fullscreen hides the host frame without remounting the scene or losing the tool.
+  // Fullscreen hides the host frame — the nav row and its panel toggles — without remounting
+  // the scene or losing the tool.
   await page.evaluate(() => { window.beforeFullscreenCanvas = document.querySelector('[data-testid="one"] [aria-busy] > div > canvas'); window.cadHarness.fullscreen(true); });
-  await pane.getByRole('button', { name: 'Inspector', exact: true }).waitFor({ state: 'detached' });
+  await pane.locator('[data-file-panel]').first().waitFor({ state: 'detached' });
   assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).count(), 0);
   assert.equal(await pane.getByRole('button', { name: 'Zoom controls' }).count(), 0);
   const defaultFullscreenCamera = await camera();
@@ -981,7 +989,7 @@ test('a renderer supplies the viewport menu, a bottom action that falls back to 
   assert.deepEqual(errors, []);
 });
 
-test('a renderer says more about its load than a download: edit states, a preview, a warning, a degraded view, the revision on screen, its own snapshot and its own frame', async (t) => {
+test('a renderer says more about its load than a download: finding the file, edit states, a failed update the model survives, the revision on screen, its own snapshot and its own frame', async (t) => {
   const temporary = await mkdtemp(join(tmpdir(), 'hardcore-shell-load-'));
   let server, browser;
   t.after(async () => { await browser?.close(); if (server) await new Promise(resolve => server.close(resolve)); await rm(temporary, { recursive: true, force: true }); });
@@ -1008,62 +1016,94 @@ test('a renderer says more about its load than a download: edit states, a previe
   await page.addInitScript(() => { window.Worker = undefined; });
   await page.goto(`http://127.0.0.1:${server.address().port}/?file=one.harness`);
   const pane = page.getByTestId('one');
-  const canvas = await pane.locator('[aria-busy="false"] > div > canvas').first().boundingBox();
+  const canvasElement = pane.locator('[aria-busy="false"] > div > canvas').first();
+  const canvas = await canvasElement.boundingBox();
   const middle = { x: canvas.x + canvas.width / 2, y: canvas.y + canvas.height / 2 };
-  // The chip beside the filename is the host's, drawn from what the shell reports.
-  const chip = pane.locator('[data-file-status]');
   const stage = name => pane.locator(`[data-harness-stage="${name}"]`).click();
+  // What the shell draws over the viewport about a load: the overlay that covers a model
+  // still opening, and the card for an alert. Nothing is drawn beside the filename any more.
+  const overlay = pane.locator('[data-viewer-loading]');
+  const card = pane.getByRole('alert');
+  // The DRAWN frame, and how much of it is the triangle: its lit blue-grey, counted below the
+  // harness's own controls along the top, and outside `hole` (a box in canvas pixels).
+  const shot = async () => PNG.sync.read(await canvasElement.screenshot());
+  const triangle = ({ width, height, data }, hole = null) => {
+    let count = 0;
+    for (let y = 48; y < height; y += 2) for (let x = 0; x < width; x += 2) {
+      if (hole && x >= hole.x0 && x <= hole.x1 && y >= hole.y0 && y <= hole.y1) continue;
+      const at = (y * width + x) * 4;
+      if (data[at] + data[at + 1] + data[at + 2] > 250 && data[at + 2] > data[at] + 8) count += 1;
+    }
+    return count;
+  };
 
   // THE FRAME IS THE RENDERER'S TO WRAP. Its own context reaches the frame — and
   // it is above the frame, so it is there before anything the renderer draws in it.
   assert.equal(await pane.locator('[data-harness-frame-context]').innerText(), 'frame:idle');
 
-  // A LOAD THAT IS ONLY A DOWNLOAD SAYS NOTHING. Nothing of the six is passed, and
-  // the file on screen has no chip at all — which is every renderer but STEP.
-  assert.equal(await chip.count(), 0, 'a plain load has nothing to report');
+  // A LOAD THAT IS ONLY A DOWNLOAD SAYS NOTHING. Nothing of the load's extras is
+  // passed, and nothing covers the model or stands over it.
+  assert.equal(await overlay.count(), 0, 'a plain load covers nothing');
+  assert.equal(await card.count(), 0, 'and raises nothing');
 
-  // FINDING: the wait before the file is even located, named as such rather than
-  // as a phase of reading it.
+  // FINDING: the wait before the file is even located covers the viewport, and says
+  // so as such rather than as a phase of reading it.
   await stage('finding');
-  await chip.waitFor();
-  assert.equal(await chip.getAttribute('data-file-status'), 'Opening');
-  assert.match(await chip.getAttribute('title'), /Looking up the selected file/);
+  await overlay.waitFor();
+  assert.match(await overlay.innerText(), /Finding file/);
+  assert.equal(await pane.locator('[data-harness-frame-context]').innerText(), 'frame:finding');
 
-  // AN EDIT OF THE PERSON'S OWN is a wait with nothing downloading; the chip names
-  // it, and the busy spinner is up.
+  // AN EDIT OF THE PERSON'S OWN is a wait with nothing downloading, and the model it
+  // edits stays on screen: nothing covers it. The corner says the model is catching up.
+  const updating = pane.locator('[data-view-update-status]');
   await stage('editing');
-  await page.waitForFunction(() => document.querySelector('[data-file-status]')?.dataset.fileStatus === 'Updating');
-  assert.equal(await pane.locator('[data-file-status] .animate-spin').count(), 1, 'an edit in flight is busy');
+  await overlay.waitFor({ state: 'detached' });
+  assert.equal(await card.count(), 0);
+  await updating.waitFor();
+  assert.match(await updating.innerText(), /Updating model/);
 
-  // THE PREVIEW ENDS IT: the result is on screen, so the wait is over even though
-  // the write is not, and the chip goes quiet.
+  // THE PREVIEW ENDS IT: the result is on screen, so the wait is over even though the
+  // write is not.
   await stage('previewing');
-  await page.waitForFunction(() => !document.querySelector('[data-file-status]'));
+  await updating.waitFor({ state: 'detached' });
+  await page.waitForTimeout(300);
+  assert.deepEqual([await overlay.count(), await card.count()], [0, 0]);
+  const settled = await shot();
+  const whole = triangle(settled);
+  assert.ok(whole > 500, `the triangle is drawn: ${whole} samples of it`);
 
-  // A WARNING the model survives rides the badge under its own summary, opens as an
-  // alert, and is not a failed load: the canvas is still there and not covered.
-  await stage('warned');
-  await chip.waitFor();
-  assert.equal(await chip.getAttribute('data-file-status'), 'Harness warning');
-  assert.equal(await pane.locator('[data-harness-overlay]').count(), 1, 'the model is still on screen');
-  await chip.click();
-  await page.getByRole('alertdialog').waitFor();
-  assert.match(await page.getByRole('alertdialog').innerText(), /triangle is visible, but the harness reports a problem/);
-  await page.keyboard.press('Escape');
-  await page.getByRole('alertdialog').waitFor({ state: 'detached' });
-
-  // A DEGRADED VIEW is the renderer's own verdict about what it drew, and only it
-  // can reach it: the shell has no idea what a triangle should have looked like.
-  await stage('degraded');
-  await page.waitForFunction(() => document.querySelector('[data-file-status]')?.dataset.fileStatus === 'Limited detail');
-
-  // A SCENE THAT IS NOT WHOLE is not geometry to report on: the same failure reads
-  // "Open failed" rather than "Update failed", because there is nothing to fall back to.
-  await stage('partial');
-  await page.waitForFunction(() => !document.querySelector('[data-file-status]'));
-
+  // A FAILED UPDATE THE MODEL SURVIVES is an error, and the viewport is where it is said:
+  // a card over the model — which is still drawn around it, neither blanked nor covered.
+  await stage('failed');
+  await card.waitFor();
+  const said = await card.innerText();
+  assert.match(said, /Harness update failed/);
+  assert.match(said, /The existing model remains visible/);
+  assert.equal(await overlay.count(), 0, 'it is not a load: nothing covers the model');
+  const [canvasBox, cardBox] = [await canvasElement.boundingBox(), await card.boundingBox()];
+  const hole = { x0: cardBox.x - canvasBox.x - 4, y0: cardBox.y - canvasBox.y - 4,
+    x1: cardBox.x - canvasBox.x + cardBox.width + 4, y1: cardBox.y - canvasBox.y + cardBox.height + 4 };
+  const around = triangle(settled, hole);
+  assert.ok(around > 200, `there is triangle to see around the card: ${around}`);
+  const survived = triangle(await shot(), hole);
+  assert.ok(Math.abs(survived - around) <= around * 0.05, `and it is still drawn there: ${survived} of ${around}`);
+  // DISMISS puts the card away, since the previous version is there to use: the card goes
+  // and the whole model is on screen again.
+  await card.getByRole('button', { name: 'Dismiss', exact: true }).click();
+  await card.waitFor({ state: 'detached' });
+  assert.ok(Math.abs(triangle(await shot()) - whole) <= whole * 0.05, 'the triangle is all there under where the card was');
+  // It stays put away while that alert stands; once the alert clears, the same failure
+  // raised again (a retry that failed the same way) is shown again.
+  await page.waitForTimeout(300);
+  assert.equal(await card.count(), 0, 'dismissed while the same alert stands');
   await stage('idle');
-  await page.waitForFunction(() => !document.querySelector('[data-file-status]'));
+  await page.waitForTimeout(300);
+  assert.equal(await card.count(), 0);
+  await stage('failed');
+  await card.waitFor();
+  assert.match(await card.innerText(), /Harness update failed/);
+  await stage('idle');
+  await card.waitFor({ state: 'detached' });
 
   // THE REVISION ON SCREEN. Live state reports what is being SHOWN, which a renderer
   // holding a predecessor over a rebuild knows and the shell does not.

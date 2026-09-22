@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { resolveViewSettings } from '@hardcore/core/common/viewSettings.js';
 import { createViewSettingsStore } from './viewSettingsStore.js';
-import { DisplaySettingsSection } from '../../../../dist/renderers/kit/view-settings/DisplaySettingsTab.js';
+import { DisplaySettingsSection } from '../../../../dist/renderers/kit/view-settings/DisplaySettingsSection.js';
 import { FileSheetGatedSection } from '../../../../dist/renderers/kit/inspector/FileSheet.js';
 
 Object.assign(globalThis, { React });

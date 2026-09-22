@@ -78,7 +78,7 @@ function layoutJointHandles(runtime, handles, width, height) {
 }
 
 /**
- * The Pose tool in the viewport: a knob per joint, drawn over the scene, that
+ * The Position tool in the viewport: a knob per joint, drawn over the scene, that
  * drags the joint through `handle.onChange`.
  *
  * `handles` is the adapters' list for the CURRENT pose; the hook lives exactly as

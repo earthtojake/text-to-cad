@@ -2,7 +2,7 @@ import { RotateCcw } from "lucide-react";
 import { Button } from "@hardcore/ui/primitives/button";
 import { FILE_SHEET_COMPACT_BUTTON_CLASSES, FileSheetSelectRow } from "./FileSheet.js";
 
-// The Kinematics tab's two controls every posable file shares: the named-position
+// The Position section's two controls every posable file shares: the named-pose
 // dropdown and the Reset button. None describes custom/default values without adding
 // a selectable reset option.
 export const NO_PRESET_VALUE = "__none__";
@@ -12,9 +12,8 @@ export function KinematicsPoseRow({
   activeValue,
   onSelect,
   disabled = false,
-  compact = false,
-  label = "Preset",
-  ariaLabel = "Preset position"
+  label = "Pose",
+  ariaLabel = "Pose"
 }) {
   if (!Array.isArray(poses) || !poses.length) {
     return null;
@@ -24,9 +23,8 @@ export function KinematicsPoseRow({
     ? "None"
     : String(poses.find((pose) => pose.value === active)?.label || active);
   return (
+    // A labelled row: the name on the left, the dropdown right-aligned beside it.
     <FileSheetSelectRow
-      stacked={!compact}
-      hideLabel={compact}
       label={label}
       value={active}
       onValueChange={(value) => {
@@ -43,7 +41,7 @@ export function KinematicsPoseRow({
   );
 }
 
-/** The tab's last row: every driven value back to where the file puts it. */
+/** The section's last row: every driven value back to where the file puts it. */
 export function MotionResetButton({ onReset }) {
   if (!onReset) return null;
   return <div className="px-2 py-2">

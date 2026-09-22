@@ -9,7 +9,7 @@ import { Fragment } from "react";
 // gesture, the anchor and the dismissal. Neither can drift from the other.
 //
 // Its last group is the model's framing, and it is the only zoom control the
-// viewer has left: a percentage readout and its menu used to sit in the Inspector
+// viewer has left: a percentage readout and its menu used to sit in the panel
 // header, and nothing replaced them. Framing cannot contradict the active tool,
 // and every action here returns to Select first anyway (`partMenuActions`).
 function AssemblyContextMenuItemLabel({ children }) {

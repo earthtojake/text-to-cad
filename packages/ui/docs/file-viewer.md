@@ -40,7 +40,8 @@ releases it on navigation, reload, cancellation, and unmount.
 
 Use `defineFileRenderer<T>` to keep the prepared payload paired with its lazy
 component. A definition supplies `id`, numeric `priority`, `matches`, `prepare`,
-and `load`. Larger priorities win. Duplicate IDs and equal-priority matches
+and `load`, and optionally `panels` and `fullscreen`. Larger priorities win.
+Duplicate IDs and equal-priority matches
 produce explicit errors. At most one registration may declare `fallback: true`;
 it runs only when no ordinary registration matches. Registration construction
 and matching do not load the component.
@@ -54,24 +55,37 @@ during a pending save survive its response. External changes reload clean
 documents; dirty documents retain their draft and show the existing reload
 choice.
 
-Panel declarations use stable IDs and `content: "slot" | "body"`. The renderer
+A definition's `panels({ open, ready, file, data })` returns the nav row's
+panels for one prepared document, so it can read what `prepare` found (`data`).
+Panel declarations use stable IDs and `content: "slot" | "body"`; FileViewer
+appends the file tree (`content: "tree"`) last. The nav row is the tab strip:
+one toggle per panel, one panel open at a time, and no tabs inside a panel. The renderer
 portals a slot panel into `panelSlot`; a body panel replaces its own content.
 `openPanel` and `onPanelOpen` keep every renderer panel exclusive with the file
 tree. `onReady(false)` suppresses panels whose surface could not start.
+`FileViewerState.panel` is `null` until someone chooses, which opens the first
+panel declared `defaultOpen` (a viewer file's own panel), or nothing; the tree
+is the default only when no file is open. `""` is nothing open. Which panel a
+newly shown file opens with is the host's to apply: `navigation.openFile(path,
+{ target, panel })` names it — the tree, for a file picked in the tree, so the tree
+stays up while a person walks it — and without one a file shown in place or in a
+new view opens at `null`, while a view already showing the file keeps its panel.
 `onChromeVisibilityChange(false)` supports an immersive preview and resets on
 the next document. Host-specific empty, loading, and error artwork can be
-supplied through `presentation`, without duplicating the tab's placement.
-`onActivityChange` publishes work on the current file. FileViewer displays its
-loading flag, label, title and optional tone beside the filename; an optional
-`onActivate` callback makes that status actionable. `presentation.activity` can
-replace the default indicator. Each publish renders the whole FileViewer, so a
-renderer publishes status changes as they happen and coalesces progress detail
-that changes only `title` (CAD: `useFileActivityReport`, latest value a few times
-a second) rather than publishing from an effect per progress tick. `narrowCrumbs` optionally
+supplied through `presentation`, without duplicating the tab's placement. The
+row's status slot holds only the unsaved-changes dot; a renderer shows its own
+loading and errors in its body. `narrowCrumbs` optionally
 overrides automatic breadcrumb folding. Per-file renderer state is also accepted
 during a departing renderer's cleanup, while it still belongs to the same root.
 `navigationPath` can keep navigation unselected while a requested file is still
 being resolved by a host catalog. It does not change the requested document.
+
+`fullscreen` and `onFullscreenChange(fullscreen)` are the host's. A host without
+`onFullscreenChange` has no fullscreen. FileViewer hands `onFullscreenChange` only
+to a renderer whose definition declares `fullscreen: true`, and only such a
+renderer is ever told `fullscreen`; opening any other file asks a `fullscreen`
+host to leave (`onFullscreenChange(false)`). While presenting, the nav row and
+panel column are hidden.
 
 The browser harness beside FileViewer exercises injected renderers, dirty and
 revision state, delayed writes, changes, root isolation, navigation actions,

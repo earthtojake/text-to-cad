@@ -33,7 +33,7 @@ const SAVE_DEBOUNCE_MS = 400;
 
 /**
  * The file tab's panel column, in pixels — one width for every panel that
- * can be in it (the tree or the CAD Inspector), because
+ * can be in it (the tree or a viewer file's panels), because
  * it is one column. A preference, not a per-tab property; WHICH panel is
  * open is per tab (`FileTabSchema.panel`).
  */
@@ -844,10 +844,14 @@ export async function openSessionTab<K extends ExplorerTabKind>(sessionId: strin
   const strip = currentStrip(sessionId)!;
   const rooted = { ...((kind === "file" || kind === "drawing" || kind === "browser") ? { root } : kind === "terminal" ? { cwd: root } : {}), ...init };
   const path = kind === "file" ? (init as TabInit["file"])?.path : null;
+  // A panel asked for is the panel the file shows, in whichever tab shows it; none asked for
+  // leaves a tab already showing the file as it is.
+  const panel = kind === "file" ? (init as TabInit["file"])?.panel : undefined;
   const existing = path ? strip.tabs.find(tab => tab.kind === "file" && tab.path === path && tab.root === root) : null;
   const blank = path ? strip.tabs.find(tab => tab.kind === "file" && !tab.path) : null;
-  const tab = existing ?? (blank ? { ...blank, path, root } as FileTab : blankTab(kind, projectId, sessionId, strip.tabs.length, rooted));
-  const tabs = existing ? strip.tabs : blank ? strip.tabs.map(item => item.id === blank.id ? tab : item) : [...strip.tabs, tab];
+  const tab = existing ? (panel === undefined ? existing : { ...existing, panel } as FileTab)
+    : blank ? { ...blank, path, root, panel: panel ?? null } as FileTab : blankTab(kind, projectId, sessionId, strip.tabs.length, rooted);
+  const tabs = existing || blank ? strip.tabs.map(item => item.id === tab.id ? tab : item) : [...strip.tabs, tab];
   updateSessionStrip(sessionId, { ...strip, tabs, activeId: tab.id, reveal: null, collapsed: false });
   return tab;
 }

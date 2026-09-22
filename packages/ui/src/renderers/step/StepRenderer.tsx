@@ -1,5 +1,5 @@
 import { useSyncExternalStore, type ComponentType } from 'react';
-import type { FileActivity, FileNavigationAction, FileRendererProps, JsonValue } from '../../file-viewer/types.js';
+import type { FileNavigationAction, FileRendererProps, JsonValue } from '../../file-viewer/types.js';
 import type { CadWorkspaceService, CadEntry, CadRenderSession, CadServerInfo } from '@hardcore/core/client';
 import type { CadCommands, CadCommandSource, CadLiveBinding, StepRendererSlots, PreparedStepDocument } from './index.js';
 import type { ResourceRef } from '@hardcore/core/prompt';
@@ -11,7 +11,7 @@ const emptySubscribe = () => () => {};
 const getEmptyCommands = () => emptyCommands;
 interface StepSurfaceProps {
   fullscreen?: boolean;
-  onExitFullscreen?: () => void;
+  onFullscreenChange?: (fullscreen: boolean) => void;
   onNavigationActionsChange?: (actions: readonly FileNavigationAction[]) => void;
   preferences: CadPreferences;
   onPreferenceChange(patch: Partial<CadPreferences>): void;
@@ -25,7 +25,6 @@ interface StepSurfaceProps {
   openPanel: string;
   onPanelOpen(id: string): void;
   onChromeVisibilityChange(visible: boolean): void;
-  onActivityChange(activity: FileActivity | null): void;
   onReload(): void;
   state: JsonValue | undefined;
   onStateChange(state: JsonValue): void;
@@ -60,9 +59,8 @@ export default function StepRenderer(props: FileRendererProps<PreparedStepDocume
     openPanel={props.openPanel}
     onPanelOpen={props.onPanelOpen}
     onChromeVisibilityChange={props.onChromeVisibilityChange}
-    onActivityChange={props.onActivityChange}
     fullscreen={props.fullscreen}
-    onExitFullscreen={props.onExitFullscreen}
+    onFullscreenChange={props.onFullscreenChange}
     onNavigationActionsChange={props.onNavigationActionsChange}
     onReload={props.reload}
     state={props.state}

@@ -28,7 +28,7 @@ function GlbSurface({ view, data }) {
   requestRenderRef.current = shell.requestRender;
   useDeclinedSelectReference(document, shell.setCopyStatus, GLB_DECLINED_LIVE_COMMANDS.select);
 
-  return <RendererShell shell={shell} tools={[]} inspector={{ title: "GLB", tabs: [shell.displayTab] }} />;
+  return <RendererShell shell={shell} tools={[]} />;
 }
 
 export default function GlbRenderer(props) {

@@ -10,7 +10,7 @@ This package was renamed from the former viewer app directory. It is the browser
 `@hardcore/ui/file-viewer`, not the owner of the shared CAD interface.
 This is a **pure refactor**: UI, UX and functionality stay the same, including
 URL/history behavior, read-only actions, app appearance and camera state, CAD
-selection/measurements/tools, inspector layout and responsive behavior.
+selection/measurements/tools and responsive behavior.
 
 **Owns:** URL selection, browser history, document title/appearance, catalog
 file-source adapter, browser persistence, and this app's top bar/release links.
@@ -19,7 +19,7 @@ continues to expose CAD artifacts only; this migration adds no file types or
 write endpoints to the web app.
 Follow the [shared host contract](../../packages/ui/docs/viewer-host.md) when
 adding viewer features; browser effects belong in this app's adapters.
-The [shared Model tree](../../packages/ui/docs/cad-renderer.md#step-inspector-layout)
+The [shared Model tree](../../packages/ui/docs/cad-renderer.md#step-panel)
 owns expansion-based picking, lazy topology/feature inspection and isolation.
 Web uses the same tree and file-row primitives as desktop; its HTTP adapter
 does not decide which model nodes are expanded or selectable.
@@ -159,7 +159,7 @@ registered renderers and explicit services. Viewer content is registered through
 `@hardcore/ui/renderers/glb`, for `.stl` and `.3mf` `@hardcore/ui/renderers/mesh`, and
 for `.urdf`, `.srdf` and `.sdf` `@hardcore/ui/renderers/robot` (`App.tsx` registers all
 five with the same client and preferences); all loading,
-selection, inspector and tool behavior is shared. Public declarations, styles and worker assets are built in that
+selection, panel and tool behavior is shared. Public declarations, styles and worker assets are built in that
 package. See `docs/shell.md` for the host boundary and `docs/storage.md` for
 browser persistence. CAD control guidance lives with the UI package.
 
@@ -184,8 +184,8 @@ Linux/Windows. Use the same graphics backend for baseline/refactor image
 comparisons.
 
 From the repository root, `scripts/test/test-viewer-browser.sh --ci` exercises
-the bundled client's format, picking, robot Links/Kinematics and camera
-contracts with fresh temporary fixtures and a private server/cache. Omit `--ci`
+the bundled client's format, picking, kinematics (robot joints, an SRDF group
+state, a STEP mate) and camera contracts with fresh temporary fixtures and a private server/cache. Omit `--ci`
 to include full cold/warm/disabled-LOD picking, scene placement and Render quality
 checks. `--out /tmp/viewer-review` retains screenshots and bounded failure
 diagnostics; the runner cleans up its project and processes on exit.
@@ -202,11 +202,12 @@ the UI package's asset documentation for asset provenance and regeneration.
 ### Narrow CAD panes
 
 A file has a top-right tool strip only where it has tools. A STEP's holds Select,
-Measure, Draw, plus Pose and Animate where the file has joints or routines;
-pressing Select again opens its selection-filter dropdown. Under Select a
+Measure, Draw, plus Position and Animate where the file has joints or routines,
+and Fullscreen last; pressing Select again opens its selection-filter dropdown.
+Under Select a
 secondary tap over a STEP opens the part menu (the shell's viewport menu, filled
 by the STEP renderer); under any other tool it opens nothing. A robot description
-(its own renderer) opens in Pose, which leads its tools, followed by a Select
+(its own renderer) opens in Position, which leads its tools, followed by a Select
 that picks whole links. Draw is a STEP tool and appears nowhere else. A DXF, a
 GLB, an STL and a 3MF (their own renderers) have NO tools and no strip at all:
 their viewport simply orbits, pans and zooms, and a secondary press opens
@@ -214,11 +215,12 @@ nothing. A GLB with clips shows the playbar under the model always — it is a
 transport, not a tool, and the file opens at rest. A DXF is not a viewport at
 all: it is a straight 2D render on a canvas (drag to pan, wheel or pinch to zoom
 about the pointer, double-click to fit), and its file navbar carries Take
-snapshot and nothing else. Buttons wrap inside the pill
-when the Inspector or a narrow host reduces the scene width. Snapshot is a
-direct action beside the Inspector and file-tree toggles in the file navbar;
-the web prompt adapter copies the viewport image and references to the clipboard.
-There is no zoom control: no percentage beside the Inspector tabs, no menu behind
+snapshot and the file tree's toggle, nothing else. Buttons wrap inside the pill
+when an open panel or a narrow host reduces the scene width. Snapshot is a
+direct action before the panel toggles in the file navbar (the file's own panel,
+Display, then the file tree); the web prompt adapter copies the viewport image
+and references to the clipboard.
+There is no zoom control: no percentage readout, no menu behind
 one, no zoom toolbar. A STEP's viewport context menu ends in Zoom to fit and Zoom
 to selection (off without a selection), offered over a part, over the backdrop and
 on every Features tree row; on every other 3D file the view cube's centre, "Reset
@@ -226,63 +228,74 @@ to default isometric view", frames the model again from the default direction.
 Nothing in either touches the model, its motion or its display settings.
 X/Y/Z labels remain visible outside the bottom-right axis endpoints.
 
-Fullscreen (`Maximize2`) sits beside appearance in the web header. The app owns
-this transient state and passes it to FileViewer. It hides all chrome, sidebars
-and viewport tools. Shared CAD fullscreen controls show the Animate tool's
+Fullscreen (`Maximize2`) is the last button of a STEP's own tool strip; the web
+header has none, and no other format offers it. The app owns this transient
+state and passes it to FileViewer with `onFullscreenChange`, which FileViewer
+hands to the STEP renderer alone. It hides all chrome, the nav row, the panel
+column and viewport tools. Shared CAD fullscreen controls show the Animate tool's
 transparent centered bottom playbar and an untooltipped orbit-settings button
 plus X at top-right. Settings opens a floating, content-height panel capped by
 the viewport, with one permanent Orbit section: a speed slider and numeric
 input (0 stops rotation). The bottom playbar has plain play/pause and a live
 scrub bar — there is no separate restart, since scrubbing to the start is the
-restart — and is absent without animation. Kinematics stays in the inspector.
+restart — and is absent without animation. Position stays in the file's panel.
 Both control areas fade after two seconds idle; an open settings panel and active
 slider/keyboard interaction keep them visible.
-The app supplies `onExitFullscreen` and honors prevented Escape events so nested
-pickers and settings close before fullscreen exits. X or Escape restores the
-panel, active tool and original camera without reloading the scene. Each entry
-starts at the default camera. Orbit speed persists globally through the host
-preference adapter; animation shares the inspector's per-file state and clocks.
+The app honors prevented Escape events so nested pickers and settings close
+before fullscreen exits; X calls `onFullscreenChange(false)`. X or Escape
+restores the panel, active tool and original camera without reloading the scene.
+Each entry starts at the default camera. Orbit speed persists globally through
+the host preference adapter; animation shares the Animate tool's per-file state
+and clocks.
 
 ## Current viewer behavior
 
-The STEP inspector uses **Features | Kinematics | Display**. Kinematics appears
-when the sidecar declares it, with Pose above Joints. Every pose write — a
-named pose, a slider, a typed value, or a Pose-tool knob — is an instant jump;
-there is no eased transition. Reset also stops any playing routine and hands
-the pose back to Kinematics, so the two never disagree about which one is in
-control afterward. Robot Pose and Joints controls also live in Kinematics,
-followed by a Links tab that always shows the robot's link tree. A DXF has NO
-Inspector at all — no Display settings, no tabs, and no toggle for one in its
-navbar: a drawing is a finished 2D document, and the pane shows it and nothing
-else.
+The nav row is the tab strip: a file's toggles are its own panel, `Display`,
+then the file tree, and no panel has tabs inside it. A STEP's own panel is
+`Part` or `Assembly`; it stacks Features, then Position when the sidecar
+declares kinematics (a `Pose` row, the joint sliders, then Reset), then Issues
+when there are any. Every pose write — a named pose, a slider, a typed value, or
+a Position-tool knob — is an instant jump; there is no eased transition. Reset
+also stops any playing routine and hands the pose back to Position, so the two
+never disagree about which one is in control afterward. A robot description's
+own panel is `Robot`: its Position (a `Pose` row with any SRDF group states,
+then joint sliders, then Reset), then Links, which always shows the robot's link
+tree, and an SDF's metadata after Links. An
+STL, a 3MF and a GLB have Display and the tree. A DXF has neither a panel of its
+own nor Display — only the file tree's toggle beside Take snapshot: a drawing is
+a finished 2D document, and the pane shows it and nothing else.
+
+The open panel is not saved: a page load opens the file with its own panel, or
+with nothing when it has none, and Display is never open by default. In a window
+at least 520px wide, a file picked in the tree opens with the tree still up, so it
+can be walked file by file, and any other open (a crumb, a link in a panel) shows
+the file's own panel; below that width every open leaves the model the room, with
+no panel at all. The web host stores the
+panel width and the tree's expanded folders ([storage](docs/storage.md)).
 
 Display owns a single Mode dropdown: Solid, Render, X-ray, Hidden line and Wireframe.
 Modes are presets over one grouped display schema, and all settings groups are
 available in every preset. Render defaults to perspective; others to orthographic.
 Changing a view setting shows Custom. Display Reset restores its base preset and
 disables Clip/Explode; preset selection preserves those tools. Neither operation
-changes camera viewpoint/zoom, selection, Kinematics or app appearance.
+changes camera viewpoint/zoom, selection, the pose or app appearance.
 Expanded settings groups are enabled; the minus disables and restores neutral
-behavior. See [View presets](../../packages/ui/docs/render-mode.md). Inspector
-tabs occupy one fixed row in canonical order, without dragging, reordering or
-splitting. Active selection is saved per file and preserved across mode changes.
-Old global tab layouts are ignored; a legacy split restores its last available
-selection, and a saved section ID the current format does not have is simply
-not open, so the sheet lands on the format's first tab.
-Visited Model trees retain disclosure and scroll when another tab is active.
+behavior. See [View presets](../../packages/ui/docs/render-mode.md). The file's
+own panel stays mounted while Display is open, so the Features tree keeps its
+disclosure and scroll.
 
 Authored material information lives in the Model reference details; editing it
 requires changing the source model or annotations. The viewer has no Materials
 or Theme editor and does not restore legacy material overrides or custom themes.
 These controls live in `@hardcore/ui`; the web host keeps URL/history, appearance
 and root-scoped persistence. See the UI package's Render and LOD playbooks.
-Saved references to the retired Theme panel restore the renderer's default
-Inspector. Explicitly closed panels and existing Render recipes are preserved.
 
 Large assemblies load progressively and refine visible components within memory
 budgets. Warm tessellations can render before exact surface derivation. The
-filename reports opening/updating stages, limited detail and actionable errors;
-its diagnostic preserves complete compiler output and offers a file-only retry.
+breadcrumb carries no status: opening and updating show in the viewport's loading
+overlay, and an error is a card over the viewport whose Details keep the complete
+compiler output and whose Try again reloads only that file. A failed update the
+model survives can be dismissed, leaving the previous version to inspect.
 
 A source-checkout backend can restart on Python code changes. This browser host
 polls its identity and reloads when the same endpoint is ready. Installed wheels

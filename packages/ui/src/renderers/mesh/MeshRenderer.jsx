@@ -8,8 +8,6 @@ import { MESH_DECLINED_LIVE_COMMANDS } from "./tools.js";
 import { useMeshScene } from "./useMeshScene.js";
 
 const LIVE = Object.freeze({ declined: MESH_DECLINED_LIVE_COMMANDS });
-// The Inspector is titled by the format on disk.
-const formatLabel = path => (/\.3mf$/i.test(path) ? "3MF" : "STL");
 
 function MeshSurface({ view, data }) {
   const document = useWorkspaceDocument({ view, data });
@@ -28,8 +26,7 @@ function MeshSurface({ view, data }) {
   });
   useDeclinedSelectReference(document, shell.setCopyStatus, MESH_DECLINED_LIVE_COMMANDS.select);
 
-  return <RendererShell shell={shell} tools={[]}
-    inspector={{ title: formatLabel(view.file.path), tabs: [shell.displayTab] }} />;
+  return <RendererShell shell={shell} tools={[]} />;
 }
 
 export default function MeshRenderer(props) {

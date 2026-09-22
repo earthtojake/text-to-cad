@@ -13,13 +13,14 @@
 import faviconUrl from "../../assets/favicon.ico";
 
 import ViewerLinks from "./ViewerLinks";
-import { Maximize2, Monitor, Moon, Sun } from "lucide-react";
+import { Monitor, Moon, Sun } from "lucide-react";
 import { Button } from "@hardcore/ui/primitives/button";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@hardcore/ui/primitives/dropdown-menu";
 import { COLOR_SCHEMES } from "../../ui/colorScheme.js";
 
-/** @param {{ colorSchemePreference?: string, resolvedColorSchemeMode?: 'light' | 'dark', onColorSchemePreferenceChange?: (value: string) => void, fullscreen?: boolean, fullscreenAvailable?: boolean, onFullscreenChange?: (value: boolean) => void }} props */
-export default function ViewerTopBar({ colorSchemePreference = "system", resolvedColorSchemeMode = "light", onColorSchemePreferenceChange = undefined, fullscreen = false, fullscreenAvailable = false, onFullscreenChange = undefined }) {
+// Fullscreen is not here: it is the last button of a STEP's own tool strip.
+/** @param {{ colorSchemePreference?: string, resolvedColorSchemeMode?: 'light' | 'dark', onColorSchemePreferenceChange?: (value: string) => void, fullscreen?: boolean }} props */
+export default function ViewerTopBar({ colorSchemePreference = "system", resolvedColorSchemeMode = "light", onColorSchemePreferenceChange = undefined, fullscreen = false }) {
   const AppearanceIcon = resolvedColorSchemeMode === "dark" ? Moon : Sun;
   const label = `Appearance: ${COLOR_SCHEMES.find(option => option.id === colorSchemePreference)?.label || "System"}`;
   if (fullscreen) return null;
@@ -46,7 +47,6 @@ export default function ViewerTopBar({ colorSchemePreference = "system", resolve
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>
-        <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:text-foreground" aria-label="Fullscreen" title="Fullscreen" disabled={!fullscreenAvailable} onClick={() => onFullscreenChange?.(true)}><Maximize2 className="size-3.5" aria-hidden="true" /></Button>
       </div>
     </header>
   );

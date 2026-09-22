@@ -14,16 +14,15 @@ function nextComponentIds(current, id, multiSelect) {
 /**
  * What is selected and hovered in a robot: ONE link, or any number of named mesh objects.
  * The scene graph draws both (`scene.setHighlight`), so there is no table of part ids: a
- * link is its group's meshes. Selection is React state, because the Links tab draws it;
+ * link is its group's meshes. Selection is React state, because the Links section draws it;
  * hover is not, because nothing but the scene shows it and it changes as the pointer moves.
  *
  * A link is named by the description, so its selection survives a rebuilt scene; an
  * object's id belongs to one built scene and does not.
  *
- * @param {{ scene: object | null, hidden: boolean, requestRender: () => void }} options  `hidden`: highlights
- *   are not drawn (fullscreen), though the selection is kept.
+ * @param {{ scene: object | null, requestRender: () => void }} options
  */
-export function useLinkSelection({ scene, hidden, requestRender }) {
+export function useLinkSelection({ scene, requestRender }) {
   const [selection, setSelection] = useState(NOTHING);
   const hover = useRef({ linkName: "", componentId: "" });
   const live = useRef(null);
@@ -32,18 +31,18 @@ export function useLinkSelection({ scene, hidden, requestRender }) {
     [scene, selection.componentIds]
   );
   const selectedLinkName = selection.linkName;
-  live.current = { scene, hidden, requestRender, selectedLinkName, selectedComponentIds };
+  live.current = { scene, requestRender, selectedLinkName, selectedComponentIds };
 
   const paint = useCallback(() => {
     const now = live.current;
     if (!now.scene) return;
-    now.scene.setHighlight(now.hidden ? {} : {
+    now.scene.setHighlight({
       hoveredLink: hover.current.linkName, hoveredComponent: hover.current.componentId,
       selectedLink: now.selectedLinkName, selectedComponents: now.selectedComponentIds
     });
     now.requestRender();
   }, []);
-  useEffect(paint, [paint, scene, hidden, selectedLinkName, selectedComponentIds]);
+  useEffect(paint, [paint, scene, selectedLinkName, selectedComponentIds]);
 
   const setHover = useCallback((linkName, componentId) => {
     if (hover.current.linkName === linkName && hover.current.componentId === componentId) return;

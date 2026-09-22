@@ -256,6 +256,8 @@ test("stays dark through display mode and render settings edits", async () => {
   await page.getByLabel("Filter files").fill(STEP);
   await page.getByRole("option", { name: STEP, exact: false }).first().click();
   await expect(page.locator("[data-cad-surface] canvas").first()).toBeVisible({ timeout: 120_000 });
+  // Picked in the tree, the file opens with the tree; its model list is in its own panel.
+  await page.locator("header [data-file-panel=cad-file]").click();
   await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible({ timeout: 120_000 });
   await expectNeverMoved(page, "dark", "the CAD surface mounting");
   // Embedded CAD consumes the host appearance and never writes the document.
@@ -263,13 +265,14 @@ test("stays dark through display mode and render settings edits", async () => {
   await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
   await expect(page.locator("[data-file-panel='cad-theme'], [data-file-sheet='Theme']")).toHaveCount(0);
 
-  await page.getByRole("tab", { name: "Display", exact: true }).click();
-  const displayMode = page.getByRole("tabpanel", { name: "Display", exact: true }).getByRole("combobox", { name: "Mode" });
+  // Display is a panel of its own: its toggle in the nav row turns the column over to it.
+  await page.locator("header [data-file-panel=cad-display]").click();
+  const displayMode = page.locator("[data-file-sheet=Display]").getByRole("combobox", { name: "Mode" });
   await displayMode.click();
   await page.getByRole("option", { name: "Render", exact: true }).click();
   // Render turns Lighting on. An open section's header is plain text and only its minus is a
   // control (`packages/ui/docs/settings-ui.md`), so the section is found by its name.
-  const studio = page.getByRole("tabpanel", { name: "Display", exact: true }).getByRole("region", { name: "Lighting", exact: true });
+  const studio = page.locator("[data-file-sheet=Display]").getByRole("region", { name: "Lighting", exact: true });
   await expect(studio.getByRole("button", { name: "Disable Lighting", exact: true })).toHaveAttribute("aria-expanded", "true");
   await expectNeverMoved(page, "dark", "entering Render");
 
@@ -285,7 +288,8 @@ test("stays dark through display mode and render settings edits", async () => {
 
   await displayMode.click();
   await page.getByRole("option", { name: "Solid", exact: true }).click();
-  await page.getByRole("tab", { name: "Features", exact: true }).click();
+  // Back to the file's own panel, where its Features tree is.
+  await page.locator("header [data-file-panel=cad-file]").click();
   await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible();
   await expectNeverMoved(page, "dark", "returning to Inspect");
   expect(await surfaceWroteTheDocument(page)).toEqual({ theme: null, preference: null });

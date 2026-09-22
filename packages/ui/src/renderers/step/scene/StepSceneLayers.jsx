@@ -287,7 +287,7 @@ export default function StepSceneLayers({ viewport, stepScene, policy, props, ap
       linkName: String(record?.sourcePart?.linkName || ""),
       matrix: record?.mesh?.matrix?.toArray?.() || null
     }));
-    // Where the Pose tool's knobs are, in CSS pixels of the viewport, with each joint's
+    // Where the Position tool's knobs are, in CSS pixels of the viewport, with each joint's
     // value; empty outside the tool.
     const jointHandleLayout = () => jointHandleLayoutRef.current?.() || [];
     // The true-pose contract -- model at authored coordinates, ground per the floor coupling

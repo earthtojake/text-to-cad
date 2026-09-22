@@ -2,7 +2,7 @@ import { memo, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { cn } from "@hardcore/ui/utils";
 import { Slider } from "@hardcore/ui/primitives/slider";
 import {
-  FILE_SHEET_PRECISION_SLIDER_CLASSES, FileSheetSliderField, FileSheetStaticSection, FileSheetStatusText, parseFileSheetNumberInput
+  FILE_SHEET_PRECISION_SLIDER_CLASSES, FileSheetSliderField, FileSheetStatusText, parseFileSheetNumberInput
 } from "../kit/inspector/FileSheet.js";
 import { KinematicsPoseRow, MotionResetButton, NO_PRESET_VALUE } from "../kit/inspector/kinematicsControls.jsx";
 
@@ -168,8 +168,8 @@ const JointRow = memo(function JointRow({
 });
 
 // Each control subscribes to the ONE thing it draws (a joint's value, the named pose's
-// id), so a pose step renders the row that moved and nothing else: not the tab, not its
-// 26 other rows.
+// id), so a pose step renders the row that moved and nothing else: not the section, not
+// its 26 other rows.
 function PoseJointRow({ pose, joint }) {
   const read = () => pose.getSnapshot().values[joint.name] ?? joint.defaultValueDeg ?? 0;
   const valueDeg = useSyncExternalStore(pose.subscribe, read, read);
@@ -179,7 +179,7 @@ function PoseJointRow({ pose, joint }) {
 function PoseGroupStateRow({ pose }) {
   const read = () => pose.getSnapshot().groupStateId;
   const groupStateId = useSyncExternalStore(pose.subscribe, read, read);
-  return <KinematicsPoseRow compact
+  return <KinematicsPoseRow
     poses={pose.groupStates.map(state => ({ value: state.id, label: String(state.label || state.name || "").trim() || "State" }))}
     activeValue={pose.groupStates.some(state => state.id === groupStateId) ? groupStateId : NO_PRESET_VALUE}
     onSelect={(value) => {
@@ -190,21 +190,19 @@ function PoseGroupStateRow({ pose }) {
 }
 
 /**
- * A robot's Kinematics tab: named poses (an SRDF's group states), then a slider per joint a
- * person can drive, then Reset.
+ * A robot's Position section: its named pose (an SRDF's group states), then a slider per
+ * joint a person can drive, then Reset — one section's rows, with no sections of their own.
  *
  * @param {{ pose: ReturnType<typeof import("./poseStore.js").createPoseStore> }} props
  */
-export default function KinematicsTab({ pose }) {
+export default function PositionControls({ pose }) {
   if (!pose.joints.length) return <FileSheetStatusText className="py-2">No movable joints.</FileSheetStatusText>;
   return (
-    <div>
+    <div className="space-y-1">
       {/* A named state is a way of SETTING the joints, so it leads them. A plain URDF
           declares none and opens straight onto its values. */}
-      {pose.groupStates.length ? <FileSheetStaticSection title="Pose"><PoseGroupStateRow pose={pose} /></FileSheetStaticSection> : null}
-      <FileSheetStaticSection title="Joints">
-        {pose.joints.map(joint => <PoseJointRow key={joint.name} pose={pose} joint={joint} />)}
-      </FileSheetStaticSection>
+      {pose.groupStates.length ? <PoseGroupStateRow pose={pose} /> : null}
+      {pose.joints.map(joint => <PoseJointRow key={joint.name} pose={pose} joint={joint} />)}
       <MotionResetButton onReset={pose.reset} />
     </div>
   );

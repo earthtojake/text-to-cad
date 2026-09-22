@@ -21,7 +21,6 @@ import {
   FileSheetSelectRow,
   FileSheetSliderField,
   FileSheetStatusText,
-  FileSheetStaticSection,
   FileSheetCheckboxRow,
   FileSheetValueInput,
   parseFileSheetNumberInput
@@ -134,15 +133,12 @@ export default function PoseControlsSection({
       {definition ? (
         <>
           {poseNames.length ? (
-            <FileSheetStaticSection title="Pose">
-            <KinematicsPoseRow compact
+            <KinematicsPoseRow
               poses={poseNames.map((poseName) => ({ value: poseName, label: poseName }))}
               activeValue={activePose}
               onSelect={(poseName) => runtime?.onApplyPose?.(poseName)}
             />
-            </FileSheetStaticSection>
           ) : null}
-          {parameters.length ? <FileSheetStaticSection title="Joints">
           {parameters.map((parameter) => {
             const driver = drivenDofs[parameter.id] || null;
             const currentValue = poseControlDisplayValue({
@@ -253,7 +249,6 @@ export default function PoseControlsSection({
               </FileSheetSliderField>
             );
           })}
-          </FileSheetStaticSection> : null}
           {!parameters.length && !poseNames.length ? <FileSheetStatusText>{noParametersLabel}</FileSheetStatusText> : null}
         </>
       ) : null}

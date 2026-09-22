@@ -78,7 +78,9 @@ test('web host preserves compact navigation, history, root state and focus refre
       for (const listener of listeners) listener();
     });
     assert.equal(snapshot().navigationPath, 'one.step');
-    assert.equal(snapshot().state.panel, 'tree');
+    // A page load is a file opened directly, so it opens on that file's own default panel
+    // (`null`) — a narrow window included — and never on one a previous page left open.
+    assert.equal(snapshot().state.panel, null);
     assert.equal(snapshot().narrowCrumbs, false);
     assert.equal(window.document.title, 'text-to-cad | one.step');
     const historyLength = window.history.length;
@@ -87,9 +89,30 @@ test('web host preserves compact navigation, history, root state and focus refre
     assert.equal(snapshot().file, 'one.step');
     await act(() => snapshot().host.navigation.openFile('folder\\two.step'));
     assert.equal(snapshot().file, 'folder/two.step');
+    // The compact surface gives the model the room: a file opens there with no panel.
     assert.equal(snapshot().state.panel, '');
     assert.equal(window.history.length, historyLength + 1);
     assert.equal(new URL(window.location.href).searchParams.get('file'), 'folder/two.step');
+    await act(() => snapshot().host.navigation.openFile('one.step', { target: 'new', panel: 'tree' }));
+    assert.equal(snapshot().state.panel, '', 'even one picked in the tree');
+    assert.equal(window.history.length, historyLength + 2);
+    // Wider, a file opens with the panel it was opened with — the tree, for a pick there — or
+    // on its own default (`null`); the file already shown, opened with no panel, is left as it is.
+    window.innerWidth = 1280;
+    await act(() => snapshot().host.navigation.openFile('folder\\two.step', { target: 'new', panel: 'tree' }));
+    assert.equal(snapshot().file, 'folder/two.step');
+    assert.equal(snapshot().state.panel, 'tree');
+    assert.equal(window.history.length, historyLength + 3);
+    await act(() => snapshot().host.navigation.openFile('folder\\two.step', { target: 'current' }));
+    assert.equal(snapshot().state.panel, 'tree', 'the shown file opened with no panel keeps the one it has');
+    assert.equal(window.history.length, historyLength + 3, 'and is no navigation at all');
+    await act(() => snapshot().host.navigation.openFile('folder\\two.step', { target: 'new', panel: '' }));
+    assert.equal(snapshot().state.panel, '', 'the shown file opened with a panel takes it');
+    assert.equal(window.history.length, historyLength + 3);
+    await act(() => snapshot().host.navigation.openFile('one.step', { target: 'current' }));
+    assert.equal(snapshot().file, 'one.step');
+    assert.equal(snapshot().state.panel, null, 'another file opened with no panel opens on its own default');
+    window.innerWidth = 480;
     await act(() => { window.history.replaceState({}, '', '?file=one.step'); window.dispatchEvent(new window.PopStateEvent('popstate')); });
     assert.equal(snapshot().file, 'one.step');
     await act(() => { window.history.replaceState({}, '', '?file=missing.step'); window.dispatchEvent(new window.PopStateEvent('popstate')); });
@@ -107,9 +130,11 @@ test('web host preserves compact navigation, history, root state and focus refre
     assert.equal(calls.length, 2);
     await act(() => root.render(createElement(App, { client, server: { rootId: 'b' } })));
     assert.equal(snapshot().host.files.id, 'b');
-    assert.equal(snapshot().state.panel, 'tree');
-    assert.equal(JSON.parse(window.sessionStorage.getItem('hardcore:file-viewer:v1:a')).panel, '');
-    assert.equal(JSON.parse(window.sessionStorage.getItem('hardcore:file-viewer:v1:b')).panel, 'tree');
+    assert.equal(snapshot().state.panel, null);
+    // The open panel is not stored for the next page load: root `a` was left with none open ('')
+    // and still stores the default.
+    assert.equal(JSON.parse(window.sessionStorage.getItem('hardcore:file-viewer:v1:a')).panel, null);
+    assert.equal(JSON.parse(window.sessionStorage.getItem('hardcore:file-viewer:v1:b')).panel, null);
     assert.equal(calls[0].signal.aborted, true);
   } finally {
     await act(() => root.unmount());

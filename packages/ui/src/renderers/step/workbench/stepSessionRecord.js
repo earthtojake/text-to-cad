@@ -2,7 +2,7 @@ import { entryAssetHash } from "@hardcore/core/lib/entryAssets.js";
 
 // The STEP renderer's own slot in the shell's per-file record (`kit/shell/shellState.js`):
 // what it was left looking at, posed to, and playing. The shell keeps the camera, the
-// Display settings, the open tab and the tool; everything here is a STEP's alone.
+// Display settings and the tool; everything here is a STEP's alone.
 //
 //   { tree, treeSignature, pose, animation, motionSignature, largeFile, largeFileSignature }
 //

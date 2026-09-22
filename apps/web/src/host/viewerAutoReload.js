@@ -23,14 +23,6 @@
 export const VIEWER_WATCH_INTERVAL_MS = 2000;
 /** Faster poll while the server is mid-restart. */
 export const VIEWER_RELOADING_POLL_MS = 400;
-/**
- * How long the "Reloading" status may stand before the page stops claiming a
- * restart is under way. The watch continues at the slow interval — a restart
- * that eventually lands still reloads the page — but the badge stops asserting
- * something that is no longer happening, and ordinary request failures surface
- * through the alerts they always did.
- */
-export const VIEWER_RELOAD_TIMEOUT_MS = 30000;
 
 export const AUTO_RELOAD_PHASE = Object.freeze({
   WATCHING: "watching",
@@ -71,16 +63,4 @@ export function nextAutoReloadState(state, poll, { baseline, now }) {
     return watching;
   }
   return { phase, since, reload: false, delayMs: VIEWER_WATCH_INTERVAL_MS };
-}
-
-/**
- * True while the page should say a restart is under way. Past the bound the
- * watch continues but stops asserting it.
- */
-export function autoReloadIsPending(state, now, timeoutMs = VIEWER_RELOAD_TIMEOUT_MS) {
-  if (state?.phase !== AUTO_RELOAD_PHASE.RELOADING) {
-    return false;
-  }
-  const since = Number.isFinite(state.since) ? Number(state.since) : now;
-  return now - since < timeoutMs;
 }

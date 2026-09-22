@@ -38,10 +38,14 @@ describe("non-CAD renderer registrations", () => {
     expect(selectRenderer(renderers, file("archive.zip", "binary", "application/zip")).id).toBe("unsupported");
   });
 
-  it("preserves Markdown's preview/source switch", () => {
-    expect(markdownRenderer.panels?.({ open: "", ready: true, file: file("README.md", "text") }))
+  it("preserves Markdown's preview/source switch, declared by the prepared document", async () => {
+    const text = { value: "# Title", readOnly: false };
+    const prepared = await markdownRenderer.prepare({
+      file: file("README.md", "text"), source: source({ readText: async () => text as never }), signal: new AbortController().signal,
+    });
+    expect(prepared.panels?.({ open: "", ready: true, file: file("README.md", "text") }))
       .toMatchObject([{ id: "source", label: "View source", content: "body" }]);
-    expect(markdownRenderer.panels?.({ open: "source", ready: true, file: file("README.md", "text") }))
+    expect(prepared.panels?.({ open: "source", ready: true, file: file("README.md", "text") }))
       .toMatchObject([{ id: "source", label: "View preview", content: "body" }]);
   });
 
@@ -117,9 +121,11 @@ describe("viewer renderer registrations", () => {
     expect([dxf.id, step.id]).toEqual(["dxf", "step"]);
     expect(selectRenderer([step, dxf], file("plate.dxf", "cad"))).toBe(dxf);
     expect(selectRenderer([step, dxf], file("part.step", "cad"))).toBe(step);
-    // A DXF is a straight render: it declares no Inspector, so the navbar offers no
-    // toggle for one and the file tree is the only panel a drawing tab can open.
-    expect(dxf.panels).toBeUndefined();
+    // A DXF is a straight render: it declares no panels, so the navbar offers no toggle
+    // but the file tree's, which is the only panel a drawing tab can open.
+    expect("panels" in dxf).toBe(false);
+    // STEP is the one that offers fullscreen.
+    expect([dxf.fullscreen, step.fullscreen]).toEqual([undefined, true]);
   });
 });
 

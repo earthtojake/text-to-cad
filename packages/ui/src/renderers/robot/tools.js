@@ -12,5 +12,5 @@ export const ROBOT_TOOL_RESTORE = Object.freeze({ opensIn: ROBOT_TOOL.POSE });
 
 /** What a host command that needs a reference grammar is told. A robot description has none. */
 export const ROBOT_DECLINED_LIVE_COMMANDS = Object.freeze({
-  select: "A robot description has no CAD references to select: URDF, SRDF and SDF name links and joints, not faces or edges. Pick a link in the viewport or the Links tab, or control the camera and display settings instead."
+  select: "A robot description has no CAD references to select: URDF, SRDF and SDF name links and joints, not faces or edges. Pick a link in the viewport or under Links in the Robot panel, or control the camera and display settings instead."
 });

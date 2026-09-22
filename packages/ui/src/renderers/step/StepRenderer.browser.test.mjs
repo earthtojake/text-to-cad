@@ -85,6 +85,21 @@ function projector(camera, box) {
 }
 const translations = page => page.evaluate(() => Object.fromEntries(window.__cadDisplayRecords().map(record => [record.partId, record.matrix.slice(12, 15)])));
 /**
+ * A labelled row, measured where it is drawn: the label on the left and the control on the
+ * same line beside it, pushed to the section's right edge — not a label stacked over a
+ * full-width control, and not a control whose label is only a tooltip.
+ */
+async function assertLabelledRow(section, label, control) {
+  const [sectionBox, labelBox, controlBox] = await Promise.all([
+    section.boundingBox(), section.getByText(label, { exact: true }).boundingBox(), control.boundingBox()]);
+  const middle = box => box.y + box.height / 2;
+  assert.ok(Math.abs(middle(labelBox) - middle(controlBox)) < 3,
+    `the ${label} label and its control share a line: ${JSON.stringify({ labelBox, controlBox })}`);
+  assert.ok(labelBox.x + labelBox.width <= controlBox.x, `the ${label} label leads its control`);
+  assert.ok(sectionBox.x + sectionBox.width - (controlBox.x + controlBox.width) <= 12,
+    `and the control is right-aligned: ${JSON.stringify({ sectionBox, controlBox })}`);
+}
+/**
  * The drawn frame once it satisfies `reached`, or a failure naming what it never
  * did. A repaint can land a frame or two after the state that asked for it, so a
  * single shot is a race; a poll that runs out is still the missing-repaint bug.
@@ -104,10 +119,10 @@ async function open() {
   const { page, pane } = view;
   await pane.locator('[aria-busy="false"] > div > canvas').first().waitFor();
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
-  // The Inspector narrows the viewport, so it is open before anything is
-  // located on screen or any frame is compared.
-  if (!await pane.locator('[data-file-sheet="STEP"]').count()) await pane.getByRole('button', { name: 'Inspector', exact: true }).click();
-  await pane.locator('[data-file-sheet="STEP"]').waitFor();
+  // The file's own panel narrows the viewport, so it is open before anything is located on
+  // screen or any frame is compared. Nobody opens it: a STEP opened directly opens with it
+  // (the harness starts at `panel: null`), and the fixture is an assembly, so it is named so.
+  await pane.locator('[data-file-sheet="Assembly"]').waitFor();
   // The world axes are drawn into the same canvas and the X one is the red the
   // arm is authored in, so they would answer to a question about the arm's pixels.
   await page.evaluate(() => window.cadHarness.a.controller.setDisplaySettings({ axes: { enabled: false } }));
@@ -120,11 +135,17 @@ async function open() {
     state: () => page.evaluate(() => window.cadHarness.a.controller.readState()),
     display: patch => page.evaluate(next => window.cadHarness.a.controller.setDisplaySettings(next), patch),
     tool: name => pane.getByRole('button', { name, exact: true }),
-    tab: name => pane.getByRole('tab', { name, exact: true }),
     tools: () => pane.getByRole('group', { name: 'Interaction tools' }).getByRole('button')
       .evaluateAll(buttons => buttons.map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`)),
-    tabs: () => pane.getByRole('tab').evaluateAll(tabs => tabs.map(tab => `${tab.textContent.trim()}:${tab.getAttribute('aria-selected')}`)),
-    panel: name => pane.getByRole('tabpanel', { name, exact: true }),
+    // The nav row's panel toggles, in order, each with whether its panel is the open one:
+    // the row IS the tab strip, so this is what the old tab list was.
+    panels: () => pane.locator('[data-file-panel]')
+      .evaluateAll(buttons => buttons.map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`)),
+    toggle: id => pane.locator(`[data-file-panel="${id}"]`),
+    // The file panel's sections, top to bottom, by their headings.
+    sections: () => pane.locator('[data-file-sheet="Assembly"] [data-file-panel-section] > h2').allInnerTexts(),
+    section: name => pane.getByRole('region', { name, exact: true }),
+    displayPanel: () => pane.locator('[data-file-sheet="Display"]'),
     rows: () => pane.getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))
       .filter(label => label?.startsWith('Select ') || label?.startsWith('Expand ') || label?.startsWith('Collapse '))),
     frame: () => frame(pane),
@@ -138,13 +159,21 @@ async function open() {
   };
 }
 
-test('a STEP opens in Select with the five tools and three tabs its sidecar earns, and paints both authored colours', async () => {
+test('a STEP opens in Select with the tools its sidecar earns and Fullscreen last, on its own panel with the sections the sidecar earns, and paints both authored colours', async () => {
   const view = await open();
   const { pane, errors } = view;
-  assert.deepEqual(await view.tools(), ['Select:true', 'Measure:false', 'Draw:false', 'Pose:false', 'Animate:false']);
-  assert.deepEqual(await view.tabs(), ['Features:true', 'Kinematics:false', 'Display:false'],
-    'Kinematics is here because the sidecar bound: schema 9, and a documentHash matching the STEP');
-  assert.equal(await pane.locator('[data-file-sheet="STEP"]').count(), 1, 'the Inspector opens by default, titled by the format');
+  assert.deepEqual(await view.tools(), ['Select:true', 'Measure:false', 'Draw:false', 'Position:false', 'Animate:false', 'Fullscreen:false'],
+    'Position and Animate because the sidecar bound; Fullscreen, an act rather than a mode, is the last button');
+  // The nav row is the tab strip: the file's own panel (named for what it is, the icon its
+  // tree draws for it), then Display, then the tree. The file opened directly, so it opened
+  // on its own panel: never on Display, and not on the tree.
+  assert.deepEqual(await view.panels(), ['Assembly:true', 'Display:false', 'Show files:false']);
+  assert.equal(await pane.locator('[data-file-sheet="Assembly"]').count(), 1, 'the file panel opens by default, named for the file');
+  assert.equal(await view.displayPanel().count(), 0, 'Display is never where a file opens');
+  // No tabs anywhere inside it: one column of sections, each under its heading.
+  assert.equal(await pane.getByRole('tab').count(), 0);
+  assert.deepEqual(await view.sections(), ['Features', 'Position'],
+    'Position is here because the sidecar bound: schema 9, and a documentHash matching the STEP');
   const opened = await view.frame();
   assert.ok(coverage(opened) > 0.2, `the opening frame is the model: ${coverage(opened)}`);
   const boxes = partBoxes(opened);
@@ -190,7 +219,7 @@ test('Select picks parts and faces, a selection lives only under Select, and the
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.length === 0);
   await pane.getByRole('button', { name: 'Select arm', exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.length === 1);
-  assert.deepEqual(await view.tools(), ['Select:true', 'Measure:false', 'Draw:false', 'Pose:false', 'Animate:false']);
+  assert.deepEqual(await view.tools(), ['Select:true', 'Measure:false', 'Draw:false', 'Position:false', 'Animate:false', 'Fullscreen:false']);
   assert.deepEqual((await view.state()).selectedPartIds, ['o1.2']);
   await page.keyboard.press('Escape');
 
@@ -246,19 +275,19 @@ test('the Features tree searches as a second view: typing ranks matches and expa
   const { page, pane, errors } = view;
   const search = pane.getByPlaceholder('Filter model…');
   await search.fill('arm');
-  await page.waitForFunction(() => document.querySelector('[data-testid="one"] [data-file-sheet]').innerText.includes('1 match'));
+  await page.waitForFunction(() => document.querySelector('[data-testid="one"] [data-file-sheet="Assembly"]').innerText.includes('1 match'));
   assert.deepEqual(await view.rows(), ['Select arm'], 'a flat ranked list, with no disclosure of its own');
   await pane.getByRole('button', { name: 'Select arm', exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.join() === 'o1.2');
   await search.fill('');
-  await page.waitForFunction(() => !document.querySelector('[data-testid="one"] [data-file-sheet]').innerText.includes('match'));
+  await page.waitForFunction(() => !document.querySelector('[data-testid="one"] [data-file-sheet="Assembly"]').innerText.includes('match'));
   assert.deepEqual(await view.rows(), ['Expand base', 'Select base', 'Expand arm', 'Select arm'], 'the tree comes back as it was');
   assert.equal(await pane.getByRole('button', { name: 'Select arm', exact: true }).getAttribute('aria-pressed'), 'true', 'and the hit is revealed, selected');
   assert.deepEqual(errors, []);
 });
 
 // What the one part menu offers, in order, ending in the framing group. That group is
-// the viewer's ONLY zoom control — the Inspector's percentage readout and its menu are
+// the viewer's ONLY zoom control — the old Inspector's percentage readout and its menu are
 // gone — so it is here, on every tree row, and on the empty-space menu below. It cannot
 // contradict the tool in hand: every item returns to Select before it acts.
 const ZOOM_SECTION = ['Zoom to fit', 'Zoom to selection'];
@@ -307,7 +336,7 @@ test('hiding a part takes it off the screen, and the viewport menus offer what t
   await page.keyboard.press('Escape');
   await page.getByRole('menu').waitFor({ state: 'detached' });
   await away();
-  for (const tool of ['Measure', 'Pose', 'Animate', 'Draw']) {
+  for (const tool of ['Measure', 'Position', 'Animate', 'Draw']) {
     await view.tool(tool).click();
     await page.mouse.click(...at([6, 6, 5]), { button: 'right' });
     await page.waitForTimeout(150);
@@ -336,12 +365,12 @@ test('hiding a part takes it off the screen, and the viewport menus offer what t
   }
   // A tree-row action chosen under another tool lands in Select first, then acts —
   // Isolate, which has no selection of its own to make and so cannot get there by itself.
-  assert.deepEqual(await view.tools(), ['Select:false', 'Measure:false', 'Draw:true', 'Pose:false', 'Animate:false']);
+  assert.deepEqual(await view.tools(), ['Select:false', 'Measure:false', 'Draw:true', 'Position:false', 'Animate:false', 'Fullscreen:false']);
   await pane.getByRole('button', { name: 'Select arm', exact: true }).click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Isolate', exact: true }).click();
   await page.getByRole('menu').waitFor({ state: 'detached' });
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().isolatedPartIds.join() === 'o1.2');
-  assert.deepEqual(await view.tools(), ['Select:true', 'Measure:false', 'Draw:false', 'Pose:false', 'Animate:false']);
+  assert.deepEqual(await view.tools(), ['Select:true', 'Measure:false', 'Draw:false', 'Position:false', 'Animate:false', 'Fullscreen:false']);
   await page.keyboard.press('Escape');
   assert.deepEqual(errors, []);
 });
@@ -402,9 +431,9 @@ test('the context menu frames the model and the selection, from the viewport and
   // And from a tree row under another tool it lands in Select first, exactly as every
   // other tree-row action does, then frames the model again.
   await view.tool('Measure').click();
-  assert.deepEqual(await view.tools(), ['Select:false', 'Measure:true', 'Draw:false', 'Pose:false', 'Animate:false']);
+  assert.deepEqual(await view.tools(), ['Select:false', 'Measure:true', 'Draw:false', 'Position:false', 'Animate:false', 'Fullscreen:false']);
   await choose(treeRow('Select base'), 'Zoom to fit');
-  assert.deepEqual(await view.tools(), ['Select:true', 'Measure:false', 'Draw:false', 'Pose:false', 'Animate:false'],
+  assert.deepEqual(await view.tools(), ['Select:true', 'Measure:false', 'Draw:false', 'Position:false', 'Animate:false', 'Fullscreen:false'],
     'a tree-row framing action comes back to Select, like the rest of that menu');
   await frameWhen(view, shot => armWidth(shot) > 0 && armWidth(shot) < framedSelection * 0.9,
     `framed the whole model again from ${framedSelection}`);
@@ -414,8 +443,15 @@ test('the context menu frames the model and the selection, from the viewport and
 test('every Display control reaches the drawn frame: the five modes, edges, the clip plane and its flip, explode, and the surface styles that take the model away', async () => {
   const view = await open();
   const { page, pane, errors } = view;
-  await view.tab('Display').click();
-  const panel = view.panel('Display');
+  // Display is a panel of its own, not a tab of the file's: its toggle turns the one column
+  // over to it. The file's panel is not torn down for it — it stays mounted, hidden, so its
+  // tree keeps its place for the way back.
+  await view.toggle('cad-display').click();
+  const panel = view.displayPanel();
+  await panel.waitFor();
+  assert.deepEqual(await view.panels(), ['Assembly:false', 'Display:true', 'Show files:false']);
+  assert.equal(await pane.locator('[data-file-sheet="Assembly"]').count(), 1, 'the file panel is still mounted');
+  assert.equal(await pane.locator('[data-file-sheet="Assembly"]').isHidden(), true, 'and hidden while Display is up');
   const solid = await view.frame();
   await page.evaluate(() => { window.openingCanvas = document.querySelector('[data-testid="one"] [aria-busy] > div > canvas'); });
 
@@ -501,13 +537,19 @@ test('every Display control reaches the drawn frame: the five modes, edges, the 
   assert.deepEqual(errors, []);
 });
 
-test('Kinematics drives the mate and repaints, a named pose jumps, the Pose knob is never the camera, and the grid keeps the size the rest pose gave it', async () => {
+test('Position drives the mate and repaints, a named pose jumps, the Position knob is never the camera, and the grid keeps the size the rest pose gave it', async () => {
   const view = await open();
   const { page, pane, errors } = view;
-  await view.tab('Kinematics').click();
-  const panel = view.panel('Kinematics');
+  // Position is a section of the file's own panel, on screen as the file opens: no tab to turn to.
+  const panel = view.section('Position');
   const slider = pane.getByLabel('hinge slider value', { exact: true });
-  const preset = panel.getByRole('combobox').first();
+  const preset = panel.getByRole('combobox', { name: 'Pose', exact: true });
+  // ONE section, whose first row is the named pose — labelled, with its dropdown beside the
+  // label — then the joint, then Reset. The pose and the joints are no sections of their own.
+  await assertLabelledRow(panel, 'Pose', preset);
+  for (const heading of ['Pose', 'Joints', 'Kinematics']) {
+    assert.equal(await panel.getByRole('heading', { name: heading, exact: true }).count(), 0, `no ${heading} heading inside Position`);
+  }
   assert.equal((await preset.innerText()).trim(), 'None');
   assert.equal(await slider.inputValue(), '0.00 deg');
 
@@ -539,8 +581,8 @@ test('Kinematics drives the mate and repaints, a named pose jumps, the Pose knob
   assert.deepEqual((await translations(page))['o1.2'], restArm, 'Reset puts the mate back where it started');
   await frameWhen(view, shot => differing(rest, shot) === 0, 'came back to the rest pose after Reset');
 
-  // The Pose tool: one knob, on the mate's axis, and dragging it is never the camera.
-  await view.tool('Pose').click();
+  // The Position tool: one knob, on the mate's axis, and dragging it is never the camera.
+  await view.tool('Position').click();
   await page.waitForFunction(() => window.__cadJointHandles().length === 1);
   const [knob] = await page.evaluate(() => window.__cadJointHandles());
   assert.equal(knob.id, 'hinge');
@@ -568,8 +610,7 @@ test('Kinematics drives the mate and repaints, a named pose jumps, the Pose knob
     after[key].forEach((value, index) => assert.ok(Math.abs(value - camera[key][index]) < 1e-9, `a knob drag never moves the camera: ${key}[${index}]`));
   }
   await frameWhen(view, shot => differing(rest, shot) > 20_000, 'showed the pose the knob dragged to');
-  await view.tab('Kinematics').click();
-  assert.equal(Number.parseFloat(await slider.inputValue()), Math.round(held * 10) / 10, 'the Kinematics slider follows the knob');
+  assert.equal(Number.parseFloat(await slider.inputValue()), Math.round(held * 10) / 10, 'the Position slider follows the knob');
 
   // The Render studio's floor is the same ground as the grid: sized and centred
   // from the REST placement. Entering Render builds the studio against the scene
@@ -611,7 +652,8 @@ test('a pose reaches the screen while a part is selected, whether the selection 
   const armY = () => page.evaluate(() => window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix[13]);
   const pose = async (value) => {
     const before = await armY();
-    await view.tab('Kinematics').click();
+    // The slider is in the file panel's Position section, beside the Features tree: both are
+    // on screen together, so nothing is turned to between a pick and a pose.
     await slider.fill(String(value));
     await slider.press('Enter');
     await page.waitForFunction(was => Math.abs(window.__cadDisplayRecords()
@@ -634,7 +676,6 @@ test('a pose reaches the screen while a part is selected, whether the selection 
   assert.deepEqual((await view.state()).selectedPartIds, ['o1.1'], 'the selection was standing the whole time');
 
   // THE ARM SELECTED: now the selection itself is what moves, so its ink has to move with it.
-  await view.tab('Features').click();
   await pane.getByRole('button', { name: 'Select arm', exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.join() === 'o1.2');
   await away();
@@ -644,7 +685,6 @@ test('a pose reaches the screen while a part is selected, whether the selection 
   await frameWhen(view, shot => differing(armSelected, shot) > 20_000, 'repainted for a mate that moved the selected part');
   // Back at rest with the arm still selected, the ink is where the arm is: the picture is the
   // one the same selection gave at rest, not the one it gave posed.
-  await view.tab('Features').click();
   await pane.getByRole('button', { name: 'Select base', exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.join() === 'o1.1');
   await away();
@@ -652,7 +692,7 @@ test('a pose reaches the screen while a part is selected, whether the selection 
   assert.deepEqual(errors, []);
 });
 
-test('Animate is the rightmost tool, its playbar plays the routine, and leaving it puts the model back exactly', async () => {
+test('Animate is the last mode on the strip, its playbar plays the routine, leaving it puts the model back exactly, and the Fullscreen button after it presents the same playbar', async () => {
   const view = await open();
   const { page, pane, errors } = view;
   const rest = await view.frame();
@@ -660,7 +700,7 @@ test('Animate is the rightmost tool, its playbar plays the routine, and leaving 
   await view.tool('Animate').click();
   const playbar = pane.getByRole('toolbar', { name: 'Animation playback' });
   await playbar.waitFor();
-  assert.deepEqual(await view.tools(), ['Select:false', 'Measure:false', 'Draw:false', 'Pose:false', 'Animate:true']);
+  assert.deepEqual(await view.tools(), ['Select:false', 'Measure:false', 'Draw:false', 'Position:false', 'Animate:true', 'Fullscreen:false']);
   // One routine: no routine-list button, just transport and the settings cog.
   assert.deepEqual(await playbar.getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
     ['Play animation', 'Playback settings']);
@@ -678,19 +718,26 @@ test('Animate is the rightmost tool, its playbar plays the routine, and leaving 
   assert.deepEqual((await translations(page))['o1.2'], restArm);
   await frameWhen(view, shot => differing(rest, shot) === 0, 'came back to the rest pose exactly');
 
-  // Fullscreen is the same mode and the same playbar.
+  // Fullscreen is the strip's last button, and pressing it asks the HOST for its fullscreen
+  // (the harness hands this renderer `onFullscreenChange`): the same mode and the same
+  // playbar, with no strip, no nav row and no panel.
   await view.tool('Animate').click();
   await playbar.waitFor();
-  await page.evaluate(() => window.cadHarness.fullscreen(true));
+  await view.tool('Fullscreen').click();
   await pane.getByRole('button', { name: 'Exit fullscreen', exact: true }).waitFor();
   assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).count(), 0, 'fullscreen has no tool strip');
+  assert.equal(await pane.locator('[data-file-panel]').count(), 0, 'nor the nav row and its panel toggles');
+  assert.equal(await pane.locator('[data-file-sheet]').count(), 0, 'nor a panel');
   await pane.getByRole('toolbar', { name: 'Animation playback' }).waitFor();
   await pane.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
   await pane.getByRole('group', { name: 'Interaction tools' }).waitFor();
+  assert.deepEqual(await view.tools(), ['Select:false', 'Measure:false', 'Draw:false', 'Position:false', 'Animate:true', 'Fullscreen:false'],
+    'back in the mode it left, and Fullscreen is an act, never a mode left pressed');
+  assert.deepEqual(await view.panels(), ['Assembly:true', 'Display:false', 'Show files:false'], 'and the panel it had');
   assert.deepEqual(errors, []);
 });
 
-test('Measure reads a distance between two picks; Draw lays ink over a STEP; and the camera, the mode and the open tab survive a remount', async () => {
+test('Measure reads a distance between two picks; Draw lays ink over a STEP; and the camera, the mode and the open panel survive a remount', async () => {
   const view = await open();
   const { page, pane, at, errors } = view;
 
@@ -747,8 +794,10 @@ test('Measure reads a distance between two picks; Draw lays ink over a STEP; and
   await view.tool('Draw').click();
   await pane.locator('[data-cad-drawing-overlay]').waitFor({ state: 'detached' });
 
-  // What the file remembers: the camera, the display settings and the open tab.
-  await view.tab('Display').click();
+  // What the file remembers: the camera and the display settings, in its record — and the
+  // panel that was open, which is the host's to keep (its `panel`), not the renderer's.
+  await view.toggle('cad-display').click();
+  await view.displayPanel().waitFor();
   await view.display({ mode: 'wireframe' });
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().display.mode === 'wireframe');
   await page.evaluate(() => window.cadHarness.a.controller.setCamera({ ...window.cadHarness.a.controller.readState().camera, position: [60, -20, 25], target: [4, 1, 0], zoom: 1.3 }));
@@ -768,7 +817,8 @@ test('Measure reads a distance between two picks; Draw lays ink over a STEP; and
     before.camera[key].forEach((value, index) => assert.ok(Math.abs(value - restored.camera[key][index]) < 1e-6, `${key}[${index}] came back`));
   }
   assert.equal(restored.camera.zoom, before.camera.zoom);
-  assert.deepEqual(await view.tabs(), ['Features:false', 'Kinematics:false', 'Display:true'], 'and the open tab with them');
+  assert.deepEqual(await view.panels(), ['Assembly:false', 'Display:true', 'Show files:false'], 'and the open panel with them');
+  assert.equal(await page.evaluate(() => window.cadHarness.state.panel), 'cad-display');
   assert.deepEqual(errors, []);
 });
 

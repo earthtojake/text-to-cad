@@ -175,6 +175,8 @@ test("the explorer's toggle answers with a markdown file open and the tree hidde
   // Rendered, not raw: the `#` became an H1 (the document editor is up).
   await expect(page.getByTestId("explorer").getByRole("heading", { level: 1, name: "Panes" })).toBeVisible();
 
+  // Picked in the tree, the file opened with the tree; hiding it is the state the person hit.
+  await expect(page.getByTestId("tree-toggle")).toHaveAttribute("aria-pressed", "true");
   await page.getByTestId("tree-toggle").click();
   await expect(page.getByRole("button", { name: "Show files" })).toBeVisible();
 

@@ -7,7 +7,7 @@ export type CadStateObject = { [key: string]: JsonValue };
 // record itself is the shell's (`kit/shell/shellState.js`) and a host treats it as opaque
 // JSON, so the session schema that used to be published here went with the surface that
 // wrote it. What is left is the two things a host really does own: the orbit preference,
-// which is a preference rather than per-file state, and the width of the Inspector sheet,
+// which is a preference rather than per-file state, and the width of the panel column,
 // which the host lays out.
 export const cadWorkspaceDefaultFileSheetWidthForViewport =
   state.cadWorkspaceDefaultFileSheetWidthForViewport as (width: number) => number;

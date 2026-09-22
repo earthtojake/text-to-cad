@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { useResolvedTheme } from "@renderer/hooks/use-theme";
 import { desktopLiveDocuments } from "@renderer/state/live-documents";
-import { openSessionTab, readSessionStrip, selectSessionTab, updateSessionTab, useExplorer } from "@renderer/state/explorer";
+import { openSessionTab, readSessionStrip, updateSessionTab, useExplorer } from "@renderer/state/explorer";
 import { useProjects } from "@renderer/state/projects";
 import type { ExplorerRoot, Project } from "@shared/types";
 import { createDesktopFileSource, createDesktopFileActions } from "./adapters/fileSource";
@@ -31,13 +31,20 @@ export function FileTab({ sessionId, tabId, project, root, path, panel, cadConne
   const promptContext = useMemo(() => createDesktopPromptContext(project.id, root, source.id, sessionId), [sessionId, project.id, root, source.id]);
   const fileActions = useMemo(() => createDesktopFileActions({ sessionId, projectId: project.id, root, sourceId: source.id, promptContext, clipboard: desktopClipboard }), [sessionId, project.id, root, source.id, promptContext]);
   const worktree = useMemo(() => worktreeMark(root), [root]);
-  const onOpenFile = useCallback((next: string, options?: { target: "current" | "new" }) => {
+  // A file opens with the panel it was opened with — the tree, for one picked there — or with its
+  // own default; a tab already showing the file keeps its own unless a panel is asked for.
+  const onOpenFile = useCallback((next: string, options?: { target: "current" | "new"; panel?: string }) => {
+    const panel = options?.panel;
     void (async () => {
-      if (options?.target === "new") { await openSessionTab(sessionId, project.id, root, "file", { path: next }); return; }
-      const strip = await readSessionStrip(sessionId);
-      const existing = strip.tabs.find(tab => tab.kind === "file" && tab.path === next && tab.root === root);
-      if (existing) { await selectSessionTab(sessionId, existing.id); return; }
-      await updateSessionTab(sessionId, tabId, { path: next, panel: null });
+      if (options?.target !== "new") {
+        const strip = await readSessionStrip(sessionId);
+        if (!strip.tabs.some(tab => tab.kind === "file" && tab.path === next && tab.root === root)) {
+          await updateSessionTab(sessionId, tabId, { path: next, panel: panel ?? null });
+          return;
+        }
+      }
+      // A new tab, or the one already showing the file.
+      await openSessionTab(sessionId, project.id, root, "file", panel === undefined ? { path: next } : { path: next, panel });
     })().catch(error => toast.error(error instanceof Error ? error.message : String(error)));
   }, [sessionId, project.id, tabId, root]);
   const liveDocuments = useMemo(() => desktopLiveDocuments(tabId, { projectId: project.id, root }), [tabId, project.id, root]);

@@ -190,7 +190,8 @@ test("opens a markdown file as a preview, then as source", async () => {
   expect(sourceBox!.x + sourceBox!.width).toBeLessThanOrEqual(toggleBox!.x + 1);
   await expect(source).toHaveAttribute("aria-pressed", "false");
   await expect(source).toHaveAttribute("data-file-panel", "source");
-  // The tree is the open panel, and there is one panel column in the tab.
+  // Picked in the tree, the file opens with the tree, so a person can go on walking it:
+  // the tree is the open panel, and there is one panel column in the tab.
   await expect(panels(page)).toHaveCount(1);
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
 
@@ -246,6 +247,8 @@ test("expands three levels of the tree, and keeps them", async () => {
   await folder("apps/web/src/client").click();
   await page.locator(`[role="treeitem"][data-path="apps/web/src/client/unboundIdentifiers.test.js"]`).click();
   await expect(page.getByRole("tab", { name: /unboundIdentifiers\.test\.js/ })).toBeVisible();
+  // Picked in the tree, the file opens with the tree still up.
+  await expect(page.getByTestId("tree-toggle")).toHaveAttribute("aria-pressed", "true");
   await expect(folder("apps/web/src/client")).toBeVisible();
 
   await folder("apps/web").click();
@@ -444,9 +447,8 @@ test("shows the runtime's own error for a STEP file when the runtime cannot star
   await expect(page.locator("[data-file-panel]")).toHaveCount(1);
   await expect(page.locator("[data-file-panel]")).toHaveAttribute("data-file-panel", "tree");
   await expect(page.getByTestId("tree-toggle")).toBeVisible();
-  // ...so what the one panel column holds is the tree: the default falls to
-  // it when the renderer has declared nothing, rather than leaving a column
-  // with a panel in it that cannot be drawn.
+  // ...so what the one panel column holds is the tree the file was picked in,
+  // rather than a panel that cannot be drawn.
   await expect(panels(page)).toHaveCount(1);
   await expect(panels(page)).toHaveAttribute("data-file-panel-container", "tree");
   await shoot("file-cad-failed.png");
@@ -566,47 +568,53 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   // must persist, so reopening leaves one file tab and no blank duplicate.
   await expect(page.locator("[data-tab-strip] [data-tab]")).toHaveCount(1);
 
-  // The viewer's surface: a WebGL canvas and the STEP model list. The
-  // first open compiles the document in cadgen's build pool, so this is the
-  // slow assertion of the suite.
+  // The viewer's surface: a WebGL canvas. The first open compiles the
+  // document in cadgen's build pool, so this is the slow assertion of the suite.
   await expect(page.locator("canvas").first()).toBeVisible({ timeout: 60_000 });
-  const tree = page.getByRole("list", { name: "Model", exact: true });
-  await expect(tree).toBeVisible({ timeout: 90_000 });
-  await expect(page.getByRole("tab", { name: "Source features" })).toHaveCount(0);
-  await expect(page.getByRole("tab", { name: "Surfaces" })).toHaveCount(0);
 
   /*
-    A CAD tab opens with the viewer's Inspector as its ONE panel — a STEP
-    file's geometry and source features are why the tab is open — so the files
-    toggle offers the tree rather than hiding it. The Inspector is drawn in
-    this app's panel column (`panelSlot`), which is the same column the tree
-    would be in, to the right of the model and never a drawer over it, at
-    1440×900 and at 1280×800.
+    Picked in the tree, the STEP opens with the tree still up — a person walking
+    the tree keeps it — and its own panel, named for what the file is (a part,
+    here), one press away beside Display. That panel holds its geometry and
+    source features. It is drawn in this app's panel column (`panelSlot`), the
+    same column the tree is in, to the right of the model and never a drawer
+    over it, at 1440×900 and at 1280×800.
   */
+  const filePanel = page.locator("header [data-file-panel=cad-file]");
+  await expect(page.getByRole("button", { name: "Hide files" })).toBeVisible();
+  await expect(filePanel).toHaveAttribute("aria-pressed", "false");
+  await expect(filePanel).toHaveAttribute("aria-label", "Part");
+  await expect(page.locator("header [data-file-panel=cad-display]")).toHaveAttribute("aria-pressed", "false");
+  await filePanel.click();
   await expect(page.getByRole("button", { name: "Show files" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Hide files" })).toHaveCount(0);
-  await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible({ timeout: 120_000 });
+  await expect(page.locator("[data-file-sheet=Part]")).toBeVisible();
+  // The STEP model list is in it.
+  const tree = page.getByRole("list", { name: "Model", exact: true });
+  await expect(tree).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByRole("region", { name: "Source features" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Surfaces" })).toHaveCount(0);
   await page.waitForTimeout(1000);
   await shoot("file-cad-default.png", true);
-  await expectInspectorBesideModel();
+  await expectFilePanelBesideModel();
   await resizeWindow(1280, 800);
-  await expectInspectorBesideModel();
+  await expectFilePanelBesideModel();
   await shoot("file-cad-default-1280x800.png", true);
   /*
-    The files toggle puts the tree in that column, which closes the
-    Inspector: one panel, one column, whatever is in it. The tree used to
-    open BESIDE it — two columns, two designs — and this pane was too narrow
-    to hold both, which is why the tree used to hide itself here.
+    The files toggle puts the tree in that column, which closes the file's
+    panel: one panel, one column, whatever is in it. The tree used to open
+    BESIDE it — two columns, two designs — and this pane was too narrow to
+    hold both, which is why the tree used to hide itself here.
   */
   await page.getByRole("button", { name: "Show files" }).click();
   await expect(page.getByRole("button", { name: "Hide files" })).toBeVisible();
   await expect(page.getByLabel("Filter files")).toBeVisible();
   await expect(panels(page)).toHaveCount(1);
-  await expect(page.getByRole("tab", { name: "Source features" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Source features" })).toHaveCount(0);
   await shoot("file-cad-tree.png", true);
-  // ...and the Inspector's own toggle brings it back, closing the tree.
-  await page.locator("header [data-file-panel='cad-file-sheet']").click();
-  await expect(page.getByRole("tab", { name: "Source features" })).toHaveCount(0);
+  // ...and the file panel's own toggle brings it back, closing the tree.
+  await page.locator("header [data-file-panel='cad-file']").click();
+  await expect(page.getByRole("region", { name: "Source features" })).toHaveCount(0);
   await expect(page.getByLabel("Filter files")).toHaveCount(0);
   await expect(panels(page)).toHaveCount(1);
   await resizeWindow(1440, 900);
@@ -618,21 +626,23 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   // the document's solids once the compile lands.
   await widenExplorer();
   await expect(tree.getByRole("button", { name: /^Select / }).first()).toBeVisible();
-  await expectInspectorBesideModel();
+  await expectFilePanelBesideModel();
   await page.waitForTimeout(1500);
   await shoot("file-cad.png", true);
   await resizeWindow(1280, 800);
   await shoot("file-cad-1280x800.png", true);
   await resizeWindow(1440, 900);
 
-  // Display owns display settings; returning to Features preserves its controls and tree.
-  // The retired names must not come back: "View" became Display, and "Model" became Features.
-  await expect(page.getByRole("tab", { name: "View", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("tab", { name: "Model", exact: true })).toHaveCount(0);
-  const view = page.getByRole("tab", { name: "Display", exact: true });
-  const model = page.getByRole("tab", { name: "Features", exact: true });
+  // Display is a panel of its own, beside the file's; going back to the file's panel
+  // preserves Display's controls and the tree. The row holds those two and the files
+  // toggle, and no tab of any name: the retired View, Model and Inspector included.
+  expect(await page.locator("header [data-file-panel]").evaluateAll(toggles => toggles.map(toggle => toggle.getAttribute("aria-label"))))
+    .toEqual(["Part", "Display", "Show files"]);
+  await expect(page.locator("[data-file-sheet]").getByRole("tab")).toHaveCount(0);
+  const view = page.locator("header [data-file-panel=cad-display]");
+  const model = page.locator("header [data-file-panel=cad-file]");
   await view.click();
-  const viewPanel = page.getByRole("tabpanel", { name: "Display", exact: true });
+  const viewPanel = page.locator("[data-file-sheet=Display]");
   const mode = viewPanel.getByRole("combobox", { name: "Mode" });
   await mode.click();
   await page.getByRole("option", { name: "Wireframe", exact: true }).click();
@@ -664,15 +674,17 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await expect(measurements).toHaveCount(0);
   await expect(tree).toBeVisible();
 
-  // CAD declares the Inspector; the file tree shares its single panel column.
-  // The retired Theme editor must not leave a toggle or an empty panel behind.
+  // A STEP declares its own panel and Display; the file tree shares their single
+  // panel column. The retired Theme editor must not leave a toggle or an empty panel behind.
   const filesToggle = page.getByTestId("tree-toggle");
-  const sheetPanel = page.locator("header [data-file-panel='cad-file-sheet']");
+  const sheetPanel = page.locator("header [data-file-panel='cad-file']");
   await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
   await expect(page.locator("[data-file-panel='cad-theme'], [data-file-sheet='Theme']")).toHaveCount(0);
-  await expect(sheetPanel).toHaveAttribute("aria-label", "Inspector");
-  await expect(sheetPanel).toHaveAttribute("title", "Inspector");
-  await expect(sheetPanel.locator("svg.lucide-sliders-horizontal")).toHaveCount(1);
+  // Named, and drawn, for what the file is: a part, with the box its tree draws for one.
+  await expect(sheetPanel).toHaveAttribute("aria-label", "Part");
+  await expect(sheetPanel).toHaveAttribute("title", "Part");
+  await expect(sheetPanel.locator("svg.lucide-box")).toHaveCount(1);
+  await expect(page.locator("header [data-file-panel='cad-display'] svg.lucide-sliders-horizontal")).toHaveCount(1);
   const parked = (await filesToggle.boundingBox())!;
   const sheetBox = (await sheetPanel.boundingBox())!;
   expect(sheetBox.x + sheetBox.width).toBeLessThanOrEqual(parked.x + 1);
@@ -693,9 +705,9 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await expect(page.getByLabel("Filter files")).toHaveCount(0);
   await expect(tree).toBeVisible();
   await expect(panels(page)).toHaveCount(1);
-  await expect(panels(page)).toHaveAttribute("data-file-panel-container", "cad-file-sheet");
+  await expect(panels(page)).toHaveAttribute("data-file-panel-container", "cad-file");
   await expect(page.locator("[data-cad-surface] aside")).toHaveCount(0);
-  await expectInspectorBesideModel();
+  await expectFilePanelBesideModel();
   expect(Math.abs((await filesToggle.boundingBox())!.x - parked.x)).toBeLessThan(1);
 
   // Inspect uses one fixed scene recipe. Its canvas and guides follow the
@@ -704,7 +716,7 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   const panelDark = await paint();
   await expect(page.locator("html")).toHaveClass(/\bdark\b/);
   await expect.poll(sceneBackdrop).toBe("51,51,51");
-  await expect(page.getByRole("tab", { name: "Display", exact: true })).toBeVisible();
+  await expect(page.locator("header [data-file-panel=cad-display]")).toBeVisible();
 
   await page.evaluate(() => window.hardcore.settings.set({ theme: "light" }));
   await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
@@ -899,6 +911,8 @@ test("makes a folder from the tree's menu, renames it, and moves it to the trash
   await expect(page.getByRole("tab", { name: /notes\.md/ })).toBeVisible();
   await expect(page.getByRole("button", { name: "Browse notes.md", exact: true })).toBeVisible();
   expect(fs.readFileSync(path.join(docsDir, "assemblies", "notes.md"), "utf8")).toBe("");
+  // Made in the tree, it opens the way a pick there does: with the tree.
+  await expect(page.getByTestId("tree-toggle")).toHaveAttribute("aria-pressed", "true");
 
   // F2 renames the cursor row from the keyboard, and Escape leaves it alone.
   await folder("assemblies/notes.md").click();
@@ -1002,11 +1016,11 @@ async function openFromTree(target: string) {
   await page.getByRole("option", { name: target, exact: false }).first().click();
   // Selection changes the mounted FileViewer. Do not clear the old tree or
   // open a context menu before the host has activated the requested file.
-  // The EXPLORER's active file tab, scoped to its own tab list: the Inspector beside the model has
-  // a selected tab too, so an unscoped `[role=tab][aria-selected=true]` matches both.
+  // The EXPLORER's active file tab, scoped to its own tab list.
   await expect(page.getByRole("tablist", { name: "Explorer tabs" }).locator('[role="tab"][aria-selected="true"]'))
     .toHaveAttribute("title", target);
-  // A CAD file in a narrow pane hides the tree, filter and all.
+  // Picked in the tree, the file opens with the tree: its filter is cleared for
+  // whatever comes next.
   if (await filter.isVisible()) {
     await filter.fill("");
   }
@@ -1141,17 +1155,17 @@ function panels(target: Page) {
 }
 
 /**
- * The Inspector is a column beside the model, never a drawer over it.
+ * The file's own panel is a column beside the model, never a drawer over it.
  *
- * It is the app's own panel column now (`@hardcore/ui/navigation`'s `FilePanelColumn.jsx`) with the viewer's
+ * It is the app's own panel column (`@hardcore/ui/navigation`'s `FilePanelColumn.jsx`) with the viewer's
  * panel portaled into it, so it sits BESIDE the surface rather than inside
  * it: the model gets the whole surface and the pane is what the column takes
  * its width from.
  */
-async function expectInspectorBesideModel() {
+async function expectFilePanelBesideModel() {
   const surface = page.locator("[data-cad-surface]");
   const sheet = panels(page);
-  await expect(sheet).toHaveAttribute("data-file-panel-container", "cad-file-sheet");
+  await expect(sheet).toHaveAttribute("data-file-panel-container", "cad-file");
   await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible();
   const surfaceBox = (await surface.boundingBox())!;
   const sheetBox = (await sheet.boundingBox())!;

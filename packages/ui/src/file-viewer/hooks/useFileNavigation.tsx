@@ -1,11 +1,12 @@
 import { Ellipsis } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "../../primitives/dropdown-menu.jsx";
-import { EntryContextMenu, EntryMenuItems, InlineName, parentOf, useEntryMenuFocusGuard } from "../navigation/index.js";
+import { EntryContextMenu, EntryMenuItems, FILE_PANEL_TREE, InlineName, parentOf, useEntryMenuFocusGuard } from "../navigation/index.js";
 import type { CrumbSource, EntryAction, FileTreeSource, MenuEntryTarget, TreeEdit, TreeEditRequest } from "../navigation/index.js";
-import type { FileActions, FileChange, FileEntry, FileMutationResult, FileSource, FileViewerProps, FileViewerState, RendererViewProps } from "../types.js";
+import type { FileActions, FileChange, FileEntry, FileMutationResult, FileSource, FileViewerProps, FileViewerState } from "../types.js";
 import { movedFilePath, reconcileFileTree } from "../fileChanges.js";
 import { errorMessage } from "./useFileDocument.js";
+import type { ViewerHost } from "../../host/types.js";
 
 type MenuAction = (action: EntryAction, entry: MenuEntryTarget) => void;
 function CrumbActions({ entry, capabilities, platform, onAction }: {
@@ -26,7 +27,7 @@ function CrumbActions({ entry, capabilities, platform, onAction }: {
 /** One shared cache feeds breadcrumb menus and tree rows for this mounted root. */
 export function useFileNavigation({ source, actions, state, onStateChange, onOpenFile, path, onError }: {
   source: FileSource; actions?: FileActions; state: FileViewerState; onStateChange: FileViewerProps["onStateChange"];
-  onOpenFile: RendererViewProps["onOpenFile"]; path: string | null; onError?: FileViewerProps["onError"];
+  onOpenFile: ViewerHost["navigation"]["openFile"]; path: string | null; onError?: FileViewerProps["onError"];
 }) {
   const [cache, setCache] = useState<{ id: string; listings: Record<string, readonly FileEntry[]>; revision: number }>({ id: source.id, listings: {}, revision: 0 });
   const listings = cache.id === source.id ? cache.listings : {};
@@ -86,7 +87,8 @@ export function useFileNavigation({ source, actions, state, onStateChange, onOpe
     if (JSON.stringify(next.expanded) !== JSON.stringify(before.state.expandedDirectories ?? [])) before.onStateChange({ ...before.state, expandedDirectories: next.expanded });
     let moved = before.path;
     for (const change of changes) if (moved !== null && change.kind === "moved") moved = movedFilePath(moved, change.from, change.to);
-    if (moved !== before.path && moved !== null) before.onOpenFile(moved, { target: "current" });
+    // The file moved under the view: the same file, so whatever panel is open stays open.
+    if (moved !== before.path && moved !== null) before.onOpenFile(moved, { target: "current", panel: before.state.panel ?? undefined });
   }, [source, load]);
   useEffect(() => source.subscribe?.(change => { if (change.sourceId === source.id) reconcile(change.changes); }), [source, reconcile]);
 
@@ -129,7 +131,7 @@ export function useFileNavigation({ source, actions, state, onStateChange, onOpe
   const create = useCallback(async (directory: string, kind: "file" | "directory", name: string) => {
     try {
       const created = await mutate(signal => source.create!(directory, { kind, name, signal }));
-      if (created !== null && current.current.source === source) { load(directory); if (kind === "file") onOpenFile(created, { target: "new" }); }
+      if (created !== null && current.current.source === source) { load(directory); if (kind === "file") onOpenFile(created, { target: "new", panel: FILE_PANEL_TREE }); }
       return created;
     } catch (error) { report(error); return null; }
   }, [source, load, onOpenFile, report, mutate]);
@@ -138,7 +140,7 @@ export function useFileNavigation({ source, actions, state, onStateChange, onOpe
     catch (error) { if (current.current.source === source) report(error); return false; }
   }, [source, load, report, mutate]);
   const onAction = useCallback<MenuAction>((action, entry) => {
-    if (action === "open") onOpenFile(entry.path, { target: "new" });
+    if (action === "open") onOpenFile(entry.path, entry.surface === "crumb" ? { target: "new" } : { target: "new", panel: FILE_PANEL_TREE });
     else if (action === "rename") {
       if (entry.path === path && entry.surface === "crumb" && path !== null) setRenaming({ sourceId: source.id, path });
       else askTree({ mode: "rename", entry });

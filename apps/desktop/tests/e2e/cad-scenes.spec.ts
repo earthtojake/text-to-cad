@@ -145,6 +145,10 @@ async function openFile(file: string) {
   await page.getByLabel("Filter files").fill(file);
   await page.getByRole("option", { name: file, exact: false }).first().click();
   await expect(page.locator("[data-cad-surface] canvas").first()).toBeVisible({ timeout: 90_000 });
+  // Picked in the tree, the file opens with the tree still up; these tests are about the
+  // file, so its own panel is taken up.
+  await expect(page.getByTestId("tree-toggle")).toHaveAttribute("aria-pressed", "true");
+  await showPanel("cad-file");
 }
 
 async function selectOrOpenFile(file: string) {
@@ -157,25 +161,31 @@ async function selectOrOpenFile(file: string) {
   await openFile(file);
 }
 
+/** A panel's toggle in the nav row, pressed only if its panel is not already the open one. */
+async function showPanel(id: "cad-file" | "cad-display") {
+  const toggle = page.locator(`header [data-file-panel=${id}]`);
+  if (await toggle.getAttribute("aria-pressed") !== "true") await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+}
+
 async function setDisplayMode(mode: string) {
-  await page.getByRole("tab", { name: "Display", exact: true }).click();
-  const value = page.getByRole("tabpanel", { name: "Display", exact: true }).getByRole("combobox", { name: "Mode" });
+  // Display is a panel of its own, beside the file's: its toggle turns the column over to it.
+  await showPanel("cad-display");
+  const value = page.locator("[data-file-sheet=Display]").getByRole("combobox", { name: "Mode" });
   await value.click();
   await page.getByRole("option", { name: mode, exact: true }).click();
   await expect(value).toContainText(mode);
-  // Retain the helper's original return to geometry inspection: the Features tab.
-  const features = page.getByRole("tab", { name: "Features", exact: true });
-  if (await features.count()) await features.click();
+  // Retain the helper's original return to geometry inspection: the file's own panel.
+  if (await page.locator("header [data-file-panel=cad-file]").count()) await showPanel("cad-file");
   // The file-session writer batches ordinary UI changes for 180ms.
   await page.waitForTimeout(250);
 }
 
 async function expectDisplayMode(mode: string) {
-  await page.getByRole("tab", { name: "Display", exact: true }).click();
-  await expect(page.getByRole("tabpanel", { name: "Display", exact: true })
+  await showPanel("cad-display");
+  await expect(page.locator("[data-file-sheet=Display]")
     .getByRole("combobox", { name: "Mode" })).toContainText(mode);
-  const features = page.getByRole("tab", { name: "Features", exact: true });
-  if (await features.count()) await features.click();
+  if (await page.locator("header [data-file-panel=cad-file]").count()) await showPanel("cad-file");
 }
 
 async function expectCadReady(file: string, componentCount = 1) {
@@ -189,7 +199,8 @@ async function expectCadReady(file: string, componentCount = 1) {
   }, { expectedFile: file, expectedComponents: componentCount }), {
     timeout: 90_000,
   }).toBe(true);
-  await expect(page.locator("[data-file-status] .animate-spin")).toHaveCount(0);
+  // Nothing is still covering the model as it opens.
+  await expect(page.locator("[data-viewer-loading]")).toHaveCount(0);
   await expect(page.getByRole("status").filter({
     hasText: /Recognizing geometry|Loading model geometry/,
   })).toHaveCount(0);
@@ -250,8 +261,14 @@ test("View presets preserve authored materials and independent tools without a M
   await page.screenshot({ path: test.info().outputPath("inspect-material-unselected.png"), animations: "disabled" });
   await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
   await expect(page.locator("[data-file-panel=cad-theme], [data-file-sheet=Theme]")).toHaveCount(0);
-  const viewTab = page.getByRole("tab", { name: "Display", exact: true });
-  const view = page.getByRole("tabpanel", { name: "Display", exact: true });
+  // A lone part's own panel is named for it; Display is the panel beside it, and no panel
+  // of a Materials or Studio editor is in the row.
+  await expect(page.locator("header [data-file-panel]")).toHaveCount(3);
+  expect(await page.locator("header [data-file-panel]").evaluateAll(toggles => toggles.map(toggle =>
+    `${toggle.getAttribute("data-file-panel")}:${toggle.getAttribute("aria-label")}`)))
+    .toEqual(["cad-file:Part", "cad-display:Display", "tree:Show files"]);
+  const viewTab = page.locator("header [data-file-panel=cad-display]");
+  const view = page.locator("[data-file-sheet=Display]");
   const mode = view.getByRole("combobox", { name: "Mode" });
   await viewTab.click();
   // The section rules of `packages/ui/docs/settings-ui.md`. Surfaces is always open: its
@@ -282,11 +299,11 @@ test("View presets preserve authored materials and independent tools without a M
   await mode.click();
   await page.getByRole("option", { name: "Wireframe", exact: true }).click();
   await expect(mode).toContainText("Wireframe");
-  await expect(page.getByRole("tab", { name: "Materials", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Materials", exact: true })).toHaveCount(0);
 
   await mode.click();
   await page.getByRole("option", { name: "Render", exact: true }).click();
-  await expect(viewTab).toHaveAttribute("aria-selected", "true");
+  await expect(viewTab).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
   // Render turns Lighting on. Open, its header is text and only its minus is a control.
   const disableLighting = view.getByRole("button", { name: "Disable Lighting", exact: true });
@@ -305,25 +322,28 @@ test("View presets preserve authored materials and independent tools without a M
   await expect(exposure).toHaveValue("0.0 EV");
   await exposure.fill("1.5");
   await exposure.press("Enter");
-  await expect(page.getByRole("tab", { name: "Materials", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Materials", exact: true })).toHaveCount(0);
   await expect(page.locator("[data-cad-materials-settings-section]")).toHaveCount(0);
   await expect(page.locator("[data-file-panel-container]")).toHaveCount(1);
   await page.screenshot({ path: test.info().outputPath("render-view.png"), animations: "disabled" });
 
   await mode.click();
   await page.getByRole("option", { name: "Wireframe", exact: true }).click();
-  await expect(viewTab).toHaveAttribute("aria-selected", "true");
+  await expect(viewTab).toHaveAttribute("aria-pressed", "true");
   // Wireframe has no lighting: the section is closed, its title the control that opens it.
   await expect(view.getByRole("button", { name: "Lighting", exact: true })).toHaveAttribute("aria-expanded", "false");
   await expect(exposure).toHaveCount(0);
   await expect(view.getByLabel("Clip X position", { exact: true })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Studio", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Studio", exact: true })).toHaveCount(0);
   await mode.click();
   await page.getByRole("option", { name: "Render", exact: true }).click();
   await expect(exposure).toHaveValue("0.0 EV");
   await mode.click();
   await page.getByRole("option", { name: "Solid", exact: true }).click();
-  await page.getByRole("tab", { name: "Features", exact: true }).click();
+  // Leaving Render prepares the view again; a pick waits until the model is ready for one.
+  await expect(page.locator("[data-viewer-transition]")).toHaveCount(0);
+  await page.locator("header [data-file-panel=cad-file]").click();
+  await expectCadReady("part.step");
   await selectWholePart();
   await expect(materialInfo).toContainText("Brushed steel");
   const sidecarPath = path.join(project, "part.step.json");
@@ -337,11 +357,15 @@ test("View presets preserve authored materials and independent tools without a M
   expect(errors).toEqual([]);
 });
 
-test("robot Motion edits, preserves and resets a joint through the desktop Inspector", async () => {
+test("robot Position edits, preserves and resets a joint through the robot's own panel", async () => {
   await openFile("hinge.urdf");
-  await page.getByRole("tab", { name: "Kinematics", exact: true }).click();
-  await expect(page.getByRole("tabpanel", { name: "Kinematics", exact: true })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Joints", exact: true })).toHaveCount(0);
+  // A robot's own panel is named for what it is, and its joints are the Position section at
+  // the top of it: one section, with no Joints section inside it.
+  await expect(page.locator("[data-file-sheet=Robot]")).toBeVisible();
+  await expect(page.locator("header [data-file-panel=cad-file]")).toHaveAttribute("aria-label", "Robot");
+  const position = page.getByRole("region", { name: "Position", exact: true });
+  await expect(position).toBeVisible();
+  await expect(position.getByRole("heading", { name: "Joints", exact: true })).toHaveCount(0);
   const joint = page.getByLabel("hinge value in deg", { exact: true });
   await expect(joint).toHaveValue("0°");
   await joint.fill("35");
@@ -349,7 +373,7 @@ test("robot Motion edits, preserves and resets a joint through the desktop Inspe
   await expect(joint).toHaveValue("35°");
   await page.getByRole("button", { name: "Show files", exact: true }).click();
   await expect(joint).toBeHidden();
-  await page.locator("header [data-file-panel=cad-file-sheet]").click();
+  await page.locator("header [data-file-panel=cad-file]").click();
   await expect(joint).toHaveValue("35°");
   await page.getByRole("button", { name: "Reset", exact: true }).click();
   await expect(joint).toHaveValue("0°");
@@ -361,10 +385,12 @@ test("embedded STEP animation loads, plays and scrubs under the desktop CSP", as
   // Keep the ordinary UI budget separate from the existing cold CAD-load wait.
   test.setTimeout(60_000 + 90_000);
   await openFile("animated.step");
-  // A routine and no mates: nothing to pose, so no Kinematics tab. Playback is the Animate tool,
-  // whose playbar sits under the model while it is up.
-  await expect(page.getByRole("tab", { name: "Kinematics", exact: true })).toHaveCount(0);
+  // A routine and no mates: nothing to pose, so no Position section and no Position tool.
+  // Playback is the Animate tool, whose playbar sits under the model while it is up.
   const tools = page.getByRole("group", { name: "Interaction tools", exact: true });
+  await expect(tools.getByRole("button", { name: "Animate", exact: true })).toBeVisible();
+  await expect(tools.getByRole("button", { name: "Position", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Position", exact: true })).toHaveCount(0);
   await tools.getByRole("button", { name: "Animate", exact: true }).click();
   const animation = page.getByRole("toolbar", { name: "Animation playback", exact: true });
   const play = animation.getByRole("button", { name: "Play animation", exact: true });

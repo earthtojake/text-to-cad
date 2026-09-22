@@ -1,5 +1,5 @@
 /**
- * The Pose tool's geometry: where a joint's handle sits, and what a drag of its
+ * The Position tool's geometry: where a joint's handle sits, and what a drag of its
  * knob means for the joint's value.
  *
  * Everything is plain `[x, y, z]` in ONE space (the caller's: the viewer passes

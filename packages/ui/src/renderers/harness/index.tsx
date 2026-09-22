@@ -67,15 +67,15 @@ function App() {
   // "reopen this file" can be a real open against a stored state rather than a remount over a
   // live client that still holds everything it has already downloaded.
   const [state, setState] = useState<FileViewerState>(
-    () => (window as unknown as { __cadViewerState?: FileViewerState }).__cadViewerState || { panel: '', panelWidth: 300 });
-  const [otherState, setOtherState] = useState<FileViewerState>({ panel: '', panelWidth: 300 });
+    () => (window as unknown as { __cadViewerState?: FileViewerState }).__cadViewerState || { panel: null, panelWidth: 300 });
+  const [otherState, setOtherState] = useState<FileViewerState>({ panel: null, panelWidth: 300 });
   const [second, setSecond] = useState(false);
   const [mounted, setMounted] = useState(true);
   const [fullscreen, setFullscreen] = useState(false);
   Object.assign(window, { cadHarness: { a, b, state, otherState, preferences, captures, opened, capture: a.capture, selectReference: a.selectReference, second: setSecond, mounted: setMounted, fullscreen: setFullscreen } });
   return <div style={{ display: 'flex', width: '1200px', height: '720px' }}>
     <section data-testid="one" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-      {mounted && <FileViewer fullscreen={fullscreen} onExitFullscreen={() => setFullscreen(false)} file={file} host={a.host} renderers={a.renderers} state={state} onStateChange={setState} />}
+      {mounted && <FileViewer fullscreen={fullscreen} onFullscreenChange={setFullscreen} file={file} host={a.host} renderers={a.renderers} state={state} onStateChange={setState} />}
     </section>
     {second && <section data-testid="two" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <FileViewer file={file} host={b.host} renderers={b.renderers} state={otherState} onStateChange={setOtherState} />

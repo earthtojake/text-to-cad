@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FileTab } from "@renderer/features/explorer/FileTab";
-import { useExplorer } from "@renderer/state/explorer";
+import { openSessionTab, useExplorer } from "@renderer/state/explorer";
 import type { Project } from "@shared/types";
 
 /**
@@ -15,8 +15,8 @@ import type { Project } from "@shared/types";
  * one design — and the choice of which panel rides on the tab row, so it
  * survives switching tabs and a reload.
  *
- * The CAD Inspector is exercised end to end in `tests/e2e/explorer.spec.ts`:
- * it is the viewer's surface drawn into this
+ * A viewer file's panels are exercised end to end in `tests/e2e/explorer.spec.ts`:
+ * they are the viewer's surface drawn into this
  * column, and that needs a running `cadgen viewer`. What is testable here is
  * the host's own rule, over markdown's source panel and the tree.
  */
@@ -28,6 +28,9 @@ const PROJECT: Project = {
 };
 
 const MARKDOWN = "AGENTS.md";
+const OTHER = "README.md";
+/** A root listing with the two documents in it, the way `explorer.list` answers. */
+const ROOT_ENTRIES = [MARKDOWN, OTHER].map((path) => ({ path, name: path, kind: "file", size: 12, modifiedAt: 0, symlink: false }));
 
 /** Replace one `explorer.*` call on the preload bridge, which is read-only. */
 function stub(name: keyof typeof window.hardcore.explorer, implementation: unknown) {
@@ -79,11 +82,17 @@ function Host({ tabId }: { tabId: string }) {
 async function mount() {
   const tab = useExplorer.getState().open("file", { path: MARKDOWN });
   const view = render(<Host tabId={tab!.id} />);
-  await waitFor(() => expect(screen.getByRole("tree")).toBeInTheDocument());
-  // Registrations load their components lazily; the tree can render while
-  // Markdown's document module is still being prepared.
+  // Registrations load their components lazily: the row's toggles are up once
+  // Markdown's document module has been prepared.
   await screen.findByRole("button", { name: "View source" });
+  await screen.findByRole("button", { name: "Show files" });
   return { tabId: tab!.id, view };
+}
+
+/** The tree, taken up by its toggle: a document does not open on it. */
+async function showFiles() {
+  await userEvent.click(screen.getByRole("button", { name: "Show files" }));
+  await waitFor(() => expect(screen.getByRole("tree")).toBeInTheDocument());
 }
 
 /** The panel column, whichever panel is in it. */
@@ -92,8 +101,14 @@ const openPanelId = () => columns()[0]?.getAttribute("data-file-panel-container"
 const panelOf = (id: string) => useExplorer.getState().tabs.find((tab) => tab.id === id);
 
 describe("the file tab's panel column", () => {
-  it("opens with the tree, and draws exactly one column", async () => {
+  it("opens with no panel, and draws exactly one column for the one it is given", async () => {
     await mount();
+    // A document declares no panel that claims the default, and the tree is
+    // not where a file opens — only a tab with no file opens on it.
+    expect(columns()).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Show files" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "View source" })).toHaveAttribute("aria-pressed", "false");
+    await showFiles();
     expect(columns()).toHaveLength(1);
     expect(openPanelId()).toBe("tree");
     // Named for the accessibility tree by the toggle that opens it.
@@ -107,6 +122,7 @@ describe("the file tab's panel column", () => {
 
   it("closes the open panel when its own toggle is pressed, leaving none", async () => {
     const { tabId } = await mount();
+    await showFiles();
     await userEvent.click(screen.getByRole("button", { name: "Hide files" }));
     expect(columns()).toHaveLength(0);
     // `""` is "nothing open" and is not the same as "nobody has said": a tab
@@ -132,9 +148,11 @@ describe("the file tab's panel column", () => {
    */
   it("draws no column for a panel that is another file's", async () => {
     const { tabId } = await mount();
-    useExplorer.getState().update(tabId, { panel: "cad-file-sheet" });
+    await showFiles();
+    expect(columns()).toHaveLength(1);
+    useExplorer.getState().update(tabId, { panel: "cad-file" });
     await waitFor(() => expect(columns()).toHaveLength(0));
-    // The CAD surface's panels are not this file's, so nothing is open and
+    // A viewer file's panels are not this file's, so nothing is open and
     // no toggle is pressed — rather than a column with nothing in it.
     expect(screen.getByRole("button", { name: "Show files" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: "View source" })).toHaveAttribute("aria-pressed", "false");
@@ -142,12 +160,12 @@ describe("the file tab's panel column", () => {
 
   it("keeps the choice on the tab row, which is what persists it", async () => {
     const { tabId, view } = await mount();
-    // Nobody has said yet, so nothing is stamped on the row: the column is
-    // showing the renderer's default.
+    // Nobody has said yet, so nothing is stamped on the row: the tab is
+    // showing the renderer's default, which for a document is no panel.
     expect(panelOf(tabId)).toMatchObject({ panel: null });
 
-    await userEvent.click(screen.getByRole("button", { name: "Hide files" }));
-    expect(panelOf(tabId)).toMatchObject({ panel: "" });
+    await showFiles();
+    expect(panelOf(tabId)).toMatchObject({ panel: "tree" });
 
     // The row is what `explorer_tabs` stores, so this is the whole of
     // persistence: the tab remounted from the same row — another tab
@@ -155,17 +173,83 @@ describe("the file tab's panel column", () => {
     // panel the person left, and not to the default.
     view.unmount();
     render(<Host tabId={tabId} />);
-    await waitFor(() => expect(screen.getByRole("button", { name: "Show files" })).toBeInTheDocument());
-    expect(columns()).toHaveLength(0);
+    await waitFor(() => expect(screen.getByRole("tree")).toBeInTheDocument());
+    expect(columns()).toHaveLength(1);
+    expect(openPanelId()).toBe("tree");
+
+    // And a tab closed on purpose comes back closed: `""` is not `null`.
+    await userEvent.click(screen.getByRole("button", { name: "Hide files" }));
+    expect(panelOf(tabId)).toMatchObject({ panel: "" });
   });
 
   it("gives every panel the one stored width", async () => {
     useExplorer.setState({ panelWidth: 320 });
     await mount();
+    await showFiles();
     expect(columns()[0]).toHaveStyle({ width: "320px" });
     // One handle, named for the panel it sizes, and its value is the width
     // every panel in this column gets.
     const handle = screen.getByRole("separator", { name: "Resize Hide files panel" });
     expect(handle).toHaveAttribute("aria-valuenow", "320");
+  });
+});
+
+/**
+ * Which panel a file opens with is said by the way it was reached, and the tab applies it:
+ * the viewer asks `openFile(path, { target, panel })` and this app's `FileTab` answers with
+ * a tab. A pick in the tree carries the tree, so a person can go on walking it; a crumb
+ * carries nothing, so the file opens on its own default.
+ */
+describe("the panel a file opens with", () => {
+  const tabOf = (path: string) => useExplorer.getState().tabs.find((tab) => tab.kind === "file" && tab.path === path);
+
+  it("opens a file picked in the tree in a tab of its own, with the tree open", async () => {
+    stub("list", async ({ path }: { path: string }) => (path === "" ? ROOT_ENTRIES : []));
+    const { tabId } = await mount();
+    await showFiles();
+    const row = await waitFor(() => {
+      const found = document.querySelector(`[role="treeitem"][data-path="${OTHER}"]`);
+      expect(found).not.toBeNull();
+      return found as HTMLElement;
+    });
+    await userEvent.click(row);
+    await waitFor(() => expect(tabOf(OTHER)).toMatchObject({ panel: "tree" }));
+    expect(tabOf(OTHER)!.id).not.toBe(tabId);
+    expect(useExplorer.getState().activeId).toBe(tabOf(OTHER)!.id);
+    // The tab it was picked from keeps its own file and its own choice.
+    expect(panelOf(tabId)).toMatchObject({ path: MARKDOWN, panel: "tree" });
+  });
+
+  it("moves this tab to a file a crumb opens, on that file's own default", async () => {
+    stub("list", async ({ path }: { path: string }) => (path === "" ? ROOT_ENTRIES : []));
+    const { tabId } = await mount();
+    await showFiles();
+    expect(panelOf(tabId)).toMatchObject({ panel: "tree" });
+    await userEvent.click(screen.getByRole("button", { name: `Browse ${MARKDOWN}` }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: OTHER }));
+    // The same tab, the other file, and not the tree the last file had open: `null`, the default.
+    await waitFor(() => expect(panelOf(tabId)).toMatchObject({ path: OTHER, panel: null }));
+    expect(useExplorer.getState().tabs.filter((tab) => tab.kind === "file")).toHaveLength(1);
+  });
+
+  it("gives a tab already showing the file the panel it is opened with, and leaves it be when none is asked for", async () => {
+    const { tabId } = await mount();
+    expect(panelOf(tabId)).toMatchObject({ panel: null });
+    await openSessionTab("session", PROJECT.id, null, "file", { path: MARKDOWN, panel: "tree" });
+    expect(panelOf(tabId)).toMatchObject({ panel: "tree" });
+    expect(useExplorer.getState().tabs.filter((tab) => tab.kind === "file" && tab.path === MARKDOWN)).toHaveLength(1);
+    await openSessionTab("session", PROJECT.id, null, "file", { path: MARKDOWN });
+    expect(panelOf(tabId)).toMatchObject({ panel: "tree" });
+    await waitFor(() => expect(columns()).toHaveLength(1));
+    expect(openPanelId()).toBe("tree");
+  });
+
+  it("fills the blank tab with the file and the panel it is opened with, or the file's default", async () => {
+    const blank = useExplorer.getState().open("file")!;
+    await openSessionTab("session", PROJECT.id, null, "file", { path: OTHER, panel: "tree" });
+    expect(panelOf(blank.id)).toMatchObject({ path: OTHER, panel: "tree" });
+    const second = useExplorer.getState().open("file")!;
+    await openSessionTab("session", PROJECT.id, null, "file", { path: MARKDOWN });
+    expect(panelOf(second.id)).toMatchObject({ path: MARKDOWN, panel: null });
   });
 });

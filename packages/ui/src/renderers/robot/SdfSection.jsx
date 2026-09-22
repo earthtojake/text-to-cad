@@ -29,7 +29,7 @@ function SdfMetadataList({ title, items, fields }) {
 }
 
 /** What an SDF document says about itself beyond its links and joints: the parser's `sdf` record. */
-export default function SdfTab({ info, movableJointCount = 0, title = "SDF" }) {
+export default function SdfSection({ info, movableJointCount = 0, title = "SDF" }) {
   const sdfInfo = info && typeof info === "object" ? info : {};
   const metadata = sdfInfo.staticMetadata && typeof sdfInfo.staticMetadata === "object" ? sdfInfo.staticMetadata : {};
   const list = key => (Array.isArray(metadata[key]) ? metadata[key] : []);

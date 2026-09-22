@@ -51,21 +51,28 @@ use the [explicit fake host](../src/host/testing/host.ts).
 ## Host fullscreen and renderer navigation actions
 
 `FileViewer.fullscreen` is transient host-owned presentation state, never a file
-preference. It hides the shared navbar and panel frame and passes the flag to
-the renderer. CAD also hides viewport controls and suspends tools/shortcuts.
-Keep the viewport mounted; preserve the selected panel, tool and document state.
-The app owns its header, fullscreen entry and Escape listener, and supplies
-`FileViewer.onExitFullscreen`, forwarded unchanged as
-`RendererViewProps.onExitFullscreen`. CAD renders its own fullscreen playback and exit controls
-and invokes that callback for Exit. The host Escape listener must honor
-`event.defaultPrevented`; Escape first closes an open renderer menu/overlay.
+preference. A host offers it by passing `FileViewer.onFullscreenChange(fullscreen:
+boolean)`; without that prop there is no fullscreen. FileViewer forwards it as
+`RendererViewProps.onFullscreenChange` only to a renderer whose registration
+declares `fullscreen: true` (STEP), and passes the flag only to such a renderer;
+when the file on screen has no fullscreen, FileViewer calls
+`onFullscreenChange(false)`. While presenting it hides the shared navbar and
+panel frame. CAD offers the switch as the last tool of its strip
+(`shell.tools.fullscreen`); while presenting, it hides viewport controls and
+suspends tools/shortcuts. Keep the viewport mounted; preserve the selected panel, tool and
+document state. The app owns the state and its Escape listener. CAD renders its
+own fullscreen playback and exit controls, and its X calls
+`onFullscreenChange(false)`. The host Escape listener must honor
+`event.defaultPrevented`; Escape first closes an open renderer menu/overlay. The
+web app offers fullscreen; the desktop app passes no `onFullscreenChange`, so it
+has none.
 Control visibility and the fullscreen camera are transient. CAD captures the
 regular camera on entry, fits the authored model at the default angle, and restores
 the saved regular camera on exit. Presentation camera events never persist into
 the file session. Picking listeners, drawing and measurement are suspended;
 ordinary camera dragging remains available. Orbit speed is a global
 `CadPreferences.orbit` preference persisted by each host adapter. The fullscreen
-playbar reuses the same per-file animation runtime as the inspector.
+playbar reuses the same per-file animation runtime as the Animate tool.
 
 A renderer can publish `FileNavigationAction[]` through
 `RendererViewProps.onNavigationActionsChange`. The shared navbar shows these
@@ -77,6 +84,16 @@ commands should read the current viewport through a ref, avoiding parent/child
 render loops. These actions use existing host capabilities for effects. For
 example, CAD's snapshot delivers through `host.promptContext`, which binds the
 destination before waiting for the image. It never detects the platform.
+
+`navigation.openFile(path, { target, panel })` shows a file in this view
+(`"current"`) or in a new one, where the host has more than one (`"new"`). `panel`
+is the panel the file opens with: FileViewer asks for the tree (`"tree"`) for a
+file picked in the tree, so the tree stays up while a person walks it. Without a
+panel, a file shown in place or in a new view starts at `FileViewerState.panel:
+null` (its own default), and a view already showing the file keeps what it has
+open. The host applies it because only the host knows which view shows the file:
+web writes it into its one view's state, and desktop into the tab it selects or
+creates.
 
 ## Adding a shared feature
 

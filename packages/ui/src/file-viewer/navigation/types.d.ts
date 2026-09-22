@@ -104,18 +104,15 @@ export type FilePanel = {
 
 export const FILE_PANEL_TREE: string;
 export const SOURCE_PANEL: string;
-export const CAD_PANEL: { readonly fileSheet: string };
+export const CAD_PANEL: { readonly file: string; readonly display: string };
 
-/** The CAD Inspector — both apps draw it. */
-export function inspectorPanels(ready: boolean, options?: { defaultOpen?: boolean }): FilePanel[];
+/** A viewer file's panels: its own controls (when it has any), then its Display settings. */
+export function viewerPanels(ready: boolean, options?: { file?: { label: string; icon: ElementType } | null }): FilePanel[];
 /** The desktop's markdown source view, declared in the same vocabulary. */
 export function markdownPanels(open: string): FilePanel[];
-export function treePanel(open: string): FilePanel;
-export function panelsFor(declared: FilePanel[], open: string): FilePanel[];
+export function treePanel(open: string, options?: { empty?: boolean }): FilePanel;
 export function resolveOpenPanel(panels: FilePanel[], panel: string | null): FilePanel | null;
 export function nextOpenPanel(open: string, id: string): string;
-/** What the open panel becomes when the CAD surface reports one of its own. */
-export function panelClosedBy(open: boolean, current: string, id: string): string;
 
 export const PANEL_MIN_WIDTH: number;
 export const PANEL_MAX_WIDTH: number;

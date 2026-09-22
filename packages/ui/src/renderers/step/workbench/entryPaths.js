@@ -33,7 +33,7 @@ export function filenameLabelForEntry(entry) {
   // any more now that model scripts moved into `src/`.
   //
   // An artifact is presented as an artifact: every user-visible name is the basename of the
-  // catalog entry's own path. Generated-vs-imported still drives status badges and rebuild
+  // catalog entry's own path. Generated-vs-imported still drives rebuild
   // behaviour; it never drives the NAME. Showing the filename verbatim also means new source
   // kinds need no case here.
   return entryLeafName(entry);

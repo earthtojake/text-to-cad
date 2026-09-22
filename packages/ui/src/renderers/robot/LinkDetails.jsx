@@ -1,6 +1,6 @@
 import { CoordValue, InfoRow, MonoValue } from "../kit/inspector/referenceRows.jsx";
 
-// The Reference pane at the foot of the Links tab: what the selection IS.
+// The Reference pane at the foot of the Links section: what the selection IS.
 //
 // A link reads back what the description says about it (its inertial properties, its
 // visual and collision geometry, its parent joint with limits and origin); a named

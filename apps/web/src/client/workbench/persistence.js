@@ -8,7 +8,6 @@ function normalizeUniqueStringList(value) {
   return Array.isArray(value) ? [...new Set(value.map(entry => String(entry ?? "").trim()).filter(Boolean))] : [];
 }
 function normalizeNullableUniqueStringList(value) { return Array.isArray(value) ? normalizeUniqueStringList(value) : null; }
-function normalizeNullableBoolean(value) { return typeof value === "boolean" ? value : null; }
 
 function readStorageJson(storage, key) {
   try {
@@ -51,14 +50,7 @@ function browserSessionStorage() {
 
 export function createCadDirectorySessionState(overrides = {}, options = {}) {
   return {
-    // Nullable, exactly like `fileSheetOpen`: null is "nobody has said", which
-    // resolves to the panel list's own default (`@hardcore/ui/navigation`'s
-    // `panels.js` — the file tree, unless the open file's Inspector claims it).
-    // A stored `false` is a person who closed the panel and must come back to
-    // it closed, which a plain boolean could not tell apart from a first visit.
-    fileViewerOpen: normalizeNullableBoolean(overrides?.fileViewerOpen),
     fileViewerExpandedDirectoryIds: normalizeNullableUniqueStringList(overrides?.fileViewerExpandedDirectoryIds),
-    fileSheetOpen: normalizeNullableBoolean(overrides?.fileSheetOpen),
     fileSheetWidthPx: fileSheetWidthPxForSessionState(
       overrides?.fileSheetWidthPx,
       options.defaultFileSheetWidthPx
@@ -71,14 +63,8 @@ function buildCadDirectorySessionStoragePayload(state = {}, options = {}) {
   const payload = {
     version: CAD_DIRECTORY_SESSION_STORAGE_VERSION
   };
-  if (typeof normalizedState.fileViewerOpen === "boolean") {
-    payload.fileViewerOpen = normalizedState.fileViewerOpen;
-  }
   if (Array.isArray(normalizedState.fileViewerExpandedDirectoryIds)) {
     payload.fileViewerExpandedDirectoryIds = normalizedState.fileViewerExpandedDirectoryIds;
-  }
-  if (typeof normalizedState.fileSheetOpen === "boolean") {
-    payload.fileSheetOpen = normalizedState.fileSheetOpen;
   }
   if (normalizedState.fileSheetWidthPx) {
     payload.fileSheetWidthPx = normalizedState.fileSheetWidthPx;

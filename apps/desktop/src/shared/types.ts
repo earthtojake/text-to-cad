@@ -186,17 +186,17 @@ export const FileTabSchema = z.object({
    *
    * A file tab has one panel column and a list of things that can be in it:
    * the file tree (`FILE_PANEL_TREE`, in the shared shell), and whatever the file's renderer
-   * declares — markdown's source view or a CAD file's Inspector.
+   * declares — markdown's source view, or a viewer file's own panel and its Display.
    * Opening one closes whatever was open, so the answer is a single
    * id rather than a flag per panel; `""` is "nothing open".
    *
    * `null` is "the person has not said", which resolves to the renderer's
-   * own default — the tree for a document, the Inspector for a CAD file.
+   * own default — a viewer file's own panel (a STEP's, a robot's), else nothing.
    * It is not the same as `""`: a tab whose panels were all closed on
    * purpose must come back closed.
    */
   // Older tabs can name the retired theme editor. Restore the renderer's
-  // default panel while preserving explicit closed/tree/Inspector choices.
+  // default panel while preserving explicit choices.
   panel: z.string().nullable().default(null).transform((panel) => panel === "cad-theme" ? null : panel),
 });
 

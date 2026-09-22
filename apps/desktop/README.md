@@ -37,9 +37,8 @@ review tabs, agent integrations and native services remain in this app.
 Neither shared package imports app source, and desktop imports no web source.
 The host keeps the fullscreen orbit preference in one window-wide store backed
 by its global storage key (`cad-viewer:orbit:v1`). Active and newly opened roots share that
-preference; document state, inspector selection and panel state remain scoped
-to their root or tab. Retired tutorial and inspector tab-layout records are
-ignored. Inspector tabs cannot be dragged, reordered or split.
+preference; document state and the open panel remain scoped to their root or
+tab. Retired tutorial and tab-layout records are ignored.
 
 ## Dev
 
@@ -193,11 +192,11 @@ neighbours, open),
 `file-context-menu` (a tree row's), `file-image`, `file-cad-failed` (the runtime broken on
 purpose), `file-cad` (the explorer at its widest: the sidebar hidden and the
 session at its floor), `file-cad-default` (the explorer at its default
-width, the Inspector as the tab's one panel) and both again at 1280×800,
+width, the file's own panel open beside the model) and both again at 1280×800,
 `file-cad-measure`, `file-cad-tree` and `file-cad-files` (the file tree in
 that same column), `file-cad-light-chrome` (Inspect and the app in light
 appearance), `render-materials` (Render's material editor and photographic
-scene), and `robot-kinematics` (a joint edited in the Inspector),
+scene), and `robot-kinematics` (a joint edited in the robot panel's Position),
 `terminal`,
 `browser-empty`, `browser`, `review`, `strip`, `strip-overflow` (seven tabs in
 a pane at its floor, `+` pinned to the right edge), `panes-sidebar-collapsed`
@@ -1056,78 +1055,85 @@ which is the last entry and not a special case; the nav row draws one icon
 button per entry with `aria-pressed`, highlighted while its panel is open,
 in that order — so the files toggle is last and never moves, and the one
 control that is always there is always in the same place. Opening any panel
-closes whatever was open. This is the standalone viewer's top bar, ported,
+closes whatever was open, and no panel has tabs inside it: the nav row is the
+tab strip. This is the standalone viewer's top bar, ported,
 with the app's own tree folded into it.
 
 Markdown declares one, the two readings of the same bytes (`View source` /
-`View preview`). A CAD file declares **Inspector**. Its sections follow the
-viewing mode and the file's capabilities; its toggle uses the same sliders
-glyph in desktop and web. Its id stays `cad-file-sheet`, which is persisted
-on the file tab. Code, images and PDFs declare none, leaving the tree as the
-whole list.
+`View preview`). A viewer file declares its own panel, then **Display**
+(`cad-display`, the sliders glyph). The own panel's id is `cad-file`, named for
+what the file is: a STEP part's `Part` (a box), an assembly's `Assembly`
+(boxes), a URDF, SRDF or SDF's `Robot` (a bot). An STL, a 3MF and a GLB declare
+Display alone, and a DXF declares none. Code, images and PDFs declare none,
+leaving the tree as the whole list.
 
 A declaration identifies where its content belongs: `tree` is the app's file
 tree, `slot` is a box the renderer draws into, and `body` replaces the file
-content, as markdown's source view does. The CAD Inspector uses `slot` and
-portals into the file tab's panel column. The Inspector and tree share one
-border, width, resize handle and header treatment.
+content, as markdown's source view does. A viewer file's panels use `slot` and
+portal into the file tab's panel column. Every panel shares one border, width,
+resize handle and header treatment.
 
-**The tab owns which panel is open**, as one id in `FileTabSchema.panel`.
-`null` restores the renderer's default — Inspector for CAD, tree for other
-files — while `""` preserves a deliberately closed panel. The controlled CAD
-renderer reports when it opens the Inspector, so the toggle follows the
-visible content. A CAD tab whose runtime failed declares no Inspector and
-falls back to the file tree. Saved `cad-theme` panel choices migrate to the
-default; other saved panel choices remain unchanged.
+**The tab owns which panel is open**, as one id in `FileTabSchema.panel`,
+persisted with the tab. `null` is the renderer's default — a viewer file's own
+panel (a STEP's, a robot's), else nothing; the tree is the default only for a
+tab with no file — while `""` preserves a deliberately closed panel. A new tab,
+and a crumb that points this tab at another file, start at `null`. A file picked
+in the tree asks for the tree (`openFile(path, { target: "new", panel: "tree" })`):
+its tab — new, or the one already showing it — opens with the tree up, so the tree
+can be walked file by file; `openSessionTab` applies a requested panel in the same
+strip update that selects the tab, and leaves a tab's panel alone when none is
+asked for. When a pick in the viewport has details to show, the renderer opens
+its own panel (`onPanelOpen`), so the toggle follows the visible content. A CAD
+tab whose runtime failed declares no panels, leaving only the files toggle.
+Saved `cad-theme` panel choices read as `null`.
 
 ### Inspect and Render
 
 CAD controls are shared with web. A file has a top-right tool strip only where it
-has tools: a STEP's contains Select, Measure and Draw, plus Pose (drag joints by
+has tools: a STEP's contains Select, Measure and Draw, plus Position (drag joints by
 viewport handles) and Animate where the file has joints or routines. Pressing Select again opens its selection-filter dropdown.
-A robot description opens in Pose, which leads its tools, followed by a Select that picks whole links. An agent's select command on one fails with a sentence saying so; its clearSelection clears the link selection.
+A robot description opens in Position, which leads its tools, followed by a Select that picks whole links. An agent's select command on one fails with a sentence saying so; its clearSelection clears the link selection.
 Draw is a STEP tool and appears nowhere else.
 A GLB, an STL and a 3MF have nothing to select and no tools at all: their viewport
 simply orbits, pans and zooms, with no strip over it and no menu on a secondary
 press. A GLB with clips shows the playbar under the model always — a transport,
 not a tool — and the file opens at rest. An agent's select command on one of them fails with a sentence saying so.
 Buttons wrap inside the pill in a narrow explorer pane. The file navbar has a
-direct snapshot action before Inspector (`SlidersHorizontal`) and file tree (`Folders`).
+direct snapshot action before the panel toggles: the file's own panel, Display
+(`SlidersHorizontal`) and the file tree (`Folders`).
 Snapshot attaches the viewport PNG and references to this tab's owning session
 draft through the prompt-context adapter; it does not send a message. Playback
-lives in the Animate tool, not the Inspector. There is no zoom control anywhere:
-no percentage beside the Inspector tabs, no menu behind one, no zoom toolbar. A
+lives in the Animate tool, not in a panel. There is no zoom control anywhere:
+no percentage readout, no menu behind one, no zoom toolbar. A
 STEP's viewport context menu ends in Zoom to fit and Zoom to selection (off without
 a selection), offered over a part, over the backdrop and on every Features tree row;
 on every other 3D file the view cube's centre, "Reset to default isometric view",
 frames the model again from the default direction. Nothing in either touches the
 model, its motion or its display settings; Display Reset restores the selected
-preset and disables Clip/Explode, and the Kinematics tab's Reset restores a pose. X/Y/Z labels stay outside the
+preset and disables Clip/Explode, and the Position section's Reset restores a pose. X/Y/Z labels stay outside the
 bottom-right axis endpoints, with the yellow center above their stems.
-The web header's fullscreen action is owned by that app.
+This app has no fullscreen: it passes no `onFullscreenChange`, so a STEP's strip
+has no Fullscreen button here.
 
-The shared STEP Inspector uses **Features | Kinematics | Display**. Kinematics
-appears when the sidecar declares it, with Pose above Joints. Animate's
-playback and Kinematics' pose retain independent runtimes, enable state and
-actions; every pose write (a value, a named pose, a Pose-tool knob, Reset) is
+A STEP's own panel is `Part` or `Assembly`, and it stacks Features, then Position
+when the sidecar declares kinematics (a `Pose` row, the joint sliders, then
+Reset), then Issues when there are any. Animate's
+playback and Position's pose retain independent runtimes, enable state and
+actions; every pose write (a value, a named pose, a Position-tool knob, Reset) is
 an instant jump, and Reset also stops any playing routine and hands the pose
-back to Kinematics. Robots also use Kinematics for their joints, then Links
-(the link tree), and keep the SDF tab. A DXF drawing has NO Inspector at all, and no
-toggle for one in its file navbar: it is a straight 2D render on a canvas — drag to pan,
+back to Position. A robot's own panel is `Robot`: its Position for the joints,
+then Links (the link tree), and an SDF's metadata after Links. A DXF drawing has
+no panel of its own and no Display: it is a straight 2D render on a canvas — drag to pan,
 wheel or pinch to zoom about the pointer, double-click to fit — and the navbar carries
-only Take snapshot.
+only Take snapshot and the files toggle.
 
 Display contains the single Mode dropdown for shaded, edge, wire and photographic
 Render presentation. All modes share the camera, projection, part colors,
 guides, clipping and explode controls. Render adds its lighting, backdrop and
 Preview/Final quality sections inside Display. Switching modes never reframes the
-camera, replaces inspector tabs or resets the selected tab. Inspector tabs
-use one fixed row in canonical order; dragging, reordering and splitting are
-unavailable. Photographic settings and the active tab persist per file. Old
-global tab arrangements are ignored. A saved section ID the current format
-does not have is simply not open, so the sheet lands on the format's first
-tab; a legacy split selects its last available tab. Visited Model trees retain
-disclosure and scroll while hidden.
+camera or changes the open panel. Photographic settings persist per file. The
+file's own panel stays mounted while Display is open, so the Features tree keeps
+its disclosure and scroll.
 
 Settings › Appearance owns the app's System, Light and Dark preference. CAD
 Theme settings are retired, and old theme records cannot override the current
@@ -1144,7 +1150,7 @@ JavaScript file is discovered or written.
 
 Neither a display-mode change nor a photographic setting changes the app's appearance. The
 Electron `theme` suite samples the document through these interactions, and
-`cad-scenes` checks Display settings, Kinematics controls, authored material details
+`cad-scenes` checks Display settings, a robot's Position controls, authored material details
 and the absence of a Materials editor. See the shared [Render modes](../../packages/ui/docs/render-mode.md)
 playbook for the mode bases and camera behavior.
 
@@ -1695,7 +1701,7 @@ The shared Model tree infers read-only features from existing SURF geometry
 when a visible part is expanded. Expansion also controls viewport selection and
 exact topology loading; desktop supplies no separate tree or inference backend.
 It does not consult Python source or run kernel reconstruction. See the shared
-[model-tree contract](../../packages/ui/docs/cad-renderer.md#step-inspector-layout)
+[model-tree contract](../../packages/ui/docs/cad-renderer.md#step-panel)
 for isolation, reveal and selection granularity. The client-side
 [feature detection guide](../../packages/ui/docs/feature-detection.md) covers
 rules, cancellation and the versioned memory cache shared by the UI in both apps.

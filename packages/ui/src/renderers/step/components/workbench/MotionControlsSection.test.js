@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildMotionControlsTab } from './MotionControlsSection.js';
+import { buildPositionSection } from './MotionControlsSection.js';
 import PoseControlsSection from './PoseControlsSection.js';
 import { KinematicsPoseRow, MotionResetButton, NO_PRESET_VALUE } from '../../../kit/inspector/kinematicsControls.jsx';
 import { FileSheetStaticSection, FileSheetSliderField } from '../../../kit/inspector/FileSheet.js';
@@ -10,14 +10,14 @@ const definition = { parameters: [{ id: 'hinge', label: 'Hinge', type: 'number' 
   defaultParameterValues: { hinge: 0 }, manifest: { poses: { rest: { hinge: 0 } } } };
 const animation = { clips: [{ id: 'turn', duration: 3 }], activeClipId: 'turn' };
 
-test('Kinematics is poses and joints: animation is the Animate tool, so routines alone make no tab', () => {
-  assert.equal(buildMotionControlsTab(), null);
-  for (const props of [{ animationRuntime: animation }, { animationRuntime: { status: 'loading' } }]) assert.equal(buildMotionControlsTab(props), null);
+test('Position is poses and joints: animation is the Animate tool, so routines alone make no section', () => {
+  assert.equal(buildPositionSection(), null);
+  for (const props of [{ animationRuntime: animation }, { animationRuntime: { status: 'loading' } }]) assert.equal(buildPositionSection(props), null);
   for (const props of [{ poseRuntime: { definition } }, { poseRuntime: { error: 'Invalid joints' } }, { poseRuntime: { definition }, animationRuntime: animation }]) {
-    const tab = buildMotionControlsTab(props);
-    assert.equal(tab.id, 'kinematics');
-    assert.equal(tab.title, 'Kinematics');
-    assert.deepEqual(elements(tab.content).filter(node => node.type === PoseControlsSection).length, 1);
+    const section = buildPositionSection(props);
+    assert.equal(section.id, 'position');
+    assert.equal(section.title, 'Position');
+    assert.deepEqual(elements(section.content).filter(node => node.type === PoseControlsSection).length, 1);
   }
 });
 
@@ -25,8 +25,8 @@ test('one global Reset calls the coordinated host command', () => {
   const calls = [];
   const pose = { definition, onResetMotion: () => calls.push('both'), onResetParameters: () => calls.push('wrong') };
   const playback = { ...animation, resetModel: () => calls.push('wrong') };
-  const tab = buildMotionControlsTab({ poseRuntime: pose, animationRuntime: playback });
-  const children = elements(tab.content).filter(node => [PoseControlsSection, MotionResetButton].includes(node.type));
+  const section = buildPositionSection({ poseRuntime: pose, animationRuntime: playback });
+  const children = elements(section.content).filter(node => [PoseControlsSection, MotionResetButton].includes(node.type));
   assert.deepEqual(children.map(node => node.type), [PoseControlsSection, MotionResetButton]);
   const reset = MotionResetButton(children[1].props);
   elements(reset).find(node => node.props.onClick).props.onClick();
@@ -34,12 +34,13 @@ test('one global Reset calls the coordinated host command', () => {
   assert.equal(elements(PoseControlsSection({ runtime: pose })).some(node => node.props.onReset || node.props.onCopy || node.props.transition), false);
 });
 
-test('Pose and Joints are separate permanent sections; either can exist independently', () => {
-  const titles = def => elements(PoseControlsSection({ runtime: { definition: def }, hideWhenEmpty: true }))
-    .filter(node => node.type === FileSheetStaticSection).map(node => node.props.title);
-  assert.deepEqual(titles(definition), ['Pose', 'Joints']);
-  assert.deepEqual(titles({ ...definition, parameters: [] }), ['Pose']);
-  assert.deepEqual(titles({ ...definition, manifest: {} }), ['Joints']);
+test("the pose row and the joints are ONE section's rows, with no section of their own; either can exist alone", () => {
+  const rows = def => elements(PoseControlsSection({ runtime: { definition: def }, hideWhenEmpty: true }));
+  const kinds = def => rows(def).filter(node => [KinematicsPoseRow, FileSheetSliderField].includes(node.type)).map(node => node.type);
+  assert.deepEqual(kinds(definition), [KinematicsPoseRow, FileSheetSliderField]);
+  assert.deepEqual(kinds({ ...definition, parameters: [] }), [KinematicsPoseRow]);
+  assert.deepEqual(kinds({ ...definition, manifest: {} }), [FileSheetSliderField]);
+  assert.equal(rows(definition).some(node => node.type === FileSheetStaticSection), false, 'no Pose or Joints section inside Position');
 });
 
 test('animation-owned authored values do not claim a named position, and parameters stay editable', () => {

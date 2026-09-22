@@ -369,6 +369,9 @@ export function buildFileStatusItems({
   stepArtifactGenerationState = null,
   activeGenerationFiles = [],
   viewerAlert = null,
+  // A problem the model survives (a routine that did not load): the viewer is still up, and
+  // this list is the one place that says what it could not do.
+  warningAlert = null,
   viewerServerInfo = null,
   artifactAdvisory = null,
 } = {}) {
@@ -391,14 +394,16 @@ export function buildFileStatusItems({
     }));
   }
 
-  const viewerAlertItem = viewerAlertFileStatusItem(viewerAlert);
-  const duplicatesExistingItem = viewerAlertItem && normalizeFileStatusItems(items).some((item) => (
-    item.level === viewerAlertItem.level &&
-    item.title === viewerAlertItem.title &&
-    item.message === viewerAlertItem.message
-  ));
-  if (viewerAlertItem && !duplicatesExistingItem) {
-    items.push(viewerAlertItem);
+  for (const alert of [viewerAlert, warningAlert]) {
+    const alertItem = viewerAlertFileStatusItem(alert);
+    const duplicatesExistingItem = alertItem && normalizeFileStatusItems(items).some((item) => (
+      item.level === alertItem.level &&
+      item.title === alertItem.title &&
+      item.message === alertItem.message
+    ));
+    if (alertItem && !duplicatesExistingItem) {
+      items.push(alertItem);
+    }
   }
 
   return normalizeFileStatusItems(items);

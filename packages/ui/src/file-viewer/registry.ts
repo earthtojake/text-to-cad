@@ -8,7 +8,7 @@ export function defineFileRenderer<T>(definition: FileRendererDefinition<T>): Re
     priority: definition.priority,
     matches: definition.matches,
     fallback: definition.fallback,
-    panels: definition.panels,
+    fullscreen: definition.fullscreen,
     async prepare(context) {
       context.signal.throwIfAborted();
       let prepared: PreparedDocument<T> | undefined;
@@ -30,8 +30,10 @@ export function defineFileRenderer<T>(definition: FileRendererDefinition<T>): Re
         ]), aborted]);
         context.signal.throwIfAborted();
         const { default: Component } = module;
+        const { panels } = definition;
         return {
           Component: (props) => createElement(Component, { ...props, data: document.data }),
+          panels: panels ? (panelContext) => panels({ ...panelContext, data: document.data }) : undefined,
           text: document.text,
           dispose,
         };

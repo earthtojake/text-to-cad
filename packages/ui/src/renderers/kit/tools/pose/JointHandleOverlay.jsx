@@ -3,7 +3,7 @@ import { useRef } from "react";
 import { useJointHandles } from "./useJointHandles.js";
 
 /**
- * The Pose tool's layer over the viewport: the canvas the handles are drawn on
+ * The Position tool's layer over the viewport: the canvas the handles are drawn on
  * and the label beside the hovered or held knob. Neither takes the pointer; the
  * knobs are hit-tested from the viewer's own element (`useJointHandles`).
  */

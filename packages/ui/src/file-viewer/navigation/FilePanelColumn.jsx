@@ -4,15 +4,15 @@ import { useRef } from "react";
  * The file surface's panel column: the one frame every panel is drawn in.
  *
  * There is one of these beside a file and never two, because there is one
- * open panel (`panels.js`). Whatever is in it — the file tree or the CAD
- * Inspector — gets the same border, the same width and the
+ * open panel (`panels.js`). Whatever is in it — the file tree, a file's own
+ * panel or its Display — gets the same border, the same width and the
  * same handle, which is the point: they used to be two columns of two
  * designs, a file list on the left and the viewer's own aside on the right,
  * each with its own idea of how wide a panel is.
  *
- * No title bar. Each panel's own top row is its header — the tree's filter,
- * the Inspector's tabs — and the nav row's toggle is how it closes. A
- * title above a tab bar would be a second name for the same thing.
+ * No title bar of the column's own. Each panel's own top row is its header —
+ * the tree's filter, a file panel's first section — and the nav row's toggle is
+ * how it closes.
  *
  * A collapsed panel is not rendered at all, so the toggle for it exists in
  * the document exactly once: in the nav row.
@@ -26,7 +26,7 @@ import { useRef } from "react";
  * them, and the `aria-valuemin`/`max` on the handle below are the real
  * numbers rather than a second opinion.
  */
-// Fits Features / Kinematics / Display and the zoom readout without scrolling.
+// Fits a Position section's joint sliders and their typed values without scrolling sideways.
 export const PANEL_MIN_WIDTH = 256;
 export const PANEL_MAX_WIDTH = 480;
 export const PANEL_DEFAULT_WIDTH = 320;

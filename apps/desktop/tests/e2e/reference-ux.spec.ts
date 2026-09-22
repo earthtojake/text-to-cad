@@ -41,6 +41,8 @@ test("viewer context and revision requests stay with the right draft and workspa
     await page.getByRole("menuitem", { name: "File", exact: false }).click();
     await page.getByLabel("Filter files").fill("models/car.step");
     await page.getByRole("option", { name: "models/car.step", exact: false }).first().click();
+    // Picked in the tree, the file opens with the tree; its components are in its own panel.
+    await page.locator("header [data-file-panel=cad-file]").click({ timeout: 90_000 });
     const wheel = page.getByRole("treeitem", { name: /Component wheel_front_left/ });
     await expect(wheel).toBeVisible({ timeout: 90_000 });
     await wheel.click();

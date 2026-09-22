@@ -27,19 +27,15 @@ function createMemoryStorage() {
   };
 }
 
-test("workspace global session state stores the panel choice, the tree's folders and only custom widths", () => {
+test("workspace global session state stores the tree's folders and only custom widths", () => {
   const storage = createMemoryStorage();
   const customFileSheetWidth = CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH + 72;
 
-  // Nothing stored is nobody having said, for BOTH panel flags. The file
-  // tree's default is the shared panel list's (`@hardcore/ui/navigation`'s
-  // `panels.js`) and not a `false` written down here; there is no file-viewer
-  // WIDTH at all any more, because there is one panel column and
-  // `fileSheetWidthPx` is its width.
+  // Nothing stored is nothing to restore. Which panel is open is never stored: a page load
+  // opens the file's own default panel. There is one panel column, and `fileSheetWidthPx`
+  // is its width.
   assert.deepEqual(readCadDirectorySessionState({ storage }), {
-    fileViewerOpen: null,
     fileViewerExpandedDirectoryIds: null,
-    fileSheetOpen: null,
     fileSheetWidthPx: null
   });
 
@@ -73,54 +69,23 @@ test("workspace global session state stores the panel choice, the tree's folders
     storage,
     defaultFileSheetWidthPx: CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH
   }), {
-    fileViewerOpen: null,
     fileViewerExpandedDirectoryIds: null,
-    fileSheetOpen: null,
     fileSheetWidthPx: CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH
   });
 
   assert.equal(writeCadDirectorySessionState({
-    fileViewerOpen: true,
-    fileSheetOpen: false,
     fileSheetWidthPx: customFileSheetWidth
   }, { storage }), true);
   assert.deepEqual(
     JSON.parse(storage.getItem(CAD_DIRECTORY_SESSION_STORAGE_KEY)),
     {
       version: 1,
-      fileViewerOpen: true,
-      fileSheetOpen: false,
       fileSheetWidthPx: customFileSheetWidth
     }
   );
   assert.deepEqual(readCadDirectorySessionState({ storage }), {
-    fileViewerOpen: true,
     fileViewerExpandedDirectoryIds: null,
-    fileSheetOpen: false,
     fileSheetWidthPx: customFileSheetWidth
-  });
-
-  // `false` round-trips as `false`: a person who CLOSED the file tree comes
-  // back to it closed, which is the whole reason this field is nullable
-  // rather than a plain boolean.
-  assert.equal(writeCadDirectorySessionState({
-    fileViewerOpen: false,
-    fileSheetOpen: true,
-    fileSheetWidthPx: CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH
-  }, { storage }), true);
-  assert.deepEqual(
-    JSON.parse(storage.getItem(CAD_DIRECTORY_SESSION_STORAGE_KEY)),
-    {
-      version: 1,
-      fileViewerOpen: false,
-      fileSheetOpen: true
-    }
-  );
-  assert.deepEqual(readCadDirectorySessionState({ storage }), {
-    fileViewerOpen: false,
-    fileViewerExpandedDirectoryIds: null,
-    fileSheetOpen: true,
-    fileSheetWidthPx: null
   });
 
   // The file tree's open folders, deduplicated and kept in order.
@@ -135,9 +100,7 @@ test("workspace global session state stores the panel choice, the tree's folders
     }
   );
   assert.deepEqual(readCadDirectorySessionState({ storage }), {
-    fileViewerOpen: null,
     fileViewerExpandedDirectoryIds: ["assemblies", "parts/servo"],
-    fileSheetOpen: null,
     fileSheetWidthPx: null
   });
 
@@ -154,23 +117,22 @@ test("workspace global session state stores the panel choice, the tree's folders
     }
   );
   assert.deepEqual(readCadDirectorySessionState({ storage }), {
-    fileViewerOpen: null,
     fileViewerExpandedDirectoryIds: [],
-    fileSheetOpen: null,
     fileSheetWidthPx: null
   });
 });
 
-test("legacy directory theme overrides are ignored without affecting panel state", () => {
+test("a stored record's theme overrides and panel flags are ignored", () => {
   const storage = createMemoryStorage();
-  const legacy = JSON.stringify({ version: 1, fileSheetOpen: true, theme: { themeId: "custom", custom: { projection: "perspective" } } });
+  const customFileSheetWidth = CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH + 72;
+  const legacy = JSON.stringify({ version: 1, fileSheetOpen: true, fileViewerOpen: false, fileSheetWidthPx: customFileSheetWidth,
+    theme: { themeId: "custom", custom: { projection: "perspective" } } });
   storage.setItem(CAD_DIRECTORY_SESSION_STORAGE_KEY, legacy);
   const state = readCadDirectorySessionState({ storage });
-  assert.equal(state.fileSheetOpen, true);
-  assert.equal("theme" in state, false);
+  assert.deepEqual(state, { fileViewerExpandedDirectoryIds: null, fileSheetWidthPx: customFileSheetWidth });
   assert.equal(storage.getItem(CAD_DIRECTORY_SESSION_STORAGE_KEY), legacy);
   writeCadDirectorySessionState(state, { storage });
-  assert.deepEqual(JSON.parse(storage.getItem(CAD_DIRECTORY_SESSION_STORAGE_KEY)), { version: 1, fileSheetOpen: true });
+  assert.deepEqual(JSON.parse(storage.getItem(CAD_DIRECTORY_SESSION_STORAGE_KEY)), { version: 1, fileSheetWidthPx: customFileSheetWidth });
 });
 
 test("findEntryByUrlPath matches catalog-root file params exactly", () => {

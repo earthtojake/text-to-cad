@@ -5,12 +5,11 @@ import {
   CAD_PANEL,
   FILE_PANEL_TREE,
   SOURCE_PANEL,
-  inspectorPanels,
   markdownPanels,
   nextOpenPanel,
-  panelClosedBy,
-  panelsFor,
-  resolveOpenPanel
+  resolveOpenPanel,
+  treePanel,
+  viewerPanels
 } from "./panels.js";
 
 /**
@@ -20,27 +19,29 @@ import {
  * row, and no second list for the standalone viewer.
  */
 
-test("a viewer surface declares only its Inspector", () => {
+const Icon = () => null;
+const part = { label: "Part", icon: Icon };
+const panelsOf = (declared, open = "", options) => [...declared, treePanel(open, options)];
+
+test("a viewer file declares its own panel, then Display; a file with nothing of its own, Display alone", () => {
   assert.deepEqual(
-    inspectorPanels(true).map((panel) => [panel.id, panel.label, panel.content]),
-    [
-      // "Inspector" is the name a person sees; the id stays `cad-file-sheet`
-      // because the desktop's stored `panel` field holds it and the viewer's
-      // host contract calls the same panel `fileSheetOpen`.
-      ["cad-file-sheet", "Inspector", "slot"]
-    ]
+    viewerPanels(true, { file: part }).map((panel) => [panel.id, panel.label, panel.content]),
+    [["cad-file", "Part", "slot"], ["cad-display", "Display", "slot"]]
   );
-  // And there are none at all until the surface behind it is up: a toggle
+  assert.deepEqual(viewerPanels(true).map((panel) => panel.id), ["cad-display"]);
+  // And there are none at all until the surface behind them is up: a toggle
   // over a runtime's failure card would open nothing.
-  assert.deepEqual(inspectorPanels(false), []);
+  assert.deepEqual(viewerPanels(false, { file: part }), []);
 });
 
-test("the Inspector opens by default unless its renderer says the file has nothing to inspect", () => {
-  assert.equal(resolveOpenPanel(inspectorPanels(true), null)?.id, "cad-file-sheet");
-  const shut = inspectorPanels(true, { defaultOpen: false });
-  assert.equal(resolveOpenPanel(shut, null), null);
-  // A default only: a person who opened it keeps it.
-  assert.equal(resolveOpenPanel(shut, "cad-file-sheet")?.id, "cad-file-sheet");
+test("a file opened directly opens with its own panel, or nothing: never Display, never the tree", () => {
+  assert.equal(resolveOpenPanel(panelsOf(viewerPanels(true, { file: part })), null)?.id, CAD_PANEL.file);
+  assert.equal(resolveOpenPanel(panelsOf(viewerPanels(true)), null), null);
+  assert.equal(resolveOpenPanel(panelsOf([]), null), null);
+  // Only with no file to show at all is the tree the thing to reach for.
+  assert.equal(resolveOpenPanel(panelsOf([], "", { empty: true }), null)?.id, FILE_PANEL_TREE);
+  // A default only: a person who opened Display keeps it.
+  assert.equal(resolveOpenPanel(panelsOf(viewerPanels(true, { file: part })), CAD_PANEL.display)?.id, CAD_PANEL.display);
 });
 
 test("markdown's one panel is named by what pressing it does", () => {
@@ -52,56 +53,33 @@ test("markdown's one panel is named by what pressing it does", () => {
 });
 
 test("the files toggle is last in every list, and named by what it does", () => {
-  const cad = panelsFor(inspectorPanels(true), "");
-  assert.deepEqual(cad.map((panel) => panel.id), ["cad-file-sheet", "tree"]);
-  assert.equal(cad.at(-1)?.label, "Show files");
-  // A surface with no panels of its own has the tree alone.
-  assert.deepEqual(
-    panelsFor([], FILE_PANEL_TREE).map((panel) => [panel.id, panel.label]),
-    [["tree", "Hide files"]]
-  );
+  const viewer = panelsOf(viewerPanels(true, { file: part }));
+  assert.deepEqual(viewer.map((panel) => panel.id), ["cad-file", "cad-display", "tree"]);
+  assert.equal(viewer.at(-1)?.label, "Show files");
+  assert.deepEqual(panelsOf([], FILE_PANEL_TREE).map((panel) => [panel.id, panel.label]), [["tree", "Hide files"]]);
 });
 
 test("one panel is open at a time, whichever was up before", () => {
-  const cad = panelsFor(inspectorPanels(true), "");
-
-  // The default is what a surface opens with when nobody has said: a CAD
-  // file's Inspector, and the tree for everything else. The tree is last, so
-  // its default never wins over a renderer's own.
-  assert.equal(resolveOpenPanel(cad, null)?.id, CAD_PANEL.fileSheet);
-  assert.equal(resolveOpenPanel(panelsFor([], ""), null)?.id, FILE_PANEL_TREE);
-
   // A press names its panel; pressing the open one closes it and leaves
   // nothing open.
-  assert.equal(nextOpenPanel("", CAD_PANEL.fileSheet), CAD_PANEL.fileSheet);
-  assert.equal(nextOpenPanel(CAD_PANEL.fileSheet, CAD_PANEL.fileSheet), "");
+  assert.equal(nextOpenPanel("", CAD_PANEL.file), CAD_PANEL.file);
+  assert.equal(nextOpenPanel(CAD_PANEL.file, CAD_PANEL.file), "");
   // A press while ANOTHER panel is up opens this one — "show me this instead"
   // — whether the other is the surface's or the host's own tree.
-  assert.equal(nextOpenPanel(FILE_PANEL_TREE, CAD_PANEL.fileSheet), CAD_PANEL.fileSheet);
-  assert.equal(nextOpenPanel(CAD_PANEL.fileSheet, FILE_PANEL_TREE), FILE_PANEL_TREE);
+  assert.equal(nextOpenPanel(FILE_PANEL_TREE, CAD_PANEL.display), CAD_PANEL.display);
+  assert.equal(nextOpenPanel(CAD_PANEL.display, CAD_PANEL.file), CAD_PANEL.file);
+  assert.equal(nextOpenPanel(CAD_PANEL.file, FILE_PANEL_TREE), FILE_PANEL_TREE);
   assert.equal(nextOpenPanel(SOURCE_PANEL, FILE_PANEL_TREE), FILE_PANEL_TREE);
-  assert.equal(nextOpenPanel(FILE_PANEL_TREE, SOURCE_PANEL), SOURCE_PANEL);
 });
 
 test("a panel this file does not have shows nothing", () => {
   // `""` is nothing open, and so is an id that is not in the list: a surface
-  // that was reading markdown's source and is pointed at a `.step`, or a CAD
-  // pane whose surface has not come up, names a panel that is not there.
-  const cad = panelsFor(inspectorPanels(true), "");
-  assert.equal(resolveOpenPanel(cad, ""), null);
-  assert.equal(resolveOpenPanel(cad, SOURCE_PANEL), null);
-  assert.equal(resolveOpenPanel(cad, "cad-theme"), null);
-  const notReady = panelsFor(inspectorPanels(false), "");
-  assert.equal(resolveOpenPanel(notReady, CAD_PANEL.fileSheet), null);
-  // ...and with nobody having said, the tree is what is left.
-  assert.equal(resolveOpenPanel(notReady, null)?.id, FILE_PANEL_TREE);
-});
-
-test("a surface reporting its own panel shut leaves another host's panel alone", () => {
-  // The CAD surface reports its panel state, so a "the
-  // Inspector is shut" arriving while the file tree is open must not close
-  // the column.
-  assert.equal(panelClosedBy(true, FILE_PANEL_TREE, CAD_PANEL.fileSheet), CAD_PANEL.fileSheet);
-  assert.equal(panelClosedBy(false, FILE_PANEL_TREE, CAD_PANEL.fileSheet), FILE_PANEL_TREE);
-  assert.equal(panelClosedBy(false, CAD_PANEL.fileSheet, CAD_PANEL.fileSheet), "");
+  // that was reading markdown's source and is pointed at a `.step`, a mesh asked
+  // for a file panel it does not have, or a pane whose surface has not come up.
+  const viewer = panelsOf(viewerPanels(true, { file: part }));
+  assert.equal(resolveOpenPanel(viewer, ""), null);
+  assert.equal(resolveOpenPanel(viewer, SOURCE_PANEL), null);
+  assert.equal(resolveOpenPanel(viewer, "cad-file-sheet"), null);
+  assert.equal(resolveOpenPanel(panelsOf(viewerPanels(true)), CAD_PANEL.file), null);
+  assert.equal(resolveOpenPanel(panelsOf(viewerPanels(false, { file: part })), CAD_PANEL.file), null);
 });

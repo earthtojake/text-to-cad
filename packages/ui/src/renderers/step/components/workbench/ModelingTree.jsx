@@ -72,7 +72,7 @@ function ModelingSearchRow({ match, index, selected, cursor, choose, disabled, p
           onClick={event=>choose(node,event)} title={`${entry.prefix}${node.label}`}
           className="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded pl-2 pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40">
           <Icon className="size-3.5 shrink-0 text-muted-foreground"/>
-          {/* Name first: in a narrow inspector a deep owner path takes the truncation, never the name. */}
+          {/* Name first: in a narrow panel a deep owner path takes the truncation, never the name. */}
           <TreeRowLabel className="max-w-full shrink-0"><TreeFilterHighlight indices={indices} text={entry.label}/></TreeRowLabel>
           {entry.prefix && <TreeRowLabel className="flex-1 text-micro text-muted-foreground">{entry.prefix.slice(0,-1)}</TreeRowLabel>}
         </button>

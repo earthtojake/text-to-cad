@@ -7,7 +7,7 @@ import { cloneJointValueMap, findBestMatchingJointValueState } from "./robotMoti
 // prismatic joint), outside React. There is ONE write path, and every write is where the
 // robot IS from that frame on: a slider, a typed number, a Pose knob, a named pose and
 // Reset alike. Listeners hear about a write synchronously: the scene poses itself on it,
-// and only what draws joint VALUES (the Kinematics tab) subscribes a component.
+// and only what draws joint VALUES (the Position section) subscribes a component.
 
 function groupStatesOf(description) {
   const states = Array.isArray(description?.srdf?.groupStates) ? description.srdf.groupStates
@@ -27,7 +27,7 @@ function groupStatesOf(description) {
   }).filter(Boolean);
 }
 
-/** The joints a Kinematics slider exists for: not fixed, not a mimic follower. */
+/** The joints a Position slider exists for: not fixed, not a mimic follower. */
 export function movableJoints(description) {
   return (Array.isArray(description?.joints) ? description.joints : [])
     .filter(joint => String(joint?.type || "") !== "fixed" && !joint?.mimic && String(joint?.name || ""));

@@ -51,10 +51,10 @@ File-tab chrome uses normal-weight type. Breadcrumbs, file and model rows, and
 filter matches use muted/primary text color for emphasis, never bold weight.
 Both tree lists inset row backgrounds 4px from their horizontal edges, including
 selected, hovered and filtered rows; nesting adds indentation inside that gutter.
-The explorer and inspector share a 256px minimum panel width. Resizing below it
-closes the panel; reopening restores 320px. Inspector tabs never scroll sideways,
-and their zoom readout uses the muted 10px metadata size. Kinematics keeps its
-Pose and Joints rows compact; labels truncate to preserve sliders and inputs.
+Every panel — the file tree, a file's own panel, Display — shares a 256px minimum
+width. Resizing below it closes the panel; reopening restores 320px. Panels never
+scroll sideways: a Position section's labels truncate to preserve its sliders and
+inputs.
 
 React, ReactDOM, Three.js and Lucide are host-supplied peers. React 18 and 19
 are supported: web and desktop use React 19.3.0. Each
@@ -69,7 +69,13 @@ src/
   file-viewer/       FileViewer, typed source/renderer contracts, lifecycle hooks
     navigation/     breadcrumbs, file tree, entry menus and panel frame
   renderers/
-    cad/            CAD viewport, inspector, scene controls and state schemas
+    kit/            the frame every viewer file shares: viewport, tools, panels, Display settings, status
+    step/           STEP: Features tree, Position, Animate, feature recognition
+    robot/          URDF, SRDF and SDF: Position and Links
+    glb/, mesh/     GLB, and STL/3MF triangle meshes
+    dxf/            2D drawings
+    workspace/      a viewer file's catalog entry and document load
+    harness/, shell-harness/  surfaces the browser suites drive
     markdown/       preview/editor and lossless Markdown bridge
     code/           Monaco editor and worker setup
     image/          image view and zoom
@@ -166,7 +172,7 @@ bounded cache. They retain exact decoded component buffers and copy structural
 metadata for each mount; scene objects, controls and pending work are not cached.
 Reuse is scoped to root, resource-provider generation and file revision. See
 [CAD resource lifetime](docs/cad-renderer.md) for cache bounds and invalidation.
-The Model inspector can reuse those accepted component identities for completed
+The Features tree can reuse those accepted component identities for completed
 recognition metadata after the runtime descriptor also matches, avoiding surface
 requests on a warm reopen without retaining another copy of the geometry.
 
@@ -214,7 +220,7 @@ The Model tree shares the file tree's row and filter primitives. Its visible exp
 controls viewport selection, exact topology and optional feature recognition;
 collapsed parts do not trigger whole-assembly analysis, and neither does its
 filter, which searches names without expanding anything. Contextual measurements
-remain available in Render too. See [model tree and recognition](docs/cad-renderer.md#step-inspector-layout)
+remain available in Render too. See [model tree and recognition](docs/cad-renderer.md#step-panel)
 for selection, isolation, demand and cache ownership.
 
 Feature detection stays client-side in this renderer, separate from cadgen
@@ -223,15 +229,21 @@ and versioned, bounded memory cache; it adds no persistent store. Read
 [feature detection](docs/feature-detection.md) before changing inference rules,
 cache identity, cancellation or recognition limits.
 
-Robot descriptions (URDF, SRDF, SDF) use Kinematics, Links and Display (SDF
-adds its own SDF tab). Links is
-the description's link tree, with the Model tree's rows, filter and Reference pane;
-see [robot links](docs/cad-renderer.md#robot-links).
-
-The Features, Kinematics and Display tabs use one fixed row in canonical order. Tabs cannot
-be dragged, reordered or split; only the active selection is saved per file.
-Visited Model trees stay mounted when hidden, preserving disclosure and scroll.
-The Display tab uses a compact properties panel with 28px headers/controls, no extra
+A file's controls are nav-row panels, never tabs inside a panel. From left to
+right a file has its own panel (a STEP's `Part` or `Assembly`, a robot's `Robot`),
+then `Display`, then the file tree; a mesh has no panel of its own, and a DXF has
+only the file tree. A file's own panel stacks sections under headings that never
+collapse (`FilePanelSections`): a STEP's Features, Position when it declares
+kinematics, and Issues when it has any; a robot description's Position and Links
+(SDF adds its SDF metadata). Links is the description's link tree, with the Model
+tree's rows, filter and Reference pane; see [robot links](docs/cad-renderer.md#robot-links).
+Which panel a file opens with is the host's to apply
+(`ViewerHost.navigation.openFile(path, { target, panel })`): a file picked in the
+tree asks for the tree, so the tree stays up while a person walks it; any other
+open gets the file's own panel, or nothing when it has none. Display is never open
+by default, and no panel is saved per file. Switching to Display keeps the file's
+panel mounted behind it, preserving the tree's disclosure and scroll.
+The Display panel uses a compact properties layout with 28px headers/controls, no extra
 header-to-content padding, 4px row gaps and 8px section bottoms. Mode contains equal-width Mode and
 Projection dropdowns; Explode is a separate section. Surfaces stays expanded,
 and perspective uses the standard lens without a separate Camera section. Optional settings sections are
@@ -239,9 +251,8 @@ feature gates: title/plus click enables, only the trailing minus disables, and
 gray/collapsed means neutral/off. Reopening resets values to defaults, including
 Clip offsets/Flip and Explode's amount (50%). Explode stays open when its slider
 returns to 0%; only the minus collapses it. The fixed section order is Mode,
-Explode, Clip, Surfaces, Edges, Grid, Axes, Lighting, Background, Floor: tools,
-Solid's enabled settings, then Solid's disabled settings. Grid and Axes are
-separate, with matching default colors.
+Surfaces, Explode, Clip, Edges, Grid, Axes, Lighting, Background, Floor, and no
+preset reorders it. Grid and Axes are separate, with matching default colors.
 Floor and Background have no redundant enable/transparency checkboxes; opacity
 lives in color pickers with checkerboard previews.
 Hover only highlights controls; it never writes settings. One per-file settings store serves controls, agent
@@ -265,7 +276,7 @@ Model reference section shows their properties. There is no Materials editor or
 persisted material override. See [View styles](docs/render-mode.md) and
 [progressive detail](docs/lod.md).
 
-A renderer publishes `FileActivity` with a loading flag, label, title, optional
-tone and optional activation callback. FileViewer shows a generic filename
-indicator unless the host supplies `presentation.activity`. CAD status activation
-opens the shared diagnostic; Try again reloads only the selected renderer.
+The breadcrumb names the file and carries no status. Opening and updating show
+in the viewport's own loading state, and an error as a card over the viewport;
+a failed update the model survives can be dismissed, leaving the previous
+version to inspect. Try again reloads only the selected renderer.

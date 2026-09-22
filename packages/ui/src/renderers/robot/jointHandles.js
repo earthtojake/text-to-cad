@@ -1,7 +1,7 @@
 import { clampJointValueDeg } from "@hardcore/core/lib/urdf/kinematics.js";
 import { armOffset, normalize, wrapTurn } from "../kit/tools/pose/jointHandleMath.js";
 
-// What the Pose tool can take hold of on a robot, as the kit's plain handle list
+// What the Position tool can take hold of on a robot, as the kit's plain handle list
 // (`kit/tools/pose`), in the robot's own space:
 //
 //   { id, label, kind: "revolute" | "continuous" | "prismatic", pivot, axis, toward,

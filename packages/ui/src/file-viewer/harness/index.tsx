@@ -7,6 +7,8 @@ import { FileViewer, defineFileRenderer } from "../index.js";
 import type { FileSource, FileActions, FileMetadata, FileRendererProps, FileViewerState, JsonValue, TextDocument } from "../types.js";
 
 const events: string[] = [];
+// Every file the viewer asked its host to open, with how: the host contract under test.
+const opened: { path: string; options?: { target: "current" | "new"; panel?: string } }[] = [];
 const rendererCallbacks = new Map<string, FileRendererProps<string>>();
 const cleanupWrites = new Map<string, JsonValue>();
 function memorySource(id: string) {
@@ -86,7 +88,7 @@ const renderer = defineFileRenderer({
 });
 const renderers = [renderer];
 const clipboard = { writeText: async () => {}, readText: async () => "", writeImage: async () => {} };
-function host(root: ReturnType<typeof memorySource>, openFile: (path: string) => void) { return { files: root.source, fileActions: root.actions, clipboard, promptContext: unavailablePromptContext, environment: { colorScheme: "light" as const }, navigation: { openFile } }; }
+function host(root: ReturnType<typeof memorySource>, openFile: (path: string, options?: { target: "current" | "new"; panel?: string }) => void) { return { files: root.source, fileActions: root.actions, clipboard, promptContext: unavailablePromptContext, environment: { colorScheme: "light" as const }, navigation: { openFile } }; }
 function App() {
   const [file, setFile] = useState("notes.txt");
   const [root, setRoot] = useState(a);
@@ -95,11 +97,11 @@ function App() {
   const [navigationPath, setNavigationPath] = useState<string | null | undefined>(undefined);
   const [state, setState] = useState<FileViewerState>({ panel: null, panelWidth: 300, expandedDirectories: [""] });
   const [otherState, setOtherState] = useState<FileViewerState>({ panel: "", panelWidth: 300 });
-  Object.assign(window, { harness: { a, b, events, rendererCallbacks, cleanupWrites, state, open: setFile, narrowCrumbs: setNarrowCrumbs, navigationPath: setNavigationPath, setRoot: (id: string) => { setRoot(id === "root-b" ? b : a); }, second: setSecond, width: (panelWidth: number) => setState((previous) => ({ ...previous, panelWidth })) } });
+  Object.assign(window, { harness: { a, b, events, opened, rendererCallbacks, cleanupWrites, state, open: setFile, narrowCrumbs: setNarrowCrumbs, navigationPath: setNavigationPath, setRoot: (id: string) => { setRoot(id === "root-b" ? b : a); }, second: setSecond, width: (panelWidth: number) => setState((previous) => ({ ...previous, panelWidth })) } });
   return <div style={{ width: "1000px", height: "650px" }}>
     <section data-testid="primary" style={{ height: "400px", display: "flex", flexDirection: "column" }}>
-      <FileViewer file={file} host={host(root, (path) => { setFile(path); setState((previous) => ({ ...previous, panel: null })); })} renderers={renderers} state={state} onStateChange={setState} narrowCrumbs={narrowCrumbs} navigationPath={navigationPath}
-        presentation={{ activity: value => value?.loading ? <span data-testid="activity">{value.title || value.label}</span> : null }} />
+      {/* A host that shows one file at a time: an open moves this view to the file, with the panel it was opened with, or the file's own default. */}
+      <FileViewer file={file} host={host(root, (path, options) => { opened.push({ path, options }); setFile(path); setState((previous) => ({ ...previous, panel: options?.panel ?? null })); })} renderers={renderers} state={state} onStateChange={setState} narrowCrumbs={narrowCrumbs} navigationPath={navigationPath} />
     </section>
     {second ? <section data-testid="secondary" style={{ height: "240px" }}><FileViewer file="notes.txt" host={host(b, () => {})} renderers={renderers} state={otherState} onStateChange={setOtherState} /></section> : null}
   </div>;

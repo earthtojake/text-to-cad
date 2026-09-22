@@ -610,7 +610,7 @@ export function zoomRuntimeToBounds(runtime, bounds, sceneScaleMode, {
   // must use the model's base range, or resetting after zooming out would fit
   // behind the old distant near plane instead of returning to the default view.
   // A physical lens changes vertical FOV with aspect. Fit using the destination
-  // viewport before installing the pose, not the outgoing inspector's aspect.
+  // viewport before installing the pose, not the aspect before a panel opened or closed.
   runtime.syncCameraViewport?.(runtime.camera, frameMetrics.width, frameMetrics.height);
   const fitNearClip = Math.max(boundsModelRadius(runtime.THREE, normalizedBounds, sceneScaleMode) / 1200, 0.01);
   const frame = interactiveCameraFrameForBounds(runtime.THREE, {

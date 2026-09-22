@@ -40,7 +40,7 @@ export function useWorkspaceDocument({ view, data }) {
 /**
  * The alert for a document load, as `useRendererShell` takes it in `load.alert`:
  * the catalog could not be read, or the file's loader raised. With a scene
- * already on screen a failed reload rides the status badge instead of covering it.
+ * already on screen a failed reload can be dismissed, leaving that scene to use.
  *
  * @param {{ catalogError?: unknown, error?: any, modelKey: string, hasScene: boolean }} state
  */
@@ -48,7 +48,6 @@ export function workspaceLoadAlert({ catalogError, error, modelKey, hasScene }) 
   if (catalogError && !hasScene) return {
     severity: "error", kind: "status", title: "Couldn’t open the model",
     message: "The viewer couldn’t retrieve this file’s information.",
-    tooltip: "The viewer couldn’t retrieve information about this file. Try reloading the viewer.",
     recovery: "Try again. If this continues, check that the viewer is running.",
     details: catalogError, reload: true
   };

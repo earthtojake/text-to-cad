@@ -1,5 +1,5 @@
 // What a host still needs of the STEP renderer's stored state: the directory session's storage
-// key and the width of the Inspector sheet, which the host lays out.
+// key and the width of the panel column, which the host lays out.
 //
 // This module used to hold the per-tab snapshot schema as well — selection, expansion, hidden
 // parts, the camera, the tool — normalized, cloned and compared field by field. The per-file
@@ -9,8 +9,8 @@
 export const CAD_DIRECTORY_SESSION_STORAGE_VERSION = 1;
 export const CAD_DIRECTORY_SESSION_STORAGE_KEY = `cad-viewer:directory-session:v${CAD_DIRECTORY_SESSION_STORAGE_VERSION}`;
 
-// The one breakpoint left of the old layout-mode module: between these widths the Inspector
-// sheet takes the narrower default, because the pane beside it would otherwise have nothing
+// The one breakpoint left of the old layout-mode module: between these widths the panel
+// column takes the narrower default, because the pane beside it would otherwise have nothing
 // left to show. Everything else that module carried described a mobile layout this viewer no
 // longer has — the surface always laid out as desktop — and went with it.
 const FILE_SHEET_COMPACT_MIN_PX = 520;
