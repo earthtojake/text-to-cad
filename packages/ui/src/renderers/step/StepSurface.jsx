@@ -3953,6 +3953,15 @@ function StepSurfaceBody({
   stepLiveStateRef.current = () => {
     const displayedResource = displayedResourceRef.current;
     return {
+      // The selection in the PROMPT grammar, as the live contract reads it: the references a
+      // snapshot would carry, each a selector of (or the whole of) the document on screen.
+      // `promptReferencesRef` holds them in this renderer's own vocabulary, which only
+      // `createCadPromptContext` speaks.
+      selection: promptReferencesRef.current().map(reference => ({
+        resource: { ...displayedResource },
+        target: reference.selector ? { kind: 'cad-selector', selectors: reference.selector.split(',') } : { kind: 'whole-resource' },
+        ...(reference.label ? { label: reference.label } : {})
+      })),
       loading: Boolean(viewerLoading || stepInteractionBlocked),
       selectedPartIds: [...(inspectionHighlight ? inspectionHighlight.partIds || [] : viewerSelectedPartIds)],
       selectedReferenceIds: [...(inspectionHighlight ? inspectionHighlight.faceIds || [] : selectedReferenceIdsRef.current)],
