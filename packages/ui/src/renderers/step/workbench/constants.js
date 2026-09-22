@@ -35,6 +35,10 @@ export const TAB_TOOL_MODE = {
 // This renderer's tool modes for the kit's state machine (`kit/tools/toolModes.js`).
 // Measure and Draw are sessions that end when their tool is asked for again; a saved
 // tab records only Select, Measure and Pose.
+// Pose is offered, never restored into: a file comes back in Select, with its pose intact,
+// rather than with the handles already up over a model the person has not looked at yet.
+export const CAD_TOOL_RESTORE = Object.freeze({ never: [TAB_TOOL_MODE.POSE] });
+
 export const CAD_TOOL_MODES = createToolModes({
   defaultMode: TAB_TOOL_MODE.REFERENCES,
   modes: {

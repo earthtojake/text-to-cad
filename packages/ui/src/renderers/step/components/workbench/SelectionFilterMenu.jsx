@@ -1,3 +1,4 @@
+import { FLOATING_TOOL_BAR_SURFACE_CLASS } from "../../../kit/tools/FloatingToolBar.js";
 import { ChevronDown, ListFilter } from 'lucide-react';
 import { Fragment, useContext } from 'react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuLabel, DropdownMenuSeparator } from '@hardcore/ui/primitives/dropdown-menu';
@@ -26,4 +27,22 @@ export default function SelectionFilterMenu({ value, onChange, disabled, compact
       {hint && <><DropdownMenuSeparator /><p className="px-2 py-1.5 text-micro text-muted-foreground">{hint}</p></>}
     </DropdownMenuContent>
   </DropdownMenu>;
+}
+
+/**
+ * What a tool adds under the strip while it is in hand: the chosen filter, when it is not the
+ * everything one, and anything else that tool carries (a notice, a measurement list).
+ *
+ * @param {{ options: {id: string, label: string}[] | null, value: string | null, active: boolean,
+ *   notice?: string, panel?: import("react").ReactNode }} props
+ */
+export function ToolFilterNote({ options, value, active, notice = "", panel = null }) {
+  if (!active) return null;
+  const chosen = options && value && value !== "all" ? options.find(item => item.id === value)?.label : "";
+  if (!chosen && !notice && !panel) return null;
+  return <>
+    {chosen ? <div className={`pointer-events-auto max-w-full rounded-md px-2 py-0.5 text-micro text-muted-foreground ${FLOATING_TOOL_BAR_SURFACE_CLASS}`}>{chosen}</div> : null}
+    {notice ? <p role="status" className="max-w-56 rounded-md border bg-background px-2 py-1 text-micro text-muted-foreground shadow-sm">{notice}</p> : null}
+    {panel}
+  </>;
 }

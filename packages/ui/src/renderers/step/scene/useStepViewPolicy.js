@@ -17,6 +17,16 @@ const CAD_EDGE_OPACITY = 0.84;
 // The viewer's own base theme; a STEP has no other.
 const viewerTheme = BASE_VIEWER_THEME;
 
+// The look half of the policy below, answerable on its own. The viewport has to know
+// whether the scene is drawn with one-pixel linework before it knows what is pickable in
+// it: that is what decides whether the pixel ratio holds while the camera moves.
+const hairlineResolver = createViewerRenderStateResolver();
+export function viewDrawsHairlines(themeSettings, displaySettings) {
+  const state = hairlineResolver({ themeSettings, displaySettings });
+  return displayModeIsWireframe(state.displayMode) ||
+    (state.displaySettings.surfaces ? state.edgeSettings.enabled : displayModeShowsEdges(state.displayMode));
+}
+
 export function renderableMeshParts(meshData) {
   return Array.isArray(meshData?.parts)
     ? meshData.parts.filter((part) => toNumber(part?.vertexCount) > 0 && toNumber(part?.triangleCount) > 0)

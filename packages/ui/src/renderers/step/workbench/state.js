@@ -1,10 +1,21 @@
 import { clonePerspectiveSnapshot, perspectiveSnapshotEqual } from "@hardcore/core/lib/perspective.js";
 import { normalizeRenderFormat } from "@hardcore/core/lib/fileFormats.js";
-import { isCadWorkspaceCompactFileSheetViewport } from "./breakpoints.js";
 import { CAD_TOOL_MODES, RENDER_FORMAT, TAB_TOOL_MODE } from "./constants.js";
 
 export const CAD_DIRECTORY_SESSION_STORAGE_VERSION = 1;
 export const CAD_DIRECTORY_SESSION_STORAGE_KEY = `cad-viewer:directory-session:v${CAD_DIRECTORY_SESSION_STORAGE_VERSION}`;
+// The one breakpoint left of the old layout-mode module: between these widths the Inspector
+// sheet takes the narrower default, because the pane beside it would otherwise have nothing
+// left to show. Everything else that module carried described a mobile layout this viewer no
+// longer has — the surface always laid out as desktop — and went with it.
+const FILE_SHEET_COMPACT_MIN_PX = 520;
+const FILE_SHEET_COMPACT_MAX_PX = 1024;
+
+function isCompactFileSheetViewport(width) {
+  const numeric = Number(width);
+  return Number.isFinite(numeric) && numeric >= FILE_SHEET_COMPACT_MIN_PX && numeric < FILE_SHEET_COMPACT_MAX_PX;
+}
+
 export const CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH = 365;
 export const CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH = 280;
 
@@ -67,7 +78,7 @@ export function fileSheetWidthPxForSessionState(value, defaultWidth = CAD_WORKSP
 }
 
 export function cadWorkspaceDefaultFileSheetWidthForViewport(width) {
-  return isCadWorkspaceCompactFileSheetViewport(width)
+  return isCompactFileSheetViewport(width)
     ? CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH
     : CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH;
 }

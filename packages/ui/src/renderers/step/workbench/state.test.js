@@ -3,7 +3,6 @@ import test from 'node:test';
 import { cloneTabSnapshot, createTabRecord, cadWorkspaceDefaultFileSheetWidthForViewport, CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH, CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH } from './state.js';
 import { TAB_TOOL_MODE } from './constants.js';
 import { ENTRY_ICON_KIND, entryIconKind } from '../../../file-viewer/navigation/entryIconKind.js';
-import { CAD_WORKSPACE_LAYOUT_MODE, CAD_WORKSPACE_DESKTOP_BREAKPOINT_PX, CAD_WORKSPACE_FILE_VIEWER_DEFAULT_OPEN_BREAKPOINT_PX, CAD_WORKSPACE_FILE_SHEET_COMPACT_BREAKPOINT_PX, CAD_WORKSPACE_MOBILE_BREAKPOINT_PX, getCadWorkspaceLayoutMode, isCadWorkspaceCompactFileSheetViewport, isCadWorkspaceDesktopViewport, isCadWorkspaceMobileViewport, shouldCadWorkspaceDefaultFileViewerOpen, shouldCadWorkspaceDefaultFileSettingsOpen } from './breakpoints.js';
 
 test("how a model was produced changes nothing about its icon", () => {
   const generatedAssembly = {
@@ -75,68 +74,6 @@ test("entryIconKind gives STEP, STL, 3MF, and GLB distinct file explorer icons",
   assert.equal(glbIcon, ENTRY_ICON_KIND.GLB_MESH);
   assert.equal(staleStepIcon, ENTRY_ICON_KIND.STEP);
   assert.equal(new Set([stepIcon, stlIcon, threeMfIcon, glbIcon]).size, 4);
-});
-
-test("workspace breakpoints split mobile and desktop layouts", () => {
-  assert.equal(CAD_WORKSPACE_DESKTOP_BREAKPOINT_PX, CAD_WORKSPACE_MOBILE_BREAKPOINT_PX);
-  assert.equal(CAD_WORKSPACE_FILE_SHEET_COMPACT_BREAKPOINT_PX, 1024);
-  assert.equal(getCadWorkspaceLayoutMode(CAD_WORKSPACE_MOBILE_BREAKPOINT_PX - 1), CAD_WORKSPACE_LAYOUT_MODE.MOBILE);
-  assert.equal(isCadWorkspaceMobileViewport(CAD_WORKSPACE_MOBILE_BREAKPOINT_PX - 1), true);
-  assert.equal(isCadWorkspaceDesktopViewport(CAD_WORKSPACE_MOBILE_BREAKPOINT_PX - 1), false);
-  assert.equal(isCadWorkspaceCompactFileSheetViewport(CAD_WORKSPACE_MOBILE_BREAKPOINT_PX - 1), false);
-
-  assert.equal(getCadWorkspaceLayoutMode(CAD_WORKSPACE_MOBILE_BREAKPOINT_PX), CAD_WORKSPACE_LAYOUT_MODE.DESKTOP);
-  assert.equal(isCadWorkspaceMobileViewport(CAD_WORKSPACE_MOBILE_BREAKPOINT_PX), false);
-  assert.equal(isCadWorkspaceDesktopViewport(CAD_WORKSPACE_MOBILE_BREAKPOINT_PX), true);
-  assert.equal(isCadWorkspaceCompactFileSheetViewport(CAD_WORKSPACE_MOBILE_BREAKPOINT_PX), true);
-  assert.equal(isCadWorkspaceCompactFileSheetViewport(CAD_WORKSPACE_FILE_SHEET_COMPACT_BREAKPOINT_PX - 1), true);
-  assert.equal(isCadWorkspaceCompactFileSheetViewport(CAD_WORKSPACE_FILE_SHEET_COMPACT_BREAKPOINT_PX), false);
-
-  assert.equal(getCadWorkspaceLayoutMode(CAD_WORKSPACE_FILE_VIEWER_DEFAULT_OPEN_BREAKPOINT_PX), CAD_WORKSPACE_LAYOUT_MODE.DESKTOP);
-});
-
-test("workspace panel defaults keep file viewer closed and file sheet open only on desktop", () => {
-  assert.equal(CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH, 280);
-  assert.equal(
-    cadWorkspaceDefaultFileSheetWidthForViewport(CAD_WORKSPACE_MOBILE_BREAKPOINT_PX - 1),
-    CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH
-  );
-  assert.equal(
-    cadWorkspaceDefaultFileSheetWidthForViewport(CAD_WORKSPACE_MOBILE_BREAKPOINT_PX),
-    CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH
-  );
-  assert.equal(
-    cadWorkspaceDefaultFileSheetWidthForViewport(CAD_WORKSPACE_FILE_SHEET_COMPACT_BREAKPOINT_PX - 1),
-    CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH
-  );
-  assert.equal(
-    cadWorkspaceDefaultFileSheetWidthForViewport(CAD_WORKSPACE_FILE_SHEET_COMPACT_BREAKPOINT_PX),
-    CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH
-  );
-  assert.equal(
-    shouldCadWorkspaceDefaultFileSettingsOpen(CAD_WORKSPACE_MOBILE_BREAKPOINT_PX - 1),
-    false
-  );
-  assert.equal(
-    shouldCadWorkspaceDefaultFileSettingsOpen(CAD_WORKSPACE_MOBILE_BREAKPOINT_PX),
-    true
-  );
-  assert.equal(
-    shouldCadWorkspaceDefaultFileViewerOpen(CAD_WORKSPACE_FILE_VIEWER_DEFAULT_OPEN_BREAKPOINT_PX - 1),
-    false
-  );
-  assert.equal(
-    shouldCadWorkspaceDefaultFileViewerOpen(CAD_WORKSPACE_FILE_VIEWER_DEFAULT_OPEN_BREAKPOINT_PX),
-    false
-  );
-  assert.equal(
-    shouldCadWorkspaceDefaultFileViewerOpen(320, { hasSelectedFile: false }),
-    false
-  );
-  assert.equal(
-    shouldCadWorkspaceDefaultFileViewerOpen(1600, { hasSelectedFile: false }),
-    false
-  );
 });
 
 test("workspace tab records restore old expanded assembly inspection state", () => {

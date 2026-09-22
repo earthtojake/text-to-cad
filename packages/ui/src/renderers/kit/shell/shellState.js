@@ -23,6 +23,16 @@ function readDisplay(value) {
   try { return normalizeViewSettings(value); } catch { return normalizeViewSettings({}); }
 }
 
+/**
+ * What the viewport is asked to present, as one token. The viewport echoes it back
+ * (`onPresentationChange`), so "what is on screen is what was asked for" is a string
+ * comparison. A renderer that must answer that question itself — a live preview asking
+ * whether its own result has landed — builds the same token from the same two parts.
+ */
+export function shellPresentationKey(modelKey, revisionKey = "") {
+  return modelKey ? `${modelKey}:${revisionKey}:complete` : "";
+}
+
 /** The stored camera, scoped to the model it frames so it is never applied to another. */
 export function scopeShellCamera(camera, modelKey, sceneScaleMode) {
   const snapshot = clonePerspectiveSnapshot(camera);

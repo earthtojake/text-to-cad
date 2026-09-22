@@ -35,7 +35,7 @@ CLIENT_ROOT = UI_ROOT / "renderers" / "step"
 # enum re-export's own default (``workbench/state.js``) and four in
 # ``workbench/stepArtifactStatus.js``, which still take a ``sourceFormat`` parameter that
 # only ever arrives as STEP — those go with the parameter.
-MAX_RENDER_FORMAT_CHECKS = 6
+MAX_RENDER_FORMAT_CHECKS = 5
 MAX_FORMAT_PREDICATE_CALLS = 0
 
 # Files allowed to know about concrete formats, because deciding *which* format an entry
@@ -140,7 +140,10 @@ class ViewerFormatCapabilityPolicyTest(unittest.TestCase):
             f"swept no scene sources under {CLIENT_ROOT / 'scene'} — did the directory move?",
         )
         for path in (
-            CLIENT_ROOT / "components/workbench/FloatingToolBar.js",
+            # The STEP surface itself, on the shell since the renderer split finished: it shows
+            # ONE family, so it has no format left to ask about either. (It replaced
+            # `file-view/CadFileView.js`, and STEP's own `FloatingToolBar.js` went with it.)
+            CLIENT_ROOT / "StepSurface.jsx",
             *scene_sources,
             # Status, alerts and the file list: every one of these was a per-format
             # cascade, and each cascade was a place a new format inherited the wrong

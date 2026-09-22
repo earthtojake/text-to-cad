@@ -21,7 +21,7 @@ import { cameraForViewSettings, viewerDisplaySettingsForCamera } from "../view-s
 import { attachLiveBinding } from "./liveBinding.js";
 import { shellLoadReport } from "./loadReport.js";
 import { createViewPromptContext, promptDeliveryMessage } from "./promptContext.js";
-import { readShellState, scopeShellCamera, shellStatesEqual, writeShellState } from "./shellState.js";
+import { readShellState, scopeShellCamera, shellPresentationKey, shellStatesEqual, writeShellState } from "./shellState.js";
 import { useViewerShortcuts } from "./useViewerShortcuts.js";
 
 /** The tool ids the shell itself understands. A renderer's own tools use any other id. */
@@ -57,9 +57,18 @@ const EMPTY = Object.freeze({});
  * @param {string} [options.revisionKey]  Changes when the file's bytes do.
  * @param {import("@hardcore/core/common/viewSettings.js").ViewFeatures} options.features
  * @param {object} [options.viewSettings]  The result of `useViewSettings`, when the renderer needs the
- *   display settings earlier in its own render than this hook could hand them back.
+ *   display settings earlier in its own render than this hook could hand them back. It may also carry
+ *   `applied`: the renderer's own `useAppliedViewSettings` result, for a renderer that must read the
+ *   RESOLVED view that early too — a renderer that decides what to load, and at what detail, from the
+ *   view it is showing. Such a renderer owns the viewport's handle as well and passes it as `viewerRef`.
+ * @param {{ current: object | null }} [options.viewerRef]  The ref the viewport's handle lands in, when
+ *   the renderer made it itself (see `viewSettings.applied`).
  * @param {ReturnType<typeof import("../tools/toolModes.js").createToolModes> | null} [options.toolModes]  Omitted
  *   by a renderer with no tools: the shell then has no active tool and a saved tab records none.
+ * @param {{ mode: string, set: (update: (current: string) => string) => void }} [options.tool]  The tool in
+ *   hand, when the renderer holds that state itself: a renderer whose LOAD, or what Escape means in it,
+ *   turns on which tool is up cannot wait for this hook to hand it back. The rules stay the shell's —
+ *   `set` is given the mode `toolModes` decided. Omitted: the shell holds the state.
  * @param {import("../scene.js").KitScene | null} options.scene
  * @param {{ busy: boolean, updating?: boolean, progress?: object | null, alert?: object | null,
  *   warning?: object | null, editPending?: boolean, currentPreview?: boolean, finding?: boolean }} options.load  The
@@ -101,16 +110,26 @@ const EMPTY = Object.freeze({});
  * @param {{ onRelease?(runtime: object, detail: { handoff: boolean }): void, onContextLost?(): void,
  *   onInitializationError?(error: unknown): void }} [options.runtimeLifecycle]  What happens to the WebGL runtime
  *   under the scene, for a renderer that hangs its own objects or in-flight work on it (`ShellViewport.jsx`).
+ * @param {(alert: object | null) => void} [options.onRuntimeAlert]  The viewport reported an alert, or
+ *   cleared one. A renderer that folds the viewport's alert into an alert of its own keeps that state
+ *   itself and hands the composed result back as `load.alert`; the shell then holds none of its own.
+ *   Omitted: the shell keeps it and folds it into the report.
+ * @param {(presentation: { file: string, key: string, renderMode: boolean, covering: boolean,
+ *   preparing: boolean }) => void} [options.onPresentationChange]  The viewport published what it is
+ *   presenting. The shell always keeps this for its own report; this is for a renderer that must
+ *   answer "is what is on screen the document I asked for" itself — a live preview deciding whether
+ *   its own result has landed. Compare `key` with `shellPresentationKey(modelKey, revisionKey)`.
  * @param {object} [options.displayTabProps]  Extra Display tab props for sections the renderer's FEATURES opt into.
  * @param {string} [options.sceneScaleMode]
  */
 export function useRendererShell({
-  view, services, resource, modelKey, revisionKey = "", features, toolModes = null, scene, load,
-  viewSettings = null,
+  view, services, resource, modelKey, revisionKey = "", features, toolModes = null, tool = null, scene, load,
+  viewSettings = null, viewerRef: providedViewerRef = null,
   animation = null, live = EMPTY, promptReferences = null, promptContext = createViewPromptContext,
   fileStatus: fileStatusFields = EMPTY,
   escape = EMPTY, rendererState = EMPTY, toolRestore = EMPTY, displayTabProps = EMPTY,
   onCameraSettled = null, preserveInteractionPixelRatio = false, runtimeLifecycle = null,
+  onRuntimeAlert = null, onPresentationChange = null,
   sceneScaleMode = VIEWER_SCENE_SCALE.CAD
 }) {
   const host = useViewerHost();
@@ -126,7 +145,7 @@ export function useRendererShell({
   // ---- per-file state -------------------------------------------------------
   const [restored] = useState(() => readShellState(view.state));
   // A renderer whose own work needs the display settings BEFORE it can hand this hook a scene
-  // — STEP reads them while it is still deciding what to load — creates them itself and passes
+  // — one that reads them while it is still deciding what to load — creates them itself and passes
   // them in. It is the same store either way; owning it here is a convenience, not a rule.
   const ownViewSettings = useViewSettings(colorScheme);
   const { display: displaySettings, scene: desiredScene, store: viewSettingsStore } =
@@ -134,8 +153,13 @@ export function useRendererShell({
   useLayoutEffect(() => { viewSettingsStore.configure({ features }); }, [viewSettingsStore, features]);
   // Before the first paint, like every later edit: through the store, never around it.
   useLayoutEffect(() => { viewSettingsStore.restore(restored.display); }, [viewSettingsStore, restored]);
-  const viewerRef = useRef(null);
-  const viewUpdate = useAppliedViewSettings(desiredScene, modelKey, viewerRef, viewSettingsStore);
+  const ownViewerRef = useRef(null);
+  const viewerRef = providedViewerRef || ownViewerRef;
+  // Exactly one coordinator drives one viewport. A renderer that resolved the view itself
+  // hands the result in, and this call stands down (`useAppliedViewSettings`).
+  const appliedByRenderer = viewSettings?.applied || null;
+  const ownViewUpdate = useAppliedViewSettings(desiredScene, appliedByRenderer ? null : modelKey, viewerRef, viewSettingsStore);
+  const viewUpdate = appliedByRenderer || ownViewUpdate;
   const resolvedScene = viewUpdate.scene;
   const rendering = resolvedScene.render.enabled;
   useEffect(() => { if (rendering) prefetchRenderStudio(); }, [rendering]);
@@ -151,7 +175,9 @@ export function useRendererShell({
   const [inspectorTab, setInspectorTab] = useState(restored.inspectorTab);
   // "" is a renderer with no tools at all: there is no active tool to be in, and
   // nothing for a saved tab to record.
-  const [toolMode, setToolMode] = useState(() => (toolModes ? toolModes.restore(restored.tool, toolRestore) : ""));
+  const [ownToolMode, setOwnToolMode] = useState(() => (toolModes ? toolModes.restore(restored.tool, toolRestore) : ""));
+  const toolMode = tool ? tool.mode : ownToolMode;
+  const setToolMode = tool ? tool.set : setOwnToolMode;
   const recordRef = useRef(null);
   const onStateChangeRef = useRef(onStateChange);
   onStateChangeRef.current = onStateChange;
@@ -232,12 +258,21 @@ export function useRendererShell({
   const [copyStatus, setCopyStatus] = useState("");
   const [screenshotStatus, setScreenshotStatus] = useState("");
   const [viewerAlertOpen, setViewerAlertOpen] = useState(false);
-  const [runtimeAlert, setRuntimeAlert] = useState(null);
+  const [ownRuntimeAlert, setOwnRuntimeAlert] = useState(null);
+  // A renderer that composes the viewport's alert into its own keeps that state; the shell
+  // then holds none, so the composed `load.alert` is not counted a second time here.
+  const runtimeAlertRef = useRef(onRuntimeAlert);
+  runtimeAlertRef.current = onRuntimeAlert;
+  const setRuntimeAlert = useCallback(alert => (runtimeAlertRef.current || setOwnRuntimeAlert)(alert || null), []);
+  const runtimeAlert = onRuntimeAlert ? null : ownRuntimeAlert;
   const viewerLoading = Boolean(load.busy);
   const hasContent = Boolean(scene) && !viewerLoading;
-  const presentationKey = modelKey ? `${modelKey}:${revisionKey}:complete` : "";
+  const presentationKey = shellPresentationKey(modelKey, revisionKey);
   const [presentationState, setPresentationState] = useState(null);
+  const presentationReportRef = useRef(onPresentationChange);
+  presentationReportRef.current = onPresentationChange;
   const handlePresentationChange = useCallback((next) => {
+    presentationReportRef.current?.(next);
     setPresentationState(previous => previous?.file === next.file && previous?.renderMode === next.renderMode &&
       previous?.key === next.key && previous?.covering === next.covering && previous?.preparing === next.preparing ? previous : next);
   }, []);
@@ -399,13 +434,13 @@ export function useRendererShell({
     // What only an opted-in section reads (its bounds, its status): the renderer that opted in supplies it.
     ...displayTabProps
   });
-  const tool = ({ id, label, icon, ...rest }) => ({
+  const stripTool = ({ id, label, icon, ...rest }) => ({
     id, label, icon, active: !previewMode && toolMode === id, disabled: idle, onSelect: () => selectTool(id), ...rest
   });
   const tools = {
     /** A tool of the renderer's own: `{ id, label, icon }` plus anything the strip reads. */
-    own: tool,
-    draw: tool({ id: SHELL_TOOL.DRAW, label: "Draw", icon: <Pencil className="size-3" strokeWidth={2} aria-hidden="true" />,
+    own: stripTool,
+    draw: stripTool({ id: SHELL_TOOL.DRAW, label: "Draw", icon: <Pencil className="size-3" strokeWidth={2} aria-hidden="true" />,
       subToolbar: drawToolActive ? <DrawingToolbar drawing={drawing} /> : null })
   };
 
@@ -413,6 +448,9 @@ export function useRendererShell({
     // Renderer-facing.
     toolMode, selectTool, tools, displayTab, idle, previewMode, rendering, resolvedScene, viewerRef,
     setCopyStatus, setScreenshotStatus, capture, requestRender: () => viewerRef.current?.requestRender?.(),
+    // Put the alert dialog away. The shell closes it whenever the alert behind it changes; this
+    // is for a renderer with a reason of its own (taking up a tool, say).
+    dismissAlert: () => setViewerAlertOpen(false),
     // The scene moved its own bounds: lighting, shadows and the floor follow, with no React render.
     syncSceneBounds: () => viewerRef.current?.syncSceneBounds?.(),
     // State the renderer keeps outside React changed: write the record soon (and on unmount).

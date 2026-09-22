@@ -82,7 +82,12 @@ export function viewportLodSampleForQuality(sample, quality = SCENE_QUALITY.INTE
   };
 }
 
-export function useViewportLod({ viewerRef, lodPackage, modelKey = "", applyComponentLodBatch,
+/**
+ * @param {(request: { components: Map, dynamicScene: boolean }) => object | null} options.sampleCamera
+ *   Where the camera is now, in the terms this scheduler decides detail in (`lodCameraSample.js`).
+ *   Only the renderer can answer it: the sample reads the live runtime's own scene graph.
+ */
+export function useViewportLod({ sampleCamera, lodPackage, modelKey = "", applyComponentLodBatch,
   prepareComponentLodPayload, componentLodNeedsSelectors, dynamicScene = false,
   quality = SCENE_QUALITY.INTERACTIVE, tessellationCache, resources }) {
   const qualityId = normalizeSceneQuality(quality?.id || quality, { fallback: SCENE_QUALITY.INTERACTIVE });
@@ -95,6 +100,8 @@ export function useViewportLod({ viewerRef, lodPackage, modelKey = "", applyComp
       for (const buffer of lodPayloadMemory({ meshData: component.meshData }).buffers) buffers.add(buffer);
     displayBuffersRef.current = buffers;
   };
+  const sampleCameraRef = useRef(sampleCamera);
+  sampleCameraRef.current = sampleCamera;
   const applyRef = useRef(applyComponentLodBatch);
   applyRef.current = applyComponentLodBatch;
   const prepareRef = useRef(prepareComponentLodPayload);
@@ -284,7 +291,7 @@ export function useViewportLod({ viewerRef, lodPackage, modelKey = "", applyComp
     if (!componentsRef.current.size) {
       return;
     }
-    const sampler = viewerRef.current?.sampleLodCamera?.({ components: componentsRef.current, dynamicScene });
+    const sampler = sampleCameraRef.current?.({ components: componentsRef.current, dynamicScene });
     if (!sampler) {
       return;
     }
@@ -298,7 +305,7 @@ export function useViewportLod({ viewerRef, lodPackage, modelKey = "", applyComp
     // sample when it changes something, and through onIdle/onOccupiedChanged.
     if (changed === false) return;
     if (typeof window !== "undefined") dispatchViewportLodStatus(window.__cadViewportLod?.());
-  }, [viewerRef, dynamicScene, qualityId]);
+  }, [dynamicScene, qualityId]);
 
   // Initial framing can notify before the package summary reaches this hook.
   // Sample once after installing the summary too: otherwise a stationary

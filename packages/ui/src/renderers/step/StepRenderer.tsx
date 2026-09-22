@@ -4,7 +4,7 @@ import type { CadWorkspaceService, CadEntry, CadRenderSession, CadServerInfo } f
 import type { CadCommands, CadCommandSource, CadLiveBinding, StepRendererSlots, PreparedStepDocument } from './index.js';
 import type { ResourceRef } from '@hardcore/core/prompt';
 import type { CadPreferences } from '../workspace/index.js';
-import CadFileView from './file-view/CadFileView.js';
+import StepSurface from './StepSurface.jsx';
 
 const emptyCommands: CadCommands = Object.freeze({});
 const emptySubscribe = () => () => {};
@@ -36,7 +36,7 @@ interface StepSurfaceProps {
   slots?: StepRendererSlots;
   live?: CadLiveBinding;
 }
-const Surface = CadFileView as ComponentType<StepSurfaceProps>;
+const Surface = StepSurface as ComponentType<StepSurfaceProps>;
 
 export default function StepRenderer(props: FileRendererProps<PreparedStepDocument>) {
   const { data } = props;

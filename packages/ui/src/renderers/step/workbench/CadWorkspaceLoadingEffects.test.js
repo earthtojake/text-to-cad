@@ -10,7 +10,7 @@ import traverseModule from "@babel/traverse";
 const traverse = traverseModule.default ?? traverseModule;
 const WORKSPACE_PATH = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  "../file-view/CadFileView.js"
+  "../StepSurface.jsx"
 );
 
 function referencedNames(functionPath) {
