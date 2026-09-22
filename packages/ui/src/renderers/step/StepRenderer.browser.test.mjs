@@ -199,7 +199,9 @@ test('Select picks parts and faces, a selection lives only under Select, and the
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.join() === 'o1.2');
   const live = await view.state();
   assert.deepEqual([live.selectedReferenceIds, live.hiddenPartIds, live.isolatedPartIds], [[], [], []]);
-  assert.equal(live.selection[0].label, 'arm');
+  // The selection in the prompt grammar the live contract reads (what `viewer-state` hands an
+  // agent): a selector of the document on screen, never the renderer's own copy vocabulary.
+  assert.deepEqual(live.selection, [{ resource: live.resource, target: { kind: 'cad-selector', selectors: ['o1.2'] }, label: 'arm' }]);
   await page.evaluate(() => window.cadHarness.a.controller.clearSelection());
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.length === 0);
   // And what it delivers: the snapshot carries the file, the references carry the selection.

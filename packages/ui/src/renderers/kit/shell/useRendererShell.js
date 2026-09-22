@@ -90,7 +90,8 @@ const EMPTY = Object.freeze({});
  * @param {(input: { resource: object, references: object[], capture: Promise<Blob> }) => object} [options.promptContext]
  *   How this renderer assembles a snapshot's prompt context. Default `createViewPromptContext`, which takes
  *   references already in the prompt grammar; a renderer with a reference vocabulary of its own supplies the
- *   builder that speaks it, and then `promptReferences` may return that vocabulary instead.
+ *   builder that speaks it, and then `promptReferences` may return that vocabulary instead — and such a
+ *   renderer reports its live `selection` itself, in the prompt grammar, through `live.state`.
  * @param {{ active?: boolean, handle?: () => boolean }} [options.escape]  Escape, innermost first: `handle` returns
  *   true when it spent the key; otherwise the shell closes the alert dialog and the Inspector.
  * @param {object | (() => object)} [options.rendererState]  The renderer's own slice of the per-file record. A
@@ -375,7 +376,10 @@ export function useRendererShell({
       const shown = liveResourceRef.current?.() || resource;
       return {
         resource: { ...shown }, revision: String(shown.revision || ""), loading: viewerLoading || !scene,
-        selection: referencesRef.current?.() || [],
+        // Live state reads the selection in the prompt grammar. References are already in it
+        // only where the default builder assembles the snapshot; a renderer that keeps its own
+        // vocabulary reports its selection through `live.state`, so it is never passed on raw.
+        selection: promptContextRef.current === createViewPromptContext ? referencesRef.current?.() || [] : [],
         camera: clonePerspectiveSnapshot(viewerRef.current?.getPerspective?.() || activePerspectiveRef.current),
         display, renderMode: display.mode === "render" ? "render" : "inspect",
         ...(live.state?.() || {})
