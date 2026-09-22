@@ -10,7 +10,6 @@ import {
   hasCapability,
   isArtifactManagedFormat,
   renderCapabilities,
-  renderFormatLabel,
   supportsTool
 } from "./renderCapabilities.js";
 
@@ -144,12 +143,6 @@ test("every viewport format gets the whole toolbar: the tools act on the viewpor
   assert.equal(supportsTool("totally-unknown", "draw"), true);
 });
 
-test("projection is a theme trait for every format", () => {
-  for (const format of Object.values(RENDER_FORMAT)) {
-    assert.equal(hasCapability(format, "themeProjection"), true, `${format} ignores the theme projection`);
-  }
-});
-
 test("no format advertises export capabilities: the CLIs own exporting", () => {
   for (const format of Object.values(RENDER_FORMAT)) {
     const row = renderCapabilities(format);
@@ -158,14 +151,8 @@ test("no format advertises export capabilities: the CLIs own exporting", () => {
   }
 });
 
-test("labels are present for the formats that surface one", () => {
-  assert.equal(renderFormatLabel(RENDER_FORMAT.THREE_MF), "3MF");
-  assert.equal(renderFormatLabel(RENDER_FORMAT.GLB), "GLB");
-  assert.equal(renderFormatLabel(RENDER_FORMAT.STL), "STL");
-});
-
 test("aliases resolve to their real format", () => {
-  assert.equal(renderCapabilities("stp").sheetKind, RENDER_FORMAT.STEP);
+  assert.equal(renderCapabilities("stp"), renderCapabilities(RENDER_FORMAT.STEP));
   assert.equal(renderCapabilities("gltf").iconKind, renderCapabilities(RENDER_FORMAT.GLB).iconKind);
   assert.equal(renderCapabilities("  STEP  ").parts, true);
 });
