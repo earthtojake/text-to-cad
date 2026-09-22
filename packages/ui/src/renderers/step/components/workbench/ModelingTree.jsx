@@ -43,7 +43,7 @@ function ModelingRow({ node, depth=0, selected, expanded, toggle, choose, disabl
           className="grid size-7 shrink-0 place-items-center rounded focus-visible:ring-2 focus-visible:ring-ring"
           onClick={()=>toggle(node)}><TreeRowChevron expanded={open}/></button> : <span className="w-7 shrink-0"/>}
         <button type="button" aria-label={`Select ${node.label}`} aria-pressed={selected.has(node.id)}
-          disabled={disabled || unavailable || !(node.selectionId || node.faces?.length || node.edges?.length)}
+          disabled={disabled || unavailable || !(node.selectionId || node.memberSelectionIds?.length || node.faces?.length || node.edges?.length)}
           onClick={event=>choose(node,event)} title={node.label}
           className="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40">
           <Icon className="size-3.5 shrink-0 text-muted-foreground"/><TreeRowLabel className="flex-1">{node.label}</TreeRowLabel>
@@ -88,6 +88,15 @@ export default function ModelingTree({ modeling, active, disabled, references=EM
   const [selected,setSelected]=useState(null),[pending,setPending]=useState(null),[localExpanded,setLocalExpanded]=useState(new Set());
   const tree=useMemo(()=>presentModelingAssembly(descriptor,results,stepRoot),[descriptor,results,stepRoot]);
   const implicitRoots=useMemo(()=>implicitModelingRoots(tree),[tree]);
+  const foldedRows=useMemo(()=>{
+    const rows=[];
+    const visit=nodes=>{for(const node of nodes){
+      if(node.memberSelectionIds?.length)rows.push(node);
+      visit(node.children || EMPTY);
+    }};
+    visit(tree);
+    return rows;
+  },[tree]);
   const visibleRoots=implicitRoots.length ? implicitRoots.at(-1).children || EMPTY : tree;
   const implicitOwner=implicitRoots.reduce((owner,node)=>nodeAvailability(node,partControls,owner.hiddenByOwner,owner.outsideFrontier),{hiddenByOwner:false,outsideFrontier:false});
   const componentIds=useMemo(()=>[...new Set(descriptor?.occurrences.map(o=>o.component)||[])],[descriptor]);
@@ -227,6 +236,14 @@ export default function ModelingTree({ modeling, active, disabled, references=EM
     if(ids.length){onSelect?.(ids);setPending(null);}
   },[pending,active,disabled,references,onSelect,selectionKey]);
   const choose=(node,event)=>{
+    // A folded row stands for every instance under it, so it selects them all --
+    // the alternative is a row that reads "(6)" and selects one of the six.
+    if(node.memberSelectionIds?.length){
+      setSelected(null);setPending(null);
+      const additive=event?.shiftKey || event?.metaKey || event?.ctrlKey;
+      node.memberSelectionIds.forEach((id,index)=>partControls.onSelectTreeNode?.(id,{multiSelect:additive || index > 0}));
+      return;
+    }
     if(node.selectionId){
       setSelected(null);setPending(null);
       partControls.onSelectTreeNode?.(node.selectionId,{multiSelect:event?.shiftKey || event?.metaKey || event?.ctrlKey});
@@ -260,6 +277,9 @@ export default function ModelingTree({ modeling, active, disabled, references=EM
     }
   };
   const highlighted=new Set(showDetails ? [selected.id] : paths.map(path=>path.at(-1).id));
+  // Its members are not rendered while it is collapsed, so the row itself carries
+  // their selection; anything less and selecting a folded row looks like a no-op.
+  for(const node of foldedRows)if(node.memberSelectionIds.every(id=>selectedPartIds.includes(id)))highlighted.add(node.id);
   const selectedNode=showDetails ? selected : paths.length === 1 ? paths[0].at(-1) : null;
   const nodeDetails=selectedNode && (selectedNode.summary || selectedNode.note || selectedNode.measurements?.length);
   const details=showDetails && selected.edges?.length === 1 && !pending && selectionDetails ? selectionDetails : <>
