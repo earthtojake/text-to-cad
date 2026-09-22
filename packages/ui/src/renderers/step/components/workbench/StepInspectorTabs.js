@@ -1,7 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
 import { STEP_MODEL_ROOT_ID } from '@hardcore/core/lib/step/stepTree.js';
-import FileSheet from '../../../kit/inspector/FileSheet.js';
-import FileSheetTabbedSurface from '../../../kit/inspector/FileSheetTabbedSurface.js';
 import { buildFileStatusTab } from './FileStatusSection.js';
 import { buildMotionControlsTab } from './MotionControlsSection.js';
 import { StepReferenceSection } from './StepReferenceSection.js';
@@ -10,8 +8,13 @@ import { useStepModeling } from '../../workbench/useStepModeling.js';
 import { stepGeometryMeasurements } from '../../workbench/stepGeometryMeasurements.js';
 const EMPTY = [];
 
-export default function StepFileSheet({
-  client, open, isDesktop, width, onOpenChange, onStartResize, selectedEntry, viewerLoading,
+/**
+ * The Inspector's tabs for a STEP: its Features tree, its Kinematics, the Display tab the
+ * shell built, and the file's status. The sheet around them is the shell's
+ * (`kit/shell/RendererShell.jsx`); this is only what goes in it.
+ */
+export function useStepInspectorTabs({
+  client, open, selectedEntry, viewerLoading,
   geometryInspection = null, stepTreeRoot, isAssemblyView = false,
   selectedMeshData = null, selectedSourceAppearance = null,
   selectedPartIds = EMPTY, selectedReferenceIds = EMPTY, selectedReferences = EMPTY,
@@ -23,8 +26,7 @@ export default function StepFileSheet({
   // The one part menu a tree row carries: its descriptor per node, and the actions behind it.
   menuForNode = null, partMenuActions = null,
   treeSelectionDisabled = false, treeSelectionDisabledReason = '',
-  stepModule = null, stepAnimation = null, statusItems = EMPTY,
-  openSectionIds = EMPTY, onOpenSectionIdsChange, settingsTabs = EMPTY,
+  stepModule = null, stepAnimation = null, statusItems = EMPTY, settingsTabs = EMPTY,
 }) {
   const recognitionKey = `${selectedEntry?.file}:${geometryInspection?.revision}`;
   const [recognitionRequest, setRecognitionRequest] = useState({ key: recognitionKey, ids: EMPTY });
@@ -44,7 +46,7 @@ export default function StepFileSheet({
     ])],
   }), [selectedReferences, selectedPartIds, modelParts]);
   const measurements = useMemo(() => stepGeometryMeasurements(measuredSelection, modelReferences, modelParts), [measuredSelection, modelReferences, modelParts]);
-  if (!selectedEntry) return null;
+  if (!selectedEntry) return EMPTY;
   const selectionDetails = selectedReferences.length || measuredSelection.partIds.length ? <StepReferenceSection
     references={selectedReferences} meshData={selectedMeshData} sourceAppearance={selectedSourceAppearance} measurements={measurements}
   /> : null;
@@ -68,9 +70,5 @@ export default function StepFileSheet({
     poseRuntime: stepModule, animationRuntime: stepAnimation,
     poseProps: { loadingLabel: 'Loading kinematics...', noParametersLabel: 'No pose controls.' },
   }), ...settingsTabs, buildFileStatusTab(statusItems)].filter(Boolean);
-  return <FileSheet open={open} title="STEP" isDesktop={isDesktop} width={width}
-    onOpenChange={onOpenChange} onStartResize={onStartResize} scrollBody={false}>
-    <FileSheetTabbedSurface sections={sections} openSectionIds={openSectionIds}
-      onOpenSectionIdsChange={onOpenSectionIdsChange} />
-  </FileSheet>;
+  return sections;
 }
