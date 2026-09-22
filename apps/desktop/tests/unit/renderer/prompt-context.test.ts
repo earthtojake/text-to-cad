@@ -81,6 +81,25 @@ it("binds the destination before PNG resolution, preserves order and never focus
   expect(useComposer.getState().pendingFiles.first).toHaveLength(1);
 });
 
+it("a snapshot's whole-file subject adds no token to a draft that already names that file, and does to one that does not", async () => {
+  const port = createDesktopPromptContext("car", null, workspaceId, "first");
+  const snapshot = (operationId: string, path = "models/car.step") => context(operationId, [
+    { id: "source", kind: "reference", reference: { resource: { kind: "workspace-file", workspaceId, path }, target: { kind: "whole-resource" } } },
+    { id: "image", kind: "attachment", name: "car-view.png", mimeType: "image/png", content: png(), about: ["source"] },
+  ]);
+  // The person added a face of the file; the snapshot's subject is that same file.
+  expect((await port.deliver(context("face"))).status).toBe("added");
+  expect(await port.deliver(snapshot("shot"))).toEqual({ status: "added", partIds: ["source", "image"] });
+  expect(useComposer.getState().drafts.first).toBe("models/car.step#o1.f2 ");
+  expect(useComposer.getState().pendingFiles.first?.map(file => file.name)).toEqual(["car-view.png"]);
+  // A snapshot of another file still names it, and a whole-file reference chosen on its own
+  // (no image about it) is always the person's to add.
+  await port.deliver(snapshot("other", "models/wheel.step"));
+  expect(useComposer.getState().drafts.first).toBe("models/car.step#o1.f2 models/wheel.step ");
+  await port.deliver(context("file", [{ id: "file", kind: "reference", reference: { resource: { kind: "workspace-file", workspaceId, path: "models/car.step" }, target: { kind: "whole-resource" } } }]));
+  expect(useComposer.getState().drafts.first).toBe("models/car.step#o1.f2 models/wheel.step models/car.step ");
+});
+
 it("rejects an invalid attachment without accepting text or reference parts", async () => {
   const port = createDesktopPromptContext("car", null, workspaceId, "first");
   const result = await port.deliver(context("binary", [reference, { id: "binary", kind: "attachment", name: "archive.zip", mimeType: "application/zip", content: new Blob([new Uint8Array([1, 0, 2])], { type: "application/zip" }) as unknown as globalThis.Blob }]));
