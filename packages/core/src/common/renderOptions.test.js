@@ -462,6 +462,29 @@ test("inspection grid uses explicit appearance and shared Viewer spacing", () =>
   assert.equal(materials[0].depthWrite, false);
 });
 
+test("a posed model's ground is sized from its REST placement, while the floor still drops under it", () => {
+  // The viewer sizes the grid and stage from the rest pose so posing never rescales the ground;
+  // a snapshot must too, or `cadgen step snapshot --kinematics` shows a different ground than the
+  // viewer does. Only the SIZE follows rest: a pose that reaches below the rest box still pushes
+  // the floor down, or the moved part would sink through it.
+  const rest = { min: [0, 0, 0], max: [10, 10, 10] };
+  const posed = { min: [-400, -400, -30], max: [400, 400, 10] };
+  const gridSpan = sizeBounds => {
+    const scene = new THREE.Scene();
+    addFloor(scene, posed, normalizeThemeSettings({ floor: { mode: "none", enabled: false } }),
+      RENDER_SCENE_SCALE.CAD, SCALE_SETTINGS, { grid: { enabled: true } }, sizeBounds);
+    const grid = scene.children.find(child => child.type === "GridHelper");
+    grid.geometry.computeBoundingBox();
+    const box = grid.geometry.boundingBox;
+    return { span: box.max.x - box.min.x, z: grid.position.z };
+  };
+  const fromRest = gridSpan(rest);
+  const fromPose = gridSpan(null);
+  assert.ok(fromRest.span < fromPose.span / 4,
+    `the ground is sized from rest, not from the pose (${fromRest.span} vs ${fromPose.span})`);
+  assert.equal(fromRest.z, fromPose.z, "and the floor's height is the pose's either way");
+});
+
 test("display guides render independently from the studio stage floor", () => {
   const scene = new THREE.Scene();
   addFloor(

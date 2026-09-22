@@ -325,7 +325,11 @@ export function applyLighting(scene, themeSettings, {
   return { directional, fill, rim, spot, point, radius, positionScale };
 }
 
-export function addFloor(scene, bounds, themeSettings, sceneScale, settingsByScale, guideSettings = null) {
+// `sizeBounds` sizes the grid and stage; `bounds` places the floor's height. They are the same box
+// unless a caller knows the model's REST placement: then the ground is sized from rest, as the
+// viewer sizes it, so a pose never rescales it, while the floor still drops under a pose that
+// reaches below the rest box.
+export function addFloor(scene, bounds, themeSettings, sceneScale, settingsByScale, guideSettings = null, sizeBounds = null) {
   const floor = themeSettings.floor || {};
   const mode = floor.mode || THEME_FLOOR_MODES.STAGE;
   const floorEnabled = floor.enabled === true || (
@@ -343,7 +347,7 @@ export function addFloor(scene, bounds, themeSettings, sceneScale, settingsBySca
     return;
   }
   const settings = renderSceneScaleSettings(sceneScale, settingsByScale);
-  const { radius } = centerAndRadiusFromBounds(bounds, sceneScale, settingsByScale);
+  const { radius } = centerAndRadiusFromBounds(sizeBounds || bounds, sceneScale, settingsByScale);
   // The stage floor sits at world z=0, matching the viewer
   // (resolveRuntimeModelFloorZ in lib/viewer/modelRuntime.js). This path used to
   // glue the floor to bounds.min[2], which silently re-grounded EVERY model: a
