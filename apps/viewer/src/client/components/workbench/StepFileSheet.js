@@ -380,6 +380,7 @@ export default function StepFileSheet({
   onSelectTreeNode,
   onSelectReferenceNode,
   onCopyTreeNodeReference,
+  onExportTreeNodeStl,
   onFocusTreeNode,
   onUnfocusTreeNode,
   onExitAllIsolate,
@@ -1109,6 +1110,9 @@ export default function StepFileSheet({
                           onCopyReference={() => {
                             onCopyTreeNodeReference?.(copyReferenceTargetId, { topology: topologyRow });
                           }}
+                          onExportStl={onExportTreeNodeStl && !topologyRow
+                            ? () => onExportTreeNodeStl(row)
+                            : undefined}
                           onSelect={(event) => {
                             if (!topologyRow && selected && selectedContextNodeIds.length > 1) {
                               onClearSelection?.();

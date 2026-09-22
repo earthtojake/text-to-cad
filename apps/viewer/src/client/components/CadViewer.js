@@ -3358,6 +3358,51 @@ const CadViewer = forwardRef(function CadViewer({
   }, [bendAxisX, drawingBendLines, bendAnglesRad, drawingBends, drawingBendStyle, drawingBendRadiusMm, drawingKFactor, drawingHiddenLayers, drawingOrientation, drawingMaterialColor, drawingGeometry, drawingThicknessMm, drawingThicknessScale, meshData, viewerReadyTick]);
 
   useImperativeHandle(ref, () => ({
+    // An exported part follows the same rule as everything else here: bytes go
+    // to the PROJECT and a path comes back, never to a download. The same
+    // client runs in a browser, in the desktop shell and in an editor, and the
+    // desktop shell has no download handler at all -- a download button would
+    // work in one host and silently do nothing in another. Saving into the
+    // project works in all three, and puts the file where the tree and the
+    // agent can both already see it.
+    //
+    // The bytes are built from the mesh on screen, so no kernel runs: the
+    // server writes what it was handed rather than generating anything.
+    async exportPartsStl({ partIds = [], name = "part" } = {}) {
+      const runtime = runtimeRef.current;
+      if (!runtime?.THREE || !Array.isArray(runtime.displayRecords)) {
+        throw new Error("CAD Viewer not ready");
+      }
+      const wanted = new Set(
+        (Array.isArray(partIds) ? partIds : []).map((id) => String(id || "").trim()).filter(Boolean)
+      );
+      const meshes = runtime.displayRecords
+        .filter((record) => record?.mesh && wanted.has(String(record?.partId || "").trim()))
+        .map((record) => record.mesh);
+      if (!meshes.length) {
+        throw new Error("That selection has no geometry to export.");
+      }
+      const [{ STLExporter }, { buildExportGroup, encodeBase64, exportNameForPart }] = await Promise.all([
+        import("three/examples/jsm/exporters/STLExporter.js"),
+        import("cadgen-js/lib/step/partStlExport.js")
+      ]);
+      const group = buildExportGroup(runtime.THREE, meshes);
+      // Binary: ASCII is many times the size for no gain and every slicer reads it.
+      const data = new STLExporter().parse(group, { binary: true });
+      const response = await fetch("/__cad/export-part", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-cadgen-viewer": "1" },
+        body: JSON.stringify({
+          name: exportNameForPart(name),
+          bytes: encodeBase64(data instanceof DataView ? new Uint8Array(data.buffer) : data)
+        })
+      });
+      const result = await response.json();
+      if (!response.ok || result?.ok === false) {
+        throw new Error(result?.error || "Export failed");
+      }
+      return result;
+    },
     // Clipboard-only: the viewer never downloads artifact or screenshot bytes
     // through a URL — copy actions hand out paths and images instead.
     async captureScreenshot() {

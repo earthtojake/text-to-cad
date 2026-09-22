@@ -6632,6 +6632,26 @@ export default function CadWorkspace({
     }
   }, [retainedPreviousStepMeshError, stepInteractionBlocked]);
 
+  const exportStepTreeNodeStl = useCallback(async (row) => {
+    if (stepInteractionBlocked) {
+      setCopyStatus("STEP update in progress. Please wait.");
+      return;
+    }
+    // A node stands for its leaves; its own id carries no geometry, and a
+    // folded row stands for every instance under it.
+    const partIds = Array.isArray(row?.leafPartIds) && row.leafPartIds.length
+      ? row.leafPartIds
+      : [row?.id];
+    const name = String(row?.label || row?.node?.displayName || row?.id || "part");
+    try {
+      const result = await viewerRef.current?.exportPartsStl({ partIds, name });
+      // The path, not a download: the tree shows the file where it landed.
+      setCopyStatus(result?.path ? `Saved ${result.path}` : "Exported");
+    } catch (error) {
+      setCopyStatus(String(error?.message || error));
+    }
+  }, [stepInteractionBlocked]);
+
   const copyStepTreeContextMenuReference = useCallback(async (id, { topology = false } = {}) => {
     if (stepInteractionBlocked) {
       setCopyStatus(retainedPreviousStepMeshError
@@ -7749,6 +7769,7 @@ export default function CadWorkspace({
                 onSelectTreeNode={selectStepTreeNode}
                 onSelectReferenceNode={selectStepTreeReferenceNode}
                 onCopyTreeNodeReference={copyStepTreeContextMenuReference}
+                onExportTreeNodeStl={exportStepTreeNodeStl}
                 onFocusTreeNode={focusStepTreeNode}
                 onUnfocusTreeNode={handleExitSingleIsolate}
                 onExitAllIsolate={handleExitIsolate}

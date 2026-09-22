@@ -32,6 +32,8 @@ export default function AssemblyContextMenuItems({
   expandAllDisabled = true,
   collapseAllDisabled = true,
   onCopyReference,
+  onExportStl,
+  exportStlDisabled = false,
   onSelect,
   onIsolate,
   onExitAllIsolate,
@@ -62,6 +64,17 @@ export default function AssemblyContextMenuItems({
       >
         <AssemblyContextMenuItemLabel>Copy Reference</AssemblyContextMenuItemLabel>
       </Item>
+      {onExportStl ? (
+        <Item
+          className={itemClassName}
+          disabled={exportStlDisabled}
+          onSelect={onExportStl}
+        >
+          {/* Beside Copy Reference because both answer "get this out of here",
+              and both answer it with a path rather than a download. */}
+          <AssemblyContextMenuItemLabel>Export STL…</AssemblyContextMenuItemLabel>
+        </Item>
+      ) : null}
       <Separator />
       <Item
         className={itemClassName}

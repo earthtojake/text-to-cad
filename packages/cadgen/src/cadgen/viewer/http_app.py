@@ -464,6 +464,8 @@ class CadApp:
                         raise ValueError("surface cancellation requires a subscriber token")
                     self.surface_subscribers.cancel(payload["job"])
                     response.send_empty(204)
+                elif pathname == "/__cad/export-part":
+                    self._handle_part_export(request, response)
                 elif pathname == TESS_CACHE_PROBE_PATH:
                     self._handle_tess_probe(request, response)
                 elif pathname == TESS_CACHE_BATCH_PATH:
@@ -487,6 +489,59 @@ class CadApp:
         response.send_empty(405, [("allow", "GET, HEAD, POST")])
 
     # --- placeholders filled by later steps of the port -------------------
+
+    #: An exported part is mesh the client already had on screen, so the cap is
+    #: about a single part rather than a whole assembly; past this the caller is
+    #: sending something other than one part.
+    _EXPORT_BODY_LIMIT = 64 * 1024 * 1024
+
+    def _handle_part_export(self, request, response):
+        """Write a part the client meshed into the project, and report where.
+
+        The viewer hands out paths, not bytes: the same client runs in a
+        browser, in the desktop shell and in an editor, and only the first of
+        those can act on a download. Saving into the project works in all three
+        and puts the file where the tree and the agent can both see it.
+
+        Nothing is generated here. The bytes arrive already built from the mesh
+        on screen, so this route writes what it was handed and never touches the
+        kernel.
+        """
+        from base64 import b64decode
+
+        from .part_export import EXPORT_DIRECTORY, resolve_export_target
+
+        if int(request.headers.get("content-length") or 0) > self._EXPORT_BODY_LIMIT:
+            response.send_empty(413, [("connection", "close")])
+            return
+        payload = json.loads(request.body())
+        if type(payload) is not dict:
+            raise ValueError("export requires a JSON object")
+        name = payload.get("name")
+        encoded = payload.get("bytes")
+        if type(name) is not str or type(encoded) is not str:
+            raise ValueError("export requires 'name' and base64 'bytes'")
+        data = b64decode(encoded, validate=True)
+        if not data:
+            raise ValueError("export carried no bytes")
+        target, relative = resolve_export_target(self.backend.root_path, name)
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        # Written whole through a temp file in the same directory, so a reader
+        # watching the tree never sees a half-written mesh under the final name.
+        partial = f"{target}.partial"
+        try:
+            with open(partial, "wb") as handle:
+                handle.write(data)
+            os.replace(partial, target)
+        finally:
+            if os.path.exists(partial):
+                os.unlink(partial)
+        response.send_json(200, {
+            "ok": True,
+            "path": relative,
+            "directory": EXPORT_DIRECTORY,
+            "bytes": len(data)
+        })
 
     def _handle_catalog(self, request, response):
         response.send_json(200, self.backend.read_catalog(request.query.get("file")))
