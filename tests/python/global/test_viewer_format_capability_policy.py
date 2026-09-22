@@ -30,12 +30,13 @@ CLIENT_ROOT = UI_ROOT / "renderers" / "step"
 # Every remaining identity check is a unification candidate. Lower these as phases land;
 # never raise them.
 #
-# 13 -> 6: the STEP file view asked "is this entry a STEP" eight separate times, inside a
-# renderer that matches no other extension. It derives that once now. What is left is the
-# enum re-export's own default (``workbench/state.js``) and four in
-# ``workbench/stepArtifactStatus.js``, which still take a ``sourceFormat`` parameter that
-# only ever arrives as STEP — those go with the parameter.
-MAX_RENDER_FORMAT_CHECKS = 5
+# 13 -> 0. Every check was the STEP renderer asking whether an entry was a STEP, inside a
+# renderer whose registry match already guarantees it. The file view asked eight times; the
+# STEP artifact helpers took a ``sourceFormat`` that only ever arrived as STEP (they existed
+# so a DXF, served by the same renderer then, would not get a STEP artifact card); the asset
+# loaders were allowlisted as "per-format" long after every other format had its own
+# renderer. At 0 this is a regression gate: one reappearing check fails it.
+MAX_RENDER_FORMAT_CHECKS = 0
 MAX_FORMAT_PREDICATE_CALLS = 0
 
 # Files allowed to know about concrete formats, because deciding *which* format an entry
@@ -43,8 +44,6 @@ MAX_FORMAT_PREDICATE_CALLS = 0
 ALLOWLIST = {
     # The registry and the format enum themselves.
     "workbench/constants.js",
-    # Per-format loaders: genuinely different work per format.
-    "components/workbench/hooks/useCadAssets.js",
 }
 
 RENDER_FORMAT_MEMBER = re.compile(

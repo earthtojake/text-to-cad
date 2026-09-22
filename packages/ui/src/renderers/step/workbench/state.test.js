@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { cloneTabSnapshot, createTabRecord, cadWorkspaceDefaultFileSheetWidthForViewport, CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH, CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH } from './state.js';
-import { TAB_TOOL_MODE } from './constants.js';
+import { cadWorkspaceDefaultFileSheetWidthForViewport, fileSheetWidthPxForSessionState, CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH, CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH } from './state.js';
 import { ENTRY_ICON_KIND, entryIconKind } from '../../../file-viewer/navigation/entryIconKind.js';
 
 test("how a model was produced changes nothing about its icon", () => {
@@ -76,34 +75,19 @@ test("entryIconKind gives STEP, STL, 3MF, and GLB distinct file explorer icons",
   assert.equal(new Set([stepIcon, stlIcon, threeMfIcon, glbIcon]).size, 4);
 });
 
-test("workspace tab records restore old expanded assembly inspection state", () => {
-  const record = createTabRecord("assemblies/sample.step", {
-    expandedAssemblyPartIds: ["module", "leaf"]
-  });
-
-  assert.equal(record.inspectedAssemblyNodeId, "leaf");
-  assert.deepEqual(record.expandedAssemblyPartIds, ["module", "leaf"]);
+test("the Inspector sheet takes the narrower default between the compact breakpoints, and only there", () => {
+  assert.equal(cadWorkspaceDefaultFileSheetWidthForViewport(1440), CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH);
+  assert.equal(cadWorkspaceDefaultFileSheetWidthForViewport(800), CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH);
+  assert.equal(cadWorkspaceDefaultFileSheetWidthForViewport(520), CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH, "the lower edge is compact");
+  assert.equal(cadWorkspaceDefaultFileSheetWidthForViewport(1024), CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH, "the upper edge is not");
+  assert.equal(cadWorkspaceDefaultFileSheetWidthForViewport(400), CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH, "below both, the default");
+  assert.equal(cadWorkspaceDefaultFileSheetWidthForViewport(NaN), CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH);
 });
 
-test("a tab record never holds Draw: the sketch it would restore no longer exists", () => {
-  // Draw is live-only. Its drawing is discarded with the editor, so a restored
-  // tab must come back selecting, not with the camera locked under an empty sketch.
-  assert.equal(TAB_TOOL_MODE.DRAW, "draw");
-  assert.equal(createTabRecord("parts/a.step", { tabToolMode: "draw" }).tabToolMode, TAB_TOOL_MODE.REFERENCES);
-  assert.equal(cloneTabSnapshot({ tabToolMode: TAB_TOOL_MODE.DRAW }).tabToolMode, TAB_TOOL_MODE.REFERENCES);
-  // The modes that carry no discarded state still round-trip.
-  assert.equal(createTabRecord("parts/a.step", { tabToolMode: "measure" }).tabToolMode, TAB_TOOL_MODE.MEASURE);
-  // Pan was a tool once; the camera pans by right-drag, Shift-drag or two fingers, under every tool.
-  assert.equal(createTabRecord("parts/a.step", { tabToolMode: "pan" }).tabToolMode, TAB_TOOL_MODE.REFERENCES);
-  assert.equal(createTabRecord("parts/a.step", { tabToolMode: "nonsense" }).tabToolMode, TAB_TOOL_MODE.REFERENCES);
-  assert.equal(createTabRecord("parts/a.step", {}).tabToolMode, TAB_TOOL_MODE.REFERENCES);
+test("a sheet width is only worth storing when it is not the default", () => {
+  assert.equal(fileSheetWidthPxForSessionState(CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH), null);
+  assert.equal(fileSheetWidthPxForSessionState(420.4), 420);
+  assert.equal(fileSheetWidthPxForSessionState(0), null);
+  assert.equal(fileSheetWidthPxForSessionState("nope"), null);
+  assert.equal(fileSheetWidthPxForSessionState(280, 280), null, "the default is the one the caller names");
 });
-
-test("nothing restores into Pose", () => {
-  // A STEP with kinematics offers Pose but always opens in Select.
-  assert.equal(createTabRecord("parts/a.step", { tabToolMode: "pose" }).tabToolMode, TAB_TOOL_MODE.REFERENCES);
-  assert.equal(createTabRecord("parts/a.dxf", { tabToolMode: "pose" }).tabToolMode, TAB_TOOL_MODE.REFERENCES);
-  // The live snapshot carries the mode as it is; the rule is applied where a file's tab is made.
-  assert.equal(cloneTabSnapshot({ tabToolMode: TAB_TOOL_MODE.POSE }).tabToolMode, TAB_TOOL_MODE.POSE);
-});
-

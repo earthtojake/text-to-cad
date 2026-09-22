@@ -1,4 +1,3 @@
-import { entrySourceFormat } from "@hardcore/core/lib/fileFormats.js";
 import {
   stepArtifactHasRenderableGlb,
   stepArtifactStatusMessage
@@ -13,7 +12,6 @@ export function buildViewerMeshAlert(entry, hasMeshData, loadError, artifact = n
     return null;
   }
 
-  const sourceFormat = entrySourceFormat(entry);
 
   if (artifact?.status === "failed") {
     const alert = failureAlert(fileRef, artifact.error, artifact.failure, true);
@@ -24,7 +22,7 @@ export function buildViewerMeshAlert(entry, hasMeshData, loadError, artifact = n
     } : alert;
   }
 
-  const stepArtifactError = failedStepArtifact(entry, sourceFormat);
+  const stepArtifactError = failedStepArtifact(entry);
   if (stepArtifactError && !hasMeshData) {
     const code = String(stepArtifactError.error || "").trim();
     const missingGlb = code === "missing_glb";

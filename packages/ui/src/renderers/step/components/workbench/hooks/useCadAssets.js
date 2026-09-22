@@ -61,7 +61,6 @@ import {
 } from "@hardcore/core/lib/entryAssets.js";
 import { reclaimIdleSurfWorkers } from "@hardcore/core/lib/renderAssetClient.js";
 import { estimateMeshRenderCost } from "@hardcore/core/lib/render/meshCost.js";
-import { RENDER_FORMAT, entrySourceFormat } from "@hardcore/core/lib/fileFormats.js";
 import { buildDisplayEdgeRuntime, buildSelectorRuntime } from "@hardcore/core/lib/selectors/runtime.js";
 import {
   composePackageSelectorRuntime,
@@ -84,6 +83,9 @@ import {
   resolveSurfaceComponents,
   SurfaceResolutionError,
 } from "../../../workbench/surfaceResolution.js";
+// Only the STEP renderer mounts this hook, and it is only ever handed STEPs (its `matches`
+// excludes every other format by extension). So where this used to ask whether an entry
+// was a STEP, it asks whether there is one: the same answer for every input it receives.
 
 // A package's first-level surfaces are fetched and decoded off the main thread, so the
 // cap only bounds sockets and the worker's queue.
@@ -238,7 +240,7 @@ export function useCadAssets({
     }
     // Complete STEP packages may exceed the per-component SURF LRU. Reuse their
     // bounded CPU working set, with fresh occurrence metadata for this mount.
-    if (entrySourceFormat(entry) === RENDER_FORMAT.STEP) {
+    if (Boolean(entry)) {
       const completed = restoreCompletedPackage(entry);
       if (completed) return completedPackageMeshState(entry, completed.meshData);
       const glbUrl = entryAssetUrl(entry, "glb");
@@ -788,7 +790,7 @@ export function useCadAssets({
     try {
       // Every STEP entry is a component-GLB package (a single-component part is just a
       // package with one occurrence); compose it the same way.
-      if (entrySourceFormat(entry) === RENDER_FORMAT.STEP) {
+      if (Boolean(entry)) {
         setMeshLoadProgress({
           phase: "read",
           label: "Reading model",
@@ -1158,7 +1160,7 @@ export function useCadAssets({
         return;
       }
       if (err instanceof SurfaceResolutionError && err.replacementView
-          && !surfaceViewReplacement && entrySourceFormat(entry) === RENDER_FORMAT.STEP) {
+          && !surfaceViewReplacement && Boolean(entry)) {
         return surfaceViewReplacementRef.current?.(
           entry, entryAssetUrl(entry, "glb"), err.replacementView,
         );
@@ -1534,7 +1536,7 @@ export function useCadAssets({
     // fetch (the package "glb" asset is a directory, so a fetch would 404). The per-component
     // edges live in the composed selector runtime, which the STEP scene already uses as the display-
     // edge source via `displayEdgeRuntime || selectorRuntime`. Disable the dedicated load.
-    if (entrySourceFormat(entry) === RENDER_FORMAT.STEP) {
+    if (Boolean(entry)) {
       setDisplayEdgeState(null);
       setDisplayEdgeStatus(REFERENCE_STATUS.DISABLED);
       setDisplayEdgeError("");
