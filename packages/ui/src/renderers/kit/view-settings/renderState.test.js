@@ -76,3 +76,28 @@ test("grouped View passes independent surface and edge choices through to the re
     assert.equal(normalized.edgeSettings.depthTest, true);
   }
 });
+
+// The snapshot CLI dresses a GLB, a mesh or a robot with the look the viewport would put on
+// it (`headlessSceneDress`, from the job's resolved scene settings). The viewport resolves its
+// look from the same settings AFTER normalizing them here, so this pins that the two routes to
+// `resolveSceneSurfaceLook` land on one look for every preset, appearance and surface choice.
+test("the viewport and the snapshot CLI resolve one surface look from one setting", async () => {
+  const { resolveSceneSurfaceLook, resolveViewSceneSettings } = await import('@hardcore/core/common/sceneSettings.js');
+  const { headlessSceneDress } = await import('@hardcore/core/common/headlessScene.js');
+  const { EDGELESS_VIEW_FEATURES } = await import('@hardcore/core/common/viewSettings.js');
+  const displays = [];
+  for (const mode of ['solid', 'render']) for (const appearance of ['light', 'dark']) {
+    for (const surfaces of [undefined, { colorMode: 'by-part' }, { colorMode: 'single', color: '#ff8800' }, { style: 'flat', opacity: 0.5 }]) {
+      displays.push({ mode, appearance, ...(surfaces ? { surfaces } : {}) });
+    }
+  }
+  displays.push({ mode: 'solid', floor: { enabled: true } }, { mode: 'render', lighting: { enabled: false } });
+  for (const display of displays) {
+    const scene = resolveViewSceneSettings({ display, features: EDGELESS_VIEW_FEATURES });
+    const viewport = normalizeViewerRenderState({ themeSettings: scene.theme, displaySettings: scene.display });
+    const look = resolveSceneSurfaceLook({ themeSettings: viewport.themeSettings, displaySettings: viewport.displaySettings,
+      renderMode: scene.render.enabled, renderConfiguration: scene.render.configuration });
+    assert.deepEqual(look, headlessSceneDress(scene).look, JSON.stringify(display));
+    assert.equal(headlessSceneDress(scene).receiveShadows, scene.view.lighting.enabled, JSON.stringify(display));
+  }
+});
