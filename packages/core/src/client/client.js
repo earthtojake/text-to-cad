@@ -234,6 +234,17 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
         headers: { 'content-type': 'application/json', 'x-cadgen-viewer': '1' },
       });
     },
+    // One part of an assembly, meshed by the client and SAVED INTO THE PROJECT:
+    // bytes up, a path back. The viewer hands out paths rather than downloads
+    // because the same client runs in a browser, in the desktop shell and in an
+    // editor, and only the first of those can act on a download. Nothing is
+    // generated server-side -- the bytes were built from the mesh on screen.
+    exportPart(body, { signal } = {}) {
+      return request('/__cad/export-part', {
+        body, signal, method: 'POST', operation: 'export-part',
+        headers: { 'content-type': 'application/json', 'x-cadgen-viewer': '1' },
+      });
+    },
     editingPreview(file, { after = '', signal } = {}) {
       return request('/__cad/preview', { file, signal, params: { after }, operation: 'preview' });
     },

@@ -49,6 +49,12 @@ export function assemblyPartMenuEntries(menu, { disabled = false, actions = {} }
   const entries = [];
   if (actions.onAddToPrompt) entries.push(entry("add-to-prompt", "Add to prompt", copyDisabled, run(actions.onAddToPrompt)));
   entries.push(entry("copy-reference", "Copy Reference", copyDisabled, run(actions.onCopyReference)));
+  // Beside Copy Reference because both answer "get this out of here", and both
+  // answer it with a PATH rather than a download. Offered only where the host can
+  // write into the project, so a caller without one leaves it out.
+  if (actions.onExportStl) {
+    entries.push(entry("export-stl", "Export STL\u2026", off(menu.exportDisabled), run(actions.onExportStl)));
+  }
   entries.push(entry("select", menu.selected === true ? "Deselect" : "Select", off(menu.selectDisabled), run(actions.onSelect), true));
   if (menu.showIsolate !== false) {
     entries.push(entry("isolate", menu.focused === true ? "Exit isolate" : "Isolate", off(menu.isolateDisabled), run(actions.onIsolate)));
