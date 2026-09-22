@@ -96,13 +96,22 @@ in [the drawing contract](../ui/docs/drawing.md); the mechanism is
   Browser imports use temporary Blob URLs, revoked after module evaluation;
   hosts with a content security policy allow `blob:` in `script-src`. Node
   imports use data URLs because its ESM loader does not support Blob URLs.
-- **Direct GLB animation stays native**: interactive direct-GLB loading retains
-  the glTF scene graph and standard translation, rotation, scale, skin, and
-  morph-weight tracks for a Three `AnimationMixer`. Static mesh normalization
-  remains the fallback for unanimated files. Interactive documents are mutable,
-  uncached, and explicitly disposed by their viewer owner; a bounded load-time
-  pose sample supplies a stable framing estimate rather than resizing the stage
-  during playback.
+- **One scene builder per file family, two callers**: a GLB, an STL or 3MF, and a
+  robot description (URDF, SRDF, SDF) are each drawn by ONE builder here
+  (`lib/render/glbScene.js`, `lib/render/meshScene.js`, `lib/urdf/robotScene.js`, over
+  `lib/urdf/loadRobot.js` and `lib/urdf/robotParts.js`), which the viewer's renderer
+  for that family and the snapshot CLI's headless stage (`common/headlessScene.js`)
+  both call; the look they wear is resolved in one place (`resolveSceneSurfaceLook`,
+  `common/sceneSettings.js`) and a robot opens at one pose (`robotOpeningPose`). A
+  snapshot therefore cannot draw one of them differently from the viewer, and none is
+  flattened into mesh data for a render. `npm run check:boundaries` holds both callers
+  to the shared modules. A STEP document's scene is `buildModel`, shared the same way.
+- **Direct GLB stays native**: a direct GLB is its glTF scene graph (nodes, skins,
+  morph targets, authored materials) with its translation, rotation, scale, skin and
+  morph-weight tracks for a Three `AnimationMixer`, in the viewer and in a snapshot.
+  Its documents are mutable, uncached, and explicitly disposed by their one owner; a
+  bounded load-time pose sample supplies a stable framing estimate rather than
+  resizing the stage during playback.
 - **Byte determinism**: the tessellator and mesh serializers here produce
   the shipped export bytes — same geometry in, same bytes out. Deterministic
   algorithm changes advance `TESSELLATION_VERSION` and its Python mirror so
@@ -138,9 +147,10 @@ src/
   client/          # CAD service/resource contracts, HTTP adapter and worker tickets
   prompt/          # typed context bundles, identity/targets and pure serialization
   common/          # rendering + runtime entries shared by every consumer:
-                   #   cadScene (scene build), renderMeshScene/renderModel/
-                   #   renderOptions (stills), headlessRenderEntry (the
-                   #   snapshot browser bundle's entrypoint),
+                   #   cadScene (a STEP's scene build), renderMeshScene/
+                   #   renderModel/renderOptions (stills), headlessRenderEntry
+                   #   (the snapshot browser bundle's entrypoint), headlessScene
+                   #   (a GLB, mesh or robot job through its family builder),
                    #   kinematicsRuntime + kinematicsModule (FK + sidecar ->
                    #   pose definition), animationRuntime (clips),
                    #   stepModule/stepModuleEffects (effects application),
@@ -149,8 +159,10 @@ src/
                    #   displaySettings, stepTopology
   lib/             # subsystems: surf/ (tessellation + caches), selectors/
                    #   (ref runtime), assembly/ (package composition),
-                   #   render/ (format mesh loaders), viewer/ (exploded
-                   #   view, part visual state), urdf/ (robot loading),
+                   #   render/ (format mesh loaders; the GLB and mesh scene
+                   #   builders), viewer/ (exploded view, part visual state,
+                   #   the surface look, the scene contract), urdf/ (robot
+                   #   parsing and loading; the robot parts and scene builder),
                    #   drawing2d/ (a GET /__cad/drawing payload -> Canvas 2D:
                    #   fit/pan/zoom maths, batched Path2D, hairline strokes),
                    #   export/ (packageMeshExport), cadRefs (grammar,

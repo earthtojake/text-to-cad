@@ -33,7 +33,7 @@ the reverse.
 | --- | --- |
 | `viewport/` | `useViewerRuntime` (three.js renderer lifecycle, on-demand render loop and `requestRender`, resize and device-pixel-ratio caps, context loss, keyboard orbit, teardown), `framePresentation`, `viewportBuffer`, `renderDepthPolicy`, `sceneObjects` (`disposeSceneObject`), DOM helpers. The scene in the viewport is its owner's: teardown calls the injected `disposeScene(runtime)` and `disposeStudio(runtime)`. |
 | `camera/` | `runtimeCamera` (zoom percent against the authored framing, projection and lens sync, perspective snapshots, eased transitions, fit-to-bounds, recentre), `useViewportCamera` (that behaviour bound to a mounted viewport: the perspective a session stores, the fullscreen camera swap and its restore, the reset, view-cube presets — whose default preset FRAMES as well as turns), `viewportCameraKit` and `viewportCameraFit`, `orbitControls`, `zoomPivotReanchor`, `zoomSpeeds`, `cameraLens`, `ViewPlaneControl` (view cube). |
-| `look/` | `stageEffects` (lighting rig scaled to the model, floor, glow and shadow catcher, grid and origin axes), the Render studio boundary (`renderStudioChunk`, `studioEnvironmentCache` and its worker). `chromeBackdrop` and `useChromeBackdropColor` (the frame colour around a scene). The surface LOOK is data the viewport resolves and a scene applies to its own materials: `@hardcore/core/lib/viewer/surfaceLook.js` (`createSurfaceLook(THREE, root).apply(look)`) does it for any authored material tree. |
+| `look/` | `stageEffects` (lighting rig scaled to the model, floor, glow and shadow catcher, grid and origin axes), the Render studio boundary (`renderStudioChunk`, `studioEnvironmentCache` and its worker). `chromeBackdrop` and `useChromeBackdropColor` (the frame colour around a scene). The surface LOOK is data the viewport resolves and a scene applies to its own materials: `@hardcore/core/lib/viewer/surfaceLook.js` (`createSurfaceLook(THREE, root).apply(look)`) does it for any authored material tree. The viewport resolves it with core's `resolveSceneSurfaceLook` (`common/sceneSettings.js`), the resolver the snapshot CLI dresses the same scenes with. |
 | `view-settings/` | The settings model and store (`viewSettingsStore`, `useViewSettings`, `viewerDisplaySettings`, `renderState`), applying a change to a viewport (`useAppliedViewSettings`, `viewUpdateCoordinator`, `viewUpdateGate`, `viewUpdatePlan`), and the Display tab (`DisplaySettingsTab`, `DisplayModeOptions`). |
 | `tools/` | `FloatingToolBar` (the dumb strip), `toolModes` (the tool-mode state machine), `ToolbarButton`, and the format-blind tools: `draw/` (overlay, view lock, `useDrawingViewLock`), `fullscreen/` (controls and the orbit preference), `playbar/` (`ViewportAnimationBar`, `animationClock`, `usePlaybackFrames`), `pose/` (the handle overlay, canvas, drag mathematics), `select/` (`usePointerPick`: taps and hover through a scene's own `pick`). Screenshot capture is `@hardcore/core/lib/viewer/screenshotCapture.js`. |
 | `inspector/` | `FileSheet` and its row primitives, `FileSheetTabbedSurface`, `activeSection`, `InspectorSplit`, `modelTreeSearch`, `referenceRows` (`InfoRow`, `MonoValue`, `CoordValue`), `kinematicsControls` (the named-position dropdown and the Reset button every Kinematics tab ends with). The tree row and filter box are `primitives/tree-row` and `primitives/tree-filter`. |
@@ -49,7 +49,8 @@ Core names two lists, `ALL_VIEW_FEATURES` and `EDGELESS_VIEW_FEATURES` (no Edges
 Clip or Explode; Solid and Render; Shaded and Flat). The STEP renderer passes the
 first, in three places that must agree: the view-settings store (`configure({ features })`), the Display tab,
 and the headless renderer (`renderMeshScene.js`). The GLB, mesh and robot renderers
-pass the second to the shell, which configures the store and the tab from the one list.
+pass the second to the shell, which configures the store and the tab from the one list,
+and the headless renderer resolves a GLB, mesh or robot job under it too.
 
 **Tools.** The strip draws the list it is handed: `{ id, label, icon, active,
 disabled, onSelect, description?, menu?, secondPressOpensMenu?, subToolbar? }`.
@@ -62,7 +63,8 @@ the runtime it is handed (`runtime.clock`, an `AnimationClock`); the Pose overla
 takes a plain handle list, as a prop or (for an owner that poses its model
 outside React) as a ref whose list it replaces per pose.
 
-**The scene contract** (`kit/scene.js`, a JSDoc typedef): `{ object3D, bounds,
+**The scene contract** (core's `lib/viewer/sceneContract.js`, a JSDoc typedef that `kit/scene.js`
+re-exports, because the snapshot CLI holds the same scenes): `{ object3D, bounds,
 restBounds?, dispose(), setSurfaceLook?(look), setShadowReception?(receives),
 keepsAuthoredFinish?, complete?, pick?(ray), placedObjects?() }`.
 The viewport adopts `object3D`, frames `restBounds`, lights and floors `bounds`,
@@ -101,7 +103,38 @@ that rule: the file viewer mounts a renderer through the registry and imports
 none itself, so no host pays for a family it is not showing. The
 unbound-identifier test (`src/renderers/unboundIdentifiers.test.js`) scans the
 whole renderer tree, so a renamed or added slice is covered the moment it
-exists.
+exists. The same script's `checkSharedSceneBuilders` holds the rule of the next
+section: each family's builder, loader, opening pose and look are imported by the
+renderer AND by the snapshot's `common/headlessScene.js` from one core module, are
+defined nowhere else, and no module on the snapshot's render path imports a mesh
+flattener.
+
+### One scene builder per family: the viewer and the snapshot CLI
+
+`cadgen snapshot` of a GLB, an STL, a 3MF or a robot description draws the scene the
+viewer draws, because both call the same builder. A family's scene construction lives in
+`@hardcore/core` (no React, no DOM beyond three.js); its renderer here keeps the loading
+state, the tools and the tabs, and the snapshot page (`common/headlessScene.js`, routed
+from `common/headlessRenderEntry.js`) keeps only what a still has and a viewport does
+not: the camera fit, the studio set up per output, and PNG encoding.
+
+| family | builder (core) | viewer caller | snapshot caller |
+| --- | --- | --- | --- |
+| GLB | `lib/render/glbScene.js` `createGlbScene`, over `loadRenderGlbDocument` | `glb/useGlbScene.js` | `GLB_FAMILY` |
+| STL, 3MF | `lib/render/meshScene.js` `buildMeshScene`, over `loadRenderMeshByUrl` | `mesh/useMeshScene.js` | `MESH_FAMILY` |
+| URDF, SRDF, SDF | `lib/urdf/robotScene.js` `createRobotScene` over `robotParts.js`, loaded by `lib/urdf/loadRobot.js` | `robot/RobotRenderer.jsx`, `robot/useRobotDocument.js` | `ROBOT_FAMILY` |
+| STEP | `common/cadScene.js` `buildModel` | `step/scene/stepScene.js` | `headlessRenderEntry.js` |
+
+Both hosts dress a scene the same way: the look from `resolveSceneSurfaceLook`, shadows
+while the lighting is on, `keepsAuthoredFinish` for Inspect's reflection environment, and
+the ground sized from `restBounds`. A robot opens at `robotOpeningPose`
+(`lib/urdf/motion.js`: every joint's default, then an SRDF's `home` state) and a
+snapshot's `--joint-values` go on top through the same joint matrices. What a snapshot
+cannot express, it refuses rather than approximates: a GLB's clips are the viewer's
+playbar and have no snapshot flag. The pieces are pinned by `common/headlessScene.test.js`
+(core), `kit/view-settings/renderState.test.js` (one look from either route) and
+`tests/python/packages/cadgen/test_snapshot_family_scenes.py` (real snapshots, read as
+pixels).
 
 ### Shell
 
@@ -282,7 +315,7 @@ the viewer was inventing from the file; a drawing is not that.
 its NATIVE glTF scene, always: one path whether or not a clip is playing. The
 STEP renderer does not match `.glb`.
 
-- **Scene** (`glb/glbScene.js`): the file's hierarchy (nodes, skins, morph
+- **Scene** (core's `lib/render/glbScene.js`, which the snapshot CLI draws a GLB with too): the file's hierarchy (nodes, skins, morph
   targets, authored materials) placed in CAD space by the document's root
   matrix. Embedded lights stay hidden, skinned and morphed meshes are never
   frustum-culled, every mesh casts shadows. The scene owns its document and
@@ -320,7 +353,7 @@ STEP renderer does not match `.glb`.
 or a `.3mf` as what it is: triangles, and in a 3MF a colour per object. The CAD
 renderer does not match either.
 
-- **Scene** (`mesh/meshScene.js`): one `Mesh` per object of the file (an STL is
+- **Scene** (core's `lib/render/meshScene.js`, `buildMeshScene`, which the snapshot CLI draws an STL or a 3MF with too): one `Mesh` per object of the file (an STL is
   one; a 3MF has one per object and material) and nothing else: no part table,
   display records, edges, clip planes, explode matrices or selectors. Geometries
   come from `@hardcore/core/lib/render/meshObjects.js` (`buildMeshObjects`): views
@@ -361,7 +394,7 @@ an SRDF is its paired URDF with the SRDF's semantics on it (group states, end
 effectors, planning groups), an SDF a robot with one more tab. Nothing below the
 loader asks which it is. The STEP renderer matches none of them.
 
-- **Scene** (`robot/robotScene.js`, no React, no DOM): a scene GRAPH. One `Group`
+- **Scene** (core's `lib/urdf/robotScene.js`, no React, no DOM, which the snapshot CLI draws a robot with too): a scene GRAPH. One `Group`
   per link, a link's meshes attached to it once, and each joint as three nested
   frames: the static parent-to-joint frame, ONE motion group, then the child link
   (at an SDF joint's static child offset, else identity). A pose writes the
@@ -377,13 +410,13 @@ loader asks which it is. The STEP renderer matches none of them.
   from. Picking raycasts the link meshes (each geometry's BVH is built in idle
   time once a ray reaches it, core's `raycastBvh.js`) and walks up to the link
   group; a named object of a link's mesh is itself.
-- **Parts** (`robot/robotParts.js`): built once per load. One part per visual, or
+- **Parts** (core's `lib/urdf/robotParts.js`): built once per load. One part per visual, or
   per NAMED object of a visual's mesh (`head:v1/object/0`), with its link, local
   transform, source mesh and palette place. Geometries wrap the loader's arrays
   and are shared by visuals that name one mesh.
-- **Loading** (`robot/useRobotDocument.js`): core's `loadRenderUrdf`, `loadRenderSrdf`
-  or `loadRenderSdf`, then every distinct link mesh (`loadRenderMeshByUrl`, at most
-  eight at a time). Progress reads "Loading URDF", "Loading meshes 3/13",
+- **Loading** (`robot/useRobotDocument.js`, over core's `lib/urdf/loadRobot.js`, the loader
+  the snapshot CLI uses): `loadRenderUrdf`, `loadRenderSrdf` or `loadRenderSdf`, then every
+  distinct link mesh (`loadRenderMeshByUrl`, at most eight at a time). Progress reads "Loading URDF", "Loading meshes 3/13",
   "Building robot". The robot is published once, whole. A missing link mesh fails
   the load. A warm file is on screen on the first render; a new revision loads
   behind the robot on screen and keeps the pose it was left in. An SRDF with no
@@ -394,9 +427,8 @@ loader asks which it is. The STEP renderer matches none of them.
   visual; else the colours the mesh brought (per vertex, graded as a material
   colour is); else the named object's own; else the viewer's surface colour.
   A colour the description gives a visual (a URDF `<material>`, an SDF `<diffuse>`)
-  WINS over the colours its mesh file carries: this is deliberate, it is what the
-  headless renderer does, and it replaces the old viewer's rule, where the mesh's
-  vertex colours won.
+  WINS over the colours its mesh file carries: this is deliberate, and a snapshot wears
+  it too, because it draws the robot with this same scene.
   Materials are double-sided, so a mirrored `<mesh scale>` cannot turn a link
   inside out. "Color by part" deals the palette in the order parts always took it.
 - **Display**: `EDGELESS_VIEW_FEATURES` (Solid and Render; no Edges, Clip or Explode).
@@ -416,7 +448,8 @@ loader asks which it is. The STEP renderer matches none of them.
   about 270 ms of script when a pose was React state and a re-placed part list; it
   costs about 3 ms with the Inspector shut and about 6 ms with Kinematics open
   (a development React build), which is what a frame costs. The opening pose is
-  every joint's default, then the SRDF group state(s) named `home`.
+  every joint's default, then the SRDF group state(s) named `home` (core's
+  `robotOpeningPose`, which a snapshot opens the robot at too).
 - **Select**: a selection is ONE link or any number of named objects (Shift in
   the viewport; Shift, Ctrl or Cmd on a row). It exists only while Select is the
   tool: choosing a row under another tool returns to Select first, and leaving
@@ -1207,7 +1240,7 @@ Links is always present: it is the description's kinematic tree, not an
 inventory of mesh names. `robot/robotTree.js` builds it as plain data.
 Links are the rows, carrying no icon; a child link sits under its parent link
 and shows the joint between them as muted text (`shoulder_pan · revolute`); the
-named objects inside a link's meshes (`robotComponents` in `robot/robotParts.js`) are leaves under that
+named objects inside a link's meshes (`robotComponents` in core's `lib/urdf/robotParts.js`) are leaves under that
 link, after its child links. Built-in primitives and unnamed mesh objects
 contribute no leaves. Every link appears once: a cycle, a second parent or a
 missing parent cannot hang the builder or drop a link, and orphans become

@@ -1,7 +1,7 @@
 # Render Pipeline
 
 `@hardcore/core` exposes a staged render pipeline for shared viewer, docs, and generated
-snapshot browser-runtime work:
+snapshot browser-runtime work. A STEP document goes:
 
 ```js
 const source = await loadSource(input, sourceOptions);
@@ -10,11 +10,22 @@ const viewport = renderModel(THREE, model, viewportOptions);
 const result = await captureModel(viewport, captureOptions);
 ```
 
+Every other file family (GLB, STL, 3MF, URDF, SRDF, SDF) is drawn by ITS OWN scene
+builder, the one the viewer's renderer for it calls too: the snapshot page loads the
+file with that family's loader, builds the scene with that family's builder, dresses it
+in the look the viewer's viewport would, and hands it to the same `renderModel` and
+`captureModel` (`common/headlessScene.js`). No family is flattened into mesh data for a
+render.
+
 The stages keep ownership narrow:
 
-- `loadSource` owns source and sidecar loading plus file-kind validation.
+- `loadSource` owns STEP source and sidecar loading plus file-kind validation.
 - `buildModel` owns the CAD object graph, records, selection, clipping,
   materials, topology/display edges, and STEP parameter effects.
+- A family builder owns its scene: `createGlbScene` (`lib/render/glbScene.js`),
+  `buildMeshScene` (`lib/render/meshScene.js`), `createRobotScene`
+  (`lib/urdf/robotScene.js`). Each returns the scene contract of
+  `lib/viewer/sceneContract.js`.
 - `renderModel` owns renderer, scene, camera, lighting, background, floor,
   framing, resizing, and render loop concerns.
 - `captureModel` owns deterministic snapshot outputs without filesystem writes.
@@ -162,11 +173,11 @@ Materials reaching that scene stay authored. STEP package material channels are
 inputs to the rig: assigned sparse materials use roughness 0.42, metalness 0.03,
 clearcoat 0, clearcoat roughness 0.26, and opacity 1; an absent base color
 retains the STEP color, and authored opacity multiplies its source alpha.
-Static direct mesh normalization retains only the appearance data the shared
-mesh-data contract represents — GLB base or vertex color and opacity, 3MF
-color, and no authored color for STL. Animated direct GLB keeps its native
-glTF hierarchy instead, so its textures and PBR channels stay attached to the
-scene.
+A GLB, a mesh file and a robot reach the studio as the scene their viewer renderer
+builds. A GLB is its native glTF hierarchy, so its textures and PBR channels stay
+attached and Render wears them exactly as authored; an STL, a 3MF and a robot author no
+finish, so they wear the studio's surface over their colours (a 3MF's object colours, a
+robot description's colour, else its link mesh's own).
 
 Snapshots use the same grouped display contract. Photographic lighting supports
 only the `view` capture mode. Camera,
@@ -194,7 +205,7 @@ import {
 } from "@hardcore/core/common/source.js";
 ```
 
-`loadSource(input, options)` returns a normalized render source:
+`loadSource(input, options)` returns a normalized STEP render source:
 
 ```js
 {
@@ -212,9 +223,10 @@ import {
 
 Accepted input fields:
 
-- `kind`: `step`, `stp`, `glb`, `stl`, `3mf`, or inferred from a URL.
+- `kind`: `step` or `stp`, or inferred from a URL. A GLB, STL, 3MF, URDF, SRDF
+  or SDF is refused by name: it is drawn by its own scene builder
+  (`common/headlessScene.js`), never flattened into mesh data here.
 - `meshData`: already-loaded mesh data. If present, no mesh URL fetch is needed.
-- `url`: source URL for non-STEP GLB loading.
 - `glbUrl` or `resolved.glbUrl`: STEP/STP hidden GLB sidecar URL.
 - `cadPath` or `resolved.inputPath`: CAD path used by STEP selectors.
 - A caller that passes a `resolved` packet together with any source URL must also pass
@@ -275,9 +287,8 @@ Three.js object graph and its mutable state.
 `bounds` follows the live pose — what lighting, the floor, shadows and clipping
 need. `restBounds` is the same model at its ZERO pose, before a parameter, mate
 or animation frame moved a record, and it is what a camera fit is grounded on so
-that posing a model never re-frames it. A source that is itself a posed wrapper
-over its own rest geometry (a robot description; see `poseUrdfMeshData`)
-publishes `restBounds` on its mesh data and that value stands in.
+that posing a model never re-frames it. A family scene carries its own
+(`restBounds` in the scene contract): a robot's is every joint at its default.
 
 Common settings:
 
@@ -477,13 +488,18 @@ import {
 `renderJobContext(meshData, job)` resolves the shared scene contract plus
 snapshot-owned output policy: display, camera, quality, scene scale, outputs,
 STEP topology edge visibility, and warnings. Studio scene quality comes from enabled
-`display.lighting.quality`; `job.quality` contains technical tessellation only.
+`display.lighting.quality`; `job.quality` contains technical tessellation only. A
+family scene passes `{ bounds }` for `meshData`; its job's kind resolves the view
+features, and anything but a STEP gets the viewer's `EDGELESS_VIEW_FEATURES` (no edges,
+clip or explode).
 
 `modelOptionsForRenderJob(context, job)` converts that policy into
 `buildModel()` settings.
 
-Snapshot `renderModel(THREE, model, { job, context })` returns a headless
-viewport:
+Snapshot `renderModel(THREE, model, { job, context })` holds either a CAD model from
+`buildModel` or a family scene wrapped by `headlessSceneModel`; only a CAD model has a
+runtime, so only it takes the exploded view, topology edges and screen-space line
+widths. It returns a headless viewport:
 
 ```js
 {
@@ -513,7 +529,8 @@ camera does not breathe between frames.
 
 - `mode: "view"`: PNG data URLs in `outputs`.
 - `mode: "section"`: PNG data URLs or SVG text in `outputs`.
-- `mode: "list"`: part list and bounds.
+- `mode: "list"`: part list and bounds. A CAD model lists its composed part
+  occurrences; a family scene lists what it drew, one row per mesh.
 
 It does not write files. The CAD skill snapshot CLI writes the returned data to
 disk. Consumers use compiled `@hardcore/core` exports; generated snapshot browser assets
@@ -521,6 +538,25 @@ bundle this entrypoint into cadgen's packaged runtime (`cadgen/_runtime/browser`
 
 `renderMeshJob(meshData, job)` is a compatibility wrapper that builds a context,
 builds a model, renders/captures it, and disposes owned resources.
+
+### `common/headlessScene.js`
+
+The snapshot page's half of "one scene builder per file family". `headlessSceneFamily(job)`
+answers, from the job's resolved kind, the family whose loader and builder draw it (GLB;
+STL and 3MF; URDF, SRDF and SDF), or null for a STEP document. A family is
+`{ load(job, { resources }), build(THREE, loaded, job), release(loaded) }`, each a call to
+the module the viewer's renderer calls: `loadRenderGlbDocument` + `createGlbScene`,
+`loadRenderMeshByUrl` + `buildMeshScene`, `loadRobot` + `createRobotScene`. A robot is
+posed as it is built, at `robotOpeningPose` (every joint's default, then an SRDF's `home`
+group state: where the viewer opens it) with the job's `jointValues` on top.
+
+`headlessSceneModel(THREE, scene, headlessSceneDress(context.sceneSettings))` dresses the
+scene exactly as the viewer's viewport dresses one it adopts, with the look
+`resolveSceneSurfaceLook` resolves (`common/sceneSettings.js`, which the viewport calls
+too) and shadows while the lighting is on, and exposes what `renderModel` and
+`captureModel` read of any model: `root`, `bounds`, `restBounds` (what sizes the ground),
+`keepsAuthoredFinish`, the drawn meshes for the tight frame, `listParts()` and `dispose()`.
+The still's tight frame reads a skinned or morphed mesh where the GPU draws it.
 
 ## Kinematics
 
@@ -577,7 +613,8 @@ const viewport = renderModel(THREE, model, {
 });
 ```
 
-Headless snapshot usage:
+Headless snapshot usage (a STEP document; `headlessRenderEntry.js` routes every other
+family through `common/headlessScene.js` into the same `renderModel`/`captureModel`):
 
 ```js
 import * as THREE from "three";
@@ -615,3 +652,6 @@ try {
 - Prefer `loadSource -> buildModel -> renderModel -> captureModel` for new
   shared render code instead of loading assets or constructing render scenes
   inline.
+- Draw a GLB, a mesh file or a robot with its family's scene builder, in the viewer
+  and in a snapshot alike. Never give one host its own way to draw a family:
+  `scripts/test/check-kit-boundaries.mjs` (`checkSharedSceneBuilders`) refuses it.

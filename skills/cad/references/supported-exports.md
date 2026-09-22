@@ -138,6 +138,11 @@ Mesh doors do not have
 or render-module clips for those controls to act on. `cadgen step snapshot`
 refuses a mesh input and names the door that takes it.
 
+The picture is the scene the CAD Viewer draws for the same file, built by the same code:
+an STL or a 3MF is its objects in their colours, and a GLB is its own glTF scene (nodes,
+skins, morph targets and authored materials), so `--display render` shows the finish the
+file authored. A GLB's clips play in the viewer; its snapshot is the file at rest.
+
 For a mesh-only model, this is its required visual review. When a STEP is also
 produced, review that document and render the mesh when tessellation or external
 tool output is the question. Pure format conversion with unchanged geometry

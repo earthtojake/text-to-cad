@@ -530,7 +530,8 @@ def robot_snapshot_verb(door: str):
             the other flags override every job in it.
         mode: view (default) or list.
         joint_values: {joint: degrees} JSON posing the robot; joints not
-            named stay at the rest pose.
+            named stay where the viewer opens it (each at its default, then
+            an SRDF's home group state).
         camera: a preset (front, back, left, right, top, bottom, iso), an
             "azimuth:elevation" pair, or camera JSON;
             orthographicHalfHeight preserves an orthographic view's scale.

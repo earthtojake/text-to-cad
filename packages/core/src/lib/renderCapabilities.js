@@ -20,27 +20,14 @@ import { RENDER_FORMAT, normalizeFormat } from "./fileFormats.js";
 // - Format-specific *content* (STEP's tree, DXF's bends) stays format-specific — the
 //   flags below decide WHICH panels mount, not what is in them.
 
-// Which loaded object is "the thing on screen" for this format. The viewer resolves it
-// once into a single content signal; asking `!selectedMeshData` per format is what left
-// screenshot and orbit buttons permanently disabled for a format that loads no mesh.
-//
-// DRAWING is not a viewport at all: a DXF is painted on a 2D canvas, so the row says so
-// rather than claiming the mesh viewport it used to be rendered in.
-export const VIEWPORT_CONTENT = Object.freeze({
-  MESH: "mesh",
-  DRAWING: "drawing",
-  ROBOT: "robot"
-});
-
 // How parameters reach the viewer. One consumer surface over the possible stores.
 export const PARAMETER_SOURCE = Object.freeze({
   SIDECAR: "sidecar"
 });
 
-// WHICH ASSET the viewer loads for this format — not the same question as `content`, which
-// is what ends up drawn. A DXF loads a DRAWING: the server's flattened 2D payload, not a
-// mesh, so every "is it loaded yet?" check has to ask about the drawing. Loader
-// implementations stay per-format; this only names which one.
+// WHICH ASSET the viewer loads for this format. A DXF loads a DRAWING: the server's
+// flattened 2D payload, not a mesh, so every "is it loaded yet?" check has to ask about the
+// drawing. Loader implementations stay per-format; this only names which one.
 export const ASSET_KIND = Object.freeze({
   MESH: "mesh",
   DRAWING: "drawing",
@@ -83,7 +70,6 @@ const NO_VIEWPORT_TOOLS = Object.freeze({
 });
 
 const MESH_CAPABILITIES = Object.freeze({
-  content: VIEWPORT_CONTENT.MESH,
   assetKind: ASSET_KIND.MESH,
   iconKind: ENTRY_ICON_KIND.STL_MESH,
   sheetKind: "mesh",
@@ -102,12 +88,10 @@ const MESH_CAPABILITIES = Object.freeze({
 });
 
 const ROBOT_CAPABILITIES = Object.freeze({
-  content: VIEWPORT_CONTENT.ROBOT,
   assetKind: ASSET_KIND.ROBOT,
   iconKind: ENTRY_ICON_KIND.ROBOT,
   sheetKind: RENDER_FORMAT.URDF,
   label: "URDF",
-  sceneScale: "urdf",
   // No selection. A URDF is a link tree, so links CAN be made pickable — that was tried and
   // removed: selecting one gives you nothing to do with it. There is no copyable reference
   // for a link the way there is for a STEP face or occurrence, so the whole affordance was
@@ -127,12 +111,10 @@ const ROBOT_CAPABILITIES = Object.freeze({
 });
 
 const DEFAULT_CAPABILITIES = Object.freeze({
-  content: VIEWPORT_CONTENT.MESH,
   assetKind: ASSET_KIND.MESH,
   iconKind: ENTRY_ICON_KIND.STEP,
   sheetKind: "",
   label: "",
-  sceneScale: "cad",
   tools: VIEWPORT_TOOLS,
   parts: false,
   topology: false,
@@ -186,11 +168,10 @@ export const RENDER_CAPABILITIES = Object.freeze({
   }),
   // A DXF is NOT on the 3D shell (packages/ui/src/renderers/dxf): the pane is a canvas
   // painted from `GET /__cad/drawing`. What survives here is what the file LIST and the
-  // asset layer still ask — the icon, the label, which asset to load — plus the two
-  // claims the row has to withdraw: there is no viewport, and so no viewport tools.
+  // asset layer still ask — the icon, the label, which asset to load — plus the claim
+  // the row has to withdraw: there is no viewport, and so no viewport tools.
   [RENDER_FORMAT.DXF]: Object.freeze({
     ...DEFAULT_CAPABILITIES,
-    content: VIEWPORT_CONTENT.DRAWING,
     assetKind: ASSET_KIND.DRAWING,
     iconKind: ENTRY_ICON_KIND.DXF,
     label: "DXF",
@@ -239,10 +220,6 @@ export function supportsTool(renderFormat, tool) {
 // policy ratchet's allowlist easy to describe: capability reads look like this.
 export function hasCapability(renderFormat, capability) {
   return renderCapabilities(renderFormat)[capability] === true;
-}
-
-export function viewportContentKind(renderFormat) {
-  return renderCapabilities(renderFormat).content;
 }
 
 // Which parameter store backs this format, or "" when it has no parameters. The viewer
