@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { RENDER_FORMAT } from "@hardcore/core/lib/fileFormats.js";
 
 import {
   BUILDABLE_STEP_ARTIFACT_ERROR_CODES,
@@ -18,7 +17,7 @@ test("stepArtifactCanGenerate allows buildable STEP artifact warnings", () => {
         ok: false,
         error: code
       }
-    }, RENDER_FORMAT.STEP), true, code);
+    }), true, code);
   }
 });
 
@@ -32,7 +31,7 @@ test("stepArtifactCanGenerate respects backend generation availability", () => {
   };
 
   assert.equal(
-    stepArtifactCanGenerate(entry, RENDER_FORMAT.STEP, { generationAvailable: false }),
+    stepArtifactCanGenerate(entry, { generationAvailable: false }),
     false
   );
 });

@@ -1,5 +1,4 @@
 import { entryHasMesh } from "@hardcore/core/lib/entryAssets.js";
-import { RENDER_FORMAT } from "@hardcore/core/lib/fileFormats.js";
 
 const STEP_ARTIFACT_GENERATION_FAILURE_DISPLAY_THRESHOLD = 3;
 
@@ -100,7 +99,6 @@ export function stepArtifactGenerationInProgress({
 export function stepArtifactIssueShouldSuppress({
   entry = null,
   artifact = entry?.artifact,
-  sourceFormat = RENDER_FORMAT.STEP,
   generationAvailable = true,
   generationState = null,
   activeGenerationFiles = []
@@ -114,7 +112,6 @@ export function stepArtifactIssueShouldSuppress({
   });
   if (!stepArtifactCanGenerate(
     candidateEntry,
-    sourceFormat,
     { generationAvailable: generationAvailable || generationInProgress }
   )) {
     return false;
@@ -128,15 +125,12 @@ export function stepArtifactIssueShouldSuppress({
 
 // The entry's failed STEP artifact record, or null.
 //
-// STEP-shaped on purpose, and NOT `artifactManaged`: DXF is artifact-managed too, but the
-// error codes, the `stale` flag and the renderable-GLB fallback below are all STEP package
-// vocabulary. Generalising the gate without generalising the vocabulary would show a DXF a
-// card about a STEP artifact. The generic "render artifact build failed" card in
-// viewerAlerts already covers every artifact-managed kind; this is the STEP detail on top.
-export function failedStepArtifact(entry, sourceFormat) {
-  return sourceFormat === RENDER_FORMAT.STEP && entry?.artifact?.ok === false
-    ? entry.artifact
-    : null;
+// These used to take the entry's format and check it was a STEP, because one renderer served
+// every format and a DXF - artifact-managed too - would otherwise have been shown a card about
+// a STEP artifact. A DXF is its own renderer now and never reaches this module: the STEP
+// renderer is only handed STEPs (its `matches`), so there is no format left to ask about.
+export function failedStepArtifact(entry) {
+  return entry?.artifact?.ok === false ? entry.artifact : null;
 }
 
 // A STEP artifact whose metadata is incomplete can still carry a renderable mesh:
@@ -172,8 +166,8 @@ export function stepArtifactStatusMessage(artifact) {
   return "Generated STEP artifact is unavailable.";
 }
 
-export function stepArtifactCanGenerate(entry, sourceFormat, { generationAvailable = true } = {}) {
-  if (!generationAvailable || sourceFormat !== RENDER_FORMAT.STEP) {
+export function stepArtifactCanGenerate(entry, { generationAvailable = true } = {}) {
+  if (!generationAvailable) {
     return false;
   }
   if (entry?.artifact?.ok) {
@@ -182,10 +176,6 @@ export function stepArtifactCanGenerate(entry, sourceFormat, { generationAvailab
   return BUILDABLE_STEP_ARTIFACT_ERROR_CODE_SET.has(String(entry?.artifact?.error || ""));
 }
 
-export function stepArtifactNeedsWarning(entry, sourceFormat, options = {}) {
-  return (
-    sourceFormat === RENDER_FORMAT.STEP &&
-    entry?.artifact?.ok === false &&
-    !stepArtifactCanGenerate(entry, sourceFormat, options)
-  );
+export function stepArtifactNeedsWarning(entry, options = {}) {
+  return entry?.artifact?.ok === false && !stepArtifactCanGenerate(entry, options);
 }
