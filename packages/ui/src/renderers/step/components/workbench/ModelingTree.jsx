@@ -26,7 +26,7 @@ function nodeAvailability(node, controls, inheritedHidden=false, inheritedUnavai
   return {hiddenByOwner,outsideFrontier,unavailable:hiddenByOwner || outsideFrontier};
 }
 
-function ModelingRow({ node, depth=0, selected, expanded, toggle, choose, disabled, partControls, rowRefs, inheritedHidden=false, inheritedUnavailable=false }) {
+function ModelingRow({ node, depth=0, selected, expanded, toggle, choose, disabled, partControls, feature, rowRefs, inheritedHidden=false, inheritedUnavailable=false }) {
   const Icon = icons[node.kind] || Box;
   const open = expanded.has(node.id);
   const children = (node.children || []).filter(child => child.kind !== 'curve');
@@ -35,7 +35,7 @@ function ModelingRow({ node, depth=0, selected, expanded, toggle, choose, disabl
   // its descendants can. Only a hidden owner blocks its entire subtree.
   const {hiddenByOwner,outsideFrontier,unavailable}=nodeAvailability(node,partControls,inheritedHidden,inheritedUnavailable);
   return <li className="min-w-0" ref={element => { if (element) rowRefs.current.set(node.id, element); else rowRefs.current.delete(node.id); }}>
-    <ModelPartMenu node={node} controls={partControls} disabled={disabled}>
+    <ModelPartMenu node={node} controls={partControls} feature={feature} disabled={disabled}>
       <TreeRowSurface active={selected.has(node.id)} className={cn('gap-0 pr-0', hiddenByOwner && 'opacity-50')}
         onMouseEnter={() => partControls.onHoverTreeNode?.(node.selectionId || node.occurrenceId || '')}
         onMouseLeave={() => partControls.onHoverTreeNode?.('')} style={{paddingLeft:depth*14}}>
@@ -51,19 +51,19 @@ function ModelingRow({ node, depth=0, selected, expanded, toggle, choose, disabl
         {node.selectionId && <ModelPartActions node={node} controls={partControls} disabled={disabled}/>}
       </TreeRowSurface>
     </ModelPartMenu>
-    {branch && open && <ul>{children.map(child=><ModelingRow key={child.id} {...{node:child,depth:depth+1,inheritedHidden:hiddenByOwner,inheritedUnavailable:outsideFrontier,selected,expanded,toggle,choose,disabled,partControls,rowRefs}}/>)}</ul>}
+    {branch && open && <ul>{children.map(child=><ModelingRow key={child.id} {...{node:child,depth:depth+1,inheritedHidden:hiddenByOwner,inheritedUnavailable:outsideFrontier,selected,expanded,toggle,choose,disabled,partControls,feature,rowRefs}}/>)}</ul>}
   </li>;
 }
 
 // A search hit is the tree row without its place in the tree: the same menu, eye
 // and availability, with the owners it would sit under named instead of drawn.
-function ModelingSearchRow({ match, index, selected, cursor, choose, disabled, partControls }) {
+function ModelingSearchRow({ match, index, selected, cursor, choose, disabled, partControls, feature }) {
   const {entry,indices}=match,{node}=entry;
   const Icon = icons[node.kind] || Box;
   const {hiddenByOwner,unavailable}=modelTreeSearchChain(index,match.at).reduce(
     (owner,step)=>nodeAvailability(step,partControls,owner.hiddenByOwner,owner.outsideFrontier),{hiddenByOwner:false,outsideFrontier:false});
   return <li className="min-w-0" data-search-row={node.id}>
-    <ModelPartMenu node={node} controls={partControls} disabled={disabled}>
+    <ModelPartMenu node={node} controls={partControls} feature={feature} disabled={disabled}>
       <TreeRowSurface active={selected.has(node.id)} cursor={cursor} className={cn('gap-0 pr-0', hiddenByOwner && 'opacity-50')}
         onMouseEnter={() => partControls.onHoverTreeNode?.(node.selectionId || node.occurrenceId || '')}
         onMouseLeave={() => partControls.onHoverTreeNode?.('')}>
@@ -242,6 +242,9 @@ export default function ModelingTree({ modeling, active, disabled, references=EM
     setLocalExpanded(current=>{const next=new Set(current);if(next.has(node.id))next.delete(node.id);else next.add(node.id);return next;});
   };
   const clearSelection=()=>{setSelected(null);setPending(null);onClearSelection?.();};
+  // What a feature row's menu needs of the tree: the row's faces as reference ids, how to load
+  // them, and the row's own click, so its Select is the click rather than a second opinion.
+  const feature={referenceIds:node=>modelingReferenceIds(node,node.occurrenceId,references),loadTopology:onLoadTopology,choose};
   const cursorId=found.matches.some(match=>match.entry.node.id === cursor) ? cursor : found.matches[0]?.entry.node.id ?? null;
   useEffect(()=>{if(cursorId)listRef.current?.querySelector(`[data-search-row="${CSS.escape(cursorId)}"]`)?.scrollIntoView?.({block:'nearest'});},[cursorId]);
   const onSearchKeyDown=event=>{
@@ -284,11 +287,11 @@ export default function ModelingTree({ modeling, active, disabled, references=EM
         onClick={event=>{if(!disabled && !event.target.closest('li,button,input,[role="menu"]'))clearSelection();}}>
         {searching && <p role="status" className="px-2 py-1 text-micro text-muted-foreground">{found.total > found.matches.length ? `First ${found.matches.length} of ${found.total.toLocaleString()} matches` : `${found.total} ${found.total === 1 ? 'match' : 'matches'}`}</p>}
         {searching ? found.matches.length
-          ? <ul aria-label="Model search results">{found.matches.map(match=><ModelingSearchRow key={match.entry.node.id} {...{match,index:searchIndex,selected:highlighted,cursor:match.entry.node.id === cursorId,choose,disabled,partControls}}/>)}</ul>
+          ? <ul aria-label="Model search results">{found.matches.map(match=><ModelingSearchRow key={match.entry.node.id} {...{match,index:searchIndex,selected:highlighted,cursor:match.entry.node.id === cursorId,choose,disabled,partControls,feature}}/>)}</ul>
           : deferredQuery.trim() && <p className="px-3 py-6 text-center text-xs text-muted-foreground">{`No part or feature matches “${deferredQuery.trim()}”`}</p>
         : empty && !stepRoot ? <p role="status" className="p-2 leading-relaxed text-muted-foreground">This component has no faces to inspect.</p>
         : !visibleRoots.length && implicitRoots.at(-1)?.recognitionPending ? <p role="status" className="p-2 text-tiny text-muted-foreground">Loading features…</p>
-        : <ul aria-label="Model">{visibleRoots.map(node=><ModelingRow key={node.id} {...{node,selected:highlighted,expanded,choose,disabled,partControls,rowRefs,toggle,inheritedHidden:implicitOwner.hiddenByOwner,inheritedUnavailable:implicitOwner.outsideFrontier}}/>)}</ul>}
+        : <ul aria-label="Model">{visibleRoots.map(node=><ModelingRow key={node.id} {...{node,selected:highlighted,expanded,choose,disabled,partControls,feature,rowRefs,toggle,inheritedHidden:implicitOwner.hiddenByOwner,inheritedUnavailable:implicitOwner.outsideFrontier}}/>)}</ul>}
       </div>
     </InspectorSplit>
   </div>;

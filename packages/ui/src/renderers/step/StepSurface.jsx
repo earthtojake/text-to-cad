@@ -3461,6 +3461,61 @@ function StepSurfaceBody({
     stepTreeCopyReferenceMap
   ]);
 
+  /**
+   * The menu over topology: the faces and edges of one pick in the viewport, or of one
+   * Features row (its feature, group or body). It is one descriptor for both, so the tree's
+   * menu over a feature is the viewport's over its faces. Topology is not a part, so it offers
+   * no isolate or visibility; its actions take the selection with it, as a part's do.
+   *
+   * `referenceIds` may be empty while a row's topology is still loading: the menu then opens
+   * with nothing to copy yet, rather than not at all.
+   */
+  const topologyReferenceMenu = useCallback((referenceIds, label = "") => {
+    const ids = uniqueStringList(
+      (Array.isArray(referenceIds) ? referenceIds : []).map((id) => String(id || "").trim()).filter(Boolean)
+    );
+    const selectedContextReferenceIds = uniqueStringList(
+      selectedReferenceIdsRef.current
+        .map((id) => String(id || "").trim())
+        .filter(Boolean)
+    );
+    const actionReferenceIds = ids.length ? uniqueStringList([...selectedContextReferenceIds, ...ids]) : [];
+    const referencesForCopy = actionReferenceIds
+      .map((id) => (
+        stepTreeCopyReferenceMap.get(id) ||
+        effectiveActiveReferenceMap.get(id) ||
+        copyReferenceForRawSelectorSelection(id, "topology")
+      ))
+      .filter(Boolean);
+    const { lines } = actionReferenceIds.length ? copyPayloadWithSelectedIdFallback(buildSelectionCopyPayload({
+      references: referencesForCopy,
+      parts: [],
+      entry: selectedEntry
+    }), {
+      selectedReferenceIds: actionReferenceIds,
+      copyReferenceMap: stepTreeCopyReferenceMap
+    }) : { lines: [] };
+    return {
+      referenceId: ids[0] || "",
+      referenceIds: actionReferenceIds,
+      label: String(label || ids[0] || "").trim(),
+      selected: ids.length > 0 && ids.every((id) => selectedContextReferenceIds.includes(id)),
+      hidden: false,
+      focused: false,
+      actionCount: actionReferenceIds.length || 1,
+      copyText: lines.join("\n"),
+      zoomSelectionAvailable: zoomSelectionRef.current.available,
+      showIsolate: false,
+      showHideOther: false,
+      showVisibility: false,
+      showHideAll: false
+    };
+  }, [
+    effectiveActiveReferenceMap,
+    selectedEntry,
+    stepTreeCopyReferenceMap
+  ]);
+
   // Only ever reached under Select (the viewport's menu is offered by that tool alone), so
   // nothing it offers can contradict the tool.
   const handleModelReferenceContext = useCallback((referenceId, { clientX = 0, clientY = 0 } = {}) => {
@@ -3475,44 +3530,13 @@ function StepSurfaceBody({
     }
     const topologyReference = effectiveActiveReferenceMap.get(pickedPartId) || null;
     if (topologyReference && isViewerTopologyReference(topologyReference)) {
-      const selected = selectedReferenceIdsRef.current.includes(pickedPartId);
-      const selectedContextReferenceIds = uniqueStringList(
-        selectedReferenceIdsRef.current
-          .map((id) => String(id || "").trim())
-          .filter(Boolean)
-      );
-      const actionReferenceIds = uniqueStringList([...selectedContextReferenceIds, pickedPartId]);
-      const referencesForCopy = actionReferenceIds
-        .map((id) => (
-          stepTreeCopyReferenceMap.get(id) ||
-          effectiveActiveReferenceMap.get(id) ||
-          copyReferenceForRawSelectorSelection(id, "topology")
-        ))
-        .filter(Boolean);
-      const { lines } = copyPayloadWithSelectedIdFallback(buildSelectionCopyPayload({
-        references: referencesForCopy.length ? referencesForCopy : [topologyReference],
-        parts: [],
-        entry: selectedEntry
-      }), {
-        selectedReferenceIds: actionReferenceIds,
-        copyReferenceMap: stepTreeCopyReferenceMap
-      });
       setViewerContextMenu({
         x: Number(clientX) || 0,
         y: Number(clientY) || 0,
-        referenceId: pickedPartId,
-        referenceIds: actionReferenceIds,
-        label: String(topologyReference?.label || topologyReference?.displayName || pickedPartId).trim(),
-        selected,
-        hidden: false,
-        focused: false,
-        actionCount: actionReferenceIds.length || 1,
-        copyText: lines.join("\n"),
-        zoomSelectionAvailable: zoomSelectionRef.current.available,
-        showIsolate: false,
-        showHideOther: false,
-        showVisibility: false,
-        showHideAll: false
+        ...topologyReferenceMenu(
+          [pickedPartId],
+          topologyReference?.label || topologyReference?.displayName || pickedPartId
+        )
       });
       return;
     }
@@ -3532,9 +3556,8 @@ function StepSurfaceBody({
     isViewerTopologyReference,
     openGlobalViewerContextMenu,
     resolvePickedAssemblyPartId,
-    selectedEntry,
-    stepTreeCopyReferenceMap,
     stepInteractionBlocked,
+    topologyReferenceMenu,
     viewerInAssemblyMode
   ]);
 
@@ -4196,6 +4219,7 @@ function StepSurfaceBody({
         : "STEP update in progress. Please wait.")
       : "",
     menuForNode: assemblyNodeMenu,
+    menuForReferences: topologyReferenceMenu,
     partMenuActions,
     showAllHiddenParts: handleShowAllHiddenParts,
     stepModule: stepPositionControls,
