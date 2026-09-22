@@ -243,4 +243,11 @@ test("a family scene takes none of a CAD model's steps: no edges, explode or sec
     headlessSceneDress(context.sceneSettings));
   assert.deepEqual(stl.listParts().map(({ id, name, triangleCount }) => [id, name, triangleCount]), [["", "", 24]]);
   stl.dispose();
+
+  // A robot lists down its tree, root first: a link, then the links it carries (as the file has them).
+  const robot = headlessSceneModel(THREE, headlessSceneFamily(job("urdf")).build(THREE, robotOf(parseArmUrdf()), job("urdf")),
+    headlessSceneDress(context.sceneSettings));
+  assert.deepEqual(robot.listParts().map(({ id }) => id),
+    ["base:v1", "turret:v1", "arm:v1", "tool:v1", "finger_link:v1", "finger_mirror_link:v1", "wheel_link:v1"]);
+  robot.dispose();
 });

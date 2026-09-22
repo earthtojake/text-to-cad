@@ -530,7 +530,9 @@ camera does not breathe between frames.
 - `mode: "view"`: PNG data URLs in `outputs`.
 - `mode: "section"`: PNG data URLs or SVG text in `outputs`.
 - `mode: "list"`: part list and bounds. A CAD model lists its composed part
-  occurrences; a family scene lists what it drew, one row per mesh.
+  occurrences; a family scene lists what it drew, one row per mesh, in its scene
+  graph's order (a robot's scene attaches a link's meshes before the joints it
+  carries, so its rows run down the tree from the root).
 
 It does not write files. The CAD skill snapshot CLI writes the returned data to
 disk. Consumers use compiled `@hardcore/core` exports; generated snapshot browser assets
