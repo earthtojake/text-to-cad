@@ -14,6 +14,7 @@ import { Camera, FileText } from "lucide-react";
 import { CAD_PANEL, EmptyState } from "@hardcore/ui/navigation";
 import { cn } from "@hardcore/ui/utils";
 import StepViewport from "../scene/StepViewport.jsx";
+import { createStepScene } from "../scene/stepScene.js";
 import { viewportMenuEntries } from "../components/workbench/AssemblyContextMenuItems.js";
 import { useViewportLod } from "../render/useViewportLod.js";
 import { lodSceneMayMove } from "../render/lodCameraSample.js";
@@ -339,6 +340,9 @@ function CadFileViewSurface({
   }, []);
   const { display: displaySettings, scene: desiredScene, store: viewSettingsStore } = useViewSettings(resolvedColorSchemeMode);
   const viewerRef = useRef(null);
+  // ONE scene per mounted file, made HERE rather than in the viewport: the shell hook is
+  // handed a scene, and it runs in this function, above the viewport it mounts.
+  const [stepScene] = useState(() => createStepScene(THREE));
   const viewUpdate = useAppliedViewSettings(desiredScene, selectedKey, viewerRef, viewSettingsStore);
   const resolvedScene = viewUpdate.scene;
   const [renderSession, setRenderSession] = useState(createRenderSessionState);
@@ -4453,6 +4457,7 @@ function CadFileViewSurface({
               <div className="pointer-events-auto absolute inset-0 z-0">
                 <StepViewport
                 ref={viewerRef}
+                scene={stepScene}
                 onReload={onReload}
                 viewUpdate={viewUpdate}
                 onLodCameraChange={onLodCameraMoved}

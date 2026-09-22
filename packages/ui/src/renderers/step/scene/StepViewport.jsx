@@ -81,6 +81,7 @@ function displayRecordBoundsForPartIds(runtime, partIds = []) {
  * bounds of a selection.
  */
 const StepViewport = forwardRef(function StepViewport({
+  scene: providedScene = null,
   onReload,
   renderPartsIndividually = false,
   selectedMeshData,
@@ -243,7 +244,11 @@ const StepViewport = forwardRef(function StepViewport({
   });
 
   // ONE scene for as long as this viewport is mounted; what is inside it changes in place.
-  const [stepScene] = useState(() => createStepScene(THREE));
+  // The SURFACE owns it once it has a shell to hand it to — the shell needs the scene before
+  // this component exists — and passes it down; a viewport mounted without one still makes
+  // its own, which is what every test that mounts it directly relies on.
+  const [ownScene] = useState(() => createStepScene(THREE));
+  const stepScene = providedScene || ownScene;
   const keepsAuthoredFinish = useMemo(() => hasAuthoredMaterials(selectedMeshData), [selectedMeshData]);
   const sceneView = useMemo(() => stepSceneView(stepScene, keepsAuthoredFinish), [stepScene, keepsAuthoredFinish]);
   const scene = !isLoading && hasMeshGeometry(selectedMeshData) ? sceneView : null;
