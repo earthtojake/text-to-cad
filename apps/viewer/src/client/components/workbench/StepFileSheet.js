@@ -805,9 +805,20 @@ export default function StepFileSheet({
                     const multiSelect = event.shiftKey;
                     if (topologyRow) {
                       onSelectReferenceNode?.(topologyReferenceId, { multiSelect });
-                    } else {
-                      onSelectTreeNode?.(selectionRowId, { multiSelect });
+                      return;
                     }
+                    if (row.isGroup) {
+                      // A folded row stands for every instance under it, so
+                      // selecting it selects all of them. Without this the row
+                      // inherits its first member's selectionPartId and picks
+                      // one of six, which is not what a row reading "x6" says.
+                      const members = Array.isArray(row.groupMemberIds) ? row.groupMemberIds : [];
+                      members.forEach((memberId, index) => {
+                        onSelectTreeNode?.(memberId, { multiSelect: multiSelect || index > 0 });
+                      });
+                      return;
+                    }
+                    onSelectTreeNode?.(selectionRowId, { multiSelect });
                   };
                   const handleRowHoverStart = () => {
                     if (rowSelectionDisabled) {
