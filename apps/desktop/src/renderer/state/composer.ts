@@ -93,6 +93,11 @@ export const useComposer = create<ComposerState>((set, get) => ({
       ...(part.kind === "reference" && part.reference ? { reference: structuredClone(part.reference) } : {}),
       ...(part.kind === "attachment" && part.about ? { about: [...part.about] } : {}),
     })) };
+    // What an attachment is about. A viewer snapshot with nothing selected is about the whole
+    // file it shows, and names it only so the image has a subject — which a draft that already
+    // names that file, down to any part or face of it, has: the image is about the file either
+    // way, and a second, bare token for it would be noise beside the one the person chose.
+    const subjects = new Set(parts.flatMap(part => part.kind === "attachment" ? part.about ?? [] : []));
     set(state => {
       let text = state.drafts[key] ?? "";
       const labels = { ...state.referenceLabels[key] };
@@ -100,7 +105,10 @@ export const useComposer = create<ComposerState>((set, get) => ({
       for (const part of parts) {
         if (part.kind === "attachment") { files.push(part.file); continue; }
         if (part.kind === "reference") {
-          if (!parseSegments(text).some(segment => segment.type === "reference" && referenceText(segment.reference) === part.text)) {
+          const named = parseSegments(text).flatMap(segment => segment.type === "reference" ? [segment.reference] : []);
+          const subjectNamed = subjects.has(part.id) && part.reference?.target.kind === "whole-resource"
+            && named.some(reference => referenceText({ file: reference.file, selector: "" }) === part.text);
+          if (!subjectNamed && !named.some(reference => referenceText(reference) === part.text)) {
             text += `${text && !/\s$/.test(text) ? " " : ""}${part.text} `;
           }
           if (part.label?.trim()) labels[part.text] = part.label.trim();
