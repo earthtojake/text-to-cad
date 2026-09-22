@@ -55,8 +55,9 @@ snapshot's own.
 - The ground is sized from the rest placement, so a pose never rescales it; only
   the floor's height follows a posed robot down.
 - `--mode list` lists what the scene drew, one row per mesh: a `ref` naming it,
-  its `name`, its triangle and vertex counts, and its bounds as drawn. For these
-  inputs a ref is a name, not a selector: `--focus` and `--hide` are STEP-only.
+  its `name`, its triangle and vertex counts, and its bounds as drawn. A robot's
+  rows run down its tree from the root link. For these inputs a ref is a name, not
+  a selector: `--focus` and `--hide` are STEP-only.
 
 ## Drawings
 

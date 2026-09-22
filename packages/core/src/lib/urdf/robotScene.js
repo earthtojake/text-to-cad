@@ -107,6 +107,10 @@ export function createRobotScene(THREE, { description, parts }) {
     if (parent && String(joint.childLink || "")) jointsByParent.set(parent, [...(jointsByParent.get(parent) || []), joint]);
   }
   const rootLink = String(description?.rootLink || "");
+  // A joint's frame joins its parent link AFTER that link's own meshes (below), so the graph
+  // reads in tree order, root first: a link, what it draws, then the links it carries. That is
+  // the order `--mode list` lists a robot in.
+  const jointFrames = [];
   if (rootLink) {
     root.add(linkGroup(rootLink, description.rootWorldTransform));
     // Iterative, first claim wins: the parsers validate, and a description that still
@@ -120,7 +124,7 @@ export function createRobotScene(THREE, { description, parts }) {
         const motion = group(THREE, `motion:${joint.name}`, null);
         motion.userData.jointName = joint.name;
         motions.set(joint.name, { joint, object: motion, value: null, meshes: [] });
-        links.get(parentName).add(frame);
+        jointFrames.push([parentName, frame]);
         frame.add(motion);
         motion.add(linkGroup(childName, joint.postMotionTransform || null));
         queue.push(childName);
@@ -173,6 +177,7 @@ export function createRobotScene(THREE, { description, parts }) {
     if (part.componentName) recordByComponent.set(mesh.name, record);
     meshesByLink.set(mesh.userData.linkName, [...(meshesByLink.get(mesh.userData.linkName) || []), record]);
   }
+  for (const [parentName, frame] of jointFrames) links.get(parentName).add(frame);
   // Every mesh a joint carries, so a pose marks exactly the boxes it moved.
   for (const motion of motions.values()) {
     motion.object.traverse((object) => { if (recordByMesh.has(object)) motion.meshes.push(recordByMesh.get(object)); });
