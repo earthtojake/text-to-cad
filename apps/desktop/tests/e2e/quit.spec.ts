@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { _electron as electron, expect, test, type Page } from "@playwright/test";
 import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-runtime";
+import { selectFixtureSession } from "./session-fixture";
 
 /**
  * Quitting has a budget: two seconds from `app.quit()` to the process being
@@ -60,9 +61,9 @@ test("the app quits in under two seconds with everything running, leaving no chi
   const page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
 
-  // The watcher over this repository.
-  const project = await page.evaluate((root) => window.hardcore.projects.addPath({ path: root }), repoRoot);
-  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
+  // The watcher over this repository. A folder alone has no explorer: the session selected in
+  // it owns one (`docs/session-workspaces.md`).
+  const fixture = await selectFixtureSession(page, repoRoot);
   // The explorer pane starts closed (plan §3); everything below opens in it.
   await page.getByRole("button", { name: "Toggle explorer" }).click();
   await expect(page.getByTestId("explorer")).toBeVisible();
@@ -74,7 +75,7 @@ test("the app quits in under two seconds with everything running, leaving no chi
   // A live adapter, mid-turn: the fake's `slow` prompt runs until it is stopped.
   const session = await page.evaluate(
     (projectId) => window.hardcore.sessions.create({ projectId, agentId: "codex", gitMode: "none" }),
-    project.id,
+    fixture.projectId,
   );
   void page.evaluate((id) => window.hardcore.sessions.prompt({ id, content: [{ type: "text", text: "slow" }] }), session.id).catch(() => {});
 

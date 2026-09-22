@@ -11,7 +11,7 @@ const root = path.resolve(appRoot, '../..');
 // test drives Electron rather than a page, so it takes no fixture from it. The
 // empty pattern is the framework's contract, not an oversight.
 // eslint-disable-next-line no-empty-pattern
-test('Model tree preserves part controls and adds precise viewport references to the prompt', async ({}, testInfo) => {
+test('the Features tree presents a lone part as its features, and precise viewport references reach the prompt', async ({}, testInfo) => {
   test.setTimeout(120000);
   const profile = cadTestProfile('surfaces');
   // CAD checks own a tiny project; catalog resolution must not scan the repo's
@@ -72,29 +72,30 @@ test('Model tree preserves part controls and adds precise viewport references to
     await expect(page.locator('[data-file-sheet-header]')).toBeVisible({
       timeout: 60000
     });
-    await expect(page.getByRole('tab',{name:'Model',exact:true})).toBeVisible();
+    // The tree is the Features tab's; the Model, Surfaces and Geometry tabs are gone.
+    await expect(page.getByRole('tab',{name:'Features',exact:true})).toBeVisible();
     await expect(page.locator('[data-file-sheet-tab-panel=tree]')).toBeVisible();
-    await expect(page.getByRole('tab',{name:'Surfaces',exact:true})).toHaveCount(0);
-    await expect(page.getByRole('tab',{name:'Geometry',exact:true})).toHaveCount(0);
-    await expect(page.getByRole('tab',{name:'Features',exact:true})).toHaveCount(0);
+    for (const retired of ['Model','Surfaces','Geometry']) await expect(page.getByRole('tab',{name:retired,exact:true})).toHaveCount(0);
     const tree=page.getByRole('list',{name:'Model',exact:true});
-    const part=tree.getByRole('button',{name:/^Select /}).first();
-    await expect(part).toBeVisible({timeout:30000});
-    await part.click();
-    await page.getByText('Dimension previews',{exact:true}).click();
-    await expect(page.getByRole('button',{name:'Show X extent',exact:true})).toBeVisible();
-    await tree.getByRole('button',{name:/^Hide /}).first().click();
-    await expect(tree.getByRole('button',{name:/^Reveal /}).first()).toBeVisible();
-    await page.getByRole('button',{name:'Show all',exact:true}).click();
-    await expect(tree.getByRole('button',{name:/^Hide /}).first()).toBeVisible();
-    // Expanded parts expose exact topology. All mode may select inferred
-    // feature groups, so request Faces explicitly for this precise-ref check.
-    await tree.getByRole('button',{name:'Expand import-smoke.step',exact:true}).click();
-    await expect(tree.getByRole('button',{name:/^Select Base (extrude|revolve)$/}).first()).toBeVisible({timeout:30000});
-    await page.getByRole('button',{name:'Selection filter: All',exact:true}).click();
-    await page.getByRole('menuitemradio',{name:'Faces Faces only',exact:true}).click();
-    const selectTool = page.getByRole('button', {name:'Select', exact:true});
+    // A lone part is presented as its features directly: the part itself adds no choice.
+    const feature=tree.getByRole('button',{name:/^Select Base (extrude|revolve)$/}).first();
+    await expect(feature).toBeVisible({timeout:30000});
+    await expect(tree.getByRole('button',{name:'Select import-smoke.step',exact:true})).toHaveCount(0);
+    // A feature row carries the viewport's menu over its faces, and its Select is the row's click.
+    await feature.click({button:'right'});
+    await expect(page.getByRole('menu').getByRole('menuitem')).toHaveText(['Add to prompt','Copy Reference','Select','Zoom to fit','Zoom to selection']);
+    await page.getByRole('menuitem',{name:'Select',exact:true}).click();
+    await expect(page.getByRole('menu')).toHaveCount(0);
+    await expect(feature).toHaveAttribute('aria-pressed','true');
+    await page.keyboard.press('Escape');
+    await expect(feature).toHaveAttribute('aria-pressed','false');
+    // Precise refs: the Select tool's second press narrows its filter to faces.
+    const selectTool = page.getByRole('group',{name:'Interaction tools',exact:true}).getByRole('button', {name:'Select', exact:true});
     await expect(selectTool).toBeEnabled({timeout:30000});
+    await expect(selectTool).toHaveAttribute('aria-pressed','true');
+    await selectTool.click();
+    await page.getByRole('menuitemradio',{name:/^Faces/}).click();
+    await expect(page.getByRole('menu')).toHaveCount(0);
     // Pick the model itself; no exhaustive topology list is needed to inspect faces or edges.
     const canvas=page.locator('[data-cad-surface] canvas').first();
     const box=await canvas.boundingBox();
@@ -115,7 +116,7 @@ test('Model tree preserves part controls and adds precise viewport references to
     await page.screenshot({path:`${output}/selection-summary.png`});
     // Clearing inspection must also clear the viewport selection, while preserving the draft reference.
     await page.getByRole('button',{name:'Clear selection',exact:true}).click();
-    await expect(page.getByRole('region',{name:'Modeling details',exact:true})).toHaveCount(0);
+    await expect(page.getByRole('region',{name:'Reference details',exact:true})).toHaveCount(0);
     await expect(page.getByRole('button',{name:'Add to prompt',exact:true})).toHaveCount(0);
     await expect(chip).toHaveCount(1);
     assert.deepEqual(sourceRequests,[]);

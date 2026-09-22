@@ -22,6 +22,10 @@ let page: Page;
 let userData: string;
 let project: string;
 const errors: string[] = [];
+// Feature recognition runs in a packaged worker. A lone part is recognized as soon as its
+// Features tab shows it, which is whichever test opens it first, so workers are counted from
+// the app's start.
+let recognitionWorkers = 0;
 const MANY_COMPONENT_COUNT = 32;
 const MANY_COMPONENT_STEP_SCRIPT = `
 import sys
@@ -90,6 +94,7 @@ test.beforeAll(async () => {
   page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
   page.on("pageerror", error => errors.push(error.message));
+  page.on("worker", worker => { if (worker.url().includes("modelingTree.worker")) recognitionWorkers += 1; });
   page.on("console", message => { if (message.type() === "error") console.error(`[CAD renderer] ${message.text()}`); });
   page.on("response", async response => {
     if (response.status() >= 400 && /\/__(?:cad|tess_cache)(?:\/|\?)/.test(response.url())) {
@@ -128,7 +133,14 @@ test.afterAll(async () => {
 });
 
 async function openFile(file: string) {
-  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  // Each session keeps its own explorer, and a session just made has its closed and empty
+  // (`docs/session-workspaces.md`): open it first.
+  const newTab = page.getByRole("button", { name: "New tab", exact: true });
+  if (!(await newTab.isVisible())) {
+    await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
+    await page.getByRole("button", { name: "Toggle explorer", exact: true }).click();
+  }
+  await newTab.click();
   await page.getByRole("menuitem", { name: "File", exact: false }).click();
   await page.getByLabel("Filter files").fill(file);
   await page.getByRole("option", { name: file, exact: false }).first().click();
@@ -151,9 +163,9 @@ async function setDisplayMode(mode: string) {
   await value.click();
   await page.getByRole("option", { name: mode, exact: true }).click();
   await expect(value).toContainText(mode);
-  // Retain the helper's original return to geometry inspection.
-  const model = page.getByRole("tab", { name: "Model", exact: true });
-  if (await model.count()) await model.click();
+  // Retain the helper's original return to geometry inspection: the Features tab.
+  const features = page.getByRole("tab", { name: "Features", exact: true });
+  if (await features.count()) await features.click();
   // The file-session writer batches ordinary UI changes for 180ms.
   await page.waitForTimeout(250);
 }
@@ -162,8 +174,8 @@ async function expectDisplayMode(mode: string) {
   await page.getByRole("tab", { name: "Display", exact: true }).click();
   await expect(page.getByRole("tabpanel", { name: "Display", exact: true })
     .getByRole("combobox", { name: "Mode" })).toContainText(mode);
-  const model = page.getByRole("tab", { name: "Model", exact: true });
-  if (await model.count()) await model.click();
+  const features = page.getByRole("tab", { name: "Features", exact: true });
+  if (await features.count()) await features.click();
 }
 
 async function expectCadReady(file: string, componentCount = 1) {
@@ -184,17 +196,39 @@ async function expectCadReady(file: string, componentCount = 1) {
   const model = page.getByRole("list", { name: "Model", exact: true });
   await expect(model).toBeVisible({ timeout: 15_000 });
   if (componentCount === 1) {
-    await expect(page.getByRole("tabpanel", { name: "Model", exact: true })
-      .getByText("1 feature", { exact: true })).toBeVisible({ timeout: 15_000 });
+    // A lone part is presented as its features, so it is ready when they are listed.
+    await expect(model.getByRole("button", { name: /^Select / }).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("Loading features…", { exact: true })).toHaveCount(0);
   }
+}
+
+/**
+ * Select a lone part WHOLE. It has no row of its own in the Features tree, so it is selected
+ * where a person selects a part whole: in the viewport, under the Select tool's Parts filter.
+ */
+async function selectWholePart() {
+  await setSelectFilter(/^Parts/);
+  const canvas = page.locator("[data-cad-surface] canvas").first();
+  const box = (await canvas.boundingBox())!;
+  await canvas.click({ position: { x: box.width / 2, y: box.height / 2 } });
+  await expect(page.getByRole("region", { name: "Reference details", exact: true })).toBeVisible();
+}
+
+/** The Select tool's second press opens its filter; the filter is kept with the file. */
+async function setSelectFilter(name: RegExp) {
+  const select = page.getByRole("group", { name: "Interaction tools", exact: true }).getByRole("button", { name: "Select", exact: true });
+  if (await select.getAttribute("aria-pressed") !== "true") await select.click();
+  await expect(select).toHaveAttribute("aria-pressed", "true");
+  await select.click();
+  await page.getByRole("menuitemradio", { name }).click();
+  await expect(page.getByRole("menu")).toHaveCount(0);
 }
 
 test("View presets preserve authored materials and independent tools without a Materials editor", async () => {
   test.setTimeout(150_000);
   await openFile("part.step");
   await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible({ timeout: 90_000 });
-  await page.getByRole("list", { name: "Model", exact: true })
-    .getByRole("button", { name: "Select part.step", exact: true }).click();
+  await selectWholePart();
   const materialInfo = page.locator('[aria-label="Source material"]');
   await expect(materialInfo).toContainText("Unassigned");
   await expect(materialInfo.locator("input, select, button")).toHaveCount(0);
@@ -220,20 +254,31 @@ test("View presets preserve authored materials and independent tools without a M
   const view = page.getByRole("tabpanel", { name: "Display", exact: true });
   const mode = view.getByRole("combobox", { name: "Mode" });
   await viewTab.click();
-  const displaySettings = view.getByRole("button", { name: "Surfaces", exact: true });
-  await expect(displaySettings).toHaveAttribute("aria-expanded", "true");
-  await expect(displaySettings.locator("svg")).toHaveCount(0);
-  expect((await displaySettings.boundingBox())?.height).toBe(28);
-  expect(await displaySettings.evaluate(element => element.ownerDocument.defaultView!.getComputedStyle(element).fontSize)).toBe("12px");
+  // The section rules of `packages/ui/docs/settings-ui.md`. Surfaces is always open: its
+  // header is static text, 28px and regular 12px, with no disclosure, plus or minus.
+  const surfaces = view.getByRole("region", { name: "Surfaces", exact: true });
+  const surfacesHeading = surfaces.getByRole("heading", { name: "Surfaces", exact: true });
+  await expect(surfacesHeading).toBeVisible();
+  await expect(surfaces.getByRole("button", { name: /Surfaces$/ })).toHaveCount(0);
+  expect((await surfacesHeading.boundingBox())?.height).toBe(28);
+  expect(await surfacesHeading.evaluate(element => element.ownerDocument.defaultView!.getComputedStyle(element).fontSize)).toBe("12px");
   await expect(view.getByRole("button", { name: "View", exact: true })).toHaveCount(0);
   await expect(view.getByRole("combobox", { name: "Projection", exact: true })).toBeVisible();
-  const restingBackground = await displaySettings.evaluate(element => element.ownerDocument.defaultView!.getComputedStyle(element.parentElement!.parentElement!).backgroundColor);
-  await displaySettings.hover();
-  await expect.poll(() => displaySettings.evaluate(element => element.ownerDocument.defaultView!.getComputedStyle(element).textDecorationLine)).not.toContain("underline");
-  await expect.poll(() => displaySettings.evaluate(element => element.ownerDocument.defaultView!.getComputedStyle(element.parentElement!.parentElement!).backgroundColor)).not.toBe(restingBackground);
-  await view.getByRole("button", { name: "Clip", exact: true }).click();
-  await expect(view.getByLabel("Clip X position", { exact: true })).toBeVisible();
-  await expect(view.getByLabel("Amount value", { exact: true })).toBeVisible();
+  // Clip is optional and off: its title is the control that turns it on, and hovering its
+  // header gives the row a gray background and nothing else.
+  const clip = view.getByRole("button", { name: "Clip", exact: true });
+  await expect(clip).toHaveAttribute("aria-expanded", "false");
+  await expect(clip.locator("svg")).toHaveCount(0);
+  expect((await clip.boundingBox())?.height).toBe(28);
+  expect(await clip.evaluate(element => element.ownerDocument.defaultView!.getComputedStyle(element).fontSize)).toBe("12px");
+  const restingBackground = await clip.evaluate(element => element.ownerDocument.defaultView!.getComputedStyle(element.parentElement!.parentElement!).backgroundColor);
+  await clip.hover();
+  await expect.poll(() => clip.evaluate(element => element.ownerDocument.defaultView!.getComputedStyle(element).textDecorationLine)).not.toContain("underline");
+  await expect.poll(() => clip.evaluate(element => element.ownerDocument.defaultView!.getComputedStyle(element.parentElement!.parentElement!).backgroundColor)).not.toBe(restingBackground);
+  await clip.click();
+  // Open, Clip is a position along each axis and a flip.
+  for (const axis of ["X", "Y", "Z"]) await expect(view.getByLabel(`Clip ${axis} position`, { exact: true })).toBeVisible();
+  await expect(view.getByRole("checkbox", { name: "Flip", exact: true })).toBeVisible();
   await mode.click();
   await page.getByRole("option", { name: "Wireframe", exact: true }).click();
   await expect(mode).toContainText("Wireframe");
@@ -243,17 +288,20 @@ test("View presets preserve authored materials and independent tools without a M
   await page.getByRole("option", { name: "Render", exact: true }).click();
   await expect(viewTab).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
-  const renderingSettings = view.getByRole("button", { name: "Lighting", exact: true });
-  await expect(renderingSettings).toHaveAttribute("aria-expanded", "true");
+  // Render turns Lighting on. Open, its header is text and only its minus is a control.
+  const disableLighting = view.getByRole("button", { name: "Disable Lighting", exact: true });
+  await expect(disableLighting).toHaveAttribute("aria-expanded", "true");
+  await expect(view.getByRole("button", { name: "Lighting", exact: true })).toHaveCount(0);
   const exposure = view.getByLabel("Exposure value", { exact: true });
   await expect(view.getByRole("combobox", { name: "Quality", exact: true })).toContainText("Preview");
   await exposure.fill("1.5");
   await exposure.press("Enter");
   await expect(mode).toContainText("Custom");
-  await view.getByRole("button", { name: "Disable Lighting", exact: true }).click();
+  await disableLighting.click();
   await expect(exposure).toHaveCount(0);
   await expect(mode).toBeVisible();
-  await renderingSettings.click();
+  // Closed, its title is the control that turns it back on, at its defaults.
+  await view.getByRole("button", { name: "Lighting", exact: true }).click();
   await expect(exposure).toHaveValue("0.0 EV");
   await exposure.fill("1.5");
   await exposure.press("Enter");
@@ -265,7 +313,8 @@ test("View presets preserve authored materials and independent tools without a M
   await mode.click();
   await page.getByRole("option", { name: "Wireframe", exact: true }).click();
   await expect(viewTab).toHaveAttribute("aria-selected", "true");
-  await expect(renderingSettings).toHaveAttribute("aria-expanded", "false");
+  // Wireframe has no lighting: the section is closed, its title the control that opens it.
+  await expect(view.getByRole("button", { name: "Lighting", exact: true })).toHaveAttribute("aria-expanded", "false");
   await expect(exposure).toHaveCount(0);
   await expect(view.getByLabel("Clip X position", { exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Studio", exact: true })).toHaveCount(0);
@@ -274,15 +323,16 @@ test("View presets preserve authored materials and independent tools without a M
   await expect(exposure).toHaveValue("0.0 EV");
   await mode.click();
   await page.getByRole("option", { name: "Solid", exact: true }).click();
-  await page.getByRole("tab", { name: "Model", exact: true }).click();
-  await page.getByRole("list", { name: "Model", exact: true })
-    .getByRole("button", { name: "Select part.step", exact: true }).click();
+  await page.getByRole("tab", { name: "Features", exact: true }).click();
+  await selectWholePart();
   await expect(materialInfo).toContainText("Brushed steel");
   const sidecarPath = path.join(project, "part.step.json");
   const sidecar = JSON.parse(fs.readFileSync(sidecarPath, "utf8"));
   delete sidecar.appearance;
   fs.writeFileSync(sidecarPath, JSON.stringify(sidecar));
   await expect(materialInfo).toContainText("Unassigned", { timeout: 30_000 });
+  await page.keyboard.press("Escape");
+  await setSelectFilter(/^All/);
   expect(await page.evaluate(() => localStorage.getItem("cad-viewer:theme"))).toBeNull();
   expect(errors).toEqual([]);
 });
@@ -311,13 +361,17 @@ test("embedded STEP animation loads, plays and scrubs under the desktop CSP", as
   // Keep the ordinary UI budget separate from the existing cold CAD-load wait.
   test.setTimeout(60_000 + 90_000);
   await openFile("animated.step");
-  await page.getByRole("tab", { name: "Kinematics", exact: true }).click();
-  const animation = page.getByRole("tabpanel", { name: "Kinematics", exact: true });
+  // A routine and no mates: nothing to pose, so no Kinematics tab. Playback is the Animate tool,
+  // whose playbar sits under the model while it is up.
+  await expect(page.getByRole("tab", { name: "Kinematics", exact: true })).toHaveCount(0);
+  const tools = page.getByRole("group", { name: "Interaction tools", exact: true });
+  await tools.getByRole("button", { name: "Animate", exact: true }).click();
+  const animation = page.getByRole("toolbar", { name: "Animation playback", exact: true });
   const play = animation.getByRole("button", { name: "Play animation", exact: true });
-  // The data: module regression renders an error in this panel instead of controls.
+  // The data: module regression renders an error in place of these controls.
   await expect(play).toBeEnabled();
-  const time = animation.getByLabel("Animation time value", { exact: true });
-  await expect(time).toHaveValue("0.00s");
+  const time = animation.getByRole("slider", { name: "Animation time", exact: true });
+  await expect(time).toHaveAttribute("aria-valuenow", "0");
 
   await expect.poll(async () => page.evaluate(() => window.__cadDisplayRecords?.().length || 0)).toBeGreaterThan(0);
   const rest = await page.evaluate(() => window.__cadDisplayRecords?.()[0]);
@@ -329,19 +383,28 @@ test("embedded STEP animation loads, plays and scrubs under the desktop CSP", as
   ), rest.partId);
 
   await play.click();
-  await expect.poll(async () => Number.parseFloat(await time.inputValue())).toBeGreaterThan(0.05);
+  await expect.poll(async () => Number(await time.getAttribute("aria-valuenow"))).toBeGreaterThan(0.05);
   await expect.poll(async () => (await displayMatrix())?.[12] ?? restX).toBeGreaterThan(restX + 0.05);
   await animation.getByRole("button", { name: "Pause animation", exact: true }).click();
   await expect(play).toBeVisible();
 
-  await time.fill("1.25");
-  await time.press("Enter");
-  await expect(time).toHaveValue("1.25s");
+  // Scrubbing is the slider: a hundredth of a second a step, a tenth a page. At 1.25 s the clip
+  // (which slides 1 a second) has moved the model 1.25, and the slider's start is the restart:
+  // the model exactly at rest again.
+  await time.focus();
+  await page.keyboard.press("Home");
+  for (let tenth = 0; tenth < 12; tenth += 1) await page.keyboard.press("PageUp");
+  for (let hundredth = 0; hundredth < 5; hundredth += 1) await page.keyboard.press("ArrowRight");
+  await expect(time).toHaveAttribute("aria-valuenow", "1.25");
   // Read the existing diagnostic seam's live mesh matrix, not just transport state.
   await expect.poll(async () => (await displayMatrix())?.[12] ?? restX).toBeCloseTo(restX + 1.25, 6);
   await page.screenshot({ path: test.info().outputPath("embedded-step-animation.png"), animations: "disabled" });
-  await animation.getByRole("button", { name: "Restart animation", exact: true }).click();
-  await expect(time).toHaveValue("0.00s");
+  await page.keyboard.press("Home");
+  await expect(time).toHaveAttribute("aria-valuenow", "0");
+  await expect.poll(displayMatrix).toEqual(rest.matrix);
+  // Leaving Animate takes the playbar down and leaves the model at rest.
+  await tools.getByRole("button", { name: "Select", exact: true }).click();
+  await expect(animation).toHaveCount(0);
   await expect.poll(displayMatrix).toEqual(rest.matrix);
 
   const policy = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute("content");
@@ -399,19 +462,20 @@ test("reopening a many-component STEP reuses its backend and every prepared body
   page.on("requestfinished", finishRequest);
   page.on("requestfailed", finishRequest);
   try {
-    // These documents have the same STEP bytes but distinct per-file state.
+    // These documents have the same STEP bytes but distinct per-file state: each keeps its
+    // own display mode (X-ray is material only, so it asks for no geometry of its own).
     // Warm both before measuring the A -> B -> A reopen path.
     await selectOrOpenFile("many-a.step");
     await expectCadReady("many-a.step", MANY_COMPONENT_COUNT);
-    await setDisplayMode("Wire");
+    await setDisplayMode("Wireframe");
     await expectCadReady("many-a.step", MANY_COMPONENT_COUNT);
     await selectOrOpenFile("many-b.step");
     await expectCadReady("many-b.step", MANY_COMPONENT_COUNT);
-    await setDisplayMode("Flat");
+    await setDisplayMode("X-ray");
     await expectCadReady("many-b.step", MANY_COMPONENT_COUNT);
     await selectOrOpenFile("many-a.step");
     await expectCadReady("many-a.step", MANY_COMPONENT_COUNT);
-    await expectDisplayMode("Wire");
+    await expectDisplayMode("Wireframe");
     await expect(page.locator("[data-cad-surface]")).toHaveCount(1);
     await expect(page.locator("[data-cad-surface] canvas").first()).toBeVisible();
 
@@ -424,12 +488,12 @@ test("reopening a many-component STEP reuses its backend and every prepared body
     const transitionStartedAt = Date.now();
     await selectOrOpenFile("many-b.step");
     await expectCadReady("many-b.step", MANY_COMPONENT_COUNT);
-    await expectDisplayMode("Flat");
+    await expectDisplayMode("X-ray");
     await expect(page.locator("[data-cad-surface]")).toHaveCount(1);
     await expect(page.locator("[data-cad-surface] canvas").first()).toBeVisible();
     await selectOrOpenFile("many-a.step");
     await expectCadReady("many-a.step", MANY_COMPONENT_COUNT);
-    await expectDisplayMode("Wire");
+    await expectDisplayMode("Wireframe");
     await expect(page.locator("[data-cad-surface]")).toHaveCount(1);
     await expect(page.locator("[data-cad-surface] canvas").first()).toBeVisible();
     const switchElapsedMs = Date.now() - transitionStartedAt;
@@ -462,36 +526,28 @@ test("reopening a many-component STEP reuses its backend and every prepared body
   }
 });
 
-test("STEP feature expansion runs the packaged worker once and reuses recognition after switching files", async () => {
-  let recognitionWorkers = 0;
-  const countWorker = (worker: { url(): string }) => {
-    if (worker.url().includes("modelingTree.worker")) recognitionWorkers += 1;
-  };
-  page.on("worker", countWorker);
-  try {
-    await selectOrOpenFile("part.step");
-    await expectCadReady("part.step");
-    const model = page.getByRole("list", { name: "Model", exact: true });
-    const expand = model.getByRole("button", { name: "Expand part.step", exact: true });
-    await expand.click();
-    const feature = model.getByRole("button", { name: /^Select Base (extrude|revolve)$/ }).first();
-    await expect(feature).toBeVisible();
-    expect(recognitionWorkers).toBe(1);
+test("STEP features run in the packaged worker, and switching files reuses their recognition", async () => {
+  await selectOrOpenFile("part.step");
+  await expectCadReady("part.step");
+  const model = page.getByRole("list", { name: "Model", exact: true });
+  // A lone part is presented as its features: there is no part row to expand.
+  await expect(model.getByRole("button", { name: "Expand part.step", exact: true })).toHaveCount(0);
+  const feature = model.getByRole("button", { name: /^Select Base (extrude|revolve)$/ }).first();
+  await expect(feature).toBeVisible();
+  // The packaged worker ran (under the desktop CSP), whenever this file was first shown.
+  const recognized = recognitionWorkers;
+  expect(recognized).toBeGreaterThan(0);
 
-    await selectOrOpenFile("hinge.urdf");
-    await selectOrOpenFile("part.step");
-    await expectCadReady("part.step");
-    if (await expand.isVisible()) await expand.click();
-    await expect(feature).toBeVisible();
-    await feature.click();
-    await expect(feature).toHaveAttribute("aria-pressed", "true");
-    expect(recognitionWorkers).toBe(1);
-    expect(errors).toEqual([]);
-    await page.keyboard.press("Escape");
-    await model.getByRole("button", { name: "Collapse part.step", exact: true }).click();
-  } finally {
-    page.off("worker", countWorker);
-  }
+  await selectOrOpenFile("hinge.urdf");
+  await selectOrOpenFile("part.step");
+  await expectCadReady("part.step");
+  await expect(feature).toBeVisible();
+  await feature.click();
+  await expect(feature).toHaveAttribute("aria-pressed", "true");
+  expect(recognitionWorkers).toBe(recognized);
+  expect(errors).toEqual([]);
+  await page.keyboard.press("Escape");
+  await expect(feature).toHaveAttribute("aria-pressed", "false");
 });
 
 test("prompt actions preserve the draft, native clipboard and captured selection without sending", async () => {
@@ -511,32 +567,34 @@ test("prompt actions preserve the draft, native clipboard and captured selection
     await selectOrOpenFile("part.step");
     await expectCadReady("part.step");
     const model = page.getByRole("list", { name: "Model", exact: true });
-    // This single-component import exposes its model root as a whole-resource
-    // selection. Exercise that identity explicitly rather than assuming o1.
-    const row = model.getByRole("button", { name: "Select part.step", exact: true });
-    await row.click();
-    await expect(page.locator("[data-reference-tip]")).toHaveCount(0);
-    await page.keyboard.press("Escape");
-    await expect(row).toHaveAttribute("aria-pressed", "false");
-    await row.click();
-    await expect(row).toHaveAttribute("aria-pressed", "true");
-
-    await row.click({ button: "right" });
+    // Copy Reference, from a feature row's menu (the viewport's menu over its faces), is what
+    // writes the native clipboard; nothing after it here may.
+    const feature = model.getByRole("button", { name: /^Select Base (extrude|revolve)$/ }).first();
+    await feature.click({ button: "right" });
     await page.getByRole("menuitem", { name: "Copy Reference", exact: true }).click();
     const copiedReference = await app.evaluate(({ clipboard }) => clipboard.readText());
-    // Core's ordinary CAD copy grammar uses a trailing # for the whole file;
-    // the prompt serializer renders the same whole-resource identity as a file.
-    expect(copiedReference).toBe("part.step#");
+    // The ordinary CAD copy grammar: a selector copies bare (the file is the one it is pasted
+    // about); only the whole file names its path, as `part.step#`.
+    expect(copiedReference).toMatch(/^#o1\.f\d+(,o1\.f\d+)*$/);
     const chips = page.locator("[data-composer] [data-reference-chip]");
     await expect(chips).toHaveCount(0);
     await expect(draft).toHaveText("Keep this draft intact.");
+
+    // This single-component import exposes its model root as a whole-resource selection,
+    // made in the viewport under Parts. Exercise that identity explicitly rather than assuming o1.
+    const details = page.getByRole("region", { name: "Reference details", exact: true });
+    await selectWholePart();
+    await expect(page.locator("[data-reference-tip]")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(details).toHaveCount(0);
+    await selectWholePart();
 
     await page.getByRole("button", { name: "Add to prompt", exact: true }).click();
     await expect(chips).toHaveCount(1);
     await expect(chips).toHaveAttribute("data-file", "part.step");
     const selector = await chips.getAttribute("data-selector");
+    // The prompt serializer renders the whole-resource identity as the bare file.
     expect(selector).toBe("");
-    expect(copiedReference).toBe(`part.step#${selector}`);
     await expect(draft).toContainText("Keep this draft intact.");
     await expect(draft).toBeFocused();
     expect(await app.evaluate(({ clipboard }) => clipboard.readText())).toBe(copiedReference);
