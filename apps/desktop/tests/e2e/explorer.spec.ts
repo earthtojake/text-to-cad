@@ -625,10 +625,12 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await shoot("file-cad-1280x800.png", true);
   await resizeWindow(1440, 900);
 
-  // View owns display settings; returning to Model preserves its controls and tree.
-  await expect(page.getByRole("tab", { name: "Display", exact: true })).toHaveCount(0);
+  // Display owns display settings; returning to Features preserves its controls and tree.
+  // The retired names must not come back: "View" became Display, and "Model" became Features.
+  await expect(page.getByRole("tab", { name: "View", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "Model", exact: true })).toHaveCount(0);
   const view = page.getByRole("tab", { name: "Display", exact: true });
-  const model = page.getByRole("tab", { name: "Model", exact: true });
+  const model = page.getByRole("tab", { name: "Features", exact: true });
   await view.click();
   const viewPanel = page.getByRole("tabpanel", { name: "Display", exact: true });
   const mode = viewPanel.getByRole("combobox", { name: "Mode" });
@@ -1000,7 +1002,10 @@ async function openFromTree(target: string) {
   await page.getByRole("option", { name: target, exact: false }).first().click();
   // Selection changes the mounted FileViewer. Do not clear the old tree or
   // open a context menu before the host has activated the requested file.
-  await expect(page.locator('[role="tab"][aria-selected="true"]')).toHaveAttribute("title", target);
+  // The EXPLORER's active file tab, scoped to its own tab list: the Inspector beside the model has
+  // a selected tab too, so an unscoped `[role=tab][aria-selected=true]` matches both.
+  await expect(page.getByRole("tablist", { name: "Explorer tabs" }).locator('[role="tab"][aria-selected="true"]'))
+    .toHaveAttribute("title", target);
   // A CAD file in a narrow pane hides the tree, filter and all.
   if (await filter.isVisible()) {
     await filter.fill("");
