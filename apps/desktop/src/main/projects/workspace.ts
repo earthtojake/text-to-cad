@@ -29,6 +29,7 @@
  * threads by cwd, so a worktree is what makes a Hardcore session resumable
  * from a terminal later.
  */
+import { realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -83,11 +84,35 @@ export function rootBelongsToProject(
   project: Pick<Project, "name" | "path">,
   candidate: string,
 ): boolean {
-  const requested = path.resolve(candidate);
+  const requested = realDirectory(candidate);
   return (
-    git.samePath(requested, project.path) ||
-    git.isUnder(projectWorktreeDir(settings, project), requested)
+    isProjectDirectory(project, candidate) ||
+    git.isUnder(realDirectory(projectWorktreeDir(settings, project)), requested)
   );
+}
+
+/**
+ * A directory as the project list records one. `projects.add` stores REAL paths, so macOS's
+ * `/var/...` and `/tmp/...` are kept as `/private/...` — while a renderer or an agent may still
+ * name the directory the way it was chosen. Comparisons resolve the symlinks in the part that
+ * exists; the part that does not exist yet (a worktree about to be made) is kept as spelled.
+ */
+function realDirectory(candidate: string): string {
+  const resolved = path.resolve(candidate);
+  const missing: string[] = [];
+  for (let existing = resolved; ; existing = path.dirname(existing)) {
+    try {
+      return path.join(realpathSync(existing), ...missing.reverse());
+    } catch {
+      if (path.dirname(existing) === existing) return resolved;
+      missing.push(path.basename(existing));
+    }
+  }
+}
+
+/** Is `candidate` the project directory itself, however it is spelled? */
+function isProjectDirectory(project: Pick<Project, "path">, candidate: string): boolean {
+  return git.samePath(realDirectory(candidate), realDirectory(project.path));
 }
 
 /**
@@ -106,7 +131,7 @@ export function resolveProjectRoot(
   if (!rootBelongsToProject(settings, project, root)) {
     throw new git.GitError("that directory does not belong to this project");
   }
-  return git.samePath(path.resolve(root), project.path) ? project.path : path.resolve(root);
+  return isProjectDirectory(project, root) ? project.path : path.resolve(root);
 }
 
 export type ResolveInput = {
@@ -173,16 +198,18 @@ export async function resolveWorkspace(input: ResolveInput): Promise<Workspace> 
 async function explicitWorkspace(cwd: string, input: ResolveInput): Promise<Workspace> {
   const requested = path.resolve(cwd);
   if (!rootBelongsToProject(input.settings, input.project, requested) &&
-      !input.knownWorktrees?.some(root => git.samePath(root, requested))) {
+      !input.knownWorktrees?.some(root => git.samePath(realDirectory(root), realDirectory(requested)))) {
     throw new git.GitError("that directory does not belong to this project");
   }
 
-  const info = await git.repoInfo(requested);
-  const isWorktree = !git.samePath(requested, input.project.path);
+  // The project itself runs at the path the project list records, however it was named here.
+  const isWorktree = !isProjectDirectory(input.project, requested);
+  const directory = isWorktree ? requested : input.project.path;
+  const info = await git.repoInfo(directory);
   return {
-    cwd: requested,
+    cwd: directory,
     ...(info.branch ? { branch: info.branch } : {}),
-    ...(isWorktree ? { worktreePath: requested } : {}),
+    ...(isWorktree ? { worktreePath: directory } : {}),
   };
 }
 

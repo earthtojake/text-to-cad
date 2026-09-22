@@ -7,7 +7,7 @@
  * is fine — and only git can answer the first two.
  */
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -184,6 +184,27 @@ describe("resolveWorkspace", () => {
     // never shown.
     await expect(
       resolveWorkspace({ project, settings, gitMode: "checkout", cwd: base }),
+    ).rejects.toThrow("does not belong to this project");
+  });
+
+  it("an explicit directory spelled through a symlink is the one the project list stores", async () => {
+    // `projects.add` stores real paths, so a project made from macOS's `/var/...` or `/tmp/...`
+    // is recorded at `/private/...`, while the renderer may still name it the way it was chosen.
+    const { base, project, settings } = await fixture();
+    const made = await resolveWorkspace({ project, settings, gitMode: "worktree", name: "linked" });
+    const link = `${base}-link`;
+    temporary.push(link);
+    await symlink(base, link, process.platform === "win32" ? "junction" : "dir");
+    const spelled = (directory: string) => path.join(link, path.relative(base, directory));
+
+    expect(
+      await resolveWorkspace({ project, settings, gitMode: "none", cwd: spelled(project.path) }),
+    ).toEqual({ cwd: project.path, branch: "main" });
+    expect(rootBelongsToProject(settings, project, spelled(made.cwd))).toBe(true);
+    expect(resolveProjectRoot(settings, project, spelled(project.path))).toBe(project.path);
+    // The link to somewhere else is still somewhere else.
+    await expect(
+      resolveWorkspace({ project, settings, gitMode: "none", cwd: link }),
     ).rejects.toThrow("does not belong to this project");
   });
 });
