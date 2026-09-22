@@ -492,3 +492,31 @@ it('asks for a feature row’s faces when its menu opens, and fills the menu in 
  await waitFor(()=>expect(screen.getByRole('menuitem',{name:'Add to prompt'}).getAttribute('aria-disabled')).toBeNull());
  expect(menu.menuForReferences).toHaveBeenLastCalledWith(['o1.f1','o1.f2'],'Cut extrude 1');
 });
+
+const repeatedDescriptor={components:{c:{surf:'components/c.surf'},d:{surf:'components/d.surf'}},occurrences:[
+ {id:'p1',component:'c',name:'Planter'},{id:'p2',component:'c',name:'Planter'},{id:'lid',component:'d',name:'Lid'}]};
+const repeatedRoot={id:'document',nodeType:'assembly',name:'deck',children:[
+ partNode('p1','plant_1_01'),partNode('p2','plant_1_02'),partNode('lid','lid')]};
+const repeatedModeling={descriptor:repeatedDescriptor,results:{},error:null,retryFailed:vi.fn()};
+
+it('folds repeated parts into one row and selects every instance it stands for',()=>{
+ const onSelectTreeNode=vi.fn();
+ render(<ModelingTreeView modeling={repeatedModeling} stepRoot={repeatedRoot} active partControls={{expandedTreeNodeIds:[],onSelectTreeNode}}/>);
+ // One row for the repeat, the unrepeated part untouched, and neither instance drawn yet.
+ expect(screen.getByRole('button',{name:'Select plant_1 (2)'})).toBeTruthy();
+ expect(screen.getByRole('button',{name:'Select lid'})).toBeTruthy();
+ expect(screen.queryByRole('button',{name:'Select plant_1_01'})).toBeNull();
+ fireEvent.click(screen.getByRole('button',{name:'Expand plant_1 (2)'}));
+ expect(screen.getByRole('button',{name:'Select plant_1_01'})).toBeTruthy();
+ expect(screen.getByRole('button',{name:'Select plant_1_02'})).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'Select plant_1 (2)'}));
+ expect(onSelectTreeNode.mock.calls).toEqual([['p1',{multiSelect:false}],['p2',{multiSelect:true}]]);
+});
+
+it('a folded row reads as selected only when the selection is what it stands for',()=>{
+ const props={modeling:repeatedModeling,stepRoot:repeatedRoot,active:true};
+ const {rerender}=render(<ModelingTreeView {...props} selectedPartIds={['p1']}/>);
+ expect(screen.getByRole('button',{name:'Select plant_1 (2)'}).getAttribute('aria-pressed')).toBe('false');
+ rerender(<ModelingTreeView {...props} selectedPartIds={['p1','p2']}/>);
+ expect(screen.getByRole('button',{name:'Select plant_1 (2)'}).getAttribute('aria-pressed')).toBe('true');
+});
