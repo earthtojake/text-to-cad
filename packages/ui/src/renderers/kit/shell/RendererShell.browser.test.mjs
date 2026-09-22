@@ -241,7 +241,7 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   // headings, with no tab in sight.
   assert.deepEqual(await panels(first), ['Display:true', 'Show files:false']);
   assert.equal(await first.getByRole('tab').count(), 0);
-  const modeRegion = first.getByRole('region', { name: 'Mode', exact: true });
+  const modeRegion = first.getByRole('region', { name: 'Display', exact: true });
   assert.equal(await modeRegion.getByRole('slider').count(), 0);
   // The fixture is a mesh: no parts to explode, no solid to section and no CAD edges, so
   // the View tab offers none of those sections, by heading, gate or title button.

@@ -36,7 +36,7 @@ the reverse.
 | `look/` | `stageEffects` (lighting rig scaled to the model, floor, glow and shadow catcher, grid and origin axes), the Render studio boundary (`renderStudioChunk`, `studioEnvironmentCache` and its worker). `chromeBackdrop` and `useChromeBackdropColor` (the frame colour around a scene). The surface LOOK is data the viewport resolves and a scene applies to its own materials: `@hardcore/core/lib/viewer/surfaceLook.js` (`createSurfaceLook(THREE, root).apply(look)`) does it for any authored material tree. The viewport resolves it with core's `resolveSceneSurfaceLook` (`common/sceneSettings.js`), the resolver the snapshot CLI dresses the same scenes with. |
 | `view-settings/` | The settings model and store (`viewSettingsStore`, `useViewSettings`, `viewerDisplaySettings`, `renderState`), applying a change to a viewport (`useAppliedViewSettings`, `viewUpdateCoordinator`, `viewUpdateGate`, `viewUpdatePlan`), and the Display panel's content (`DisplaySettingsSection`, `DisplayModeOptions`). |
 | `tools/` | `FloatingToolBar` (the dumb strip), `toolModes` (the tool-mode state machine), `ToolbarButton`, and the format-blind tools: `draw/` (overlay, view lock, `useDrawingViewLock`), `fullscreen/` (`FullscreenToolbar`, the presentation controls, and the orbit preference), `playbar/` (`ViewportAnimationBar`, `animationClock`, `usePlaybackFrames`), `pose/` (the handle overlay, canvas, drag mathematics), `select/` (`usePointerPick`: taps and hover through a scene's own `pick`). Screenshot capture is `@hardcore/core/lib/viewer/screenshotCapture.js`. |
-| `inspector/` | `FileSheet` and its row primitives, `FilePanelSections` (a file's own panel: its sections stacked under headings that never collapse), `InspectorSplit`, `modelTreeSearch`, `referenceRows` (`InfoRow`, `MonoValue`, `CoordValue`), `kinematicsControls` (the `Pose` row and the Reset button every Position section ends with). The tree row and filter box are `primitives/tree-row` and `primitives/tree-filter`. |
+| `inspector/` | `FileSheet` and its row primitives, `FilePanelSections` (a file's own panel: its sections stacked tight in one scrolling column, each foldable beside another, with a pick's Reference pinned at the foot), `InspectorSplit`, `modelTreeSearch`, `referenceRows` (`InfoRow`, `MonoValue`, `CoordValue`), `kinematicsControls` (the `Pose` row and the Reset button every Position section ends with). The tree row and filter box are `primitives/tree-row` and `primitives/tree-filter`. |
 | `status/` | `LoadingIndicator` and `ViewerLoadingOverlay`, `ViewerAlertCard` (the card over the viewport, and `viewportAlert`, which alert it shows), `MissingFileAlert`, `StatusToast` (two slots, a copy and a capture — nothing there is an error, which is the alert card's), `ViewUpdateStatus`, `loadingState` (`viewerLoadingState`), `loadAlerts` (`failureAlert`, `noGeometryAlert`). |
 | `shell/` | The host glue every renderer needs that is not about its scene: see [Shell](#shell). |
 
@@ -178,7 +178,7 @@ shell.syncSceneBounds();         // the scene moved its bounds (a pose): the sta
 shell.scheduleStateSave();       // state kept outside React changed: write the record soon, and on unmount
 // shell.tools.fullscreen is null unless the registration declares `fullscreen` and the host offers one
 const tools = [shell.tools.own({ id, label, icon }), shell.tools.draw, shell.tools.fullscreen].filter(Boolean);   // or [] for no strip at all
-// panel: the file's own, as sections { id, title, content, fill? }; omitted, the file has Display alone
+// panel: the file's own, as sections { id, title, content }; omitted, the file has Display alone
 return <RendererShell shell={shell} tools={tools} panel={{ title, sections }}
   viewportOverlay={viewport => <PointerPick viewport={viewport} scene={scene} enabled={selecting} onPick={pick} onHover={hover} />} />;
 ```
@@ -475,13 +475,13 @@ loader asks which it is. The STEP renderer matches none of them.
   selection are drawn by the scene (`setHighlight`), with
   the highlight ink a STEP part wears; hover is not React state. A robot has no
   viewport menu and so no framing items: its way back to a framed view is the view cube.
-- **Panels**: its own, `Robot` (`Bot`), open by default, then `Display` and the
+- **Panels**: `Display`, then its own, `Robot` (`Bot`), open by default, then the
   file tree (`viewerPanels(ready, { file: { label: "Robot", icon: Bot } })`). The
-  Robot panel stacks, under headings that never collapse: **Position**
+  Robot panel stacks, each section at its full height: **Position**
   (`PositionControls.jsx`, only with a joint to drive: a `Pose` row with the SRDF's
   group states, only when there are any, then a slider per driven joint, then
-  Reset), **Links** ([Robot links](#robot-links)), which fills the panel, and
-  **SDF** for an `.sdf` (`SdfSection.jsx`).
+  Reset), **Links** ([Robot links](#robot-links)), and **SDF** for an `.sdf`
+  (`SdfSection.jsx`).
 - **Host commands**: the base live commands; `clearSelection` clears the link
   selection; `select` is declined with a sentence (a robot description has no
   reference grammar), and a `selectReference` host request is consumed and
@@ -880,10 +880,10 @@ Shift toggles the resulting group and Add to prompt uses its canonical edge refs
 ### STEP panel
 
 A STEP's own panel (`components/workbench/StepPanel.js`) is named for what the file
-is, `Part` or `Assembly`, and stacks its sections in one column under headings that
-never collapse (`kit/inspector/FilePanelSections.jsx`), in this order:
+is, `Part` or `Assembly`, and stacks its sections tight in one column
+(`kit/inspector/FilePanelSections.jsx`), in this order:
 
-- **Features**: the model tree, which fills the height the other sections leave.
+- **Features**: the model tree, at its full height.
 - **Position**: only when the sidecar declares kinematics. One section: a `Pose` row
   (the label on the left, the named-pose dropdown right-aligned beside it; only with
   named poses), the joint sliders, then Reset.
@@ -893,7 +893,7 @@ never collapse (`kit/inspector/FilePanelSections.jsx`), in this order:
 A file with no kinematics and no issues is its Features alone, and a panel of one
 section is headed by that section's title. Animation is the Animate tool, not a
 section, so a file with routines and no kinematics has no Position. No section has a
-gate. A robot's Position uses the same `Pose` row and Reset
+gate; beside another, each folds away and back, which changes the view and nothing else. A robot's Position uses the same `Pose` row and Reset
 (`kit/inspector/kinematicsControls.jsx`). Display is a panel of its own beside this one
 in the nav row. Switching display mode leaves the open panel and the selection as they
 are.
@@ -961,7 +961,8 @@ unselectable. Selection reveals expand the required ancestors and scroll once
 per selection or explicit reveal command. Later expansion, recognition updates
 and manual scrolling must not pull the view back to that row.
 
-The Reference pane is read-only, resizable, and independently scrollable. Its
+The Reference pane is read-only, resizable, independently scrollable, and pinned at
+the panel's foot, under every section. Its
 static heading has one X action to clear selection; neither the pane nor its
 fields collapse. A compact dropdown browses the selected references directly
 without modifying the selection. New selections show their newest reference.
@@ -1169,10 +1170,10 @@ the frame; selection handles are not included), plus the selected references.
 The file navbar holds the renderer's actions, then the file's panel toggles, and
 the nav row IS the tab strip: no panel has tabs inside it, and pressing a toggle
 opens that panel and closes whatever was open. Left to right: the direct snapshot
-action (`Take snapshot`, `Camera`); the file's own panel, id `cad-file` (a STEP
-part's `Part` with `Box`, an assembly's `Assembly` with `Boxes`, a URDF, SRDF or
-SDF's `Robot` with `Bot`); `Display`, id `cad-display` (`SlidersHorizontal`); and
-the file tree, id `tree` (`Folders`, labelled `Show files` / `Hide files`). An STL,
+action (`Take snapshot`, `Camera`); `Display`, id `cad-display` (`SlidersHorizontal`);
+the file's own panel, id `cad-file` (a STEP part's `Part` with `Box`, an assembly's
+`Assembly` with `Boxes`, a URDF, SRDF or SDF's `Robot` with `Bot`); and the file
+tree, id `tree` (`Folders`, labelled `Show files` / `Hide files`). An STL,
 a 3MF and a GLB have Display and the tree; a DXF has the tree alone. Each
 registration declares its panels in `panels({ open, ready, file, data })`, which
 can read what `prepare` found (a STEP names its panel from the entry), through
@@ -1296,9 +1297,9 @@ in which case every link is kept. An SRDF shows its paired URDF's tree.
 The section reuses the Features tree's pieces rather than cloning them: the 28px
 row primitive, `Filter links…` (`primitives/tree-filter`), the ranked flat
 search of `kit/inspector/modelTreeSearch.js`, and `InspectorSplit` for the Reference pane
-(it opens at a third of the section, never below a readable minimum on a short
-screen, and never so tall that the tree loses its own — the same split the
-Features tree uses). The search index also reads a row's `searchAliases`, so a
+(pinned at the panel's foot, it opens at a third of the panel, never below a readable
+minimum on a short screen, and never so tall that the sections lose theirs — the same
+pane the Features tree uses). The search index also reads a row's `searchAliases`, so a
 link is found by its joint name and the hit shows that joint in place of its
 owners. The root opens, along with a chain of single child links below it;
 everything else starts collapsed. When the tree has exactly one root with
@@ -1342,12 +1343,13 @@ There is no copy action: robot formats have no reference grammar to deliver.
 ### Panels and dark surfaces
 
 A file's panels have no tabs: the nav row's toggles are the tab strip, and a panel
-is one column of sections under 28px headings that never collapse, the design the
-Display panel's static sections use (`FilePanelSections`). A section that fills (a
-tree that scrolls itself and keeps its filter at the top) takes the height the
-others leave; the others keep their natural height, up to a share of the panel,
-and scroll within it. With nothing filling, the panel scrolls as one column. With
-one section, its title heads the panel. The file's own panel stays mounted, hidden,
+is one column of sections under 28px headings (`FilePanelSections`), stacked tight,
+each at its full height: only the column scrolls, never a section inside it. Beside
+another section, each heading folds its section away and back with the Display
+gates' plus and minus (`FileSheetToggleHeading`); folding is a view and nothing
+else, and a folded section stays mounted. With one section, its title heads the
+panel. A pick's Reference (`InspectorSplit`) is pinned at the panel's foot, under
+every section, and scrolls on its own; its separator resizes it. The file's own panel stays mounted, hidden,
 while Display is open, so the Features tree keeps its disclosure and scroll across
 the switch.
 

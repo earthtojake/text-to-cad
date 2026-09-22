@@ -184,27 +184,41 @@ export function FileSheetStaticSection({ title, children }) {
 
 // Expanded IS enabled. Only explicit activation changes settings: hover, focus,
 // scrolling and another section moving under the pointer must never write state.
+/**
+ * The heading row of a section that opens and shuts: its title — shown muted, and a button
+ * that opens it, while it is shut — and a trailing plus or minus. `verbs` name the two acts
+ * for the button's label: `["Enable", "Disable"]` for a Display gate, `["Expand",
+ * "Collapse"]` for a file panel's section a person folds away.
+ */
+export function FileSheetToggleHeading({ title, open, onOpenChange, headingId, contentId, verbs, as: Heading = "h3" }) {
+  const show = () => onOpenChange(true);
+  const act = `${open ? verbs[1] : verbs[0]} ${title}`;
+  return (
+    <div className={cn("flex min-h-7 items-center", !open && "hover:bg-accent")}>
+      <Heading className="min-w-0 flex-1">
+        {open ? <span id={headingId} className="flex min-h-7 items-center px-2 py-1 text-xs font-normal leading-4 text-foreground">{title}</span> : <button id={headingId} type="button" aria-expanded={false} aria-controls={contentId}
+          onClick={show}
+          className="flex min-h-7 w-full items-center px-2 py-1 text-left text-xs font-normal leading-4 text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45">
+          {title}
+        </button>}
+      </Heading>
+      <Button type="button" variant="ghost" size="icon-xs" aria-label={act} title={act}
+        aria-expanded={open} aria-controls={contentId}
+        onClick={open ? () => onOpenChange(false) : show}
+        className="mr-1 size-6 shrink-0 text-muted-foreground hover:text-foreground">
+        {open ? <Minus className="size-3.5" strokeWidth={1.5} /> : <Plus className="size-3.5" strokeWidth={1.5} />}
+      </Button>
+    </div>
+  );
+}
+
 export function FileSheetGatedSection({ title, enabled, onEnabledChange, children }) {
   const contentId = useId();
   const headingId = useId();
-  const enable = () => onEnabledChange(true);
   return (
     <section className="border-b border-border" aria-labelledby={headingId}>
-      <div className={cn("flex min-h-7 items-center", !enabled && "hover:bg-accent")}>
-        <h3 className="min-w-0 flex-1">
-          {enabled ? <span id={headingId} className="flex min-h-7 items-center px-2 py-1 text-xs font-normal leading-4 text-foreground">{title}</span> : <button id={headingId} type="button" aria-expanded={false} aria-controls={contentId}
-            onClick={enable}
-            className="flex min-h-7 w-full items-center px-2 py-1 text-left text-xs font-normal leading-4 text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45">
-            {title}
-          </button>}
-        </h3>
-        <Button type="button" variant="ghost" size="icon-xs" aria-label={`${enabled ? "Disable" : "Enable"} ${title}`} title={`${enabled ? "Disable" : "Enable"} ${title}`}
-          aria-expanded={enabled} aria-controls={contentId}
-          onClick={enabled ? () => onEnabledChange(false) : enable}
-          className="mr-1 size-6 shrink-0 text-muted-foreground hover:text-foreground">
-          {enabled ? <Minus className="size-3.5" strokeWidth={1.5} /> : <Plus className="size-3.5" strokeWidth={1.5} />}
-        </Button>
-      </div>
+      <FileSheetToggleHeading title={title} open={enabled} onOpenChange={onEnabledChange} headingId={headingId}
+        contentId={contentId} verbs={["Enable", "Disable"]} />
       {enabled ? <div id={contentId} className="space-y-1 pb-2">{children}</div> : null}
     </section>
   );

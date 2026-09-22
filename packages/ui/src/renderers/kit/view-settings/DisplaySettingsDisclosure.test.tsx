@@ -87,7 +87,7 @@ it('does not enable a section when the pointer only passes across it', async () 
 it('Reset disables tools and restores the preset; transparency stays in the color picker', async () => {
   const user = userEvent.setup();
   render(<Harness initial={{ mode: 'render', background: { color: '#abcdef', opacity: 0.4 }, exploded: { enabled: true, amount: 0.5 } }} />);
-  const mode = screen.getByRole('region', { name: 'Mode', exact: true });
+  const mode = screen.getByRole('region', { name: 'Display', exact: true });
   expect(within(mode).getByRole('combobox', { name: 'Mode' }).textContent).toBe('Custom');
   expect(within(mode).getByRole('combobox', { name: 'Projection' }).querySelector('svg')).toBeTruthy();
   expect(within(mode).queryByRole('slider')).toBeNull();
@@ -118,8 +118,8 @@ it('Reset disables tools and restores the preset; transparency stays in the colo
   expect(within(mode).getByRole('combobox', { name: 'Mode' }).textContent).toBe('Render');
 });
 
-it('keeps tools first, then Solid features, then optional rendering features in every preset', () => {
-  const headings = ['Mode', 'Surfaces', 'Explode', 'Clip', 'Edges', 'Grid', 'Axes', 'Lighting', 'Background', 'Floor'];
+it('keeps one section order in every preset, Display first', () => {
+  const headings = ['Display', 'Surfaces', 'Explode', 'Clip', 'Edges', 'Grid', 'Axes', 'Lighting', 'Background', 'Floor'];
   for (const mode of ['solid', 'render', 'wireframe']) {
     render(<Harness initial={{ mode }} />);
     expect(screen.getAllByRole('heading').map(node => node.textContent)).toEqual(headings);

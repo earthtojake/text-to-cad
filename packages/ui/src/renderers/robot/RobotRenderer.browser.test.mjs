@@ -151,7 +151,7 @@ async function open(t, file, { panel = true } = {}) {
     toggle: id => pane.locator(`[data-file-panel="${id}"]`),
     // The robot's own panel, and its sections top to bottom by their headings.
     sheet: () => pane.locator('[data-file-sheet="Robot"]'),
-    sections: () => pane.locator('[data-file-sheet="Robot"] [data-file-panel-section] > h2').allInnerTexts(),
+    sections: () => pane.locator('[data-file-sheet="Robot"] [data-file-panel-section] h2').allInnerTexts(),
     section: name => pane.getByRole('region', { name, exact: true }),
     settle: () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))),
     // The viewport's own pixels, without any chrome over them: what a host capture returns.
@@ -201,6 +201,13 @@ const sameCamera = (a, b) => a.every((value, index) => Math.abs(value - b[index]
 const round6 = value => Math.round(value * 1e6) / 1e6;
 const translation = matrix => [matrix[3], matrix[7], matrix[11]];
 
+// Anything inside a file panel's sections that scrolls on its own: the column is the panel's
+// one scroller, and the pinned Reference the only other.
+const scrollingInside = (pane, sheet) => pane.locator(`[data-file-sheet="${sheet}"] [data-file-panel-section]`).evaluateAll(sections =>
+  sections.flatMap(section => [section, ...section.querySelectorAll('*')])
+    .filter(element => /(auto|scroll)/.test(getComputedStyle(element).overflowY) && element.scrollHeight > element.clientHeight + 1)
+    .map(element => element.getAttribute('aria-label') || element.getAttribute('data-file-panel-section') || element.tagName));
+
 test('a robot opens in Position on its own panel: knobs drag joints, the camera keeps every other press, every pose write is a jump, and a pose step renders no component', async (t) => {
   const robot = await open(t, 'arm.srdf');
   const { page, pane } = robot;
@@ -214,11 +221,14 @@ test('a robot opens in Position on its own panel: knobs drag joints, the camera 
   assert.equal(await robot.tool('Fullscreen').count(), 0, 'so is Fullscreen: a robot presents no fullscreen');
   // The nav row is the tab strip: the robot's own panel, then Display, then the tree. Opened
   // directly, the file shows its own panel — never Display, and not the tree.
-  assert.deepEqual(await robot.panels(), ['Robot:true', 'Display:false', 'Show files:false']);
+  assert.deepEqual(await robot.panels(), ['Display:false', 'Robot:true', 'Show files:false']);
   assert.equal(await robot.sheet().count(), 1, 'the robot panel is named for what the file is, whatever its format');
   assert.equal(await pane.locator('[data-file-sheet="Display"]').count(), 0, 'Display is never where a file opens');
   assert.equal(await pane.getByRole('tab').count(), 0, 'a panel has no tabs inside it');
   assert.deepEqual(await robot.sections(), ['Position', 'Links']);
+  // Stacked tight: Links starts where Position ends.
+  const [positionBox, linksBox] = await Promise.all(['position', 'links'].map(id => pane.locator(`[data-file-panel-section="${id}"]`).boundingBox()));
+  assert.ok(Math.abs(linksBox.y - (positionBox.y + positionBox.height)) <= 1, `Links follows Position directly: ${positionBox.y + positionBox.height} → ${linksBox.y}`);
   // One knob per joint a person can drive: no fixed joint, no mimic follower. The follower has no slider either.
   assert.deepEqual(Object.keys(await robot.handles()).sort(), ['grip', 'lift', 'nod', 'shoulder']);
   assert.equal(await robot.jointField('grip_mirror', 'm').count(), 0);
@@ -374,6 +384,14 @@ test('Select picks links at once; a selection lives only under Select; Links sho
   const reference = pane.getByLabel('Reference details');
   await reference.getByText('shoulder', { exact: true }).first().waitFor();
   assert.match(await reference.innerText(), /arm/, 'the SRDF planning group of the link');
+  // Pinned at the panel's foot, under both sections.
+  const [pinned, sheetBox, linksAfter] = await Promise.all([reference.boundingBox(), robot.sheet().boundingBox(),
+    pane.locator('[data-file-panel-section="links"]').boundingBox()]);
+  assert.ok(Math.abs(pinned.y + pinned.height - (sheetBox.y + sheetBox.height)) <= 1, `the Reference ends where the panel does: ${pinned.y + pinned.height} vs ${sheetBox.y + sheetBox.height}`);
+  assert.ok(pinned.y >= linksAfter.y + linksAfter.height - 1, 'under Links');
+  // With the Reference pinned, the sections keep their full heights: nothing inside them
+  // scrolls — only the column does, and the Reference on its own.
+  assert.deepEqual(await scrollingInside(pane, 'Robot'), [], 'no section scrolls inside itself');
   // Leaving Select drops the selection, in the tree and the viewport alike.
   await robot.tool('Position').click();
   await robot.waitPressed(0);
@@ -400,7 +418,7 @@ test('Select picks links at once; a selection lives only under Select; Links sho
   await page.mouse.down(); await page.mouse.up();
   await robot.settle();
   assert.deepEqual(await robot.pressedRows(), ['Select upper_arm'], 'selected by the next frame');
-  assert.deepEqual(await robot.panels(), ['Robot:true', 'Display:false', 'Show files:false'], 'the pick revealed the robot\'s panel');
+  assert.deepEqual(await robot.panels(), ['Display:false', 'Robot:true', 'Show files:false'], 'the pick revealed the robot\'s panel');
   assert.equal(await robot.section('Links').isVisible(), true, 'where its Links are');
   assert.deepEqual((await page.evaluate(() => window.cadHarness.a.controller.readState())).selectedLinks, ['upper_arm']);
   // A robot has no zoom control of any kind: no percentage readout, no menu behind it,
@@ -420,7 +438,7 @@ test('Select picks links at once; a selection lives only under Select; Links sho
   assert.equal(await robot.sheet().isVisible(), true, 'the first Escape spent itself on the selection');
   await page.keyboard.press('Escape');
   await robot.sheet().waitFor({ state: 'hidden' });
-  assert.deepEqual(await robot.panels(), ['Robot:false', 'Display:false', 'Show files:false'], 'the second shut the panel');
+  assert.deepEqual(await robot.panels(), ['Display:false', 'Robot:false', 'Show files:false'], 'the second shut the panel');
   await robot.toggle('cad-file').click();
   await robot.sheet().waitFor();
   await page.waitForTimeout(400);
@@ -538,7 +556,7 @@ test('a pose, the tool and the open panel survive closing the file, and a pose i
   assert.match(record.renderer.signature, /arm\.urdf-1$/);
   await page.evaluate(() => window.cadHarness.mounted(true));
   await pane.locator('[data-file-sheet="Display"]').waitFor();
-  assert.deepEqual(await robot.panels(), ['Robot:false', 'Display:true', 'Show files:false'], 'the file comes back on the panel it was left on');
+  assert.deepEqual(await robot.panels(), ['Display:true', 'Robot:false', 'Show files:false'], 'the file comes back on the panel it was left on');
   await robot.toggle('cad-file').click();
   await robot.jointField('shoulder').waitFor();
   assert.deepEqual([await robot.jointField('shoulder').inputValue(), await robot.jointField('lift', 'm').inputValue(), await robot.jointField('nod').inputValue()], ['25°', '0.2 m', '12°']);
@@ -563,7 +581,7 @@ test('an SDF is the same robot with a section of its own; a robot declines the h
   await page.waitForFunction(() => window.__cadJointHandles?.().length === 1);
   assert.deepEqual(await robot.toolNames(), ['Position:true', 'Select:false']);
   // The same panel as any robot, named the same whatever the format on disk: SDF is a section of it.
-  assert.deepEqual(await robot.panels(), ['Robot:true', 'Display:false', 'Show files:false']);
+  assert.deepEqual(await robot.panels(), ['Display:false', 'Robot:true', 'Show files:false']);
   assert.deepEqual(await robot.sections(), ['Position', 'Links', 'SDF']);
   const text = (await robot.section('SDF').innerText()).replace(/\s+/g, ' ');
   for (const fact of ['Version 1.9', 'Document world', 'World lab', 'Frame mode native', 'Root link base', 'Model swing', 'Links 2', 'Joints 1', 'Lights 1', 'sun / directional']) assert.ok(text.includes(fact), `${fact} in: ${text}`);
@@ -588,7 +606,7 @@ test('an SDF is the same robot with a section of its own; a robot declines the h
   await page.waitForTimeout(300);
   assert.equal(await pane.getByRole('button', { name: 'Exit fullscreen', exact: true }).count(), 0);
   assert.equal(await pane.getByRole('group', { name: 'Fullscreen controls' }).count(), 0);
-  assert.deepEqual(await robot.panels(), ['Robot:false', 'Display:true', 'Show files:false'], 'the nav row stays');
+  assert.deepEqual(await robot.panels(), ['Display:true', 'Robot:false', 'Show files:false'], 'the nav row stays');
   assert.deepEqual(await robot.toolNames(), ['Position:true', 'Select:false'], 'and the tools');
   assert.equal((await robot.handles()).hinge.value, 40, 'and the knob, where the pose left it');
   assert.equal(await pane.getByRole('toolbar', { name: 'Animation playback' }).count(), 0, 'a robot has no routines to play');

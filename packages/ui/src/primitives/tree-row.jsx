@@ -9,7 +9,7 @@ export const TreeRowSurface = forwardRef(function TreeRowSurface({
   as: Component = 'div', active = false, cursor = false, className, style, children, ...props
 }, ref) {
   return <Component ref={ref} className={cn(
-    'flex min-w-0 w-full items-center gap-1.5 rounded-md pr-2 text-left text-sm font-normal transition-colors',
+    'flex min-w-0 w-full items-center gap-1.5 rounded-md pr-2 text-left text-xs font-normal transition-colors',
     active ? 'bg-accent text-accent-foreground' : 'text-foreground/80 hover:bg-accent/50',
     cursor && !active && 'bg-accent/30', className
   )} style={{ height: TREE_ROW_HEIGHT, ...style }} {...props}>{children}</Component>;

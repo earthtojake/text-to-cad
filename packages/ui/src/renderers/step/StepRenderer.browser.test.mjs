@@ -143,10 +143,10 @@ async function open() {
       .evaluateAll(buttons => buttons.map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`)),
     toggle: id => pane.locator(`[data-file-panel="${id}"]`),
     // The file panel's sections, top to bottom, by their headings.
-    sections: () => pane.locator('[data-file-sheet="Assembly"] [data-file-panel-section] > h2').allInnerTexts(),
+    sections: () => pane.locator('[data-file-sheet="Assembly"] [data-file-panel-section] h2').allInnerTexts(),
     section: name => pane.getByRole('region', { name, exact: true }),
     displayPanel: () => pane.locator('[data-file-sheet="Display"]'),
-    rows: () => pane.getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))
+    rows: () => pane.locator('[aria-label="Modeling tree"]').getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))
       .filter(label => label?.startsWith('Select ') || label?.startsWith('Expand ') || label?.startsWith('Collapse '))),
     frame: () => frame(pane),
     // What the pointer looks like over the model. Read from the INTERACTIVE
@@ -159,6 +159,13 @@ async function open() {
   };
 }
 
+// Anything inside a file panel's sections that scrolls on its own: the column is the panel's
+// one scroller, and the pinned Reference the only other.
+const scrollingInside = (pane, sheet) => pane.locator(`[data-file-sheet="${sheet}"] [data-file-panel-section]`).evaluateAll(sections =>
+  sections.flatMap(section => [section, ...section.querySelectorAll('*')])
+    .filter(element => /(auto|scroll)/.test(getComputedStyle(element).overflowY) && element.scrollHeight > element.clientHeight + 1)
+    .map(element => element.getAttribute('aria-label') || element.getAttribute('data-file-panel-section') || element.tagName));
+
 test('a STEP opens in Select with the tools its sidecar earns and Fullscreen last, on its own panel with the sections the sidecar earns, and paints both authored colours', async () => {
   const view = await open();
   const { pane, errors } = view;
@@ -167,13 +174,28 @@ test('a STEP opens in Select with the tools its sidecar earns and Fullscreen las
   // The nav row is the tab strip: the file's own panel (named for what it is, the icon its
   // tree draws for it), then Display, then the tree. The file opened directly, so it opened
   // on its own panel: never on Display, and not on the tree.
-  assert.deepEqual(await view.panels(), ['Assembly:true', 'Display:false', 'Show files:false']);
+  assert.deepEqual(await view.panels(), ['Display:false', 'Assembly:true', 'Show files:false']);
   assert.equal(await pane.locator('[data-file-sheet="Assembly"]').count(), 1, 'the file panel opens by default, named for the file');
   assert.equal(await view.displayPanel().count(), 0, 'Display is never where a file opens');
   // No tabs anywhere inside it: one column of sections, each under its heading.
   assert.equal(await pane.getByRole('tab').count(), 0);
   assert.deepEqual(await view.sections(), ['Features', 'Position'],
     'Position is here because the sidecar bound: schema 9, and a documentHash matching the STEP');
+  // Stacked tight: Position starts where Features ends, and what the panel has left over is
+  // left empty below them rather than spread between them.
+  const [features, position] = await Promise.all(['features', 'position'].map(id => pane.locator(`[data-file-panel-section="${id}"]`).boundingBox()));
+  const sheet = await pane.locator('[data-file-sheet="Assembly"]').boundingBox();
+  assert.ok(Math.abs(position.y - (features.y + features.height)) <= 1, `Position follows Features directly: ${features.y + features.height} → ${position.y}`);
+  assert.ok(position.y + position.height < sheet.y + sheet.height - 40, 'and the panel under them is empty');
+  // Each heading folds its section away and back: a view of the panel and nothing more — the
+  // tree stays mounted, and Position rises to meet the folded heading.
+  await pane.getByRole('button', { name: 'Collapse Features', exact: true }).click();
+  await pane.getByRole('button', { name: 'Select base', exact: true }).waitFor({ state: 'hidden' });
+  assert.equal(await pane.getByRole('button', { name: 'Select base', exact: true, includeHidden: true }).count(), 1, 'folded, not unmounted');
+  const risen = await pane.locator('[data-file-panel-section="position"]').boundingBox();
+  assert.ok(risen.y < position.y - 40, `Position rises under the folded Features: ${position.y} → ${risen.y}`);
+  await pane.getByRole('button', { name: 'Expand Features', exact: true }).click();
+  await pane.getByRole('button', { name: 'Select base', exact: true }).waitFor();
   const opened = await view.frame();
   assert.ok(coverage(opened) > 0.2, `the opening frame is the model: ${coverage(opened)}`);
   const boxes = partBoxes(opened);
@@ -201,6 +223,12 @@ test('Select picks parts and faces, a selection lives only under Select, and the
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.length === 1);
   assert.deepEqual((await view.state()).selectedPartIds, ['o1.1']);
   assert.match((await reference.innerText()).replace(/\s+/g, ' '), /Name base.*Type Component.*ID o1\.1.*Size 20 × 20 × 10 mm.*Color #3A6EA5/);
+  // The Reference is pinned at the panel's foot, under every section — never between two.
+  const [pinned, sheet, last] = await Promise.all([reference.boundingBox(), pane.locator('[data-file-sheet="Assembly"]').boundingBox(),
+    pane.locator('[data-file-panel-section]').last().boundingBox()]);
+  assert.ok(Math.abs(pinned.y + pinned.height - (sheet.y + sheet.height)) <= 1, `the Reference ends where the panel does: ${pinned.y + pinned.height} vs ${sheet.y + sheet.height}`);
+  assert.ok(pinned.y >= last.y + last.height - 1, `under the last section: ${pinned.y} vs ${last.y + last.height}`);
+  assert.deepEqual(await scrollingInside(pane, 'Assembly'), [], 'no section scrolls inside itself: only the column does');
   assert.equal(await pane.getByRole('button', { name: 'Select base', exact: true }).getAttribute('aria-pressed'), 'true', 'the tree row follows the viewport');
   await page.keyboard.down('Shift');
   await page.mouse.click(...at([15, 0, 4]));
@@ -449,7 +477,7 @@ test('every Display control reaches the drawn frame: the five modes, edges, the 
   await view.toggle('cad-display').click();
   const panel = view.displayPanel();
   await panel.waitFor();
-  assert.deepEqual(await view.panels(), ['Assembly:false', 'Display:true', 'Show files:false']);
+  assert.deepEqual(await view.panels(), ['Display:true', 'Assembly:false', 'Show files:false']);
   assert.equal(await pane.locator('[data-file-sheet="Assembly"]').count(), 1, 'the file panel is still mounted');
   assert.equal(await pane.locator('[data-file-sheet="Assembly"]').isHidden(), true, 'and hidden while Display is up');
   const solid = await view.frame();
@@ -733,7 +761,7 @@ test('Animate is the last mode on the strip, its playbar plays the routine, leav
   await pane.getByRole('group', { name: 'Interaction tools' }).waitFor();
   assert.deepEqual(await view.tools(), ['Select:false', 'Measure:false', 'Draw:false', 'Position:false', 'Animate:true', 'Fullscreen:false'],
     'back in the mode it left, and Fullscreen is an act, never a mode left pressed');
-  assert.deepEqual(await view.panels(), ['Assembly:true', 'Display:false', 'Show files:false'], 'and the panel it had');
+  assert.deepEqual(await view.panels(), ['Display:false', 'Assembly:true', 'Show files:false'], 'and the panel it had');
   assert.deepEqual(errors, []);
 });
 
@@ -817,7 +845,7 @@ test('Measure reads a distance between two picks; Draw lays ink over a STEP; and
     before.camera[key].forEach((value, index) => assert.ok(Math.abs(value - restored.camera[key][index]) < 1e-6, `${key}[${index}] came back`));
   }
   assert.equal(restored.camera.zoom, before.camera.zoom);
-  assert.deepEqual(await view.panels(), ['Assembly:false', 'Display:true', 'Show files:false'], 'and the open panel with them');
+  assert.deepEqual(await view.panels(), ['Display:true', 'Assembly:false', 'Show files:false'], 'and the open panel with them');
   assert.equal(await page.evaluate(() => window.cadHarness.state.panel), 'cad-display');
   assert.deepEqual(errors, []);
 });

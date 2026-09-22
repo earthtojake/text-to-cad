@@ -5,6 +5,7 @@ import { TreeRowSurface, TreeRowChevron, TreeRowLabel } from "@hardcore/ui/primi
 import { TreeFilterHighlight, TreeFilterInput } from "@hardcore/ui/primitives/tree-filter";
 import { cn } from "@hardcore/ui/utils";
 import InspectorSplit from "../kit/inspector/InspectorSplit.jsx";
+import { panelScroller } from "../kit/inspector/FilePanelSections.jsx";
 import RobotComponentDetails, { RobotLinkDetails } from "./LinkDetails.jsx";
 import { buildModelTreeSearchIndex, searchModelTree } from "../kit/inspector/modelTreeSearch.js";
 import { buildRobotTree, robotComponentNodeId, robotLinkFacts, robotLinkNodeId, robotTreeAncestorIds } from "./robotTree.js";
@@ -126,11 +127,11 @@ export default function LinksSection({ description = null, components = EMPTY, p
   const found = useMemo(() => (searchIndex ? searchModelTree(searchIndex, deferredQuery) : NO_MATCHES), [searchIndex, deferredQuery]);
   const listRef = useRef(null), resumeScroll = useRef(0), rowRefs = useRef(new Map());
   const changeQuery = value => {
-    if (!searching && value.trim() && listRef.current) resumeScroll.current = listRef.current.scrollTop;
+    if (!searching && value.trim() && listRef.current) resumeScroll.current = panelScroller(listRef.current).scrollTop;
     setQuery(value); setCursor(null);
   };
   // Back where the tree was; a hit selected meanwhile is then scrolled to by the reveal below.
-  useLayoutEffect(() => { if (!searching && listRef.current) listRef.current.scrollTop = resumeScroll.current; }, [searching]);
+  useLayoutEffect(() => { if (!searching && listRef.current) panelScroller(listRef.current).scrollTop = resumeScroll.current; }, [searching]);
 
   // A selection is always a row the tree holds: its owners open at once, whether it
   // came from a search hit or from the viewport. The one scroll waits for the tree.
@@ -168,11 +169,11 @@ export default function LinksSection({ description = null, components = EMPTY, p
     : selection.selectedComponentIds.length ? <RobotComponentDetails components={components} selectedIds={selection.selectedComponentIds}/> : null;
   const clearSelection = () => selection.select("");
 
-  return <div className="flex h-full min-h-0 flex-col text-xs" aria-label="Robot links">
-    <TreeFilterInput label="Filter links" placeholder="Filter links…" value={query} onChange={changeQuery} onKeyDown={onSearchKeyDown}/>
+  return <div className="flex flex-col text-xs" aria-label="Robot links">
+    <TreeFilterInput className="h-7" label="Filter links" placeholder="Filter links…" value={query} onChange={changeQuery} onKeyDown={onSearchKeyDown}/>
     <InspectorSplit title="Reference" label="Reference details" details={details}
       actions={<Button type="button" variant="ghost" size="icon-xs" aria-label="Clear selection" title="Clear selection" onClick={clearSelection}><X className="size-3.5" aria-hidden="true"/></Button>}>
-      <div ref={listRef} className="min-h-0 flex-1 overflow-auto px-1 py-1" aria-label="Robot tree area"
+      <div ref={listRef} className="px-1 py-1" aria-label="Robot tree area"
         onClick={event => { if (!event.target.closest("li,button,input")) clearSelection(); }}>
         {searching && <p role="status" className="px-2 py-1 text-micro text-muted-foreground">{found.total > found.matches.length ? `First ${found.matches.length} of ${found.total.toLocaleString()} matches` : `${found.total} ${found.total === 1 ? "match" : "matches"}`}</p>}
         {searching ? found.matches.length

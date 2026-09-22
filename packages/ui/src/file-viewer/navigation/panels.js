@@ -79,10 +79,10 @@ export const CAD_PANEL = Object.freeze({
 export const SOURCE_PANEL = "source";
 
 /**
- * A viewer file's panels, in nav-row order: the file's own controls, when it has
- * any, then its Display settings.
+ * A viewer file's panels, in nav-row order: its Display settings, then the file's
+ * own controls when it has any — so the file's own sits next to the file tree.
  *
- * `file` names the first by what the file is — `{ label, icon }`, the icon the
+ * `file` names the second by what the file is — `{ label, icon }`, the icon the
  * file tree draws for that kind of document (a part's box, an assembly's boxes, a
  * robot) — and is null for a file whose only settings are Display's (a mesh). It is
  * the default: a file opened directly opens with its controls. Display never is.
@@ -97,8 +97,8 @@ export const SOURCE_PANEL = "source";
 export function viewerPanels(ready, { file = null } = {}) {
   if (!ready) return [];
   return [
-    ...(file ? [{ id: CAD_PANEL.file, label: file.label, icon: file.icon, content: "slot", defaultOpen: true }] : []),
-    { id: CAD_PANEL.display, label: "Display", icon: SlidersHorizontal, content: "slot" }
+    { id: CAD_PANEL.display, label: "Display", icon: SlidersHorizontal, content: "slot" },
+    ...(file ? [{ id: CAD_PANEL.file, label: file.label, icon: file.icon, content: "slot", defaultOpen: true }] : [])
   ];
 }
 

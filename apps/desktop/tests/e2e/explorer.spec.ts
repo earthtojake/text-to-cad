@@ -637,7 +637,7 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   // preserves Display's controls and the tree. The row holds those two and the files
   // toggle, and no tab of any name: the retired View, Model and Inspector included.
   expect(await page.locator("header [data-file-panel]").evaluateAll(toggles => toggles.map(toggle => toggle.getAttribute("aria-label"))))
-    .toEqual(["Part", "Display", "Show files"]);
+    .toEqual(["Display", "Part", "Show files"]);
   await expect(page.locator("[data-file-sheet]").getByRole("tab")).toHaveCount(0);
   const view = page.locator("header [data-file-panel=cad-display]");
   const model = page.locator("header [data-file-panel=cad-file]");

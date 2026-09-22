@@ -23,10 +23,10 @@ const Icon = () => null;
 const part = { label: "Part", icon: Icon };
 const panelsOf = (declared, open = "", options) => [...declared, treePanel(open, options)];
 
-test("a viewer file declares its own panel, then Display; a file with nothing of its own, Display alone", () => {
+test("a viewer file declares Display, then its own panel; a file with nothing of its own, Display alone", () => {
   assert.deepEqual(
     viewerPanels(true, { file: part }).map((panel) => [panel.id, panel.label, panel.content]),
-    [["cad-file", "Part", "slot"], ["cad-display", "Display", "slot"]]
+    [["cad-display", "Display", "slot"], ["cad-file", "Part", "slot"]]
   );
   assert.deepEqual(viewerPanels(true).map((panel) => panel.id), ["cad-display"]);
   // And there are none at all until the surface behind them is up: a toggle
@@ -54,7 +54,7 @@ test("markdown's one panel is named by what pressing it does", () => {
 
 test("the files toggle is last in every list, and named by what it does", () => {
   const viewer = panelsOf(viewerPanels(true, { file: part }));
-  assert.deepEqual(viewer.map((panel) => panel.id), ["cad-file", "cad-display", "tree"]);
+  assert.deepEqual(viewer.map((panel) => panel.id), ["cad-display", "cad-file", "tree"]);
   assert.equal(viewer.at(-1)?.label, "Show files");
   assert.deepEqual(panelsOf([], FILE_PANEL_TREE).map((panel) => [panel.id, panel.label]), [["tree", "Hide files"]]);
 });

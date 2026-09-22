@@ -217,8 +217,8 @@ all: it is a straight 2D render on a canvas (drag to pan, wheel or pinch to zoom
 about the pointer, double-click to fit), and its file navbar carries Take
 snapshot and the file tree's toggle, nothing else. Buttons wrap inside the pill
 when an open panel or a narrow host reduces the scene width. Snapshot is a
-direct action before the panel toggles in the file navbar (the file's own panel,
-Display, then the file tree); the web prompt adapter copies the viewport image
+direct action before the panel toggles in the file navbar (Display, the file's own
+panel, then the file tree); the web prompt adapter copies the viewport image
 and references to the clipboard.
 There is no zoom control: no percentage readout, no menu behind
 one, no zoom toolbar. A STEP's viewport context menu ends in Zoom to fit and Zoom
@@ -250,9 +250,10 @@ and clocks.
 
 ## Current viewer behavior
 
-The nav row is the tab strip: a file's toggles are its own panel, `Display`,
-then the file tree, and no panel has tabs inside it. A STEP's own panel is
-`Part` or `Assembly`; it stacks Features, then Position when the sidecar
+The nav row is the tab strip: a file's toggles are `Display`, its own panel, then
+the file tree, and no panel has tabs inside it. Sections stack tight at their full
+heights in one scrolling column, each foldable beside another, with a pick's
+Reference pinned at the foot. A STEP's own panel is `Part` or `Assembly`; it stacks Features, then Position when the sidecar
 declares kinematics (a `Pose` row, the joint sliders, then Reset), then Issues
 when there are any. Every pose write — a named pose, a slider, a typed value, or
 a Position-tool knob — is an instant jump; there is no eased transition. Reset

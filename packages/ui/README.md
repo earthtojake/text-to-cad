@@ -48,7 +48,9 @@ The token uses rems so desktop UI scaling still works without changing the
 normal 16px root or shrinking layout spacing.
 
 File-tab chrome uses normal-weight type. Breadcrumbs, file and model rows, and
-filter matches use muted/primary text color for emphasis, never bold weight.
+filter matches use muted/primary text color for emphasis, never bold weight. Tree
+rows — files, model features, robot links — are 12px, the size of the section
+titles and the filter above them.
 Both tree lists inset row backgrounds 4px from their horizontal edges, including
 selected, hovered and filtered rows; nesting adds indentation inside that gutter.
 Every panel — the file tree, a file's own panel, Display — shares a 256px minimum
@@ -230,12 +232,14 @@ and versioned, bounded memory cache; it adds no persistent store. Read
 cache identity, cancellation or recognition limits.
 
 A file's controls are nav-row panels, never tabs inside a panel. From left to
-right a file has its own panel (a STEP's `Part` or `Assembly`, a robot's `Robot`),
-then `Display`, then the file tree; a mesh has no panel of its own, and a DXF has
-only the file tree. A file's own panel stacks sections under headings that never
-collapse (`FilePanelSections`): a STEP's Features, Position when it declares
+right a file has `Display`, then its own panel (a STEP's `Part` or `Assembly`, a
+robot's `Robot`), then the file tree; a mesh has no panel of its own, and a DXF has
+only the file tree. A file's own panel stacks its sections tight, each at its full
+height (`FilePanelSections`): a STEP's Features, Position when it declares
 kinematics, and Issues when it has any; a robot description's Position and Links
-(SDF adds its SDF metadata). Links is the description's link tree, with the Model
+(SDF adds its SDF metadata). Only the column scrolls, never a section; beside
+another, each section folds away and back with a plus and minus, a view only; and a
+pick's Reference is pinned at the panel's foot, scrolling on its own. Links is the description's link tree, with the Model
 tree's rows, filter and Reference pane; see [robot links](docs/cad-renderer.md#robot-links).
 Which panel a file opens with is the host's to apply
 (`ViewerHost.navigation.openFile(path, { target, panel })`): a file picked in the
@@ -244,13 +248,13 @@ open gets the file's own panel, or nothing when it has none. Display is never op
 by default, and no panel is saved per file. Switching to Display keeps the file's
 panel mounted behind it, preserving the tree's disclosure and scroll.
 The Display panel uses a compact properties layout with 28px headers/controls, no extra
-header-to-content padding, 4px row gaps and 8px section bottoms. Mode contains equal-width Mode and
-Projection dropdowns; Explode is a separate section. Surfaces stays expanded,
+header-to-content padding, 4px row gaps and 8px section bottoms. Its first section, Display, holds
+equal-width Mode and Projection dropdowns; Explode is a separate section. Surfaces stays expanded,
 and perspective uses the standard lens without a separate Camera section. Optional settings sections are
 feature gates: title/plus click enables, only the trailing minus disables, and
 gray/collapsed means neutral/off. Reopening resets values to defaults, including
 Clip offsets/Flip and Explode's amount (50%). Explode stays open when its slider
-returns to 0%; only the minus collapses it. The fixed section order is Mode,
+returns to 0%; only the minus collapses it. The fixed section order is Display,
 Surfaces, Explode, Clip, Edges, Grid, Axes, Lighting, Background, Floor, and no
 preset reorders it. Grid and Axes are separate, with matching default colors.
 Floor and Background have no redundant enable/transparency checkboxes; opacity
