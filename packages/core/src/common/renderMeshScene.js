@@ -164,8 +164,8 @@ function mergeBoundsList(boundsList) {
   return count > 0 && min.every(Number.isFinite) && max.every(Number.isFinite) ? { min, max } : null;
 }
 
-function addFloor(scene, bounds, themeSettings, sceneScale = RENDER_SCENE_SCALE.CAD, guideSettings = null) {
-  return addSharedFloor(scene, bounds, themeSettings, sceneScale, RENDER_SCENE_SCALE_SETTINGS, guideSettings);
+function addFloor(scene, bounds, themeSettings, sceneScale = RENDER_SCENE_SCALE.CAD, guideSettings = null, sizeBounds = null) {
+  return addSharedFloor(scene, bounds, themeSettings, sceneScale, RENDER_SCENE_SCALE_SETTINGS, guideSettings, sizeBounds);
 }
 
 function boundsCorners(bounds) {
@@ -962,10 +962,18 @@ export function renderModel(_THREE, model, viewportOptions = {}) {
   const studioConfiguration = photographicConfiguration && normalizeBoolean(job.output?.transparent, false)
     ? { ...photographicConfiguration, backdrop: { ...photographicConfiguration.backdrop, transparent: true, opacity: 0 } }
     : photographicConfiguration;
+  // What the GROUND is sized from. The viewer sizes the grid, the stage and the studio floor from
+  // the model's rest placement, so posing or playing never rescales the ground under it; the CLI
+  // follows the same rule so a posed snapshot shows the ground the viewer shows. A video passes
+  // `floorBounds` (the union across its frames) and keeps it for everything.
+  const restGroundBounds = model.restBounds || null;
   const studioRuntime = studioConfiguration ? { scene, renderer, modelBounds: model.bounds || context.bounds } : null;
   if (studioRuntime) {
     applyPhotographicStudio(THREE, studioRuntime, studioConfiguration, {
       bounds: viewportOptions.floorBounds || studioRuntime.modelBounds,
+      // The viewer sizes the studio floor from the REST placement (`groundBounds`), so a posed
+      // still must too, or the CLI and the viewer disagree about how big the ground is.
+      groundBounds: viewportOptions.floorBounds ? null : restGroundBounds,
       sceneScale: context.sceneScale,
       shadowMapSize: context.quality.shadowMapSize
     });
@@ -1016,7 +1024,9 @@ export function renderModel(_THREE, model, viewportOptions = {}) {
     viewportOptions.floorBounds || model.bounds || context.bounds,
     { ...context.theme, floor: { enabled: false }, colorMode: context.sceneSettings.appearance },
     context.sceneScale,
-    context.displaySettings.guides
+    context.displaySettings.guides,
+    // A still is sized from rest, as the viewer is; a video keeps its union box for both.
+    viewportOptions.floorBounds ? null : restGroundBounds
   );
   const orthographicCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.001, 10000);
   const perspectiveCamera = new THREE.PerspectiveCamera(48, firstSize.width / Math.max(firstSize.height, 1), 0.1, 50000);
