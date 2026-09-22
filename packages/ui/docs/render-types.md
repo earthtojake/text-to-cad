@@ -41,13 +41,10 @@ format. Pure data: no behaviour, no imports beyond the format enum.
 |---|---|
 | `assetKind` | Which asset a format LOADS: `mesh`, `drawing`, `robot`. |
 | `iconKind` | The file-list glyph. |
-| `sheetKind` | Which file-sheet section set mounts. |
-| `label` | User-facing format name (status chips, sheet titles, loading labels). |
 | `tools` | `select`, `pan`, `draw`, `orbit`, `screenshot`. Orbit and screenshot are true for every format WITH a viewport — they act on the viewport, not the geometry. `dxf` claims none of them: its pane is a canvas with no toolbar over it. |
 | `parts` | Per-part selection, hiding, isolate, assembly tree. |
 | `topology` | Face/edge/vertex references. Implies `parts`. |
 | `exploded`, `displayModes`, `clip` | STEP-tier display transforms. |
-| `themeProjection` | Honours the internally resolved scene recipe's `themeSettings.projection`. |
 | `params` | `sidecar` (the model's `@step(pose=...)` block), or `null`. |
 | `animations` | Has animation clips, so transport controls apply. |
 | `artifactManaged` | Builds a package before it can render. A format listed here that the backend cannot produce a package for blocks forever, so a format the viewer renders from its own file belongs out. |

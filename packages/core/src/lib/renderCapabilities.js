@@ -72,8 +72,6 @@ const NO_VIEWPORT_TOOLS = Object.freeze({
 const MESH_CAPABILITIES = Object.freeze({
   assetKind: ASSET_KIND.MESH,
   iconKind: ENTRY_ICON_KIND.STL_MESH,
-  sheetKind: "mesh",
-  label: "STL",
   parts: false,
   topology: false,
   // Measure is a STEP tool: it snaps to B-rep topology. A mesh has only triangle corners.
@@ -81,7 +79,6 @@ const MESH_CAPABILITIES = Object.freeze({
   exploded: false,
   displayModes: false,
   clip: false,
-  themeProjection: true,
   params: null,
   animations: false,
   artifactManaged: false,
@@ -90,8 +87,6 @@ const MESH_CAPABILITIES = Object.freeze({
 const ROBOT_CAPABILITIES = Object.freeze({
   assetKind: ASSET_KIND.ROBOT,
   iconKind: ENTRY_ICON_KIND.ROBOT,
-  sheetKind: RENDER_FORMAT.URDF,
-  label: "URDF",
   // No selection. A URDF is a link tree, so links CAN be made pickable — that was tried and
   // removed: selecting one gives you nothing to do with it. There is no copyable reference
   // for a link the way there is for a STEP face or occurrence, so the whole affordance was
@@ -104,7 +99,6 @@ const ROBOT_CAPABILITIES = Object.freeze({
   exploded: false,
   displayModes: false,
   clip: false,
-  themeProjection: true,
   params: null,
   animations: false,
   artifactManaged: false,
@@ -113,8 +107,6 @@ const ROBOT_CAPABILITIES = Object.freeze({
 const DEFAULT_CAPABILITIES = Object.freeze({
   assetKind: ASSET_KIND.MESH,
   iconKind: ENTRY_ICON_KIND.STEP,
-  sheetKind: "",
-  label: "",
   tools: VIEWPORT_TOOLS,
   parts: false,
   topology: false,
@@ -122,8 +114,6 @@ const DEFAULT_CAPABILITIES = Object.freeze({
   exploded: false,
   displayModes: false,
   clip: false,
-  // Projection is a THEME trait, and every format honours it.
-  themeProjection: true,
   params: null,
   animations: false,
   // Formats whose VIEWPORT CONTENT comes from a generated package, so the viewer checks
@@ -139,8 +129,6 @@ export const RENDER_CAPABILITIES = Object.freeze({
   [RENDER_FORMAT.STEP]: Object.freeze({
     ...DEFAULT_CAPABILITIES,
     iconKind: ENTRY_ICON_KIND.STEP,
-    sheetKind: RENDER_FORMAT.STEP,
-    label: "STEP",
     parts: true,
     topology: true,
     measure: true,
@@ -151,45 +139,32 @@ export const RENDER_CAPABILITIES = Object.freeze({
     animations: true,
     artifactManaged: true,
   }),
-  [RENDER_FORMAT.STL]: Object.freeze({ ...DEFAULT_CAPABILITIES, ...MESH_CAPABILITIES, label: "STL" }),
+  [RENDER_FORMAT.STL]: Object.freeze({ ...DEFAULT_CAPABILITIES, ...MESH_CAPABILITIES }),
   [RENDER_FORMAT.THREE_MF]: Object.freeze({
     ...DEFAULT_CAPABILITIES,
     ...MESH_CAPABILITIES,
-    iconKind: ENTRY_ICON_KIND.THREE_MF_MESH,
-    label: "3MF"
+    iconKind: ENTRY_ICON_KIND.THREE_MF_MESH
   }),
   [RENDER_FORMAT.GLB]: Object.freeze({
     ...DEFAULT_CAPABILITIES,
     ...MESH_CAPABILITIES,
     iconKind: ENTRY_ICON_KIND.GLB_MESH,
-    label: "GLB",
     // Content-gated after parse: only embedded playable clips mount controls.
     animations: true
   }),
   // A DXF is NOT on the 3D shell (packages/ui/src/renderers/dxf): the pane is a canvas
   // painted from `GET /__cad/drawing`. What survives here is what the file LIST and the
-  // asset layer still ask — the icon, the label, which asset to load — plus the claim
-  // the row has to withdraw: there is no viewport, and so no viewport tools.
+  // asset layer still ask — the icon and which asset to load — plus the claim the row
+  // has to withdraw: there is no viewport, and so no viewport tools.
   [RENDER_FORMAT.DXF]: Object.freeze({
     ...DEFAULT_CAPABILITIES,
     assetKind: ASSET_KIND.DRAWING,
     iconKind: ENTRY_ICON_KIND.DXF,
-    label: "DXF",
     tools: NO_VIEWPORT_TOOLS,
   }),
-  [RENDER_FORMAT.URDF]: Object.freeze({ ...DEFAULT_CAPABILITIES, ...ROBOT_CAPABILITIES, label: "URDF" }),
-  [RENDER_FORMAT.SRDF]: Object.freeze({
-    ...DEFAULT_CAPABILITIES,
-    ...ROBOT_CAPABILITIES,
-    sheetKind: RENDER_FORMAT.SRDF,
-    label: "SRDF"
-  }),
-  [RENDER_FORMAT.SDF]: Object.freeze({
-    ...DEFAULT_CAPABILITIES,
-    ...ROBOT_CAPABILITIES,
-    sheetKind: RENDER_FORMAT.SDF,
-    label: "SDF"
-  })
+  [RENDER_FORMAT.URDF]: Object.freeze({ ...DEFAULT_CAPABILITIES, ...ROBOT_CAPABILITIES }),
+  [RENDER_FORMAT.SRDF]: Object.freeze({ ...DEFAULT_CAPABILITIES, ...ROBOT_CAPABILITIES }),
+  [RENDER_FORMAT.SDF]: Object.freeze({ ...DEFAULT_CAPABILITIES, ...ROBOT_CAPABILITIES })
 });
 
 // Extension aliases that name the same render format.
@@ -227,10 +202,6 @@ export function hasCapability(renderFormat, capability) {
 // written once rather than once per store.
 export function parameterSourceKind(renderFormat) {
   return renderCapabilities(renderFormat).params || "";
-}
-
-export function renderFormatLabel(renderFormat) {
-  return renderCapabilities(renderFormat).label;
 }
 
 export function isArtifactManagedFormat(renderFormat) {
