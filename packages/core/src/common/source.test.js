@@ -115,7 +115,7 @@ test("snapshot tessellation is explicit, finite and restricted to exact surfaces
   assert.throws(() => normalizeRenderTessellation({ chordTolerance: 1e-12 }), /at least 0.00001/);
   assert.throws(() => normalizeRenderTessellation({ angleTolerance: 1e-6 }), /at least 0.005/);
   assert.deepEqual(normalizeRenderTessellation(RENDER_TESSELLATION_FLOORS), { ...RENDER_TESSELLATION_FLOORS });
-  await assert.rejects(() => loadSource({ kind: "glb", meshData: meshData(),
+  await assert.rejects(() => loadSource({ meshData: meshData(),
     quality: { tessellation: { chordTolerance: .001 } } }), /only for STEP/);
   await assert.rejects(() => loadSource({ kind: "step", meshData: meshData(),
     quality: { tessellation: { chordTolerance: .001 } } }), /exact-surface STEP package/);
@@ -309,7 +309,6 @@ async function withTempModule(callback) {
 test("loadSource rejects STEP parameter options for non-STEP sources", async () => {
   await assert.rejects(
     () => loadSource({
-      kind: "glb",
       meshData: meshData(),
       kinematics: { drive: 90 }
     }),
@@ -317,7 +316,6 @@ test("loadSource rejects STEP parameter options for non-STEP sources", async () 
   );
   await assert.rejects(
     () => loadSource({
-      kind: "glb",
       meshData: meshData(),
       stepParameterUrl: "file:///tmp/part.step.mjs"
     }),
@@ -604,78 +602,20 @@ test("render-only source loading leaves STEP topology lazy", async (t) => {
   assert.equal(fetches, 0);
 });
 
-function binaryStlTriangle() {
-  // 80-byte header + uint32 triangle count + one 50-byte triangle record.
-  const buffer = new ArrayBuffer(84 + 50);
-  const view = new DataView(buffer);
-  view.setUint32(80, 1, true); // triangle count
-  const floats = [
-    0, 0, 1, // normal
-    0, 0, 0, // v1
-    1, 0, 0, // v2
-    0, 1, 0 // v3
-  ];
-  let offset = 84;
-  for (const value of floats) {
-    view.setFloat32(offset, value, true);
-    offset += 4;
-  }
-  // trailing uint16 attribute byte count left as 0
-  return buffer;
-}
-
-test("loadSource builds mesh data from an STL url", async () => {
+// Every other file family is drawn by its own scene builder, the one its viewer renderer
+// uses (common/headlessScene.js); loadSource flattens none of them into mesh data.
+test("loadSource composes STEP documents and refuses every other file family by name, fetching nothing", async (t) => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response(binaryStlTriangle(), { status: 200 });
-  try {
-    const source = await loadSource("/models/part.stl");
-    assert.equal(source.kind, "stl");
-    assert.equal(source.stepParameterSource, null);
-    assert.equal(source.selectorRuntime, null);
-    assert.equal(source.displayEdgeRuntime, null);
-    assert.ok(source.meshData.vertices.length >= 9);
-    assert.ok(source.meshData.indices.length >= 3);
-    assert.equal(source.meshData.sourceFormat, "stl");
-  } finally {
-    globalThis.fetch = originalFetch;
+  let fetches = 0;
+  globalThis.fetch = async () => { fetches += 1; throw new Error("unexpected fetch"); };
+  t.after(() => { globalThis.fetch = originalFetch; });
+  for (const input of ["/models/part.stl", "/models/part.glb", "/models/robot.urdf",
+    { kind: "3mf", meshData: meshData() }, { kind: "glb", url: "/models/part.glb" },
+    { resolved: { kind: "sdf", url: "/models/robot.sdf", inputPath: "/models/robot.sdf" } }, { kind: "srdf", url: "/models/robot.srdf" }]) {
+    await assert.rejects(() => loadSource(input), /loadSource composes a STEP document; a (STL|GLB|URDF|3MF|SDF|SRDF) is drawn by its own scene builder/,
+      JSON.stringify(input));
   }
-});
-
-test("loadSource fetches a direct mesh exactly once (no STEP sidecar loads)", async () => {
-  const originalFetch = globalThis.fetch;
-  const fetchedUrls = [];
-  globalThis.fetch = async (url) => {
-    fetchedUrls.push(String(url));
-    return new Response(binaryStlTriangle(), { status: 200 });
-  };
-  try {
-    const source = await loadSource("/models/part.stl");
-    // Selector/display-edge runtimes are STEP topology sidecars; loading them for a
-    // mesh kind re-downloads the binary just to fail the GLB parse. One fetch total.
-    assert.deepEqual(fetchedUrls, ["/models/part.stl"]);
-    assert.equal(source.selectorRuntime, null);
-    assert.equal(source.displayEdgeRuntime, null);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test("loadSource surfaces STL fetch failures", async () => {
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response("nope", { status: 404 });
-  try {
-    await assert.rejects(() => loadSource("/models/missing.stl"), /Failed to load STL source: HTTP 404/);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test("loadSource routes 3MF sources through the non-step return path", async () => {
-  const source = await loadSource({ kind: "3mf", meshData: meshData() });
-  assert.equal(source.kind, "3mf");
-  assert.equal(source.stepParameterSource, null);
-  assert.equal(source.selectorRuntime, null);
-  assert.equal(source.displayEdgeRuntime, null);
+  assert.equal(fetches, 0);
 });
 
 test("retired render snapshot field is rejected before loading a source", async (t) => {

@@ -2,20 +2,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  applyUrdfPoseToMeshData,
   buildDefaultUrdfJointValues,
-  buildUrdfMeshGeometry,
+  buildUrdfVisualParts,
   clampJointValueDeg,
   jointMotionTransform,
   linkOriginInFrame,
   multiplyTransforms,
-  poseUrdfMeshData,
   posedJointLocalTransform,
   resolveUrdfJointValues,
   solveUrdfLinkWorldTransforms,
   transformPoint
 } from "./kinematics.js";
-import { displayTransformForPart } from "../../common/stepModuleEffects.js";
 
 function translationTransform(x, y, z) {
   return [
@@ -186,12 +183,6 @@ function sampleUrdf() {
   };
 }
 
-const PART_MESHES = new Map([
-  ["base-part", partMesh({ min: [0, 0, 0], max: [1, 1, 0] })],
-  ["arm-part", partMesh({ min: [0, 0, 0], max: [2, 1, 0] })],
-  ["tool-part", partMesh({ min: [0, 0, 0], max: [1, 2, 0] })]
-]);
-
 test("zero-pose solving reproduces authored default transforms", () => {
   const linkWorldTransforms = solveUrdfLinkWorldTransforms(sampleUrdf(), buildDefaultUrdfJointValues(sampleUrdf()));
 
@@ -344,401 +335,82 @@ test("resolved joint values clamp driven joints and solve mimic followers from t
   assert.equal(resolveUrdfJointValues(urdf).get("driver"), 0, "no value is the declared default");
 });
 
-// The merged geometry of the sample robot, posed: what the headless renderer draws.
-function posedMeshData(jointValues) {
-  return poseUrdfMeshData(sampleUrdf(), buildUrdfMeshGeometry(sampleUrdf(), PART_MESHES), jointValues);
-}
-
-test("posed mesh bounds update after joint motion", () => {
-  const zeroPose = posedMeshData({ base_to_arm: 0 });
-  const rotatedPose = posedMeshData({ base_to_arm: 90 });
-
-  assert.notDeepEqual(zeroPose.meshData.bounds, rotatedPose.meshData.bounds);
-  assert.equal(zeroPose.meshData.parts.length, 3);
-  assert.equal(rotatedPose.meshData.parts.length, 3);
-});
-
-// The camera that renders this robot is grounded on the zero pose, so a posed
-// wrapper has to keep that box beside its live one. Without it a viewer has no
-// way back: `bounds` is the only box it holds, and re-fitting to that one makes
-// the zoom a function of wherever the joints happen to be.
-test("a posed robot carries the zero-pose bounds whatever the joints are driven to", () => {
-  const meshGeometry = buildUrdfMeshGeometry(sampleUrdf(), PART_MESHES);
-  const zeroPose = poseUrdfMeshData(sampleUrdf(), meshGeometry, { base_to_arm: 0 });
-  const rotatedPose = poseUrdfMeshData(sampleUrdf(), meshGeometry, { base_to_arm: 90 });
-  const farPose = poseUrdfMeshData(sampleUrdf(), meshGeometry, { base_to_arm: -60 });
-
-  assert.deepEqual(zeroPose.meshData.restBounds, zeroPose.meshData.bounds,
-    "at the joint defaults the two boxes are the same box");
-  assert.notDeepEqual(rotatedPose.meshData.bounds, zeroPose.meshData.bounds);
-  assert.deepEqual(rotatedPose.meshData.restBounds, zeroPose.meshData.bounds);
-  assert.deepEqual(farPose.meshData.restBounds, zeroPose.meshData.bounds);
-});
-
-test("an in-place URDF pose republishes the same zero-pose bounds", () => {
-  const meshGeometry = buildUrdfMeshGeometry(sampleUrdf(), PART_MESHES);
-  const restBounds = applyUrdfPoseToMeshData(sampleUrdf(), meshGeometry, {}).meshData.restBounds;
-  // Posing mutates the wrapper, so a second pose reads back parts a previous
-  // pose already moved -- the rest box has to be rebuilt from sourceBounds, not
-  // accumulated from the last one.
-  applyUrdfPoseToMeshData(sampleUrdf(), meshGeometry, { base_to_arm: 90 });
-  const posed = applyUrdfPoseToMeshData(sampleUrdf(), meshGeometry, { base_to_arm: -60 });
-
-  assert.deepEqual(posed.meshData.restBounds, restBounds);
-  assert.notDeepEqual(posed.meshData.bounds, restBounds);
-});
-
-test("posing URDF mesh data reuses the static geometry buffers", () => {
-  const meshGeometry = buildUrdfMeshGeometry(sampleUrdf(), PART_MESHES);
-  const zeroPose = poseUrdfMeshData(sampleUrdf(), meshGeometry, { base_to_arm: 0 });
-  const rotatedPose = poseUrdfMeshData(sampleUrdf(), meshGeometry, { base_to_arm: 90 });
-
-  assert.equal(zeroPose.meshData.vertices, meshGeometry.vertices);
-  assert.equal(rotatedPose.meshData.vertices, meshGeometry.vertices);
-  assert.equal(zeroPose.meshData.indices, meshGeometry.indices);
-  assert.equal(rotatedPose.meshData.indices, meshGeometry.indices);
-  assert.equal(zeroPose.meshData.geometrySource, meshGeometry);
-  assert.equal(rotatedPose.meshData.geometrySource, meshGeometry);
-  assert.notDeepEqual(zeroPose.meshData.bounds, rotatedPose.meshData.bounds);
-});
-
-test("applying a URDF pose in place preserves mesh identity and updates posed parts", () => {
-  const meshGeometry = buildUrdfMeshGeometry(sampleUrdf(), PART_MESHES);
-  const zeroPose = applyUrdfPoseToMeshData(sampleUrdf(), meshGeometry, { base_to_arm: 0 });
-  const zeroParts = zeroPose.meshData.parts;
-  const zeroBounds = zeroPose.meshData.bounds;
-  const rotatedPose = applyUrdfPoseToMeshData(sampleUrdf(), meshGeometry, { base_to_arm: 90 });
-
-  assert.equal(zeroPose.meshData, meshGeometry);
-  assert.equal(rotatedPose.meshData, meshGeometry);
-  assert.equal(rotatedPose.meshData.geometrySource, meshGeometry);
-  assert.notEqual(rotatedPose.meshData.parts, zeroParts);
-  assert.notDeepEqual(zeroBounds, rotatedPose.meshData.bounds);
-  assert.notDeepEqual(
-    zeroParts.find((part) => part.linkName === "arm_link").transform,
-    rotatedPose.meshData.parts.find((part) => part.linkName === "arm_link").transform
-  );
-});
-
-test("posed URDF mesh data can override link world transforms", () => {
-  const meshGeometry = buildUrdfMeshGeometry(sampleUrdf(), PART_MESHES);
-  const overrideTransform = translationTransform(25, 0, 0);
-  const posed = poseUrdfMeshData(
-    sampleUrdf(),
-    meshGeometry,
-    { base_to_arm: 0 },
-    new Map([["arm_link", overrideTransform]])
-  );
-
-  assert.deepEqual(transformPoint(posed.linkWorldTransforms.get("arm_link"), [0, 0, 0]), [25, 0, 0]);
-  assert.deepEqual(transformPoint(posed.meshData.parts.find((part) => part.linkName === "arm_link").transform, [0, 0, 0]), [25, 0, 0]);
-});
-
-test("posed URDF mesh data preserves resolved visual colors", () => {
-  const posed = posedMeshData({ base_to_arm: 0 });
-
-  assert.deepEqual(
-    posed.meshData.parts.map((part) => part.color),
-    ["#2b2f33", "#a4abb3", "#a4abb3"]
-  );
-  assert.equal(posed.meshData.has_source_colors, true);
-  assert.deepEqual(
-    rounded(posed.meshData.colors.slice(0, 9)),
-    rounded(repeatedTriplet(linearHexTriplet("#2b2f33")))
-  );
-  assert.deepEqual(
-    rounded(posed.meshData.colors.slice(9, 18)),
-    rounded(repeatedTriplet(linearHexTriplet("#a4abb3")))
-  );
-});
-
-test("URDF mesh data builds primitive box visuals without external mesh assets", () => {
+// A description's visuals as the parts a robot's scene is built from. The scene poses them
+// (robotScene.test.js holds it to the solver); these hold what a part carries.
+test("visual parts keep the robot's link meshes in their own units and frames, the visual's transform beside them", () => {
   const urdfData = {
     rootLink: "base_link",
     rootWorldTransform: translationTransform(0, 0, 0),
     links: [
-      {
-        name: "base_link",
-        visuals: [
-          {
-            id: "base_link:v1",
-            label: "box",
-            primitive: {
-              type: "box",
-              size: [2, 4, 6]
-            },
-            color: "#a4abb3",
-            localTransform: translationTransform(0, 0, 0)
-          }
-        ]
-      }
+      { name: "base_link", visuals: [{ id: "base_link:visual", partFileRef: "link-mesh", localTransform: scaleTransform(0.001) }] },
+      { name: "second_link", visuals: [{ id: "second_link:visual", partFileRef: "link-mesh", localTransform: scaleTransform(0.001) }] }
     ],
+    joints: [
+      { name: "fixed_joint", type: "fixed", parentLink: "base_link", childLink: "second_link", originTransform: translationTransform(0.3, 0, 0) }
+    ]
+  };
+  const linkMesh = partMesh({ min: [0, 0, 0], max: [100, 10, 10] });
+  const parts = buildUrdfVisualParts(urdfData, new Map([["link-mesh", linkMesh]]));
+
+  assert.deepEqual(parts.map((part) => [part.id, part.linkName, part.sourceMeshKey]),
+    [["base_link:visual", "base_link", "link-mesh"], ["second_link:visual", "second_link", "link-mesh"]]);
+  assert.equal(parts[0].sourceMesh, linkMesh, "the loaded mesh itself, never a copy");
+  assert.equal(parts[1].sourceMesh, linkMesh);
+  assert.deepEqual(parts[0].bounds, { min: [0, 0, 0], max: [100, 10, 10] }, "in the mesh file's own units");
+  assert.equal(parts[0].localTransform[0], 0.001, "the <mesh scale> lives in the part's transform");
+  assert.deepEqual([parts[0].vertexCount, parts[0].triangleCount], [3, 1]);
+  assert.equal("transform" in parts[0], false, "a part is not placed: the scene graph places it");
+});
+
+test("visual parts build primitive visuals without external mesh assets", () => {
+  const urdfData = {
+    rootLink: "base_link",
+    rootWorldTransform: translationTransform(0, 0, 0),
+    links: [{ name: "base_link", visuals: [{ id: "base_link:v1", label: "box", primitive: { type: "box", size: [2, 4, 6] },
+      color: "#a4abb3", localTransform: translationTransform(0, 0, 0) }] }],
     joints: []
   };
 
-  const meshGeometry = buildUrdfMeshGeometry(urdfData, new Map());
+  const [part] = buildUrdfVisualParts(urdfData, new Map());
 
-  assert.equal(meshGeometry.parts.length, 1);
-  assert.equal(meshGeometry.parts[0].vertexCount, 24);
-  assert.equal(meshGeometry.parts[0].triangleCount, 12);
-  assert.deepEqual(meshGeometry.parts[0].bounds, {
-    min: [-1, -2, -3],
-    max: [1, 2, 3]
-  });
-  assert.equal(meshGeometry.has_source_colors, true);
-  assert.deepEqual(
-    rounded(meshGeometry.colors.slice(0, 9)),
-    rounded(repeatedTriplet(linearHexTriplet("#a4abb3")))
-  );
+  assert.deepEqual([part.vertexCount, part.triangleCount], [24, 12]);
+  assert.deepEqual(part.bounds, { min: [-1, -2, -3], max: [1, 2, 3] });
+  assert.deepEqual([part.name, part.color, part.hasSourceColors], ["box", "#a4abb3", true]);
 });
 
-test("URDF mesh data preserves mesh source colors when visuals omit material colors", () => {
+test("a visual's colour is the description's, else its mesh's own, else none: the viewer's surface colour applies", () => {
   const urdfData = {
     rootLink: "base_link",
     rootWorldTransform: translationTransform(0, 0, 0),
-    links: [
-      {
-        name: "base_link",
-        visuals: [
-          {
-            id: "base_link:painted",
-            label: "painted",
-            partFileRef: "painted-part",
-            color: "#2b2f33",
-            localTransform: translationTransform(0, 0, 0)
-          },
-          {
-            id: "base_link:source",
-            label: "source",
-            partFileRef: "source-part",
-            localTransform: translationTransform(0, 0, 0)
-          }
-        ]
-      }
-    ],
+    links: [{ name: "base_link", visuals: [
+      { id: "base_link:painted", label: "painted", partFileRef: "painted-part", color: "#2b2f33", localTransform: translationTransform(0, 0, 0) },
+      { id: "base_link:source", label: "source", partFileRef: "source-part", localTransform: translationTransform(0, 0, 0) },
+      { id: "base_link:default", label: "default", occurrenceId: "o1.2.10", partFileRef: "default-part", localTransform: translationTransform(0, 0, 0) }
+    ] }],
     joints: []
   };
   const meshes = new Map([
     ["painted-part", partMesh({ min: [0, 0, 0], max: [1, 1, 0] }, [0.8, 0.1, 0.1])],
-    ["source-part", partMesh({ min: [0, 0, 0], max: [1, 1, 0] }, [0.25, 0.5, 0.75])]
-  ]);
-
-  const meshGeometry = buildUrdfMeshGeometry(urdfData, meshes);
-
-  assert.equal(meshGeometry.has_source_colors, true);
-  assert.deepEqual(
-    meshGeometry.parts.map((part) => part.color),
-    ["#2b2f33", ""]
-  );
-  assert.deepEqual(
-    rounded(meshGeometry.colors.slice(0, 9)),
-    rounded(repeatedTriplet(linearHexTriplet("#2b2f33")))
-  );
-  assert.deepEqual(
-    Array.from(meshGeometry.colors.slice(9, 18)),
-    [0.25, 0.5, 0.75, 0.25, 0.5, 0.75, 0.25, 0.5, 0.75]
-  );
-});
-
-test("URDF mesh data marks uncolored visuals for default viewer color", () => {
-  const urdfData = {
-    rootLink: "base_link",
-    rootWorldTransform: translationTransform(0, 0, 0),
-    links: [
-      {
-        name: "base_link",
-        visuals: [
-          {
-            id: "base_link:motor",
-            label: "motor",
-            partFileRef: "motor-part",
-            color: "#2b2f33",
-            localTransform: translationTransform(0, 0, 0)
-          },
-          {
-            id: "base_link:default",
-            label: "default",
-            partFileRef: "default-part",
-            localTransform: translationTransform(0, 0, 0)
-          }
-        ]
-      }
-    ],
-    joints: []
-  };
-  const meshes = new Map([
-    ["motor-part", partMesh({ min: [0, 0, 0], max: [1, 1, 0] })],
+    ["source-part", partMesh({ min: [0, 0, 0], max: [1, 1, 0] }, [0.25, 0.5, 0.75])],
     ["default-part", partMesh({ min: [0, 0, 0], max: [1, 1, 0] })]
   ]);
 
-  const meshGeometry = buildUrdfMeshGeometry(urdfData, meshes);
+  const parts = buildUrdfVisualParts(urdfData, meshes);
 
-  assert.equal(meshGeometry.has_source_colors, true);
-  assert.deepEqual(
-    meshGeometry.parts.map((part) => part.hasSourceColors),
-    [true, false]
-  );
-  assert.deepEqual(
-    rounded(meshGeometry.colors.slice(0, 9)),
-    rounded(repeatedTriplet(linearHexTriplet("#2b2f33")))
-  );
-  assert.deepEqual(Array.from(meshGeometry.colors.slice(9, 18)), [1, 1, 1, 1, 1, 1, 1, 1, 1]);
+  assert.deepEqual(parts.map((part) => part.color), ["#2b2f33", "", ""]);
+  assert.deepEqual(parts.map((part) => part.hasSourceColors), [true, true, false]);
+  assert.deepEqual(Array.from(parts[1].sourceMesh.colors.slice(0, 3)), [0.25, 0.5, 0.75], "the mesh's own colours travel with it");
+  assert.equal(parts[2].occurrenceId, "o1.2.10");
 });
 
-test("URDF mesh geometry can keep source meshes for lightweight viewer rendering", () => {
+test("a visual whose mesh did not load has no part", () => {
   const urdfData = {
     rootLink: "base_link",
     rootWorldTransform: translationTransform(0, 0, 0),
-    links: [
-      {
-        name: "base_link",
-        visuals: [
-          {
-            id: "base_link:first",
-            label: "first",
-            partFileRef: "shared-part",
-            localTransform: translationTransform(0, 0, 0)
-          },
-          {
-            id: "base_link:second",
-            label: "second",
-            partFileRef: "shared-part",
-            localTransform: translationTransform(2, 0, 0)
-          }
-        ]
-      }
-    ],
+    links: [{ name: "base_link", visuals: [{ id: "base_link:lost", partFileRef: "lost-part", localTransform: translationTransform(0, 0, 0) }] }],
     joints: []
   };
-  const sharedMesh = partMesh({ min: [0, 0, 0], max: [1, 1, 0] });
-  const meshes = new Map([["shared-part", sharedMesh]]);
-
-  const meshGeometry = buildUrdfMeshGeometry(urdfData, meshes, { lightweight: true });
-  const posed = poseUrdfMeshData(urdfData, meshGeometry, {});
-
-  assert.equal(meshGeometry.lightweightGeometry, true);
-  assert.equal(meshGeometry.parts[0].sourceMesh, sharedMesh);
-  assert.equal(meshGeometry.parts[1].sourceMesh, sharedMesh);
-  assert.equal(meshGeometry.vertices.length, 9);
-  assert.equal(meshGeometry.indices.length, 3);
-  assert.deepEqual(posed.meshData.bounds, {
-    min: [0, 0, 0],
-    max: [3, 1, 0]
-  });
-});
-
-// Regression: a robot's link meshes are never in world space -- each keeps its own mesh
-// file's units and frame, and `<mesh scale>` + the visual origin + the joint FK live in the
-// part transform. The renderer only applies that transform when the mesh data declares
-// partTransformsBaked: false. Without the flag every link drew once, unscaled, at the
-// origin -- a metre-scale robot rendered as a pile of millimetre-scale link meshes.
-test("URDF mesh geometry declares that part transforms are not baked", () => {
-  const urdfData = {
-    rootLink: "base_link",
-    rootWorldTransform: translationTransform(0, 0, 0),
-    links: [
-      {
-        name: "base_link",
-        visuals: [
-          {
-            id: "base_link:visual",
-            partFileRef: "link-mesh",
-            localTransform: scaleTransform(0.001)
-          }
-        ]
-      },
-      {
-        name: "second_link",
-        visuals: [
-          {
-            id: "second_link:visual",
-            partFileRef: "link-mesh",
-            localTransform: scaleTransform(0.001)
-          }
-        ]
-      }
-    ],
-    joints: [
-      {
-        name: "fixed_joint",
-        type: "fixed",
-        parentLink: "base_link",
-        childLink: "second_link",
-        originTransform: translationTransform(0.3, 0, 0)
-      }
-    ]
-  };
-  const meshes = new Map([["link-mesh", partMesh({ min: [0, 0, 0], max: [100, 10, 10] })]]);
-
-  for (const options of [{ lightweight: true }, {}]) {
-    const meshGeometry = buildUrdfMeshGeometry(urdfData, meshes, options);
-    assert.equal(meshGeometry.partTransformsBaked, false);
-
-    const posed = poseUrdfMeshData(urdfData, meshGeometry, {});
-    const [first, second] = posed.meshData.parts;
-    // displayTransformForPart is the renderer's hook: it hands the part transform to the
-    // scene ONLY for unbaked mesh data, so this is the assertion that fails without the flag.
-    assert.deepEqual(displayTransformForPart(posed.meshData, first), first.transform);
-    assert.deepEqual(displayTransformForPart(posed.meshData, second), second.transform);
-    // The mesh stays in its own units; the scale and the joint offset live in the transform.
-    assert.equal(first.transform[0], 0.001);
-    assert.equal(second.transform[0], 0.001);
-    assert.equal(second.transform[3], 0.3);
-    assert.deepEqual(posed.meshData.bounds, {
-      min: [0, 0, 0],
-      max: [0.4, 0.01, 0.01]
-    });
-  }
-});
-
-test("URDF mesh data leaves uncolored robots for theme fill colors", () => {
-  const urdfData = {
-    rootLink: "base_link",
-    rootWorldTransform: translationTransform(0, 0, 0),
-    links: [
-      {
-        name: "base_link",
-        visuals: [
-          {
-            id: "base_link:first",
-            label: "first",
-            occurrenceId: "o1.2.10",
-            partFileRef: "first-part",
-            localTransform: translationTransform(0, 0, 0)
-          },
-          {
-            id: "base_link:second",
-            label: "second",
-            occurrenceId: "o1.2.11",
-            partFileRef: "second-part",
-            localTransform: translationTransform(0, 0, 0)
-          }
-        ]
-      }
-    ],
-    joints: []
-  };
-  const meshes = new Map([
-    ["first-part", partMesh({ min: [0, 0, 0], max: [1, 1, 0] })],
-    ["second-part", partMesh({ min: [0, 0, 0], max: [1, 1, 0] })]
-  ]);
-
-  const meshGeometry = buildUrdfMeshGeometry(urdfData, meshes);
-
-  assert.equal(meshGeometry.has_source_colors, false);
-  assert.deepEqual(
-    meshGeometry.parts.map((part) => part.color),
-    ["", ""]
-  );
-  assert.deepEqual(
-    meshGeometry.parts.map((part) => part.hasSourceColors),
-    [false, false]
-  );
-  assert.deepEqual(
-    meshGeometry.parts.map((part) => part.occurrenceId),
-    ["o1.2.10", "o1.2.11"]
-  );
-  assert.equal(meshGeometry.colors.length, 0);
+  assert.deepEqual(buildUrdfVisualParts(urdfData, new Map()), []);
 });
 
 // A link mesh whose colour is PER PART rather than per vertex — a GLB with one material per
@@ -785,51 +457,26 @@ function multiMaterialUrdf() {
   };
 }
 
-test("a link mesh coloured by material keeps its colours through the URDF composer", () => {
+test("a link mesh coloured by material carries its colours per vertex, so its part is a coloured one", () => {
   const meshes = new Map([["hand-part", multiMaterialPartMesh()]]);
 
-  const meshGeometry = buildUrdfMeshGeometry(multiMaterialUrdf(), meshes);
+  const [part] = buildUrdfVisualParts(multiMaterialUrdf(), meshes);
 
-  assert.equal(meshGeometry.has_source_colors, true);
-  assert.deepEqual(
-    rounded(meshGeometry.colors.slice(0, 9)),
-    rounded(repeatedTriplet(linearHexTriplet("#e4572e"))),
-    "the first primitive keeps its own material colour"
-  );
-  assert.deepEqual(
-    rounded(meshGeometry.colors.slice(9, 18)),
-    rounded(repeatedTriplet(linearHexTriplet("#17bebb"))),
-    "and so does the second"
-  );
+  assert.equal(part.hasSourceColors, true);
+  assert.equal(part.sourceMesh.colors.length, part.sourceMesh.vertices.length,
+    "the part the scene draws from carries a full colour buffer");
+  assert.deepEqual(rounded(part.sourceMesh.colors.slice(0, 9)), rounded(repeatedTriplet(linearHexTriplet("#e4572e"))),
+    "the first primitive keeps its own material colour");
+  assert.deepEqual(rounded(part.sourceMesh.colors.slice(9, 18)), rounded(repeatedTriplet(linearHexTriplet("#17bebb"))),
+    "and so does the second");
 });
 
-test("the lightweight composer reports the same material-coloured link as coloured", () => {
-  const meshes = new Map([["hand-part", multiMaterialPartMesh()]]);
-
-  const meshGeometry = buildUrdfMeshGeometry(multiMaterialUrdf(), meshes, { lightweight: true });
-
-  assert.equal(meshGeometry.has_source_colors, true);
-  assert.equal(meshGeometry.parts[0].hasSourceColors, true);
-  assert.equal(
-    meshGeometry.parts[0].sourceMesh.colors.length,
-    meshGeometry.parts[0].sourceMesh.vertices.length,
-    "the part the renderer draws from carries a full colour buffer"
-  );
-});
-
-test("a URDF <material> still wins over the mesh's own materials", () => {
+test("a URDF <material> is the part's colour over the mesh's own materials", () => {
   const urdfData = multiMaterialUrdf();
   urdfData.links[0].visuals[0].color = "#2b2f33";
   const meshes = new Map([["hand-part", multiMaterialPartMesh()]]);
 
-  const meshGeometry = buildUrdfMeshGeometry(urdfData, meshes);
+  const [part] = buildUrdfVisualParts(urdfData, meshes);
 
-  assert.deepEqual(
-    rounded(meshGeometry.colors.slice(0, 9)),
-    rounded(repeatedTriplet(linearHexTriplet("#2b2f33")))
-  );
-  assert.deepEqual(
-    rounded(meshGeometry.colors.slice(9, 18)),
-    rounded(repeatedTriplet(linearHexTriplet("#2b2f33")))
-  );
+  assert.deepEqual([part.color, part.hasSourceColors], ["#2b2f33", true]);
 });

@@ -104,8 +104,7 @@ test("view presets and azimuth/elevation camera parsing remain stable", () => {
 test("scene scale inference, bounds, and camera framing are policy-free helpers", () => {
   assert.equal(inferRenderSceneScale({ explicit: "urdf" }), RENDER_SCENE_SCALE.URDF);
   assert.equal(inferRenderSceneScale({ kind: "sdf" }), RENDER_SCENE_SCALE.URDF);
-  assert.equal(inferRenderSceneScale({ parts: [{ linkName: "base_link" }] }), RENDER_SCENE_SCALE.URDF);
-  assert.equal(inferRenderSceneScale({ kind: "glb", parts: [] }), RENDER_SCENE_SCALE.CAD);
+  assert.equal(inferRenderSceneScale({ kind: "glb" }), RENDER_SCENE_SCALE.CAD);
 
   const bounds = boundsFromVertices(new Float32Array([0, 0, 0, 2, 4, 6]));
   assert.deepEqual(bounds, { min: [0, 0, 0], max: [2, 4, 6] });

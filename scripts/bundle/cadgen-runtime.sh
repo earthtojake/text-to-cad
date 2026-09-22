@@ -195,18 +195,25 @@ build_stage_packages() {
 }
 
 # --- third-party notices --------------------------------------------------------------
-# The builders and the browser bundle inline three and meshoptimizer. Shipping
-# them inside a wheel is redistribution, and all three are MIT: the licence text has to
-# travel with the copy. esbuild keeps the per-file banners (--legal-comments=eof); this is
-# the human-readable summary beside them.
+# The builders and the browser bundle inline three and meshoptimizer, and the browser
+# bundle three-mesh-bvh too: the robot scene it shares with the viewer picks through it.
+# Shipping them inside a wheel is redistribution, and all of them are MIT: the licence text
+# has to travel with the copy. esbuild keeps the per-file banners (--legal-comments=eof);
+# this is the human-readable summary beside them. A stage passes one line per package it
+# inlines beyond the two every stage does.
 write_third_party_notices() {
   local target="$1"
-  cat > "$target/THIRD_PARTY_LICENSES.txt" <<'EOF'
-The JavaScript in this directory is bundled output. It inlines third-party code:
-
-  three          (MIT)  https://github.com/mrdoob/three.js
-  meshoptimizer  (MIT)  https://github.com/zeux/meshoptimizer
-
+  shift
+  local extra=""
+  local line
+  for line in "$@"; do extra="$extra  $line"$'\n'; done
+  {
+    printf '%s\n\n' "The JavaScript in this directory is bundled output. It inlines third-party code:"
+    printf '%s\n' "  three          (MIT)  https://github.com/mrdoob/three.js"
+    printf '%s\n' "  meshoptimizer  (MIT)  https://github.com/zeux/meshoptimizer"
+    printf '%s' "$extra"
+    printf '\n'
+    cat <<'EOF'
 Each bundle carries the originating licence banners at end of file
 (esbuild --legal-comments=eof). Exact versions are pinned by
 package-lock.json at the commit that produced these files.
@@ -231,6 +238,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 EOF
+  } > "$target/THIRD_PARTY_LICENSES.txt"
 }
 
 build_all() {
@@ -244,7 +252,8 @@ build_all() {
   if [ "$STAGE_BROWSER" -eq 1 ]; then
     ensure_snapshot_runtime_deps "$SNAPSHOT_BUILD_DEPS_DIR" 1
     build_snapshot_runtime "$root/browser" "$SNAPSHOT_BUILD_DEPS_DIR"
-    write_third_party_notices "$root/browser"
+    write_third_party_notices "$root/browser" \
+      "three-mesh-bvh (MIT)  https://github.com/gkjohnson/three-mesh-bvh"
     echo "Bundled ${root#"$REPO_ROOT"/}/browser"
   fi
   if [ "$STAGE_VIEWER" -eq 1 ] && [ "$MODE" != "check" ]; then

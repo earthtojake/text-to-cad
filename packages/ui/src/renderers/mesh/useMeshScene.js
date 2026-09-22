@@ -3,8 +3,7 @@ import * as THREE from "three";
 import { entryMeshAssetHash, entryMeshAssetUrl, meshAssetKeyForEntry } from "@hardcore/core/lib/entryAssets.js";
 import { isAbortError } from "@hardcore/core/lib/renderAssetClient.js";
 import { loadRenderMeshByUrl } from "@hardcore/core/lib/render/meshLoaders.js";
-import { buildMeshObjects } from "@hardcore/core/lib/render/meshObjects.js";
-import { createMeshScene } from "./meshScene.js";
+import { buildMeshScene } from "@hardcore/core/lib/render/meshScene.js";
 
 const READING = Object.freeze({ phase: "read", label: "Reading model", done: 0, total: 0, determinate: false });
 const LOADING = Object.freeze({ phase: "geometry", label: "Loading geometry", done: 0, total: 1, determinate: true });
@@ -47,8 +46,7 @@ export function useMeshScene({ entry, resources }) {
     setState(current => ({ ...current, busy: true, progress: current.scene ? current.progress : LOADING, error: null, empty: false }));
     loadRenderMeshByUrl(url, { resources: resourcesRef.current, signal: controller.signal, fallback: format }).then((meshData) => {
       if (controller.signal.aborted) return;
-      const objects = buildMeshObjects(THREE, meshData);
-      const scene = objects.length ? createMeshScene(THREE, objects) : null;
+      const scene = buildMeshScene(THREE, meshData);
       adopt(scene);
       setState({ scene, revision, busy: false, progress: null, error: null, empty: !scene });
     }, (error) => {

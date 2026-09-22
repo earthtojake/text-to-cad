@@ -10,6 +10,7 @@ import {
   normalizeDisplaySettings,
   validateDisplaySettings
 } from "./displaySettings.js";
+import { PHOTOGRAPHIC_STUDIO_MATERIAL_SETTINGS } from "./photographicStudioRig.js";
 import {
   cloneThemePresetSettings,
   normalizeThemeSettings
@@ -425,6 +426,44 @@ export function resolveDisplayMaterialSettings(materialSettings = {}, partColorS
     materials.cycleColors = true;
   }
   return materials;
+}
+
+/**
+ * Whether a scene is lit by the photographic studio: Render asked for, with its lighting
+ * on. A floor or a custom background alone opts the stage into the studio, not the
+ * model's surfaces. `renderMode` and `renderConfiguration` are `render.enabled` and
+ * `render.configuration` of `resolveViewSceneSettings`.
+ */
+export function scenePhotographicLighting({ renderMode = false, renderConfiguration = null } = {}) {
+  return Boolean(renderMode) && renderConfiguration?.lighting?.enabled !== false;
+}
+
+/**
+ * The surface LOOK a family's scene wears (`lib/viewer/sceneContract.js`) for resolved
+ * scene settings: the finish (the theme's in Inspect, the studio's under photographic
+ * Render), the Surfaces section's colour mode, style and opacity, and whether Render keeps
+ * what the file authored. The viewer's viewport and the snapshot CLI's headless stage both
+ * resolve a look HERE, from the same `resolveViewSceneSettings` output, so one setting is
+ * one look wherever a scene is drawn.
+ *
+ * @param {{ themeSettings?: object | null, displaySettings?: object | null, renderMode?: boolean,
+ *   renderConfiguration?: object | null }} scene  `theme`, `display`, `render.enabled` and
+ *   `render.configuration` of `resolveViewSceneSettings`.
+ * @returns {import("../lib/viewer/sceneContract.js").SurfaceLook}
+ */
+export function resolveSceneSurfaceLook({ themeSettings = null, displaySettings = null, renderMode = false, renderConfiguration = null } = {}) {
+  const photographic = scenePhotographicLighting({ renderMode, renderConfiguration });
+  const display = normalizeDisplaySettings(displaySettings);
+  // Grouped view resolution already decided the surface policy; normalization must not undo it.
+  const surfaces = displaySettings?.surfaces || display.surfaces;
+  return {
+    materialSettings: resolveDisplayMaterialSettings(
+      photographic ? PHOTOGRAPHIC_STUDIO_MATERIAL_SETTINGS : normalizeThemeSettings(themeSettings || {}).materials,
+      display.partColor
+    ),
+    authored: photographic,
+    surface: surfaces ? { style: surfaces.style, opacity: surfaces.opacity } : null
+  };
 }
 
 function applyPartColor(settings, partColor) {

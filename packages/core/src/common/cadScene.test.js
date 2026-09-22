@@ -34,7 +34,6 @@ import { applyPartVisualState as applyViewerPartVisualState } from "../lib/viewe
 import { syncRuntimeStepClipPlane } from "../lib/viewer/modelRuntime.js";
 import { applyMaterialSettingsToRecord as applyViewerMaterialSettings } from "../lib/viewer/surfaceMaterials.js";
 import { buildComposedPackageMeshData } from "../lib/assembly/meshData.js";
-import { applyUrdfPoseToMeshData, buildUrdfMeshGeometry } from "../lib/urdf/kinematics.js";
 
 function sampleMeshData() {
   return {
@@ -2017,76 +2016,4 @@ test("failed edge-instance disposal retains its set and another scene's shared s
   set.material.removeEventListener("dispose", fail);
   scene.dispose(); assert.equal(instanceDisposals, 1); assert.equal(textureDisposals, 0);
   other.dispose(); assert.equal(textureDisposals, 1);
-});
-
-function rounded(values) {
-  return Array.from(values).map((value) => {
-    const roundedValue = Math.round(value * 1e6) / 1e6;
-    return Object.is(roundedValue, -0) ? 0 : roundedValue;
-  });
-}
-
-function robotLinkMesh() {
-  return {
-    vertices: new Float32Array([0, 0, 0, 0.01, 0, 0, 0, 0.01, 0]),
-    normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
-    indices: new Uint32Array([0, 1, 2]),
-    colors: new Float32Array(0),
-    bounds: { min: [0, 0, 0], max: [0.01, 0.01, 0] }
-  };
-}
-
-// Two links, one revolute joint about +Y, the child 60mm above the parent: the
-// smallest robot whose pose is visible in a record matrix.
-function shoulderRobot() {
-  const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
-  return {
-    rootLink: "base",
-    rootWorldTransform: identity,
-    links: [
-      { name: "base", visuals: [{ id: "base:v1", label: "base", partFileRef: "base-part", localTransform: identity }] },
-      { name: "arm", visuals: [{ id: "arm:v1", label: "arm", partFileRef: "arm-part", localTransform: identity }] }
-    ],
-    joints: [{
-      name: "shoulder",
-      type: "revolute",
-      parentLink: "base",
-      childLink: "arm",
-      originTransform: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0.06, 0, 0, 0, 1],
-      axisInJointFrame: [0, 1, 0],
-      defaultValueDeg: 0,
-      minValueDeg: -90,
-      maxValueDeg: 90
-    }]
-  };
-}
-
-test("a robot pose republished on the same source moves its records without rebuilding geometry", () => {
-  const urdfData = shoulderRobot();
-  const meshesByUrl = new Map([["base-part", robotLinkMesh()], ["arm-part", robotLinkMesh()]]);
-  const meshData = buildUrdfMeshGeometry(urdfData, meshesByUrl, { lightweight: true });
-  applyUrdfPoseToMeshData(urdfData, meshData, { shoulder: 0 });
-
-  const scene = buildModel(THREE, meshData, { renderPartsIndividually: true });
-  const armRecord = scene.displayRecords.find((record) => record.sourcePart?.linkName === "arm");
-  const baseRecord = scene.displayRecords.find((record) => record.sourcePart?.linkName === "base");
-  assert.ok(armRecord && baseRecord, "both links render as their own records");
-  const armGeometry = armRecord.geometry;
-  const restMatrix = new THREE.Matrix4().makeTranslation(0, 0, 0.06);
-  assert.deepEqual(rounded(armRecord.mesh.matrix.elements), rounded(restMatrix.elements));
-
-  applyUrdfPoseToMeshData(urdfData, meshData, { shoulder: 45 });
-  scene.update({ source: meshData, renderPartsIndividually: true });
-
-  const posedArm = scene.displayRecords.find((record) => record.sourcePart?.linkName === "arm");
-  const expected = new THREE.Matrix4().makeTranslation(0, 0, 0.06)
-    .multiply(new THREE.Matrix4().makeRotationY(Math.PI / 4));
-  assert.deepEqual(rounded(posedArm.mesh.matrix.elements), rounded(expected.elements));
-  assert.equal(posedArm.geometry, armGeometry, "posing reuses the uploaded link geometry");
-  assert.deepEqual(
-    rounded(scene.displayRecords.find((record) => record.sourcePart?.linkName === "base").mesh.matrix.elements),
-    rounded(new THREE.Matrix4().elements),
-    "the root link does not move"
-  );
-  scene.dispose();
 });

@@ -4,11 +4,18 @@ import {
   buildModel
 } from "./cadScene.js";
 import {
+  headlessResources,
+  headlessSceneDress,
+  headlessSceneFamily,
+  headlessSceneModel
+} from "./headlessScene.js";
+import {
   captureModel,
   modelOptionsForRenderJob,
   renderJobContext,
   renderModel
 } from "./renderMeshScene.js";
+import { validateSnapshotRenderJob } from "./snapshotJobValidation.js";
 import {
   loadSource,
   sourceIsStep,
@@ -25,11 +32,11 @@ import {
 
 // Each call owns its measurements. Capture reports camera fitting, draw
 // submission and image encoding separately; viewport construction is not a draw.
-async function capturePreparedSource(source, job, stageTimings) {
-  const buildStarted = performance.now();
-  const context = renderJobContext(source.meshData, job);
-  const model = buildModel(THREE, source, modelOptionsForRenderJob(context, job));
-  stageTimings.buildModelMs = Math.round(performance.now() - buildStarted);
+//
+// ONE capture for every file family: the model is the family's (a STEP's `buildModel`,
+// anything else's scene from its family's shared builder), and the stage, the camera and
+// the encoding are the same for all of them.
+async function captureWithModel(model, context, job, stageTimings) {
   if (context.mode === "list" || context.mode === "section") {
     try {
       return await captureModel({ model, context }, { job });
@@ -51,6 +58,37 @@ async function capturePreparedSource(source, job, stageTimings) {
   } finally {
     viewport.dispose();
   }
+}
+
+async function capturePreparedSource(source, job, stageTimings) {
+  const buildStarted = performance.now();
+  const context = renderJobContext(source.meshData, job);
+  const model = buildModel(THREE, source, modelOptionsForRenderJob(context, job));
+  stageTimings.buildModelMs = Math.round(performance.now() - buildStarted);
+  return captureWithModel(model, context, job, stageTimings);
+}
+
+// A GLB, an STL, a 3MF or a robot: the file is read by its family's loader and drawn by its
+// family's builder, the two the viewer's renderer for it uses (`headlessScene.js`), then
+// dressed in the look the viewer's viewport would put on it for these settings.
+async function captureFamilyScene(family, job) {
+  validateSnapshotRenderJob(job);
+  const stageTimings = {};
+  const loadStarted = performance.now();
+  const loaded = await family.load(job, { resources: headlessResources() });
+  stageTimings.loadSourceMs = Math.round(performance.now() - loadStarted);
+  const buildStarted = performance.now();
+  let scene;
+  try { scene = family.build(THREE, loaded, job); }
+  catch (error) { family.release(loaded); throw error; }
+  let context;
+  let model;
+  try {
+    context = renderJobContext({ bounds: scene.bounds }, job);
+    model = headlessSceneModel(THREE, scene, headlessSceneDress(context.sceneSettings));
+  } catch (error) { scene.dispose(); throw error; }
+  stageTimings.buildModelMs = Math.round(performance.now() - buildStarted);
+  return captureWithModel(model, context, job, stageTimings);
 }
 
 // `job.animation` is the JOB PACKET's frame request ({clip, time}); the
@@ -135,6 +173,10 @@ export async function runHeadlessRenderJob(job) {
   // the code the viewer's DXF pane paints with (./headlessDrawingRender.js).
   if (jobIsDrawing(job)) {
     return runHeadlessDrawingJob(job);
+  }
+  const family = headlessSceneFamily(job);
+  if (family) {
+    return captureFamilyScene(family, job);
   }
   const { source, renderJob, stageTimings } = await prepareRenderJob(job);
   return capturePreparedSource(source, renderJob, stageTimings);
@@ -227,6 +269,9 @@ export async function prepareHeadlessRenderSequence(job) {
   disposeHeadlessRenderSequence();
   if (jobIsDrawing(job)) {
     throw new Error("a video renders an animation clip; a DXF is a flat 2D drawing with no clips");
+  }
+  if (headlessSceneFamily(job)) {
+    throw new Error(`a video renders a STEP model's animation clip; a ${String(job?.resolved?.kind || job?.kind).toUpperCase()} has none`);
   }
   const { source, stepAnimation, renderJob } = await prepareRenderJob(job);
   if (!stepAnimation) {

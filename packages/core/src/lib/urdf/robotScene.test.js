@@ -2,15 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
 
-import { poseUrdfMeshData, solveUrdfLinkWorldTransforms } from "@hardcore/core/lib/urdf/kinematics.js";
-import { isKitScene, sceneFramingBounds } from "../kit/scene.js";
-import { parseArmUrdf, parseSwingSdf, robotOf } from "./__tests__/robotFixtures.js";
+import { isKitScene, sceneFramingBounds } from "../viewer/sceneContract.js";
+import { parseArmUrdf, parseSwingSdf, robotOf, solvedBounds } from "./__tests__/robotFixtures.js";
+import { solveUrdfLinkWorldTransforms } from "./kinematics.js";
 import { createRobotScene } from "./robotScene.js";
 
-// The description solver (`solveUrdfLinkWorldTransforms`, `poseUrdfMeshData`) is what the
-// viewer posed robots with before it had a scene graph, and what the headless renderer
-// still uses. It is the ORACLE here: for any pose, the graph must put every link, and
-// every box, exactly where the solver does.
+// The description solver (`solveUrdfLinkWorldTransforms`) is the ORACLE here: for any pose,
+// the graph must put every link, and every box, exactly where the solver does. The graph is
+// the ONE way a robot is posed, in the viewer and in a snapshot alike.
 
 const INSPECT = Object.freeze({
   defaultColor: "#b6c4ce", fillColors: ["#b6c4ce", "#f4a7a7", "#f8c77e"], cycleColors: false, overrideSourceColors: false,
@@ -46,9 +45,10 @@ for (const [name, parse] of [["URDF", parseArmUrdf], ["SDF", parseSwingSdf]]) {
       const frames = scene.linkFrames();
       assert.deepEqual([...frames.keys()].sort(), [...solved.keys()].sort());
       for (const [link, transform] of solved) closeTo(frames.get(link), transform, 1e-9, `${link} @ ${JSON.stringify(pose)}`);
-      const posed = poseUrdfMeshData(robot.description, robot.oracleMeshData, pose).meshData;
-      closeTo([...scene.bounds.min, ...scene.bounds.max], [...posed.bounds.min, ...posed.bounds.max], 1e-9, `bounds @ ${JSON.stringify(pose)}`);
-      closeTo([...scene.restBounds.min, ...scene.restBounds.max], [...posed.restBounds.min, ...posed.restBounds.max], 1e-9, "rest bounds never move");
+      const posed = solvedBounds(robot, pose);
+      const rest = solvedBounds(robot, {});
+      closeTo([...scene.bounds.min, ...scene.bounds.max], [...posed.min, ...posed.max], 1e-9, `bounds @ ${JSON.stringify(pose)}`);
+      closeTo([...scene.restBounds.min, ...scene.restBounds.max], [...rest.min, ...rest.max], 1e-9, "rest bounds never move");
     }
     scene.dispose();
   });

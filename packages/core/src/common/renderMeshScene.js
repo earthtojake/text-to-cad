@@ -118,12 +118,11 @@ function normalizeRenderSceneScale(value) {
   return normalizeSharedRenderSceneScale(value);
 }
 
-function resolveRenderSceneScale(job = {}, meshData = {}) {
+function resolveRenderSceneScale(job = {}) {
   const explicit = String(job.scale || "").trim().toLowerCase();
   return inferRenderSceneScale({
     explicit,
-    kind: job.resolved?.kind || job.kind,
-    parts: meshData?.parts
+    kind: job.resolved?.kind || job.kind
   });
 }
 
@@ -283,6 +282,15 @@ function tightFrameEnabled(job = {}) {
   return normalizeBoolean(job.output?.tightFrame, true);
 }
 
+// A vertex where it is drawn. A skinned or morphed mesh (a GLB's native scene) is deformed
+// on the GPU, so its position attribute is the rest shape: three's `getVertexPosition` applies
+// the morph targets and the skin the way the shader does. Every other mesh reads its attribute.
+function vertexWorldPosition(mesh, position, index, target) {
+  if (mesh.isSkinnedMesh || mesh.morphTargetInfluences?.length) mesh.getVertexPosition(index, target);
+  else target.fromBufferAttribute(position, index);
+  return target.applyMatrix4(mesh.matrixWorld);
+}
+
 export function projectedVisibleGeometryFrame(records, camera) {
   const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize();
   const screenUp = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1).normalize();
@@ -299,7 +307,7 @@ export function projectedVisibleGeometryFrame(records, camera) {
     }
     mesh.updateWorldMatrix?.(true, false);
     for (let index = 0; index < position.count; index += 1) {
-      point.fromBufferAttribute(position, index).applyMatrix4(mesh.matrixWorld);
+      vertexWorldPosition(mesh, position, index, point);
       const x = point.dot(right);
       const y = point.dot(screenUp);
       if (!Number.isFinite(x) || !Number.isFinite(y)) {
@@ -336,7 +344,7 @@ function *visibleGeometryWorldPoints(records) {
     }
     mesh.updateWorldMatrix?.(true, false);
     for (let index = 0; index < position.count; index += 1) {
-      yield point.fromBufferAttribute(position, index).applyMatrix4(mesh.matrixWorld);
+      yield vertexWorldPosition(mesh, position, index, point);
     }
   }
 }
@@ -794,8 +802,8 @@ export function resolveOutputCameraProjection(context, cameraSpec) {
 export function renderJobContext(meshData, job = {}) {
   validateSnapshotRenderJob(job);
   const mode = String(job.mode || "view").trim().toLowerCase();
-  const sceneScale = resolveRenderSceneScale(job, meshData);
-  const sourceKind = String(job.resolved?.kind || job.kind || meshData?.sourceFormat || "").trim().toLowerCase();
+  const sceneScale = resolveRenderSceneScale(job);
+  const sourceKind = String(job.resolved?.kind || job.kind || "").trim().toLowerCase();
   const stepDisplayEnabled = sourceKind === "step" || sourceKind === "stp";
   const sceneSettings = resolveViewSceneSettings({
     // Appearance is `display.appearance`; the CLI default is Light.
@@ -945,6 +953,13 @@ export function stepParametersForSnapshotOutput(output = {}, job = {}) {
   return output.stepParameters || job.stepParameters || null;
 }
 
+// Inspect gives authored finishes a small neutral environment to reflect. A family's scene
+// says so itself (`keepsAuthoredFinish`, the viewer's viewport reads the same flag); a CAD
+// model built by `buildModel` answers from its composed parts.
+function keepsAuthoredFinish(model) {
+  return typeof model.keepsAuthoredFinish === "boolean" ? model.keepsAuthoredFinish : hasAuthoredMaterials(model.meshData);
+}
+
 export function renderModel(_THREE, model, viewportOptions = {}) {
   if (!model?.root) {
     throw new Error("renderModel requires a model returned by buildModel");
@@ -989,7 +1004,7 @@ export function renderModel(_THREE, model, viewportOptions = {}) {
   const ready = Promise.resolve().then(() => {
     const resource = context.sceneSettings.view.lighting.enabled
       ? createEnvironmentResource(renderer, studioConfiguration, { size: context.quality.environmentMapSize })
-      : hasAuthoredMaterials(model.meshData) ? createInspectEnvironmentResource(THREE) : null;
+      : keepsAuthoredFinish(model) ? createInspectEnvironmentResource(THREE) : null;
     if (disposed) {
       disposeEnvironmentResource(resource);
       return null;
@@ -1005,13 +1020,17 @@ export function renderModel(_THREE, model, viewportOptions = {}) {
     context.sceneScale,
     context.quality.shadowMapSize
   );
-  Object.assign(model.runtime, {
-    Line2,
-    LineGeometry,
-    LineSegments2,
-    LineSegmentsGeometry,
-    LineMaterial
-  });
+  // CAD edges are drawn with screen-space lines; only a CAD model has them (a family's scene
+  // from `headlessScene.js` has no edges, which is the viewer's rule for it too).
+  if (model.runtime) {
+    Object.assign(model.runtime, {
+      Line2,
+      LineGeometry,
+      LineSegments2,
+      LineSegmentsGeometry,
+      LineMaterial
+    });
+  }
   scene.add(model.root);
   // `floorBounds` is what a locked camera will frame, for a caller that knows
   // more than this pose does. The stage plane and grid are sized and centred on
@@ -1158,19 +1177,23 @@ export async function captureModel(viewport, captureOptions = {}) {
     warnings,
     edgeSettings
   } = context;
-  const modelBounds = viewport.model?.bounds || meshData.bounds || bounds;
+  const modelBounds = viewport.model?.bounds || meshData?.bounds || bounds;
 
   if (mode === "list") {
     return {
       ok: true,
       mode,
-      parts: listRenderableParts(meshData),
+      // A family's scene lists what it drew; a CAD model its composed part occurrences.
+      parts: listRenderableParts(viewport.model.listParts ? { parts: viewport.model.listParts() } : meshData),
       bounds: roundedBounds(modelBounds) || modelBounds,
       warnings
     };
   }
 
   if (mode === "section") {
+    if (!meshData) {
+      throw new Error("section mode cuts a STEP model's solids; this file has none to section");
+    }
     const section = job.section || {};
     const segments = sectionSegments(meshData, section);
     if (!segments.length) {
@@ -1243,17 +1266,23 @@ export async function captureModel(viewport, captureOptions = {}) {
     // would breathe as the model moves. A video passes the union across its
     // frames, computed once (headlessRenderEntry sequenceFrameBounds).
     const baseOutputBounds = captureOptions.frameBounds || posedBounds;
-    const outputBounds = applyViewportExplodedView(viewport, baseOutputBounds);
-    syncViewportTopologyDisplayEdges(viewport);
-    // Device pixels: renderScale is the renderer's pixel ratio, so a
-    // supersampled drawing buffer keeps `thickness` in drawing-buffer units
-    // before the final PNG is resampled to this output's requested dimensions.
-    const lineResolution = screenSpaceLineDeviceResolution(viewport.renderer, width, height);
-    syncScreenSpaceLineMaterialResolution(
-      viewport.model.runtime.screenSpaceLineMaterials,
-      lineResolution.width,
-      lineResolution.height
-    );
+    let outputBounds = baseOutputBounds;
+    // The exploded view, topology edges and their screen-space line widths are a CAD
+    // model's (`buildModel`'s runtime). A family's scene has none of them: the viewer's
+    // rule for it (`EDGELESS_VIEW_FEATURES`), which the job was resolved under too.
+    if (viewport.model.runtime) {
+      outputBounds = applyViewportExplodedView(viewport, baseOutputBounds);
+      syncViewportTopologyDisplayEdges(viewport);
+      // Device pixels: renderScale is the renderer's pixel ratio, so a
+      // supersampled drawing buffer keeps `thickness` in drawing-buffer units
+      // before the final PNG is resampled to this output's requested dimensions.
+      const lineResolution = screenSpaceLineDeviceResolution(viewport.renderer, width, height);
+      syncScreenSpaceLineMaterialResolution(
+        viewport.model.runtime.screenSpaceLineMaterials,
+        lineResolution.width,
+        lineResolution.height
+      );
+    }
     if (outputTimings) outputTimings.updateModelMs = Math.round(performance.now() - stageStarted);
     stageStarted = performance.now();
     const cameraSpec = resolveOutputCameraSpec(context, output.camera || null);
@@ -1289,8 +1318,8 @@ export async function captureModel(viewport, captureOptions = {}) {
         shadowMapSize: context.quality.shadowMapSize
       });
       fitCameraDepthToBounds(renderCamera, outputBounds, {
-        placedObjects: viewport.model.displayRecords,
-        modelGroup: viewport.model.runtime.modelGroup,
+        placedObjects: viewport.model.runtime ? viewport.model.displayRecords : viewport.model.placedObjects(),
+        modelGroup: viewport.model.runtime?.modelGroup ?? null,
         groundZ: viewport.studioRuntime.photographicStudio?.ground?.position.z ?? null
       });
       if (outputTimings) outputTimings.prepareStudioMs = Math.round(performance.now() - stageStarted);
@@ -1330,7 +1359,7 @@ export async function captureModel(viewport, captureOptions = {}) {
     timings: {
       sceneBuildMs,
       renderMs,
-      meshCount: viewport.model.displayRecords.length || listRenderableParts(meshData).length || 1
+      meshCount: viewport.model.displayRecords.length || (meshData ? listRenderableParts(meshData).length : 0) || 1
     },
     warnings
   };

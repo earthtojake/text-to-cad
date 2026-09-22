@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { entryAssetUrl, entryUrdfAssetHash } from "@hardcore/core/lib/entryAssets.js";
+import { isAbortError, loadRenderText } from "@hardcore/core/lib/renderAssetClient.js";
 import {
-  isAbortError, loadRenderSdf, loadRenderSrdf, loadRenderText, loadRenderUrdf, peekRenderSdf, peekRenderSrdf, peekRenderUrdf
-} from "@hardcore/core/lib/renderAssetClient.js";
-import { loadRenderMeshByUrl, peekRenderMeshByUrl } from "@hardcore/core/lib/render/meshLoaders.js";
-import { buildRobotParts } from "./robotParts.js";
+  loadRobotDescription, loadRobotMeshes, peekRobotDescription, peekRobotMeshes, robotMeshUrls, robotModel
+} from "@hardcore/core/lib/urdf/loadRobot.js";
 
 // Link meshes are fetched and parsed off the main thread where a worker exists, so the
 // cap only bounds sockets and the worker's queue; it is tied to cores because the
@@ -18,29 +17,13 @@ function meshConcurrency() {
   return Number.isFinite(cores) && cores > 0 ? Math.max(2, Math.min(MESH_LOAD_CONCURRENCY, cores)) : MESH_LOAD_CONCURRENCY;
 }
 
-/** Every distinct mesh a description's visuals name. */
-export function robotMeshUrls(description) {
-  return [...new Set((Array.isArray(description?.links) ? description.links : [])
-    .flatMap(link => (Array.isArray(link?.visuals) ? link.visuals : []))
-    .map(visual => String(visual?.meshUrl || "").trim()).filter(Boolean))];
-}
-
-function descriptionUrls(entry) {
+// Where the entry's description lives: the file itself, and for an SRDF the URDF the
+// catalog paired with it. Loading is core's (`lib/urdf/loadRobot.js`), shared with the
+// snapshot CLI, so both read a robot the same way.
+function descriptionSource(entry, resources) {
   const kind = kindOf(entry);
-  return { kind, primary: entryAssetUrl(entry, kind === "sdf" ? "sdf" : kind === "srdf" ? "srdf" : "urdf"), urdf: entryAssetUrl(entry, "urdf") };
-}
-
-function peekDescription(entry, resources) {
-  const { kind, primary, urdf } = descriptionUrls(entry);
-  if (!primary) return null;
-  if (kind === "srdf") return urdf ? peekRenderSrdf(primary, { resources, urdfUrl: urdf })?.urdfData || null : null;
-  return kind === "sdf" ? peekRenderSdf(primary, { resources }) : peekRenderUrdf(primary, { resources });
-}
-
-async function loadDescription(entry, { resources, signal }) {
-  const { kind, primary, urdf } = descriptionUrls(entry);
-  if (kind === "srdf") return (await loadRenderSrdf(primary, { resources, signal, urdfUrl: urdf })).urdfData;
-  return kind === "sdf" ? loadRenderSdf(primary, { resources, signal }) : loadRenderUrdf(primary, { resources, signal });
+  return { kind, url: entryAssetUrl(entry, kind === "sdf" ? "sdf" : kind === "srdf" ? "srdf" : "urdf"),
+    urdfUrl: entryAssetUrl(entry, "urdf"), resources };
 }
 
 // An SRDF holds planning semantics only; what is drawn is the URDF it is about, which the
@@ -68,32 +51,19 @@ async function unpairedSrdfError(entry, { resources, signal }) {
   return error;
 }
 
-async function mapWithConcurrency(items, limit, run) {
-  const results = new Array(items.length);
-  let next = 0;
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) {
-      const index = next;
-      next += 1;
-      results[index] = await run(items[index], index);
-    }
-  }));
-  return results;
-}
-
-function robotOf(entry, description, meshes, urls) {
-  const { parts, components } = buildRobotParts(description, new Map(urls.map((url, index) => [url, meshes[index]])));
-  return { file: String(entry?.file || ""), kind: kindOf(entry), revision: entryUrdfAssetHash(entry), description, parts, components };
+function robotOf(entry, description, urls, meshes) {
+  return { file: String(entry?.file || ""), kind: kindOf(entry), revision: entryUrdfAssetHash(entry), ...robotModel(description, urls, meshes) };
 }
 
 // A warm file (its description and every link mesh still decoded) is whole at once.
 function peekRobot(entry, resources) {
   if (!KINDS.has(kindOf(entry))) return null;
-  const description = peekDescription(entry, resources);
+  const source = descriptionSource(entry, resources);
+  const description = peekRobotDescription(source.kind, source);
   if (!description) return null;
   const urls = robotMeshUrls(description);
-  const meshes = urls.map(url => peekRenderMeshByUrl(url, { resources, fallback: "stl" }));
-  return meshes.every(Boolean) ? robotOf(entry, description, meshes, urls) : null;
+  const meshes = peekRobotMeshes(urls, { resources });
+  return meshes ? robotOf(entry, description, urls, meshes) : null;
 }
 
 /**
@@ -110,7 +80,7 @@ function peekRobot(entry, resources) {
 export function useRobotDocument({ entry, resources }) {
   const kind = kindOf(entry);
   const revision = entryUrdfAssetHash(entry);
-  const { primary, urdf } = descriptionUrls(entry);
+  const { url: primary, urdfUrl: urdf } = descriptionSource(entry, null);
   const pending = entry?.catalogPending === true;
   const label = `Loading ${kind.toUpperCase()}`;
   const [state, setState] = useState(() => {
@@ -140,20 +110,16 @@ export function useRobotDocument({ entry, resources }) {
       if (warm) return warm;
       if (kind === "srdf" && !urdf) throw await unpairedSrdfError(current, { resources: resourcesRef.current, signal });
       if (!primary) throw new Error(`${kind.toUpperCase()} entry is missing its ${kind.toUpperCase()} asset: ${current?.file || "(unknown)"}`);
-      const description = await loadDescription(current, { resources: resourcesRef.current, signal });
+      const source = descriptionSource(current, resourcesRef.current);
+      const description = await loadRobotDescription(source.kind, { ...source, signal });
       const urls = robotMeshUrls(description);
-      let done = 0;
-      if (urls.length) publish({ progress: { phase: "meshes", label: "Loading meshes", done, total: urls.length, determinate: true } });
-      const meshes = await mapWithConcurrency(urls, meshConcurrency(), async (url) => {
-        signal.throwIfAborted();
-        const mesh = await loadRenderMeshByUrl(url, { signal, resources: resourcesRef.current, fallback: "stl" });
-        done += 1;
-        publish({ progress: { phase: "meshes", label: "Loading meshes", done, total: urls.length, determinate: true } });
-        return mesh;
-      });
+      const counted = done => ({ progress: { phase: "meshes", label: "Loading meshes", done, total: urls.length, determinate: true } });
+      if (urls.length) publish(counted(0));
+      const meshes = await loadRobotMeshes(urls, { resources: resourcesRef.current, signal, concurrency: meshConcurrency(),
+        onMeshLoaded: done => publish(counted(done)) });
       signal.throwIfAborted();
       publish({ progress: { phase: "view", label: "Building robot", determinate: false } });
-      return robotOf(current, description, meshes, urls);
+      return robotOf(current, description, urls, meshes);
     })().then((robot) => {
       if (signal.aborted) return;
       loadedRef.current = revision;

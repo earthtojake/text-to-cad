@@ -559,130 +559,23 @@ function resolveUrdfVisuals(urdfData, meshesByUrl) {
   return resolvedVisuals;
 }
 
-export function buildUrdfMeshGeometry(urdfData, meshesByUrl, options = {}) {
-  const resolvedVisuals = resolveUrdfVisuals(urdfData, meshesByUrl);
-  const lightweightGeometry = options?.lightweight === true || options?.mode === "source-parts";
-  if (lightweightGeometry) {
-    const parts = [];
-    let hasAuthoredDisplayColors = false;
-    for (let visualIndex = 0; visualIndex < resolvedVisuals.length; visualIndex += 1) {
-      const { linkName, meshUrl, partFileRef, partMesh, visual } = resolvedVisuals[visualIndex];
-      const sourceVertices = partMesh.vertices || new Float32Array(0);
-      const sourceIndices = partMesh.indices || new Uint32Array(0);
-      const vertexCount = Math.floor(sourceVertices.length / 3);
-      const triangleCount = Math.floor(sourceIndices.length / 3);
-      const authoredVisualColor = String(visual?.color || "").trim();
-      const visualColor = authoredVisualColor;
-      const visualRgb = parseHexColorToLinearRgb(visualColor);
-      const partHasSourceColors = !!visualRgb || urdfMeshHasSourceColors(partMesh);
-      hasAuthoredDisplayColors ||= urdfVisualHasDisplayColors(visualColor, partMesh);
-      const partLabel = String(visual?.label || visual?.instanceId || visual?.id || meshUrl || partFileRef).trim();
-      parts.push({
-        id: String(visual?.id || `${linkName}:${meshUrl || partFileRef}`),
-        name: partLabel,
-        label: partLabel,
-        occurrenceId: String(visual?.occurrenceId || "").trim(),
-        instanceId: String(visual?.instanceId || "").trim(),
-        color: visualColor,
-        meshUrl,
-        partFileRef,
-        linkName,
-        localTransform: toTransformArray(visual?.localTransform),
-        sourceBounds: partMesh.bounds,
-        bounds: partMesh.bounds,
-        transform: [...IDENTITY_TRANSFORM],
-        hasSourceColors: partHasSourceColors,
-        sourceMesh: partMesh,
-        sourceMeshKey: String(meshUrl || partFileRef || visual?.id || `visual:${visualIndex + 1}`),
-        vertexOffset: 0,
-        vertexCount,
-        triangleOffset: 0,
-        triangleCount,
-        edgeIndexOffset: 0,
-        edgeIndexCount: 0
-      });
-    }
-    return {
-      vertices: new Float32Array([0, 0, 0, 0, 0, 0, 0, 0, 0]),
-      indices: new Uint32Array([0, 1, 2]),
-      normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
-      colors: new Float32Array(0),
-      edge_indices: new Uint32Array(0),
-      bounds: mergeBounds(parts.map((part) => part.bounds)),
-      parts,
-      has_source_colors: hasAuthoredDisplayColors,
-      lightweightGeometry: true,
-      // A robot's link meshes are NEVER in world space: each one keeps the units and the
-      // frame of its own mesh file, and the `<mesh scale>`, the visual `<origin>` and the
-      // joint FK all live in the part transform. Declaring that here is what makes the
-      // renderer apply it — without the flag every link is drawn once, unscaled, at the
-      // origin, which is a metre-scale robot rendered as a pile of millimetre-scale meshes.
-      partTransformsBaked: false,
-      geometrySource: {
-        type: "urdf-source-parts",
-        urdfData,
-        meshesByUrl
-      }
-    };
-  }
-  let totalVertexCount = 0;
-  let totalIndexCount = 0;
-  let hasAuthoredDisplayColors = false;
-  for (const resolvedVisual of resolvedVisuals) {
-    const partMesh = resolvedVisual.partMesh;
-    totalVertexCount += Math.floor((partMesh.vertices?.length || 0) / 3);
-    totalIndexCount += partMesh.indices?.length || 0;
-    const visualColor = String(resolvedVisual.visual?.color || "").trim();
-    hasAuthoredDisplayColors ||= urdfVisualHasDisplayColors(visualColor, partMesh);
-  }
-  const hasSourceColors = hasAuthoredDisplayColors;
-
-  const vertices = new Float32Array(totalVertexCount * 3);
-  const normals = new Float32Array(totalVertexCount * 3);
-  const indices = new Uint32Array(totalIndexCount);
-  const colors = hasSourceColors ? new Float32Array(totalVertexCount * 3).fill(1) : new Float32Array(0);
-  const parts = [];
-  let vertexOffset = 0;
-  let indexOffset = 0;
-
-  for (let visualIndex = 0; visualIndex < resolvedVisuals.length; visualIndex += 1) {
-    const resolvedVisual = resolvedVisuals[visualIndex];
-    const { linkName, meshUrl, partFileRef, partMesh, visual } = resolvedVisual;
-    const sourceVertices = partMesh.vertices || new Float32Array(0);
-    const sourceNormals = partMesh.normals || new Float32Array(0);
-    const sourceColors = partMesh.colors || new Float32Array(0);
-    const sourceIndices = partMesh.indices || new Uint32Array(0);
-    const partVertexOffset = vertexOffset;
-    const partTriangleOffset = Math.floor(indexOffset / 3);
-    const vertexCount = Math.floor(sourceVertices.length / 3);
-    const triangleCount = Math.floor(sourceIndices.length / 3);
-    const authoredVisualColor = String(visual?.color || "").trim();
-    const visualColor = authoredVisualColor;
-    const visualRgb = parseHexColorToLinearRgb(visualColor);
-    const partHasSourceColors = !!visualRgb || urdfMeshHasSourceColors(partMesh);
-
-    vertices.set(sourceVertices, partVertexOffset * 3);
-    if (sourceNormals.length === sourceVertices.length) {
-      normals.set(sourceNormals, partVertexOffset * 3);
-    }
-    if (hasSourceColors && partHasSourceColors) {
-      if (visualRgb) {
-        for (let colorIndex = 0; colorIndex < vertexCount; colorIndex += 1) {
-          const offset = (partVertexOffset + colorIndex) * 3;
-          colors[offset] = visualRgb[0];
-          colors[offset + 1] = visualRgb[1];
-          colors[offset + 2] = visualRgb[2];
-        }
-      } else if (sourceColors.length === sourceVertices.length) {
-        colors.set(sourceColors, partVertexOffset * 3);
-      }
-    }
-    for (let index = 0; index < sourceIndices.length; index += 1) {
-      indices[indexOffset + index] = sourceIndices[index] + partVertexOffset;
-    }
-
+/**
+ * One part per resolved visual of a description: its link, its local transform (the visual
+ * origin and `<mesh scale>`), the mesh it draws in that mesh's own units and frame (a loaded
+ * link mesh, or a primitive built here), the colour the description gives it, and whether it
+ * has a colour of its own at all. What a robot's scene is built from (`robotParts.js`, then
+ * `robotScene.js`, in the viewer and in a snapshot alike); a pose never touches it, because a
+ * pose is the scene graph's joint matrices. A visual whose mesh is not in `meshesByUrl` has no
+ * part: the loader fails a robot with a missing link mesh before it gets here.
+ *
+ * @param {object} urdfData  A parsed URDF or SDF (an SRDF's is its URDF's).
+ * @param {Map<string, object> | Record<string, object>} meshesByUrl  Every link mesh, loaded.
+ */
+export function buildUrdfVisualParts(urdfData, meshesByUrl) {
+  return resolveUrdfVisuals(urdfData, meshesByUrl).map(({ linkName, meshUrl, partFileRef, partMesh, visual }, visualIndex) => {
+    const visualColor = String(visual?.color || "").trim();
     const partLabel = String(visual?.label || visual?.instanceId || visual?.id || meshUrl || partFileRef).trim();
-    parts.push({
+    return {
       id: String(visual?.id || `${linkName}:${meshUrl || partFileRef}`),
       name: partLabel,
       label: partLabel,
@@ -695,103 +588,17 @@ export function buildUrdfMeshGeometry(urdfData, meshesByUrl, options = {}) {
       localTransform: toTransformArray(visual?.localTransform),
       sourceBounds: partMesh.bounds,
       bounds: partMesh.bounds,
-      transform: [...IDENTITY_TRANSFORM],
-      hasSourceColors: partHasSourceColors,
-      vertexOffset: partVertexOffset,
-      vertexCount,
-      triangleOffset: partTriangleOffset,
-      triangleCount,
-      edgeIndexOffset: 0,
-      edgeIndexCount: 0
-    });
-
-    vertexOffset += vertexCount;
-    indexOffset += sourceIndices.length;
-  }
-
-  return {
-    vertices,
-    indices,
-    normals,
-    colors,
-    edge_indices: new Uint32Array(0),
-    bounds: mergeBounds(parts.map((part) => part.bounds)),
-    parts,
-    has_source_colors: hasSourceColors,
-    // Merged too: the concatenated buffer holds each link mesh's own local vertices, so
-    // placement still lives only in the part transform. See the lightweight branch.
-    partTransformsBaked: false
-  };
+      hasSourceColors: !!parseHexColorToLinearRgb(visualColor) || urdfMeshHasSourceColors(partMesh),
+      sourceMesh: partMesh,
+      sourceMeshKey: String(meshUrl || partFileRef || visual?.id || `visual:${visualIndex + 1}`),
+      vertexCount: Math.floor((partMesh.vertices?.length || 0) / 3),
+      triangleCount: Math.floor((partMesh.indices?.length || 0) / 3)
+    };
+  });
 }
 
 function urdfMeshHasSourceColors(partMesh) {
   return !!partMesh?.has_source_colors &&
     partMesh.colors?.length > 0 &&
     partMesh.colors.length === partMesh.vertices?.length;
-}
-
-function urdfVisualHasDisplayColors(visualColor, partMesh) {
-  return !!parseHexColorToLinearRgb(visualColor) || (!visualColor && urdfMeshHasSourceColors(partMesh));
-}
-
-function posedPartPlacement(part, linkWorldTransforms) {
-  const linkWorldTransform = linkWorldTransforms.get(String(part?.linkName || "")) || [...IDENTITY_TRANSFORM];
-  const transform = multiplyTransforms(linkWorldTransform, toTransformArray(part?.localTransform));
-  return { transform, bounds: transformBounds(part?.sourceBounds || part?.bounds, transform) };
-}
-
-// The ZERO pose: every joint at its declared default, whatever the caller has
-// driven them to. A posed robot carries this beside its live `bounds` so a
-// renderer can ground a camera fit on the robot at rest -- moving a joint
-// changes what is lit and clipped, never how the model is framed.
-function urdfRestBounds(urdfData, sourceParts) {
-  const restTransforms = solveUrdfLinkWorldTransforms(urdfData, {});
-  return mergeBounds(sourceParts.map((part) => posedPartPlacement(part, restTransforms).bounds));
-}
-
-export function poseUrdfMeshData(urdfData, meshData, jointValuesByName = {}, linkWorldTransformOverrides = null) {
-  const linkWorldTransforms = solveUrdfLinkWorldTransforms(urdfData, jointValuesByName);
-  if (linkWorldTransformOverrides instanceof Map) {
-    for (const [linkName, transform] of linkWorldTransformOverrides.entries()) {
-      linkWorldTransforms.set(String(linkName || ""), toTransformArray(transform));
-    }
-  } else if (linkWorldTransformOverrides && typeof linkWorldTransformOverrides === "object") {
-    for (const [linkName, transform] of Object.entries(linkWorldTransformOverrides)) {
-      linkWorldTransforms.set(String(linkName || ""), toTransformArray(transform));
-    }
-  }
-  const sourceParts = Array.isArray(meshData?.parts) ? meshData.parts : [];
-  const geometrySource = meshData?.geometrySource && typeof meshData.geometrySource === "object"
-    ? meshData.geometrySource
-    : meshData;
-  const posedParts = sourceParts.map((part) => ({
-    ...part,
-    ...posedPartPlacement(part, linkWorldTransforms)
-  }));
-
-  return {
-    meshData: {
-      ...meshData,
-      geometrySource,
-      bounds: mergeBounds(posedParts.map((part) => part.bounds)),
-      restBounds: urdfRestBounds(urdfData, sourceParts),
-      parts: posedParts
-    },
-    linkWorldTransforms
-  };
-}
-
-export function applyUrdfPoseToMeshData(urdfData, meshData, jointValuesByName = {}, linkWorldTransformOverrides = null) {
-  const posed = poseUrdfMeshData(urdfData, meshData, jointValuesByName, linkWorldTransformOverrides);
-  if (!meshData || typeof meshData !== "object") {
-    return posed;
-  }
-  meshData.geometrySource = posed.meshData.geometrySource || meshData.geometrySource || meshData;
-  meshData.bounds = posed.meshData.bounds;
-  meshData.restBounds = posed.meshData.restBounds;
-  meshData.parts = posed.meshData.parts;
-  return {
-    ...posed,
-    meshData
-  };
 }

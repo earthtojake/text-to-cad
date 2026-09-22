@@ -1,9 +1,8 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { createInspectEnvironmentResource, INSPECT_ENVIRONMENT_ID } from "@hardcore/core/common/inspectEnvironment.js";
-import { PHOTOGRAPHIC_STUDIO_MATERIAL_SETTINGS } from "@hardcore/core/common/photographicStudioRig.js";
 import { resolveCadGridSettings } from "@hardcore/core/common/cadInk.js";
-import { resolveDisplayMaterialSettings } from "@hardcore/core/common/sceneSettings.js";
+import { resolveSceneSurfaceLook, scenePhotographicLighting } from "@hardcore/core/common/sceneSettings.js";
 import {
   CAMERA_PROJECTION, normalizeCameraProjection, perspectiveSnapshotMatchesScene, resolvePerspectiveSnapshot
 } from "@hardcore/core/lib/perspective.js";
@@ -44,6 +43,7 @@ import LoadingIndicator from "../status/LoadingIndicator.js";
 import DrawingOverlay from "../tools/draw/DrawingOverlay.jsx";
 import { useDrawingViewLock } from "../tools/draw/useDrawingViewLock.js";
 import { createViewerRenderStateResolver } from "../view-settings/renderState.js";
+import { shareSettingsValue } from "../view-settings/shareSettingsValue.js";
 import { createViewUpdateGate } from "../view-settings/viewUpdateGate.js";
 import { viewerTransitionBackdrop } from "../viewport/framePresentation.js";
 import { IDLE_PIXEL_RATIO_CAP, INTERACTION_IDLE_DELAY_MS, INTERACTION_PIXEL_RATIO_CAP, getPixelRatioCap } from "../viewport/pixelRatio.js";
@@ -204,18 +204,15 @@ const ShellViewport = forwardRef(function ShellViewport({
     [resolveViewerRenderState, themeSettings, displaySettings]);
   const normalizedThemeSettings = renderState.themeSettings;
   const normalizedDisplaySettings = renderState.displaySettings;
-  const surfaceSettings = normalizedDisplaySettings.surfaces;
-  const photographicLighting = renderMode && renderConfiguration?.lighting?.enabled !== false;
-  const materialSettings = useMemo(() => resolveDisplayMaterialSettings(
-    photographicLighting ? PHOTOGRAPHIC_STUDIO_MATERIAL_SETTINGS : normalizedThemeSettings.materials,
-    normalizedDisplaySettings.partColor
-  ), [normalizedDisplaySettings.partColor, normalizedThemeSettings.materials, photographicLighting]);
-  // The look a scene wears. Photographic Render keeps what the file authored; the
-  // Surfaces section (colour mode, style, opacity) applies in both.
-  const surfaceLook = useMemo(() => ({
-    materialSettings, authored: photographicLighting,
-    surface: surfaceSettings ? { style: surfaceSettings.style, opacity: surfaceSettings.opacity } : null
-  }), [materialSettings, photographicLighting, surfaceSettings]);
+  const photographicLighting = scenePhotographicLighting({ renderMode, renderConfiguration });
+  // The look a scene wears, resolved where the snapshot CLI resolves it (core's
+  // `resolveSceneSurfaceLook`). Photographic Render keeps what the file authored; the
+  // Surfaces section (colour mode, style, opacity) applies in both. The look keeps its
+  // identity while its VALUE holds, so a guide or a stage setting never re-dresses the scene.
+  const surfaceLookRef = useRef(null);
+  const surfaceLook = useMemo(() => (surfaceLookRef.current = shareSettingsValue(surfaceLookRef.current, resolveSceneSurfaceLook({
+    themeSettings: normalizedThemeSettings, displaySettings: normalizedDisplaySettings, renderMode, renderConfiguration
+  }))), [normalizedThemeSettings, normalizedDisplaySettings, renderMode, renderConfiguration]);
   const floorSettings = normalizedThemeSettings.floor || {};
   const guideFloorSettings = useMemo(() => ({
     ...floorSettings,

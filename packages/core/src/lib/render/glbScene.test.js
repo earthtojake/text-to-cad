@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
 
-import { isKitScene, sceneFramingBounds } from "../kit/scene.js";
+import { isKitScene, sceneFramingBounds } from "../viewer/sceneContract.js";
 import { createGlbScene } from "./glbScene.js";
 
 const INSPECT = Object.freeze({
