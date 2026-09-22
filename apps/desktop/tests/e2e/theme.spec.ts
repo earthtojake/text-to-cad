@@ -267,9 +267,10 @@ test("stays dark through display mode and render settings edits", async () => {
   const displayMode = page.getByRole("tabpanel", { name: "Display", exact: true }).getByRole("combobox", { name: "Mode" });
   await displayMode.click();
   await page.getByRole("option", { name: "Render", exact: true }).click();
-  await page.getByRole("button", { name: "Lighting", exact: true }).click();
-  const studio = page.locator("[data-cad-render-settings-section=rendering]");
-  await expect(studio).toBeVisible();
+  // Render turns Lighting on. An open section's header is plain text and only its minus is a
+  // control (`packages/ui/docs/settings-ui.md`), so the section is found by its name.
+  const studio = page.getByRole("tabpanel", { name: "Display", exact: true }).getByRole("region", { name: "Lighting", exact: true });
+  await expect(studio.getByRole("button", { name: "Disable Lighting", exact: true })).toHaveAttribute("aria-expanded", "true");
   await expectNeverMoved(page, "dark", "entering Render");
 
   // Compact numeric fields modify photographic presentation, not app appearance.
@@ -284,7 +285,7 @@ test("stays dark through display mode and render settings edits", async () => {
 
   await displayMode.click();
   await page.getByRole("option", { name: "Solid", exact: true }).click();
-  await page.getByRole("tab", { name: "Model", exact: true }).click();
+  await page.getByRole("tab", { name: "Features", exact: true }).click();
   await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible();
   await expectNeverMoved(page, "dark", "returning to Inspect");
   expect(await surfaceWroteTheDocument(page)).toEqual({ theme: null, preference: null });

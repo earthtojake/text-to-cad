@@ -592,7 +592,9 @@ test("the sidebar renames and archives a session", async () => {
   await row.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Archive" }).click();
   await expect(row).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: /What should we build in/ })).toBeVisible();
+  // A folder is a group of sessions, not a saved project (`docs/session-workspaces.md`):
+  // archiving its last visible session hides the group, so there is no folder left to start in.
+  await expect(page.getByText("Choose a folder to get started")).toBeVisible();
 });
 
 
@@ -608,6 +610,10 @@ test("the sidebar renames and archives a session", async () => {
  * asked because nothing asks.
  */
 test("the new session is created in the mode its chip is on, and Manual waits", async () => {
+  // The archive before this left no session, and so no folder: choose this one again, which is
+  // what selects its new-session draft (`docs/session-workspaces.md`).
+  await page.evaluate((dir) => window.hardcore.projects.addPath({ path: dir }), project);
+  await expect(page.getByRole("heading", { name: `What should we build in ${path.basename(project)}?` })).toBeVisible();
   const actionRow = page.locator("[data-new-session] [data-composer-row]");
   const chip = actionRow.locator("[data-chip=mode]");
   // Preselected at the agent's own auto preset, the way the model and the
@@ -687,15 +693,14 @@ test("the full-access mode is never asked anything", async () => {
     await expect(page.getByRole("menuitem", { name: "Delete" })).toBeHidden();
   }
   await expect(rows).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: /What should we build in/ })).toBeVisible();
+  // Deleting the last session removes the derived directory group with it.
+  await expect(page.getByText("Choose a folder to get started")).toBeVisible();
 });
 
 test("a signed-out agent asks to sign in", async () => {
+  // Choosing a folder selects its new-session draft. A folder no session has used yet is not a
+  // saved project, so it is not in the project chip's Recent list (`docs/session-workspaces.md`).
   await page.evaluate((dir) => window.hardcore.projects.addPath({ path: dir }), signedOutProject);
-  await page.locator("[data-chip=project]").click();
-  // `Recent`, then a plain item per folder with a check on the current one
-  // (`sidebar.spec.ts` covers the order and `Open folder…`).
-  await page.getByRole("menuitem", { name: path.basename(signedOutProject) }).click();
   await expect(page.getByRole("heading", { name: `What should we build in ${path.basename(signedOutProject)}?` })).toBeVisible();
   const composer = page.getByPlaceholder("Do anything");
   await composer.fill("hello");

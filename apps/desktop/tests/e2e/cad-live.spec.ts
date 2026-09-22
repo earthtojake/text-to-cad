@@ -75,8 +75,18 @@ test('live CAD commands observe and control the mounted tiny STEP viewport witho
   expect(state.revision).toBe(revision);
   expect(state.display).toEqual({ mode: 'solid' });
   const initialCamera = state.camera!;
-  const model = page.getByRole('list', { name: 'Model', exact: true });
-  await model.getByRole('button', { name: 'Select part.step', exact: true }).click();
+  // A lone part has no row of its own in the Features tree (it is presented as its features),
+  // so it is selected whole where a person selects it whole: the viewport, under Parts.
+  const selectTool = page.getByRole('group', { name: 'Interaction tools', exact: true }).getByRole('button', { name: 'Select', exact: true });
+  await expect(selectTool).toHaveAttribute('aria-pressed', 'true');
+  await selectTool.click();
+  await page.getByRole('menuitemradio', { name: /^Parts/ }).click();
+  await expect(page.getByRole('menu')).toHaveCount(0);
+  const canvas = page.locator('[data-cad-surface] canvas').first();
+  const canvasBox = (await canvas.boundingBox())!;
+  const details = page.getByRole('region', { name: 'Reference details', exact: true });
+  await canvas.click({ position: { x: canvasBox.width / 2, y: canvasBox.height / 2 } });
+  await expect(details).toBeVisible();
   const selected = await command('viewer-state', tabId) as CadLiveState;
   expect(selected.selection).toEqual(expect.arrayContaining([expect.objectContaining({ resource: expect.objectContaining({ path: 'part.step', revision }), target: { kind: 'whole-resource' } })]));
   const captured = await command('capture-view', tabId) as CadLiveState & { base64: string; mimeType: string };
@@ -84,10 +94,10 @@ test('live CAD commands observe and control the mounted tiny STEP viewport witho
   expect(captured.mimeType).toBe('image/png'); expect(Buffer.from(captured.base64, 'base64').subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
   fs.writeFileSync(test.info().outputPath('live-capture.png'), Buffer.from(captured.base64, 'base64'));
   expect((await command('cad-clear-selection', tabId) as CadLiveState).selection).toEqual([]);
-  await expect(model.getByRole('button', { name: 'Select part.step', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await expect(details).toHaveCount(0);
   const reselected = await command('select-reference', tabId, { selector: 'part.step' }) as CadLiveState;
   expect(reselected.selection).toEqual(selected.selection);
-  await expect(model.getByRole('button', { name: 'Select part.step', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(details).toBeVisible();
   await command('cad-clear-selection', tabId);
   const movedCamera = { ...initialCamera, position: initialCamera.position.map((value, index) => value + (index === 0 ? 5 : 0)) };
   const movedState = await command('cad-camera', tabId, { camera: movedCamera }) as CadLiveState;
