@@ -81,6 +81,12 @@ packages/cadgen/build/
 # bundler runs, and cadgen says so by name when it needs one that is absent.
 packages/cadgen/src/cadgen/_runtime/
 
+# The QwenPaw plugin installs by copying a single directory, so it can carry a
+# generated skills/ copy for an install with no checkout to point at. That copy
+# is regenerable with the rsync recipe in .qwenpaw-plugin/README.md and is not
+# committed; the plugin prefers a configured or sibling skills/ tree anyway.
+.qwenpaw-plugin/skills/
+
 # Design notes are local working files, never committed (user policy 2026-08-29).
 design/
 

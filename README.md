@@ -113,8 +113,8 @@ Neither command removes a skill that was retired upstream; drop one with
 
 ### Plugins
 
-Provider-native plugin installs are also available for Codex, Claude Code, and
-Grok Build:
+Provider-native plugin installs are also available for Codex, Claude Code,
+ZCode, Grok Build, QwenPaw, and Cursor:
 
 ```bash
 # Codex (requires Codex 0.142.0 or newer)
@@ -132,6 +132,12 @@ claude plugin marketplace add earthtojake/text-to-cad
 claude plugin install cad@text-to-cad
 ```
 
+```bash
+# ZCode
+zcode plugin marketplace add earthtojake/text-to-cad
+zcode plugin install cad@text-to-cad
+```
+
 Grok Build uses the existing `.claude-plugin/marketplace.json`; there is no
 separate Grok plugin manifest.
 
@@ -140,6 +146,39 @@ separate Grok plugin manifest.
 grok plugin install earthtojake/text-to-cad --trust
 grok plugin enable cad
 ```
+
+```bash
+# QwenPaw (clone the repo, then install the plugin directory)
+git clone https://github.com/earthtojake/text-to-cad.git
+qwenpaw plugin install text-to-cad/.qwenpaw-plugin
+# then name the tree in ~/.qwenpaw/config.json and restart
+# ({"plugins": {"cad": {"skills_dir": "~/text-to-cad/skills"}}}; ~ expands)
+```
+
+The QwenPaw plugin registers the skills as a skill provider: every skill is
+copied into each QwenPaw workspace and enabled by default. It ships no copy of
+them, so it needs that path (or the generated copy described in
+[`.qwenpaw-plugin/README.md`](.qwenpaw-plugin/README.md)) to know which
+`skills/` tree to provision.
+
+```bash
+# Cursor (clone into Cursor's local plugin directory)
+mkdir -p ~/.cursor/plugins/local
+git clone https://github.com/earthtojake/text-to-cad.git ~/.cursor/plugins/local/cad
+```
+
+Cursor discovers the plugin through `.cursor-plugin/plugin.json` and loads the
+skills from the clone's `skills/` directory; restart Cursor or run
+**Developer: Reload Window** after installing. Clone it into place rather than
+symlinking a checkout you already have: a symlink under
+`~/.cursor/plugins/local` loads only when its target resolves to a directory
+inside that folder, so a link to another path is ignored with no error. The
+directory is named `cad` after the manifest's plugin name, and a marketplace
+install of the same name takes precedence over this local copy. Local imports
+are admin-controlled on Teams/Enterprise plans (**Allow Local Plugin Imports**);
+without them, install through a marketplace instead ([submitting it](https://cursor.com/marketplace/publish)
+for the public one, or adding this repository as a team marketplace under
+Dashboard -> Plugins). Updating the install is a `git pull` in that directory.
 
 Restart your agent if newly installed skills do not appear. For local
 development, branch from `main`, open PRs against `main`, and follow

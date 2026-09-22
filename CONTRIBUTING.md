@@ -157,6 +157,7 @@ Supported local-development agent destinations:
 | ----------- | ------------------------------------------------- |
 | `codex`     | `${CODEX_HOME:-$HOME/.codex}/skills`              |
 | `claude`    | `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills`      |
+| `zcode`     | `${ZCODE_CONFIG_DIR:-$HOME/.zcode}/skills`        |
 | `gemini`    | `$HOME/.gemini/skills`                            |
 | `universal` | `${XDG_CONFIG_HOME:-$HOME/.config}/agents/skills` |
 | `project`   | `.agents/skills` in this repository               |
@@ -482,9 +483,11 @@ production-output check.
 `main` is the source tree, what installers clone, and what releases are cut
 from. There is no development symlink layout and no generated publish tree:
 every path is the real file, and the repository root is itself the agent plugin
-package (`.claude-plugin/` and `.codex-plugin/` hold the manifests; the plugin's
-skills are `skills/` directly), so whatever is on `main` is what agent
-installers copy.
+package (`.claude-plugin/`, `.codex-plugin/`, `.cursor-plugin/`,
+`.qwenpaw-plugin/`, and `.zcode-plugin/` hold the manifests; the plugin's
+skills are `skills/` directly, and the QwenPaw package resolves a `skills/`
+tree at runtime instead of committing a second one (see its README), so
+whatever is on `main` is what agent installers copy.
 
 Three consequences are enforced by `scripts/github-workflows/check-builds.sh`
 on every push:
