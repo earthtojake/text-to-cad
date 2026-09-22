@@ -1,12 +1,13 @@
 import { Search, X } from 'lucide-react';
+import { cn } from '@hardcore/ui/utils';
 
 /**
  * The filter box above a tree, and the highlight its matches use. Shared by the
  * file tree and the Model tree so the two filters are one control; each caller
  * owns its corpus, ranking and keyboard.
  */
-export function TreeFilterInput({ label, placeholder, value, onChange, onKeyDown, trailing, clearLabel = 'Clear filter' }) {
-  return <div className="flex h-9 shrink-0 items-center gap-1 border-b px-2">
+export function TreeFilterInput({ label, placeholder, value, onChange, onKeyDown, trailing, clearLabel = 'Clear filter', className }) {
+  return <div className={cn('flex h-9 shrink-0 items-center gap-1 border-b px-2', className)}>
     <div className="relative flex min-w-0 flex-1 items-center">
       <Search className="pointer-events-none absolute left-2 size-3 text-muted-foreground" />
       <input

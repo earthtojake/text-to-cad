@@ -17,13 +17,15 @@ put the display groups inside another “Display settings” accordion.
 
 | Kind | Primitive | Behavior | Examples |
 | --- | --- | --- | --- |
-| Always available | `FileSheetStaticSection` in Display; `FilePanelSections` in a file's own panel (the same heading) | Always open; no plus/minus, hover treatment, or enable switch | Mode, Surfaces, Features, Position, Issues, Links |
+| Always available | `FileSheetStaticSection` | Always open; no plus/minus, hover treatment, or enable switch | Display, Surfaces |
+| Foldable | `FilePanelSections` in a file's own panel, beside another section (`FileSheetToggleHeading`, Expand/Collapse) | The gates' plus and minus as a view only: folding changes nothing the section does, and a folded section stays mounted | Features, Position, Issues, Links, SDF |
 | Optional feature | `FileSheetGatedSection` | Expanded means enabled; collapsed means disabled | Explode, Clip, Edges, Grid, Axes, Lighting, Background, Floor |
 
 A section is gated only when its entire feature has a meaningful disabled state.
 Surfaces stays open because the group configures the model's basic presentation;
 its style picker can still explicitly select Off. Position holds controls over
-authored motion, not an optional display effect: it never collapses.
+authored motion, not an optional display effect, so it is never gated; folding it
+away beside Features changes the view and nothing else.
 
 For an optional feature:
 
@@ -107,7 +109,7 @@ Keep this order in every preset; enabling a feature never moves it:
 
 | Section | Contents |
 | --- | --- |
-| Mode | Equal-width Mode and Projection dropdowns |
+| Display | Equal-width Mode and Projection dropdowns |
 | Surfaces | Style and part-color mode together; compact color/opacity controls |
 | Explode | Amount slider/value |
 | Clip | X/Y/Z slider/value rows, then Flip checkbox |

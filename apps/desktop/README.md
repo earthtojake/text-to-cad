@@ -1060,9 +1060,9 @@ tab strip. This is the standalone viewer's top bar, ported,
 with the app's own tree folded into it.
 
 Markdown declares one, the two readings of the same bytes (`View source` /
-`View preview`). A viewer file declares its own panel, then **Display**
-(`cad-display`, the sliders glyph). The own panel's id is `cad-file`, named for
-what the file is: a STEP part's `Part` (a box), an assembly's `Assembly`
+`View preview`). A viewer file declares **Display** (`cad-display`, the sliders
+glyph), then its own panel, next to the tree. The own panel's id is `cad-file`,
+named for what the file is: a STEP part's `Part` (a box), an assembly's `Assembly`
 (boxes), a URDF, SRDF or SDF's `Robot` (a bot). An STL, a 3MF and a GLB declare
 Display alone, and a DXF declares none. Code, images and PDFs declare none,
 leaving the tree as the whole list.

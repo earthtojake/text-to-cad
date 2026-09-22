@@ -26,7 +26,7 @@ test("View has the same feature groups for every preset, with Render second", ()
     assert.ok(labelled(view.tree, "Projection"));
     assert.equal(labelled(view.tree, "Lens"), undefined);
     assert.deepEqual(elements(view.tree).filter(node => node.type?.name === "FileSheetStaticSection").map(node => node.props.title),
-      ["Mode", "Surfaces"]);
+      ["Display", "Surfaces"]);
     view.unmount();
   }
 });

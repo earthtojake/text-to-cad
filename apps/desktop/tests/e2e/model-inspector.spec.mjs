@@ -110,7 +110,8 @@ test('the Features tree presents a lone part as its features, and precise viewpo
     await canvas.click({position:{x:box.width*0.5,y:box.height*0.5}});
     await page.screenshot({path:`${output}/after-pick.png`,animations:'disabled'});
     await expect(page.getByRole('button',{name:'Add to prompt',exact:true})).toBeVisible();
-    const reference=page.locator('[data-file-panel-section=features]').getByText(/^o[0-9.]+\.[fe][0-9]+$/);
+    // The pick's Reference, pinned at the Part panel's foot under its sections.
+    const reference=page.locator('[data-file-sheet=Part]').getByRole('region',{name:'Reference details',exact:true}).getByText(/^o[0-9.]+\.[fe][0-9]+$/);
     await expect(reference).toBeVisible();
     const selector=await reference.innerText();
     await page.getByRole('button',{name:'Add to prompt',exact:true}).click();

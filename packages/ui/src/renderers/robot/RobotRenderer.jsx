@@ -185,7 +185,7 @@ function RobotSurface({ view, data }) {
   // Links (the tree, which fills the panel), then what an SDF declares of itself.
   const panel = { title: "Robot", sections: [
     posable && pose ? { id: "position", title: "Position", content: <PositionControls key={robot.revision} pose={pose} /> } : null,
-    { id: "links", title: "Links", fill: true,
+    { id: "links", title: "Links",
       content: active => <LinksSection key={modelKey} active={active} description={robot?.description || null} components={robot?.components}
         parts={robot?.parts} selection={treeSelection} groupNamesByLink={groupNamesByLink} meshPath={meshPath} onOpenFile={view.onOpenFile} /> },
     kind === "sdf" ? { id: "sdf", title: "SDF",

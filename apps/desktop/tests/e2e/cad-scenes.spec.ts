@@ -266,7 +266,7 @@ test("View presets preserve authored materials and independent tools without a M
   await expect(page.locator("header [data-file-panel]")).toHaveCount(3);
   expect(await page.locator("header [data-file-panel]").evaluateAll(toggles => toggles.map(toggle =>
     `${toggle.getAttribute("data-file-panel")}:${toggle.getAttribute("aria-label")}`)))
-    .toEqual(["cad-file:Part", "cad-display:Display", "tree:Show files"]);
+    .toEqual(["cad-display:Display", "cad-file:Part", "tree:Show files"]);
   const viewTab = page.locator("header [data-file-panel=cad-display]");
   const view = page.locator("[data-file-sheet=Display]");
   const mode = view.getByRole("combobox", { name: "Mode" });

@@ -15,6 +15,7 @@ test('file and model trees share row sizing and insets while model disclosure, i
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import ModelingTree from '../../../dist/renderers/step/components/workbench/ModelingTree.js';
+import FilePanelSections from '../../../dist/renderers/kit/inspector/FilePanelSections.js';
 import { FileTree } from '../../../dist/file-viewer/navigation/FileTree.js';
 const leaves = Array.from({length:70}, (_, i) => ({id:'o'+i,nodeType:'part',displayName:'Part '+i,leafPartIds:['o'+i],children:[]}));
 const group = {id:'group',nodeType:'assembly',displayName:'Subassembly',leafPartIds:['o0','o1'],children:leaves.slice(0,2)};
@@ -29,14 +30,15 @@ function App(){
  window.treeTest={events,refresh:()=>setTick(n=>n+1),select:id=>{setSelected([id]);setReveal(n=>n+1);},isolate:()=>{setExpanded(['group']);setFocused(['o0']);}};
  return <div style={{display:'flex',gap:20,padding:16}}>
   <section data-testid="files" style={{height:360,width:280}}><FileTree source={{...baseSource,expanded:files,setExpanded:setFiles}} activePath="part.step" onOpen={()=>{}}/></section>
-  <section data-testid="model" style={{height:360,width:320}}><ModelingTree active disabled={false}
+  {/* As a file panel holds it: in the panel's one scroller, with the Reference at its foot. */}
+  <section data-testid="model" style={{height:360,width:320,display:'flex',flexDirection:'column'}}><FilePanelSections sections={[{id:'features',title:'Features',content:<ModelingTree active disabled={false}
     modeling={{descriptor,results:{},error:'',retryFailed(){}}} stepRoot={root} selectedPartIds={selected}
     activeTreeNodeScrollKey={reveal} onRequestRecognition={ids=>{events.requested=ids;}}
     partControls={{isAssemblyView:true,expandedTreeNodeIds:expanded,onToggleTreeNode:toggle,hiddenPartIds:hidden,
       focusedNodeIds:focused,selectableNodeIds:focused.length?['o0']:null,onSelectTreeNode:choose,
       onTogglePartVisibility:id=>setHidden(current=>current.includes(id)?current.filter(n=>n!==id):[...current,id]),
       showAllHiddenParts:()=>setHidden([]),onExitAllIsolate:()=>setFocused([])}}
-    selectionDetails={selected.length?<p>Selected {selected[0]} ({tick})</p>:null}/></section>
+    selectionDetails={selected.length?<p>Selected {selected[0]} ({tick})</p>:null}/>}]}/></section>
  </div>;
 }
 createRoot(document.getElementById('root')).render(<App/>);

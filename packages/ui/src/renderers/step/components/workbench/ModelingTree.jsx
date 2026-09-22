@@ -8,6 +8,7 @@ import ModelPartMenu from './ModelPartMenu.jsx';
 import ModelPartActions from './ModelPartActions.jsx';
 import { modelingSelectionPaths } from '../../workbench/modelingSelection.js';
 import InspectorSplit from '../../../kit/inspector/InspectorSplit.jsx';
+import { panelScroller } from '../../../kit/inspector/FilePanelSections.jsx';
 import { modelingReferenceIds } from '../../workbench/modelingTree.js';
 import { implicitModelingRoots, presentModelingAssembly } from '../../workbench/modelingPresentation.js';
 import { buildModelTreeSearchIndex, modelTreeSearchChain, searchModelTree } from '../../../kit/inspector/modelTreeSearch.js';
@@ -120,11 +121,11 @@ export default function ModelingTree({ modeling, active, disabled, references=EM
   const found=useMemo(()=>searchIndex ? searchModelTree(searchIndex,deferredQuery) : NO_MATCHES,[searchIndex,deferredQuery]);
   const listRef=useRef(null),resumeScroll=useRef(0);
   const changeQuery=value=>{
-    if(!searching && value.trim() && listRef.current)resumeScroll.current=listRef.current.scrollTop;
+    if(!searching && value.trim() && listRef.current)resumeScroll.current=panelScroller(listRef.current).scrollTop;
     setQuery(value);setCursor(null);
   };
   // Back where the tree was; a hit selected meanwhile is then scrolled to by the reveal below.
-  useLayoutEffect(()=>{if(!searching && listRef.current)listRef.current.scrollTop=resumeScroll.current;},[searching]);
+  useLayoutEffect(()=>{if(!searching && listRef.current)panelScroller(listRef.current).scrollTop=resumeScroll.current;},[searching]);
   const picked=useMemo(()=>selectedReferences || references.filter(ref=>selectedReferenceIds.includes(ref.id)),[selectedReferences,references,selectedReferenceIds]);
   const ids=selected ? modelingReferenceIds(selected,selected.occurrenceId,references) : EMPTY;
   const selection=new Set(selectedReferenceIds),showDetails=selected && (pending || (ids.length > 0 && ids.length === selection.size && ids.every(id=>selection.has(id))));
@@ -273,8 +274,8 @@ export default function ModelingTree({ modeling, active, disabled, references=EM
     {selectionDetails}
   </>;
   const empty=descriptor && done===componentIds.length && !failed && componentIds.every(id=>!results[id]?.tree?.length);
-  return <div className="flex h-full min-h-0 flex-col text-xs" aria-label="Modeling tree">
-    <TreeFilterInput label="Filter model" placeholder="Filter model…" value={query} onChange={changeQuery} onKeyDown={onSearchKeyDown}
+  return <div className="flex flex-col text-xs" aria-label="Modeling tree">
+    <TreeFilterInput className="h-7" label="Filter model" placeholder="Filter model…" value={query} onChange={changeQuery} onKeyDown={onSearchKeyDown}
       trailing={<>
         {partControls.hiddenPartIds?.length > 0 && <Button disabled={disabled} type="button" variant="ghost" size="sm" className="h-6 shrink-0 px-1.5 text-tiny text-muted-foreground" onClick={partControls.showAllHiddenParts}>Show all</Button>}
         {partControls.focusedNodeIds?.length > 0 && <Button disabled={disabled} type="button" variant="ghost" size="sm" className="h-6 shrink-0 px-1.5 text-tiny text-muted-foreground" onClick={partControls.onExitAllIsolate}>Exit isolate</Button>}
@@ -283,7 +284,7 @@ export default function ModelingTree({ modeling, active, disabled, references=EM
     <InspectorSplit title="Reference"
       actions={<Button type="button" variant="ghost" size="icon-xs" aria-label="Clear selection" title="Clear selection" disabled={disabled} onClick={clearSelection}><X className="size-3.5" aria-hidden="true"/></Button>}
       label="Reference details" details={nodeDetails || pending || selectionDetails ? details : null}>
-      <div ref={listRef} className="min-h-0 flex-1 overflow-auto px-1 py-1" aria-label="Model tree area"
+      <div ref={listRef} className="px-1 py-1" aria-label="Model tree area"
         onClick={event=>{if(!disabled && !event.target.closest('li,button,input,[role="menu"]'))clearSelection();}}>
         {searching && <p role="status" className="px-2 py-1 text-micro text-muted-foreground">{found.total > found.matches.length ? `First ${found.matches.length} of ${found.total.toLocaleString()} matches` : `${found.total} ${found.total === 1 ? 'match' : 'matches'}`}</p>}
         {searching ? found.matches.length

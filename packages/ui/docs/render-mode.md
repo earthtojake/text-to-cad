@@ -83,7 +83,7 @@ Clip follows the
 same gate rule: disabling discards its offsets and Flip; re-enabling restores
 the default X center cut. Preset selection preserves Clip/Explode; Display Reset
 disables both tools. Grid and Axes are independent sections.
-The fixed panel order is Mode, Surfaces, Explode, Clip, Edges, Grid, Axes,
+The fixed panel order is Display, Surfaces, Explode, Clip, Edges, Grid, Axes,
 Lighting, Background, Floor. Preset changes never reorder controls.
 The remaining optional effects use the same feature gate primitive. A surface
 gate that just restores ordinary shading is not a meaningful disable action.

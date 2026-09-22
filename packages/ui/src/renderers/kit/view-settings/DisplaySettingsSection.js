@@ -201,7 +201,7 @@ export function DisplaySettingsSection({
     onOpacityChange={opacity => setGroup(group, { opacity })} />;
   return (
     <div data-cad-display-settings-section="true">
-      {(offers("mode") || offers("camera")) && <FileSheetStaticSection title="Mode">
+      {(offers("mode") || offers("camera")) && <FileSheetStaticSection title="Display">
         <FileSheetFieldGrid>
           {offers("mode") && <FileSheetSelectRow hideLabel className="px-0" label="Mode" value={custom ? "" : selectedMode.value} placeholder="Custom" onValueChange={onModeChange}
             triggerContent={custom ? undefined : <span className="flex min-w-0 items-center gap-1"><ModeIcon className="size-3 shrink-0" aria-hidden="true" /><span className="truncate">{presetLabel}</span></span>}
