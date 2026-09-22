@@ -724,3 +724,133 @@ export function collectStepTreeAncestorIds(root, nodeId) {
   }
   return visit(root) ? path.slice(0, -1).filter(Boolean) : [];
 }
+
+/** The longest label prefix every member shares, tidied to a readable stem.
+ *
+ * `plant_1_01 … plant_1_06` reads better folded as `plant_1` than as
+ * `plant_1_01 ×6`, which names one instance and counts six. Falls back to the
+ * first label when the members share nothing, which happens whenever the
+ * grouping key disagrees with the naming -- and the key is what is trusted.
+ */
+function commonLabelStem(labels) {
+  const first = normalizeString(labels[0]);
+  if (labels.length < 2) return first;
+  let end = first.length;
+  for (const label of labels.slice(1)) {
+    const other = normalizeString(label);
+    let i = 0;
+    while (i < end && i < other.length && first[i] === other[i]) i += 1;
+    end = i;
+  }
+  // The prefix usually stops mid-number -- plant_1_01..03 share "plant_1_0" --
+  // so back up past the digits it split before tidying the separator.
+  const splitsANumber = labels.some((label) => /\d/.test(normalizeString(label)[end] || ""));
+  let stem = first.slice(0, end);
+  if (splitsANumber) stem = stem.replace(/\d+$/, "");
+  stem = stem.replace(/[\s._\-#(]+$/, "");
+  return stem || first;
+}
+
+/** Rows that share a component, folded into one row apiece.
+ *
+ * A gearbox with 47 instances of 12 parts lists 47 rows, six identical bolts
+ * among them with nothing tying them together, and scrolling past duplicates
+ * is most of what the list does. This folds each repeated LEAF into a single
+ * row carrying a count, and leaves every instance reachable underneath it.
+ *
+ * The key is `componentByNodeId`, which the descriptor already carries:
+ * `occurrences[].component` is derived from the component's source hash, so
+ * two rows fold because they are the SAME GEOMETRY, not because their names
+ * look alike. Name-stem grouping would eventually merge two unlike parts that
+ * a CAD author happened to number; this cannot. A row with no component id
+ * never folds.
+ *
+ * Only leaves fold. A sub-assembly repeated across the tree keeps its
+ * hierarchy, because collapsing it would hide the structure the tree exists
+ * to show -- `column_1_deck_socket` and `column_1_module_1` are one column,
+ * not one part.
+ *
+ * Order is preserved: a group sits exactly where its first member sat, so the
+ * tree still reads in assembly order. Siblings fold only within one parent —
+ * two rows at the same depth separated by a shallower row belong to different
+ * parents and stay apart.
+ */
+export function groupRepeatedStepTreeRows(rows, componentByNodeId, expandedGroupIds = []) {
+  const list = Array.isArray(rows) ? rows : [];
+  const components = componentByNodeId instanceof Map ? componentByNodeId : new Map();
+  if (!list.length || !components.size) return list;
+  const expanded = new Set(
+    (Array.isArray(expandedGroupIds) ? expandedGroupIds : [])
+      .map((id) => normalizeString(id))
+      .filter(Boolean)
+  );
+
+  // Members of one parent are the same-depth rows with no shallower row between
+  // them, which is what a pre-order flattening guarantees.
+  const blockOf = new Array(list.length).fill(0);
+  const openAtDepth = new Map();
+  let nextBlock = 1;
+  list.forEach((row, index) => {
+    const depth = Number(row?.depth) || 0;
+    for (const key of [...openAtDepth.keys()]) {
+      if (key > depth) openAtDepth.delete(key);
+    }
+    if (!openAtDepth.has(depth)) openAtDepth.set(depth, nextBlock++);
+    blockOf[index] = openAtDepth.get(depth);
+  });
+
+  const groups = new Map();
+  list.forEach((row, index) => {
+    if (row?.hasChildren) return;
+    const component = normalizeString(components.get(normalizeString(row?.id)));
+    if (!component) return;
+    const key = `${blockOf[index]}::${component}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(index);
+  });
+
+  const leader = new Map();
+  for (const [key, indices] of groups) {
+    if (indices.length < 2) continue;
+    leader.set(indices[0], { key, indices });
+  }
+  if (!leader.size) return list;
+
+  const folded = new Set();
+  for (const { indices } of leader.values()) {
+    for (const index of indices) folded.add(index);
+  }
+
+  const out = [];
+  list.forEach((row, index) => {
+    const head = leader.get(index);
+    if (head) {
+      const members = head.indices.map((i) => list[i]);
+      const groupId = `group:${head.key}`;
+      const isExpanded = expanded.has(groupId);
+      out.push({
+        ...row,
+        id: groupId,
+        label: commonLabelStem(members.map((member) => member.label)),
+        detail: "",
+        hasChildren: true,
+        expanded: isExpanded,
+        isGroup: true,
+        groupCount: members.length,
+        groupMemberIds: members.map((member) => normalizeString(member.id)),
+        // Selecting or hiding the group means every instance it stands for.
+        leafPartIds: members.flatMap((member) =>
+          Array.isArray(member.leafPartIds) ? member.leafPartIds : [])
+      });
+      if (isExpanded) {
+        for (const member of members) {
+          out.push({ ...member, depth: (Number(row?.depth) || 0) + 1, inGroup: groupId });
+        }
+      }
+      return;
+    }
+    if (folded.has(index)) return;
+    out.push(row);
+  });
+  return out;
+}

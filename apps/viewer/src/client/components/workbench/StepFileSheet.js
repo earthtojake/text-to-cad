@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Box, Boxes, ChevronRight, Eye, EyeOff, X } from "lucide-react";
 import { cn } from "@/ui/utils";
 import {
@@ -11,6 +11,7 @@ import {
 import {
   STEP_MODEL_ROOT_ID,
   flattenVisibleStepTreeRows,
+  groupRepeatedStepTreeRows,
   stepTreeNodeChildren
 } from "cadgen-js/lib/step/stepTree";
 import { Button } from "../ui/button";
@@ -365,6 +366,7 @@ export default function StepFileSheet({
   viewerLoading,
   isAssemblyView = false,
   stepTreeRoot,
+  componentByNodeId = null,
   expandedTreeNodeIds,
   loadableTreeNodeIds = [],
   selectedPartIds,
@@ -408,6 +410,15 @@ export default function StepFileSheet({
   const previousVisibleRowsRef = useRef([]);
   const [focusedTreeRowId, setFocusedTreeRowId] = useState("");
   const [contextTreeRowId, setContextTreeRowId] = useState("");
+  // Which folded groups are open. Group ids are synthesised by the fold rather
+  // than being tree nodes, so they cannot live in expandedTreeNodeIds, which the
+  // workspace owns and keys by node id.
+  const [expandedGroupIds, setExpandedGroupIds] = useState([]);
+  const toggleGroupRow = useCallback((groupId) => {
+    setExpandedGroupIds((current) => (current.includes(groupId)
+      ? current.filter((id) => id !== groupId)
+      : [...current, groupId]));
+  }, []);
   const lastActiveTreeNodeScrollKeyRef = useRef("");
   const selectedIds = Array.isArray(selectedPartIds) ? selectedPartIds : [];
   const selectedReferenceIdSet = useMemo(
@@ -435,12 +446,19 @@ export default function StepFileSheet({
     isAssemblyView ||
     stepTreeNodeId(treeRoot) === STEP_MODEL_ROOT_ID
   );
-  const visibleRows = useMemo(
+  const flattenedRows = useMemo(
     () => flattenVisibleStepTreeRows(treeRoot, expandedTreeNodeIds, {
       omitRoot: elideRootTreeRow,
       showAllRootChildren: true
     }),
     [elideRootTreeRow, expandedTreeNodeIds, treeRoot]
+  );
+  // Repeated leaves fold into one row apiece. Keyed on the component id the
+  // descriptor already carries, so rows fold because they are the same geometry
+  // and not because their names look alike.
+  const visibleRows = useMemo(
+    () => groupRepeatedStepTreeRows(flattenedRows, componentByNodeId, expandedGroupIds),
+    [componentByNodeId, expandedGroupIds, flattenedRows]
   );
   const treeWindow = useStepTreeWindow(visibleRows, focusedTreeRowId, contextTreeRowId);
   const siblingPositions = useMemo(() => stepTreeSiblingPositions(visibleRows), [visibleRows]);
@@ -854,11 +872,13 @@ export default function StepFileSheet({
                     }
                     if (rowHasChildren && event.key === "ArrowRight" && !rowExpanded) {
                       event.preventDefault();
+                      if (row.isGroup) { toggleGroupRow(row.id); return; }
                       onToggleTreeNode?.(row.id);
                       return;
                     }
                     if (rowHasChildren && event.key === "ArrowLeft" && rowExpanded) {
                       event.preventDefault();
+                      if (row.isGroup) { toggleGroupRow(row.id); return; }
                       onToggleTreeNode?.(row.id);
                     }
                   };
@@ -1005,9 +1025,17 @@ export default function StepFileSheet({
                                     className={treeChevronButtonClasses}
                                     onClick={(event) => {
                                       event.stopPropagation();
+                                      if (row.isGroup) {
+                                        toggleGroupRow(row.id);
+                                        return;
+                                      }
                                       onToggleTreeNode?.(row.id);
                                     }}
-                                    aria-label={rowExpanded ? `Collapse ${row.label}` : `Expand ${row.label}`}
+                                    aria-label={rowExpanded
+                                      ? `Collapse ${row.label}`
+                                      : row.isGroup
+                                        ? `Expand ${row.label}, ${row.groupCount} instances`
+                                        : `Expand ${row.label}`}
                                     title={rowExpanded ? "Collapse" : "Expand"}
                                   >
                                     <ChevronRight
@@ -1030,6 +1058,14 @@ export default function StepFileSheet({
                                       <span className="min-w-0 truncate">
                                         {row.label}
                                       </span>
+                                      {row.isGroup ? (
+                                        <span
+                                          className="shrink-0 rounded bg-current/10 px-1 text-[10px] font-normal leading-4 tabular-nums text-current/70"
+                                          title={`${row.groupCount} instances of this part`}
+                                        >
+                                          &times;{row.groupCount}
+                                        </span>
+                                      ) : null}
                                       {inlineRowDetail ? (
                                         <span className="min-w-0 truncate text-[10px] font-normal text-current/50">
                                           {inlineRowDetail}

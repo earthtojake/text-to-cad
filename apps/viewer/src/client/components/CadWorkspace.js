@@ -7734,6 +7734,7 @@ export default function CadWorkspace({
                 onMeasurementDelete={handleMeasureDelete}
                 onMeasurementsClear={handleMeasureClear}
                 stepTreeRoot={displayStepTreeRoot}
+                componentByNodeId={lodPackage?.componentByNodeId || null}
                 expandedTreeNodeIds={expandedStepTreeNodeIds}
                 loadableTreeNodeIds={loadableStepTreeTopologyNodeIds}
                 selectedPartIds={selectedPartIds}

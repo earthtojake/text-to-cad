@@ -379,8 +379,17 @@ export function useCadAssets({
       ]
       : p);
     const transformsByCid = new Map();
+    // Which component each occurrence instantiates, keyed by the occurrence id
+    // the STEP tree uses for its rows. The component id is derived from the
+    // component's source hash, so this is what lets the tree fold repeated
+    // parts together by geometry rather than by name.
+    const componentByNodeId = new Map();
     for (const occurrence of descriptor.occurrences || []) {
       const cid = String(occurrence?.component || "").trim();
+      const occurrenceId = String(occurrence?.id || "").trim();
+      if (occurrenceId && cid) {
+        componentByNodeId.set(occurrenceId, cid);
+      }
       if (!transformsByCid.has(cid)) {
         transformsByCid.set(cid, []);
       }
@@ -444,6 +453,7 @@ export function useCadAssets({
       .filter(Boolean);
     return { file: entry.file,
       modelKey: `${entry.file}:${entryMeshAssetSignature(entry) || entry.hash || ""}`,
+      componentByNodeId,
       components };
   }, []);
 
