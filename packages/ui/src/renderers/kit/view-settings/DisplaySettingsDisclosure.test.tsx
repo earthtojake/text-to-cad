@@ -35,7 +35,7 @@ it('a deliberate click on a shut chevron after hovering cannot shut it again', a
   expect(screen.getByText('Grid settings')).toBeTruthy();
 });
 
-it.each(['Edges', 'Grid', 'Axes'])('Render remains a preset when the pointer rests on disabled %s', title => {
+it.each(['Edges', 'Grid & axes'])('Render remains a preset when the pointer rests on disabled %s', title => {
   vi.useFakeTimers();
   render(<Harness initial={{ mode: 'render' }} />);
   const heading = screen.getByRole('heading', { name: title, exact: true });
@@ -49,16 +49,16 @@ it.each(['Edges', 'Grid', 'Axes'])('Render remains a preset when the pointer res
 it('opens feature sections by click or keyboard and only the open chevron disables them', async () => {
   const user = userEvent.setup();
   render(<Harness />);
-  const floor = screen.getByRole('button', { name: 'Floor', exact: true });
-  expect(floor.getAttribute('aria-expanded')).toBe('false');
-  await user.click(floor);
-  expect(screen.getByRole('button', { name: 'Disable Floor' }).getAttribute('aria-expanded')).toBe('true');
-  const heading = screen.getByRole('heading', { name: 'Floor' });
+  const environment = screen.getByRole('button', { name: 'Environment', exact: true });
+  expect(environment.getAttribute('aria-expanded')).toBe('false');
+  await user.click(environment);
+  expect(screen.getByRole('button', { name: 'Disable Environment' }).getAttribute('aria-expanded')).toBe('true');
+  const heading = screen.getByRole('heading', { name: 'Environment' });
   const header = heading.parentElement!;
   fireEvent.pointerLeave(header);
   expect(screen.getByRole('button', { name: 'Floor color' })).toBeTruthy();
-  expect(screen.queryByRole('checkbox', { name: 'Floor' })).toBeNull();
-  expect(screen.queryByRole('button', { name: 'Floor', exact: true })).toBeNull();
+  expect(screen.queryByRole('checkbox', { name: 'Environment' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Environment', exact: true })).toBeNull();
   expect(header.className).not.toContain('hover:');
   await user.click(heading);
   expect(current.floor.enabled).toBe(true);
@@ -66,12 +66,15 @@ it('opens feature sections by click or keyboard and only the open chevron disabl
   fireEvent.change(screen.getByRole('spinbutton', { name: 'Color opacity' }), { target: { value: '80' } });
   expect(current.floor.opacity).toBe(0.8);
   await user.keyboard('{Escape}');
-  await user.click(screen.getByRole('button', { name: 'Disable Floor' }));
+  await user.click(screen.getByRole('button', { name: 'Disable Environment' }));
+  // One gate: lighting, background and floor go off together.
   expect(current.floor).toEqual({ enabled: false });
+  expect(current.lighting).toEqual({ enabled: false });
+  expect(current.background).toEqual({ enabled: false });
   expect(screen.queryByRole('button', { name: 'Floor color' })).toBeNull();
-  screen.getByRole('button', { name: 'Floor', exact: true }).focus(); await user.keyboard('{Enter}');
+  screen.getByRole('button', { name: 'Environment', exact: true }).focus(); await user.keyboard('{Enter}');
   expect(resolveViewSettings(current).floor.opacity).toBe(0.6);
-  expect(screen.getByRole('button', { name: 'Disable Floor' }).getAttribute('aria-expanded')).toBe('true');
+  expect(screen.getByRole('button', { name: 'Disable Environment' }).getAttribute('aria-expanded')).toBe('true');
 });
 
 it('does not enable a section when the pointer only passes across it', async () => {
@@ -89,7 +92,8 @@ it('Reset disables tools and restores the preset; transparency stays in the colo
   render(<Harness initial={{ mode: 'render', background: { color: '#abcdef', opacity: 0.4 }, exploded: { enabled: true, amount: 0.5 } }} />);
   const mode = screen.getByRole('region', { name: 'Display', exact: true });
   expect(within(mode).getByRole('combobox', { name: 'Mode' }).textContent).toBe('Custom');
-  expect(within(mode).getByRole('combobox', { name: 'Projection' }).querySelector('svg')).toBeTruthy();
+  // Projection is the view cube's toggle, not a Display control.
+  expect(within(mode).queryByRole('combobox', { name: 'Projection' })).toBeNull();
   expect(within(mode).queryByRole('slider')).toBeNull();
   const background = screen.getByRole('button', { name: 'Background color' });
   const preview = background.querySelector('[data-color-preview]') as HTMLElement;
@@ -106,7 +110,7 @@ it('Reset disables tools and restores the preset; transparency stays in the colo
 });
 
 it('keeps one section order in every preset, Display first', () => {
-  const headings = ['Display', 'Surfaces', 'Edges', 'Grid', 'Axes', 'Lighting', 'Background', 'Floor'];
+  const headings = ['Display', 'Edges', 'Grid & axes', 'Environment'];
   for (const mode of ['solid', 'render', 'wireframe']) {
     render(<Harness initial={{ mode }} />);
     expect(screen.getAllByRole('heading').map(node => node.textContent)).toEqual(headings);
@@ -165,13 +169,24 @@ it('Cross-section turns on at an X centre cut, and Flip reverses it', async () =
   expect(resolveViewSettings(current).clip.enabled).toBe(false);
 });
 
-it('exposes Grid and Axes independently in every preset', async () => {
+it('turns Grid and Axes on and off together, under one section', async () => {
   const user = userEvent.setup();
   render(<Harness />);
-  await user.click(screen.getByRole('button', { name: 'Disable Grid' }));
-  expect(current.grid).toEqual({ enabled: false });
-  expect(screen.queryByRole('button', { name: 'Grid color' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Grid color' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Axis color' })).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Lighting', exact: true })).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Background', exact: true })).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Disable Grid & axes' }));
+  expect(current.grid).toEqual({ enabled: false });
+  expect(current.axes).toEqual({ enabled: false });
+  expect(screen.queryByRole('button', { name: 'Grid color' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Axis color' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Environment', exact: true })).toBeTruthy();
+});
+
+it('an edit inside a combined section turns on the group it belongs to', () => {
+  // Only the background is on, so Environment is open and shows Lighting while lighting is off.
+  render(<Harness initial={{ mode: 'solid', background: { enabled: true } }} />);
+  const exposure = screen.getByRole('textbox', { name: 'Exposure value' });
+  fireEvent.change(exposure, { target: { value: '1.5' } }); fireEvent.blur(exposure);
+  expect(resolveViewSettings(current).lighting.enabled).toBe(true);
+  expect(resolveViewSettings(current).lighting.exposure).toBe(1.5);
 });

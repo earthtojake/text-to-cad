@@ -118,14 +118,34 @@ function cachedTransformedRuntime(cache, baseRuntime, transforms, buildRuntime) 
   return runtime;
 }
 
-export function selectorTransformsFromDisplayRecords(displayRecords) {
+// Column-major 4x4 product a * b, as THREE's Matrix4.multiplyMatrices, without THREE.
+function multiplyColumnMajor(a, b) {
+  const out = new Array(16).fill(0);
+  for (let row = 0; row < 4; row += 1) {
+    for (let col = 0; col < 4; col += 1) {
+      let sum = 0;
+      for (let k = 0; k < 4; k += 1) sum += a[k * 4 + row] * b[col * 4 + k];
+      out[col * 4 + row] = sum;
+    }
+  }
+  return { elements: out };
+}
+
+// `includeExplode` composes each part's exploded-view offset over its effect, in the order
+// the mesh does (composeDisplayRecordObjectMatrix): explode after effect.
+export function selectorTransformsFromDisplayRecords(displayRecords, { includeExplode = false } = {}) {
   const transforms = new Map();
   for (const record of Array.isArray(displayRecords) ? displayRecords : []) {
     const partId = String(record?.partId || "").trim();
-    if (!partId || !record?.effectMatrix || !matrixHasTransform(record.effectMatrix)) {
+    const effect = record?.effectMatrix && matrixHasTransform(record.effectMatrix) ? record.effectMatrix : null;
+    const explode = includeExplode && record?.explodedViewMatrix && matrixHasTransform(record.explodedViewMatrix)
+      ? record.explodedViewMatrix
+      : null;
+    if (!partId || (!effect && !explode)) {
       continue;
     }
-    const transform = rowMajorArrayFromMatrix4(record.effectMatrix);
+    const matrix = explode && effect ? multiplyColumnMajor(explode.elements, effect.elements) : explode || effect;
+    const transform = rowMajorArrayFromMatrix4(matrix);
     if (transform) {
       transforms.set(partId, transform);
     }
@@ -182,6 +202,24 @@ export function displayEdgeRuntimeWithSelectorVisibilityClasses(displayEdgeRunti
   };
   displayEdgeVisibilityClassRuntimeCache.set(displayEdgeRuntime, { selectorRuntime, runtime });
   return runtime;
+}
+
+const explodedPickRuntimeCache = new WeakMap();
+
+/**
+ * The selector runtime to PICK against while parts are exploded: its proxies moved to where
+ * the parts are drawn. Picking reads only this; highlights keep the runtime at rest and add
+ * the explode offset themselves (useStepHighlights). Null when nothing is exploded.
+ */
+export function explodedPickSelectorRuntime(baseSelectorRuntime, displayRecords) {
+  const records = Array.isArray(displayRecords) ? displayRecords : [];
+  if (!baseSelectorRuntime || !records.some((record) => record?.explodedViewMatrix && matrixHasTransform(record.explodedViewMatrix))) {
+    return null;
+  }
+  const transforms = selectorTransformsFromDisplayRecords(records, { includeExplode: true });
+  return transforms.size
+    ? cachedTransformedRuntime(explodedPickRuntimeCache, baseSelectorRuntime, transforms, buildTransformedSelectorRuntime)
+    : null;
 }
 
 export function resolveTopologyDisplayEdgeRuntimes({

@@ -9,6 +9,9 @@ import { BASE_VIEWER_THEME } from "@hardcore/core/lib/viewer/stageTheme.js";
 import { createRecordTopologyDisplayEdgeGroup, syncTopologyDisplayEdgeLine } from "@hardcore/core/lib/viewer/topologyDisplayEdgeLine.js";
 import { clamp } from "../../kit/camera/viewportCameraKit.js";
 import { clearSceneGroup } from "./useStepSceneSync.js";
+import { explodedPickSelectorRuntime } from "@hardcore/core/common/topologyDisplayEdgeRuntime.js";
+
+const EXPLODED_PICK_SETTLE_MS = 150;
 
 const MODEL_OFFSET = new THREE.Vector3(0, 0, 0);
 
@@ -112,7 +115,7 @@ export function useStepPartVisualState(layers) {
  * pointer, the B-rep edges the display asks for, and the brighter edges of a highlighted part.
  */
 export function useStepLinework(layers) {
-  const { viewport, props, policy, refs, activeSelectorRuntime, activeDisplayEdgeRuntime } = layers;
+  const { viewport, props, policy, refs, activeSelectorRuntime, activeDisplayEdgeRuntime, explodedViewPoseTick } = layers;
   const { runtimeRef, viewerReadyTick } = viewport;
   const { meshData, modelKey, selectedPartIds, hoveredPartId, selectorRuntime, displayEdgeRuntime } = props;
   const { viewerTheme, displayEdgeSettings, visualEdgeSettings, hiddenAwareVisualEdgeSettings, focusedPartIds, hiddenPartIdSet } = policy;
@@ -126,9 +129,26 @@ export function useStepLinework(layers) {
     }
 
     syncDisplayMeshFaceIds(runtime, meshData, activeSelectorRuntime);
-    syncSelectorPickGroups(runtime, activeSelectorRuntime, MODEL_OFFSET, { clearSceneGroup });
-    syncRuntimeStepClipPlane(runtime, clipSettingsRef.current);
-  }, [activeSelectorRuntime, meshData, modelKey, viewerReadyTick]);
+    const syncPicks = (pickRuntime) => {
+      syncSelectorPickGroups(runtime, pickRuntime, MODEL_OFFSET, { clearSceneGroup });
+      syncRuntimeStepClipPlane(runtime, clipSettingsRef.current);
+    };
+    // The exploded view moves the meshes, not the proxies: once it settles on a pose
+    // (explodedViewPoseTick), the proxies move to where the parts are drawn, so a click
+    // on an exploded part picks it. Highlights keep the proxies at rest and add the offset.
+    // Moving them re-transforms every proxy, and the Explode slider settles on each value it
+    // passes, so the move waits until the slider rests.
+    const exploded = Boolean(selectorRuntime) && runtime.displayRecords?.some(record => record?.explodedViewMatrix);
+    if (!exploded) {
+      syncPicks(activeSelectorRuntime);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      if (runtimeRef.current !== runtime) return;
+      syncPicks(explodedPickSelectorRuntime(selectorRuntime, runtime.displayRecords) || activeSelectorRuntime);
+    }, EXPLODED_PICK_SETTLE_MS);
+    return () => window.clearTimeout(timer);
+  }, [activeSelectorRuntime, meshData, modelKey, viewerReadyTick, explodedViewPoseTick, selectorRuntime]);
 
   useEffect(() => {
     const runtime = runtimeRef.current;

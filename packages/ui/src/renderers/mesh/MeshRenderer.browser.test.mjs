@@ -181,8 +181,9 @@ test('an STL opens as one mesh with no tools: display settings, orbit, host comm
   assert.deepEqual(await options('Surface style'), ['Shaded', 'Flat']);
   assert.deepEqual(await options('Parts'), ['Original', 'Single color', 'Color by part']);
   for (const section of ['Edges', 'Cross-section', 'Explode']) assert.equal(await pane.getByRole('heading', { name: section, exact: true }).count(), 0, section);
-  for (const section of ['Lighting', 'Background', 'Floor', 'Grid', 'Axes']) assert.equal(await pane.getByRole('heading', { name: section, exact: true }).count(), 1, section);
-  assert.equal(await pane.getByRole('combobox', { name: 'Projection', exact: true }).count(), 1);
+  for (const section of ['Grid & axes', 'Environment']) assert.equal(await pane.getByRole('heading', { name: section, exact: true }).count(), 1, section);
+  // Projection is the view cube's toggle.
+  assert.equal(await pane.getByRole('combobox', { name: 'Projection', exact: true }).count(), 0);
   assert.equal(await pane.getByRole('button', { name: 'Reset', exact: true }).count(), 1);
   await pane.locator('[data-file-panel="cad-display"]').click();
   await pane.locator('[data-file-sheet="Display"]').waitFor({ state: 'detached' });

@@ -11,6 +11,8 @@ export const VIEWING_MODE = Object.freeze({
   RENDER: "render"
 });
 export const KEYBOARD_ORBIT_NUDGE_RAD = Math.PI / 32;
+// Dragging the view cube: about half a turn across the cube's width.
+export const VIEW_CUBE_DRAG_RAD_PER_PX = Math.PI / 120;
 export const KEYBOARD_ORBIT_SPEED_RAD_PER_SEC = Math.PI * 0.42;
 export const KEYBOARD_POLAR_EPSILON = 0.02;
 export const VIEW_PLANE_ACTIVE_DOT_THRESHOLD = 0.994;
@@ -46,8 +48,21 @@ export const VIEW_PLANE_FACES = [
   { id: "x", label: "X", title: "Jump to right view", direction: [1, 0, 0], up: WORLD_UP },
   { id: "xNeg", label: "-X", title: "Jump to left view", direction: [-1, 0, 0], up: WORLD_UP }
 ];
+// The view cube's corners: each looks at the model along a cube diagonal, a true isometric
+// view from that corner. Ids read x, y, z signs: "iso+-+" is right, front, top.
+const CUBE_SIDE_NAMES = Object.freeze({ x: ["left", "right"], y: ["front", "back"], z: ["bottom", "top"] });
+export const VIEW_CUBE_CORNERS = [-1, 1].flatMap((sz) => [-1, 1].flatMap((sy) => [-1, 1].map((sx) => {
+  const sign = (value) => (value > 0 ? "+" : "-");
+  const name = (axis, value) => CUBE_SIDE_NAMES[axis][value > 0 ? 1 : 0];
+  return Object.freeze({
+    id: `iso${sign(sx)}${sign(sy)}${sign(sz)}`,
+    title: `Jump to ${name("y", sy)} ${name("x", sx)} ${name("z", sz)} isometric view`,
+    direction: [sx, sy, sz],
+    up: WORLD_UP
+  });
+})));
 export const VIEW_PLANE_FACE_BY_ID = Object.fromEntries(
-  VIEW_PLANE_FACES.map((face) => [face.id, face])
+  [...VIEW_PLANE_FACES, ...VIEW_CUBE_CORNERS].map((face) => [face.id, face])
 );
 export const VIEW_PLANE_DEFAULT_PRESET = {
   id: "isometric",
@@ -486,7 +501,8 @@ export function getActiveViewPlaneFaceId(runtime) {
 
   let bestId = "";
   let bestScore = -Infinity;
-  for (const face of VIEW_PLANE_FACES) {
+  // The cube's corners count too, so a corner view stays lit on the cube like a face view.
+  for (const face of [...VIEW_PLANE_FACES, ...VIEW_CUBE_CORNERS]) {
     const direction = new runtime.THREE.Vector3(...face.direction).normalize();
     const score = offset.dot(direction);
     if (score > bestScore) {

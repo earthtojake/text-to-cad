@@ -413,6 +413,10 @@ export function useRendererShell({
     });
   }, [liveBinding, commandNames]);
 
+  // The view cube's projection toggle writes the same camera setting Display used to. Stable,
+  // so the memoized cube does not redraw with every render of the shell.
+  const setProjection = useCallback(
+    projection => viewSettingsStore.patch({ camera: { enabled: true, projection } }), [viewSettingsStore]);
   // ---- what the frame and the renderer read ---------------------------------
   // The Display panel's content: every renderer's, built here from its display settings.
   const display = <DisplaySettingsSection
@@ -454,6 +458,7 @@ export function useRendererShell({
       previewMode, previewOrbitSpeed, setPreviewOrbitSpeed, viewerLoading, loading, presentationState,
       handlePresentationChange, viewerAlert, setRuntimeAlert,
       drawToolActive, drawing, animationAvailable, animation, composer, capture, openPanel, display,
+      setProjection,
       copyStatus, screenshotStatus, setCopyStatus, setScreenshotStatus
     }
   };

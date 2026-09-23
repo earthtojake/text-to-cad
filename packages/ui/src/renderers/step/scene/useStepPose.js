@@ -6,7 +6,8 @@ import {
 } from "@hardcore/core/common/stepModuleEffects.js";
 import { applySceneState } from "@hardcore/core/common/applySceneState.js";
 import {
-  resolveTopologyDisplayEdgeRuntimes, shouldRenderTopologyDisplayEdges, shouldUseRecordTopologyEdgeTransforms
+  explodedPickSelectorRuntime, resolveTopologyDisplayEdgeRuntimes, shouldRenderTopologyDisplayEdges,
+  shouldUseRecordTopologyEdgeTransforms
 } from "@hardcore/core/common/topologyDisplayEdgeRuntime.js";
 import { applyDisplayRecordTransform, syncRuntimeStepClipPlane } from "@hardcore/core/lib/viewer/modelRuntime.js";
 import { applyPartVisualState, FOCUSED_DIMMED_SURFACE_OPACITY } from "@hardcore/core/lib/viewer/partVisualState.js";
@@ -316,7 +317,9 @@ export function useStepPose(layers) {
       // pick-only state per frame; the playing->stopped rerun syncs the final pose.
       if (!stepAnimationPlaying && !animateMode) {
         syncDisplayMeshFaceIds(runtime, meshData, effectiveRuntime);
-        syncSelectorPickGroups(runtime, effectiveRuntime, MODEL_OFFSET, { clearSceneGroup });
+        // While exploded, pick where the parts are drawn, not where they rest.
+        syncSelectorPickGroups(runtime, explodedPickSelectorRuntime(selectorRuntime, runtime.displayRecords) || effectiveRuntime,
+          MODEL_OFFSET, { clearSceneGroup });
         // A kinematic edit (or a stopped scrub) is a one-shot model-bounds
         // change for LOD and shadows. Playback stays on its existing bounded
         // frame loop; an idle posed model schedules no recurring work.
