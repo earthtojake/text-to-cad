@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   applyTopologyDisplayEdgeSurfaceOffset,
+  explodedPickSelectorRuntime,
   displayEdgeRuntimeWithSelectorVisibilityClasses,
   resolveTopologyDisplayEdgeRuntimes,
   rowMajorArrayFromMatrix4,
@@ -182,4 +183,20 @@ test("surface offset scales for thick topology display edges", () => {
   assert.equal(material.polygonOffsetFactor, 0);
   assert.equal(material.polygonOffsetUnits, 0);
   assert.equal(material.needsUpdate, true);
+});
+
+test("picking while exploded composes each part's explode offset over its effect", () => {
+  const records = [
+    { partId: "posed-and-exploded", effectMatrix: TRANSLATE_2_3_4, explodedViewMatrix: TRANSLATE_3_4_5 },
+    { partId: "exploded-only", explodedViewMatrix: TRANSLATE_3_4_5 }
+  ];
+  // Highlights and edges keep reading the effect alone.
+  const effectOnly = selectorTransformsFromDisplayRecords(records);
+  assert.deepEqual([...effectOnly.keys()], ["posed-and-exploded"]);
+  const picking = selectorTransformsFromDisplayRecords(records, { includeExplode: true });
+  assert.deepEqual(picking.get("posed-and-exploded").filter((_, index) => index % 4 === 3), [5, 7, 9, 1]);
+  assert.deepEqual(picking.get("exploded-only").filter((_, index) => index % 4 === 3), [3, 4, 5, 1]);
+  // Nothing exploded: the caller's own runtime stands.
+  assert.equal(explodedPickSelectorRuntime({ proxy: {} }, [{ partId: "a", effectMatrix: TRANSLATE_2_3_4 }]), null);
+  assert.equal(explodedPickSelectorRuntime(null, records), null);
 });

@@ -96,6 +96,7 @@ const ShellViewport = forwardRef(function ShellViewport({
   drawingEnabled = false,
   drawing = null,
   onPerspectiveChange = null,
+  onProjectionChange = null,
   onPresentationChange = null,
   onViewerAlertChange = null,
   // The camera came to rest on a new view: a presentation camera that moved (fullscreen's
@@ -284,7 +285,7 @@ const ShellViewport = forwardRef(function ShellViewport({
   };
   const coordinateSystemFor = useCallback(() => STORED_CAMERA_COORDINATES, []);
   const {
-    activateDefaultViewPlane, activateViewPlaneFace, applyInitialPerspective, emitPerspectiveChange,
+    activateDefaultViewPlane, activateViewPlaneFace, orbitFromViewCube, applyInitialPerspective, emitPerspectiveChange,
     resetZoomAndPan, syncFullscreenCamera, syncViewPlaneOrientation
   } = useViewportCamera({
     coordinateSystemFor, activeViewPlaneFaceRef, defaultPerspectiveResettingRef, fullscreenCameraRef,
@@ -994,6 +995,9 @@ const ShellViewport = forwardRef(function ShellViewport({
         viewerTheme={viewerTheme}
         activateViewPlaneFace={activateViewPlaneFace}
         activateDefaultViewPlane={activateDefaultViewPlane}
+        orbitViewCube={orbitFromViewCube}
+        projection={projection}
+        onProjectionChange={onProjectionChange}
       />
       {error ? (
         <p className="bg-popover pointer-events-none absolute left-4 top-24 z-20 rounded-lg border border-error-border px-4 py-3 text-sm text-error shadow-sm sm:top-20">

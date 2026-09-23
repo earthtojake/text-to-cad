@@ -548,12 +548,19 @@ test('every Display control reaches the drawn frame: the five modes, edges, the 
 
   // Surface style: STEP's two extra styles both take the shaded surfaces away.
   // Hidden keeps them as occluders — the grid behind the model stops showing
-  // through — where Off removes them from the scene and lets it through.
+  // through — where Off removes them from the scene and lets it through. They are
+  // what Hidden line and Wireframe are made of, so the panel offers them only
+  // through the Mode; the setting itself is set directly here.
   const shaded = partBoxes(await view.frame());
   const styled = {};
-  for (const [style, label] of [['hidden', 'Hidden'], ['off', 'Off']]) {
+  assert.deepEqual(await (async () => {
     await panel.getByRole('combobox', { name: 'Surface style', exact: true }).click();
-    await page.getByRole('option', { name: label, exact: true }).click();
+    const names = await page.getByRole('option').allTextContents();
+    await page.keyboard.press('Escape');
+    return names;
+  })(), ['Shaded', 'Flat'], 'the Style menu leaves Hidden and Off to the Mode');
+  for (const [style, label] of [['hidden', 'Hidden'], ['off', 'Off']]) {
+    await view.display({ surfaces: { enabled: true, style } });
     await page.waitForFunction(wanted => window.cadHarness.a.controller.readState().display.surfaces?.style === wanted, style);
     const shot = await frameWhen(view, frame => partBoxes(frame).arm === null, `took the shaded surfaces away for ${label}`);
     styled[style] = { boxes: partBoxes(shot), painted: painted(shot) };

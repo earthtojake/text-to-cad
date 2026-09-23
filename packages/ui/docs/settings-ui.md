@@ -17,13 +17,15 @@ put the display groups inside another “Display settings” accordion.
 
 | Kind | Primitive | Behavior | Examples |
 | --- | --- | --- | --- |
-| Always available | `FileSheetStaticSection` | Always open; no chevron, hover treatment, or enable switch | Display, Surfaces |
+| Always available | `FileSheetStaticSection` | Always open; no chevron, hover treatment, or enable switch | Display |
 | Foldable | `FilePanelSections` in a file's own panel, beside another section (`FileSheetToggleHeading`, Expand/Collapse) | The gates' chevron as a view only: folding changes nothing the section does, and a folded section stays mounted | Features, Position, Issues, Links, SDF |
-| Optional feature | `FileSheetGatedSection` | Expanded means enabled; collapsed means disabled | Edges, Grid, Axes, Lighting, Background, Floor |
+| Optional feature | `FileSheetGatedSection` | Expanded means enabled; collapsed means disabled | Edges, Grid & axes, Environment |
 
 A section is gated only when its entire feature has a meaningful disabled state.
-Surfaces stays open because the group configures the model's basic presentation;
-its style picker can still explicitly select Off. Position holds controls over
+The surface controls stay open, inside Display, because they configure the model's
+basic presentation. Their style picker offers only Shaded and Flat: Hidden and Off
+are what Hidden line and Wireframe are made of, so the Mode owns them, and while the
+Mode draws no shaded surface the surface rows step aside. Position holds controls over
 authored motion, not an optional display effect, so it is never gated; folding it
 away beside Features changes the view and nothing else.
 
@@ -125,14 +127,14 @@ Keep this order in every preset; enabling a feature never moves it:
 
 | Section | Contents |
 | --- | --- |
-| Display | Equal-width Mode and Projection dropdowns |
-| Surfaces | Style and part-color mode together; compact color/opacity controls |
+| Display | The Mode dropdown; then, while the Mode draws surfaces, Style (Shaded/Flat) and part-color mode together and compact color/opacity controls. Projection is not here: it is the view cube's toggle |
 | Edges | Visibility and color together |
-| Grid | Color/opacity |
-| Axes | Color/opacity, matching Grid's default color |
-| Lighting | Quality, then paired numeric properties for exposure/rotation and size/fill |
-| Background | Color/opacity |
-| Floor | Placement and color/opacity, using model origin by default |
+| Grid & axes | One gate over both groups; Grid and Axis color/opacity side by side (the axes match the grid's default color) |
+| Environment | One gate over lighting, background and floor, the groups Render turns on together. A **Lighting** group (quality, then paired numeric properties for exposure/rotation and size/fill), then **Background & floor** (the two colors side by side, then floor placement, using model origin by default) |
+
+A section that gates several groups (`groupSection`) is open while any of them is on, and
+its gate turns all of them on or off together. Inside it, `FileSheetItemGroup` labels each
+group; that is a label, never a nested disclosure.
 
 Explode, Cross-section and Edges are for CAD models (STEP). A mesh, a robot or a drawing has
 no parts to separate, no solid to section and no topology to draw edges from: those
@@ -167,7 +169,7 @@ from a view that has been driven off it.
 | --- | --- | --- |
 | Zoom to fit | STEP's viewport context menu — over a part, over the backdrop, and on every Features tree row | Frame the whole model again, without turning the camera. What the live `resetCamera` command does |
 | Zoom to selection | The same menu, disabled without a selection | Frame what is selected now |
-| Reset to default isometric view | The view cube's centre, in every 3D renderer | Frame the model AND return to the default direction — the only way back on a robot, a GLB or a mesh |
+| Reset to default isometric view | The house beside the view cube, in every 3D renderer | Frame the model AND return to the default direction — the only way back on a robot, a GLB or a mesh |
 | Display → Reset | The Display panel | Restore selected preset defaults and disable Cross-section/Explode; keep the model's pose and the camera |
 
 Framing the whole model is ONE act, so it is offered once and under one name.

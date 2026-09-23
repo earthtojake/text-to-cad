@@ -2,7 +2,7 @@ import { useCallback, useLayoutEffect, useRef } from "react";
 import { applyPerspectiveSnapshot, cancelCameraTransition, captureRuntimeViewportFitScale, readPerspectiveSnapshot, readScopedPerspectiveSnapshot, recenterRuntimeTarget, setRuntimeZoomPercent, syncRuntimeViewportFraming, transitionCameraToViewPreset, zoomRuntimeToBounds } from "./runtimeCamera.js";
 import { runtimeModelKeyMatches } from "@hardcore/core/lib/viewer/modelRuntime.js";
 import { perspectiveSnapshotEqual, perspectiveSnapshotMatchesScene, resolvePerspectiveSnapshot } from "@hardcore/core/lib/perspective.js";
-import { DEFAULT_VIEW_DIRECTION, VIEW_PLANE_DEFAULT_PRESET, VIEW_PLANE_FACE_BY_ID, WORLD_UP, cameraMatchesViewPreset, clearKeyboardOrbitState, readViewPlaneOrientation, runtimeFramingBounds, viewPlaneOrientationEqual } from "./viewportCameraKit.js";
+import { DEFAULT_VIEW_DIRECTION, VIEW_CUBE_DRAG_RAD_PER_PX, VIEW_PLANE_DEFAULT_PRESET, VIEW_PLANE_FACE_BY_ID, WORLD_UP, applyOrbitDelta, cameraMatchesViewPreset, clearKeyboardOrbitState, readViewPlaneOrientation, runtimeFramingBounds, viewPlaneOrientationEqual } from "./viewportCameraKit.js";
 
 /**
  * The camera of a mounted viewport, as React sees it: the perspective a session
@@ -246,9 +246,32 @@ export function useViewportCamera({
     }
     return reset;
   }, []);
+  // Dragging the view cube orbits the camera, as dragging Fusion's does: the cube turns with
+  // the pointer, so the camera turns the other way. Same orbit as the arrow keys.
+  const orbitFromViewCube = useCallback((dxPx, dyPx) => {
+    const runtime = runtimeRef.current;
+    if (!runtime) {
+      return false;
+    }
+    cancelCameraTransition(runtime);
+    // Interaction quality while the drag lasts, full quality once it rests: as the arrow keys.
+    runtime.beginInteraction?.();
+    const orbited = applyOrbitDelta(runtime, -dxPx * VIEW_CUBE_DRAG_RAD_PER_PX, -dyPx * VIEW_CUBE_DRAG_RAD_PER_PX);
+    runtime.scheduleIdleQuality?.();
+    if (!orbited) {
+      return false;
+    }
+    activeViewPlaneFaceRef.current = "";
+    setActiveViewPlaneFace("");
+    emitPerspectiveChange(runtime);
+    syncViewPlaneOrientation(runtime);
+    runtime.requestRender?.();
+    return true;
+  }, []);
   return {
     activateDefaultViewPlane,
     activateViewPlaneFace,
+    orbitFromViewCube,
     applyInitialPerspective,
     emitPerspectiveChange,
     resetZoomAndPan,

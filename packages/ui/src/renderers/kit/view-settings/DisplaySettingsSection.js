@@ -7,24 +7,20 @@ import { MAX_THEME_FILL_COLORS } from "@hardcore/core/lib/themeSettings.js";
 import { Button } from "@hardcore/ui/primitives/button";
 import { Slider } from "@hardcore/ui/primitives/slider";
 import { DISPLAY_MODE_OPTIONS } from "./DisplayModeOptions.js";
-import { OrthographicProjectionIcon, PerspectiveProjectionIcon } from "../camera/ProjectionModeIcons.js";
 import {
   FILE_SHEET_COMPACT_BUTTON_CLASSES, FILE_SHEET_PRECISION_SLIDER_CLASSES,
   FileSheetButtonRow, FileSheetColorPicker, FileSheetColorProperty, FileSheetCheckboxRow,
   FileSheetGatedSection, FileSheetControlRow, FileSheetSelectRow, FileSheetSliderField,
-  FileSheetStaticSection, FileSheetFieldGrid, FileSheetNumberProperty, parseFileSheetNumberInput
+  FileSheetStaticSection, FileSheetFieldGrid, FileSheetItemGroup, FileSheetNumberProperty, parseFileSheetNumberInput
 } from "../inspector/FileSheet.js";
 
-const PROJECTION_OPTIONS = [
-  { value: "orthographic", label: "Orthographic", Icon: OrthographicProjectionIcon },
-  { value: "perspective", label: "Perspective", Icon: PerspectiveProjectionIcon }
-];
 const PART_COLOR_OPTIONS = [
   { value: "original", label: "Original" }, { value: "single", label: "Single color" }, { value: "by-part", label: "Color by part" }
 ];
+// Only the styles no Mode covers. Hidden and Off are what Hidden line and Wireframe are made
+// of, so the Mode owns them: a second control for them only turned the Mode "Custom".
 const SURFACE_STYLE_OPTIONS = [
-  { value: "shaded", label: "Shaded" }, { value: "flat", label: "Flat" },
-  { value: "hidden", label: "Hidden" }, { value: "off", label: "Off" }
+  { value: "shaded", label: "Shaded" }, { value: "flat", label: "Flat" }
 ];
 
 const AXES = Object.freeze(["x", "y", "z"]);
@@ -187,39 +183,51 @@ export function DisplaySettingsSection({
   const offers = id => offered.sections.includes(id);
   const modeOptions = DISPLAY_MODE_OPTIONS.filter(option => offered.modes.includes(option.value));
   const surfaceStyleOptions = SURFACE_STYLE_OPTIONS.filter(option => offered.surfaceStyles.includes(option.value));
+  const surfacesDrawn = SURFACE_STYLE_OPTIONS.some(option => option.value === view.surfaces.style);
+  // Editing a group turns it on. A combined section (Grid & axes, Environment) is open while
+  // any of its groups is on, so it can show a group that is off; an edit there must count.
   const setGroup = (group, patch) => onViewSettingsPatch({ [group]: {
-    ...(group === "surfaces" ? { enabled: true } : {}), ...patch
+    ...(group === "surfaces" || view[group]?.enabled === false ? { enabled: true } : {}), ...patch
   } });
   const custom = viewSettingsAreCustom(settings, { appearance: hostAppearance, lightingQuality, features });
   const selectedMode = modeOptions.find(option => option.value === view.mode) || modeOptions[0];
   const ModeIcon = selectedMode.Icon;
   const presetLabel = selectedMode.label;
-  const projection = view.camera.projection;
-  const selectedProjection = PROJECTION_OPTIONS.find(option => option.value === projection) || PROJECTION_OPTIONS[0];
-  const ProjectionIcon = selectedProjection.Icon;
   const section = (group, title, children) => !offers(group) ? null : (
     <FileSheetGatedSection title={title} enabled={view[group].enabled} onEnabledChange={enabled => onGroupEnabledChange(group, enabled)}>
       {children}
     </FileSheetGatedSection>
   );
+  // One gate over several groups: open while any of them is on, and it turns them all on or
+  // off together. Grid & axes, and the Render look (lighting, background, floor), each read
+  // as one thing to a person, so each is one section.
+  const groupSection = (groups, title, children) => {
+    const offeredGroups = groups.filter(offers);
+    if (!offeredGroups.length) return null;
+    return (
+      <FileSheetGatedSection title={title} enabled={offeredGroups.some(group => view[group].enabled)}
+        onEnabledChange={enabled => offeredGroups.forEach(group => onGroupEnabledChange(group, enabled))}>
+        {children(offeredGroups)}
+      </FileSheetGatedSection>
+    );
+  };
   const color = (group, label, className) => <FileSheetColorProperty className={className} label={label} value={view[group].color}
     onChange={value => setGroup(group, { color: value })} opacity={view[group].opacity}
     onOpacityChange={opacity => setGroup(group, { opacity })} />;
   return (
     <div data-cad-display-settings-section="true">
-      {(offers("mode") || offers("camera")) && <FileSheetStaticSection title="Display">
-        <FileSheetFieldGrid>
+      {/* One section: the Mode, then the surfaces it draws. While the Mode draws none (Hidden
+          line, Wireframe) there is nothing to style, so the surface rows step aside. */}
+      {(offers("mode") || offers("surfaces")) && <FileSheetStaticSection title="Display">
+        {/* Projection is the view cube's toggle now: it is how the camera looks. */}
+        <FileSheetFieldGrid columns={1}>
           {offers("mode") && <FileSheetSelectRow hideLabel className="px-0" label="Mode" value={custom ? "" : selectedMode.value} placeholder="Custom" onValueChange={onModeChange}
             triggerContent={custom ? undefined : <span className="flex min-w-0 items-center gap-1"><ModeIcon className="size-3 shrink-0" aria-hidden="true" /><span className="truncate">{presetLabel}</span></span>}
             triggerClassName="gap-1 px-1.5 [&_svg]:size-3"
             options={modeOptions.map(({ Icon, ...option }) => ({ ...option, icon: <Icon className="size-3.5" aria-hidden="true" /> }))} />}
-          {offers("camera") && <FileSheetSelectRow hideLabel className="px-0" label="Projection" triggerClassName="gap-1 px-1.5 [&_svg]:size-3"
-            value={projection} onValueChange={value => setGroup("camera", { enabled: true, projection: value })}
-            triggerContent={<span className="flex min-w-0 items-center gap-1"><ProjectionIcon className="size-3 shrink-0" /><span className="truncate">{selectedProjection.label}</span></span>}
-            options={PROJECTION_OPTIONS.map(({ Icon, ...option }) => ({ ...option, icon: <Icon className="size-3.5" aria-hidden="true" /> }))} />}
+
         </FileSheetFieldGrid>
-      </FileSheetStaticSection>}
-      {offers("surfaces") && <FileSheetStaticSection title="Surfaces">
+      {offers("surfaces") && surfacesDrawn && <>
         <FileSheetFieldGrid>
           <FileSheetSelectRow hideLabel className="px-0" label="Surface style" value={view.surfaces.style} onValueChange={style => setGroup("surfaces", { style })} options={surfaceStyleOptions} />
           <FileSheetSelectRow hideLabel className="px-0" label="Parts" value={view.surfaces.colorMode} onValueChange={colorMode => setGroup("surfaces", { colorMode })} options={PART_COLOR_OPTIONS} />
@@ -227,30 +235,37 @@ export function DisplaySettingsSection({
         {view.surfaces.colorMode === "single" ? color("surfaces", "Part color") : null}
         {view.surfaces.colorMode === "by-part" ? <ColorPalette colors={view.surfaces.colors} onChange={colors => setGroup("surfaces", { colors })} /> : null}
         {view.surfaces.colorMode !== "single" ? <FileSheetFieldGrid columns={1}><NumberProperty label="Surface opacity" Icon={Blend} value={view.surfaces.opacity * 100} min={0} max={100} unit="%" digits={0} onChange={value => setGroup("surfaces", { opacity: value / 100 })} /></FileSheetFieldGrid> : null}
+      </>}
       </FileSheetStaticSection>}
       {section("edges", "Edges", <FileSheetFieldGrid>
         <FileSheetSelectRow hideLabel className="px-0" label="Edge visibility" value={view.edges.visibility} onValueChange={visibility => setGroup("edges", { visibility })}
           options={[{ value: "visible", label: "Visible" }, { value: "all", label: "All" }]} />
         <FileSheetColorProperty className="px-0" label="Edge color" value={view.edges.color} onChange={value => setGroup("edges", { color: value })} />
       </FileSheetFieldGrid>)}
-      {section("grid", "Grid", color("grid", "Grid color"))}
-      {section("axes", "Axes", color("axes", "Axis color"))}
-      {section("lighting", "Lighting", <>
-        <FileSheetSelectRow hideLabel label="Quality" value={view.lighting.quality} onValueChange={quality => setGroup("lighting", { quality })}
-          options={[{ value: "preview", label: "Preview" }, { value: "final", label: "Final" }]} />
-        <FileSheetFieldGrid className="gap-1">
-          <NumberProperty label="Exposure" Icon={Sun} value={view.lighting.exposure} min={-5} max={5} unit=" EV" digits={1} onChange={exposure => setGroup("lighting", { exposure })} />
-          <NumberProperty label="Rotation" Icon={RotateCw} value={view.lighting.rotation} min={-180} max={180} unit="°" digits={0} onChange={rotation => setGroup("lighting", { rotation })} />
-          <NumberProperty label="Softbox size" Icon={Expand} value={view.lighting.size} min={0.25} max={3} unit="×" onChange={size => setGroup("lighting", { size })} />
-          <NumberProperty label="Fill ratio" Icon={SunDim} value={view.lighting.fill * 100} min={0} max={100} unit="%" digits={0} onChange={value => setGroup("lighting", { fill: value / 100 })} />
-        </FileSheetFieldGrid>
-      </>)}
-      {section("background", "Background", color("background", "Background color"))}
-      {section("floor", "Floor", <FileSheetFieldGrid>
-        <FileSheetSelectRow hideLabel className="px-0" label="Floor position" value={view.floor.placement} onValueChange={placement => setGroup("floor", { placement })}
-          options={[{ value: "origin", label: "Model origin" }, { value: "lowest", label: "Lowest point" }]} />
-        {color("floor", "Floor color", "px-0")}
+      {groupSection(["grid", "axes"], "Grid & axes", groups => <FileSheetFieldGrid>
+        {groups.includes("grid") ? color("grid", "Grid color", "px-0") : null}
+        {groups.includes("axes") ? color("axes", "Axis color", "px-0") : null}
       </FileSheetFieldGrid>)}
+      {groupSection(["lighting", "background", "floor"], "Environment", groups => <>
+        {groups.includes("lighting") ? <FileSheetItemGroup label="Lighting">
+          <FileSheetSelectRow hideLabel label="Quality" value={view.lighting.quality} onValueChange={quality => setGroup("lighting", { quality })}
+            options={[{ value: "preview", label: "Preview" }, { value: "final", label: "Final" }]} />
+          <FileSheetFieldGrid className="gap-1">
+            <NumberProperty label="Exposure" Icon={Sun} value={view.lighting.exposure} min={-5} max={5} unit=" EV" digits={1} onChange={exposure => setGroup("lighting", { exposure })} />
+            <NumberProperty label="Rotation" Icon={RotateCw} value={view.lighting.rotation} min={-180} max={180} unit="°" digits={0} onChange={rotation => setGroup("lighting", { rotation })} />
+            <NumberProperty label="Softbox size" Icon={Expand} value={view.lighting.size} min={0.25} max={3} unit="×" onChange={size => setGroup("lighting", { size })} />
+            <NumberProperty label="Fill ratio" Icon={SunDim} value={view.lighting.fill * 100} min={0} max={100} unit="%" digits={0} onChange={value => setGroup("lighting", { fill: value / 100 })} />
+          </FileSheetFieldGrid>
+        </FileSheetItemGroup> : null}
+        {groups.includes("background") || groups.includes("floor") ? <FileSheetItemGroup label="Background & floor">
+          <FileSheetFieldGrid>
+            {groups.includes("background") ? color("background", "Background color", "px-0") : null}
+            {groups.includes("floor") ? color("floor", "Floor color", "px-0") : null}
+          </FileSheetFieldGrid>
+          {groups.includes("floor") ? <FileSheetSelectRow hideLabel label="Floor position" value={view.floor.placement} onValueChange={placement => setGroup("floor", { placement })}
+            options={[{ value: "origin", label: "Floor at model origin" }, { value: "lowest", label: "Floor at lowest point" }]} /> : null}
+        </FileSheetItemGroup> : null}
+      </>)}
       {offers("edges") && edgeStatus === "loading" ? <p role="status" className="px-2 text-tiny text-muted-foreground">Preparing edges…</p> : null}
       {offers("edges") && edgeError ? <p role="alert" className="px-2 text-tiny text-destructive">Couldn’t load edges. {edgeError}</p> : null}
       <div className="py-2">
