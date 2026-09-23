@@ -169,7 +169,7 @@ const scrollingInside = (pane, sheet) => pane.locator(`[data-file-sheet="${sheet
 test('a STEP opens in Select with the tools its sidecar earns and Fullscreen last, on its own panel with the sections the sidecar earns, and paints both authored colours', async () => {
   const view = await open();
   const { pane, errors } = view;
-  assert.deepEqual(await view.tools(), ['Select:true', 'Measure:false', 'Draw:false', 'Position:false', 'Animate:false', 'Fullscreen:false'],
+  assert.deepEqual(await view.tools(), ['Select:true', 'Measure:false', 'Explode:false', 'Cross-section:false', 'Draw:false', 'Position:false', 'Animate:false', 'Fullscreen:false'],
     'Position and Animate because the sidecar bound; Fullscreen, an act rather than a mode, is the last button');
   // The nav row is the tab strip: the file's own panel (named for what it is, the icon its
   // tree draws for it), then Display, then the tree. The file opened directly, so it opened
@@ -247,7 +247,7 @@ test('Select picks parts and faces, a selection lives only under Select, and the
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.length === 0);
   await pane.getByRole('button', { name: 'Select arm', exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.length === 1);
-  assert.deepEqual(await view.tools(), ['Select:true', 'Measure:false', 'Draw:false', 'Position:false', 'Animate:false', 'Fullscreen:false']);
+  assert.deepEqual(await view.tools(), ['Select:true', 'Measure:false', 'Explode:false', 'Cross-section:false', 'Draw:false', 'Position:false', 'Animate:false', 'Fullscreen:false']);
   assert.deepEqual((await view.state()).selectedPartIds, ['o1.2']);
   await page.keyboard.press('Escape');
 
@@ -393,12 +393,12 @@ test('hiding a part takes it off the screen, and the viewport menus offer what t
   }
   // A tree-row action chosen under another tool lands in Select first, then acts —
   // Isolate, which has no selection of its own to make and so cannot get there by itself.
-  assert.deepEqual(await view.tools(), ['Select:false', 'Measure:false', 'Draw:true', 'Position:false', 'Animate:false', 'Fullscreen:false']);
+  assert.deepEqual(await view.tools(), ['Select:false', 'Measure:false', 'Explode:false', 'Cross-section:false', 'Draw:true', 'Position:false', 'Animate:false', 'Fullscreen:false']);
   await pane.getByRole('button', { name: 'Select arm', exact: true }).click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Isolate', exact: true }).click();
   await page.getByRole('menu').waitFor({ state: 'detached' });
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().isolatedPartIds.join() === 'o1.2');
-  assert.deepEqual(await view.tools(), ['Select:true', 'Measure:false', 'Draw:false', 'Position:false', 'Animate:false', 'Fullscreen:false']);
+  assert.deepEqual(await view.tools(), ['Select:true', 'Measure:false', 'Explode:false', 'Cross-section:false', 'Draw:false', 'Position:false', 'Animate:false', 'Fullscreen:false']);
   await page.keyboard.press('Escape');
   assert.deepEqual(errors, []);
 });
@@ -459,9 +459,9 @@ test('the context menu frames the model and the selection, from the viewport and
   // And from a tree row under another tool it lands in Select first, exactly as every
   // other tree-row action does, then frames the model again.
   await view.tool('Measure').click();
-  assert.deepEqual(await view.tools(), ['Select:false', 'Measure:true', 'Draw:false', 'Position:false', 'Animate:false', 'Fullscreen:false']);
+  assert.deepEqual(await view.tools(), ['Select:false', 'Measure:true', 'Explode:false', 'Cross-section:false', 'Draw:false', 'Position:false', 'Animate:false', 'Fullscreen:false']);
   await choose(treeRow('Select base'), 'Zoom to fit');
-  assert.deepEqual(await view.tools(), ['Select:true', 'Measure:false', 'Draw:false', 'Position:false', 'Animate:false', 'Fullscreen:false'],
+  assert.deepEqual(await view.tools(), ['Select:true', 'Measure:false', 'Explode:false', 'Cross-section:false', 'Draw:false', 'Position:false', 'Animate:false', 'Fullscreen:false'],
     'a tree-row framing action comes back to Select, like the rest of that menu');
   await frameWhen(view, shot => armWidth(shot) > 0 && armWidth(shot) < framedSelection * 0.9,
     `framed the whole model again from ${framedSelection}`);
@@ -735,7 +735,7 @@ test('Animate is the last mode on the strip, its playbar plays the routine, leav
   await view.tool('Animate').click();
   const playbar = pane.getByRole('toolbar', { name: 'Animation playback' });
   await playbar.waitFor();
-  assert.deepEqual(await view.tools(), ['Select:false', 'Measure:false', 'Draw:false', 'Position:false', 'Animate:true', 'Fullscreen:false']);
+  assert.deepEqual(await view.tools(), ['Select:false', 'Measure:false', 'Explode:false', 'Cross-section:false', 'Draw:false', 'Position:false', 'Animate:true', 'Fullscreen:false']);
   // One routine: no routine-list button, just transport and the settings cog.
   assert.deepEqual(await playbar.getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
     ['Play animation', 'Playback settings']);
@@ -766,7 +766,7 @@ test('Animate is the last mode on the strip, its playbar plays the routine, leav
   await pane.getByRole('toolbar', { name: 'Animation playback' }).waitFor();
   await pane.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
   await pane.getByRole('group', { name: 'Interaction tools' }).waitFor();
-  assert.deepEqual(await view.tools(), ['Select:false', 'Measure:false', 'Draw:false', 'Position:false', 'Animate:true', 'Fullscreen:false'],
+  assert.deepEqual(await view.tools(), ['Select:false', 'Measure:false', 'Explode:false', 'Cross-section:false', 'Draw:false', 'Position:false', 'Animate:true', 'Fullscreen:false'],
     'back in the mode it left, and Fullscreen is an act, never a mode left pressed');
   assert.deepEqual(await view.panels(), ['Display:false', 'Assembly:true', 'Show files:false'], 'and the panel it had');
   assert.deepEqual(errors, []);
