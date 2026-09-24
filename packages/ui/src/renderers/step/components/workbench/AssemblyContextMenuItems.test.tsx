@@ -60,3 +60,19 @@ it('a disabled menu disables its framing group too', () => {
   expect(find(entries, 'Zoom to fit').disabled).toBe(true);
   expect(find(entries, 'Zoom to selection').disabled).toBe(true);
 });
+
+it('offers Export STL beside Copy Reference, and only where the host can write', () => {
+  const onExportStl = vi.fn();
+  const entries = assemblyPartMenuEntries({ ...partMenu, exportPartIds: ['o1'] }, { actions: { onExportStl } });
+  // Both answer "get this out of here", and both answer it with a path.
+  expect(labels(entries).slice(0, 2)).toEqual(['Copy Reference', 'Export STL…']);
+  find(entries, 'Export STL…').onSelect();
+  expect(onExportStl).toHaveBeenCalledTimes(1);
+  // A caller with nowhere to write leaves the action out and gets no item.
+  expect(find(assemblyPartMenuEntries(partMenu, { actions: {} }), 'Export STL…')).toBeUndefined();
+});
+
+it('disables Export STL for a node that stands for no geometry', () => {
+  const entries = assemblyPartMenuEntries({ ...partMenu, exportDisabled: true }, { actions: { onExportStl: vi.fn() } });
+  expect(find(entries, 'Export STL…').disabled).toBe(true);
+});

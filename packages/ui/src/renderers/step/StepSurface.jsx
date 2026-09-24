@@ -3409,6 +3409,11 @@ function StepSurfaceBody({
       nodeId: normalizedNodeId,
       renderPartId: pickedPartId,
       label,
+      // What an export writes: the render parts this node stands for, so a folded
+      // row or an assembly exports everything under it rather than its own id,
+      // which carries no geometry.
+      exportPartIds: leafIds,
+      exportDisabled: leafIds.length === 0,
       zoomSelectionAvailable: zoomSelectionRef.current.available,
       selected,
       hidden,
@@ -3551,6 +3556,50 @@ function StepSurfaceBody({
     topologyReferenceMenu,
     viewerInAssemblyMode
   ]);
+
+  /**
+   * One part of the assembly, written into the project, with its path reported.
+   *
+   * The bytes are built from the meshes already on screen -- no kernel loads and
+   * nothing is generated here, so this stays on the right side of "the viewer's
+   * render path runs no generators". They go to the project rather than to a
+   * download because the same client runs in a browser, in the desktop shell and
+   * in an editor, and the desktop shell has no download handler at all; a path in
+   * the project is reachable from all three, and from the agent.
+   */
+  const exportViewerContextMenuNodeStl = useCallback(async (menu) => {
+    if (stepInteractionBlocked) {
+      setCopyStatus("STEP update in progress. Please wait.");
+      return;
+    }
+    const runtime = runtimeRefRef.current?.current;
+    const wanted = new Set(uniqueStringList(menu?.exportPartIds || []));
+    const records = wanted.size && Array.isArray(runtime?.displayRecords) ? runtime.displayRecords : [];
+    const meshes = records
+      .filter((record) => record?.mesh && wanted.has(String(record?.partId || "").trim()))
+      .map((record) => record.mesh);
+    if (!runtime?.THREE || !meshes.length) {
+      setCopyStatus("That selection has no geometry to export.");
+      return;
+    }
+    try {
+      const [{ STLExporter }, { buildExportGroup, encodeBase64, exportNameForPart }] = await Promise.all([
+        import("three/examples/jsm/exporters/STLExporter.js"),
+        import("@hardcore/core/lib/step/partStlExport.js")
+      ]);
+      const group = buildExportGroup(runtime.THREE, meshes);
+      // Binary: ASCII is many times the size for no gain, and every slicer reads it.
+      const data = new STLExporter().parse(group, { binary: true });
+      const result = await client.exportPart({
+        name: exportNameForPart(menu?.label),
+        bytes: encodeBase64(data instanceof DataView ? new Uint8Array(data.buffer) : data)
+      });
+      // The path, not a download: the file tree shows where it landed.
+      setCopyStatus(result?.path ? `Saved ${result.path}` : "Exported");
+    } catch (error) {
+      setCopyStatus(error instanceof Error ? error.message : String(error));
+    }
+  }, [client, stepInteractionBlocked]);
 
   const copyViewerContextMenuReference = useCallback(async (menu) => {
     if (stepInteractionBlocked) {
@@ -3853,6 +3902,7 @@ function StepSurfaceBody({
   const partMenuActions = useMemo(() => Object.fromEntries(Object.entries({
     onAddToPrompt: addPartMenuReferenceToPrompt,
     onCopyReference: copyViewerContextMenuReference,
+    onExportStl: exportViewerContextMenuNodeStl,
     onSelect: selectViewerContextMenuNode,
     onIsolate: focusViewerContextMenuNode,
     onExitAllIsolate: handleExitIsolate,
@@ -3869,6 +3919,7 @@ function StepSurfaceBody({
   }).map(([name, action]) => [name, (menu) => { ensureSelectTool(); return action(menu); }])), [
     addPartMenuReferenceToPrompt,
     copyViewerContextMenuReference,
+    exportViewerContextMenuNodeStl,
     selectViewerContextMenuNode,
     focusViewerContextMenuNode,
     handleExitIsolate,
