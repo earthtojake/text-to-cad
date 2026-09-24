@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { referenceMeasurements, selectionMeasurements } from "../../workbench/referenceMeasurements.js";
 import { stepSelectionMaterialInfo } from "../../workbench/stepSelectionMaterial.js";
+import { nodeVolume } from "../../workbench/partVolume.js";
 
 import { CoordValue, InfoRow, MonoValue, formatNumber } from "../../../kit/inspector/referenceRows.jsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@hardcore/ui/primitives/select";
@@ -143,7 +144,7 @@ function TopologyDetail({ reference, fallbackSize }) {
   );
 }
 
-function PartDetail({ node, fallbackSize }) {
+function PartDetail({ node, fallbackSize, meshData }) {
   const isAssembly =
     String(node.nodeType || "").trim() === "assembly" ||
     (Array.isArray(node.children) && node.children.length > 0);
@@ -155,6 +156,7 @@ function PartDetail({ node, fallbackSize }) {
       ? node.children.length
       : 0;
   const box = readBbox(node);
+  const volume = useMemo(() => nodeVolume(node, meshData), [node, meshData]);
 
   return (
     <div className="flex min-w-0 flex-col">
@@ -166,10 +168,18 @@ function PartDetail({ node, fallbackSize }) {
           <InfoRow label="Parts"><MonoValue>{formatNumber(partCount, 0)}</MonoValue></InfoRow>
         ) : null}
         {(box?.dims || fallbackSize) && <SizeRow size={box?.dims || fallbackSize}/>}
+        {volume !== null && <VolumeRow volume={volume}/>}
         {box && <InfoRow label="Center"><CoordValue vector={box.center}/></InfoRow>}
       </div>
     </div>
   );
+}
+
+// From the displayed mesh: exact for flat faces, a close approximation where faces curve.
+function VolumeRow({ volume }) {
+  return <InfoRow label="Volume" title="Computed from the displayed mesh; curved faces make it a close approximation">
+    <MonoValue>{formatNumber(volume, volume >= 100 ? 0 : 2)} mm³</MonoValue>
+  </InfoRow>;
 }
 
 function SizeRow({ size }) {
@@ -200,12 +210,19 @@ export function StepReferenceSection({ references = [], meshData = null, sourceA
   const totals = items.length > 1 ? selectionMeasurements(items) : [];
   const selectionSize = items.length !== 1 && measurements?.size;
   const radii = items.length > 1 ? measurements?.radii || [] : [];
+  // Several whole parts: their combined volume, known only if every one's is.
+  const selectionVolume = useMemo(() => {
+    if (items.length < 2 || !items.every(isPartNode)) return null;
+    const volumes = items.map(item => nodeVolume(item, meshData));
+    return volumes.every(volume => volume !== null) ? volumes.reduce((sum, volume) => sum + volume, 0) : null;
+  }, [items, meshData]);
 
   return <div className="min-w-0 text-tiny font-normal">
     {items.length > 1 && <p className="py-1 text-micro text-muted-foreground">Selection · {items.length} references</p>}
-    {(totals.length > 0 || selectionSize || radii.length > 0) && <div className="mb-2 border-b border-sidebar-border/60 pb-2" aria-label="Selection measurements">
+    {(totals.length > 0 || selectionSize || radii.length > 0 || selectionVolume !== null) && <div className="mb-2 border-b border-sidebar-border/60 pb-2" aria-label="Selection measurements">
       <MeasurementRows rows={totals}/>
       {selectionSize && <SizeRow size={selectionSize}/>}
+      {selectionVolume !== null && <VolumeRow volume={selectionVolume}/>}
       {radii.length > 0 && <InfoRow label={radii.length === 1 ? 'Radius' : 'Radii'}><MonoValue>{radii.map(value=>formatNumber(value)).join(', ')} mm</MonoValue></InfoRow>}
     </div>}
     {items.length > 1 && <Select value={itemKey(activeItem)} onValueChange={id=>setBrowsed({selection:idsKey,id})}>
@@ -215,7 +232,7 @@ export function StepReferenceSection({ references = [], meshData = null, sourceA
       <SelectContent className="max-w-[var(--radix-select-trigger-width)]">{items.map(item=><SelectItem className="break-all" key={itemKey(item)} value={itemKey(item)}>{itemLabel(item)}</SelectItem>)}</SelectContent>
     </Select>}
     {activeItem && (isPartNode(activeItem)
-      ? <PartDetail node={activeItem} fallbackSize={items.length === 1 ? measurements?.size : null}/>
+      ? <PartDetail node={activeItem} meshData={meshData} fallbackSize={items.length === 1 ? measurements?.size : null}/>
       : <TopologyDetail reference={activeItem} fallbackSize={items.length === 1 ? measurements?.size : null}/>)}
     <MaterialDetail info={materialInfo}/>
   </div>;
