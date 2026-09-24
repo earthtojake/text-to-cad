@@ -157,3 +157,12 @@ test('an issued URL worker ticket cannot publish after its resource generation r
     } finally {lifetime.abort();release();}
   }
 });
+
+test('a failed read carries the viewer\'s own reason, with its status', async () => {
+  const provider = createHttpCadResourceProvider({ fetch: async () => Response.json(
+    { error: 'artifact request failed: The geometry service failed (exit 1).' }, { status: 400 }) });
+  await assert.rejects(provider.readJson('/__cad/store?file=a'), error =>
+    error.message === 'artifact request failed: The geometry service failed (exit 1).' && error.status === 400);
+  const plain = createHttpCadResourceProvider({ fetch: async () => new Response('nope', { status: 404, statusText: 'Not Found' }) });
+  await assert.rejects(plain.readJson('/missing'), error => /404 Not Found/.test(error.message) && error.status === 404);
+});

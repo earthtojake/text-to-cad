@@ -18,9 +18,19 @@ export function shouldStartMeshLoad({
   hydrationFailed,
   failedTargetFile,
   failedTargetHash,
+  fatalFailure = null,
   ...target
 } = {}) {
   if (meshLoadTargetsEntry(target)) return false;
+  // A load that failed with nothing on screen is not retried by itself: its failure ends
+  // "in progress", which would start the same doomed load again, forever, behind a
+  // "Reading model" that never becomes the error. A new revision (hash) or Reload retries.
+  if (
+    fatalFailure &&
+    String(fatalFailure.file || "") === String(target.entryFile || "") &&
+    String(target.entryHash || "") &&
+    String(fatalFailure.hash || "") === String(target.entryHash || "")
+  ) return false;
   if (
     !selectedMeshMatches &&
     String(failedTargetFile || "") === String(target.entryFile || "") &&

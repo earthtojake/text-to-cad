@@ -100,7 +100,8 @@ createRoot(document.getElementById('root')).render(<App/>);
   await page.waitForFunction(() => document.querySelector('[aria-label="Select Subassembly"]')?.disabled);
   assert.equal(await model.getByRole('button', { name: 'Select Part 0', exact: true }).isEnabled(), true, 'isolated descendant survives an excluded ancestor');
   assert.equal(await model.getByRole('button', { name: 'Select Part 1', exact: true }).isEnabled(), false);
-  await model.getByRole('button', { name: 'Exit isolate', exact: true }).click();
+  // Isolation says so at the top of the tree, and its Exit ends it.
+  await model.getByRole('status', { name: 'Isolation' }).getByRole('button', { name: 'Exit', exact: true }).click();
   await page.evaluate(() => window.treeTest.select('o69'));
   const scrollPosition = () => page.evaluate(() => {
     let node = document.querySelector('[aria-label="Model"]');

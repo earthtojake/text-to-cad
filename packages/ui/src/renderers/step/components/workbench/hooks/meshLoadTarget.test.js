@@ -73,3 +73,15 @@ test("a terminal partial hydration reports its background error instead of loadi
     backgroundError: "memory limit",
   }), "network failed");
 });
+
+test("a load that failed with nothing on screen is not restarted until the revision changes", () => {
+  const failed = { file: "/p/STEP/deck.step", hash: "rev-1" };
+  const idle = { inProgress: false, entryFile: "/p/STEP/deck.step", selectedMeshMatches: false };
+  // The failure ended "in progress"; the same file and revision must not load again by itself.
+  assert.equal(shouldStartMeshLoad({ ...idle, entryHash: "rev-1", fatalFailure: failed }), false);
+  // A new revision of the file, or another file, loads.
+  assert.equal(shouldStartMeshLoad({ ...idle, entryHash: "rev-2", fatalFailure: failed }), true);
+  assert.equal(shouldStartMeshLoad({ ...idle, entryFile: "/p/STEP/other.step", entryHash: "rev-1", fatalFailure: failed }), true);
+  // With no failure recorded (as after Reload remounts the viewer), it loads.
+  assert.equal(shouldStartMeshLoad({ ...idle, entryHash: "rev-1" }), true);
+});

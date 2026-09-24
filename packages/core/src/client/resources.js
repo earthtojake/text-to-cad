@@ -18,6 +18,17 @@ function failure(url, response) {
   return Object.assign(new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`), { status: response.status });
 }
 
+// The viewer answers a failed build with `{"error": "..."}`; that sentence is the diagnosis,
+// so it becomes the message. The status and URL stay on the error for callers and details.
+async function failureWithDetail(url, response) {
+  const error = failure(url, response);
+  try {
+    const detail = String(JSON.parse(await response.text())?.error || "").trim();
+    if (detail) Object.assign(error, { message: detail, detail, url });
+  } catch { /* No JSON body: the status line is all there is. */ }
+  return error;
+}
+
 /** Read bounded bytes before transferring them to a worker. The ticket never owns cached arrays. */
 async function responseBytes(response, maxBytes = Infinity) {
   const length = Number(response.headers?.get('content-length'));
@@ -73,7 +84,7 @@ export function createHttpCadResourceProvider({ origin = '', fetch: fetchImpl = 
     const combined = signal && lifetimeSignal ? AbortSignal.any([signal, lifetimeSignal]) : signal || lifetimeSignal;
     const response = await fetchImpl(resourceUrl(url), { signal: combined, method, headers: headersFor(url), ...(cache ? { cache } : {}) });
     aborted(combined);
-    if (!response.ok) throw failure(url, response);
+    if (!response.ok) throw method === 'HEAD' ? failure(url, response) : await failureWithDetail(url, response);
     return response;
   }
   const provider = {

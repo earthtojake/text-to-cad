@@ -178,6 +178,9 @@ import { useViewerHost, usePromptDestination } from "../../host/context.js";
 import { createCadPromptContext } from "./file-view/promptContext.js";
 import { HostReferenceContext, referenceLabel, referencesFromCopyText, resolveSelectorSelection } from "./file-view/hostReference.js";
 import { applySourceAppearanceToMeshData, sourceAppearanceGeometry } from "@hardcore/core/common/sourceSidecar.js";
+const TOPOLOGY_FILTER_NOUNS = Object.freeze({
+  faces: "faces", edges: "edges", "tangent-faces": "faces", "edge-chain": "edges"
+});
 const EMPTY_MATERIAL_OVERRIDES = Object.freeze({});
 // --- zoom to selection -------------------------------------------------------
 // What a selection occupies NOW: the boxes of its references, from the selector runtime as
@@ -398,7 +401,8 @@ function StepSurfaceBody({
     cancelDisplayEdgeLoad,
     loadMeshForEntry,
     loadReferencesForEntry,
-    loadDisplayEdgesForEntry
+    loadDisplayEdgesForEntry,
+    fatalLoadFailure
   } = useCadAssets({
     initialEntry: liveEntry,
     client,
@@ -1499,6 +1503,7 @@ function StepSurfaceBody({
       hydrationFailed: selectedAssemblyHydrationFailed,
       failedTargetFile: meshState?.file,
       failedTargetHash: meshState?.assemblyBackgroundErrorMeshHash,
+      fatalFailure: fatalLoadFailure,
     })) {
       return;
     }
@@ -1516,6 +1521,7 @@ function StepSurfaceBody({
     meshLoadTargetHash,
     meshState?.file,
     meshState?.assemblyBackgroundErrorMeshHash,
+    fatalLoadFailure,
     selectedAssemblyHydrationFailed,
     selectedAssemblyInteractionReady,
     selectedEntry,
@@ -2211,7 +2217,8 @@ function StepSurfaceBody({
   const escapeRef = useRef(() => false);
   // Escape has something to do here whenever there is a selection to clear or a Measure session
   // to leave; an open panel is the shell's own reason.
-  const escapeActive = selectedPartIds.length > 0 || selectedReferenceIds.length > 0 || tabToolMode === TAB_TOOL_MODE.MEASURE;
+  const escapeActive = selectedPartIds.length > 0 || selectedReferenceIds.length > 0 || focusedAssemblyNodeIds.length > 0
+    || tabToolMode === TAB_TOOL_MODE.MEASURE;
 
 
   // ---- the shell --------------------------------------------------------------------------
@@ -3934,6 +3941,8 @@ function StepSurfaceBody({
       return true;
     }
     if (selectedPartIds.length > 0 || selectedReferenceIds.length > 0) { clearAssemblySelection(); return true; }
+    // Then isolation: Escape backs out one layer at a time, selection first.
+    if (focusedAssemblyNodeIds.length > 0) { handleExitIsolate(); return true; }
     return false;
   };
 
@@ -4111,6 +4120,10 @@ function StepSurfaceBody({
   const selectDisabled = viewerLoading || !selectedMeshData || referenceSelectionPending ||
     referenceSelectionUnavailable || topologySelectionDeferred;
   const toolIdle = viewerLoading || !selectedMeshData;
+  // In an assembly, faces and edges load for one part at a time (topologyTarget). With a face
+  // or edge filter and no part chosen, a click has nothing to pick; say why instead of silence.
+  const topologyFilterHint = isAssemblyView && !topologyTarget && TOPOLOGY_FILTER_NOUNS[selectionFilter]
+    ? `Select a part to pick its ${TOPOLOGY_FILTER_NOUNS[selectionFilter]}` : "";
   const viewToggle = ({ id, group, label, Icon, disabled, panel }) => {
     const on = desiredScene.view[group]?.enabled === true;
     return { id, label, active: !previewMode && on, disabled: toolIdle || disabled,
@@ -4137,7 +4150,7 @@ function StepSurfaceBody({
       menu: supportsTopology ? trigger => <SelectionFilterMenu value={selectionFilter} trigger={trigger}
         onChange={value => { setSelectionFilter(value); handleSelectTabToolMode(TAB_TOOL_MODE.REFERENCES); }} /> : undefined,
       subToolbar: <ToolFilterNote options={supportsTopology ? SELECTION_FILTERS : null} value={supportsTopology ? selectionFilter : null}
-        active={selectionToolActive} notice={selectionFilterNotice} />
+        active={selectionToolActive} notice={selectionFilterNotice || topologyFilterHint} />
     }) : null,
     // Measure works like Select: the first press takes up the tool, a press while it is active
     // opens what it snaps to. It does not toggle off; another tool or Escape ends the session.

@@ -277,6 +277,8 @@ export function useCadAssets({
   const [meshLoadInProgress, setMeshLoadInProgress] = useState(false);
   const [meshLoadTargetFile, setMeshLoadTargetFile] = useState("");
   const [meshLoadTargetHash, setMeshLoadTargetHash] = useState("");
+  // The file and revision whose load failed outright; see shouldStartMeshLoad.
+  const [fatalLoadFailure, setFatalLoadFailure] = useState(null);
   const [meshLoadProgress, setMeshLoadProgress] = useState(null);
   const [status, setStatus] = useState(ASSET_STATUS.READY);
   const [error, setError] = useState("");
@@ -1100,6 +1102,7 @@ export function useCadAssets({
                 setMeshState(nextState);
                 setStatus(ASSET_STATUS.READY);
                 setError("");
+                setFatalLoadFailure(null);
                 // A partial model is on screen: a later failure attaches to it
                 // as a background error rather than blanking the viewport.
                 assemblyPreviewVisible = entry?.kind === "assembly";
@@ -1198,6 +1201,7 @@ export function useCadAssets({
         setStatus(ASSET_STATUS.READY);
         return;
       }
+      setFatalLoadFailure({ file: String(entry?.file || "").trim(), hash: String(targetMeshHash || "") });
       setStatus(ASSET_STATUS.ERROR);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1631,6 +1635,7 @@ export function useCadAssets({
     cancelReferenceLoad,
     cancelDisplayEdgeLoad,
     loadMeshForEntry,
+    fatalLoadFailure,
     loadReferencesForEntry,
     loadDisplayEdgesForEntry
   };

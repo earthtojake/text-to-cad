@@ -86,6 +86,7 @@ test("persisted Render loads model documents and shared interaction assets", () 
     fileKey: (entry) => entry.path,
     selectedMeshHash: "hash",
     selectedMeshMatches: false,
+    fatalLoadFailure: null,
     isAssemblyView: false,
     selectedAssemblyInteractionReady: false,
     selectedAssemblyHydrationFailed: false,

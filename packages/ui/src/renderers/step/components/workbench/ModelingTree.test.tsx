@@ -520,3 +520,28 @@ it('a folded row reads as selected only when the selection is what it stands for
  rerender(<ModelingTreeView {...props} selectedPartIds={['p1','p2']}/>);
  expect(screen.getByRole('button',{name:'Select plant_1 (2)'}).getAttribute('aria-pressed')).toBe('true');
 });
+
+it('joins touching selected rows into one block, and isolates from the row', () => {
+  const onFocusTreeNode=vi.fn(),onUnfocusTreeNode=vi.fn(),onExitAllIsolate=vi.fn();
+  const controls={expandedTreeNodeIds:['arm'],isAssemblyView:true,hiddenPartIds:[],focusedNodeIds:[] as string[],
+    onSelectTreeNode:vi.fn(),onToggleTreeNode:vi.fn(),onTogglePartVisibility:vi.fn(),onFocusTreeNode,onUnfocusTreeNode,onExitAllIsolate};
+  const props={modeling:directModeling,stepRoot:assemblyRoot,active:true,selectedPartIds:['arm.wrist','base'],partControls:controls};
+  const {rerender}=render(<ModelingTreeView {...props}/>);
+  const surface=(name:string)=>screen.getByRole('button',{name:`Select ${name}`}).parentElement!;
+  // Wrist sits directly above Base: the block squares off where they meet, and only there.
+  expect(surface('Wrist').style.borderBottomLeftRadius).toBe('0px');
+  expect(surface('Wrist').style.borderTopLeftRadius).toBe('');
+  expect(surface('Base').style.borderTopLeftRadius).toBe('0px');
+  expect(surface('Arm').style.borderBottomLeftRadius).toBe('');
+  // Isolate sits beside Hide on the row; isolated, it stays lit and the tree says so.
+  fireEvent.click(screen.getByRole('button',{name:'Isolate Base'}));
+  expect(onFocusTreeNode).toHaveBeenCalledWith('base');
+  rerender(<ModelingTreeView {...props} partControls={{...controls,focusedNodeIds:['base']}}/>);
+  expect(screen.getByRole('button',{name:'Exit isolate Base'}).getAttribute('aria-pressed')).toBe('true');
+  const bar=screen.getByRole('status',{name:'Isolation'});
+  expect(bar.textContent).toContain('Isolated: Base');
+  fireEvent.click(within(bar).getByRole('button',{name:'Exit'}));
+  expect(onExitAllIsolate).toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button',{name:'Exit isolate Base'}));
+  expect(onUnfocusTreeNode).toHaveBeenCalledWith('base');
+});

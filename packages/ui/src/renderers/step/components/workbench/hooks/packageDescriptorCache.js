@@ -25,7 +25,12 @@ export async function loadPackageDescriptor(packageAssetUrl, { signal, resources
   if (PACKAGE_DESCRIPTOR_CACHE.has(cacheKey)) {
     return PACKAGE_DESCRIPTOR_CACHE.get(cacheKey);
   }
-  const descriptor = await loadRenderJson(descriptorUrl, { signal, resources }).catch(() => null);
+  // Missing (404) means the artifact was never built as a package, which the caller reports.
+  // Anything else is the viewer saying why it could not build one: that reaches the person.
+  const descriptor = await loadRenderJson(descriptorUrl, { signal, resources }).catch((error) => {
+    if (error?.status === 404 || !error?.status) return null;
+    throw error;
+  });
   if (!descriptor || signal?.aborted) {
     return null;
   }
