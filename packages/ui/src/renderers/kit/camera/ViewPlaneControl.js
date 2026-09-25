@@ -15,6 +15,7 @@ const ORIENTATION_FALLBACK = Object.freeze({
 const FACE_LABELS = Object.freeze({ z: "Top", zNeg: "Bottom", yNeg: "Front", y: "Back", x: "Right", xNeg: "Left" });
 const AXIS_COLORS = Object.freeze({ x: "rgb(239, 83, 80)", y: "rgb(76, 175, 80)", z: "rgb(66, 133, 244)" });
 const DEFAULT_VIEW_PLANE_SIZE = "7rem";
+const HOME_CORNER_ID = "iso+-+";
 // SVG units: the cube's half-size on screen, and where its centre sits.
 const SCALE = 21;
 const CENTER = 50;
@@ -294,10 +295,17 @@ function ViewPlaneControl({
             </g>
           ))}
           {corners.map((corner) => {
+            // Every corner is an isometric view and shows a dot; the right-front-top one, the
+            // usual isometric view, is darker so it is the one to aim for.
+            const home = corner.id === HOME_CORNER_ID;
+            const lit = activeViewPlaneFace === corner.id || hoveredId === corner.id;
+            const tone = lit ? 100 : home ? 55 : 25;
             return (
               <g key={corner.id} {...pickProps(corner.id, corner.title, () => activateViewPlaneFace?.(corner.id))}>
                 <circle cx={corner.x} cy={corner.y} r="6" fill="transparent" />
-
+                <circle cx={corner.x} cy={corner.y} r={lit ? 3 : home ? 2.4 : 1.8} pointerEvents="none"
+                  fill={`color-mix(in oklch, var(--foreground) ${tone}%, var(--background))`}
+                  stroke="var(--background)" strokeWidth="0.8" />
               </g>
             );
           })}

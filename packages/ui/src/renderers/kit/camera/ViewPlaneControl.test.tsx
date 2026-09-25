@@ -80,7 +80,17 @@ it('uses the enlarged cube itself for navigation without surrounding arrow butto
   const { container } = cube({ orbitViewCube: vi.fn() });
   expect(screen.queryByRole('button', { name: /^Orbit / })).toBeNull();
   expect(screen.getByLabelText('View cube').parentElement?.style.width).toBe('7rem');
-  for (const dot of container.querySelectorAll('circle')) expect(dot.getAttribute('fill')).toBe('transparent');
+  // Each corner's hit area is invisible; the dot drawn on it is what shows.
+  const corners = [...container.querySelectorAll('g[role="button"]')].filter(g => /isometric view$/.test(g.getAttribute('aria-label') ?? ''));
+  expect(corners.length).toBeGreaterThan(0);
+  for (const corner of corners) {
+    const [hit, dot] = corner.querySelectorAll('circle');
+    expect(hit.getAttribute('fill')).toBe('transparent');
+    expect(dot.getAttribute('fill')).not.toBe('transparent');
+  }
+  // The right-front-top corner, the usual isometric view, has the largest dot.
+  const home = screen.getByRole('button', { name: 'Jump to front right top isometric view' }).querySelectorAll('circle')[1];
+  expect(Number(home.getAttribute('r'))).toBeGreaterThan(2);
 });
 it('follows its orientation store alone: an equal orientation is no change, a new one redraws only the cube', () => {
   const orientation = createViewPlaneOrientationStore(ISO);
