@@ -174,9 +174,23 @@ test('web source keeps only catalog files, native path capabilities and original
   assert.deepEqual(copied, ['parts/probe.step', '/models/parts/probe.step']);
   assert.equal(statuses.at(-1), 'Copied path for probe.step');
   assert.equal(createWebFileActions(client, { rootId: 'a', rootPath: '/models', backend: 'remote' }, ports).perform['copy-path'], undefined);
-  await actions.perform['copy-reference']({ path: 'parts/probe.step' });
-  assert.deepEqual(delivered[0].parts[0].reference, { resource: { kind: 'workspace-file', workspaceId: 'a', path: 'parts/probe.step' }, target: { kind: 'whole-resource' } });
-  assert.equal(copied.length, 2, 'reference delivery does not also do an ordinary clipboard write');
+  assert.equal(actions.perform['copy-reference'], undefined);
+  assert.equal(actions.perform.reveal, undefined, 'older servers do not advertise reveal');
+  const native = createWebFileActions(client, { ...server, platform: 'win32', serverFeatures: ['reveal-path'] }, ports);
+  assert.equal(native.platform, 'win32', 'native effects use the server device platform');
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (url, request) => {
+      assert.equal(url, '/__cad/reveal');
+      assert.equal(request.method, 'POST');
+      assert.equal(request.headers['x-cadgen-viewer'], '1');
+      assert.deepEqual(JSON.parse(request.body), { path: 'parts/probe.step' });
+      return new Response(null, {status: 204});
+    };
+    await native.perform.reveal({ path: 'parts/probe.step' });
+    globalThis.fetch = async () => new Response(JSON.stringify({error: 'Cannot reveal file'}), {status: 400});
+    await assert.rejects(native.perform.reveal({ path: 'parts/probe.step' }), /Cannot reveal file/);
+  } finally { globalThis.fetch = originalFetch; }
   for (const unsupported of ['readText', 'readAsset', 'writeText', 'rename', 'create', 'duplicate', 'trash', 'actions']) assert.equal(source[unsupported], undefined);
   const changes = [];
   const unsubscribe = source.subscribe(change => changes.push(change));

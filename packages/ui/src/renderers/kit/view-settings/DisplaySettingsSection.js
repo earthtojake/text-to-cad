@@ -1,64 +1,27 @@
+import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
 import { useMemo } from "react";
 import { Blend, Expand, Plus, RotateCcw, RotateCw, Sun, SunDim, X } from "lucide-react";
-import { normalizeExplodedViewSettings } from "@hardcore/core/lib/displaySettings.js";
 import { ALL_VIEW_FEATURES, normalizeViewFeatures, normalizeViewSettings, resolveViewSettings, viewSettingsAreCustom } from "@hardcore/core/common/viewSettings.js";
-import { clipAxisBounds, clipAxisPosition, DEFAULT_STEP_CLIP_SETTINGS, normalizeStepClipSettings } from "@hardcore/core/lib/viewer/clipPlane.js";
 import { MAX_THEME_FILL_COLORS } from "@hardcore/core/lib/themeSettings.js";
 import { Button } from "@hardcore/ui/primitives/button";
-import { Slider } from "@hardcore/ui/primitives/slider";
 import { DISPLAY_MODE_OPTIONS } from "./DisplayModeOptions.js";
 import {
-  FILE_SHEET_COMPACT_BUTTON_CLASSES, FILE_SHEET_PRECISION_SLIDER_CLASSES,
-  FileSheetButtonRow, FileSheetColorPicker, FileSheetColorProperty, FileSheetCheckboxRow,
-  FileSheetGatedSection, FileSheetControlRow, FileSheetSelectRow, FileSheetSliderField,
-  FileSheetStaticSection, FileSheetFieldGrid, FileSheetItemGroup, FileSheetNumberProperty, parseFileSheetNumberInput
+  FileSheetColorPicker, FileSheetColorProperty,
+  FileSheetControlRow, FileSheetSelectRow,
+  FileSheetFieldGrid, FileSheetNumberProperty, parseFileSheetNumberInput
 } from "../inspector/FileSheet.js";
+
+import FilePanelSections from "../inspector/FilePanelSections.jsx";
+import { OrthographicProjectionIcon, PerspectiveProjectionIcon } from "../camera/ProjectionModeIcons.js";
 
 const PART_COLOR_OPTIONS = [
   { value: "original", label: "Original" }, { value: "single", label: "Single color" }, { value: "by-part", label: "Color by part" }
 ];
-// Only the styles no Mode covers. Hidden and Off are what Hidden line and Wireframe are made
-// of, so the Mode owns them: a second control for them only turned the Mode "Custom".
+// Surface styles mirror the CLI; presets are shortcuts over these same controls.
 const SURFACE_STYLE_OPTIONS = [
-  { value: "shaded", label: "Shaded" }, { value: "flat", label: "Flat" }
+  { value: "shaded", label: "Shaded" }, { value: "flat", label: "Flat" },
+  { value: "hidden", label: "Hidden" }, { value: "off", label: "Off" }
 ];
-
-const AXES = Object.freeze(["x", "y", "z"]);
-
-function clamp(value, min, max) {
-  return Math.min(Math.max(Number(value) || 0, min), max);
-}
-
-function formatNumber(value, digits = 2) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number.toFixed(digits) : "0";
-}
-
-function SettingsSlider({ label, value, min, max, step = 0.01, suffix = "", digits = 2, disabled = false, hideLabel = false, onChange }) {
-  const numericValue = Number.isFinite(Number(value)) ? Number(value) : min;
-  return (
-    <FileSheetSliderField compact hideLabel={hideLabel}
-      label={label}
-      value={`${formatNumber(numericValue, digits)}${suffix}`}
-      onValueCommit={(draft) => onChange(parseFileSheetNumberInput(draft, {
-        fallback: numericValue,
-        min,
-        max
-      }))}
-      valueInputProps={{ disabled, ariaLabel: `${label} value` }}
-    >
-      <Slider
-        value={[numericValue]}
-        min={min}
-        max={max}
-        step={step}
-        disabled={disabled}
-        onValueChange={(next) => onChange(clamp(next[0], min, max))}
-        className={FILE_SHEET_PRECISION_SLIDER_CLASSES}
-      />
-    </FileSheetSliderField>
-  );
-}
 
 function ColorPalette({ colors, onChange }) {
   const palette = Array.isArray(colors) && colors.length ? colors : ["#ffffff"];
@@ -107,66 +70,6 @@ function ColorPalette({ colors, onChange }) {
   );
 }
 
-// Explode and Cross-section are toolbar toggles, not Display sections: a person examines a
-// design with them while Select or Measure is up. These are the bodies of their panels.
-export function CrossSectionControls({ viewSettings, onViewSettingsPatch, bounds }) {
-  const clip = normalizeStepClipSettings(normalizeViewSettings(viewSettings).clip);
-  const setClip = (patch) => onViewSettingsPatch({ clip: patch });
-  return (
-    <>
-      {AXES.map((axis) => {
-        const offset = clip.offsets?.[axis] ?? DEFAULT_STEP_CLIP_SETTINGS.offsets[axis];
-        const axisBounds = clipAxisBounds(bounds, axis);
-        const range = Math.max(axisBounds.max - axisBounds.min, 0);
-        const position = clipAxisPosition(bounds, {
-          ...clip,
-          axis,
-          offset,
-          offsets: { ...clip.offsets, [axis]: offset }
-        });
-        const changeOffset = (nextOffset) => setClip({
-          axis,
-          offsets: { [axis]: nextOffset },
-          enabled: true
-        });
-        return (
-          <FileSheetSliderField compact
-            key={axis}
-            label={axis.toUpperCase()}
-            value={`${formatNumber(position, Math.abs(position) >= 100 ? 0 : 2)} mm`}
-            onValueCommit={(draft) => {
-              const nextPosition = parseFileSheetNumberInput(draft, {
-                fallback: position,
-                min: axisBounds.min,
-                max: axisBounds.max
-              });
-              changeOffset(range > 0 ? (nextPosition - axisBounds.min) / range : offset);
-            }}
-            valueInputProps={{ disabled: !range, ariaLabel: `Cross-section ${axis.toUpperCase()} position` }}
-          >
-            <Slider
-              value={[offset]}
-              min={0}
-              max={1}
-              step={0.001}
-              disabled={!range}
-              onValueChange={(next) => changeOffset(next[0])}
-              className={FILE_SHEET_PRECISION_SLIDER_CLASSES}
-            />
-          </FileSheetSliderField>
-        );
-      })}
-      <FileSheetCheckboxRow label="Flip" checked={clip.invert} onCheckedChange={(invert) => setClip({ invert })} />
-    </>
-  );
-}
-
-export function ExplodeControls({ viewSettings, onViewSettingsPatch, disabled = false }) {
-  const exploded = normalizeExplodedViewSettings(normalizeViewSettings(viewSettings).exploded);
-  return <SettingsSlider label="Explode" hideLabel value={exploded.enabled ? exploded.amount * 100 : 0} min={0} max={100} step={1} digits={0} suffix="%" disabled={disabled}
-    onChange={amount => onViewSettingsPatch({ exploded: { amount: amount / 100, enabled: true } })} />;
-}
-
 function NumberProperty({ label, Icon, value, min, max, unit = "", digits = 2, onChange }) {
   return <FileSheetNumberProperty label={label} Icon={Icon} value={`${Number(value).toFixed(digits)}${unit}`}
     onValueCommit={draft => onChange(parseFileSheetNumberInput(draft, { fallback: value, min, max }))} />;
@@ -174,7 +77,7 @@ function NumberProperty({ label, Icon, value, min, max, unit = "", digits = 2, o
 
 export function DisplaySettingsSection({
   viewSettings = {}, resolvedView, hostAppearance = "light", lightingQuality = "final", onViewSettingsPatch, onGroupEnabledChange, onModeChange, onViewReset,
-  edgeStatus = "idle", edgeError = "", features = ALL_VIEW_FEATURES
+  edgeStatus = "idle", edgeError = "", features = ALL_VIEW_FEATURES, leadingSections = [], appearanceControl = null, sticky = true
 }) {
   const settings = useMemo(() => normalizeViewSettings(viewSettings), [viewSettings]);
   const view = resolvedView || resolveViewSettings(settings, { appearance: hostAppearance, lightingQuality, features });
@@ -183,9 +86,7 @@ export function DisplaySettingsSection({
   const offers = id => offered.sections.includes(id);
   const modeOptions = DISPLAY_MODE_OPTIONS.filter(option => offered.modes.includes(option.value));
   const surfaceStyleOptions = SURFACE_STYLE_OPTIONS.filter(option => offered.surfaceStyles.includes(option.value));
-  const surfacesDrawn = SURFACE_STYLE_OPTIONS.some(option => option.value === view.surfaces.style);
-  // Editing a group turns it on. A combined section (Grid & axes, Environment) is open while
-  // any of its groups is on, so it can show a group that is off; an edit there must count.
+  // Sparse writes stay in the canonical settings store; the renderer never owns UI state.
   const setGroup = (group, patch) => onViewSettingsPatch({ [group]: {
     ...(group === "surfaces" || view[group]?.enabled === false ? { enabled: true } : {}), ...patch
   } });
@@ -193,41 +94,14 @@ export function DisplaySettingsSection({
   const selectedMode = modeOptions.find(option => option.value === view.mode) || modeOptions[0];
   const ModeIcon = selectedMode.Icon;
   const presetLabel = selectedMode.label;
-  const section = (group, title, children) => !offers(group) ? null : (
-    <FileSheetGatedSection title={title} enabled={view[group].enabled} onEnabledChange={enabled => onGroupEnabledChange(group, enabled)}>
-      {children}
-    </FileSheetGatedSection>
-  );
-  // One gate over several groups: open while any of them is on, and it turns them all on or
-  // off together. Grid & axes, and the Render look (lighting, background, floor), each read
-  // as one thing to a person, so each is one section.
-  const groupSection = (groups, title, children) => {
-    const offeredGroups = groups.filter(offers);
-    if (!offeredGroups.length) return null;
-    return (
-      <FileSheetGatedSection title={title} enabled={offeredGroups.some(group => view[group].enabled)}
-        onEnabledChange={enabled => offeredGroups.forEach(group => onGroupEnabledChange(group, enabled))}>
-        {children(offeredGroups)}
-      </FileSheetGatedSection>
-    );
-  };
+  const section = (group, title, content) => !offers(group) ? null : ({
+    id: group, title, content, enabled: view[group].enabled,
+    onEnabledChange: enabled => onGroupEnabledChange(group, enabled),
+  });
   const color = (group, label, className) => <FileSheetColorProperty className={className} label={label} value={view[group].color}
     onChange={value => setGroup(group, { color: value })} opacity={view[group].opacity}
     onOpacityChange={opacity => setGroup(group, { opacity })} />;
-  return (
-    <div data-cad-display-settings-section="true">
-      {/* One section: the Mode, then the surfaces it draws. While the Mode draws none (Hidden
-          line, Wireframe) there is nothing to style, so the surface rows step aside. */}
-      {(offers("mode") || offers("surfaces")) && <FileSheetStaticSection title="Display">
-        {/* Projection is the view cube's toggle now: it is how the camera looks. */}
-        <FileSheetFieldGrid columns={1}>
-          {offers("mode") && <FileSheetSelectRow hideLabel className="px-0" label="Mode" value={custom ? "" : selectedMode.value} placeholder="Custom" onValueChange={onModeChange}
-            triggerContent={custom ? undefined : <span className="flex min-w-0 items-center gap-1"><ModeIcon className="size-3 shrink-0" aria-hidden="true" /><span className="truncate">{presetLabel}</span></span>}
-            triggerClassName="gap-1 px-1.5 [&_svg]:size-3"
-            options={modeOptions.map(({ Icon, ...option }) => ({ ...option, icon: <Icon className="size-3.5" aria-hidden="true" /> }))} />}
-
-        </FileSheetFieldGrid>
-      {offers("surfaces") && surfacesDrawn && <>
+  const surfaces = <>
         <FileSheetFieldGrid>
           <FileSheetSelectRow hideLabel className="px-0" label="Surface style" value={view.surfaces.style} onValueChange={style => setGroup("surfaces", { style })} options={surfaceStyleOptions} />
           <FileSheetSelectRow hideLabel className="px-0" label="Parts" value={view.surfaces.colorMode} onValueChange={colorMode => setGroup("surfaces", { colorMode })} options={PART_COLOR_OPTIONS} />
@@ -235,46 +109,55 @@ export function DisplaySettingsSection({
         {view.surfaces.colorMode === "single" ? color("surfaces", "Part color") : null}
         {view.surfaces.colorMode === "by-part" ? <ColorPalette colors={view.surfaces.colors} onChange={colors => setGroup("surfaces", { colors })} /> : null}
         {view.surfaces.colorMode !== "single" ? <FileSheetFieldGrid columns={1}><NumberProperty label="Surface opacity" Icon={Blend} value={view.surfaces.opacity * 100} min={0} max={100} unit="%" digits={0} onChange={value => setGroup("surfaces", { opacity: value / 100 })} /></FileSheetFieldGrid> : null}
-      </>}
-      </FileSheetStaticSection>}
-      {section("edges", "Edges", <FileSheetFieldGrid>
+  </>;
+  const sections = [
+      offers("mode") && { id: "display", title: "Display", collapsible: false, headingAction: <TooltipHint content="Reset display"><Button type="button" variant="ghost" size="icon-xs" aria-label="Reset"  className="size-5 text-muted-foreground" onClick={onViewReset}><RotateCcw className="size-3" aria-hidden="true" /></Button></TooltipHint>, content: <>
+        <FileSheetFieldGrid columns={1}>
+          <FileSheetSelectRow hideLabel className="px-0" label="Mode" value={custom ? "" : selectedMode.value} placeholder="Custom" onValueChange={onModeChange}
+            triggerContent={custom ? undefined : <span className="flex min-w-0 items-center gap-1"><ModeIcon className="size-3 shrink-0" aria-hidden="true" /><span className="truncate">{presetLabel}</span></span>}
+            triggerClassName="gap-1 px-1.5 [&_svg]:size-3"
+            options={modeOptions.map(({ Icon, ...option }) => ({ ...option, icon: <Icon className="size-3.5" aria-hidden="true" /> }))} />
+        </FileSheetFieldGrid>
+        <FileSheetFieldGrid columns={appearanceControl ? 2 : 1}>
+          {appearanceControl}
+          <FileSheetSelectRow hideLabel className="px-0" label="Projection" value={view.camera.projection}
+            onValueChange={projection => setGroup("camera", { projection })}
+            options={[{ value: "orthographic", label: "Orthographic", icon: <OrthographicProjectionIcon className="size-3" /> },
+              { value: "perspective", label: "Perspective", icon: <PerspectiveProjectionIcon className="size-3" /> }]} />
+        </FileSheetFieldGrid>
+      </> },
+      offers("surfaces") && { id: "surfaces", title: "Surfaces", collapsible: false, content: surfaces },
+      ...leadingSections,
+      section("edges", "Edges", <FileSheetFieldGrid>
         <FileSheetSelectRow hideLabel className="px-0" label="Edge visibility" value={view.edges.visibility} onValueChange={visibility => setGroup("edges", { visibility })}
           options={[{ value: "visible", label: "Visible" }, { value: "all", label: "All" }]} />
         <FileSheetColorProperty className="px-0" label="Edge color" value={view.edges.color} onChange={value => setGroup("edges", { color: value })} />
-      </FileSheetFieldGrid>)}
-      {groupSection(["grid", "axes"], "Grid & axes", groups => <FileSheetFieldGrid>
-        {groups.includes("grid") ? color("grid", "Grid color", "px-0") : null}
-        {groups.includes("axes") ? color("axes", "Axis color", "px-0") : null}
-      </FileSheetFieldGrid>)}
-      {groupSection(["lighting", "background", "floor"], "Environment", groups => <>
-        {groups.includes("lighting") ? <FileSheetItemGroup label="Lighting">
-          <FileSheetSelectRow hideLabel label="Quality" value={view.lighting.quality} onValueChange={quality => setGroup("lighting", { quality })}
-            options={[{ value: "preview", label: "Preview" }, { value: "final", label: "Final" }]} />
-          <FileSheetFieldGrid className="gap-1">
-            <NumberProperty label="Exposure" Icon={Sun} value={view.lighting.exposure} min={-5} max={5} unit=" EV" digits={1} onChange={exposure => setGroup("lighting", { exposure })} />
-            <NumberProperty label="Rotation" Icon={RotateCw} value={view.lighting.rotation} min={-180} max={180} unit="°" digits={0} onChange={rotation => setGroup("lighting", { rotation })} />
-            <NumberProperty label="Softbox size" Icon={Expand} value={view.lighting.size} min={0.25} max={3} unit="×" onChange={size => setGroup("lighting", { size })} />
-            <NumberProperty label="Fill ratio" Icon={SunDim} value={view.lighting.fill * 100} min={0} max={100} unit="%" digits={0} onChange={value => setGroup("lighting", { fill: value / 100 })} />
-          </FileSheetFieldGrid>
-        </FileSheetItemGroup> : null}
-        {groups.includes("background") || groups.includes("floor") ? <FileSheetItemGroup label="Background & floor">
-          <FileSheetFieldGrid>
-            {groups.includes("background") ? color("background", "Background color", "px-0") : null}
-            {groups.includes("floor") ? color("floor", "Floor color", "px-0") : null}
-          </FileSheetFieldGrid>
-          {groups.includes("floor") ? <FileSheetSelectRow hideLabel label="Floor position" value={view.floor.placement} onValueChange={placement => setGroup("floor", { placement })}
-            options={[{ value: "origin", label: "Floor at model origin" }, { value: "lowest", label: "Floor at lowest point" }]} /> : null}
-        </FileSheetItemGroup> : null}
-      </>)}
+      </FileSheetFieldGrid>),
+      (offers("grid") || offers("axes")) && { id: "grid-axes", title: "Grid / Axes",
+        enabled: view.grid.enabled || view.axes.enabled,
+        onEnabledChange: enabled => { if (offers("grid")) onGroupEnabledChange("grid", enabled); if (offers("axes")) onGroupEnabledChange("axes", enabled); },
+        content: <FileSheetFieldGrid>{offers("grid") && color("grid", "Grid color", "px-0")}{offers("axes") && color("axes", "Axis color", "px-0")}</FileSheetFieldGrid> },
+      section("lighting", "Lighting", <>
+        <FileSheetSelectRow hideLabel label="Quality" value={view.lighting.quality} onValueChange={quality => setGroup("lighting", { quality })}
+          options={[{ value: "preview", label: "Preview" }, { value: "final", label: "Final" }]} />
+        <FileSheetFieldGrid className="gap-1">
+          <NumberProperty label="Exposure" Icon={Sun} value={view.lighting.exposure} min={-5} max={5} unit=" EV" digits={1} onChange={exposure => setGroup("lighting", { exposure })} />
+          <NumberProperty label="Rotation" Icon={RotateCw} value={view.lighting.rotation} min={-180} max={180} unit="°" digits={0} onChange={rotation => setGroup("lighting", { rotation })} />
+          <NumberProperty label="Softbox size" Icon={Expand} value={view.lighting.size} min={0.25} max={3} unit="×" onChange={size => setGroup("lighting", { size })} />
+          <NumberProperty label="Fill ratio" Icon={SunDim} value={view.lighting.fill * 100} min={0} max={100} unit="%" digits={0} onChange={value => setGroup("lighting", { fill: value / 100 })} />
+        </FileSheetFieldGrid>
+      </>),
+      section("background", "Background", color("background", "Background color")),
+      section("floor", "Floor", <>
+        {color("floor", "Floor color")}
+        <FileSheetSelectRow hideLabel label="Floor position" value={view.floor.placement} onValueChange={placement => setGroup("floor", { placement })}
+          options={[{ value: "origin", label: "Model origin" }, { value: "lowest", label: "Lowest point" }]} />
+      </>),
+  ];
+  return <div className="flex min-h-0 flex-1 flex-col [&_[data-file-panel-heading]_.text-xs]:text-tiny" data-cad-display-settings-section="true">
+    <FilePanelSections sections={sections} sticky={sticky} footer={edgeStatus === "loading" || edgeError ? <div className="space-y-1 border-t border-border py-1">
       {offers("edges") && edgeStatus === "loading" ? <p role="status" className="px-2 text-tiny text-muted-foreground">Preparing edges…</p> : null}
       {offers("edges") && edgeError ? <p role="alert" className="px-2 text-tiny text-destructive">Couldn’t load edges. {edgeError}</p> : null}
-      <div className="py-2">
-        <FileSheetButtonRow columns={1}>
-          <Button type="button" variant="outline" size="sm" title={`Reset to ${presetLabel}`} className={FILE_SHEET_COMPACT_BUTTON_CLASSES} onClick={onViewReset}>
-            <RotateCcw className="size-3.5" aria-hidden="true" />Reset
-          </Button>
-        </FileSheetButtonRow>
-      </div>
-    </div>
-  );
+    </div> : null} />
+  </div>;
 }

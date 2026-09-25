@@ -1,3 +1,4 @@
+import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
 import { cn } from "@hardcore/ui/utils";
 
 // Onshape-style axis colour coding for coordinate triples.
@@ -19,10 +20,10 @@ export function formatNumber(value, digits = 2) {
 // the far edge, so the readout scans top-to-bottom.
 export function InfoRow({ label, children, title }) {
   return (
-    <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-baseline gap-2 py-1" title={title}>
+    <TooltipHint content={title}><div className="grid grid-cols-[5rem_minmax(0,1fr)] items-baseline gap-2 py-1" >
       <span className="text-tiny text-muted-foreground">{label}</span>
       <div className="min-w-0 flex-1 text-tiny text-sidebar-foreground [overflow-wrap:anywhere]">{children}</div>
-    </div>
+    </div></TooltipHint>
   );
 }
 

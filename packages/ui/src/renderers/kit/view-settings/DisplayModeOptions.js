@@ -1,9 +1,14 @@
 import {
   Eye,
-  Circle,
   Spline,
   SquareDashed
 } from "lucide-react";
+
+export function SolidModeIcon(props) {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" {...props}>
+    <circle cx="12" cy="12" r="9" />
+  </svg>;
+}
 
 export function RenderModeIcon(props) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -14,7 +19,7 @@ export function RenderModeIcon(props) {
 }
 
 export const DISPLAY_MODE_OPTIONS = Object.freeze([
-  Object.freeze({ value: "solid", label: "Solid", title: "Solid surfaces with visible CAD edges", Icon: Circle }),
+  Object.freeze({ value: "solid", label: "Solid", title: "Solid surfaces with visible CAD edges", Icon: SolidModeIcon }),
   Object.freeze({ value: "render", label: "Render", title: "Photographic materials, lighting and backdrop", Icon: RenderModeIcon }),
   Object.freeze({ value: "xray", label: "X-ray", title: "Transparent surfaces with visible and hidden CAD edges", Icon: Eye }),
   Object.freeze({ value: "hidden-line", label: "Hidden line", title: "Visible contours with obscured edges removed", Icon: SquareDashed }),

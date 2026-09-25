@@ -1,3 +1,4 @@
+import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
 import { useEffect, useState } from "react";
 import { Check, Copy } from "lucide-react";
 import { Badge } from "@hardcore/ui/primitives/badge";
@@ -132,23 +133,23 @@ function FileStatusSectionContent({ items = [] }) {
                   <Badge variant={itemMeta.badgeVariant} className={cn("shrink-0", STATUS_LEVEL_BADGE_CLASSES)}>
                     {fileStatusLevelLabel(item.level)}
                   </Badge>
-                  <div className="min-w-0 flex-1 truncate leading-4 text-sidebar-foreground" title={item.title}>{item.title}</div>
+                  <TooltipHint content={item.title} overflowOnly><div className="min-w-0 flex-1 truncate leading-4 text-sidebar-foreground" >{item.title}</div></TooltipHint>
                   <span className="ml-auto inline-flex h-5 shrink-0 items-center">
-                    <Button
+                    <TooltipHint content={copiedItemId === item.id ? "Copied" : "Copy issue"}><Button
                       type="button"
                       variant="ghost"
                       size="icon-xs"
                       className="size-5 rounded-sm text-muted-foreground hover:text-sidebar-foreground"
                       onClick={(event) => handleCopyIssue(event, item)}
-                      aria-label={copiedItemId === item.id ? "Copied issue" : "Copy issue for agent"}
-                      title={copiedItemId === item.id ? "Copied" : "Copy issue for agent"}
+                      aria-label={copiedItemId === item.id ? "Copied issue" : "Copy issue"}
+
                     >
                       {copiedItemId === item.id ? (
                         <Check className="size-3" strokeWidth={2.25} aria-hidden="true" />
                       ) : (
                         <Copy className="size-3" strokeWidth={2.1} aria-hidden="true" />
                       )}
-                    </Button>
+                    </Button></TooltipHint>
                   </span>
                 </div>
                 {item.message ? (

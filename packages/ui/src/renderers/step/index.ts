@@ -5,7 +5,6 @@ import type { PromptContext, PromptReference } from '@hardcore/core/prompt';
 import type { ComponentType } from 'react';
 import { isCadFile } from '@hardcore/core/lib/fileFormats.js';
 import { defineFileRenderer } from '../../file-viewer/registry.js';
-import { Box, Boxes } from 'lucide-react';
 import { viewerPanels } from '../../file-viewer/navigation/panels.js';
 
 export type { CadLiveBinding, CadLiveController, CadLiveState, CadCameraSnapshot } from './live.js';
@@ -51,12 +50,10 @@ export function createStepRenderer({ client, ...services }: StepRendererOptions)
     id: 'step',
     priority: 100,
     matches: (file) => !OTHER_RENDERERS_FILE.test(file.path) && (file.mediaType === 'cad' || Boolean(isCadFile(file.path))),
-    // A STEP is the one file that presents itself fullscreen (the host's switch, the tool strip's last button).
+    // A STEP is the one file that presents itself fullscreen (the host's switch, Display's Preview action).
     fullscreen: true,
     // Its own panel is named for what the file is, with the icon its Features tree draws for it.
-    panels: ({ ready, data }) => viewerPanels(ready, {
-      file: data.entry?.kind === 'assembly' ? { label: 'Assembly', icon: Boxes } : { label: 'Part', icon: Box }
-    }),
+    panels: ({ ready }) => viewerPanels(ready, { file: true }),
     async prepare(context) {
       const prepared = await prepareWorkspaceEntry(client, context);
       return { data: { ...prepared.data, services }, dispose: prepared.dispose };

@@ -44,6 +44,11 @@ and submenus. Menu shortcuts use 10px metadata. These defaults belong to the
 primitives, including desktop's app-level equivalents; consumers do not add
 per-menu font-size overrides. Portals set their own compact text size rather
 than inheriting the trigger or host body's size.
+Viewer hover hints use `TooltipHint` from the shared tooltip primitive, with
+11px text and a 400ms delay. Use short action names, omit redundant hints on
+obvious or already labeled controls, and show full tree/field names only when
+clipped. Native HTML `title` attributes are not used for interface tooltips.
+
 The token uses rems so desktop UI scaling still works without changing the
 normal 16px root or shrinking layout spacing.
 
@@ -53,8 +58,9 @@ rows — files, model features, robot links — are 12px, the size of the sectio
 titles and the filter above them.
 Both tree lists inset row backgrounds 4px from their horizontal edges, including
 selected, hovered and filtered rows; nesting adds indentation inside that gutter.
-Every panel — the file tree, a file's own panel, Display — shares a 256px minimum
-width. Resizing below it closes the panel; reopening restores 320px. Panels never
+Every sidebar — the file tree and a file's own panel — shares a 256px minimum
+width. On desktop, resizing below it closes the panel; reopening restores 320px. Below 720px of total FileViewer width, panels are dismissible floating sheets and never shrink the scene. The sheets have no extra visible title row and never scroll or translate the host page.
+The view cube is hidden on mobile. Breadcrumbs and progress indicators use this same breakpoint. Panels never
 scroll sideways: a Position section's labels truncate to preserve its sliders and
 inputs.
 
@@ -231,34 +237,46 @@ and versioned, bounded memory cache; it adds no persistent store. Read
 [feature detection](docs/feature-detection.md) before changing inference rules,
 cache identity, cancellation or recognition limits.
 
-A file's controls are nav-row panels, never tabs inside a panel. From left to
-right a file has `Display`, then its own panel (a STEP's `Part` or `Assembly`, a
-robot's `Robot`), then the file tree; a mesh has no panel of its own, and a DXF has
-only the file tree. A file's own panel stacks its sections tight, each at its full
-height (`FilePanelSections`): a STEP's Features, Position when it declares
-kinematics, and Issues when it has any; a robot description's Position and Links
-(SDF adds its SDF metadata). Only the column scrolls, never a section; beside
-another, each section folds away and back with a plus and minus, a view only; and a
-pick's Reference is pinned at the panel's foot, scrolling on its own. Links is the description's link tree, with the Model
+A file can expose one optional `Settings` panel with the sliders icon in the
+nav row, beside the file tree. When Position exists, `FilePanelTabs`
+separates Features / Position or Links / Position. These primary views are always
+open within their tabs, with no collapse headers. Both stay mounted to preserve
+scroll and tree state; only the active tab does background work. Without Position,
+show the model panel directly. Each tab has one scrolling column and the selection
+Reference pinned at its foot. Issues and SDF metadata remain with the model tree.
+Links is the description's link tree, with the Model
 tree's rows, filter and Reference pane; see [robot links](docs/cad-renderer.md#robot-links).
 Which panel a file opens with is the host's to apply
 (`ViewerHost.navigation.openFile(path, { target, panel })`): a file picked in the
 tree asks for the tree, so the tree stays up while a person walks it; any other
 open gets the file's own panel, or nothing when it has none. Display is never open
-by default, and no panel is saved per file. Switching to Display keeps the file's
-panel mounted behind it, preserving the tree's disclosure and scroll.
-The Display panel uses a compact properties layout with 28px headers/controls, no extra
-header-to-content padding, 4px row gaps and 8px section bottoms. Its first section, Display, holds
-equal-width Mode and Projection dropdowns; Explode is a separate section. Surfaces stays expanded,
-and perspective uses the standard lens without a separate Camera section. Optional settings sections are
-feature gates: title/plus click enables, only the trailing minus disables, and
-gray/collapsed means neutral/off. Reopening resets values to defaults, including
-Clip offsets/Flip and Explode's amount (50%). Explode stays open when its slider
-returns to 0%; only the minus collapses it. The fixed section order is Display,
-Surfaces, Explode, Clip, Edges, Grid, Axes, Lighting, Background, Floor, and no
-preset reorders it. Grid and Axes are separate, with matching default colors.
-Floor and Background have no redundant enable/transparency checkboxes; opacity
-lives in color pickers with checkerboard previews.
+by default, and no panel is saved per file. Opening Display leaves the file's
+panel visible, preserving the tree's disclosure and scroll.
+Display uses a compact properties popover capped at 520px: full-width Mode, then
+Appearance and Projection share a row. Surfaces is a separate section; Orbit belongs to the Play menu.
+A muted Reset icon sits at the top-right of Display.
+Optional effects use the shared plus/minus section gates: expand enables defaults,
+collapse disables. One scrollbar contains the whole sheet; choices and colors use
+ordinary Select and color-picker controls without closing the sheet.
+The sidebar uses `FilePanelSections` and `FileSheetSettingsSection` with 28px
+headers/controls, 4px row gaps and an 8px bottom gutter matching the horizontal inset; the first header has no top
+border. Perspective uses the standard lens without a separate Camera section.
+The toolbar orders Select, Draw, Measure, Explode, Clip, Position and Play without separators. Display sits beside Home above the cube and opens a 280px properties popover. Play options control Orbit, which moves the camera in place and fades toolbar chrome when idle; the sidebar stays visible. Interaction tools are exclusive; Explode and Clip remain selected while their panels exist. There are no dots. Persistent tools add compact 160px panels stacked directly beneath the toolbar. There are
+no enable checkboxes: both start with no effect until their sliders/inputs are edited. X or
+pressing the tool again resets and removes the effect; changing tools preserves applied effects and their panels, but removes neutral zero-value panels.
+Position controls live in the sidebar in STEP and robot viewers. Its tool enables
+joint handles and reveals the section; leaving the tool preserves the pose.
+Section headers stack at the top and bottom of the single scrolling column,
+remaining reachable even beside a long expanded tree. The tool strip is right-aligned
+at the top of the viewport. Measure has a temporary corner menu for snap options. Its first result adds a retained panel; completed measurements persist across tools. With results present, the main button or X clears them, while the corner resumes picking without clearing.
+Draw uses an ephemeral dropdown whose chosen tool determines its toolbar icon.
+The section order is Display, Surfaces, Edges, Grid / Axes, Lighting,
+Background and Floor; no preset reorders it. Grid and Axes have matching default colors.
+Transparent Home and Display buttons sit above the view cube. Clicking a face,
+edge or corner changes orientation without changing zoom or pan. Home restores
+the default isometric direction and original model bounds at 100% zoom. Colored XYZ guides follow the cube edges.
+Floor and Background use the same plus/minus gates as the other optional effects;
+opacity lives in color pickers with checkerboard previews.
 Hover only highlights controls; it never writes settings. One per-file settings store serves controls, agent
 commands and persistence, and retains unchanged renderer inputs across edits;
 see [View state and updates](docs/render-mode.md#state-and-updates).

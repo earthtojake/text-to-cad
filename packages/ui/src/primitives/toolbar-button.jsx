@@ -1,10 +1,18 @@
+import { createContext, useContext } from "react";
 import { Button } from "@hardcore/ui/primitives/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@hardcore/ui/primitives/tooltip";
+import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
 import { cn } from "@hardcore/ui/utils";
 
 // The icon button every floating toolbar is made of: the CAD interaction tools,
 // the drawing tools under them, and the standalone drawing editor's toolbar.
 export const TOOLBAR_ICON_BUTTON_CLASS = "size-6 rounded-sm text-sidebar-foreground/70 shadow-none transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-ring/45 data-[variant=secondary]:bg-sidebar-accent data-[variant=secondary]:text-sidebar-accent-foreground data-[variant=secondary]:hover:bg-sidebar-accent";
+
+const ToolbarTooltipVisibility = createContext(true);
+// Portalled tips must follow chrome visibility, rather than remaining above an
+// inert/faded toolbar. The trigger DOM stays mounted for menu focus restoration.
+export function ToolbarTooltipScope({ enabled = true, children }) {
+  return <ToolbarTooltipVisibility.Provider value={enabled}>{children}</ToolbarTooltipVisibility.Provider>;
+}
 
 /**
  * `tooltip={false}` leaves the accessible name and shows nothing on hover: for a
@@ -21,6 +29,8 @@ export function ToolbarButton({
   children,
   ...props
 }) {
+  const tipsVisible = useContext(ToolbarTooltipVisibility);
+  const tipEnabled = tipsVisible && tooltip && !active && !props.disabled && props["aria-expanded"] !== true;
   const button = (
     <Button
       type="button"
@@ -34,12 +44,5 @@ export function ToolbarButton({
     </Button>
   );
   if (!tooltip) return button;
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>{button}</TooltipTrigger>
-      <TooltipContent side={tooltipSide} sideOffset={6}>
-        {label}
-      </TooltipContent>
-    </Tooltip>
-  );
+  return <TooltipHint content={label} disabled={!tipEnabled} side={tooltipSide}>{button}</TooltipHint>;
 }

@@ -94,3 +94,16 @@ test('browser lifecycle listeners flush only while subscribed', () => {
     assert.equal(flushes, 2);
   } finally { restoreWindow(); }
 });
+
+
+test('viewport PNG copy uses the guarded local endpoint without browser clipboard permission', async () => {
+  const calls = [];
+  const restore = replaceGlobal('fetch', async (...args) => { calls.push(args); return {ok:true}; });
+  try {
+    const png = new Blob(['png'], {type:'image/png'});
+    await browserClipboard.writeImage(Promise.resolve(png));
+    assert.equal(calls[0][0], '/__cad/clipboard');
+    assert.equal(calls[0][1].headers['x-cadgen-viewer'], '1');
+    assert.equal(calls[0][1].body, png);
+  } finally { restore(); }
+});

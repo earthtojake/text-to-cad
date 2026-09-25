@@ -15,14 +15,14 @@ import {
  * a filesystem is left with.
  */
 
-test("a file gets the open, copy, edit and trash items, in that order", () => {
+test("a file puts path copies before open, edit and trash actions", () => {
   assert.deepEqual(entryMenuActions({ path: "src/index.ts", kind: "file" }, "darwin"), [
+    "copy-path",
+    "copy-relative-path",
     "open",
     "open-default",
     "open-with",
     "reveal",
-    "copy-path",
-    "copy-relative-path",
     "rename",
     "duplicate",
     "trash"
@@ -40,21 +40,21 @@ test("a breadcrumb gets the same menu without Open — the crumb is the open fil
   );
 });
 
-test("Copy reference is offered for a CAD file and nothing else", () => {
-  assert.ok(entryMenuActions({ path: "models/bracket.step", kind: "file" }, "darwin").includes("copy-reference"));
-  assert.ok(entryMenuActions({ path: "models/bracket.stl", kind: "file" }, "darwin").includes("copy-reference"));
+test("File menus omit the redundant Copy reference action", () => {
+  assert.ok(!entryMenuActions({ path: "models/bracket.step", kind: "file" }, "darwin").includes("copy-reference"));
+  assert.ok(!entryMenuActions({ path: "models/bracket.stl", kind: "file" }, "darwin").includes("copy-reference"));
   assert.ok(!entryMenuActions({ path: "models/bracket.py", kind: "file" }, "darwin").includes("copy-reference"));
   assert.ok(!entryMenuActions({ path: "models", kind: "directory" }, "darwin").includes("copy-reference"));
 });
 
 test("a folder gets the new-entry, terminal, copy, rename and trash items", () => {
   assert.deepEqual(entryMenuActions({ path: "models", kind: "directory" }, "darwin"), [
+    "copy-path",
+    "copy-relative-path",
     "new-file",
     "new-folder",
     "open-terminal",
     "reveal",
-    "copy-path",
-    "copy-relative-path",
     "rename",
     "trash"
   ]);
@@ -99,16 +99,15 @@ test("the platform's file browser and its trash chord are named", () => {
  * The capability filter is the whole difference between the two apps' menus:
  * one table, filtered, rather than a table each.
  */
-test("a browser tab is left with opening a file and naming it", () => {
+test("a local browser viewer can open, reveal, and copy paths", () => {
   assert.deepEqual(
     entryMenuActions({ path: "models/bracket.step", kind: "file" }, "darwin", WEB_ENTRY_CAPABILITIES),
-    ["open", "copy-path", "copy-relative-path", "copy-reference"]
+    ["copy-path", "copy-relative-path", "open", "reveal"]
   );
-  // A folder in a browser tab can be copied and nothing else — no new file,
-  // no terminal, no reveal, no rename, no trash.
+  // A folder can be revealed or copied without filesystem mutations.
   assert.deepEqual(
     entryMenuActions({ path: "models", kind: "directory" }, "darwin", WEB_ENTRY_CAPABILITIES),
-    ["copy-path", "copy-relative-path"]
+    ["copy-path", "copy-relative-path", "reveal"]
   );
 });
 
@@ -124,8 +123,8 @@ test("an item's place never depends on which host is asking", () => {
 test("a section the filter empties takes its separator with it", () => {
   const sections = entryMenu({ path: "a.step", kind: "file" }, "darwin", WEB_ENTRY_CAPABILITIES);
   assert.ok(sections.every((section) => section.length > 0));
-  // Open, then the copies: two sections, not five with three blanks.
-  assert.equal(sections.length, 2);
+  // Copies, open, then reveal; empty sections leave no separators.
+  assert.equal(sections.length, 3);
 });
 
 test("a host with no capabilities at all gets no menu rather than an empty one", () => {

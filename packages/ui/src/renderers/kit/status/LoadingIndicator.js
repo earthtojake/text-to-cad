@@ -1,3 +1,4 @@
+import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
 import LoadingIcon from "@hardcore/ui/loading-icon";
 import { useEffect, useState } from "react";
 import { Progress } from "@hardcore/ui/primitives/progress";
@@ -27,7 +28,7 @@ export default function LoadingIndicator({ progress, operationKey = "" }) {
       <Progress value={progress?.percent ?? null} aria-label={progress?.label || "Preparing view"}
         className={waiting ? "[&_[data-slot=progress-indicator]]:[animation-play-state:paused]" : undefined} />
       {explanation ? <div className="text-xs opacity-75" aria-live="off">{explanation}</div> : null}
-      {elapsed >= 10_000 && progress?.detail ? <div className="truncate text-xs opacity-60" title={progress.detail}>{progress.detail}</div> : null}
+      {elapsed >= 10_000 && progress?.detail ? <TooltipHint content={progress.detail}><div className="truncate text-xs opacity-60" >{progress.detail}</div></TooltipHint> : null}
     </div>
   );
 }

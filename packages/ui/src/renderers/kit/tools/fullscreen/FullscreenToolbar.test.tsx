@@ -76,14 +76,11 @@ it('play/pause is a plain button even with multiple routines', () => {
   expect(screen.queryByRole('listbox')).toBeNull();
 });
 
-it('the playbar carries the routine list and the settings menu, and an open menu holds the bar visible', async () => {
+it('the playbar carries settings but no routine picker, and an open menu holds the bar visible', async () => {
   const select = vi.fn(), loop = vi.fn();
   const user = userEvent.setup();
   render(<Harness select={select} loop={loop}/>);
-  await user.click(screen.getByRole('button', { name: 'Animation routine: Turn' }));
-  await user.click(await screen.findByRole('menuitemradio', { name: 'Sweep' }));
-  expect(select).toHaveBeenCalledWith('sweep');
-  expect(screen.getByRole('slider', { name: 'Animation time' }).getAttribute('aria-valuemax')).toBe('4');
+  expect(screen.queryByRole('button', { name: /Animation routine/ })).toBeNull();
   vi.useFakeTimers({ shouldAdvanceTime: true });
   fireEvent.pointerDown(screen.getByRole('button', { name: 'Playback settings' }), { button: 0, ctrlKey: false });
   fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Loop' })); expect(loop).toHaveBeenCalledWith(false);

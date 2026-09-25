@@ -9,7 +9,7 @@ import {
 import { Button } from "@hardcore/ui/primitives/button";
 import { Slider } from "@hardcore/ui/primitives/slider";
 import {
-  NO_PRESET_VALUE,
+  NO_PRESET_VALUE, DEFAULT_POSE_VALUE, positionValuesAreDefault,
   KinematicsPoseRow
 } from "../../../kit/inspector/kinematicsControls.jsx";
 import {
@@ -89,25 +89,32 @@ export function poseValuesForPreset(definition, poseName) {
   return values;
 }
 
+// Resolve the selected authored pose from the shared position runtime.
+export function posePresetSelection(runtime) {
+  const definition = runtime?.definition;
+  const poseNames = poseNamesFromDefinition(definition);
+  const pickedPose = String(runtime?.activePose || "");
+  const activePose = runtime?.positionActive === false ? NO_PRESET_VALUE
+    : pickedPose && poseNames.includes(pickedPose) ? pickedPose
+    : positionValuesAreDefault(runtime?.parameterValues, definition?.defaultParameterValues) ? DEFAULT_POSE_VALUE
+    : activePoseName(definition, runtime?.parameterValues || {}) || NO_PRESET_VALUE;
+  return { poseNames, activePose };
+}
+
 export default function PoseControlsSection({
   runtime = null,
   loadingLabel = "Loading pose...",
   noParametersLabel = "No pose controls.",
-  hideWhenEmpty = false
+  hideWhenEmpty = false,
+  stacked = true,
+  onReset = runtime?.onResetMotion || runtime?.onResetParameters
 }) {
   const definition = runtime?.definition || null;
   const parameters = Array.isArray(definition?.parameters) ? definition.parameters : [];
   const status = String(runtime?.status || "").trim();
   const error = String(runtime?.error || "").trim();
   const values = runtime?.parameterValues || {};
-  const poseNames = poseNamesFromDefinition(definition);
-  // Which pose is on: the one the person picked, until they move a DOF by hand; then
-  // whichever preset the values match, or "None". The robot's group state reads the
-  // same way, so the two dropdowns cannot disagree about what "the current pose" means.
-  const pickedPose = String(runtime?.activePose || "");
-  const activePose = runtime?.positionActive === false ? NO_PRESET_VALUE
-    : pickedPose && poseNames.includes(pickedPose) ? pickedPose
-    : activePoseName(definition, values) || NO_PRESET_VALUE;
+  const { poseNames, activePose } = posePresetSelection(runtime);
   // Back-drive routing: which members a coupling drives, and what every DOF's
   // effective value is. Both are pure functions of the definition and the
   // current values, so a driven slider needs no state of its own.
@@ -132,10 +139,11 @@ export default function PoseControlsSection({
 
       {definition ? (
         <>
-          {poseNames.length ? (
+          {poseNames.length || onReset ? (
             <KinematicsPoseRow
               poses={poseNames.map((poseName) => ({ value: poseName, label: poseName }))}
               activeValue={activePose}
+              onReset={onReset}
               onSelect={(poseName) => runtime?.onApplyPose?.(poseName)}
             />
           ) : null}
@@ -219,7 +227,7 @@ export default function PoseControlsSection({
               );
             }
             return (
-              <FileSheetSliderField compact
+              <FileSheetSliderField compact={!stacked} stacked={stacked}
                 key={parameter.id}
                 label={parameter.label}
                 labelTitle={driver ? `${parameter.label} · driven by ${driver.coupling}` : parameter.label}
@@ -234,7 +242,8 @@ export default function PoseControlsSection({
                   }));
                 }}
                 valueInputProps={{
-                  ariaLabel: `${parameter.label} slider value`
+                  ariaLabel: `${parameter.label} slider value`,
+                  className: undefined
                 }}
               >
                 <Slider

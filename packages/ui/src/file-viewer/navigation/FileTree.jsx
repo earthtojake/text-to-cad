@@ -1,3 +1,4 @@
+import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@hardcore/ui/primitives/context-menu";
@@ -515,7 +516,7 @@ export function FileTree({ source, activePath, reveal = null, edit = null, onOpe
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-sidebar/40">
-      <TreeFilterInput
+      <TreeFilterInput data-mobile-panel-top-row=""
         label="Filter files"
         onChange={setQuery}
         onKeyDown={onKeyDown}
@@ -635,7 +636,7 @@ function TreeRow({ row, active, cursor, onSelect, onRename }) {
   }
 
   return (
-    <TreeRowSurface
+    <TooltipHint content={row.path} overflowOnly><TreeRowSurface
       as="button"
       active={active}
       cursor={cursor}
@@ -646,13 +647,13 @@ function TreeRow({ row, active, cursor, onSelect, onRename }) {
       onClick={onSelect}
       role="treeitem"
       style={{ height: ROW_HEIGHT, paddingLeft: 6 + row.depth * INDENT }}
-      title={row.path}
+
       type="button"
     >
       {chevron}
       {icon}
       <TreeRowLabel>{row.name}</TreeRowLabel>
-    </TreeRowSurface>
+    </TreeRowSurface></TooltipHint>
   );
 }
 
@@ -660,7 +661,7 @@ function FilterRow({ path, indices, active, cursor, onOpen }) {
   const lastSlash = path.lastIndexOf("/");
   const directory = lastSlash < 0 ? "" : path.slice(0, lastSlash + 1);
   return (
-    <TreeRowSurface
+    <TooltipHint content={path} overflowOnly><TreeRowSurface
       as="button"
       active={active}
       cursor={cursor}
@@ -671,7 +672,7 @@ function FilterRow({ path, indices, active, cursor, onOpen }) {
       onClick={onOpen}
       role="option"
       style={{ height: ROW_HEIGHT }}
-      title={path}
+
       type="button"
     >
       <FileIcon className="size-3.5 shrink-0 text-muted-foreground" path={path} />
@@ -679,6 +680,6 @@ function FilterRow({ path, indices, active, cursor, onOpen }) {
         {directory ? <span className="text-muted-foreground">{directory}</span> : null}
         <TreeFilterHighlight from={directory.length} indices={indices} text={path.slice(directory.length)} />
       </TreeRowLabel>
-    </TreeRowSurface>
+    </TreeRowSurface></TooltipHint>
   );
 }

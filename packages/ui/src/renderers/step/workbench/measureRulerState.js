@@ -122,8 +122,8 @@ export function measureRulerDraftMeasurement(state) {
 }
 
 /**
- * Measurements are temporary tool state. Leaving Measure or opening another
- * model clears the draft and completed rulers together.
+ * Completed measurements outlive the picking tool. Changing tools cancels only
+ * the draft; changing files clears results because their coordinates belong to that model.
  */
 export function measureRulerStateForChange(state, { entryChanged = false, toolActive = true } = {}) {
   if (!state) {
@@ -133,7 +133,7 @@ export function measureRulerStateForChange(state, { entryChanged = false, toolAc
     return null;
   }
   if (!toolActive) {
-    return null;
+    return cancelMeasureRulerDraft(state);
   }
   return state;
 }

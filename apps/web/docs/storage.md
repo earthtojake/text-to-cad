@@ -85,8 +85,8 @@ opening the root without a file does not silently select a different artifact.
 
 Per-file state is intentionally tab-local. Do not sync these keys from
 `storage` events; two tabs viewing the same file must be free to keep different
-camera, display and tool settings. A STEP, GLB, mesh or robot entry is the
-shell's per-file record, `{ version, camera, display, tool, renderer }`
+display and tool settings. Camera position, target and zoom live only in the mounted viewer; every reload frames the model fresh. Older saved cameras are ignored. A STEP, GLB, mesh or robot entry is the
+shell's per-file record, `{ version, camera: null, display, tool, renderer }`
 ([shellState.js](../../../packages/ui/src/renderers/kit/shell/shellState.js));
 a DXF entry is only the view a person moved it to. A STEP's own `renderer` slot
 keeps its tree selection, expansion and hidden parts, its pose, its animation

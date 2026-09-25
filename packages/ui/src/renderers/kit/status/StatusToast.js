@@ -1,3 +1,6 @@
+import { useContext } from "react";
+import { createPortal } from "react-dom";
+import { ViewerElementContext } from "../../../host/context.js";
 import {
   Toast,
   ToastProvider,
@@ -11,14 +14,16 @@ import {
  * a person reads them — nothing here is an error, which is the alert dialog's.
  */
 export default function StatusToast({ copyStatus, screenshotStatus, previewMode, onClear }) {
+  const viewerElement = useContext(ViewerElementContext);
+  const container = viewerElement?.current?.querySelector("[data-file-viewer-body]");
   const message = copyStatus || screenshotStatus;
   if (!message || previewMode) {
     return null;
   }
 
-  return (
+  const notification = (
     <ToastProvider duration={2200} swipeDirection="right">
-      <Toast
+      <Toast style={{ animation: "none" }}
         open={true}
         onOpenChange={(open) => {
           if (!open) {
@@ -28,7 +33,8 @@ export default function StatusToast({ copyStatus, screenshotStatus, previewMode,
       >
         <ToastTitle>{message}</ToastTitle>
       </Toast>
-      <ToastViewport />
+      <ToastViewport className="absolute right-3 top-3 w-max max-w-[min(calc(100%-1.5rem),22rem)]" />
     </ToastProvider>
   );
+  return container ? createPortal(notification, container) : notification;
 }

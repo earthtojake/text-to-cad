@@ -61,8 +61,18 @@ export const VIEW_CUBE_CORNERS = [-1, 1].flatMap((sz) => [-1, 1].flatMap((sy) =>
     up: WORLD_UP
   });
 })));
+// The twelve edge midpoints provide the two-axis diagonal views between faces.
+export const VIEW_CUBE_EDGES = [0, 1, 2].flatMap((along) => [-1, 1].flatMap((a) => [-1, 1].map((b) => {
+  const other = [0, 1, 2].filter((axis) => axis !== along);
+  const direction = [0, 0, 0];
+  direction[other[0]] = a;
+  direction[other[1]] = b;
+  const names = other.map((axis) => CUBE_SIDE_NAMES[["x", "y", "z"][axis]][direction[axis] > 0 ? 1 : 0]);
+  return Object.freeze({ id: `edge${direction.map((value) => value > 0 ? "+" : value < 0 ? "-" : "0").join("")}`,
+    title: `Jump to ${names.join(" ")} edge view`, direction, along, up: WORLD_UP });
+})));
 export const VIEW_PLANE_FACE_BY_ID = Object.fromEntries(
-  [...VIEW_PLANE_FACES, ...VIEW_CUBE_CORNERS].map((face) => [face.id, face])
+  [...VIEW_PLANE_FACES, ...VIEW_CUBE_EDGES, ...VIEW_CUBE_CORNERS].map((face) => [face.id, face])
 );
 export const VIEW_PLANE_DEFAULT_PRESET = {
   id: "isometric",
@@ -502,7 +512,7 @@ export function getActiveViewPlaneFaceId(runtime) {
   let bestId = "";
   let bestScore = -Infinity;
   // The cube's corners count too, so a corner view stays lit on the cube like a face view.
-  for (const face of [...VIEW_PLANE_FACES, ...VIEW_CUBE_CORNERS]) {
+  for (const face of [...VIEW_PLANE_FACES, ...VIEW_CUBE_EDGES, ...VIEW_CUBE_CORNERS]) {
     const direction = new runtime.THREE.Vector3(...face.direction).normalize();
     const score = offset.dot(direction);
     if (score > bestScore) {

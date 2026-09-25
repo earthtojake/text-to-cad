@@ -25,6 +25,14 @@ function writeContent({ text, image }: { text?: string; image?: Blob | Promise<B
 export const browserClipboard: ClipboardPort = {
   writeText: copyTextToClipboard,
   readText: readTextFromClipboard,
-  writeImage: image => copyImageBlobToClipboard(image).then(() => {}),
+  async writeImage(image) {
+    const png = await image;
+    if (png.type !== 'image/png') throw new Error('Screenshot must be a PNG.');
+    const response = await fetch('/__cad/clipboard', { method: 'POST', headers: { 'x-cadgen-viewer': '1', 'content-type': 'image/png' }, body: png });
+    if (!response.ok) {
+      const detail = await response.json().catch(() => null);
+      throw new Error(detail?.error || 'Could not copy screenshot to the local clipboard.');
+    }
+  },
   get writeContent() { return browserClipboardSupportsImages() ? writeContent : undefined; },
 };

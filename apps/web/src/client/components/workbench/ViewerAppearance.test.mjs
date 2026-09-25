@@ -12,7 +12,7 @@ const temporary = await mkdtemp(join(tmpdir(), 'hardcore-appearance-'));
 const output = join(temporary, 'appearance.mjs');
 after(() => rm(temporary, { recursive: true, force: true }));
 await build({
-  stdin: { contents: `export {default as ViewerTopBar} from './ViewerTopBar.jsx'; export {createElement} from 'react'; export {renderToStaticMarkup} from 'react-dom/server';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
+  stdin: { contents: `export {default as ViewerAppearance} from './ViewerAppearance.jsx'; export {createElement} from 'react'; export {renderToStaticMarkup} from 'react-dom/server';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
   bundle: true, platform: 'node', format: 'esm', jsx: 'automatic', outfile: output,
   banner: { js: `import {createRequire} from 'node:module'; const require=createRequire(import.meta.url);` },
   loader: { '.ico': 'dataurl' },
@@ -26,18 +26,21 @@ await build({
     plugin.onLoad({ filter: /.*/, namespace: 'test-links' }, () => ({ contents: 'export default function ViewerLinks(){ return null; }', loader: 'js' }));
   } }],
 });
-const { ViewerTopBar, createElement, renderToStaticMarkup } = await import(pathToFileURL(output).href);
+const { ViewerAppearance, createElement, renderToStaticMarkup } = await import(pathToFileURL(output).href);
 
-test('appearance button shows the resolved sun or moon while preserving its selected preference label', () => {
-  for (const [preference, resolved, icon] of [
-    ['system', 'light', 'sun'], ['system', 'dark', 'moon'],
-    ['light', 'light', 'sun'], ['dark', 'dark', 'moon'],
-  ]) {
-    const markup = renderToStaticMarkup(createElement(ViewerTopBar, {
-      colorSchemePreference: preference, resolvedColorSchemeMode: resolved,
-    }));
-    assert.match(markup, new RegExp(`lucide-${icon}(?: |")`));
-    assert.doesNotMatch(markup, /lucide-monitor/);
-    assert.match(markup, new RegExp(`aria-label="Appearance: ${preference[0].toUpperCase()}${preference.slice(1)}"`));
+test('appearance is a compact single-choice control with the saved preference selected', () => {
+  for (const preference of ['system', 'light', 'dark']) {
+    const markup = renderToStaticMarkup(createElement(ViewerAppearance, { colorSchemePreference: preference }));
+    assert.match(markup, /aria-label="Appearance"/);
+    assert.match(markup, /role="combobox"/);
+    assert.ok(markup.includes(`lucide-${{ system: 'sun', light: 'sun', dark: 'moon' }[preference]}`));
+    assert.match(markup, /aria-expanded="false"/);
+    assert.doesNotMatch(markup, /menuitem/);
   }
+});
+
+test('system preference displays the resolved dark appearance without changing the preference', () => {
+  const markup = renderToStaticMarkup(createElement(ViewerAppearance, { colorSchemePreference: 'system', resolvedColorSchemeMode: 'dark' }));
+  assert.match(markup, /lucide-moon/);
+  assert.match(markup, />Dark</);
 });

@@ -220,7 +220,7 @@ export function useViewportCamera({
     }
     return transitioned;
   }, []);
-  // The view cube's centre: "Reset to default isometric view". It resets the VIEW —
+  // Home restores the default isometric view. It resets the VIEW —
   // the model is FRAMED again, from the default direction — not just the direction.
   // Turning the camera alone left somebody who had zoomed or panned away looking
   // isometrically at empty space, and for a renderer that offers no viewport menu
@@ -237,6 +237,7 @@ export function useViewportCamera({
       animate: true,
       modelOffset: modelTransformRef.current.offset,
       resetZoomBaseline: true,
+      originalModelScale: true,
       viewDirection: DEFAULT_VIEW_DIRECTION,
       viewUp: WORLD_UP
     }) || transitionCameraToViewPreset(runtime, VIEW_PLANE_DEFAULT_PRESET);

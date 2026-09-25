@@ -16,9 +16,9 @@ const DrawingEditor = lazy(() => import("../../../../drawing/index.js").then(mod
 export default function DrawingOverlay({ drawing, onReady, onContentChange, onViewportChange }) {
   return <div className="absolute inset-0 z-10" data-cad-drawing-overlay="">
     <Suspense fallback={null}>
-      {/* The toolbar is the host's: a row under the CAD interaction tools (`FloatingToolBar.js`). */}
+      {/* The host exposes drawing controls through Draw's corner dropdown. */}
       <DrawingEditor mode="overlay" toolbar={false} initialTool={CAD_DRAWING_DEFAULTS.tool} name="CAD drawing" onReady={onReady}
-        onToolChange={drawing?.onToolChange} onColorChange={drawing?.onColorChange}
+        onHistoryChange={drawing?.onHistoryChange} onToolChange={drawing?.onToolChange} onColorChange={drawing?.onColorChange}
         onContentChange={onContentChange} onViewportChange={onViewportChange} />
     </Suspense>
   </div>;

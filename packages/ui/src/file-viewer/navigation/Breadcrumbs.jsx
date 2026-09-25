@@ -1,3 +1,4 @@
+import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
 import { Check } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -66,7 +67,7 @@ export function Breadcrumbs({ crumbs, source, activePath, onOpen }) {
         const rename = crumb.kind === "file" ? source.renderRename?.({ crumb }) : null;
         return (
           <span
-            className={cn("flex min-w-0 items-center gap-1", last ? "shrink-0" : "shrink")}
+            className={"flex min-w-0 shrink items-center gap-1"}
             key={`${crumb.kind}-${crumb.path}-${index}`}
           >
             {index > 0 ? (
@@ -112,7 +113,7 @@ function CrumbButton({ crumb, last, activePath, onOpen, source }) {
         aria-label={`Browse ${crumb.kind === "ellipsis" ? crumb.title : crumb.label}`}
         className={className}
         data-crumb={crumb.kind}
-        title={crumb.title}
+
         type="button"
       >
         <span className="truncate">{crumb.label}</span>
@@ -193,19 +194,19 @@ function DirectoryMenuItems({ directory, activePath, onOpen, source }) {
             source={source}
           />
         ) : (
-          <DropdownMenuItem
+          <TooltipHint key={entry.path} content={entry.path} overflowOnly><DropdownMenuItem
             aria-current={entry.current ? "page" : undefined}
             className={cn("min-w-0 font-normal", entry.current && "bg-accent/60 text-foreground")}
             data-active={entry.current || undefined}
             data-entry={entry.path}
-            key={entry.path}
+
             onSelect={() => onOpen(entry.path, entry)}
-            title={entry.path}
+
           >
             <FileIcon className="size-3.5 shrink-0" path={entry.path} />
             <span className="min-w-0 flex-1 truncate">{entry.name}</span>
             {entry.current ? <Check className="size-3.5 shrink-0" /> : null}
-          </DropdownMenuItem>
+          </DropdownMenuItem></TooltipHint>
         )
       )}
     </>
@@ -223,16 +224,16 @@ function DirectorySubMenu({ directory, label, marked, activePath, onOpen, source
   const [open, setOpen] = useState(false);
   return (
     <DropdownMenuSub onOpenChange={setOpen} open={open}>
-      <DropdownMenuSubTrigger
+      <TooltipHint content={directory} overflowOnly><DropdownMenuSubTrigger
         aria-current={marked ? "page" : undefined}
         className={cn("min-w-0 font-normal", marked && "bg-accent/60 text-foreground")}
         data-active={marked || undefined}
         data-entry={directory}
-        title={directory}
+
       >
         <FolderIcon className="size-3.5 shrink-0" open={open} />
         <span className="min-w-0 flex-1 truncate">{label}</span>
-      </DropdownMenuSubTrigger>
+      </DropdownMenuSubTrigger></TooltipHint>
       <DropdownMenuSubContent className="max-h-80 w-max min-w-44 max-w-80 overflow-y-auto">
         <DirectoryMenuItems
           activePath={activePath}

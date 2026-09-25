@@ -62,7 +62,7 @@ test("omitted Render fields stay sparse while configuration expands effective de
     quality: "final",
     exposure: 0,
     lighting: { rotation: 0, size: 1, fill: 0.25 },
-    backdrop: { color: "#e7e7e5", transparent: false, ground: true, groundPlacement: "origin", groundColor: "#e7e7e5", groundOpacity: 0.6 }
+    backdrop: { color: "#ffffff", transparent: false, ground: true, groundPlacement: "origin", groundColor: "#e7e7e5", groundOpacity: 0.6 }
   });
   assert.equal(camera.projection, "orthographic");
   assert.deepEqual(light.camera, camera);
@@ -79,7 +79,7 @@ test("explicit studios pin only the backdrop default", () => {
   assert.equal(pinned.appearance, "dark");
   assert.equal(pinned.render.payload.studio, "light");
   assert.equal(pinned.render.configuration.studio, "light");
-  assert.equal(pinned.render.configuration.backdrop.color, "#e7e7e5");
+  assert.equal(pinned.render.configuration.backdrop.color, "#ffffff");
 
   const { camera: _camera, ...custom } = resolveSceneSettings({
     appearance: "light",

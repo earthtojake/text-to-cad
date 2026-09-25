@@ -1,3 +1,4 @@
+import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
 import { CoordValue, InfoRow, MonoValue } from "../kit/inspector/referenceRows.jsx";
 
 // The Reference pane at the foot of the Links section: what the selection IS.
@@ -46,7 +47,7 @@ const vectorText = (vector, digits = 4) => vector.map(value => formatValue(value
 /** Another link of the same robot: pressing it selects that link in the tree and the viewport. */
 function LinkName({ name, onSelect, selectable = true }) {
   if (!onSelect || !selectable) return name;
-  return <button type="button" className={LINK_CLASS} onClick={() => onSelect(name)} title={`Select ${name}`}>{name}</button>;
+  return <TooltipHint content="Select link"><button type="button" className={LINK_CLASS} onClick={() => onSelect(name)} >{name}</button></TooltipHint>;
 }
 
 // What a primitive IS, in the description's own metres.
@@ -69,10 +70,10 @@ function GeometryEntry({ entry, meshPath, onOpenFile }) {
   ].filter(Boolean);
   return <span className="block py-0.5">
     <span className="flex min-w-0 items-baseline gap-1.5">
-      {entry.color && <span className="size-2.5 shrink-0 self-center rounded-sm border border-border/70" style={{ backgroundColor: entry.color }} title={entry.materialName || entry.color} aria-hidden="true"/>}
+      {entry.color && <TooltipHint content={entry.materialName || entry.color}><span className="size-2.5 shrink-0 self-center rounded-sm border border-border/70" style={{ backgroundColor: entry.color }}  aria-hidden="true"/></TooltipHint>}
       {entry.filename
         ? path && onOpenFile
-          ? <button type="button" className={LINK_CLASS} onClick={() => onOpenFile(path)} title={`Open ${path}`}>{entry.filename}</button>
+          ? <TooltipHint content="Open file"><button type="button" className={LINK_CLASS} onClick={() => onOpenFile(path)} >{entry.filename}</button></TooltipHint>
           : <span>{entry.filename}</span>
         : <span>{entry.type}</span>}
     </span>
@@ -93,7 +94,7 @@ function GeometryRows({ label, entries, meshPath, onOpenFile }) {
 function InertiaRows({ inertia }) {
   if (!inertia) return null;
   const rows = [["ixx", "ixy", "ixz"], ["ixy", "iyy", "iyz"], ["ixz", "iyz", "izz"]];
-  return <InfoRow label="Inertia" title="Inertia tensor about the centre of mass, kg·m², as the description writes it">
+  return <InfoRow label="Inertia" title="Inertia at centre of mass (kg·m²)">
     <span className="grid w-fit grid-cols-3 gap-x-3 font-mono tabular-nums">
       {rows.flatMap((row, r) => row.map((term, c) => <span key={`${r}${c}`} className={c < r ? "text-muted-foreground" : undefined}>{formatValue(inertia[term], 6)}</span>))}
     </span>
@@ -107,7 +108,7 @@ function LimitRows({ joint }) {
   const unit = angular ? "rad" : "m";
   const range = Number.isFinite(limit.lower) || Number.isFinite(limit.upper);
   return <>
-    {range && <InfoRow label="Limits" title={`Lower and upper position limits, in ${angular ? "radians" : "metres"} as the description writes them`}>
+    {range && <InfoRow label="Limits" title={`Limits (${angular ? "radians" : "metres"})`}>
       <MonoValue>{`${formatValue(limit.lower)} … ${formatValue(limit.upper)} ${unit}`}</MonoValue>
       {angular && Number.isFinite(limit.lower) && Number.isFinite(limit.upper) &&
         <span className="block text-muted-foreground">{`${degrees(limit.lower)} … ${degrees(limit.upper)}`}</span>}
@@ -122,11 +123,11 @@ export function RobotLinkDetails({ facts, meshPath, onOpenFile, onSelectLink, ha
   return <div className="flex min-w-0 flex-col text-tiny font-normal" aria-label="Link details">
     <InfoRow label="Name">{facts.name}</InfoRow>
     <InfoRow label="Type">{facts.isRoot ? "Root link" : "Link"}</InfoRow>
-    {facts.groups.length > 0 && <InfoRow label="Groups" title="SRDF planning groups this link belongs to">{facts.groups.join(", ")}</InfoRow>}
+    {facts.groups.length > 0 && <InfoRow label="Groups" title="Planning groups">{facts.groups.join(", ")}</InfoRow>}
     {facts.endEffectors.length > 0 && <InfoRow label="End effector">{facts.endEffectors.join(", ")}</InfoRow>}
     {(facts.mass !== null || facts.inertia) && <Section label="Inertial">
       {facts.mass !== null && <InfoRow label="Mass"><MonoValue>{`${formatValue(facts.mass, 4)} kg`}</MonoValue></InfoRow>}
-      {facts.centerOfMass && <InfoRow label="Centre of mass" title="In the link frame, metres"><CoordValue vector={facts.centerOfMass.xyz} digits={4}/></InfoRow>}
+      {facts.centerOfMass && <InfoRow label="Centre of mass" title="Link frame (m)"><CoordValue vector={facts.centerOfMass.xyz} digits={4}/></InfoRow>}
       <InertiaRows inertia={facts.inertia}/>
     </Section>}
     <Section label="Geometry">
@@ -141,8 +142,8 @@ export function RobotLinkDetails({ facts, meshPath, onOpenFile, onSelectLink, ha
       <LimitRows joint={joint}/>
       {joint.mimic && <InfoRow label="Mimic"><MonoValue>{`${joint.mimic.joint} × ${formatValue(joint.mimic.multiplier)} + ${formatValue(joint.mimic.offset)}`}</MonoValue></InfoRow>}
       {joint.origin && <>
-        <InfoRow label="Origin xyz" title="Joint origin in the parent link frame, metres"><CoordValue vector={joint.origin.xyz} digits={4}/></InfoRow>
-        {!isZero(joint.origin.rpy) && <InfoRow label="Origin rpy" title="Joint origin roll, pitch and yaw, radians"><MonoValue>{vectorText(joint.origin.rpy)}</MonoValue></InfoRow>}
+        <InfoRow label="Origin xyz" title="Parent-frame position (m)"><CoordValue vector={joint.origin.xyz} digits={4}/></InfoRow>
+        {!isZero(joint.origin.rpy) && <InfoRow label="Origin rpy" title="Roll, pitch, yaw (rad)"><MonoValue>{vectorText(joint.origin.rpy)}</MonoValue></InfoRow>}
       </>}
     </Section>}
     {facts.childJoints.length > 0 && <Section label="Child joints">
@@ -165,7 +166,7 @@ function ComponentDetails({ component }) {
       <MonoValue>{component.color}</MonoValue>
     </span></InfoRow>}
     <InfoRow label="Triangles"><MonoValue>{formatCount(component.triangleCount)}</MonoValue></InfoRow>
-    {size && <InfoRow label="Size" title="Bounding size of the object on the robot, millimetres"><MonoValue>{`${size.map(formatMillimetres).join(" × ")} mm`}</MonoValue></InfoRow>}
+    {size && <InfoRow label="Size" title="Bounding size (mm)"><MonoValue>{`${size.map(formatMillimetres).join(" × ")} mm`}</MonoValue></InfoRow>}
   </div>;
 }
 

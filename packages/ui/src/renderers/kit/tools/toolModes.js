@@ -13,7 +13,8 @@ const text = value => String(value ?? "");
  *   is recorded as the default mode. The default mode always persists.
  */
 export function createToolModes({ defaultMode, modes }) {
-  const known = new Set([defaultMode, ...Object.keys(modes)]);
+  // Display is shared by every renderer and, like Draw, never restored as an active session.
+  const known = new Set(["display", defaultMode, ...Object.keys(modes)]);
   const normalize = mode => (known.has(mode) ? mode : defaultMode);
   const persisted = recorded => {
     const mode = text(recorded || defaultMode);

@@ -17,11 +17,11 @@ const description = {
 };
 const field = (name: string, unit: string) => screen.getByRole('textbox', { name: `${name} value in ${unit}` }) as HTMLInputElement;
 
-it('lists the named pose on a labelled row, then a slider per joint a person can drive, then Reset: no sections of its own', () => {
+it('lists the named pose on a labelled row, then a slider per joint a person can drive, with Reset in its header: no sections of its own', () => {
   render(<PositionControls pose={createPoseStore(description)}/>);
   // One section's rows: the Position section around them is the panel's.
   expect(screen.queryAllByRole('heading')).toEqual([]);
-  expect(screen.getByRole('combobox', { name: 'Pose' }).textContent).toBe('None');
+  expect(screen.getByRole('combobox', { name: 'Pose' }).textContent).toBe('Default');
   expect(screen.getByText('Pose')).toBeTruthy();
   expect([field('shoulder', 'deg').value, field('lift', 'm').value]).toEqual(['0°', '0 m']);
   expect(screen.queryByRole('textbox', { name: /mount|follower/ })).toBeNull();
@@ -49,5 +49,5 @@ it('follows the pose store, and writes to it: a typed value is clamped, Reset re
   expect(screen.getByRole('combobox').textContent).toBe('raised');
   fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
   expect(pose.getSnapshot().values).toEqual({ shoulder: 0, lift: 0 });
-  expect(screen.getByRole('combobox').textContent).toBe('None');
+  expect(screen.getByRole('combobox').textContent).toBe('Default');
 });

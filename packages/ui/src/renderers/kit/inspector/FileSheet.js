@@ -1,6 +1,7 @@
+import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
 import { Children, createContext, useContext, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, ChevronRight } from "lucide-react";
+import { Check, ChevronDown, Minus, Plus } from "lucide-react";
 import { cn } from "@hardcore/ui/utils";
 import { Button } from "@hardcore/ui/primitives/button";
 import {
@@ -172,77 +173,91 @@ export function FileSheetSection({
 /** A section heading: 28px, regular 12px, never a control (`docs/settings-ui.md`). */
 export const FILE_SHEET_SECTION_HEADING_CLASSES = "flex min-h-7 items-center px-2 py-1 text-xs font-normal leading-4 text-foreground";
 
-export function FileSheetStaticSection({ title, children }) {
+/** One section primitive for Display, file panels and standalone settings. */
+export function FileSheetSettingsSection({ title, children, open = true, onOpenChange,
+  gated = false, disabled = false, onReveal, headingAction = null, hideHeading = false, sectionId, index = 0, count = 1, sticky = false }) {
   const titleId = useId();
-  return (
-    <section aria-labelledby={titleId} className="border-b border-border pb-2">
-      <h3 id={titleId} className={FILE_SHEET_SECTION_HEADING_CLASSES}>{title}</h3>
-      <div className="space-y-1">{children}</div>
-    </section>
-  );
+  const contentId = useId();
+  const collapsible = typeof onOpenChange === "function";
+  // Contents keeps sticky headings in the panel's shared scroll flow.
+  return <section aria-labelledby={titleId} data-file-panel-section={sectionId}
+    className={sticky ? "contents" : "[&+section]:border-t border-border"}>
+    <div hidden={hideHeading} data-mobile-panel-top-row={index === 0 ? "" : undefined} data-file-panel-heading="" className={cn("relative h-7 shrink-0 bg-background",
+      sticky && "sticky z-10", sticky && index > 0 && "border-t border-border")}
+      style={sticky ? { top: `${index * 1.75}rem`, bottom: `${(count - index - 1) * 1.75}rem` } : undefined}>
+      {collapsible ? <FileSheetToggleHeading as="h2" title={title} open={open} onOpenChange={onOpenChange}
+        headingId={titleId} contentId={contentId} disabled={disabled} onTitleClick={onReveal}
+        verbs={gated ? ["Enable", "Disable"] : ["Expand", "Collapse"]} />
+        : <h2>{onReveal ? <button id={titleId} type="button" onClick={onReveal}
+          className={`${FILE_SHEET_SECTION_HEADING_CLASSES} w-full text-left`}>{title}</button>
+          : <span id={titleId} className={FILE_SHEET_SECTION_HEADING_CLASSES}>{title}</span>}</h2>}
+      {headingAction && <div className="absolute right-1 top-0 flex h-7 items-center">{headingAction}</div>}
+    </div>
+    <div id={contentId} hidden={!open} data-file-panel-body="" className={cn("space-y-1 pb-2",
+      !hideHeading && "[&>div>[data-slot=tree-filter]]:h-8 [&>div>[data-slot=tree-filter]]:pb-1")}>{!gated || open ? children : null}</div>
+  </section>;
+}
+
+export function FileSheetStaticSection({ title, children }) {
+  return <FileSheetSettingsSection title={title}>{children}</FileSheetSettingsSection>;
 }
 
 // Expanded IS enabled. Only explicit activation changes settings: hover, focus,
 // scrolling and another section moving under the pointer must never write state.
 /**
  * The heading row of a section that opens and shuts: its title — shown muted, and a button
- * that opens it, while it is shut — and a trailing chevron, right while shut and down while
- * open, like a dropdown. `verbs` name the two acts
+ * that opens it, while it is shut — and a trailing plus when shut and minus when open.
+ * `verbs` name the two acts
  * for the button's label: `["Enable", "Disable"]` for a Display gate, `["Expand",
  * "Collapse"]` for a file panel's section a person folds away.
  */
-export function FileSheetToggleHeading({ title, open, onOpenChange, headingId, contentId, verbs, as: Heading = "h3" }) {
-  const show = () => onOpenChange(true);
+export function FileSheetToggleHeading({ title, open, onOpenChange, headingId, contentId, verbs, disabled = false, onTitleClick, as: Heading = "h3" }) {
+  const show = () => { if (!disabled) { onOpenChange(true); onTitleClick?.(); } };
   const act = `${open ? verbs[1] : verbs[0]} ${title}`;
   return (
-    <div className={cn("flex min-h-7 items-center", !open && "hover:bg-accent")}>
+    <div className={cn("flex min-h-7 items-center", !open && !disabled && "hover:bg-accent", disabled && "opacity-40")}>
       <Heading className="min-w-0 flex-1">
-        {open ? <span id={headingId} className="flex min-h-7 items-center px-2 py-1 text-xs font-normal leading-4 text-foreground">{title}</span> : <button id={headingId} type="button" aria-expanded={false} aria-controls={contentId}
+        {open && onTitleClick ? <button id={headingId} type="button" disabled={disabled} aria-expanded={true} aria-controls={contentId}
+          onClick={onTitleClick}
+          className="flex min-h-7 w-full items-center px-2 py-1 text-left text-xs font-normal leading-4 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45">{title}</button>
+          : open ? <span id={headingId} className="flex min-h-7 items-center px-2 py-1 text-xs font-normal leading-4 text-foreground">{title}</span> : <button id={headingId} type="button" disabled={disabled} aria-expanded={false} aria-controls={contentId}
           onClick={show}
           className="flex min-h-7 w-full items-center px-2 py-1 text-left text-xs font-normal leading-4 text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45">
           {title}
         </button>}
       </Heading>
-      <Button type="button" variant="ghost" size="icon-xs" aria-label={act} title={act}
-        aria-expanded={open} aria-controls={contentId}
+      <Button type="button" variant="ghost" size="icon-xs" aria-label={act}
+        disabled={disabled} aria-expanded={open} aria-controls={contentId}
         onClick={open ? () => onOpenChange(false) : show}
         className="mr-1 size-6 shrink-0 text-muted-foreground hover:text-foreground">
-        {open ? <ChevronDown className="size-3.5" strokeWidth={1.5} /> : <ChevronRight className="size-3.5" strokeWidth={1.5} />}
+        {open ? <Minus className="size-3.5" strokeWidth={1.5} aria-hidden="true" /> : <Plus className="size-3.5" strokeWidth={1.5} aria-hidden="true" />}
       </Button>
     </div>
   );
 }
 
 export function FileSheetGatedSection({ title, enabled, onEnabledChange, children }) {
-  const contentId = useId();
-  const headingId = useId();
-  return (
-    <section className="border-b border-border" aria-labelledby={headingId}>
-      <FileSheetToggleHeading title={title} open={enabled} onOpenChange={onEnabledChange} headingId={headingId}
-        contentId={contentId} verbs={["Enable", "Disable"]} />
-      {enabled ? <div id={contentId} className="space-y-1 pb-2">{children}</div> : null}
-    </section>
-  );
+  return <FileSheetSettingsSection title={title} open={enabled} onOpenChange={onEnabledChange} gated>{children}</FileSheetSettingsSection>;
 }
 
 export function FileSheetCheckboxRow({ label, checked, onCheckedChange, disabled = false, title, className }) {
   return (
-    <label title={title} className={cn("flex min-h-6 cursor-pointer items-center gap-2 px-2 text-tiny text-muted-foreground has-disabled:cursor-default has-disabled:opacity-40", className)}>
+    <TooltipHint content={title}><label  className={cn("flex min-h-6 cursor-pointer items-center gap-2 px-2 text-tiny text-muted-foreground has-disabled:cursor-default has-disabled:opacity-40", className)}>
       <input type="checkbox" checked={checked} disabled={disabled} onChange={event => onCheckedChange(event.target.checked)} className="size-3.5 shrink-0 accent-primary" />
       <span>{label}</span>
-    </label>
+    </label></TooltipHint>
   );
 }
 
 // Figma-like property: the icon/unit carries the visible meaning; its accessible
-// name and native hover hint keep the exact setting discoverable.
+// name and shared hover hint keep the exact setting discoverable.
 export function FileSheetNumberProperty({ label, Icon, value, onValueCommit, disabled = false }) {
   return (
-    <div title={label} className="flex h-7 min-w-0 items-center gap-1 rounded-md border border-input bg-muted/30 px-2 focus-within:ring-1 focus-within:ring-ring">
+    <TooltipHint content={label}><div  className="flex h-7 min-w-0 items-center gap-1 rounded-md border border-input bg-muted/30 px-2 focus-within:ring-1 focus-within:ring-ring">
       {Icon ? <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /> : null}
       <FileSheetValueInput ariaLabel={`${label} value`} value={value} onValueCommit={onValueCommit} disabled={disabled}
         className="h-6 min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 text-left shadow-none focus-visible:ring-0 dark:bg-transparent" />
-    </div>
+    </div></TooltipHint>
   );
 }
 
@@ -250,12 +265,12 @@ export function FileSheetColorProperty({ label, value, onChange, opacity, onOpac
   const withOpacity = typeof onOpacityChange === "function";
   return (
     <div className={cn("min-w-0 px-2", className)}>
-      <div className="flex h-7 min-w-0 items-center overflow-hidden rounded-md border border-input bg-muted/30">
+      <TooltipHint content={label} disabled={disabled}><div className="flex h-7 min-w-0 items-center overflow-hidden rounded-md border border-input bg-muted/30">
         <FileSheetColorPicker value={value} onChange={onChange} opacity={opacity} onOpacityChange={onOpacityChange}
-          showOpacity={withOpacity} disabled={disabled} aria-label={label} title={label}
+          showOpacity={withOpacity} disabled={disabled} aria-label={label}
           className="min-w-0 flex-1 rounded-none border-0 bg-transparent shadow-none dark:bg-transparent" />
 
-      </div>
+      </div></TooltipHint>
     </div>
   );
 }
@@ -472,11 +487,11 @@ export function FileSheetValueInput({
   };
 
   return (
-    <input
+    <TooltipHint content={title}><input
       ref={inputRef}
       type="text"
       inputMode={inputMode}
-      title={title}
+
       value={visibleValue}
       disabled={disabled}
       data-editing={editing ? "true" : "false"}
@@ -546,7 +561,7 @@ export function FileSheetValueInput({
         ...style
       }}
       aria-label={ariaLabel}
-    />
+    /></TooltipHint>
   );
 }
 
@@ -562,6 +577,7 @@ export function FileSheetSliderField({
   labelClassName,
   labelTitle,
   compact = false,
+  stacked = false,
   hideLabel = false
 }) {
   const valueTrailing = trailing ?? (onValueCommit ? (
@@ -572,11 +588,23 @@ export function FileSheetSliderField({
     />
   ) : null);
 
+  if (stacked) {
+    return <FileSheetControlRow className={className} rowKind="slider">
+      <div className="grid min-h-8 min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2" data-position-control=""
+        >
+        <div className="min-w-0">
+          {!hideLabel && label != null ? <TooltipHint content={labelTitle || label} overflowOnly><span className={cn(FILE_SHEET_FIELD_LABEL_CLASSES, "leading-3")}>{label}</span></TooltipHint> : null}
+          <div className="min-w-0">{children}</div>
+        </div>
+        {valueTrailing}
+      </div>
+    </FileSheetControlRow>;
+  }
   if (compact) {
     return (
-      <div className={cn("px-2", className)} title={labelTitle || (typeof label === "string" ? label : undefined)}>
+      <div className={cn("px-2", className)} >
         <div className={cn("flex min-h-7 items-center gap-2", contentClassName)}>
-          {!hideLabel && label != null ? <span className={cn("min-w-0 max-w-[40%] truncate text-tiny text-muted-foreground", labelClassName)}>{label}</span> : null}
+          {!hideLabel && label != null ? <TooltipHint content={labelTitle || label} overflowOnly><span className={cn("min-w-0 max-w-[40%] truncate text-tiny text-muted-foreground", labelClassName)}>{label}</span></TooltipHint> : null}
           <div className="min-w-12 flex-1">{children}</div>
           {valueTrailing}
         </div>
@@ -725,15 +753,15 @@ export function FileSheetValueField({ label, value, mono = false }) {
   return (
     <div className="block min-w-0">
       <span className={FILE_SHEET_FIELD_LABEL_CLASSES}>{label}</span>
-      <div
+      <TooltipHint content={displayValue} overflowOnly><div
         className={cn(
           "mt-1 min-h-7 truncate rounded-md border border-border/70 bg-muted/25 px-2 py-1 text-tiny leading-4 text-foreground",
           mono && "font-mono tabular-nums"
         )}
-        title={displayValue}
+
       >
         {displayValue}
-      </div>
+      </div></TooltipHint>
     </div>
   );
 }
@@ -741,7 +769,7 @@ export function FileSheetValueField({ label, value, mono = false }) {
 export function FileSheetFieldGrid({ columns = 2, children, className }) {
   return (
     <div
-      className={cn("grid gap-2 px-2", className)}
+      className={cn("grid gap-1 px-2", className)}
       style={{ gridTemplateColumns: typeof columns === "number" ? `repeat(${columns}, minmax(0, 1fr))` : columns }}
       data-file-sheet-field-grid=""
     >
@@ -794,8 +822,8 @@ export function FileSheetSegmentedControl({ value, onChange, options, ariaLabel,
       {options.map((option) => {
         const Icon = option.Icon;
         return (
-          <ToggleGroupItem
-            key={option.value}
+          <TooltipHint key={option.value} content={option.title || (option.iconOnly ? option.label : null)}><ToggleGroupItem
+
             value={option.value}
             disabled={option.disabled === true}
             className={cn(
@@ -804,13 +832,13 @@ export function FileSheetSegmentedControl({ value, onChange, options, ariaLabel,
               option.iconOnly && "px-1",
               FILE_SHEET_SEGMENTED_ITEM_CLASSES
             )}
-            title={option.title || option.label}
+
             aria-label={option.label}
           >
             {Icon ? <Icon className="size-3" strokeWidth={2} aria-hidden="true" /> : null}
             {/* iconOnly keeps the label for the tooltip and screen readers only. */}
             {Icon && option.iconOnly ? null : <span className="truncate">{option.label}</span>}
-          </ToggleGroupItem>
+          </ToggleGroupItem></TooltipHint>
         );
       })}
     </ToggleGroup>
@@ -836,30 +864,31 @@ export function FileSheetSelectRow({
   triggerClassName,
   className
 }) {
+  const selectedIcon = options.find(option => option.value === value)?.icon;
   const select = (
     <Select value={value} onValueChange={onValueChange} disabled={disabled}>
-      <SelectTrigger
+      <TooltipHint content={hideLabel ? ariaLabel || label : undefined}><SelectTrigger
         size="sm"
         className={cn(stacked || hideLabel ? FILE_SHEET_SELECT_TRIGGER_CLASSES : FILE_SHEET_INLINE_SELECT_TRIGGER_CLASSES, triggerClassName)}
-        title={hideLabel ? ariaLabel || label : undefined}
+
         aria-label={ariaLabel || (typeof label === "string" ? label : undefined)}
       >
-        {triggerContent ?? <SelectValue placeholder={placeholder} />}
-      </SelectTrigger>
+        {triggerContent ?? (selectedIcon ? <span className="flex min-w-0 items-center gap-1">{selectedIcon}<SelectValue placeholder={placeholder} /></span> : <SelectValue placeholder={placeholder} />)}
+      </SelectTrigger></TooltipHint>
       <SelectContent>
         {(() => {
           // Options may carry a `group`: grouped ones render under SelectGroup headings in
           // first-appearance order, ungrouped ones (e.g. a leading "None") stay at the top.
           const renderItem = (option) => (
-            <SelectItem
-              key={option.value}
+            <TooltipHint key={option.value} content={option.title}><SelectItem
+
               value={option.value}
               disabled={option.disabled}
-              title={option.title}
+
               icon={option.icon}
             >
               {option.label}
-            </SelectItem>
+            </SelectItem></TooltipHint>
           );
           const ungrouped = options.filter((option) => !option.group);
           const groupNames = [...new Set(options.map((option) => option.group).filter(Boolean))];

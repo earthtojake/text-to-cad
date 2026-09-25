@@ -140,11 +140,12 @@ describe('drawing editor', () => {
     expect(view.container.querySelector('[aria-label="Drawing tools"]')).toBeNull();
     // Locked: a line is followed by another line, as a pen stroke always was by another stroke.
     expect(sdk.props.initialData.appState).toMatchObject({ viewBackgroundColor: 'transparent', currentItemStrokeColor: '#ff2d55',
-      activeTool: { type: 'freedraw', locked: true } });
+      activeTool: { type: 'freedraw', locked: true }, currentItemStrokeWidth: 2 / 4.25 });
     // The SDK paints a white page until the given scene is in place; the overlay stays hidden until then.
     expect(editor.dataset.drawingReady).toBe('');
 
     controller!.setTool('arrow');
+    expect(sdk.api.updateScene).toHaveBeenLastCalledWith({ appState: { currentItemStrokeWidth: 2 }, captureUpdate: 'NEVER' });
     expect(sdk.api.setActiveTool).toHaveBeenLastCalledWith({ type: 'arrow', locked: true });
     controller!.setTool('hand');
     expect(sdk.api.setActiveTool).toHaveBeenLastCalledWith({ type: 'hand', locked: true });

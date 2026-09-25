@@ -89,9 +89,20 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
     .evaluateAll(buttons => buttons.map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`));
   // A mesh's one panel is Display, which a file never opens with: it is opened by its toggle.
   const openDisplay = async pane => {
-    if (!await pane.locator('[data-file-sheet="Display"]').isVisible()) await pane.locator('[data-file-panel="cad-display"]').click();
-    await pane.locator('[data-file-sheet="Display"]').waitFor();
+    if (await pane.locator('[data-cad-camera-controls]').getByRole('button', { name: 'Display', exact: true }).getAttribute('aria-expanded') !== 'true') await pane.locator('[data-cad-camera-controls]').getByRole('button', { name: 'Display', exact: true }).click();
+    await pane.locator('[data-cad-display-popover]').waitFor();
   };
+  const openSection = async title => {
+    await openDisplay(first);
+    if (['Mode', 'Projection'].includes(title)) await first.getByRole('combobox', { name: title, exact: true }).click();
+    else await first.getByRole('heading', { name: title, exact: true }).hover();
+  };
+  const setEnabled = async (title, enabled) => {
+    await openDisplay(first);
+    const button = first.getByRole('button', { name: `${enabled ? 'Enable' : 'Disable'} ${title}`, exact: true });
+    if (await button.count()) await button.click();
+  };
+  const modeLabel = async () => `Mode${await first.getByRole('combobox', { name: 'Mode', exact: true }).innerText()}`;
   // The camera is moved through the live controller now: there is no zoom control in the
   // viewer to press.
   const zoomTo = (testId, zoom) => page.evaluate(async ([id, value]) => {
@@ -99,10 +110,10 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
     await controller.setCamera({ ...controller.readState().camera, zoom: value });
   }, [testId, zoom]);
   const cameraZoom = () => page.evaluate(() => window.cadHarness.a.controller.readState().camera?.zoom ?? null);
-  await first.locator('[data-file-panel="cad-display"]').waitFor().catch(async (error) => { throw new Error(`${error.message}; page errors: ${errors.join('; ')}; body: ${await page.locator("body").innerText()}; requests: ${requests.join(", ")}`); });
+  await first.locator('[data-cad-camera-controls]').getByRole('button', { name: 'Display', exact: true }).waitFor().catch(async (error) => { throw new Error(`${error.message}; page errors: ${errors.join('; ')}; body: ${await page.locator("body").innerText()}; requests: ${requests.join(", ")}`); });
   // The file opened directly and opened with nothing: a mesh has no panel of its own, and
   // Display, its only one, is never where a file opens. Nor is the tree.
-  assert.deepEqual(await panels(first), ['Display:false', 'Show files:false']);
+  assert.deepEqual(await panels(first), ['Show files:false']);
   assert.equal(await first.locator('[data-file-sheet]').count(), 0);
   await openDisplay(first);
   await page.waitForFunction(() => Object.keys(window.cadHarness.state.renderers || {}).length > 0);
@@ -119,7 +130,7 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   await openDisplay(first);
   assert.equal(await first.getByRole('button', { name: 'Theme settings', exact: true }).count(), 0);
   assert.equal(await first.locator('[data-file-sheet="Theme"]').count(), 0);
-  await first.locator('[data-file-panel="cad-display"]').click();
+  await first.locator('[data-cad-camera-controls]').getByRole('button', { name: 'Display', exact: true }).click();
   await first.getByRole('button', { name: 'Take snapshot', exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.captures.length === 1);
   const captured = await page.evaluate(() => window.cadHarness.captures[0]);
@@ -130,10 +141,10 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   assert.deepEqual(captured.references[0].target, { kind: 'whole-resource' });
   assert.equal(captured.references[0].resource.workspaceId, 'one');
   assert.equal(captured.references[0].resource.path, 'part.stl');
-  assert.equal(await first.locator('[data-file-sheet="Display"]').count(), 0);
+  await first.locator('[data-cad-display-popover]').waitFor({ state: 'detached' });
   // A mesh hands the shell no tools, so there is no strip over its viewport at
   // all: orbit, pan and zoom, and nothing to take up — nor Fullscreen, which is a STEP's.
-  assert.equal(await first.getByRole('group', { name: 'Interaction tools' }).count(), 0, 'no tools, no strip');
+  assert.equal(await first.getByRole('group', { name: 'Interaction tools' }).count(), 0, 'camera controls do not create an empty interaction toolbar');
   for (const name of ['Orbit', 'Draw', 'Select', 'Measure', 'Position', 'Animate', 'Fullscreen']) {
     assert.equal(await first.getByRole('button', { name, exact: true }).count(), 0, name);
   }
@@ -173,8 +184,9 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   assert.deepEqual(Object.keys(before.renderers), [JSON.stringify(['part.stl', 'mesh'])], 'one record per file, keyed [path, renderer id]');
   for (const saved of Object.values(before.renderers)) assert.ok(saved.camera, 'unmount flushes the outgoing camera');
   await page.evaluate(() => window.cadHarness.mounted(true));
-  // Display was left open, and which panel is open is the host's: it comes back open.
-  await first.locator('[data-file-sheet="Display"]').waitFor();
+  // Popover visibility is transient, not file state.
+  await first.locator('[data-cad-camera-controls]').getByRole('button', { name: 'Display', exact: true }).waitFor();
+  assert.equal(await first.locator('[data-cad-display-popover]').count(), 0);
   // The pane remounts before the viewport adopts the mesh and publishes its restored
   // camera. Wait for the actual presented frame, not an arbitrary settling delay.
   const restoreDiagnostic = await page.evaluate(() => {
@@ -239,59 +251,31 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   await openDisplay(first);
   // A mesh's panels are Display and the tree, and Display is the one open: sections under
   // headings, with no tab in sight.
-  assert.deepEqual(await panels(first), ['Display:true', 'Show files:false']);
+  assert.deepEqual(await panels(first), ['Show files:false']);
   assert.equal(await first.getByRole('tab').count(), 0);
-  const modeRegion = first.getByRole('region', { name: 'Display', exact: true });
-  assert.equal(await modeRegion.getByRole('slider').count(), 0);
-  // The fixture is a mesh: no parts to explode, no solid to section and no CAD edges, so
-  // the View tab offers none of those sections, by heading, gate or title button.
   for (const title of ['Explode', 'Cross-section', 'Edges']) {
-    assert.equal(await first.getByRole('region', { name: title, exact: true }).count(), 0, `a mesh has no ${title} section`);
-    assert.equal(await first.getByRole('heading', { name: title, exact: true }).count(), 0, `a mesh has no ${title} heading`);
-    assert.equal(await first.getByRole('button', { name: new RegExp(`^(?:(?:Enable|Disable) )?${title}$`) }).count(), 0, `a mesh has no ${title} button`);
+    assert.equal(await first.getByRole('heading', { name: title, exact: true }).count(), 0);
   }
-  // The same queries do find a gate the mesh has (its title button and its chevron), so the zeros above mean absence.
-  assert.equal(await first.getByRole('heading', { name: 'Environment', exact: true }).count(), 1);
-  assert.equal(await first.getByRole('button', { name: /^(?:(?:Enable|Disable) )?Environment$/ }).count(), 2);
-  assert.equal(await first.getByLabel('Explode value', { exact: true }).count(), 0);
-  assert.equal(await first.getByLabel(/^Cross-section [XYZ] position$/).count(), 0);
-  // A gate opens its section at the defaults; its controls do not exist while it is off.
+  assert.equal(await first.getByRole('heading', { name: 'Lighting', exact: true }).count(), 1);
+  await openSection('Lighting');
   assert.equal(await first.getByLabel('Exposure value', { exact: true }).count(), 0);
-  await first.getByRole('button', { name: 'Enable Environment', exact: true }).click();
+  await setEnabled('Lighting', true);
   assert.equal(await first.getByLabel('Exposure value', { exact: true }).inputValue(), '0.0 EV');
-  await first.getByRole('button', { name: 'Disable Environment', exact: true }).click();
+  await setEnabled('Lighting', false);
   assert.equal(await first.getByLabel('Exposure value', { exact: true }).count(), 0);
-  assert.equal(await first.getByRole('button', { name: /(?:Enable|Disable) Surfaces/ }).count(), 0);
-  assert.equal(await first.getByRole('region', { name: 'Camera', exact: true }).count(), 0);
-  // Projection is the view cube's toggle, not a Display control.
-  assert.equal(await modeRegion.getByRole('combobox', { name: 'Projection', exact: true }).count(), 0);
-  assert.equal(await first.getByRole('button', { name: /^(?:Orthographic|Perspective): switch to (?:perspective|orthographic)$/ }).count(), 1);
-  // The fixture is a mesh: no CAD edges, so no Edges section and no presets made of edges.
-  assert.equal(await first.getByRole('combobox', { name: 'Edge visibility', exact: true }).count(), 0);
-  assert.equal(await first.getByRole('region', { name: 'Edges', exact: true }).count(), 0);
-  for (const [left, right] of [['Surface style', 'Parts']]) {
-    const a = await first.getByRole('combobox', { name: left, exact: true }).boundingBox();
-    const b = await first.getByLabel(right, { exact: true }).boundingBox();
-    assert.ok(Math.abs(a.y - b.y) <= 1 && b.x > a.x, `${left} and ${right} share one compact row`);
-  }
-  // Human-paced pointing/clicking: the old toggle turned from plus to minus
-  // during the hover dwell and immediately closed the section on mouse-up.
-  // Environment is the gate a mesh still has that Solid leaves off, as Clip was.
-  const floorPlus = first.getByRole('button', { name: 'Enable Environment', exact: true });
-  await floorPlus.hover();
-  await page.waitForTimeout(200);
-  assert.equal(await floorPlus.count(), 1, 'hovering the action cannot change what its click means');
-  await floorPlus.click({ delay: 200 });
-  await page.waitForFunction(() => Object.values(window.cadHarness.state.renderers || {}).some(saved => saved.display?.floor?.enabled));
-  await first.getByRole('button', { name: 'Disable Environment', exact: true }).click();
-  await page.waitForTimeout(200);
-  assert.equal(await first.getByRole('button', { name: 'Enable Environment', exact: true }).count(), 1, 'collapse does not immediately re-enable under the pointer');
-  await first.getByRole('button', { name: 'Environment', exact: true }).hover();
+  assert.equal(await first.getByRole('button', { name: /^Projection:/ }).count(), 0);
+  assert.equal(await first.getByRole('combobox', { name: 'Projection', exact: true }).innerText(), 'Orthographic');
+  assert.equal(await first.getByRole('combobox', { name: 'Surface style', exact: true }).count(), 1);
+  assert.equal(await first.getByRole('combobox', { name: 'Parts', exact: true }).count(), 1);
+  await openSection('Floor');
   await page.waitForTimeout(250);
-  assert.equal(await floorPlus.count(), 1, 'resting on the section title cannot enable Environment');
-  await first.getByRole('button', { name: 'Environment', exact: true }).click();
-  assert.equal(await first.getByRole('combobox', { name: 'Floor position', exact: true }).innerText(), 'Floor at model origin');
-  await first.getByRole('button', { name: 'Disable Environment', exact: true }).click();
+  assert.equal(await first.getByRole('button', { name: 'Enable Floor', exact: true }).count(), 1, 'hover never enables Floor');
+  await setEnabled('Floor', true);
+  await page.waitForFunction(() => Object.values(window.cadHarness.state.renderers || {}).some(saved => saved.display?.floor?.enabled));
+  assert.match(await first.getByRole('combobox', { name: 'Floor position', exact: true }).innerText(), /Model origin/);
+  await setEnabled('Floor', false);
+  await page.waitForTimeout(200);
+  assert.equal(await first.getByRole('button', { name: 'Enable Floor', exact: true }).count(), 1);
   assert.deepEqual(await page.evaluate(() => window.cadHarness.a.controller.readState().display.floor), { enabled: false });
   // A guide's paint is a settings-only edit: it reaches the saved state without a scene sync.
   // The floor is scene content, so its gate above does sync; let that land first.
@@ -303,13 +287,14 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
     return window.__viewerSurfaceLooks.count;
   });
   const syncsBeforeGrid = await settledSceneSyncs();
+  await openSection('Grid');
   await first.getByRole('button', { name: 'Grid color', exact: true }).click();
   await page.getByRole('spinbutton', { name: 'Color opacity' }).fill('40');
   await page.getByRole('spinbutton', { name: 'Color opacity' }).press('Tab');
   await page.waitForFunction(() => Object.values(window.cadHarness.state.renderers || {}).some(saved => saved.display?.grid?.opacity === 0.4));
   await page.keyboard.press('Escape');
   assert.equal(await settledSceneSyncs(), syncsBeforeGrid, 'Grid paint only changes the guide: the scene is not dressed again');
-  await first.getByRole('button', { name: 'Environment', exact: true }).click();
+  await setEnabled('Lighting', true);
   await first.getByLabel('Exposure value', { exact: true }).fill('0.8');
   await first.getByLabel('Exposure value', { exact: true }).press('Enter');
   await first.getByLabel('Rotation value', { exact: true }).fill('45');
@@ -318,10 +303,10 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
     const lighting = saved.display?.lighting;
     return lighting?.exposure === 0.8 && lighting.rotation === 45;
   }));
-  await first.getByRole('button', { name: 'Disable Environment', exact: true }).click();
+  await setEnabled('Lighting', false);
   assert.deepEqual(await page.evaluate(() => window.cadHarness.a.controller.readState().display.lighting), { enabled: false });
   // Reopening a gate starts from its defaults, never its previous values.
-  await first.getByRole('button', { name: 'Enable Environment', exact: true }).click();
+  await setEnabled('Lighting', true);
   assert.equal(await first.getByLabel('Exposure value', { exact: true }).inputValue(), '0.0 EV');
   assert.equal(await first.getByLabel('Rotation value', { exact: true }).inputValue(), '0°');
   await page.evaluate(() => window.cadHarness.a.controller.setDisplaySettings({
@@ -362,7 +347,7 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
     ['render', 'perspective', 'Render'], ['solid', 'orthographic', 'Solid'],
     ['render', 'perspective', 'Render'], ['solid', 'orthographic', 'Solid']
   ]) {
-    await first.getByRole('combobox', { name: 'Mode', exact: true }).click();
+    await openSection('Mode');
     // The fixture is a mesh: the presets made of CAD edges (X-ray, Hidden line, Wireframe) are not offered.
     assert.deepEqual(await page.getByRole('option').allTextContents(), ['Solid', 'Render']);
     await page.getByRole('option', { name: label, exact: true }).click();
@@ -374,32 +359,37 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
     // A real pointer may land over a different section when the menu closes or
     // preset groups change height. Dwell long enough to catch delayed writes.
     const presetState = await page.evaluate(() => window.cadHarness.a.controller.readState().display);
-    for (const title of ['Grid & axes', 'Environment']) {
-      await first.getByRole('heading', { name: title, exact: true }).hover();
+    for (const title of ['Grid', 'Axes', 'Lighting', 'Background', 'Floor']) {
+      await openSection(title);
       await page.waitForTimeout(220);
       assert.deepEqual(await page.evaluate(() => window.cadHarness.a.controller.readState().display), presetState, `${label}: hover over ${title} must not change settings`);
     }
-    assert.equal(await first.getByRole('combobox', { name: 'Mode', exact: true }).innerText(), label);
+    assert.equal((await modeLabel()).replace(/\s/g, ''), `Mode${label}`);
   }
-  await first.getByRole('button', { name: 'Orthographic: switch to perspective', exact: true }).click();
+  await openSection('Projection');
+  await page.getByRole('option', { name: 'Perspective', exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().camera.projection === 'perspective');
-  assert.equal(await first.getByRole('combobox', { name: 'Mode', exact: true }).innerText(), 'Custom');
+  await openDisplay(first);
+  assert.equal((await modeLabel()).replace(/\s/g, ''), 'ModeCustom');
   // Custom is a muted placeholder, never an option or a selected base preset.
-  assert.equal(await first.getByRole('combobox', { name: 'Mode', exact: true }).getAttribute('data-placeholder'), '');
-  await first.getByRole('combobox', { name: 'Mode', exact: true }).click();
-  assert.equal(await page.getByRole('option', { name: 'Solid', exact: true }).getAttribute('data-state'), 'unchecked');
+  await openSection('Mode');
+  assert.equal(await page.getByRole('option', { name: 'Solid', exact: true }).getAttribute('aria-selected'), 'false');
   assert.equal(await page.getByRole('option', { name: 'Custom', exact: true }).count(), 0);
   await page.getByRole('option', { name: 'Solid', exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().camera.projection === 'orthographic');
-  assert.equal(await first.getByRole('combobox', { name: 'Mode', exact: true }).innerText(), 'Solid');
+  await openDisplay(first);
+  assert.equal((await modeLabel()).replace(/\s/g, ''), 'ModeSolid');
   await assertPreservedState();
 
   // Actual control edits must survive subsequent edits and the debounced host
   // save, rather than only being visible in an intermediate React render.
+  await openSection('Surfaces');
   await first.getByLabel('Surface opacity value', { exact: true }).fill('65');
   await first.getByLabel('Surface opacity value', { exact: true }).press('Enter');
   await first.getByRole('combobox', { name: 'Surface style', exact: true }).click();
   await page.getByRole('option', { name: 'Flat', exact: true }).click();
+  assert.equal(await first.locator('[data-cad-display-popover]').isVisible(), true);
+  await openSection('Surfaces');
   await first.getByRole('combobox', { name: 'Parts', exact: true }).click();
   await page.getByRole('option', { name: 'Single color', exact: true }).click();
   await page.waitForFunction(() => Object.values(window.cadHarness.state.renderers || {}).some(saved => {
@@ -424,30 +414,37 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
     mode: 'solid', lighting: { quality: 'preview', exposure: 0.5 }, background: { opacity: 0.4 }
   }));
   await page.waitForFunction(() => !window.cadHarness.a.controller.readState().loading);
+  await openSection('Lighting');
   assert.equal(await first.getByLabel('Exposure value', { exact: true }).inputValue(), '0.5 EV');
-  assert.equal(await first.getByRole('combobox', { name: 'Mode', exact: true }).innerText(), 'Custom');
+  assert.equal((await modeLabel()).replace(/\s/g, ''), 'ModeCustom');
   assert.equal(await first.getByRole('checkbox', { name: 'Transparent', exact: true }).count(), 0);
+  await openSection('Background');
   await first.getByRole('button', { name: 'Background color', exact: true }).click();
   await page.getByRole('spinbutton', { name: 'Color opacity' }).fill('0');
   await page.getByRole('spinbutton', { name: 'Color opacity' }).press('Tab');
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().display.background.opacity === 0);
   await page.keyboard.press('Escape');
-  await first.getByRole('button', { name: 'Disable Environment' }).click();
+  await setEnabled('Lighting', false);
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().display.lighting.enabled === false);
   assert.equal(await first.getByLabel('Exposure value', { exact: true }).count(), 0);
+  await openSection('Background');
+  assert.equal(await first.getByRole('button', { name: 'Background color', exact: true }).count(), 1, 'disabling Lighting does not disable Background');
   await first.getByRole('button', { name: 'Reset', exact: true }).click();
   await page.waitForFunction(() => !window.cadHarness.a.controller.readState().loading);
   await assertPreservedState(false);
-  assert.equal(await first.getByRole('combobox', { name: 'Mode', exact: true }).innerText(), 'Solid');
+  await openDisplay(first);
+  assert.equal((await modeLabel()).replace(/\s/g, ''), 'ModeSolid');
 
-  await first.getByRole('combobox', { name: 'Mode', exact: true }).click();
+  await openSection('Mode');
   await page.getByRole('option', { name: 'Render', exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().display.mode === 'render' && !window.cadHarness.a.controller.readState().loading);
+  await openSection('Lighting');
   await first.getByLabel('Exposure value', { exact: true }).fill('1.5');
   await first.getByLabel('Exposure value', { exact: true }).press('Enter');
   await first.getByRole('button', { name: 'Reset', exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().display.mode === 'render' && !window.cadHarness.a.controller.readState().loading);
-  assert.equal(await first.getByRole('combobox', { name: 'Mode', exact: true }).innerText(), 'Render');
+  assert.equal((await modeLabel()).replace(/\s/g, ''), 'ModeRender');
+  await openSection('Lighting');
   assert.equal(await first.getByLabel('Exposure value', { exact: true }).inputValue(), '0.0 EV');
   await assertPreservedState(false);
   // Several commands in one turn must leave controls at the final request,
@@ -549,11 +546,7 @@ test('a file opens framed at 100% of its own ruler: the open fit is the fit, wha
   assert.ok(Math.abs(opened.halfHeight - expected) / expected < 0.01,
     `framed at the fit for this aspect: ${opened.halfHeight} vs ${expected}`);
 
-  // And the way BACK. A mesh has no tools, no viewport menu and — since the Inspector's
-  // zoom readout and its menu were removed — no zoom control at all. The view cube's
-  // centre is the only affordance left, so it has to do what its label says: reset the
-  // VIEW. It used to turn the camera to the default direction and keep the distance and
-  // the pan, which from a camera driven off the model left the pane empty.
+  // Home resets the complete view; cube faces keep the current zoom and target.
   const canvas = pane.locator('[aria-busy] > div > canvas').first();
   const inkFraction = async () => {
     const png = PNG.sync.read(await canvas.screenshot());
@@ -584,11 +577,22 @@ test('a file opens framed at 100% of its own ruler: the open fit is the fit, wha
   });
   const lost = await settleInk(ink => ink < 0.01, 'emptied when the camera was driven off the model');
 
-  const cube = pane.getByRole('button', { name: 'Reset to default isometric view', exact: true });
-  assert.equal(await cube.count(), 1, 'a mesh keeps the view cube');
-  await cube.click();
-  const recovered = await settleInk(ink => ink > 0.05, 'framed the plate again after the view cube was pressed');
-  assert.ok(recovered > lost * 5, `the cube re-frames, it does not only re-orient: ${lost} -> ${recovered}`);
+  const beforeSnap = await page.evaluate(() => window.__cadCamera());
+  await pane.getByRole('button', { name: 'Jump to top view', exact: true }).click();
+  await page.waitForFunction(() => { const c = window.__cadCamera(); return Math.hypot(c.position[0] - c.target[0], c.position[1] - c.target[1]) / Math.abs(c.position[2] - c.target[2]) < 0.001; });
+  const snapped = await page.evaluate(() => window.__cadCamera());
+  snapped.target.forEach((value, index) => assert.ok(Math.abs(value - beforeSnap.target[index]) < 1e-8));
+  assert.equal(snapped.zoom, beforeSnap.zoom);
+  const home = pane.getByRole('button', { name: 'Home', exact: true });
+  const display = pane.locator('[data-cad-camera-controls]').getByRole('button', { name: 'Display', exact: true });
+  const [homeBox, displayBox, cubeBox] = await Promise.all([home.boundingBox(), display.boundingBox(), pane.getByRole('img', { name: 'View cube' }).boundingBox()]);
+  assert.ok(homeBox.x < displayBox.x && homeBox.y === displayBox.y);
+  assert.ok(homeBox.y + homeBox.height <= cubeBox.y + 1);
+  await home.click();
+  const recovered = await settleInk(ink => ink > 0.05, 'framed the plate again after Home');
+  assert.ok(recovered > lost * 5);
+  await page.waitForFunction(() => Math.round(window.__cadCamera().zoomPercent) === 100);
+  assert.equal(Math.round((await page.evaluate(() => window.__cadCamera())).zoomPercent), 100);
   assert.deepEqual(errors, []);
 });
 
@@ -688,10 +692,11 @@ test('the shell keeps its Draw session across fullscreen, and fullscreen drags a
   await pane.getByRole('button', { name: 'Draw', exact: true }).waitFor();
   assert.equal(await pane.getByRole('button', { name: 'Draw', exact: true }).getAttribute('aria-pressed'), 'true',
     'the session the sketch is in survives a trip through fullscreen');
-  // Pressing it again ends the session, and the strip is left with no tool taken up.
+  // Repeated Draw opens its temporary settings without discarding the sketch.
   await pane.getByRole('button', { name: 'Draw', exact: true }).click();
-  await pane.locator('[data-drawing-ready]').waitFor({ state: 'detached' });
-  assert.equal(await pane.getByRole('button', { name: 'Draw', exact: true }).getAttribute('aria-pressed'), 'false');
+  await page.locator('[role="menu"][aria-label="Drawing controls"]').waitFor();
+  await page.keyboard.press('Escape');
+  assert.equal(await pane.getByRole('button', { name: 'Draw', exact: true }).getAttribute('aria-pressed'), 'true');
   assert.deepEqual(errors, []);
 });
 

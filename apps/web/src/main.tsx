@@ -10,11 +10,12 @@ import type { ViewerHost } from '@hardcore/ui/host';
 import { browserClipboard } from './host/clipboard';
 import { browserLifecycle } from './host/lifecycle';
 import App from './App';
-import ViewerTopBar from './client/components/workbench/ViewerTopBar.jsx';
+import ViewerBrand from './client/components/workbench/ViewerBrand.jsx';
+import ViewerLinks from './client/components/workbench/ViewerLinks.jsx';
 import { readCadParam, readDefaultCadParam } from './client/workbench/sidebar.js';
 import { readColorSchemePreference, resolveColorSchemeMode } from './client/ui/colorScheme.js';
 import { readViewState } from './persistence/fileViewer';
-import faviconUrl from './client/assets/favicon.ico';
+import faviconUrl from './client/assets/favicon.png';
 import './client/styles/globals.css';
 
 /** Keep the existing file-tab presentation while its root identity is requested. */
@@ -34,8 +35,8 @@ function StartingView({ error }: { error?: Error }) {
     files: source, clipboard: browserClipboard, promptContext: unavailablePromptContext,
     navigation: { openFile: () => {} }, environment: { colorScheme: dark ? 'dark' : 'light' }, lifecycle: browserLifecycle,
   }), [source, dark]);
-  return <div className="flex h-svh flex-col overflow-hidden"><ViewerTopBar /><div className="min-h-0 flex-1">
-    <FileViewer file={file} host={host} renderers={[]} state={state} onStateChange={setState} navigationPath={null} narrowCrumbs={false}
+  return <div className="flex h-svh flex-col overflow-hidden"><div className="min-h-0 flex-1">
+    <FileViewer leading={<ViewerBrand />} navigationActions={<ViewerLinks />} file={file} host={host} renderers={[]} state={state} onStateChange={setState} navigationPath={null} narrowCrumbs={false}
       presentation={{loading:<div className="relative h-full"><ViewerLoadingOverlay viewerLoading /></div>, error:() => <div className="relative h-full"><EmptyState icon={FileText} title="No file open" description="Pick one from the tree on the right, or filter by name." /></div>}} />
   </div></div>;
 }
@@ -46,7 +47,7 @@ const root = createRoot(element);
 const client = createCadClient({ origin: '', shouldPoll: () => document.visibilityState !== 'hidden' });
 let icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
 if (!icon) { icon = document.createElement('link'); icon.rel = 'icon'; document.head.append(icon); }
-icon.type = 'image/x-icon'; icon.href = `${faviconUrl}?v=star-tile`;
+icon.type = 'image/png'; icon.href = faviconUrl;
 document.title = 'text-to-cad';
 const controller = new AbortController();
 function dispose() { controller.abort(); root.unmount(); client.dispose(); window.removeEventListener('pagehide', onPageHide); }

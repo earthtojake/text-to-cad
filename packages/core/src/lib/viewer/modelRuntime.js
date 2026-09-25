@@ -124,7 +124,9 @@ export function syncRuntimeStepClipPlane(runtime, clipSettings) {
   const clipPlane = buildStepClipPlane(
     runtime.THREE,
     clipSettings,
-    runtime.modelBounds,
+    // The UI and snapshots measure section coordinates against authored bounds.
+    // Posing/exploding changes the scene envelope, never the slider's coordinate system.
+    runtime.zeroPoseBounds || runtime.baseBounds || runtime.modelBounds,
     runtime.modelGroup?.position
   );
   // No section now and none last time: every material already has no planes (a new

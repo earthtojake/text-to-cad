@@ -1,15 +1,17 @@
+import { useViewerMobile } from "../../../file-viewer/responsive.js";
+import { VIEWPORT_BOTTOM_CENTER } from "./viewportLayout.js";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@hardcore/ui/primitives/button";
 import { cn } from "@hardcore/ui/utils";
 
 const ACTION_CLASS = "pointer-events-auto border border-primary/20 bg-primary/85 text-primary-foreground shadow-lg shadow-black/20 hover:bg-primary/75 focus-visible:ring-primary/35";
-const METRICS_CLASS = "h-9 w-fit min-w-0 max-w-full sm:max-w-[min(28rem,calc(100%-16rem))] shrink overflow-hidden px-4 text-xs max-sm:w-full max-sm:pr-32";
-const COMPOSER_METRICS_CLASS = "h-9 w-fit min-w-0 max-w-full shrink overflow-hidden px-4 text-xs";
+const METRICS_CLASS = "h-11 w-fit min-w-0 max-w-full shrink overflow-hidden px-5 text-sm";
+const COMPOSER_METRICS_CLASS = "h-11 w-fit min-w-0 max-w-full shrink overflow-hidden px-5 text-sm";
 
 /**
  * The viewport's bottom action: the one button the active tool offers, centred
- * over the bottom edge. `composer` is a host that has a prompt composer docked
- * under the viewport, which the button clears.
+ * over the shared bottom inset. `composer` selects prompt-oriented sizing;
+ * the host owns any layout needed for its composer.
  *
  * `shortLabel` is what the button says when `label` does not FIT — a label cut off
  * mid-token reads like a broken name rather than a long one, so a long one is
@@ -25,8 +27,9 @@ const COMPOSER_METRICS_CLASS = "h-9 w-fit min-w-0 max-w-full shrink overflow-hid
  * the disabled state, the title and the label node, and must render all four.
  */
 export default function ViewportBottomAction({
-  label, shortLabel = "", title = label, disabled = false, onInvoke, composer = false, render = null, children = null
+  label, shortLabel = "", title = label, disabled = false, onInvoke, composer = false, render = null, children = null, shortcut = ""
 }) {
+  const mobile = useViewerMobile();
   const rulerRef = useRef(null);
   const [fits, setFits] = useState(true);
   useLayoutEffect(() => {
@@ -44,21 +47,21 @@ export default function ViewportBottomAction({
     return () => { window.removeEventListener("resize", measure); observer?.disconnect(); };
   }, [label, shortLabel, composer]);
 
-  const metrics = composer ? COMPOSER_METRICS_CLASS : METRICS_CLASS;
+  const metrics = cn(composer ? COMPOSER_METRICS_CLASS : METRICS_CLASS, mobile && "h-10 px-4");
   const shown = shortLabel && !fits ? shortLabel : label;
-  const content = <span className="block min-w-0 max-w-full truncate">{shown}</span>;
+  const content = <><span className="block min-w-0 max-w-full truncate">{shown}</span>{shortcut && !mobile ? <kbd className="ml-3 shrink-0 font-sans text-xs opacity-65">{shortcut}</kbd> : null}</>;
   const className = cn(ACTION_CLASS, metrics);
   return (
-    <div className={cn("pointer-events-none absolute inset-x-4 z-20 flex min-w-0 justify-center", composer ? "bottom-36" : "bottom-4")}>
+    <div style={{ bottom: VIEWPORT_BOTTOM_CENTER }} className="pointer-events-none absolute inset-x-4 z-20 translate-y-1/2 flex min-w-0 justify-center">
       {shortLabel ? (
         <span aria-hidden="true" className={cn("pointer-events-none invisible absolute left-0 top-0", metrics)}>
           <span ref={rulerRef} className="block min-w-0 max-w-full truncate">{label}</span>
         </span>
       ) : null}
       {render
-        ? render({ className, disabled, title, children: content })
+        ? render({ className, disabled, children: content })
         : <Button type="button" variant="default" size="sm" className={className}
-            disabled={disabled} onClick={() => void onInvoke?.()} title={title}>{content}</Button>}
+            disabled={disabled} onClick={() => void onInvoke?.()} >{content}</Button>}
       {children ? <div className="pointer-events-auto ml-2">{children}</div> : null}
     </div>
   );
@@ -67,7 +70,7 @@ export default function ViewportBottomAction({
 /** Draw's bottom action: the view with its ink, to the prompt or the clipboard. */
 export function drawingCaptureAction({ composer = false, disabled = false, onInvoke }) {
   return {
-    label: composer ? "Add to Prompt" : "Copy Drawing",
+    label: "Copy Drawing",
     title: composer ? "Add the view and its drawing to the prompt" : "Copy the view and its drawing to the clipboard",
     disabled, onInvoke
   };

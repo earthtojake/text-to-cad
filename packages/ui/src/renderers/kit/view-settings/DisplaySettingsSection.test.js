@@ -3,7 +3,8 @@ import test from "node:test";
 import { EDGELESS_VIEW_FEATURES, resolveViewSettings, viewSettingsAreCustom } from "@hardcore/core/common/viewSettings.js";
 import { elements, render } from "../../../../scripts/reactHarness.mjs";
 import { DISPLAY_MODE_OPTIONS } from "./DisplayModeOptions.js";
-import { DisplaySettingsSection, ExplodeControls } from "./DisplaySettingsSection.js";
+import { DisplaySettingsSection } from "./DisplaySettingsSection.js";
+import { ExplodeControls } from "../../step/components/workbench/ModelViewControls.js";
 import { createViewSettingsStore } from "./viewSettingsStore.js";
 
 function panel(input = {}) {
@@ -16,19 +17,23 @@ function panel(input = {}) {
   });
   return { ...result, settings: () => store.getSnapshot().display };
 }
-const labelled = (tree, label) => elements(tree).find(node => node.props.label === label);
+const sections = tree => elements(tree).find(node => node.type?.name === "FilePanelSections")?.props.sections.filter(Boolean) ?? [];
+const controls = tree => sections(tree).length ? sections(tree).flatMap(section => elements(section.content)) : elements(tree);
+const labelled = (tree, label) => controls(tree).find(node => node.props.label === label);
 
 test("View has the same feature groups for every preset, with Render second", () => {
   assert.deepEqual(DISPLAY_MODE_OPTIONS.map(option => option.value), ["solid", "render", "xray", "hidden-line", "wireframe"]);
   for (const mode of DISPLAY_MODE_OPTIONS.map(option => option.value)) {
     const view = panel({ mode });
-    assert.deepEqual(elements(view.tree).filter(node => node.type?.name === "FileSheetGatedSection").map(node => node.props.title),
-      ["Edges", "Grid & axes", "Environment"]);
-    // Projection is the view cube's toggle now.
-    assert.equal(labelled(view.tree, "Projection"), undefined);
+    assert.deepEqual(sections(view.tree).filter(section => section.onEnabledChange).map(section => section.title),
+      ["Edges", "Grid / Axes", "Lighting", "Background", "Floor"]);
+    // Projection shares Display with Mode.
+    assert.equal(labelled(view.tree, "Projection").props.value, resolveViewSettings({ mode }).camera.projection);
     assert.equal(labelled(view.tree, "Lens"), undefined);
-    assert.deepEqual(elements(view.tree).filter(node => node.type?.name === "FileSheetStaticSection").map(node => node.props.title),
-      ["Display"]);
+    assert.deepEqual(sections(view.tree).filter(section => section.collapsible === false).map(section => section.title),
+      ["Display", "Surfaces"]);
+    assert.deepEqual(labelled(view.tree, "Surface style").props.options.map(option => option.value), ["shaded", "flat", "hidden", "off"]);
+    assert.equal(labelled(view.tree, "Surface style").props.value, resolveViewSettings({ mode }).surfaces.style);
     view.unmount();
   }
 });
@@ -37,24 +42,24 @@ test("group edits are sparse and disabling discards only that group's overrides"
   const view = panel({ mode: "render", floor: { color: "#abcdef", opacity: 0.8 }, clip: { enabled: true, offset: 0.3 } });
   labelled(view.tree, "Floor color").props.onOpacityChange(0.4);
   assert.deepEqual(view.settings().floor, { color: "#abcdef", opacity: 0.4 });
-  const environment = elements(view.tree).find(node => node.props.title === "Environment");
-  environment.props.onEnabledChange(false);
+  const floor = sections(view.tree).find(section => section.title === "Floor");
+  floor.onEnabledChange(false);
   assert.deepEqual(view.settings().floor, { enabled: false });
   assert.deepEqual(view.settings().clip, { enabled: true, offset: 0.3 });
-  environment.props.onEnabledChange(true);
+  floor.onEnabledChange(true);
   assert.deepEqual(resolveViewSettings(view.settings()).floor, resolveViewSettings({ mode: "render" }).floor);
   view.unmount();
 });
 
 test("projection and tools update independent groups; only the view change is Custom", () => {
   const view = panel({ mode: "solid" });
-  // Explode is the toolbar's toggle now; its panel writes the same store.
+  // Explode lives in the STEP sidebar and writes the same store.
   const explode = render(ExplodeControls, { viewSettings: view.settings(), onViewSettingsPatch: panel.store.patch });
   labelled(explode.tree, "Explode").props.onChange(45);
   explode.unmount();
   assert.equal(viewSettingsAreCustom(view.settings()), false);
   assert.deepEqual(view.settings().exploded, { amount: 0.45, enabled: true });
-  // What the view cube's projection toggle writes (useRendererShell's setProjection).
+  // What the viewport's projection toggle writes (useRendererShell's setProjection).
   panel.store.patch({ camera: { enabled: true, projection: "perspective" } });
   assert.equal(viewSettingsAreCustom(view.settings()), true);
   assert.equal(view.settings().camera.projection, "perspective");
@@ -77,8 +82,8 @@ test("a file that is not a CAD model has no Edges section and only the presets n
   assert.equal(display.mode, "wireframe", "the saved preset is not rewritten");
   const view = render(DisplaySettingsSection, { features: EDGELESS_VIEW_FEATURES, viewSettings: display, resolvedView: scene.view,
     onViewSettingsPatch: store.patch, onGroupEnabledChange: store.setEnabled });
-  assert.deepEqual(elements(view.tree).filter(node => node.type?.name === "FileSheetGatedSection").map(node => node.props.title),
-    ["Grid & axes", "Environment"]);
+  assert.deepEqual(sections(view.tree).filter(section => section.onEnabledChange).map(section => section.title),
+    ["Grid / Axes", "Lighting", "Background", "Floor"]);
   assert.equal(elements(view.tree).some(node => node.type?.name === "ClipSettings"), false);
   const mode = labelled(view.tree, "Mode");
   assert.deepEqual(mode.props.options.map(option => option.value), ["solid", "render"]);

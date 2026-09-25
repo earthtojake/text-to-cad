@@ -10,6 +10,7 @@ const emptyCommands: CadCommands = Object.freeze({});
 const emptySubscribe = () => () => {};
 const getEmptyCommands = () => emptyCommands;
 interface StepSurfaceProps {
+  displayActions?: import("react").ReactNode;
   fullscreen?: boolean;
   onFullscreenChange?: (fullscreen: boolean) => void;
   onNavigationActionsChange?: (actions: readonly FileNavigationAction[]) => void;
@@ -20,6 +21,9 @@ interface StepSurfaceProps {
   serverInfo: CadServerInfo;
   renderSession: CadRenderSession;
   onOpenFile(path: string): void;
+  /** Renderer status beside the filename; panel suspension preserves the open tab and width. */
+  navigationStatusSlot?: HTMLElement | null;
+  onPanelVisibilityChange?: (visible: boolean) => void;
   panelSlot: HTMLElement | null;
   colorScheme: 'light' | 'dark';
   openPanel: string;
@@ -54,6 +58,8 @@ export default function StepRenderer(props: FileRendererProps<PreparedStepDocume
     serverInfo={data.serverInfo}
     renderSession={data.renderSession}
     onOpenFile={props.onOpenFile}
+    navigationStatusSlot={props.navigationStatusSlot}
+    onPanelVisibilityChange={props.onPanelVisibilityChange}
     panelSlot={props.panelSlot}
     colorScheme={props.appearance.colorScheme}
     openPanel={props.openPanel}
@@ -62,6 +68,7 @@ export default function StepRenderer(props: FileRendererProps<PreparedStepDocume
     fullscreen={props.fullscreen}
     onFullscreenChange={props.onFullscreenChange}
     onNavigationActionsChange={props.onNavigationActionsChange}
+    displayActions={props.displayActions}
     onReload={props.reload}
     state={props.state}
     onStateChange={props.onStateChange}
