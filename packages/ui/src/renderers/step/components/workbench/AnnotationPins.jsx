@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Check, X } from "lucide-react";
+import { X } from "lucide-react";
 import { Button } from "@hardcore/ui/primitives/button";
 import { cn } from "@hardcore/ui/utils";
 import { measureModelOffsetFromRuntime } from "../../scene/useStepPicking.js";
@@ -34,26 +34,22 @@ export function projectAnnotationAnchor(runtime, anchor, width, height) {
 }
 
 /**
- * The bar over the model while there are annotations to add: "3 annotations · Add to chat · ×",
- * as Codex's comment bar is. Adding puts every one not yet added into the chat box, in one go;
- * the cross clears them all.
+ * The bar over the model while some annotations are not in the chat box yet, as Codex's comment
+ * bar is: "3 annotations · Add to chat · ×". Adding puts every one not yet added into the chat box
+ * in one go; the cross clears them all. Once all are added it goes: the grey dots say so.
  */
-function AnnotationsBar({ pending, total, canAddToChat, onAddToChat, onClear }) {
-  if (!total) return null;
-  const count = pending || total;
-  const label = `${count} ${count === 1 ? "annotation" : "annotations"}`;
+function AnnotationsBar({ pending, canAddToChat, onAddToChat, onClear }) {
+  if (!pending) return null;
   return (
     <div className="pointer-events-none absolute inset-x-0 top-3 z-30 flex justify-center">
       <div role="toolbar" aria-label="Annotations" onPointerDown={event => event.stopPropagation()}
-        className="pointer-events-auto flex items-center gap-1 rounded-full border bg-background/95 py-1 pr-1 pl-3.5 text-[13px] shadow-lg shadow-black/15 backdrop-blur">
-        <span className="tabular-nums">{pending ? label : `${label} added`}</span>
-        {pending ? (
-          <Button type="button" size="sm" disabled={!canAddToChat} onClick={() => void onAddToChat()}
-            className="ml-1 h-7 rounded-full bg-blue-500 px-3 text-[13px] text-white hover:bg-blue-500/90">
-            Add to chat
-          </Button>
-        ) : <Check className="ml-0.5 size-3.5 text-muted-foreground" aria-hidden="true" />}
-        <Button type="button" variant="ghost" size="icon-xs" className="size-7 rounded-full text-muted-foreground"
+        className="pointer-events-auto flex h-9 items-center gap-2 rounded-full border border-border/70 bg-background pr-1 pl-4 text-[13px] shadow-md shadow-black/10">
+        <span className="font-medium tabular-nums">{pending} {pending === 1 ? "annotation" : "annotations"}</span>
+        <Button type="button" size="sm" disabled={!canAddToChat} onClick={() => void onAddToChat()}
+          className="h-7 rounded-full bg-blue-500 px-3 text-[13px] font-medium text-white shadow-none hover:bg-blue-600">
+          Add to chat
+        </Button>
+        <Button type="button" variant="ghost" size="icon-xs" className="-ml-1 size-7 rounded-full text-muted-foreground"
           aria-label="Clear annotations" onClick={onClear}>
           <X className="size-3.5" />
         </Button>
@@ -64,6 +60,9 @@ function AnnotationsBar({ pending, total, canAddToChat, onAddToChat, onClear }) 
 
 export default function AnnotationPins({ viewport, annotations, openId, onOpenChange, canAddToChat, onAddToChat, onClear, ...body }) {
   const pinRefs = useRef(new Map());
+  // Elements the frame loop has placed. A ref callback runs again on every render; only an element
+  // it has never placed starts hidden, so a re-render never blinks a dot out for a frame.
+  const placedRef = useRef(new WeakSet());
   const annotationsRef = useRef(annotations);
   annotationsRef.current = annotations;
   const { runtimeRef, hostRef } = viewport;
@@ -83,6 +82,7 @@ export default function AnnotationPins({ viewport, annotations, openId, onOpenCh
         const at = projectAnnotationAnchor(runtime, annotation.anchor, width, height);
         const onScreen = at && at.x >= 0 && at.y >= 0 && at.x <= width && at.y <= height;
         element.hidden = !onScreen;
+        placedRef.current.add(element);
         if (!onScreen) continue;
         element.style.transform = `translate(${Math.round(at.x)}px, ${Math.round(at.y)}px)`;
         element.dataset.facing = String(at.facing);
@@ -98,7 +98,7 @@ export default function AnnotationPins({ viewport, annotations, openId, onOpenCh
   if (!placed.length) return null;
   return (
     <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden" data-annotation-pins="">
-      <AnnotationsBar pending={annotations.filter(annotation => !annotation.sent).length} total={annotations.length}
+      <AnnotationsBar pending={annotations.filter(annotation => !annotation.sent).length}
         canAddToChat={canAddToChat} onAddToChat={onAddToChat} onClear={onClear} />
       {annotations.map((annotation, index) => {
         if (!annotation.anchor) return null;
@@ -106,8 +106,9 @@ export default function AnnotationPins({ viewport, annotations, openId, onOpenCh
         return (
           <div key={annotation.id} ref={element => {
             // Hidden until the frame loop has placed it; after that the loop alone owns it.
-            if (element && !pinRefs.current.has(annotation.id)) { element.hidden = true; pinRefs.current.set(annotation.id, element); }
-            else if (!element) pinRefs.current.delete(annotation.id);
+            if (!element) { pinRefs.current.delete(annotation.id); return; }
+            if (!placedRef.current.has(element)) element.hidden = true;
+            pinRefs.current.set(annotation.id, element);
           }}
             className="group/pin absolute left-0 top-0" data-annotation-pin={annotation.id} data-open={open}
             // A press on a dot or its card is not a press on the model: no pick, no orbit.

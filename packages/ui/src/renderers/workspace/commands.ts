@@ -5,7 +5,8 @@
  */
 export interface ViewerCommands {
   captureRequest?: { key: string | number } | null;
-  selectReference?: { selector: string; key?: string | number } | null;
+  /** `annotation` also opens that annotation's card, when the viewer still has it. */
+  selectReference?: { selector: string; key?: string | number; annotation?: string } | null;
 }
 export interface ViewerCommandSource {
   subscribe(listener: () => void): () => void;

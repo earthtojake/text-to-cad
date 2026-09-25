@@ -8,7 +8,7 @@ export type ReferenceScope = { projectId: string; root: ExplorerRoot; draftKey?:
 export const ReferenceScopeContext = createContext<ReferenceScope | null>(null);
 
 /** A chip names a file in its draft's workspace, even when another tab is visible. */
-export function openComposerReference(scope: ReferenceScope, reference: CadReference): void {
+export function openComposerReference(scope: ReferenceScope, reference: CadReference, options?: { annotation?: string }): void {
   const explorer = useExplorer.getState();
   if (explorer.projectId !== scope.projectId || !explorer.ready) {
     throw new Error("Open this reference’s project first.");
@@ -20,5 +20,7 @@ export function openComposerReference(scope: ReferenceScope, reference: CadRefer
     throw new Error("Open the model in this chat’s workspace to view this reference.");
   }
   const tab = explorer.openFile(file, scope.root);
-  if (tab && reference.selector) explorer.selectCadReference(tab.id, reference.selector);
+  if (!tab || !reference.selector) return;
+  if (options) explorer.selectCadReference(tab.id, reference.selector, options);
+  else explorer.selectCadReference(tab.id, reference.selector);
 }

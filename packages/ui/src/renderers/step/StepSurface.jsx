@@ -2000,7 +2000,14 @@ function StepSurfaceBody({ view, data }) {
   // Pressing an annotation asks for its geometry the same way a transcript link does. The
   // host's newest request wins over an annotation's older one, and only the host's is
   // acknowledged back to it.
-  useEffect(() => { setAnnotationSelectRequest(null); }, [selectReference?.key]);
+  const annotationsRef = useRef(annotations);
+  annotationsRef.current = annotations;
+  useEffect(() => {
+    setAnnotationSelectRequest(null);
+    // A request from the chat box that names an annotation opens its card on the model too.
+    const named = selectReference?.annotation;
+    if (named && annotationsRef.current.some(annotation => annotation.id === named && annotation.anchor)) setOpenAnnotationId(named);
+  }, [selectReference?.key]);
   const activeSelectReference = annotationSelectRequest || selectReference;
   const acknowledgeHostCommand = acknowledgeCommand;
   useEffect(() => {

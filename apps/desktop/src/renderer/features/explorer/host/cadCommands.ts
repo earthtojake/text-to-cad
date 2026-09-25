@@ -18,7 +18,8 @@ export function createDesktopCadCommands(projectId: string, root: ExplorerRoot, 
       const selection = matches(state.cadSelection) ? state.cadSelection : null;
       const capture = matches(state.cadCapture) ? state.cadCapture : null;
       if (snapshot.selectReference?.key !== selection?.nonce || snapshot.captureRequest?.key !== capture?.nonce) {
-        snapshot = { selectReference: selection ? { selector: selection.selector, key: selection.nonce } : null,
+        snapshot = { selectReference: selection ? { selector: selection.selector, key: selection.nonce,
+          ...(selection.annotation ? { annotation: selection.annotation } : {}) } : null,
           captureRequest: capture ? { key: capture.nonce } : null };
       }
       return snapshot;

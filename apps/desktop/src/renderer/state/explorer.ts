@@ -193,7 +193,7 @@ type ExplorerState = {
    * link twice a second selection. Consumed by `CadRenderer`, which hands it
    * to the viewer's `selectReference` prop.
    */
-  cadSelection: { projectId: string; tabId: string; path: string; root: ExplorerRoot; selector: string; nonce: number } | null;
+  cadSelection: { projectId: string; tabId: string; path: string; root: ExplorerRoot; selector: string; annotation?: string; nonce: number } | null;
   /**
    * A request for a CAD tab to send its viewport to the composer — the
    * composer's `+` menu asking for the same picture the viewer's own camera
@@ -245,7 +245,8 @@ type ExplorerState = {
    * of the same root, so one is brought forward or opened first.
    */
   revealPath: (path: string, directory: boolean, root: ExplorerRoot) => void;
-  selectCadReference: (tabId: string, selector: string) => void;
+  /** `annotation` also opens that annotation's card on the model. */
+  selectCadReference: (tabId: string, selector: string, options?: { annotation?: string }) => void;
   /** Ask a CAD tab for a capture of what it is showing. */
   captureCad: (tabId: string) => void;
   acknowledgeCadCommand: (kind: "selectReference" | "captureRequest", nonce: string | number) => void;
@@ -676,10 +677,11 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     set({ reveal: { path, directory, root } });
   },
 
-  selectCadReference: (tabId, selector) => set(state => {
+  selectCadReference: (tabId, selector, options) => set(state => {
     const tab = state.tabs.find(tab => tab.id === tabId);
     if (!state.projectId || state.activeId !== tabId || tab?.kind !== "file" || !tab.path) return state;
-    return { cadSelection: { projectId: state.projectId, tabId, path: tab.path, root: tab.root, selector, nonce: ++cadCommandSequence } };
+    return { cadSelection: { projectId: state.projectId, tabId, path: tab.path, root: tab.root, selector,
+      ...(options?.annotation ? { annotation: options.annotation } : {}), nonce: ++cadCommandSequence } };
   }),
 
   captureCad: (tabId) => set(state => {

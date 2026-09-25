@@ -1503,6 +1503,14 @@ test('Annotate pins a note to the selection as a dot on the model, and the bar a
   await card.getByRole('button', {name: 'Close', exact: true}).click();
   await card.waitFor({state: 'detached'});
 
+  // The chat box names an annotation (its chip was pressed there): its geometry is selected and its card opens.
+  await page.evaluate(() => window.cadHarness.a.controller.select({selectors:['o1.1']}));
+  const annotationId = await dot.evaluate(element => element.closest('[data-annotation-pin]').dataset.annotationPin);
+  await page.evaluate(id => window.cadHarness.selectReference('o1.2', id), annotationId);
+  await card.waitFor();
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.join() === 'o1.2');
+  await card.getByRole('button', {name: 'Close', exact: true}).click();
+
   // A second annotation; the bar over the model adds both to the chat box in one go.
   await annotate('o1.1', 'add a fillet');
   const bar = pane.getByRole('toolbar', {name: 'Annotations'});
@@ -1514,10 +1522,13 @@ test('Annotate pins a note to the selection as a dot on the model, and the bar a
     ['annotation', ['o1.2'], 'make a 6 mm hole in it'],
     ['annotation', ['o1.1'], 'add a fillet']
   ]);
-  await bar.getByText('2 annotations added').waitFor();
-  assert.equal(await bar.getByRole('button', {name: 'Add to chat', exact: true}).count(), 0, 'nothing is left to add');
+  // Once every annotation is in the chat box the bar goes; the dots stay, grey.
+  await bar.waitFor({state: 'detached'});
+  assert.equal(await dot.count(), 1);
 
-  // Clearing takes every dot away.
+  // A new one brings the bar back; clearing takes every dot away.
+  await annotate('o1.2', 'and chamfer it');
+  assert.match(await bar.innerText(), /^1 annotation\b/);
   await bar.getByRole('button', {name: 'Clear annotations'}).click();
   await dot.waitFor({state: 'detached'});
   assert.equal(await bar.count(), 0);

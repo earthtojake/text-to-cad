@@ -1,6 +1,8 @@
-import { beforeEach, expect, it } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 
-import { withAnnotations } from "@renderer/features/session/composer/AnnotationsChip";
+import { openAnnotation, withAnnotations } from "@renderer/features/session/composer/AnnotationsChip";
+import { useExplorer } from "@renderer/state/explorer";
+import type { FileTab } from "@shared/types";
 import { useComposer } from "@renderer/state/composer";
 import type { DraftPart } from "@renderer/state/composer";
 
@@ -39,4 +41,17 @@ it("sending writes the annotations after the prompt as a numbered list of geomet
   );
   expect(withAnnotations("", annotations)).toMatch(/^Annotations:\n1\. /);
   expect(withAnnotations("Just text", [])).toBe("Just text");
+});
+
+it("pressing an annotation in the chat box opens its model, selects its geometry and names it", () => {
+  const openFile = vi.fn(() => ({ id: "bracket-tab" }) as FileTab);
+  const selectCadReference = vi.fn();
+  useExplorer.setState({ projectId: "p", ready: true, tabs: [], activeId: null, openFile, selectCadReference });
+  openAnnotation({ projectId: "p", root: null }, {
+    id: "a1", text: "fillet these",
+    references: [{ text: "parts/bracket.step#o1.1.f2", label: "Face 2" }, { text: "parts/bracket.step#o1.1.f5", label: "Face 5" }],
+  });
+  expect(openFile).toHaveBeenCalledWith("parts/bracket.step", null);
+  expect(selectCadReference).toHaveBeenCalledWith("bracket-tab", "o1.1.f2,o1.1.f5", { annotation: "a1" });
+  expect(() => openAnnotation(null, { id: "a2", text: "", references: [{ text: "parts/bracket.step#o1.1.f2" }] })).toThrow(/project/);
 });

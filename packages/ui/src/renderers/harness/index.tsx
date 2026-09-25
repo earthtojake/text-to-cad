@@ -37,7 +37,7 @@ function workspace(id: string) {
   };
   const request = (next: CadCommands) => { snapshot = next; for (const listener of listeners) listener(); };
   const capture = () => request({ captureRequest: { key: Date.now() } });
-  const selectReference = (selector: string) => request({ selectReference: { selector, key: Date.now() } });
+  const selectReference = (selector: string, annotation?: string) => request({ selectReference: { selector, key: Date.now(), ...(annotation ? { annotation } : {}) } });
   const client = createCadClient({ origin: `${location.origin}/${id}`, workspaceId: id, pollIntervalMs: 0 });
   const source: FileSource = {
     id, rootName: id,

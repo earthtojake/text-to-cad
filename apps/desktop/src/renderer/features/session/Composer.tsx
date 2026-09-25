@@ -235,7 +235,7 @@ export function Composer({
           onError={(error) => toast.error(error.message)}
           onSubmit={handleSubmit}
         >
-          <AnnotationsChip annotations={annotations} onRemove={() => removeAnnotations(draftKey)} />
+          <AnnotationsChip annotations={annotations} onRemove={() => removeAnnotations(draftKey)} scope={referenceScope} />
           <AttachmentStrip />
           <AttachmentSink draftKey={draftKey} />
           <AttachmentBridge targetRef={attachmentsRef} />
