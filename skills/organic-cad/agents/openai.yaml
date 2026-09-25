@@ -1,0 +1,4 @@
+interface:
+  display_name: "Organic + CAD"
+  short_description: "Integrate organic meshes with CAD joints and connectors."
+  default_prompt: "Use $organic-cad to combine an organic model with CAD connections, choose and size connectors or joints from intended use and local geometry, and validate Boolean integration, assembly and any required motion."

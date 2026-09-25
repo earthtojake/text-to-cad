@@ -70,6 +70,7 @@ robot description files, simulation, and local review.
 | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
 | CAD          | Creates and edits CAD models from plain-language or image requests, with STEP as the main output along with options to export to STL, 3MF and GLB. | [skills/cad](skills/cad/SKILL.md)                   |
 | CAD Viewer   | Shows local browser previews for CAD and robot files.                                                                                     | [skills/cad-viewer](skills/cad-viewer/SKILL.md)     |
+| Organic + CAD | Integrates organic meshes with CAD joints and connectors using booleans, assembly checks and sampled motion clearance. | [skills/organic-cad](skills/organic-cad/SKILL.md) |
 | step.parts   | Finds off-the-shelf STEP parts like screws, bearings, motors, and connectors.                                                                      | [skills/step-parts](skills/step-parts/SKILL.md)     |
 | Engineering Drawing | Dimensioned engineering drawings from a part, as a PDF: views, hidden lines, dimensions, hole callouts, title block. | [skills/engineering-drawing](skills/engineering-drawing/SKILL.md) |
 | DXF          | Creates 2D DXF drawings like profiles, templates, gaskets, and cut layouts from Python sources or CAD geometry.                                    | [skills/dxf](skills/dxf/SKILL.md)                   |

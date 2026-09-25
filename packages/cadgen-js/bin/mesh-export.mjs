@@ -77,6 +77,7 @@ import { buildTubeMorphTargets } from "../src/lib/export/packageTubeMorph.js";
 import { animationClipList, findAnimationClip } from "../src/common/animationClock.js";
 import { resolveFramePlan } from "../src/common/framePlan.js";
 import { compileAnimationSource } from "../src/common/renderModule.js";
+import { meshSceneToGlb, meshSceneToStl } from "../src/lib/export/meshSceneExport.js";
 
 function parseArgs(argv) {
   // Scalar flags are last-wins; `--format`/`--out` collect in CLI order and
@@ -158,7 +159,85 @@ function tessellationForComponent(packageDir, cid, entry, options) {
   return { ...component, partColor };
 }
 
+function readSceneArray(folder, file) {
+  if (typeof file !== "string" || !file || path.basename(file) !== file) {
+    throw new Error("Mesh scene array must be a sibling file name");
+  }
+  const bytes = fs.readFileSync(path.join(folder, file));
+  if (bytes.byteLength % 4) throw new Error("Mesh scene array is not float32");
+  const values = new Float32Array(
+    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+  );
+  for (const value of values) {
+    if (!Number.isFinite(value)) throw new Error("Mesh scene contains a non-finite vertex or normal");
+  }
+  return values;
+}
+
+function exportTriangleScene(scenePath, format, out) {
+  if (!path.isAbsolute(scenePath) || !path.isAbsolute(out)) {
+    throw new Error("Mesh scene and output paths must be absolute");
+  }
+  if (format !== "stl" && format !== "glb") {
+    throw new Error("Mesh scene output supports stl and glb");
+  }
+  const descriptor = JSON.parse(fs.readFileSync(scenePath, "utf8"));
+  if (descriptor.units !== "mm" || descriptor.up !== "z" || !Array.isArray(descriptor.parts) || !descriptor.parts.length) {
+    throw new Error("Mesh scene requires named parts in millimetres, Z-up");
+  }
+  const folder = path.dirname(scenePath);
+  const names = new Set();
+  const primitives = descriptor.parts.map((part) => {
+    const name = String(part?.name || "");
+    if (!name || names.has(name)) throw new Error("Mesh scene part names must be unique and nonempty");
+    names.add(name);
+    const positions = readSceneArray(folder, part.positions);
+    if (!positions.length || positions.length % 9) throw new Error(`Part ${name} is not a triangle soup`);
+    const normals = part.normals ? readSceneArray(folder, part.normals) : new Float32Array(0);
+    if (normals.length && normals.length !== positions.length) throw new Error(`Part ${name} has mismatched normals`);
+    const colors = part.colors ? readSceneArray(folder, part.colors) : null;
+    if (colors && colors.length !== positions.length / 3 * 4) throw new Error(`Part ${name} has mismatched colors`);
+    if (colors && colors.some((value) => value < 0 || value > 1)) throw new Error(`Part ${name} has out-of-range colors`);
+    if (part.alphaMode !== undefined && !["OPAQUE", "MASK", "BLEND"].includes(part.alphaMode)) {
+      throw new Error("Mesh scene alphaMode must be OPAQUE, MASK or BLEND");
+    }
+    if (part.alphaCutoff !== undefined && (part.alphaMode !== "MASK"
+      || typeof part.alphaCutoff !== "number" || !Number.isFinite(part.alphaCutoff)
+      || part.alphaCutoff < 0 || part.alphaCutoff > 1)) {
+      throw new Error("Mesh scene alphaCutoff requires MASK and a finite number in [0, 1]");
+    }
+    return {
+      name, positions, normals, ...(colors ? { colors } : {}),
+      color: part.color || "#ffffff",
+      ...(part.alphaMode ? { alphaMode: part.alphaMode } : {}),
+      ...(part.alphaCutoff !== undefined ? { alphaCutoff: part.alphaCutoff } : {}),
+    };
+  });
+  const scene = { primitives };
+  const name = String(descriptor.name || "assembly");
+  const body = format === "stl"
+    ? meshSceneToStl(scene, { name })
+    : meshSceneToGlb(scene, {
+      name, sourceKind: "organic",
+      materialOptions: { metallicFactor: 0, roughnessFactor: 0.8 },
+    });
+  fs.mkdirSync(path.dirname(out), { recursive: true });
+  fs.writeFileSync(out, body);
+  return { ok: true, files: [{ path: out, format, triangleCount: primitives.reduce((n, p) => n + p.positions.length / 9, 0) }] };
+}
+
 const { args, formats, outs, pairTolerances, pairAnimations, defaults } = parseArgs(process.argv.slice(2));
+if (args["mesh-scene"] !== undefined) {
+  if (formats.length !== 1 || outs.length !== 1) fail("A mesh scene needs exactly one --format/--out pair");
+  if (pairAnimations[0] !== undefined) fail("A mesh scene cannot carry a package animation");
+  try {
+    process.stdout.write(JSON.stringify(exportTriangleScene(String(args["mesh-scene"]), formats[0], outs[0])) + "\n");
+  } catch (error) {
+    fail(error?.message || error);
+  }
+  process.exit(0);
+}
+
 const packageDir = String(args["package-dir"] || "");
 if (!packageDir || !path.isAbsolute(packageDir)) {
   fail("--package-dir must be an absolute render-package directory");

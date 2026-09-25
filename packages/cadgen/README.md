@@ -303,6 +303,8 @@ src/cadgen/
                          #   writes no STEP
   kinematics.py          # typed mates vocabulary (revolute/slider/
                          #   cylindrical/fastened, couple, normalize)
+  organic/               # optional mesh/CAD authoring, solid booleans,
+                         #   joint tools and sampled motion checks
   step_scene.py          # read_step and scene loading (recorded inputs)
   inputs.py              # declare_input: a data file the model reads and
                          #   cadgen has no reader for (a JSON atlas, a CSV
@@ -338,6 +340,15 @@ validate · snapshot; `srdf` validate. `cadgen snapshot` routes any suffix.
 [list|stop]` the CAD Viewer's launcher and instance manager — all deliberately
 outside the mirror pattern. `cadgen step compile` is internal tooling: skills never
 teach it — doors compile a document's missing tree on demand.
+
+### Optional organic-mesh authoring
+
+Install `cadgen[organic]` for the `cadgen.organic` Python API, which provides
+mesh inspection and preparation, CAD tessellation, solid mesh booleans,
+mechanical-joint construction, fixed-pivot clearance and motion helpers, and
+STL/GLB output. `cadgen[organic,organic-smooth]` additionally enables VTK-based
+cutter smoothing. These helpers run in ordinary Python recipes and do not
+extend cadgen's decorated-model return contract, artifact store or CLI surface.
 
 Developed in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad);
 that repo's contributor guide carries the development workflow (tests,

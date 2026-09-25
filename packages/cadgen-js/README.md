@@ -86,6 +86,10 @@ snapshot renderer and the node builders in `bin/`).
   uncached, and explicitly disposed by their viewer owner; a bounded load-time
   pose sample supplies a stable framing estimate rather than resizing the stage
   during playback.
+- **Shared mesh serialization**: a prepared CAD package and a validated
+  organic triangle scene both reach the final STL/GLB serializers through
+  src/lib/export/meshSceneExport.js; package animation and morph preparation
+  remain upstream of that boundary.
 - **Byte determinism**: the tessellator and mesh serializers here produce
   the shipped export bytes — same geometry in, same bytes out. Deterministic
   algorithm changes advance `TESSELLATION_VERSION` and its Python mirror so
@@ -132,10 +136,12 @@ src/
                    #   (ref runtime), assembly/ (package composition),
                    #   render/ (format mesh loaders), viewer/ (exploded
                    #   view, part visual state), urdf/ (robot loading),
-                   #   export/ (packageMeshExport), cadRefs (grammar,
+                   #   export/ (packageMeshExport + meshSceneExport),
+                   #   cadRefs (grammar,
                    #   parity-tested against cad_ref_syntax.py)
 bin/               # node builders the bundler ships into _runtime/node:
-                   #   mesh-export.mjs (the ONE mesh path), dxf-mesh.mjs
+                   #   mesh-export.mjs (CAD package or triangle scene),
+                   #   dxf-mesh.mjs
 docs/              # subsystem docs (the map below)
 ```
 

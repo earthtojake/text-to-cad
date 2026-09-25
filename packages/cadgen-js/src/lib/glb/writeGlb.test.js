@@ -79,6 +79,76 @@ test("weldMesh collapses a cube soup to 24 vertices and keeps creases", () => {
   assert.equal(welded.indices.length, 36);
 });
 
+test("weldMesh keeps coincident vertices with different authored colors distinct", () => {
+  const triangle = [0, 0, 0, 1, 0, 0, 0, 1, 0];
+  const positions = new Float32Array([...triangle, ...triangle]);
+  const red = [1, 0, 0, 1], blue = [0, 0, 1, 1];
+  const colors = new Float32Array([...red, ...red, ...red, ...blue, ...blue, ...blue]);
+  const welded = weldMesh(positions, null, { colors });
+  assert.equal(welded.positions.length / 3, 6);
+  assert.deepEqual([...welded.colors.slice(0, 4)], red);
+  assert.deepEqual([...welded.colors.slice(12, 16)], blue);
+});
+
+test("per-corner alpha enables GLB transparency in a stock loader", async () => {
+  const positions = cubeSoup(4);
+  const colors = new Float32Array(positions.length / 3 * 4);
+  for (let i = 0; i < colors.length; i += 4) {
+    colors.set([1, 0, 0, 0.25], i);
+  }
+  const bytes = writeGlb({ primitives: [{
+    positions, colors, colorAt: () => [0, 1, 0, 1],
+  }] });
+  const gltf = await parseGlb(bytes);
+  const mesh = collectMeshes(gltf)[0];
+  assert.equal(mesh.material.transparent, true);
+  assert.ok(Math.abs(mesh.geometry.getAttribute("color").getW(0) - 0.25) < 1e-4);
+  assert.ok(mesh.geometry.getAttribute("color").getX(0) > 0.99, "colors override colorAt");
+  assert.equal(mesh.geometry.getAttribute("color").getY(0), 0);
+  const length = new DataView(bytes.buffer, bytes.byteOffset).getUint32(12, true);
+  const header = JSON.parse(new TextDecoder().decode(bytes.subarray(20, 20 + length)));
+  assert.equal(header.materials[0].alphaMode, "BLEND");
+
+  const opaque = writeGlb({ primitives: [{ positions, colors: colors.map((value, index) =>
+    index % 4 === 3 ? 1 : value) }] });
+  assert.equal(collectMeshes(await parseGlb(opaque))[0].material.transparent, false);
+});
+
+test("explicit glTF alpha modes preserve opaque, mask and blend behavior", async () => {
+  const positions = cubeSoup(4);
+  const colors = new Float32Array(positions.length / 3 * 4);
+  for (let i = 0; i < colors.length; i += 4) colors.set([0.5, 0.5, 0.5, 0.25], i);
+  for (const mode of ["OPAQUE", "MASK", "BLEND"]) {
+    const bytes = writeGlb({ primitives: [{
+      positions, colors, alphaMode: mode,
+      ...(mode === "MASK" ? { alphaCutoff: 0.4 } : {}),
+    }] });
+    const length = new DataView(bytes.buffer, bytes.byteOffset).getUint32(12, true);
+    const header = JSON.parse(new TextDecoder().decode(bytes.subarray(20, 20 + length)));
+    assert.equal(header.materials[0].alphaMode, mode);
+    const material = collectMeshes(await parseGlb(bytes))[0].material;
+    assert.equal(material.transparent, mode === "BLEND");
+    assert.equal(material.alphaTest, mode === "MASK" ? 0.4 : 0);
+  }
+  assert.throws(() => writeGlb({ primitives: [{
+    positions, colors, alphaMode: "MASK", alphaCutoff: 2,
+  }] }), /alphaCutoff/);
+});
+
+test("colors and material options reject unsupported inputs explicitly", () => {
+  const positions = cubeSoup(4);
+  for (const options of [
+    { materialOptions: null }, { materialOptions: { roughnessFactor: 2 } },
+    { materialOptions: { metallicFactor: NaN } },
+  ]) {
+    assert.throws(() => writeGlb({ primitives: [{ positions }] }, options), /materialOptions/);
+  }
+  assert.throws(() => writeGlb({ primitives: [{ positions, colors: new Uint8Array(4) }] }), /Float32Array/);
+  assert.throws(() => writeGlb({
+    primitives: [{ positions, indices: new Uint16Array([0, 1, 2]), colors: new Float32Array(4) }],
+  }), /one RGBA value per vertex/);
+});
+
 test("weldMesh is deterministic", () => {
   const a = weldMesh(cubeSoup(), null);
   const b = weldMesh(cubeSoup(), null);

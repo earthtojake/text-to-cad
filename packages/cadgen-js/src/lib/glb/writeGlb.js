@@ -27,6 +27,9 @@
  *                   normals?: Float32Array,    // same length; derived per-face when absent
  *                   color?: "#rrggbb",         // becomes a per-primitive material
  *                   opacity?: number,          // < 1 makes that material BLEND
+ *                   colors?: Float32Array,     // sRGB RGBA per input vertex; wins over colorAt
+ *                   alphaMode?: string,        // OPAQUE, MASK or BLEND
+ *                   alphaCutoff?: number,      // MASK cutoff in [0, 1]
  *                   material?: {               // the authored PBR FINISH, if any
  *                     roughness?, metalness?,  //   -> pbrMetallicRoughness factors
  *                     clearcoat?,              //   -> KHR_materials_clearcoat
@@ -155,24 +158,29 @@ function faceNormal(positions, offset) {
 /**
  * Weld a non-indexed triangle soup into indexed geometry.
  *
- * Keys on quantized position AND normal, so a crease keeps its two distinct normals instead
- * of being averaged into a smooth-shaded artefact. `weldDecimals` controls the position
+ * Keys on quantized position, normal and optional RGBA color, so creases and color seams remain distinct.
+ * `weldDecimals` controls the position
  * tolerance; the default matches the mesher's own precision.
  *
  * Iteration is in source order and the key is a deterministic string, so the same input
  * always yields the same output -- content-addressed caching depends on it.
  */
-export function weldMesh(positions, normals, { weldDecimals = 5 } = {}) {
+export function weldMesh(positions, normals, { weldDecimals = 5, colors = null } = {}) {
   const vertexCount = Math.floor(positions.length / 3);
   const scale = 10 ** weldDecimals;
   const q = (value) => Math.round(value * scale) / scale;
 
   const outPositions = [];
   const outNormals = [];
+  const outColors = [];
   const indices = new Uint32Array(vertexCount);
   const seen = new Map();
 
   const hasNormals = normals && normals.length === positions.length;
+  if (colors && colors.length !== vertexCount * 4) {
+    throw new Error("writeGlb: vertex colors must contain one RGBA value per vertex");
+  }
+  const hasColors = !!colors;
 
   for (let triangle = 0; triangle * 9 < positions.length; triangle += 1) {
     const base = triangle * 9;
@@ -183,13 +191,18 @@ export function weldMesh(positions, normals, { weldDecimals = 5 } = {}) {
       const nx = hasNormals ? normals[p] : derived[0];
       const ny = hasNormals ? normals[p + 1] : derived[1];
       const nz = hasNormals ? normals[p + 2] : derived[2];
-      const key = `${q(px)},${q(py)},${q(pz)},${q(nx)},${q(ny)},${q(nz)}`;
+      const colorOffset = (triangle * 3 + corner) * 4;
+      const colorKey = hasColors
+        ? [colors[colorOffset], colors[colorOffset + 1], colors[colorOffset + 2], colors[colorOffset + 3]].join(",")
+        : "";
+      const key = [q(px), q(py), q(pz), q(nx), q(ny), q(nz), colorKey].join(",");
       let index = seen.get(key);
       if (index === undefined) {
         index = outPositions.length / 3;
         seen.set(key, index);
         outPositions.push(px, py, pz);
         outNormals.push(nx, ny, nz);
+        if (hasColors) outColors.push(...colors.subarray(colorOffset, colorOffset + 4));
       }
       indices[triangle * 3 + corner] = index;
     }
@@ -199,6 +212,7 @@ export function weldMesh(positions, normals, { weldDecimals = 5 } = {}) {
     positions: new Float32Array(outPositions),
     normals: new Float32Array(outNormals),
     indices: indices.subarray(0, Math.floor(positions.length / 3) * 3),
+    ...(hasColors ? { colors: new Float32Array(outColors) } : {}),
   };
 }
 
@@ -250,7 +264,8 @@ function finishChannel(finish, key) {
   return Number.isFinite(value) ? clamp01(value) : null;
 }
 
-function materialFor(color, name, opacity = null, finish = null) {
+function materialFor(color, name, opacity = null, finish = null, alphaMode = undefined,
+  alphaCutoff = undefined, translucentVertices = false) {
   // sRGB in, LINEAR out: baseColorFactor is a linear quantity per the glTF spec, and the
   // authored hex is sRGB. Without the conversion every generated GLB renders too bright.
   // Canonical Float32 precision: exponentiation can differ by a Float64 ULP across JS
@@ -286,7 +301,10 @@ function materialFor(color, name, opacity = null, finish = null) {
       metallicFactor: metalness === null ? DEFAULT_METALNESS : metalness,
     },
   };
-  if (alpha < 1) {
+  if (alphaMode !== undefined) {
+    material.alphaMode = alphaMode;
+    if (alphaMode === "MASK") material.alphaCutoff = alphaCutoff ?? 0.5;
+  } else if (alpha < 1 || translucentVertices) {
     material.alphaMode = "BLEND";
   }
   // A clearcoat of 0 IS the glTF default, so an authored zero is written by leaving the
@@ -430,6 +448,19 @@ export function writeGlb(mesh, options = {}) {
     animations = null,
     nodeTransforms = null,
   } = options;
+  const hasMaterialOptions = Object.prototype.hasOwnProperty.call(options, "materialOptions");
+  const materialOptions = options.materialOptions;
+  if (hasMaterialOptions) {
+    if (!materialOptions || typeof materialOptions !== "object" || Array.isArray(materialOptions)) {
+      throw new Error("writeGlb: materialOptions must be an object");
+    }
+    for (const key of ["metallicFactor", "roughnessFactor"]) {
+      const value = materialOptions[key];
+      if (value !== undefined && (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1)) {
+        throw new Error("writeGlb: materialOptions factors must be finite numbers in [0, 1]");
+      }
+    }
+  }
 
   // WHICH SPACE the caller's positions are in, declared rather than guessed. glTF's
   // own convention is Y-up, so "y" is the default and the value a spec-conformant
@@ -570,6 +601,26 @@ export function writeGlb(mesh, options = {}) {
         );
       }
     }
+    if (input?.alphaMode !== undefined && !["OPAQUE", "MASK", "BLEND"].includes(input.alphaMode)) {
+      throw new Error("writeGlb: alphaMode must be OPAQUE, MASK or BLEND");
+    }
+    if (input?.alphaCutoff !== undefined && (input.alphaMode !== "MASK"
+      || typeof input.alphaCutoff !== "number" || !Number.isFinite(input.alphaCutoff)
+      || input.alphaCutoff < 0 || input.alphaCutoff > 1)) {
+      throw new Error("writeGlb: alphaCutoff requires MASK and a finite number in [0, 1]");
+    }
+    const inputColors = input?.colors ?? null;
+    if (inputColors !== null) {
+      if (!(inputColors instanceof Float32Array)) {
+        throw new Error("writeGlb: colors must be a Float32Array of sRGB RGBA values");
+      }
+      if (inputColors.length !== rawPositions.length / 3 * 4) {
+        throw new Error("writeGlb: vertex colors must contain one RGBA value per vertex");
+      }
+      if (inputColors.some((value) => !Number.isFinite(value) || value < 0 || value > 1)) {
+        throw new Error("writeGlb: vertex colors must be finite RGBA values in [0, 1]");
+      }
+    }
     // ALREADY-INDEXED input passes straight through. The G-code mesher emits indexed
     // ribbon geometry with its own groups; de-indexing it just to re-weld would cost a
     // full pass and could only lose information.
@@ -580,8 +631,9 @@ export function writeGlb(mesh, options = {}) {
           ? input.normals
           : new Float32Array(rawPositions.length),
         indices: input.indices,
+        ...(inputColors ? { colors: inputColors } : {}),
       }
-      : weldMesh(rawPositions, input?.normals, { weldDecimals });
+      : weldMesh(rawPositions, input?.normals, { weldDecimals, colors: inputColors });
     const vertexCount = welded.positions.length / 3;
     const bounds = boundsForPositions(welded.positions);
 
@@ -591,7 +643,15 @@ export function writeGlb(mesh, options = {}) {
     // via the same srgbToLinear the material path uses. When present, the material goes
     // WHITE, because three multiplies material colour by vertex colour.
     let colorArray = null;
-    if (typeof input?.colorAt === "function") {
+    if (welded.colors) {
+      colorArray = new Uint16Array(vertexCount * 4);
+      for (let v = 0; v < vertexCount; v += 1) {
+        for (let k = 0; k < 3; k += 1) {
+          colorArray[v * 4 + k] = Math.round(srgbToLinear(clamp01(welded.colors[v * 4 + k])) * 65535);
+        }
+        colorArray[v * 4 + 3] = Math.round(clamp01(welded.colors[v * 4 + 3]) * 65535);
+      }
+    } else if (typeof input?.colorAt === "function") {
       colorArray = new Uint16Array(vertexCount * 4);
       for (let v = 0; v < vertexCount; v += 1) {
         const c = input.colorAt(
@@ -780,7 +840,14 @@ export function writeGlb(mesh, options = {}) {
         input?.opacity ?? null,
         // The finish is independent of where the colour came from: a per-vertex-coloured
         // primitive whitens its baseColorFactor and keeps its authored metal.
-        input?.material ?? null
+        hasMaterialOptions ? {
+          metalness: materialOptions.metallicFactor ?? DEFAULT_METALNESS,
+          roughness: materialOptions.roughnessFactor ?? DEFAULT_ROUGHNESS,
+          ...input?.material,
+        } : input?.material ?? null,
+        input?.alphaMode,
+        input?.alphaCutoff,
+        !!colorArray && colorArray.some((value, index) => index % 4 === 3 && value < 65535)
       )
     );
     const primitive = {
