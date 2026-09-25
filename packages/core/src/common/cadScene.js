@@ -1207,11 +1207,8 @@ function mergeBoundsList(boundsList) {
   return count > 0 && min.every(Number.isFinite) && max.every(Number.isFinite) ? { min, max } : null;
 }
 
-// Bounds of the model in its current parameter pose: the at-rest part bounds
-// moved by the module-effect delta. This is what the loader frames the camera
-// on, so callers that re-frame later (reset, fit) use it to land back on the
-// same view. Exploded-view offsets are deliberately excluded -- exploding is a
-// temporary inspection state, not a change to how big the model is.
+// Current placed bounds for depth, lighting and picking, including pose and
+// explode. Camera framing uses the separate restBounds and stays unchanged.
 export function effectiveBoundsFromRecords(THREE, records, fallbackBounds = null) {
   const boundsList = [];
   for (const record of Array.isArray(records) ? records : []) {
@@ -2515,7 +2512,7 @@ export function buildModel(THREE, source, settings = {}) {
       showEdges: nextSettings.selection?.showEdges !== false
     });
     syncSurfaceInstances();
-    syncClip(runtime, nextSettings.clip, runtime.bounds, nextSettings.modelOffset || modelGroup.position);
+    syncClip(runtime, nextSettings.clip, runtime.baseBounds, nextSettings.modelOffset || modelGroup.position);
     appliedStaticStateKey = staticMutableStateKey(nextSettings);
   };
 
@@ -2563,6 +2560,14 @@ export function buildModel(THREE, source, settings = {}) {
       return modelGroup;
     },
     syncSurfaceInstances,
+    // External pose/animation passes move these records without calling update.
+    // Publish their bounds before the viewport fits its depth and lighting.
+    refreshBounds() {
+      runtime.bounds = effectiveBoundsFromRecords(THREE, runtime.displayRecords, runtime.baseBounds);
+      runtime.modelBounds = runtime.bounds;
+      runtime.modelRadius = centerAndRadiusFromBounds(THREE, runtime.bounds, runtime.scale).radius;
+      return runtime.bounds;
+    },
     get displayRecords() {
       return runtime.displayRecords;
     },

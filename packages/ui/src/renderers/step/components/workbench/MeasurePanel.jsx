@@ -1,16 +1,13 @@
-import { Trash2, X } from "lucide-react";
+import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
+import { X } from "lucide-react";
 
 import { MEASURE_SNAP_LABELS, formatMeasurementAngle, formatMeasurementDelta } from "@hardcore/core/lib/viewer/measurement.js";
 import { measureLabelText, measureSeriesColor } from "@hardcore/core/lib/viewer/measureDimension.js";
 import { cn } from "@hardcore/ui/utils";
 
 
-// The Measure tool's panel under the interaction tools: the drawing toolbar's
-// surface and width, in rows rather than a grid. Each measurement adds a row,
-// and there is no panel until there is one. What picks snap to is the Measure
-// button's own second press (`FloatingToolBar.js`). No title, close button or
-// footer: leaving the tool ends the session, and ending it clears the rulers.
-const SURFACE = "pointer-events-auto flex max-h-64 w-[calc(7*1.5rem+6*0.125rem+0.5rem+2px)] max-w-full flex-col gap-px overflow-y-auto rounded-md border border-border bg-background p-1 text-foreground shadow-sm";
+// The measurement list is content inside the shared persistent tool popover.
+const SURFACE = "flex min-w-0 flex-col gap-px px-1";
 const ROW = "flex h-6 min-w-0 w-full items-center gap-1.5 rounded-sm px-1.5 text-micro outline-none";
 
 // What each endpoint bound to, so an exact edge or face reading is visibly
@@ -21,7 +18,7 @@ function snapPairLabel(item) {
   return first && second ? `${first} → ${second}` : "";
 }
 
-export default function MeasurePanel({ measurements = [], activeId = "", onActivate = null, onDelete = null, onClear = null }) {
+export default function MeasurePanel({ measurements = [], activeId = "", onActivate = null, onDelete = null }) {
   // Nothing measured, nothing to show: the panel arrives with the first ruler.
   if (!measurements.length) return null;
   return (
@@ -32,9 +29,9 @@ export default function MeasurePanel({ measurements = [], activeId = "", onActiv
           const labelText = measureLabelText(item.measurement);
           const angleText = formatMeasurementAngle(item.measurement);
           return (
-            <div key={item.id} role="listitem" tabIndex={0}
+            <TooltipHint key={item.id} content={[labelText, angleText, formatMeasurementDelta(item.measurement), snapPairLabel(item)].filter(Boolean).join("  ·  ")}><div  role="listitem" tabIndex={0}
               // The full reading: deltas and what each end snapped to stay one hover away.
-              title={[labelText, angleText, formatMeasurementDelta(item.measurement), snapPairLabel(item)].filter(Boolean).join("  ·  ")}
+
               onClick={() => onActivate?.(item.id)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onActivate?.(item.id); }
@@ -53,14 +50,11 @@ export default function MeasurePanel({ measurements = [], activeId = "", onActiv
                 onClick={(event) => { event.stopPropagation(); onDelete?.(item.id); }}>
                 <X className="size-3" strokeWidth={2} aria-hidden="true" />
               </button>
-            </div>
+            </div></TooltipHint>
           );
         })}
       </div>
-      {measurements.length > 1 && <button type="button" onClick={() => onClear?.()}
-        className={cn(ROW, "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent")}>
-        <Trash2 className="size-3 shrink-0" strokeWidth={2} aria-hidden="true" />Clear all
-      </button>}
+
     </section>
   );
 }

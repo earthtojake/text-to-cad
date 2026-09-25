@@ -53,7 +53,7 @@ function resolvedConfiguration(configuration = {}) {
     },
     backdrop: {
       ...(Object.hasOwn(backdrop, "opacity") ? { opacity: clamp(finiteOr(backdrop.opacity, 1), 0, 1) } : {}),
-      color: typeof backdrop.color === "string" ? backdrop.color : "#e7e7e5",
+      color: typeof backdrop.color === "string" ? backdrop.color : "#ffffff",
       transparent: typeof backdrop.transparent === "boolean"
         ? backdrop.transparent
         : DEFAULT_RENDER_BACKDROP.transparent,

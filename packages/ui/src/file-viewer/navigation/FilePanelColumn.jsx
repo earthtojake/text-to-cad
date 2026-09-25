@@ -1,3 +1,6 @@
+import { X } from "lucide-react";
+import { Button } from "../../primitives/button.jsx";
+import { Sheet, SheetContent, SheetTitle, SheetClose } from "../../primitives/sheet.jsx";
 import { useRef } from "react";
 
 /**
@@ -44,13 +47,18 @@ export function clampPanelWidth(width) {
  * @param {object} props
  * @param {string} props.id The open panel's id, for tests and for styling hooks.
  * @param {string} props.label Names the column for the accessibility tree: the toggle's own label.
+ * @param {boolean} [props.hidden] Temporarily suspend without losing panel state.
+ * @param {boolean} [props.mobile]
+ * @param {HTMLElement|null} [props.portalContainer]
+ * @param {() => void} [props.onDismiss]
  * @param {number} props.width
  * @param {(width: number) => void} props.onWidthChange
  * @param {() => void} [props.onCollapse]
  * @param {import("react").ReactNode} props.children
  */
-export function FilePanelColumn({ id, label, width, onWidthChange, onCollapse, children }) {
+export function FilePanelColumn({ id, label, width, onWidthChange, onCollapse, children, hidden = false, mobile = false, portalContainer = null, onDismiss }) {
   const drag = useRef(null);
+  const content = useRef(null);
   const resize = (nextWidth) => {
     if (nextWidth < PANEL_MIN_WIDTH && onCollapse) {
       drag.current = null;
@@ -77,9 +85,31 @@ export function FilePanelColumn({ id, label, width, onWidthChange, onCollapse, c
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
 
+  // Keep the floating panel inside its viewer even while opening. A slide from
+  // outside the right edge creates horizontal overflow on narrow pages.
+  if (mobile) return <Sheet open={!hidden} onOpenChange={open => { if (!open) onDismiss?.(); }} modal={false}>
+    <SheetContent ref={content} portalContainer={portalContainer} showCloseButton={false} aria-describedby={undefined}
+      className="absolute inset-y-2 right-2 h-auto w-[min(320px,calc(100%-32px))] max-w-none gap-0 overflow-hidden rounded-lg border shadow-lg data-[state=open]:animate-none data-[state=closed]:animate-none"
+      data-file-panel-container={id} data-mobile-panel="" onOpenAutoFocus={event => event.preventDefault()}
+      onCloseAutoFocus={event => event.preventDefault()}
+      onInteractOutside={event => {
+        // Navbar toggles switch sheets directly; don't let the old sheet's dismissal close the new one.
+        const target = event.detail.originalEvent.target;
+        // Selects and color/menu popups portal outside the sheet. Their touches
+        // still belong to it, and dismissing a child must not dismiss the panel.
+        if (target?.closest?.('[data-file-panel], [data-slot=select-content], [data-slot=dropdown-menu-content], [data-slot=dropdown-menu-sub-content], [data-slot=popover-content]')
+          || content.current?.querySelector('[aria-haspopup][aria-expanded="true"]')) event.preventDefault();
+      }}>
+      <SheetTitle className="sr-only">{label.replace(/^(Show|Hide) /, "")}</SheetTitle>
+      <SheetClose asChild><Button className="absolute right-2 top-2 z-10 size-5" variant="ghost" size="icon-xs" aria-label="Close panel"><X className="size-3" /></Button></SheetClose>
+      <div className="min-h-0 flex-1 overflow-hidden [&_[data-mobile-panel-top-row]]:pr-9">{children}</div>
+    </SheetContent>
+  </Sheet>;
+
   return (
     <>
       <div
+        hidden={hidden}
         aria-label={`Resize ${label} panel`}
         aria-orientation="vertical"
         aria-valuemax={PANEL_MAX_WIDTH}
@@ -101,6 +131,7 @@ export function FilePanelColumn({ id, label, width, onWidthChange, onCollapse, c
         tabIndex={0}
       />
       <aside
+        hidden={hidden}
         aria-label={label}
         className="shrink-0 overflow-hidden border-l bg-background"
         data-file-panel-container={id}

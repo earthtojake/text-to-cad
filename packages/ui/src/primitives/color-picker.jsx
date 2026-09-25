@@ -1,3 +1,4 @@
+import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
 import * as React from "react"
 import { Pipette } from "lucide-react"
 
@@ -229,6 +230,7 @@ function ColorPicker({
   swatchClassName,
   valueClassName,
   popoverAlign = "start",
+  inline = false,
   showValue = true,
   showOpacity = false,
   disabled = false,
@@ -331,39 +333,8 @@ function ColorPicker({
     }
   }
 
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          data-slot="color-picker-trigger"
-          variant="outline"
-          size="sm"
-          disabled={disabled}
-          className={cn("h-7 w-auto max-w-full justify-start gap-1.5 px-1.5 text-tiny", className)}
-          {...props}
-        >
-          <span
-            className={cn(
-              "relative size-4 shrink-0 overflow-hidden rounded bg-clip-border shadow-[0_0_0_1px_rgba(15,23,42,0.24)] dark:shadow-[0_0_0_1px_rgba(255,255,255,0.24)]",
-              swatchClassName
-            )}
-            style={{
-              backgroundColor: "var(--background)",
-              backgroundImage: showOpacity ? "conic-gradient(var(--muted-foreground) 25%, transparent 0 50%, var(--muted-foreground) 0 75%, transparent 0)" : undefined,
-              backgroundSize: "8px 8px"
-            }}
-            aria-hidden="true"
-          >
-            <span className="absolute inset-0" data-color-preview="true"
-              style={{ backgroundColor: normalizedValue, opacity: showOpacity ? normalizedOpacity : 1 }} />
-          </span>
-          {showValue ? (
-            <span className={cn("truncate font-mono uppercase leading-none", valueClassName)}>{normalizedValue}</span>
-          ) : null}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align={popoverAlign} className="w-64 space-y-3 p-3">
+  const controls = <>
+
         <div
           ref={svPlaneRef}
           role="slider"
@@ -472,16 +443,16 @@ function ColorPicker({
               aria-label="Hex color"
             />
             {canUseEyeDropper ? (
-              <Button
+              <TooltipHint content="Eyedropper"><Button
                 type="button"
                 variant="outline"
                 size="icon-sm"
                 onClick={pickFromScreen}
                 aria-label="Pick color from screen"
-                title="Pick color from screen"
+
               >
                 <Pipette className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-              </Button>
+              </Button></TooltipHint>
             ) : null}
           </div>
         ) : null}
@@ -501,6 +472,43 @@ function ColorPicker({
             <ColorNumberInput label="L" value={colorNumbers.hsl.l} min={0} max={100} onChange={(nextValue) => setHslChannel("l", nextValue)} />
           </div>
         ) : null}
+
+  </>;
+  if (inline) return <div className="space-y-3 p-2">{controls}</div>;
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          data-slot="color-picker-trigger"
+          variant="outline"
+          size="sm"
+          disabled={disabled}
+          className={cn("h-7 w-auto max-w-full justify-start gap-1.5 px-1.5 text-tiny", className)}
+          {...props}
+        >
+          <span
+            className={cn(
+              "relative size-4 shrink-0 overflow-hidden rounded bg-clip-border shadow-[0_0_0_1px_rgba(15,23,42,0.24)] dark:shadow-[0_0_0_1px_rgba(255,255,255,0.24)]",
+              swatchClassName
+            )}
+            style={{
+              backgroundColor: "var(--background)",
+              backgroundImage: showOpacity ? "conic-gradient(var(--muted-foreground) 25%, transparent 0 50%, var(--muted-foreground) 0 75%, transparent 0)" : undefined,
+              backgroundSize: "8px 8px"
+            }}
+            aria-hidden="true"
+          >
+            <span className="absolute inset-0" data-color-preview="true"
+              style={{ backgroundColor: normalizedValue, opacity: showOpacity ? normalizedOpacity : 1 }} />
+          </span>
+          {showValue ? (
+            <span className={cn("truncate font-mono uppercase leading-none", valueClassName)}>{normalizedValue}</span>
+          ) : null}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align={popoverAlign} className="w-64 space-y-3 p-3">{controls}
       </PopoverContent>
     </Popover>
   )

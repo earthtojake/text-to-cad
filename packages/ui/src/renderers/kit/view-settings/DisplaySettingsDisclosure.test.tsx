@@ -4,7 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { resolveViewSettings } from '@hardcore/core/common/viewSettings.js';
 import { createViewSettingsStore } from './viewSettingsStore.js';
-import { CrossSectionControls, DisplaySettingsSection, ExplodeControls } from '../../../../dist/renderers/kit/view-settings/DisplaySettingsSection.js';
+import { DisplaySettingsSection } from '../../../../dist/renderers/kit/view-settings/DisplaySettingsSection.js';
+import { CrossSectionControls, ExplodeControls } from '../../../../dist/renderers/step/components/workbench/ModelViewControls.js';
 import { FileSheetGatedSection } from '../../../../dist/renderers/kit/inspector/FileSheet.js';
 
 Object.assign(globalThis, { React });
@@ -21,21 +22,21 @@ function Harness({ initial = { mode: 'solid' } }: { initial?: any }) {
     clipBounds={{ min: [0, 0, 0], max: [100, 100, 100] }} />;
 }
 
-it('a deliberate click on a shut chevron after hovering cannot shut it again', async () => {
+it('a deliberate click on a shut plus after hovering cannot shut it again', async () => {
   const user = userEvent.setup();
   function Gate() {
     const [enabled, setEnabled] = React.useState(false);
     return <FileSheetGatedSection title="Grid" enabled={enabled} onEnabledChange={setEnabled}>Grid settings</FileSheetGatedSection>;
   }
   render(<Gate />);
-  const chevron = screen.getByRole('button', { name: 'Enable Grid' });
-  await user.hover(chevron);
+  const plus = screen.getByRole('button', { name: 'Enable Grid' });
+  await user.hover(plus);
   await new Promise(resolve => setTimeout(resolve, 200));
-  await user.click(chevron);
+  await user.click(plus);
   expect(screen.getByText('Grid settings')).toBeTruthy();
 });
 
-it.each(['Edges', 'Grid & axes'])('Render remains a preset when the pointer rests on disabled %s', title => {
+it.each(['Edges', 'Grid / Axes'])('Render remains a preset when the pointer rests on disabled %s', title => {
   vi.useFakeTimers();
   render(<Harness initial={{ mode: 'render' }} />);
   const heading = screen.getByRole('heading', { name: title, exact: true });
@@ -46,35 +47,34 @@ it.each(['Edges', 'Grid & axes'])('Render remains a preset when the pointer rest
   expect(screen.getByRole('button', { name: `Enable ${title}` }).getAttribute('aria-expanded')).toBe('false');
 });
 
-it('opens feature sections by click or keyboard and only the open chevron disables them', async () => {
+it('opens individual features by click or keyboard; only the minus disables and clears edits', async () => {
   const user = userEvent.setup();
   render(<Harness />);
-  const environment = screen.getByRole('button', { name: 'Environment', exact: true });
-  expect(environment.getAttribute('aria-expanded')).toBe('false');
-  await user.click(environment);
-  expect(screen.getByRole('button', { name: 'Disable Environment' }).getAttribute('aria-expanded')).toBe('true');
-  const heading = screen.getByRole('heading', { name: 'Environment' });
+  const floor = screen.getByRole('button', { name: 'Floor', exact: true });
+  expect(floor.getAttribute('aria-expanded')).toBe('false');
+  await user.click(floor);
+  expect(screen.getByRole('button', { name: 'Disable Floor' }).getAttribute('aria-expanded')).toBe('true');
+  const heading = screen.getByRole('heading', { name: 'Floor' });
   const header = heading.parentElement!;
   fireEvent.pointerLeave(header);
   expect(screen.getByRole('button', { name: 'Floor color' })).toBeTruthy();
-  expect(screen.queryByRole('checkbox', { name: 'Environment' })).toBeNull();
-  expect(screen.queryByRole('button', { name: 'Environment', exact: true })).toBeNull();
+  expect(screen.queryByRole('checkbox', { name: 'Floor' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Floor', exact: true }).getAttribute('aria-expanded')).toBe('true');
   expect(header.className).not.toContain('hover:');
-  await user.click(heading);
+  await user.click(screen.getByRole('button', { name: 'Floor', exact: true }));
   expect(current.floor.enabled).toBe(true);
   await user.click(screen.getByRole('button', { name: 'Floor color' }));
   fireEvent.change(screen.getByRole('spinbutton', { name: 'Color opacity' }), { target: { value: '80' } });
   expect(current.floor.opacity).toBe(0.8);
   await user.keyboard('{Escape}');
-  await user.click(screen.getByRole('button', { name: 'Disable Environment' }));
-  // One gate: lighting, background and floor go off together.
+  await user.click(screen.getByRole('button', { name: 'Disable Floor' }));
   expect(current.floor).toEqual({ enabled: false });
-  expect(current.lighting).toEqual({ enabled: false });
-  expect(current.background).toEqual({ enabled: false });
+  expect(current.lighting).toBeUndefined();
+  expect(current.background).toBeUndefined();
   expect(screen.queryByRole('button', { name: 'Floor color' })).toBeNull();
-  screen.getByRole('button', { name: 'Environment', exact: true }).focus(); await user.keyboard('{Enter}');
+  screen.getByRole('button', { name: 'Floor', exact: true }).focus(); await user.keyboard('{Enter}');
   expect(resolveViewSettings(current).floor.opacity).toBe(0.6);
-  expect(screen.getByRole('button', { name: 'Disable Environment' }).getAttribute('aria-expanded')).toBe('true');
+  expect(screen.getByRole('button', { name: 'Disable Floor' }).getAttribute('aria-expanded')).toBe('true');
 });
 
 it('does not enable a section when the pointer only passes across it', async () => {
@@ -92,8 +92,8 @@ it('Reset disables tools and restores the preset; transparency stays in the colo
   render(<Harness initial={{ mode: 'render', background: { color: '#abcdef', opacity: 0.4 }, exploded: { enabled: true, amount: 0.5 } }} />);
   const mode = screen.getByRole('region', { name: 'Display', exact: true });
   expect(within(mode).getByRole('combobox', { name: 'Mode' }).textContent).toBe('Custom');
-  // Projection is the view cube's toggle, not a Display control.
-  expect(within(mode).queryByRole('combobox', { name: 'Projection' })).toBeNull();
+  // Projection shares the first row with Mode.
+  expect(within(mode).getByRole('combobox', { name: 'Projection' })).toBeTruthy();
   expect(within(mode).queryByRole('slider')).toBeNull();
   const background = screen.getByRole('button', { name: 'Background color' });
   const preview = background.querySelector('[data-color-preview]') as HTMLElement;
@@ -110,7 +110,7 @@ it('Reset disables tools and restores the preset; transparency stays in the colo
 });
 
 it('keeps one section order in every preset, Display first', () => {
-  const headings = ['Display', 'Edges', 'Grid & axes', 'Environment'];
+  const headings = ['Display', 'Surfaces', 'Edges', 'Grid / Axes', 'Lighting', 'Background', 'Floor'];
   for (const mode of ['solid', 'render', 'wireframe']) {
     render(<Harness initial={{ mode }} />);
     expect(screen.getAllByRole('heading').map(node => node.textContent)).toEqual(headings);
@@ -118,7 +118,7 @@ it('keeps one section order in every preset, Display first', () => {
   }
 });
 
-// Explode and Cross-section are toolbar toggles; these are their panels' controls.
+// Explode and Cross-section remain independent sidebar tools.
 function Tools() {
   const [store] = React.useState(() => createViewSettingsStore({ mode: 'solid' }));
   const { display: settings } = React.useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
@@ -131,7 +131,7 @@ function Tools() {
   </>;
 }
 
-it('Display has no Explode or Cross-section: they are the toolbar\'s', () => {
+it('Display has no Explode or Cross-section: they belong in the STEP sidebar', () => {
   render(<Harness />);
   for (const name of ['Explode', 'Clip', 'Cross-section']) expect(screen.queryByRole('heading', { name })).toBeNull();
   expect(screen.queryByRole('textbox', { name: 'Explode value' })).toBeNull();
@@ -159,34 +159,34 @@ it('Cross-section turns on at an X centre cut, and Flip reverses it', async () =
   render(<Tools />);
   await user.click(screen.getByRole('button', { name: 'Cross-section' }));
   expect(resolveViewSettings(current).clip.offsets.x).toBe(0.5);
-  const x = screen.getByRole('textbox', { name: 'Cross-section X position' });
-  expect((x as HTMLInputElement).value).toBe('50.00 mm');
+  const x = screen.getByRole('textbox', { name: 'Clip amount value' });
+  expect((x as HTMLInputElement).value).toBe('50.0%');
   fireEvent.change(x, { target: { value: '35' } }); fireEvent.blur(x);
-  expect(resolveViewSettings(current).clip.offsets.x).toBeCloseTo(0.35);
+  expect(resolveViewSettings(current).clip.offsets.x).toBeCloseTo(0.65);
   await user.click(screen.getByRole('checkbox', { name: 'Flip' }));
   expect(resolveViewSettings(current).clip.invert).toBe(true);
   await user.click(screen.getByRole('button', { name: 'Cross-section' }));
   expect(resolveViewSettings(current).clip.enabled).toBe(false);
 });
 
-it('turns Grid and Axes on and off together, under one section', async () => {
+it('disables and restores Grid / Axes together while keeping colors independent', async () => {
   const user = userEvent.setup();
-  render(<Harness />);
-  expect(screen.getByRole('button', { name: 'Grid color' })).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Axis color' })).toBeTruthy();
-  await user.click(screen.getByRole('button', { name: 'Disable Grid & axes' }));
+  render(<Harness initial={{ mode: 'solid', grid: { color: '#abcdef' }, axes: { color: '#123456' } }} />);
+  await user.click(screen.getByRole('button', { name: 'Disable Grid / Axes' }));
   expect(current.grid).toEqual({ enabled: false });
   expect(current.axes).toEqual({ enabled: false });
   expect(screen.queryByRole('button', { name: 'Grid color' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Axis color' })).toBeNull();
-  expect(screen.getByRole('button', { name: 'Environment', exact: true })).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Enable Grid / Axes' }));
+  expect(resolveViewSettings(current).grid).toEqual(resolveViewSettings({ mode: 'solid' }).grid);
+  expect(resolveViewSettings(current).axes).toEqual(resolveViewSettings({ mode: 'solid' }).axes);
 });
 
-it('an edit inside a combined section turns on the group it belongs to', () => {
-  // Only the background is on, so Environment is open and shows Lighting while lighting is off.
+it('enabling Background does not expose or enable Lighting or Floor', () => {
   render(<Harness initial={{ mode: 'solid', background: { enabled: true } }} />);
-  const exposure = screen.getByRole('textbox', { name: 'Exposure value' });
-  fireEvent.change(exposure, { target: { value: '1.5' } }); fireEvent.blur(exposure);
-  expect(resolveViewSettings(current).lighting.enabled).toBe(true);
-  expect(resolveViewSettings(current).lighting.exposure).toBe(1.5);
+  expect(screen.getByRole('button', { name: 'Background color' })).toBeTruthy();
+  expect(screen.queryByRole('textbox', { name: 'Exposure value' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Floor color' })).toBeNull();
+  expect(resolveViewSettings(current).lighting.enabled).toBe(false);
+  expect(resolveViewSettings(current).floor.enabled).toBe(false);
 });

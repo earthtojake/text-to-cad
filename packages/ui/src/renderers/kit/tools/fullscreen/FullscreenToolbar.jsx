@@ -66,15 +66,14 @@ const stopEscape = event => event.stopPropagation();
 export default function FullscreenToolbar({ surface, orbitSpeed, onOrbitSpeedChange, animation = null, disabled = false, onExit }) {
   const controls = useRef(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [playbarMenuOpen, setPlaybarMenuOpen] = useState(false);
-  const visible = useToolbarVisibility(surface, controls, settingsOpen || playbarMenuOpen);
+  const visible = useToolbarVisibility(surface, controls, settingsOpen);
   const hasAnimation = animationControlsHaveContent(animation);
   const pointerClass = visible ? 'pointer-events-auto' : 'pointer-events-none';
 
   return <div ref={controls} role="group" aria-label="Fullscreen controls" data-visible={visible}
     aria-hidden={!visible} inert={!visible}
     className={cn('pointer-events-none absolute inset-0 z-40 transition-opacity duration-200 motion-reduce:transition-none', visible ? 'opacity-100' : 'opacity-0')}>
-    {hasAnimation && <ViewportAnimationBar runtime={animation} disabled={disabled} className={pointerClass} onMenuOpenChange={setPlaybarMenuOpen}/>}
+    {hasAnimation && <ViewportAnimationBar runtime={animation} disabled={disabled} className={pointerClass}/>}
     <Popover open={settingsOpen} onOpenChange={setSettingsOpen}>
       <PopoverAnchor asChild>
         <div className={cn('absolute right-3 top-3 flex items-center gap-1', pointerClass)}>
@@ -85,7 +84,7 @@ export default function FullscreenToolbar({ surface, orbitSpeed, onOrbitSpeedCha
             </Button>
           </PopoverTrigger>
           <Button type="button" variant="ghost" size="icon-xs" className={buttonClass}
-            aria-label="Exit fullscreen" title="Exit fullscreen" onClick={onExit}>
+            aria-label="Exit fullscreen"  onClick={onExit}>
             <X className="size-3" aria-hidden="true"/>
           </Button>
         </div>

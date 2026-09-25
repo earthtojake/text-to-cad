@@ -2,13 +2,13 @@ import { createToolModes } from "../kit/tools/toolModes.js";
 
 export const ROBOT_TOOL = Object.freeze({ POSE: "pose", SELECT: "select" });
 
-// Select is what a session falls back to (a robot with nothing to pose lands there);
-// Pose is what a robot OPENS in (`ROBOT_TOOL_RESTORE`). A saved tab records either.
+// Select matches the initial Links tab, including files saved under Position.
+// Joint values restore independently; only the pointer tool returns to Select.
 export const ROBOT_TOOL_MODES = createToolModes({
   defaultMode: ROBOT_TOOL.SELECT,
   modes: { [ROBOT_TOOL.POSE]: { persists: true }, [ROBOT_TOOL.SELECT]: { persists: true } }
 });
-export const ROBOT_TOOL_RESTORE = Object.freeze({ opensIn: ROBOT_TOOL.POSE });
+export const ROBOT_TOOL_RESTORE = Object.freeze({ opensIn: ROBOT_TOOL.SELECT, never: [ROBOT_TOOL.POSE] });
 
 /** What a host command that needs a reference grammar is told. A robot description has none. */
 export const ROBOT_DECLINED_LIVE_COMMANDS = Object.freeze({

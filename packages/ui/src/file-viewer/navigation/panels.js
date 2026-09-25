@@ -3,8 +3,7 @@
  *
  * ONE panel column, one width, one border, one resize handle
  * (`FilePanelColumn.jsx`) — and a list of things that can be in it: what the
- * file's renderer declares (a viewer file's own controls, then its Display
- * settings) and the file tree LAST. The nav row draws one icon button per
+ * file's renderer declares (a viewer file's own controls) and the file tree LAST. The nav row draws one icon button per
  * panel, in declaration order, and highlights the open one; pressing a toggle
  * opens that panel and closes whatever was open. A panel has no tabs inside it:
  * the nav row IS the tab strip.
@@ -46,7 +45,7 @@ import { Code2, Eye, Folders, SlidersHorizontal } from "lucide-react";
  * @property {boolean} [defaultOpen]
  *   The panel a surface opens with when nobody has said (`panel: null`): the
  *   FIRST declaration that claims it wins. A viewer file's own controls claim it;
- *   its Display settings and the file tree never do, so a file opened directly
+ *   the file tree never does, so a file opened directly
  *   shows its controls, or nothing when it has none.
  *
  * @typedef {object} FilePanelContext
@@ -66,9 +65,8 @@ import { Code2, Eye, Folders, SlidersHorizontal } from "lucide-react";
 export const FILE_PANEL_TREE = "tree";
 
 /**
- * A viewer file's two panels, by id: its own controls and its Display settings.
- * Every viewer renderer declares the SAME ids, so a person who opened a file's
- * Display keeps it open from one model to the next, whichever renderer shows it.
+ * The file sidebar's id. The legacy Display id is retained only so existing
+ * persisted panel values resolve as unavailable; Display is a toolbar popover.
  */
 export const CAD_PANEL = Object.freeze({
   file: "cad-file",
@@ -79,10 +77,10 @@ export const CAD_PANEL = Object.freeze({
 export const SOURCE_PANEL = "source";
 
 /**
- * A viewer file's panels, in nav-row order: its Display settings, then the file's
- * own controls when it has any — so the file's own sits next to the file tree.
+ * A viewer file's sidebar, when it has file-specific controls. Display settings
+ * live in the viewport toolbar's popover and never occupy this column.
  *
- * `file` names the second by what the file is — `{ label, icon }`, the icon the
+ * `file` names the sidebar by what the file is — `{ label, icon }`, the icon the
  * file tree draws for that kind of document (a part's box, an assembly's boxes, a
  * robot) — and is null for a file whose only settings are Display's (a mesh). It is
  * the default: a file opened directly opens with its controls. Display never is.
@@ -91,14 +89,13 @@ export const SOURCE_PANEL = "source";
  * failure card, and a toggle over a card would open nothing.
  *
  * @param {boolean} ready
- * @param {{ file?: { label: string, icon: import("react").ElementType } | null }} [options]
+ * @param {{ file?: boolean }} [options]
  * @returns {FilePanel[]}
  */
-export function viewerPanels(ready, { file = null } = {}) {
+export function viewerPanels(ready, { file = false } = {}) {
   if (!ready) return [];
   return [
-    { id: CAD_PANEL.display, label: "Display", icon: SlidersHorizontal, content: "slot" },
-    ...(file ? [{ id: CAD_PANEL.file, label: file.label, icon: file.icon, content: "slot", defaultOpen: true }] : [])
+    ...(file ? [{ id: CAD_PANEL.file, label: "Settings", icon: SlidersHorizontal, content: "slot", defaultOpen: true }] : [])
   ];
 }
 

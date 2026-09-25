@@ -25,6 +25,7 @@ import hashlib
 import json
 import os
 import stat
+import sys
 import threading
 import time
 from hashlib import sha256
@@ -55,7 +56,7 @@ __all__ = [
 ]
 
 POST_GUARD_HEADER = "x-cadgen-viewer"
-LOCAL_SERVER_FEATURES = ["path-directory"]
+LOCAL_SERVER_FEATURES = ["path-directory", "reveal-path"]
 _LOOPBACK_NAMES = frozenset({"127.0.0.1", "localhost", "::1"})
 
 TESS_CACHE_ROUTE_PREFIX = "/__tess_cache/"
@@ -284,6 +285,7 @@ class CadApp:
             "serverMode": "serve",
             "serverFeatures": LOCAL_SERVER_FEATURES,
             "backend": "local-fs",
+            "platform": sys.platform,
             "rootId": self.root_id,
             # path.resolve(), NOT realpath: the launcher's registry and the
             # client both compare the spelling the operator gave.
@@ -467,6 +469,23 @@ class CadApp:
             try:
                 if pathname == "/__cad/artifact":
                     self._handle_artifact_build(request, response, query)
+                elif pathname == "/__cad/reveal":
+                    from .reveal import reveal_path
+                    if int(request.headers.get("content-length") or 0) > 8192:
+                        response.send_empty(413, [("connection", "close")])
+                        return
+                    payload = json.loads(request.body())
+                    if type(payload) is not dict or set(payload) != {"path"}:
+                        raise ValueError("Reveal requires a path")
+                    reveal_path(self.backend.root_path, payload["path"])
+                    response.send_empty(204)
+                elif pathname == "/__cad/clipboard":
+                    from .clipboard import MAX_PNG_BYTES, copy_png
+                    if int(request.headers.get("content-length") or 0) > MAX_PNG_BYTES:
+                        response.send_empty(413, [("connection", "close")])
+                        return
+                    copy_png(request.body())
+                    response.send_empty(204)
                 elif pathname == "/__cad/surfaces":
                     if int(request.headers.get("content-length") or 0) > 128 * 1024:
                         response.send_empty(413, [("connection", "close")])

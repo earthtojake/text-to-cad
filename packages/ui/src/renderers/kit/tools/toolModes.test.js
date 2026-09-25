@@ -14,6 +14,12 @@ test("an unknown tool falls back to the default tool", () => {
   assert.equal(modes.normalize(undefined), "pick");
 });
 
+test("Display is an exclusive transient tool shared by all renderers", () => {
+  assert.equal(modes.next("ink", "display"), "display");
+  assert.equal(modes.next("display", "pick"), "pick");
+  assert.equal(modes.restore("display"), "pick");
+});
+
 test("a toggling session ends when its tool is asked for again; other tools stay", () => {
   assert.equal(modes.next("pick", "ink"), "ink");
   assert.equal(modes.next("ink", "ink"), "pick");

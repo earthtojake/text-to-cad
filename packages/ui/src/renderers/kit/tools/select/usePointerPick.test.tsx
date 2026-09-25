@@ -91,3 +91,23 @@ it('listens only while enabled, and leaves nothing hovered behind', () => {
   fire(canvas, 'pointerup', { clientX: 50, clientY: 50 });
   expect(onPick).not.toHaveBeenCalled();
 });
+
+it('pinch, cancelled touches, and a drag returning to its start never become picks', () => {
+  const { canvas, onPick, fire } = mount();
+  const touch = (type: string, pointerId = 1, clientX = 50) => fire(canvas, type, { pointerType: 'touch', pointerId, clientX, clientY: 50 });
+  touch('pointerdown');
+  touch('pointerdown', 2, 80);
+  touch('pointerup', 2, 80);
+  touch('pointerup');
+  touch('pointerdown');
+  touch('pointercancel');
+  touch('pointerup');
+  touch('pointerdown');
+  touch('pointermove', 1, 90);
+  touch('pointermove');
+  touch('pointerup');
+  expect(onPick).not.toHaveBeenCalled();
+  touch('pointerdown');
+  touch('pointerup');
+  expect(onPick).toHaveBeenCalledTimes(1);
+});

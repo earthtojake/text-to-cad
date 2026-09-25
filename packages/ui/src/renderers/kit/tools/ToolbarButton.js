@@ -1,9 +1,4 @@
 import { Button } from "@hardcore/ui/primitives/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger
-} from "@hardcore/ui/primitives/tooltip";
 import { cn } from "@hardcore/ui/utils";
 
 export { TOOLBAR_ICON_BUTTON_CLASS, ToolbarButton } from "@hardcore/ui/primitives/toolbar-button";
@@ -17,8 +12,6 @@ export function ToolbarTextButton({
   ...props
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
         <Button
           type="button"
           variant={active ? "secondary" : "ghost"}
@@ -32,10 +25,5 @@ export function ToolbarTextButton({
         >
           {children}
         </Button>
-      </TooltipTrigger>
-      <TooltipContent side={tooltipSide} sideOffset={6}>
-        {label}
-      </TooltipContent>
-    </Tooltip>
   );
 }

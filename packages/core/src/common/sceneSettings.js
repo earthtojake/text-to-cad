@@ -135,6 +135,11 @@ export const DEFAULT_RENDER_BACKDROP = Object.freeze({
 });
 
 const STUDIO_BACKDROP_COLORS = Object.freeze({
+  [RENDER_STUDIO.LIGHT]: "#ffffff",
+  [RENDER_STUDIO.DARK]: "#121315"
+});
+
+const STUDIO_GROUND_COLORS = Object.freeze({
   [RENDER_STUDIO.LIGHT]: "#e7e7e5",
   [RENDER_STUDIO.DARK]: "#121315"
 });
@@ -305,7 +310,7 @@ function resolveRenderConfiguration(render = {}, appearance = SCENE_APPEARANCE.L
       transparent: payload.backdrop?.transparent ?? DEFAULT_RENDER_BACKDROP.transparent,
       ground: payload.backdrop?.ground ?? DEFAULT_RENDER_BACKDROP.ground,
       groundPlacement: payload.backdrop?.groundPlacement ?? DEFAULT_RENDER_BACKDROP.groundPlacement,
-      groundColor: payload.backdrop?.groundColor || payload.backdrop?.color || STUDIO_BACKDROP_COLORS[studio],
+      groundColor: payload.backdrop?.groundColor || payload.backdrop?.color || STUDIO_GROUND_COLORS[studio],
       groundOpacity: payload.backdrop?.groundOpacity ?? DEFAULT_RENDER_BACKDROP.groundOpacity
     }
   };

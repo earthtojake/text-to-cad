@@ -143,14 +143,6 @@ export function referencesForExpandedStepTree(references, occurrenceIds, referen
   return references.filter(reference => allowed.has(referencePartId(reference)));
 }
 
-/** First visible descendant wins; a parent still covers its remaining faces. */
-export function referenceGroupForModelTreeHit(referenceId, targets, availableReferenceIds) {
-  const available = new Set(availableReferenceIds);
-  if (!available.has(referenceId)) return [];
-  const target = targets.find(item => item.referenceIds.includes(referenceId));
-  return target && target.referenceIds.every(id => available.has(id)) ? uniqueStringList(target.referenceIds) : [];
-}
-
 /** An external face/edge reference opens only the owner it actually addresses. */
 export function stepTreeTopologyOwnersForSelectors(root, selectors, { isAssemblyView = true } = {}) {
   return uniqueStringList(selectors.flatMap(selector => {

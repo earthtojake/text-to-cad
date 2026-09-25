@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { FileSheetValueInput } from '../../../../dist/renderers/kit/inspector/FileSheet.js';
+import { FileSheetValueInput, FileSheetToggleHeading } from '../../../../dist/renderers/kit/inspector/FileSheet.js';
 
 // The value badge beside a slider — a joint angle, a thickness, a playback speed. It carries a
 // draft while it is being typed into and commits it once, and Enter has to be a commit in its own
@@ -46,4 +46,17 @@ it('still discards the draft on Escape', () => {
   fireEvent.keyDown(input, { key: 'Escape' });
   expect(onValueCommit).not.toHaveBeenCalled();
   expect(input.value).toBe('0.00 deg');
+});
+
+it('disables both ways to open a gated heading while its feature is unavailable', () => {
+  const onOpenChange = vi.fn();
+  const view = render(<FileSheetToggleHeading title="Explode" open={false} disabled
+    onOpenChange={onOpenChange} headingId="explode-heading" contentId="explode-body" verbs={['Enable', 'Disable']} />);
+  const title = view.getByRole('button', { name: 'Explode', exact: true }) as HTMLButtonElement;
+  const plus = view.getByRole('button', { name: 'Enable Explode' }) as HTMLButtonElement;
+  expect(title.disabled).toBe(true);
+  expect(plus.disabled).toBe(true);
+  fireEvent.click(title);
+  fireEvent.click(plus);
+  expect(onOpenChange).not.toHaveBeenCalled();
 });

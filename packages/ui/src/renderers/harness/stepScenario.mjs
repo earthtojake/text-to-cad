@@ -243,8 +243,8 @@ export async function serveStepHarness(t, { onRequest, progressive = false } = {
    * `state` opens the page as a previous session left this file: the viewer state a test read
    * off `window.cadHarness.state` earlier, seeded before any of the app runs.
    */
-  const open = async ({ timeout = 30000, state = null } = {}) => {
-    const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+  const open = async ({ timeout = 30000, state = null, hasTouch = false } = {}) => {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1, hasTouch });
     t.after(() => page.close().catch(() => {}));
     page.setDefaultTimeout(timeout);
     const errors = [];

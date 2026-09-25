@@ -57,8 +57,8 @@ boolean)`; without that prop there is no fullscreen. FileViewer forwards it as
 declares `fullscreen: true` (STEP), and passes the flag only to such a renderer;
 when the file on screen has no fullscreen, FileViewer calls
 `onFullscreenChange(false)`. While presenting it hides the shared navbar and
-panel frame. CAD offers the switch as the last tool of its strip
-(`shell.tools.fullscreen`); while presenting, it hides viewport controls and
+panel frame. The legacy host presentation API is separate from Display’s inline Preview.
+When a host invokes fullscreen directly, the renderer hides viewport controls and
 suspends tools/shortcuts. Keep the viewport mounted; preserve the selected panel, tool and
 document state. The app owns the state and its Escape listener. CAD renders its
 own fullscreen playback and exit controls, and its X calls
@@ -199,8 +199,8 @@ not a sixth mode. `setRenderMode(true/false)` selects Render/Solid through that
 same state. Grouped camera projection/lens changes preserve the viewport's pose
 and zoom. Display Reset restores the selected preset and disables both tools.
 `resetCamera` frames the model again without turning the camera — exactly what
-STEP's context-menu "Zoom to fit" does. There is no zoom command and no zoom
-percentage in the live state, on any renderer.
+STEP's context-menu "Zoom to fit" does. The viewport Home button operates through
+the camera owner; it does not add a command to the live API.
 
 Persisted pre-grouped file sessions migrate once at the state boundary: their
 old display and photographic payload become this display record; the render
@@ -283,3 +283,26 @@ assets. Hosts bundle and serve these assets with their notices; shared UI never
 discovers a CDN. These support predefined CJK encodings, standard fonts,
 JPEG2000/JBIG2 images and color profiles. Hosts allowing WebAssembly should
 permit its compilation in CSP without enabling JavaScript eval.
+
+## Host chrome slots
+
+`FileViewer.leading` adds host content before breadcrumbs. `navigationActions` adds
+host controls before renderer navigation actions (such as Snapshot), and
+`displayActions` passes host-owned appearance controls into the Display section beside Projection via
+`RendererViewProps`. The shell handles placement and hides the toolbar in fullscreen;
+the host owns callbacks and preferences. These slots do not imply platform detection
+or move application-specific release/network behavior into shared UI.
+
+For snapshot actions, clipboard destinations receive the viewport PNG directly
+through `ClipboardPort.writeImage`; composer destinations retain prompt-context
+delivery. Native clipboard effects remain in the host implementation.
+
+
+The viewport's Copy Reference(s) and Copy Drawing actions use `ClipboardPort`
+directly, including on desktop. Their copy shortcut and double-click topology
+copy follow the same path. Double-clicking a component or subassembly isolates
+it instead; only non-isolatable topology references use double-click copying. Camera snapshots retain the host's existing prompt
+routing. The host supplies `environment.platform` for the ⌘C / Ctrl+C hint;
+the web host derives that field from its browser environment.
+
+Renderer status uses `RendererViewProps.navigationStatusSlot`, a named portal slot immediately after the filename. `onPanelVisibilityChange(false)` temporarily hides the panel and disables panel toggles without changing the user’s selected panel or width. Renderers restore visibility on exit/unmount; FileViewer scopes this callback to the current document generation. Preview uses this suspension while keeping the navbar visible.

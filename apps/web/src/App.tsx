@@ -19,7 +19,9 @@ import { browserLifecycle } from './host/lifecycle';
 import { createWebPromptContext } from './host/promptContext';
 import { readViewState, writeViewState } from './persistence/fileViewer';
 import { createWebCadPreferences } from './persistence/cadPreferences';
-import ViewerTopBar from './client/components/workbench/ViewerTopBar.jsx';
+import ViewerAppearance from './client/components/workbench/ViewerAppearance.jsx';
+import ViewerBrand from './client/components/workbench/ViewerBrand.jsx';
+import ViewerLinks from './client/components/workbench/ViewerLinks.jsx';
 import { cadFileParamForEntry, findEntryByUrlPath, normalizeCadFileQueryParam, readCadParam, readDefaultCadParam, writeCadParam } from './client/workbench/sidebar.js';
 import { applyColorSchemeToDocument, readColorSchemePreference, resolveColorSchemeMode, writeColorSchemePreference } from './client/ui/colorScheme.js';
 
@@ -106,11 +108,13 @@ function RootView({ client, server }: { client: CadClient; server: CadServerInfo
   }, [client]);
   const host = useMemo<ViewerHost>(() => ({
     files: source, fileActions, clipboard: browserClipboard, promptContext,
-    navigation: { openFile: open }, environment: appearance, lifecycle: browserLifecycle,
+    navigation: { openFile: open }, environment: { ...appearance, platform: /Mac|iPhone|iPad/.test(navigator.platform) ? "darwin" : /Win/.test(navigator.platform) ? "win32" : "linux" }, lifecycle: browserLifecycle,
   }), [source, fileActions, promptContext, open, appearance]);
   const empty = <div className="pointer-events-auto absolute inset-0 z-10 bg-background"><EmptyState icon={FileText} title="No file open" description="Pick one from the tree on the right, or filter by name." /></div>;
-  return <div className="flex h-svh flex-col overflow-hidden"><ViewerTopBar fullscreen={fullscreen} colorSchemePreference={colorSchemePreference} resolvedColorSchemeMode={appearance.colorScheme} onColorSchemePreferenceChange={changeColorScheme} /><div className="min-h-0 flex-1">
+  return <div className="flex h-svh flex-col overflow-hidden"><div className="min-h-0 flex-1">
     <FileViewer fullscreen={fullscreen} onFullscreenChange={setFullscreen} file={file || null} host={host} renderers={renderers} state={state} onStateChange={setState} narrowCrumbs={false}
+      leading={<ViewerBrand />} navigationActions={<ViewerLinks />}
+      displayActions={<ViewerAppearance colorSchemePreference={colorSchemePreference} resolvedColorSchemeMode={appearance.colorScheme} onColorSchemePreferenceChange={changeColorScheme} />}
       navigationPath={selectedEntry ? normalizeCadFileQueryParam(cadFileParamForEntry(selectedEntry)) : null}
       onError={error => setCopyStatus(error.message)} presentation={{
         empty: <div className="relative h-full">{empty}</div>,

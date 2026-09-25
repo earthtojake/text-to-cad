@@ -1,3 +1,4 @@
+import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Box, Boxes, Circle, CornerUpRight, Layers, RotateCw, Shapes, Spline, SquareDashed, X } from 'lucide-react';
 import { Button } from '@hardcore/ui/primitives/button';
@@ -43,12 +44,12 @@ function ModelingRow({ node, depth=0, selected, expanded, toggle, choose, disabl
         {branch ? <button type="button" aria-label={`${open ? 'Collapse' : 'Expand'} ${node.label}`} aria-expanded={open}
           className="grid size-7 shrink-0 place-items-center rounded focus-visible:ring-2 focus-visible:ring-ring"
           onClick={()=>toggle(node)}><TreeRowChevron expanded={open}/></button> : <span className="w-7 shrink-0"/>}
-        <button type="button" aria-label={`Select ${node.label}`} aria-pressed={selected.has(node.id)}
+        <TooltipHint content={node.label} overflowOnly><button type="button" aria-label={`Select ${node.label}`} aria-pressed={selected.has(node.id)}
           disabled={disabled || unavailable || !(node.selectionId || node.memberSelectionIds?.length || node.faces?.length || node.edges?.length)}
-          onClick={event=>choose(node,event)} title={node.label}
+          onClick={event=>{if(event.detail < 2)choose(node,event);}} onDoubleClick={event=>choose(node,event)}
           className="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40">
           <Icon className="size-3.5 shrink-0 text-muted-foreground"/><TreeRowLabel className="flex-1">{node.label}</TreeRowLabel>
-        </button>
+        </button></TooltipHint>
         {node.selectionId && <ModelPartActions node={node} controls={partControls} disabled={disabled}/>}
       </TreeRowSurface>
     </ModelPartMenu>
@@ -68,15 +69,15 @@ function ModelingSearchRow({ match, index, selected, cursor, choose, disabled, p
       <TreeRowSurface active={selected.has(node.id)} cursor={cursor} className={cn('gap-0 pr-0', hiddenByOwner && 'opacity-50')}
         onMouseEnter={() => partControls.onHoverTreeNode?.(node.selectionId || node.occurrenceId || '')}
         onMouseLeave={() => partControls.onHoverTreeNode?.('')}>
-        <button type="button" aria-label={`Select ${node.label}`} aria-pressed={selected.has(node.id)}
+        <TooltipHint content={`${entry.prefix}${node.label}`} overflowOnly><button type="button" aria-label={`Select ${node.label}`} aria-pressed={selected.has(node.id)}
           disabled={disabled || unavailable || !(node.selectionId || node.faces?.length || node.edges?.length)}
-          onClick={event=>choose(node,event)} title={`${entry.prefix}${node.label}`}
+          onClick={event=>{if(event.detail < 2)choose(node,event);}} onDoubleClick={event=>choose(node,event)}
           className="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded pl-2 pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40">
           <Icon className="size-3.5 shrink-0 text-muted-foreground"/>
           {/* Name first: in a narrow panel a deep owner path takes the truncation, never the name. */}
           <TreeRowLabel className="max-w-full shrink-0"><TreeFilterHighlight indices={indices} text={entry.label}/></TreeRowLabel>
           {entry.prefix && <TreeRowLabel className="flex-1 text-micro text-muted-foreground">{entry.prefix.slice(0,-1)}</TreeRowLabel>}
-        </button>
+        </button></TooltipHint>
         {node.selectionId && <ModelPartActions node={node} controls={partControls} disabled={disabled}/>}
       </TreeRowSurface>
     </ModelPartMenu>
@@ -84,7 +85,7 @@ function ModelingSearchRow({ match, index, selected, cursor, choose, disabled, p
 }
 
 /** Read-only geometry inference; assembly instances share recognition, never selection IDs. */
-export default function ModelingTree({ modeling, active, disabled, references=EMPTY, selectedReferenceIds=EMPTY, selectedPartIds=EMPTY, onLoadTopology, onRequestRecognition, onVisibleFeatureTargetsChange, onSelect, onClearSelection, stepRoot, selectedReferences, selectionDetails, activeTreeNodeScrollKey, partControls={} }) {
+export default function ModelingTree({ modeling, active, disabled, references=EMPTY, selectedReferenceIds=EMPTY, selectedPartIds=EMPTY, onLoadTopology, onRequestRecognition, onSelect, onClearSelection, stepRoot, selectedReferences, selectionDetails, activeTreeNodeScrollKey, partControls={} }) {
   const {descriptor,results,error,retryFailed}=modeling;
   const [selected,setSelected]=useState(null),[pending,setPending]=useState(null),[localExpanded,setLocalExpanded]=useState(new Set());
   const tree=useMemo(()=>presentModelingAssembly(descriptor,results,stepRoot),[descriptor,results,stepRoot]);
@@ -207,26 +208,6 @@ export default function ModelingTree({ modeling, active, disabled, references=EM
   const requestKey=JSON.stringify(requestedOccurrences);
   useEffect(()=>{onRequestRecognition?.(JSON.parse(requestKey));},[requestKey,onRequestRecognition]);
 
-  const visibleFeatureTargets=useMemo(()=>{
-    const targets=[];
-    const visit=(nodes,inheritedHidden=false,inheritedUnavailable=false)=>{for(const node of nodes){
-      if(node.kind === 'curve')continue;
-      const {hiddenByOwner,outsideFrontier,unavailable}=nodeAvailability(node,partControls,inheritedHidden,inheritedUnavailable);
-      // Children first: a visible profile wins over its feature; its parent is
-      // retained as the fallback for canonical faces outside that profile.
-      if(expanded.has(node.id))visit(node.children || EMPTY,hiddenByOwner,outsideFrontier);
-      if(!node.selectionId && !unavailable){
-        const referenceIds=modelingReferenceIds(node,node.occurrenceId,references);
-        if(referenceIds.length)targets.push({nodeId:node.id,referenceIds});
-      }
-    }};
-    visit(tree);
-    return targets;
-  },[tree,expanded,references,partControls.hiddenPartIds,partControls.selectableNodeIds]);
-  const featureTargetKey=JSON.stringify(visibleFeatureTargets);
-  useEffect(()=>{onVisibleFeatureTargetsChange?.(JSON.parse(featureTargetKey));},[featureTargetKey,onVisibleFeatureTargetsChange]);
-  useEffect(()=>()=>onVisibleFeatureTargetsChange?.([]),[onVisibleFeatureTargetsChange]);
-
   const done=componentIds.filter(id=>results[id]).length;
   const failed=componentIds.filter(id=>results[id]?.error).length;
   useEffect(()=>{if(!active || disabled)setPending(null);},[active,disabled]);
@@ -237,6 +218,13 @@ export default function ModelingTree({ modeling, active, disabled, references=EM
     if(ids.length){onSelect?.(ids);setPending(null);}
   },[pending,active,disabled,references,onSelect,selectionKey]);
   const choose=(node,event)=>{
+    if (event?.type === 'dblclick') {
+      const components = node.memberSelectionIds?.length ? node.memberSelectionIds : node.selectionId;
+      if (components) {
+        if (partControls.isAssemblyView) partControls.onFocusTreeNode?.(components);
+      } else if (modelingReferenceIds(node,node.occurrenceId,references).length) partControls.onCopySelection?.();
+      return;
+    }
     // A folded row stands for every instance under it, so it selects them all --
     // the alternative is a row that reads "(6)" and selects one of the six.
     if(node.memberSelectionIds?.length){
@@ -295,16 +283,16 @@ export default function ModelingTree({ modeling, active, disabled, references=EM
   </>;
   const empty=descriptor && done===componentIds.length && !failed && componentIds.every(id=>!results[id]?.tree?.length);
   return <div className="flex flex-col text-xs" aria-label="Modeling tree">
-    <TreeFilterInput className="h-7" label="Filter model" placeholder="Filter model…" value={query} onChange={changeQuery} onKeyDown={onSearchKeyDown}
+    <TreeFilterInput label="Filter model" placeholder="Filter model…" value={query} onChange={changeQuery} onKeyDown={onSearchKeyDown}
       trailing={<>
         {partControls.hiddenPartIds?.length > 0 && <Button disabled={disabled} type="button" variant="ghost" size="sm" className="h-6 shrink-0 px-1.5 text-tiny text-muted-foreground" onClick={partControls.showAllHiddenParts}>Show all</Button>}
         {partControls.focusedNodeIds?.length > 0 && <Button disabled={disabled} type="button" variant="ghost" size="sm" className="h-6 shrink-0 px-1.5 text-tiny text-muted-foreground" onClick={partControls.onExitAllIsolate}>Exit isolate</Button>}
       </>}/>
     {(error || failed>0) && <p role="alert" className="px-3 pb-2 text-micro text-muted-foreground">{error || `${failed} ${failed===1?'component is':'components are'} unavailable.`} <button type="button" className="underline" onClick={retryFailed}>Retry</button></p>}
     <InspectorSplit title="Reference"
-      actions={<Button type="button" variant="ghost" size="icon-xs" aria-label="Clear selection" title="Clear selection" disabled={disabled} onClick={clearSelection}><X className="size-3.5" aria-hidden="true"/></Button>}
+      actions={<Button type="button" variant="ghost" size="icon-xs" aria-label="Clear selection"  disabled={disabled} onClick={clearSelection}><X className="size-3.5" aria-hidden="true"/></Button>}
       label="Reference details" details={nodeDetails || pending || selectionDetails ? details : null}>
-      <div ref={listRef} className="px-1 py-1" aria-label="Model tree area"
+      <div ref={listRef} className="px-1 pt-1" aria-label="Model tree area"
         onClick={event=>{if(!disabled && !event.target.closest('li,button,input,[role="menu"]'))clearSelection();}}>
         {searching && <p role="status" className="px-2 py-1 text-micro text-muted-foreground">{found.total > found.matches.length ? `First ${found.matches.length} of ${found.total.toLocaleString()} matches` : `${found.total} ${found.total === 1 ? 'match' : 'matches'}`}</p>}
         {searching ? found.matches.length

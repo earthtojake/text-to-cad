@@ -170,10 +170,10 @@ export default function LinksSection({ description = null, components = EMPTY, p
   const clearSelection = () => selection.select("");
 
   return <div className="flex flex-col text-xs" aria-label="Robot links">
-    <TreeFilterInput className="h-7" label="Filter links" placeholder="Filter links…" value={query} onChange={changeQuery} onKeyDown={onSearchKeyDown}/>
+    <TreeFilterInput label="Filter links" placeholder="Filter links…" value={query} onChange={changeQuery} onKeyDown={onSearchKeyDown}/>
     <InspectorSplit title="Reference" label="Reference details" details={details}
-      actions={<Button type="button" variant="ghost" size="icon-xs" aria-label="Clear selection" title="Clear selection" onClick={clearSelection}><X className="size-3.5" aria-hidden="true"/></Button>}>
-      <div ref={listRef} className="px-1 py-1" aria-label="Robot tree area"
+      actions={<Button type="button" variant="ghost" size="icon-xs" aria-label="Clear selection"  onClick={clearSelection}><X className="size-3.5" aria-hidden="true"/></Button>}>
+      <div ref={listRef} className="px-1 pt-1" aria-label="Robot tree area"
         onClick={event => { if (!event.target.closest("li,button,input")) clearSelection(); }}>
         {searching && <p role="status" className="px-2 py-1 text-micro text-muted-foreground">{found.total > found.matches.length ? `First ${found.matches.length} of ${found.total.toLocaleString()} matches` : `${found.total} ${found.total === 1 ? "match" : "matches"}`}</p>}
         {searching ? found.matches.length

@@ -298,3 +298,25 @@ test("the ground is sized from the bounds it is given, so a viewer can hand it t
   const runtime = {};
   assert.equal(applyRuntimeModelBounds(THREE, runtime, rest, VIEWER_SCENE_SCALE.CAD).radius, restRadius);
 });
+
+test("clip coordinates span authored bounds even when the posed envelope changes", () => {
+  const rest = { min: [-20, -30, -40], max: [80, 170, 260] };
+  const runtime = { THREE, zeroPoseBounds: rest,
+    modelBounds: { min: [-100, -100, -100], max: [900, 900, 900] },
+    modelGroup: new THREE.Group(), displayRecords: [] };
+  runtime.modelGroup.position.set(7, 11, 13);
+  for (const [index, axis] of ['x', 'y', 'z'].entries()) {
+    for (const offset of [0, 0.25, 0.5, 0.75, 1]) {
+      for (const invert of [false, true]) {
+        syncRuntimeStepClipPlane(runtime, { enabled: true, axis, offset, invert });
+        if ((!invert && offset === 1) || (invert && offset === 0)) {
+          assert.equal(runtime.activeClipPlane, null);
+        } else {
+          const point = runtime.modelGroup.position.clone();
+          point.setComponent(index, point.getComponent(index) + rest.min[index] + offset * (rest.max[index] - rest.min[index]));
+          assertNear(runtime.activeClipPlane.distanceToPoint(point), 0, 'displayed coordinate is the plane');
+        }
+      }
+    }
+  }
+});

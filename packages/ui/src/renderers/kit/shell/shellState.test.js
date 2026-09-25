@@ -15,13 +15,14 @@ test("a missing, foreign or older record restores nothing and never throws", () 
   }
 });
 
-test("the record round-trips camera, display, tool and the renderer's own slice", () => {
+test("the record discards camera framing while preserving display, tool and renderer state", () => {
   const display = readShellState({ version: 1, display: { mode: "render", surfaces: { colorMode: "single", color: "#00c040" } } }).display;
   const written = writeShellState({ camera, display, tool: "orbit", renderer: { clip: "glb:1" } });
   const copy = JSON.parse(JSON.stringify(written));
   const state = readShellState(copy);
-  assert.deepEqual(state.camera.position, camera.position);
-  assert.equal(state.camera.zoom, 1.5);
+  assert.equal(written.camera, null);
+  assert.equal(state.camera, null);
+  assert.equal(readShellState({ ...copy, camera }).camera, null);
   assert.deepEqual([state.display.mode, state.display.surfaces.colorMode, state.display.surfaces.color], ["render", "single", "#00c040"]);
   assert.deepEqual([state.tool, state.renderer], ["orbit", { clip: "glb:1" }]);
   assert.equal(shellStatesEqual(written, writeShellState({ camera, display, tool: "orbit", renderer: { clip: "glb:1" } })), true);

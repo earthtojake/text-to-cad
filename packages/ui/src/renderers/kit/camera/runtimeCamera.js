@@ -595,6 +595,7 @@ export function zoomRuntimeToBounds(runtime, bounds, sceneScaleMode, {
   animate = true,
   modelOffset = null,
   resetZoomBaseline = false,
+  originalModelScale = false,
   viewDirection = null,
   viewUp = null
 } = {}) {
@@ -627,8 +628,21 @@ export function zoomRuntimeToBounds(runtime, bounds, sceneScaleMode, {
   if (!frame) {
     return false;
   }
+  // Cube shortcuts reset to the same 100% ruler the original model opened with.
+  // Refitting each face would silently redefine that scale for a tall or flat part.
+  if (originalModelScale) {
+    const original = originalModelCameraFrame(runtime.THREE, {
+      camera: runtime.camera, bounds: normalizedBounds, frameAspect: frameMetrics.aspect,
+      minRadius: getSceneScaleSettings(sceneScaleMode).minModelRadius, modelOffset
+    });
+    if (original) {
+      frame.halfHeight = original.halfHeight;
+      frame.distance = original.distance;
+      frame.position.copy(frame.target).addScaledVector(frame.direction, original.distance);
+    }
+  }
   runtime.interactiveFraming = {
-    bounds: normalizedBounds, direction: frame.direction.toArray(), up: frame.up.toArray(),
+    bounds: normalizedBounds, direction: originalModelScale ? [...DEFAULT_VIEW_DIRECTION] : frame.direction.toArray(), up: frame.up.toArray(),
     minRadius: getSceneScaleSettings(sceneScaleMode).minModelRadius,
     nearClip: fitNearClip,
   };

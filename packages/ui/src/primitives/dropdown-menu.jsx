@@ -39,10 +39,11 @@ const DropdownMenuContent = React.forwardRef(/**
  */ function DropdownMenuContent({
   className,
   sideOffset = 4,
+  container,
   ...props
 }, ref) {
   return (
-    <DropdownMenuPrimitive.Portal>
+    <DropdownMenuPrimitive.Portal container={container}>
       <DropdownMenuPrimitive.Content
         ref={ref}
         data-slot="dropdown-menu-content"
@@ -81,6 +82,7 @@ function DropdownMenuCheckboxItem({
   className,
   children,
   checked,
+  indicatorSide = "left",
   ...props
 }) {
   return (
@@ -88,12 +90,13 @@ function DropdownMenuCheckboxItem({
       data-slot="dropdown-menu-checkbox-item"
       className={cn(
         "relative flex cursor-default items-center gap-2 rounded-sm py-1.5 pr-2 pl-8 text-tiny leading-4 outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        indicatorSide === "right" && "pl-2 pr-8",
         className
       )}
       checked={checked}
       {...props}
     >
-      <span className="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center">
+      <span className={cn("pointer-events-none absolute flex size-3.5 items-center justify-center", indicatorSide === "right" ? "right-2" : "left-2")}>
         <DropdownMenuPrimitive.ItemIndicator>
           <Check className="size-4" />
         </DropdownMenuPrimitive.ItemIndicator>
@@ -112,6 +115,7 @@ function DropdownMenuRadioGroup({
 function DropdownMenuRadioItem({
   className,
   children,
+  indicatorSide = "left",
   ...props
 }) {
   return (
@@ -119,13 +123,14 @@ function DropdownMenuRadioItem({
       data-slot="dropdown-menu-radio-item"
       className={cn(
         "relative flex cursor-default items-center gap-2 rounded-sm py-1.5 pr-2 pl-8 text-tiny leading-4 outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        indicatorSide === "right" && "pl-2 pr-8",
         className
       )}
       {...props}
     >
-      <span className="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center">
+      <span className={cn("pointer-events-none absolute flex size-3.5 items-center justify-center", indicatorSide === "right" ? "right-2" : "left-2")}>
         <DropdownMenuPrimitive.ItemIndicator>
-          <Circle className="size-2 fill-current" />
+          {indicatorSide === "right" ? <Check className="size-4" /> : <Circle className="size-2 fill-current" />}
         </DropdownMenuPrimitive.ItemIndicator>
       </span>
       {children}

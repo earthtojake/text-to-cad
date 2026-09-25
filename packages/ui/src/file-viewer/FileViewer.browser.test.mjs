@@ -296,3 +296,17 @@ test("catalog arrival restarts the initial pending directory listing", async () 
   assert.equal(await page.getByText('Reading…', { exact: true }).count(), 0);
   assert.ok(await page.evaluate(() => window.harness.events.filter(event => event === 'root-a:list').length >= 2));
 });
+
+test("mobile breadcrumbs show only the file and its actions across a single breakpoint", async () => {
+  await reset();
+  await page.evaluate(() => { window.harness.a.add('nested/deep/file.txt'); window.harness.open('nested/deep/file.txt'); });
+  await page.getByRole('button', { name: 'Browse file.txt', exact: true }).waitFor();
+  const pane = page.getByTestId('primary');
+  await pane.evaluate(element => { element.parentElement.style.width = '390px'; });
+  await page.waitForFunction(() => document.querySelector('[data-viewer-layout]')?.dataset.viewerLayout === 'mobile');
+  assert.equal(await pane.locator('[data-crumb="directory"], [data-crumb="ellipsis"]').count(), 0);
+  assert.equal(await pane.getByTestId('crumb-actions').count(), 1);
+  await pane.evaluate(element => { element.parentElement.style.width = '720px'; });
+  await page.waitForFunction(() => document.querySelector('[data-viewer-layout]')?.dataset.viewerLayout === 'desktop');
+  assert.equal(await pane.locator('[data-crumb="directory"]').count(), 2);
+});

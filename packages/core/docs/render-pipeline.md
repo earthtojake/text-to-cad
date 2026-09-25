@@ -52,7 +52,7 @@ Every preset has the same independent groups:
   surfaces: { style: "shaded", colorMode: "original", opacity: 1 },
   edges: { enabled: false, visibility: "visible", color: "#253443" },
   lighting: { quality: "final", exposure: 0, rotation: 0, size: 1, fill: 0.25 },
-  background: { color: "#e7e7e5", opacity: 1 },
+  background: { color: "#ffffff", opacity: 1 },
   floor: { placement: "origin", color: "#e7e7e5", opacity: 0.6 },
   grid: { enabled: false, color: "#cbd5e1", opacity: 0.16 },
   axes: { enabled: false, color: "#6b7280", opacity: 0.28 }
@@ -90,7 +90,9 @@ Clip keeps coordinates below its plane by default (`invert: false`); Flip keeps
 coordinates above it. Its offset remains measured from the bounds minimum to
 maximum regardless of Flip. The neutral boundary is therefore offset 1 normally,
 or offset 0 when flipped. Interactive viewers and snapshots share this policy;
-orbiting the camera never changes the clipped half.
+orbiting the camera never changes the clipped half. Clip coordinates use original
+model bounds in both snapshot and interactive paths; posing or exploding the
+model cannot silently change the plane represented by a slider/input value.
 
 `resolveViewSceneSettings({display, camera, appearance, quality})` is the public
 Viewer/snapshot scene-policy boundary. Its `view` is the full grouped state;

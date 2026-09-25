@@ -1,21 +1,17 @@
 import { FLOATING_TOOL_BAR_SURFACE_CLASS } from "../../../kit/tools/FloatingToolBar.js";
 import { ChevronDown, ListFilter } from 'lucide-react';
-import { Fragment, useContext } from 'react';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuLabel, DropdownMenuSeparator } from '@hardcore/ui/primitives/dropdown-menu';
+import { Fragment } from 'react';
+import { DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuLabel, DropdownMenuSeparator } from '@hardcore/ui/primitives/dropdown-menu';
 import { SELECTION_FILTERS } from '../../workbench/selectionFilter.js';
-import { FileSheetPortalContext } from '../../../kit/inspector/FileSheet.js';
+import ToolPopover from "../../../kit/tools/ToolPopover.jsx";
 
 export default function SelectionFilterMenu({ value, onChange, disabled, compact, fullWidth, options = SELECTION_FILTERS, menuLabel = 'Selection filter', hint = 'Shift-click adds or removes from selection.', triggerIcon: TriggerIcon = ListFilter, trigger = null }) {
-  const boundary = useContext(FileSheetPortalContext);
   const label = options.find(item => item.id === value)?.label || options[0]?.label;
-  return <DropdownMenu>
-    <DropdownMenuTrigger asChild>
-      {trigger || <button type="button" aria-label={`${menuLabel}: ${label}`} title={`${menuLabel}: ${label}`} disabled={disabled}
+  const button = trigger || <button type="button" aria-label={`${menuLabel}: ${label}`}  disabled={disabled}
         className={`inline-flex shrink-0 items-center gap-1.5 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 ${fullWidth ? 'w-full px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground' : `h-6 justify-center text-sm hover:bg-sidebar-accent ${compact ? 'px-2' : 'w-6'} ${value !== 'all' ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-foreground/70'}`}`}>
         <TriggerIcon className="size-3 shrink-0" aria-hidden="true" />{(compact || fullWidth) && label}{fullWidth && <ChevronDown className="ml-auto size-3 text-muted-foreground" aria-hidden="true" />}
-      </button>}
-    </DropdownMenuTrigger>
-    <DropdownMenuContent align="start" sideOffset={8} collisionBoundary={boundary} collisionPadding={8} className="w-60 max-w-[min(240px,var(--radix-dropdown-menu-content-available-width))]" onEscapeKeyDown={event => event.stopPropagation()}>
+      </button>;
+  return <ToolPopover trigger={button} label={menuLabel} className="w-60">
       <DropdownMenuLabel>{menuLabel}</DropdownMenuLabel>
       <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
         {options.map((item, index) => <Fragment key={item.id}>
@@ -25,8 +21,7 @@ export default function SelectionFilterMenu({ value, onChange, disabled, compact
         </DropdownMenuRadioItem></Fragment>)}
       </DropdownMenuRadioGroup>
       {hint && <><DropdownMenuSeparator /><p className="px-2 py-1.5 text-micro text-muted-foreground">{hint}</p></>}
-    </DropdownMenuContent>
-  </DropdownMenu>;
+  </ToolPopover>;
 }
 
 /**

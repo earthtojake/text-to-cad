@@ -77,14 +77,15 @@ pickers include opacity, with an opaque checkerboard behind the color swatch:
 0% is transparent, 100% opaque. The background's fractional alpha reaches the
 actual canvas and PNG, not just the preview.
 
-**Mode** and **Surfaces** stay visible. Explode is gated: collapsing clears its
+**Mode** and **Surfaces** share one always-open **Display** section. Explode is gated: collapsing clears its
 amount and reopening starts at 50%; editing back to 0% does not auto-collapse.
 Clip follows the
 same gate rule: disabling discards its offsets and Flip; re-enabling restores
 the default X center cut. Preset selection preserves Clip/Explode; Display Reset
 disables both tools. Grid and Axes are independent sections.
-The fixed panel order is Display, Surfaces, Explode, Clip, Edges, Grid, Axes,
-Lighting, Background, Floor. Preset changes never reorder controls.
+Explode and Clip live in the STEP panel between Features and Position, outside
+the exclusive tool strip. The Display panel order is Display, Edges, Grid,
+Axes, Lighting, Background, Floor. Preset changes never reorder controls.
 The remaining optional effects use the same feature gate primitive. A surface
 gate that just restores ordinary shading is not a meaningful disable action.
 The Lens slider and Camera section are omitted: perspective uses the standard
@@ -164,6 +165,11 @@ Floor defaults to model origin (Z=0), 60% opacity, with Lowest point available.
 Its double-sided shadow-receiving surface uses its actual elevation during
 camera depth fitting, avoiding the origin-placement near-plane gap. Its color
 and opacity are independent of Background.
+Light Render defaults to a pure white background and retains the slightly gray
+floor (`#e7e7e5`); explicit background colors still override the preset.
+External STEP pose and animation passes publish current placed bounds before
+drawing. Depth and lighting follow moving parts without changing camera framing
+or the floor's footprint.
 
 All presets share surface-under-cursor zoom, zero-pose framing and the 1.1 fit
 padding multiplier. Preset changes do not refit. Motion changes geometry, not

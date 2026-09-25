@@ -43,6 +43,7 @@ export interface DrawingEditorProps {
   initialTool?: DrawingTool;
   onReady(controller: DrawingController | null): void;
   onContentChange?(hasContent: boolean): void;
+  onHistoryChange?(history: { canUndo: boolean; canRedo: boolean }): void;
   onToolChange?(tool: string): void;
   onColorChange?(color: string): void;
   /** Pan and zoom made inside the editor, for a host that moves its own background with the ink. */
@@ -68,8 +69,14 @@ function pressHistoryKey(editor: HTMLElement | null, redo: boolean) {
     shiftKey: redo, metaKey: mac, ctrlKey: !mac }));
 }
 
+// Excalidraw 0.18 expands freehand size by 4.25 before pressure shaping. Match
+// the nominal 2px shape strokes rather than giving the pen an 8.5px brush.
+function drawingStrokeWidth(tool: string) {
+  return tool === 'freedraw' ? 2 / 4.25 : ['line', 'arrow', 'rectangle', 'ellipse'].includes(tool) ? 2 : undefined;
+}
+
 /** An editor only: no app detection, persistence, network, file dialogs or prompt routing. */
-export function DrawingEditor({ initialScene, name = 'Drawing', mode = 'canvas', toolbar = true, initialTool = 'selection', onReady, onContentChange, onToolChange, onColorChange, onViewportChange }: DrawingEditorProps) {
+export function DrawingEditor({ initialScene, name = 'Drawing', mode = 'canvas', toolbar = true, initialTool = 'selection', onReady, onContentChange, onHistoryChange, onToolChange, onColorChange, onViewportChange }: DrawingEditorProps) {
   const [initialData] = useState(() => {
     const document = initialScene ? parseDrawingScene(initialScene) : emptyDrawingDocument();
     // Ink over someone else's picture cannot assume a light background.
@@ -78,6 +85,7 @@ export function DrawingEditor({ initialScene, name = 'Drawing', mode = 'canvas',
     // than handing every new line back to selection.
     const tool = { activeTool: { type: DRAWING_TOOLS.includes(initialTool) ? initialTool : 'selection', customType: null, locked: true, lastActiveTool: null } };
     return { ...document, appState: { currentItemFontFamily: 5, ...overlayInk, ...document.appState, ...tool,
+      ...(drawingStrokeWidth(initialTool) != null ? { currentItemStrokeWidth: drawingStrokeWidth(initialTool) } : {}),
       viewBackgroundColor: mode === 'overlay' ? 'transparent' : '#ffffff',
       exportBackground: mode !== 'overlay', exportWithDarkMode: false,
     } } as unknown as ExcalidrawInitialDataState;
@@ -104,6 +112,15 @@ export function DrawingEditor({ initialScene, name = 'Drawing', mode = 'canvas',
   const root = useRef<HTMLDivElement | null>(null);
   const session = useDrawingSession(true, { tool: initialTool, color: mode === 'overlay' ? DEFAULT_OVERLAY_DRAWING_COLOR : '#1e1e1e' });
   const toolChange = useRef(onToolChange), colorChange = useRef(onColorChange), viewportChange = useRef(onViewportChange);
+  const historyChange = useRef(onHistoryChange);
+  historyChange.current = onHistoryChange;
+  // Keyboard tool changes use the same defaults as the toolbar.
+  useEffect(() => {
+    const width = drawingStrokeWidth(session.tool);
+    if (api && width != null && api.getAppState().currentItemStrokeWidth !== width) {
+      api.updateScene({ appState: { currentItemStrokeWidth: width }, captureUpdate: CaptureUpdateAction.NEVER });
+    }
+  }, [api, session.tool]);
   const last = useRef({ tool: '', color: '' });
   toolChange.current = onToolChange; colorChange.current = onColorChange; viewportChange.current = onViewportChange;
   // The SDK paints its default white page until the scene it was given is in
@@ -151,6 +168,8 @@ export function DrawingEditor({ initialScene, name = 'Drawing', mode = 'canvas',
       },
       setTool(tool) {
         if (!DRAWING_TOOLS.includes(tool)) return;
+        const width = drawingStrokeWidth(tool);
+        if (width != null) api.updateScene({ appState: { currentItemStrokeWidth: width }, captureUpdate: CaptureUpdateAction.NEVER });
         api.setActiveTool(tool === 'fill' ? { type: 'custom', customType: 'fill', locked: true } : { type: tool, locked: true });
       },
       setColor(color) { api.updateScene({ appState: { currentItemStrokeColor: color }, captureUpdate: CaptureUpdateAction.NEVER }); },
@@ -168,6 +187,28 @@ export function DrawingEditor({ initialScene, name = 'Drawing', mode = 'canvas',
     ready.current(controller);
     return () => { liveApi.current = null; session.onReady(null); ready.current(null); };
   }, [api, mode, session.onReady]);
+  useEffect(() => {
+    const editor = root.current;
+    if (!api || !editor) return;
+    // The SDK exposes no history subscription through its imperative API. Its
+    // mounted (CSS-hidden) history buttons subscribe to the actual stacks; mirror
+    // their disabled state instead of maintaining a second, divergent history.
+    let previous = '';
+    const report = () => {
+      const undo = editor.querySelector<HTMLButtonElement>('[data-testid="button-undo"]');
+      const redo = editor.querySelector<HTMLButtonElement>('[data-testid="button-redo"]');
+      const history = { canUndo: Boolean(undo && !undo.disabled), canRedo: Boolean(redo && !redo.disabled) };
+      const key = `${history.canUndo}:${history.canRedo}`;
+      if (key === previous) return;
+      previous = key;
+      session.onHistoryChange(history);
+      historyChange.current?.(history);
+    };
+    const observer = new MutationObserver(report);
+    observer.observe(editor, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled'] });
+    report();
+    return () => observer.disconnect();
+  }, [api, session.onHistoryChange]);
   const change = useCallback<NonNullable<Parameters<typeof Excalidraw>[0]['onChange']>>((elements, appState, files) => {
     latest.current = { elements, appState, files };
     const hasContent = elements.some(element => !element.isDeleted);

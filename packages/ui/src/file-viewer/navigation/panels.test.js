@@ -19,16 +19,15 @@ import {
  * row, and no second list for the standalone viewer.
  */
 
-const Icon = () => null;
-const part = { label: "Part", icon: Icon };
+const part = true;
 const panelsOf = (declared, open = "", options) => [...declared, treePanel(open, options)];
 
-test("a viewer file declares Display, then its own panel; a file with nothing of its own, Display alone", () => {
+test("a viewer file declares only its own sidebar; Display belongs to the toolbar", () => {
   assert.deepEqual(
     viewerPanels(true, { file: part }).map((panel) => [panel.id, panel.label, panel.content]),
-    [["cad-display", "Display", "slot"], ["cad-file", "Part", "slot"]]
+    [["cad-file", "Settings", "slot"]]
   );
-  assert.deepEqual(viewerPanels(true).map((panel) => panel.id), ["cad-display"]);
+  assert.deepEqual(viewerPanels(true).map((panel) => panel.id), []);
   // And there are none at all until the surface behind them is up: a toggle
   // over a runtime's failure card would open nothing.
   assert.deepEqual(viewerPanels(false, { file: part }), []);
@@ -40,8 +39,8 @@ test("a file opened directly opens with its own panel, or nothing: never Display
   assert.equal(resolveOpenPanel(panelsOf([]), null), null);
   // Only with no file to show at all is the tree the thing to reach for.
   assert.equal(resolveOpenPanel(panelsOf([], "", { empty: true }), null)?.id, FILE_PANEL_TREE);
-  // A default only: a person who opened Display keeps it.
-  assert.equal(resolveOpenPanel(panelsOf(viewerPanels(true, { file: part })), CAD_PANEL.display)?.id, CAD_PANEL.display);
+  // A legacy Display panel id cannot occupy the sidebar.
+  assert.equal(resolveOpenPanel(panelsOf(viewerPanels(true, { file: part })), CAD_PANEL.display), null);
 });
 
 test("markdown's one panel is named by what pressing it does", () => {
@@ -54,7 +53,7 @@ test("markdown's one panel is named by what pressing it does", () => {
 
 test("the files toggle is last in every list, and named by what it does", () => {
   const viewer = panelsOf(viewerPanels(true, { file: part }));
-  assert.deepEqual(viewer.map((panel) => panel.id), ["cad-display", "cad-file", "tree"]);
+  assert.deepEqual(viewer.map((panel) => panel.id), ["cad-file", "tree"]);
   assert.equal(viewer.at(-1)?.label, "Show files");
   assert.deepEqual(panelsOf([], FILE_PANEL_TREE).map((panel) => [panel.id, panel.label]), [["tree", "Hide files"]]);
 });

@@ -107,7 +107,7 @@ export const SOURCE_PANEL: string;
 export const CAD_PANEL: { readonly file: string; readonly display: string };
 
 /** A viewer file's panels: its own controls (when it has any), then its Display settings. */
-export function viewerPanels(ready: boolean, options?: { file?: { label: string; icon: ElementType } | null }): FilePanel[];
+export function viewerPanels(ready: boolean, options?: { file?: boolean }): FilePanel[];
 /** The desktop's markdown source view, declared in the same vocabulary. */
 export function markdownPanels(open: string): FilePanel[];
 export function treePanel(open: string, options?: { empty?: boolean }): FilePanel;
@@ -121,6 +121,10 @@ export function clampPanelWidth(width: number): number;
 
 /** The one frame every panel is drawn in: one border, one width, one handle. */
 export const FilePanelColumn: ComponentType<{
+  mobile?: boolean;
+  portalContainer?: HTMLElement | null;
+  onDismiss?: () => void;
+  hidden?: boolean;
   id: string;
   label: string;
   width: number;
@@ -298,6 +302,7 @@ export const FileNavRow: ComponentType<{
 
 /** One panel's toggle at the end of the nav row; `active` is its panel being open. */
 export const PanelToggle: ComponentType<{
+  disabled?: boolean;
   icon: ElementType;
   label: string;
   active: boolean;

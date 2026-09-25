@@ -6,8 +6,8 @@ import { cn } from '@hardcore/ui/utils';
  * file tree and the Model tree so the two filters are one control; each caller
  * owns its corpus, ranking and keyboard.
  */
-export function TreeFilterInput({ label, placeholder, value, onChange, onKeyDown, trailing, clearLabel = 'Clear filter', className }) {
-  return <div className={cn('flex h-9 shrink-0 items-center gap-1 border-b px-2', className)}>
+export function TreeFilterInput({ label, placeholder, value, onChange, onKeyDown, trailing, clearLabel = 'Clear filter', className, ...props }) {
+  return <div {...props} data-slot="tree-filter" className={cn('flex h-9 shrink-0 items-center gap-1 border-b px-2', className)}>
     <div className="relative flex min-w-0 flex-1 items-center">
       <Search className="pointer-events-none absolute left-2 size-3 text-muted-foreground" />
       <input
