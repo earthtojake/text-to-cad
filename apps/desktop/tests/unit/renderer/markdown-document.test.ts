@@ -10,7 +10,7 @@ import README from "../../../../../README.md?raw";
 import {
   documentToMarkdown,
   markdownToDocument,
-} from "./document.js";
+} from "@renderer/features/explorer/renderers/markdown/document";
 
 /**
  * The contract this module exists for: a document that comes back out of the

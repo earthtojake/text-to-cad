@@ -1,4 +1,4 @@
-import { defineFileRenderer } from "../../file-viewer/registry.js";
+import { defineFileRenderer } from "@hardcore/ui/file-viewer";
 
 export const unsupportedRenderer = defineFileRenderer<null>({
   id: "unsupported",
@@ -6,7 +6,7 @@ export const unsupportedRenderer = defineFileRenderer<null>({
   fallback: true,
   matches: () => false,
   prepare: async () => ({ data: null }),
-  load: () => import("./UnsupportedRenderer.js"),
+  load: () => import("./UnsupportedRenderer"),
 });
 
-export type { UnsupportedRendererData } from "./UnsupportedRenderer.js";
+export type { UnsupportedRendererData } from "./UnsupportedRenderer";

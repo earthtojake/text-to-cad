@@ -1,14 +1,20 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { createServer } from 'vite';
-import { chromium } from 'playwright';
-import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-test('PDF.js renders the same two-page document that live read, page, selection and capture use', async () => {
-  const root = fileURLToPath(new URL('../../..', import.meta.url));
+import { chromium } from '@playwright/test';
+import { createServer } from 'vite';
+import { test } from 'vitest';
+
+/**
+ * The PDF renderer in real Chromium, with PDF.js's real worker: a FileViewer on an
+ * effect-free host (`pdf/index.tsx`), served by Vite from this app's root. The
+ * renderer is this app's source; FileViewer is `@hardcore/ui`'s built export.
+ */
+test('PDF.js renders the same two-page document that live read, page, selection and capture use', { timeout: 120_000 }, async () => {
+  const root = fileURLToPath(new URL('../..', import.meta.url));
   const pdfRoot = path.dirname(createRequire(import.meta.url).resolve('pdfjs-dist/package.json'));
   const server = await createServer({ configFile: false, root, server: { host: '127.0.0.1', port: 0 },
     plugins: [{ name: 'pdf-harness', configureServer(server) { server.middlewares.use((request, response, next) => {
@@ -16,7 +22,7 @@ test('PDF.js renders the same two-page document that live read, page, selection 
         response.end(readFileSync(path.join(pdfRoot, request.url.slice('/pdfjs/'.length)))); return;
       }
       if (request.url !== '/') return next();
-      response.setHeader('Content-Type', 'text/html'); response.end('<div id="root"></div><script type="module" src="/tests/pdf/index.tsx"></script>');
+      response.setHeader('Content-Type', 'text/html'); response.end('<div id="root"></div><script type="module" src="/tests/browser/pdf/index.tsx"></script>');
     }); } }], esbuild: { jsx: 'automatic' } });
   let browser;
   try {

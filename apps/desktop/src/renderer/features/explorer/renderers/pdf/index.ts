@@ -1,4 +1,4 @@
-import { defineFileRenderer } from "../../file-viewer/registry.js";
+import { defineFileRenderer } from "@hardcore/ui/file-viewer";
 
 export const pdfRenderer = defineFileRenderer<{ bytes: Uint8Array<ArrayBuffer> }>({
   id: "pdf",
@@ -14,7 +14,7 @@ export const pdfRenderer = defineFileRenderer<{ bytes: Uint8Array<ArrayBuffer> }
       dispose: asset.release,
     };
   },
-  load: () => import("./PdfRenderer.js"),
+  load: () => import("./PdfRenderer"),
 });
 
-export type { PdfRendererData } from "./PdfRenderer.js";
+export type { PdfRendererData } from "./PdfRenderer";

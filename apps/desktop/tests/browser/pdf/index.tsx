@@ -1,11 +1,11 @@
 import { createRoot } from 'react-dom/client';
 import { useState } from 'react';
-import { FileViewer } from '../../src/file-viewer/FileViewer.js';
-import { pdfRenderer } from '../../src/renderers/pdf/index.js';
-import { testHost } from '../../src/host/testing/host.js';
-import type { LivePdfDocument } from '../../src/host/documents.js';
-import type { FileViewerState } from '../../src/file-viewer/types.js';
+import { FileViewer, type FileViewerState } from '@hardcore/ui/file-viewer';
+import type { LivePdfDocument } from '@hardcore/ui/host';
 import '@hardcore/ui/styles.css';
+
+import { pdfRenderer } from '../../../src/renderer/features/explorer/renderers/pdf';
+import { testViewerHost } from '../../viewer-host';
 
 const objects = [
   '<< /Type /Catalog /Pages 2 0 R >>',
@@ -26,7 +26,7 @@ const bytes = new TextEncoder().encode(pdf);
 let live: LivePdfDocument | null = null;
 const deliveries: string[] = [];
 const destination = { kind: 'clipboard' as const, available: true };
-const host = testHost({
+const host = testViewerHost({
   promptContext: { getSnapshot: () => destination, subscribe: () => () => {},
     // A host takes the attachments' content before it reports: the page capture is the delivery.
     deliver: async context => {

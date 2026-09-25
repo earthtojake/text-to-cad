@@ -3,10 +3,8 @@ import { getDocument, PDFWorker, TextLayer } from 'pdfjs-dist/legacy/build/pdf.m
 import type { PDFDocumentProxy } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import PdfWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker';
 import 'pdfjs-dist/web/pdf_viewer.css';
-import { useViewerHost } from '../../host/context.js';
-import { PromptContextAction } from '../../host/PromptContextAction.js';
-import type { FileRendererProps } from '../../file-viewer/types.js';
-import type { LivePdfDocument } from '../../host/documents.js';
+import { PromptContextAction, useViewerHost, type LivePdfDocument } from '@hardcore/ui/host';
+import type { FileRendererProps } from '@hardcore/ui/file-viewer';
 
 export interface PdfRendererData { bytes: Uint8Array<ArrayBuffer> }
 function validPage(page: number, count: number) {
@@ -32,12 +30,15 @@ export default function PdfRenderer({ data, file, source, state, onStateChange, 
   const [error, setError] = useState<string | null>(null);
   const [selection, setSelection] = useState('');
   const [feedback, setFeedback] = useState('');
-  const pageRef = useRef(page); pageRef.current = page;
-  const selectionRef = useRef(selection); selectionRef.current = selection;
+  // The live binding reads these outside render; every writer of `page` and `selection`
+  // writes its ref first (`setPage`, the text layer's mouseup), so render never has to.
+  const pageRef = useRef(page);
+  const selectionRef = useRef(selection);
   const canvas = useRef<HTMLCanvasElement>(null);
   const layer = useRef<HTMLDivElement>(null);
   const liveRef = useRef<LivePdfDocument | null>(null);
-  const changeRef = useRef(onStateChange); changeRef.current = onStateChange;
+  const changeRef = useRef(onStateChange);
+  useEffect(() => { changeRef.current = onStateChange; }, [onStateChange]);
   const setPage = (value: number) => { pageRef.current = value; selectionRef.current = ''; setSelection(''); updatePage(value); changeRef.current({ page: value }); };
   const assetBaseUrl = host.pdf?.assetBaseUrl;
   useEffect(() => {

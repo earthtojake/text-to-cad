@@ -52,8 +52,6 @@ export { FileIcon, FolderIcon, fileIconFor } from "./icons.jsx";
 export {
   CAD_PANEL,
   FILE_PANEL_TREE,
-  SOURCE_PANEL,
-  markdownPanels,
   nextOpenPanel,
   resolveOpenPanel,
   treePanel,

@@ -12,7 +12,7 @@ title updates, profile locations and the database migration/backup contract.
 
 Electron 40 · electron-vite · React 19 · TypeScript · Tailwind v4 ·
 shadcn/ui (stock neutral) · Vercel AI Elements · `@agentclientprotocol/sdk` ·
-Monaco (code) · TipTap over remark (markdown).
+Monaco (code) · TipTap over remark (markdown) · PDF.js.
 
 This app is a root npm workspace. Install dependencies in this checkout with
 `npm ci` from the repository root, build shared packages, then rebuild native
@@ -21,11 +21,13 @@ Electron dependency resolution must be verified from this workspace's tree.
 
 `features/explorer/FileTab.tsx` is a thin host of `@hardcore/ui/file-viewer`.
 Its adapters translate IPC file access, source capabilities, root identity,
-persistence and CAD commands into package contracts. `renderers.tsx` registers
+persistence and CAD commands into package contracts. `renderers/index.tsx` registers
 the shared viewer renderers (CAD, and DXF drawings, GLB, triangle meshes (STL, 3MF) and
 robot descriptions (URDF, SRDF, SDF) as their own renderers; all get the tab's backend
-connection, preferences, host commands and live binding), Markdown, code,
-image, PDF and fallback renderers. The whole
+connection, preferences, host commands and live binding) and this app's own
+Markdown, code, image, PDF and fallback renderers, which only the desktop
+registers and so live beside it in `features/explorer/renderers/` rather than in
+`@hardcore/ui` (see "File renderers" below). The whole
 file-tab interface is shared with web. Projects, sessions, browser/terminal/
 review tabs, agent integrations and native services remain in this app.
 Neither shared package imports app source, and desktop imports no web source.
@@ -123,7 +125,8 @@ motion switch both suppress these transitions.
 
 ```sh
 npm run typecheck    # tsc over both projects: node (main/preload/shared) and web (renderer)
-npm test             # vitest: tests/unit/{main,shared} in node, tests/unit/renderer in jsdom
+npm test             # vitest: tests/unit/{main,shared} in node, tests/unit/renderer in jsdom,
+                     # tests/browser in Playwright's Chromium (`npx playwright install chromium`)
 npm run lint         # eslint flat config
 npm run build        # scripts/build.mjs: compose the skills, electron-vite build -> out/, bundle the MCP server
 npm run e2e          # playwright _electron against out/ — run `npm run build` first
@@ -449,7 +452,7 @@ signing note.
 Three panes in a flex row, in pixels (`PANE_LIMITS` in `src/shared/types.ts`,
 read by `Shell.tsx`): a 230px sidebar (180–480), the session taking what is
 left with a 320px floor — its transcript and composer are a 720px column
-centred in it — and a 560px explorer (280 up to the window less the session's
+centred in it — and a 740px explorer (280 up to the window less the session's
 floor and the sidebar). The two side panes are `width: Npx` and are the
 persisted preference; the session's width is a consequence, so there is no
 number for it beyond the floor. Two separators (`[data-separator]`,
@@ -589,10 +592,12 @@ opening a file shows the pane without deciding anything for next time.
 
 A CAD file in the explorer is laid out by the shared FileViewer, which measures
 its own width: from 720px up, a file's panels are drawn in the file tab's own
-panel column beside the model (see "The panels a file has"); below it — and the
-explorer pane opens at 560px (`PANE_LIMITS.explorer.default`) — they are
+panel column beside the model (see "The panels a file has"); below it they are
 floating sheets over the model, the crumbs collapse to the file and the view
-cube is hidden. The app owns light/dark appearance. Inspect uses its
+cube is hidden. The explorer pane opens at 740px (`PANE_LIMITS.explorer.default`),
+so a fresh pane in the default 1440px window is the wide layout, with room for
+the 280px panel column beside the model; a narrower window or a dragged
+separator takes it below the breakpoint. The app owns light/dark appearance. Inspect uses its
 fixed light (`#f0f4f9`) or dark (`#333333`) canvas; Render starts from the
 matching photographic studio and keeps its model-local backdrop edits.
 
@@ -606,8 +611,8 @@ already uses. A whole-document serializer moves 18 lines of this
 repository's `README.md` and 149 of its `AGENTS.md` on a one-word edit; this
 moves the block. Raw HTML, link reference definitions and footnotes have no
 node in the schema and are held as their own bytes. See
-`@hardcore/ui`'s Markdown document bridge for the whole argument, and
-`packages/ui/src/renderers/markdown/{document,editor}.test.ts` for the proof, which is run against
+`features/explorer/renderers/markdown/document.ts` for the whole argument, and
+`tests/unit/renderer/markdown-{document,editor}.test.ts` for the proof, which is run against
 these three files.
 
 **Paths in a transcript are links** when they exist (plan §8). `features/session/links` is
@@ -933,6 +938,48 @@ lifetime and prompt port. Fonts are bundled for offline use by the shared
 `@hardcore/ui/drawing-assets` Vite plugin (desktop ships the full set) and the
 editor loads only on opening a Drawing tab. Read [the drawing contract](../../packages/ui/docs/drawing.md)
 for limits, asset licensing and the reuse boundary for future CAD overlays.
+
+### File renderers
+
+The shared viewer renderers come from `@hardcore/ui/renderers/*`. Markdown, code,
+image, PDF and the unsupported fallback are this app's own, because web
+registers none of them: `features/explorer/renderers/{markdown,code,image,pdf,unsupported}`,
+each a `defineFileRenderer` registration from `@hardcore/ui/file-viewer` over the
+package's public exports only (the contract a host renderer may rely on is
+`@hardcore/ui`'s [renderer contracts](../../packages/ui/docs/renderers.md)).
+Monaco, TipTap, remark and PDF.js are this app's dependencies, not the package's.
+
+They keep the Markdown document and source views, Monaco's configuration and
+save binding, image fit and actual-size controls, PDF presentation and the
+unsupported-file fallback. Text preparation uses `FileSource.readText`; image and
+PDF preparation use `FileSource.readAsset`, whose release lease is the prepared
+document's `dispose`. Monaco setup and editor constants are `renderers/code/editor`
+(the session's diff view reuses them). Model URIs include source, document, and
+mounted-view identity so two FileViewer instances cannot share draft or cursor
+state, while a mounted editor keeps a stable model through ordinary renders.
+Markdown loads that editor only when its source view (`View source`, a `body`
+panel with the id `source`, persisted like any other panel id) is opened.
+
+PDF uses Mozilla PDF.js with a per-document worker, real text layer, page
+navigation and a prompt capture action. Rendering, extraction and captures
+share the same loaded document. The host provides asset bytes and the live
+`host.pdf` binding. Reads accept at most 50 pages and one million characters;
+page canvases are bounded to 4096 pixels on their longest side. Extraction
+is not OCR. Page and selection identity is captured before asynchronous prompt
+delivery. Page state persists through the renderer's state slice.
+
+Code and Markdown source selections offer “Use selection in prompt” in Monaco's
+context menu. This sends a zero-based UTF-16 text range and the selected bytes
+through PromptContext. External live-buffer replacements update the Markdown
+visual editor without echoing another edit or discarding unaffected source
+formatting. Dirty text can survive view unmounts through the host draft store.
+The image, PDF and fallback views follow the shared viewer design system's type
+scale and breakpoint (`tests/unit/renderer/file-renderers.test.tsx` checks it).
+
+Their tests are this app's: `tests/unit/renderer/{file-renderers,file-renderer-registrations,markdown-*}`
+in jsdom, and `tests/browser/pdf-renderer.test.mjs`, which serves a FileViewer
+with the PDF renderer from this app's root through its own Vite server and drives
+PDF.js's real worker, text selection and capture in Playwright's Chromium.
 
 ### Live files and terminals
 
@@ -1414,10 +1461,16 @@ src/renderer/
     drawing/              temporary Excalidraw host and prompt attachment action
     adapters/fileSource.ts  this app's file/navigation service: the listings, read a
                           directory at a time over IPC, and the crumb entry menus
-    markdown/document.ts  markdown <-> the editor's document, keeping every block the
+    renderers/            the file-tab renderers: index.tsx composes the shared viewer
+                          renderers with this app's own, which live here —
+      code/               Monaco, self-hosted, and its worker setup (code/editor)
+      markdown/           the document editor and its `View source` panel
+      markdown/document.ts  markdown <-> the editor's document, keeping every block the
                           person did not touch byte for byte (remark; read its header)
-    markdown/schema.ts    the editor's schema: TipTap's starter kit plus tables, task
+      markdown/schema.ts  the editor's schema: TipTap's starter kit plus tables, task
                           lists, images, a raw-markdown atom and the source attributes
+      image/, pdf/        image fit and zoom; PDF.js pages, text layer and live binding
+      unsupported/        the fallback: “Not supported”, and Open externally
   features/settings       the Settings route, the card-grouped rows, the agent drawer, and
                           pages/ — one module per page; search is done by the rows themselves
   lib/shortcuts.ts        the keyboard-shortcut table the Shortcuts page prints

@@ -1,15 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import type { FileMetadata, FileSource, TextDocument } from "../file-viewer/types.js";
+import type { FileMetadata } from "../file-viewer/types.js";
 import { selectRenderer } from "../file-viewer/registry.js";
-import { languageFor, monacoModelUri } from "./code/editor/monaco.js";
 import { createStepRenderer } from "./step/index.js";
 import { createDxfRenderer } from "./dxf/index.js";
-import { codeRenderer } from "./code/index.js";
-import { imageRenderer } from "./image/index.js";
-import { markdownRenderer } from "./markdown/index.js";
-import { pdfRenderer } from "./pdf/index.js";
-import { unsupportedRenderer } from "./unsupported/index.js";
 
 const file = (path: string, mediaType: string, mime?: string): FileMetadata => ({
   path,
@@ -19,98 +13,6 @@ const file = (path: string, mediaType: string, mime?: string): FileMetadata => (
   extension: path.split(".").at(-1)?.toLowerCase() ?? "",
   mediaType,
   mime,
-});
-
-const source = (overrides: Partial<FileSource> = {}): FileSource => ({
-  id: "root-a",
-  rootName: "Fixture",
-  stat: async (path) => file(path, "text"),
-  ...overrides,
-});
-
-describe("non-CAD renderer registrations", () => {
-  it("selects specific formats before text and has an explicit fallback", () => {
-    const renderers = [codeRenderer, markdownRenderer, imageRenderer, pdfRenderer, unsupportedRenderer];
-    expect(selectRenderer(renderers, file("README.md", "text", "text/markdown")).id).toBe("markdown");
-    expect(selectRenderer(renderers, file("photo.png", "image", "image/png")).id).toBe("image");
-    expect(selectRenderer(renderers, file("paper.pdf", "pdf", "application/pdf")).id).toBe("pdf");
-    expect(selectRenderer(renderers, file("main.ts", "text", "text/plain")).id).toBe("code");
-    expect(selectRenderer(renderers, file("archive.zip", "binary", "application/zip")).id).toBe("unsupported");
-  });
-
-  it("preserves Markdown's preview/source switch, declared by the prepared document", async () => {
-    const text = { value: "# Title", readOnly: false };
-    const prepared = await markdownRenderer.prepare({
-      file: file("README.md", "text"), source: source({ readText: async () => text as never }), signal: new AbortController().signal,
-    });
-    expect(prepared.panels?.({ open: "", ready: true, file: file("README.md", "text") }))
-      .toMatchObject([{ id: "source", label: "View source", content: "body" }]);
-    expect(prepared.panels?.({ open: "source", ready: true, file: file("README.md", "text") }))
-      .toMatchObject([{ id: "source", label: "View preview", content: "body" }]);
-  });
-
-  it("prepares an unsupported file without reading or decoding its contents", async () => {
-    const readText = vi.fn();
-    const readAsset = vi.fn();
-    const prepared = await unsupportedRenderer.prepare({
-      file: file("archive.zip", "binary", "application/zip"),
-      source: source({ readText, readAsset }),
-      signal: new AbortController().signal,
-    });
-    expect(prepared.text).toBeUndefined();
-    expect(prepared.Component).toBeTypeOf("function");
-    expect(readText).not.toHaveBeenCalled();
-    expect(readAsset).not.toHaveBeenCalled();
-  });
-
-  it("prepares editable text through the source without changing its metadata", async () => {
-    const text: TextDocument = { content: "# Exact bytes\n", revision: "r1", truncated: true };
-    const readText = vi.fn(async () => text);
-    const prepared = await markdownRenderer.prepare({
-      file: file("README.md", "text"),
-      source: source({ readText }),
-      signal: new AbortController().signal,
-    });
-    expect(readText).toHaveBeenCalledWith("README.md", { signal: expect.any(AbortSignal) });
-    expect(prepared.text).toBe(text);
-  });
-
-  it.each([imageRenderer, pdfRenderer])("releases every managed asset lease", async (renderer) => {
-    const release = vi.fn();
-    const readAsset = vi.fn(async () => ({ url: "blob:fixture", mime: "application/octet-stream", bytes: new Uint8Array([37, 80, 68, 70]), release }));
-    const prepared = await renderer.prepare({
-      file: file(renderer.id === "image" ? "photo.png" : "paper.pdf", renderer.id),
-      source: source({ readAsset }),
-      signal: new AbortController().signal,
-    });
-    prepared.dispose?.();
-    expect(release).toHaveBeenCalledOnce();
-  });
-
-  it("releases a PDF lease when the host cannot supply bytes", async () => {
-    const release = vi.fn();
-    await expect(pdfRenderer.prepare({
-      file: file("paper.pdf", "pdf"),
-      source: source({ readAsset: async () => ({ url: "blob:pdf", release }) }),
-      signal: new AbortController().signal,
-    })).rejects.toThrow("asset bytes");
-    expect(release).toHaveBeenCalledOnce();
-  });
-
-  it.each([imageRenderer, pdfRenderer])("releases an asset when its request is cancelled after acquisition", async (renderer) => {
-    const controller = new AbortController();
-    const release = vi.fn();
-    const readAsset = vi.fn(async () => {
-      controller.abort();
-      return { url: "blob:cancelled", bytes: new Uint8Array([37, 80, 68, 70]), release };
-    });
-    await expect(renderer.prepare({
-      file: file(renderer.id === "image" ? "photo.png" : "paper.pdf", renderer.id),
-      source: source({ readAsset }),
-      signal: controller.signal,
-    })).rejects.toMatchObject({ name: "AbortError" });
-    expect(release).toHaveBeenCalledOnce();
-  });
 });
 
 describe("viewer renderer registrations", () => {
@@ -126,20 +28,5 @@ describe("viewer renderer registrations", () => {
     expect("panels" in dxf).toBe(false);
     // Fullscreen is each viewer's own presentation, never a flag a registration offers a host.
     expect("fullscreen" in dxf || "fullscreen" in step).toBe(false);
-  });
-});
-
-describe("shared Monaco identity", () => {
-  it("keeps one view stable and isolates views and roots", () => {
-    const first = monacoModelUri("root-a", "src/main.ts", "document-1", "view-1");
-    expect(monacoModelUri("root-a", "src/main.ts", "document-1", "view-1")).toBe(first);
-    expect(monacoModelUri("root-a", "src/main.ts", "document-1", "view-2")).not.toBe(first);
-    expect(monacoModelUri("root-b", "src/main.ts", "document-1", "view-1")).not.toBe(first);
-  });
-
-  it("preserves the editor language table", () => {
-    expect(languageFor("Dockerfile.dev")).toBe("dockerfile");
-    expect(languageFor("robot.urdf")).toBe("xml");
-    expect(languageFor("data.unknownext")).toBe("plaintext");
   });
 });

@@ -13,7 +13,7 @@
 import * as monaco from "monaco-editor";
 // The explorer owns the worker environment and the base themes; the session
 // only adds two transparent variants so a diff sits on the transcript itself.
-import { languageFor, setupMonaco } from "@hardcore/ui/renderers/code/editor";
+import { languageFor, setupMonaco } from "@renderer/features/explorer/renderers/code/editor";
 
 let configured = false;
 

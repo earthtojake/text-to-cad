@@ -1,6 +1,6 @@
 import { cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
-import { MarkdownEditor } from './MarkdownRenderer.js';
+import { MarkdownEditor } from '@renderer/features/explorer/renderers/markdown/MarkdownRenderer';
 
 afterEach(cleanup);
 test('a live-buffer replacement reaches the visual editor without echoing an edit', async () => {

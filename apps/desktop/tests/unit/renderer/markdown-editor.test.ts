@@ -10,8 +10,8 @@ import {
   capturePristine,
   documentToMarkdown,
   markdownToDocument,
-} from "./document.js";
-import { markdownExtensions } from "./schema.js";
+} from "@renderer/features/explorer/renderers/markdown/document";
+import { markdownExtensions } from "@renderer/features/explorer/renderers/markdown/schema";
 
 /**
  * The same contract as `markdown-document.test.ts`, but through a real

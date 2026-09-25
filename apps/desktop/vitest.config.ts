@@ -41,6 +41,11 @@ const alias = [
  *   tests/unit/{main,shared}  plain Node, no DOM;
  *   tests/unit/renderer       jsdom.
  *
+ * And a third, `browser`: Node tests that serve a harness from this app's root
+ * with their own Vite server and drive it in Playwright's Chromium (the PDF
+ * renderer, whose worker, text layer and canvas jsdom has none of). They need
+ * `npx playwright install chromium`, as `@hardcore/ui`'s browser suite does.
+ *
  * The split matters. A main-process test that quietly gets a `window` will
  * pass while the code it covers cannot run, and a renderer test without one
  * fails for the wrong reason.
@@ -71,6 +76,13 @@ export default defineConfig({
           // per test; on a machine that is also building the app, that is
           // more than five seconds and not a failure.
           testTimeout: 20_000,
+        },
+      },
+      {
+        test: {
+          name: "browser",
+          environment: "node",
+          include: ["tests/browser/**/*.test.mjs"],
         },
       },
       {

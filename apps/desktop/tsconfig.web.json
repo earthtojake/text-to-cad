@@ -8,6 +8,8 @@
     "tests/unit/renderer/**/*.ts",
     "tests/unit/renderer/**/*.tsx",
     "tests/unit/shared/frames.ts",
+    "tests/browser/**/*.tsx",
+    "tests/viewer-host.ts",
     "tests/setup-jsdom.ts"
   ],
   "compilerOptions": {

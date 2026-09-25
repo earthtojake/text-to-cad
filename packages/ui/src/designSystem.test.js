@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 // (markdown, code) keeps its own content styles and is not chrome.
 const root = fileURLToPath(new URL(".", import.meta.url));
 const CHROME = ["file-viewer", "host", "primitives", "loading", "drawing", "renderers/kit", "renderers/glb", "renderers/mesh", "renderers/dxf",
-  "renderers/image", "renderers/workspace", "renderers/pdf", "renderers/unsupported"];
+  "renderers/workspace"];
 const sources = dir => readdirSync(dir).flatMap(name => {
   const path = join(dir, name);
   if (statSync(path).isDirectory()) return name === "__fixtures__" ? [] : sources(path);

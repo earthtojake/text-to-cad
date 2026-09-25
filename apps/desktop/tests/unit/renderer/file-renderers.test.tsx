@@ -1,17 +1,13 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { DocumentSession, FileRendererProps, FileSource } from "../file-viewer/types.js";
-import CodeRenderer from "./code/CodeRenderer.js";
-import ImageRenderer from "./image/ImageRenderer.js";
-import { ViewerHostContext } from "../host/context.js";
-import { testHost } from "../host/testing/host.js";
-import UnsupportedRenderer from "./unsupported/UnsupportedRenderer.js";
+import type { DocumentSession, FileRendererProps, FileSource } from "@hardcore/ui/file-viewer";
+import { ViewerHostContext } from "@hardcore/ui/host";
+import CodeRenderer from "@renderer/features/explorer/renderers/code/CodeRenderer";
+import ImageRenderer from "@renderer/features/explorer/renderers/image/ImageRenderer";
+import UnsupportedRenderer from "@renderer/features/explorer/renderers/unsupported/UnsupportedRenderer";
 
-// The package build uses automatic JSX. This focused no-config Vitest command
-// also executes legacy .jsx primitives whose transform expects React global.
-Object.assign(globalThis, { React });
+import { testViewerHost } from "../../viewer-host";
 
 let editorProps: Record<string, unknown> | null = null;
 
@@ -21,7 +17,7 @@ vi.mock("@monaco-editor/react", () => ({
     return <div data-testid="monaco-editor" />;
   },
 }));
-vi.mock("./code/editor/setup.js", () => ({ setupMonaco: vi.fn() }));
+vi.mock("@renderer/features/explorer/renderers/code/editor/setup", () => ({ setupMonaco: vi.fn() }));
 
 const source = (overrides: Partial<FileSource> = {}): FileSource => ({
   id: "root:fixture",
@@ -39,7 +35,7 @@ const documentSession = (overrides: Partial<DocumentSession> = {}): DocumentSess
   stale: false,
   error: null,
   setValue: vi.fn(),
-  save: vi.fn(async () => {}),
+  save: vi.fn(async () => ({ status: "unavailable" as const })),
   reload: vi.fn(),
   keepMine: vi.fn(),
   ...overrides,
@@ -73,7 +69,7 @@ describe("CodeRenderer", () => {
   it("preserves editor options, appearance, edits, save binding, and isolated model identity", () => {
     const document = documentSession();
     const props = common(null, { document });
-    const first = render(<ViewerHostContext.Provider value={testHost()}><CodeRenderer {...props} /></ViewerHostContext.Provider>);
+    const first = render(<ViewerHostContext.Provider value={testViewerHost()}><CodeRenderer {...props} /></ViewerHostContext.Provider>);
     expect(screen.getByTestId("monaco-editor")).toBeTruthy();
     expect(editorProps?.language).toBe("typescript");
     expect(editorProps?.theme).toBe("hardcore-dark");
@@ -98,14 +94,14 @@ describe("CodeRenderer", () => {
     saveCommand?.();
     expect(document.save).toHaveBeenCalledOnce();
 
-    const second = render(<ViewerHostContext.Provider value={testHost()}><CodeRenderer {...props} /></ViewerHostContext.Provider>);
+    const second = render(<ViewerHostContext.Provider value={testViewerHost()}><CodeRenderer {...props} /></ViewerHostContext.Provider>);
     expect(editorProps?.path).not.toBe(firstPath);
     first.unmount();
     second.unmount();
   });
 
   it("keeps prose wrapped and honors read-only documents", () => {
-    render(<ViewerHostContext.Provider value={testHost()}><CodeRenderer {...common(null, {
+    render(<ViewerHostContext.Provider value={testViewerHost()}><CodeRenderer {...common(null, {
       file: { path: "README.md", name: "README.md", kind: "file", size: 4, extension: "md" },
       document: documentSession({ readOnly: true }),
     })} /></ViewerHostContext.Provider>);
@@ -130,11 +126,11 @@ describe("asset and fallback renderers", () => {
   });
 
   // PDF rendering, selection, capture and capability cleanup use the real worker
-  // in pdf/PdfRenderer.browser.test.mjs rather than a simulated iframe.
+  // in tests/browser/pdf-renderer.test.ts rather than a simulated iframe.
 
   it("offers the existing OS fallback only when the host provides it", () => {
     const openDefault = vi.fn();
-    render(<ViewerHostContext.Provider value={testHost({ fileActions: { perform: { "open-default": openDefault } } })}><UnsupportedRenderer {...common(null, {
+    render(<ViewerHostContext.Provider value={testViewerHost({ fileActions: { perform: { "open-default": openDefault } } })}><UnsupportedRenderer {...common(null, {
       file: { path: "archive.zip", name: "archive.zip", kind: "file", size: 2048, extension: "zip", mediaType: "binary" },
 
     })} /></ViewerHostContext.Provider>);
@@ -145,11 +141,33 @@ describe("asset and fallback renderers", () => {
   });
 
   it("shows unsupported files without requiring an external-open capability", () => {
-    render(<ViewerHostContext.Provider value={testHost()}><UnsupportedRenderer {...common(null, {
+    render(<ViewerHostContext.Provider value={testViewerHost()}><UnsupportedRenderer {...common(null, {
       file: { path: "capture.bin", name: "capture.bin", kind: "file", size: 64, extension: "bin", mediaType: "binary" },
     })} /></ViewerHostContext.Provider>);
     expect(screen.getByText("Not supported")).toBeTruthy();
     expect(screen.getByText(/capture.bin/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Open externally" })).toBeNull();
+  });
+});
+
+// The image, PDF and fallback views are file-tab chrome, so they follow the shared viewer
+// design system (`@hardcore/ui`'s docs/settings-ui.md): type from the token scale and layout
+// from the viewer's own breakpoint, never the window's `sm:`/`md:` or a pixel font size.
+// Markdown and code are document content and keep their own content styles.
+describe("file-tab chrome", () => {
+  it("uses the type scale and the viewer breakpoint, never window breakpoints or pixel font sizes", () => {
+    const sources = import.meta.glob<string>("../../../src/renderer/features/explorer/renderers/{image,pdf,unsupported}/*.{ts,tsx}", {
+      query: "?raw", import: "default", eager: true,
+    });
+    expect(Object.keys(sources)).not.toHaveLength(0);
+    const found: string[] = [];
+    for (const [file, code] of Object.entries(sources)) {
+      code.split("\n").forEach((line, index) => {
+        if (/(^|[\s"'`])(sm|md|lg|xl|2xl):[\w[!-]/.test(line) || /\btext-\[\d+(\.\d+)?px\]/.test(line)) {
+          found.push(`${file.split("/renderers/")[1]}:${index + 1}: ${line.trim().slice(0, 120)}`);
+        }
+      });
+    }
+    expect(found).toEqual([]);
   });
 });

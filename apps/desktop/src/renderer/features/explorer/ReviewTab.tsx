@@ -52,7 +52,7 @@ import {
   languageFor,
   monacoTheme,
   setupMonaco,
-} from "@hardcore/ui/renderers/code/editor";
+} from "@renderer/features/explorer/renderers/code/editor";
 import type { ChangedFile, FileDiff, GitStatus } from "./types";
 
 /**
