@@ -320,6 +320,28 @@ test("mobile breadcrumbs show only the file and its actions across a single brea
   assert.equal(await pane.locator('[data-crumb="directory"]').count(), 2);
 });
 
+test("a narrow empty tab still opens on its tree, and a file picked there opens with nothing over it", async () => {
+  await reset();
+  const pane = page.getByTestId('primary');
+  await pane.evaluate(element => { element.parentElement.style.width = '560px'; });
+  await page.waitForFunction(() => document.querySelector('[data-viewer-layout]')?.dataset.viewerLayout === 'mobile');
+  // A file opens with no sheet over it on a narrow viewer...
+  assert.equal(await page.getByRole("tree").count(), 0);
+  // ...but with no file there is nothing to show except the tree, and the empty state says so.
+  await page.evaluate(() => window.harness.open(null));
+  await page.getByRole("tree").waitFor();
+  assert.equal(await page.getByTestId("tree-toggle").getAttribute("aria-pressed"), "true");
+  // A host hands focus back to whatever opened the tab (a closing menu's trigger): that is not a
+  // dismissal, and the tree stays.
+  await page.evaluate(() => { const outside = document.createElement("button"); outside.textContent = "New tab"; document.body.append(outside); outside.focus(); });
+  await page.waitForTimeout(100);
+  assert.equal(await page.getByRole("tree").count(), 1, "focus elsewhere does not dismiss the sheet");
+  await page.locator('[role="treeitem"][data-path="next.txt"]').click();
+  await waitValue("root-a next");
+  assert.equal(await page.getByRole("tree").count(), 0, "the sheet closes on the pick");
+  await pane.evaluate(element => { element.parentElement.style.width = ''; });
+});
+
 test("the renderer is not re-rendered by the frame's own chrome: a panel drag or a resize within a layout", async () => {
   await reset();
   await page.getByTestId("tree-toggle").click();

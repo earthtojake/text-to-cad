@@ -8,11 +8,9 @@ import { hasOpenPopup } from "../../lib/popups.js";
  * The file surface's panel column: the one frame every panel is drawn in.
  *
  * There is one of these beside a file and never two, because there is one
- * open panel (`panels.js`). Whatever is in it — the file tree, a file's own
- * panel or its Display — gets the same border, the same width and the
- * same handle, which is the point: they used to be two columns of two
- * designs, a file list on the left and the viewer's own aside on the right,
- * each with its own idea of how wide a panel is.
+ * open panel (`panels.js`). Whatever is in it — the file tree or a file's
+ * Settings — gets the same border, the same width and the same handle. Below
+ * the viewer breakpoint it is a floating sheet over the body instead.
  *
  * No title bar of the column's own. Each panel's own top row is its header —
  * the tree's filter, a file panel's first section — and the nav row's toggle is
@@ -25,10 +23,10 @@ import { hasOpenPopup } from "../../lib/popups.js";
 /**
  * The column's range, and the one place it is written down.
  *
- * Both apps clamp to these — the desktop when it stores the width, the
- * standalone when it drags — so a panel is never a different size in one of
- * them, and the `aria-valuemin`/`max` on the handle below are the real
- * numbers rather than a second opinion.
+ * FileViewer clamps every width it stores and draws to these, in both apps, so
+ * a panel is never a different size in one of them, and the
+ * `aria-valuemin`/`max` on the handle below are the real numbers rather than a
+ * second opinion. The mobile sheet is the default width.
  */
 // Fits a Position section's joint sliders and their typed values without scrolling sideways.
 export const PANEL_MIN_WIDTH = 256;
@@ -94,6 +92,10 @@ export function FilePanelColumn({ id, label, width, onWidthChange, onCollapse, c
       style={{ "--file-panel-sheet-width": `${PANEL_DEFAULT_WIDTH}px` }}
       data-file-panel-container={id} data-mobile-panel="" onOpenAutoFocus={event => event.preventDefault()}
       onCloseAutoFocus={event => event.preventDefault()}
+      // A press outside, Escape or the X dismisses the sheet; focus moving elsewhere does not. The
+      // sheet never takes focus, so a host handing focus back to the control that opened this
+      // view (a closing "New tab" menu) must not close the tree an empty tab opens on.
+      onFocusOutside={event => event.preventDefault()}
       onInteractOutside={event => {
         // Navbar toggles switch sheets directly; don't let the old sheet's dismissal close the new one.
         const target = event.detail.originalEvent.target;

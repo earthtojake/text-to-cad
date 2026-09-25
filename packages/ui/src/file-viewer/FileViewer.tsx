@@ -45,8 +45,9 @@ export function FileViewer({ file, host, renderers, state, onStateChange, leadin
   // Width matters only as the breakpoint: this state changes when it is crossed, never per pixel.
   const [rootRef, mobile] = useViewerMobileMeasure();
   // Mobile sheets are deliberate, temporary openings. Keep the wide layout's panel preference intact.
-  const [mobilePanel, setMobilePanel] = useState("");
-  useEffect(() => { setMobilePanel(""); }, [key, mobile]);
+  // `null` is nobody having said: a file opens with nothing, but an empty tab still opens on its tree.
+  const [mobilePanel, setMobilePanel] = useState<string | null>(null);
+  useEffect(() => { setMobilePanel(null); }, [key, mobile]);
   const setPanel = useCallback((panel: string) => {
     if (currentKey.current !== key) return;
     if (mobile) setMobilePanel(panel);
@@ -67,7 +68,7 @@ export function FileViewer({ file, host, renderers, state, onStateChange, leadin
   const ready = loaded.status === "ready" && (readiness?.key === key ? readiness.ready : true);
   const declared = (open: string) => loaded.status === "ready" ? loaded.prepared.panels?.({ open, ready, file: loaded.file }) ?? [] : [];
   const panelsAt = (open: string) => [...declared(open), ...(source.list ? [treePanel(open, { empty: loaded.status === "empty" })] : [])];
-  const requestedPanel = mobile ? mobilePanel : state.panel;
+  const requestedPanel = mobile ? mobilePanel ?? (loaded.status === "empty" ? null : "") : state.panel;
   const openId = resolveOpenPanel(panelsAt(requestedPanel ?? ""), requestedPanel)?.id ?? "";
   const panels = panelsAt(openId);
   const openPanel = panels.find((panel) => panel.id === openId);
