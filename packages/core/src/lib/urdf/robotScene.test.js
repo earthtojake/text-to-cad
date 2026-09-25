@@ -176,7 +176,7 @@ test("a highlight round-trips to the exact look underneath it, in Solid, Flat an
     scene.setHighlight({ hoveredLink: "arm" });
     const hovered = state();
     assert.notEqual(hovered, base, `${name}: hover shows`);
-    scene.setHighlight({ hoveredLink: "arm", selectedLink: "arm" });
+    scene.setHighlight({ hoveredLink: "arm", selectedLinks: ["arm"] });
     assert.notEqual(state(), hovered, `${name}: selection outranks hover`);
     assert.deepEqual([arm.renderOrder, arm.material.opacity, arm.children.filter(child => child.userData.isOcclusionGhost && child.visible).length], [23, 1, 1]);
     // A look change while highlighted keeps the highlight on the NEW look.
@@ -201,7 +201,7 @@ test("visuals that name one mesh share one geometry, and dispose releases everyt
   assert.equal(geometry("finger_link").getAttribute("position").array, mesh.vertices, "the loader's array, wrapped");
 
   scene.setSurfaceLook(look());
-  scene.setHighlight({ selectedLink: "arm" });
+  scene.setHighlight({ selectedLinks: ["arm"] });
   const disposed = { geometry: 0, material: 0 };
   scene.object3D.traverse((object) => {
     if (!object.isMesh) return;

@@ -26,6 +26,8 @@ it('lists the named pose on a labelled row, then a slider per joint a person can
   expect([field('shoulder', 'deg').value, field('lift', 'm').value]).toEqual(['0°', '0 m']);
   expect(screen.queryByRole('textbox', { name: /mount|follower/ })).toBeNull();
   expect(screen.getByRole('button', { name: 'Reset' })).toBeTruthy();
+  // Each thumb is named for its joint, as its number field is.
+  expect(screen.getAllByRole('slider').map(thumb => thumb.getAttribute('aria-label'))).toEqual(['shoulder', 'lift']);
 });
 
 it('a plain description has no pose row, and one with nothing to move says so', () => {

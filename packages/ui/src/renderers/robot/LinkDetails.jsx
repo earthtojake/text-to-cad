@@ -170,6 +170,14 @@ function ComponentDetails({ component }) {
   </div>;
 }
 
+/** Several links at once (a modified click adds one): which, as several objects are summarised. */
+export function RobotLinksSummary({ linkNames }) {
+  return <div className="flex min-w-0 flex-col text-tiny font-normal" aria-label="Link details">
+    <p className="py-1 text-micro text-muted-foreground">Selection · {linkNames.length} links</p>
+    <InfoRow label="Links">{linkNames.join(", ")}</InfoRow>
+  </div>;
+}
+
 export default function RobotComponentDetails({ components, selectedIds }) {
   const selected = components.filter((component) => selectedIds.includes(component.id));
   if (!selected.length) return null;

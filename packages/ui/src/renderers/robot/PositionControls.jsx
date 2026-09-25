@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { cn } from "@hardcore/ui/utils";
 import { Slider } from "@hardcore/ui/primitives/slider";
+import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
 import {
   FILE_SHEET_PRECISION_SLIDER_CLASSES, FileSheetSliderField, FileSheetStatusText, parseFileSheetNumberInput
 } from "../kit/inspector/FileSheet.js";
@@ -142,27 +143,28 @@ const JointRow = memo(function JointRow({
         ariaLabel: `${jointName || "Joint"} value in ${unitLabel}`
       }}
     >
-        <Slider
-          className={cn(FILE_SHEET_PRECISION_SLIDER_CLASSES, "min-w-0")}
-          min={minValueDeg}
-          max={maxValueDeg}
-          step={sliderStep}
-          value={[liveValueDeg]}
-          onValueChange={(nextValue) => {
-            const nextValueDeg = clampJointInputValue(nextValue?.[0], minValueDeg, maxValueDeg, liveValueDeg);
-            if (jointControlValuesClose(nextValueDeg, pendingValueRef.current)) {
-              return;
-            }
-            setLiveValueDeg(nextValueDeg);
-            holdLocalValueUntilParentSettles(nextValueDeg);
-            scheduleValueChange(nextValueDeg);
-          }}
-          onValueCommit={(nextValue) => {
-            commitValue(nextValue?.[0]);
-          }}
-          aria-label={jointName || "Joint value"}
-          title={`${formatJointValue(minValueDeg, joint)} to ${formatJointValue(maxValueDeg, joint)}`}
-        />
+        <TooltipHint content={`${formatJointValue(minValueDeg, joint)} to ${formatJointValue(maxValueDeg, joint)}`}>
+          <Slider
+            className={cn(FILE_SHEET_PRECISION_SLIDER_CLASSES, "min-w-0")}
+            min={minValueDeg}
+            max={maxValueDeg}
+            step={sliderStep}
+            value={[liveValueDeg]}
+            onValueChange={(nextValue) => {
+              const nextValueDeg = clampJointInputValue(nextValue?.[0], minValueDeg, maxValueDeg, liveValueDeg);
+              if (jointControlValuesClose(nextValueDeg, pendingValueRef.current)) {
+                return;
+              }
+              setLiveValueDeg(nextValueDeg);
+              holdLocalValueUntilParentSettles(nextValueDeg);
+              scheduleValueChange(nextValueDeg);
+            }}
+            onValueCommit={(nextValue) => {
+              commitValue(nextValue?.[0]);
+            }}
+            thumbProps={{ "aria-label": jointName || "Joint value" }}
+          />
+        </TooltipHint>
     </FileSheetSliderField>
   );
 });

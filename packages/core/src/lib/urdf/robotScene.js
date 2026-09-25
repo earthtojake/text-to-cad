@@ -82,7 +82,7 @@ function boxOf(bounds) {
  * @param {{ description: object, parts: object[] }} input  `description`: a parsed URDF or SDF (an SRDF's is its
  *   URDF's). `parts`: `buildRobotParts` — one per visual, or per named object of a visual's mesh.
  * @returns {import("../viewer/sceneContract.js").KitScene & object}  The contract, plus: `setJointValues(values)` (true when a
- *   matrix was written), `setHighlight({ hoveredLink, hoveredComponent, selectedLink, selectedComponents })`,
+ *   matrix was written), `setHighlight({ hoveredLink, hoveredComponent, selectedLinks, selectedComponents })`,
  *   `linkCentre(name)`, `motionFrame(jointName)`, `linkFrames()`, `hasComponent(id)`,
  *   and `stats` (test seam: matrix writes per pose).
  */
@@ -259,7 +259,7 @@ export function createRobotScene(THREE, { description, parts }) {
   const gradedColor = new THREE.Color();
   let lastLook = null;
   let lastGrading = "";
-  let highlight = { hoveredLink: "", hoveredComponent: "", selectedLink: "", selectedComponents: [] };
+  let highlight = { hoveredLink: "", hoveredComponent: "", selectedLinks: [], selectedComponents: [] };
   const highlighted = new Set();
   // The viewer's highlight ink: a selection wears the colour a selected STEP part does.
   const hoverColor = new THREE.Color(REFERENCE_HOVER_COLOR);
@@ -286,8 +286,8 @@ export function createRobotScene(THREE, { description, parts }) {
     }
   }
 
-  function recordsFor(linkName, componentIds) {
-    const records = linkName ? [...(meshesByLink.get(linkName) || [])] : [];
+  function recordsFor(linkNames, componentIds) {
+    const records = [linkNames].flat().flatMap(linkName => (linkName ? meshesByLink.get(linkName) || [] : []));
     for (const id of componentIds) if (recordByComponent.has(id)) records.push(recordByComponent.get(id));
     return records;
   }
@@ -314,7 +314,7 @@ export function createRobotScene(THREE, { description, parts }) {
     }
     highlighted.clear();
     look.apply(lastLook);
-    const selected = recordsFor(highlight.selectedLink, highlight.selectedComponents);
+    const selected = recordsFor(highlight.selectedLinks, highlight.selectedComponents);
     // Selection outranks hover: hovering what is already picked must not weaken it.
     for (const record of recordsFor(highlight.hoveredLink, highlight.hoveredComponent ? [highlight.hoveredComponent] : [])) {
       if (!selected.includes(record)) paint(record, false);
@@ -386,7 +386,7 @@ export function createRobotScene(THREE, { description, parts }) {
     hasComponent(id) { return recordByComponent.has(id); },
     setHighlight(next) {
       if (disposed) return;
-      highlight = { hoveredLink: "", hoveredComponent: "", selectedLink: "", selectedComponents: [], ...next };
+      highlight = { hoveredLink: "", hoveredComponent: "", selectedLinks: [], selectedComponents: [], ...next };
       applyHighlight();
     },
     // The first surface under the ray: a named object is itself, anything else is its

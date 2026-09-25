@@ -49,13 +49,13 @@ const meshPath = (filename: string) => (filename.includes(':') ? '' : `robots/ar
 // What the scene graph was last asked to draw: the viewport half of a selection.
 let highlight: Record<string, unknown> = {};
 const scene = { hasComponent: (id: string) => components.some(component => component.id === id), setHighlight(next: Record<string, unknown>) { highlight = next; } };
-const drawn = () => JSON.stringify([highlight.selectedLink || '', highlight.selectedComponents || []]);
+const drawn = () => JSON.stringify([highlight.selectedLinks || [], highlight.selectedComponents || []]);
 function Harness({ spy = {} as Record<string, (...args: any[]) => void>, groupNamesByLink = null as Map<string, string[]> | null, onOpenFile = undefined as ((path: string) => void) | undefined }) {
   const selection = useLinkSelection({ scene, hidden: false, requestRender() {} });
   const observed = {
     ...selection,
     select: (...args: [string, any?]) => { spy.select?.(...args); selection.select(...args); },
-    selectLink: (name: string) => { spy.selectLink?.(name); selection.selectLink(name); },
+    selectLink: (name: string, options?: any) => { spy.selectLink?.(name); selection.selectLink(name, options); },
     hoverLink: (name: string) => { spy.hoverLink?.(name); selection.hoverLink(name); },
   };
   return <LinksSection description={description} components={components} parts={parts} selection={observed} groupNamesByLink={groupNamesByLink} meshPath={meshPath} onOpenFile={onOpenFile}/>;
@@ -96,7 +96,7 @@ it('selects a link in the scene graph and reads the description back', () => {
   expect(highlight.hoveredLink).toBe('base_link');
   fireEvent.click(screen.getByRole('button', { name: 'Select base_link' }));
   expect(spy.selectLink).toHaveBeenCalledWith('base_link');
-  expect(drawn()).toBe('["base_link",[]]');
+  expect(drawn()).toBe('[["base_link"],[]]');
   expect(screen.getByRole('button', { name: 'Select base_link' }).getAttribute('aria-pressed')).toBe('true');
   let details = within(screen.getByRole('region', { name: 'Reference details' }));
   expect(details.getByLabelText('Link details').textContent).toContain('2.5 kg');
@@ -109,7 +109,7 @@ it('selects a link in the scene graph and reads the description back', () => {
 
   // A link with no geometry is still a selection: the row, and what the description says.
   fireEvent.click(screen.getByRole('button', { name: 'Select shoulder_link' }));
-  expect(drawn()).toBe('["shoulder_link",[]]');
+  expect(drawn()).toBe('[["shoulder_link"],[]]');
   details = within(screen.getByRole('region', { name: 'Reference details' }));
   const parentJoint = details.getByLabelText('Parent joint').textContent!;
   expect(parentJoint).toContain('shoulder_pan');
@@ -155,7 +155,7 @@ it('reads a link’s inertial and geometry back, opens the mesh files it names a
   details = within(screen.getByRole('region', { name: 'Reference details' }));
   fireEvent.click(within(details.getByLabelText('Parent joint')).getByRole('button', { name: 'base_link' }));
   expect(screen.getByRole('button', { name: 'Select base_link' }).getAttribute('aria-pressed')).toBe('true');
-  expect(drawn()).toBe('["base_link",[]]');
+  expect(drawn()).toBe('[["base_link"],[]]');
 });
 
 it('filters to a flat ranked list by link, joint or object name without expanding anything', () => {
@@ -190,7 +190,7 @@ it('reveals a selected hit with its ancestors expanded when the filter is cleare
   render(<Harness/>);
   fireEvent.change(filter(), { target: { value: 'wrist_roll' } });
   fireEvent.keyDown(filter(), { key: 'Enter' });
-  expect(drawn()).toBe('["wrist_link",[]]');
+  expect(drawn()).toBe('[["wrist_link"],[]]');
   expect(within(screen.getByRole('region', { name: 'Reference details' })).getByLabelText('Parent joint').textContent).toContain('continuous');
   scrollIntoView.mockClear();
   fireEvent.keyDown(filter(), { key: 'Escape' });
@@ -203,7 +203,7 @@ it('reveals a selected hit with its ancestors expanded when the filter is cleare
 
   // A named object keeps its own selection and facts.
   fireEvent.click(screen.getByRole('button', { name: 'Select flange' }));
-  expect(drawn()).toBe('["",["wrist_link:v1/object/0"]]');
+  expect(drawn()).toBe('[[],["wrist_link:v1/object/0"]]');
   const component = within(screen.getByRole('region', { name: 'Reference details' })).getByLabelText('Component details').textContent!;
   for (const fact of ['flange', 'wrist_link', '#336699', '1,200', '40.0 × 40.0 × 8.00 mm']) expect(component).toContain(fact);
 });
@@ -230,4 +230,20 @@ it('a viewport pick of a surface selects its link; a named object selects itself
   fireEvent.click(screen.getByRole('button', { name: 'Pick surface' }));
   fireEvent.click(screen.getByRole('button', { name: 'Pick nothing' }));
   expect(screen.queryByRole('region', { name: 'Reference details' })).toBeNull();
+});
+
+it('a modified click adds a link to the selection, as it adds an object, and a plain one goes back to one', () => {
+  render(<Harness/>);
+  fireEvent.click(screen.getByRole('button', { name: 'Select base_link' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Select shoulder_link' }), { shiftKey: true });
+  expect(drawn()).toBe('[["base_link","shoulder_link"],[]]');
+  expect(screen.getAllByRole('button', { pressed: true }).map(row => row.getAttribute('aria-label')))
+    .toEqual(['Select base_link', 'Select shoulder_link']);
+  const summary = within(screen.getByRole('region', { name: 'Reference details' })).getByLabelText('Link details');
+  expect(summary.textContent).toContain('2 links');
+  expect(summary.textContent).toContain('base_link, shoulder_link');
+  fireEvent.click(screen.getByRole('button', { name: 'Select base_link' }), { metaKey: true });
+  expect(drawn()).toBe('[["shoulder_link"],[]]');
+  fireEvent.click(screen.getByRole('button', { name: 'Select base_link' }));
+  expect(drawn()).toBe('[["base_link"],[]]');
 });

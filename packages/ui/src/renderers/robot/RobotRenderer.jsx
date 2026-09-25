@@ -51,7 +51,6 @@ function RobotSurface({ view, data }) {
     ? { jointValues: poseRef.current.getSnapshot().values, signature: robotRef.current.revision } : restored), [restored]);
 
   // ---- scene ----------------------------------------------------------------------------
-  const [previewToolActive, setPreviewToolActive] = useState(false);
   const [scene, setScene] = useState(null);
   useLayoutEffect(() => {
     if (!robot || !pose) { setScene(null); return undefined; }
@@ -79,9 +78,9 @@ function RobotSurface({ view, data }) {
     declined: ROBOT_DECLINED_LIVE_COMMANDS,
     commands: { clearSelection: () => selectionRef.current.clear() },
     state: () => ({
-      selectedLinks: selectionRef.current.selectedLinkName ? [selectionRef.current.selectedLinkName] : [],
-      selectedPartIds: (robotRef.current?.parts || []).filter(part => (selectionRef.current.selectedLinkName
-        ? part.linkName === selectionRef.current.selectedLinkName : selectionRef.current.selectedComponentIds.includes(part.id))).map(part => part.id)
+      selectedLinks: [...selectionRef.current.selectedLinkNames],
+      selectedPartIds: (robotRef.current?.parts || []).filter(part => (selectionRef.current.selectedLinkNames.length
+        ? selectionRef.current.selectedLinkNames.includes(part.linkName) : selectionRef.current.selectedComponentIds.includes(part.id))).map(part => part.id)
     })
   }), []);
   const escape = useMemo(() => ({
@@ -147,9 +146,9 @@ function RobotSurface({ view, data }) {
   useEffect(() => { if (robot && !posable && toolMode === ROBOT_TOOL.POSE) selectTool(ROBOT_TOOL.SELECT); }, [robot, posable, toolMode, selectTool]);
   // A selection exists only while Select is the tool: leaving it drops the selection.
   const clearSelection = selection.clear;
-  useEffect(() => { if (previewToolActive || toolMode !== ROBOT_TOOL.SELECT) clearSelection(); }, [previewToolActive, toolMode, clearSelection]);
-  const poseActive = !previewToolActive && posable && Boolean(scene) && toolMode === ROBOT_TOOL.POSE;
-  const selectActive = !previewToolActive && Boolean(scene) && toolMode === ROBOT_TOOL.SELECT;
+  useEffect(() => { if (toolMode !== ROBOT_TOOL.SELECT) clearSelection(); }, [toolMode, clearSelection]);
+  const poseActive = !shell.presenting && posable && Boolean(scene) && toolMode === ROBOT_TOOL.POSE;
+  const selectActive = !shell.presenting && Boolean(scene) && toolMode === ROBOT_TOOL.SELECT;
 
   // Choosing a link or an object under another tool returns to Select first, and shows
   // what was chosen where its details are: the robot's panel, with its Links.
@@ -161,7 +160,7 @@ function RobotSurface({ view, data }) {
   const treeSelection = useMemo(() => ({
     ...selection,
     select: (id, options) => { selection.select(id, options); if (id) reveal(); },
-    selectLink: (name) => { selection.selectLink(name); if (name) reveal(); }
+    selectLink: (name, options) => { selection.selectLink(name, options); if (name) reveal(); }
   }), [selection, reveal]);
   const pickSelection = selection.pick;
   const handlePick = useCallback((hit, modifiers) => { pickSelection(hit, modifiers); if (hit) reveal(); }, [pickSelection, reveal]);
@@ -187,15 +186,15 @@ function RobotSurface({ view, data }) {
   ].filter(Boolean);
   // Links leads the panel; Position remains available independently of the tool.
   const panel = { title: "Settings", sections: [
-    { id: "links", title: "Links",
+    { id: "links", title: "Links", role: "model",
       content: active => <LinksSection key={modelKey} active={active} description={robot?.description || null} components={robot?.components}
         parts={robot?.parts} selection={treeSelection} groupNamesByLink={groupNamesByLink} meshPath={meshPath} onOpenFile={view.onOpenFile} /> },
-    posable && pose ? { id: "position", title: "Position", content: <PositionControls key={robot.revision} pose={pose} /> } : null,
+    posable && pose ? { id: "position", role: "position", title: "Position", content: <PositionControls key={robot.revision} pose={pose} /> } : null,
     kind === "sdf" ? { id: "sdf", title: "SDF",
       content: <SdfSection info={robot?.description?.sdf || null} movableJointCount={pose?.joints.length || 0} /> } : null
   ] };
 
-  return <RendererShell shell={shell} tools={tools} panel={panel} onPreviewActiveChange={setPreviewToolActive}
+  return <RendererShell shell={shell} tools={tools} panel={panel}
     viewportOverlay={viewport => <>
       {poseActive ? <JointHandleOverlay handlesRef={handlesRef} layoutSeamRef={handleLayoutRef} {...viewport} /> : null}
       <PointerPick viewport={viewport} scene={scene} enabled={selectActive} onPick={handlePick} onHover={selection.hoverHit} />

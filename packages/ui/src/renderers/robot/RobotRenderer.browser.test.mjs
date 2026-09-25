@@ -468,6 +468,11 @@ test('Select picks links at once; a selection lives only under Select; Links sho
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="one"] [aria-label="Robot tree area"] button[aria-pressed="true"]').length === 1);
   assert.deepEqual(await robot.pressedRows(), ['Select carriage']);
   assert.match(await reference.innerText(), /tool/, 'the end effector mounted on the link');
+  // Shift adds a link to the selection, as it adds a named object.
+  await page.keyboard.down('Shift'); await page.mouse.click(...onScreen(spots.shoulder)); await page.keyboard.up('Shift');
+  await page.waitForFunction(() => document.querySelectorAll('[data-testid="one"] [aria-label="Robot tree area"] button[aria-pressed="true"]').length === 2);
+  assert.deepEqual((await robot.pressedRows()).sort(), ['Select carriage', 'Select upper_arm']);
+  assert.deepEqual((await page.evaluate(() => window.cadHarness.a.controller.readState())).selectedLinks.sort(), ['carriage', 'upper_arm']);
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="one"] [aria-label="Robot tree area"] button[aria-pressed="true"]').length === 0);
   assert.equal(await robot.sheet().isVisible(), true, 'the first Escape spent itself on the selection');
@@ -613,7 +618,7 @@ test('a pose and the open panel survive closing the file, and a pose is dropped 
   assert.deepEqual(robot.errors, []);
 });
 
-test('an SDF is the same robot with a section of its own; a robot declines the host\'s fullscreen; a snapshot depicts the whole file', async (t) => {
+test('an SDF is the same robot with a section of its own; a snapshot depicts the whole file', async (t) => {
   const robot = await open(t, 'swing.sdf');
   const { page, pane } = robot;
   await robot.openPosition();
@@ -654,17 +659,6 @@ test('an SDF is the same robot with a section of its own; a robot declines the h
   const captured = await page.evaluate(() => window.cadHarness.captures[0]);
   assert.deepEqual([captured.file, captured.type, captured.references.length], ['swing.sdf', 'image/png', 1], 'one context, of the file');
 
-  // Fullscreen is a STEP's alone. A host that asks a robot for it is declined: the nav row,
-  // the tools and the knobs all stay, with nothing of fullscreen's own drawn, and the pose
-  // is where it was.
-  await page.evaluate(() => window.cadHarness.fullscreen(true));
-  await page.waitForTimeout(300);
-  assert.equal(await pane.getByRole('button', { name: 'Exit fullscreen', exact: true }).count(), 0);
-  assert.equal(await pane.getByRole('group', { name: 'Fullscreen controls' }).count(), 0);
-  assert.deepEqual(await robot.panels(), ['Settings:true', 'Show files:false'], 'the nav row stays');
-  assert.deepEqual(await robot.toolNames(), ['Select:false', 'Position:true', 'Display:false'], 'and the tools');
-  assert.equal((await robot.handles()).hinge.value, 40, 'and the knob, where the pose left it');
-  assert.equal(await pane.getByRole('toolbar', { name: 'Animation playback' }).count(), 0, 'a robot has no routines to play');
   assert.deepEqual(robot.errors, []);
 });
 

@@ -1,13 +1,12 @@
-import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@hardcore/ui/primitives/button";
 import { TreeRowSurface, TreeRowChevron, TreeRowLabel } from "@hardcore/ui/primitives/tree-row";
 import { TreeFilterHighlight, TreeFilterInput } from "@hardcore/ui/primitives/tree-filter";
 import { cn } from "@hardcore/ui/utils";
 import InspectorSplit from "../kit/inspector/InspectorSplit.jsx";
-import { panelScroller } from "../kit/inspector/FilePanelSections.jsx";
-import RobotComponentDetails, { RobotLinkDetails } from "./LinkDetails.jsx";
-import { buildModelTreeSearchIndex, searchModelTree } from "../kit/inspector/modelTreeSearch.js";
+import RobotComponentDetails, { RobotLinkDetails, RobotLinksSummary } from "./LinkDetails.jsx";
+import { useTreeSearch } from "../kit/inspector/modelTreeSearch.js";
 import { buildRobotTree, robotComponentNodeId, robotLinkFacts, robotLinkNodeId, robotTreeAncestorIds } from "./robotTree.js";
 
 // The robot's kinematic tree, drawn with the Model tree's rows, filter and Reference
@@ -20,7 +19,6 @@ import { buildRobotTree, robotComponentNodeId, robotLinkFacts, robotLinkNodeId, 
 // of tom.urdf (78 objects, 51 under one link) is unreadable fully open.
 
 const EMPTY = Object.freeze([]);
-const NO_MATCHES = Object.freeze({ matches: EMPTY, total: 0 });
 
 function initialExpansion(tree) {
   const expanded = new Set();
@@ -36,9 +34,8 @@ function initialExpansion(tree) {
 function rowHandlers(node, selection) {
   const link = node.kind === "link";
   return {
-    choose: event => (link
-      ? selection.selectLink(node.linkName)
-      : selection.select(node.component.id, { multiSelect: event.ctrlKey || event.metaKey || event.shiftKey })),
+    choose: event => (link ? selection.selectLink : selection.select)(link ? node.linkName : node.component.id,
+      { multiSelect: event.ctrlKey || event.metaKey || event.shiftKey }),
     enter: () => (link ? selection.hoverLink(node.linkName) : selection.hover(node.component.id)),
     leave: () => (link ? selection.hoverLink("") : selection.hover("")),
   };
@@ -113,25 +110,16 @@ export default function LinksSection({ description = null, components = EMPTY, p
     setUserExpanded(next);
   };
 
-  const selectedNodeIds = useMemo(() => (selection.selectedLinkName
-    ? [robotLinkNodeId(selection.selectedLinkName)]
+  const selectedNodeIds = useMemo(() => (selection.selectedLinkNames.length
+    ? selection.selectedLinkNames.map(robotLinkNodeId)
     : selection.selectedComponentIds.map(robotComponentNodeId)).filter(id => tree.nodesById.has(id)),
-  [selection.selectedLinkName, selection.selectedComponentIds, tree]);
+  [selection.selectedLinkNames, selection.selectedComponentIds, tree]);
   const highlighted = useMemo(() => new Set(selectedNodeIds), [selectedNodeIds]);
 
   // Search is a second view of the same tree: typing never touches expansion, and
   // the tree's rows unmount so a large open robot is not re-rendered per keystroke.
-  const [query, setQuery] = useState(""), [cursor, setCursor] = useState(null);
-  const searching = query.trim() !== "", deferredQuery = useDeferredValue(query);
-  const searchIndex = useMemo(() => (searching ? buildModelTreeSearchIndex(tree.roots) : null), [searching, tree]);
-  const found = useMemo(() => (searchIndex ? searchModelTree(searchIndex, deferredQuery) : NO_MATCHES), [searchIndex, deferredQuery]);
-  const listRef = useRef(null), resumeScroll = useRef(0), rowRefs = useRef(new Map());
-  const changeQuery = value => {
-    if (!searching && value.trim() && listRef.current) resumeScroll.current = panelScroller(listRef.current).scrollTop;
-    setQuery(value); setCursor(null);
-  };
-  // Back where the tree was; a hit selected meanwhile is then scrolled to by the reveal below.
-  useLayoutEffect(() => { if (!searching && listRef.current) panelScroller(listRef.current).scrollTop = resumeScroll.current; }, [searching]);
+  const { query, searching, deferredQuery, found, cursorId, listRef, changeQuery, onKeyDown: onSearchKeyDown } = useTreeSearch(tree.roots);
+  const rowRefs = useRef(new Map());
 
   // A selection is always a row the tree holds: its owners open at once, whether it
   // came from a search hit or from the viewport. The one scroll waits for the tree.
@@ -147,25 +135,16 @@ export default function LinksSection({ description = null, components = EMPTY, p
     if (row) { row.scrollIntoView?.({ block: "nearest" }); reveal.current.complete = true; }
   }, [active, revealKey, selectedNodeIds, tree, expanded, searching]);
 
-  const cursorId = found.matches.some(match => match.entry.node.id === cursor) ? cursor : found.matches[0]?.entry.node.id ?? null;
-  useEffect(() => { if (cursorId) listRef.current?.querySelector(`[data-search-row="${CSS.escape(cursorId)}"]`)?.scrollIntoView?.({ block: "nearest" }); }, [cursorId]);
-  const onSearchKeyDown = event => {
-    if (event.key === "Escape" && query) { event.preventDefault(); event.stopPropagation(); changeQuery(""); return; }
-    if (!found.matches.length) return;
-    const at = found.matches.findIndex(match => match.entry.node.id === cursorId);
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      event.preventDefault();
-      setCursor(found.matches[Math.min(Math.max(at + (event.key === "ArrowDown" ? 1 : -1), 0), found.matches.length - 1)].entry.node.id);
-    } else if (event.key === "Enter" && at >= 0) {
-      event.preventDefault();
-      listRef.current?.querySelector(`[data-search-row="${CSS.escape(cursorId)}"] button[aria-pressed]`)?.click();
-    }
-  };
 
-  const linkFacts = useMemo(() => (selection.selectedLinkName && tree.nodesById.has(robotLinkNodeId(selection.selectedLinkName))
-    ? robotLinkFacts(description, selection.selectedLinkName, { groupNamesByLink }) : null),
-  [selection.selectedLinkName, tree, description, groupNamesByLink]);
+  // One link reads back what the description says of it; several are summarised, as several
+  // objects are.
+  const shownLinkNames = useMemo(() => selection.selectedLinkNames.filter(name => tree.nodesById.has(robotLinkNodeId(name))),
+    [selection.selectedLinkNames, tree]);
+  const linkFacts = useMemo(() => (shownLinkNames.length === 1
+    ? robotLinkFacts(description, shownLinkNames[0], { groupNamesByLink }) : null),
+  [shownLinkNames, description, groupNamesByLink]);
   const details = linkFacts ? <RobotLinkDetails facts={linkFacts} meshPath={meshPath} onOpenFile={onOpenFile} onSelectLink={selection.selectLink} hasLinkRow={name => tree.nodesById.has(robotLinkNodeId(name))}/>
+    : shownLinkNames.length ? <RobotLinksSummary linkNames={shownLinkNames}/>
     : selection.selectedComponentIds.length ? <RobotComponentDetails components={components} selectedIds={selection.selectedComponentIds}/> : null;
   const clearSelection = () => selection.select("");
 
