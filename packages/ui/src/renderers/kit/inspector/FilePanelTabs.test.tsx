@@ -20,6 +20,20 @@ for (const title of ['Features', 'Links']) it(`${title} and Position have separa
   rerender(<FilePanelTabs sections={sections} active revealRequest={{ sectionId: 'position', key: 1 }} />);
   expect(screen.getByRole('tab', { name: 'Position' }).getAttribute('aria-selected')).toBe('true');
 });
+it('a reveal turns the tab in the render that carries it, never painting the old tab first', () => {
+  // What each commit shows: a probe inside the panel reads the selected tab as it lays out.
+  const seen: string[] = [];
+  function Probe() { React.useLayoutEffect(() => { seen.push(document.querySelector('[role=tab][aria-selected=true]')?.textContent || ''); }); return null; }
+  const sections = () => [{ id: 'links', title: 'Links', content: <Probe /> }, { id: 'position', title: 'Position', content: 'Joints' }];
+  const { rerender } = render(<FilePanelTabs sections={sections()} active />);
+  expect(seen.at(-1)).toBe('Links');
+  seen.length = 0;
+  rerender(<FilePanelTabs sections={sections()} active revealRequest={{ sectionId: 'position', key: 1 }} />);
+  expect(seen).toEqual(['Position']);
+  seen.length = 0;
+  rerender(<FilePanelTabs sections={sections()} active revealRequest={{ sectionId: 'links', key: 2 }} />);
+  expect(seen).toEqual(['Links']);
+});
 it('does not add tabs without position controls', () => {
   render(<FilePanelTabs sections={[{id:'features',title:'Features',content:'Tree'}]} active />);
   expect(screen.queryByRole('tablist')).toBeNull();

@@ -15,18 +15,32 @@ import assert from 'node:assert/strict';
  *   A page the harness has opened on a file whose renderer offers Draw.
  */
 export async function runDrawScenario({ page, pane, errors }) {
-  const tool = name => pane.getByRole('group', { name: 'Drawing tools' }).getByRole('button', { name, exact: true });
+  // Draw's corner menu, named by the tool that opens it, is portalled out of the pane.
+  const menu = page.getByRole('menu', { name: 'Draw', exact: true });
+  const tool = name => menu.getByRole('button', { name, exact: true });
+  const openMenu = async () => { if (!await menu.isVisible()) await pane.getByRole('button', { name: 'Draw', exact: true }).click(); await menu.waitFor(); };
+  // A mark or a way of moving closes the menu once chosen; Color and Undo keep it open.
+  const choose = async (name, { keepsMenu = false } = {}) => {
+    await openMenu(); await tool(name).click();
+    if (keepsMenu) assert.equal(await menu.isVisible(), true, `${name} keeps the menu open`);
+    else await menu.waitFor({ state: 'detached' });
+  };
   const camera = () => page.evaluate(() => window.cadHarness.a.controller.readState().camera);
   // What the static ink canvas holds: pixel counts by kind, and the ink's left edge in CSS pixels.
+  // Pen ink is as thin as a line's, so a diagonal stroke is mostly antialiased edge: a pixel is
+  // ink by its alpha (> 30), its colour is read wherever it is ink, and `opaque`/`translucent`
+  // split the ink by coverage (a fill is translucent throughout).
   const ink = () => page.evaluate(() => {
     const canvas = document.querySelector('[data-testid="one"] [data-cad-drawing-overlay] canvas.excalidraw__canvas.static');
     if (!canvas) return null;
     const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
-    const counts = { opaque: 0, translucent: 0, green: 0, red: 0 }; let left = Infinity;
+    const counts = { ink: 0, opaque: 0, translucent: 0, green: 0, red: 0 }; let left = Infinity;
     for (let index = 0; index < data.length; index += 4) {
       const [r, g, b, a] = [data[index], data[index + 1], data[index + 2], data[index + 3]];
-      if (a > 200) { counts.opaque += 1; left = Math.min(left, (index / 4) % canvas.width); if (g > 200 && r < 120) counts.green += 1; if (r > 200 && g < 100) counts.red += 1; }
-      else if (a > 30) counts.translucent += 1;
+      if (a <= 30) continue;
+      counts.ink += 1; counts[a > 200 ? 'opaque' : 'translucent'] += 1;
+      left = Math.min(left, (index / 4) % canvas.width);
+      if (g > 200 && r < 120) counts.green += 1; if (r > 200 && g < 100) counts.red += 1;
     }
     return { ...counts, left: left * canvas.getBoundingClientRect().width / canvas.width };
   });
@@ -39,14 +53,18 @@ export async function runDrawScenario({ page, pane, errors }) {
   await draw.click();
   await pane.locator('[data-cad-drawing-overlay] canvas.excalidraw__canvas.interactive').waitFor();
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [data-drawing-ready]'));
+  await openMenu();
   assert.equal(await tool('Pen').getAttribute('aria-pressed'), 'true', 'Draw opens on the pen');
-  // The sub-toolbar reads left to right in the order a sketch is made: the marks,
-  // the colour they are made in, the two ways of moving around what was drawn,
-  // then undo/redo and Clear.
-  assert.deepEqual(await pane.getByRole('group', { name: 'Drawing tools' }).getByRole('button')
+  // The menu's tools read left to right: the two ways of moving around what was drawn,
+  // then the marks; beneath a rule, the colour they are made in, undo/redo and Clear.
+  assert.deepEqual(await menu.getByRole('group', { name: 'Drawing tools' }).getByRole('button')
     .evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
-  ['Pen', 'Line', 'Arrow', 'Rectangle', 'Ellipse', 'Text', 'Fill area', 'Eraser',
-    'Color', 'Select and move drawings', 'Pan view', 'Undo', 'Redo', 'Clear drawing']);
+  ['Select and move drawings', 'Pan view', 'Pen', 'Line', 'Arrow', 'Rectangle', 'Ellipse', 'Text', 'Fill area', 'Eraser']);
+  assert.deepEqual(await menu.getByRole('group', { name: 'Drawing settings' }).getByRole('button')
+    .evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
+  ['Color', 'Undo', 'Redo', 'Clear drawing']);
+  await page.keyboard.press('Escape');
+  await menu.waitFor({ state: 'detached' });
   assert.equal(await pane.locator('.layer-ui__wrapper').isVisible(), false, 'the SDK has no controls of its own here');
   const box = await pane.locator('[data-cad-drawing-overlay]').boundingBox();
   const at = (x, y) => [box.x + x, box.y + y];
@@ -67,7 +85,7 @@ export async function runDrawScenario({ page, pane, errors }) {
   await page.waitForFunction(left => {
     const canvas = document.querySelector('[data-testid="one"] [data-cad-drawing-overlay] canvas.excalidraw__canvas.static');
     const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
-    for (let x = 0; x < canvas.width; x += 1) for (let y = 0; y < canvas.height; y += 1) if (data[(y * canvas.width + x) * 4 + 3] > 200) return x * canvas.getBoundingClientRect().width / canvas.width > left + 60;
+    for (let x = 0; x < canvas.width; x += 1) for (let y = 0; y < canvas.height; y += 1) if (data[(y * canvas.width + x) * 4 + 3] > 30) return x * canvas.getBoundingClientRect().width / canvas.width > left + 60;
     return false;
   }, stroke.left);
   const panned = await camera();
@@ -78,25 +96,28 @@ export async function runDrawScenario({ page, pane, errors }) {
   assert.ok(Math.abs(panned.zoom - locked.zoom) < 1e-9, `a pan is not a zoom: ${locked.zoom} -> ${panned.zoom}`);
 
   // The Pan view tool drags the same picture.
-  await tool('Pan view').click();
+  const panInk = (await ink()).ink;
+  await choose('Pan view');
   await drag(at(300, 300), at(340, 330));
   const dragged = await camera();
   assert.ok(Math.hypot(...dragged.target.map((value, index) => value - panned.target[index])) > 1e-3);
-  assert.equal((await ink()).opaque > 0, true, 'panning draws nothing');
+  assert.equal((await ink()).ink, panInk, 'panning draws nothing');
 
   // Sticky tools: a rectangle is followed by a rectangle.
-  await tool('Rectangle').click();
+  await choose('Rectangle');
   await drag(at(120, 220), at(300, 360));
-  assert.equal(await tool('Rectangle').getAttribute('aria-pressed'), 'true');
+  assert.equal(await draw.locator('[data-drawing-tool]').getAttribute('data-drawing-tool'), 'rectangle');
   // Color is for what comes next; the red ink stays red.
-  await tool('Color').click();
-  await pane.getByRole('radio', { name: 'Neon green', exact: true }).click();
+  await choose('Color', { keepsMenu: true });
+  await menu.getByRole('radio', { name: 'Neon green', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await menu.waitFor({ state: 'detached' });
   await drag(at(330, 220), at(400, 300));
   const colored = await ink();
   assert.ok(colored.green > 50 && colored.red >= stroke.red, JSON.stringify(colored));
 
   // Fill: a translucent area inside the first rectangle, and nothing opaque added.
-  await tool('Fill area').click();
+  await choose('Fill area');
   await page.mouse.click(...at(210, 290));
   await page.waitForFunction(() => {
     const canvas = document.querySelector('[data-testid="one"] [data-cad-drawing-overlay] canvas.excalidraw__canvas.static');
@@ -104,9 +125,11 @@ export async function runDrawScenario({ page, pane, errors }) {
     let translucent = 0; for (let index = 3; index < data.length; index += 4) if (data[index] > 30 && data[index] <= 200) translucent += 1;
     return translucent > 5000;
   });
-  assert.equal(await tool('Fill area').getAttribute('aria-pressed'), 'true');
+  assert.equal(await draw.locator('[data-drawing-tool]').getAttribute('data-drawing-tool'), 'fill');
   // One Undo, one fill.
-  await tool('Undo').click();
+  await choose('Undo', { keepsMenu: true });
+  await page.keyboard.press('Escape');
+  await menu.waitFor({ state: 'detached' });
   await page.waitForFunction(() => {
     const canvas = document.querySelector('[data-testid="one"] [data-cad-drawing-overlay] canvas.excalidraw__canvas.static');
     const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
@@ -114,19 +137,24 @@ export async function runDrawScenario({ page, pane, errors }) {
     return translucent < 5000;
   });
 
-  // The capture carries the ink, registered to the viewport.
-  // "Copy Drawing" for a clipboard host, "Add to Prompt" where the host has a composer.
-  await pane.getByRole('button', { name: /^(Copy Drawing|Add to Prompt)$/ }).click();
-  await page.waitForFunction(() => window.cadHarness.captures.length > 0);
+  // The bottom action copies the view with its ink to the host's clipboard, as a PNG.
+  await page.evaluate(() => {
+    window.__drawingCopies = [];
+    window.cadHarness.a.host.clipboard.writeImage = async pending => { const blob = await pending; window.__drawingCopies.push({ size: blob.size, type: blob.type }); };
+  });
+  await pane.getByRole('button', { name: /^Copy Drawing/ }).click();
+  await page.waitForFunction(() => window.__drawingCopies.length === 1);
+  const [copied] = await page.evaluate(() => window.__drawingCopies);
+  assert.ok(copied.type === 'image/png' && copied.size > 100, JSON.stringify(copied));
 
-  // Pressing Draw again ends the session and the sketch with it.
-  await draw.click();
+  // Leaving Draw ends the session and the sketch with it.
+  await pane.getByRole('group', { name: 'Interaction tools' }).getByRole('button', { name: 'Select', exact: true }).click();
   await pane.locator('[data-cad-drawing-overlay]').waitFor({ state: 'detached' });
-  assert.equal(await pane.getByRole('group', { name: 'Drawing tools' }).count(), 0);
+  assert.equal(await page.getByRole('group', { name: 'Drawing tools' }).count(), 0);
   const left = await camera();
   for (const key of ['position', 'target']) left[key].forEach((value, index) => assert.ok(Math.abs(value - dragged[key][index]) < 1e-6, `the camera keeps the pose the sketch left it in: ${key}`));
   await draw.click();
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [data-drawing-ready]'));
-  assert.equal((await ink()).opaque, 0, 'a new session starts empty');
+  assert.equal((await ink()).ink, 0, 'a new session starts empty');
   assert.deepEqual(errors, []);
 }

@@ -55,6 +55,19 @@ const TooltipContent = React.forwardRef(function TooltipContent({
 
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }
 
+// A hint on focus answers keyboard NAVIGATION: a Tab onto the control. Focus that a closing
+// menu or popover hands back to its trigger (after Escape, or a choice) is restoration, and
+// reopening the trigger's hint then reads as a hint that "sticks". So whether the last key
+// was Tab is tracked, in every document a hint is mounted in, and a pointer press clears it.
+let focusArrivedByTab = false;
+const navigationDocuments = new WeakSet();
+function trackFocusNavigation(document) {
+  if (!document || navigationDocuments.has(document)) return;
+  navigationDocuments.add(document);
+  document.addEventListener("keydown", event => { focusArrivedByTab = event.key === "Tab"; }, true);
+  document.addEventListener("pointerdown", () => { focusArrivedByTab = false; }, true);
+}
+
 /** Short, noninteractive hints. Never use a native title alongside this component. */
 /** @typedef {Omit<React.HTMLAttributes<HTMLElement>, "content" | "children"> & { content?: React.ReactNode, children: React.ReactElement, disabled?: boolean, side?: "top" | "right" | "bottom" | "left", overflowOnly?: boolean }} TooltipHintProps */
 const TooltipHint = React.forwardRef(/**
@@ -65,6 +78,7 @@ const TooltipHint = React.forwardRef(/**
   const blocked = disabled || !content || children.props.disabled || children.props["aria-expanded"] === true || props["aria-expanded"] === true;
   React.useEffect(() => { if (blocked) setOpen(false); }, [blocked]);
   const target = React.useRef(null);
+  React.useEffect(() => { trackFocusNavigation(target.current?.ownerDocument); }, []);
   const bindTarget = React.useCallback(node => {
     target.current = node;
     if (typeof forwardedRef === "function") forwardedRef(node);
@@ -82,7 +96,7 @@ const TooltipHint = React.forwardRef(/**
       <TooltipTrigger asChild {...props} ref={bindTarget}
         onPointerDown={event => { setOpen(false); props.onPointerDown?.(event); }}
         onClick={event => { setOpen(false); props.onClick?.(event); }}
-        onFocus={event => { props.onFocus?.(event); if (!event.currentTarget.matches(':focus-visible')) event.preventDefault(); }}>
+        onFocus={event => { props.onFocus?.(event); if (!focusArrivedByTab || !event.currentTarget.matches(':focus-visible')) event.preventDefault(); }}>
         {children}
       </TooltipTrigger>
       {!blocked && open ? <TooltipContent side={side} sideOffset={6} className="pointer-events-none">{content}</TooltipContent> : null}

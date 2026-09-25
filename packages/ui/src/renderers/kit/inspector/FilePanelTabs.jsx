@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hardcore/ui/primitives/tabs";
 import FilePanelSections from "./FilePanelSections.jsx";
 
@@ -8,10 +8,15 @@ export default function FilePanelTabs({ sections, active, revealRequest }) {
   const shown = sections.filter(Boolean);
   const model = shown.find(section => section.id === "features" || section.id === "links");
   const position = shown.find(section => section.id === "position");
-  const [selected, setSelected] = useState(model?.id);
-  useEffect(() => {
-    if (revealRequest) setSelected(revealRequest.sectionId === "position" ? "position" : model?.id);
-  }, [revealRequest, model?.id]);
+  // A reveal turns the tab in the same render as the press that asked for it: adjusted while
+  // rendering, not in an effect, which would paint the old tab for a frame first.
+  const revealed = request => (request?.sectionId === "position" ? "position" : model?.id);
+  const [selected, setSelected] = useState(() => revealed(revealRequest));
+  const [seenRequest, setSeenRequest] = useState(revealRequest);
+  if (revealRequest !== seenRequest) {
+    setSeenRequest(revealRequest);
+    if (revealRequest) setSelected(revealed(revealRequest));
+  }
   if (!model || !position) return <FilePanelSections sections={sections} active={active} revealRequest={revealRequest} />;
   const current = selected === "position" ? "position" : model.id;
   const groups = [
