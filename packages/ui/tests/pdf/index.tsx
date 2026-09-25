@@ -28,7 +28,11 @@ const deliveries: string[] = [];
 const destination = { kind: 'clipboard' as const, available: true };
 const host = testHost({
   promptContext: { getSnapshot: () => destination, subscribe: () => () => {},
-    deliver: async context => { deliveries.push(context.parts.map(part => part.id).join()); return { status: 'copied', partIds: context.parts.map(part => part.id) }; } },
+    // A host takes the attachments' content before it reports: the page capture is the delivery.
+    deliver: async context => {
+      await Promise.all(context.parts.map(part => part.kind === 'attachment' ? part.content : null));
+      deliveries.push(context.parts.map(part => part.id).join()); return { status: 'copied', partIds: context.parts.map(part => part.id) };
+    } },
   files: { id: 'pdf-root', rootName: 'PDF', stat: async path => ({ path, name: path, kind: 'file', size: bytes.length, extension: 'pdf', mediaType: 'pdf', revision: 'fixture-r1' }),
     readAsset: async () => ({ url: '', bytes, release() {} }) },
   pdf: { assetBaseUrl: new URL('/pdfjs/', window.location.href).href, bind(target) { live = target; return () => { live = null; }; } },
